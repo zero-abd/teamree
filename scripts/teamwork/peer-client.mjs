@@ -1,19 +1,9 @@
-// A client for one runtime's local socket, speaking the protocol in
-// src/shared/protocol.ts: newline-delimited JSON, one value per line, with
-// responses and stream events interleaved on the same connection.
-//
-// The harness talks this rather than shelling out to the built `teamree` CLI for
-// two reasons. It needs no build step, so a two-peer run works from a clean
-// checkout. And it is the same shape a peer transport is: `docs/teamwork.md`
-// describes a teammate as "a third transport onto the same catalogue", so a
-// client that sends `{ id, method, params }` and reads `{ id, ok, result }` back
-// is already the thing that eventually goes over the relay.
+// A client for one runtime's local socket: newline-delimited JSON (src/shared/protocol.ts), responses
+// and stream events interleaved. Needs no build, and is the same shape a peer transport is.
 
 import { connect } from 'node:net'
 
 /**
- * Connects to a runtime endpoint.
- *
  * @param {string} endpoint Unix socket path, or a named pipe on Windows.
  * @returns {Promise<PeerClient>}
  */
@@ -33,29 +23,13 @@ export class PeerClient {
   #socket
   #pending = new Map()
   #streams = new Map()
-  /**
-   * Events for a subscription this end cannot name yet.
-   *
-   * Responses and stream events share one socket and are read in order, and a
-   * subscription can start pushing before the response that names it is
-   * written — so the first frames of a pane can arrive before the caller has
-   * any id to file them under. Dropping them would make this harness lose the
-   * first thing a pane says, which is a bug it exists to catch elsewhere.
-   */
+  /** Events for a subscription not yet named: its first frames can arrive before the response. */
   #held = new Map()
   #buffer = ''
   #nextId = 0
-  /**
-   * Every method this client has sent, in order.
-   *
-   * Kept because some of what teamwork promises is about what a person did
-   * *not* have to do: a teammate's worktrees arrive without anybody
-   * subscribing, and the only honest way to assert that is to be able to show
-   * what this end actually asked for.
-   */
+  /** Every method sent, in order, so a test can show what this end did not have to ask for. */
   #called = []
-  /** Set once, and reported to every caller afterwards: a socket that dropped
-   * mid-run must not leave the next call hanging until the suite times out. */
+  /** Set once and reported to every later caller, so a dropped socket fails fast. */
   #closed = null
 
   constructor(socket) {
@@ -71,8 +45,6 @@ export class PeerClient {
   }
 
   /**
-   * Sends one request and resolves with its result.
-   *
    * @param {string} method
    * @param {unknown} [params]
    * @returns {Promise<unknown>}
@@ -88,13 +60,8 @@ export class PeerClient {
   }
 
   /**
-   * Subscribes and routes the stream's events to `onEvent`.
-   *
-   * Resolves with the method's own answer — which for `teamwork.watch` carries
-   * the owner's pane dimensions beside the subscription id — plus a `close`.
-   * Closing is the caller's, since a subscription nobody released keeps a pty
-   * streaming into nothing.
-   *
+   * Subscribes and routes events to `onEvent`; resolves with the method's answer plus a `close`,
+   * which is the caller's to call.
    * @param {string} method A method that answers with a subscription id.
    * @param {unknown} params
    * @param {(event: any) => void} onEvent
@@ -112,8 +79,7 @@ export class PeerClient {
       close: async () => {
         this.#streams.delete(subscription)
         this.#held.delete(subscription)
-        // Best effort: the runtime may already have gone, and tearing a harness
-        // down is not a reason to fail a test that otherwise passed.
+        // Best effort: the runtime may already have gone.
         await this.call('unsubscribe', { subscription }).catch(() => {})
       }
     }
@@ -148,8 +114,7 @@ export class PeerClient {
       waiter.resolve(frame.result)
       return
     }
-    // The method is taken from the pending request, not the response: a response
-    // carries only the id, and an error reading "h7 failed" helps nobody.
+    // From the pending request: a response carries only the id.
     const error = new Error(`${waiter.method}: ${frame.error.message}`)
     error.code = frame.error.code
     waiter.reject(error)

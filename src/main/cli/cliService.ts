@@ -1,30 +1,6 @@
-// Putting this app's own CLI on PATH.
-//
-// The destination is not a choice. `/usr/local/bin` is where a Mac developer
-// expects a command to be and it is already on the PATH every login shell gets,
-// so offering a directory picker would be offering a way to get it wrong. What
-// the user is asked is the one thing only they can answer: their password, and
-// only when the directory cannot be written without it.
-//
-// Expect that to be almost always. Homebrew took ownership of /usr/local on
-// Intel Macs, but on Apple Silicon it installs to /opt/homebrew and leaves
-// /usr/local/bin as root:wheel 755. So the password path is the ordinary one on
-// every Apple Silicon Mac, not the fallback — which makes it the path to keep
-// tested, not the one to treat as rare.
-//
-// Three things here are refusals rather than conveniences, and each of them is
-// somebody's afternoon:
-//
-//   - A regular file at the destination is not overwritten. It is somebody's
-//     binary; teamree says what is there and stops.
-//   - A link that already points at this app is success. The button is
-//     idempotent, and pressing it twice must not read as a failure.
-//   - Nothing is reported as done until the link has been resolved and found to
-//     land on this app's CLI, and that CLI has been found to have a bundle
-//     behind it. A privileged command that was run is not the same fact as a
-//     link that works, and a link that resolves is not the same fact either:
-//     `resources/cli/teamree` is a launcher, and in a checkout that never ran
-//     `npm run build:cli` there is nothing for it to launch.
+// Putting this app's own CLI on PATH at `/usr/local/bin`, which on Apple
+// Silicon is root:wheel 755 (Homebrew lives in /opt/homebrew), so the password
+// path is the ordinary one. Refuses to overwrite a file; a link already right is success.
 
 import { access, constants, lstat, mkdir, readFile, readlink, realpath, stat, symlink, unlink } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
@@ -40,17 +16,9 @@ export const CLI_DESTINATION_DIRECTORY = '/usr/local/bin'
 export const CLI_COMMAND_NAME = 'teamree'
 
 /**
- * Whether a link to this path would still lead somewhere tomorrow.
- *
- * Two places a Mac runs an app from before anybody has put it in /Applications,
- * and a symlink survives neither. `/Volumes` is every mounted volume, and a
- * disk image is one: the DMG window invites the double-click, the app inside
- * runs perfectly, and the link it made dangles at the eject. App Translocation
- * is the other — an app opened from a disk image or a download is run from a
- * read-only copy under the per-boot temporary directory, which is why the
- * translocated path is matched on both of its halves: `/var/folders` alone is
- * an ordinary temporary directory and `AppTranslocation` alone is a name
- * anybody is allowed to give a folder of their own.
+ * Whether a link to this path would still lead somewhere tomorrow: a mounted
+ * DMG dangles at the eject, and App Translocation runs a downloaded app from a
+ * per-boot temporary copy (matched on both halves of the path, since either alone is ordinary).
  */
 function impermanentSource(source: string): CliImpermanence | null {
   if (source.startsWith('/Volumes/')) return 'volume'
@@ -59,23 +27,12 @@ function impermanentSource(source: string): CliImpermanence | null {
 }
 
 /**
- * The file `path_helper` builds every login shell's PATH from.
- *
- * Read because an app opened from Finder inherits no shell environment, so this
- * process's own PATH cannot answer "will `teamree` be found in my terminal".
- * `/etc/paths.d` is deliberately not read: this is asked about one directory,
- * `/usr/local/bin` is in the stock `/etc/paths`, and a partial answer that is
- * right about the question being asked beats a thorough one nobody can check.
+ * The file `path_helper` builds every login shell's PATH from. `/etc/paths.d`
+ * is deliberately not read: `/usr/local/bin` is in the stock `/etc/paths`.
  */
 export const LOGIN_PATHS_FILE = '/etc/paths'
 
-/**
- * Where the answer to "shall I put this on your PATH?" is kept.
- *
- * A seam rather than a store, because the service has no business knowing what
- * a workspace file is — and because a test has to be able to watch what was
- * written down without one.
- */
+/** Where the answer to "shall I put this on your PATH?" is kept. A seam, not a store. */
 export type CliPromptRecord = {
   askedAt: () => number | undefined
   markAsked: (at: number) => void
@@ -86,11 +43,7 @@ export type CliServiceOptions = {
   source: string | null
   /** Whether that CLI is a packaged app's rather than a source checkout's. */
   packaged?: boolean
-  /**
-   * Where the one-time question's answer is remembered. Defaults to this
-   * process, which is the most a runtime with nowhere to write can honestly
-   * promise — and is what the acceptance harness gets.
-   */
+  /** Where the one-time question's answer is remembered. Defaults to this process. */
   prompt?: CliPromptRecord
   /** Injected so a test never goes near the real one. */
   directory?: string
@@ -103,13 +56,7 @@ export type CliServiceOptions = {
   administrator?: AdministratorRunner
   /** The login shell's PATH directories. */
   loginPaths?: () => Promise<string[]>
-  /**
-   * The login shell's own PATH, or undefined when it cannot be asked.
-   *
-   * A seam rather than a direct call so a test can put a machine in the state
-   * that matters — a profile that assigns PATH over the top of `/etc/paths` —
-   * without owning the machine it runs on.
-   */
+  /** The login shell's own PATH, or undefined when it cannot be asked. A test seam. */
   shellPath?: () => string | undefined
   now?: () => number
 }
@@ -137,8 +84,7 @@ export class CliService {
     this.#writable = options.writable ?? canWrite
     this.#administrator = options.administrator
     this.#loginPaths = options.loginPaths ?? readLoginPaths
-    // The same probe every pane is built with, and the same cached answer, so
-    // asking here costs nothing after the first shell start.
+    // The same probe every pane is built with, and the same cached answer.
     this.#shellPath = options.shellPath ?? (() => loginShellPath({ platform: this.#platform }))
     this.#now = options.now ?? Date.now
   }
@@ -180,10 +126,8 @@ export class CliService {
         'This build of teamree has no CLI in it to link. A packaged app carries one in Contents/Resources/cli.'
       )
     }
-    // Ahead of everything else, including the link that may already be right:
-    // where the app itself is outranks what is at the destination. A link made
-    // from here is written, read back, and reported as done, and it is the user
-    // who finds out at the eject.
+    // Ahead of everything, the link that may already be right included: a link
+    // made from here reads back fine and the user finds out at the eject.
     if (before.impermanent !== null) {
       throw conflict(
         (before.impermanent === 'volume'
@@ -194,9 +138,7 @@ export class CliService {
           'Drag teamree to your Applications folder, open it from there, and press this again.'
       )
     }
-    // Before the destination is even looked at, because this one is about the
-    // thing being linked: a launcher with nothing behind it cannot become a
-    // working command by being linked, already-linked included.
+    // A launcher with nothing behind it cannot become a working command by being linked.
     if (before.bundle === null) {
       throw notFound(
         `${source} is the launcher, and the CLI bundle it runs has not been built. Linking it would put a ` +
@@ -217,9 +159,7 @@ export class CliService {
     if (administrator) await this.#escalate(source, before.destination)
     else await this.#link(source, before.destination, before.state === 'elsewhere')
 
-    // Read back rather than assumed. A privileged command that exited zero and
-    // a link that lands on this app's CLI are two different facts, and only the
-    // second one is what the caller is about to be told.
+    // Read back rather than assumed: a privileged command exiting zero is not a link that lands.
     const after = await this.status()
     if (after.state !== 'linked') {
       throw internal(
@@ -236,12 +176,8 @@ export class CliService {
   }
 
   /**
-   * Records that the question has been put and answered, without asking it.
-   *
-   * Called when somebody declines the offer — and, from `install`, when they
-   * accept it, because pressing the button is as complete an answer as saying
-   * no. A refusal is not an answer and does not get here: there was nothing
-   * for the user to decide.
+   * Records that the question has been answered, by a decline or by `install`.
+   * A refusal is not an answer and does not get here.
    */
   async dismissPrompt(): Promise<CliStatus> {
     return this.#answered(await this.status())
@@ -270,14 +206,9 @@ export class CliService {
   }
 
   /**
-   * The bundle the launcher would run, found the way the launcher finds it.
-   *
-   * `resources/cli/teamree` walks its own symlinks, takes the directory it
-   * lands in, and runs `teamree.mjs` there if it exists and
-   * `../../out/cli/index.js` otherwise — without checking that the second one
-   * exists. This resolves the same two candidates in the same order and does
-   * check, which is the whole difference between "teamree is on your PATH" and
-   * a root-owned link to a script that fails on its first line.
+   * The bundle the launcher would run, found the way `resources/cli/teamree`
+   * finds it (`teamree.mjs` beside it, else `../../out/cli/index.js`), but
+   * checked to exist, which the launcher does not do for the second.
    */
   async #bundle(): Promise<string | null> {
     const source = this.#source
@@ -293,11 +224,8 @@ export class CliService {
     const entry = await lstat(destination).catch(() => null)
     if (entry === null) return { state: 'absent', resolved: null, dangling: false }
     if (entry.isSymbolicLink()) {
-      // A link that leads nowhere still leads somewhere nameable, and naming it
-      // is how "the app it pointed at has been deleted" reads as itself rather
-      // than as an empty destination. Which of the two it is is `realpath`
-      // failing, and that is worth carrying: the caller has one sentence for a
-      // command that drives another app and another for one that does not run.
+      // A dangling link still names somewhere; `realpath` failing is what tells
+      // "the app was deleted" from "points at another app".
       const landed = await realpath(destination).catch(() => null)
       const resolved = landed ?? (await readlink(destination))
       const target = this.#source === null ? null : await realpath(this.#source).catch(() => this.#source)
@@ -307,26 +235,10 @@ export class CliService {
   }
 
   /**
-   * Which PATH the destination is on, and which question that answers.
-   *
-   * The order is by how much each source knows. This process's own PATH is
-   * conclusive when it says yes and means nothing when it says no, because an
-   * app opened from the Finder was handed no shell environment at all.
-   *
-   * Then the login shell, which is the whole answer when it can be had: it is
-   * started, it reads the user's profile, and it prints the PATH it ended up
-   * with — the PATH of the terminal they are going to type in. So it is the one
-   * source allowed to say *no*. It was never consulted here before, even though
-   * the same probe runs for every pane and for agent discovery, and the gap
-   * showed: `/etc/paths` was taken as proof, and `/etc/paths` is a starting
-   * PATH that a profile assigning `PATH=` rather than extending it discards.
-   * Somebody in that state was told their directory was on their PATH, shown no
-   * warning, and charged an administrator password for a link their terminal
-   * could not find.
-   *
-   * `/etc/paths` is still read, but only where it is the best thing available —
-   * a shell this app does not know how to ask — and it is reported as itself so
-   * the panel can hedge rather than assert.
+   * Which PATH the destination is on. This process's PATH means nothing when it
+   * says no (a Finder-opened app has no shell environment); the login shell's
+   * is the one source allowed to say no, since a profile assigning `PATH=`
+   * discards `/etc/paths`, which is read only where the shell cannot be asked.
    */
   async #onPath(): Promise<CliPathSource | null> {
     const wanted = withoutTrailingSlash(this.#directory)
@@ -336,8 +248,7 @@ export class CliService {
 
     const shell = this.#shellPath()
     if (shell !== undefined) {
-      // Asked and answered. A no here is a real no, and the caller shows the
-      // warning rather than a sentence claiming the command will be found.
+      // A no here is a real no.
       return shell.split(':').map(withoutTrailingSlash).includes(wanted) ? 'shell' : null
     }
 

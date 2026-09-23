@@ -1,32 +1,5 @@
-// Cuts a release from this machine, because nothing else cuts one.
-//
-// There was a GitHub Actions pipeline that did this from a `v*` tag, and it
-// worked. It was removed anyway: every job in it ran on a `macos` runner, which
-// bills at ten times the Linux rate against a free account's monthly minutes,
-// and a full run packaged a 190 MB Electron app. A handful of pushes spent the
-// month. Nothing about the checks was wrong — they cost more than they were
-// worth on this plan, so they moved here.
-//
-// What that pipeline was for is still needed, though, and it is not the
-// building — it is the refusing. A release is the one artifact nobody re-runs
-// the tests on, so the checks have to be attached to the act of publishing
-// rather than remembered next to it. So this runs every gate the pipeline ran,
-// in one sequence, and stops at the first that says no:
-//
-//   typecheck, the relay's own typecheck, format, lint, the relay build, the
-//   full suite, the app build, the smoke test, the macOS package, the
-//   packaged-app check against the unpacked tree, the same check against the
-//   copy inside the mounted .dmg, and a report on what a Mac that downloaded
-//   the .dmg would say about it.
-//
-// The last two are the ones worth keeping when something has to give. The
-// packaged-app check is the only one that can tell a package that built from a
-// package that works, and the copy inside the image is the file that actually
-// leaves here — everything upstream of it has only ever looked at a directory.
-//
-// `--dry-run` does all of that and stops before the tag and the release, so the
-// rehearsal is the performance minus its last two steps rather than a different
-// sequence that shares a name with it.
+// Cuts a release from this machine and runs every gate first, stopping at the first that says no.
+// `--dry-run` does all of it and stops before the tag and the release.
 import { createHash } from 'node:crypto'
 import {
   copyFileSync,
@@ -51,38 +24,16 @@ import { isDistributable, readSignatureKind } from './verify-signing.mjs'
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-/**
- * Every gate, in the order a failure is cheapest to read.
- *
- * Typecheck, format and lint are seconds and catch the things most likely to be
- * wrong in a tree somebody just finished editing; the packaging steps are
- * minutes each and go last. The order is the only thing here that is a
- * preference — the set is not, and there is deliberately no flag to shorten it.
- */
+/** Every gate, cheapest failure first. The set is fixed; there is deliberately no flag to shorten it. */
 export const GATES = [
   { name: 'typecheck', args: ['run', 'typecheck'] },
-  // The relay is a second package, and the root typecheck cannot see it: its
-  // Worker entry point is the one file in the project that names Cloudflare
-  // types, so `relay build` excludes it on purpose and only the relay's own
-  // `typecheck` — which runs a second tsc against `@cloudflare/workers-types` —
-  // ever looks at it. Without this line a type error in `src/workers/worker.ts`
-  // passed every gate in this list and shipped: `verify-package.mjs` proves the
-  // file is in the package, and the person who deploys it is the one who finds
-  // out. It costs a second, so it sits with the other cheap checks.
+  // The root typecheck cannot see the relay's Worker entry point; only the relay's own tsc does.
   { name: 'relay typecheck', args: ['run', 'typecheck'], cwd: 'relay' },
   { name: 'format:check', args: ['run', 'format:check'] },
   { name: 'oxlint', args: ['run', 'lint'] },
-  // The acceptance pass drives the CLI as a real executable and throws
-  // "run `npm run build:cli` before the acceptance suite" when `out/cli/index.js`
-  // is absent. A developer's checkout usually has one lying around from an
-  // earlier build, which is why this is invisible until the sequence runs
-  // somewhere clean — as it did the first time this script was rehearsed in a
-  // fresh clone, where it stopped the run at `test`.
+  // The acceptance pass needs `out/cli/index.js`, which a clean clone does not have.
   { name: 'build:cli', args: ['run', 'build:cli'] },
-  // Before the suite, not beside it: `relay/dist` is gitignored per-machine
-  // state, the peer tests stat it before deciding whether to run, and `pretest`
-  // refuses to start a suite whose relay is stale. Building it here is what the
-  // pipeline did in its own step, for the same reason.
+  // Before the suite: the peer tests stat `relay/dist`, and `pretest` refuses a stale one.
   { name: 'relay build', args: ['run', 'build'], cwd: 'relay' },
   { name: 'test', args: ['test'] },
   { name: 'build', args: ['run', 'build'] },
@@ -103,9 +54,7 @@ export function tagAgreement(tag, version) {
   }
   const expected = expectedTag(version)
   if (tag === expected) return null
-  // A pre-release of a version is still that version: `v0.2.0-rc.1` releases
-  // package version 0.2.0, and refusing it would mean bumping package.json to
-  // something that is not a version to cut a candidate.
+  // A pre-release of a version is still that version: `v0.2.0-rc.1` releases 0.2.0.
   if (tag.startsWith(`${expected}-`)) return null
   return (
     `the tag says ${tag} and package.json says ${version}.\n` +
@@ -119,16 +68,7 @@ export function isPrerelease(tag) {
   return tag.includes('-')
 }
 
-/**
- * Where the version's own notes are written, relative to the repository.
- *
- * One file per version rather than one file with every version in it, because
- * the thing being read is the file at a tag — the release body carries it, and
- * a link into a growing changelog would point a downloader at the section for
- * whatever shipped later. It is written by hand, and it has to be: nothing here
- * can work out from a diff which five of the forty commits since the last
- * release a person downloading this needs to be told about.
- */
+/** Where the version's hand-written notes live; one file per version so the tag carries its own. */
 export function highlightsPath(version) {
   return join('docs', 'release-notes', `${version}.md`)
 }
@@ -141,14 +81,7 @@ export function readHighlights(version, root = REPO_ROOT) {
   return text === '' ? null : text
 }
 
-/**
- * Everything wrong with the repository, before a minute of machine time is
- * spent on it.
- *
- * All of it is knowable in a second, and all of it would otherwise be found
- * after the build — which is where the old pipeline put its one guard, and why
- * that guard ended up in front of the build rather than behind it.
- */
+/** Everything wrong with the repository, checked before any machine time is spent. */
 export function preflightRefusals(state) {
   const refusals = []
 
@@ -167,11 +100,7 @@ export function preflightRefusals(state) {
     )
   }
 
-  // A release with no notes is the one that reaches people looking exactly like
-  // a release with notes: the body still explains Gatekeeper, still carries the
-  // checksums, and says nothing whatever about why anybody should install it.
-  // Nobody notices afterwards, because there is nothing missing on the page to
-  // notice. So it is asked for here, by name, before a minute is spent.
+  // A release with no notes looks complete on the page, so nobody notices; ask for them by name.
   if (state.highlights === null) {
     refusals.push(
       `nothing describes what is in ${state.version}. Write ${highlightsPath(state.version)} —\n` +
@@ -196,9 +125,7 @@ export function preflightRefusals(state) {
     )
   }
 
-  // Separate from authentication, because they fail for different reasons and
-  // one message for both sent a signed-in maintainer to `gh auth login` over a
-  // remote that simply was not GitHub.
+  // Separate from authentication: one message for both sent people to `gh auth login` over a non-GitHub remote.
   if (!state.repo) {
     refusals.push(
       'could not work out which GitHub repository to publish to. `gh repo view` found none —\n' +
@@ -243,18 +170,8 @@ function short(sha) {
 }
 
 /**
- * The second name every release publishes the same `.dmg` under.
- *
- * `releases/latest/download/<name>` resolves the latest RELEASE and then looks
- * for that exact filename in it — so a link naming `teamree-0.1.0.dmg` keeps
- * working right up until the moment v0.2.0 is published, and then 404s while
- * having looked healthy the whole time. That is the worst shape a broken link
- * can have: it breaks on the day traffic is highest and nothing before then
- * tells you.
- *
- * So the image goes up twice, under the same bytes: once named for its version,
- * because somebody linking a specific release needs that, and once under a name
- * with no version in it, which is what the download button points at.
+ * The version-free second name of the `.dmg`. `releases/latest/download/<name>` looks up that exact
+ * filename, so a versioned link 404s the day the next release ships.
  */
 export const STABLE_DMG_NAME = 'teamree-mac-universal.dmg'
 
@@ -264,21 +181,8 @@ export function checksumLine(hash, name) {
 }
 
 /**
- * The notes the release carries.
- *
- * They are generated from what was actually built rather than written once and
- * copied forward: the signing paragraph is chosen by looking at the signature on
- * the bundle that is about to be published, so a release cannot claim to be
- * signed because the last one was, or apologise for being unsigned after
- * somebody has gone to the trouble of signing it.
- *
- * The one part no machine can generate is what changed, so that is read from
- * the file `highlightsPath()` names and goes in second — above the signing
- * section, which is the same paragraph in every release and is also in
- * `docs/install.md`. The order matters for one reader in particular: the update
- * card in the window renders this body as text and cuts it at a length, so
- * whatever is at the top is what somebody still running the old build actually
- * reads, and what they want from it is why they should bother.
+ * The release body, generated from the bundle actually built so the signing paragraph cannot lie.
+ * Highlights go on top: the update card cuts the body at a length.
  */
 export function releaseNotes({ tag, repo, checksums, kind, highlights = null }) {
   const signed = isDistributable(kind)
@@ -307,21 +211,8 @@ export function releaseNotes({ tag, repo, checksums, kind, highlights = null }) 
       'downloaded against `SHA256SUMS.txt` below and you know it is the one this build produced.',
       'It cannot tell you the build is trustworthy — only that what reached you is what left here.',
       '',
-      // The dialog, in the words macOS 15 and later actually use. The wording
-      // here was the macOS 10.15-14 one — "cannot be opened because the
-      // developer cannot be verified" — which stopped existing three major
-      // versions ago, and which `docs/install.md` and `site/README.md` both
-      // already say is gone. A downloader who reads a sentence that does not
-      // match what is on their screen has to decide which of the two is wrong,
-      // and the thing on the screen is a dialog whose prominent button deletes
-      // the file they just fetched.
-      //
-      // Which is why the Move to Trash line is here at all. The release body is
-      // the *only* text most people will read before they double-click: it is
-      // what the download page shows, and what the update card in the window
-      // renders for somebody still on the old build. Sending them to
-      // docs/install.md for the one sentence that stops them destroying the
-      // download is sending them there too late.
+      // macOS 15+ wording. The body is the only text most people read before double-clicking,
+      // so the "do not press Move to Trash" line has to be here, not in docs/install.md.
       'The first time you open it, macOS will refuse, with a dialog whose two buttons are',
       '**Move to Trash** and **Done**:',
       '',
@@ -434,34 +325,13 @@ function runGate(gate) {
   return false
 }
 
-/**
- * The packaged-app check again, against the copy inside the image.
- *
- * Everything above it has looked at `dist/mac-universal/teamree.app` — a
- * directory. What a person downloads is the `.dmg`, built afterwards out of
- * that tree but through hdiutil, an HFS+ image and a compressor, none of which
- * anything here had ever opened. An image that would not mount, or that carried
- * a short copy of the app, would have been found first by whoever downloaded it.
- */
+/** The packaged-app check again, against the copy inside the mounted image that actually ships. */
 function verifyInsideTheImage(dmg) {
   heading('--- package:verify (the copy inside the .dmg) ---')
-  // `realpathSync`, and this is not cosmetic. On macOS `os.tmpdir()` is under
-  // `/var/folders/...`, and `/var` is a symlink to `/private/var` — so a bundle
-  // reached through that path is reached through a symlink. The relay command
-  // inside the app guards its entry point with
-  // `pathToFileURL(process.argv[1]).href === import.meta.url`, and
-  // `import.meta.url` is resolved while `process.argv[1]` is not: through a
-  // symlinked path the two differ, the guard fails, and the command exits 0
-  // having done nothing at all. `package:verify` then reports that the shipped
-  // relay wrote no project — a true statement about a path artefact rather than
-  // about the `.dmg`. Found exactly that way, the first time this ran.
-  //
-  // A real download does not take this path (`/Volumes` and `/Applications` are
-  // both real directories), so it is the mount that is fixed here rather than
-  // the guard. The fragility is real and is recorded in ROADMAP.md.
+  // realpath: /var is a symlink to /private/var, and through it the relay entry guard
+  // (`argv[1]` vs `import.meta.url`) fails and exits 0 having done nothing.
   const mount = realpathSync(mkdtempSync(join(tmpdir(), 'teamree-dmg-')))
-  // Mounted where we say rather than wherever /Volumes puts it, so the path
-  // below is known instead of guessed from the volume name.
+  // A known mount point instead of one guessed from the volume name.
   const attached = spawnSync('hdiutil', ['attach', dmg, '-nobrowse', '-readonly', '-mountpoint', mount], {
     stdio: 'inherit'
   })
@@ -505,9 +375,7 @@ async function main(argv) {
 
   const head = git(['rev-parse', 'HEAD']).out
   const branch = git(['rev-parse', '--abbrev-ref', 'HEAD']).out
-  // `refs/tags/<tag>^{commit}` rather than the bare name: a branch sharing the
-  // name would otherwise answer for the tag, and an annotated tag would answer
-  // with the tag object rather than the commit it points at.
+  // Not the bare name: a same-named branch would answer, and an annotated tag gives the tag object.
   const localTagRef = git(['rev-parse', '-q', '--verify', `refs/tags/${tag}^{commit}`])
   const remote = git(['ls-remote', 'origin'])
   if (remote.status !== 0) {
@@ -517,12 +385,9 @@ async function main(argv) {
   const remoteRefs = remote.out.split('\n').map((line) => line.split('\t'))
   const remoteTagLine = remoteRefs.find(([, ref]) => ref === `refs/tags/${tag}`)
 
-  // Authentication and repository are asked separately: `gh repo view` fails
-  // both when nobody is signed in and when no remote points at GitHub, and one
-  // message for the two sent a signed-in maintainer to `gh auth login`.
+  // `gh repo view` fails both signed-out and with no GitHub remote, so auth is asked separately.
   const ghAuthenticated = spawnSync('gh', ['auth', 'status'], { encoding: 'utf8', cwd: REPO_ROOT }).status === 0
-  // `GH_REPO` is gh's own override, honoured for the same reason gh honours it:
-  // a checkout can be perfectly valid and have no GitHub remote on it.
+  // `GH_REPO` is gh's own override for a checkout with no GitHub remote.
   const named = spawnSync('gh', ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'], {
     encoding: 'utf8',
     cwd: REPO_ROOT
@@ -534,9 +399,7 @@ async function main(argv) {
     version: pkg.version,
     head,
     dirty: git(['status', '--porcelain']).out,
-    // Keyed by the package version rather than by the tag, so a candidate is
-    // released with the notes of the version it is a candidate for instead of
-    // asking somebody to write `0.2.0-rc.1.md` and then write it again.
+    // By package version, so a candidate uses the notes of the version it is a candidate for.
     highlights: readHighlights(pkg.version),
     relayInstalled: existsSync(join(REPO_ROOT, 'relay', 'node_modules')),
     ghAuthenticated,
@@ -569,8 +432,7 @@ async function main(argv) {
   }
 
   const dist = join(REPO_ROOT, 'dist')
-  // The alias this script wrote on an earlier run is not a second build, and
-  // counting it as one would make every re-run refuse.
+  // The alias from an earlier run is not a second build.
   const dmgs = readdirSync(dist).filter((name) => name.endsWith('.dmg') && name !== STABLE_DMG_NAME)
   if (dmgs.length !== 1) {
     fail(
@@ -589,11 +451,8 @@ async function main(argv) {
   }
   console.log('release: package:verify (the copy inside the .dmg) passed')
 
-  // What a downloader's Mac would say. A report rather than a gate when no
-  // credentials are set — unsigned is this project's default and refusing it
-  // would refuse every release it has ever been able to make — and a gate when
-  // they are, because a signing run that silently produced an unsigned build is
-  // the failure that reaches people.
+  // A report when unsigned (the default), a gate when credentials are set: a signing run
+  // that silently produced an unsigned build is the failure that reaches people.
   heading('--- verify-signing ---')
   const signing = resolveMacSigning(process.env)
   const signingResult = spawnSync(
@@ -610,14 +469,10 @@ async function main(argv) {
 
   const hash = await sha256(dmg)
 
-  // Copied rather than symlinked: a release asset is uploaded by reading the
-  // path, and a link would upload as whatever it points at on this machine.
+  // Copied, not symlinked: upload reads the path.
   const stableDmg = join(dist, STABLE_DMG_NAME)
   copyFileSync(dmg, stableDmg)
 
-  // Both names, one hash. Somebody who downloaded either file can compare
-  // what they have against the line naming it, rather than working out that
-  // the two files are the same file.
   const checksums = `${checksumLine(hash, dmgs[0])}\n${checksumLine(hash, STABLE_DMG_NAME)}\n`
   const sumsPath = join(dist, 'SHA256SUMS.txt')
   writeFileSync(sumsPath, checksums)

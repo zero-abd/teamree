@@ -1,20 +1,7 @@
-// Asking GitHub what the newest published release is, and refusing to believe
-// most of what comes back.
-//
-// Everything below the request is a trust boundary. The response is JSON from
-// the internet: a proxy, a captive portal or a compromised token can put
-// anything in it, and two of the fields end up somewhere dangerous — the notes
-// are shown to the user, and the download URL is handed to their browser. So
-// nothing is used as it arrives. The tag has to look like one of this project's
-// tags, the URL has to be an address on github.com under this repository, the
-// notes are flattened to plain text and cut to a length, and the body is read
-// through a byte budget so a response that never ends cannot be a response that
-// never ends.
-//
-// It reads the releases API rather than the atom feed or the download page
-// because that is the only one of the three that says which release is a
-// pre-release, and that distinction is what keeps a candidate away from
-// somebody who is not testing candidates.
+// Asking GitHub what the newest published release is. The response is a trust
+// boundary: the notes are shown and the download URL goes to the browser, so
+// tag, URL, notes and body length are all checked. The releases API is the
+// only source that says which release is a pre-release.
 
 import { z } from 'zod'
 import { compareVersions, isPrereleaseVersion, parseVersion, type Version } from './semver'
@@ -27,23 +14,10 @@ export const GITHUB_API_ORIGIN = 'https://api.github.com'
 /** The only host a download link is allowed to lead to. */
 export const RELEASE_HOST = 'github.com'
 
-/**
- * How long the check may take before it is abandoned.
- *
- * Nothing waits on this — it runs long after the window is up — so the timeout
- * is not about responsiveness. It is about a socket on a captive-portal network
- * that accepts a connection and then says nothing at all, which without a
- * deadline is a request that is still outstanding when the user quits.
- */
+/** A captive portal accepts the connection and says nothing; without this the request outlives the user. */
 export const REQUEST_TIMEOUT_MS = 10_000
 
-/**
- * The most of a response body that will be read.
- *
- * A release with generous notes is a few kilobytes. This is two orders of
- * magnitude above that and still small enough that a body claiming to be
- * endless is abandoned rather than accumulated.
- */
+/** The most of a response body that will be read; a release is a few kilobytes. */
 export const MAX_RESPONSE_BYTES = 256 * 1024
 
 /** The most release notes that are shown. Past it the reader gets the link. */
@@ -53,12 +27,8 @@ export const MAX_NOTES_CHARS = 4_000
 export const PRERELEASE_PAGE_SIZE = 20
 
 /**
- * Which releases this build is a candidate for being offered.
- *
- * `stable` asks for `/releases/latest`, which GitHub defines as the newest
- * release that is neither a draft nor a pre-release — the filtering is done by
- * the API, and checked again here, because the two agreeing is not something
- * this app should have to assume.
+ * Which releases this build is a candidate for. `stable` asks `/releases/latest`,
+ * GitHub's newest non-draft non-prerelease, and checks that again here.
  */
 export type ReleaseChannel = 'stable' | 'prerelease'
 
@@ -81,12 +51,8 @@ export type LatestRelease = {
 }
 
 /**
- * Exactly the fields that are used, and every one of them optional.
- *
- * A schema that demanded the whole shape would turn an API that added or
- * renamed something into a check that fails forever, silently, on everybody's
- * machine at once. So this asks for very little and the code below decides what
- * it can do without.
+ * Exactly the fields that are used, every one optional: demanding the whole
+ * shape would make an API rename a check that fails silently on every machine.
  */
 const ReleaseSchema = z.object({
   tag_name: z.string().optional(),
@@ -113,10 +79,7 @@ export type LatestReleaseOptions = {
 
 /**
  * The newest release this build could be offered, or null when there is none.
- *
- * Throws when the check could not be made — no network, a refusal, a body that
- * is not JSON. The caller's job is to write that down and say nothing, so the
- * message here is for the log rather than for a window.
+ * Throws when the check could not be made; the message is for the log, not a window.
  */
 export async function readLatestRelease(options: LatestReleaseOptions): Promise<LatestRelease | null> {
   const repository = options.repository ?? UPDATE_REPOSITORY
@@ -130,20 +93,16 @@ export async function readLatestRelease(options: LatestReleaseOptions): Promise<
   const response = await fetchImpl(url, {
     headers: {
       accept: 'application/vnd.github+json',
-      // Pinned, because an unversioned request is one that changes shape on
-      // GitHub's schedule rather than on this project's.
+      // Pinned, so the shape changes on this project's schedule rather than GitHub's.
       'x-github-api-version': '2022-11-28',
-      // GitHub refuses a request without one, and an identifiable agent is also
-      // how a maintainer would recognise this app in their own logs.
+      // GitHub refuses a request without one.
       'user-agent': `teamree/${options.version}`
     },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
   })
 
   if (!response.ok) {
-    // The status is the whole message on purpose. 403 with no remaining quota
-    // is the rate limit, 404 is a repository that has no releases yet, and
-    // neither is something to put in front of somebody who is working.
+    // 403 is the rate limit, 404 a repository with no releases yet; neither goes in front of the user.
     throw new Error(`GitHub answered ${response.status} for ${options.channel} releases`)
   }
 
@@ -168,13 +127,8 @@ export async function readLatestRelease(options: LatestReleaseOptions): Promise<
 }
 
 /**
- * One release, if it is one this app can act on at all.
- *
- * A draft is not published and cannot be downloaded; a tag that is not a
- * version cannot be compared to this build's; and on the stable channel a
- * release GitHub has marked a pre-release is not offered whatever endpoint it
- * arrived from, because `/releases/latest` excluding them is GitHub's promise
- * rather than this app's guarantee.
+ * One release, if it is one this app can act on: not a draft, a tag that is a
+ * version, and on the stable channel not a pre-release whatever endpoint it came from.
  */
 function usable(raw: RawRelease, repository: string, channel: ReleaseChannel): LatestRelease | null {
   if (raw.draft === true) return null
@@ -183,21 +137,17 @@ function usable(raw: RawRelease, repository: string, channel: ReleaseChannel): L
 
   const tag = raw.tag_name?.trim() ?? ''
   const version = parseVersion(tag)
-  // A tag is a path segment in the two URLs below, so this refusal is what
-  // keeps `../` and a query string out of an address the browser is handed.
+  // The tag is a path segment in the URLs below: this keeps `../` and a query string out.
   if (version === null || !/^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(tag)) return null
 
   return {
     version: version.raw,
     tag,
-    // GitHub's own flag when it is set, and the tag's shape when it is not: a
-    // release cut as `v0.3.0-rc.1` is a candidate whether or not the box was
-    // ticked, and the tag is the half of that pair this project controls.
+    // GitHub's flag or the tag's shape: `v0.3.0-rc.1` is a candidate whether or not the box was ticked.
     prerelease: prerelease || isPrereleaseVersion(version),
     notes: plainText(raw.body ?? ''),
     downloadUrl: diskImage(raw, repository),
-    // Built here rather than read from `html_url`, so the one link that is
-    // always offered is one this app composed out of a tag it has checked.
+    // Built from a checked tag rather than read from `html_url`.
     releaseUrl: `https://${RELEASE_HOST}/${repository}/releases/tag/${tag}`,
     publishedAt: epoch(raw.published_at)
   }
@@ -214,14 +164,7 @@ function highest(releases: readonly LatestRelease[]): LatestRelease | null {
   return best?.release ?? null
 }
 
-/**
- * The macOS image among the release's assets, or null.
- *
- * Checked against the repository it claims to belong to, because this URL is
- * the one piece of the response that is handed to the user's browser. A
- * download link pointing somewhere else is not a release asset however much the
- * JSON around it says it is.
- */
+/** The macOS image among the release's assets, or null. This URL goes to the browser, so it is checked. */
 function diskImage(raw: RawRelease, repository: string): string | null {
   for (const asset of raw.assets ?? []) {
     if (asset.name === undefined || !asset.name.endsWith('.dmg')) continue
@@ -234,10 +177,7 @@ function diskImage(raw: RawRelease, repository: string): string | null {
 
 /**
  * Whether a URL is an address in this repository's releases, served over TLS.
- *
- * Deliberately narrow. The alternative — "it starts with https://github.com" —
- * is passed by `https://github.com.example.invalid/` on a string comparison,
- * which is exactly the mistake a parsed URL cannot make.
+ * Parsed, not prefix-matched: `https://github.com.example.invalid/` passes a string compare.
  */
 export function isReleaseDownload(candidate: string, repository: string = UPDATE_REPOSITORY): boolean {
   let url: URL
@@ -252,12 +192,8 @@ export function isReleaseDownload(candidate: string, repository: string = UPDATE
 }
 
 /**
- * The response body, up to the budget, abandoned past it.
- *
- * Read through the stream rather than with `response.text()` because `text()`
- * has already buffered the whole thing by the time its length could be
- * checked — which makes a cap applied afterwards a cap on what is shown rather
- * than on what is held.
+ * The response body, up to the budget, abandoned past it. Streamed, because
+ * `response.text()` has buffered the whole thing before its length can be checked.
  */
 async function readBounded(response: Response): Promise<string> {
   const body = response.body
@@ -285,23 +221,13 @@ async function readBounded(response: Response): Promise<string> {
 }
 
 /**
- * Release notes as something safe to put on screen.
- *
- * The body is markdown, and markdown is a document format that carries HTML.
- * Nothing here renders it: control characters that could rewrite a line of
- * terminal-adjacent UI are dropped, the text is cut to a length, and what
- * survives is a string the renderer prints as text. Any angle brackets in it
- * stay angle brackets — see the card, which puts this in a text node and never
- * near `dangerouslySetInnerHTML`.
+ * Release notes as something safe to put on screen: markdown carries HTML, so
+ * nothing renders it; control characters are dropped and the card uses a text node.
  */
 export function plainText(body: string, limit: number = MAX_NOTES_CHARS): string | null {
   const flattened = body
     .replace(/\r\n?/g, '\n')
-    // Every control character except tab and newline — an escape sequence in a
-    // release body is not notes, whatever else it may be. Spelled as "in the
-    // Cc category and not one of those two" rather than as ranges, because a
-    // range of control characters is a regex nobody can read and a linter is
-    // right to be suspicious of.
+    // Every control character except tab and newline; spelled by category, not ranges.
     .replace(/[^\P{Cc}\n\t]/gu, '')
     .trim()
   if (flattened === '') return null

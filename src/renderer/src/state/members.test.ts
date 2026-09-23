@@ -31,8 +31,7 @@ it('adds you to a roster you are not in, and re-reads every roster on screen', a
   await store.bootstrap()
   const stop = store.startWatching()
   try {
-    // The demo seeds one project the local key is in and one it is not, because
-    // the difference between those two is the whole of what the dialog shows.
+    // The demo seeds one project the local key is in and one it is not.
     const [joined, outsider] = useWorkspaceStore.getState().projects
     await store.loadMembers(joined!.id)
     await store.loadMembers(outsider!.id)
@@ -45,8 +44,7 @@ it('adds you to a roster you are not in, and re-reads every roster on screen', a
     expect(after.enrolled).toBe(true)
     expect(after.members.filter((member) => member.isSelf)).toHaveLength(1)
 
-    // The write announces itself, and the announcement re-reads the rosters
-    // this window is holding rather than only the one that changed.
+    // The write announces itself, and the announcement re-reads every roster this window holds.
     await vi.waitFor(() => {
       const read = call.mock.calls
         .filter(([method]) => method === 'members.list')
@@ -80,8 +78,7 @@ it('writes the relay into the project and leaves committing it to the user', asy
 })
 
 it('says whether the override was seen, not only whether it won', async () => {
-  // "I set TEAMREE_RELAY_URL and nothing happened" has no answer inside the app
-  // unless the app reports having looked.
+  // "I set TEAMREE_RELAY_URL and nothing happened" has no answer unless the app reports having looked.
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
   const [joined] = useWorkspaceStore.getState().projects
@@ -95,8 +92,7 @@ it('says whether the override was seen, not only whether it won', async () => {
 })
 
 it('re-reads the relay on the same change that re-reads the roster', async () => {
-  // One directory, one watch, one event: a pull that brings in a key and a
-  // relay must not need two of anything.
+  // One directory, one watch, one event: a pull bringing a key and a relay must not need two of anything.
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
   const stop = store.startWatching()
@@ -121,10 +117,8 @@ it('re-reads the relay on the same change that re-reads the roster', async () =>
 })
 
 it('keeps a refused join in the panel rather than in a notice', async () => {
-  // Every refusal the runtime raises here ends in "choose another handle",
-  // which is an instruction about a field. It also used to be unreadable: the
-  // notice layer sat under the modal's own scrim, so pressing the button with a
-  // taken handle showed the user nothing whatsoever.
+  // Every refusal here ends in "choose another handle", an instruction about a field; a notice
+  // under the modal's own scrim was never seen.
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
   const [, outsider] = useWorkspaceStore.getState().projects
@@ -139,8 +133,7 @@ it('keeps a refused join in the panel rather than in a notice', async () => {
   const after = useWorkspaceStore.getState()
   expect(after.membersError).toBe(taken)
   expect(after.membersPending).toBe(false)
-  // Not duplicated into the corner of the window: one sentence, in one place,
-  // and that place is under the box it is about.
+  // One sentence, in one place: under the box it is about.
   expect(after.notices.map((notice) => notice.text)).not.toContain(taken)
 })
 

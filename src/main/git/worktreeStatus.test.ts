@@ -43,8 +43,7 @@ describe('parsePorcelainV2', () => {
       unstaged: 2, // unstaged.txt, both.txt
       untracked: 1,
       conflicted: 1,
-      // Counted, and counted apart: an ignored file is not a change, but it is
-      // still something a removal would delete.
+      // Counted apart: an ignored file is not a change, but a removal would delete it.
       ignored: 1,
       ignoredPaths: ['ignored.txt']
     })
@@ -136,11 +135,8 @@ describe('worktree.status', () => {
     expect(status.untracked).toBe(0)
   })
 
-  // The defect this pair of numbers was confused by: `ahead` is what the push
-  // button sends and belongs to the upstream; `behind` is how far the base has
-  // moved on and belongs to the base ref. They were the same number for as long
-  // as the upstream was the base, and a push that fixed the first would have
-  // silently taken the second with it.
+  // `ahead` belongs to the upstream and `behind` to the base ref; they were the same
+  // number while the upstream was the base, and a push fixing one silently took the other.
   it('reads what is left to push from the upstream and what is left to merge from the base', async () => {
     const repo = await createTempRepo({ withRemote: true })
     repos.push(repo)
@@ -155,8 +151,7 @@ describe('worktree.status', () => {
     await repo.write('work.ts', 'export const a = 1\n', worktree.path)
     await repo.commit('work in the worktree', worktree.path)
 
-    // The base moves on twice and the remote hears about it: this is the `2
-    // behind` the sidebar draws, and it must survive the push.
+    // The base moves on twice: the `2 behind` the sidebar draws, which must survive the push.
     await repo.write('base-one.ts', '1\n')
     await repo.commit('base one')
     await repo.write('base-two.ts', '2\n')
@@ -170,8 +165,7 @@ describe('worktree.status', () => {
     const pushed = await service.worktreePush({ worktreeId: worktree.id })
     expect(pushed.upstream).toBe('origin/push-me')
 
-    // The branch now tracks itself on the remote, so there is nothing left to
-    // send — and the base is still two commits ahead of it.
+    // The branch tracks itself on the remote now, and the base is still two ahead.
     expect(await repo.git(['rev-parse', '--abbrev-ref', '@{upstream}'], worktree.path)).toBe('origin/push-me')
     const after = await service.worktreeStatus({ worktreeId: worktree.id })
     expect(after.ahead).toBe(0)

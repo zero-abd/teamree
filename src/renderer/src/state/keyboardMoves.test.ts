@@ -1,20 +1,8 @@
 /** @vitest-environment jsdom */
 
-// Getting around without the mouse: the two chords that walk the sidebar, the
-// two that walk the panes, and the one that fills the window with the pane you
-// are looking at.
-//
-// What the store owes each of them is different, so they are tested apart. The
-// worktree walk owes agreement with the sidebar — proved against
-// `worktreeOrder`, which is the function the sidebar itself renders from. The
-// pane walk owes reversibility: forwards and backwards written twice would be
-// two orders, and a pair of chords that do not undo each other. Maximising owes
-// the thing that is easiest to get wrong and hardest to notice — that it
-// touches nothing the runtime will save, so a window maximised at midnight does
-// not come back tomorrow with one pane in it.
-//
-// The runtime is a call that never answers, so nothing here depends on one:
-// every claim below is about what the store does before it asks anybody.
+// The chords that walk the sidebar and the panes, and the one that maximises
+// a pane. The worktree walk is proved against `worktreeOrder`, the function the
+// sidebar renders from. The runtime is a call that never answers.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Layout, PaneNode } from '@shared/entities'
@@ -71,8 +59,7 @@ beforeEach(() => {
 })
 
 describe('walking the worktrees', () => {
-  // Interleaved, the way a runtime answer arrives, so stepping the store's own
-  // array and stepping the sidebar's order are visibly different answers.
+  // Interleaved, so stepping the store's array and the sidebar's order differ visibly.
   beforeEach(() => {
     useWorkspaceStore.setState({
       projects: [project('p1'), project('p2')],
@@ -82,8 +69,7 @@ describe('walking the worktrees', () => {
   })
 
   it('goes down the sidebar rather than down the store’s list', () => {
-    // The store's array says w2 is next. The sidebar draws w3 there, because
-    // w3 is the second row under the first project.
+    // The store's array says w2 is next; the sidebar draws w3 there.
     store().stepWorktree(1)
     expect(store().activeWorktreeId).toBe('w3')
     store().stepWorktree(1)
@@ -129,9 +115,7 @@ describe('walking the panes', () => {
     expect(store().layouts.w1?.focusedTerminalId).toBe('t1')
   })
 
-  // A teammate's pane is in the cycle in both directions, for the reason it is
-  // in it at all: a pane you can type into that a chord refuses to reach is a
-  // pane that is only half in the window.
+  // A pane you can type into that a chord refuses to reach is only half in the window.
   it('walks backwards out of your own panes and into a teammate’s', () => {
     useWorkspaceStore.setState({
       watches: [{ id: 'watch:p1:priya:t7', projectId: 'p1', paneId: 't7', label: 'priya', handle: 'priya' }]
@@ -159,9 +143,7 @@ describe('maximising a pane', () => {
     expect(shownRoot(store().layouts.w1?.root ?? null, store().expandedTerminalId)).toBe(SPLIT)
   })
 
-  // The whole reason it is not in the `Layout`: what the runtime saves is an
-  // arrangement, and this is a way of looking at one. A window left maximised
-  // must not come back tomorrow with one pane in it.
+  // Not in the `Layout`: a window left maximised must not come back tomorrow with one pane in it.
   it('leaves the saved layout exactly as it was, and tells the runtime nothing', () => {
     const before = store().layouts.w1
     store().toggleExpandedPane()
@@ -175,8 +157,7 @@ describe('maximising a pane', () => {
     expect(store().expandedTerminalId).toBeNull()
   })
 
-  // Maximising is about the tree in front of you, so it does not travel: the
-  // tab you come back to is the tab as you left it.
+  // Maximising is about the tree in front of you, so it does not travel.
   it('gives the tree back when another worktree is opened', () => {
     store().toggleExpandedPane()
     void store().openWorktree('w2')

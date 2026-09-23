@@ -1,23 +1,5 @@
-// Fails the run on any test that was skipped for a reason nobody wrote down.
-//
-// Every quiet hole this suite has had was the same shape. A test decides for
-// itself whether to run by looking for something — a built relay, a working
-// pty, a runtime binary — and skips when it is missing. The run ends
-// "1868 passed", a reader concludes the project is proven, and the sixty tests
-// that did not run are a line of grey in the middle of a minute of output.
-// Aliasing node-pty's `spawn` to a stub that throws took this suite from
-// 1868 passed / 7 skipped to 1808 passed / 67 skipped, and before this check
-// existed both of those runs exited 0.
-//
-// One check here rather than a condition in each of those files, because seven
-// conditions rot separately and this cannot: a test that starts skipping for a
-// new reason fails the run until somebody says, here, why that is acceptable.
-//
-// The allowlist lives in this file rather than in `vitest.config.ts` because it
-// is not configuration — it is the reasoning behind each tolerated absence, and
-// the place a reader lands when the refusal below names it. `vitest.config.ts`
-// says how the tests run; which absences are tolerable is a different question
-// and it deserves its own page.
+// Fails the run on any skipped test not allowlisted here with a reason. A stubbed node-pty once took
+// the suite from 7 to 67 skips and still exited 0; one check here cannot rot the way per-file ones do.
 
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -30,12 +12,8 @@ const ptyOptOut = () => process.env.TEAMREE_SKIP_PTY_TESTS === '1'
 const workerdOptOut = () => process.env.TEAMREE_SKIP_WORKERD_TESTS === '1'
 
 /**
- * The skips this project accepts, and why each one is not a hole.
- *
- * `file` is repository-relative. `suite` names a top-level describe and covers
- * everything under it; `test` names one test exactly; neither means the whole
- * file. `when` is what has to be true for the absence to be acceptable — no
- * entry is unconditional except the two that are always legitimate.
+ * The accepted skips and why. `suite` covers a top-level describe, `test` one test, neither the file;
+ * `when` is what must hold for the absence to be acceptable.
  */
 const ALLOWED = [
   {
@@ -52,9 +30,7 @@ const ALLOWED = [
       'The assertion that matters — that fitsUnixSocketPath rejects the path — runs before it.'
   },
 
-  // Opted out of by hand. `scripts/require-test-environment.mjs` refuses to
-  // start the suite without a built relay or a working pty, so reaching these
-  // means somebody typed the variable and knows what they gave up.
+  // Opted out by hand: require-test-environment.mjs refuses to start without relay and pty otherwise.
   {
     file: 'src/main/teamwork/peer/relayProcess.test.ts',
     suite: 'two peers over the real relay',
@@ -155,9 +131,7 @@ const ALLOWED = [
       'configFromEnv throwing (relay/test/operability.test.ts).'
   },
 
-  // POSIX-only, and skipped on the one platform this does not ship to. Kept as
-  // entries rather than waved through, so that a Windows run still reports
-  // exactly which tests it did not have.
+  // POSIX-only; listed so a Windows run still reports exactly what it did not run.
   {
     file: 'src/main/runtime/socketServer.test.ts',
     when: onWindows,
@@ -206,8 +180,7 @@ function allowanceFor(skip) {
 
 export default class SkipAllowlist {
   onTestRunEnd(testModules, _errors, reason) {
-    // An interrupted run has not finished deciding what it skipped, and a
-    // failing one has already said something worth reading first.
+    // An interrupted or failing run has something more worth reading first.
     if (reason !== 'passed') return
 
     const unexplained = []

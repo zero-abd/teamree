@@ -10,11 +10,7 @@ export type ArgSpec = {
   name: string
   description: string
   required?: boolean
-  /**
-   * Takes every remaining positional rather than one. Only the last argument
-   * may be variadic, and a command has at most one — otherwise there is no
-   * saying where the first ends and the second begins.
-   */
+  /** Takes every remaining positional; only the last argument, and at most one per command. */
   variadic?: boolean
 }
 
@@ -26,23 +22,11 @@ export type CommandContext = {
   cwd: string
   /** Where the endpoint came from; `status` reports it. */
   endpointSource: string
-  /**
-   * Everything on stdin, read once. For a flag whose value is `-`, and for the
-   * one command another program runs with something on its stdin — an agent's
-   * hook, handing over the hook's JSON, which is read bounded (see
-   * `stdin.ts`) and comes back empty when nothing was piped.
-   */
+  /** Everything on stdin, read once and bounded (`stdin.ts`); empty when nothing was piped. */
   stdin: () => Promise<string>
   /**
-   * For the one command that streams. `teamree team watch --follow` writes a
-   * teammate's pane out as it arrives rather than at the end, and there is no
-   * way to do that through a returned `CommandOutput`.
-   *
-   * Every other command must leave this alone and return its output, because
-   * `--json` promises exactly one JSON document on stdout and a command writing
-   * around the emitter is how that promise gets broken. `team watch` refuses
-   * --follow together with --json for exactly that reason, which makes the
-   * guarantee structural rather than a rule somebody has to remember.
+   * For `team watch --follow` only, which streams. Everyone else returns output, since `--json` promises
+   * one document on stdout; `team watch` refuses `--follow` with `--json`.
    */
   streams: Streams
 }
@@ -56,13 +40,8 @@ export type CommandSpec = {
   flags?: readonly FlagSpec[]
   examples?: readonly string[]
   /**
-   * Prints nothing and exits 0 whatever happens after its arguments parse —
-   * no runtime, a refused call, a broken socket. For a command another
-   * program runs from a hook, where anything on stdout lands in that
-   * program's context and any non-zero exit lands in its transcript as this
-   * app's failure. A usage error is still one: the line is generated, so
-   * getting it wrong is a bug worth hearing about, and it can only be typed
-   * by a person.
+   * Prints nothing and exits 0 whatever happens after parsing, for commands run from another program's
+   * hook. A usage error still fails: the line is generated, so it is a bug worth hearing.
    */
   silent?: boolean
   run: (context: CommandContext) => Promise<CommandOutput>

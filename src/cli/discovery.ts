@@ -16,10 +16,7 @@ export const APP_DIR_NAME = 'teamree'
 /** The name the runtime writes; TEAMREE_RUNTIME_FILE overrides the whole path. */
 export const DISCOVERY_FILE_NAME = 'runtime.json'
 
-/**
- * Deliberately loose: only the three fields the CLI needs to dial the runtime
- * are required, so a runtime that adds fields never breaks an older CLI.
- */
+/** Loose: only the three fields needed to dial are required, so newer runtimes never break an older CLI. */
 export const DiscoveryRecordSchema = z.object({
   /** Unix socket path, or a named pipe on Windows. */
   endpoint: z.string().min(1),
@@ -125,11 +122,7 @@ export function parseDiscoveryRecord(
   return { ok: true, record: parsed.data }
 }
 
-/**
- * A record is stale when its process is gone, or when the unix socket it names
- * has been removed — a crashed runtime leaves the file behind, and connecting to
- * a dead socket fails far less legibly than saying so.
- */
+/** Stale when its process is gone or its unix socket was removed (a crash leaves the file behind). */
 export function isStale(record: DiscoveryRecord, host: DiscoveryHost): string | null {
   if (!host.isProcessAlive(record.pid)) return `process ${record.pid} is no longer running`
   if (!isPipe(record.endpoint) && host.platform !== 'win32' && !host.pathExists(record.endpoint)) {
@@ -166,8 +159,7 @@ export function requireRuntime(host: DiscoveryHost = defaultDiscoveryHost()): Di
   const outcome = findRuntime(host)
   if (outcome.ok) {
     const spoken = outcome.record?.protocolVersion
-    // A running but incompatible runtime is a different problem from an absent
-    // one, so it must not look like exit code 3.
+    // A running but incompatible runtime must not look like exit code 3.
     if (spoken !== undefined && spoken !== PROTOCOL_VERSION) {
       throw new CliError({
         code: 'protocol_mismatch',

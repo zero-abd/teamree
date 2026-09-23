@@ -1,11 +1,7 @@
-// What git itself believes about a repository's worktrees.
-//
-// The service's records are a cache of this; anything the user removed with
-// `rm -rf` or plain `git worktree remove` has to disappear from the app too, so
-// every list/get pass reconciles against this inventory.
+// What git itself believes about a repository's worktrees. The service's records
+// are a cache of this, so every list/get pass reconciles against it.
 
 import type { GitRunner } from './gitProcess'
-import { pathKey } from './pathIdentity'
 
 export type InventoryEntry = {
   path: string
@@ -17,11 +13,7 @@ export type InventoryEntry = {
   locked: boolean
 }
 
-/**
- * Records are separated by blank lines; each is `key value` or a bare keyword.
- * The `-z` form would spare us the quoting rules but only landed in git 2.36,
- * above our floor, so the plain form is parsed instead.
- */
+/** Records are blank-line separated, `key value` or a bare keyword. `-z` landed in git 2.36, above our floor. */
 export function parseWorktreeList(raw: string): InventoryEntry[] {
   const entries: InventoryEntry[] = []
   let current: InventoryEntry | null = null
@@ -91,8 +83,4 @@ export async function readWorktreeInventory(runner: GitRunner, root: string): Pr
     timeoutMs: 30_000
   })
   return parseWorktreeList(stdout)
-}
-
-export function inventoryPathKeys(entries: readonly InventoryEntry[]): Set<string> {
-  return new Set(entries.map((entry) => pathKey(entry.path)))
 }

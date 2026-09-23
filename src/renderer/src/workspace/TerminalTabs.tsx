@@ -1,36 +1,7 @@
-// The strip along the top of the workspace: the panes of the worktree you are
-// in, and nothing from any other. What goes in it, in what order and under what
-// name is `paneTabs`, which explains why the strip lists panes rather than
-// worktrees; this file is the store actions a tab can reach and the one
-// question the store answers that the module cannot see — which pane, if any,
-// has the focus.
-//
-// It is also the top edge of the window on this side of the seam. There is no
-// title strip above it: the sidebar's header and this strip share the window's
-// top row, both are drag regions, and on macOS the window buttons sit over
-// whichever is at the left edge — this one, once the sidebar is away, which is
-// when the stylesheet gives it the same inset and this file gives it the
-// control that brings the sidebar back. So the strip is always drawn, even with
-// nothing to list: the tabs and the pane buttons come and go, the strip stays.
-//
-// And it lists panes only while the panes are what is under it. Over the pane
-// board, settings, help or teamwork setup, a row of tabs would describe panes
-// that are not on screen, which is the old strip's mistake in a new place.
-//
-// The three buttons at the end of the strip are the only place in the window
-// that a pane can be split or opened with a pointer. They were in the worktree
-// header, next to the path and the pane board and the two repository buttons,
-// which made a row of six out of a row of two and put commands about a pane
-// above the panes' own strip rather than in it. They act on the focused pane —
-// the one this strip is already drawing as current — so the strip says what
-// they will happen to. The `+` opens a menu of what can be started here — a
-// terminal, an agent the machine has — rather than a terminal outright; the
-// chord is still the one-press way to a terminal.
-//
-// It is also where a pane gets renamed, because this is where the name is a
-// problem: three agents on three approaches read `claude`, `claude`, `claude`
-// along the top, and the strip is what somebody is looking at when they wish
-// one of them said which was the auth refactor.
+// The strip along the top of the workspace: the open worktree's panes (what and how is `paneTabs`),
+// plus the actions a tab reaches. It is the window's top edge and drag region on this side, so it is
+// always drawn; it lists panes only while panes are under it. The end buttons split, close and start
+// (`+` opens a menu of what can start here), and a tab is where a pane gets renamed.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { paneTabs, paneTabTitle } from './paneTabs'
@@ -58,16 +29,11 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   const terminals = useWorkspaceStore((state) => state.terminals)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
   const toggleSidebar = useWorkspaceStore((state) => state.toggleSidebar)
-  // Whether the panes are what is under this strip. The same order of
-  // precedence `WorkspaceArea` applies before it gets to the panes.
+  // Same precedence `WorkspaceArea` applies.
   const panesShown = useWorkspaceStore(
     (state) => !state.dashboardOpen && state.teamworkProjectId === null && !state.settingsOpen && !state.helpOpen
   )
-  // A teammate's pane holding the focus is what takes it off yours, and the
-  // strip has to say so by marking nothing: two active tabs, or an active tab
-  // beside a focused border somewhere else, would be the second answer this
-  // whole arrangement exists to avoid. It is the same test `WorkspaceArea`
-  // applies before it hands a focused id to the pane tree.
+  // A teammate's pane holding focus marks no tab here, as `WorkspaceArea` marks no focused border.
   const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
   const focusPane = useWorkspaceStore((state) => state.focusPane)
   const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
@@ -80,8 +46,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
     setMenuAt(null)
     plus.current?.focus()
   }, [])
-  // The same reading the sidebar draws, on the same panes: a strip that called
-  // a pane read while the row beside it called it unread would be two answers.
+  // The sidebar's reading, so the strip and the row agree.
   const unread = useUnreadPanes()
 
   const tabs = panesShown ? paneTabs(layout?.root ?? null, terminals) : []
@@ -118,15 +83,11 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
               >
                 {renaming === tab.terminalId ? (
                   <RenameField
-                    // The name the tab shows, not the stored label: for a pane the
-                    // app named — the ones people rename — the label is empty and
-                    // the field opened blank.
+                    // The shown name, not the stored label, which is empty for app-named panes.
                     name={tab.label}
                     onCommit={(name) => {
                       setRenaming(null)
-                      // Enter on the untouched field is not a rename. Storing
-                      // `claude 1` as a label would freeze a number the strip made
-                      // up, and the name would stop telling twins apart.
+                      // Enter on the untouched field is not a rename: storing `claude 1` would freeze a made-up number.
                       if (name.trim() === tab.label) return
                       void renamePane(tab.terminalId, name)
                     }}
@@ -150,19 +111,12 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                       className={tab.activity === null ? 'activity' : `activity activity--${tab.activity}`}
                       aria-hidden="true"
                     />
-                    {/* Shortened here and nowhere behind here. The strip is narrow
-                      and a name can be a whole task description; the tooltip
-                      above and the record underneath both keep all of it. */}
+                    {/* Shortened here only; the tooltip and the record keep all of it. */}
                     {isUnread ? <span className="pip" aria-hidden="true" /> : null}
                     <span className="tab__name">{truncateName(tab.label)}</span>
                   </button>
                 )}
-                {/*
-                A button rather than the double-click alone, because a name is the
-                one thing on this strip somebody has to be able to set without a
-                mouse, and the modifier-free key that would do it — F2 — is a
-                brightness control on the keyboard this app is built for.
-              */}
+                {/* A button besides double-click: F2 is a brightness key on a Mac keyboard. */}
                 <button
                   type="button"
                   className="tab__rename"
@@ -174,14 +128,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                     <path d="M8.2 1.8 L10.2 3.8 L4 10 L1.8 10.2 L2 8 Z" />
                   </svg>
                 </button>
-                {/*
-                The same close the pane's own bar offers, because there is exactly
-                one terminal behind a tab and behind a pane, and closing it kills
-                the process. A tab that merely hid a pane while its pty ran on
-                would be inventing a state the layout tree has no leaf for, the
-                runtime has no record of, and `teamree terminal list` has no word
-                for — a pane you could no longer reach and no longer see.
-              */}
+                {/* The pane's own close: it kills the process, since a hidden-but-running pane has no leaf. */}
                 <button
                   type="button"
                   className="tab__close"
@@ -276,15 +223,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   )
 }
 
-/**
- * The name being typed, in the tab's own slot.
- *
- * Blur commits, like Enter: the field is inside a strip whose every other
- * control takes the focus away, and a name thrown away because somebody reached
- * for the pane they were naming would be the worst of the three possible
- * answers. Escape is the one that discards, and it sets the flag the blur then
- * reads — the cancel arrives as a blur too.
- */
+/** The rename field; blur commits like Enter, and Escape sets the flag the following blur reads. */
 function RenameField({
   name,
   onCommit,

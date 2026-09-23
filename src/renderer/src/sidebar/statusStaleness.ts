@@ -1,17 +1,6 @@
-// Whether a row is still vouching for the numbers printed on it.
-//
-// Staleness here is deliberately not "these numbers are old". A quiet worktree
-// is read only when something happens to it, so a status can be an hour old
-// with nothing whatever wrong; marking that would put a badge on every row in a
-// workspace nobody is touching, which says as much as no badge at all.
-//
-// What makes a number untrustworthy is that the app tried to confirm it and
-// could not. That is a fact rather than an inference, so it needs no threshold
-// to establish — the threshold below exists only to let a blip go by unremarked:
-// a checkout busy under somebody's own git command, a worktree mid-removal, a
-// read that lost a race with a refresh. Past it, the chips are the last thing
-// the app managed to read rather than the state of the repository, and the two
-// are not the same claim.
+// Whether a row is still vouching for the numbers printed on it. Stale is not
+// "old": a quiet worktree is read only when something happens. Stale is that
+// the app tried to confirm and could not; the threshold only lets a blip go by.
 
 import type { WorktreeStatus } from '@shared/entities'
 import { sinceLabel } from './agentRows'
@@ -33,8 +22,7 @@ export function statusStaleness(options: {
   now: number
 }): StatusStaleness | null {
   const { status, unreadableSince, now } = options
-  // Nothing has ever been read, so there is nothing on screen to qualify. The
-  // row says nothing at all, which is already the honest answer.
+  // Nothing has ever been read, so there is nothing on screen to qualify.
   if (!status || unreadableSince === undefined) return null
   if (now - unreadableSince < STATUS_UNCONFIRMED_AFTER_MS) return null
 

@@ -1,21 +1,6 @@
-// A short rail of places to go, and then projects and their worktrees, with
-// each worktree's panes and what they are doing underneath them.
-//
-// The rail exists because everything this app can show you used to be reachable
-// only from a chord or from a button buried in a project's header, which is a
-// fine arrangement for the person who built it and a dead end for everybody
-// else. It holds the two destinations that are about the window rather than
-// about one worktree — teamwork and the pane board — above the tree, where an
-// app-level thing belongs.
-//
-// There is still no filter box, and the search entry is not one. A field that
-// filters this list permanently occupying the top of the sidebar earns its
-// place only in a list too long to look at, and by then the palette is faster:
-// it matches names, branches, projects and commands, and it is one chord away
-// from anywhere. So the rail's search opens that palette. It is a button
-// wearing a field's clothes rather than a box that does a lesser thing, because
-// the alternative — a second, weaker search beside the real one — is how an app
-// ends up with two answers to "where is it".
+// A short rail of places to go, then projects and their worktrees with each
+// worktree's panes underneath. The rail's search is a button wearing a field's
+// clothes: it opens the palette rather than being a second, weaker search.
 
 import { useEffect, useMemo } from 'react'
 import { teammatesHeard } from '@shared/entities'
@@ -36,12 +21,7 @@ import { WorktreeRow } from './WorktreeRow'
 export function Sidebar({
   searchHint
 }: {
-  /**
-   * The one chord drawn in the rail, inside the search field, because that is
-   * where every app puts it. The rows under it carry none: the owner's rule is
-   * that the window has too many places explaining shortcuts, and the menu
-   * bar, the palette and the help page already name these.
-   */
+  /** The one chord drawn in the rail; the rows carry none, the menu bar and help page name theirs. */
   searchHint: string
 }): React.JSX.Element {
   const projects = useWorkspaceStore((state) => state.projects)
@@ -79,15 +59,14 @@ export function Sidebar({
   const closeTeamwork = useWorkspaceStore((state) => state.closeTeamwork)
   const toggleSidebar = useWorkspaceStore((state) => state.toggleSidebar)
 
-  // Which editors are on this machine, asked once and from here: the row menu
-  // names one and the sidebar is the only thing that is always mounted while a
-  // row exists. It answers with a list this window then does not ask for again.
+  // Which editors are on this machine, asked once from the one thing always
+  // mounted while a row exists.
   useEffect(() => {
     void loadEditors()
   }, [loadEditors])
 
-  // No box sets this any more; the palette does the finding. Kept as the one
-  // place the empty-state wording asks "is this filtered or simply empty".
+  // No box sets this; kept as the one place the empty-state wording asks
+  // "is this filtered or simply empty".
   const filter = ''
 
   const matching = useMemo(() => {
@@ -98,23 +77,19 @@ export function Sidebar({
     )
   }, [filter, worktrees])
 
-  // Only the panes of worktrees actually rendered are read: a collapsed project
-  // costs nothing, and neither does a row the filter left out.
+  // Only the panes of worktrees actually rendered are read; a collapsed project costs nothing.
   const onScreen = useMemo(() => {
     const shown = new Set(matching.filter((worktree) => !collapsed[worktree.projectId]).map((worktree) => worktree.id))
     return paneList.filter((terminal) => shown.has(terminal.worktreeId))
   }, [collapsed, matching, paneList])
 
   const evidence = usePaneEvidence(onScreen, terminals)
-  // Asked once for the whole sidebar. Which panes have printed since they were
-  // last looked at is a question about the window, not about a row.
+  // Asked once for the whole sidebar: a question about the window, not a row.
   const unread = useUnreadPanes()
   const watching = useWorkspaceStore((state) => state.watchers)
 
-  // The panes themselves are in the workspace, beside this window's own — the
-  // sidebar only says which of these rows is one of them, and quotes what they
-  // have printed. It used to hold the viewer as well, floating over everything,
-  // and that is exactly what a watched pane stopped being.
+  // The panes themselves are in the workspace; the sidebar only says which
+  // rows are watched and quotes what they have printed.
   const watches = useWorkspaceStore((state) => state.watches)
   const watchTails = useWorkspaceStore((state) => state.watchTails)
   const toggleWatchedPane = useWorkspaceStore((state) => state.toggleWatchedPane)
@@ -126,10 +101,8 @@ export function Sidebar({
     return lines
   }, [watches, watchTails])
 
-  // Teamwork is set up per repository, so an app-level entry has to pick one:
-  // the repository whose worktree is open, and otherwise the first. Undefined
-  // only before any repository has been added, and then the entry says so
-  // rather than doing nothing when pressed.
+  // Teamwork is per repository, so the app-level entry picks the one whose
+  // worktree is open, else the first. Undefined only before any has been added.
   const active = worktrees.find((entry) => entry.id === activeWorktreeId)
   const railProject = projects.find((project) => project.id === active?.projectId) ?? projects[0]
 
@@ -307,13 +280,10 @@ export function Sidebar({
           {worktreesByProject(projects, matching).map(({ project, rows }) => {
             const isCollapsed = Boolean(collapsed[project.id])
             const summary = teamworkSummary(teamwork[project.id], now)
-            // Under the same project, because that is what they are: the same
-            // repository, checked out somewhere else. The rows below make whose
-            // they are unmissable, which is what lets them share the list.
+            // Under the same project: the same repository, checked out elsewhere.
             const theirs = teammateRows(teammatesHeard(teammates[project.id])?.worktrees ?? [], now, watchEvidence)
             const reading = attentionByPane(watching[project.id])
-            // Teammates on the roster this machine has never heard a word from.
-            // Not the same as away, and not the same as having no worktrees.
+            // Roster teammates never heard from: not away, and not without worktrees.
             const unheard = unheardTeammates(teammates[project.id])
             return (
               <section className="project" key={project.id}>
@@ -454,13 +424,8 @@ function watchingIn(watches: readonly { projectId: string; paneId: string }[], p
 }
 
 /**
- * What the row menu's Open in item is called.
- *
- * The project's own command wins, named by its last path segment so that
- * `/opt/homebrew/bin/mate` reads as "Open in mate" rather than as a path in a
- * menu. Otherwise it is whatever teamree found first on PATH, and failing that
- * the word: the item is offered either way, because choosing it is how somebody
- * finds out nothing is set up, and what comes back says so in one line.
+ * What the row menu's Open in item is called: the project's own command by its
+ * last path segment, else the first found on PATH, else the bare word.
  */
 export function editorLabel(
   command: string | undefined,

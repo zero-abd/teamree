@@ -1,17 +1,6 @@
-// THE SEAM. This is the whole surface the runtime wires up.
-//
-// In src/main/runtime/handlers/registerHandlers.ts:
-//
-//   import { TeamworkService, registerTeamworkHandlers } from '../../teamwork'
-//   registerTeamworkHandlers(registry, new TeamworkService({ store, dataDir }))
-//
-// `dataDir` is the app's own data directory and is not optional, because it is
-// where the private key goes and the one thing this area must never do is put a
-// secret inside a repository.
-//
-// Handlers receive already-validated params and resolve with exactly the result
-// the contract declares. Everything they throw is a TeamworkError or a
-// RuntimeError, so the dispatcher preserves its ErrorCode.
+// THE SEAM: the whole surface the runtime wires up, from `registerHandlers.ts`. `dataDir` is the app's own
+// data directory and not optional: the private key goes there, never inside a repository. Handlers get
+// validated params and throw only TeamworkError or RuntimeError, so the dispatcher preserves the ErrorCode.
 
 import { Params } from '../../shared/methods'
 import type { ParamsOf, ResultOf } from '../../shared/methods'

@@ -1,34 +1,7 @@
-// Runs the peer library's cipher path in whatever runtime is executing this
-// file, and says so out loud.
-//
-// WHY THIS EXISTS, since the shape of it is otherwise hard to justify:
-//
-// `src/shared/peer` had a hard-coded `chacha20-poly1305` and 1803 green tests.
-// The tests were green because vitest runs under plain Node, whose OpenSSL has
-// that cipher. The product runs under Electron, whose BoringSSL does not, so
-// `createCipheriv` threw "Unknown cipher" on the first handshake and the entire
-// teamwork feature was dead in every shipped build. Nothing in the suite could
-// see it, because nothing in the suite ran in the runtime that ships.
-//
-// The fix was one line. The defect was that the suite had no way to notice, and
-// a second cipher, hash or curve that Electron lacks would land exactly the same
-// way. So this check is not "a test for ChaCha20-Poly1305". It is the peer
-// library, executed in the shipping runtime, asserting its output against bytes
-// fixed outside this project.
-//
-// It is deliberately runnable in three ways, all of which run the same code:
-//
-//   * as a child process under Electron, which is what `electronRuntime.test.ts`
-//     does and is how `npm test` reaches it;
-//   * as a child process under plain Node, which is the control: the same
-//     assertions must hold in both, because the acceptance suite runs the
-//     runtime headlessly under Node;
-//   * imported by `scripts/smoke.mjs`, which is a real Electron *main process*
-//     rather than Electron-as-Node, and is the closest a check gets to the
-//     thing the user launches.
-//
-// Assertions collect rather than throw, so one run names everything that is
-// wrong instead of the first thing.
+// Runs the peer library's cipher path in whatever runtime executes this file. vitest runs under Node,
+// whose OpenSSL has chacha20-poly1305; Electron's BoringSSL does not, and that once shipped a dead
+// teamwork feature past a green suite. Run under Electron, under Node (the control), and from smoke.mjs.
+// Assertions collect rather than throw, so one run names everything wrong.
 
 import { readFileSync } from 'node:fs'
 import { getCiphers } from 'node:crypto'
@@ -43,19 +16,8 @@ const utf8 = (text) => new Uint8Array(Buffer.from(text, 'utf8'))
 const EMPTY = new Uint8Array(0)
 
 /**
- * Known answers for the AEAD, with the Noise nonce encoding applied.
- *
- * These are not invented. They were produced by the implementation that the
- * thirty-eight published `25519_ChaChaPoly_SHA256` vectors in
- * `noiseVectors.json` already validate, and `electronRuntime.test.ts` recomputes
- * them against Node's own native `chacha20-poly1305` on every run — so if the
- * cipher underneath is ever swapped for something that is merely
- * self-consistent, three separate things go red rather than none.
- *
- * The nonces are chosen to exercise the counter rather than just the cipher:
- * `4294967296` is the first value with a bit above the low 32, which is where a
- * big-endian slip (AES-GCM's encoding, not ChaChaPoly's) stops being invisible,
- * and the last is the largest nonce Noise permits.
+ * AEAD known answers with the Noise nonce encoding, recomputed against native chacha20-poly1305 by
+ * electronRuntime.test.ts. 4294967296 catches a big-endian slip; the last is Noise's largest nonce.
  */
 export const AEAD_KNOWN_ANSWERS = {
   key: 'c4a34b21897e983c59dd5a2fd8f9be5550cef3385b5ecac49c118906f0840755',
@@ -142,8 +104,7 @@ function checkAead(primitives, fail) {
     }
   }
 
-  // A cipher that decrypts anything is not an AEAD, and a stub that returned its
-  // input would pass everything above.
+  // A stub that returned its input would pass everything above.
   const forged = bytes(AEAD_KNOWN_ANSWERS.ciphertexts[0].hex)
   forged[forged.length - 1] ^= 0x01
   try {
@@ -239,11 +200,7 @@ function checkPublishedVector(noise, primitives, fail) {
   if (!transport) fail('the published IK handshake never reached transport keys')
 }
 
-/**
- * The product's own path: the exported session API, two peers, real randomness.
- * The vector above proves the bytes are right; this proves the thing callers
- * actually hold can be driven end to end in this runtime.
- */
+/** The exported session API end to end, two peers, real randomness, in this runtime. */
 function checkLiveSession(peer, fail) {
   let initiator
   let responder
@@ -306,10 +263,7 @@ function checkLiveSession(peer, fail) {
 
 // ------------------------------------------------------------------ the run --
 
-/**
- * @param bundleDir output of `buildPeerBundle()` — the peer library, compiled
- *   to ESM so a runtime without a TypeScript loader can import it.
- */
+/** @param bundleDir output of `buildPeerBundle()`, compiled to ESM. */
 export async function runPeerCheck(bundleDir) {
   const failures = []
   const fail = (message) => failures.push(message)
@@ -317,9 +271,7 @@ export async function runPeerCheck(bundleDir) {
   const load = (name) => import(pathToFileURL(`${bundleDir}/${name}.js`).href)
 
   const runtime = process.versions.electron ? `electron ${process.versions.electron}` : `node ${process.versions.node}`
-  // The single most important line this prints. If a run claims to have
-  // exercised Electron and this says the native cipher was there, the run was
-  // not under Electron and its pass means nothing.
+  // If a run claims Electron and this says the native cipher was there, it was not under Electron.
   const nativeChaCha = getCiphers().includes('chacha20-poly1305')
 
   let peer
@@ -342,15 +294,8 @@ export async function runPeerCheck(bundleDir) {
   return { runtime, nativeChaCha, failures }
 }
 
-// Run directly: `node scripts/electron-peer-check.mjs <bundleDir>`, or the same
-// under Electron. One JSON line on stdout so a parent process can read it
-// without parsing prose.
-//
-// `--peer-bundle=<dir>` says the same thing and is what `run-smoke.mjs` passes;
-// see smoke-args.mjs for why naming it beats counting to it. The bare
-// positional is still read for the handwritten form above, and reading it by
-// position is safe here in a way it was not there: this branch is only taken
-// when argv[1] is this file, which is to say when nothing was prepended.
+// Run directly: `node scripts/electron-peer-check.mjs <bundleDir>` or under Electron; one JSON line
+// on stdout. `--peer-bundle=<dir>` is what run-smoke.mjs passes (see smoke-args.mjs).
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const bundleDir = readNamedArg(PEER_BUNDLE_FLAG) ?? process.argv[2]
   if (!bundleDir) {

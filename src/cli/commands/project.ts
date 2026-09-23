@@ -85,9 +85,7 @@ export const projectCommands: readonly CommandSpec[] = [
       const project = await resolveProject(context.client, context.args[0] as string)
       const command = context.args[1]
       const clear = readBoolean(context.flags, 'clear')
-      // Naming no command reads as a question, exactly as it does for the two
-      // path lists above: removing what a project runs has to be typed on
-      // purpose.
+      // Naming no command reads as a question; removing one has to be typed on purpose.
       const after =
         clear || command !== undefined
           ? await context.client.call('project.setPaths', {
@@ -116,13 +114,7 @@ export const projectCommands: readonly CommandSpec[] = [
   }
 ]
 
-/**
- * The two path lists, which differ only in which field they touch.
- *
- * One builder rather than two commands written out, because every sentence
- * either would print — how it is shown, how it is set, how it is cleared — is
- * the same sentence, and two copies of it is two things to keep true.
- */
+// The two path lists differ only in which field they touch.
 function pathsCommand(
   kind: 'linked' | 'copied',
   spec: { summary: string; details: string; examples: readonly string[] }
@@ -146,9 +138,8 @@ function pathsCommand(
       const project = await resolveProject(context.client, context.args[0] as string)
       const paths = context.args.slice(1)
       const clear = readBoolean(context.flags, 'clear')
-      // Naming no paths reads as a question, never as "make it empty": the
-      // command that empties a list has to be typed on purpose, because the
-      // shell that expanded a glob to nothing did not mean to.
+      // Naming no paths reads as a question, never "make it empty": a shell that
+      // expanded a glob to nothing did not mean to.
       const wanted = clear ? [] : paths
       const change = kind === 'linked' ? { linkedPaths: wanted } : { copiedPaths: wanted }
       const after =
@@ -160,19 +151,9 @@ function pathsCommand(
   }
 }
 
-/**
- * A project with every worktree-creation setting present, empty when it is
- * empty: both path lists, and the setup command.
- *
- * The store drops an empty list and an empty command rather than keeping them,
- * because a record that has never been configured has said nothing rather than
- * "none" — see `GitService.setProjectPaths`. That is the right shape for a file
- * somebody edits and the wrong one for a script: `teamree project linked api
- * --json` answered `{"id":...,"baseRef":"main"}`, from which no caller can tell
- * an empty list from a field this build does not have. So the absence is
- * resolved here, at the edge that promises a JSON shape, and the stored record
- * keeps its own meaning.
- */
+// The store drops empty lists and an empty command (see `GitService.setProjectPaths`),
+// so a `--json` caller could not tell an empty list from a field this build lacks.
+// The absence is resolved here, at the edge that promises a JSON shape.
 function withProjectDefaults(
   project: Project
 ): Project & { linkedPaths: string[]; copiedPaths: string[]; setupCommand: string } {

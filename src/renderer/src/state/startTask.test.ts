@@ -1,6 +1,5 @@
-// The composer's whole promise, through the in-memory runtime: one submission
-// creates the worktrees, waits for them, and leaves each agent running in its
-// own.
+// The composer's whole promise, through the in-memory runtime: one submission creates the
+// worktrees, waits for them, and leaves each agent running in its own.
 
 import { expect, it, vi } from 'vitest'
 import { collectTerminalIds } from '../panes/paneLayout'
@@ -54,8 +53,7 @@ it('creates the worktree, then runs the chosen agent in it', { timeout: 20_000 }
       'the worktree to be created'
     ).then(() => useWorkspaceStore.getState().worktrees.find((worktree) => worktree.name === 'Rewrite the pager')!)
 
-    // Every pane the runtime has opened in it is in the layout, and the agent's
-    // is one of them: the tab opened before any of them existed.
+    // Every pane the runtime opened is in the layout: the tab opened before any of them existed.
     await until(() => {
       const state = useWorkspaceStore.getState()
       const panes = collectTerminalIds(state.layouts[created.id]?.root ?? null)
@@ -72,17 +70,11 @@ it('creates the worktree, then runs the chosen agent in it', { timeout: 20_000 }
     expect(state.worktrees.find((worktree) => worktree.id === created.id)?.state).toBe('ready')
     expect(state.openWorktreeIds).toContain(created.id)
 
-    // The pane the agent runs in exists, and nothing was started before the
-    // checkout was ready: a terminal.create ahead of that would have had
-    // nowhere to run.
+    // Nothing was started before the checkout was ready: a terminal.create ahead of that has nowhere to run.
     const agentPanes = call.mock.calls.filter(([method]) => method === 'terminal.create')
     expect(agentPanes).toHaveLength(1)
-    // The pane is named after what was typed in the composer. Three agents on
-    // three approaches are three panes called `claude` without this, and the
-    // description is the only thing on record that says which is which.
-    // And the description travels with the pane as its first prompt, and with
-    // the checkout as its record: the branch and the label were all the text
-    // ever became before, and the agent was launched with nothing to do.
+    // The pane is named after what was typed, and the description travels as its first prompt and
+    // as the checkout's record.
     expect(agentPanes[0]![1]).toEqual({
       worktreeId: created.id,
       command: agent.command,
@@ -115,8 +107,7 @@ it('reports why a task that could not be created failed, and starts no agent', {
     const projectId = useWorkspaceStore.getState().projects[0]!.id
     const call = vi.spyOn(runtimeClient, 'call')
 
-    // The seeded runtime fails any task whose name says so, which is the only
-    // way to reach this path without a real repository to break.
+    // The seeded runtime fails any task whose name says so.
     store.startTask({
       projectId,
       creates: [{ name: 'fail on purpose', agentCommand: 'claude', task: 'fail on purpose' }]
@@ -135,8 +126,7 @@ it('reports why a task that could not be created failed, and starts no agent', {
   }
 })
 
-// The workflow the app is for: one description, several attempts at it, each in
-// its own checkout with its own agent.
+// One description, several attempts at it, each in its own checkout with its own agent.
 it('creates one worktree per selected agent, each running its own', { timeout: 30_000 }, async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
@@ -161,8 +151,7 @@ it('creates one worktree per selected agent, each running its own', { timeout: 3
     )
 
     const made = names.map((name) => useWorkspaceStore.getState().worktrees.find((one) => one.name === name)!)
-    // Three branches, not one branch and two failures: the suffix is what keeps
-    // them apart before the runtime ever allocates anything.
+    // Three branches, not one branch and two failures: the suffix keeps them apart.
     expect(new Set(made.map((one) => one.branch)).size).toBe(3)
 
     await until(
@@ -189,10 +178,8 @@ it('creates one worktree per selected agent, each running its own', { timeout: 3
   }
 })
 
-// The incident this pins: the checkout takes tens of seconds, and opening the
-// tab when it was ready meant the window changed tabs under whoever had gone
-// on typing somewhere else in the meantime. Starting the task is the click
-// that opens the tab; nothing that happens afterwards is.
+// Starting the task is the click that opens the tab; a checkout finishing tens of seconds later
+// must not change tabs under whoever went on typing somewhere else.
 it(
   'opens the tab as the composer closes, and never moves you again once the checkout is ready',
   { timeout: 20_000 },

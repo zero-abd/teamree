@@ -3,13 +3,8 @@
 declare const __APP_VERSION__: string
 
 /**
- * What a build that was never built reports.
- *
- * `npm run dev` has no `__APP_VERSION__` to bake in, so this is what the app
- * says about itself in a checkout. It is named rather than repeated because the
- * update check has to recognise it: it parses as a pre-release of 0.0.0, which
- * every published release is newer than, so a developer would be told to
- * upgrade on every launch of every dev server.
+ * What `npm run dev` reports. Named because the update check has to recognise
+ * it: every published release is newer than a pre-release of 0.0.0.
  */
 export const DEV_VERSION = '0.0.0-dev'
 

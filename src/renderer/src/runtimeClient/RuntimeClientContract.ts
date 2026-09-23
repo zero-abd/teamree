@@ -19,13 +19,7 @@ export type Subscription = { close(): void }
 /** Handle for the workspace change stream; idempotent to close. */
 export type WorkspaceWatch = { close(): void }
 
-/**
- * A teammate's pane, opened for reading.
- *
- * The dimensions are the owner's and are part of the answer rather than
- * something to ask for afterwards: a viewer letterboxes to them, and one that
- * learned them a frame late would draw the wrong size first.
- */
+/** A teammate's pane opened for reading, with the owner's dimensions so the first frame is the right size. */
 export type WatchedPaneHandle = {
   subscription: Subscription
   cols: number
@@ -41,20 +35,10 @@ export interface RuntimeClient {
   /** Live output for one terminal. Resolves once the stream is established. */
   subscribeTerminal(terminalId: string, onEvent: (event: TerminalEvent) => void): Promise<Subscription>
 
-  /**
-   * Live output for one of a **teammate's** panes, over the peer link.
-   *
-   * Separate from `subscribeTerminal` because it is a different promise to the
-   * reader: bytes only while it is open, nothing to type back, and a stream that
-   * can honestly report a gap or a lost link.
-   */
+  /** Live output for a teammate's pane over the peer link: read-only, and able to report a gap or lost link. */
   watchPane(projectId: string, paneId: string, onEvent: (event: WatchedPaneEvent) => void): Promise<WatchedPaneHandle>
 
-  /**
-   * Watches everything the workspace owns and keeps the stream up by itself, so
-   * the UI never polls. Each event names a collection to re-read; returns
-   * synchronously because a watch that is still connecting is still a watch.
-   */
+  /** Watches the workspace and keeps the stream up; each event names a collection to re-read. */
   watchWorkspace(onEvent: (event: WorkspaceEvent) => void): WorkspaceWatch
 
   readonly connection: ConnectionState

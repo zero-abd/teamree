@@ -1,26 +1,7 @@
-// The test that would have caught it.
-//
-// Every other file in this directory tests the peer library under vitest, which
-// is plain Node. The product is Electron. Node links OpenSSL and Electron links
-// BoringSSL, and the two do not offer the same ciphers: `getCiphers()` returns
-// 130 names under Node 24 and 28 under Electron 38, and `chacha20-poly1305` —
-// the cipher this library's whole suite is named after — is in the first list
-// and not the second.
-//
-// So `primitives.ts` threw "Unknown cipher" on the first handshake of every
-// shipped build while 1803 tests stayed green, and teamwork was dead in the
-// product for as long as nobody tried it by hand.
-//
-// This spawns the real Electron binary, hands it the real peer library, and
-// makes it prove the cipher path works there. It runs under `npm test` like
-// everything else, so it cannot be the check somebody forgot to run — and it
-// asserts the child reported *no* native ChaCha, so a future change that
-// accidentally runs it under Node fails instead of passing vacuously.
-//
-// The same check also runs inside a genuine Electron main process during
-// `npm run smoke`; see `scripts/smoke.mjs`. Electron-as-Node and Electron's main
-// process share one crypto implementation, so this is the cheap one that gates
-// every run and that is the faithful one that gates a build.
+// Node links OpenSSL and Electron links BoringSSL, which has no
+// `chacha20-poly1305`; `primitives.ts` once threw "Unknown cipher" on every
+// shipped build while all tests stayed green. This spawns the real Electron
+// binary to prove the cipher path there; `npm run smoke` repeats it in a real main process.
 
 import { execFile } from 'node:child_process'
 import { createCipheriv, createHash, getCiphers } from 'node:crypto'
@@ -28,8 +9,7 @@ import { rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-// Plain ESM helpers rather than TypeScript, because the second thing that runs
-// them is Electron, which has no TypeScript loader. See `peer-bundle.mjs`.
+// Plain ESM, because Electron runs them too and has no TypeScript loader.
 // @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
 import { AEAD_KNOWN_ANSWERS, runPeerCheck } from '../../../scripts/electron-peer-check.mjs'
 // @ts-expect-error -- see above.
@@ -64,9 +44,7 @@ describe('the peer library in the runtime that actually ships', () => {
     const binary = ((await import('electron')) as unknown as { default: string }).default
 
     const { stdout } = await run(binary, [CHECK_SCRIPT, bundleDir], {
-      // Electron-as-Node: the same V8 and the same BoringSSL as the main
-      // process, with no window and no display server, so this runs on a
-      // headless runner without xvfb in front of it.
+      // Electron-as-Node: the main process's BoringSSL, no display server needed.
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
       maxBuffer: 8 * 1024 * 1024
     })
@@ -75,17 +53,13 @@ describe('the peer library in the runtime that actually ships', () => {
 
     expect(result.failures).toEqual([])
     expect(result.runtime).toMatch(/^electron /)
-    // The assertion that keeps this test honest. If Electron ever ships
-    // `chacha20-poly1305` natively this goes red, and the right answer is to
-    // read the failure rather than delete it: the runtime will have moved, and
-    // this test will no longer prove what it says it proves.
+    // Keeps the test honest: if Electron ever ships `chacha20-poly1305` natively
+    // this goes red, and the test no longer proves what it says it proves.
     expect(result.nativeChaCha).toBe(false)
   }, 120_000)
 
   it('completes the same checks under plain Node, which the acceptance suite uses', async () => {
-    // The runtime also runs headlessly under Node, so "works in Electron" is
-    // only half of it. In-process rather than spawned: the runtime under test
-    // is the one already running.
+    // The runtime also runs headlessly under Node; in-process, since that is the runtime already running.
     const result = (await runPeerCheck(bundleDir)) as CheckResult
     expect(result.failures).toEqual([])
     expect(result.runtime).toMatch(/^node /)
@@ -93,12 +67,8 @@ describe('the peer library in the runtime that actually ships', () => {
   }, 60_000)
 
   it('pins its known answers to the cipher OpenSSL implements, not to itself', () => {
-    // `electron-peer-check.mjs` carries frozen ciphertexts, and a frozen
-    // ciphertext is only worth something if something outside this project
-    // agrees with it. Here they are recomputed against Node's own native
-    // ChaCha20-Poly1305 — which exists under vitest even though it does not
-    // exist under Electron, and which is the implementation the thirty-eight
-    // published vectors in `noiseVectors.test.ts` already validate.
+    // The frozen ciphertexts are recomputed against Node's native ChaCha20-Poly1305,
+    // the implementation the published vectors in `noiseVectors.test.ts` validate.
     expect(getCiphers()).toContain('chacha20-poly1305')
 
     const answers = AEAD_KNOWN_ANSWERS as KnownAnswers
@@ -106,8 +76,7 @@ describe('the peer library in the runtime that actually ships', () => {
     const ad = Buffer.from(answers.associatedData, 'hex')
     const plaintext = Buffer.from(answers.plaintext, 'hex')
 
-    // Derived rather than typed, so the constants can be regenerated from this
-    // description alone rather than trusted because they are written down.
+    // Derived, so the constants can be regenerated from this description alone.
     expect(key).toEqual(createHash('sha256').update('teamree/peer/aead-known-answer/key', 'utf8').digest())
     expect(ad).toEqual(createHash('sha256').update('teamree/peer/aead-known-answer/associated-data', 'utf8').digest())
 

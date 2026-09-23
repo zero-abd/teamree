@@ -1,14 +1,6 @@
-// What the main process will and will not draw in its menu bar.
-//
-// The window describes its own menus and this process builds them, which is the
-// only arrangement in which there is one list of teamree's commands rather than
-// two. The price of it is that a message decides what goes into
-// `Menu.buildFromTemplate`, so the parse below is the boundary, and these are
-// the tests of that boundary: what shape is accepted, what is dropped on the
-// floor, and who is allowed to send it.
-//
-// No Electron. `ipcMain` and a web contents are the two things faked, because a
-// test that needed a packaged app to run would not be run.
+// What the main process will and will not draw in its menu bar: a message
+// decides what goes into `Menu.buildFromTemplate`, so the parse is the boundary.
+// No Electron; `ipcMain` and a web contents are faked.
 
 import { describe, expect, it, vi } from 'vitest'
 import type { IpcMain, IpcMainEvent } from 'electron'
@@ -26,7 +18,6 @@ const ITEM = {
 describe('reading a published menu', () => {
   it('takes a list of items and gives back exactly those fields', () => {
     expect(readMenuBarItems([ITEM])).toEqual([ITEM])
-    // A window with nothing to offer is a legitimate answer, not a broken one.
     expect(readMenuBarItems([])).toEqual([])
   })
 
@@ -44,32 +35,21 @@ describe('reading a published menu', () => {
       expect(readMenuBarItems([rest]), `${field} missing`).toBeNull()
       expect(readMenuBarItems([{ ...ITEM, [field]: 7 }]), `${field} wrong kind`).toBeNull()
     }
-    // An item with no name is an item nobody can read, and an item with no
-    // command behind it is one that would do nothing when chosen.
     expect(readMenuBarItems([{ ...ITEM, label: '' }])).toBeNull()
     expect(readMenuBarItems([{ ...ITEM, command: '' }])).toBeNull()
   })
 
-  // The chord beside an item is a key equivalent, and a key equivalent placed
-  // above Quit in the same menu wins the key. Only the spellings the window's
-  // own table produces are accepted.
+  // A key equivalent placed above Quit in the same menu wins the key.
   it('refuses an accelerator that is not shaped like one of the table’s chords', () => {
     for (const accelerator of [
       'CommandOrControl+Alt+Shift+D',
       'CommandOrControl+,',
       'CommandOrControl+Shift+D',
-      // The keys whose name is a word rather than a character. The window binds
-      // two of these — the worktree moves are on the arrows — and Electron's
-      // spelling of an arrow is `Up`, so a rule that took one character only
-      // would drop the item and say nothing.
+      // Electron spells an arrow `Up`; the worktree moves are on the arrows.
       'CommandOrControl+Alt+Up',
       'CommandOrControl+Alt+Down',
       'CommandOrControl+Shift+Enter',
-      // No key at all, which is what the window publishes for a command it
-      // binds to none — the theme editor, and the two git commands. An item
-      // like that claims nothing from the platform, which is the thing this
-      // rule is guarding, so it is the one string allowed through beside a
-      // chord.
+      // No key at all claims nothing from the platform.
       ''
     ]) {
       expect(readMenuBarItems([{ ...ITEM, accelerator }]), accelerator).toEqual([{ ...ITEM, accelerator }])
@@ -81,9 +61,7 @@ describe('reading a published menu', () => {
       'CommandOrControl+Escape',
       'CommandOrControl+ ',
       'CommandOrControl+D+',
-      // Named keys are the four arrows and Return, one by one, and not "a
-      // word": each of these is a key equivalent a menu item can take off the
-      // platform, and none of them is in the table this rule exists to admit.
+      // Named keys are the four arrows and Return, not "a word".
       'CommandOrControl+Tab',
       'CommandOrControl+F4',
       'CommandOrControl+Space',
@@ -98,15 +76,12 @@ describe('reading a published menu', () => {
     expect(readMenuBarItems(Array.from({ length: 65 }, () => ITEM))).toBeNull()
   })
 
-  // Half a menu bar is worse than the one already installed, because nothing on
-  // screen says which half is missing.
+  // Half a menu bar is worse than the one already installed.
   it('drops the whole list rather than the item it could not read', () => {
     expect(readMenuBarItems([ITEM, { ...ITEM, section: 4 }])).toBeNull()
   })
 
-  // The reason the items are rebuilt field by field rather than passed along.
-  // `Menu.buildFromTemplate` reads `click`, `role` and `submenu` off whatever it
-  // is handed, and what it is handed here arrived over IPC.
+  // `Menu.buildFromTemplate` reads `click`, `role` and `submenu` off whatever it is handed.
   it('leaves behind anything else the sender put on an item', () => {
     const items = readMenuBarItems([{ ...ITEM, role: 'close', click: 'anything', submenu: [{ role: 'quit' }] }])
     expect(items).toEqual([ITEM])
@@ -189,8 +164,7 @@ describe('the menu bar bridge', () => {
     expect(install).not.toHaveBeenCalled()
   })
 
-  // The same guard the folder picker and the reveal make. A subframe is not the
-  // window, and must not get to name the items of the application's menu bar.
+  // A subframe is not the window.
   it('refuses a publish that did not come from the window’s main frame', () => {
     const install = vi.fn()
     const ipc = fakeIpc()
@@ -213,8 +187,7 @@ describe('the menu bar bridge', () => {
     expect(window.sent).toEqual([{ channel: MENU_COMMAND_CHANNEL, command: 'close-pane' }])
   })
 
-  // A menu outlives the window it was built for by however long it takes the
-  // next one to publish. A click in that gap is dropped rather than thrown.
+  // A menu outlives its window; a click in that gap is dropped rather than thrown.
   it('says nothing to a window that has gone', () => {
     const install = vi.fn()
     const ipc = fakeIpc()
@@ -227,8 +200,7 @@ describe('the menu bar bridge', () => {
     expect(window.sent).toEqual([])
   })
 
-  // The app outlives its last window on macOS. What must not outlive it is a
-  // menu bar of that window's items, lit and inert.
+  // The app outlives its last window on macOS; that window's items must not.
   it('takes the items away with the window that published them', () => {
     const install = vi.fn()
     const ipc = fakeIpc()

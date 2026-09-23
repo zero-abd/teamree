@@ -1,16 +1,6 @@
-// The owner's half of "anyone on the roster can type here", asserted against
-// the real judge rather than against a stand-in for it.
-//
-// `docs/teamwork.md` names attribution and an instant mute as the whole of what
-// makes a pane anyone may type into survivable. Both of those are answered
-// here, by `remoteWrite`, `remoteRead`, `watchers` and `teamwork.writeLog`, and
-// every test in this file is about one of them being true of the project the
-// message actually arrived on — not of some other project the same key happens
-// to appear in.
-//
-// Nothing here goes near a relay: a verdict is a synchronous answer about this
-// machine's own rosters and panes, and driving it directly is what lets two
-// projects be in play at once without two of everything else.
+// Attribution and the instant mute, asserted against the real judge: every test
+// is about one of them being true of the project the message arrived on, not
+// another project the same key appears in. Nothing here goes near a relay.
 
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -62,10 +52,8 @@ const logOf = async (runtime: PeerRuntime): Promise<RemoteWrite[]> => (await run
 
 describe('a teammate is named by the roster of the project they reached this machine through', () => {
   /**
-   * Mallory is `mallory` on the project she shares with the owner, and `ana` on
-   * an unrelated repository she also has push to — a key she committed there
-   * herself, or, far more ordinarily, one person whose `git config user.email`
-   * differs between two checkouts. Neither project knows about the other.
+   * Mallory is `mallory` on the shared project and `ana` on an unrelated one
+   * (two checkouts, two `user.email`s). Neither project knows about the other.
    */
   const twoRosters = async (): Promise<{ runtime: PeerRuntime; malloryKey: string }> => {
     const malloryData = await mkdtemp(join(tmpdir(), 'teamree-mallory-'))
@@ -91,10 +79,7 @@ describe('a teammate is named by the roster of the project they reached this mac
       scheduler,
       env: { TEAMREE_RELAY_URL: RELAY_URL },
       dataDir: ownerData,
-      // The owner settled this pane for Mallory some time before: these tests
-      // are about which roster names her, not about the prompt, and driving
-      // the prompt through first would put the subject of every one of them
-      // behind a step belonging to a different test.
+      // Settled beforehand: these tests are about which roster names her, not the prompt.
       consent: standingConsent([{ terminalId: 't_a1', publicKey: malloryKey }]),
       runner: remoteRunner({ [elsewhere]: ORIGIN_Z, [shared]: ORIGIN_A }),
       workspace: {
@@ -136,8 +121,7 @@ describe('a teammate is named by the roster of the project they reached this mac
 describe('the same repository checked out twice is one team and two projects', () => {
   /**
    * A main checkout and a review checkout of one repository, added as two
-   * projects. They hash to one project key, so there is one link — and the
-   * presence snapshot that link carries holds the panes of both.
+   * projects: one project key, one link, one snapshot holding the panes of both.
    */
   const twoClones = async (): Promise<{ runtime: PeerRuntime; aliceKey: string; linkId: string }> => {
     const aliceData = await mkdtemp(join(tmpdir(), 'teamree-alice-'))
@@ -160,8 +144,7 @@ describe('the same repository checked out twice is one team and two projects', (
       scheduler,
       env: { TEAMREE_RELAY_URL: RELAY_URL },
       dataDir: ownerData,
-      // Both of the owner's own panes are already Alice's to type in, so what
-      // these tests exercise is the scoping rather than the asking.
+      // Both panes already Alice's to type in: the scoping is under test, not the asking.
       consent: standingConsent([
         { terminalId: 't1', publicKey: aliceKey },
         { terminalId: 't2', publicKey: aliceKey }
@@ -248,8 +231,7 @@ describe('a refused keystroke leaves no mark on a project its sender is not on',
       scheduler,
       env: { TEAMREE_RELAY_URL: RELAY_URL },
       dataDir: ownerData,
-      // Settled beforehand for the one pane she is allowed on, so the flood
-      // below is measured against a record that really exists.
+      // Settled beforehand for the one pane she is allowed on.
       consent: standingConsent([{ terminalId: 't_a1', publicKey: malloryKey }]),
       runner: remoteRunner({ [shared]: ORIGIN_A, [alone]: ORIGIN_Z }),
       workspace: {
@@ -273,8 +255,7 @@ describe('a refused keystroke leaves no mark on a project its sender is not on',
     expect(verdict.ok).toBe(false)
 
     // The owner's window for the other project must have nothing to show: a
-    // private project labelled as one whose history is not the owner's alone is
-    // also a confirmation channel for pane ids, against their own screen.
+    // name there would be a confirmation channel for pane ids.
     expect(runtime.service.watchers({ projectId: 'p_b' }).panes).toEqual([])
   })
 
@@ -296,9 +277,8 @@ describe('a refused keystroke leaves no mark on a project its sender is not on',
     const { runtime, linkId } = await malloryOnOneProject()
     runtime.service.remoteWrite(linkId, { terminalId: 't_a1', data: 'deploy\n', bytes: 7 })
 
-    // Enough refusals to roll both generations of a log that files every one.
-    // Sent in bursts with the log allowed to reach the disk between them,
-    // because that is how a flood off a wire arrives: not in one process tick.
+    // Enough refusals to roll both generations of a log that files every one,
+    // in bursts with the log reaching disk between them, as a flood off a wire arrives.
     for (let burst = 0; burst < 14; burst += 1) {
       for (let index = 0; index < 1_000; index += 1) {
         runtime.service.remoteWrite(linkId, { terminalId: `junk_${burst}_${index}`, data: 'x', bytes: 1 })
@@ -414,9 +394,8 @@ describe('a roster that could not be read is not a team nobody has joined', () =
     const dir = await mkdtemp(join(tmpdir(), 'teamree-project-'))
     const members = join(dir, ...MEMBERS_DIR_SEGMENTS)
     await mkdir(dirname(members), { recursive: true })
-    // A members directory that cannot be listed. The transient shapes of this
-    // are EACCES, EIO and EMFILE; every one of them, and this one, arrives here
-    // as a rejected read rather than as an empty roster.
+    // A members directory that cannot be listed (EACCES, EIO and EMFILE are the
+    // transient shapes) arrives as a rejected read, never as an empty roster.
     await writeFile(members, 'not a directory', 'utf8')
     cleanups.push(() => rm(dir, { recursive: true, force: true }))
 
@@ -445,9 +424,8 @@ describe('a roster that could not be read is not a team nobody has joined', () =
 
 describe('a mute is the owner’s standing decision, not this process’s', () => {
   /**
-   * A pane comes back from a restart under the id it had — `session-restore.ts`
-   * keeps it on purpose — so a mute that does not come back with it is a
-   * decision quietly discarded at the moment it is least visible.
+   * `session-restore.ts` brings a pane back under the id it had, so a mute that
+   * does not come back with it is a decision quietly discarded.
    */
   const serviceOver = async (options: {
     dataDir: string

@@ -1,14 +1,5 @@
-// Teamwork from a shell.
-//
-// The GUI could see the roster, the relay, who was connected and what a
-// teammate's pane was printing; the CLI could see none of it, which made the
-// whole feature human-only by accident. An agent working beside a person on a
-// shared project has the same questions they do — is this on, who is here, what
-// is that pane doing — and until now it had no way to ask them.
-//
-// Two deliberate absences are documented at the bottom of this file rather than
-// implemented badly: there is no `layout set`, and there is no command that
-// reads a teammate's pane without naming whose it is.
+// Teamwork from a shell: roster, relay, invitations and a teammate's panes.
+// Deliberate absences are listed at the bottom of this file.
 
 import type {
   PeerPane,
@@ -140,11 +131,7 @@ function describePane(candidate: PaneCandidate): Record<string, unknown> {
   }
 }
 
-/**
- * Picks the pane to act on. With one pane there is nothing to choose; with
- * several there is, and guessing at somebody else's shell is exactly the guess
- * not to make.
- */
+/** Picks the pane to act on; with several, guessing at somebody else's shell is the wrong guess. */
 function selectPane(candidates: readonly PaneCandidate[], handle: string, token: string | undefined): PaneCandidate {
   if (candidates.length === 0) {
     throw new CliError({
@@ -197,16 +184,9 @@ function selectPane(candidates: readonly PaneCandidate[], handle: string, token:
 }
 
 /**
- * The roster, or a refusal that says which kind of nothing this is.
- *
- * `teamwork.presence` answers `state: 'unread'` for a project the runtime has
- * but has not read yet — the beat after `project.add`, or a runtime still
- * starting — and every command below wants the roster rather than the wait. The
- * wait is still worth its own exit, though, and worth a code of its own: an
- * agent that sees `not_read_yet` should ask again in a second, where one that
- * sees an empty pane table has been told its teammate has no panes and will
- * believe it. That is the distinction a `no_panes`-shaped answer destroys, so
- * it is drawn here, once, rather than guessed at by each caller.
+ * The roster, or a refusal that says which kind of nothing this is. `unread`
+ * (the beat after `project.add`, or a runtime still starting) gets its own code:
+ * an agent seeing `not_read_yet` asks again; one seeing an empty table believes it.
  */
 async function readPresence(context: CommandContext, projectId: string): Promise<TeammatePresenceRead> {
   const presence = await context.client.call('teamwork.presence', { projectId })
@@ -258,12 +238,8 @@ function sleep(ms: number): Promise<void> {
 
 /**
  * Reads a teammate's pane for a bounded while, or until told to stop.
- *
- * `teamwork.watch` answers with the scrollback and then the live tail on one
- * subscription, so a snapshot is "subscribe, let the scrollback land, stop" —
- * which is what a quiet window measures. An exit or a lost link ends either
- * mode, because both say there is nothing more to read and a reader left
- * staring at a frozen pane would be a lie.
+ * `teamwork.watch` sends scrollback then the live tail on one subscription, so a
+ * snapshot is "subscribe, wait for a quiet window, stop". Exit or lost link ends either mode.
  */
 async function collectPane(options: {
   client: RuntimeClient
@@ -312,9 +288,7 @@ async function collectPane(options: {
   const interrupt = (): void => {
     stopped = 'interrupted'
   }
-  // Signals only in follow mode: a bounded snapshot ends on its own, and a CLI
-  // that swallowed Ctrl-C for a command that is about to return anyway would be
-  // taking something away from the caller for nothing.
+  // Signals only in follow mode: a bounded snapshot ends on its own.
   const release = options.follow ? stopSignals(interrupt) : undefined
 
   const started = Date.now()
@@ -376,10 +350,8 @@ export const teamCommands: readonly CommandSpec[] = [
     run: async (context) => {
       const project = await resolveProject(context.client, context.args[0] as string)
       const status = await context.client.call('teamwork.status', { projectId: project.id })
-      // Nothing has been read about this project, so there is no roster to lay
-      // a table out from and no relay to report. One honest line instead, and
-      // still exit 0: a project this machine has just been given is not a
-      // failure of the command.
+      // Nothing read yet: one line, still exit 0, since a project just given
+      // to this machine is not a failure of the command.
       const notReadYet = (
         answer: { state: 'unread'; readAt: number },
         presence: TeammatePresence | null
@@ -391,14 +363,10 @@ export const teamCommands: readonly CommandSpec[] = [
           ['read at', new Date(answer.readAt).toISOString()]
         ])}\n\nAsk again in a moment.`
       })
-      // Asked before the presence beside it, because asking would only be
-      // asking a second question about the same unread project.
       if (status.state === 'unread') return notReadYet(status, null)
       const presence = await context.client.call('teamwork.presence', { projectId: project.id })
-      // The two reads are one reconcile, so a status that is read has a
-      // presence to go with it and this is not a branch anybody reaches. It is
-      // here because the alternative is a cast, and a cast is what would let a
-      // roster that had genuinely not been read be laid out as an empty one.
+      // Unreachable (both reads are one reconcile) but a cast would let an unread
+      // roster be laid out as an empty one.
       if (presence.state === 'unread') return notReadYet(presence, presence)
       const now = Date.now()
 
@@ -415,9 +383,8 @@ export const teamCommands: readonly CommandSpec[] = [
             link.detail ?? ''
           ]
         }),
-        // Somebody on the roster with no link at all is a real state — teamwork
-        // is off, or their key arrived since the last dial — and dropping them
-        // would show a shorter roster than the repository has.
+        // A teammate with no link at all is a real state (teamwork off, or their
+        // key arrived since the last dial); dropping them shortens the roster.
         ...presence.teammates
           .filter((person) => !linked.has(person.publicKey))
           .map((person) => [person.handle, 'no link', person.connected ? 'yes' : 'no', ago(person.heardAt, now), ''])
@@ -533,10 +500,8 @@ export const teamCommands: readonly CommandSpec[] = [
     run: async (context) => {
       const project = await resolveProject(context.client, context.args[0] as string)
       const plan = await context.client.call('teamwork.publishPlan', { projectId: project.id })
-      // The blocker is the runtime's own sentence about why this cannot be
-      // done, already written as something to act on. Passing it through
-      // unchanged is the point: `teamwork.publish` would throw the same words,
-      // and reading the plan first means a --dry-run says them too.
+      // The runtime's own sentence, passed through unchanged: `teamwork.publish`
+      // would throw the same words, and --dry-run says them too.
       if (plan.blocker !== null) {
         throw new CliError({
           code: 'publish_blocked',
@@ -599,16 +564,12 @@ export const teamCommands: readonly CommandSpec[] = [
           data: { projectId: project.id, origin: status.origin }
         })
       }
-      // An origin that names a transport rather than an address is a thing this
-      // checkout may legitimately have, and it is not a thing to put somebody
-      // else's name on and send them. `team accept` refuses the same string at
-      // the other end; refusing it here means nobody hands one out believing it
-      // works.
+      // An origin naming a program rather than an address may be legitimate here
+      // but `team accept` refuses it at the other end; refuse before handing it out.
       const cloneable = checkCloneable(status.origin.url)
       if (!cloneable.ok) {
         throw new CliError({
-          // Its own code and not `no_origin`: there is an origin, and an agent
-          // branching on this has a different thing to do about it.
+          // Not `no_origin`: there is an origin, and an agent does something different about it.
           code: 'origin_not_cloneable',
           message: `${project.name}'s origin is not one to send a teammate: ${cloneable.reason}.`,
           exitCode: ExitCode.Failure,
@@ -643,9 +604,7 @@ export const teamCommands: readonly CommandSpec[] = [
         })
       }
 
-      // The origin as the repository is to be named, and never as this machine
-      // happens to reach it: an https remote can carry a token, and this line is
-      // going into somebody's chat window.
+      // An https remote can carry a token, and this line is going into a chat window.
       const shareable = withoutCredentials(status.origin.url)
       const invitation = {
         origin: shareable.origin,
@@ -655,13 +614,11 @@ export const teamCommands: readonly CommandSpec[] = [
       }
       const link = formatInvitation(invitation)
 
-      // Two facts about this particular invitation that are true, are not
-      // refusals, and go wrong silently if nobody says them.
+      // True facts that are not refusals and go wrong silently if unsaid.
       const notes: string[] = []
       if (status.relay.source === 'environment') {
-        // Asked only here, and only for the variable's name: an override is a
-        // per-machine thing to try, and a sentence that said "the environment"
-        // without naming it is one nobody can go and look at.
+        // Only for the variable's name: an override is per-machine, and a sentence
+        // that does not name it is one nobody can go and look at.
         const relay = await context.client.call('teamwork.relay', { projectId: project.id })
         notes.push(
           `This relay came from ${relay.override.name} in this app’s environment, not the repository. Push ` +
@@ -831,8 +788,7 @@ export const teamCommands: readonly CommandSpec[] = [
         follow,
         quietMs: readNumber(context.flags, 'quiet-ms') ?? DEFAULT_WATCH_QUIET_MS,
         timeoutMs: readNumber(context.flags, 'timeout-ms') ?? DEFAULT_WATCH_TIMEOUT_MS,
-        // Streaming writes go straight out; in --json mode there is no follow,
-        // so the single-document guarantee is structural rather than checked.
+        // No follow in --json mode, so the single-document guarantee is structural.
         ...(follow ? { onData: (text: string) => context.streams.out(text) } : {})
       })
 
@@ -842,8 +798,7 @@ export const teamCommands: readonly CommandSpec[] = [
         paneId: target.pane.pane.id,
         worktree: target.pane.worktree,
         title: target.pane.pane.title,
-        // The owner's, and never negotiated: a reader letterboxes rather than
-        // resizing a pty under a program it is only reading.
+        // The owner's: a reader letterboxes rather than resizing a pty it only reads.
         cols: target.pane.pane.cols ?? DEFAULT_COLS,
         rows: target.pane.pane.rows ?? DEFAULT_ROWS,
         live: target.pane.live,
@@ -856,8 +811,7 @@ export const teamCommands: readonly CommandSpec[] = [
         ...(collected.lostReason === undefined ? {} : { lostReason: collected.lostReason })
       }
 
-      // Follow already wrote every byte as it arrived; anything more here would
-      // be a second copy of the same output.
+      // Follow already wrote every byte as it arrived.
       if (follow) {
         const notes = [
           collected.reason === 'exit' ? `\n[pane exited ${collected.exitCode ?? '?'}]` : '',
@@ -1195,18 +1149,10 @@ export const teamCommands: readonly CommandSpec[] = [
 ]
 
 /**
- * What a publish did, in the two halves it can half-fail in.
- *
- * The commit is reported whichever way the push went, because a commit that
- * landed and a push that was refused is the ordinary outcome of a teammate
- * pushing first — and reporting that as one failure would leave somebody
- * believing they had made no commit and committing it a second time.
- *
- * The failure leaves by the same door every other failure here does, so `--json`
- * gets the shape it gets everywhere else and the exit code is 1 rather than a
- * success document with a sad field in it. git's own words are the message;
- * they are what a person can search for, and paraphrasing them is the one thing
- * a refused push must not have done to it.
+ * What a publish did, in the two halves it can half-fail in. The commit is
+ * reported whichever way the push went (a teammate pushing first is ordinary,
+ * and hiding the commit invites a second one); a refused push exits 1 with
+ * git's own words, which are what a person can search for.
  */
 function publishOutcome(projectName: string, result: TeamworkPublish): { data: unknown; text: string } {
   const committed =
@@ -1245,11 +1191,7 @@ function publishOutcome(projectName: string, result: TeamworkPublish): { data: u
 
 /**
  * The read facts about a project, or a refusal that says which kind of nothing
- * this is.
- *
- * The twin of `readPresence`, and drawn for the same reason: `unread` is a
- * project teamree has and has not looked at, which is not the same finding as
- * "no relay" or "no origin" and must not be reported as one.
+ * this is. Twin of `readPresence`: `unread` is not "no relay" or "no origin".
  */
 async function readTeamwork(context: CommandContext, projectId: string): Promise<TeamworkRead> {
   const status = await context.client.call('teamwork.status', { projectId })
@@ -1281,27 +1223,9 @@ async function muteCommand(context: CommandContext, muted: boolean): Promise<{ d
 }
 
 // Deliberate absences.
-//
-// **No `team layout set`.** Reading a teammate's layout says what their window
-// is showing; writing one would rearrange it from another machine, and a
-// rearrangement nobody asked for cannot be told from a bug in their own app.
-//
-// **No command that reads a pane without naming whose it is.** Every pane verb
-// takes a teammate, so there is no spelling of these that watches "whoever is
-// around". Watching is visible to the owner, and it is visible because it is
-// always of a named person's pane.
-//
-// **No way to join a team without pushing a key.** `team accept` takes a link,
-// and the link is not a credential: it carries four facts that are public
-// already and it ends in a push that the repository either allows or refuses.
-// There is no bearer token here, no pairing secret, and no code path that adds
-// somebody to a roster they cannot push to. Anything of that shape would move
-// the decision about who is on a team out of the repository, which is the one
-// place every member can already see it — and it would do so for the sake of
-// saving somebody a `git push`.
-//
-// **No `team origin set`.** `teamwork.setOrigin` exists and `team accept` uses
-// it, on a checkout that has no usable origin at all. It is not offered as a
-// verb of its own because pointing an existing origin somewhere else is
-// `git remote set-url`, a command every user of this tool already has, and a
-// second spelling of it here would be a second thing to keep true.
+// No `team layout set`: a rearrangement from another machine cannot be told
+// from a bug in their own app. No pane verb without a named teammate: watching
+// is visible to the owner because it is always of a named person's pane. No way
+// to join without pushing a key: the link is not a credential, and who is on a
+// team is decided by the repository, the one place every member can see it.
+// No `team origin set`: that is `git remote set-url`, which everybody has.

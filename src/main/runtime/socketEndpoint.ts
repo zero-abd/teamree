@@ -6,10 +6,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 /**
- * sockaddr_un.sun_path holds 104 bytes on macOS and 108 on Linux, and the kernel
- * measures **bytes**, not characters — a profile directory spelled in CJK or
- * Cyrillic is three times longer than it looks. Well under the smaller limit,
- * leaving room for the file name.
+ * sockaddr_un.sun_path holds 104 bytes on macOS and 108 on Linux, measured in
+ * bytes: a CJK profile directory is three times longer than it looks.
  */
 const MAX_UNIX_SOCKET_BYTES = 92
 

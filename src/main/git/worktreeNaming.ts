@@ -1,8 +1,5 @@
-// Turning a human task name into a branch and a directory.
-//
-// Both have to be collision-free, because the whole product is several agents
-// working at once: two people naming a task "fix login" must not race for the
-// same branch or the same checkout on disk.
+// Turning a human task name into a branch and a directory, both collision-free:
+// two people naming a task "fix login" must not race for the same checkout.
 
 import { access } from 'node:fs/promises'
 import path from 'node:path'
@@ -11,45 +8,24 @@ import { describeError, GitServiceError } from './errors'
 import { pathKey } from './pathIdentity'
 import { slugifyBranchName, taskNamesForAgents } from '../../shared/branchName'
 
-/**
- * The slug rule lives in shared so the create dialog previews exactly what gets
- * created. Re-exported here because this module is where callers expect it.
- */
+/** The slug rule lives in shared so the create dialog previews exactly what gets created. */
 export const slugify = slugifyBranchName
 
 /**
- * One task, several agents: the rule that keeps their names apart. It lives in
- * shared for the same reason the slug does — the composer has to show what it
- * is about to create — and the names it hands out go through
- * `allocateBranchName` like any others, which is what makes the suffix a
- * distinguisher rather than a second collision rule.
+ * One task, several agents: the rule that keeps their names apart. The names
+ * still go through `allocateBranchName`, so the suffix is not a second collision rule.
  */
 export { taskNamesForAgents }
 
 /**
- * Windows refuses to create a file or directory whose name is a DOS device,
- * whatever the extension. That kills both halves of a worktree at once: the
- * checkout directory, and git's own loose ref file under refs/heads. Names are
- * therefore disambiguated at the source rather than at each use.
- *
- * The list itself is in shared, because member filenames obey it too and the
- * window now reads that rule. Re-exported here because this module is where
- * callers expect it.
+ * Windows refuses a file or directory named after a DOS device, whatever the
+ * extension, which kills both the checkout and git's loose ref under refs/heads.
  */
 export { isWindowsDeviceName } from '../../shared/windowsNames'
 
 /**
- * Lowercase ASCII words joined by dashes. This deliberately throws away more
- * than git forbids: a branch that survives being typed into a shell prompt,
- * pasted into a PR, and used as a folder name on Windows is worth more than one
- * that faithfully preserves the task title.
- */
-
-/**
  * git stores branches as files, so `feature` and `feature/login` cannot both
- * exist. A candidate collides if it equals, contains, or is contained by a
- * taken name. Comparison is case-insensitive because loose refs live on
- * case-insensitive filesystems on macOS and Windows.
+ * exist. Case-insensitive because loose refs live on case-insensitive filesystems.
  */
 export function branchCollides(candidate: string, taken: ReadonlySet<string>): boolean {
   const lower = candidate.toLowerCase()
@@ -101,14 +77,8 @@ export async function allocateCheckoutPath(
 }
 
 /**
- * Only "there is nothing there" makes a path free.
- *
- * Any other answer is "could not tell", and could-not-tell must not become
- * was-not-there here of all places: the path this returns is handed to
- * `git worktree add`, and a create that fails then deletes the directory it
- * was pointed at. A permission error, an I/O error or a symlink loop all mean
- * something may well be sitting there, so they are raised rather than guessed
- * past.
+ * Only "there is nothing there" makes a path free: a create that fails deletes
+ * the directory it was pointed at, so could-not-tell is raised, not guessed past.
  */
 async function exists(target: string): Promise<boolean> {
   try {

@@ -17,14 +17,10 @@ const ProjectSchema = z.object({
   name: z.string().min(1),
   path: z.string().min(1),
   baseRef: z.string().min(1),
-  // Additive and optional: every workspace file already on disk parses as a
-  // project with neither list, which is exactly what a project that carries
-  // nothing over into its worktrees looks like.
+  // Additive and optional: every workspace file already on disk parses.
   linkedPaths: z.array(z.string().min(1)).optional(),
   copiedPaths: z.array(z.string().min(1)).optional(),
-  // Additive for the same reason, and never an empty string: the service
-  // deletes the field rather than storing one, so "" and "never configured"
-  // cannot both be on disk meaning the same thing.
+  // Never an empty string: the service deletes the field rather than storing one.
   setupCommand: z.string().min(1).optional()
 })
 
@@ -38,9 +34,7 @@ const WorktreeSchema = z.object({
   state: z.enum(['creating', 'ready', 'removing', 'failed']),
   error: z.string().optional(),
   createdAt: z.number(),
-  // Which pane the setup command was started in. Kept across a relaunch so the
-  // record still says setup ran, though the pane itself comes back as whatever
-  // `session-restore` makes of it.
+  // Which pane the setup command was started in; kept so the record still says setup ran.
   setupTerminalId: z.string().min(1).optional(),
   // Never an empty string, for the reason `setupCommand` gives above.
   task: z.string().min(1).optional()
@@ -64,10 +58,7 @@ const LayoutSchema = z.object({
   focusedTerminalId: z.string().min(1).nullable()
 })
 
-/**
- * A terminal as it outlives the process that ran it. The PTY is gone on the
- * next launch; this is what startup rebuilds a pane from.
- */
+/** A terminal as it outlives the process that ran it; what startup rebuilds a pane from. */
 const TerminalRecordSchema = z.object({
   id: z.string().min(1),
   worktreeId: z.string().min(1),
@@ -76,38 +67,18 @@ const TerminalRecordSchema = z.object({
   command: z.string().min(1).optional(),
   agent: z.enum(AGENT_KINDS as [string, ...string[]]).optional(),
   agentSessionId: z.string().min(1).optional(),
-  // What the pane is called. The only field here that somebody typed rather
-  // than something the process reported, and therefore the one whose loss would
-  // be noticed: `terminal rename --help` promises it survives a restart, and a
-  // schema that drops it on the way back in is where that promise was broken.
-  // Optional because most panes have never been named, and capped at the same
-  // length the wire caps a rename at.
+  // `terminal rename --help` promises the label survives a restart; capped at the wire's length.
   label: z.string().min(1).max(MAX_PANE_LABEL_CHARS).optional(),
-  // Whether anybody ever typed into the pane, which is what the next launch
-  // reads to decide whether the pinned id above names a conversation at all.
-  //
-  // Optional because it has to be, and the absent case is the one to be careful
-  // about: every workspace file already written is missing this field, and the
-  // panes in those files are mostly panes with real conversations behind them.
-  // Absent therefore means unknown rather than no — the restore tries the
-  // resume, and a resume that turns out to find nothing writes `false` here on
-  // its way out, so the pane starts over on the launch after that. Reading
-  // absent as `false` would take the resume away from every pane already on
-  // disk, exactly once, on the launch after an upgrade: the same bug this field
-  // exists to fix, arrived at from the other side.
+  // Whether anybody ever typed into the pane. Absent means unknown, not no:
+  // every file already on disk lacks it, and reading it as `false` would take
+  // the resume away from every pane once, on the launch after an upgrade.
   typed: z.boolean().optional(),
   cols: z.number().int().positive(),
   rows: z.number().int().positive(),
   createdAt: z.number()
 })
 
-/**
- * Questions this installation only ever asks once, and when it asked them.
- *
- * A closed set rather than a free-form bag, so the file cannot silently
- * accumulate keys nobody remembers writing. A timestamp rather than a flag
- * because it costs the same and answers "when did it stop asking me".
- */
+/** Questions this installation only ever asks once, and when. A closed set, not a bag. */
 const AskedSchema = z.object({ installCli: z.number().optional() })
 
 export type AskedQuestions = z.infer<typeof AskedSchema>
@@ -116,20 +87,9 @@ export type AskedQuestions = z.infer<typeof AskedSchema>
 export type AskedQuestion = keyof AskedQuestions
 
 /**
- * What the update check remembers between runs.
- *
- * Three small facts, and what is *not* here is the decision worth explaining:
- * the release notes are not kept. They are text from the GitHub API, and this
- * file is the one the app cannot afford to have trouble reading — the store
- * refuses to write over a file it could not parse precisely because somebody's
- * projects are in it. `teammateCache.ts` makes the same argument for the bytes
- * a peer sends, and keeps them somewhere else. So a run that is inside the rate
- * limit can still say that 0.2.0 exists, and offers the release page rather
- * than notes it did not keep.
- *
- * `automatic` is absent until somebody turns the check off, which is what makes
- * "on unless said otherwise" a fact about the schema rather than a fact spread
- * across the readers.
+ * What the update check remembers between runs. Release notes are not kept:
+ * text off the wire has no place in the one file the app cannot afford to
+ * misread. `automatic` is absent until somebody turns the check off.
  */
 const UpdatesSchema = z.object({
   automatic: z.boolean().optional(),
@@ -148,47 +108,19 @@ export type WorkspaceDocument = {
   terminals: TerminalRecord[]
   /**
    * Panes the owner has stopped remote keystrokes reaching, by terminal id.
-   *
-   * Here rather than in memory because a terminal id survives a restart on
-   * purpose — `session-restore.ts` keeps it so the pane layout needs no
-   * remapping — so a pane comes back indistinguishable from the one that was
-   * muted: same id, same worktree, same conversation resumed. A mute that did
-   * not come back with it would be the owner's decision discarded at the one
-   * moment nothing on screen says so.
-   *
-   * Beside the terminal records and pruned with them: `removeTerminal` drops
-   * the mute, so there is nothing to sweep at startup, which is the moment
-   * sweeping is least reliable.
+   * Durable because the id survives a restart; pruned by `removeTerminal`.
    */
   mutedTerminals: string[]
   /**
-   * Teammates the owner has told this machine may always type in a pane,
-   * without being asked again.
-   *
-   * The mirror image of the list above, and here for the same two reasons. It
-   * is durable because a permission that lapsed at the next restart would be
-   * the owner's decision quietly discarded — they would find out by being asked
-   * again for something they had already settled, which trains people to click
-   * through the question this whole feature exists to make them read. And it is
-   * kept beside the terminal records because a permission is about one pane, so
-   * `removeTerminal` drops it and there is nothing to sweep.
-   *
-   * The key is committed to the repository and is the identity the handshake
-   * authenticates, so this survives a teammate changing their handle and does
-   * not survive them changing their machine — which is the right way round.
+   * Teammates who may always type in a pane without being asked again. Keyed
+   * by the public key the handshake authenticates, so it survives a handle change
+   * and not a machine change. Pruned by `removeTerminal`.
    */
   standingConsent: StandingConsentRecord[]
   asked: AskedQuestions
   /**
-   * How this installation paints itself: a preset, an optional ground and
-   * accent, and any per-token edits.
-   *
-   * Here rather than in the renderer's local storage because it is a fact about
-   * the installation and not about one window: the main process reads it before
-   * any window exists, to give the window the background colour it will open
-   * with, and a second window has to open the same colour as the first. It is
-   * also the shape of preference this file already holds — `asked` is the same
-   * kind of thing — so it costs no new file on disk.
+   * How this installation paints itself. Here, not in the renderer's storage:
+   * the main process reads it before any window exists for the opening colour.
    */
   appearance: Appearance
   /** The update check's preference and clock. See `UpdatesSchema`. */
@@ -235,14 +167,10 @@ export function parseWorkspaceDocument(raw: unknown): WorkspaceDocument {
     terminals: salvage(record.terminals, TerminalRecordSchema) as TerminalRecord[],
     mutedTerminals: salvage(record.mutedTerminals, z.string().min(1)),
     standingConsent: salvage(record.standingConsent, StandingConsentSchema),
-    // Salvaged like everything else: a date somebody hand-edited into a string
-    // means the question has not been asked, never that the file is unusable.
+    // A hand-edited date means the question has not been asked, never that the file is unusable.
     asked: AskedSchema.safeParse(record.asked).data ?? {},
-    // Salvaged one colour at a time rather than parsed whole: a theme with a
-    // single bad hex in it should cost that colour, not the whole choice.
+    // Salvaged one colour at a time: a single bad hex costs that colour, not the theme.
     appearance: sanitizeAppearance(record.appearance),
-    // Salvaged on the same terms: a preference nobody can read is a preference
-    // that has not been expressed, which is the default rather than a failure.
     updates: UpdatesSchema.safeParse(record.updates).data ?? {}
   }
 }

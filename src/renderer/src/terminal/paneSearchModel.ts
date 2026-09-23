@@ -1,8 +1,4 @@
-// Everything the find bar decides, with no terminal attached. The emulator is
-// imperative and impossible to assert against without a DOM, so the decisions
-// that can actually be wrong — when a stale count must be dropped, what "3 of
-// 17" reads when the addon stopped counting, which keystroke steps where —
-// live here and the component only relays them.
+// Everything the find bar decides, with no terminal attached, so it can be asserted without a DOM.
 
 import type { ISearchOptions } from '@xterm/addon-search'
 
@@ -19,11 +15,7 @@ export type PaneSearchState = {
   total: number
 }
 
-/**
- * The addon stops collecting once it has this many hits, so a count that
- * reaches it is a floor and not a total. Passed to the addon as well, so the
- * two numbers cannot disagree about where counting stopped.
- */
+/** The addon stops at this many hits, so reaching it is a floor; passed to the addon too. */
 export const SEARCH_HIGHLIGHT_LIMIT = 1000
 
 export const EMPTY_PANE_SEARCH: PaneSearchState = {
@@ -43,9 +35,7 @@ export function paneSearchReducer(state: PaneSearchState, action: PaneSearchActi
   switch (action.type) {
     case 'query':
       if (action.value === state.query) return state
-      // The old tally describes the old term. Keeping it would leave "3 of 17"
-      // under a query that matches nothing until the addon gets round to
-      // answering, which reads as a result rather than as a pending search.
+      // The old tally describes the old term; kept, "3 of 17" would read as a result.
       return { ...state, query: action.value, current: 0, total: 0 }
     case 'toggle':
       return {
@@ -55,25 +45,19 @@ export function paneSearchReducer(state: PaneSearchState, action: PaneSearchActi
         total: 0
       }
     case 'results':
-      // resultIndex is -1 both before a match is selected and once the active
-      // one sits past the limit; either way there is no position to show.
+      // -1 before a selection and past the limit alike.
       return {
         ...state,
         current: action.resultIndex < 0 ? 0 : action.resultIndex + 1,
         total: Math.max(0, action.resultCount)
       }
     case 'reset':
-      // The query survives, because reopening the bar to search for the same
-      // thing again is the common case; the counts do not, because they
-      // describe a buffer that has been growing in the meantime.
+      // The query survives reopening; the counts describe a buffer that has since grown.
       return { ...state, current: 0, total: 0 }
   }
 }
 
-/**
- * What the counter reads. An empty string means the bar shows nothing at all:
- * an untouched field has neither found nor failed to find anything.
- */
+/** What the counter reads; empty for an untouched field. */
 export function matchLabel(state: PaneSearchState, limit = SEARCH_HIGHLIGHT_LIMIT): string {
   if (state.query === '') return ''
   if (state.total === 0) return 'No results'
@@ -96,11 +80,7 @@ export type PaneSearchKeyEvent = {
   altKey: boolean
 }
 
-/**
- * The field's own keys. Anything carrying the app modifier is declined, so a
- * workspace chord typed with the field focused still reaches the window
- * handler instead of being answered twice.
- */
+/** The field's own keys; app-modifier chords are declined so the window handles them. */
 export function searchFieldAction(event: PaneSearchKeyEvent): PaneSearchKeyAction | null {
   if (event.metaKey || event.ctrlKey || event.altKey) return null
   if (event.key === 'Escape') return 'close'
@@ -108,11 +88,7 @@ export function searchFieldAction(event: PaneSearchKeyEvent): PaneSearchKeyActio
   return null
 }
 
-/**
- * The addon's own option shape. `regex` stays off deliberately: a search field
- * over shell output is typed at, not composed in, and a stray `.` or `(` from
- * a path would otherwise match something else entirely.
- */
+/** The addon's options; `regex` off, since a stray `.` or `(` from a path would match something else. */
 export function toFindOptions(
   options: PaneSearchOptions,
   decorations: NonNullable<ISearchOptions['decorations']>,

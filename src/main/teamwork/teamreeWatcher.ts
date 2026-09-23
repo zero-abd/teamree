@@ -1,87 +1,6 @@
-// Watching `.teamree` in the primary checkout, so a `git pull` is not a
-// restart.
-//
-// The two team-wide facts — who is on the roster and which relay they meet on —
-// are files in the repository, and that is the whole point of the design: they
-// arrive the way every other decision about a project arrives, in a commit. But
-// arriving in a commit means arriving without this app doing anything, and
-// until now nothing here noticed. The peer service re-read those files when the
-// project list changed or when *this* app wrote a member file, and a pull that
-// brings in a teammate's key is neither: both machines sat on the roster from
-// before the pull, with nothing on screen to suggest a stale read. "Quit and
-// reopen teamree" was a numbered step in the runbook because of this file's
-// absence.
-//
-// WHAT IS WATCHED, AND WHY IT IS THREE THINGS. Each project gets a
-// non-recursive watch on the checkout root, on `.teamree`, and on
-// `.teamree/members`. The root is watched only for the `.teamree` entry itself,
-// because a project that has never had teamwork set up on it gets the directory
-// created by somebody else's commit; `.teamree` covers the relay file and the
-// appearance of `members/`; `members/` covers the keys. Each layer is what
-// notices the next one being created — or deleted and recreated, which is what
-// a checkout of a branch without it and back again does — so the set repairs
-// itself instead of holding a watch on an inode nobody writes to any more.
-//
-// WHY NOT ONE RECURSIVE WATCH. `src/main/git/worktreeWatcher.ts` found this out
-// the hard way: on Linux `recursive: true` is Node's own directory walker, and
-// with no inotify instance left to give it the watcher comes back looking
-// healthy and then never fires — nothing throws and nothing reaches the error
-// event. `.teamree` is two directories deep and holds a handful of small files,
-// so asking recursively buys nothing and costs that failure mode. A
-// non-recursive watch that cannot be set up fails loudly with EMFILE, which is
-// what makes the degraded report below trustworthy.
-//
-// AND WHY A SWEEP AS WELL. An event is the fast path, not the guarantee.
-//
-// On darwin it is not even reliably the fast path, and that has now been
-// measured on a mac rather than reasoned about from libuv's source. Driving
-// this class the way its own tests do — `sync`, then write a key — and logging
-// every raw `fs.watch` callback beside every report: in three runs out of eight
-// not one of the three handles said anything at all, ever, and the report at
-// ~213ms came from the sweep. Under parallel load the silent share rose past
-// nine in ten. In the runs that did speak, the first callback arrived 2-6ms
-// after `fs.watch` returned and carried a replay of writes made *before* the
-// watch existed — a stream that starts slightly in the past and races the
-// caller.
-//
-// That is the documented shape of the platform. There is no non-recursive
-// directory watch on darwin, so every handle is a path on one process-wide
-// FSEvents stream, and adding or removing any handle tears that stream down and
-// builds a new one subscribed from now. The work happens on libuv's
-// CoreFoundation thread, after `fs.watch` has already returned. So a watch is
-// not listening when it is created; it starts listening some unmeasured time
-// later, and whatever happened in between is not delivered late, it is never
-// delivered. No event-shaped fix can recover it: an event macOS did not send
-// cannot be waited for.
-//
-// So the sweep is the floor under the whole feature, not a belt beside a brace:
-// the same three `stat`s the checkout-root filter already does, on a timer. On
-// Linux the event arrives in single-digit milliseconds and the sweep never has
-// anything to say. On darwin it is routinely the only thing that speaks.
-//
-// Being the floor is what shapes its timing, and two of those rules are here
-// because leaving them out left holes that the measurements above walk straight
-// into:
-//
-//   - It holds the short delay for a run of sweeps after the handle set
-//     changes, rather than sampling once and backing off. One sample is not a
-//     covering of a window: if that sample lands before the change does — a
-//     loaded machine need only stall the write past the first tick — the next
-//     chance used to be 800ms later, then 3.2s, then 12.8s.
-//   - Finding something resets it. A sweep that finds a change the watch never
-//     mentioned is the plainest evidence available that the watch is not
-//     delivering, and the old code responded to that evidence by sweeping less
-//     often. It now responds by staying close until things go quiet.
-//
-// And a watch *dying* re-arms it too, for the same reason attaching one does:
-// the handle set changed. A branch switch that removes `.teamree` kills two
-// watches, and the watch that has to notice the directory coming back is a
-// watch on the same deaf stream. Without this the project could sit thirty
-// seconds behind its own checkout, still marked unwatched, waiting for a report
-// that is what would have re-attached it.
-//
-// What comes out is the same coarse invalidation every other producer emits.
-// The value here is entirely in the timing.
+// Watches `.teamree` in the primary checkout (root, `.teamree`, `members/`; each layer notices the next
+// appearing), so a `git pull` is not a restart. Never recursive: on Linux `recursive: true` with no inotify
+// instance left comes back healthy and never fires. A timed sweep is the floor: darwin routinely never delivers.
 
 import { existsSync, statSync, watch as fsWatch } from 'node:fs'
 import { join } from 'node:path'
@@ -93,13 +12,8 @@ import { RELAY_FILE_SEGMENTS } from './peer/relayUrl'
 export const DEFAULT_SETTLE_MS = 200
 
 /**
- * How soon after a watch is attached the set is checked by hand anyway, and how
- * close it keeps sampling while anything is still moving.
- *
- * Short, because attaching is when the platform is least likely to be
- * listening — see the note above on what darwin does with a new handle — and
- * because a report this late is still twenty-five times inside the budget the
- * tests give a `git pull`.
+ * How soon after a watch is attached the set is checked by hand, and how close it keeps sampling while
+ * anything moves. Short, because attaching is when darwin is least likely to be listening.
  */
 export const DEFAULT_SWEEP_FROM_MS = 200
 
@@ -110,14 +24,10 @@ export const DEFAULT_SWEEP_UNTIL_MS = 30_000
 const SWEEP_BACKOFF = 4
 
 /**
- * How many sweeps run at the short delay before the backoff is allowed to start.
- *
- * Sized against the window darwin is blind for, not against a test: the raw
- * `fs.watch` callbacks measured on a mac arrive 2-6ms after the handle is made
- * and are lost outright before that, so a second of close sampling is two
- * orders of magnitude of margin over the window itself and leaves room for a
- * loaded machine to be late with the write as well. The cost of the whole
- * settling phase is five sweeps of three `stat`s per project.
+ * Sweeps at the short delay before backoff may start. Sized against darwin's blind window: every
+ * handle is a path on one process-wide FSEvents stream, and adding or removing a handle rebuilds that
+ * stream from now, so writes made before the new one listens are never delivered. Measured on a mac:
+ * in three runs of eight no handle spoke at all and the sweep was the only report.
  */
 const SWEEP_SETTLE_SWEEPS = 5
 
@@ -126,10 +36,7 @@ const TEAMREE_DIR = MEMBERS_DIR_SEGMENTS[0]
 
 export type WatchHandle = { close: () => void }
 
-/**
- * The filesystem seam, so the tests for the watch set drive a fake and the one
- * test that matters drives a real checkout. Never recursive: see above.
- */
+/** The filesystem seam, so tests drive a fake and one test drives a real checkout. Never recursive: see above. */
 export type WatchFn = (options: {
   target: string
   onChange: (relative: string | null) => void
@@ -137,13 +44,8 @@ export type WatchFn = (options: {
 }) => WatchHandle
 
 /**
- * A project whose `.teamree` is not being watched, and why.
- *
- * Not an error, which is exactly why it has to be said: everything goes on
- * working, and what changes is only what the app is able to *know*. A roster
- * that is silently no longer following the file would have somebody reading a
- * membership list from before their last pull and believing it, which is the
- * failure this whole area exists to avoid.
+ * A project whose `.teamree` is not being watched, and why. Not an error: everything works, but a
+ * roster silently no longer following the file is a membership list from before the last pull.
  */
 export type TeamreeWatchDegraded = {
   projectId: string
@@ -153,17 +55,8 @@ export type TeamreeWatchDegraded = {
 }
 
 /**
- * What the two team-wide facts looked like last time an event made us check.
- *
- * Three numbers, not one, and the third is why: a key arriving does not touch
- * `.teamree`'s own mtime — it changes the mtime of `members/`, the directory it
- * lands in — and the relay file changes neither, since editing a file leaves
- * its parent alone. A mark of `.teamree` by itself answers "did teamwork
- * appear or go", which is only one of the three things this watch is for.
- *
- * `undefined` for a path means it is not there at all, which is a state worth
- * telling apart from every other: a project nobody has set teamwork up on is
- * the case the checkout-root watch exists for.
+ * The two team-wide facts last time an event made us check. Three mtimes: a key arriving touches
+ * `members/` and not `.teamree`, and the relay file touches neither. `undefined` means not there.
  */
 type TeamreeMark = readonly (number | undefined)[]
 
@@ -207,16 +100,10 @@ export type TeamreeWatcherOptions = {
   onChange: () => void
   watch?: WatchFn
   settleMs?: number
-  /**
-   * Called once per project that is not fully covered. Defaults to reporting,
-   * never to silence.
-   */
+  /** Called once per project that is not fully covered. Defaults to reporting, never to silence. */
   onDegraded?: (event: TeamreeWatchDegraded) => void
   schedule?: (run: () => void, delayMs: number) => () => void
-  /**
-   * The sweep's timer, kept apart from `schedule` so a test driving the debounce
-   * by hand is not also driving the safety net, and the other way about.
-   */
+  /** The sweep's timer, apart from `schedule` so a test driving the debounce is not also driving the safety net. */
   sweep?: (run: () => void, delayMs: number) => () => void
   sweepFromMs?: number
   sweepUntilMs?: number
@@ -230,11 +117,8 @@ type WatchedTeamree = {
 }
 
 /**
- * Keeps one set of filesystem watches in step with the set of projects.
- *
- * `sync` takes the whole list and works out the difference, for the same reason
- * the worktree watcher does: the list is short, and a missed add is a feature
- * that silently stops working.
+ * Keeps one set of filesystem watches in step with the set of projects. `sync` takes the whole list
+ * and works out the difference: the list is short, and a missed add is a feature that silently stops.
  */
 export class TeamreeWatcher {
   readonly #watched = new Map<string, WatchedTeamree>()
@@ -274,10 +158,8 @@ export class TeamreeWatcher {
   }
 
   /**
-   * True when everything that exists under this project's `.teamree` is
-   * watched, so a change git brings in is noticed without being asked. False is
-   * never "broken" — it is "this list is only as fresh as the last read", which
-   * is a different sentence and has to stay one.
+   * True when everything that exists under this project's `.teamree` is watched. False is never
+   * "broken" — it is "this list is only as fresh as the last read".
    */
   watches(projectId: string): boolean {
     return this.#watched.get(projectId)?.covered ?? false
@@ -295,9 +177,7 @@ export class TeamreeWatcher {
     }
 
     for (const [id, project] of wanted) this.#attach(id, project.path)
-    // `#attach` has already asked for a soon one if it attached anything. This
-    // is for the project it could not attach a single watch to, which is the
-    // one that needs the floor most.
+    // `#attach` asked for a soon one if it attached anything; this is for the project it could not attach at all.
     this.#armSweep(false)
   }
 
@@ -311,82 +191,43 @@ export class TeamreeWatcher {
   }
 
   /**
-   * Attaches whatever is missing for one project, and says so when something
-   * that exists could not be attached.
-   *
-   * Idempotent, and run again after every report: the directories appear one
-   * inside the next, and the watch on the outer one is what says the inner one
-   * now exists.
+   * Attaches whatever is missing for one project, and says so when something that exists could not
+   * be. Idempotent and re-run after every report: the watch on the outer directory says the inner one exists.
    */
   #attach(projectId: string, projectPath: string): void {
     const watched = this.#watched.get(projectId) ?? { path: projectPath, handles: new Map(), covered: true }
     this.#watched.set(projectId, watched)
-    // The baseline for the checkout-root filter below. Taken here rather than
-    // on the first event, so that a build writing into the checkout is still
-    // free: without it the first write after attaching would always look like a
-    // change, because nothing had been recorded to compare it against.
+    // The baseline for the checkout-root filter, taken here rather than on the first event, so a
+    // build writing into the checkout does not look like a change.
     if (!this.#marks.has(projectId)) this.#marks.set(projectId, markOf(projectPath))
 
     const teamreeDir = join(projectPath, TEAMREE_DIR)
     const membersDir = join(projectPath, ...MEMBERS_DIR_SEGMENTS)
     const had = watched.handles.size
 
-    // The root is watched for one entry only. A checkout is where a build
-    // writes and an agent works, and a report per file written there would cost
-    // a roster read for every one of them.
+    // The root is watched for one entry only: a report per file a build writes would cost a roster read each.
     this.#attachOne(watched, projectId, projectPath, {
-      // Asked of the filesystem, not of the event's filename.
-      //
-      // This used to compare the reported name against `.teamree`, which is a
-      // statement about how a platform spells its events and not about what
-      // happened. Three fixes were spent guessing at that string, and two of the
-      // guesses came with a story about macOS that libuv's `src/unix/fsevents.c`
-      // does not support: it resolves the watched path with `realpath` before
-      // matching, so a symlinked checkout is not spelled differently, and it
-      // drops any event whose path has a `/` left in it after the watched
-      // prefix, so a non-recursive watch there hears about its direct children
-      // and nothing below them — the same shape inotify gives on Linux.
-      //
-      // So the string is no longer load-bearing, and neither is the story. Any
-      // event on the checkout root costs one `stat` of `.teamree`, and only a
-      // real change to it — appearing, going, or being written — reports. That
-      // is cheaper than the roster read this filter exists to avoid, and it is
-      // the same answer on every platform because it is not an opinion about
-      // the platform.
+      // Asked of the filesystem, not of the event's filename: how a platform spells its events is
+      // not what happened. libuv's `src/unix/fsevents.c` resolves the watched path with `realpath` and
+      // drops events below the direct children, so this is the same answer on every platform.
       interesting: () => this.#teamreeChanged(projectId, projectPath),
-      // The checkout itself is the one directory that has to be there: it is
-      // what notices `.teamree` appearing, so a project whose path has gone is
-      // a project nothing can be heard about.
+      // The checkout itself is what notices `.teamree` appearing, so it has to be there.
       required: true
     })
     this.#attachOne(watched, projectId, teamreeDir)
     this.#attachOne(watched, projectId, membersDir)
 
-    // Degraded is a state to recover from, not a verdict.
-    //
-    // `#lose` sets it when a watch dies, and a watch dying is exactly what a
-    // branch switch does: checking out a branch without `.teamree` takes the
-    // directory and its watches with it. Without this, the project stayed
-    // marked unwatched for the life of the process — including after the branch
-    // came back, the directory returned, and every watch was successfully
-    // re-attached a few lines above.
-    //
-    // That is the failure of this area pointed the other way. A roster that has
-    // silently stopped following its file is the thing worth warning about; a
-    // warning left standing over a roster that is being followed perfectly well
-    // is how somebody learns to ignore the warning.
+    // Degraded is a state to recover from, not a verdict: a branch switch without `.teamree` kills the
+    // watches, and the project must not stay marked unwatched after the directory and its watches come
+    // back. A warning left standing over a roster being followed is how somebody learns to ignore it.
     watched.covered =
       watched.handles.has(projectPath) &&
-      // A directory that is not there needs no watch — a project nobody has set
-      // teamwork up on is covered by the watch on its checkout. One that is
-      // there and has no watch is the case this flag exists for.
+      // A directory that is not there needs no watch; one that is there and unwatched is what this flag is for.
       (!existsSync(teamreeDir) || watched.handles.has(teamreeDir)) &&
       (!existsSync(membersDir) || watched.handles.has(membersDir))
 
-    // A handle appearing is the moment the set is least trustworthy: on darwin
-    // it rebuilds the stream every other watch in this process is listening on,
-    // and until the new one is listening this project has nothing following it
-    // at all. Sweep soon, then back off again.
+    // A handle appearing is when the set is least trustworthy: on darwin it rebuilds the stream every
+    // other watch is listening on. Sweep soon, then back off again.
     if (watched.handles.size > had) this.#armSweep(true)
   }
 
@@ -406,17 +247,14 @@ export class TeamreeWatcher {
           onChange: (relative) => {
             if (interesting(relative)) this.#report()
           },
-          // A watch can die long after it was set up — the directory is removed
-          // by a branch switch, or inotify runs out while the app is running —
-          // so this is not only a setup path. The handle is dropped so the next
-          // report re-attaches it.
+          // A watch can die long after setup — branch switch, inotify running out — so the handle is
+          // dropped and the next report re-attaches it.
           onError: (error) => this.#lose(projectId, target, error)
         })
       )
     } catch (error) {
-      // A directory that does not exist yet is not a fault: this is the
-      // ordinary state of a project nobody has set teamwork up on, and the
-      // watch on its parent is what will say it has appeared.
+      // A directory that does not exist yet is the ordinary state of a project without teamwork; its
+      // parent's watch will say when it appears.
       if ((error as NodeJS.ErrnoException).code === 'ENOENT' && options.required !== true) return
       this.#lose(projectId, target, error)
     }
@@ -425,14 +263,11 @@ export class TeamreeWatcher {
   #lose(projectId: string, target: string, error: unknown): void {
     const watched = this.#watched.get(projectId)
     if (!watched) return
-    // Losing a handle changes the handle set, which is the same kind of moment
-    // as attaching one: on darwin it rebuilds the stream every watch in this
-    // process shares, and the directory that just went is the one a branch
-    // switch is about to bring back. Only on the first loss of a given handle,
-    // so a watch that dies noisily cannot push the sweep out ahead of itself.
+    // Losing a handle changes the handle set, the same moment as attaching one, and the directory that
+    // went is the one a branch switch is about to bring back. Only on the first loss, so a watch that
+    // dies noisily cannot push the sweep out ahead of itself.
     if (watched.handles.delete(target)) this.#armSweep(true)
-    // Said once per project. A dying watch can report repeatedly, and the app
-    // has already stopped following the file after the first one.
+    // Said once per project: a dying watch can report repeatedly.
     if (!watched.covered) return
     watched.covered = false
     this.#onDegraded({ projectId, path: target, error })
@@ -442,9 +277,7 @@ export class TeamreeWatcher {
     const watched = this.#watched.get(id)
     if (!watched) return
     this.#watched.delete(id)
-    // A project that comes back is a project nobody has looked at since, so its
-    // remembered `.teamree` would be a claim about a checkout this watcher is
-    // no longer following.
+    // A remembered `.teamree` would be a claim about a checkout this watcher is no longer following.
     this.#marks.delete(id)
     for (const handle of watched.handles.values()) {
       try {
@@ -455,12 +288,9 @@ export class TeamreeWatcher {
     }
   }
 
-  /** Collapses a burst — a pull writes several files — into one report. */
   /**
-   * Whether `.teamree` itself has changed since the last event said it had.
-   *
-   * Remembered per project so a build writing into the checkout — which is what
-   * a checkout is for — costs one `stat` and no report.
+   * Whether `.teamree` itself has changed since the last event said it had. Remembered per project so
+   * a build writing into the checkout costs one `stat` and no report.
    */
   #teamreeChanged(projectId: string, projectPath: string): boolean {
     const mark = markOf(projectPath)
@@ -470,12 +300,8 @@ export class TeamreeWatcher {
   }
 
   /**
-   * Puts the next sweep on the clock.
-   *
-   * `fromStart` is for the moments the handle set has changed — a watch
-   * attached, a watch lost, the project list set — and for a sweep that has
-   * just found a change nothing reported, which are the moments an event is
-   * most likely to be lost; everything else lets the backoff carry on.
+   * Puts the next sweep on the clock. `fromStart` is for the moments an event is most likely lost —
+   * handle set changed, or a sweep found a change nothing reported; everything else lets the backoff carry on.
    */
   #armSweep(fromStart: boolean): void {
     if (this.#closed || this.#watched.size === 0) return
@@ -492,13 +318,8 @@ export class TeamreeWatcher {
   }
 
   /**
-   * Three `stat`s per project, and a report if any of them moved without an
-   * event to say so.
-   *
-   * The same comparison the checkout-root filter makes, which is what keeps this
-   * honest: a sweep that finds nothing costs three `stat`s and says nothing, and
-   * one that finds something is indistinguishable from the event that should
-   * have arrived.
+   * Three `stat`s per project, and a report if any moved without an event: the same comparison the
+   * checkout-root filter makes, so a hit is indistinguishable from the event that should have arrived.
    */
   #sweepNow(): void {
     if (this.#closed) return
@@ -507,8 +328,7 @@ export class TeamreeWatcher {
       if (this.#teamreeChanged(id, watched.path)) changed = true
     }
     if (changed) {
-      // The sweep found what the watch did not say. That is evidence about the
-      // watch, not about the repository, and the answer to it is to stay close.
+      // The sweep found what the watch did not say: evidence about the watch, so stay close.
       this.#stayClose()
     } else if (this.#settlingSweeps > 0) {
       this.#settlingSweeps -= 1
@@ -525,13 +345,13 @@ export class TeamreeWatcher {
     this.#settlingSweeps = SWEEP_SETTLE_SWEEPS
   }
 
+  /** Collapses a burst — a pull writes several files — into one report. */
   #report(): void {
     if (this.#closed || this.#cancelPending) return
     this.#cancelPending = this.#schedule(
       () => {
         this.#cancelPending = undefined
-        // Before the report, so a `.teamree` that has just been created is
-        // already covered by the time anything re-reads it.
+        // Before the report, so a `.teamree` just created is covered by the time anything re-reads it.
         for (const [id, watched] of [...this.#watched]) this.#attach(id, watched.path)
         this.#onChange()
       },
@@ -543,8 +363,7 @@ export class TeamreeWatcher {
 function nodeWatch(options: Parameters<WatchFn>[0]): WatchHandle {
   const watcher = fsWatch(
     options.target,
-    // Never the reason a process stays alive: quitting must not wait on a file
-    // watch, and neither must a test.
+    // Never the reason a process stays alive: quitting must not wait on a file watch, nor a test.
     { persistent: false },
     (_event, fileName) => options.onChange(typeof fileName === 'string' ? fileName : null)
   )

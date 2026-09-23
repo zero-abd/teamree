@@ -1,15 +1,8 @@
 /** @vitest-environment jsdom */
 
-// A teammate's worktree, in the same list as your own.
-//
-// Sharing the list is the whole risk: two of the facts on this row must never
-// be mistaken, and neither is visible to `teammateRows.test.ts`, which only
-// proves the model. Whose it is has to be on the row and not only in a tooltip.
-// And that it is not yours to act on has to be structural — the row is a `div`
-// rather than a disabled button, because a disabled control is a thing that
-// would work if something were different, and this will not.
-//
-// The one exception is a pane, and only in one direction: reading.
+// A teammate's worktree in the same list as your own: whose it is must be on the row, and
+// that it is not yours to act on must be structural (a `div`, not a disabled button). The one
+// exception is a pane, and only for reading.
 
 import { render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -78,8 +71,7 @@ describe('whose worktree this is', () => {
 })
 
 describe('what cannot be done to it', () => {
-  // Not a disabled button: a disabled control is a thing that would work if
-  // something were different, and removing somebody else's checkout will not.
+  // A disabled control is a thing that would work if something were different; this will not.
   it('offers no way to open, retry or remove it — not even a dead one', () => {
     mount()
     expect(screen.queryByRole('button', { name: /Remove/ })).toBeNull()
@@ -106,8 +98,7 @@ describe('a pane of theirs', () => {
     mount(theirs(), ['priya:t7'])
     const button = screen.getByRole('button')
     expect(button.getAttribute('aria-pressed')).toBe('true')
-    // And what a second press would do, because a toggle whose hover text still
-    // offers what it already did is a button that lies about half its presses.
+    // A toggle whose hover text still offers what it already did lies about half its presses.
     expect(button.getAttribute('title')).toBe('Stop watching priya’s claude')
   })
 
@@ -124,9 +115,7 @@ describe('a pane of theirs', () => {
     )
   })
 
-  // A teammate's pane does not stream until somebody opens it, so a quoted
-  // line on a row nobody is watching would be a line this machine was never
-  // sent.
+  // A teammate's pane does not stream until opened; a quoted line before then was never sent.
   it('quotes nothing until somebody is actually watching it', () => {
     mount()
     expect(document.querySelector('.pane-row__evidence')).toBeNull()
@@ -149,29 +138,23 @@ describe('a pane of theirs', () => {
 })
 
 describe('a teammate who has gone away', () => {
-  // The row stays where it was — a worktree disappearing reads as a worktree
-  // deleted — and says how old the picture is instead.
+  // A worktree disappearing reads as a worktree deleted.
   it('stays on the list and says how old the picture is', () => {
     mount(theirs({ live: false, heardAt: NOW - 240_000 }))
-    // And says *which* age the number is. `heardAt` moves when a snapshot
-    // changes rather than on contact, so this is the age of the picture and not
-    // of the absence — `away · 4m` beside a teammate who went thirty seconds
-    // ago claimed the second when it knew only the first. The number is the
-    // same one; the word beside it is what was wrong. See `teammateStaleness`.
+    // `heardAt` moves when a snapshot changes, not on contact: the age of the picture, not of the
+    // absence. See `teammateStaleness`.
     expect(screen.getByText('away · picture 4m old')).toBeTruthy()
     expect(screen.getByText('Fix the relay budget')).toBeTruthy()
   })
 
-  // "Their machine is away" is the fact. Nothing at all is known about the
-  // worktree, and the sentence must not imply otherwise.
+  // Nothing is known about the worktree, and the sentence must not imply otherwise.
   it('says their machine is not connected, never anything about the worktree', () => {
     mount(theirs({ live: false, heardAt: NOW - 240_000 }))
     const detail = screen.getByLabelText(/not connected/).getAttribute('aria-label') ?? ''
     expect(detail).toBe('priya’s machine is not connected. This is what they were showing 4m ago.')
   })
 
-  // Reconnection is ordinary. A badge that blinked on every relay restart
-  // would train a reader to ignore it.
+  // A badge that blinked on every relay restart would train a reader to ignore it.
   it('says nothing during the grace a reconnection takes', () => {
     mount(theirs({ live: false, heardAt: NOW - 5_000 }))
     expect(screen.queryByText(/away/)).toBeNull()
@@ -182,9 +165,7 @@ describe('a teammate who has gone away', () => {
     expect(screen.queryByText(/away/)).toBeNull()
   })
 
-  // The age crossed the wire as a duration the owner measured, plus however
-  // long it has been sitting here — the only arithmetic that does not involve
-  // believing somebody else's clock.
+  // The owner's measured silence plus the time it has sat here: the only arithmetic that trusts no other clock.
   it('adds the time since the snapshot arrived to the silence its owner measured', () => {
     mount(theirs({ live: false, heardAt: NOW - 120_000, panes: [pane({ quietForMs: 180_000 })] }))
     expect(within(screen.getByRole('button')).getByText('5m')).toBeTruthy()

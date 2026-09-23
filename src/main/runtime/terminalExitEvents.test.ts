@@ -1,12 +1,6 @@
-// A pane exiting, as every client hears about it.
-//
-// Wired in the order the app wires it — restore first, then register the
-// handlers, then wrap them as producers — because that order is what the
-// invariant here is about: the panes brought back from the last launch exist
-// before any handler does, and they still have to announce their own exits.
-// A restored pane and a freshly opened one must be indistinguishable to a
-// subscriber, or the sidebar goes on calling a dead agent "working" after every
-// restart, which is precisely when a resumed agent pane is the point.
+// A pane exiting, as every client hears about it. Wired in the order the app
+// wires it, because restored panes exist before any handler does and still
+// have to announce their own exits.
 
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -49,11 +43,8 @@ afterEach(async () => {
 })
 
 /**
- * A stand-in for an agent CLI that sits there until it is told to stop, then
- * exits with a code of its own. Ending it by touching a file rather than by
- * writing into the pty keeps the pane's own state out of it: a keystroke
- * retires a restored pane's badge and is itself a producer, which would put
- * events in the way of the ones under test.
+ * A stand-in for an agent CLI that sits there until told to stop. Ended by
+ * touching a file, because a keystroke is itself a producer.
  */
 async function fakeAgent(): Promise<{ checkout: string; binary: string; stopFile: string }> {
   const base = await mkdtemp(join(tmpdir(), 'teamree-exit-events-'))
@@ -89,10 +80,8 @@ async function startAfterRestart(record: TerminalRecord, checkout: string, stopF
     resolveWorktreeCwd: (worktreeId) => (worktreeId === WORKTREE ? checkout : undefined),
     layouts: store,
     sessions: store,
-    // The conversation is there, said here rather than left to the real probe —
-    // which would read the home directory of whoever is running this and answer
-    // for a checkout `mkdtemp` made a moment ago, so the pane would come back as
-    // a fresh agent and this file would be watching the wrong pane.
+    // Said here rather than left to the real probe, which would read the home
+    // directory of whoever is running this and bring the pane back as a fresh agent.
     conversationEvidence: () => 'present'
   })
   services.push(terminals)
@@ -122,15 +111,11 @@ function recordFor(binary: string, checkout: string): TerminalRecord {
     worktreeId: WORKTREE,
     cwd: checkout,
     shell: testShell(),
-    // An agent pane, because that is the one M10 brings back with its
-    // conversation rather than as a plain shell.
+    // An agent pane, the one that comes back with its conversation.
     command: binary,
     agent: 'claude',
     agentSessionId: 'session_from_last_launch',
-    // Typed into last time. What actually decides the resume is the evidence
-    // above — whether the agent's store has this conversation — and this says
-    // the other half agrees: a pane nobody spoke to takes the other branch and
-    // comes back running a fresh agent, which is not the pane this file watches.
+    // A pane nobody spoke to comes back running a fresh agent, not the pane this file watches.
     typed: true,
     cols: 80,
     rows: 24,
@@ -158,8 +143,7 @@ describePty('exits on the workspace stream', () => {
         'both panes to be running'
       )
 
-      // One deliberate act ends both, so neither one's announcement can be a
-      // side effect of anything the other did.
+      // One deliberate act ends both.
       harness.events.length = 0
       await writeFile(harness.stopFile, '', 'utf8')
       await waitUntil(() => exitsIn(harness.events).length === 2, 'both exits to be published')
@@ -172,8 +156,7 @@ describePty('exits on the workspace stream', () => {
         terminalId: RESTORED_ID,
         exitCode: EXIT_CODE
       })
-      // The invariant: the two panes are described identically, one having come
-      // back from a previous launch and the other having been opened by a call.
+      // The invariant: restored and fresh panes are described identically.
       expect(byTerminal[fresh.id]).toEqual({ type: 'terminalExited', terminalId: fresh.id, exitCode: EXIT_CODE })
       // And the record each client holds is stale now, for both of them.
       expect(harness.events).toContainEqual({ type: 'terminals' })
@@ -195,8 +178,7 @@ describePty('exits on the workspace stream', () => {
       expect(panes.find((pane) => pane.id === RESTORED_ID)).toMatchObject({
         running: false,
         exitCode: EXIT_CODE,
-        // The pane is not working, and nothing needs to happen for a client to
-        // be told so: the exit above already invalidated the list.
+        // The exit above already invalidated the list.
         busy: false
       })
     },
@@ -213,8 +195,7 @@ describePty('exits on the workspace stream', () => {
       harness.events.length = 0
       await harness.call('terminal.close', { terminalId: RESTORED_ID })
 
-      // Closing already announced itself; an exit event for a pane no client can
-      // list any more would be an exit banner on something that is not there.
+      // Closing already announced itself; no exit banner on a pane nobody can list.
       expect(exitsIn(harness.events)).toEqual([])
       expect(harness.events).toContainEqual({ type: 'terminals' })
     },

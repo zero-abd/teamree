@@ -1,24 +1,7 @@
-// A unified patch, read the way a person reads one.
-//
-// The panel that shows an agent's work used to colour a patch by its first
-// character and stop there, which is enough to see that something changed and
-// not enough to say what: no file boundaries you can fold away, no hunk you can
-// point at, and — the one that sends people back to their editor — no line
-// numbers. "It broke around line 212" is the sentence a review is made of, and
-// a screen of `+`/`-` cannot produce it.
-//
-// So the patch is parsed into what it already is: files, each with hunks, each
-// with lines that know their number on both sides. The patch stays the source
-// of truth — nothing here reads the working tree, and nothing here is a fact
-// git did not write down — which is what keeps this honest about a diff of a
-// file that has moved on since it was taken.
-//
-// Deliberately tolerant. The patch this is given may have been cut short at a
-// byte ceiling (see `readWorktreeDiff`), so a hunk with fewer lines than its
-// header claims is an ordinary outcome and not a parse error: whatever arrived
-// is rendered, and the note about the cut is the panel's to add.
+// A unified patch parsed into files, hunks and lines that know their number on
+// both sides. Nothing here reads the working tree. Tolerant on purpose: the patch
+// may have been cut at a byte ceiling (see `readWorktreeDiff`), so a short hunk is not an error.
 
-/** What a line is doing, which is decided by the column git puts it in. */
 export type PatchLineKind = 'added' | 'removed' | 'context'
 
 export type PatchLine = {
@@ -29,7 +12,7 @@ export type PatchLine = {
   oldNumber: number | null
   /** Its number in the file after it; absent on a removal. */
   newNumber: number | null
-  /** What `\ No newline at end of file` was said about, said about the line. */
+  /** `\ No newline at end of file` was said about this line. */
   noNewline: boolean
 }
 
@@ -43,7 +26,6 @@ export type PatchHunk = {
   lines: PatchLine[]
 }
 
-/** What happened to one file, and everything the patch says about it. */
 export type PatchFile = {
   /** The path after the change; for a deletion, the path that was there. */
   path: string
@@ -56,18 +38,8 @@ export type PatchFile = {
 }
 
 /**
- * Every file in a unified patch, with the numbers a reader needs to cite.
- *
- * The classification is positional, the way the format is: the first character
- * of a line decides what it is, and `---`/`+++` are headers rather than a
- * removal and an addition — the trap in every hand-rolled diff renderer, and
- * the reason this is one function with one set of rules rather than a test on
- * each side of the panel.
- *
- * Line numbers are counted off the hunk header rather than trusted from it: a
- * removed line advances only the old side, an added line only the new, and a
- * context line both. That is the whole arithmetic, and it is what makes the two
- * gutters agree with what the file itself would say.
+ * Every file in a unified patch, with the numbers a reader needs to cite. Classification
+ * is positional (`---`/`+++` are headers, not lines) and numbers are counted off the hunk header.
  */
 export function parsePatch(patch: string): PatchFile[] {
   const files: PatchFile[] = []
@@ -92,9 +64,7 @@ export function parsePatch(patch: string): PatchFile[] {
       continue
     }
 
-    // A patch that begins at a hunk — which is what a cut-short one handed back
-    // from its second half would look like — still has lines worth showing, so
-    // it gets a file with no name rather than nothing at all.
+    // A patch that begins at a hunk (a cut-short one) gets a file with no name rather than nothing.
     if (file === undefined && (line.startsWith('@@') || line.startsWith('--- '))) start({ path: '', from: null })
     if (file === undefined) continue
 
@@ -109,17 +79,13 @@ export function parsePatch(patch: string): PatchFile[] {
     }
 
     if (hunk === undefined) {
-      // Still in the file's own preamble: the index line, the modes, and the
-      // two statements that are the only record of a move git makes when the
-      // content is identical enough that there are no hunks to read it from.
+      // The file's preamble; the rename statements are the only record of a move with no hunks.
       if (line.startsWith('rename from ')) file.from = line.slice('rename from '.length)
       else if (line.startsWith('rename to ')) file.path = line.slice('rename to '.length)
       else if (line.startsWith('copy from ')) file.from = line.slice('copy from '.length)
       else if (line.startsWith('new file mode')) file.status = 'added'
       else if (line.startsWith('deleted file mode')) file.status = 'deleted'
-      // Both spellings: the summary git prints by default, and the header above
-      // the encoded payload `--binary` produces. Either way there is nothing
-      // here a reader can be shown, and saying so is better than an empty file.
+      // Both spellings: the default summary, and the header `--binary` produces.
       else if (line.startsWith('Binary files ') || line.startsWith('GIT binary patch')) file.binary = true
       else if (line.startsWith('--- ') || line.startsWith('+++ ')) {
         const path = sidePath(line)
@@ -131,19 +97,15 @@ export function parsePatch(patch: string): PatchFile[] {
       continue
     }
 
-    // `\ No newline at end of file` is a remark about the line above it, and
-    // belongs to that line rather than to the hunk: it is the difference
-    // between two files that differ only in their last byte.
+    // `\ No newline at end of file` is a remark about the line above it, not the hunk.
     if (line.startsWith('\\')) {
       const last = hunk.lines.at(-1)
       if (last) last.noNewline = true
       continue
     }
 
-    // An empty context line is written as a single space, so an actually empty
-    // one is something that has been through a tool that strips trailing
-    // whitespace. Read as context rather than as the end of the hunk, because
-    // ending it there would silently drop every line below it.
+    // An empty context line is a single space; a truly empty one has been through
+    // a whitespace-stripping tool. Read as context, else every line below is dropped.
     const marker = line === '' ? ' ' : line[0]
     const text = line.slice(1)
     if (marker === '+') {
@@ -159,9 +121,7 @@ export function parsePatch(patch: string): PatchFile[] {
     }
   }
 
-  // A rename is only readable off the pair of paths, and the two statements
-  // above are not always there: a rename with edits in it carries `---`/`+++`
-  // as well, and those are what the panel ends up showing.
+  // A rename with edits carries `---`/`+++` too, so it is read off the pair of paths.
   for (const each of files) {
     if (each.from !== null && each.from !== each.path && each.status === 'modified') each.status = 'renamed'
   }
@@ -189,16 +149,8 @@ function sidePath(line: string): string | null {
   return raw.startsWith('a/') || raw.startsWith('b/') ? raw.slice(2) : raw
 }
 
-/**
- * The two paths out of a `diff --git` line.
- *
- * Only reached when nothing better follows it — a binary file, or a pure
- * rename — because the line is genuinely ambiguous: the separator between the
- * two paths is a space, and a path may contain one. Git quotes a path it
- * cannot write plainly, which is the case that is read exactly; the rest is
- * split at the last ` b/`, which is right for every path that does not itself
- * contain that sequence.
- */
+// The two paths out of a `diff --git` line, which is ambiguous (a path may contain
+// a space): quoted paths are read exactly, the rest split at the last ` b/`.
 function headerPaths(rest: string): { path: string; from: string | null } {
   const quoted = /^"(.*)" "(.*)"$/.exec(rest)
   if (quoted !== null) {

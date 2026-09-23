@@ -10,13 +10,8 @@ import { canSpawnPty, waitUntil } from './pty-test-support'
 import { isTerminalServiceError } from './service-error'
 import { SHELL_UNRUNNABLE } from './shell-environment'
 
-// Real PTYs, no mocks: the interesting failures here are all in the native layer
-// and in how a shell reacts to signals, and a fake would reproduce neither.
-// POSIX only, deliberately. Every command below is POSIX shell — `$(seq 1 200)`,
-// `exit 5`, `;` as a separator — and the behaviour under test is what a pty does
-// with them. A Windows equivalent would be a different test rather than a
-// translation of this one, so this skips there instead of failing there, and the
-// Windows-relevant parts of the session live in tests that do run on it.
+// Real PTYs, no mocks: the interesting failures are in the native layer. POSIX
+// only: every command below is POSIX shell, so this skips on Windows.
 const describePty = process.platform !== 'win32' && canSpawnPty() ? describe : describe.skip
 const TEST_TIMEOUT_MS = 20_000
 
@@ -58,10 +53,7 @@ describePty('PtySession', () => {
 
     let thrown: unknown
     try {
-      // Windows refuses this inside node-pty's spawn. POSIX does not refuse it
-      // at all: the fork succeeds, the exec fails in the child, and the pane
-      // opens and disappears a moment later with the reason going nowhere. The
-      // caller has to hear the same thing on both.
+      // Windows refuses in spawn; POSIX forks fine and the exec fails in the child.
       start({ shell: missing, command: 'echo never' })
     } catch (error) {
       thrown = error
@@ -137,8 +129,7 @@ describePty('PtySession', () => {
   it(
     'raises a title event from an OSC sequence in the live stream',
     async () => {
-      // printf writes the sequence in two calls, so the chunking is the shell's
-      // choice rather than the test's -- the scanner has to cope either way.
+      // Two printf calls, so the chunking is the shell's choice, not the test's.
       const session = start({ command: `printf '\\033]0;agent-run' && printf '\\007' && sleep 1` })
       const events = collect(session)
 
@@ -149,9 +140,7 @@ describePty('PtySession', () => {
     TEST_TIMEOUT_MS
   )
 
-  // The bell is the one byte a program sends for no reason except to be
-  // noticed, and everything downstream of the session throws it away. So it is
-  // reported from here, and remembered here, or it is lost.
+  // Everything downstream of the session throws the bell away, so it is reported here or lost.
   it(
     'raises a bell event and remembers when it rang',
     async () => {
@@ -166,9 +155,7 @@ describePty('PtySession', () => {
     TEST_TIMEOUT_MS
   )
 
-  // An agent that repaints a spinner into its window title emits one of these
-  // several times a second. Counted, every one of those panes would look like a
-  // pane asking for attention.
+  // An agent repainting a spinner into its title emits one of these several times a second.
   it(
     'does not count the BEL that terminates a title as a bell',
     async () => {
@@ -182,8 +169,6 @@ describePty('PtySession', () => {
     TEST_TIMEOUT_MS
   )
 
-  // A bell is a request. A keystroke is somebody answering it, and a pane that
-  // has been answered is not asking for anything.
   it(
     'forgets the bell once somebody types into the pane',
     async () => {
@@ -197,13 +182,10 @@ describePty('PtySession', () => {
     TEST_TIMEOUT_MS
   )
 
-  // And a fresh burst of output is the pane overtaking its own request: whatever
-  // it rang about, it has gone back to doing something since.
   it(
     'forgets the bell when a new burst of output starts',
     async () => {
-      // A quiet window of a few milliseconds, so the second printf a second
-      // later is a burst of its own rather than more of the first.
+      // A quiet window of milliseconds, so the second printf is a burst of its own.
       const session = start({
         command: `printf '\\007' && sleep 1 && echo carried-on && sleep 2`,
         schedule: (run, _delayMs) => {
@@ -223,9 +205,7 @@ describePty('PtySession', () => {
   it(
     'caps scrollback no matter how much the child prints',
     async () => {
-      // The ratio is the point, not the volume: 200 lines is about 6.8KB
-      // against a 2KB cap, so most of it must be evicted. The buffer's own
-      // eviction is covered exhaustively, without a PTY, in scrollback.test.ts.
+      // 200 lines is about 6.8KB against a 2KB cap; eviction itself is covered in scrollback.test.ts.
       const cap = 2 * 1024
       const session = start({
         command: 'for i in $(seq 1 200); do echo "chatty line $i padding padding padding"; done',
@@ -236,9 +216,7 @@ describePty('PtySession', () => {
       await waitUntil(() => events.some((event) => event.type === 'exit'), 'the chatty command to finish')
       expect(session.retainedBytes).toBeLessThanOrEqual(cap)
       expect(Buffer.byteLength(session.read(), 'utf8')).toBeLessThanOrEqual(cap)
-      // The head is gone, which is what eviction means. Whether the very last
-      // line arrived is node-pty's question, not this buffer's, and the test
-      // above answers it at a volume that always drains in time.
+      // The head is gone; whether the last line arrived is node-pty's question.
       expect(session.read()).not.toContain('chatty line 1 ')
     },
     TEST_TIMEOUT_MS
@@ -247,9 +225,6 @@ describePty('PtySession', () => {
   it(
     "lets go of most of an exited pane's scrollback and keeps the tail",
     async () => {
-      // A finished pane appends nothing more, so whatever it is holding is
-      // held purely against the next read. The readers are real and all of
-      // them read the tail, so the tail is what survives.
       const session = start({ command: 'seq 1 200000; sleep 1' })
       const events = collect(session)
 
@@ -260,8 +235,7 @@ describePty('PtySession', () => {
       await waitUntil(() => events.some((event) => event.type === 'exit'), 'the chatty command to finish')
 
       expect(session.retainedBytes).toBeLessThanOrEqual(EXITED_RETENTION_BYTES)
-      // Trimmed, not dropped: `terminal.read` on an exited pane is what the
-      // renderer repaints from and what `teamree terminal read` answers with.
+      // Trimmed, not dropped: the renderer repaints an exited pane from `terminal.read`.
       expect(session.retainedBytes).toBeGreaterThan(0)
       expect(session.read().length).toBeGreaterThan(0)
     },
@@ -271,10 +245,8 @@ describePty('PtySession', () => {
   it(
     'keeps the last line of a chatty command that exits the moment it has printed it',
     async () => {
-      // 3000 lines is the volume the tail used to go missing at: enough that
-      // the pty is still holding some of it when the child is reaped. A handful
-      // of runs rather than one, because what used to fail here failed by race
-      // and a single green run would have said nothing.
+      // 3000 lines: the pty is still holding some when the child is reaped. Several
+      // runs, because the failure is a race.
       for (let run = 0; run < 5; run++) {
         const session = start({ command: 'seq 1 3000' })
         const events = collect(session)
@@ -289,11 +261,8 @@ describePty('PtySession', () => {
   it(
     'holds the exit event until everything the child printed has arrived',
     async () => {
-      // The bug this pins down: waitpid returns as soon as the child is reaped,
-      // while its last writes are still in the pty buffer. Emitting exit then
-      // loses the tail — which is exactly what `terminal run` hands back to an
-      // agent. So the invariant is that when exit lands, the scrollback is
-      // already complete.
+      // waitpid returns while the last writes are still in the pty buffer; when
+      // exit lands the scrollback must already be complete.
       const session = start({
         command: 'for i in $(seq 1 40); do echo "tail line $i padding padding padding"; done'
       })
@@ -318,8 +287,7 @@ describePty('PtySession', () => {
   it(
     'kills the whole process tree, not just the shell',
     async () => {
-      // The shell prints its grandchild's pid, then waits forever. Closing the
-      // session has to take the sleep with it.
+      // The shell prints its grandchild's pid, then waits forever.
       const session = start({ command: 'sleep 120 & echo child:$!; wait' })
       const events = collect(session)
 
@@ -367,8 +335,7 @@ describePty('PtySession', () => {
     async () => {
       const edges: { busy: boolean; running: boolean }[] = []
       const session = start({
-        // Output, then death, well inside the quiet window: the pane is
-        // genuinely busy at the moment it exits.
+        // Output, then death, inside the quiet window: busy at the moment it exits.
         command: 'echo working; exit 5',
         onActivityChange: (each) => {
           const { busy, running } = each.snapshot()
@@ -379,10 +346,7 @@ describePty('PtySession', () => {
 
       await waitUntil(() => events.some((event) => event.type === 'exit'), 'exit event')
 
-      // Both edges, not just the first. Settling the exit cancels the quiet
-      // countdown that would have reported the second one, so without it a
-      // subscriber watching activity is left holding "busy" for a pane that is
-      // never going to say anything again.
+      // Both edges: settling the exit cancels the countdown that would have reported the second.
       expect(edges).toEqual([
         { busy: true, running: true },
         { busy: false, running: false }
@@ -418,11 +382,9 @@ describePty('PtySession', () => {
     async () => {
       const session = start({ command: 'cat', restored: 'agent', restoredRecord: earlier })
 
-      // The conversation is about to print itself out of the agent's own store,
-      // so showing a transcript of it as well would be the same exchange twice.
+      // The conversation is about to print itself; a transcript too would be the exchange twice.
       expect(session.read()).not.toContain('what this pane printed last time')
-      // Held, though, and not thrown away: this is the only copy of it, and what
-      // gets written down for the next launch has to still have it.
+      // Held, not thrown away: this is the only copy.
       expect(session.recordedOutput()).toContain('what this pane printed last time')
     },
     TEST_TIMEOUT_MS
@@ -441,29 +403,19 @@ describePty('PtySession', () => {
       await waitUntil(() => !session.isRunning, 'the agent to give up')
 
       const shown = session.read()
-      // Said in words, and in the pane's own output rather than to whoever
-      // happens to be subscribed: a restored pane can die before there is a
-      // window, and the window paints from what it reads.
-      // One line, and the two facts the pane is the only thing that knows:
-      // which of the two resume failures this was, and what the agent exited
-      // with. Why a conversation can be gone is in the comment on
-      // `failedResumeMark`, not in the pane.
+      // In the pane's own output: a restored pane can die before there is a window.
+      // One line with the two facts only the pane knows; why is on `failedResumeMark`.
       expect(shown).toContain('[resume refused — agent exited 1')
       expect(shown).not.toContain('deleted, expired, or recorded on another machine')
       expect(outputOf(events)).toContain('resume refused')
-      // A subscriber that was already attached is sent the held record too. It
-      // only ever reads once, when its view mounts, so un-holding the record
-      // without also sending it would tell this one that the old output is
-      // above while never having sent it a byte of it — the same false claim
-      // this whole mechanism exists to stop, moved somewhere harder to see.
+      // An attached subscriber is sent the held record too: it only reads once, at mount.
       expect(outputOf(events)).toContain('what this pane printed last time')
       expect(outputOf(events).indexOf('what this pane printed last time')).toBeLessThan(
         outputOf(events).indexOf('resume refused')
       )
 
-      // The held record is let go of in the same moment, above the attempt that
-      // failed, and under a line that does not promise a shell that is not
-      // coming.
+      // The held record is let go of, above the failed attempt, under a line
+      // that does not promise a shell.
       expect(shown).toContain('what this pane printed last time')
       expect(shown).toContain('resume attempt below')
       expect(shown).not.toContain('new shell below')
@@ -477,9 +429,7 @@ describePty('PtySession', () => {
   it(
     'blames nothing for an agent that resumed, did its work and exited cleanly',
     async () => {
-      // A one-shot: resume, answer, leave with zero. It is the same executable
-      // in a different mode, so nothing upstream can tell it apart from the
-      // interactive one, and every clause of the note would be false about it.
+      // A one-shot: same executable, different mode, nothing upstream can tell it apart.
       const session = start({ command: 'echo the answer', restored: 'agent', restoredRecord: earlier })
 
       await waitUntil(() => !session.isRunning, 'the one-shot to finish')
@@ -495,10 +445,7 @@ describePty('PtySession', () => {
   it(
     'blames nothing for an agent that ran for a while before it died',
     async () => {
-      // Started inside the window and reaped outside it. Past the window an
-      // agent that ends is an agent that ended — it may well have resumed
-      // perfectly an hour ago — and inventing a cause for it would be this app
-      // saying something it does not know.
+      // Started inside the window and reaped outside it.
       let clock = 1_000
       const session = start({
         command: 'sleep 0.05; exit 1',
@@ -511,8 +458,7 @@ describePty('PtySession', () => {
       await waitUntil(() => !session.isRunning, 'the agent to exit')
 
       expect(session.read()).not.toContain('resume refused')
-      // And the record stays held, because nothing has happened to say the
-      // conversation did not come back.
+      // And the record stays held.
       expect(session.read()).not.toContain('what this pane printed last time')
       expect(session.snapshot().restored).toBe('agent')
     },
@@ -522,8 +468,7 @@ describePty('PtySession', () => {
   it(
     'says nothing of the kind about a pane that was never resuming anything',
     async () => {
-      // A restored *shell* exits because somebody ended it, which is not a
-      // failure and has no conversation behind it to be missing.
+      // A restored *shell* has no conversation behind it to be missing.
       const session = start({ command: 'exit 1', restored: 'shell', restoredRecord: earlier })
 
       await waitUntil(() => !session.isRunning, 'the command to finish')

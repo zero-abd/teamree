@@ -44,8 +44,7 @@ describe('checkoutDirName', () => {
 })
 
 describe('taskNamesForAgents', () => {
-  // Every shape a fan-out comes in, and what each run is called. Read the
-  // second column as the sidebar: these are the rows somebody sees.
+  // Every shape a fan-out comes in; read the second column as the sidebar.
   const cases: ReadonlyArray<{ what: string; agents: readonly string[]; names: readonly string[] }> = [
     { what: 'no agent at all is still one worktree', agents: [], names: ['task'] },
     { what: 'one agent keeps the task name it would have had alone', agents: ['claude'], names: ['task'] },
@@ -87,18 +86,15 @@ describe('taskNamesForAgents', () => {
     })
   }
 
-  // The two properties the table above is only a sample of. A `task claude 2`
-  // with no `task claude` beside it was the bug: the counter counted a run the
-  // naming rule had skipped, so the sidebar numbered from two and the first
-  // racer was called nothing in particular.
+  // A `task claude 2` with no `task claude` beside it was the bug: the counter
+  // counted a run the naming rule had skipped.
   it('never repeats a name, and never numbers a run without its unnumbered first', () => {
     for (const { agents } of cases) {
       const names = taskNamesForAgents('task', agents)
       expect(names).toHaveLength(Math.max(1, agents.length))
       expect(new Set(names).size).toBe(names.length)
       for (const name of names) {
-        // Safe to read a trailing number as the counter here because the task
-        // itself is `task`; only the rule under test can put a digit on the end.
+        // Only the rule under test can put a digit on the end of `task`.
         const unnumbered = name.replace(/ \d+$/, '')
         if (unnumbered !== name) expect(names).toContain(unnumbered)
       }
@@ -121,8 +117,7 @@ describe('taskNamesForAgents', () => {
     }
   })
 
-  // The suffix distinguishes the runs from each other; it says nothing about
-  // what the repository already holds, which is still the allocator's job.
+  // The suffix distinguishes runs; what the repository holds is the allocator's job.
   it('leaves collisions with existing branches to the allocator', () => {
     const taken: string[] = []
     for (const name of taskNamesForAgents('task', ['claude', 'codex', 'claude'])) {

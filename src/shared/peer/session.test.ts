@@ -1,11 +1,6 @@
-// What this session must refuse, and what it must not leak.
-//
-// `noiseVectors.test.ts` proves the handshake computes the right bytes. This
-// file proves the object around it fails in the right direction: an unknown
-// peer, a replay, a reorder, a truncation, a flipped bit, an over-long frame and
-// a call made at the wrong moment must each end in a typed error with the
-// session unusable afterwards, and none of them may put key material anywhere a
-// human or a log file could read it.
+// What this session must refuse, and what it must not leak. `noiseVectors.test.ts`
+// proves the bytes; this proves each failure ends in a typed error with the
+// session unusable and no key material anywhere readable.
 
 import { readFileSync } from 'node:fs'
 import { inspect } from 'node:util'
@@ -32,11 +27,7 @@ import {
   rosterOf
 } from './session'
 
-/**
- * Deterministic randomness so a failing test is the same failing test tomorrow.
- * Counter-hashed rather than a fixed buffer, so successive calls differ the way
- * real ephemerals do.
- */
+/** Deterministic randomness; counter-hashed so successive calls differ the way real ephemerals do. */
 function seededRandom(seed: string): (length: number) => Uint8Array {
   let counter = 0
   return (length) => {
@@ -95,11 +86,7 @@ function handshake(options: PairOptions = {}): { initiator: PeerSession; respond
   return sessions
 }
 
-/**
- * A handshake plus the first transport message. That message is what turns a
- * responder's *claimed* peer into a confirmed one, so anything that asks a
- * responder who it is talking to has to come through here.
- */
+/** A handshake plus the first transport message, which turns a responder's claimed peer into a confirmed one. */
 function confirmed(options: PairOptions = {}): { initiator: PeerSession; responder: PeerSession } {
   const sessions = handshake(options)
   sessions.responder.decrypt(sessions.initiator.encrypt(text('a first real frame')))
@@ -149,9 +136,8 @@ describe('a completed IK handshake', () => {
   })
 
   it('reads and writes byte ranges that sit inside a larger buffer', () => {
-    // Anything reading from a socket hands over a view into a shared read
-    // buffer, not a freshly allocated array. Ignoring `byteOffset` anywhere
-    // would encrypt or authenticate the wrong bytes.
+    // A socket hands over a view into a shared read buffer; ignoring
+    // `byteOffset` would encrypt or authenticate the wrong bytes.
     const sessions = pair()
     const backing = new Uint8Array(128).fill(0xaa)
     const payload = backing.subarray(37, 60)
@@ -187,25 +173,16 @@ describe('a completed IK handshake', () => {
   it('gives the two directions independent keys, so a message cannot be reflected', () => {
     const { initiator } = handshake()
     const outbound = initiator.encrypt(text('typed into your pane'))
-    // Handing the initiator its own ciphertext is what a relay echoing frames
-    // back would produce.
+    // What a relay echoing frames back would produce.
     expect(codeOf(() => initiator.decrypt(outbound))).toBe(PeerErrorCode.DecryptionFailed)
   })
 })
 
 describe('the published IK vector, driven through the public API', () => {
-  // `noiseVectors.test.ts` checks the engine against all thirty-nine corpus
-  // vectors, IK among them. This checks that the session wrapper uses that
-  // engine correctly — the right role, the right turn order, and the right one
-  // of the two transport keys for each direction. A session that reproduced the
-  // specification's bytes through a mis-wired wrapper would pass there and fail
-  // here.
-  //
-  // The corpus puts a payload in message one and this library refuses to carry
-  // one there, so the session cannot reproduce that message's last bytes. What
-  // it is still held to: the corpus itself for every byte of message one that
-  // the payload does not reach, and then the engine — the thing the corpus
-  // validates — for the whole handshake and both transport directions.
+  // The wrapper's wiring (role, turn order, transport key per direction),
+  // which a mis-wired session would pass in `noiseVectors.test.ts`. The corpus
+  // puts a payload in message one and this library refuses to, so message one
+  // is held to the corpus up to the payload and the rest to the engine.
   const vector = (
     JSON.parse(readFileSync(new URL('./noiseVectors.json', import.meta.url), 'utf8')) as {
       vectors: {
@@ -259,8 +236,7 @@ describe('the published IK vector, driven through the public API', () => {
     })
 
     expect(codeOf(() => initiator.writeHandshakeMessage(fromHex(first.payload)))).toBe(PeerErrorCode.ReplayablePayload)
-    // Refused before the handshake was touched, ephemeral included, so the same
-    // session still writes the message the corpus would recognise.
+    // Refused before the handshake was touched, ephemeral included.
     const tokens = DH_LEN + (DH_LEN + 16)
     expect(toHex(initiator.writeHandshakeMessage().subarray(0, tokens))).toBe(first.ciphertext.slice(0, tokens * 2))
   })
@@ -321,9 +297,8 @@ describe('the published IK vector, driven through the public API', () => {
       const fromInitiator = index % 2 === 0
       const sender = fromInitiator ? initiator : responder
       const receiver = fromInitiator ? responder : initiator
-      // The direction that matters: an initiator must send under c1 and read
-      // under c2, and a wrapper that swapped them would still interoperate with
-      // itself and with nothing else.
+      // An initiator sends under c1 and reads under c2; swapped, it would
+      // interoperate with itself and nothing else.
       const senderKey = fromInitiator ? keys.initiatorToResponder : keys.responderToInitiator
       const expected = encryptWithAd(senderKey, new Uint8Array(0), fromHex(message.payload))
       expect(toHex(sender.encrypt(fromHex(message.payload)))).toBe(toHex(expected))
@@ -358,8 +333,7 @@ describe('authenticating the peer, which is the whole point of IK', () => {
   })
 
   it('refuses an initiator that addressed its first message to a different responder', () => {
-    // The initiator was told bob's key but is in fact talking to mallory's
-    // machine: mallory cannot decrypt a message sealed to bob.
+    // Told bob's key but talking to mallory: mallory cannot open a message sealed to bob.
     const sessions = pair({
       responderStatic: mallory.privateKey,
       initiatorBelievesResponderIs: bob.publicKey,
@@ -398,8 +372,7 @@ describe('authenticating the peer, which is the whole point of IK', () => {
 
   it('rejects a responder key that is not a usable curve point', () => {
     const sessions = pair({ initiatorBelievesResponderIs: new Uint8Array(DH_LEN) })
-    // An all-zero public key is a low-order point; the DH must not quietly
-    // produce an all-zero shared secret.
+    // A low-order point must not quietly give an all-zero shared secret.
     expect(codeOf(() => sessions.initiator.writeHandshakeMessage())).toBe(PeerErrorCode.InvalidKey)
     expect(sessions.initiator.stage).toBe('closed')
   })
@@ -508,12 +481,8 @@ describe('hostile or damaged handshake messages', () => {
       const tampered = new Uint8Array(first)
       tampered[index] = (tampered[index] ?? 0) ^ 0x40
       const code = codeOf(() => sessions.responder.readHandshakeMessage(tampered))
-      // A flipped bit in the ephemeral changes which key the static was sealed
-      // to, so it can surface as either a failed decryption or an unusable
-      // point. Both refuse; neither continues. `unknown_peer` is not on the
-      // list and must not be: whatever a flipped bit turns the claimed static
-      // key into, the payload it comes with no longer authenticates, and the
-      // roster is never consulted about it.
+      // Either a failed decryption or an unusable point. `unknown_peer` must not
+      // be on the list: the payload no longer authenticates, so the roster is never consulted.
       expect([PeerErrorCode.DecryptionFailed, PeerErrorCode.InvalidKey]).toContain(code)
       expect(sessions.responder.stage).toBe('closed')
     }
@@ -537,9 +506,8 @@ describe('hostile or damaged handshake messages', () => {
   })
 
   it('refuses a first message that arrives carrying a payload, whoever wrote it', () => {
-    // A peer on the roster, running some other implementation, could still put
-    // one there. What it says would be indistinguishable from a recording of
-    // what it said an hour ago, so it is not read.
+    // Another implementation could put one there; it would be indistinguishable
+    // from a recording, so it is not read.
     const smuggler = pair({ seed: 'smuggler' })
     const engine = initializeHandshake({
       pattern: {
@@ -563,10 +531,8 @@ describe('hostile or damaged handshake messages', () => {
   })
 
   it('does not confirm a peer on a message it has only ever seen replayed', () => {
-    // IK has no anti-replay on its first message and cannot have one: the
-    // responder has no state yet, so a relay holding a recorded frame and the
-    // rendezvous that delivers it can make that message arrive again, whenever
-    // it likes. What it must not buy is Alice's presence on Bob's machine.
+    // IK's first message cannot have anti-replay (the responder has no state
+    // yet); a replay must not buy Alice's presence on Bob's machine.
     const recorded = pair({ seed: 'recorded' }).initiator.writeHandshakeMessage()
     const fresh = pair({ seed: 'fresh' }).responder
     expect(fresh.readHandshakeMessage(recorded)).toHaveLength(0)
@@ -575,8 +541,7 @@ describe('hostile or damaged handshake messages', () => {
     expect(fresh.stage).toBe('established')
     expect(fresh.confirmed).toBe(false)
     expect(codeOf(() => fresh.remoteStaticPublicKey())).toBe(PeerErrorCode.UnconfirmedPeer)
-    // And it stays that way, because the replayer holds no private key with
-    // which to write a frame that authenticates.
+    // The replayer holds no private key to write a frame that authenticates.
     expect(codeOf(() => fresh.decrypt(new Uint8Array(32)))).toBe(PeerErrorCode.DecryptionFailed)
     expect(fresh.confirmed).toBe(false)
   })
@@ -638,8 +603,7 @@ describe('calls made at the wrong moment', () => {
   it('refuses a handshake payload too long to fit the message', () => {
     const sessions = pair()
     sessions.responder.readHandshakeMessage(sessions.initiator.writeHandshakeMessage())
-    // Message two is the first that may carry anything at all, and it is the
-    // one with a size to overrun.
+    // Message two is the first that may carry anything.
     expect(codeOf(() => sessions.responder.writeHandshakeMessage(new Uint8Array(65536)))).toBe(
       PeerErrorCode.MessageTooLong
     )
@@ -810,8 +774,7 @@ describe('secrecy of the things that must never be printed', () => {
         thrown += 1
         expect(isPeerError(error)).toBe(true)
         expectNoSecrets(error)
-        // The nonce must not travel either; it is the other half of a
-        // catastrophic AEAD failure.
+        // The nonce is the other half of a catastrophic AEAD failure.
         expect((error as PeerError).message).not.toMatch(/nonce\s*[:=]?\s*\d/i)
       }
     }
@@ -823,8 +786,7 @@ describe('secrecy of the things that must never be printed', () => {
     initiator.encrypt(text('some traffic'))
     for (const session of [initiator, responder]) {
       expectNoSecrets(session)
-      // Transport keys are derived, so check the rendering names no byte blobs
-      // at all rather than only the statics we happen to know.
+      // Transport keys are derived, so check for no byte blobs at all.
       const rendering = inspect(session, { depth: null, showHidden: true })
       expect(rendering).not.toMatch(/Uint8Array|Buffer|\bk\b\s*:/)
     }

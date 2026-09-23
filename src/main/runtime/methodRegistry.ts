@@ -28,11 +28,7 @@ export class MethodRegistry {
 
   constructor(readonly context: RuntimeContext) {}
 
-  /**
-   * Registering a method that already exists replaces it. That is deliberate:
-   * placeholders are installed first and real handlers overwrite them as they
-   * land, so a half-built runtime still answers every method in the contract.
-   */
+  /** Registering a method that already exists replaces it: real handlers overwrite placeholders. */
   register<M extends MethodName>(method: M, schema: z.ZodType<ParamsOf<M>>, handler: MethodHandler<M>): void {
     this.entries.set(method, {
       method,

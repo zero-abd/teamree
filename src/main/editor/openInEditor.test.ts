@@ -1,15 +1,5 @@
-// What "Open in …" does, and what it says when it cannot.
-//
-// Nothing here starts a program. The spawner is a notebook and the PATH probe
-// is a set of names, which is the whole point of both being injected: the
-// assertions that matter are about an argv and about wording, and a test that
-// really launched an editor could assert neither without a window opening on
-// whoever ran it.
-//
-// The argv assertion is the load-bearing one. A path is a directory name off
-// somebody's disk, a directory may legally be called `$(rm -rf ~)`, and the
-// difference between an argument and a command line is the difference between
-// that being a folder and it being a catastrophe.
+// What "Open in …" does, and what it says when it cannot. Nothing here starts
+// a program; the argv assertion is the load-bearing one.
 
 import { describe, expect, it } from 'vitest'
 import { createEditorActions, KNOWN_EDITORS } from './openInEditor'
@@ -47,8 +37,7 @@ describe('an editor teamree can find', () => {
     expect(spawner.started).toEqual([{ binary: '/usr/local/bin/code', args: [CHECKOUT] }])
   })
 
-  // The case the argv is for. Nothing in this path is quoted, escaped or
-  // interpreted, so a directory that reads as a shell command is a directory.
+  // A directory that reads as a shell command is a directory.
   it('hands a path that reads like a shell command over as one argument', () => {
     const spawner = recorder()
     const hostile = '/repos/$(rm -rf ~) & echo'
@@ -86,8 +75,7 @@ describe('an editor teamree can find', () => {
 })
 
 describe('an editor teamree cannot find', () => {
-  // The refusal this whole module exists for. A menu item that did nothing and
-  // said nothing would read as a broken button.
+  // A menu item that did nothing and said nothing would read as a broken button.
   it('refuses when nothing is configured and nothing is installed, and says what it looked for', () => {
     const spawner = recorder()
     const actions = createEditorActions({ locate: machine(), start: spawner.start })
@@ -103,8 +91,7 @@ describe('an editor teamree cannot find', () => {
 
   it('names the command this project asked for when that is the one missing', () => {
     const spawner = recorder()
-    // `code` is right there, and is deliberately not used: somebody who named
-    // an editor is told their editor is missing, not quietly given another.
+    // `code` is right there and is not used: a named editor is not quietly swapped.
     const actions = createEditorActions({ locate: machine('code'), start: spawner.start })
 
     const result = actions.open({ path: CHECKOUT, command: 'mate' })

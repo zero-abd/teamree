@@ -1,8 +1,4 @@
-// Everything here drives the service through its seams: the destination
-// directory is a fresh temporary one and the privileged runner is a function
-// this file wrote. Nothing in this suite can reach /usr/local/bin, which is the
-// point — an installer whose tests need the real root of the filesystem is an
-// installer nobody can change safely.
+// Drives the service through its seams; nothing here can reach /usr/local/bin.
 
 import { execFile } from 'node:child_process'
 import { lstat, mkdir, mkdtemp, readFile, readlink, realpath, rm, symlink, writeFile } from 'node:fs/promises'
@@ -22,18 +18,10 @@ afterEach(async () => {
   await Promise.all(scratches.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
 
-/**
- * An app bundle with a CLI in it, at a path awkward enough to be interesting.
- *
- * The launcher and the Node bundle it runs, because that is what
- * `extraResources` puts there: a launcher on its own is what a checkout has
- * before `npm run build:cli`, and it is not an app anybody can run.
- */
+/** An app bundle with a launcher and its Node bundle, at a path awkward enough to be interesting. */
 async function scratchApp(appName = 'my "teamree" copy.app'): Promise<{ root: string; source: string; bin: string }> {
-  // Canonical, because the service resolves the link it made and compares it
-  // with the app's own path: on macOS a temporary directory is reached through
-  // a symlink, and an uncanonicalised root would have this suite disagree with
-  // itself there and nowhere else.
+  // Canonical: on macOS a temporary directory is reached through a symlink, and
+  // the service compares the resolved link with the app's own path.
   const root = await realpath(await mkdtemp(join(tmpdir(), 'tmr-cli-')))
   scratches.push(root)
   const resources = join(root, appName, 'Contents', 'Resources', 'cli')
@@ -67,10 +55,7 @@ function harness(options: Partial<CliServiceOptions> & { directory: string }): H
     platform: 'darwin',
     env: { PATH: '/usr/bin:/bin' },
     loginPaths: async () => [],
-    // Undefined by default: "the login shell could not be asked", which is the
-    // state in which /etc/paths is consulted at all. A test that wants the
-    // shell consulted says so, rather than every other test in this file
-    // silently starting a real zsh and answering for the machine it runs on.
+    // Undefined: "the shell could not be asked", else every test would start a real zsh.
     shellPath: () => undefined,
     writable: async () => true,
     administrator: async (command) => {
@@ -205,9 +190,6 @@ describe('whether the destination is on PATH', () => {
     expect((await service.status()).onPath).toBe('login')
   })
 
-  // The login shell is the PATH of the terminal somebody will actually type in,
-  // so when it can be asked it is the whole answer — including when the answer
-  // is no.
   it('takes the login shell’s own PATH over everything else', async () => {
     const { source, bin } = await scratchApp()
     const { service } = harness({
@@ -219,10 +201,7 @@ describe('whether the destination is on PATH', () => {
     expect((await service.status()).onPath).toBe('shell')
   })
 
-  // The defect this seam exists for. `/etc/paths` is the PATH a shell *starts*
-  // with, and a profile that assigns PATH rather than extending it throws it
-  // away — so /etc/paths said yes, the terminal said no, and the app reported
-  // yes with no hedge, after charging an administrator password for the link.
+  // A profile that assigns PATH rather than extending it throws `/etc/paths` away.
   it('believes the shell over /etc/paths when the two disagree', async () => {
     const { source, bin } = await scratchApp()
     const { service } = harness({
@@ -315,8 +294,7 @@ describe('when the directory cannot be written', () => {
       source,
       directory: bin,
       writable: async () => false,
-      // Stands in for osascript by running the same command the real one would
-      // hand /bin/sh, so the escaping is executed rather than asserted.
+      // Runs the command osascript would hand /bin/sh, so the escaping is executed.
       administrator: async (command) => {
         escalated.push(command)
         await run('/bin/sh', ['-c', command])
@@ -389,8 +367,7 @@ describe('platforms this app cannot do it on', () => {
     expect(status.platform).toBe('linux')
     expect(status.destination).toBe(join(bin, 'teamree'))
 
-    // The refusal carries the command, because that is the whole of what is
-    // left for somebody on a platform this button cannot serve.
+    // The refusal carries the command.
     await expect(service.install()).rejects.toThrow(/macOS/)
     await expect(service.install()).rejects.toThrow(new RegExp(`ln -s .*${'teamree'}`))
   })
@@ -501,8 +478,7 @@ describe('running from somewhere a link cannot follow', () => {
     const { bin } = await scratchApp()
     expect((await harness({ source: TRANSLOCATED, directory: bin }).service.status()).impermanent).toBe('translocated')
 
-    // A folder somebody made called AppTranslocation, outside the per-boot
-    // temporary directory macOS actually uses, is a path a link survives.
+    // A folder called AppTranslocation outside the per-boot temp dir is a path a link survives.
     const impostor = '/Users/ann/AppTranslocation/teamree.app/Contents/Resources/cli/teamree'
     expect((await harness({ source: impostor, directory: bin }).service.status()).impermanent).toBeNull()
   })
@@ -519,7 +495,7 @@ describe('running from somewhere a link cannot follow', () => {
     await expect(service.install()).rejects.toThrow(/Applications/)
     await expect(service.install()).rejects.toThrow(/eject/i)
     await expect(service.install()).rejects.toMatchObject({ code: ErrorCode.Conflict })
-    // No password spent on a link that would dangle, and nothing written.
+    // No password spent on a link that would dangle.
     expect(escalated).toEqual([])
     await expect(lstat(join(bin, 'teamree'))).rejects.toThrow()
   })
@@ -538,8 +514,7 @@ describe('running from somewhere a link cannot follow', () => {
     await symlink(ON_VOLUME, join(bin, 'teamree'))
     const { service } = harness({ source: ON_VOLUME, directory: bin })
 
-    // 'already-linked' would be true of the link and false of the command: the
-    // volume is ejected eventually, and then it leads nowhere.
+    // 'already-linked' would be true of the link and false of the command.
     await expect(service.install()).rejects.toThrow(/Applications/)
   })
 })

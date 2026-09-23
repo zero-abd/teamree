@@ -77,11 +77,8 @@ type Pair = {
 }
 
 /**
- * Two installations that have each other in their rosters, on one relay.
- *
- * The rosters are real files under `.teamree/members`, read by the real reader,
- * because "is this key on the roster" is the whole of the trust model and a
- * stubbed answer to it would not be testing anything.
+ * Two installations that have each other in their rosters, on one relay. The
+ * rosters are real files: "is this key on the roster" is the whole trust model.
  */
 async function pairOfRuntimes(
   options: {
@@ -147,10 +144,7 @@ async function pairOfRuntimes(
   return { relay, scheduler, alice, bob, aliceKey, bobKey, aliceProject }
 }
 
-/**
- * Alice's app, closed and opened again: same identity, same repository, same
- * workspace, and nothing carried over in memory.
- */
+/** Alice's app, closed and opened again: same identity, repository and workspace, nothing carried over. */
 async function reopenAlice(pair: Pair, cache?: TeammateCache): Promise<PeerRuntime> {
   return createPeerRuntime({
     dial: pair.relay.dial,
@@ -202,11 +196,9 @@ function linkTo(runtime: PeerRuntime, projectId: string, publicKey: string) {
 }
 
 /**
- * A socket that sends its first content frame and then nothing.
- *
- * Message 1 of the handshake gets through, so the far end really does complete
- * an `IK` and reach the unconfirmed window; nothing after it does, which is
- * what a replayer holding a recording and no private key can manage.
+ * A socket that sends its first content frame and then nothing: the far end
+ * completes an `IK` and reaches the unconfirmed window, which is what a
+ * replayer holding a recording and no private key can manage.
  */
 function muteAfterHandshake(dial: RelayDialer): RelayDialer {
   return (url, handlers) => {
@@ -224,13 +216,8 @@ function muteAfterHandshake(dial: RelayDialer): RelayDialer {
 }
 
 /**
- * A relay that changes one byte of one frame on its way through.
- *
- * The single observable symptom of the component the threat model says not to
- * trust. A relay that flips a bit, replays a frame, drops one or reorders two
- * produces exactly this on the far side — a frame that does not authenticate —
- * and nothing else it can do produces it. The bit is flipped in a frame this
- * side *sends*, because the relay is what sits between the two sockets.
+ * A relay that changes one byte of one frame: the single observable symptom of
+ * an untrusted relay. Flipped in a frame this side *sends*.
  */
 function relayThatChangesAByte(): { wrap: (dial: RelayDialer) => RelayDialer; arm: () => void } {
   let armed = false
@@ -260,14 +247,9 @@ function relayThatChangesAByte(): { wrap: (dial: RelayDialer) => RelayDialer; ar
 }
 
 /**
- * A machine that keeps its socket and stops using it.
- *
- * A closed laptop lid, which is not a process exiting. Nothing is sent, nothing
- * is delivered, and no close frame is ever written, so the relay and the far
- * end both go on seeing a perfectly open connection. Every other failure in
- * this file ends a socket, and a socket ending is the case that already worked:
- * a test written that way passes whether or not this client has a deadline of
- * its own, which is how the absence of one survived.
+ * A machine that keeps its socket and stops using it: a closed lid. No close
+ * frame is ever written, so the relay and the far end see an open connection.
+ * Every other failure here ends a socket, which is the case that already worked.
  */
 function sleepingLid(): { wrap: (dial: RelayDialer) => RelayDialer; sleep: () => void } {
   let asleep = false
@@ -306,13 +288,9 @@ function sleepingLid(): { wrap: (dial: RelayDialer) => RelayDialer; sleep: () =>
 }
 
 /**
- * A socket that holds everything back and then lets it all through, in order.
- *
- * The other real shape of a machine going away, and the only one a link can
- * come back from. `sleepingLid` above drops, which is a hole in the Noise
- * transcript and ends the session by design; a suspended laptop's connection
- * loses nothing and delivers late, so this is what a test about *recovering*
- * from a silence has to be written against.
+ * A socket that holds everything back and then lets it all through, in order:
+ * a suspended laptop's connection loses nothing and delivers late, the only
+ * silence a link can come back from (`sleepingLid` holes the Noise transcript).
  */
 function stalledLid(): { wrap: (dial: RelayDialer) => RelayDialer; stall: () => void; resume: () => void } {
   let stalled = false
@@ -365,12 +343,8 @@ function bobsPaneId(runtime: PeerRuntime): string {
 }
 
 /**
- * One link with nothing behind it: a teammate who asks for things.
- *
- * The runtime pair is the right harness for what two apps do to each other;
- * this is the right one for what one of them may ask, because a test that made
- * its calls through the other runtime could only ever ask what that runtime
- * happens to ask.
+ * One link with nothing behind it: a teammate who asks for things, including
+ * things a runtime would never ask.
  */
 async function rawLink(options: {
   relay: FakeRelay
@@ -444,9 +418,8 @@ describe('two peers over a relay', () => {
     // Silence crosses as a duration, because two machines do not agree about
     // what time it is and an instant from a fast clock renders as the future.
     expect(pane?.quietForMs).toBeGreaterThanOrEqual(90_000)
-    // Nothing that could carry a line of terminal output is on the wire at all.
-    // The dimensions are metadata and are here so a watcher can letterbox to
-    // them; a scrollback, a cursor position and a byte of output are not.
+    // Nothing that could carry a line of terminal output is on the wire; the
+    // dimensions are metadata so a watcher can letterbox.
     expect(Object.keys(pane ?? {}).sort()).toEqual(
       ['agent', 'busy', 'cols', 'id', 'quietForMs', 'rows', 'running', 'shell', 'title'].sort()
     )
@@ -477,23 +450,20 @@ describe('two peers over a relay', () => {
 
   it('tells a teammate nothing about a project they are not a member of', async () => {
     const pair = await pairOfRuntimes()
-    // A second repository Alice is in and Bob is not. Under the README's
-    // pairwise scheme this would ride the same session as the shared one.
+    // A second repository Alice is in and Bob is not.
     const privateProject = await makeProjectDir([{ handle: 'alice', publicKey: pair.aliceKey }])
     pair.alice.workspace.projects.push(project('p_private', privateProject))
     pair.alice.workspace.worktrees.push(worktree('wt_secret', 'p_private', 'acquisition', 'feat/acq'))
     await connect(pair)
 
-    // Refused twice over: the session is for one project because its rendezvous
-    // and its prologue say so, and the roster is checked again where the data
-    // is chosen.
+    // Refused twice over: the session is for one project, and the roster is
+    // checked again where the data is chosen.
     const shared = projectKeyFor(normaliseRemote(ORIGIN)!)
     const snapshot = pair.alice.service.peerPresence(linkIdFor(pair.bobKey, shared))
     expect(snapshot.projects).toHaveLength(1)
     expect(JSON.stringify(snapshot)).not.toContain('acquisition')
 
-    // And there is no session the private one could have arrived over: a link
-    // exists per repository, and Bob is on the roster of exactly one of them.
+    // And there is no session the private one could have arrived over.
     const secret = projectKeyFor('github.com/team/secret')
     expect(() => pair.alice.service.peerPresence(linkIdFor(pair.bobKey, secret))).toThrow()
   })
@@ -551,17 +521,15 @@ describe('two peers over a relay', () => {
       scheduler,
       env: { TEAMREE_RELAY_URL: RELAY_URL },
       dataDir: aliceData,
-      // The same repository, checked out twice and added twice, which is an
-      // ordinary thing to do.
+      // The same repository, checked out twice and added twice.
       runner: remoteRunner({ [cloneA]: ORIGIN, [cloneB]: ORIGIN }),
       workspace: { projects: [project('p_a', cloneA), project('p_b', cloneB)], worktrees: [], terminals: [] }
     })
     await alice.service.start()
     await scheduler.advance(0)
 
-    // One rendezvous, because the rendezvous is derived from the repository and
-    // not from the local project row. Two links here would present the same
-    // token and the relay would have them displace each other forever.
+    // One rendezvous, derived from the repository and not the local project row:
+    // two links would present the same token and displace each other forever.
     expect(new Set(relay.greetings()).size).toBe(1)
     // Both projects still report it, because both of them really are it.
     expect(linkTo(alice, 'p_a', bobKey)?.phase).toBe('waiting')
@@ -613,9 +581,8 @@ describe('presence stays live', () => {
 
   it('drops a snapshot that arrives behind one already applied', () => {
     const held = { revision: 4, handle: 'bob', projects: [] }
-    // A reply overtaken in flight, which is ordinary on a link with real
-    // latency. Applying it would put the sidebar back into a past its sender
-    // has already left, with nothing else coming to correct it.
+    // A reply overtaken in flight: applying it would put the sidebar back into
+    // a past its sender has already left.
     expect(isNewerPresence(held, { revision: 3, handle: 'bob', projects: [] })).toBe(false)
     expect(isNewerPresence(held, { revision: 4, handle: 'bob', projects: [] })).toBe(false)
     expect(isNewerPresence(held, { revision: 5, handle: 'bob', projects: [] })).toBe(true)
@@ -682,10 +649,9 @@ describe('the failure paths', () => {
     const pair = await pairOfRuntimes()
     await connect(pair)
 
-    // Bob's machine suspends: his old socket reads as open to the relay, and he
-    // dials again. The relay cannot tell the two apart, so it ends the session
-    // and both old peers get 4002 — which is a back-off, never an immediate
-    // retry, or the two of them displace each other for as long as they run.
+    // Bob's machine suspends: his old socket reads as open, he dials again, the
+    // relay ends the session and both old peers get 4002, which is a back-off,
+    // never an immediate retry, or the two displace each other for ever.
     const bobsSecondRuntime = pair.bob
     bobsSecondRuntime.service.stop()
     await bobsSecondRuntime.service.start()
@@ -700,9 +666,8 @@ describe('the failure paths', () => {
     await pair.alice.service.start()
     await pair.bob.service.start()
 
-    // The relay pairs them and the handshake runs, but nothing is delivered:
-    // every frame the two of them write is held. This is the state a replayer
-    // leaves a responder in — the handshake completed, and nobody is there.
+    // The relay pairs them and the handshake runs, but every frame is held: the
+    // state a replayer leaves a responder in.
     pair.relay.holdContent()
     await pair.scheduler.advance(0)
 
@@ -716,10 +681,8 @@ describe('the failure paths', () => {
   })
 
   it('gives up on a peer that completed a handshake it cannot follow through', async () => {
-    // The shape a replayer leaves a responder in, and the only shape that
-    // matters: message 1 arrives and is real, so the handshake completes and
-    // the unconfirmed window opens — and then nothing is ever said again,
-    // because whatever sent it holds no key it could say anything with.
+    // The shape a replayer leaves a responder in: message 1 is real, the
+    // handshake completes, and nothing is ever said again.
     const pair = await pairOfRuntimes({ bobDial: muteAfterHandshake })
     // Bob parks first, so he is the initiator and Alice is the responder: the
     // side that reaches `established` on a message it only wrote.
@@ -729,18 +692,15 @@ describe('the failure paths', () => {
     await pair.scheduler.advance(0)
 
     // The handshake really did complete on Alice's side, which is what makes
-    // this the window the deadline is for and not merely a peer that never
-    // arrived: both are paired on the relay and her side has stopped waiting.
+    // this the deadline's window and not merely a peer that never arrived.
     expect(pair.relay.connections()).toBe(2)
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).not.toBe('connected')
     const dialled = pair.relay.greetings().length
 
-    // A session nobody can speak on must not hold its slot — or the rendezvous
-    // — for ever, and this side's own keepalive would otherwise defeat the
-    // relay's idle deadline on its behalf.
+    // A session nobody can speak on must not hold its slot for ever, and this
+    // side's own keepalive would otherwise defeat the relay's idle deadline.
     await pair.scheduler.advance(HANDSHAKE_TIMEOUT_MS + 5_000)
-    // Dialled again, which is the whole of it: the wedged socket was let go of
-    // and this link is trying rather than holding.
+    // Dialled again: the wedged socket was let go of.
     expect(pair.relay.greetings().length).toBeGreaterThan(dialled)
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).not.toBe('connected')
   })
@@ -766,9 +726,8 @@ describe('the failure paths', () => {
 
   it('names the two things to check once nobody has arrived for two hours', async () => {
     // A clock across the hourly boundary and a teammate on a different relay
-    // both look exactly like this, for ever, and the relay cannot tell either
-    // of us apart from an unanswered rendezvous. What the client knows is how
-    // long it has waited, and it says only that and what it narrows to.
+    // both look exactly like this, for ever; the client says only how long it
+    // has waited and what that narrows to.
     const relay = createFakeRelay()
     const pair = await pairOfRuntimes({ relay })
     await pair.alice.service.start()
@@ -965,9 +924,8 @@ describe('a snapshot from a teammate is somebody else’s bytes', () => {
     expect(bobsRows(pair.alice).map((row) => row.name)).toEqual(['flaky test'])
 
     // Passes a check of the two outer fields and blows up at the first lookup
-    // inside them. Believed, it poisons what is held for this link: every later
-    // read of the project throws, the link goes on reporting itself connected,
-    // and the sidebar sits on yesterday's picture with nothing saying why.
+    // inside. Believed, it poisons what is held for this link: every later read
+    // throws and the sidebar sits on yesterday's picture with nothing saying why.
     answerPresenceWith(pair.bob, { revision: 9_999, projects: [null] })
     pair.bob.changed()
     await pair.scheduler.advance(1_000)
@@ -1017,9 +975,7 @@ describe('a snapshot from a teammate is somebody else’s bytes', () => {
     await pair.scheduler.advance(1_000)
 
     const rows = presenceOf(pair.alice.service, 'p_alice').worktrees
-    // The cache's numbers rather than a second set: what is held in memory and
-    // the copy written to disk being bounded differently would mean one of the
-    // two numbers is wrong.
+    // The cache's numbers rather than a second set, so memory and disk agree.
     expect(rows).toHaveLength(MAX_CACHED_WORKTREES)
     expect(rows[0]?.panes).toHaveLength(MAX_CACHED_PANES)
     expect(Math.max(...rows.map((row) => row.name.length))).toBe(MAX_CACHED_TEXT)
@@ -1060,10 +1016,7 @@ describe('a snapshot from a teammate is somebody else’s bytes', () => {
 
 /**
  * Lets one session run long enough to count as healthy, has the relay break it,
- * and returns how long the link then waited before it was back.
- *
- * The clock's jitter is fixed at 1, so the wait is the backoff itself and two
- * of these can be compared.
+ * and returns how long the link waited. Jitter is fixed at 1, so two can be compared.
  */
 async function breakOneSession(pair: Pair, middle: { arm: () => void }): Promise<number> {
   await pair.scheduler.advance(HEALTHY_SESSION_MS)
@@ -1082,10 +1035,8 @@ async function breakOneSession(pair: Pair, middle: { arm: () => void }): Promise
 
 describe('a frame that does not authenticate', () => {
   it('does not report the relay corrupting a frame as the teammate dropping the connection', async () => {
-    // The relay is the component that is not trusted, and a frame that fails to
-    // authenticate is the one symptom it has. Calling that "your teammate's
-    // machine dropped the connection" points the reader at the only party the
-    // code has established nothing about.
+    // A frame that fails to authenticate is the untrusted relay's one symptom;
+    // blaming the teammate points at the only party nothing is established about.
     const middle = relayThatChangesAByte()
     const pair = await pairOfRuntimes({ bobDial: middle.wrap })
     await connect(pair)
@@ -1100,9 +1051,8 @@ describe('a frame that does not authenticate', () => {
   })
 
   it('leaves the operator a trace of it, rather than swallowing the reason', async () => {
-    // A relay quietly corrupting every session is indistinguishable, from the
-    // outside, from a teammate with a bad network — unless the reason reaches
-    // somewhere it can be read.
+    // A relay quietly corrupting every session looks like a teammate with a bad
+    // network, unless the reason reaches somewhere it can be read.
     const middle = relayThatChangesAByte()
     const pair = await pairOfRuntimes({ bobDial: middle.wrap })
     await connect(pair)
@@ -1115,13 +1065,9 @@ describe('a frame that does not authenticate', () => {
   })
 
   it('makes a relay that corrupts every session pay more each time, not once a second forever', async () => {
-    // Each of these sessions ran a full `HEALTHY_SESSION_MS` before the relay
-    // broke it, which is what used to buy the backoff its reset: the next dial
-    // came a second later, every time, for ever. That is a fresh X25519
-    // handshake per second per link for as long as the relay cares to keep
-    // corrupting one frame, while the screen blamed the teammate for it. A
-    // session something in the middle broke is not a session that worked,
-    // whatever the clock says about its length.
+    // Each session ran a full `HEALTHY_SESSION_MS` before the relay broke it,
+    // which used to reset the backoff: a fresh X25519 handshake per second per
+    // link, for ever, while the screen blamed the teammate.
     const middle = relayThatChangesAByte()
     const pair = await pairOfRuntimes({ bobDial: middle.wrap })
     await connect(pair)
@@ -1146,10 +1092,8 @@ describe('a rendezvous that paired and then went nowhere', () => {
   }
 
   it('stops saying nobody has answered once the relay has said somebody has', async () => {
-    // The relay sends `paired` and this side goes on showing the sentence for
-    // an empty rendezvous for the whole fifteen seconds of the handshake. The
-    // teammate is right there, and the one place that says otherwise is the
-    // screen of the person waiting for them.
+    // The relay sent `paired` and this side went on showing the sentence for an
+    // empty rendezvous for the whole of the handshake.
     const pair = await pairedButHeld()
 
     const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
@@ -1157,11 +1101,9 @@ describe('a rendezvous that paired and then went nowhere', () => {
   })
 
   it('does not call a handshake that never finished a teammate dropping the connection', async () => {
-    // A relay that pairs two peers and then withholds their frames — which is
-    // what a replayer looks like from here — ran out the handshake deadline,
-    // and this side closed its own socket to end it. That close came back
-    // `paired`, so it was read as the teammate hanging up. Nobody hung up:
-    // nothing ever arrived.
+    // A relay that pairs and then withholds frames ran out the handshake
+    // deadline; this side's own close came back `paired` and was read as the
+    // teammate hanging up. Nobody hung up: nothing ever arrived.
     const pair = await pairedButHeld()
 
     await pair.scheduler.advance(HANDSHAKE_TIMEOUT_MS)
@@ -1172,8 +1114,7 @@ describe('a rendezvous that paired and then went nowhere', () => {
   })
 
   it('still says the teammate dropped when a connected link really is hung up on', async () => {
-    // The fix must not become a way of never saying it. Bob connects properly
-    // and then his process goes.
+    // The fix must not become a way of never saying it.
     const pair = await pairOfRuntimes()
     await connect(pair)
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
@@ -1186,20 +1127,17 @@ describe('a rendezvous that paired and then went nowhere', () => {
 
 describe('a close the relay sends for a condition of its own', () => {
   it('comes back from a 4008 instead of losing the teammate until the app restarts', async () => {
-    // 4008 is documented as a protocol error, and the relay also sends it when
-    // its own pairing table cannot read the other socket's attachment — a
-    // condition inside the relay that this client had no part in and cannot
-    // tell apart from the documented one. The link stopped for good on it, and
-    // nothing ever revived it: `reconcile()` skips a link it already holds on
-    // an unchanged relay, so the teammate was gone until the app was restarted.
+    // 4008 is a protocol error, but the relay also sends it when its own pairing
+    // table cannot read the other socket. The link stopped for good on it and
+    // `reconcile()` skips a link it already holds, so the teammate was gone
+    // until the app was restarted.
     const pair = await pairOfRuntimes()
     await connect(pair)
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
 
     pair.relay.closeAll(RelayCloseCode.Protocol, 'no partner for a paired connection')
     await pair.scheduler.advance(0)
-    // Still recorded, and still reported, because the operator needs to know it
-    // happened. What changed is that it is no longer for ever.
+    // Still recorded and reported; what changed is that it is no longer for ever.
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('stopped')
 
     await pair.scheduler.advance(STOPPED_RETRY_MS)
@@ -1207,10 +1145,8 @@ describe('a close the relay sends for a condition of its own', () => {
   })
 
   it('waits a long time before doing so, so a relay that means it is not hammered', async () => {
-    // The other half. These three codes are the ones a reconnect cannot fix on
-    // its own, so coming back must cost a great deal more than an ordinary
-    // drop: this is a link looking again in case somebody fixed the relay, not
-    // a link retrying.
+    // These codes are ones a reconnect cannot fix, so coming back must cost far
+    // more than an ordinary drop: looking again, not retrying.
     const pair = await pairOfRuntimes()
     await connect(pair)
 
@@ -1242,9 +1178,8 @@ describe('what a dropped session costs the side it dropped on', () => {
     await connect(pair)
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
 
-    // Sixty full dial-handshake-confirm-drop cycles, driven entirely from Bob's
-    // end. Each one costs Alice a Diffie-Hellman and a socket, so none of them
-    // may be free: the clock does not move, and Alice must not dial on it.
+    // Sixty dial-handshake-confirm-drop cycles from Bob's end. Each costs Alice
+    // a Diffie-Hellman and a socket: the clock does not move, and she must not dial.
     const startedAt = pair.scheduler.now()
     const before = pair.relay.greetings().length
     for (let cycle = 0; cycle < 60; cycle += 1) {
@@ -1281,9 +1216,8 @@ describe('what a teammate may hold open', () => {
     const connection = linkIdFor(pair.aliceKey, projectKeyFor(normaliseRemote(ORIGIN)!))
     expect(pair.bob.subscriptions.countFor(connection)).toBe(1)
 
-    // The subscriber map is keyed by the connection, so a second subscribe used
-    // to overwrite the first's entry while leaving it registered in the hub:
-    // unreachable, impossible to tear down, and alive until the link dropped.
+    // The subscriber map is keyed by connection, so a second subscribe used to
+    // leave the first registered in the hub: unreachable until the link dropped.
     const first: unknown[] = []
     const second: unknown[] = []
     const watch =
@@ -1327,9 +1261,8 @@ describe('what a teammate may hold open', () => {
     }
     await pair.scheduler.advance(0)
 
-    // One, because a repeat replaces — and never past the cap whatever the
-    // method, because every record is a buffer this machine keeps on somebody
-    // else's say-so and each of these answers is a whole snapshot.
+    // One, because a repeat replaces, and never past the cap: every record is a
+    // buffer this machine keeps on somebody else's say-so.
     expect(pair.bob.subscriptions.countFor(connection)).toBe(1)
     expect(pair.bob.subscriptions.countFor(connection)).toBeLessThanOrEqual(MAX_PEER_SUBSCRIPTIONS)
     alice.link.stop()
@@ -1386,11 +1319,9 @@ describe('what a stream costs before anybody has claimed it', () => {
     })
     expect(alice.phase()).toBe('connected')
 
-    // One of Bob's streams that Alice has not routed, which is the window every
-    // subscription opens with: the far side attaches the stream inside the
-    // handler and starts writing, and the answer that names it is still on the
-    // wire. Held open by hand here, because a relay that stalls and then hands
-    // over the backlog reaches the same state in one synchronous run of frames.
+    // One of Bob's streams Alice has not routed: the window every subscription
+    // opens with, while the answer naming it is still on the wire. Held open by
+    // hand, since a stalled relay handing over its backlog reaches the same state.
     const connection = linkIdFor(pair.aliceKey, projectKeyFor(normaliseRemote(ORIGIN)!))
     let channel: SubscriptionChannel | undefined
     const subscription = pair.bob.subscriptions.subscribe(connection, (opened) => {
@@ -1410,10 +1341,8 @@ describe('what a stream costs before anybody has claimed it', () => {
     const events: unknown[] = []
     const stop = alice.link.route(subscription, (event) => events.push(event))
 
-    // Bounded, and said. The four frames that did not fit are 256 bytes of a
-    // teammate's output that nothing will ever send again, and a reader shown
-    // the rest with no mark where they were would be reading a transcript that
-    // never happened.
+    // Bounded, and said: a reader shown the rest with no mark where the four
+    // frames were would be reading a transcript that never happened.
     expect(events[0]).toEqual({ type: 'elided', bytes: over * 64 })
     expect(events).toHaveLength(MAX_UNROUTED_EVENTS + 1)
     expect(events.slice(1)).toEqual(Array.from({ length: MAX_UNROUTED_EVENTS }, () => ({ type: 'data', data: chunk })))
@@ -1425,10 +1354,7 @@ describe('what a stream costs before anybody has claimed it', () => {
 })
 
 describe('what a stream costs when there are already too many of them', () => {
-  /**
-   * A link of Alice's onto Bob, plus a way of opening streams on Bob that
-   * Alice has not routed — the window every subscription opens with.
-   */
+  /** A link of Alice's onto Bob, plus a way of opening streams on Bob that Alice has not routed. */
   async function rigWithStreams(pair: Pair): Promise<{
     alice: { link: PeerLink; phase: () => string }
     open: () => { id: string; emit: (event: unknown) => void; end: () => void }
@@ -1462,12 +1388,9 @@ describe('what a stream costs when there are already too many of them', () => {
   }
 
   it('says what it lost when a stream arrives past the stream bound, instead of nothing', async () => {
-    // The event bound one line above this one is honest: it drops the oldest
-    // frames and hands whoever claims the stream an `elided` saying how much
-    // went. The *stream* bound was not. Past sixteen unclaimed streams the
-    // seventeenth was dropped with nothing written down, so `route` found no
-    // entry, emitted no `elided`, and the watcher silently missed the head of
-    // the pane it had just asked for.
+    // The event bound hands out an `elided`; the *stream* bound did not: the
+    // seventeenth unclaimed stream was dropped with nothing written down, so the
+    // watcher silently missed the head of the pane it had just asked for.
     const pair = await pairOfRuntimes()
     const { alice, open } = await rigWithStreams(pair)
 
@@ -1490,12 +1413,9 @@ describe('what a stream costs when there are already too many of them', () => {
   })
 
   it('lets go of a stream nobody ever claimed, so a later one is not punished for it', async () => {
-    // An `unrouted` entry was only ever removed by `route`, and `route` is only
-    // reached when the subscribe answer that names the stream comes back. A
-    // `terminal.subscribe` that times out never learns the id, never routes and
-    // never unsubscribes — so the far side goes on streaming that pane for the
-    // life of the link and the entry holds one of the sixteen slots for ever.
-    // Enough of those and every later stream loses its head silently.
+    // An `unrouted` entry was only ever removed by `route`, so a
+    // `terminal.subscribe` that timed out held one of the sixteen slots for the
+    // life of the link; enough of those and every later stream lost its head.
     const pair = await pairOfRuntimes()
     const { alice, open } = await rigWithStreams(pair)
 
@@ -1506,8 +1426,7 @@ describe('what a stream costs when there are already too many of them', () => {
       await pair.scheduler.advance(STREAM_FLUSH_MS)
     }
 
-    // Past the longest a call may take to be answered: nothing is coming to
-    // claim these, and the slots are the only thing they still hold.
+    // Past the longest a call may take to be answered: nothing is coming to claim these.
     await pair.scheduler.advance(PEER_CALL_TIMEOUT_MS)
 
     const wanted = open()
@@ -1546,29 +1465,24 @@ describe('a teammate whose machine stopped answering', () => {
 
     lid.sleep()
 
-    // One keepalive interval of silence is what an ordinary healthy link spends
-    // between frames. Nothing may be concluded from it, and nothing is.
+    // One keepalive interval of silence is what a healthy link spends between frames.
     await pair.scheduler.advance(KEEPALIVE_MS)
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
 
-    // Past the deadline the socket is still open on both hosts and the relay
-    // still has the session. The only thing that knows is this side.
+    // Past the deadline the socket is still open on both hosts; only this side knows.
     await pair.scheduler.advance(SILENCE_TIMEOUT_MS)
     const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
     expect(link?.phase).not.toBe('connected')
-    // And it goes on saying it through the reconnect and the park that follow,
-    // because a teammate who was here and stopped is not the same wait as a
-    // rendezvous nobody has ever answered.
+    // And through the reconnect and park that follow: a teammate who stopped is
+    // not the same wait as a rendezvous nobody has ever answered.
     expect(link?.detail).toBe(SILENT_PEER_DETAIL)
     await pair.scheduler.advance(3_600_000)
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.detail).toBe(SILENT_PEER_DETAIL)
   })
 
   it('carries the age of its silence for the minutes before the deadline, and not before that', async () => {
-    // The window the deadline left behind. `since` is when the phase last
-    // moved, so a link established hours ago and silent for four minutes used
-    // to be indistinguishable from one that is fine, and the header asserted
-    // "connected" for the whole of it.
+    // `since` is when the phase last moved, so a link silent for four minutes
+    // used to be indistinguishable from one that is fine.
     const lid = sleepingLid()
     const pair = await pairOfRuntimes({ bobDial: lid.wrap })
     await connect(pair)
@@ -1581,27 +1495,19 @@ describe('a teammate whose machine stopped answering', () => {
 
     await pair.scheduler.advance(1)
     const quiet = linkTo(pair.alice, 'p_alice', pair.bobKey)
-    // Still connected — this is the window, not the deadline — and now saying
-    // when, by this machine's clock, anything from Bob last decrypted.
+    // Still connected, and now saying when anything from Bob last decrypted.
     expect(quiet?.phase).toBe('connected')
     // A timestamp rather than a duration: the sidebar ticks on its own clock
-    // and is only handed a link when something changes, so an age it can work
-    // out for itself goes on being right while nothing is sent to it again.
+    // and is only handed a link when something changes.
     expect(quiet?.lastHeardAt).toBe(CLOCK_START)
     expect(pair.scheduler.now() - (quiet?.lastHeardAt ?? 0)).toBe(LINK_QUIET_AFTER_MS)
   })
 
   it('measures that age on a clock a stepped wall clock cannot move', async () => {
-    // The age is a liveness deadline's number, so it is owed a liveness
-    // deadline's clock. Two `Date.now()` readings subtracted is the one thing
-    // this file has established a silence may not be measured with: a wall
-    // clock that steps — an NTP correction, somebody changing the time —
-    // lengthens that difference without a second of silence having passed, and
-    // the sidebar would age a link nobody had stopped hearing from.
-    //
-    // A step this small is deliberately *not* a sleep: it is inside
-    // `CLOCK_JUMP_TOLERANCE_MS`, so no deadline withdraws its verdict and
-    // nothing rescues the number except its being measured on the right clock.
+    // A wall clock that steps (NTP, somebody changing the time) lengthens a
+    // `Date.now()` difference without a second of silence passing. The step is
+    // inside `CLOCK_JUMP_TOLERANCE_MS`, so no deadline withdraws its verdict
+    // and only the right clock rescues the number.
     const lid = sleepingLid()
     const pair = await pairOfRuntimes({ bobDial: lid.wrap })
     await connect(pair)
@@ -1612,20 +1518,15 @@ describe('a teammate whose machine stopped answering', () => {
     await pair.scheduler.advance(LINK_QUIET_AFTER_MS)
 
     const quiet = linkTo(pair.alice, 'p_alice', pair.bobKey)
-    // The link is still up, so the age is still this link's to report, and the
-    // step is not part of it: exactly the threshold, not the threshold plus
-    // half a minute of somebody else's clock correction.
+    // The step is not part of the age: exactly the threshold, not the threshold
+    // plus somebody else's clock correction.
     expect(quiet?.phase).toBe('connected')
     expect(pair.scheduler.now() - (quiet?.lastHeardAt ?? 0)).toBe(LINK_QUIET_AFTER_MS)
   })
 
   it('stops carrying an age at all once this machine turns out to be the one that was away', async () => {
-    // Where the two halves of this file meet. A link four minutes silent is
-    // carrying a number; then the lid shuts. On waking, that number would be an
-    // hour old and would read as an hour of the teammate's silence — the
-    // sentence this link learned not to say, arriving as a figure instead of as
-    // a phrase. There is nothing known to put a number on, so there is no
-    // number.
+    // A link four minutes silent carries a number; then the lid shuts. On waking
+    // that number would read as an hour of the teammate's silence, so there is no number.
     const lid = sleepingLid()
     const pair = await pairOfRuntimes({ bobDial: lid.wrap })
     await connect(pair)
@@ -1645,10 +1546,8 @@ describe('a teammate whose machine stopped answering', () => {
     const pair = await pairOfRuntimes()
     await connect(pair)
 
-    // Several ordinary keepalive cycles. A gap of one whole interval is what
-    // healthy looks like, which is why the threshold sits past one: a header
-    // that sprouted an age in the instant before every keepalive landed would
-    // teach a reader to ignore the one that means something.
+    // A gap of one whole interval is what healthy looks like, which is why the
+    // threshold sits past one.
     for (let cycle = 0; cycle < 5; cycle += 1) {
       await pair.scheduler.advance(KEEPALIVE_MS)
       const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
@@ -1666,9 +1565,8 @@ describe('a teammate whose machine stopped answering', () => {
     await pair.scheduler.advance(LINK_QUIET_AFTER_MS)
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.lastHeardAt).toBeDefined()
 
-    // Inside the deadline, so there is still a link to come back to. A header
-    // going on saying "last heard 3m ago" about somebody who answered a
-    // moment ago is the same untruth pointed the other way.
+    // Inside the deadline, so there is still a link to come back to; "last
+    // heard 3m ago" about somebody who just answered is the same untruth the other way.
     lid.resume()
     await pair.scheduler.advance(0)
     const woken = linkTo(pair.alice, 'p_alice', pair.bobKey)
@@ -1677,9 +1575,8 @@ describe('a teammate whose machine stopped answering', () => {
   })
 
   it('says nothing about a machine it has never heard from, because it cannot know', async () => {
-    // Two people on different relays, or with clocks an hour apart, each wait
-    // here while the other machine is perfectly connected somewhere else. What
-    // is known is that nobody has answered, and that is all this says.
+    // Two people on different relays each wait here while the other is
+    // connected somewhere else; all that is known is that nobody has answered.
     const pair = await pairOfRuntimes()
     await pair.alice.service.start()
     await pair.scheduler.advance(0)
@@ -1700,9 +1597,8 @@ describe('a teammate whose machine stopped answering', () => {
     await pair.scheduler.advance(SILENCE_TIMEOUT_MS + KEEPALIVE_MS)
 
     const after = bobsRows(pair.alice)
-    // Not one row fewer, and not a heardAt moved on: a row that vanished reads
-    // as a worktree deleted, and a row still marked live is the same error
-    // pointed the reassuring way, which is the worse of the two.
+    // Not one row fewer, not a heardAt moved: a vanished row reads as a deleted
+    // worktree, and a row still marked live is the worse error.
     expect(after.map((row) => row.name)).toEqual(before.map((row) => row.name))
     expect(after.map((row) => row.heardAt)).toEqual(before.map((row) => row.heardAt))
     // `live` is the whole of what `teammateStaleness` reads, so this is the
@@ -1717,10 +1613,8 @@ describe('a teammate whose machine stopped answering', () => {
     const paneId = bobsPaneId(pair.alice)
 
     lid.sleep()
-    // Typed at a pane the screen still says is there, because until the
-    // deadline it still says so. This is the keystroke `WatchedPaneView` cannot
-    // report on: it prints a refusal from a rejection handler, and a promise
-    // that never settles prints nothing at all.
+    // Typed at a pane the screen still says is there. `WatchedPaneView` prints a
+    // refusal from a rejection handler; a promise that never settles prints nothing.
     const outcome = pair.alice.service.type({ projectId: 'p_alice', paneId, data: 'yes\r' }).then(
       () => 'answered',
       (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -1755,17 +1649,12 @@ describe('a teammate whose machine stopped answering', () => {
 })
 
 describe('a machine that was asleep itself', () => {
-  /**
-   * Longer than the silence deadline by an order of magnitude, which is what a
-   * closed lid looks like: the deadline was armed for two and a half keepalives
-   * and the machine comes back an hour later having run none of them.
-   */
+  /** Longer than the silence deadline by an order of magnitude, which is what a closed lid looks like. */
   const A_CLOSED_LID_MS = 3_600_000
 
   it('does not say the teammate stopped answering when this machine slept through it', async () => {
-    // The shape macOS produces: the monotonic clock counts time spent
-    // suspended, so every overdue timer fires at once on waking, each having
-    // measured far more than it was ever armed for.
+    // The macOS shape: the monotonic clock counts time spent suspended, so every
+    // overdue timer fires at once on waking.
     const pair = await pairOfRuntimes()
     await connect(pair)
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
@@ -1781,9 +1670,8 @@ describe('a machine that was asleep itself', () => {
   })
 
   it('does not blame a teammate for the silence of a socket that died in the sleep', async () => {
-    // The bug exactly: this machine sleeps, its socket does not survive it, so
-    // nothing decrypts and the deadline fires on waking with five minutes of
-    // silence to account for. It belongs to the lid, not to Bob.
+    // This machine sleeps, its socket does not survive it, and the deadline
+    // fires on waking: the silence belongs to the lid, not to Bob.
     const lid = sleepingLid()
     const pair = await pairOfRuntimes({ bobDial: lid.wrap })
     await connect(pair)
@@ -1797,15 +1685,14 @@ describe('a machine that was asleep itself', () => {
   })
 
   it('does not say it either where the monotonic clock ignored the sleep', async () => {
-    // The other platform shape: the timers come back still owing the wait they
-    // were armed for, and only the wall clock has run away from them.
+    // The other platform shape: the timers still owe their wait, and only the
+    // wall clock has run away from them.
     const pair = await pairOfRuntimes()
     await connect(pair)
 
     await pair.scheduler.sleep(A_CLOSED_LID_MS, 'uncounted')
     // Nothing is overdue on that clock, so the sleep surfaces at the next
-    // deadline rather than at once: the keepalive tick, which is the most
-    // frequent thing a healthy link does.
+    // deadline: the keepalive tick.
     await pair.scheduler.advance(KEEPALIVE_MS)
 
     const link = linkTo(pair.alice, 'p_alice', pair.bobKey)
@@ -1821,14 +1708,12 @@ describe('a machine that was asleep itself', () => {
 
     await pair.scheduler.sleep(A_CLOSED_LID_MS, 'counted')
 
-    // Kept, dated, and not live: the rows are what was true an hour ago, and
-    // an hour ago is exactly what the date on them says.
+    // Kept, dated, and not live.
     const during = bobsRows(pair.alice)
     expect(during.map((row) => row.name)).toEqual(before.map((row) => row.name))
     expect(during.some((row) => row.live)).toBe(false)
 
-    // And the link does not sit there having withdrawn its verdict: it dials,
-    // confirms, and the rows come back live because somebody answered.
+    // And the link dials again rather than sitting on a withdrawn verdict.
     await pair.scheduler.advance(KEEPALIVE_MS)
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.phase).toBe('connected')
     expect(linkTo(pair.alice, 'p_alice', pair.bobKey)?.detail).toBeUndefined()
@@ -1852,10 +1737,8 @@ describe('a machine that was asleep itself', () => {
   })
 
   it('acts on the operating system saying so, without waiting for a deadline', async () => {
-    // What `powerMonitor` is for: the same conclusion at the moment the machine
-    // is awake rather than at the next deadline that happens to fire. The seam
-    // is injected because there is no Electron in this suite — or in the
-    // acceptance suite, which is the reason the real one is imported lazily.
+    // What `powerMonitor` is for: the same conclusion at wake rather than at the
+    // next deadline. Injected because there is no Electron in this suite.
     let resume = (): void => {}
     const relay = createFakeRelay()
     const pair = await pairOfRuntimes({

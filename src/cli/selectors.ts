@@ -1,7 +1,5 @@
-// Selectors let an agent name a project or worktree the way it already knows
-// it: by id, by the name it just created it with, or by the checkout path it is
-// standing in. Matching is tiered, and a tier that matches more than one thing
-// is an error rather than a coin flip.
+// Selectors name a project or worktree by id, name or checkout path. Matching
+// is tiered, and a tier that matches more than one thing is an error.
 
 import { realpathSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -21,11 +19,9 @@ export type Selectable = {
 const CASE_INSENSITIVE_FILESYSTEM = process.platform === 'win32' || process.platform === 'darwin'
 
 /**
- * Canonical form for path comparison; symlinked temp dirs are the usual trap.
- * `realpathSync.native` rather than the JS implementation because only the
- * former reports the on-disk spelling of a case-insensitive match, and the
- * resolution climbs to the nearest existing ancestor so a path that is not on
- * disk yet still passes through the same symlinks as one that is.
+ * Canonical form for path comparison. `realpathSync.native` because only it
+ * reports the on-disk spelling of a case-insensitive match; resolution climbs
+ * to the nearest existing ancestor so a path not on disk yet follows the same symlinks.
  */
 export function canonicalPath(input: string): string {
   const absolute = resolve(input)
@@ -98,14 +94,7 @@ export async function resolveProject(client: RuntimeClient, token: string): Prom
   return selectOne('project', token, projects)
 }
 
-/**
- * Picks one worktree out of a listing already in hand.
- *
- * Split out from `resolveWorktree` for the caller that needs the whole listing
- * anyway — `terminal list` prints a worktree's name, which means reading the
- * names — so naming one does not cost a second round trip to read the same
- * rows.
- */
+/** Picks one worktree out of a listing already in hand, so `terminal list` needs no second round trip. */
 export function selectWorktree(worktrees: readonly Worktree[], token: string): Worktree {
   return selectOne(
     'worktree',

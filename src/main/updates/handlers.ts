@@ -1,14 +1,5 @@
-// THE SEAM. The whole surface the runtime wires up for the update check.
-//
-// In src/main/runtime/handlers/registerHandlers.ts:
-//
-//   import { UpdateService, registerUpdateHandlers } from '../../updates'
-//   registerUpdateHandlers(registry, new UpdateService({ ... }))
-//
-// Four methods, and the shape of them is the argument this feature makes: a
-// read, a check somebody asked for, a preference, and opening a download. There
-// is no "install", because on an unsigned build there cannot be one — see the
-// note at the top of updateService.ts.
+// THE SEAM: the whole surface the runtime wires up for the update check. No
+// "install": on an unsigned build there cannot be one (see updateService.ts).
 
 import { Params } from '../../shared/methods'
 import type { ParamsOf, ResultOf } from '../../shared/methods'
@@ -26,8 +17,7 @@ export type UpdateHandlers = {
 export function createUpdateHandlers(service: UpdateService): UpdateHandlers {
   return {
     'update.state': async () => service.state(),
-    // Always forced: nothing calls this but a person choosing it from the menu
-    // or the palette, and the rate limit is about what the app does unasked.
+    // Always forced: only a person calls this, and the rate limit is about what the app does unasked.
     'update.check': () => service.check({ force: true }),
     'update.setAutomatic': async (params) => service.setAutomatic(params.automatic),
     'update.download': () => service.openDownload()

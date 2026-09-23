@@ -1,8 +1,5 @@
-// Throwaway repositories for the tests in this folder.
-//
-// Every test here drives the real git binary against a real repository in a
-// temp directory. Mocking git would only prove that our idea of git is
-// self-consistent, which is exactly the thing worth doubting.
+// Throwaway repositories for the tests in this folder, driven against the real
+// git binary: mocking git would only prove our idea of git is self-consistent.
 
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
@@ -73,10 +70,8 @@ export async function createTempRepo(options: TempRepoOptions = {}): Promise<Tem
   if (options.withRemote) {
     const remotePath = path.join(base, 'origin.git')
     await git(['init', '--bare', remotePath], base)
-    // The bare repo's HEAD comes from whatever `init.defaultBranch` the machine
-    // running the suite happens to have. Left alone, a machine still defaulting
-    // to `master` gets an origin/HEAD pointing at a branch nothing ever pushes,
-    // and `remote set-head -a` below fails with "Cannot determine remote HEAD".
+    // A machine defaulting to `master` gets an origin/HEAD nothing pushes, and
+    // `remote set-head -a` fails with "Cannot determine remote HEAD".
     await git(['symbolic-ref', 'HEAD', 'refs/heads/main'], remotePath)
     await git(['remote', 'add', 'origin', remotePath])
     await git(['push', '-u', 'origin', 'main'])

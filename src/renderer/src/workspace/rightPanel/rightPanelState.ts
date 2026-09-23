@@ -1,15 +1,5 @@
-// The right panel's own state, remembered on this machine the way the sidebar's
-// width is: which tab, whether it is open, and how wide.
-//
-// Per machine and not per worktree, on purpose. The panel is a way of looking
-// at whatever worktree is open — the tab somebody chose is a habit, and a habit
-// that reset itself on every tab switch would be relearned twenty times a day.
-// What the panel *shows* is the worktree's, and is read fresh each time.
-//
-// Kept out of `storedSession.ts` for the reason that file gives for leaving the
-// changes panel out: that record is about what was open, and this is about how
-// the window is arranged. It is read the way the sidebar width is, and it fails
-// the same way — anything that is not what was written is the default.
+// The right panel's tab, open state and width, remembered per machine (a habit, not a worktree fact).
+// Read like the sidebar width: anything that is not what was written is the default.
 
 export const RIGHT_PANEL_TABS = ['files', 'changes', 'panes'] as const
 
@@ -80,14 +70,7 @@ export function writeStoredRightPanel(storage: Pick<Storage, 'setItem'> | undefi
   }
 }
 
-/**
- * Whether anything on screen is drawing the worktree's changes right now.
- *
- * This is the one question the store's refresh asks before it spends a
- * `git status` on the changes list: the changes tab draws the list itself and
- * the files tab draws a letter beside each changed file, so both count, and
- * the panes tab and a closed panel do not.
- */
+/** Whether anything on screen draws the changes (the changes tab, or the files tab's letters); gates `git status`. */
 export function changesOnScreen(state: { rightPanelOpen: boolean; rightPanelTab: RightPanelTab }): boolean {
   return state.rightPanelOpen && (state.rightPanelTab === 'changes' || state.rightPanelTab === 'files')
 }

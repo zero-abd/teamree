@@ -1,92 +1,19 @@
-// The application menu: the platform's own items, this app's twelve commands,
-// and the one item that is deliberately not here.
+// The application menu: the platform's roles plus the window's own commands
+// (see `menuBar.ts`). No `close` role: Electron's default Cmd+W closed the
+// whole window before the renderer's "Close pane" could see the key.
 //
-// macOS's guidance on menu bars opens with the plainest sentence in it — use
-// the menu bar to give people easy access to all the commands they need to do
-// things in your app — and for a long time this file did the opposite. Every
-// item in it was a stock Electron role: About, Services, Hide, Quit, the Edit
-// roles, zoom, full screen, DevTools, Minimize, Zoom, Front. Not one thing
-// teamree itself does was in the menu bar. The whole command set — new task,
-// new terminal, split, close pane, find, the palette, the dashboard, the
-// sidebar, settings, help — was reachable by a chord nobody had been told, or
-// by finding the right thing to click. That is not only a discoverability
-// problem: the menu bar is what VoiceOver walks and what the Help menu's own
-// search searches, and neither had anything to find.
+// On macOS a menu accelerator is a key equivalent, performed by AppKit before
+// the page sees the keypress, so the menu owns every chord it claims; a
+// disabled item falls through to the renderer, which declines on the same
+// predicate. `registerAccelerator: false` keeps Windows and Linux on the
+// renderer as the one dispatcher and is documented as a no-op on macOS —
+// single dispatch either way.
 //
-// So the commands are here now, and they come from the window rather than from
-// a second list written here. `src/main/menuBar.ts` explains that arrangement;
-// the short of it is that the labels, the chords and which items are live are
-// all facts about the window, held there in one table, and a copy of any of
-// them in this process could only ever drift out of step with the chord that
-// actually fires.
-//
-// **The omission this file has always existed for stays.** An app that sets no
-// menu gets Electron's default one, whose File menu is a single "Close Window"
-// bound to Cmd+W. A menu key equivalent is consumed before the key reaches the
-// focused web contents, so the renderer's Cmd+W — "Close pane" — never fired
-// and the whole window closed instead, taking every pane's scrollback and the
-// focus and the palette with it. The `close` role is therefore still not in
-// this menu. What is in it now is teamree's own Close pane, on the same Cmd+W:
-// the key is consumed by *that* item, which closes a pane, which is what the
-// key was always advertised to do.
-//
-// That is the shape of the whole change, and it is worth saying once plainly,
-// because getting it wrong is how one Cmd+D splits two panes. On macOS a menu
-// item's accelerator *is* its key equivalent, AppKit performs a key equivalent
-// before the event reaches the page, and so the menu owns every one of these
-// chords: the item runs, the window is told, and the renderer's key listener
-// never sees the keypress at all. Where the item is disabled AppKit does not
-// perform it and the key falls through to the page, where the renderer's own
-// handler declines it against the same predicate that greyed the item out. One
-// layer acts, either way.
-//
-// `registerAccelerator: false` is set on every one of these items all the same.
-// On Windows and Linux it means what it says — the chord is displayed but not
-// registered, so those platforms keep the renderer as the one dispatcher. On
-// macOS Electron documents the option as having no effect, so the menu keeps
-// the key there. Both of those are single dispatch, which is why the option is
-// set rather than agonised over: whichever of the two a platform does, exactly
-// one layer ends up acting on one keypress.
-//
-// The rest is unchanged and still not invented. The Edit roles are not
-// decoration: xterm has no clipboard of its own, and Cmd+C and Cmd+V inside a
-// pane are those menu items doing the work.
-//
-// That last sentence is now half of an arrangement rather than the whole of it,
-// and the other half has a caveat on this platform that is worth writing down
-// where somebody would come looking for it. A pane arbitrates the same two
-// chords itself — `paneKeyHandler` in `TerminalView.tsx`, where a copy with
-// nothing selected is the interrupt it has always been in a terminal. **These
-// two items go first.** It is the rule stated at the top of this file, the one
-// the whole Close Window omission exists for: a menu item's accelerator is its
-// key equivalent, AppKit performs a key equivalent before the keystroke reaches
-// the page, and so the pane's own rule is reached only where the menu does not
-// claim the chord.
-//
-// What that costs is one branch and not the feature. A copy with a selection is
-// this item's, and lands in the same clipboard by way of xterm's own copy
-// handler; a paste is this item's, and goes in through xterm's paste handler
-// with the brackets the program asked for. The branch nothing here answers is
-// the copy chord with nothing selected, which stays a no-op instead of becoming
-// the interrupt — and Ctrl+C, which is what that interrupt has always been
-// spelled with, is untouched and reaches the program as it always did.
-//
-// Giving the pane the whole of the chord means taking the accelerator off these
-// two items, and that costs the app Cmd+C and Cmd+V in every text field it has:
-// on macOS the menu is what binds those keys at all, which is why an Electron
-// app without an Edit menu cannot copy out of an input. That is a decision with
-// its own afternoon in it, and not one to make as a side effect of making the
-// URLs in a pane clickable. Reasoned from the rule above rather than watched:
-// a key equivalent needs a focused window, and the harness never brings one up.
-//
-// Reload is the same trap one key
-// over — Cmd+R throws away every pane view, the sidebar, the palette and the
-// dashboard, silently, for a keystroke people press out of habit — so it is
-// offered only when a dev server is what is being rendered.
-//
-// And "Check for Updates…" still has no role because Electron has none to
-// offer; it is under About because that is where a Mac user looks for it, and
-// it appears only when the caller hands over something for it to do.
+// The Edit roles do real work: xterm has no clipboard, so Cmd+C/Cmd+V in a pane
+// are those items. The menu claims them first, so a copy with nothing selected
+// is a no-op rather than the interrupt; taking the accelerator off would cost
+// Cmd+C/V in every text field. Reload is offered only under a dev server: Cmd+R
+// throws every pane view away silently.
 
 import type { MenuItemConstructorOptions } from 'electron'
 import type { MenuBarItem } from './menuBar'
@@ -96,26 +23,11 @@ export type ApplicationMenuOptions = {
   platform?: NodeJS.Platform
   /** True under `electron-vite dev`, where reloading the renderer is wanted. */
   developing?: boolean
-  /**
-   * Asks GitHub whether there is a newer release, and leaves the answer to the
-   * window. Omitted, the item is not offered at all — a menu item that does
-   * nothing is worse than one that is absent.
-   *
-   * It sits directly under About, with a separator between it and Services,
-   * because that is where a Mac user looks for it: every Mac app that checks
-   * for its own updates puts the item there, and a menu that agrees with the
-   * platform is one nobody has to be shown.
-   */
+  /** Asks GitHub for a newer release; omitted, the item is not offered. Sits under About, where a Mac user looks. */
   checkForUpdates?: () => void
   /**
-   * teamree's own commands, as the window last described them, and the way to
-   * say one was chosen.
-   *
-   * One field rather than two, so there is no way to ask for the items without
-   * also supplying what they do. Absent until the window has published — the
-   * menu is installed before the first window exists, on purpose, so the bar is
-   * never Electron's default even for a moment — and in that gap the menu is
-   * the roles alone rather than a row of items with nothing behind them.
+   * teamree's own commands as the window last described them. Absent until the
+   * window has published: the menu is installed before the first window exists.
    */
   commands?: {
     items: readonly MenuBarItem[]
@@ -127,17 +39,7 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
   const platform = options.platform ?? process.platform
   const mac = platform === 'darwin'
 
-  /**
-   * A top-level menu's name, with the mnemonic marker only where one means
-   * something.
-   *
-   * `&` in a top-level item name is a Windows and Linux convention: Electron
-   * turns `&File` into an Alt-F that opens the menu and underlines the letter,
-   * and the `&` itself is not drawn. macOS has no such thing — Cocoa menus are
-   * not opened by mnemonic — and nothing strips the character there, so an
-   * unconditional `&File` is a menu literally titled "&File" in the bar. Every
-   * one of these five carried it on every platform until now.
-   */
+  /** A top-level menu's name; the `&` mnemonic is not stripped on macOS, where it draws as "&File". */
   const top = (name: string): string => (mac ? name : `&${name}`)
 
   /** The published items of one menu, as menu items. Empty when there are none. */
@@ -148,16 +50,11 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
       .filter((item) => item.section === section)
       .map((item) => ({
         label: item.label,
-        // Undefined rather than empty for a command with no key: Electron reads
-        // an accelerator it cannot parse as a fault, and the item is meant to
-        // draw with nothing beside it.
+        // Electron reads an empty accelerator as a fault.
         accelerator: item.accelerator === '' ? undefined : item.accelerator,
-        // The window's own answer to "would this do anything right now",
-        // computed by the same function its key handler refuses on. An item
-        // that cannot act is grey rather than pressable and ignored.
+        // The same predicate the window's key handler refuses on.
         enabled: item.enabled,
-        // Display-only where the platform honours it; see the note at the top
-        // of this file for why it is set even on the platform that ignores it.
+        // See the top of this file.
         registerAccelerator: false,
         click: () => commands.choose(item.command)
       }))
@@ -181,13 +78,11 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
         ...(options.checkForUpdates
           ? ([
               { type: 'separator' },
-              // No accelerator: this one has no platform binding to claim, and
-              // one invented for it would be one taken from the renderer.
+              // No accelerator: one invented for it would be taken from the renderer.
               { label: 'Check for Updates…', click: options.checkForUpdates }
             ] as MenuItemConstructorOptions[])
           : []),
-        // Settings lives in the menu named after the app on this platform, and
-        // a Mac user looks nowhere else for it.
+        // Settings lives in the app menu on this platform.
         ...after(inSection('application')),
         { type: 'separator' },
         { role: 'services' },
@@ -200,14 +95,11 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
       ]
     })
 
-    // No Close Window here either; see the top of this file. The menu exists at
-    // all only once there is something of the app's own to put in it.
+    // No Close Window here either; see the top of this file.
     const file = inSection('file')
     if (file.length > 0) template.push({ label: top('File'), submenu: file })
   } else {
-    // The app menu is where Quit lives on macOS; everywhere else it is here,
-    // and so is everything that would have gone in it. No Close Window on this
-    // platform either: Ctrl+W is the pane's.
+    // Quit and the app-menu items live here off macOS. No Close Window: Ctrl+W is the pane's.
     template.push({
       label: top('File'),
       submenu: [...before([...inSection('file'), ...inSection('application')]), { role: 'quit' }]
@@ -226,8 +118,6 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
       ...(mac ? [{ role: 'pasteAndMatchStyle' } as const] : []),
       { role: 'delete' },
       { role: 'selectAll' },
-      // Find is in the Edit menu on every platform this runs on, and has been
-      // since before the app existed.
       ...after(inSection('edit'))
     ]
   })
@@ -238,7 +128,6 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
       ...(options.developing === true
         ? ([{ role: 'reload' }, { role: 'forceReload' }, { type: 'separator' }] as const)
         : []),
-      // What the window shows, above what the platform does to any window.
       ...before(inSection('view')),
       { role: 'resetZoom' },
       { role: 'zoomIn' },
@@ -252,10 +141,7 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
 
   template.push({
     label: top('Window'),
-    // Splitting and walking panes is arranging the window, which is what this
-    // menu is for; then Minimize and Zoom, and on macOS the one item that is
-    // about every window rather than this one. Close Window is the omission
-    // this file exists for.
+    // Close Window is the omission this file exists for.
     submenu: [
       ...before(inSection('window')),
       { role: 'minimize' },
@@ -264,9 +150,7 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
     ]
   })
 
-  // Every macOS app has a Help menu and this one did not. The `help` role is
-  // what makes it that menu rather than a menu that happens to be called Help:
-  // on macOS it is the one the system's own Help search is attached to.
+  // The `help` role is what attaches the system's own Help search on macOS.
   const help = inSection('help')
   if (help.length > 0) template.push({ label: top('Help'), role: 'help', submenu: help })
 

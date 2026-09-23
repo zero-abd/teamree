@@ -1,15 +1,5 @@
-// A workspace subscription that stays up.
-//
-// The raw `subscribeWorkspace` is one call and one stream: if the runtime is not
-// answering yet, it rejects, and the page is then deaf to every change until
-// something asks again. UI code wants the opposite — start watching, keep
-// watching — so this retries until it has a stream and hands back a close that
-// is safe to call from a React cleanup.
-//
-// Reloading the page is handled by the two ends together: the runtime drops
-// every subscription a page opened as soon as that page starts navigating away,
-// and the fresh page starts its own watch, so a reload swaps one live stream for
-// another and never accumulates them.
+// A workspace subscription that stays up: retries until it has a stream, with a close safe for React
+// cleanup. On reload the runtime drops the old page's streams, so they never accumulate.
 
 import type { WorkspaceEvent } from '@shared/methods'
 import { subscribeWorkspace, type Subscription } from './runtimeClient'

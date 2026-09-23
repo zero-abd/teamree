@@ -56,8 +56,7 @@ describe('projects', () => {
     const project = await service.addProject({ path: repo.repoPath })
 
     expect(project.name).toBe('repo')
-    // Canonically: a project's path is stored resolved and with its separators
-    // normalised, which on Windows is not the string that was handed in.
+    // Stored resolved with separators normalised, which on Windows is not the input string.
     expect(project.path).toBe(canonicalPath(repo.repoPath))
     expect(project.baseRef).toBe('origin/main')
     expect(service.listProjects()).toEqual([project])
@@ -134,9 +133,8 @@ describe('worktree.create', () => {
     const branches = await repo.git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
     expect(branches.split('\n')).toContain('fix-the-login-page')
     const listed = await repo.git(['worktree', 'list', '--porcelain'])
-    // git prints forward slashes on every platform, and a worktree's recorded
-    // path is joined the host's way — so on Windows these are the same place
-    // spelled two ways, and only the canonical form compares.
+    // git prints forward slashes on every platform and the recorded path is joined
+    // the host's way, so only the canonical form compares.
     expect(listed).toContain(canonicalPath(ready.path))
 
     expect(seen.map((event) => event.type)).toEqual(['worktree.created', 'worktree.updated'])
@@ -209,9 +207,7 @@ describe('worktree.create', () => {
     expect(branches.split('\n')).not.toContain('never-mind')
   })
 
-  // The task is what the checkout is for, and the name is only what it is
-  // called: the record keeps both, so a pane started over in it can be told
-  // again, and a listing can say what each row was opened to do.
+  // The record keeps both task and name, so a pane can be told again and a listing can say why.
   it('keeps the task on the record, and leaves it off a record made without one', async () => {
     const repo = await newRepo()
     const service = newService(repo)
@@ -269,9 +265,8 @@ describe('worktree.remove', () => {
     expect(branches.split('\n')).not.toContain('real-work')
   })
 
-  // `~/.teamree/worktrees/<project>` is made for the first checkout and used
-  // to outlive the last: an empty folder per project ever tracked, in the one
-  // directory this app owns.
+  // `~/.teamree/worktrees/<project>` is made for the first checkout; it must not
+  // outlive the last as an empty folder per project ever tracked.
   it('takes the project’s directory with the last checkout, and only then', async () => {
     const repo = await newRepo()
     const service = newService(repo)
@@ -340,10 +335,8 @@ describe('reconciliation', () => {
   })
 })
 
-// A record whose directory is gone but whose git metadata is not — the shape
-// left by an `rm -rf` of a checkout. The inventory still lists it, so the
-// reconciliation above keeps the row, and the row used to say `ready` right up
-// until a shell was asked to start in a directory that was not there.
+// A record whose directory is gone but whose git metadata is not (an `rm -rf`
+// of a checkout). The inventory still lists it, so the row used to say `ready`.
 describe('a worktree whose directory has gone', () => {
   async function missingWorktree(): Promise<{ repo: TempRepo; service: GitService; worktree: Worktree }> {
     const repo = await newRepo()
@@ -513,8 +506,7 @@ describe('the command a project runs in every new worktree', () => {
     expect(first.setupTerminalId).not.toBe(second.setupTerminalId)
   })
 
-  // The regression guard. A project that has said nothing must get exactly the
-  // panes it used to get, which is none.
+  // A project that has said nothing must get exactly the panes it used to get: none.
   it('opens nothing for a project that named no command', async () => {
     const repo = await newRepo()
     const { startSetup, runs } = recorder()
@@ -541,9 +533,8 @@ describe('the command a project runs in every new worktree', () => {
     expect(runs.map((run) => run.command)).toEqual(['npm ci --offline'])
   })
 
-  // A machine that cannot fork a pty must not lose a good checkout over a
-  // convenience: the worktree is ready, and the absent id says setup did not
-  // start.
+  // A machine that cannot fork a pty must not lose a good checkout: the worktree
+  // is ready, and the absent id says setup did not start.
   it('keeps the worktree when the pane cannot be opened', async () => {
     const repo = await newRepo()
     const service = newService(repo, {

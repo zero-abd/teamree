@@ -43,12 +43,9 @@ export type Relay = {
 type AddressRecord = { connections: number; handshakes: TokenBucket; lastSeen: number }
 
 /**
- * The client's address, as far as it can be known. With no trusted proxy in
- * front, that is the socket address, which a client cannot lie about. With
- * proxies in front, it is the nth entry from the right of X-Forwarded-For —
- * counted from the right because the rightmost entries were appended by
- * infrastructure the operator controls, while anything further left is whatever
- * the client chose to send.
+ * The client's address: the socket address with no trusted proxy, else the nth
+ * X-Forwarded-For entry from the right, since only the rightmost entries were
+ * appended by infrastructure the operator controls.
  */
 export function clientAddress(request: IncomingMessage, trustedProxyHops: number): string {
   const socketAddress = request.socket.remoteAddress ?? 'unknown'
@@ -80,8 +77,7 @@ export async function startRelay(options: RelayOptions = {}): Promise<Relay> {
   const rendezvous = new Rendezvous()
   const connections = new Set<PeerSession>()
   const addresses = new Map<string, AddressRecord>()
-  // Per-address bookkeeping is itself an attack surface: a flood from fresh
-  // addresses would otherwise grow this map for as long as it lasted.
+  // A flood from fresh addresses would otherwise grow this map for as long as it lasted.
   const addressTableLimit = Math.max(1024, config.maxConnections * 4)
   const startedAt = clock.now()
 
@@ -142,8 +138,7 @@ export async function startRelay(options: RelayOptions = {}): Promise<Relay> {
           return
         }
       }
-      // Aggregate counts only. Nothing here says which peers are talking, and
-      // there is no per-session detail to ask for.
+      // Aggregate counts only; nothing says which peers are talking.
       response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
       response.end(JSON.stringify(health()))
       return
@@ -154,11 +149,9 @@ export async function startRelay(options: RelayOptions = {}): Promise<Relay> {
 
   const wss = new WebSocketServer({
     noServer: true,
-    // The frame cap is enforced by the parser, so an oversized frame is refused
-    // before its bytes are assembled anywhere.
+    // Enforced by the parser, before an oversized frame's bytes are assembled anywhere.
     maxPayload: config.maxFrameBytes,
-    // Everything spliced here is ciphertext, which does not compress; deflate
-    // would cost CPU for nothing and add a length side channel on top.
+    // Ciphertext does not compress, and deflate would add a length side channel.
     perMessageDeflate: false
   })
 
@@ -182,10 +175,8 @@ export async function startRelay(options: RelayOptions = {}): Promise<Relay> {
       return
     }
     const path = (request.url ?? '/').split('?')[0] ?? '/'
-    // A trailing segment is a routing hint for hosts that must pick a home for
-    // the connection before the hello arrives — a Durable Object is named that
-    // way. This host pairs on the rendezvous itself and has no use for it, so it
-    // is accepted and ignored rather than made into a second thing to get right.
+    // A trailing segment is a routing hint for hosts that pick a home before the
+    // hello arrives (a Durable Object is named that way); this host ignores it.
     if (path !== config.path && !path.startsWith(`${config.path}/`)) {
       refuseUpgrade(socket, 404, 'Not Found')
       return
@@ -211,16 +202,12 @@ export async function startRelay(options: RelayOptions = {}): Promise<Relay> {
       return
     }
 
-    // Counted here rather than in the completion callback below. `ws` calls that
-    // back in the same tick today, so nothing can slip between the check and the
-    // count — but a per-address cap should be a property of the decision, not of
-    // when a dependency happens to call back, and adding `verifyClient` or an
-    // extension to the server above is all it would take to change that.
+    // Counted here, not in the completion callback: `ws` calls back in the same
+    // tick today, but a `verifyClient` or an extension would change that.
     record.connections += 1
     let admitted = false
     socket.once('close', () => {
-      // An upgrade that never completed: the count has to come back off, and no
-      // connection object exists to do it on the way out.
+      // An upgrade that never completed has no connection object to undo the count.
       if (admitted) return
       record.connections -= 1
       record.lastSeen = clock.now()
@@ -254,18 +241,16 @@ export async function startRelay(options: RelayOptions = {}): Promise<Relay> {
     pruneAddresses(now, 60_000)
   }
 
-  // Real time, not the injected clock: how often deadlines are checked is this
-  // host's business, while what counts as late is core's. Checking at the
-  // shorter of the two shortest deadlines keeps a greeting from outliving its
-  // budget by a keepalive interval.
+  // Real time, not the injected clock: how often to check is this host's
+  // business, what counts as late is core's. The shorter deadline keeps a
+  // greeting from outliving its budget by a keepalive interval.
   const sweepIntervalMs = Math.min(config.keepaliveIntervalMs, config.helloTimeoutMs)
   const scheduleSweep = (): void => {
     sweepTimer = setTimeout(() => {
       sweep()
       if (!shuttingDown) scheduleSweep()
     }, sweepIntervalMs)
-    // The relay's own timers must never be the reason the process stays up; the
-    // listening socket is what keeps it alive, and shutdown closes that.
+    // The listening socket keeps the process alive, never the relay's own timers.
     sweepTimer.unref()
   }
 
@@ -295,9 +280,8 @@ export async function startRelay(options: RelayOptions = {}): Promise<Relay> {
     // Stop accepting before draining, so nothing joins the set while it empties.
     httpServer.close()
 
-    // Every peer is told the relay is going away, with the standard code, so a
-    // client can tell "come back in a moment" from "you did something wrong".
-    // The table is emptied first so that nobody is told their partner left.
+    // Emptied first so nobody is told their partner left; then every peer gets
+    // the standard going-away code.
     rendezvous.clear()
     for (const connection of [...connections]) connection.close(CloseCode.GoingAway, 'relay shutting down')
 
@@ -306,12 +290,10 @@ export async function startRelay(options: RelayOptions = {}): Promise<Relay> {
         resolve()
         return
       }
-      // Real time, not the injected clock: this deadline is about how long a
-      // network takes to finish a closing handshake, not about a policy the
-      // relay enforces. The condition below is what normally ends the wait.
+      // Real time: this is how long a network takes to finish a closing
+      // handshake, not a relay policy. The condition below normally ends the wait.
       const deadline = setTimeout(() => {
-        // A peer that will not finish the handshake does not get to hold
-        // shutdown open; it has already been told why.
+        // A peer that will not finish the handshake does not hold shutdown open.
         onDrained = null
         for (const client of wss.clients) client.terminate()
         resolve()

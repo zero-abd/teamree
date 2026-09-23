@@ -1,32 +1,13 @@
-// Proves that the one command a first user is told to type actually works.
-//
-// `docs/install.md` tells somebody who has just downloaded a build to clear the
-// quarantine flag, and gives them a command. That command is the entire
-// difference between an app that opens and an app that macOS refuses, for every
-// person who installs this — and until now it was prose. Nobody had run it
-// against a real packaged bundle carrying a real quarantine attribute.
-//
-// The command is read out of the document rather than repeated here, for the
-// same reason the pretest guard stats the path the peer tests stat: a copy is a
-// thing that drifts, and a check that drifts from the instruction it is
-// checking is worse than none, because it goes green while the instruction
-// rots. Edit the doc and this runs the edit.
-//
-// Only meaningful on macOS, where quarantine and Gatekeeper exist at all.
+// Proves the quarantine-clearing command docs/install.md gives actually works on a packaged bundle.
+// The command is read out of the document, so editing the doc runs the edit. macOS only.
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { findPackagedApp } from './packaged-app.mjs'
 import { releaseNotes } from './release.mjs'
 
-// The document to read the advice out of. Overridable by argument for the same
-// reason `verify-package.mjs` takes a path: the test that proves this script
-// still refuses a document it should refuse has to be able to hand it one, and
-// the alternative is a test that edits docs/install.md underneath a developer.
+// Overridable so the test can hand it a document it should refuse.
 const DOC = process.argv[2] ?? 'docs/install.md'
-// What the document tells the reader to install into, and therefore what the
-// command it prints is written against. Asserted below rather than assumed: if
-// the doc starts recommending somewhere else, the substitution this script does
-// not do would silently test the wrong path.
+// Where the doc says to install; asserted below, since the command is run against it verbatim.
 const INSTALLED_PATH = '/Applications/teamree.app'
 
 function fail(message, detail) {
@@ -45,28 +26,13 @@ function run(command, args, options = {}) {
 
 // ------------------------------------------------------- the advice itself --
 
-/**
- * The shell command `docs/install.md` gives for clearing quarantine.
- *
- * Taken from the fenced block that mentions the attribute, so the thing that
- * runs below is the literal text a reader would copy.
- */
+/** The shell command `docs/install.md` gives for clearing quarantine, as a reader would copy it. */
 function documentedCommand() {
   const doc = readFileSync(DOC, 'utf8')
-  // Any info string, not a list of the three this document happened to use.
-  // The list was `sh|bash|console`, and `install.md` has since grown a
-  // ```powershell block: an opening fence the pattern could not match, which
-  // left its closing fence to be read as the next opening one and paired every
-  // fence below it with the wrong partner. The half of the document under that
-  // block was therefore being searched inside out, and a second, contradictory
-  // quarantine command placed anywhere in it was invisible to the refusal two
-  // dozen lines down that exists to catch exactly that.
+  // Any info string: a ```powershell block once desynchronised a fixed list and paired every fence
+  // below it with the wrong partner.
   const blocks = [...doc.matchAll(/^```[^\n]*\n([\s\S]*?)^```/gm)].map((match) => match[1].trim())
-  // Any `xattr` here is advice about this warning; there is nothing else in an
-  // install document it could be for. Matched on the tool rather than on the
-  // attribute name so that `xattr -cr`, which names no attribute and would
-  // strip the ad-hoc signature along with the quarantine, is caught as the
-  // second spelling it is.
+  // Matched on the tool, not the attribute, so `xattr -cr` (which also strips the signature) is caught.
   const matching = blocks.filter((block) => /\bxattr\b/.test(block))
 
   if (matching.length === 0) {
@@ -75,8 +41,7 @@ function documentedCommand() {
       'Either the advice moved, or it was dropped and readers now have none.'
     )
   }
-  // More than one would mean two spellings of the same advice, and this would
-  // be checking whichever came first while a reader followed either.
+  // Two spellings of the advice would check one while a reader follows either.
   if (matching.length > 1) {
     fail(`${DOC} gives ${matching.length} different quarantine commands.`, matching.join('\n---\n'))
   }
@@ -92,42 +57,12 @@ function documentedCommand() {
   return command
 }
 
-/**
- * Everything one `xattr` invocation can be spelled with, and nothing else.
- *
- * Letters, digits, space, and the four punctuation marks a flag, an attribute
- * name and an absolute path need. Every shell metacharacter there is falls
- * outside it — `;` `&` `|` `` ` `` `$` `(` `>` `\` and a newline included — so
- * the question "is this one command" is answered by the character set rather
- * than by a list of operators somebody has to remember to keep complete.
- */
+/** One `xattr` invocation's alphabet; every shell metacharacter falls outside it. */
 const ONE_PLAIN_COMMAND = /^[A-Za-z0-9 ._/-]+$/
 
 /**
- * Refuses to hand `/bin/sh` anything that is not the advice.
- *
- * The block below runs this string through a shell, on a maintainer's Mac,
- * against an app this script has just installed at `/Applications`. Running it
- * verbatim is the whole design — a copy of the command here would drift from
- * the document and go green while the instruction rotted — but "run what the
- * document says" and "run whatever is in the document" are two different
- * programs, and until now this was the second one.
- *
- * `docs/install.md` is an ordinary file in the repository. A change to it is a
- * documentation change, reviewed as prose, by somebody who has no reason to be
- * reading a fenced block as a payload; a block reading `xattr -dr
- * com.apple.quarantine /Applications/teamree.app && curl … | sh` satisfies every
- * other test in this function.
- *
- * Nothing was reachable through it as things stand, and the reason is worth
- * writing down because it is not this function: `agreesWithReleaseNotes` below
- * requires the documented command to be a substring of a line in
- * `scripts/release.mjs`, and that line is the bare command, so anything appended
- * to it disagrees and the script stops. That is a check about two documents
- * drifting apart. It happens to stand between a docs pull request and a shell,
- * it was not written to, and it would stop doing so the day somebody reworded
- * the release notes. A guarantee about what reaches `/bin/sh` belongs beside the
- * string that reaches it.
+ * Refuses to hand `/bin/sh` anything that is not the advice: the doc is reviewed as prose, and
+ * `... && curl | sh` would otherwise pass every other test here.
  */
 function refuseAnythingButXattr(command) {
   const [first] = command.split(' ')
@@ -144,18 +79,10 @@ function refuseAnythingButXattr(command) {
 const command = documentedCommand()
 ok(`read the advice out of ${DOC}: ${command}`)
 
-// The release notes print the same command, because somebody standing at a
-// download page should not have to open a second document to get past a
-// warning. Two copies of one instruction is exactly the arrangement where one
-// gets fixed and the other does not, so they are required to agree.
+// The release notes print the same command, so the two copies are required to agree.
 function agreesWithReleaseNotes(documented) {
   const notes = 'scripts/release.mjs'
-  // The notes themselves rather than the source that writes them. `npm run
-  // release` generates them per build and chooses the Gatekeeper paragraph from
-  // the signature on the bundle it is about to publish, so the only text worth
-  // comparing is the text a reader would actually be shown — and the unsigned
-  // build is the one this project has always produced and the only one that
-  // carries the command at all.
+  // The generated notes, not their source: the unsigned build is the one that carries the command.
   const body = releaseNotes({
     tag: 'v0.0.0',
     repo: 'owner/name',
@@ -166,12 +93,7 @@ function agreesWithReleaseNotes(documented) {
     .split('\n')
     .filter((line) => line.includes('com.apple.quarantine'))
     .map((line) => line.trim())
-  // Not a `return`. The notes losing the command is not the absence of a
-  // disagreement, it is the rot this check exists to catch: a download page
-  // that stops telling somebody how to get past Gatekeeper, while the check
-  // that is supposed to keep the two copies in step goes green because it can
-  // no longer find one of them. `documentedCommand()` fails loudly for the same
-  // case in the other file, and the two should read the same way.
+  // Not a `return`: notes losing the command is the rot this check exists to catch.
   if (mentions.length === 0) {
     fail(
       `${notes} no longer prints a quarantine command.`,
@@ -190,10 +112,7 @@ function agreesWithReleaseNotes(documented) {
 
 agreesWithReleaseNotes(command)
 
-// Everything above is reading text, and is worth doing wherever this runs: the
-// document and the notes can disagree on any machine, and that half of the
-// check costs a millisecond and needs nothing built. What follows needs a real
-// bundle, a real quarantine attribute and a real Gatekeeper, so it needs a Mac.
+// Everything above is text and runs anywhere; what follows needs a real bundle and Gatekeeper.
 if (process.platform !== 'darwin') {
   console.log('verify-quarantine-advice: the documents agree. Running the command needs macOS; stopping here.')
   process.exit(0)
@@ -201,10 +120,7 @@ if (process.platform !== 'darwin') {
 
 // -------------------------------------------------------------- the bundle --
 
-// Newest first, not a fixed order — see scripts/packaged-app.mjs. Picking a
-// stale single-architecture build here would install it at /Applications and
-// report that the instructions work, having tested them against an app nobody
-// is going to download.
+// Newest first (see packaged-app.mjs): a stale single-arch build would test an app nobody downloads.
 const built = findPackagedApp()
 if (!built) fail('no packaged macOS app found. Run `npm run package:mac` first.')
 ok(`checking against ${built}`)
@@ -212,31 +128,17 @@ ok(`checking against ${built}`)
 // ---------------------------------------------------------- the quarantine --
 
 const QUARANTINE = 'com.apple.quarantine'
-// LaunchServices' own format — type, timestamp, the agent that fetched it. The
-// value matters less than its presence, which is the whole of what Gatekeeper
-// keys on.
+// LaunchServices' own format; Gatekeeper keys on presence.
 const FLAGS = '0081;00000000;Safari;'
 
-// The two shapes an app arrives in, which are not marked the same way.
-//
-// Dragging one out of a mounted `.dmg` marks the bundle it copies. Anything
-// that unpacks it file by file — a re-zipped copy handed to a colleague, an
-// AirDrop — marks every file inside it. Only the first is what we publish, and
-// that is exactly why the second is checked: whoever writes this instruction
-// will test it the way they downloaded it, and an instruction that half works
-// is worse than one that fails, because it fails silently.
+// Two shapes: dragged from a .dmg marks the bundle; unpacked file by file marks every file.
+// Both are checked, since an instruction that half works fails silently.
 const SHAPES = [
   { name: 'a .dmg dragged to Applications', recursive: false },
   { name: 'an unpacked copy, marked file by file', recursive: true }
 ]
 
-/**
- * Puts the packaged app where the document says to put it.
- *
- * Installed at that exact path so the command can run verbatim — no path
- * substitution, and therefore nothing to get wrong between the instruction and
- * the test of it.
- */
+/** Installs the packaged app at the documented path, so the command runs verbatim. */
 function install() {
   if (existsSync(INSTALLED_PATH)) {
     const removed = run('rm', ['-rf', INSTALLED_PATH])
@@ -248,10 +150,7 @@ function install() {
 
 /** Files under the bundle still carrying the attribute. */
 function stillQuarantined() {
-  // `xattr -r -p` prints a line per file that has it and complains on stderr
-  // about every file that does not, so its exit status says nothing useful and
-  // its stdout says everything. Counted rather than shelled through `find`,
-  // whose `-exec ... \;` needs an escape a JavaScript string quietly eats.
+  // `xattr -r -p` exits uselessly and prints per file, so stdout is counted; `find -exec \;` would need an escape.
   const listed = run('xattr', ['-r', '-p', QUARANTINE, INSTALLED_PATH])
   return (listed.stdout ?? '').split('\n').filter((line) => line.trim().length > 0).length
 }
@@ -269,10 +168,7 @@ for (const shape of SHAPES) {
   }
 
   const cleared = run('/bin/sh', ['-c', command])
-  // Exit status, not just effect. A reader watching this command print an error
-  // has no way to know it worked anyway, and will go looking for a second
-  // problem that is not there — so a command that complains is a broken
-  // instruction even when the attribute is gone afterwards.
+  // Exit status too: a command that prints an error is a broken instruction even if it worked.
   if (cleared.status !== 0) {
     fail(
       `the documented command failed against ${shape.name}.`,
@@ -292,14 +188,8 @@ for (const shape of SHAPES) {
 }
 
 run('rm', ['-rf', INSTALLED_PATH])
-// Said as narrowly as it is true. The quarantine applied above is written by
-// hand with `xattr -w`; a real download also writes a LaunchServices record
-// this script cannot fabricate, and nothing here ever launches the app or asks
-// Gatekeeper anything. So what has been proved is that the command in the
-// document removes the attribute from a real bundle, both ways a download marks
-// one — not that the first-launch dialog is what the document says it is. That
-// last part is a person looking at a screen, and `docs/mac-checks.md` is where
-// it is recorded.
+// Narrowly: the command removes a hand-written quarantine from a real bundle both ways. The first-launch
+// dialog is a person looking at a screen, recorded in docs/mac-checks.md.
 console.log(
   'verify-quarantine-advice: PASS — the documented command clears a real quarantine attribute from a real ' +
     'packaged app, for both artifacts. It does not launch the app or consult Gatekeeper.'

@@ -13,8 +13,7 @@ describe('parseMergeTree', () => {
     expect(parseMergeTree(raw)).toEqual({ tree: '2e5b0d3', conflicts: ['a.txt', 'src/b.ts'] })
   })
 
-  // A modify/delete reports the conflict and the resolution it chose, both
-  // naming the same file; listing it twice reads as more damage than there is.
+  // A modify/delete names the same file twice; listing it twice reads as more damage.
   it('names each path once however many times git mentions it', () => {
     expect(parseMergeTree(['tree', 'b.txt', 'b.txt', ''].join('\0')).conflicts).toEqual(['b.txt'])
   })
@@ -31,9 +30,7 @@ describe('lacksWriteTree', () => {
     expect(lacksWriteTree('usage: git merge-tree <base-tree> <branch1> <branch2>')).toBe(true)
   })
 
-  // git translates "unknown option" and "usage"; it does not translate its own
-  // subcommand and flag names, so those are what a non-English git leaves to
-  // recognise it by.
+  // git translates "unknown option" and "usage", not its own subcommand and flag names.
   it('recognises the same refusal from a git that is not speaking English', () => {
     expect(
       lacksWriteTree("error: unbekannte Option: `write-tree'\nAufruf: git merge-tree <base-tree> <branch1> <branch2>")
@@ -134,8 +131,7 @@ describe('previewing a merge against a real repository', () => {
     expect(preview.conflicts).toEqual(['doomed.txt'])
   })
 
-  // The whole reason for merge-tree over an actual merge: asking must cost the
-  // repository nothing.
+  // The whole reason for merge-tree over an actual merge: asking must cost nothing.
   it('leaves the repository exactly as it found it', async () => {
     const repo = await repository()
     await repo.write('shared.txt', 'one\n')
@@ -174,13 +170,8 @@ describe('previewing a merge against a real repository', () => {
     expect(preview.conflicts).toEqual([])
   })
 
-  // Four commands below take these two names as positional arguments, and a ref
-  // is allowed to begin with a dash: `git check-ref-format` accepts
-  // `refs/heads/--anything`, and a clone of a repository whose HEAD points at
-  // one checks it out, so `detectBaseRef` can hand this a name the far end of a
-  // network chose. Whether any option `merge-base` or `merge-tree` happens to
-  // have is worth having is not a question to keep re-answering as git grows
-  // new ones.
+  // A ref may begin with a dash (`git check-ref-format` accepts `refs/heads/--anything`),
+  // and a clone whose HEAD points at one lets `detectBaseRef` hand this a name the far end chose.
   it('refuses a base ref git would read as an option rather than a revision', async () => {
     const repo = await repository()
     await branch(repo, 'feature', 'new.txt', 'hello\n')
@@ -232,8 +223,7 @@ describe('previewing a merge against a real repository', () => {
     expect(preview.reason).toContain('share no history')
   })
 
-  // git cannot tell these two apart, and neither should the report: both are
-  // "this branch has nothing the base lacks".
+  // git cannot tell these two apart, and neither should the report.
   it('says there is nothing to merge for a branch that never diverged', async () => {
     const repo = await repository()
     await repo.git(['checkout', '-q', '-b', 'feature', 'main'])

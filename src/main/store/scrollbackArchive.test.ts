@@ -28,9 +28,7 @@ describe('ScrollbackArchive', () => {
     expect(store.read('term_1')?.recordedAt).toBeGreaterThan(0)
   })
 
-  // The field was called `endedAt` before a record could be written while its
-  // pane was still running. A build that upgrades must not date every pane it
-  // restores to the moment of the upgrade.
+  // The field was called `endedAt` before checkpoints existed.
   it('reads the date out of a record an older build wrote', async () => {
     const store = await archive()
     store.put('term_1', 'placeholder\r\n')
@@ -63,8 +61,7 @@ describe('ScrollbackArchive', () => {
     expect(kept?.text.endsWith('line 39999\r\n')).toBe(true)
     expect(kept?.text).not.toContain('line 0\r\n')
 
-    // On disk as well as in memory: the cap is what stops a pane that printed a
-    // gigabyte from being a gigabyte in the app's data directory.
+    // On disk as well as in memory.
     const [name] = await readdir(store.directory)
     const bytes = (await readFile(join(store.directory, name as string))).byteLength
     expect(bytes).toBeLessThan(MAX_RECORD_FILE_BYTES)
@@ -81,8 +78,7 @@ describe('ScrollbackArchive', () => {
     expect(store.read('term_1')?.text).toBe(`tests ${ESC}[32mpassed${ESC}[0m\r\n`)
   })
 
-  // The file is the boundary whatever wrote it. A record sanitised on the way in
-  // and trusted on the way out would be one edit away from being live again.
+  // A record trusted on the way out would be one edit away from being live again.
   it('sanitises a file it did not write, on the way back', async () => {
     const store = await archive()
     store.put('term_1', 'placeholder\r\n')
@@ -124,8 +120,6 @@ describe('ScrollbackArchive', () => {
     expect(problems.join(' ')).toContain('past the')
   })
 
-  // A terminal id is read out of a file this app deliberately does not trust,
-  // and it is about to be part of a path.
   it('refuses an id that would reach outside its own directory', async () => {
     const problems: string[] = []
     const store = await archive([], problems)
@@ -140,31 +134,25 @@ describe('ScrollbackArchive', () => {
     expect(problems).toHaveLength(10)
   })
 
-  // A pane is written down when it exits and again when the app quits, and a
-  // running one is checkpointed in between. Most of the time the second and
-  // third of those have nothing new to say.
+  // Exit, quit and checkpoint mostly have nothing new to say.
   it('does not write a record that would say what the file already says', async () => {
     const store = await archive()
     store.put('term_1', 'built in 4.2s\r\n')
     await store.flush()
 
-    // Stood on from outside, so a write that did happen is unmistakable: the
-    // archive would put its own document back over this.
+    // Stood on from outside, so a write that did happen is unmistakable.
     await writeFile(join(store.directory, 'term_1.json'), 'untouched', 'utf8')
     store.put('term_1', 'built in 4.2s\r\n')
     await store.flush()
     expect(await readFile(join(store.directory, 'term_1.json'), 'utf8')).toBe('untouched')
 
-    // Output the pane did not have before is a different record, and that one
-    // is written.
+    // New output is a different record.
     store.put('term_1', 'built in 4.2s\r\nand then this\r\n')
     await store.flush()
     expect(store.read('term_1')?.text).toContain('and then this')
   })
 
-  // Two bytes that sanitise to the same record are the same record: a
-  // full-screen program redrawing a spinner prints constantly and says nothing
-  // this directory can keep.
+  // A full-screen program redrawing a spinner prints constantly and says nothing this can keep.
   it('does not write when everything new was dropped on the way in', async () => {
     const store = await archive()
     store.put('term_1', 'waiting\r\n')
@@ -186,18 +174,14 @@ describe('ScrollbackArchive', () => {
     expect(store.read('term_1')?.text).toBe('output\r\n')
   })
 
-  // The skip remembers what reached the disk, so a write that did not reach it
-  // must not be remembered — or a pane would go unwritten until it printed
-  // something new, which for a pane waiting on a prompt is never.
+  // A failed write must not be remembered, or a pane at a prompt goes unwritten for ever.
   it('tries again after a write that failed, even with nothing new to say', async () => {
     const problems: string[] = []
     const store = await archive([], problems)
     store.put('term_1', 'placeholder\r\n')
     await store.flush()
 
-    // A directory where the record goes: the rename at the end of the write
-    // cannot land on it, and this is a failure the archive survives rather
-    // than throws out of.
+    // A directory where the record goes: the rename cannot land on it.
     await rm(join(store.directory, 'term_1.json'))
     await mkdir(join(store.directory, 'term_1.json'))
     store.put('term_1', 'built in 4.2s\r\n')
@@ -210,9 +194,7 @@ describe('ScrollbackArchive', () => {
     expect(store.read('term_1')?.text).toBe('built in 4.2s\r\n')
   })
 
-  // The checkpoint of a running pane and the write of a quitting app can be
-  // handed to this within a tick of each other. Neither may leave a reader
-  // holding half of one record and half of the other.
+  // A checkpoint and a quit can arrive within a tick of each other.
   it('leaves one whole record when two writes of one pane arrive together', async () => {
     const store = await archive()
     store.put('term_1', 'checkpoint\r\n')
@@ -222,7 +204,6 @@ describe('ScrollbackArchive', () => {
     const onDisk = await readFile(join(store.directory, 'term_1.json'), 'utf8')
     expect(() => JSON.parse(onDisk) as unknown).not.toThrow()
     expect(store.read('term_1')?.text).toBe('checkpoint\r\nand the last line before the quit\r\n')
-    // And nothing half-written left behind under its own name.
     expect(await readdir(store.directory)).toEqual(['term_1.json'])
   })
 
@@ -249,9 +230,7 @@ describe('ScrollbackArchive', () => {
     expect(swept.read('term_kept')?.text).toBe('still open\r\n')
   })
 
-  // The store refuses to write over a workspace file it could not read, because
-  // the panes that file lists are coming back on some later launch. Sweeping
-  // their records in the meantime would be this directory deciding otherwise.
+  // The panes an unreadable workspace file lists are coming back on some later launch.
   it('sweeps nothing when the caller does not know which panes exist', async () => {
     const store = await archive()
     store.put('term_1', 'output\r\n')

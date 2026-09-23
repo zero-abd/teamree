@@ -1,32 +1,6 @@
-// What a fresh checkout needs that git will not put there.
-//
-// `git worktree add` writes the tracked files and stops, which is correct and
-// is also why minute three of a first session is an agent running `npm test`
-// against a directory with no `node_modules` and no `.env`. Those files are
-// ignored, so they are not in the branch, so they are nowhere.
-//
-// Two lists, because the two kinds of missing file want opposite things.
-// A directory like `node_modules` or `.venv` is large and rebuildable, and
-// every worktree of a repo wants the same one: it is symlinked, never copied,
-// so five worktrees cost one install. A file like `.env` is small and is
-// exactly the thing a task might need to change: it is copied, so the worktrees
-// can diverge and a debugging session cannot edit the primary checkout's secret
-// by accident.
-//
-// One thing to know about the link, because git decides it and we do not: an
-// ignore rule written with a trailing slash — `node_modules/`, which is how
-// most repositories write it — matches directories only, and a symlink is not a
-// directory. So in the new checkout that link is an untracked file rather than
-// an ignored one: `git status` lists it, and an unforced `worktree remove`
-// refuses over it as a dirty checkout instead of naming it as an ignored entry.
-// Both are refusals and nothing is destroyed either way — git unlinks the
-// symlink and never walks through it — but the sentence differs, which is why
-// `worktreePreparation.test.ts` pins both spellings.
-//
-// Everything here refuses out loud. A path that is tracked, missing, or not
-// ignored is named in the error with the reason, because the alternative —
-// skipping it quietly — produces a worktree that looks prepared and is not,
-// which is the failure this whole file exists to remove.
+// What a fresh checkout needs that git will not put there: ignored directories
+// like `node_modules` are symlinked, ignored files like `.env` are copied.
+// Everything here refuses out loud rather than leaving a checkout half prepared.
 
 import { copyFile, lstat, mkdir, readdir, readlink, stat, symlink } from 'node:fs/promises'
 import path from 'node:path'
@@ -38,16 +12,8 @@ import type { GitRunner } from './gitProcess'
 type Kind = 'linked' | 'copied'
 
 /**
- * What copying is allowed to cost, measured before a byte is written.
- *
- * The budget is the difference between `node_modules` under the copy list
- * being a refusal and being a four-minute freeze on a background task nobody
- * can see. Both halves are needed: a directory of many tiny files passes any
- * byte cap, and one disk image passes any entry cap.
- *
- * The numbers are sized for what this list is for — dotfiles holding
- * credentials and local overrides — with room for a fixture database, and not
- * for anything a package manager produced.
+ * What copying is allowed to cost, measured before a byte is written. Both halves
+ * are needed: many tiny files pass any byte cap, one disk image passes any entry cap.
  */
 export const COPY_BUDGET = { maxBytes: 16 * 1024 * 1024, maxEntries: 1_000 } as const
 
@@ -67,14 +33,7 @@ export type PreparationOptions = {
 /** What was actually put there, in the order it was put. */
 export type Preparation = { linked: string[]; copied: string[] }
 
-/**
- * Cleans one configured path up, or says why it is not one.
- *
- * Relative and inside the repository, both checked here rather than at the
- * moment of use: a setting that names `/etc` or `../../` is wrong when it is
- * typed, and refusing it then is the difference between a message beside the
- * field and a worktree that fails to create at three in the morning.
- */
+/** Cleans one configured path up, or says why it is not one: refused when typed, not at three in the morning. */
 export function normalizePreparedPath(raw: string): string {
   const trimmed = raw.trim()
   if (!trimmed) throw refusal(ErrorCode.InvalidParams, 'a path must not be blank')
@@ -82,9 +41,7 @@ export function normalizePreparedPath(raw: string): string {
   if (path.isAbsolute(trimmed) || /^[a-zA-Z]:/.test(trimmed)) {
     throw refusal(ErrorCode.InvalidParams, `"${trimmed}" is absolute; name a path inside the repository`)
   }
-  // Pathspec magic is how a path stops meaning a path. `git ls-files` reads
-  // these arguments as pathspecs, and a leading colon would let a setting say
-  // something other than what it appears to say.
+  // `git ls-files` reads these as pathspecs, and a leading colon is pathspec magic.
   if (trimmed.startsWith(':')) {
     throw refusal(ErrorCode.InvalidParams, `"${trimmed}" starts with ":", which git reads as pathspec magic`)
   }
@@ -111,13 +68,8 @@ export function normalizePreparedPaths(raw: readonly string[]): string[] {
 }
 
 /**
- * Links and copies what the project asked for, and refuses before writing.
- *
- * Every path is judged first — shape, existence, tracked, ignored — and the
- * copy list is then measured against the budget, all before the first symlink
- * exists. A refusal therefore leaves the checkout exactly as `git worktree add`
- * left it, rather than half prepared, which is the state nothing downstream
- * could describe.
+ * Links and copies what the project asked for. Every path is judged and the copy
+ * list measured before the first symlink exists, so a refusal leaves the checkout untouched.
  */
 export async function prepareWorktree(runner: GitRunner, options: PreparationOptions): Promise<Preparation> {
   const linked = normalizePreparedPaths(options.linkedPaths ?? [])
@@ -140,13 +92,8 @@ export async function prepareWorktree(runner: GitRunner, options: PreparationOpt
 }
 
 /**
- * Whether this path may be carried over at all.
- *
- * Tracked is refused because git has already put the branch's own copy there,
- * and a symlink over it would point a worktree's source at the primary
- * checkout — every task editing one tree. Not-ignored is refused for the
- * neighbouring reason: a path git would offer to commit is a path this feature
- * has no business duplicating behind git's back.
+ * Whether this path may be carried over. Tracked is refused because a symlink
+ * over it would have every task editing one tree; not-ignored because git would offer to commit it.
  */
 async function judge(runner: GitRunner, options: PreparationOptions, relative: string, kind: Kind): Promise<void> {
   const source = path.join(options.repoPath, relative)
@@ -169,9 +116,8 @@ async function judge(runner: GitRunner, options: PreparationOptions, relative: s
     throw refusal(ErrorCode.Conflict, `${kind} path "${relative}" is tracked by git; the branch already carries it`)
   }
 
-  // `check-ignore` and not our own reading of .gitignore: the rules compose
-  // across the repository, the user's global excludes and .git/info/exclude,
-  // and only git knows what they add up to.
+  // `check-ignore` and not our own reading of .gitignore: only git knows what
+  // the repository, global excludes and .git/info/exclude add up to.
   const ignored = await runner.tryRun({
     args: ['check-ignore', '--quiet', '--', relative],
     cwd: options.repoPath,
@@ -188,11 +134,8 @@ async function judge(runner: GitRunner, options: PreparationOptions, relative: s
 }
 
 /**
- * Walks the copy list, stopping the moment it is over budget.
- *
- * Stopping early is the point rather than an optimization: measuring
- * `node_modules` to the end so as to report its true size would cost the same
- * minutes the budget exists to prevent.
+ * Walks the copy list, stopping the moment it is over budget: measuring
+ * `node_modules` to the end would cost the minutes the budget prevents.
  */
 async function measureCopies(options: PreparationOptions, copied: readonly string[]): Promise<void> {
   if (copied.length === 0) return
@@ -233,11 +176,8 @@ async function claim(options: PreparationOptions, relative: string, kind: Kind):
 }
 
 /**
- * Copies a file, a directory, or a symlink, following the shape of the walk
- * that measured it — so what lands is what was counted.
- *
- * A symlink is recreated rather than followed, the way `cp -R` does it: a
- * config directory holding a link to somewhere else keeps meaning what it said.
+ * Copies a file, directory or symlink, following the shape of the walk that
+ * measured it. A symlink is recreated rather than followed, as `cp -R` does.
  */
 async function copyTree(source: string, target: string): Promise<void> {
   const entry = await lstat(source)
@@ -259,14 +199,7 @@ function refusal(code: ErrorCode, message: string): GitServiceError {
   return new GitServiceError(code, message)
 }
 
-/**
- * The two lists a project carries over, as anything outside preparation reads
- * them: together.
- *
- * Preparation keeps them apart because linking and copying are different acts.
- * Every other reader has the opposite question — "did teamree put this here, or
- * did the developer?" — and that one is asked of both lists at once.
- */
+/** The two lists a project carries over, as every reader but preparation asks of them: together. */
 export type PreparedPaths = {
   linkedPaths?: readonly string[]
   copiedPaths?: readonly string[]
@@ -279,20 +212,9 @@ export function hasPreparedPaths(prepared: PreparedPaths | undefined): boolean {
 }
 
 /**
- * Whether a path in a worktree is one preparation put there.
- *
- * A linked path is ours in whatever state git reports it. The link is the
- * reason this matters at all: an ignore rule written `node_modules/` matches
- * directories and a symlink is not one, so git lists the link as untracked and
- * every count downstream reports teamree's own plumbing as the developer's
- * work.
- *
- * A copied path is ours only while git has not been told about it. Once it is
- * staged somebody has decided the copy belongs to the branch, and hiding it
- * from the list would hide a file from the commit it is about to be in.
- *
- * Matching is by path prefix because git names an untracked directory by the
- * directory — `.config/` — and names what is inside a copied one file by file.
+ * Whether a path in a worktree is one preparation put there. A linked path is
+ * ours in any state: `node_modules/` matches directories only and a symlink is
+ * not one, so git lists the link as untracked. A copied path is ours only until staged.
  */
 export function isPreparedPath(prepared: PreparedPaths | undefined, entryPath: string, untracked: boolean): boolean {
   if (!prepared) return false
@@ -311,13 +233,8 @@ function covers(roots: readonly string[] | undefined, entryPath: string): boolea
 }
 
 /**
- * The comparable spelling of a path: separators collapsed, `.` segments and a
- * trailing slash gone.
- *
- * Deliberately not `normalizePreparedPath`, which refuses what it cannot make
- * sense of. This one is asked about paths git chose, in a loop that runs per
- * change, and a comparison has nothing to refuse — an unrecognisable path is
- * simply not one of ours.
+ * The comparable spelling of a path. Not `normalizePreparedPath`: this is asked
+ * about paths git chose, and a comparison has nothing to refuse.
  */
 function tidyPath(raw: string): string {
   return raw

@@ -235,8 +235,7 @@ describe('changes and diffs against a real repository', () => {
     expect(diff.patch).not.toContain('b changed')
   })
 
-  // The case a new branch is usually full of, and the one plain `git diff`
-  // answers with silence.
+  // The case plain `git diff` answers with silence.
   it('shows an untracked file as the patch that adds it', async () => {
     const repo = await repository()
     await repo.write('brand-new.ts', 'export const fresh = true\n')
@@ -280,10 +279,8 @@ describe('changes and diffs against a real repository', () => {
     expect(diff.patch.endsWith('\n')).toBe(true)
   })
 
-  // A log, a fixture, a dataset. The whole patch used to have to fit in the
-  // runner's 32MB ceiling before anything was cut down to the budget, and a
-  // file past it came back as a failure — which the panel rendered as "No patch
-  // for this path", an answer, for a file it had declined to read.
+  // A file past the runner's 32MB ceiling came back as a failure, which the
+  // panel rendered as "No patch for this path".
   it('cuts a very large untracked file down rather than failing to read it', async () => {
     const repo = await repository()
     // Comfortably past the runner's hard ceiling, whatever the patch budget is.
@@ -301,10 +298,8 @@ describe('changes and diffs against a real repository', () => {
     expect(Buffer.byteLength(diff.patch, 'utf8')).toBeLessThanOrEqual(64 * 1024)
   })
 
-  // The defect this guards: a fresh worktree is born holding whatever the
-  // project carries over, and git has no way to tell that from the developer's
-  // own work. An ignore rule written `node_modules/` matches directories, a
-  // symlink is not one, and so the link teamree made is reported untracked.
+  // `node_modules/` matches directories, a symlink is not one, so the link
+  // teamree made is reported untracked.
   it('leaves out the directory teamree linked in, and reports it when nothing says it is ours', async () => {
     const repo = await repository()
     await repo.write('.gitignore', 'node_modules/\n')
@@ -324,8 +319,7 @@ describe('changes and diffs against a real repository', () => {
     expect(result.total).toBe(0)
   })
 
-  // The other half of the rule: ours until somebody stages it, and theirs from
-  // then on, or the fix would hide a file from the commit it is about to be in.
+  // Ours until somebody stages it, or the fix would hide a file from its commit.
   it('keeps showing a copied file once git has been told about it', async () => {
     const repo = await repository()
     await repo.write('.gitignore', '.env\n')
@@ -387,9 +381,7 @@ describe('changes and diffs against a real repository', () => {
     expect(diff.patch).not.toContain('+\u0089PNG')
   })
 
-  // Each untracked file costs a process, so the patch stops rather than spends
-  // a minute — and says it stopped, which is the same thing it says when the
-  // bytes run out.
+  // Each untracked file costs a process, so the patch stops and says so.
   it('stops adding untracked files at the cap and calls the patch truncated', async () => {
     const repo = await repository()
     for (let index = 0; index < 4; index += 1) await repo.write(`new-${index}.ts`, 'export {}\n')

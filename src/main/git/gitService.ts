@@ -1,16 +1,6 @@
 // The stateful half of the git layer: which repos are tracked, which worktrees
-// exist, and what is happening to them right now.
-//
-// Two rules shape everything below.
-//
-// 1. `git worktree add` is slow — seconds on a large repo — and the app has to
-//    stay responsive while several of them run. So create returns a record in
-//    state 'creating' and the work continues on a background task that later
-//    transitions the record to 'ready' or 'failed'. Subscribers learn about the
-//    transition through `events`; nothing polls.
-// 2. Records are a cache, not the truth. Someone will delete a checkout in a
-//    terminal, so every list/get reconciles against `git worktree list` and
-//    drops rows git no longer knows about.
+// exist, and what is happening to them. Create returns 'creating' and finishes on
+// a background task; records are a cache, so every list/get reconciles against git.
 
 import { randomUUID } from 'node:crypto'
 import { mkdir, rm, rmdir, stat } from 'node:fs/promises'
@@ -98,15 +88,8 @@ export type GitServiceOptions = {
   now?: () => number
   createId?: () => string
   /**
-   * Runs a project's setup command in the worktree that has just been built,
-   * and answers with the id of the pane it opened.
-   *
-   * Handed in rather than reached for, because opening a pane needs the
-   * terminal service and this service has no business holding one: what git
-   * knows is the moment a checkout became usable, and that moment is all it
-   * contributes. A runtime with no terminals — the acceptance host, a vitest
-   * worker — passes nothing and no setup runs, which is the same answer a
-   * project that named no command gets.
+   * Runs a project's setup command in the just-built worktree and answers with the
+   * pane id. Handed in because opening a pane needs the terminal service.
    */
   startSetup?: (input: { worktree: Worktree; project: Project; command: string }) => string | undefined
 }
@@ -116,10 +99,7 @@ export type GitSnapshot = { projects: Project[]; worktrees: Worktree[] }
 
 /**
  * What `--delete-branch` was judged to deserve, before anything was destroyed.
- *
- * 'merged' and 'unjudged' both used to be 'safe', and they are not the same
- * thing: one is a proof that the commits are in the base ref, the other is the
- * absence of one. Telling them apart is what lets the proof be acted on.
+ * 'merged' is a proof the commits are in the base ref; 'unjudged' is the absence of one.
  */
 type BranchVerdict = 'skip' | 'merged' | 'unjudged' | 'force'
 
@@ -146,9 +126,7 @@ export class GitService {
   // One chain per project, so two creates never both read a store neither has
   // written to yet. See `createWorktree`.
   readonly #reservations = new Map<string, Promise<void>>()
-  // How each worktree's start point was interpreted. Advisory display detail
-  // with nowhere to live on the frozen Worktree, so it is session-scoped: the
-  // durable answer is `startedFrom`, which holds the resolved sha.
+  // How each start point was interpreted; session-scoped, `startedFrom` holds the sha.
   readonly #startPoints = new Map<string, ResolvedStartPoint>()
   #disposed = false
 
@@ -196,11 +174,7 @@ export class GitService {
     return project
   }
 
-  /**
-   * Untracks the repo and forgets its worktrees. Nothing on disk is touched:
-   * deleting checkouts as a side effect of tidying the sidebar would be
-   * unforgivable, so destroying a worktree stays an explicit act.
-   */
+  /** Untracks the repo and forgets its worktrees. Nothing on disk is touched. */
   async removeProject(params: ParamsOf<'project.remove'>): Promise<{ removed: true }> {
     const project = this.#requireProject(params.projectId)
     for (const worktree of this.#store.listWorktrees(project.id)) {
@@ -214,16 +188,8 @@ export class GitService {
   }
 
   /**
-   * Sets what a new worktree of this project carries over from the primary
-   * checkout, and the one command it runs once it has. Each field given
-   * replaces the stored one; an omitted field is left as it was, and an empty
-   * list or an empty string clears it.
-   *
-   * The paths are only shape-checked here. Whether `node_modules` exists, is
-   * ignored and is untracked is a fact about the repository at the moment a
-   * worktree is made — it can be true today and false after a `.gitignore`
-   * changes — so it is asked then, by `prepareWorktree`, which is also the only
-   * place that can do anything about the answer.
+   * Sets what a new worktree carries over from the primary checkout and the command
+   * it runs once it has. Paths are only shape-checked; `prepareWorktree` asks the repo.
    */
   async setProjectPaths(params: ParamsOf<'project.setPaths'>): Promise<Project> {
     const project = this.#requireProject(params.projectId)
@@ -232,15 +198,12 @@ export class GitService {
       const given = params[field]
       if (given === undefined) continue
       const paths = normalizePreparedPaths(given)
-      // Absent rather than empty: a project with an empty array in it reads as
-      // a decision, and `[]` and "never configured" are the same instruction.
+      // Absent rather than empty: `[]` and "never configured" are the same instruction.
       if (paths.length === 0) delete next[field]
       else next[field] = paths
     }
     if (params.setupCommand !== undefined) {
-      // Absent rather than empty, for the reason the lists are: a project that
-      // stored "" would be saying the same thing as one that said nothing, in a
-      // second spelling every reader would have to know about.
+      // Absent rather than empty, for the reason the lists are.
       const command = normalizeSetupCommand(params.setupCommand)
       if (command === undefined) delete next.setupCommand
       else next.setupCommand = command
@@ -266,23 +229,17 @@ export class GitService {
   }
 
   /**
-   * Returns as soon as the record exists, in state 'creating'. The checkout is
-   * built on a background task; `whenSettled` or an `events` subscription tells
-   * you how it ended.
+   * Returns as soon as the record exists, in state 'creating'; `whenSettled` or an
+   * `events` subscription tells you how it ended.
    */
   async createWorktree(params: ParamsOf<'worktree.create'>): Promise<Worktree> {
     const project = this.#requireProject(params.projectId)
     const name = params.name.trim()
     if (!name) throw new GitServiceError(ErrorCode.InvalidParams, 'worktree name must not be blank')
 
-    // Serialised per project, and this is a data-loss fix rather than tidiness.
-    // Choosing the branch and the path reads the store; the record that claims
-    // them is written afterwards. Two creates overlapping in that gap both read
-    // a store neither has written to, agree on the same slug, and end up with
-    // two records naming one checkout path — after which whichever `worktree
-    // add` loses cleans up over the winner's checkout, and an agent's afternoon
-    // goes with it. Only the reservation is serialised: `#buildCheckout` still
-    // runs concurrently, so the slow part (a fetch, then the add) is unaffected.
+    // Serialised per project: choosing branch and path reads the store, and two
+    // creates overlapping in that gap agree on one slug and two records name one
+    // checkout path — the losing add then cleans up over the winner's checkout.
     return this.#reserve(project.id, () => this.#openWorktreeRecord(project, name, params))
   }
 
@@ -290,8 +247,7 @@ export class GitService {
   #reserve(projectId: string, reserve: () => Promise<Worktree>): Promise<Worktree> {
     const previous = this.#reservations.get(projectId) ?? Promise.resolve()
     const reserved = previous.then(reserve, reserve)
-    // The tail swallows the outcome: one caller's failure is not the next
-    // caller's, and an unhandled rejection here would take the process with it.
+    // The tail swallows the outcome; an unhandled rejection here would take the process.
     const tail = reserved.then(
       () => undefined,
       () => undefined
@@ -363,21 +319,18 @@ export class GitService {
     const force = params.force === true
 
     if (!project) {
-      // The repo was untracked underneath us; the row is all that is left. The
-      // files are not: nothing here deletes them, so say where they went.
+      // The repo was untracked underneath us; nothing here deletes files, so say where they went.
       this.#forget(worktree)
       const survived = await this.#surviving(worktree)
       return { removed: true, ...survived }
     }
 
-    // Judged before anything is destroyed: refusing after the checkout is gone
-    // would leave the user worse off than refusing outright.
+    // Judged before anything is destroyed: refusing after the checkout is gone is worse.
     let branchVerdict: BranchVerdict = 'skip'
     if (params.deleteBranch) branchVerdict = await this.#judgeBranchDeletion(project, worktree.branch, force)
 
     const previousState = worktree.state
-    // Somebody else dropped the record while this was starting. Nothing was
-    // destroyed, so the files are wherever they were.
+    // Somebody else dropped the record while this was starting; nothing was destroyed.
     if (!this.#patch(worktree.id, { state: 'removing' })) {
       return { removed: true, ...(await this.#surviving(worktree)) }
     }
@@ -391,13 +344,9 @@ export class GitService {
     }
 
     this.#forget(worktree)
-    // 'merged' is a proof, not a guess: `merge-base --is-ancestor` has already
-    // shown every commit on this branch is in the base ref, which is the whole
-    // reason the verdict is taken before anything is destroyed. `git branch -d`
-    // asks a different question — merged into HEAD or upstream — and answers it
-    // "no" for a branch that is plainly in the base, after the checkout is gone.
-    // So the proof is acted on, and `-d` is left to judge only the case where
-    // there was no proof to have.
+    // 'merged' is a proof from `merge-base --is-ancestor`. `git branch -d` asks a
+    // different question (merged into HEAD or upstream) and says "no" for a branch
+    // plainly in the base, so `-d` only judges the case with no proof to have.
     if (branchVerdict !== 'skip') {
       await this.#deleteBranch(project, worktree.branch, branchVerdict !== 'unjudged')
     }
@@ -412,10 +361,8 @@ export class GitService {
         `worktree "${worktree.name}" is ${worktree.state}; status is only available once it is ready`
       )
     }
-    // Checked here as well as at list time, because status is asked for on its
-    // own. Left to git, a vanished cwd fails the spawn with ENOENT, which the
-    // runner can only report as "git executable not found" — a wrong answer
-    // about the machine, given for a question about one directory.
+    // Checked here too: a vanished cwd fails the spawn with ENOENT, which the
+    // runner can only report as "git executable not found".
     if (!(await isDirectory(worktree.path))) {
       return {
         worktreeId: worktree.id,
@@ -441,13 +388,7 @@ export class GitService {
     })
   }
 
-  /**
-   * What this project puts in every worktree of its own accord.
-   *
-   * Read fresh on each call rather than remembered from creation: the lists are
-   * editable, and what counts as a change has to follow what they say now — a
-   * path dropped from the list is the developer's to deal with from then on.
-   */
+  /** What this project puts in every worktree. Read fresh: the lists are editable. */
   #preparedPaths(projectId: string): PreparedPaths {
     const project = this.#store.getProject(projectId)
     return {
@@ -456,10 +397,7 @@ export class GitService {
     }
   }
 
-  /**
-   * Every changed path in a worktree. The counters answer whether there is
-   * anything to look at; this is the looking.
-   */
+  /** Every changed path in a worktree. */
   async worktreeChanges(params: ParamsOf<'worktree.changes'>): Promise<WorktreeChanges> {
     const worktree = this.#requireReadyWorktree(params.worktreeId, 'changes')
     return readWorktreeChanges(this.#runner, {
@@ -510,10 +448,7 @@ export class GitService {
     })
   }
 
-  /**
-   * Commits in a worktree. The first write this service makes to a repository,
-   * and the only one; everything else here reads.
-   */
+  /** Commits in a worktree. */
   async worktreeCommit(params: ParamsOf<'worktree.commit'>): Promise<WorktreeCommit> {
     const worktree = this.#requireReadyWorktree(params.worktreeId, 'committing')
     return commitWorktree(this.#runner, {
@@ -526,11 +461,8 @@ export class GitService {
   }
 
   /**
-   * Puts one hunk of the working-tree patch into the index.
-   *
-   * The only write here besides a commit that changes what the next commit will
-   * contain, and the only one that writes the index without being asked for a
-   * commit at all. It never touches the working tree; see `worktreeHunk.ts`.
+   * Puts one hunk of the working-tree patch into the index. Never touches the
+   * working tree; see `worktreeHunk.ts`.
    */
   async worktreeStageHunk(params: ParamsOf<'worktree.stageHunk'>): Promise<WorktreeHunkStage> {
     return this.#applyHunk(params, true)
@@ -554,10 +486,8 @@ export class GitService {
   }
 
   /**
-   * What this worktree has committed that its base has not.
-   *
-   * Read from the worktree rather than the primary checkout, so the branch
-   * resolves against the HEAD the user is actually looking at.
+   * What this worktree has committed that its base has not. Read from the
+   * worktree, so the branch resolves against the HEAD the user is looking at.
    */
   async worktreeLog(params: ParamsOf<'worktree.log'>): Promise<WorktreeLog> {
     const worktree = this.#requireReadyWorktree(params.worktreeId, 'a log')
@@ -572,15 +502,11 @@ export class GitService {
     })
   }
 
-  /**
-   * Sends a worktree's branch to its remote. The only call in this service that
-   * leaves the machine, and the only one that cannot be undone from here.
-   */
+  /** Sends a worktree's branch to its remote. */
   async worktreePush(params: ParamsOf<'worktree.push'>): Promise<WorktreePush> {
     const worktree = this.#requireReadyWorktree(params.worktreeId, 'pushing')
-    // The base ref is what a review would be opened against, and it belongs to
-    // the project rather than to the worktree. A worktree whose project is gone
-    // still pushes; it is only the review link that cannot be named.
+    // The base ref belongs to the project. A worktree whose project is gone still
+    // pushes; only the review link cannot be named.
     const project = this.#store.getProject(worktree.projectId)
     return pushWorktree(this.#runner, {
       worktreeId: worktree.id,
@@ -593,10 +519,8 @@ export class GitService {
   }
 
   /**
-   * Whether this worktree would merge into its project's base ref.
-   *
-   * Run from the primary checkout rather than the worktree: the merge is
-   * hypothetical and belongs to the repository, not to either side of it.
+   * Whether this worktree would merge into its project's base ref. Run from the
+   * primary checkout: the merge is hypothetical and belongs to the repository.
    */
   async worktreeMergePreview(params: ParamsOf<'worktree.mergePreview'>): Promise<WorktreeMergePreview> {
     const worktree = this.#requireReadyWorktree(params.worktreeId, 'a merge preview')
@@ -613,10 +537,7 @@ export class GitService {
     })
   }
 
-  /**
-   * A worktree that can be read from. Anything not yet `ready` has no checkout
-   * on disk, so the honest answer is a conflict rather than an empty result.
-   */
+  /** A worktree that can be read from; anything not yet `ready` has no checkout on disk. */
   #requireReadyWorktree(worktreeId: string, what: string): Worktree {
     const worktree = this.#requireWorktree(worktreeId)
     if (worktree.state !== 'ready') {
@@ -631,12 +552,8 @@ export class GitService {
   // ------------------------------------------------------------- start points
 
   /**
-   * What the create dialog can offer as a starting point: the base ref first,
-   * then the current branch, then local branches, remote branches and tags,
-   * each most-recent first. Capped, and the result says when it was capped.
-   *
-   * No method in the frozen contract exposes this, so it is reached on the
-   * service the way `events.on` and `cancelWorktreeCreate` are. See handlers.ts.
+   * What the create dialog can offer as a starting point, capped; the result says
+   * when it was capped. Not in the frozen contract, so reached on the service. See handlers.ts.
    */
   async listStartPoints(projectId: string, options: { limit?: number } = {}): Promise<StartPointList> {
     const project = this.#requireProject(projectId)
@@ -648,12 +565,7 @@ export class GitService {
     })
   }
 
-  /**
-   * How a worktree's start point was read: which ref won, what it was, whether
-   * a fetch was needed, and any same-named ref that was passed over. Present
-   * only for worktrees this process created; `Worktree.startedFrom` carries the
-   * durable part.
-   */
+  /** How a worktree's start point was read. Present only for worktrees this process created. */
   startPointFor(worktreeId: string): ResolvedStartPoint | undefined {
     return this.#startPoints.get(worktreeId)
   }
@@ -673,20 +585,14 @@ export class GitService {
     return { projects: this.#store.listProjects(), worktrees: this.#store.listWorktrees() }
   }
 
-  /**
-   * Restores records saved before a restart. Anything mid-flight then is dead
-   * now: the process that owned the `git worktree add` is gone.
-   */
+  /** Restores records saved before a restart. */
   hydrate(snapshot: GitSnapshot): void {
     for (const project of snapshot.projects) this.#store.putProject(project)
     for (const worktree of snapshot.worktrees) this.#store.putWorktree(worktree)
     this.reviveRestoredRecords()
   }
 
-  /**
-   * Call once at startup when records came from a store that outlived the
-   * process: whatever was mid-flight then has no owner now.
-   */
+  /** Call once at startup: whatever was mid-flight then has no owner now. */
   reviveRestoredRecords(): void {
     for (const worktree of this.#store.listWorktrees()) {
       if (worktree.state === 'creating') {
@@ -738,12 +644,9 @@ export class GitService {
   }
 
   async #chooseBranch(project: Project, taskName: string, requested?: string): Promise<string> {
-    // In-flight creates own branch names git has not heard of yet, so records
-    // are merged into the taken set.
+    // In-flight creates own branch names git has not heard of yet.
     const recorded = this.#store.listWorktrees(project.id).map((worktree) => worktree.branch)
-    // Deliberately not caught into an empty list: a collision check with
-    // nothing to check against says "that name is free" about every name there
-    // is, and the caller cannot tell that answer from a real one.
+    // Deliberately not caught: an empty list says "free" about every name there is.
     const fromGit = await listBranchNames(this.#runner, project.path)
     const existing = [...fromGit, ...recorded]
 
@@ -761,12 +664,11 @@ export class GitService {
 
   async #buildCheckout(worktreeId: string, project: Project, signal: AbortSignal): Promise<Worktree> {
     const worktree = this.#requireWorktree(worktreeId)
-    // Set only once this create is the one thing that could have made the
-    // branch, so the cleanup below never deletes one it did not create.
+    // Set only once this create could have made the branch, so cleanup never
+    // deletes one it did not create.
     let ourBranch: { branch: string; sha: string } | null = null
-    // The same rule applied to the checkout path. False until `worktree add`
-    // has been asked for, because before that this create has put nothing at
-    // that path — and the path may already be somebody else's checkout.
+    // Same for the path: false until `worktree add` was asked for, since the path
+    // may already be somebody else's checkout.
     let ourCheckout = false
     try {
       const start = await resolveStartPoint(this.#runner, {
@@ -774,44 +676,27 @@ export class GitService {
         requested: worktree.startedFrom,
         signal
       })
-      // Asked again here rather than trusted from #chooseBranch: that listing
-      // is as old as the start point took to resolve — network time when the
-      // ref needed fetching — and a pane or a CLI can claim a name inside it.
+      // Asked again: the #chooseBranch listing is as old as the start point took
+      // to resolve, and a pane or a CLI can claim a name inside that.
       if (await this.#branchTip(project, worktree.branch)) {
         throw new GitServiceError(ErrorCode.Conflict, `branch "${worktree.branch}" already exists`)
       }
       ourBranch = { branch: worktree.branch, sha: start.sha }
       await mkdir(path.dirname(worktree.path), { recursive: true })
       ourCheckout = true
-      // The resolved sha, never the name: git's own DWIM must not get a second
-      // vote after we have already decided what the name meant.
-      //
-      // `--no-track` because the upstream is what "how much is left to push"
-      // is measured against, and a branch cut from origin/main that inherits
-      // origin/main as its upstream reports a commit still to send after the
-      // push that sent it. How far the base has moved on is a separate
-      // question, asked separately in `worktreeStatus.ts`; the upstream is left
-      // for the push to set, to the branch the push actually wrote.
-      //
-      // Explicit rather than implied by a sha start point: `branch.autoSetupMerge`
-      // is a user setting, and `always` sets tracking from a local branch too.
+      // The resolved sha, never the name: git's DWIM must not get a second vote.
+      // `--no-track`: a branch cut from origin/main that inherits it as upstream
+      // reports a commit still to push after the push that sent it. Explicit
+      // because `branch.autoSetupMerge=always` sets tracking from a local branch too.
       await this.#runner.run({
         args: ['worktree', 'add', '--no-track', '-b', worktree.branch, worktree.path, start.sha],
         cwd: project.path,
         signal,
         timeoutMs: this.#createTimeoutMs
       })
-      // Before 'ready', deliberately. A pane opens on the transition, so a
-      // checkout that flipped first and was linked afterwards would be handed
-      // to an agent for as long as the copying took — and `npm test` in that
-      // window fails for a reason that has stopped being true by the time
-      // anybody reads it. A refusal here is a failed create like any other:
-      // the catch below discards the checkout and the row says why.
-      //
-      // Read from the store rather than from the project this create started
-      // with: an add on a large repository takes long enough for somebody to
-      // have changed the lists meanwhile, and the checkout in front of us is
-      // the one that has to match what they last said.
+      // Before 'ready', deliberately: a pane opens on the transition, and `npm test`
+      // in a checkout still being linked fails for a reason that stops being true.
+      // Read from the store: the lists may have changed during a long add.
       const settings = this.#store.getProject(project.id) ?? project
       await prepareWorktree(this.#runner, {
         repoPath: project.path,
@@ -821,14 +706,10 @@ export class GitService {
         signal
       })
       this.#startPoints.set(worktreeId, start)
-      // In the same breath as the flip to 'ready', and deliberately: the pane
-      // belongs to a checkout that is finished, and the record that says setup
-      // was started has to be the same record that says the worktree is usable
-      // — one write, one event, nothing in between for a client to read a
-      // half-answer out of.
+      // In the same breath as the flip to 'ready': one write, one event, nothing
+      // in between for a client to read a half-answer out of.
       const setupTerminalId = this.#runSetup(worktree, settings)
-      // What it branched from is now a fact, not a request: the name could move
-      // or disappear, the sha cannot.
+      // What it branched from is now a fact: the name could move, the sha cannot.
       return (
         this.#patch(worktreeId, {
           state: 'ready',
@@ -853,14 +734,8 @@ export class GitService {
   }
 
   /**
-   * Starts the project's setup command in the finished checkout, if it has one.
-   *
-   * Never a reason to fail a create. The checkout is built, prepared and
-   * correct by the time this is called, and throwing here would send it to the
-   * catch below, which discards it — so a machine that cannot fork a pty would
-   * lose the worktree over a convenience. The refusal is reported and the
-   * worktree is ready without a setup pane, which is what the absent
-   * `setupTerminalId` then says.
+   * Starts the project's setup command in the finished checkout, if any. Never a
+   * reason to fail a create: throwing here would discard a correct checkout.
    */
   #runSetup(worktree: Worktree, project: Project): string | undefined {
     const command = project.setupCommand
@@ -874,11 +749,8 @@ export class GitService {
   }
 
   /**
-   * Best effort: a failed create must not leave a half-checkout or a stray
-   * branch. `ourBranch` names the ref this create made, and is the only ref
-   * this may delete — a name that was already taken, or that somebody else
-   * claimed while the add was running, holds work this create knows nothing
-   * about.
+   * Best effort: a failed create must not leave a half-checkout or a stray branch.
+   * `ourBranch` is the only ref this may delete; any other name holds someone else's work.
    */
   async #discardPartialCheckout(
     project: Project,
@@ -889,11 +761,8 @@ export class GitService {
     const quiet = async (args: string[]): Promise<void> => {
       await this.#runner.tryRun({ args, cwd: project.path, timeoutMs: 60_000 }).catch(() => undefined)
     }
-    // Gated the way the branch below is gated, and for the same reason. This
-    // used to run unconditionally, which meant a create that failed before it
-    // ever reached `worktree add` still ran `remove --force` and then `rm -rf`
-    // over its recorded path — and when a second record held that same path,
-    // that path was a ready checkout with an agent working in it.
+    // Gated like the branch below: run unconditionally, this `rm -rf`ed a path
+    // that a second record held as a ready checkout with an agent working in it.
     if (ourCheckout && !this.#pathHeldByAnotherRecord(worktree)) {
       await quiet(['worktree', 'remove', '--force', worktree.path])
       await quiet(['worktree', 'prune'])
@@ -904,23 +773,15 @@ export class GitService {
       }
     }
     if (!ourBranch) return
-    // The add is what creates the branch, and it creates it at the start point
-    // already resolved. A ref sitting anywhere else is somebody else's, and a
-    // read that fails leaves the question open rather than answering it "mine".
+    // The add creates the branch at the resolved start point; a ref anywhere
+    // else is somebody else's, and a failed read is not a "mine".
     const tip = await this.#branchTip(project, ourBranch.branch).catch(() => null)
     if (tip === ourBranch.sha) await quiet(['branch', '-D', ourBranch.branch])
   }
 
   /**
-   * Takes away `<worktreesRoot>/<project>` once the last checkout in it has
-   * gone, and never otherwise.
-   *
-   * The directory is made for the first checkout of a project and nothing
-   * else ever wants it; left behind it is one empty folder per project ever
-   * tracked, in the one directory this app owns. Only the directory straight
-   * under the root, and only by a plain `rmdir` — anything at all in it, ours
-   * or not, makes that fail and the folder stays. A checkout somewhere the
-   * user chose is nowhere near this.
+   * Takes away `<worktreesRoot>/<project>` once the last checkout in it has gone.
+   * Only straight under the root, and only by a plain `rmdir`, so anything in it makes that fail.
    */
   async #dropEmptyProjectDir(checkoutPath: string): Promise<void> {
     const projectDir = path.dirname(checkoutPath)
@@ -928,11 +789,7 @@ export class GitService {
     await rmdir(projectDir).catch(() => undefined)
   }
 
-  /**
-   * Whether some other record names this checkout path. If one does, the
-   * directory is that record's, whatever this one believes — and a record is
-   * the only thing that knows where a running agent's files are.
-   */
+  /** Whether some other record names this checkout path; if so, the directory is that record's. */
   #pathHeldByAnotherRecord(worktree: Worktree): boolean {
     const key = pathKey(worktree.path)
     return this.#store.listWorktrees().some((other) => other.id !== worktree.id && pathKey(other.path) === key)
@@ -956,16 +813,10 @@ export class GitService {
     return null
   }
 
-  /**
-   * Takes the checkout away from git, and reports whether the directory itself
-   * survived. Three of the paths below drop the record with every file still
-   * on disk, and a caller told only "removed" has no way left to find them.
-   */
+  /** Takes the checkout away from git and reports whether the directory survived. */
   async #detachCheckout(project: Project, worktree: Worktree, force: boolean): Promise<{ checkoutLeftAt?: string }> {
-    // Deliberately not caught: a repository git cannot be asked about is not a
-    // repository with nothing in it. Reading the failure as "git has never
-    // heard of this checkout" is what let a removal report success, forget
-    // which project the row belonged to, and leave every file on disk.
+    // Deliberately not caught: reading the failure as "git has never heard of this
+    // checkout" let a removal report success and leave every file on disk.
     const inventory = await readWorktreeInventory(this.#runner, project.path)
     const registered = inventory.some((entry) => samePath(entry.path, worktree.path))
     if (!registered) {
@@ -976,15 +827,9 @@ export class GitService {
 
     if (!force) await this.#refuseIfIgnoredFilesWouldGo(worktree)
 
-    // `status.showUntrackedFiles` is pinned for the same reason it is pinned
-    // wherever else this app asks git what has changed — but here it is the
-    // difference between a refusal and a silent delete. An unforced removal
-    // has no safety check of its own for modified or untracked files: it
-    // relies entirely on `git worktree remove` refusing a dirty checkout, and
-    // git decides dirty with its own `git status`, which obeys that setting.
-    // People set it to `no` in ~/.gitconfig to make status usable on a large
-    // repository, where it then covers every repository they own — and an
-    // uncommitted file is exactly the kind nothing else has a copy of.
+    // `status.showUntrackedFiles` pinned: an unforced removal relies on `git worktree
+    // remove` refusing a dirty checkout, which obeys that setting, and people set it
+    // to `no` in ~/.gitconfig — the difference between a refusal and a silent delete.
     const args = ['-c', 'status.showUntrackedFiles=normal', 'worktree', 'remove']
     if (force) args.push('--force')
     args.push(worktree.path)
@@ -1015,14 +860,8 @@ export class GitService {
   }
 
   /**
-   * Stops a removal that would take ignored files with it.
-   *
-   * `git worktree remove` refuses a dirty checkout, and dirty to git means
-   * modified-or-untracked — everything except the files an ignore rule covers.
-   * Those are exactly the files nothing else has: no branch holds them, no
-   * remote has a copy. This app cannot tell a rebuildable node_modules from
-   * the only .env that ever existed, so it says what is there and leaves the
-   * judgement to the person whose files they are.
+   * Stops a removal that would take ignored files with it: dirty to git means
+   * modified-or-untracked, and ignored files are the ones nothing else has a copy of.
    */
   async #refuseIfIgnoredFilesWouldGo(worktree: Worktree): Promise<void> {
     if (!(await isDirectory(worktree.path))) return // nothing on disk to lose
@@ -1032,9 +871,7 @@ export class GitService {
       ignored = await readIgnoredEntries(this.#runner, { worktreePath: worktree.path })
     } catch (error) {
       // A checkout git will not read is one `worktree remove` will not delete
-      // either — it refuses and the prune below takes the record instead,
-      // leaving whatever is on disk exactly where it is. Any other failure is
-      // a question left open, and an open question is not a yes.
+      // either; any other failure is an open question, and that is not a yes.
       if (error instanceof GitCommandError && isNotAWorkingTree(error.stderr)) return
       throw error
     }
@@ -1065,8 +902,7 @@ export class GitService {
         `branch "${branch}" has commits that are not in ${target}; remove with force to delete it anyway`
       )
     }
-    // Base ref unreadable (no remote, unborn branch). Nothing was proved here,
-    // so `git branch -d` is left to judge on its own terms.
+    // Base ref unreadable (no remote, unborn branch): nothing proved, `-d` judges.
     return 'unjudged'
   }
 
@@ -1076,10 +912,8 @@ export class GitService {
     if (result.exitCode === 0) return
     if (/not found/i.test(result.stderr)) return
     if (/not fully merged/i.test(result.stderr)) {
-      // Only reachable from the 'unjudged' verdict, and by then the checkout is
-      // gone and the record with it. Telling the user to "remove with force"
-      // would send them back to a worktree that no longer exists, so the
-      // sentence says what actually happened and what is left to do.
+      // Only reachable from 'unjudged', by which time the checkout is gone;
+      // "remove with force" would point at a worktree that no longer exists.
       throw new GitServiceError(
         ErrorCode.Conflict,
         `the worktree was removed, but branch "${branch}" has commits that are not merged anywhere ` +
@@ -1104,11 +938,8 @@ export class GitService {
           this.#forget(worktree)
           continue
         }
-        // Still in git's inventory, but is the directory there? An `rm -rf` of
-        // a checkout leaves the metadata behind, and a row that said `ready`
-        // over it was a row whose every action failed one step later. One
-        // `stat` per listed row, and a patch only when the answer changes, so
-        // a list that finds nothing new says nothing on the change stream.
+        // Still in git's inventory, but an `rm -rf` leaves the metadata behind.
+        // Patch only when the answer changes, so a quiet list says nothing.
         const missing = !(await isDirectory(worktree.path))
         if (missing && worktree.missing !== true) this.#patch(worktree.id, { missing: true })
         else if (!missing && worktree.missing === true) this.#patch(worktree.id, { clearMissing: true })

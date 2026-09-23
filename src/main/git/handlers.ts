@@ -1,35 +1,6 @@
-// THE SEAM. This is the whole surface the runtime wires up.
-//
-// In src/main/runtime/handlers/registerHandlers.ts:
-//
-//   import { GitService, registerGitHandlers } from '../../git'
-//   registerGitHandlers(registry, new GitService({ store: registry.context.store }))
-//
-// That follows the runtime's own convention — `registry.register(method, schema,
-// handler)` with the schema from `Params` in src/shared/methods.ts — and passing
-// the workspace store makes project and worktree records persist with the rest
-// of the workspace. Leave `store` out and the service keeps records in memory.
-//
-// Handlers receive already-validated params and resolve with exactly the result
-// the contract declares. Everything they throw is a GitServiceError, which is a
-// RuntimeError, so the dispatcher preserves its ErrorCode.
-//
-// These capabilities have no method in the frozen contract and are reached on
-// the service directly:
-//   git.events.on(listener)             creating -> ready | failed transitions
-//   git.cancelWorktreeCreate(id)        abort a create that is still running
-//   git.listStartPoints(projectId)      what the start-from picker can offer
-//   git.describeStartPoint(id, ref)     resolve one start point without creating
-//   git.startPointFor(worktreeId)       how a create read its start point
-//
-// The three start-point calls are the picker's data source. They are plain
-// service methods because adding `worktree.startPoints` to the contract is a
-// decision for whoever owns src/shared; the shapes are stable and adding that
-// method later is a one-line handler here. Until then a renderer reaches them
-// through the main process directly, and the CLI cannot see them at all.
-//
-// `createGitHandlers(service)` returns the same handlers as a plain object, for
-// a caller that would rather wire them up itself.
+// The git surface the runtime wires up. Everything a handler throws is a
+// GitServiceError, so the dispatcher preserves its ErrorCode. `git.events`,
+// `cancelWorktreeCreate`, `describeStartPoint` and `startPointFor` have no method and are reached on the service.
 
 import { Params } from '../../shared/methods'
 import type { ParamsOf, ResultOf } from '../../shared/methods'

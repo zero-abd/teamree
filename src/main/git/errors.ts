@@ -1,9 +1,5 @@
-// Errors this service raises.
-//
-// They extend the runtime's RuntimeError on purpose: the dispatcher recognizes
-// that type and only that type, and everything else that escapes a handler is
-// reported as `internal` with its code thrown away. Subclassing is what makes
-// `not_found`, `conflict` and `git_failed` survive the trip to the wire.
+// Errors this service raises. They extend RuntimeError because the dispatcher
+// recognizes only that type; anything else reaches the wire as `internal`.
 
 import { ErrorCode } from '../../shared/protocol'
 import { RuntimeError } from '../runtime/runtimeError'
@@ -32,8 +28,7 @@ export class GitCommandError extends GitServiceError {
     timedOut?: boolean
     cancelled?: boolean
   }) {
-    // git's own stderr is the only diagnosis a user can act on, so it leads the
-    // message instead of being buried in `data`.
+    // git's own stderr is the only diagnosis a user can act on, so it leads.
     const detail = firstMeaningfulLine(input.stderr)
     const reason = input.cancelled
       ? 'cancelled'

@@ -50,9 +50,8 @@ export type Resolution =
   | { kind: 'unknown'; words: string[] }
 
 /**
- * Picks out the command words, skipping global flags so `teamree --json status`
- * reads the same as `teamree status --json`. Value-taking global flags swallow
- * their argument so it is never mistaken for a command word.
+ * The command words, skipping global flags so `teamree --json status` reads as
+ * `teamree status --json`; value-taking global flags swallow their argument.
  */
 export function scanCommandWords(tokens: readonly string[]): { word: string; index: number }[] {
   const words: { word: string; index: number }[] = []
@@ -87,8 +86,7 @@ export function resolveCommand(tokens: readonly string[]): Resolution {
     return { kind: 'command', spec, rest: tokens.filter((_, index) => !consumed.has(index)) }
   }
 
-  // A lone group word is a request for its help; a group plus an unmatched word
-  // is a typo the caller needs told about.
+  // A lone group word asks for help; a group plus an unmatched word is a typo.
   const head = words[0]?.word
   if (head !== undefined && words.length === 1 && commandGroups().includes(head)) return { kind: 'group', group: head }
   return { kind: 'unknown', words: words.map((entry) => entry.word) }
@@ -117,8 +115,7 @@ export function parseCommand(spec: CommandSpec, tokens: readonly string[]): Pars
       `Usage: teamree ${spec.path.join(' ')} ${args.map(usageName).join(' ')}`.trim()
     )
   }
-  // A variadic tail swallows everything after the fixed arguments, so there is
-  // no such thing as too many.
+  // A variadic tail swallows everything after the fixed arguments.
   const variadic = args.length > 0 && args[args.length - 1]?.variadic === true
   if (!variadic && parsed.positionals.length > args.length) {
     throw new UsageError(

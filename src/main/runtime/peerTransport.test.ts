@@ -1,12 +1,6 @@
-// The fourth transport, on its own, with the Noise session real and the relay
-// replaced by handing one side's bytes straight to the other.
-//
-// Two things are being protected here and both are about a caller who is not
-// the user. The first is the allow-list: a teammate reaches the catalogue, not
-// all of it, and the line between the two is a list rather than a judgement
-// made per handler. The second is framing: a Noise transport message is capped
-// at 65535 bytes and carries no length, so an application message larger than
-// that has to be cut and put back together exactly, or the session ends.
+// The peer transport on its own: Noise session real, relay replaced by handing
+// one side's bytes straight to the other. Guards the allow-list and the framing
+// of messages past Noise's 65535-byte transport ceiling.
 
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
@@ -42,8 +36,7 @@ function manualClock(): TransportScheduler & {
   pending: () => number
 } {
   let now = 1_000
-  // Kept apart from the wall clock, because everything a deadline concludes
-  // depends on the two of them being able to disagree.
+  // Kept apart from the wall clock so a deadline can see the two disagree.
   let monotonic = 0
   const timers = new Map<number, { at: number; run: () => void }>()
   let sequence = 0
@@ -78,9 +71,8 @@ function manualClock(): TransportScheduler & {
       now = wallTarget
     },
     sleep: (ms) => {
-      // macOS's monotonic clock counts time spent suspended, so waking makes
-      // every overdue timer fire at once having measured far longer than it
-      // was armed for.
+      // macOS's monotonic clock counts time spent suspended, so waking fires every
+      // overdue timer at once having measured far longer than it was armed for.
       now += ms
       monotonic += ms
       runDue(monotonic)
@@ -128,32 +120,17 @@ type RigOptions = {
   allowedMethods?: readonly Parameters<MethodRegistry['register']>[0][]
   /** The owner's verdict on a keystroke. Left out to prove nothing writes without one. */
   onRemoteWrite?: (write: RemoteWriteRequest) => RemoteWriteVerdict
-  /**
-   * The owner's verdict on a read. Allowed by default here, because these tests
-   * are about pacing, subscriptions and what the owner is told — not about who
-   * may look. The refusal a missing judge produces has its own test.
-   */
+  /** The owner's verdict on a read. Allowed by default; the missing-judge refusal has its own test. */
   onRemoteRead?: (terminalId: string) => RemoteReadVerdict
   /** Builds a transport with no read judge at all, to prove reads stop without one. */
   bareRead?: boolean
   /** Run when the answering side first decrypts anything, as key confirmation is. */
   onConfirmed?: (transport: PeerTransport) => void
-  /**
-   * A clock for the *calling* side, which otherwise runs on the real one.
-   *
-   * Only a test about what the caller does while it waits needs this; the
-   * pacing everything else here asserts happens on the answering side.
-   */
+  /** A clock for the calling side, which otherwise runs on the real one. */
   callerScheduler?: TransportScheduler
 }
 
-/**
- * Two transports wired mouth to ear.
- *
- * Delivery is synchronous, which is exactly what a WebSocket is not — but the
- * property under test is message boundaries, and a queue between them would
- * only prove the queue kept order.
- */
+/** Two transports wired mouth to ear. Delivery is synchronous: the property under test is message boundaries. */
 function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0][], options?: RigOptions): Rig {
   const [callerSession, answererSession] = handshakenPair()
   const hub = new SubscriptionHub()
@@ -164,9 +141,7 @@ function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0]
   let watched: readonly string[] = []
   const registry = new MethodRegistry(createRuntimeContext({ version: 't', store: {} as never, subscriptions: hub }))
 
-  // Stands in for the terminal service, and only for the part the transport can
-  // see: an id, a stream, and a teardown. What is under test here is the wire,
-  // not the pty — `relayProcess.test.ts` runs the real one.
+  // Stands in for the terminal service; the wire is under test, not the pty.
   registry.register('terminal.subscribe', Params.terminalSubscribe, (params, call) => ({
     subscription: hub.subscribe(call.connectionId, (channel) => {
       panes.set(params.terminalId, channel)
@@ -187,8 +162,7 @@ function rig(allowedMethods?: readonly Parameters<MethodRegistry['register']>[0]
   }))
   registry.register('peer.presence', z.object({}), () => ({ revision: 1, handle: 'them', projects: [] }))
   registry.register('worktree.remove', z.object({ worktreeId: z.string() }), () => ({ removed: true as const }))
-  // Everything that actually reached a pane, so "refused" can be asserted as
-  // nothing having happened rather than as an error message having come back.
+  // Everything that reached a pane, so "refused" is asserted as nothing having happened.
   registry.register('terminal.write', Params.terminalWrite, (params) => {
     written.push(params.data)
     return { written: true as const }
@@ -261,20 +235,15 @@ describe('what a teammate can reach', () => {
 
   it('refuses a method that is registered but not a teammate’s to call', async () => {
     const { caller } = rig()
-    // Registered, reachable over IPC and over the CLI socket, and not this.
-    // "Everyone sees everything" is about panes, not about deleting somebody's
-    // afternoon from two thousand miles away.
+    // Registered, reachable over IPC and the CLI socket, and not a teammate's to call.
     await expect(caller.call('worktree.remove', { worktreeId: 'wt_1' })).rejects.toMatchObject({
       code: ErrorCode.UnknownMethod
     })
   })
 
   it('lets a teammate read a pane and type into one, and reach nothing else', () => {
-    // The list is asserted whole, so widening it stays a deliberate edit to one
-    // line and never a side effect of registering a handler. C added the two
-    // reads a watcher needs; D added `terminal.write` and nothing besides. A
-    // teammate's window is not this pane's window and their keyboard is not its
-    // power switch, so resize and close stay off it.
+    // Asserted whole, so widening the list is a deliberate edit to one line and
+    // never a side effect of registering a handler. Resize and close stay off it.
     expect(Object.keys(PEER_METHODS).sort()).toEqual([
       'peer.presence',
       'peer.subscribe',
@@ -285,17 +254,14 @@ describe('what a teammate can reach', () => {
     ])
     expect(PEER_METHODS).not.toHaveProperty('terminal.resize')
     expect(PEER_METHODS).not.toHaveProperty('terminal.close')
-    // A teammate does not get to write a symlink into /usr/local/bin here, and
-    // does not get to ask for a password dialog on somebody else's screen.
+    // No symlink into /usr/local/bin, no password dialog on somebody else's screen.
     expect(PEER_METHODS).not.toHaveProperty('cli.install')
     expect(PEER_METHODS).not.toHaveProperty('cli.status')
     expect(PEER_METHODS).not.toHaveProperty('cli.dismissPrompt')
     // Nor does a teammate get to start a program on somebody else's machine.
     expect(PEER_METHODS).not.toHaveProperty('editor.list')
     expect(PEER_METHODS).not.toHaveProperty('editor.open')
-    // Nor does a teammate get to make this machine ask GitHub anything, change
-    // a preference on it, or open a page in the browser of whoever is sitting
-    // in front of it.
+    // Nor ask GitHub anything, change a preference, or open a page in a browser.
     expect(PEER_METHODS).not.toHaveProperty('update.check')
     expect(PEER_METHODS).not.toHaveProperty('update.download')
     expect(PEER_METHODS).not.toHaveProperty('update.setAutomatic')
@@ -303,21 +269,10 @@ describe('what a teammate can reach', () => {
   })
 
   it('says of every admitted method which project check it goes through', () => {
-    // Admission was an allow-list with a safe default; scoping was two `if`s
-    // further down the file, matching method names by hand. Nothing joined
-    // them, so a method added to the list — `terminal.resize`, a future
-    // `terminal.tail` — was admitted and dispatched carrying nothing but the id
-    // the remote caller named, with no project check at all and no test failing.
-    // That is exactly how `terminal.read` and `terminal.subscribe` shipped
-    // unscoped the first time.
-    //
-    // The list now *is* the table of scopes, so there is no way to add an entry
-    // without naming one, and the next omission is a type error rather than a
-    // hole. This asserts the assignments themselves: the type stops a method
-    // having no scope, and only a test stops it having the wrong one.
+    // The list is the table of scopes: a method with no scope is a type error,
+    // and only this test stops it having the wrong one.
     expect(PEER_METHODS).toEqual({
-      // Nothing to scope. These are about this link, and answer with what this
-      // link is already entitled to.
+      // About this link; answer with what it is already entitled to.
       'peer.presence': 'link',
       'peer.subscribe': 'link',
       unsubscribe: 'link',
@@ -330,10 +285,7 @@ describe('what a teammate can reach', () => {
   })
 
   it('will not let a pane method through without the owner having judged it', async () => {
-    // The property the table exists to hold, asserted through the transport
-    // rather than over the constant: every method scoped to a pane is refused
-    // when there is no judge to scope it with. A new entry that forgot its
-    // check would reach the dispatcher here instead.
+    // Every method scoped to a pane is refused when there is no judge to scope it with.
     for (const [method, scope] of Object.entries(PEER_METHODS)) {
       if (scope === 'link') continue
       const { caller } = rig([method as never], { bareRead: true })
@@ -342,12 +294,8 @@ describe('what a teammate can reach', () => {
   })
 
   it('bounds the pane id a read names, not only the one a keystroke names', async () => {
-    // The id on a write was capped because it is copied into the owner's log.
-    // The id on a read is copied too — into the map that remembers which pane
-    // each of this link's subscriptions is streaming, and out of it again to
-    // whoever is told who is reading. Bounded in the same place and by the same
-    // number, because "which fields a remote caller chooses the size of" is not
-    // a question that should have two answers in one file.
+    // The id on a read is copied into the map of what this link streams and out
+    // to whoever is told who is reading; bounded like the id on a write.
     const { caller } = rig()
     await expect(
       caller.call('terminal.read', { terminalId: 'x'.repeat(MAX_TERMINAL_ID_CHARS + 1) })
@@ -358,9 +306,8 @@ describe('what a teammate can reach', () => {
   })
 
   it('refuses a keystroke when nothing is there to attribute it to', async () => {
-    // A transport wired without `onRemoteWrite` cannot say whose bytes these
-    // are, so it does not carry them. "On the allow-list" and "allowed" are
-    // deliberately two different things for the one method that runs code.
+    // Without `onRemoteWrite` nothing can say whose bytes these are, so they are
+    // not carried. "On the allow-list" and "allowed" are two different things.
     const { caller, written } = rig(['terminal.write'])
     await expect(caller.call('terminal.write', { terminalId: 't_1', data: 'x' })).rejects.toMatchObject({
       code: ErrorCode.UnknownMethod
@@ -369,14 +316,8 @@ describe('what a teammate can reach', () => {
   })
 
   it('refuses a read when nothing is there to scope it to', async () => {
-    // The same rule as the keystroke above, for the two methods that stream a
-    // pane. A transport wired without `onRemoteRead` cannot tell which project
-    // this teammate reached it through, and a transport that cannot tell must
-    // not guess: the failure would be streaming every pane on the machine to
-    // somebody holding one repository's key.
-    //
-    // `rig` supplies a permissive judge by default, so this one is built
-    // without it on purpose.
+    // Without `onRemoteRead` the transport cannot tell which project this teammate
+    // reached it through, and must not guess. `rig` supplies a judge by default.
     const { caller } = rig(['terminal.read', 'terminal.subscribe'], { onRemoteRead: undefined, bareRead: true })
     await expect(caller.call('terminal.read', { terminalId: 't_1' })).rejects.toMatchObject({
       code: ErrorCode.NotFound
@@ -387,10 +328,8 @@ describe('what a teammate can reach', () => {
   })
 
   it('asks the owner about every read, and streams only the panes they allow', async () => {
-    // The hole this closes: reading was on the allow-list and nothing scoped
-    // it, so a teammate on one repository's roster could name any pane id on
-    // the machine — including a project they hold no key for. Typing has been
-    // scoped since it was built; this is reading catching up.
+    // Reading was on the allow-list and nothing scoped it, so a teammate could
+    // name any pane on the machine. Typing has been scoped since it was built.
     const asked: string[] = []
     const { caller } = rig(['terminal.read', 'terminal.subscribe'], {
       onRemoteRead: (terminalId) => {
@@ -404,9 +343,8 @@ describe('what a teammate can reach', () => {
     await expect(caller.call('terminal.read', { terminalId: 't_ours' })).resolves.toBeDefined()
     await expect(caller.call('terminal.subscribe', { terminalId: 't_theirs' })).rejects.toMatchObject({
       code: ErrorCode.NotFound,
-      // Reported exactly as a pane that does not exist. Telling the two apart
-      // would answer "is there a pane with this id somewhere on your machine",
-      // which is not a question a teammate should be able to ask.
+      // Reported exactly as a pane that does not exist, so a teammate cannot ask
+      // whether a pane id exists elsewhere on the machine.
       message: 'there is no pane t_theirs in this project'
     })
     expect(asked).toEqual(['t_ours', 't_theirs'])
@@ -426,8 +364,7 @@ describe('what a teammate can reach', () => {
     await expect(caller.call('terminal.write', { terminalId: 't_1', data: 'yes' })).resolves.toEqual({ written: true })
     await expect(caller.call('terminal.write', { terminalId: 't_1', data: 'no' })).rejects.toMatchObject({
       code: ErrorCode.Conflict,
-      // The owner's own words, carried to the person who typed. A refusal with
-      // a generic message is a keystroke that vanished for no stated reason.
+      // The owner's own words, carried to the person who typed.
       message: 'the owner has muted this pane'
     })
 
@@ -436,10 +373,7 @@ describe('what a teammate can reach', () => {
   })
 
   it('runs nothing at all while a keystroke is held for the owner', async () => {
-    // The shape of the whole feature, at the layer that dispatches: a verdict
-    // of `held` is neither a yes nor a no, and until the promise inside it
-    // settles the request has not been handed to the dispatcher — so the pty
-    // has not seen the bytes in any sense.
+    // `held` is neither yes nor no; until it settles the dispatcher has not seen the bytes.
     let settle: ((decision: RemoteWriteDecision) => void) | undefined
     const { caller, written } = rig(['terminal.write'], {
       onRemoteWrite: () => ({
@@ -480,20 +414,14 @@ describe('what a teammate can reach', () => {
   })
 
   it('runs nothing from a message whose session was refused as it was being read', async () => {
-    // Key confirmation happens on the first frame that decrypts and can itself
-    // end the link: a session that authenticated a different key than the one
-    // this side dialled is torn down inside `onConfirmed`, in the middle of the
-    // message carrying it. Whatever else that message held arrived over a
-    // session this machine has just refused, and a keystroke in it must not run
-    // merely because the loop had already started.
+    // Key confirmation runs on the first frame that decrypts and can end the link
+    // mid-message; a keystroke in that message must not run.
     const { caller, written } = rig(['terminal.write'], {
       onRemoteWrite: () => ({ ok: true }),
       onConfirmed: (answerer) => answerer.close('the handshake authenticated a different key')
     })
 
-    // Never answered, because the link it was sent over is gone. The sender
-    // learns that from their own socket closing, which is what a real relay
-    // does to the partner of a connection that went.
+    // Never answered: the link is gone, and the sender learns from their socket closing.
     void caller.call('terminal.write', { terminalId: 't_1', data: 'rm -rf ~' }).catch(() => {})
     await Promise.resolve()
 
@@ -508,8 +436,7 @@ describe('what a teammate can reach', () => {
         return { ok: true }
       }
     })
-    // One write is not allowed to spend a whole second of the relay's byte
-    // budget for a link that is also carrying the pane's output back.
+    // One write may not spend a whole second of the relay's byte budget.
     const paste = 'x'.repeat(MAX_REMOTE_WRITE_BYTES + 1)
     await expect(caller.call('terminal.write', { terminalId: 't_1', data: paste })).rejects.toMatchObject({
       code: ErrorCode.InvalidParams
@@ -519,13 +446,8 @@ describe('what a teammate can reach', () => {
   })
 
   it('measures a paste in the same unit at both ends of the link', async () => {
-    // `MAX_REMOTE_WRITE_BYTES` was enforced in characters by the schema the
-    // sender's own machine runs, and in bytes by the transport at the far end.
-    // A paste of that many non-ASCII characters therefore passed locally and
-    // came back refused as three times the size — a failure this machine could
-    // have named, arriving instead as something the teammate's machine said.
-    // The schema counts bytes now, so the two ends agree about what the number
-    // means and the refusal happens where the person typing is.
+    // The schema counts bytes, as the far transport does, so a non-ASCII paste is
+    // refused where the person typing is rather than by the teammate's machine.
     const threeBytesEach = '✓'.repeat(MAX_REMOTE_WRITE_BYTES)
     expect(Params.teamworkType.safeParse({ projectId: 'p', paneId: 'x', data: threeBytesEach }).success).toBe(false)
     expect(Params.terminalWrite.safeParse({ terminalId: 't', data: threeBytesEach }).success).toBe(false)
@@ -557,9 +479,7 @@ describe('framing', () => {
 
   it('keeps a multi-byte character whole across a chunk boundary', async () => {
     const { caller, registry } = rig(['peer.presence'])
-    // Four-byte characters, in a string long enough that a boundary lands
-    // inside one of them — decoded eagerly that becomes U+FFFD and never
-    // comes back.
+    // A boundary lands inside a four-byte character; decoded eagerly it becomes U+FFFD.
     const emoji = '🛠'.repeat(40_000)
     registry.register('peer.presence', z.object({}), () => ({ revision: 1, handle: emoji, projects: [] }))
     const answer = await caller.call('peer.presence', {})
@@ -584,23 +504,19 @@ describe('framing', () => {
       }
     })
 
-    // Forged, or reordered, or replayed. Noise transport has no nonce on the
-    // wire and no replay window, so all three look the same and all three mean
-    // the stream can no longer be trusted or resynchronised.
+    // Forged, reordered or replayed: Noise transport has no nonce on the wire and
+    // no replay window, so all three mean the stream cannot be resynchronised.
     transport.receive(new Uint8Array(64))
     expect(fatal).toBeTruthy()
-    // And named as what it is, because the caller puts a sentence on a screen
-    // and "a frame did not survive the trip" and "this side's own session gave
-    // up" are sentences about different machines.
+    // Named as what it is, because the caller puts a sentence on a screen.
     expect(fatal?.kind).toBe('unauthenticated')
   })
 })
 
 describe('key confirmation', () => {
   it('does not fire on a handshake that merely completed', () => {
-    // The distinction the whole gate rests on. A responder finishes `IK` having
-    // only *written* message 2, so a replayer with a captured message 1 and no
-    // private key reaches `established` carrying the real peer's static key.
+    // A responder finishes IK having only written message 2, so a replayer with a
+    // captured message 1 reaches `established` carrying the real peer's static key.
     const [session] = handshakenPair()
     let confirmed = false
     createPeerTransport({
@@ -640,8 +556,7 @@ describe('key confirmation', () => {
       onFatal: () => {}
     })
 
-    // An empty keepalive line: nothing to act on, and proof that whoever sent
-    // it holds keys a recording cannot supply.
+    // An empty keepalive: proof the sender holds keys a recording cannot supply.
     receiver.receive(alice.encrypt(new TextEncoder().encode('\n')))
     expect(confirmations).toBe(1)
     receiver.receive(alice.encrypt(new TextEncoder().encode('\n')))
@@ -700,10 +615,8 @@ describe('subscriptions a teammate opened', () => {
     }
     expect(hub.countFor('peer_answerer')).toBe(MAX_PEER_SUBSCRIPTIONS)
 
-    // Refused with a reason a teammate can act on, and refused in the one place
-    // that knows the caller is a teammate at all. Nobody reads thirty panes;
-    // every record past that is a pacing buffer this machine keeps on somebody
-    // else's say-so.
+    // Refused with a reason a teammate can act on; every record past the ceiling
+    // is a pacing buffer this machine keeps on somebody else's say-so.
     await expect(caller.call('terminal.subscribe', { terminalId: 'one_too_many' })).rejects.toMatchObject({
       code: ErrorCode.Conflict
     })
@@ -724,14 +637,11 @@ describe('a pane against the relay’s budget', () => {
     await caller.call('terminal.subscribe', { terminalId: 't1' })
     const channel = pane('t1')
 
-    // The first chunk after a pause goes straight out: watching is not
-    // uniformly a flush behind for a pane that only speaks occasionally.
+    // The first chunk after a pause goes straight out.
     channel?.emit({ type: 'data', data: 'first\r\n' })
     expect(received).toHaveLength(1)
 
-    // The rest of the burst arrives inside one flush window and leaves as one
-    // frame, which is lossless: two chunks of a byte stream concatenated are
-    // the same byte stream.
+    // The rest of the burst leaves as one frame; concatenating chunks is lossless.
     for (let chunk = 0; chunk < 50; chunk += 1) channel?.emit({ type: 'data', data: `line ${chunk}\r\n` })
     expect(received).toHaveLength(1)
 
@@ -747,8 +657,7 @@ describe('a pane against the relay’s budget', () => {
     const channel = pane('t1')
 
     channel?.emit({ type: 'data', data: 'x' })
-    // Far past what may wait for the wire. The tail is what a reader wants, so
-    // the head goes — and the count of what went is sent with it.
+    // Far past what may wait for the wire: the head goes, with a count of what went.
     const overflow = 'y'.repeat(STREAM_BUFFER_BYTES * 2)
     channel?.emit({ type: 'data', data: overflow })
     clock.advance(STREAM_FLUSH_MS)
@@ -769,8 +678,7 @@ describe('a pane against the relay’s budget', () => {
 
     channel?.emit({ type: 'data', data: 'z'.repeat(STREAM_BUFFER_BYTES * 3) })
     channel?.emit({ type: 'exit', exitCode: 0 })
-    // Generous: the byte budget is spent over several flushes, and the point is
-    // that the exit is still there at the end of them rather than how fast.
+    // The byte budget is spent over several flushes; the exit must still be there.
     for (let tick = 0; tick < 200; tick += 1) clock.advance(STREAM_FLUSH_MS)
 
     expect(received.map((frame) => frame.event)).toContainEqual({ type: 'exit', exitCode: 0 })
@@ -802,18 +710,9 @@ describe('what the owner is told about who is reading', () => {
   })
 
   it('sends what the pane had already printed before saying the owner closed it', async () => {
-    // `session-manager.ts` calls `endStreamsFor(terminalId)` *before*
-    // `session.close()`, so the producer ends the channel while the pacer is
-    // still holding up to a flush interval of that pane's output — and, behind
-    // it, whatever exit or title was queued. All of it used to be deleted with
-    // the stream, and the watcher was handed `lost` and nothing else: the last
-    // thing the pane printed, and the code it exited with, gone with no
-    // `elided` to mark that anything had been.
-    //
-    // This file's own `evict` refuses to drop an exit or a title "because a
-    // watcher that lost one would be told the pane is still running when it is
-    // not", and its header says dropping output silently would make the whole
-    // feature a lie. This is that, on the one path where the stream ends.
+    // `session-manager.ts` calls `endStreamsFor(terminalId)` before
+    // `session.close()`, so the producer ends the channel while the pacer still
+    // holds a flush interval of output and the exit behind it. None may be lost.
     const { caller, received, pane } = rig()
     await caller.call('terminal.subscribe', { terminalId: 't1' })
 
@@ -827,8 +726,7 @@ describe('what the owner is told about who is reading', () => {
     const events = received.map((frame) => frame.event)
     expect(events).toContainEqual({ type: 'data', data: 'HELD-BY-PACER' })
     expect(events).toContainEqual({ type: 'exit', exitCode: 3 })
-    // And in that order: the pane's last output, then the code it exited with,
-    // then the news that it is gone.
+    // And in that order: last output, exit, then the news that it is gone.
     const types = events.map((event) => (event as { type: string }).type)
     expect(types.indexOf('exit')).toBeGreaterThan(types.lastIndexOf('data'))
     expect(types.lastIndexOf('lost')).toBeGreaterThan(types.indexOf('exit'))
@@ -839,8 +737,7 @@ describe('what the owner is told about who is reading', () => {
     await caller.call('terminal.subscribe', { terminalId: 't1' })
     expect(watched()).toEqual(['t1'])
 
-    // What the owner closing their own pane looks like from here: the producer
-    // ends the stream, and nothing else would ever tell the reader.
+    // The owner closing their own pane: the producer ends the stream and nothing else tells the reader.
     pane('t1')?.close()
 
     expect(watched()).toEqual([])
@@ -869,13 +766,7 @@ describe('what the owner is told about who is reading', () => {
 })
 
 describe('a call the teammate never answers', () => {
-  /**
-   * One transport shouting into a socket nobody is reading.
-   *
-   * Exactly the shape a shut laptop leaves: the session is fine, the frames go
-   * out, and no answer will ever come back. Nothing is delivered to it, so
-   * there is no second transport here at all.
-   */
+  /** One transport shouting into a socket nobody reads: what a shut laptop leaves. */
   function intoTheVoid(): { transport: PeerTransport; clock: ReturnType<typeof manualClock>; sent: number } {
     const [session] = handshakenPair()
     const clock = manualClock()
@@ -911,8 +802,7 @@ describe('a call the teammate never answers', () => {
       (error: unknown) => (error instanceof Error ? error.message : String(error))
     )
 
-    // Up to the deadline it is still an outstanding call, because a slow link
-    // is not a dead one and a call refused early is a keystroke refused early.
+    // Up to the deadline it is still outstanding: a slow link is not a dead one.
     clock.advance(PEER_CALL_TIMEOUT_MS - 1)
     expect(await Promise.race([answer, Promise.resolve('waiting')])).toBe('waiting')
 
@@ -927,9 +817,8 @@ describe('a call the teammate never answers', () => {
       (error: unknown) => (error instanceof Error ? error.message : String(error))
     )
 
-    // The thirty seconds it was given were spent with the lid shut, so nobody
-    // failed to answer in them. The call is still settled — a promise nothing
-    // ever answers is the worse failure — and it is settled with the truth.
+    // The thirty seconds were spent with the lid shut, so nobody failed to answer
+    // in them; the call still settles, and with the truth.
     clock.sleep(3_600_000)
     const said = await answer
     expect(said).not.toMatch(/did not answer/)
@@ -941,8 +830,7 @@ describe('a call the teammate never answers', () => {
     const { caller } = rig(undefined, { callerScheduler: clock })
     await expect(caller.call('peer.presence', {})).resolves.toMatchObject({ revision: 1 })
 
-    // A call that is over holds nothing. Otherwise a link carrying a watched
-    // pane would accumulate one live timer per frame it ever asked for.
+    // A call that is over holds nothing; otherwise one live timer per frame ever asked for.
     expect(clock.pending()).toBe(0)
   })
 })

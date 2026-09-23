@@ -1,7 +1,5 @@
-// Subscriptions are owned by the connection that created them, never by the
-// thing being observed. A dropped socket or a reloaded renderer therefore tears
-// down every stream it opened, which is the only way a long-lived runtime avoids
-// leaking PTY listeners across days of use.
+// Subscriptions are owned by the connection that created them, so a dropped
+// socket or reloaded renderer tears down every stream it opened.
 
 import type { StreamEvent } from '../../shared/protocol'
 import { internal } from './runtimeError'
@@ -10,11 +8,8 @@ import { internal } from './runtimeError'
 export type FrameSink = (frame: StreamEvent) => void
 
 /**
- * Told whenever one of a connection's subscriptions ends, whichever end ended
- * it: the client unsubscribed, the producer closed the stream, or the whole
- * connection went. A transport that has to keep a fact per subscription — which
- * pane a teammate is watching, say — otherwise has to guess at the two paths it
- * cannot see, and would keep a watcher on a pane that exited.
+ * Told whenever one of a connection's subscriptions ends, whichever end ended it,
+ * so a transport keeping a fact per subscription need not guess.
  */
 export type SubscriptionEndSink = (subscriptionId: string) => void
 
@@ -70,13 +65,8 @@ export class SubscriptionHub {
    */
   subscribe(connectionId: string, source: SubscriptionSource): string {
     const connection = this.connections.get(connectionId)
-    // `internal` on purpose, and chosen here rather than inherited from the
-    // dispatcher's catch-all. Every connection id a handler can present was
-    // minted by the transport when the socket or the window opened, so an id
-    // this hub does not know is not a caller's mistake to correct — it is the
-    // transport having failed to register, or having torn the connection down
-    // while a subscribe was in flight. There is no client-side remedy to point
-    // at, and no narrower code would describe it honestly.
+    // `internal` on purpose: connection ids are minted by the transport, so an
+    // unknown one is the transport's fault, not a caller's mistake to correct.
     if (!connection) throw internal(`unknown connection: ${connectionId}`)
 
     this.counter += 1

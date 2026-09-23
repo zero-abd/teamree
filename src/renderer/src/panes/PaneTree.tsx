@@ -11,11 +11,7 @@ import { SplitFrame } from './SplitFrame'
 
 export type PaneCallbacks = {
   terminals: Record<string, Terminal>
-  /**
-   * What each pane is called, by id — the same names the tab strip draws, so
-   * the bar under a tab never says something other than the tab. Worked out
-   * once at the root of the tree and handed down; a caller leaves it out.
-   */
+  /** Each pane's name by id, the tab strip's names, worked out once at the root; callers leave it out. */
   names?: Readonly<Record<string, string>>
   focusedTerminalId: string | null
   onFocus: (terminalId: string) => void
@@ -42,12 +38,7 @@ export function PaneTree({
   return <PaneSplit node={node} path={path} {...callbacks} names={names} />
 }
 
-/**
- * The tree's panes named together, the way `paneTabs` names them: a person's
- * own label, else the agent, else the program — and twins nobody named told
- * apart by number. A leaf whose record has not arrived is called what the bar
- * paints meanwhile.
- */
+/** The tree's panes named together as `paneTabs` names them: label, agent, program, twins numbered. */
 function namesById(root: PaneNode, terminals: Readonly<Record<string, Terminal>>): Record<string, string> {
   const ids = collectTerminalIds(root)
   const names = paneNames(ids.map((id) => terminals[id] ?? { title: 'terminal', shell: '' }))
@@ -69,19 +60,13 @@ function PaneLeaf({
 }: PaneCallbacks & { terminalId: string }): React.JSX.Element {
   const terminal = terminals[terminalId]
   const focused = focusedTerminalId === terminalId
-  // A shell that died has to look dead: the pane keeps its scrollback, so
-  // without this it is indistinguishable from one waiting at a prompt.
+  // A dead shell keeps its scrollback, so without this it looks like one at a prompt.
   const exited = terminal !== undefined && !terminal.running
-  // One name per pane. The strip, this bar, the close button and the question
-  // asked before closing all read it from the same rule.
+  // One name per pane, shared by strip, bar, close button and close question.
   const name = names?.[terminalId] ?? terminal?.title ?? 'terminal'
   // The same reading the sidebar row, the tab and the board give this pane.
-  // The bar used to draw a dot of its own — green for running, grey for
-  // exited — which beside a tab pulsing amber for the same pane was a second
-  // vocabulary for what one PTY is doing.
   const activity = terminal === undefined ? null : activityOf(terminal)
-  // The grid is on the name's hover rather than on the bar. It is a fact about
-  // the PTY that nobody acts on, and it was the one thing every bar printed.
+  // The grid size is on the name's hover: nobody acts on it.
   const hover = terminal === undefined ? name : `${name} · ${terminal.cols}×${terminal.rows}`
 
   return (
@@ -138,11 +123,7 @@ function PaneLeaf({
   )
 }
 
-/**
- * The badge, in the words the banner in the scrollback uses. `restarted` is
- * an agent started over — "fresh claude", as the line under the record says —
- * and not a shell, whatever else is true of it.
- */
+/** The badge, in the scrollback banner's words; `restarted` is an agent started fresh, not a shell. */
 function restoredBadge(terminal: Terminal): string {
   switch (terminal.restored) {
     case 'agent':

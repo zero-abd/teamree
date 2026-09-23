@@ -1,6 +1,4 @@
-// The brand lockup: the mark on its tile, then the wordmark. It used to be the
-// whole of a title strip across the top of the window; the strip is gone and
-// the lockup is the sidebar's, drawn in the sidebar's own header.
+// The brand lockup, drawn in the sidebar's header: the mark on its tile, then the wordmark.
 
 export function Brand(): React.JSX.Element {
   return (
@@ -16,12 +14,7 @@ export function Brand(): React.JSX.Element {
   )
 }
 
-/**
- * The glyph on both sidebar toggles: a window with its left panel marked. The
- * same drawing whether the sidebar is being put away or brought back, because
- * the button's position says which — the sidebar's header for one, the left
- * end of the pane strip for the other — and the label says it in words.
- */
+/** The glyph on both sidebar toggles; the button's position and label say which way. */
 export function SidebarGlyph(): React.JSX.Element {
   return (
     <svg viewBox="0 0 14 14" aria-hidden="true">
@@ -32,22 +25,8 @@ export function SidebarGlyph(): React.JSX.Element {
 }
 
 /**
- * The teamree mark: two slabs facing a shared centre, each with a slanted
- * window, the right one a little taller than the left.
- *
- * Exported for the welcome, which draws it large on its own tile with the
- * wordmark under it rather than beside it.
- *
- * This is the reduced form of the artwork (`brand/mark-small.svg`), not the
- * full one — the tile is 22px, and below about 32px the full mark's thinner
- * frame bars drop under a device pixel and fuse with the window, so the
- * reduced form narrows the windows and thickens the frames. The site's header
- * tile and the favicon make the same call for the same reason.
- *
- * Inlined rather than loaded from `brand/` so it inherits `currentColor` and
- * needs no asset path at runtime — the packaged renderer ships no copy of that
- * directory. Decorative throughout: the wordmark beside it already announces
- * the name, so a screen reader that read this too would say "teamree" twice.
+ * The teamree mark in its reduced form (`brand/mark-small.svg`): below ~32px the full mark's frame bars
+ * fuse. Inlined for `currentColor` and no asset path; decorative, since the wordmark names it.
  */
 export function BrandMark(): React.JSX.Element {
   return (

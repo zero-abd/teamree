@@ -37,8 +37,7 @@ describe('resolveLoginShell', () => {
 
 describe('buildShellCommand', () => {
   it('runs an explicit command through the shell', () => {
-    // Without a profile in front of it: the PATH such a command needs arrives
-    // in its environment instead, from loginShellPath below.
+    // No profile: the PATH arrives in the environment, from loginShellPath.
     expect(buildShellCommand('/bin/zsh', 'claude --resume', 'darwin')).toEqual({
       file: '/bin/zsh',
       args: ['-c', 'claude --resume']
@@ -78,8 +77,6 @@ describe('buildTerminalEnv', () => {
   })
 
   it('substitutes a PATH only when there is none', () => {
-    // Which PATH is a property of the platform asked about, not of the machine
-    // the suite happens to be running on, so each one is named.
     expect(buildTerminalEnv({}, 'linux').PATH).toContain('/usr/bin')
     expect(buildTerminalEnv({}, 'darwin').PATH).toContain('/usr/bin')
     expect(buildTerminalEnv({}, 'win32').PATH).toContain('\\Windows')
@@ -119,11 +116,8 @@ describe('buildTerminalEnv', () => {
     expect(env.KEEP_ME).toBe('yes')
   })
 
-  // The app is very often started from inside a coding agent's own session, and
-  // those sessions mark their children. A pane is not one of those children:
-  // wearing the mark, Claude Code stops writing its transcript, and a pane that
-  // worked all day comes back on the next launch saying "No conversation found
-  // with session ID" — the id having named nothing all along.
+  // Wearing an agent session's child marker, Claude Code stops writing its
+  // transcript, and the pane comes back with "No conversation found with session ID".
   it('strips the markers of whichever agent session started the app', () => {
     const env = buildTerminalEnv({
       PATH: '/usr/bin',
@@ -135,9 +129,7 @@ describe('buildTerminalEnv', () => {
       CLAUDE_CODE_MESSAGING_SOCKET: '/tmp/somebody-elses.sock',
       CLAUDE_CODE_MESSAGING_TOKEN: 'secret',
       CLAUDE_PID: '4242',
-      // Not a marker but a setting the user means to have, which is why these
-      // are named one at a time rather than stripped by prefix: a pane without
-      // it would not reach a model at all.
+      // A setting, not a marker: why these are named one at a time, not stripped by prefix.
       CLAUDE_CODE_USE_BEDROCK: '1'
     })
 
@@ -184,12 +176,7 @@ describe('loginShellPath', () => {
   /** There is no login shell to ask on Windows, so these run where there is. */
   const itPosix = process.platform === 'win32' ? it.skip : it
 
-  /**
-   * Plays the part of a POSIX login shell: runs the script it was handed with a
-   * PATH of its own, the way a profile would have left one, optionally after
-   * printing the things a profile prints. The test never spells the probe out —
-   * it only answers it — so the script stays free to change.
-   */
+  /** Plays a POSIX login shell: a PATH of its own, optional profile noise, then the script it was handed. */
   const answersWith =
     (loginPath: string, noise = '') =>
     (_file: string, args: readonly string[]): string =>
@@ -209,9 +196,7 @@ describe('loginShellPath', () => {
     })
 
     expect(resolved).toBe('/opt/homebrew/bin:/usr/bin')
-    // Login, or ~/.zprofile is never read; interactive, or ~/.zshrc is not
-    // either, and that is where a version manager puts its shims; and a
-    // command, or there is nothing for it to answer with.
+    // Login for ~/.zprofile, interactive for ~/.zshrc (where version managers put shims).
     expect(asked.slice(0, 3)).toEqual(['-l', '-i', '-c'])
   })
 
@@ -303,9 +288,7 @@ describe('loginShellPath', () => {
     expect(loginShellPath()).toBe('/opt/homebrew/bin:/usr/bin')
     expect(loginShellPath()).toBe('/opt/homebrew/bin:/usr/bin')
 
-    // Twice asked, once run: a login shell is too expensive to start for every
-    // pane, and an agent installed later is still found, because discovery
-    // walks these directories again every time it is called.
+    // Twice asked, once run: a login shell is too expensive to start per pane.
     expect((await readFile(runs, 'utf8')).trim().split('\n')).toHaveLength(1)
   })
 })

@@ -1,23 +1,6 @@
-// Setting teamwork up, given the whole main area.
-//
-// It was a modal, and a modal was the wrong shape for it. Five steps, two files
-// to write, a decision about where a relay lives and a block of commands to
-// copy into a terminal do not belong in a box that is 640px wide and dismissed
-// by clicking beside it — least of all when the thing being read alongside them
-// is a repository. So this fills the main area the way a worktree's panes do,
-// and the way the pane board already does: it is about a project rather than
-// about whichever worktree happens to be open, which is exactly the kind of
-// question that should not be framed by that worktree's tab.
-//
-// What the steps say is still entirely `TeamworkSteps`'s business, and what
-// they mean is still `startTeamwork.ts`'s. This owns the chrome, the reads, and
-// the way out — plus the two things that are genuinely about *this* window
-// rather than about the flow: which of the two jobs this visit is (state of a
-// visit, not of a project), and the clock the push's elapsed time is measured
-// against. Putting the invitation on the clipboard used to be a third; a pane
-// needs the same thing for a URL an agent printed, so it is one module now and
-// `src/renderer/src/clipboard` is where the secure-context caveat is written
-// down.
+// Setting teamwork up, given the whole main area. What the steps say is
+// `TeamworkSteps`'s business and what they mean is `startTeamwork.ts`'s; this
+// owns the chrome, the reads, the way out, which job this visit is, and the push clock.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { copyText } from '../clipboard/clipboard'
@@ -28,12 +11,8 @@ import { TeamworkSteps } from './TeamworkSteps'
 import type { TeamworkPath } from './startTeamwork'
 
 /**
- * How often the relay pane is read for what it has printed.
- *
- * The pane streams to xterm, not to this file, so the only way to know what it
- * said is to ask the runtime for its scrollback. Once and a half a second is
- * far below anybody's reading speed and costs one small call while a relay
- * command is on screen and nothing at all when none is.
+ * How often the relay pane's scrollback is read; the pane streams to xterm,
+ * not to this file. One small call while a relay command is on screen.
  */
 const RELAY_PANE_POLL_MS = 1_500
 
@@ -41,13 +20,8 @@ const RELAY_PANE_POLL_MS = 1_500
 const RELAY_PANE_TAIL_BYTES = 32_768
 
 /**
- * How often a running push is asked what it is doing.
- *
- * Twice a second, which is what makes an elapsed counter read as a counter
- * rather than as a number that occasionally changes — and it is also the tick
- * that moves that counter at all, since the whole view re-renders on the answer
- * and the clock is read then. It costs one map lookup in the main process and
- * runs only while a push is in flight.
+ * How often a running push is asked what it is doing. This is also the tick
+ * that moves the elapsed counter: the clock is read on each re-render.
  */
 const PUBLISH_POLL_MS = 500
 
@@ -88,25 +62,18 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
     pane === undefined ? false : (state.terminals[pane.terminalId]?.running ?? false)
   )
 
-  // All three read on open. The runtime watches `.teamree` and says when it
-  // moves, so this is belt and braces rather than the only way any of them is
-  // refreshed — and it is what covers a project whose watch could not be set up.
+  // All three read on open: belt and braces beside the `.teamree` watch, and
+  // the only refresh for a project whose watch could not be set up.
   useEffect(() => {
     void loadMembers(projectId)
     void loadRelay(projectId)
     void loadTeamwork(projectId)
-    // The fourth read: what the commit-and-push button would do. It is a git
-    // call rather than a file read, so it is asked for here rather than folded
-    // into one of the three — and asked for on open, because the button has to
-    // be able to say what it will do before anybody presses it.
+    // The fourth read, a git call: the button has to say what it will do before it is pressed.
     void loadPublishPlan(projectId)
   }, [loadMembers, loadPublishPlan, loadRelay, loadTeamwork, projectId])
 
-  // What the push would do is a git call, not a file read, so it is not on the
-  // watch that carries `.teamree`. Re-read whenever either of the two facts it
-  // describes moves — a key written here or pulled in, a relay set or changed —
-  // because a plan that is one step behind is a button describing the wrong
-  // commit.
+  // The plan is not on the `.teamree` watch, so re-read when either fact it
+  // describes moves: a plan one step behind is a button describing the wrong commit.
   const enrolled = list?.enrolled === true
   const selfFile = list === undefined ? null : list.selfFile
   const relayOnDisk = relay?.onDisk.url ?? null
@@ -114,17 +81,9 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
     void loadPublishPlan(projectId)
   }, [enrolled, loadPublishPlan, projectId, relayOnDisk, selfFile])
 
-  // What the push is doing, asked for only while one is running.
-  //
-  // This is the whole of the fix for "it gets stuck at git push" on this side
-  // of the wire: `teamwork.publish` does not answer until the push is over, so
-  // the only way to say anything in between is to ask a second question. It is
-  // a poll rather than a subscription for the same reason the relay pane below
-  // is polled — the thing being watched lives for seconds, and a subscription
-  // to set up and tear down for it would be more machinery than the question
-  // deserves. `now` moves with it, so the elapsed time on screen is this
-  // render's clock rather than the one from whenever the panel last happened to
-  // redraw.
+  // What the push is doing, polled only while one is running: `teamwork.publish`
+  // does not answer until the push is over, so this is the only way to say
+  // anything in between. `now` moves with it so the elapsed time is this render's clock.
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!publishPending) return
@@ -142,11 +101,9 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
     }
   }, [loadPublishProgress, projectId, publishPending])
 
-  // What the relay pane has printed, asked for while one is on screen and
-  // never otherwise. The endpoint is the last thing a deploy or a relay says,
-  // and there is no other way back from a program in a terminal. Which of the
-  // three verbs is in the pane decides what may be taken out of it, and that is
-  // the store's business rather than this poll's.
+  // What the relay pane has printed, polled only while one is on screen: the
+  // endpoint is the last thing a deploy or a relay says, and there is no other
+  // way back from a program in a terminal. Which verb may yield a URL is the store's business.
   const terminalId = pane?.terminalId
   useEffect(() => {
     if (terminalId === undefined) return
@@ -170,14 +127,12 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
     }
   }, [noteRelayPane, projectId, terminalId])
 
-  // Escape is what every reader tries first on a view they opened to look at
-  // something, and it is what the modal this replaced did. Capture, for the
-  // reason the chords are captured: a focused pane must not eat it first.
+  // Escape closes it. Capture, for the reason the chords are captured: a
+  // focused pane must not eat it first.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
-      // A dialog opened on top owns Escape — the task composer, say. Closing
-      // both with one press would take away more than the reader asked for.
+      // A dialog opened on top owns Escape; closing both with one press takes too much.
       if (useWorkspaceStore.getState().dialog) return
       event.preventDefault()
       closeTeamwork()
@@ -186,18 +141,15 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [closeTeamwork])
 
-  // The view is reached from a button somewhere else in the window, so the
-  // keyboard has to come with it: without this, Tab from the sidebar walks the
-  // rest of the sidebar while the thing that just opened is unreachable.
-  // Focusing the region rather than a control inside it puts the next Tab on
-  // the first step's own button and reads the view's name out on arrival.
+  // Reached from a button elsewhere, so the keyboard has to come with it.
+  // Focusing the region puts the next Tab on the first step's button and reads
+  // the view's name out on arrival.
   const region = useRef<HTMLElement>(null)
   useEffect(() => {
     region.current?.focus()
   }, [projectId])
 
-  // The pane is rendered here rather than inside the steps, so the steps stay a
-  // pure function of their props and can be rendered whole without a canvas.
+  // The pane is rendered here so the steps stay a pure function of their props.
   const [paneFocused, setPaneFocused] = useState(false)
   const renderRelayPane = useCallback(
     (id: string): React.ReactNode => (
@@ -216,10 +168,8 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
 
   const name = project?.name ?? 'this repository'
 
-  // Which of the two jobs this is, kept here and not in the store: it is a
-  // statement about this visit rather than about the project, and a project
-  // that remembered "I am joining" would go on saying it to whoever opened the
-  // panel next, including the person who set the team up.
+  // Which of the two jobs this is, kept here and not in the store: it is about
+  // this visit, and a project that remembered "I am joining" would say it to whoever opened it next.
   const [path, setPath] = useState<TeamworkPath | null>(null)
 
   return (

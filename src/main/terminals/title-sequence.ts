@@ -1,25 +1,12 @@
-// Extracts window titles, and bells, from a PTY output stream.
-//
-// A title arrives as OSC 0 (icon + window) or OSC 2 (window): ESC ] Ps ; text
-// terminated by BEL or by ST (ESC \, or the single-byte C1 form). The stream is
-// chopped into arbitrary chunks by the kernel and by node-pty, so a sequence can
-// straddle any number of reads -- including the two bytes of ESC \ landing in
-// different chunks. The scanner therefore keeps state between calls and never
-// treats a chunk as a self-contained string.
-//
-// Bells are counted here for the same reason titles are parsed here: this is
-// the only thing in the app that knows which BEL bytes are bells. Most of them
-// are not -- a BEL that closes an OSC is punctuation, and a title-setting
-// program emits one per title. Counted anywhere else, a pane that updates a
-// spinner in its title would look like a pane ringing the bell ten times a
-// second.
+// Extracts window titles (OSC 0/2, terminated by BEL or ST) and bells from a
+// PTY stream. A sequence can straddle any number of chunks, so state is kept
+// between calls. Bells are counted here because only this knows which BELs are punctuation.
 
 const ESC = '\x1b'
 const BEL = '\x07'
 const ST_C1 = '\u009c'
 
-/** Titles are short; anything longer is a runaway sequence and is abandoned, so a
- *  process that never terminates an OSC cannot grow this buffer without bound. */
+/** Anything longer is a runaway OSC and is abandoned, so the buffer is bounded. */
 const MAX_PAYLOAD_LENGTH = 4096
 
 type ScannerState =
@@ -47,8 +34,7 @@ export class TitleSequenceScanner {
       switch (this.state) {
         case 'text':
           if (char === ESC) this.state = 'escape'
-          // Outside a sequence a BEL is what it says it is: a program asking to
-          // be noticed. Inside one it is punctuation, handled below.
+          // Outside a sequence a BEL is a bell; inside one it is punctuation.
           else if (char === BEL) bells++
           break
 
@@ -101,8 +87,7 @@ export class TitleSequenceScanner {
     const separator = this.payload.indexOf(';')
     if (separator !== -1) {
       const ps = this.payload.slice(0, separator)
-      // 0 sets icon and window title, 2 sets the window title. 1 is icon-only,
-      // and higher codes (8 hyperlinks, 133 prompt marks, ...) are not titles.
+      // 0 and 2 set the window title; 1 is icon-only, higher codes are not titles.
       if (ps === '0' || ps === '2') titles.push(this.payload.slice(separator + 1))
     }
     this.abandon()

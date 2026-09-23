@@ -38,9 +38,6 @@ import { WORKSPACE_SHORTCUTS, type WorkspaceCommand, type WorkspaceShortcut } fr
  */
 export type MenuBarSection = 'application' | 'file' | 'edit' | 'view' | 'window' | 'help'
 
-/** The menus in the order they sit in the bar, for the main process to follow. */
-export const MENU_BAR_SECTIONS: readonly MenuBarSection[] = ['application', 'file', 'edit', 'view', 'window', 'help']
-
 type Placement = {
   section: MenuBarSection
   /**

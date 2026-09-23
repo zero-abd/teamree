@@ -1,24 +1,8 @@
 /** @vitest-environment jsdom */
 
-// The window onto somebody else's machine.
-//
-// Everything asserted here is a promise the component's own header makes: that
-// a keystroke which went nowhere says so, that the picture is the owner's size
-// and never renegotiated, that a gap in the stream is admitted in the stream,
-// and that a watch which ended stays ended. None of them are visible to a pure
-// function, and all of them are the difference between reading a teammate's
-// terminal and believing you are.
-//
-// Since it stopped floating over the window there is one more: that a pane
-// which now sits in a slot somebody can drag the edge of still never renegotiates
-// the far end's geometry. Resizing the slot has to move the scale and nothing
-// else — the letterbox is the whole reason a watcher is allowed to have a
-// smaller window than the owner.
-//
-// xterm is replaced by a recorder. The real emulator needs layout jsdom does
-// not have, and what matters here is not that a glyph was rasterised but which
-// bytes this component decided to put in the pane — which is exactly what a
-// recorder can answer and a canvas cannot.
+// The window onto somebody else's machine: a keystroke that went nowhere says so, the picture is the
+// owner's size (resizing the slot moves only the scale), gaps are admitted, and an ended watch stays
+// ended. xterm is replaced by a recorder of which bytes the view put in the pane.
 
 import { act, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -64,8 +48,7 @@ vi.mock('@xterm/xterm', () => {
 
     open(host: HTMLElement): void {
       const element = document.createElement('div')
-      // jsdom has no layout, so the one measurement the letterbox reads is
-      // supplied here rather than emulated.
+      // jsdom has no layout; the letterbox's one measurement is supplied.
       Object.defineProperty(element, 'offsetWidth', { get: () => picture.width })
       Object.defineProperty(element, 'offsetHeight', { get: () => picture.height })
       host.appendChild(element)
@@ -112,13 +95,7 @@ vi.mock('@xterm/addon-webgl', () => ({
   }
 }))
 
-/**
- * The observers this view is watching its own slot with.
- *
- * The harness's stub never fires, because jsdom has no layout to fire about —
- * so the one test that is about a slot being dragged narrower calls the
- * callback itself, which is exactly what the browser would do.
- */
+/** The slot's observers; jsdom never fires them, so the drag test calls the callback itself. */
 const observers: (() => void)[] = []
 
 class RecordingResizeObserver implements ResizeObserver {
@@ -222,16 +199,7 @@ function mount(overrides: Partial<Parameters<typeof WatchedPaneView>[0]> = {}): 
   return { onClose, onFocus, onOutput, rerender: (next) => rerender(view(next)), unmount }
 }
 
-/**
- * One keystroke, as the browser delivers one: the DOM event first, then the
- * bytes xterm turns it into.
- *
- * Both halves matter now. The view sends only what somebody in this window
- * actually did, and it tells the difference by the event — so a test that
- * called the emulator's data handler on its own would be testing the case this
- * view exists to refuse rather than the case it exists to serve. `emits` below
- * is that other case, stated on purpose.
- */
+/** One keystroke as the browser delivers it: the DOM event, then xterm's bytes. `emits` is the no-person case. */
 function press(data: string): void {
   emits(data, { user: true })
 }
@@ -271,15 +239,11 @@ describe('whose pane this is', () => {
     expect(screen.getByText('Opening priya’s pane…')).toBeTruthy()
   })
 
-  // The standing sentence, not a tooltip and not a first-run notice: the
-  // argument for why a pane anyone can type into is survivable is that the
-  // person typing cannot be unaware whose machine it runs on.
+  // A standing sentence: the person typing must know whose machine it runs on.
   it('says whose machine a keystroke runs on, at all times and in words', async () => {
     const watch = armWatch()
     mount()
-    // Including the half of it that changed when consent did: it runs there,
-    // as them, once they allow it, with your name on it. Leaving out "once they
-    // allow it" would promise something this no longer does.
+    // Including "once they allow it".
     const promise = 'what you type runs on priya’s machine, as priya, once they allow it, with your name on it'
     expect(screen.getByText(promise)).toBeTruthy()
     await watch.resolve()
@@ -319,8 +283,7 @@ describe('the size is the owner’s', () => {
     expect(fakeTerms[0]?.element?.style.transform).toBe('scale(0.5)')
   })
 
-  // Blowing an 80-column pane up to fill a wide window would be showing
-  // something other than what the owner is looking at.
+  // Scaling an 80-column pane up would show something other than what the owner sees.
   it('never scales it up, however much room there is', async () => {
     const watch = armWatch()
     mount()
@@ -340,9 +303,7 @@ function frameOf(width: number, height: number): HTMLElement {
   return frame
 }
 
-// The reason this view stopped floating over the window: it is a pane, and a
-// pane is a thing you can drag the edge of. What must not follow from that is
-// the far end being told about it.
+// Dragging the slot's edge must never reach the far end.
 describe('a slot in the window, like any other pane', () => {
   it('is a pane, with the accent that says it is not one of yours', async () => {
     const watch = armWatch()
@@ -365,8 +326,7 @@ describe('a slot in the window, like any other pane', () => {
     expect(fakeTerms[0]?.focused).toBe(false)
   })
 
-  // A pane opened by the sidebar is focused from its first frame, and its
-  // emulator does not exist until the watch is answered a tick later.
+  // Focused from its first frame; the emulator exists only a tick later.
   it('takes the keyboard when it was focused before there was an emulator', async () => {
     const watch = armWatch()
     mount({ focused: true })
@@ -384,8 +344,6 @@ describe('a slot in the window, like any other pane', () => {
     expect(onFocus).toHaveBeenCalled()
   })
 
-  // A stray chord is the last thing that should be typed onto a machine that
-  // is not yours.
   it('declines the app’s own chords rather than sending them to the owner', async () => {
     const watch = armWatch()
     mount({ isAppChord: (event: KeyboardEvent) => event.key === 'w' })
@@ -395,9 +353,7 @@ describe('a slot in the window, like any other pane', () => {
     expect(handler?.(new KeyboardEvent('keydown', { key: 'a' }))).toBe(true)
   })
 
-  // The whole of what makes a pane in a resizable slot survivable: the slot is
-  // this window's, the geometry is theirs, and the two are joined by a CSS
-  // transform and nothing else.
+  // The slot is this window's, the geometry theirs, joined by a CSS transform only.
   it('rescales when its slot is dragged narrower, and never renegotiates their size', async () => {
     const watch = armWatch()
     picture.width = 800
@@ -433,13 +389,8 @@ describe('typing is a request', () => {
     ])
   })
 
-  // The emulator answers questions the far end's output asks it — a cursor
-  // report, a device-attributes reply — and xterm delivers those answers on the
-  // same `onData` a keystroke arrives on. Sending them would type the owner's
-  // own output back into the owner's pty under this reader's name, put them in
-  // the owner's audit log as this reader's keystrokes, and, where this reader
-  // has no standing permission, ask the owner to consent to a keystroke nobody
-  // pressed. `handsHere` is the distinction; this is it stated.
+  // Emulator replies arrive on the same `onData` as keystrokes; sent, they would type into the owner's
+  // pty under this reader's name. `handsHere` is the distinction.
   it('never sends bytes nobody in this window produced', async () => {
     const watch = armWatch()
     mount()
@@ -449,15 +400,12 @@ describe('typing is a request', () => {
       emits('[?1;2c', { user: false })
     })
     expect(call).not.toHaveBeenCalled()
-    // And the pane says nothing either: there was no keystroke, so there is no
-    // refusal to report and nothing for the header to claim.
+    // No keystroke, so nothing to report.
     expect(paneText()).not.toContain('not typed')
     expect(screen.getByText(/what you type runs on/)).toBeTruthy()
   })
 
-  // The other half of the same rule, and the reason it is a mark on an action
-  // rather than a filter on the bytes: a reply and a keystroke can be the same
-  // string, so nothing about the data itself could tell them apart.
+  // A mark on the action, not a byte filter: a reply and a keystroke can be the same string.
   it('sends the same bytes when a person did produce them', async () => {
     const watch = armWatch()
     mount()
@@ -472,10 +420,7 @@ describe('typing is a request', () => {
     })
   })
 
-  // The mark lasts one microtask, and this is why it has to. Somebody watching
-  // a pane is usually somebody who has also typed into it, and a mark that
-  // stayed set after the keystroke would let every reply from that moment on
-  // ride out on the back of it.
+  // One microtask, or every later reply would ride out on a past keystroke's mark.
   it('does not let one keystroke license the replies that follow it', async () => {
     const watch = armWatch()
     mount()
@@ -490,8 +435,6 @@ describe('typing is a request', () => {
     expect(call).not.toHaveBeenCalled()
   })
 
-  // A keystroke that silently went nowhere leaves somebody believing they
-  // typed into a shell two thousand miles away.
   it('prints a refusal where the keystroke would have appeared, and says so on the header', async () => {
     const watch = armWatch()
     mount()
@@ -549,23 +492,18 @@ describe('typing is a request', () => {
     expect(paneText().match(/not typed: this pane is muted/g)).toHaveLength(2)
   })
 
-  // A keystroke the owner has not answered has not run, and a window that said
-  // nothing about it would be a window in which typing simply stopped working.
+  // An unanswered keystroke has not run; the pane says so.
   it('says nothing has run while the owner’s machine has not answered', async () => {
     const watch = armWatch()
     mount()
     await watch.resolve()
     vi.useFakeTimers()
-    // Nothing ever resolves this, and that is the test: the owner's machine
-    // never answers, so the pane has to say so on its own rather than waiting
-    // for a reply that is not coming. The test below is the other half, and it
-    // keeps the resolver because it does answer.
+    // Never resolved: the pane must say so on its own. The next test does answer.
     call.mockImplementation(() => new Promise<undefined>(() => {}))
 
     await act(async () => {
       for (const key of 'npm test') press(key)
     })
-    // Nothing yet: a round trip that is merely a round trip is not news.
     expect(paneText()).not.toContain('waiting')
 
     await act(async () => {
@@ -574,8 +512,7 @@ describe('typing is a request', () => {
     expect(paneText()).toContain('[waiting: nothing you have typed has run')
     expect(screen.getByText('waiting for priya’s machine — nothing you have typed has run')).toBeTruthy()
 
-    // Said once for the burst, not once per key: eight keystrokes held
-    // together are one wait.
+    // Once per burst, not per key.
     expect(paneText().match(/waiting: nothing you have typed has run/g)).toHaveLength(1)
   })
 
@@ -602,8 +539,7 @@ describe('typing is a request', () => {
     await act(async () => {
       allow?.()
     })
-    // A pane at a password prompt echoes nothing, so being allowed and being
-    // ignored would look identical without this.
+    // A password prompt echoes nothing, so allowed and ignored would look alike.
     expect(paneText()).toContain('[no longer held: what you typed has run]')
     expect(screen.getByText(/what you type runs on priya’s machine/)).toBeTruthy()
   })
@@ -636,9 +572,7 @@ describe('the stream is honest about its own gaps', () => {
     expect(onOutput).toHaveBeenCalledWith('building…\r\n')
   })
 
-  // A row elsewhere quotes the last line of this pane. Quoting teamree's own
-  // notice back as if the teammate's program had printed it would be inventing
-  // output that never happened on their machine.
+  // Quoting teamree's own notice as the teammate's output would invent output.
   it('does not pass its own notices off as the teammate’s output', async () => {
     const watch = armWatch()
     const { onOutput } = mount()
@@ -680,9 +614,7 @@ describe('a watch that ends', () => {
     expect(screen.getByText('priya’s machine stopped answering')).toBeTruthy()
   })
 
-  // The regression this view's `end` exists for: the loss arrives while the
-  // header still says "Opening…", and the continuation that follows must not
-  // overwrite it with a window that looks live and will never move again.
+  // The loss can arrive while the header says "Opening…"; the continuation must not overwrite it.
   it('stays ended when the loss beat the stream being answered', async () => {
     const watch = armWatch()
     mount()
@@ -718,8 +650,7 @@ describe('closing', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 
-  // Closing the subscription is the whole of "bytes flow on demand": a viewer
-  // that unmounted without it would leave the owner's runtime streaming.
+  // Unmounting must close the subscription, or the owner keeps streaming.
   it('stops the bytes and disposes the emulator on unmount', async () => {
     const watch = armWatch()
     const { unmount } = mount()
@@ -740,15 +671,7 @@ describe('closing', () => {
   })
 })
 
-// The window is one surface, and a teammate's pane is part of it.
-//
-// Both emulators in this app are handed literal colours once, when they are
-// built, because xterm cannot read CSS. A local pane has always re-read them
-// when the palette moved; this one was written while the palette could not
-// move, and kept the colours it opened in. The result was a window where
-// choosing a theme repainted everything except the pane on somebody else's
-// machine — the one pane a person cannot fix by closing and reopening without
-// paying for the watch twice.
+// A watched pane repaints when the palette changes, like a local one; reopening it would pay for the watch twice.
 describe('the palette, after it changes under a running watch', () => {
   it('repaints the emulator rather than leaving it in the theme it opened in', async () => {
     const watch = armWatch()
@@ -759,8 +682,7 @@ describe('the palette, after it changes under a running watch', () => {
 
     const midnight = { ...DEFAULT_APPEARANCE, themeId: 'midnight' }
     act(() => {
-      // Exactly what `App` does when the stored appearance changes: resolve the
-      // palette onto the root, and let every pane read it back off the document.
+      // What `App` does on an appearance change: resolve onto the root; panes read it back.
       applyPalette(document.documentElement, resolvePalette(midnight))
       useWorkspaceStore.setState({ appearance: midnight })
     })

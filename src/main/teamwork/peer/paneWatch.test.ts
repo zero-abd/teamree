@@ -1,16 +1,6 @@
-// The join between a scrollback and a live tail, with the timing under test.
-//
-// This is the one place where the two calls a watch is made of can be resolved
-// by hand, in an order a real link reaches on its own but never on demand. The
-// relay test proves the whole thing works end to end; this proves it works when
-// the pane is talking *during* the round trip, which is when it would go wrong.
-//
-// And the hardest moment in that round trip is not a moment at all. A socket
-// read decodes many frames and the transport routes them in one synchronous
-// loop, so an answer and the output written behind it land here in the same
-// turn, before any promise continuation runs. The peer here counts frames the
-// way the transport does so that both sides of that boundary can be tested on
-// purpose rather than raced for under load.
+// The join between a scrollback and a live tail, with the two calls a watch is
+// made of resolved by hand. A socket read routes many frames in one synchronous
+// loop, so the peer here counts frames the way the transport does.
 
 import { describe, expect, it, vi } from 'vitest'
 import type { MethodName, ParamsOf, ResultOf } from '../../../shared/methods'
@@ -20,12 +10,8 @@ import { watchPane, type WatchTarget } from './paneWatch'
 import { parsePeerPaneId } from './peerService'
 
 /**
- * A teammate whose two answers are resolved by the test, one at a time.
- *
- * It counts frames the way the peer transport does, because the numbers are
- * what the join is made of: every answer and every stream event gets the next
- * one, and a test can therefore put an event on either side of an answer and
- * say which it meant.
+ * A teammate whose two answers are resolved by the test. It counts frames the
+ * way the transport does, so an event can be put on either side of an answer.
  */
 function scriptedPeer(): {
   target: WatchTarget
@@ -34,14 +20,9 @@ function scriptedPeer(): {
   answerSubscribe: (subscription: string) => Promise<void>
   answerRead: (data: string) => Promise<void>
   /**
-   * One socket read: the read's answer, and then frames decoded behind it.
-   *
-   * This is the transport's own loop — a batch of frames routed synchronously,
-   * one after another — and the reason it is worth a helper is that the
-   * promise the answer resolves does not run its continuation until the whole
-   * batch has been routed. Anything joined by that continuation's clock sees
-   * these events as having arrived "during" the read. They did not: they are
-   * behind the answer on the wire, so no scrollback holds them.
+   * One socket read: the answer, then frames decoded behind it, all routed
+   * before the answer's continuation runs. They are behind the answer on the
+   * wire, so no scrollback holds them.
    */
   answerReadThenSay: (data: string, ...behind: readonly unknown[]) => Promise<void>
   failRead: (reason: string) => Promise<void>
@@ -160,9 +141,8 @@ describe('joining a pane that is already running', () => {
     watchPane({ target: peer.target, terminalId: 't1', channel: sink.channel })
     await peer.answerSubscribe('sub_1')
 
-    // The pane keeps talking while the scrollback is in flight. Every one of
-    // these is already in the snapshot by the time the owner answers, because
-    // the owner wrote them before it.
+    // The pane keeps talking while the scrollback is in flight; every one of
+    // these is already in the snapshot.
     peer.say({ type: 'data', data: 'three\r\n' })
     peer.say({ type: 'data', data: 'four\r\n' })
     await peer.answerRead('one\r\ntwo\r\nthree\r\nfour\r\n')
@@ -180,10 +160,9 @@ describe('joining a pane that is already running', () => {
     await peer.answerSubscribe('sub_1')
 
     peer.say({ type: 'data', data: 'during\r\n' })
-    // One socket read carrying the answer and then two more frames. The owner
-    // wrote those after the scrollback was taken, so they are in no snapshot —
-    // and they reach this side before the answer's continuation runs, which is
-    // what makes "everything held when the promise settled" the wrong rule.
+    // One socket read carrying the answer and then two more frames, written
+    // after the scrollback was taken and reaching this side before the answer's
+    // continuation runs: "everything held when the promise settled" is the wrong rule.
     await peer.answerReadThenSay(
       'before\r\nduring\r\n',
       { type: 'data', data: 'behind-the-answer\r\n' },
@@ -199,9 +178,8 @@ describe('joining a pane that is already running', () => {
     watchPane({ target: peer.target, terminalId: 't1', channel: sink.channel })
     await peer.answerSubscribe('sub_1')
 
-    // The other edge of the same boundary: this one the owner wrote *before*
-    // the answer, so the scrollback carries it and the stream's copy is the
-    // duplicate. Reading by frame order has to drop one and keep the other.
+    // The other edge: written *before* the answer, so the scrollback carries it
+    // and the stream's copy is the duplicate.
     peer.say({ type: 'data', data: 'during\r\n' })
     await peer.answerReadThenSay('before\r\nduring\r\n')
 
@@ -214,11 +192,8 @@ describe('joining a pane that is already running', () => {
     watchPane({ target: peer.target, terminalId: 't1', channel: sink.channel })
     await peer.answerSubscribe('sub_1')
 
-    // Something overran on the way here — the owner's pacer, or this side's own
-    // hold buffer — while the read was in flight. The bytes went missing from
-    // the stream, not from the pane: the scrollback the answer carries reaches
-    // back past them and has every one. Passing the warning on would tell a
-    // reader they are missing output that is on the screen in front of them.
+    // Something overran while the read was in flight. The bytes went missing
+    // from the stream, not from the pane: the scrollback reaches back past them.
     peer.say({ type: 'data', data: 'during\r\n' })
     peer.say({ type: 'elided', bytes: 7 })
     peer.say({ type: 'data', data: 'after\r\n' })
@@ -234,19 +209,15 @@ describe('joining a pane that is already running', () => {
     watchPane({ target: peer.target, terminalId: 't1', channel: sink.channel })
     await peer.answerSubscribe('sub_1')
 
-    // The other half of the same question, and the only shape in which a
-    // pre-answer `elided` is true: a burst that outran the owner's scrollback
-    // as well as the wire. Here the window is 1010 bytes and the snapshot is
-    // six, which is the ratio a real pane reaches by printing more than
-    // `SCROLLBACK_CAP_BYTES` between the subscribe and the read.
+    // The only shape in which a pre-answer `elided` is true: a burst that outran
+    // the owner's scrollback (`SCROLLBACK_CAP_BYTES`) as well as the wire.
     peer.say({ type: 'elided', bytes: 1_000 })
     peer.say({ type: 'data', data: 'aaaa' })
     peer.say({ type: 'data', data: 'tail\r\n' })
     await peer.answerRead('tail\r\n')
 
-    // 1004, not the 1000 the wire dropped: the four bytes that did arrive are
-    // just as gone, because the snapshot that replaces them does not hold them
-    // either. And before the snapshot, because that is where the hole is.
+    // 1004, not 1000: the four bytes that did arrive are just as gone. And
+    // before the snapshot, because that is where the hole is.
     expect(sink.events).toEqual([
       { type: 'elided', bytes: 1_004 },
       { type: 'data', data: 'tail\r\n' }

@@ -1,15 +1,6 @@
-// What actually changed in a worktree, rather than how much.
-//
-// The status chips answer "is there anything here", which is the right question
-// for a sidebar and the wrong one the moment you want to commit: a count cannot
-// tell you that the file you are about to include is a stray log. So this reads
-// the same `git status --porcelain=v2` the counters come from, but keeps the
-// paths — and then gives a way to see the patch for any of them.
-//
-// `-z` is not an optimisation. Without it git quotes any path containing a
-// space, a quote or a non-ASCII byte, and the quoting rules are C-string rules
-// that a naive reader gets subtly wrong. NUL-separated records have no quoting
-// at all, so a path is whatever bytes lie between two separators.
+// What actually changed in a worktree, rather than how much: the same
+// `git status --porcelain=v2` as the counters, keeping the paths. `-z` is not an
+// optimisation: without it git C-quotes paths with spaces, quotes or non-ASCII bytes.
 
 import type { WorktreeChange, WorktreeChangeKind, WorktreeChanges, WorktreeDiff } from '../../shared/entities'
 import type { GitRunner } from './gitProcess'
@@ -23,22 +14,12 @@ export const DEFAULT_DIFF_MAX_BYTES = 1024 * 1024
 
 export const DEFAULT_DIFF_CONTEXT_LINES = 3
 
-/**
- * Untracked files a whole-worktree patch will show before it stops adding them.
- *
- * Each one costs a `git diff --no-index`, a process apiece, so an unbounded
- * list is a minute of spawning for a patch nobody will read to the end. Past
- * the cap the diff says it is truncated, which is the same thing it says when
- * the bytes run out.
- */
+/** Untracked files a whole-worktree patch shows before it stops; each costs a `git diff --no-index` process. */
 export const DEFAULT_DIFF_UNTRACKED_LIMIT = 100
 
 /**
- * Reads the NUL-separated records of `status --porcelain=v2 -z`.
- *
- * A rename record is two records: the entry, then the path it came from. That
- * is the only place the format is not one record per change, and the only
- * reason this is a loop with an index rather than a map.
+ * Reads the NUL-separated records of `status --porcelain=v2 -z`. A rename is two
+ * records (the entry, then the path it came from), hence the index loop.
  */
 export function parseChangeRecords(raw: string): WorktreeChange[] {
   const records = raw.split('\0').filter((record) => record.length > 0)
@@ -80,8 +61,7 @@ export function parseChangeRecords(raw: string): WorktreeChange[] {
     }
 
     if (marker === '2') {
-      // The record that follows is the original path, and is not a change of
-      // its own. Consuming it here is what keeps it out of the list.
+      // The record that follows is the original path, not a change of its own.
       const from = records[index + 1]
       index += 1
       if (from !== undefined) change.from = from
@@ -94,9 +74,8 @@ export function parseChangeRecords(raw: string): WorktreeChange[] {
 }
 
 /**
- * The one word for a change that is often two. A file added to the index and
- * then edited is `A` in the index and `M` in the tree; calling that "added" is
- * what a reviewer means by it, and both flags still say the rest.
+ * The one word for a change that is often two: `A` in the index and `M` in the
+ * tree is "added" to a reviewer, and both flags still say the rest.
  */
 function changeKind(stagedCode: string, unstagedCode: string): WorktreeChangeKind {
   const code = stagedCode !== '.' ? stagedCode : unstagedCode
@@ -130,10 +109,8 @@ function fieldsAfter(record: string, count: number): string | undefined {
 }
 
 /**
- * Reading order, which is review order: what blocks a commit first, then what
- * is already staged, then the rest, alphabetical inside each group. A stable
- * order matters more than any particular one — the list is re-read constantly,
- * and rows that jump around under the cursor are unusable.
+ * Review order: conflicts, then staged, then the rest, alphabetical inside each.
+ * Stable order matters most — rows that jump under the cursor are unusable.
  */
 export function sortChanges(changes: readonly WorktreeChange[]): WorktreeChange[] {
   const rank = (change: WorktreeChange): number => {
@@ -146,13 +123,8 @@ export function sortChanges(changes: readonly WorktreeChange[]): WorktreeChange[
 }
 
 /**
- * Drops what teamree put in the checkout itself.
- *
- * A worktree is born with the project's linked directories and copied files
- * already in it, and git has no way to know they were not written by whoever is
- * working here. Counting them as changes makes every new worktree open dirty,
- * with a row nobody can act on: the developer did not add `node_modules`, and
- * committing or discarding it is the wrong answer either way.
+ * Drops what teamree put in the checkout itself. git cannot know the linked
+ * directories and copied files were not written here; counting them opens every new worktree dirty.
  */
 export function withoutPreparedPaths(
   changes: readonly WorktreeChange[],
@@ -174,11 +146,9 @@ export type ChangesReadOptions = {
 
 export async function readWorktreeChanges(runner: GitRunner, options: ChangesReadOptions): Promise<WorktreeChanges> {
   const limit = options.limit ?? DEFAULT_CHANGE_LIMIT
-  // `--untracked-files=normal` is pinned, never left to the repository's own
-  // `status.showUntrackedFiles`. People set that to `no` in ~/.gitconfig to
-  // make status usable on a large repository, where it then covers every
-  // repository they own — and this read would answer "nothing untracked" for
-  // a checkout whose own status chip, which pins the flag, says otherwise.
+  // `--untracked-files=normal` is pinned: people set `status.showUntrackedFiles=no`
+  // in ~/.gitconfig for a large repository, and this read would then answer
+  // "nothing untracked" for a checkout whose status chip says otherwise.
   const { stdout } = await runner.run({
     args: ['status', '--porcelain=v2', '-z', '--untracked-files=normal'],
     cwd: options.worktreePath,
@@ -216,19 +186,9 @@ export type DiffReadOptions = {
 }
 
 /**
- * The patch for a worktree, or for one path in it.
- *
- * An untracked file is the awkward case: `git diff` has nothing to compare it
- * against and says nothing at all, which reads as "no changes" for exactly the
- * files a new branch is usually full of. `--no-index` against the platform's
- * empty file produces the add-everything patch that was wanted, and exits 1
- * because it found a difference — which is why this goes through `tryRun`.
- *
- * So the whole-worktree patch is two reads glued together: what git will diff,
- * then one add-everything hunk per untracked file. The alternative was a list
- * of three changes whose patch showed one, with nothing to say the two
- * disagreed — and the fix git's own porcelain uses for it, an intent-to-add,
- * writes to the index, which is the user's.
+ * The patch for a worktree, or for one path in it. `git diff` says nothing about
+ * an untracked file, so each is diffed `--no-index` against the platform's empty
+ * file (exit 1 on a difference, hence `tryRun`) and glued on after git's own patch.
  */
 export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptions): Promise<WorktreeDiff> {
   const staged = options.staged ?? false
@@ -241,11 +201,8 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
     ? [...base, '--cached', ...(options.path ? ['--', options.path] : [])]
     : [...base, ...(options.path ? ['--', options.path] : [])]
 
-  // One byte past the budget is all it takes to know the patch overflows it, so
-  // that is where the read stops. A 40MB log read whole only to be cut back to
-  // a megabyte used to overrun the runner's hard cap and come back as a failure
-  // — which the panel then rendered as "No patch for this path", an answer,
-  // for a file it had simply declined to read.
+  // One byte past the budget is enough to know the patch overflows. A 40MB log
+  // read whole used to overrun the runner's hard cap and render as "No patch for this path".
   const stdoutLimitBytes = maxBytes + 1
 
   const { stdout } = await runner.run({
@@ -299,11 +256,8 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
 }
 
 /**
- * The untracked files a whole-worktree patch should carry, in reading order.
- *
- * `--untracked-files=all` rather than `normal`: the change list names a new
- * directory once, but a patch of a directory is not a thing, so the files
- * inside it are what gets diffed.
+ * The untracked files a whole-worktree patch carries. `--untracked-files=all`: a
+ * patch of a directory is not a thing.
  */
 async function listUntrackedFiles(
   runner: GitRunner,
@@ -327,13 +281,9 @@ async function listUntrackedFiles(
 }
 
 /**
- * The add-everything hunk for one file git is not tracking.
- *
- * Exit 1 is "there was a difference"; anything higher is a real failure,
- * including the path simply not existing, and contributes nothing. A clipped
- * read reports git's own death by signal instead, and has the difference in
- * hand already. Binary content is left to git, which writes its one-line
- * "Binary files ... differ" rather than the bytes.
+ * The add-everything hunk for one file git is not tracking. Exit 1 is "there was a
+ * difference"; higher is a real failure and contributes nothing. A clipped read has
+ * the difference in hand already. Binary content is left to git's one-liner.
  */
 async function addedFilePatch(
   runner: GitRunner,
@@ -359,14 +309,9 @@ async function addedFilePatch(
 }
 
 /**
- * Cuts a string to a byte ceiling without splitting a character in half, and
- * then back to the last whole line, because half a diff line is worse than one
- * line fewer.
- *
- * The ceiling is in bytes because that is what a caller has to budget for, and
- * a byte offset lands wherever it lands — including the middle of a multi-byte
- * character, which decodes to a replacement character rather than an error. So
- * the cut is walked back off any continuation byte before anything is decoded.
+ * Cuts to a byte ceiling without splitting a character, then back to the last whole
+ * line. The cut is walked off any continuation byte before decoding, since a byte
+ * offset in the middle of a character decodes to a replacement character.
  */
 export function cutToBytes(text: string, maxBytes: number): string {
   const buffer = Buffer.from(text, 'utf8')

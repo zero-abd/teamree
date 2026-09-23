@@ -1,15 +1,6 @@
-// The split algebra, as pure functions over PaneNode.
-//
-// Every layout change is expressed here and nowhere else: the session manager
-// maps terminals to trees, this file decides what the tree becomes. Nothing in
-// this module touches a PTY, which is what makes the interesting cases -- an
-// insert next to a same-direction sibling, a collapse that empties a split --
-// testable without spawning anything.
-//
-// Two invariants hold for every tree these functions return:
-//   1. a split has at least two children, and none of them is a split in the
-//      same direction (a row inside a row is the same picture, flattened);
-//   2. its `sizes` has exactly one entry per child, and they sum to 1.
+// The split algebra, as pure functions over PaneNode. Invariants: a split has
+// at least two children, none a split in the same direction; `sizes` has one
+// entry per child and they sum to 1.
 
 import type { PaneNode } from '../../shared/entities'
 
@@ -33,12 +24,7 @@ export function containsTerminal(root: PaneNode | null, terminalId: string): boo
 
 /**
  * Divides the pane holding `targetTerminalId`, giving the new terminal half of
- * it. When that pane already sits in a split of the same direction the new leaf
- * becomes its neighbour rather than a nested split, so repeated splits in one
- * direction stay a single flat row or column.
- *
- * A target that is not in the tree (or an empty tree) degrades to appending at
- * the root, so a stale pane id can never lose the caller their new terminal.
+ * it. A target not in the tree degrades to appending at the root.
  */
 export function splitPane(
   root: PaneNode | null,
@@ -84,11 +70,7 @@ export function appendPane(root: PaneNode | null, terminalId: string, direction:
   })
 }
 
-/**
- * Drops the pane for `terminalId`. A split left with one child is replaced by
- * that child, which is what makes closing the last sibling restore the parent
- * rather than leave a one-pane split behind. Returns null when the tree empties.
- */
+/** Drops the pane for `terminalId`; a split left with one child becomes that child. Null when empty. */
 export function removePane(root: PaneNode | null, terminalId: string): PaneNode | null {
   if (root === null) return null
   if (root.kind === 'leaf') return root.terminalId === terminalId ? null : root
@@ -118,13 +100,12 @@ export function normaliseSizes(sizes: readonly number[], count: number): number[
   }
 
   const total = cleaned.reduce((sum, value) => sum + value, 0)
-  // Nothing usable came in (all zero, all absent, all NaN): split evenly.
+  // Nothing usable came in: split evenly.
   if (total <= 0) return cleaned.map(() => 1 / count)
   return cleaned.map((value) => value / total)
 }
 
-/** Canonicalises a subtree: flattens same-direction nesting, collapses
- *  single-child splits, and normalises sizes at every level. */
+/** Canonicalises a subtree: flattens same-direction nesting, collapses single-child splits, normalises sizes. */
 export function normalisePane(node: PaneNode): PaneNode {
   if (node.kind === 'leaf') return node
 
@@ -136,8 +117,7 @@ export function normalisePane(node: PaneNode): PaneNode {
     const normalised = normalisePane(child)
     const slot = parentSizes[index] ?? 0
     if (normalised.kind === 'split' && normalised.direction === node.direction) {
-      // A row inside a row draws identically to one wider row; hoist it so the
-      // tree has a single shape for a single picture.
+      // A row inside a row draws identically to one wider row.
       normalised.children.forEach((grandchild, inner) => {
         children.push(grandchild)
         sizes.push(slot * (normalised.sizes[inner] ?? 0))
@@ -148,19 +128,14 @@ export function normalisePane(node: PaneNode): PaneNode {
     sizes.push(slot)
   })
 
-  // Callers never build a childless split; one means the tree was constructed by
-  // hand and is not a layout at all, so fail loudly rather than invent a pane.
+  // A childless split is not a layout at all: fail loudly rather than invent a pane.
   if (children.length === 0) throw new Error('pane split has no children')
   const only = children[0]
   if (children.length === 1 && only !== undefined) return only
   return { kind: 'split', direction: node.direction, sizes: normaliseSizes(sizes, children.length), children }
 }
 
-/**
- * Validates an untrusted tree (layout.set takes `unknown`) and returns a
- * canonical copy, or null if the shape is wrong. Terminal ids are checked for
- * shape only; whether they exist is the caller's business.
- */
+/** Validates an untrusted tree and returns a canonical copy, or null. Ids are checked for shape only. */
 export function parsePaneNode(value: unknown): PaneNode | null {
   const parsed = parseNode(value, 0)
   return parsed === null ? null : normalisePane(parsed)

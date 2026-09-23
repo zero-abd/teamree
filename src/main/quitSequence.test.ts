@@ -19,14 +19,8 @@ function pendingStop(): { stop: () => Promise<void>; calls: () => number; finish
 }
 
 /**
- * The error the sequence reported first, asserted to be there rather than
- * reached through an optional chain.
- *
- * `calls[0]?.[0]` reads as safe and is not: on a spy that was never called the
- * whole expression is `undefined` and the `.message` after it throws a
- * TypeError naming neither the spy nor the expectation. Every caller has just
- * asserted the call count, so the honest thing is to say so once, here, where a
- * failure can be explained.
+ * The error the sequence reported first. `calls[0]?.[0].message` on a spy never
+ * called throws a TypeError naming neither the spy nor the expectation.
  */
 function firstProblem(onProblem: { mock: { calls: unknown[][] } }): Error {
   const [problem] = onProblem.mock.calls[0] ?? []
@@ -47,9 +41,7 @@ describe('quitting while the runtime is still letting go', () => {
     expect(quit).not.toHaveBeenCalled()
   })
 
-  // The one this file exists for. A Mac user who presses ⌘Q, sees the window
-  // sit there while the PTYs are killed, and presses it again used to end the
-  // process mid-flush — which costs every open pane its transcript.
+  // A second ⌘Q at a window that looks stuck used to end the process mid-flush.
   it('holds a second quit back too, and does not tear down twice', () => {
     const teardown = pendingStop()
     const quit = vi.fn()
@@ -74,17 +66,13 @@ describe('quitting while the runtime is still letting go', () => {
     teardown.finish()
     await vi.waitFor(() => expect(quit).toHaveBeenCalledTimes(1))
 
-    // Electron emits `before-quit` again for the quit just asked for, and that
-    // is the one quit that must not be prevented — otherwise the app can never
-    // leave at all.
+    // Electron emits `before-quit` again for the quit just asked for; that one must not be prevented.
     const final = { preventDefault: vi.fn() }
     onBeforeQuit(final)
     expect(final.preventDefault).not.toHaveBeenCalled()
   })
 
-  // An app that cannot be quit is a worse failure than a workspace file that
-  // could not be written, and a rejection that escaped here would be an
-  // unhandled one in the main process on the way out.
+  // An app that cannot be quit is the worse failure.
   it('still quits when the teardown fails, and says why once', async () => {
     const teardown = pendingStop()
     const quit = vi.fn()
@@ -100,9 +88,7 @@ describe('quitting while the runtime is still letting go', () => {
   })
 })
 
-// The other end of the same loss: a quit pressed before the launch has
-// finished, when the panes of the last session are already running and the
-// handle that could kill them does not exist yet.
+// A quit before the launch has finished: panes running, no handle to kill them yet.
 describe('quitting while the app is still starting up', () => {
   /** A launch the test finishes when it chooses, or never. */
   function pendingLaunch(): { whenStarted: () => Promise<void>; finish: () => void; fail: () => void } {
@@ -125,8 +111,7 @@ describe('quitting while the app is still starting up', () => {
 
     createQuitSequence({ whenStarted: launch.whenStarted, stop: teardown.stop, quit })({ preventDefault })
 
-    // Held, and nothing torn down yet: what would do the tearing down is what
-    // the launch is still busy producing.
+    // Held, and nothing torn down yet.
     expect(preventDefault).toHaveBeenCalledTimes(1)
     expect(teardown.calls()).toBe(0)
 
@@ -138,9 +123,7 @@ describe('quitting while the app is still starting up', () => {
     await vi.waitFor(() => expect(quit).toHaveBeenCalledTimes(1))
   })
 
-  // A launch that hangs must not take the quit key with it. The user gets a
-  // pause and then a quit, which is a worse shutdown than a complete one and a
-  // far better outcome than an app that cannot be left.
+  // A launch that hangs must not take the quit key with it.
   it('stops waiting for a launch that is not coming back, and quits anyway', async () => {
     const neverStarts = new Promise<void>(() => {})
     const teardown = pendingStop()
@@ -155,21 +138,17 @@ describe('quitting while the app is still starting up', () => {
       onProblem
     })({ preventDefault: vi.fn() })
 
-    // The teardown runs anyway, because a launch part-way through may still
-    // have left something reachable behind, and then the quit goes through.
+    // The teardown runs anyway: a launch part-way through may have left something reachable.
     await vi.waitFor(() => expect(teardown.calls()).toBe(1))
     teardown.finish()
     await vi.waitFor(() => expect(quit).toHaveBeenCalledTimes(1))
 
-    // Said out loud: this is the one quit that can leave a pty running, and
-    // without a line here nothing would ever explain how.
+    // This is the one quit that can leave a pty running.
     expect(onProblem).toHaveBeenCalledTimes(1)
     expect(firstProblem(onProblem).message).toContain('had not finished')
   })
 
-  // A launch that failed is a launch that is over. The failure belongs to
-  // whoever started it, and it says nothing about whether a pty is still
-  // running — which one may well be.
+  // A launch that failed is over; the failure belongs to whoever started it.
   it('tears down and quits when the launch failed, without reporting it twice', async () => {
     const launch = pendingLaunch()
     const teardown = pendingStop()

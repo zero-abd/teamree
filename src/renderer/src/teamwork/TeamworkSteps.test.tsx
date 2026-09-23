@@ -1,16 +1,6 @@
-// What the setup panel actually puts on screen, rendered rather than reasoned
-// about.
-//
-// The model test covers what each step decides. This covers the two things only
-// the markup can settle: that a step's state reaches a reader as words and not
-// only as a colour, and — the one that matters — that what a key grants is on
-// screen *above* the button that grants it. An order is not something a pure
-// function can assert; it is a property of the rendered page, so it is checked
-// on the rendered page.
-//
-// `renderToStaticMarkup` rather than a DOM: these components take their whole
-// world as props, nothing here depends on layout or on an effect having run,
-// and a string is the cheapest thing to ask "which of these comes first".
+// What the setup panel puts on screen, rendered rather than reasoned about: that a step's
+// state reaches a reader as words, and that what a key grants is above the button that
+// grants it. `renderToStaticMarkup`: nothing here depends on layout or on an effect.
 
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -131,8 +121,7 @@ function render(overrides: Partial<TeamworkStepsProps> = {}): string {
     publish: { plan: undefined, pending: false, error: null, result: undefined, progress: undefined },
     onPublish: () => {},
     onCancelPublish: () => {},
-    // The steps are what this file is about, so the choice in front of them is
-    // already made in every case but the one that tests the choice itself.
+    // The choice in front of the steps is already made, except where the choice itself is tested.
     path: 'start',
     onChoosePath: () => {},
     projectName: 'pager',
@@ -151,14 +140,7 @@ const pane = (overrides: Partial<RelayPaneState> & Pick<RelayPaneState, 'kind'>)
   ...overrides
 })
 
-/**
- * The labels of the buttons that cannot be pressed.
- *
- * Asserting on `Deploy a relay</button>` says only that the button is on the
- * page, which it is in every state this panel has — so the test named for
- * greying it out passed whether or not it was grey. This reads the attribute
- * that actually decides it.
- */
+/** The labels of the buttons that cannot be pressed: the attribute that decides it, not the button's presence. */
 const disabledButtons = (markup: string): string[] =>
   [...markup.matchAll(/<button[^>]*\sdisabled=""[^>]*>(.*?)<\/button>/g)].map((match) => text(match[1] ?? '').trim())
 
@@ -173,10 +155,7 @@ const text = (markup: string): string =>
     .replaceAll('&gt;', '>')
 
 describe('what a key grants, and where it is said', () => {
-  // The whole argument of `docs/teamwork.md` is that this is survivable because
-  // it cannot be done invisibly — not because it is small. A flow that let
-  // somebody add a colleague first and explain afterwards would be the one
-  // place that sentence never reached the person it is about.
+  // `docs/teamwork.md`: survivable because it cannot be done invisibly, not because it is small.
   it('is on screen before the button that adds one', () => {
     const markup = render()
     const warned = markup.indexOf('type into any pane here')
@@ -186,8 +165,6 @@ describe('what a key grants, and where it is said', () => {
     expect(warned).toBeLessThan(button)
   })
 
-  // One sentence. It used to be a paragraph, a list of six mitigations and a
-  // closing argument, all above the button.
   it('says what it is in one line, with nothing arguing around it', () => {
     const shown = text(render())
     expect(shown).toContain(KEY_GRANT_WARNING)
@@ -205,11 +182,7 @@ describe('what a key grants, and where it is said', () => {
 describe('a refused handle', () => {
   const taken = '.teamree/members/ana.pub is already somebody else\u2019s key; choose another handle'
 
-  // It used to be raised only as a notice, and the modal's own scrim was
-  // painted over it: the dialog stayed open, the button came back to life, and
-  // the sentence that named the remedy was never seen. Notices sit above the
-  // scrim now, but a corner of the screen is still the wrong place for an
-  // instruction about the box the cursor is in.
+  // A corner of the screen is the wrong place for an instruction about the box the cursor is in.
   it('is shown under the handle field, not only somewhere else', () => {
     const markup = render({ membersError: taken })
     const field = markup.indexOf('field__input')
@@ -259,25 +232,20 @@ describe('each step says whether it is done', () => {
     expect(text(markup)).toContain('git commit -m "Set up teamwork"')
   })
 
-  // teamree only ever opens a terminal in a worktree, and `.teamree` is in the
-  // primary checkout, so these commands run somewhere else than the pane a
-  // person has open. The cd is in the same block for that reason: whatever is
-  // selected to copy the commands takes it too.
+  // teamree only opens terminals in worktrees and `.teamree` is in the primary checkout, so the
+  // cd is in the block that gets copied.
   it('puts the cd in the block the commands are copied from', () => {
     const markup = render({ list: enrolled(), relay: relayOnDisk() })
     expect(markup).toContain(`<pre class="members__push-commands">cd ${PROJECT_PATH}\ngit add .teamree\n`)
   })
 
-  // Never a tick and never a cross. teamree cannot see a commit, and either
-  // mark would be it claiming that it can.
+  // teamree cannot see a commit; either mark would claim it can.
   it('never claims the push happened', () => {
     const shown = text(render({ list: enrolled(), relay: relayOnDisk() }))
     expect(shown).toContain('yours to do — teamree does not check this')
   })
 
-  // The step's summary used to promise this in a sentence. The promise belongs
-  // where it is kept: what will be committed and where it will be sent are on
-  // the screen, above the button, before anything is pressed.
+  // The promise belongs where it is kept: on screen, above the button.
   it('says what it will commit and where it will send it, before the button', () => {
     const shown = text(
       render({
@@ -324,10 +292,7 @@ describe('each step says whether it is done', () => {
 })
 
 describe('choosing a relay', () => {
-  // A wall of four equals was a decision handed to the person least able to
-  // take it, and several paragraphs of Cloudflare stood between a reader and
-  // anything they could press. The answer is a button, and everything else is
-  // a disclosure away.
+  // The answer is a button; everything else is a disclosure away.
   it('leads with the button, and the command the runtime says this build carries', () => {
     const shown = text(render())
     expect(shown).toContain('Deploy a relay')
@@ -343,15 +308,8 @@ describe('choosing a relay', () => {
     expect(shown).toContain('Other ways to get a relay')
   })
 
-  // The paragraphs the feedback named: what a normalised origin hash is, what a
-  // Durable Object is, and the note about an override a Finder-launched app
-  // cannot inherit. Each is answerable; none of them is a thing to wade through.
-  //
-  // What it costs is no longer on that list. "Is this going to bill me" is the
-  // question somebody has *before* they press a button that makes their account
-  // do something, and sending them to a pricing page to find out was sending
-  // them away from the flow at its most fragile moment. So one sentence answers
-  // it — the shape of the answer, not the figures, which are somebody else's.
+  // Each of these is answerable; none is a thing to wade through. "Is this going to bill me" is
+  // asked before the button is pressed, so one sentence answers its shape; the figures are not ours.
   it('leaves the reasoning to relay/README.md rather than printing it', () => {
     const shown = text(render())
     expect(shown).not.toMatch(/Durable Objects/)
@@ -371,9 +329,7 @@ describe('choosing a relay', () => {
     expect(shown).not.toContain('teamree-relay deploy')
   })
 
-  // Somebody joining a team that already has a relay has no decision to make:
-  // theirs arrives in the repository. A wall of options about a thing already
-  // chosen is noise at the exact moment they want to know whether it worked.
+  // A relay that arrives in the repository is a decision already taken.
   it('shows none of that to somebody whose team already has one', () => {
     const shown = text(render({ list: enrolled(), relay: relayOnDisk() }))
     expect(shown).not.toContain('Deploy a relay')
@@ -387,13 +343,8 @@ describe('choosing a relay', () => {
   })
 })
 
-// Two first-class ways to get a relay, and the honesty tax on the second one.
-//
-// Running one on your own Mac is the fastest way to a working team and a dead
-// end for two people on two home networks. Which of those it is depends on a
-// fact about somebody's network that teamree cannot see, so the whole of this
-// block's value is that the sentence saying so is on screen before the button
-// rather than in a document afterwards.
+// A relay on your own Mac is fastest for one network and a dead end for two home networks, and
+// teamree cannot see which; the sentence saying so is on screen before the button.
 describe('running a relay yourself', () => {
   it('stands beside the deploy rather than inside the other ways', () => {
     const markup = render()
@@ -413,8 +364,7 @@ describe('running a relay yourself', () => {
     expect(text(markup)).toContain(RELAY_SERVE.limit)
   })
 
-  // The command is the runtime's, with the verb swapped — never a guess at a
-  // program, and never hidden: running it yourself is a legitimate answer.
+  // The runtime's command with the verb swapped: never a guess at a program, never hidden.
   it('shows the command it will run, one disclosure away', () => {
     expect(text(render())).toContain('/apps/teamree.app/Contents/Resources/relay/teamree-relay serve')
   })
@@ -426,9 +376,7 @@ describe('running a relay yourself', () => {
     expect(text(markup)).toContain('no relay in this build')
   })
 
-  // A command this file does not recognise is a program nothing here knows, and
-  // stripping its last word off to run a different verb on it would be running
-  // something nobody can predict on somebody's machine.
+  // Stripping the last word off an unrecognised command would run something nobody can predict.
   it('is disabled, rather than guessing, when the reported command is not the launcher', () => {
     const markup = render({
       relay: { ...noRelay(), deploy: { command: 'npx wrangler deploy --cwd relay', reason: null } }
@@ -453,8 +401,7 @@ describe('checking a relay', () => {
     expect(text(render({ list: enrolled(), relay: relayOnDisk() }))).toContain(RELAY_CHECK.proves)
   })
 
-  // The other place somebody has a URL and a doubt: the one they have typed and
-  // not yet committed to everybody's repository.
+  // The other place somebody has a URL and a doubt: the one typed and not yet committed.
   it('is disabled beside the paste field until something is typed, and says so', () => {
     const shown = text(render())
     expect(shown).toContain(RELAY_CHECK.nothing)
@@ -466,17 +413,14 @@ describe('checking a relay', () => {
   })
 })
 
-// One slot, three things that can be in it. Starting a second is refused rather
-// than allowed to replace the output somebody is reading.
+// One slot, three things that can be in it; a second is refused rather than replacing what somebody is reading.
 describe('the one relay pane', () => {
   it('says which of the three it is holding', () => {
     const shown = text(render({ pane: pane({ kind: 'serve' }) }))
     expect(shown).toContain('Running a relay on this Mac')
   })
 
-  // Disabled, and not merely present: the whole point of the sentence beside it
-  // is that the button it is about cannot be pressed, and `Deploy a relay` is on
-  // the page either way.
+  // Disabled, not merely present: `Deploy a relay` is on the page either way.
   it('greys the other buttons while one is open, with the reason beside them', () => {
     const markup = render({ pane: pane({ kind: 'serve' }) })
     expect(markup).toContain('disabled=""')
@@ -484,8 +428,7 @@ describe('the one relay pane', () => {
     expect(text(markup)).toContain('A relay you are running yourself is already open in a pane below')
   })
 
-  // The URL is offered rather than written, and what committing *this* one
-  // means is beside the button that commits it.
+  // Offered rather than written, with what committing it means beside the button.
   it('offers the URL a relay run here printed, and says what committing it costs', () => {
     const markup = render({
       pane: pane({ kind: 'serve', url: 'ws://192.168.1.23:8787/v1/relay', urls: ['ws://192.168.1.23:8787/v1/relay'] })
@@ -497,11 +440,8 @@ describe('the one relay pane', () => {
     expect(shown).toContain(RELAY_SERVE.committing)
   })
 
-  // A check echoes the URL it was handed. Offering that back would be the panel
-  // pretending to have discovered something — and the guard is here as well as
-  // in the store, because a check's own scrollback says `dialling ws://…` and
-  // one loosened scheme list upstream would put a dead relay on this screen
-  // under a button that writes it into everybody's repository.
+  // A check echoes its input, and its scrollback says `dialling ws://…`: one loosened scheme list
+  // upstream would put a dead relay under a button that commits it.
   it('offers nothing out of a check pane, even one that somehow carries a URL', () => {
     const markup = render({
       list: enrolled(),
@@ -513,10 +453,7 @@ describe('the one relay pane', () => {
     expect(text(markup)).not.toContain('The relay is at')
   })
 
-  // A relay you run here is a promise about a process on this Mac. The moment
-  // that process exits the port is closed, and the address still sitting in the
-  // scrollback answers nothing — so the offer goes away rather than inviting
-  // somebody to commit an address that worked for one afternoon.
+  // An exited serve is a closed port; the address in the scrollback answers nothing.
   it('withdraws the offer when the relay it was running has stopped, and says why', () => {
     const markup = render({
       pane: pane({
@@ -530,9 +467,7 @@ describe('the one relay pane', () => {
     expect(text(markup)).toContain(RELAY_SERVE_STOPPED)
   })
 
-  // The opposite case, and the reason the gate is on the verb rather than on
-  // `running`: a deploy exiting is how a deploy succeeds, and the Worker it made
-  // outlives the pane that made it.
+  // The gate is on the verb, not `running`: a deploy exiting is how it succeeds, and the Worker outlives the pane.
   it('keeps offering what a finished deploy printed, because that outlives the pane', () => {
     const markup = render({
       pane: pane({
@@ -546,8 +481,7 @@ describe('the one relay pane', () => {
     expect(text(markup)).toContain('The deploy printed')
   })
 
-  // A finished pane with nothing to show used to render a blank space between
-  // its title and its terminal, which reads exactly like a pane still working.
+  // A finished pane with nothing to show reads exactly like one still working.
   it('says so when a command has finished and printed no relay URL', () => {
     expect(text(render({ pane: pane({ kind: 'deploy', running: false }) }))).toContain(RELAY_PANE_NO_URL)
   })
@@ -559,11 +493,8 @@ describe('the one relay pane', () => {
   })
 })
 
-// The relay prints every address this Mac has and offers the first, and its own
-// source says that first one is a guess: it cannot tell a wifi address from a
-// VPN's or a container bridge's. On a Mac with Docker Desktop, Parallels or a
-// corporate VPN the guess is routinely an address no teammate can reach, so the
-// panel shows the list rather than the assertion.
+// The relay's first address is a guess — it cannot tell wifi from a VPN or a container bridge —
+// so the panel shows the list rather than the assertion.
 describe('a Mac with more than one address', () => {
   const several = (): TeamworkStepsProps['pane'] =>
     pane({
@@ -592,9 +523,8 @@ describe('a Mac with more than one address', () => {
   })
 })
 
-// The failure that looks like a bug in the repository and is not: the override
-// is read before the file and an unreadable one leaves the project with no
-// relay at all, while .teamree/relay sits there with a good URL in it.
+// The override is read before the file, so an unreadable one leaves the project with no relay
+// while .teamree/relay holds a good URL.
 describe('an override that is set and cannot be read', () => {
   const broken = (): RelaySetting => ({
     ...noRelay(),
@@ -609,16 +539,13 @@ describe('an override that is set and cannot be read', () => {
     const said = text(markup)
     expect(said).toContain('TEAMREE_RELAY_URL is set to wss//typo.example/v1/relay')
     expect(said).toContain('this project has no relay even though .teamree/relay has one')
-    // First on the step, because every other sentence here is about a relay
-    // the app is not going to dial.
+    // First on the step: every other sentence is about a relay the app will not dial.
     expect(markup.indexOf('TEAMREE_RELAY_URL is set to')).toBeLessThan(
       markup.indexOf('Change the relay for this project')
     )
   })
 
-  // The paragraph at the foot of the step is written for an override that is
-  // winning. This one is not winning, it is breaking, and two paragraphs about
-  // one variable that disagree about what it is doing is worse than one.
+  // The foot-of-step paragraph is written for an override that is winning; this one is breaking.
   it('does not also claim the environment is beating the file', () => {
     expect(text(render({ relay: broken() }))).not.toContain('the environment is beating it for this run')
   })
@@ -637,8 +564,7 @@ describe('a checkout with no origin', () => {
     disabledReason: 'no .teamree/relay in this project, so teamree does not know which relay your team meets on'
   })
 
-  // The alternative is a step that sits at "not connected" for ever while the
-  // person checks their wifi, their relay and their teammate's laptop.
+  // Otherwise the step sits at "not connected" for ever while the person checks their wifi.
   it('says so at the top, and puts the field that fixes it there too', () => {
     const shown = text(render({ status: noOrigin }))
     expect(shown).toContain('This checkout cannot take part yet.')
@@ -660,11 +586,7 @@ describe('a checkout with no origin', () => {
 })
 
 describe('the button the project header sends people to', () => {
-  // The header's "no key" tooltip is the one sentence somebody reads when
-  // nothing is working, and it tells them which button to press. It
-  // went on naming a Members dialog for as long as this panel has existed,
-  // because this panel is what replaced it. Rendering the two together is what
-  // keeps them from drifting apart again.
+  // The header's "no key" tooltip names a button; rendering the two together keeps them from drifting apart.
   it('is on this panel, under the name the tooltip gives it', () => {
     const summary = teamworkSummary(status({ enrolled: false }), Date.now())
     expect(summary?.label).toBe('no key')
@@ -683,9 +605,7 @@ describe('before anything has been read', () => {
 })
 
 describe('a read that threw', () => {
-  // A zero-byte identity.key is the common one. Before this the panel said
-  // "Reading this machine's identity…" for the life of the window, with the
-  // whole of the explanation in a toast that had already gone.
+  // A zero-byte identity.key is the common one.
   it('says what failed, in the step it failed for, and offers to read again', () => {
     const shown = text(
       render({
@@ -702,9 +622,7 @@ describe('a read that threw', () => {
 })
 
 describe('a roster nothing is watching', () => {
-  // The sweep is the floor under a lost watch: the roster catches up on a timer
-  // rather than on an event. Telling somebody to reopen the dialog describes a
-  // version of this app that no longer exists.
+  // The sweep is the floor under a lost watch: the roster catches up on a timer.
   it('says the list is only as fresh as this read, rather than telling somebody to reopen it', () => {
     const shown = text(render({ list: roster({ watched: false }), relay: relayOnDisk() }))
     expect(shown).toContain('only as fresh as this read')
@@ -721,9 +639,7 @@ describe('a relay that only the environment names', () => {
     override: { name: 'TEAMREE_RELAY_URL', value: 'wss://tunnel.example/v1/relay' }
   })
 
-  // This is what the tunnel option tells people to do, and following it used to
-  // leave step 3 not done for ever — so the wall of four options stayed on
-  // screen underneath a working relay.
+  // The tunnel option tells people to do this; following it must not leave step 3 not done for ever.
   it('stops offering the four ways to get one to somebody who has followed one', () => {
     const shown = text(render({ list: enrolled(), relay: overridden() }))
     expect(shown).not.toContain('A VPS you rent')
@@ -732,21 +648,17 @@ describe('a relay that only the environment names', () => {
 })
 
 describe('the question asked before the steps', () => {
-  // One entry point and two honest paths. Without this the same five ticks had
-  // to describe two different jobs and the reader had to work out which half
-  // was theirs — which is what "it worked and it was confusing" meant.
+  // Five ticks describing two different jobs is what "it worked and it was confusing" meant.
   it('puts both paths in front of somebody who has not said which they are', () => {
     const shown = text(render({ path: null }))
     expect(shown).toContain('Which of these are you doing?')
     expect(shown).toContain('Start a team here')
     expect(shown).toContain('Join a team I was invited to')
-    // And nothing else: a wall of steps under an unanswered question is the
-    // page the question was added to replace.
+    // A wall of steps under an unanswered question is what the question replaced.
     expect(shown).not.toContain('1. Your identity')
   })
 
-  // Two buttons, and nothing arguing for either. The paragraphs under them
-  // described both halves of a protocol to somebody who had not yet chosen.
+  // Two buttons, and nothing arguing for either.
   it('offers the two as labels, with no prose under them', () => {
     const shown = text(render({ path: null }))
     for (const option of TEAMWORK_PATHS) expect(shown).toContain(option.title)
@@ -754,8 +666,7 @@ describe('the question asked before the steps', () => {
     expect(shown).not.toMatch(/Nothing is sent to them/)
   })
 
-  // Marked, never taken. A relay file and a colleague's key are very good
-  // evidence and still only evidence about somebody's intent.
+  // Marked, never taken: a relay file and a colleague's key are evidence, not intent.
   it('marks the one the repository points at, with the fact behind it, and picks neither', () => {
     const markup = render({ path: null, list: enrolled(), relay: relayOnDisk() })
     expect(markup).toContain('path-option--suggested')
@@ -765,8 +676,7 @@ describe('the question asked before the steps', () => {
     expect(markup).toContain('Join a team I was invited to</button>')
   })
 
-  // Somebody who is connected came here to look, not to be asked what they are
-  // doing after they have done it.
+  // Somebody connected came here to look.
   it('asks nothing of a project where this already works', () => {
     const working = render({
       path: null,
@@ -797,18 +707,14 @@ describe('the question asked before the steps', () => {
   it('keeps the answer on screen with a way to take it back', () => {
     const shown = text(render({ path: 'join' }))
     expect(shown).toContain('Not that')
-    // The choice is quoted as the button said it. Lowercasing an imperative
-    // after "You are" made a predicate of it: "You are join a team i was
-    // invited to."
+    // Quoted as the button said it: lowercasing an imperative after "You are" made a predicate of it.
     expect(shown).toContain('Join a team I was invited to')
     expect(shown).not.toMatch(/You are/)
     expect(shown).not.toMatch(/invited to\./)
   })
 })
 
-// The panel used to print, under every step, why the step was there and what
-// the far end saw while it was not done — two paragraphs per step, rewritten
-// per path. What is left is the title, the mark and one line.
+// The title, the mark and one line; nothing about why the step is there.
 describe('what a step puts on screen', () => {
   it('is the summary and nothing arguing around it', () => {
     const shown = text(render({ path: 'join' }))
@@ -824,9 +730,7 @@ describe('what a step puts on screen', () => {
     expect(steps('start').length).toBe(5)
   })
 
-  // Two relays is two halves of a team that never meet, and it is also the
-  // mistake this page otherwise encourages by putting a deploy button in front
-  // of everybody. It stays — as one line.
+  // Two relays is two halves of a team that never meet.
   it('warns a joiner whose team has not pushed a relay yet, before offering them one', () => {
     const shown = text(render({ path: 'join' }))
     const warning = shown.indexOf('Nobody has pushed .teamree/relay yet')
@@ -873,8 +777,7 @@ describe('a push that is taking its time', () => {
     }
   })
 
-  // The whole of the original report. All three of these were being produced
-  // and thrown away between git and the window.
+  // All three were being produced and thrown away between git and the window.
   it('says what it is doing, for how long, and what git last printed', () => {
     const shown = text(render(running()))
     expect(shown).toContain('Pushing to the remote')
@@ -882,8 +785,7 @@ describe('a push that is taking its time', () => {
     expect(shown).toContain('Writing objects:  60% (6/10)')
   })
 
-  // It changes on its own, so a reader who cannot see it move is exactly the
-  // one for whom "it appears stuck" was worst.
+  // It changes on its own; a reader who cannot see it move is the one "it appears stuck" was worst for.
   it('announces itself to a reader who cannot watch the lines change', () => {
     expect(render(running())).toContain('aria-live="polite"')
   })
@@ -895,8 +797,7 @@ describe('a push that is taking its time', () => {
   })
 
   it('says it is stopping once Stop has been pressed, rather than offering it again', () => {
-    // Disabled on the same element, so a second press cannot ask for a thing
-    // that is already happening.
+    // Disabled on the same element, so a second press cannot ask for a thing already happening.
     expect(render(running({ cancelling: true }))).toContain('disabled="">Stopping…</button>')
   })
 
@@ -934,8 +835,7 @@ describe('a push that did not land', () => {
     }
   })
 
-  // Somebody pushed first is the ordinary outcome on the day a team sets this
-  // up, and it is fixed in two commands rather than by starting over.
+  // Somebody pushed first is the ordinary outcome, fixed in two commands.
   it('offers the push again, and says what to do before pressing it', () => {
     const shown = text(
       render(
@@ -952,8 +852,7 @@ describe('a push that did not land', () => {
     expect(shown).not.toMatch(/--force/)
   })
 
-  // The remedy, not the diagnosis. This app runs git with no terminal to prompt
-  // on, so a push that would have asked for a password simply refuses.
+  // This app runs git with no terminal to prompt on, so a push that would ask for a password refuses.
   it('carries the credential remedy the runtime worked out', () => {
     const shown = text(
       render(
@@ -986,8 +885,7 @@ describe('a push that did not land', () => {
     expect(shown).toContain('Nothing was sent')
   })
 
-  // "Was that normal?" is the question somebody has after sitting through a
-  // slow one, and it is unanswerable without the number.
+  // "Was that normal?" is unanswerable without the number.
   it('reports how long the whole thing took', () => {
     const shown = text(
       render(
@@ -1017,8 +915,7 @@ describe('how it ends', () => {
     ...overrides
   })
 
-  // Half-working is the normal outcome here rather than an edge case, so the
-  // ending is four verdicts and not one.
+  // Half-working is the normal outcome, so the ending is four verdicts and not one.
   it('says which halves worked, one line each', () => {
     const shown = text(render(finished()))
     expect(shown).toContain('Your key')
@@ -1032,8 +929,7 @@ describe('how it ends', () => {
     expect(text(render(finished({ list: roster() })))).toContain('Step 2 writes it: Add my key')
   })
 
-  // There is no invitation in this protocol, which is why the person setting it
-  // up has to write one — to somebody who is expecting one.
+  // There is no invitation in this protocol, which is why the person setting it up has to write one.
   it('writes the invitation out in full, and offers to copy it', () => {
     const shown = text(render(finished()))
     expect(shown).toContain('Invite somebody')

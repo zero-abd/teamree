@@ -1,11 +1,5 @@
-// The start-from control: a text box that is also a list of everything this
-// repository can branch from.
-//
-// It is an editable combobox, not a menu — the text is the value. Picking a row
-// only fills the box in, so a sha or a ref the listing never mentioned submits
-// exactly as typed. Focus never leaves the input; the highlight moves through
-// aria-activedescendant, which is what keeps a screen reader and the eye on the
-// same row.
+// The start-from control: an editable combobox whose text is the value, so a sha or unlisted ref submits
+// as typed. Focus stays in the input; the highlight moves through aria-activedescendant.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { StartPoint, StartPointList } from '@shared/entities'
@@ -53,8 +47,7 @@ export function StartPointPicker({
   const [activeId, setActiveId] = useState<string | null>(null)
   const popRef = useRef<HTMLDivElement | null>(null)
 
-  // Text that only echoes the current choice is not a filter — opening the list
-  // on a prefilled box has to show everything, not the one row already in it.
+  // Text that only echoes the current choice is not a filter.
   const query = filterFor(value)
   const model = useMemo(() => buildPickerModel(list, query), [list, query])
   const activeRow = rowById(model, activeId)
@@ -79,8 +72,7 @@ export function StartPointPicker({
   }
 
   const retype = (text: string): void => {
-    // Typing the exact name of a listed ref adopts that row's sha, so the
-    // summary is as precise for a typed ref as for a picked one.
+    // Typing a listed ref's exact name adopts its sha, so the summary is as precise.
     const exact = list.options.find((option) => option.ref === text.trim()) ?? null
     const next = buildPickerModel(list, filterFor({ text, option: exact }))
     onChange({ text, option: exact })
@@ -146,8 +138,7 @@ export function StartPointPicker({
             className="combo__toggle"
             tabIndex={-1}
             aria-label={open ? 'Hide refs' : 'Show refs'}
-            // Pointer-down, not click: a click lands after the input's blur has
-            // already closed the list, so the toggle would never open it.
+            // Pointer-down: a click lands after the input's blur has closed the list.
             onMouseDown={(event) => {
               event.preventDefault()
               setOpen((wasOpen) => !wasOpen)
@@ -248,11 +239,7 @@ function Row({
   )
 }
 
-/**
- * One line under the field, which is also what the combobox is described by:
- * while loading it says so, on failure it says the box still works, and
- * otherwise it names the commit the new branch will start at.
- */
+/** The line under the field, which also describes the combobox: loading, failed (box still works), or the start commit. */
 function StartPointStatus({
   state,
   onReload,
@@ -280,8 +267,7 @@ function StartPointStatus({
     )
   }
 
-  // What the field takes, not an instruction to use it: the field is already
-  // labelled and this line is its own description.
+  // Describes what the field takes; the field is already labelled.
   if (summaryRef.length === 0) return <>Branch, tag or commit</>
 
   return (

@@ -4,12 +4,7 @@ import { formatTable } from '../output.js'
 
 const MB = 1024 * 1024
 
-/**
- * Memory the way a person says it: megabytes to a sensible precision, and
- * gigabytes past a thousand of them. The same rule the status bar uses, said
- * once per side of the socket because `src/shared` is a contract, not a
- * library of formatters.
- */
+/** Memory the way a person says it; the status bar has its own copy, since `src/shared` is a contract. */
 export function formatBytes(bytes: number): string {
   const megabytes = bytes / MB
   if (megabytes >= 1000) return `${trim(megabytes / 1024, 2)} GB`
@@ -24,14 +19,7 @@ function formatCpu(cpu: number): string {
   return `${cpu.toFixed(1)}%`
 }
 
-/**
- * The tree, as a table: totals on the first line, one row per pane under the
- * worktree that owns it, the processes under that, and the app itself last.
- *
- * The same tree the status bar's popover draws, and named the same way — the
- * name somebody gave the pane, or its title — so what a person reads on the
- * rail and what their agent reads over the socket agree.
- */
+/** The status popover's tree as a table, named the same way: totals, panes by worktree, processes, app last. */
 export function resourcesTable(
   resources: SystemResources,
   terminals: readonly Terminal[],

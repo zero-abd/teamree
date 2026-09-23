@@ -58,22 +58,9 @@ async function waitUntil(predicate: () => boolean, timeoutMs = 2000): Promise<vo
   }
 }
 
-// Unix domain sockets only, and skipped rather than adapted on win32.
-//
-// These cases are the whole test of this transport, so the named-pipe path has
-// none. What is covered of it is only the naming: `resolveEndpoint` is shown to
-// spell a pipe for win32 and `isPipeEndpoint` to recognise one, in
-// tests/platform/socket-endpoint.test.ts, and the CLI's end of the same in
-// src/cli/discovery.test.ts. Nothing has ever bound a pipe, accepted a
-// connection on one, or run the branch in `listenWithStaleRecovery` that
-// refuses to unlink one — the whole reason that branch exists.
-//
-// Recorded rather than closed, deliberately. A named pipe needs a Windows
-// kernel; there is no shim that would make one appear here, so the test could
-// only be written to be skipped on every machine this project runs on, which
-// buys a green block and no evidence. Windows was dropped on purpose — see
-// "macOS is the supported platform" in ROADMAP.md — and the app ships macOS-only.
-// If Windows ever comes back, this is the first gap that needs filling.
+// Unix domain sockets only, skipped rather than adapted on win32. Nothing has
+// ever bound a named pipe or run the `listenWithStaleRecovery` branch that
+// refuses to unlink one; the app ships macOS-only (see ROADMAP.md).
 describe.skipIf(process.platform === 'win32')('socket server', () => {
   let directory: string
   let endpoint: string
@@ -123,8 +110,7 @@ describe.skipIf(process.platform === 'win32')('socket server', () => {
     await waitUntil(() => server.connectionCount() === 2)
 
     one.send(`${JSON.stringify({ id: 'a', method: 'status.get' })}\n`)
-    // A deliberately unknown method, so this asserts per-connection routing
-    // rather than whichever feature areas happen to be wired in.
+    // A deliberately unknown method, so this asserts per-connection routing.
     two.send(`${JSON.stringify({ id: 'b', method: 'nope.nope', params: {} })}\n`)
     await Promise.all([one.waitFor(1), two.waitFor(1)])
 
@@ -159,12 +145,9 @@ describe.skipIf(process.platform === 'win32')('socket server', () => {
   })
 
   it('binds an endpoint no other account may connect to', async () => {
-    // connect(2) on a unix socket is an authorisation check — the kernel asks
-    // for write permission on the file — so this is the whole of who may drive
-    // the runtime from this machine, and it is asserted as an exact mode rather
-    // than as "no worse than": 0755, which is what an ordinary umask leaves
-    // behind, would pass a `& 0o022` test and still be a file the app never
-    // chose the permissions of.
+    // connect(2) on a unix socket is an authorisation check (the kernel asks for
+    // write permission on the file). Asserted as an exact mode: 0755, what an
+    // ordinary umask leaves, would pass a `& 0o022` test.
     expect((await stat(endpoint)).mode & 0o777).toBe(ENDPOINT_MODE)
   })
 
@@ -187,13 +170,9 @@ describe.skipIf(process.platform === 'win32')('socket server', () => {
   })
 })
 
-// The same claim as above, made where it could actually fail. `listen` takes no
-// mode, so without `restrictEndpoint` the endpoint's permissions are whatever
-// the process umask leaves — 0755 out of a Finder launch, 0777 out of a shell
-// whose profile sets `umask 000`, and the second of those is a socket every
-// account on the machine may connect to. Which of them you get is a property of
-// how the app was started, not of the app, and this is the test that says the
-// app decides.
+// `listen` takes no mode, so without `restrictEndpoint` the endpoint's permissions
+// are whatever the umask leaves — 0755 from a Finder launch, 0777 from a shell
+// with `umask 000`, a socket every account on the machine may connect to.
 describe.skipIf(process.platform === 'win32')('the endpoint under a permissive umask', () => {
   let directory: string
   let endpoint: string
@@ -223,9 +202,8 @@ describe.skipIf(process.platform === 'win32')('the endpoint under a permissive u
   })
 
   it('is still the socket the CLI connects to and gets an answer on', async () => {
-    // Shutting the door on other accounts must not shut it on this one, which is
-    // the one way a mode this strict could break the product rather than protect
-    // it. The CLI runs as the user the app runs as; that is why 0600 is enough.
+    // Shutting the door on other accounts must not shut it on this one. The CLI
+    // runs as the user the app runs as; that is why 0600 is enough.
     const client = await openClient(endpoint)
     client.send(`${JSON.stringify({ id: 'q', method: 'status.get', params: {} })}\n`)
     await client.waitFor(1)

@@ -1,5 +1,4 @@
-// The table. Every remote URL shape git accepts, against every forge this
-// recognises, and the two answers that are deliberately nothing.
+// Every remote URL shape git accepts, against every forge recognised, and the two answers that are nothing.
 
 import { describe, expect, it } from 'vitest'
 import { reviewUrl } from './reviewUrl'
@@ -7,8 +6,7 @@ import { reviewUrl } from './reviewUrl'
 const COMPARE = 'https://github.com/o/r/compare/main...work?expand=1'
 
 describe('the review page for a branch that was just pushed', () => {
-  // The three ways the same GitHub repository is written in a config, and the
-  // scp-like one is the shape the forge's own clone button hands out.
+  // The three spellings of one GitHub repository; scp-like is what the clone button hands out.
   it('reads GitHub out of every URL shape git accepts for a remote', () => {
     for (const remoteUrl of [
       'git@github.com:o/r.git',
@@ -34,8 +32,7 @@ describe('the review page for a branch that was just pushed', () => {
     expect(
       reviewUrl({ remoteUrl: 'git@github.com:o/r.git', branch: 'work', baseRef: 'upstream/main', remote: 'upstream' })
     ).toBe(COMPARE)
-    // A remote called something else does not strip origin's name off a branch
-    // that genuinely begins with it.
+    // A remote called something else does not strip origin's name off a branch that begins with it.
     expect(
       reviewUrl({ remoteUrl: 'git@github.com:o/r.git', branch: 'work', baseRef: 'origin/main', remote: 'upstream' })
     ).toBe('https://github.com/o/r/compare/origin%2Fmain...work?expand=1')

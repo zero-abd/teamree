@@ -1,9 +1,5 @@
-// Where the deploy command is, from inside a packaged app and from a checkout.
-//
-// The panel used to print `/Applications/teamree.app/...` unconditionally,
-// which is a path that does not exist on the machine of anybody running from a
-// clone — including every one of this project's own contributors. So the answer
-// is worked out rather than written down, and "there is none" is an answer.
+// Where the deploy command is, from a packaged app and from a checkout: worked
+// out rather than written down, and "there is none" is an answer.
 
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'

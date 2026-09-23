@@ -1,8 +1,5 @@
-// Whether the window is allowed to say somebody is typing.
-//
-// The failure this guards against is the quiet one: a pane that goes on saying
-// "ana is typing" after ana has walked away, which would teach an owner to stop
-// reading the line that exists to tell them when it is true.
+// Whether the window is allowed to say somebody is typing: a pane that goes on saying
+// "ana is typing" after ana has left teaches the owner to stop reading the line.
 
 import { describe, expect, it } from 'vitest'
 import { TYPING_WINDOW_MS, type PaneTypist, type PaneWatchers } from '@shared/entities'
@@ -39,9 +36,7 @@ describe('whether somebody is typing now', () => {
   })
 
   it('stops naming them once they have stopped, without being told', () => {
-    // Nothing arrives to say a burst ended: the last keystroke is simply the
-    // last one. So "is typing" has to be a question about the clock, asked
-    // again on every tick, and not a flag somebody remembered to clear.
+    // Nothing arrives to say a burst ended, so "is typing" is a question about the clock, asked on every tick.
     expect(typingNow([typist('ana', NOW - TYPING_WINDOW_MS - 1)], NOW)).toEqual([])
   })
 
@@ -51,8 +46,7 @@ describe('whether somebody is typing now', () => {
   })
 
   it('still says the pane has been typed in long after the typing stopped', () => {
-    // The two facts are different and the second one does not expire: a pane a
-    // teammate has run commands in does not go back to being only yours.
+    // The second fact does not expire: a pane a teammate has run commands in does not go back to being only yours.
     const attention = { watchers: [], typists: [typist('ana', NOW - 3_600_000)], muted: false }
     expect(typingNow(attention.typists, NOW)).toEqual([])
     expect(hasBeenTyped(attention)).toBe(true)

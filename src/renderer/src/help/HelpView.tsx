@@ -1,20 +1,5 @@
-// What the keys do, what a worktree is, and where the rest of it is written.
-//
-// It takes the whole main area, the way the pane board and teamwork's setup do,
-// and for this view the reason is stronger than it is for either of them. Help
-// is read while doing the thing it describes: somebody reading the sentence
-// about panes is looking for the pane it is about, and somebody reading about a
-// worktree has one open two inches away. A modal would put a scrim over exactly
-// the part of the window the sentence is pointing at, and the reader would be
-// left closing the help to look at the thing the help was explaining, then
-// opening it again to read the next line.
-//
-// It is also somewhere you pass through rather than somewhere you work, which
-// is why it toggles on its own chord and why Escape leaves: two ways out, both
-// of which people try without being told.
-//
-// Nothing is unmounted that was costing anything. The PTYs live in the runtime,
-// so every pane keeps running and keeps its scrollback while this is up.
+// What the keys do, what a worktree is, and where the rest is written. It takes the main area because
+// help is read beside the thing it describes, which a modal's scrim would cover.
 
 import { useEffect, useRef } from 'react'
 import { formatChord, type PlatformModifier } from '../keyboard/platformModifier'
@@ -39,32 +24,17 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
   const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
   const loadCli = useWorkspaceStore((state) => state.loadCli)
 
-  // Asked for on arrival rather than relied on from whenever something else
-  // last looked. The state this section describes is a fact about the machine
-  // that a terminal in this very window can change — somebody can link the CLI
-  // by hand between one visit and the next — and a page telling them the
-  // command is missing when they have just installed it is worse than one that
-  // takes a moment to say so.
+  // Asked on arrival: a terminal in this window may have linked the CLI since the last look.
   useEffect(() => {
     void loadCli()
   }, [loadCli])
 
-  // Escape is what every reader tries first on a view they opened to look at
-  // something. Capture, for the same reason the chords are captured: a focused
-  // pane must not eat it first.
+  // Capture phase, so a focused pane cannot eat Escape first.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
-      // Anything modal on top owns Escape. Dismissing the palette and this
-      // page with one press would take away more than the reader asked for.
-      //
-      // `modalOnScreen` rather than `dialog`, because half of what can be on
-      // top is not in `dialog` at all: a question about a teammate's keystrokes
-      // is raised by another machine, is the one modal here that refuses to be
-      // dismissed, and would otherwise have this page close underneath a scrim
-      // the reader cannot see through. `modalLayer.ts` exists because every
-      // surface that had to stand aside had learned only the half it was
-      // written beside.
+      // Anything modal on top owns Escape. `modalOnScreen`, not `dialog`: a remote-keystrokes question is
+      // not in `dialog` and would otherwise have the page close under its scrim.
       if (modalOnScreen(useWorkspaceStore.getState())) return
       event.preventDefault()
       toggleHelp()
@@ -73,11 +43,7 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [toggleHelp])
 
-  // Focus goes to the region rather than to a control in it. This is a page to
-  // read from the top, not a list to act on, so putting the focus on the first
-  // button would start the reader in the middle of it — and without this the
-  // keyboard stays wherever it was, which after a chord is a pane that is no
-  // longer on screen.
+  // Focus the region, not a control: it is read from the top, and the old focus is off screen.
   const region = useRef<HTMLElement>(null)
   useEffect(() => {
     region.current?.focus()

@@ -1,27 +1,5 @@
-// Everything this copy of teamree is configured to do, on one page.
-//
-// It takes the whole main area for the reason the pane board and teamwork's
-// setup do, and the reason is in what is on it rather than in how big it is.
-// Every section here is about the machine — what is on its PATH, whether it
-// looks for releases, how big the text in its panes is, where its checkouts
-// are — and not one of them is about the worktree whose tab happens to be open.
-// A drawer beside the panes would frame all of it with a tab that has nothing
-// to do with it, and a modal would put a scrim over the panes whose text size
-// somebody is here to change. `WorkspaceArea` gives it the area ahead of the
-// empty state for the other half of the same thought: a window with nothing
-// open is exactly where people go looking for settings.
-//
-// Two things this page deliberately is not. It is not a second colour editor:
-// Appearance is one row and a button that opens the editor that already exists,
-// because two places to set one colour is how the two come to disagree. And it
-// is not a second place to set a relay: the relay block reads, names where the
-// URL came from, and sends you to the teamwork page, which is where setting one
-// is a step in a flow that also writes a key and pushes both files.
-//
-// Nothing here is unmounted that was costing anything, the same as the board:
-// the PTYs live in the runtime, so every pane keeps running and keeps its
-// scrollback while this is up — which is what makes the text-size control
-// honest, since the panes it resizes are still there behind the page.
+// The settings page: machine-level facts (PATH, updates, text size, checkouts), so it takes the main
+// area rather than a drawer. Colours and relays are read here and set where they already live.
 
 import { useEffect, useRef, useState } from 'react'
 import { agentLaunchCommand } from '@shared/agentLaunch'
@@ -46,32 +24,18 @@ export function SettingsView({ modifier }: { modifier: PlatformModifier }): Reac
   const loadCli = useWorkspaceStore((state) => state.loadCli)
   const loadUpdate = useWorkspaceStore((state) => state.loadUpdate)
 
-  // Both are read again on open rather than trusted from startup, and for the
-  // same reason: each is a fact about the world outside this window that can
-  // have moved since. A link somebody made in a terminal and a check that ran
-  // an hour ago are exactly what this page is being opened to look at.
+  // Read again on open: both are facts about the world outside this window that may have moved.
   useEffect(() => {
     void loadCli()
     void loadUpdate()
   }, [loadCli, loadUpdate])
 
-  // Escape is what every reader tries first on a view they opened to look at
-  // something. Capture, for the same reason the chords are captured: a focused
-  // pane must not eat it first.
+  // Capture phase, so a focused pane cannot eat Escape first.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape') return
-      // Anything modal on top owns Escape. Dismissing the appearance editor —
-      // which this page's own Appearance row opens — and this page with one
-      // press would take away more than the reader asked for.
-      //
-      // `modalOnScreen` rather than `dialog`, because half of what can be on
-      // top is not in `dialog` at all: a question about a teammate's keystrokes
-      // is raised by another machine, is the one modal here that refuses to be
-      // dismissed, and would otherwise have this page close underneath a scrim
-      // the reader cannot see through. `modalLayer.ts` exists because every
-      // surface that had to stand aside had learned only the half it was
-      // written beside.
+      // Anything modal on top owns Escape. `modalOnScreen`, not `dialog`: a remote-keystrokes
+      // question is not in `dialog` and would otherwise have the page close under its scrim.
       if (modalOnScreen(useWorkspaceStore.getState())) return
       event.preventDefault()
       toggleSettings()
@@ -80,11 +44,8 @@ export function SettingsView({ modifier }: { modifier: PlatformModifier }): Reac
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [toggleSettings])
 
-  // Reached from a button elsewhere in the window, so the keyboard has to come
-  // with it: without this, Tab carries on through whatever the reader was in
-  // before, while the page that just opened is unreachable. The region rather
-  // than a control inside it, so the first Tab lands on the first section's own
-  // button and the page's name is read out on arrival.
+  // Opened from a button elsewhere, so focus has to follow; the region, so the first Tab lands on
+  // the first section and the page's name is read out.
   const region = useRef<HTMLElement>(null)
   useEffect(() => {
     region.current?.focus()
@@ -135,14 +96,7 @@ export function SettingsView({ modifier }: { modifier: PlatformModifier }): Reac
   )
 }
 
-/**
- * The `teamree` command, and whether a terminal can find it.
- *
- * One line and a button; `cliLine` says why, and the judgement underneath is
- * still `cliInstallModel`'s — the same reading of the same link the first-run
- * dialog makes, said in fewer words. What pressing the button does, and
- * whether a password is coming, is on the button's hover.
- */
+/** The `teamree` command and whether a terminal can find it; the judgement is `cliInstallModel`'s. */
 function CliSection(): React.JSX.Element {
   const status = useWorkspaceStore((state) => state.cli)
   const pending = useWorkspaceStore((state) => state.cliPending)
@@ -194,8 +148,7 @@ function UpdatesSection(): React.JSX.Element {
   const checkForUpdates = useWorkspaceStore((state) => state.checkForUpdates)
   const setAutomaticUpdates = useWorkspaceStore((state) => state.setAutomaticUpdates)
 
-  // The "last checked" line is the one number on this page that changes while
-  // nothing happens, so the page has to re-render itself for it to stay true.
+  // "Last checked" changes while nothing happens, so the page re-renders itself.
   const now = useNow()
   const panel = updatePanel(update, now)
 
@@ -244,15 +197,7 @@ function UpdatesSection(): React.JSX.Element {
   )
 }
 
-/**
- * What an agent that has stopped may do when you are not looking at the window.
- *
- * One row and no paragraph under it. Everything else on this page explains
- * something that cannot be worked out by reading the control — what a link on
- * the PATH is for, what "automatically" means in hours, which of two places a
- * relay came from. The three words in this select are the whole of what this
- * setting does.
- */
+/** What an agent that has stopped may do when you are not looking at the window. */
 function NoticesSection(): React.JSX.Element {
   const agentNotices = useWorkspaceStore((state) => state.agentNotices)
   const setAgentNotices = useWorkspaceStore((state) => state.setAgentNotices)
@@ -322,17 +267,8 @@ function PanesSection(): React.JSX.Element {
 }
 
 /**
- * Which agent you always use, and what you always pass it.
- *
- * Both are per-machine preferences rather than workspace settings — see
- * `state/preferences.ts` — and the section only exists when the probe found
- * something, because every control on it is about an agent this machine has.
- *
- * Nothing is seeded. Whether teamree pre-applies any agent's autonomy flag —
- * `--dangerously-skip-permissions` and its equivalents — is a product decision
- * about what this app does to a machine by default, and it is deliberately not
- * being taken here by shipping a default that happens to be one. The fields
- * start empty and stay empty until somebody types in them.
+ * Which agent you always use and what you pass it; per machine, shown only when the probe found one.
+ * Nothing is seeded: no autonomy flag is pre-applied by default.
  */
 function AgentsSection(): React.JSX.Element | null {
   const agents = useWorkspaceStore((state) => state.agents)
@@ -376,28 +312,15 @@ function AgentsSection(): React.JSX.Element | null {
 }
 
 /**
- * One agent's launch arguments, with the command they produce under them.
- *
- * The command is shown because the field on its own cannot be checked: a
- * fragment of a command line is exactly the thing whose effect depends on
- * where it lands, and somebody who has typed a quote in the wrong place should
- * see it in the line rather than in a pane. It is composed by the same
- * function the runtime composes with — `@shared/agentLaunch` — so the page
- * cannot drift into showing a line the launch would not produce.
- *
- * What it does not show is the session selector the runtime appends for the
- * agents that take one. That is the app's own bookkeeping, it is not what this
- * field controls, and putting a fresh uuid on the page would make a line that
- * looks copyable and is not.
+ * One agent's launch arguments, with the command `@shared/agentLaunch` builds from them shown underneath.
+ * The runtime's session selector is left out: it is not what this field controls.
  */
 function AgentArguments({ agent }: { agent: InstalledAgent }): React.JSX.Element {
   const stored = useWorkspaceStore((state) => state.agentArgs[agent.kind] ?? '')
   const setAgentArgs = useWorkspaceStore((state) => state.setAgentArgs)
   const [draft, setDraft] = useState(stored)
 
-  // As with the start point above: the stored value moving is what puts the
-  // trimmed spelling back in the box, and what keeps this field right when the
-  // preference is changed from another surface.
+  // The stored value moving puts the trimmed spelling back, including when changed from elsewhere.
   useEffect(() => {
     setDraft(stored)
   }, [stored])
@@ -436,15 +359,7 @@ function AgentArguments({ agent }: { agent: InstalledAgent }): React.JSX.Element
   )
 }
 
-/**
- * One row, and it opens something else.
- *
- * There is a colour editor already, reached by a chord and by the sidebar's
- * rail, and it is the only thing in the app that writes an appearance. A second
- * set of swatches here would be a second answer to one question, which is the
- * failure the comments around this codebase keep naming — so this row is a
- * sentence saying what is over there and a button that goes there.
- */
+/** One row and a button to the existing colour editor; a second set of swatches would drift. */
 function AppearanceSection({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
   const openDialog = useWorkspaceStore((state) => state.openDialog)
 
@@ -457,9 +372,7 @@ function AppearanceSection({ modifier }: { modifier: PlatformModifier }): React.
         <button
           type="button"
           className="button button--small"
-          // No chord since ⌘, became the settings page's own, and no empty
-          // tooltip either: an attribute with nothing in it is a tooltip that
-          // flickers open over nothing.
+          // No chord (⌘, is the settings page's) and no empty tooltip, which flickers open over nothing.
           title={shortcutHint('open-appearance', modifier) || undefined}
           onClick={() => openDialog({ kind: 'appearance' })}
         >
@@ -513,23 +426,13 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
   )
 }
 
-/**
- * Which ref the New task dialog offers first, for this project.
- *
- * Held as a draft and written on blur or Enter rather than on every keystroke.
- * A ref is typed a character at a time and half of one is a ref that does not
- * exist, so a field that wrote through as it went would spend most of its life
- * storing a preference nothing can resolve — and `withStartPoint` would be
- * clearing and re-setting the entry on the way past the empty string.
- */
+/** Which ref the New task dialog offers first; a draft written on blur, since half a ref resolves to nothing. */
 function StartPoint({ project }: { project: Project }): React.JSX.Element {
   const stored = useWorkspaceStore((state) => state.startPointDefaults[project.id] ?? '')
   const setStartPointDefault = useWorkspaceStore((state) => state.setStartPointDefault)
   const [draft, setDraft] = useState(stored)
 
-  // The stored value moving is what puts the trimmed, stored spelling back in
-  // the box after a commit — and it is also what keeps this field right when
-  // the preference is changed from somewhere else in the window.
+  // The stored value moving puts the trimmed spelling back, including when changed from elsewhere.
   useEffect(() => {
     setDraft(stored)
   }, [stored])
@@ -537,9 +440,7 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
   const commit = (): void => {
     const next = draft.trim()
     if (next === stored) return
-    // Null rather than the empty string, because the store's `withStartPoint`
-    // treats them differently on purpose: null removes the entry, which is the
-    // only spelling of "use the base ref" anything else checks for.
+    // Null, not '': `withStartPoint` removes the entry on null, the only spelling of "use the base ref".
     setStartPointDefault(project.id, next.length === 0 ? null : next)
   }
 
@@ -585,21 +486,7 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
   )
 }
 
-/**
- * What a new worktree of this project gets that the branch does not carry.
- *
- * Three fields and three labels, and no paragraph under them: the reader is a
- * developer looking at a box that says it symlinks `node_modules`, and a
- * paragraph explaining why a worktree has no `node_modules` is a paragraph
- * they will read once. What the lists refuse — a tracked path, a path that is
- * not ignored, a copy too large to be a copy — is said at the moment it is
- * refused, on the row that failed, where it is about a specific path.
- *
- * The setup command sits under them because it is the same subject and it runs
- * after them: the checkout is linked and copied first, and the command then
- * runs in a pane of it labelled `setup`, which is the whole of what needs
- * saying and is said by the pane itself rather than here.
- */
+/** What a new worktree of this project gets that the branch does not carry, and its setup command. */
 function CarriedPaths({ project }: { project: Project }): React.JSX.Element {
   const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
 
@@ -626,14 +513,7 @@ function CarriedPaths({ project }: { project: Project }): React.JSX.Element {
   )
 }
 
-/**
- * The one command a new worktree runs, held as a draft and written on blur the
- * way the fields around it are.
- *
- * One line, because it is one command line. It is stored verbatim and typed
- * into the pane verbatim — `npm ci && npm run build` is a shell's business, not
- * this field's.
- */
+/** The one setup command a new worktree runs, stored and typed into the pane verbatim. */
 function SetupCommand({ project }: { project: Project }): React.JSX.Element {
   const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
   const stored = project.setupCommand ?? ''
@@ -677,13 +557,7 @@ function SetupCommand({ project }: { project: Project }): React.JSX.Element {
   )
 }
 
-/**
- * One path per line, written on blur.
- *
- * A draft rather than a write per keystroke, for the reason the start-point
- * field keeps one: half a path is a path that does not exist, and a field that
- * wrote through as it went would spend most of its life storing one.
- */
+/** One path per line, written on blur: half a path is a path that does not exist. */
 function PathList({
   project,
   id,
@@ -738,17 +612,8 @@ function PathList({
 }
 
 /**
- * Which editor this project's checkouts open in.
- *
- * Held and committed exactly the way the start point above is, and left empty
- * by almost everybody: teamree looks for a short list of editors on PATH by
- * itself, and this field is for the one it has never heard of.
- *
- * It names a program, not a command line. The main process resolves it on PATH
- * and spawns it with the checkout as a single argument, so flags in here are
- * part of a program name that does not exist rather than flags — which is the
- * deliberate half of the bargain: there is no shell anywhere in that path, and
- * a checkout is a directory somebody else may have named.
+ * Which editor this project's checkouts open in, when teamree's own PATH search misses it.
+ * A program name, not a command line: it is spawned without a shell, the checkout as one argument.
  */
 function EditorCommand({ project }: { project: Project }): React.JSX.Element {
   const stored = useWorkspaceStore((state) => state.editorCommands[project.id] ?? '')
@@ -819,15 +684,8 @@ function EditorCommand({ project }: { project: Project }): React.JSX.Element {
 }
 
 /**
- * Where teamwork would dial, read and not written.
- *
- * Setting a relay is a step in the teamwork page's flow, and the flow is the
- * point: it writes a key, writes the relay file, and pushes both, because a
- * relay in a file nobody has pulled is a team meeting in two places. A field
- * here would let somebody do a third of that and believe they were done, so
- * this shows the three facts worth knowing from here — what is being dialled,
- * which of the two places it came from, and whether the environment is beating
- * the file — and then points at the page that can change it.
+ * Where teamwork would dial, read only: setting a relay is a step in the teamwork flow (key, file, push).
+ * Shows what is dialled, which of the two sources it came from, and whether the env beats the file.
  */
 function RelayBlock({ project }: { project: Project }): React.JSX.Element {
   const relay = useWorkspaceStore((state) => state.relays[project.id])

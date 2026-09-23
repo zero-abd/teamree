@@ -1,23 +1,6 @@
-// The renderer's whole path to the runtime, which nothing else in the suite
-// touches.
-//
-// The window reaches the runtime through three Electron IPC channels, and the
-// two ends of each channel are spelled out independently: `ipcChannels.ts` names
-// them for the main process, and `src/preload/index.ts` repeats the literals
-// because it cannot import a main-process module without dragging main into the
-// renderer's TypeScript project. Two spellings of one name is a rename waiting
-// to go half-done, and nothing would say so: rename one side and the suite stays
-// green while the app launches to a window whose every call hangs.
-//
-// The shape of the bridge — that `window.teamree.runtime` has `call`, `onStream`
-// and `release`, with those signatures — is already held by the compiler, since
-// `src/preload/index.d.ts` types `window.teamree` as the preload's own `typeof
-// api`. The strings are what the compiler cannot see, so they are what is
-// checked here, together with one real round trip through the bridge to prove
-// the channels are not merely agreed on but actually served.
-//
-// No Electron: `ipcMain` is the one thing faked, because a test that needed a
-// packaged app to run would not be run.
+// The renderer's path to the runtime. `src/preload/index.ts` repeats the channel
+// literals because it cannot import a main-process module, so the strings are
+// checked here, plus one real round trip. No Electron: `ipcMain` is faked.
 
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -53,11 +36,9 @@ describe('the renderer transport names one set of channels', () => {
     const main = await channelConstantsIn('src/main/runtime/ipcChannels.ts')
     const preload = await channelConstantsIn('src/preload/index.ts')
 
-    // Keyed by constant, so a rename that moved a value onto the wrong name
-    // reads as a mismatch rather than as two equal sets.
+    // Keyed by constant, so a value moved onto the wrong name reads as a mismatch.
     expect(preload).toEqual(main)
-    // And the constants really are the three the bridge installs, so this stays
-    // honest if a regex ever stops matching anything at all.
+    // And the constants really are the three the bridge installs.
     expect(Object.values(main).sort()).toEqual([RPC_CALL_CHANNEL, RPC_RELEASE_CHANNEL, RPC_STREAM_CHANNEL].sort())
   })
 
@@ -65,33 +46,17 @@ describe('the renderer transport names one set of channels', () => {
     const preload = new Set(await channelsNamedIn('src/preload/index.ts'))
     const served = new Set([
       ...(await channelsNamedIn('src/main/runtime/ipcChannels.ts')),
-      // The folder picker is handled straight off `ipcMain` in the entrypoint
-      // rather than through the bridge, and is spelled inline at both ends.
+      // The folder picker is handled straight off `ipcMain`, spelled inline at both ends.
       ...(await channelsNamedIn('src/main/index.ts')),
-      // And "reveal in Finder", which is also handled off `ipcMain` rather than
-      // through the bridge but keeps its channel beside the module that serves
-      // it — the entrypoint imports the registration and never names the
-      // string. Listed explicitly rather than by walking `src/main`, because
-      // the value of this check is that adding a channel makes somebody come
-      // here and say where it is answered: a glob would have quietly adopted
-      // the next one and stopped being a check at all.
+      // "Reveal in Finder" keeps its channel beside the module that serves it. Listed
+      // explicitly rather than by walking `src/main`: adding a channel should make
+      // somebody come here and say where it is answered; a glob would adopt the next one.
       ...(await channelsNamedIn('src/main/reveal/revealPath.ts')),
-      // And the menu bar's two, which are that same arrangement again: the
-      // window publishes what its own menus should contain, the main process
-      // draws them and says when one was chosen. Both literals live beside the
-      // module that serves them, and they are named here for the reason above
-      // — adding a channel should make somebody come to this list and say where
-      // it is answered.
+      // The menu bar's two, the same arrangement.
       ...(await channelsNamedIn('src/main/menuBar.ts')),
-      // And the agent notifications' two, the same arrangement a third time:
-      // the window publishes what it wants and which pane it is looking at, the
-      // main process raises the notification and says which pane a click was
-      // about. Named here for the reason above.
+      // The agent notifications' two, the same again.
       ...(await channelsNamedIn('src/main/agentNotices.ts')),
-      // And keep-awake's one, outward only: the window publishes the mode and
-      // whether an agent is busy, the main process holds or releases one
-      // power-save assertion, and nothing comes back. Named here for the
-      // reason above.
+      // Keep-awake's one, outward only.
       ...(await channelsNamedIn('src/main/keepAwake.ts'))
     ])
 
@@ -125,8 +90,7 @@ function fakeWindow(id: number): { contents: unknown; streamed: StreamEvent[]; n
     id,
     isDestroyed: () => false,
     send: (channel: string, frame: StreamEvent) => {
-      // Asserted, not assumed: a bridge writing stream frames onto some other
-      // channel would be invisible to a test that only counted them.
+      // Asserted: frames on some other channel would be invisible to a count.
       expect(channel).toBe(RPC_STREAM_CHANNEL)
       streamed.push(frame)
     },
@@ -174,17 +138,15 @@ describe('the ipc bridge, against a real registry', () => {
     const window = fakeWindow(1)
     const response = await invoke(window.contents, { id: 'r1', method: 'status.get', params: {} })
 
-    // The real dispatcher and the real handler, not a stand-in: the id is
-    // correlated back and the result is the one status.get actually produces.
+    // The real dispatcher and handler: the id is correlated back.
     expect(response).toMatchObject({ id: 'r1', ok: true, result: { version: '9.9.9', endpoint: '/tmp/fake.sock' } })
   })
 
   it('stops dispatching once uninstalled, but still answers: a call made while quitting gets a frame, not a missing handler', async () => {
     const window = fakeWindow(1)
     uninstall()
-    // Electron's own behaviour on a channel with no handler is to log an error
-    // in the main process and reject the page's invoke with its wording; this
-    // is the frame the page gets instead.
+    // Electron's own behaviour on a channel with no handler is to reject the page's
+    // invoke with its wording; this is the frame the page gets instead.
     expect(handlers.has(RPC_CALL_CHANNEL)).toBe(true)
     const response = await invoke(window.contents, { id: 'late', method: 'status.get', params: {} })
     expect(response).toEqual({ id: 'late', ok: false, error: { code: 'internal', message: 'teamree is quitting.' } })
@@ -220,8 +182,7 @@ describe('the ipc bridge, against a real registry', () => {
     await invoke(second.contents, { id: 'b', method: 'workspace.subscribe', params: {} })
     expect(hub.size).toBe(2)
 
-    // A reload: the page that subscribed is going away, so its stream goes too
-    // and the other window's is untouched.
+    // A reload: the page's stream goes and the other window's is untouched.
     first.navigate()
     expect(hub.size).toBe(1)
 

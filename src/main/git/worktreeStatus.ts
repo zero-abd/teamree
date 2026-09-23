@@ -1,11 +1,6 @@
-// Live git state for one worktree, shaped for polling.
-//
-// One `git status --porcelain=v2 --branch` answers every counter at once, which
-// is the whole reason for choosing v2 over plumbing several commands together.
-// A second command runs for the one thing v2 cannot answer: `branch.ab` is
-// measured against the upstream, and `behind` here means how far the project's
-// base ref has moved on without this worktree. Those are the same question only
-// while the upstream is the base ref, and a pushed branch tracks itself.
+// Live git state for one worktree, shaped for polling. One `status
+// --porcelain=v2 --branch` answers every counter; a second command answers
+// `behind` against the base ref, which `branch.ab` measures against the upstream.
 
 import type { WorktreeStatus } from '../../shared/entities'
 import type { GitRunner } from './gitProcess'
@@ -34,16 +29,9 @@ const DETACHED = '(detached)'
 export const IGNORED_SAMPLE_LIMIT = 6
 
 /**
- * Asked of git whenever ignored entries are wanted.
- *
- * `traditional` collapses a wholly ignored directory into a single entry, so
- * neither the walk nor the output grows with what is inside node_modules — but
- * only while untracked files are listed normally, which is why that is pinned
- * here rather than left to whatever `status.showUntrackedFiles` says.
- *
- * `-z` is not an optimisation either. Without it git C-quotes any path with a
- * space or a non-ASCII byte in it, and these paths are compared against the
- * project's carried-over list and shown to the user by name.
+ * `traditional` collapses a wholly ignored directory into one entry, but only
+ * while untracked files are listed normally, so that is pinned. `-z` because
+ * git otherwise C-quotes paths that are compared and shown by name.
  */
 const IGNORED_ARGS = ['-z', '--ignored=traditional', '--untracked-files=normal']
 
@@ -72,22 +60,18 @@ export function parsePorcelainV2(raw: string, prepared?: PreparedPaths): ParsedS
       continue
     }
     if (marker === '?') {
-      // The same question the change list asks, asked the same way: a checkout
-      // teamree linked `node_modules` into is not a checkout the developer has
-      // touched, and a chip that says otherwise is wrong on every new worktree.
+      // A checkout teamree linked `node_modules` into is not one the developer touched.
       if (!isPreparedPath(prepared, record.slice(2), true)) parsed.untracked += 1
       continue
     }
     if (marker === '!') {
-      // Never a change — but `git worktree remove` deletes these along with
-      // everything else, and counts that leave them out are why it can.
+      // Never a change, but `git worktree remove` deletes these too.
       parsed.ignored += 1
       if (parsed.ignoredPaths.length < IGNORED_SAMPLE_LIMIT) parsed.ignoredPaths.push(record.slice(2))
       continue
     }
     if (marker === 'u') {
-      // Unmerged paths are their own bucket: showing them as both staged and
-      // unstaged would double-count the one thing the user must resolve.
+      // Their own bucket: staged and unstaged both would double-count them.
       parsed.conflicted += 1
       continue
     }
@@ -99,8 +83,7 @@ export function parsePorcelainV2(raw: string, prepared?: PreparedPaths): ParsedS
       if (indexState && indexState !== '.') parsed.staged += 1
       if (worktree && worktree !== '.') parsed.unstaged += 1
       // Under `-z` the record after a rename is the path it came from, not a
-      // second change; on one line per record git puts it after a tab on the
-      // same one. Consuming it here is what keeps it out of the counts.
+      // second change; on one line per record it is after a tab on the same one.
       if (marker === '2' && nulSeparated) index += 1
     }
   }
@@ -109,13 +92,8 @@ export function parsePorcelainV2(raw: string, prepared?: PreparedPaths): ParsedS
 }
 
 /**
- * The records of a status stream, however it was asked for.
- *
- * `-z` is what the reads in this file ask for, and its records are separated by
- * a byte that cannot occur in a path — so nothing is quoted and nothing needs
- * unquoting. A stream arriving one record per line is still read, because a
- * line ending is the one thing that differs between platforms and a parser that
- * only understood one of them would be a Windows-only bug nobody could see.
+ * The records of a status stream, NUL- or line-separated; a parser that only
+ * understood one of them would be a Windows-only bug nobody could see.
  */
 function splitRecords(raw: string): { records: string[]; nulSeparated: boolean } {
   // No path can hold a NUL, so its presence says which spelling this is.
@@ -160,9 +138,7 @@ export type StatusReadOptions = {
 
 export async function readWorktreeStatus(runner: GitRunner, options: StatusReadOptions): Promise<WorktreeStatus> {
   const { stdout } = await runner.run({
-    // The ignored entries cost nothing extra to ask for: git has already
-    // decided which untracked paths an ignore rule covers in order to leave
-    // them out, so this only changes whether it says so.
+    // The ignored entries cost nothing extra: git has already decided them.
     args: ['status', '--porcelain=v2', '--branch', ...IGNORED_ARGS],
     cwd: options.worktreePath,
     readOnly: true,
@@ -171,22 +147,14 @@ export async function readWorktreeStatus(runner: GitRunner, options: StatusReadO
   })
   const parsed = parsePorcelainV2(stdout, options.prepared)
 
-  // The two numbers answer different questions and are measured against
-  // different refs. `ahead` is what the push button sends, so it belongs to the
-  // upstream. `behind` is how far the project's base has moved on without this
-  // worktree, so it belongs to the base ref — and once a push has pointed the
-  // upstream at the branch's own branch on the remote, git's own `branch.ab`
-  // has nothing left to say about the base at all.
-  //
-  // The extra command is skipped in the one case where it would only repeat
-  // what `git status` already answered: a branch tracking the base ref, which
-  // is every worktree made before this app stopped setting that tracking.
+  // `ahead` is what the push button sends, so it belongs to the upstream;
+  // `behind` is how far the base has moved on, so it belongs to the base ref.
+  // Skipped when the branch tracks the base ref, where `git status` already answered.
   if (options.baseRef !== undefined && parsed.upstream !== options.baseRef) {
     const divergence = await readDivergence(runner, options.worktreePath, options.baseRef, options.signal)
     if (divergence) {
       parsed.behind = divergence.behind
-      // With no upstream there is nothing else `ahead` could mean, and what
-      // this worktree has that the base does not is the closest thing to it.
+      // With no upstream there is nothing else `ahead` could mean.
       if (parsed.upstream === null) parsed.ahead = divergence.ahead
     }
   }
@@ -209,11 +177,8 @@ export async function readWorktreeStatus(runner: GitRunner, options: StatusReadO
 export type IgnoredEntries = { count: number; names: string[] }
 
 /**
- * What removing this checkout would delete that nothing has told the user
- * about: the `.env`, the local database, the virtualenv an agent built.
- *
- * Read on its own rather than off a status the caller happens to hold, because
- * the answer decides whether a directory is destroyed and a status is a cache.
+ * What removing this checkout would delete that nothing has told the user about.
+ * Read fresh, because the answer decides whether a directory is destroyed and a status is a cache.
  */
 export async function readIgnoredEntries(
   runner: GitRunner,
@@ -237,9 +202,7 @@ async function readDivergence(
   baseRef: string,
   signal?: AbortSignal
 ): Promise<{ ahead: number; behind: number } | null> {
-  // `HEAD...HEAD` is the branch against itself: it exits 0 and counts "0 0",
-  // which would be published as a confident "in sync" for a branch nobody has
-  // compared against anything.
+  // `HEAD...HEAD` exits 0 and counts "0 0": a confident "in sync" for nothing.
   if (comparesAgainstItself(baseRef)) return null
   try {
     assertRefShape(baseRef, 'base ref')

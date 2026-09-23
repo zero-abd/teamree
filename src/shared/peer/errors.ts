@@ -1,16 +1,5 @@
-// The one error type this library throws, and the reason its message is not a
-// parameter.
-//
-// Every other error type in this codebase takes a free-form message. This one
-// does not: the caller picks a code and the text comes from a frozen table.
-// That is deliberate. Handshake and transport code holds private keys, chaining
-// keys and nonces in the same scope as its throw sites, so a message parameter
-// is one careless template literal away from putting key material into a log
-// line, a crash report, or a `JSON.stringify` of the error. Removing the
-// parameter removes the possibility instead of relying on review to catch it.
-//
-// The code is the context. If a failure needs more than the code to diagnose,
-// add a code.
+// The one error type this library throws. No message parameter: throw sites share scope with keys and
+// nonces, so the text comes from a frozen table by code. Need more context? Add a code.
 
 export const PeerErrorCode = {
   /** A key or message was the wrong length, or a public key was not a usable X25519 point. */
@@ -37,10 +26,7 @@ export const PeerErrorCode = {
 
 export type PeerErrorCode = (typeof PeerErrorCode)[keyof typeof PeerErrorCode]
 
-/**
- * Fixed, secret-free text per code. Frozen so nothing can edit an entry at
- * runtime to smuggle a value in through the back door.
- */
+/** Fixed, secret-free text per code, frozen so nothing can smuggle a value in. */
 const MESSAGES: Readonly<Record<PeerErrorCode, string>> = Object.freeze({
   [PeerErrorCode.InvalidKey]: 'key material was not a usable X25519 key of the expected length',
   [PeerErrorCode.OutOfTurn]: 'the session is not at a point where this call means anything',

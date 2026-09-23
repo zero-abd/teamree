@@ -20,10 +20,6 @@ export function collectTerminalIds(node: PaneNode | null): string[] {
   return node.children.flatMap(collectTerminalIds)
 }
 
-export function countPanes(node: PaneNode | null): number {
-  return collectTerminalIds(node).length
-}
-
 export function hasTerminal(node: PaneNode | null, terminalId: string): boolean {
   return collectTerminalIds(node).includes(terminalId)
 }

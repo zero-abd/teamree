@@ -1,11 +1,5 @@
-// The colour on a line of a patch, which is only worth having if it is right.
-//
-// A few lines per language, chosen for the thing each language gets wrong: the
-// `#` that is a comment in a shell and a colour in CSS, the digits inside a
-// word that are not a number, the apostrophe in prose that is not a string, and
-// the extension nobody has a table for — which has to come back with no colour
-// rather than a guess, because a wrongly highlighted keyword in somebody's Rust
-// reads as the renderer knowing something it does not.
+// The colour on a line of a patch: a few lines per language, chosen for the
+// thing each gets wrong, and no colour rather than a guess for an unknown extension.
 
 import { describe, expect, it } from 'vitest'
 import { syntaxLanguage, tokenizeLine, type SyntaxKind } from './syntax'
@@ -64,7 +58,6 @@ describe('tokenizeLine', () => {
       ])
     })
 
-    // A block comment that closes on its own line is the ordinary case.
     it('closes a block comment where it closes', () => {
       expect(painted('const a = /* why */ 2', 'a.ts')).toEqual([
         ['keyword', 'const'],
@@ -75,8 +68,7 @@ describe('tokenizeLine', () => {
       ])
     })
 
-    // A digit inside a word is not a number, which is what a naive scan for
-    // digits turns every `utf8` and `h2` into.
+    // A naive digit scan turns every `utf8` and `h2` into a number.
     it('does not find a number inside a word', () => {
       expect(painted('const utf8 = 1', 'a.ts')).toEqual([
         ['keyword', 'const'],
@@ -123,8 +115,6 @@ describe('tokenizeLine', () => {
       ])
     })
 
-    // Prose is full of apostrophes and underscores, and a language table would
-    // turn half a sentence into a string at the first one.
     it('does not start a string at an apostrophe in a sentence', () => {
       expect(painted("It doesn't open a string.", 'README.md')).toEqual([['plain', "It doesn't open a string."]])
     })

@@ -1,14 +1,5 @@
-// Every stylesheet has to parse.
-//
-// This exists because one did not, and nothing noticed. A rule lost its body
-// during a merge — the opening brace ended up with the next block's comment
-// after it instead of its own declarations — and typecheck, lint, the
-// formatter and eight hundred tests all passed, because not one of them reads
-// CSS. The renderer build was the first thing to object, which is to say the
-// break was invisible until somebody tried to run the app.
-//
-// A stylesheet is the one kind of source in this repo with no compiler in
-// front of it, so it gets this instead.
+// Every stylesheet has to parse: CSS has no compiler in front of it, and a rule that lost its body in a
+// merge once passed every gate until the renderer build.
 
 import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
@@ -33,8 +24,7 @@ describe('stylesheets', () => {
     expect(() => postcss.parse(css, { from: name })).not.toThrow()
   })
 
-  // The specific shape of the break that got through: a rule whose body was
-  // swallowed, leaving a selector that declares nothing.
+  // The shape that got through: a selector that declares nothing.
   it.each(sheets)('%s has no rule with an empty body', (name) => {
     const css = readFileSync(path.join(here, name), 'utf8')
     const empty: string[] = []
@@ -44,27 +34,19 @@ describe('stylesheets', () => {
     expect(empty).toEqual([])
   })
 
-  // Errors raised by a dialog are notices, and a notice under the modal scrim
-  // is painted and then covered: the dialog stays open, the button goes live
-  // again, and nothing appears. The two numbers live in two files, so the
-  // relationship is asserted here rather than a literal in either of them.
+  // A notice under the modal scrim is painted and covered; the two z-indexes live in two files.
   it('stacks the notices above the modal layer, so no dialog can hide its own error', () => {
     expect(zIndexOf('.notices')).toBeGreaterThan(zIndexOf('.modal-layer'))
   })
 
-  // `text-overflow: ellipsis` cuts wherever the box ends, which on a row of
-  // monospace is mid-word: "MCP startup incomplete (fai…". A one-line clamp
-  // wraps at words first and ellipsises after the last one that fits, which is
-  // the only way CSS has of ending a line on a word.
+  // `text-overflow: ellipsis` cuts mid-word; a one-line clamp ends on a word.
   it('ends a quoted line under a pane row on a word, not in the middle of one', () => {
     const rule = ruleFor('sidebar.css', '.pane-row__evidence')
     expect(declarationOf(rule, '-webkit-line-clamp')).toBe('1')
     expect(declarationOf(rule, 'white-space')).not.toBe('nowrap')
   })
 
-  // One chip, wherever a chip is: the badges on worktree rows, pane bars and
-  // board rows used to pick their own radius — 3px, 99px and 999px between
-  // them — and their own size, so the same kind of thing read three ways.
+  // One chip radius and size everywhere.
   it('draws every chip from one rule', () => {
     const chip = ruleFor('base.css', '.chip')
     expect(declarationOf(chip, 'border-radius')).toBe('var(--r1)')
@@ -82,20 +64,13 @@ describe('stylesheets', () => {
     }
   })
 
-  // The activity dot is one mark with one reading, on the sidebar, the strip,
-  // the board and now the pane bar. A pane bar that drew its own 5px dot was
-  // a second vocabulary for the same five states.
+  // One activity dot, on sidebar, strip, board and pane bar.
   it('has one activity dot, and no second dot on the pane bar', () => {
     expect(ruleFor('sidebar.css', '.activity')).toBeTruthy()
     expect(findRule('panes.css', '.pane__dot')).toBeUndefined()
   })
 
-  // The strip is one row with one vertical centre. It used to sit the tabs on
-  // its bottom edge and the split and + buttons in its middle, so the labels
-  // centred eleven pixels lower than the icons beside them, and the active
-  // tab's border stopped short of the strip's baseline. Every child now
-  // centres on the same height, and the active mark is drawn on the strip's
-  // own bottom edge rather than as a border on a shorter box.
+  // The strip has one vertical centre, and the active mark sits on its own bottom edge.
   describe('the tab strip is one row', () => {
     it('centres the tabs, the pane buttons and the sidebar control on one height', () => {
       expect(declarationOf(ruleFor('workspace.css', '.tabs'), 'align-items')).toBe('center')
@@ -116,9 +91,7 @@ describe('stylesheets', () => {
       expect(declarationOf(icon, 'height')).toBe('16px')
     })
 
-    // Both strips are the window's top row, and on macOS the window buttons
-    // are centred in whichever is at the left edge. Two heights would be a step
-    // in the frame.
+    // Both strips are the window's top row; two heights would be a step in the frame.
     it('is as tall as the sidebar’s header, so the two read as one bar', () => {
       expect(declarationOf(ruleFor('workspace.css', '.tabs'), 'height')).toBe(
         declarationOf(ruleFor('shell.css', '.sidebar__brand'), 'height')
@@ -126,11 +99,7 @@ describe('stylesheets', () => {
     })
   })
 
-  // One frame for every dialog. The title is inset by the frame's own padding
-  // and the body used to bring its own — or not: the two confirms brought none,
-  // so their sentence started further left than the question above it. The
-  // frame pads the body now, on the same edge as the head, and no content
-  // class pads itself.
+  // The frame pads the body on the same edge as the head; no content class pads itself.
   describe('one dialog frame', () => {
     it('puts the body on the title’s edge', () => {
       const head = declarationOf(ruleFor('dialog.css', '.modal__head'), 'padding')
@@ -170,22 +139,11 @@ describe('stylesheets', () => {
     })
   })
 
-  /**
-   * Custom properties the shell writes onto the element itself, which no
-   * stylesheet declares and none should: two of them come from
-   * `src/shared/windowChrome.ts` — the main process reads the same numbers to
-   * place the macOS window buttons — and one is a width somebody drags.
-   */
+  /** Properties the shell writes onto elements itself: two from `windowChrome.ts`, one a dragged width. */
   const SET_BY_THE_SHELL = new Set(['--sidebar-width', '--titlebar-h', '--titlebar-inset'])
 
-  // A `var()` naming a property nothing declares is the quietest failure CSS
-  // has. The declaration is thrown away at computed-value time, so the property
-  // falls back to its inherited value and the rule simply does nothing: text
-  // meant to brighten stays dim, a border meant to be drawn is not there, and
-  // every gate in this repo is green. It is also exactly the shape a merge
-  // leaves behind — a stylesheet written against a token another branch renamed
-  // or never added — which is why it is checked across the whole set at once
-  // rather than per file.
+  // A `var()` naming an undeclared property silently does nothing, and is what a merge leaves behind,
+  // so the whole set is checked at once.
   it('names no custom property that nothing declares', () => {
     const declared = new Set<string>()
     for (const name of sheets) {
@@ -207,12 +165,8 @@ describe('stylesheets', () => {
     expect(dangling).toEqual([])
   })
 
-  // The palette is written twice on purpose — once as literals here, so the
-  // first frame is painted before any script runs, and once as a derivation in
-  // src/shared/theme.ts, which is what a theme switch and the colour editor
-  // actually produce. Two copies of one thing drift, so this is the seam that
-  // is not allowed to: a colour changed in one file and not the other would
-  // otherwise show up as a window that changes shade a tick after it opens.
+  // The palette is literal here (first frame before scripts) and derived in src/shared/theme.ts; the two
+  // must match or the window changes shade a tick after opening.
   describe('tokens.css against the default theme', () => {
     const declared = customProperties('tokens.css')
     const resolved = resolvePalette(DEFAULT_APPEARANCE)
@@ -221,10 +175,7 @@ describe('stylesheets', () => {
       expect(declared.get(`--${token}`)).toBe(resolved[token])
     })
 
-    // The other direction: a token the theme layer knows about and the
-    // stylesheet does not is a colour nothing can be styled in, and one the
-    // stylesheet declares and the theme layer does not is a colour a theme
-    // switch would leave behind at its old value.
+    // Both directions: a token either side lacks is unstyleable or left behind by a theme switch.
     it('declares every themeable token and no colour outside them', () => {
       const themeable = new Set(THEME_TOKENS.map((token) => `--${token}`))
       const colours = [...declared].filter(([, value]) => /^(#|rgb\()/.test(value)).map(([name]) => name)
@@ -255,8 +206,7 @@ function zIndexOf(selector: string): number {
       })
     })
   }
-  // A selector with no z-index, or with two, makes the comparison meaningless
-  // rather than false, and a comparison against nothing would pass quietly.
+  // No z-index, or two, would make the comparison pass quietly.
   expect(found, `${selector} should declare exactly one z-index`).toHaveLength(1)
   return found[0] ?? Number.NaN
 }

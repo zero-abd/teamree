@@ -43,13 +43,7 @@ export async function subscribe<M extends SubscribingMethod>(
   return (await openStream(method, params, onEvent)).subscription
 }
 
-/**
- * The same thing, keeping whatever else the answer carried.
- *
- * Some streams answer with more than an id — a teammate's pane comes back with
- * the owner's dimensions — and a viewer that had to ask for those separately
- * would draw one frame at the wrong size before it found out.
- */
+/** The same, keeping whatever else the answer carried (a watched pane's dimensions). */
 export async function openStream<M extends SubscribingMethod>(
   method: M,
   params: ParamsOf<M>,
@@ -88,12 +82,7 @@ export function subscribeTerminal(terminalId: string, onEvent: (event: TerminalE
   return subscribe('terminal.subscribe', { terminalId }, (event) => onEvent(event as TerminalEvent))
 }
 
-/**
- * Typed wrapper for the workspace change stream: one invalidation per changed
- * collection, from whichever transport caused it. Prefer `watchWorkspace` in UI
- * code, which keeps a subscription alive across a runtime that is not answering
- * yet.
- */
+/** The workspace change stream, one invalidation per changed collection; prefer `watchWorkspace` in UI. */
 export function subscribeWorkspace(onEvent: (event: WorkspaceEvent) => void): Promise<Subscription> {
   return subscribe('workspace.subscribe', {}, (event) => onEvent(event as WorkspaceEvent))
 }

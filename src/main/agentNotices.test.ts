@@ -43,8 +43,7 @@ describe('shouldNotify', () => {
   })
 
   it('announces another pane of a window that is focused', () => {
-    // The case the whole feature is for: three agents in three worktrees, and
-    // only one of them can be the pane on screen.
+    // Three agents in three worktrees, and only one can be the pane on screen.
     expect(
       shouldNotify({
         settings: settings({ focusedPaneId: 'term_2' }),
@@ -55,8 +54,7 @@ describe('shouldNotify', () => {
   })
 
   it('announces the focused pane of a window that is not focused', () => {
-    // The window was left with this pane selected and then left alone. Nobody
-    // is reading it, so nothing here has been seen.
+    // Selected and then left alone: nobody is reading it.
     expect(
       shouldNotify({
         settings: settings({ focusedPaneId: 'term_1' }),
@@ -164,12 +162,9 @@ describe('what the window publishes', () => {
   })
 })
 
-// The incident this pins: somebody was typing into their own pane when the
-// active worktree changed under them and the keystrokes ran in another
-// worktree's agent. The one programmatic road from "an agent stopped" to
-// "open that pane" runs through here, so this is where it is shown that the
-// road has exactly one gate — the click on the notification — and that
-// delivering the notice, on its own, sends the window nothing.
+// The incident: the active worktree changed under somebody typing, and the
+// keystrokes ran in another worktree's agent. The only road from "an agent
+// stopped" to "open that pane" has one gate, the click on the notification.
 describe('what a stopped agent is allowed to do to the window', () => {
   type Shown = { title: string; body: string; silent: boolean; onActivate: () => void }
 
@@ -209,8 +204,7 @@ describe('what a stopped agent is allowed to do to the window', () => {
 
   it('raises the notification and tells the window nothing', () => {
     const { channel, publish, sent, shown, host } = install()
-    // Somebody is typing into a pane of their own; the agent that stopped is in
-    // another worktree.
+    // Typing into a pane of their own; the stopped agent is in another worktree.
     publish({ preference: 'notify', focusedPaneId: 'term_mine' })
 
     channel.deliver(stopped)

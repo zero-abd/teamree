@@ -1,11 +1,5 @@
-// The one dispatcher, and the one predicate in front of it.
-//
-// There are two ways into every command now — a chord and a menu item — and the
-// only thing keeping them from disagreeing is that they are the same two
-// functions. So these tests are written against those functions rather than
-// against either caller: what `isCommandAvailable` says is what the menu greys
-// and what the key handler declines, and what `runWorkspaceCommand` does is
-// what happens either way.
+// The one dispatcher and its predicate, tested directly: `isCommandAvailable` is what the menu greys and
+// the key handler declines, and `runWorkspaceCommand` is what happens either way.
 
 import { describe, expect, it, vi } from 'vitest'
 import type { ConsentRequest } from '@shared/entities'
@@ -124,18 +118,13 @@ function callCount(store: Record<string, unknown>): number {
 }
 
 describe('what a window can be asked to do', () => {
-  // A question about a teammate's keystrokes is the one modal here that refuses
-  // to be dismissed, and it was raised by another machine rather than by
-  // anybody in this window. Nothing may act underneath it — which used to mean
-  // only that no chord fired, and now has to mean that no menu item is live
-  // either, because the menu bar is reachable with a modal on screen.
+  // A remote-keystrokes question refuses dismissal, so no chord and no menu item may act under it.
   it('offers nothing at all while a teammate’s question is waiting', () => {
     const asking = { ...WORKING, consent: QUESTION }
     for (const command of EVERY_COMMAND) expect(isCommandAvailable(command, asking), command).toBe(false)
   })
 
-  // A dialog of this window's own owns the keyboard too, with the palette's one
-  // exception: its own command is what closes it again.
+  // A dialog of this window's own too, except the palette, whose command closes it.
   it('offers nothing but closing the palette while a dialog is up', () => {
     const appearance = { ...WORKING, dialog: { kind: 'appearance' } as const }
     for (const command of EVERY_COMMAND) expect(isCommandAvailable(command, appearance), command).toBe(false)
@@ -148,8 +137,7 @@ describe('what a window can be asked to do', () => {
 
   it('refuses the pane commands when the focused pane is a teammate’s', () => {
     const watching = { ...WORKING, focusedWatchId: 'watch:p1:priya:t7' }
-    // Their machine owns the tree a split would go in, and a watched pane's
-    // scrollback is a picture rather than a buffer that can be searched.
+    // Their machine owns the tree, and a watched scrollback is a picture, not a searchable buffer.
     expect(isCommandAvailable('split-right', watching)).toBe(false)
     expect(isCommandAvailable('split-down', watching)).toBe(false)
     expect(isCommandAvailable('find-in-pane', watching)).toBe(false)
@@ -169,9 +157,7 @@ describe('what a window can be asked to do', () => {
     expect(isCommandAvailable('new-terminal', WORKING)).toBe(true)
   })
 
-  // Open, but the directory is gone: the shell the item would start has
-  // nowhere to start, and an item that is lit over a failure is the thing the
-  // enablement rule exists to prevent.
+  // Open but the directory is gone: the shell would have nowhere to start.
   it('withholds a new terminal from a worktree whose checkout is not on disk', () => {
     const gone = { ...WORKING, worktrees: [{ id: 'w1', projectId: 'p1', missing: true as const }] }
     expect(isCommandAvailable('new-terminal', gone)).toBe(false)
@@ -188,9 +174,7 @@ describe('what a window can be asked to do', () => {
     expect(isCommandAvailable('focus-next-pane', { ...EMPTY, watches: [{ id: 'watch:p1:priya:t7' }] })).toBe(false)
   })
 
-  // Backwards is the same walk and answers the same question. Written out
-  // rather than folded into the case above, because two directions sharing a
-  // rule is the claim being made.
+  // Backwards shares the rule, which is the claim being made.
   it('offers the walk backwards exactly where it offers it forwards', () => {
     for (const state of [EMPTY, WORKING, TWO_PANES, { ...WORKING, watches: [{ id: 'watch:p1:priya:t7' }] }]) {
       expect(isCommandAvailable('focus-previous-pane', state)).toBe(isCommandAvailable('focus-next-pane', state))
@@ -199,7 +183,7 @@ describe('what a window can be asked to do', () => {
 
   it('offers maximising only with a pane of your own in front of you', () => {
     expect(isCommandAvailable('expand-pane', EMPTY)).toBe(false)
-    // One pane is enough: maximising it puts away the tab strip and the header.
+    // One pane is enough: maximising hides the strip and header.
     expect(isCommandAvailable('expand-pane', WORKING)).toBe(true)
   })
 
@@ -209,8 +193,7 @@ describe('what a window can be asked to do', () => {
       // One worktree: the walk wraps straight back onto the one already open.
       expect(isCommandAvailable(command, WORKING), command).toBe(false)
       expect(isCommandAvailable(command, TWO_WORKTREES), command).toBe(true)
-      // A worktree whose project is not in the sidebar is nowhere to walk to:
-      // the list these chords move down does not have a row for it.
+      // A worktree whose project is not in the sidebar has no row to walk to.
       expect(
         isCommandAvailable(command, {
           ...TWO_WORKTREES,
@@ -226,8 +209,7 @@ describe('what a window can be asked to do', () => {
 })
 
 describe('the right panel', () => {
-  // The panel shows one worktree's files, changes and panes, so with no
-  // worktree open there is nothing for it to show and the item is grey.
+  // No worktree open, nothing for the panel to show.
   it('can be toggled only with a worktree open', () => {
     expect(isCommandAvailable('toggle-right-panel', EMPTY)).toBe(false)
     expect(isCommandAvailable('toggle-right-panel', { ...WORKING, layouts: {} })).toBe(true)
@@ -248,8 +230,7 @@ describe('running a command', () => {
       ['focus-next-pane', 'focusNextPane', []],
       ['focus-previous-pane', 'focusPreviousPane', []],
       ['expand-pane', 'toggleExpandedPane', []],
-      // One method, and the direction is the argument — which is what makes the
-      // two chords each other's undo rather than two walks of one list.
+      // One method with a direction argument, so the two chords undo each other.
       ['previous-worktree', 'stepWorktree', [-1]],
       ['next-worktree', 'stepWorktree', [1]],
       ['open-palette', 'openDialog', [{ kind: 'palette' }]],
@@ -261,15 +242,13 @@ describe('running a command', () => {
     ]
 
     for (const [command, method, args] of cases) {
-      // Each walk needs somewhere to walk to; everything else is happy with the
-      // one pane and the one worktree. The two git commands need git to have
-      // said there is something to do, and have their own case below.
+      // Only the walks need somewhere to go; the git pair has its own case below.
       const paneWalk = command === 'focus-next-pane' || command === 'focus-previous-pane'
       const worktreeWalk = command === 'previous-worktree' || command === 'next-worktree'
       const store = workspace(paneWalk ? TWO_PANES : worktreeWalk ? TWO_WORKTREES : WORKING)
       runWorkspaceCommand(command, store)
       expect(store[method], command).toHaveBeenCalledExactlyOnceWith(...args)
-      // And nothing else moved, so a command cannot quietly do two things.
+      // Nothing else moved.
       expect(callCount(store), command).toBe(1)
     }
   })
@@ -288,11 +267,7 @@ describe('running a command', () => {
     expect(store.openDialog).not.toHaveBeenCalled()
   })
 
-  // The case a menu bar creates and a chord never could. A menu is built from a
-  // snapshot and chosen some time afterwards: the item was live when it was
-  // drawn, the pane it would have closed exited in between, and the click
-  // arrives against a window where the command means nothing. The check is
-  // therefore made again here rather than trusted to whoever is calling.
+  // A menu item is chosen after its snapshot; the pane may have exited, so the check runs again.
   it('does nothing when the window has moved on since the menu was built', () => {
     for (const command of EVERY_COMMAND) {
       const store = workspace(EMPTY)
@@ -317,9 +292,7 @@ describe('running a command', () => {
   })
 })
 
-// The three commands the menu bar and the palette gained: the settings page,
-// which ⌘, now opens, and the two git ones, which are offered only when the
-// worktree in front of you has something for them to do.
+// Settings (⌘,), and the git pair, offered only with something to do.
 describe('the commands that were in no menu', () => {
   const AHEAD: CommandState = { ...WORKING, statuses: { w1: { ahead: 1 } } } as CommandState
   const DIRTY: CommandState = { ...WORKING, statuses: { w1: { unstaged: 2 } } } as CommandState
@@ -350,10 +323,7 @@ describe('the commands that were in no menu', () => {
     runWorkspaceCommand('push-worktree' as WorkspaceCommand, pushing)
     expect(pushing.pushActiveWorktree).toHaveBeenCalledTimes(1)
 
-    // Commit needs a message, and the message box is on the changes tab — so
-    // the command shows that tab. Shown rather than toggled: with the tab
-    // already up, this leaves it up rather than putting the panel away under
-    // somebody who asked to commit.
+    // Commit shows the changes tab (the message box) rather than toggling it.
     const changes = workspace(DIRTY)
     runWorkspaceCommand('commit-changes' as WorkspaceCommand, changes)
     expect(changes.showRightPanelTab).toHaveBeenCalledExactlyOnceWith('changes')

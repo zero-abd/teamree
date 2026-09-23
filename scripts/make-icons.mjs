@@ -1,68 +1,13 @@
-// Renders the application icon from the brand vectors and writes every size and
-// container the three packaging targets and the landing page ask for:
-// build/icon.png (Linux, and the master), build/icon.icns (macOS),
-// build/icon.ico (Windows), build/icons/<n>x<n>.png for desktop entries, and
-// the site's own PNGs under site/public.
-//
-// This script used to draw the mark itself, out of signed distance fields, so
-// that it needed nothing but Node. That bought reproducibility at the price of
-// the artwork: the icon could only ever be whatever could be expressed as a few
-// circles and quadratics in this file, and it drifted from the mark used
-// everywhere else. The artwork now lives in brand/: mark.svg and
-// mark-small.svg are the mark, app-icon.svg is the mark already placed on its
-// tile inside Apple's icon grid, and brand/README.md names the colours. Those
-// files are the source of truth for the whole brand, and this script's job is
-// to get those vectors onto a pixel grid at exactly the sizes the containers
-// promise.
-//
-// There is no rasteriser in the dependency tree — no ImageMagick, no sharp, no
-// resvg — so headless Chrome is the rasteriser. Chrome is *required to
-// regenerate the icons* and nothing else: the generated files are committed, so
-// a normal build, test or package run never touches this script. Only
-// `npm run icons` needs a browser, and it says so plainly if one is missing.
-//
-// Two rules are load-bearing and were settled by rendering and looking, not by
-// argument:
-//
-//   1. Sizes of 32px and below use brand/mark-small.svg, the reduced form with
-//      narrower windows and heavier slab frames. Sizes of 48px and up use the
-//      full brand/mark.svg — and on macOS, brand/app-icon.svg, which is that
-//      mark already on its tile. Below 32px the full mark's window slant flattens
-//      into a plain slot and its thinner frame bars drop under a pixel, which is
-//      exactly what the reduced form exists to prevent.
-//   2. Every size is its own render at that pixel size. Nothing here is one
-//      large render scaled down. A 1024 render resampled to 16 is soft in a way
-//      that no amount of sharpening recovers, and — worse — an icns assembled
-//      that way is a *valid file* that macOS accepts and then draws blurry, with
-//      nothing in any build log to say so. scripts/verify-icons.mjs opens every
-//      payload and checks its real IHDR against the size its directory entry
-//      promised, and `npm run icons` runs it at the end for that reason.
-//
-// The PNG writer and the ICO directory writer below are unchanged and still
-// depend on nothing. Chrome hands back a PNG; we decode it to raw pixels and
-// re-encode it through our own writer, so the bytes that land in the repo are
-// produced by code in this file at a deflate level we choose, rather than by
-// whatever Chrome's PNG encoder happens to do this month.
-//
-// The ICNS is the exception, and it is the exception for a reason worth
-// recording. This script used to hand-write the icns too, filing the 16px and
-// 32px images under the OSTypes `icp4` and `icp5`. Those two codes are
-// ambiguous: they are documented as 16x16 and 32x32, but macOS reads them as
-// raw ARGB rather than as PNG, so a PNG filed under them is decoded as pixel
-// data and comes out as coloured noise. Extracting the old file with
-// `iconutil -c iconset` produced a green smear for icon_16x16.png and a red one
-// for icon_32x32.png while every other entry was clean — and nothing else
-// noticed, because the chunks themselves were perfectly good PNGs. The bug was
-// the *type*, not the payload, which is precisely the kind of thing a checker
-// that reads payloads cannot see.
-//
-// Apple's own `iconutil` does not emit `icp4` or `icp5` at all. Given the ten
-// standard filenames it writes `ic04` and `ic05` — RLE-compressed ARGB, not PNG
-// — for 16 and 32, `ic11 ic12 ic07 ic13 ic08 ic14 ic09 ic10` as PNG for the
-// rest, and an `info` chunk. Rather than implement Apple's RLE, the icns is now
-// assembled by `iconutil`, which means *this one output needs macOS*. That is
-// the same bargain the Chrome dependency already is: the generated files are
-// committed, so only `npm run icons` is affected.
+// Renders the app icon from brand/ (mark.svg, mark-small.svg, app-icon.svg) into build/icon.{png,icns,ico},
+// build/icons/<n>x<n>.png and site/public PNGs. Headless Chrome is the rasteriser and iconutil assembles
+// the icns; only `npm run icons` needs either, the outputs are committed. Rules, settled by looking:
+//   1. <=32px uses mark-small.svg: the full mark's window slant flattens and its frame bars drop under a pixel.
+//   2. Every size is its own render. A resampled icns is a *valid file* macOS draws blurry, silently;
+//      scripts/verify-icons.mjs checks each payload's IHDR against its directory entry for that reason.
+// Chrome's PNG is decoded and re-encoded by this file's own writer so the committed bytes are ours.
+// The icns is not hand-written: `icp4`/`icp5` are read by macOS as raw ARGB, not PNG, so PNGs filed
+// under them decode as coloured noise while every payload checker passes. iconutil writes `ic04`/`ic05`
+// (RLE ARGB) for 16 and 32 instead, so that one output needs macOS.
 import { deflateSync, inflateSync } from 'node:zlib'
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -78,65 +23,32 @@ const siteDir = join(root, 'site', 'public')
 
 // ------------------------------------------------------------- the palette --
 
-// Final, and used exactly; the same values brand/app-icon.svg and
-// brand/README.md carry. The mark is one off-white; the tile is a restrained
-// vertical gradient between two near-blacks, drawn here for the full-bleed
-// icons the way app-icon.svg draws it for the macOS one. No inner stroke, no
-// sheen: those are the first things to turn to mud at 32px and below, and the
-// two tile tones are close enough that at 16px they are one colour anyway.
+// The values brand/app-icon.svg and brand/README.md carry. No inner stroke, no sheen:
+// those turn to mud at 32px and below.
 const TILE_INK_TOP = '#101114'
 const TILE_INK_BOTTOM = '#0B0C0E'
 const MARK_ON_TILE = '#F3F2EE'
 
-// The macOS app-icon squircle ratio. A rounded rect at 22.5% of its own side is
-// what Big Sur's grid specifies, and the site header independently landed on the
-// same number, so it is the one radius used everywhere here and in
-// site/public/favicon.svg.
+// Big Sur's squircle ratio; the one radius used here and in site/public/favicon.svg.
 const CORNER_RATIO = 0.225
 
-// Apple's Big Sur icon grid: the rounded-square body is 80.5% of the canvas,
-// centred, and everything outside it is transparent. The surround is not wasted
-// space — macOS draws the icon's shadow into it, and an icon that fills its own
-// canvas sits visibly larger than its neighbours in the Dock. On the 1024 master
-// this is an 824px body with a 185px radius.
-//
-// It is not applied to the icns's 16 and 32 chunks. Inset the body *and* the
-// mark at 16px and there are under 13 real pixels of artwork left inside a 16px
-// square, which macOS then draws in a Finder list view as a grey smudge. Below
-// 48px the shadow the surround exists for is not drawn at a visible size
-// anyway, so those two sizes get the same full-bleed tile as the web and Windows
-// icons and spend every pixel on the mark.
+// Big Sur's grid: the body is 80.5% of the canvas and macOS draws the shadow into the surround.
+// Not applied at 16 and 32: inset body and mark there leave under 13 real pixels, a grey smudge
+// in Finder, and the shadow is not drawn visibly below 48px anyway.
 const APPLE_BODY_RATIO = 0.805
 
-// The size at or below which the icon is treated as small: the reduced mark, a
-// full-bleed tile even on macOS, and almost no inset. See below, and rule 1.
+// At or below this: the reduced mark, a full-bleed tile even on macOS, almost no inset (rule 1).
 const SMALL_MARK_MAX = 32
 
-// How much of the tile the mark's 256-unit box spans, as a fraction of the
-// tile's side. There are two numbers because there have to be.
-//
-// The reduced mark's tightest features are the 24-unit channel between the two
-// slabs and the 22-unit frame bar on each window's centre side. On a 16px tile
-// a 22-unit bar is `22 * ratio * 16/256` device pixels — 1.3px at 0.94 and
-// under a pixel at 0.72 — and a feature under one pixel wide does not
-// antialias grey, it antialiases *shut*: the slab and its window fuse into one
-// grey block. So small sizes are drawn essentially full bleed. They can afford
-// to be: the artwork carries its own margin, spanning 240 of the 256 units
-// across and 200 down, so even at ratio 1 the slabs stand clear of the corner
-// radius and there is a visible band of tile above and below them.
-//
-// Large sizes get a real inset, because there the constraint is not legibility
-// but proportion. 0.66 is the number brand/app-icon.svg uses — the artwork is
-// 62% of the tile's width, and 62/(240/256) is 0.66 — so the full-bleed icons
-// for Windows, Linux and the web place the mark exactly where the macOS icon
-// places it, and the family reads as one family.
+// Fraction of the tile the mark's 256-unit box spans. Small: the 22-unit frame bar on a 16px tile
+// is 1.3px at 0.94 and under a pixel at 0.72, where it antialiases *shut* and slab and window fuse.
+// Large: 0.66 is what brand/app-icon.svg uses (62% / (240/256)), so every icon places the mark alike.
 const MARK_RATIO_SMALL = 0.94
 const MARK_RATIO_LARGE = 0.66
 
 // ------------------------------------------------------------- the browser --
 
-// Checked in order; the first that exists wins. $TEAMREE_CHROME overrides the
-// lot, which is how a CI runner with Chrome somewhere unusual gets to run this.
+// First that exists wins; $TEAMREE_CHROME overrides the lot.
 const CHROME_CANDIDATES = [
   process.env.TEAMREE_CHROME,
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -169,12 +81,8 @@ const markSmall = readFileSync(join(brandDir, 'mark-small.svg'), 'utf8')
 const appIcon = readFileSync(join(brandDir, 'app-icon.svg'), 'utf8')
 
 /**
- * A box of `fraction` of `outer`, rounded so that it still lands on whole
- * pixels when it is centred. `(outer - side)` has to be even or the box starts
- * on a half pixel, and a mark that starts on a half pixel is smeared across two
- * columns at every edge — at 16px that is the difference between two slabs
- * with a channel between them and one grey lump. So the side is rounded to the nearest integer of the same
- * parity as `outer` rather than to the nearest integer.
+ * A box of `fraction` of `outer`, rounded to the parity of `outer` so it centres on whole pixels;
+ * a mark starting on a half pixel smears across two columns at every edge.
  */
 function centredSide(outer, fraction) {
   const ideal = outer * fraction
@@ -183,26 +91,9 @@ function centredSide(outer, fraction) {
 }
 
 /**
- * Screenshots the mark at exactly `size` by `size` device pixels and returns
- * Chrome's PNG.
- *
- * `--force-device-scale-factor=1` is what makes the "exactly" true: without it
- * Chrome inherits the Mac's 2x display scale and silently hands back a 32px
- * image for a 16px window, which is the one failure this whole file is arranged
- * to avoid. `--default-background-color=00000000` keeps the area outside the
- * tile genuinely transparent instead of white.
- *
- * `apple` asks for Apple's inset body rather than the full-bleed tile that
- * Windows, Linux and the web expect. It is honoured only at 48px and up; see
- * APPLE_BODY_RATIO for why. At those sizes the page is brand/app-icon.svg
- * itself, which already draws the 824-of-1024 body, its 185 radius and the mark
- * at its place on the tile — so the macOS icon is that file rendered, not this
- * script's reconstruction of it, and a change to the icon is a change to one
- * SVG. The full-bleed tile below is drawn to the same numbers.
- *
- * This is the one place the small/large split is decided, so all three things
- * that change with it — which vector, how big a tile, how much inset — are
- * visible together.
+ * Screenshots the mark at exactly `size` device pixels. `--force-device-scale-factor=1` is what makes
+ * that true: without it Chrome inherits the Mac's 2x scale and hands back 32px for a 16px window.
+ * `apple` renders brand/app-icon.svg itself (honoured from 48px up; see APPLE_BODY_RATIO).
  */
 function rasterise(size, { apple = false } = {}) {
   const small = size <= SMALL_MARK_MAX
@@ -259,12 +150,7 @@ function paeth(a, b, c) {
   return pb <= pc ? b : c
 }
 
-/**
- * Chrome's PNG back to straight RGBA, so the pixels can go through this file's
- * own PNG writer rather than being passed along as an opaque blob. Only what
- * Chrome actually emits is supported — 8 bits a channel, not interlaced — and
- * anything else throws rather than being guessed at.
- */
+/** Chrome's PNG back to straight RGBA. Only 8-bit, non-interlaced is handled; anything else throws. */
 function decodePng(bytes) {
   if (!bytes.subarray(0, 8).equals(PNG_SIGNATURE)) throw new Error('make-icons: Chrome did not return a PNG.')
 
@@ -307,9 +193,7 @@ function decodePng(bytes) {
     const at = y * (stride + 1)
     const filter = raw[at]
     const line = Buffer.from(raw.subarray(at + 1, at + 1 + stride))
-    // Undo the per-scanline filter in place. Every byte refers to the byte one
-    // pixel to its left (`a`), the same byte on the row above (`b`) and the byte
-    // above-left (`c`); out-of-range neighbours are zero, by the spec.
+    // Undo the scanline filter: left (`a`), above (`b`), above-left (`c`); out-of-range is zero, by the spec.
     for (let i = 0; i < stride; i += 1) {
       const a = i >= channels ? line[i - channels] : 0
       const b = previous[i]
@@ -412,14 +296,8 @@ function encodeIco(entries) {
 }
 
 /**
- * The ten images a modern macOS app icon carries, under the filenames
- * `iconutil` requires. The list is the contract: two names are two *renders*
- * only where the pixel sizes differ, and four of the ten share a size with
- * another — icon_16x16@2x and icon_32x32 are both 32px, icon_128x128@2x and
- * icon_256x256 are both 256px, icon_256x256@2x and icon_512x512 are both 512px.
- * Those pairs are the same bytes under two names, which is correct: the OSType
- * is a promise about pixels, and both members of a pair promise the same
- * pixels.
+ * The ten filenames `iconutil` requires. Pairs sharing a pixel size (16@2x/32, 128@2x/256, 256@2x/512)
+ * are the same bytes under two names: the OSType is a promise about pixels.
  */
 const ICONSET_FILES = [
   ['icon_16x16.png', 16],
@@ -434,7 +312,7 @@ const ICONSET_FILES = [
   ['icon_512x512@2x.png', 1024]
 ]
 
-/** Assembles the icns with Apple's own tool. See the note at the top of the file. */
+/** Assembles the icns with iconutil; see the header for why not by hand. */
 function writeIcns(pngBySize, outPath) {
   const iconset = join(scratch, 'icon.iconset')
   mkdirSync(iconset, { recursive: true })
@@ -459,29 +337,20 @@ function writeIcns(pngBySize, outPath) {
 function pngAt(size, options) {
   const { width, height, rgba } = decodePng(rasterise(size, options))
   if (width !== size || height !== size) {
-    // Almost always a device-scale-factor problem: Chrome handed back a 2x
-    // image. Fail here rather than let a 32px payload be filed as 16px.
+    // Almost always device scale: Chrome handed back 2x. Fail rather than file 32px as 16px.
     throw new Error(`make-icons: asked Chrome for ${size}x${size} and got ${width}x${height}.`)
   }
   return encodePng(size, rgba)
 }
 
-// macOS: brand/app-icon.svg — the inset Apple body — from 48px up, transparent
-// surround, shadow drawn by the OS; a full-bleed tile at 16 and 32, where the
-// body inset costs more than the shadow is worth. build/icon.png is the 1024 member of this set and
-// not a separate render.
+// macOS: inset Apple body from 48px up, full-bleed tile at 16 and 32. build/icon.png is the 1024 member.
 const APPLE_SIZES = [...new Set(ICONSET_FILES.map(([, size]) => size))].sort((a, b) => a - b)
 
-// Windows, Linux and the web: the tile is the whole canvas. Windows in
-// particular expects full bleed — an ICO with Apple's inset body reads as a
-// small icon with a wide dead margin in the taskbar and in Explorer.
+// Full bleed: an ICO with Apple's inset body reads as a small icon with a dead margin in the taskbar.
 const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
 const LINUX_SIZES = [16, 32, 48, 64, 128, 256, 512]
 
-// The site's PNGs. apple-touch-icon and the two large maskable-ish sizes carry
-// the full mark: nothing here is displayed below 180px, so the reduced form
-// would be throwing away detail that the viewer can see. icon-32.png is the one
-// that is genuinely small, so it takes the reduced mark like every other 32.
+// The site's PNGs; only icon-32.png is genuinely small and takes the reduced mark.
 const SITE_PNGS = [
   ['icon-32.png', 32],
   ['apple-touch-icon.png', 180],
@@ -514,10 +383,7 @@ try {
   rmSync(scratch, { recursive: true, force: true })
 }
 
-// site/public/favicon.svg is deliberately not written here. It is the same tile
-// and the same reduced mark, but hand-authored and under a kilobyte, because it
-// is served to every visitor and a browser draws it at 16-20px in a tab where a
-// generated file full of redundant precision buys nothing.
+// site/public/favicon.svg is hand-authored and under a kilobyte on purpose; not written here.
 console.log(
   `make-icons: ${chrome.split('/').pop()} rendered build/icon.png, ${ICONSET_FILES.length} images in build/icon.icns, ` +
     `${ICO_SIZES.length} sizes in build/icon.ico, ${LINUX_SIZES.length} files in build/icons ` +

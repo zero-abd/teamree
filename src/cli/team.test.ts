@@ -1,7 +1,5 @@
-// Teamwork commands, driven end to end: a real unix socket, the real protocol,
-// the real argument parser, and a stub runtime on the other end. Same shape as
-// run.test.ts, because these commands are subject to the same contract — one
-// JSON document, errors on stderr, the documented exit codes.
+// Teamwork commands driven end to end: a real unix socket, the real protocol,
+// the real argument parser, a stub runtime on the other end.
 
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -98,8 +96,7 @@ const PRESENCE = {
   teammates: [
     { handle: 'ana', publicKey: ANA, connected: true, heardAt: NOW - 3_000 },
     { handle: 'bo', publicKey: BO, connected: false, heardAt: NOW - 600_000 },
-    // On the roster and never heard from: a colleague whose app has never been
-    // up while yours was. It must still appear.
+    // On the roster and never heard from; must still appear.
     { handle: 'ann', publicKey: ANN, connected: false, heardAt: null }
   ],
   readAt: NOW
@@ -126,11 +123,7 @@ const STATUS = {
   readAt: NOW
 }
 
-/**
- * The other project, so that "which checkout has this origin" is a question with
- * one answer. A fixture where every project answered with api's origin would
- * make `team accept` look ambiguous about a machine no runtime ever reports.
- */
+/** The other project, so "which checkout has this origin" has one answer. */
 const STATUS_WEB = {
   state: 'read',
   projectId: 'p_web',
@@ -379,13 +372,7 @@ function soleJsonDocument(out: string): Record<string, unknown> {
   return JSON.parse(lines[0] as string) as Record<string, unknown>
 }
 
-/**
- * An invitation to api, written the way `team invite` writes one.
- *
- * Spelled out rather than built with `formatInvitation`, so that a change to the
- * format is a change to this line and has to be looked at. The whole point of
- * the thing is that it survives being copied between two people.
- */
+/** An invitation to api, spelled out so a format change is a change to this line. */
 const LINK =
   'teamree://join?v=1&origin=https%3A%2F%2Fgithub.com%2Facme%2Fapi.git' +
   '&relay=wss%3A%2F%2Frelay.example%2Fv1%2Frelay&project=api&from=ana'
@@ -484,10 +471,7 @@ describe('team status', () => {
     expect(result.out).toContain('teamree team join')
   })
 
-  // The beat between `project.add` and the reconcile it sets off. The runtime
-  // answers that it has not read this project, which is neither "teamwork is
-  // off" nor a failure, and a script that branched on `disabledReason` here
-  // would be branching on a finding nobody has made.
+  // The beat between `project.add` and the reconcile: neither "off" nor a failure.
   it('says a project teamwork has not read yet is exactly that, and still exits 0', async () => {
     const cli = await harness(
       teamHandler({
@@ -498,8 +482,7 @@ describe('team status', () => {
     expect(result.code).toBe(ExitCode.Success)
     expect(result.out).toContain('not read yet')
     expect(result.out).toContain('Ask again in a moment.')
-    // And no roster table under it, invented out of a second question the
-    // runtime cannot answer about this project either.
+    // And no roster table invented out of a second unanswerable question.
     expect(cli.stub.received.some((request) => request.method === 'teamwork.presence')).toBe(false)
   })
 
@@ -549,8 +532,7 @@ describe('team publish', () => {
     expect(result.out).toContain('Set up teamwork')
     expect(result.out).toContain('none - this push would set origin/main')
     expect(result.out).toContain('Nothing was committed or pushed.')
-    // The assertion that matters: a dry run that published would be the worst
-    // possible bug in this command.
+    // The assertion that matters.
     expect(cli.stub.received.map((call) => call.method)).not.toContain('teamwork.publish')
   })
 
@@ -567,8 +549,7 @@ describe('team publish', () => {
     const result = await cli.run(['team', 'publish', 'api'])
     expect(result.out).toContain('is a different question')
     expect(result.out).toContain('teamree team status api')
-    // The claim, not the word: a future sentence about connecting is fine as
-    // long as it is not this command asserting that somebody is.
+    // The claim, not the word.
     expect(result.out).not.toMatch(/(is|are|now) connected/)
   })
 
@@ -615,8 +596,7 @@ describe('team publish', () => {
     const result = await cli.run(['team', 'publish', 'api'])
     expect(result.code).toBe(ExitCode.Failure)
     expect(result.err).toContain('! [rejected]        main -> main (fetch first)')
-    // Both halves, because a commit reported as a total failure is a commit
-    // somebody makes a second time.
+    // Both halves: a commit reported as total failure gets made a second time.
     expect(result.err).toContain('Committed ccccccc')
     expect(result.err).toContain('Pull or rebase')
   })
@@ -1080,10 +1060,8 @@ describe('team panes', () => {
     expect(data.panes.map((pane) => pane.paneId)).toEqual(['peer:AAAABBBBCCCC:t_7', 'peer:AAAABBBBCCCC:t_8'])
   })
 
-  // The same beat `team status` reports as "not read yet", reaching a command
-  // whose whole output is a list. An empty table here would read as "this
-  // teammate has no panes", so the wait gets an exit and a code of its own —
-  // which is the one thing an agent can branch on without parsing prose.
+  // An empty table would read as "this teammate has no panes", so the wait
+  // gets a code of its own.
   it('refuses rather than printing an empty table for a project teamwork has not read', async () => {
     const cli = await harness(
       teamHandler({

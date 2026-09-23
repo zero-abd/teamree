@@ -1,13 +1,6 @@
-// Encrypted peer sessions, as a pure library: bytes in, bytes out.
-//
-// It knows nothing about sockets, the relay, Electron or React, and imports
-// nothing from `src/main` or `src/renderer`, so the whole of it can be tested in
-// memory. Milestone B in `docs/teamwork.md` is what wires it to a connection.
-//
-// `noise.ts` and `primitives.ts` are deliberately not re-exported. They are the
-// specification's machinery and the tests reach into them directly, but a caller
-// with a raw `CipherState` in hand can reuse a nonce, and nothing outside this
-// directory has a reason to hold one.
+// Encrypted peer sessions as a pure library: bytes in, bytes out, nothing from
+// `src/main` or `src/renderer`. `noise.ts` and `primitives.ts` are not
+// re-exported: a caller holding a raw `CipherState` can reuse a nonce.
 
 export {
   createInitiatorSession,

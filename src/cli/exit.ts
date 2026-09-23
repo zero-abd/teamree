@@ -61,12 +61,8 @@ export class NoRuntimeError extends CliError {
 }
 
 /**
- * A structured error the runtime sent back, keeping its protocol error code.
- *
- * The message is the runtime's own sentence, unprefixed: a person reads
- * `error: worktree "x" holds 1 ignored file…` next to every other error the CLI
- * prints, none of which name an RPC method. The method still matters to a
- * script telling failures apart, so it travels in the JSON document instead.
+ * A structured error the runtime sent back, keeping its protocol error code. The
+ * message is the runtime's own sentence, unprefixed; the method travels in the JSON instead.
  */
 export class RuntimeCallError extends CliError {
   readonly method: string

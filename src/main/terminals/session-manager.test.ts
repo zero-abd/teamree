@@ -12,8 +12,7 @@ import { canSpawnPty, printThenExit, waitUntil, writeFakeAgent, writeProcessTree
 import type { TerminalRecord } from './session-restore'
 import { isTerminalServiceError } from './service-error'
 
-// Driven through the handler surface the runtime will call, over real PTYs, so
-// the seam itself is under test and not just the classes behind it.
+// Driven through the handler surface the runtime will call, over real PTYs.
 const describePty = canSpawnPty() ? describe : describe.skip
 const TEST_TIMEOUT_MS = 20_000
 
@@ -31,11 +30,7 @@ function newService(): TerminalService {
   return service
 }
 
-/**
- * A pane on this platform's own shell. With no command that is an interactive
- * shell, which is what every test here that is not about a command wants: it
- * stays open, and the pty echoes what is typed into it, on Windows as on unix.
- */
+/** A pane on this platform's own shell: stays open, echoes what is typed, on Windows as on unix. */
 function newTerminal(service: TerminalService, command?: string): Promise<Terminal> {
   return service.handlers['terminal.create']({
     worktreeId: WORKTREE,
@@ -107,16 +102,13 @@ describePty('terminal handlers', () => {
     'names a pane, lets a rename beat the name it was created with, and clears it on request',
     async () => {
       const service = newService()
-      // The composer's name, as `startTask` sends it: what the user typed about
-      // the job, on the pane running the agent that was given the job.
+      // The composer's name, as `startTask` sends it.
       const terminal = await service.handlers['terminal.create']({
         worktreeId: WORKTREE,
         label: 'auth refactor'
       })
       expect(terminal.label).toBe('auth refactor')
 
-      // And a rename over the top of it, which is the same user saying it
-      // again, later, having seen the pane.
       const renamed = await service.handlers['terminal.rename']({
         terminalId: terminal.id,
         label: 'auth refactor · take two'
@@ -126,8 +118,7 @@ describePty('terminal handlers', () => {
         'auth refactor · take two'
       ])
 
-      // Null is how somebody says the pane should go back to being called
-      // whatever it is running, rather than being called nothing.
+      // Null: back to being called whatever it is running.
       const cleared = await service.handlers['terminal.rename']({ terminalId: terminal.id, label: null })
       expect(cleared.label).toBeUndefined()
     },
@@ -237,8 +228,7 @@ describePty('terminal handlers', () => {
   it(
     'hands a subscription to the connection hub when one is configured',
     async () => {
-      // Mirrors SubscriptionHub: it owns the id and the teardown, and the source
-      // it starts is this service's stream.
+      // Mirrors SubscriptionHub: it owns the id and the teardown.
       const emitted: TerminalEvent[] = []
       let teardown = (): void => {}
       let closedByProducer = false
@@ -275,7 +265,6 @@ describePty('terminal handlers', () => {
         'the hub to receive data'
       )
 
-      // Closing the terminal has to end the stream from the producer side.
       await service.handlers['terminal.close']({ terminalId: terminal.id })
       expect(closedByProducer).toBe(true)
       expect(published).toHaveLength(0)
@@ -357,12 +346,7 @@ describePty('terminal handlers', () => {
   )
 })
 
-/**
- * The pane a person comes back to and finds dead — an agent that crashed, hit a
- * rate limit, was quit, or came back to resume a conversation that was not
- * there. What they do next never varies: that program, in that directory,
- * again. These are about doing it without the pane moving.
- */
+/** That program, in that directory, again — without the pane moving. */
 describePty('running an exited pane again', () => {
   /** A service whose records are readable, which is where a session id lives. */
   function serviceWithRecords(): { service: TerminalService; records: Map<string, TerminalRecord> } {
@@ -425,13 +409,12 @@ describePty('running an exited pane again', () => {
 
       const again = await service.handlers['terminal.relaunch']({ terminalId: terminal.id })
 
-      // The same pane: a different id here would be a different leaf, and the
-      // layout would have to move to hold it.
+      // The same pane: a different id would be a different leaf.
       expect(again.id).toBe(terminal.id)
       expect(again.cwd).toBe(terminal.cwd)
       expect(again.agent).toBe('claude')
       expect(again.running).toBe(true)
-      // Not the conversation that ended. Starting over is the whole claim.
+      // Not the conversation that ended.
       const second = records.get(terminal.id)?.agentSessionId
       expect(second).toBeDefined()
       expect(second).not.toBe(first)
@@ -442,8 +425,7 @@ describePty('running an exited pane again', () => {
         return data.includes(second as string)
       }, 'the second run to say which session it was given')
 
-      // And what the dead pane printed is still there, above the line that says
-      // where this run starts, rather than replaced by it.
+      // What the dead pane printed is still there, above the line.
       const after = (await service.handlers['terminal.read']({ terminalId: terminal.id })).data
       const banner = after.indexOf('claude starts again below')
       expect(banner).toBeGreaterThan(-1)
@@ -465,9 +447,7 @@ describePty('running an exited pane again', () => {
       await waitUntil(() => hasExited(service, terminal.id), 'the command pane to exit')
 
       const again = await service.handlers['terminal.relaunch']({ terminalId: terminal.id })
-      // On the pane, so the strip and the listing say it now, and on the
-      // record, so the next launch does too. Losing it here is the same loss as
-      // losing it across a restart, arrived at from the other direction.
+      // On the pane and on the record.
       expect(again.label).toBe('auth refactor')
       expect(records.get(terminal.id)?.label).toBe('auth refactor')
     },
@@ -484,8 +464,7 @@ describePty('running an exited pane again', () => {
       const again = await service.handlers['terminal.relaunch']({ terminalId: terminal.id })
       expect(again.id).toBe(terminal.id)
       expect(again.agent).toBeUndefined()
-      // Re-running whatever a pane was left holding is the thing `restoreLaunch`
-      // refuses to do at startup, for the same reason: nobody asked for it twice.
+      // The same refusal `restoreLaunch` makes: nobody asked for it twice.
       expect(records.get(terminal.id)?.command).toBeUndefined()
 
       const after = (await service.handlers['terminal.read']({ terminalId: terminal.id })).data
@@ -529,9 +508,7 @@ describePty('running an exited pane again', () => {
       published.length = 0
       await service.handlers['terminal.relaunch']({ terminalId: terminal.id })
 
-      // A subscription is to the pane, not to the process: a window that was
-      // open when the pane died must not be left watching something that can
-      // never speak again.
+      // A subscription is to the pane, not to the process.
       await waitUntil(
         () =>
           published.some(({ event }) => event.type === 'data' && event.data.includes('claude starts again below')) &&
@@ -626,8 +603,7 @@ describe('layout handlers', () => {
 
 describe('layout persistence', () => {
   it('reads and writes through an external repository', async () => {
-    // The workspace store already has this shape, which is how a layout outlives
-    // the process that made it.
+    // The workspace store already has this shape.
     const saved = new Map<string, Layout>()
     const service = createTerminalService({
       layouts: {
@@ -650,7 +626,6 @@ describe('layout persistence', () => {
       focusedTerminalId: 'a'
     })
 
-    // A layout that was already there is what a fresh service starts from.
     const restored = createTerminalService({
       layouts: { getLayout: (id) => saved.get(id), putLayout: (layout) => layout }
     })
@@ -686,20 +661,13 @@ describe('registerTerminalHandlers', () => {
       'terminal.subscribe',
       'terminal.write'
     ])
-    // The schemas come from the contract, so the dispatcher validates against the
-    // same declaration the CLI and the renderer are typed from.
+    // The schemas come from the contract.
     expect(registered.get('terminal.create')).toBe(service.schemas['terminal.create'])
   })
 })
 
-// What the agent says about itself, as the runtime keeps it.
-//
-// One field, the latest thing said, and it is overtaken by exactly one thing:
-// a keystroke, when what was said was about a turn in progress. A request the
-// person has just answered is not a request any more, and a turn the person
-// has just interrupted is not running — but a turn that ended stays ended
-// until the agent says otherwise, because typing the next prompt is not
-// starting it.
+// One field, the latest thing said, overtaken only by a keystroke when it was
+// about a turn in progress; a turn that ended stays ended.
 describePty('terminal.agentEvent', () => {
   it(
     'records the latest event on the pane and answers with the pane',

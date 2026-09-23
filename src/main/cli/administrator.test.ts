@@ -26,11 +26,7 @@ const AWKWARD = [
   'both " and \' together'
 ]
 
-/**
- * Reads an AppleScript string literal back, independently of the code that
- * wrote it. Asserting the escaped text looks a certain way only proves it
- * matches this test's idea of it; decoding proves the literal means the path.
- */
+/** Reads an AppleScript string literal back, independently of the code that wrote it. */
 function decodeAppleScriptString(literal: string): string {
   expect(literal.startsWith('"') && literal.endsWith('"')).toBe(true)
   const body = literal.slice(1, -1)
@@ -68,8 +64,7 @@ describe('shell quoting', () => {
     scratch = await mkdtemp(join(tmpdir(), 'tmr-quote-'))
     const source = join(scratch, awkward)
     await writeFile(source, 'cli')
-    // The proof is the shell's own reading of the command, not a string
-    // comparison: `printf %s` writes exactly the one argument it was handed.
+    // The shell's own reading, not a string comparison.
     const { stdout } = await run('/bin/sh', ['-c', `printf %s ${shellQuote(source)}`])
     expect(stdout).toBe(source)
   })
@@ -108,8 +103,7 @@ describe('the link command', () => {
     await writeFile(join(source, 'teamree'), 'cli')
     const link = join(scratch, 'bin', 'teamree')
 
-    // The shell half of the escaping, executed rather than asserted: whatever
-    // `do shell script` would hand /bin/sh is what runs here.
+    // The shell half, executed rather than asserted.
     await run('/bin/sh', ['-c', linkCommand(join(source, 'teamree'), link)])
 
     expect(await readlink(link)).toBe(join(source, 'teamree'))
@@ -144,11 +138,7 @@ describe('running it as an administrator', () => {
     }
   }
 
-  /**
-   * The real child_process, with the file swapped for one this machine has.
-   * Nothing about the failure is invented: the Error, its exit status and the
-   * stderr all come from a process that genuinely ran and genuinely failed.
-   */
+  /** The real child_process, with the file swapped for one this machine has; the failure is not invented. */
   function failing(stderr: string, status = 1): ExecFile {
     return (_file, _args, callback) => {
       execFile('/bin/sh', ['-c', `printf %s ${shellQuote(stderr)} >&2; exit ${status}`], callback)
@@ -168,16 +158,13 @@ describe('running it as an administrator', () => {
     const [file, args] = spawned[0]!
     expect(file).toBe('/usr/bin/osascript')
     expect(args).toEqual(['-e', administratorScript(command)])
-    // The argument decoded back into the command it spells, so the proof is
-    // what osascript would read rather than what this file expected to see.
+    // Decoded back, so the proof is what osascript would read.
     const literal = args[1]!.slice('do shell script '.length, -' with administrator privileges'.length)
     expect(decodeAppleScriptString(literal)).toBe(command)
   })
 
   it('reads a cancelled password dialog as a decision rather than a fault', async () => {
-    // The reading of the failure, not the failure itself: that pressing Cancel
-    // is what makes osascript say -128 is the one thing here only a Mac can
-    // show, and nothing below claims to have shown it.
+    // That Cancel makes osascript say -128 is the one thing only a Mac can show.
     const runner = createAdministratorRunner(failing('execution error: User canceled. (-128)'))
 
     await expect(runner('/bin/ln -sfn a b')).rejects.toThrow(
@@ -196,8 +183,7 @@ describe('running it as an administrator', () => {
   it('has the failure itself to report when the system said nothing', async () => {
     const runner = createAdministratorRunner(failing('', 7))
 
-    // Whatever node says about a command that exited 7 — but never an empty
-    // sentence ending in a colon, which is what a bare stderr would leave.
+    // Never an empty sentence ending in a colon.
     await expect(runner('/bin/ln -sfn a b')).rejects.toThrow(/macOS refused to run the command as an administrator: \S/)
   })
 })

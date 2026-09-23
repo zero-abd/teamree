@@ -1,12 +1,5 @@
-// The order two things have to agree about: what the sidebar draws, and what
-// the next-worktree chord walks.
-//
-// The failure this exists to prevent is not a crash. It is a chord that moves
-// the highlight down two rows, up four, and back — correct by the store's
-// array and nonsense against the list somebody is looking at. So the claim
-// tested here is about agreement rather than about either order on its own,
-// and `Sidebar.test.tsx` makes the other half of it by reading the rendered
-// rows back.
+// What the sidebar draws and what the next-worktree chord walks must agree; `Sidebar.test.tsx`
+// makes the other half of the claim by reading the rendered rows back.
 
 import { describe, expect, it } from 'vitest'
 import { worktreeAfter, worktreeOrder, worktreesByProject } from './worktreeOrder'
@@ -44,14 +37,12 @@ describe('walking that order', () => {
 
   it('steps one row at a time, in both directions', () => {
     expect(worktreeAfter(order, 'w1', 1)?.id).toBe('w3')
-    // Across the project boundary, because the list it is walking has no
-    // boundary in it — the next row down is the next row down.
+    // Across the project boundary: the list it walks has no boundary in it.
     expect(worktreeAfter(order, 'w3', 1)?.id).toBe('w2')
     expect(worktreeAfter(order, 'w2', -1)?.id).toBe('w3')
   })
 
-  // Five worktrees and a chord that stops at the bottom is a chord you have to
-  // know the length of the list to use.
+  // A chord that stops at the bottom is a chord you have to know the length of the list to use.
   it('wraps at both ends', () => {
     expect(worktreeAfter(order, 'w4', 1)?.id).toBe('w1')
     expect(worktreeAfter(order, 'w1', -1)?.id).toBe('w4')

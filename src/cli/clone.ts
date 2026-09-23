@@ -1,17 +1,6 @@
-// The one thing this CLI does that is not a question to the runtime.
-//
-// `project.add` adopts a checkout that is already on the disk — it inspects it
-// with git and refuses anything that is not a repository — and there is no
-// runtime method that clones, deliberately: nothing in the app has ever needed
-// to fetch a repository nobody had. `teamree team accept` does. A joiner who
-// has never seen this repository has to get it before there is a project to add,
-// and a command that stopped at that point to print `git clone …` would put the
-// shell step back in the middle of the one flow this exists to take it out of.
-//
-// So this runs git, once, through `createGitRunner` — the only place in the app
-// that starts a git process, with `shell: false`, a timeout, an output cap and a
-// sanitised environment — rather than reaching for `child_process` here and
-// arriving at a second, worse copy of all four.
+// The one thing this CLI does that is not a question to the runtime: a clone
+// for `team accept`, run through `createGitRunner` (shell: false, timeout,
+// output cap, sanitised environment) rather than a second copy of all four.
 
 import { GitCommandError } from '../main/git/errors.js'
 import { createGitRunner } from '../main/git/gitProcess.js'
@@ -19,11 +8,7 @@ import { splitProgress, sshCommand } from '../main/teamwork/publish.js'
 import { pushFailureKind } from '../main/git/worktreePush.js'
 import { checkTransport, type TransportCheck } from '../shared/origin.js'
 
-/**
- * As long as a push is allowed to take, and for the same reason: this is the
- * one command here that copies a repository across a network, and a default two
- * minutes would report a healthy clone of a large repository as a failure.
- */
+/** As long as a push may take: a default two minutes reports a healthy large clone as a failure. */
 const CLONE_TIMEOUT_MS = 10 * 60_000
 
 /** git's own words, capped so a wall of them cannot become the whole answer. */
@@ -32,20 +17,10 @@ const MAX_GIT_WORDS = 4000
 export type CloneableCheck = TransportCheck
 
 /**
- * Whether this is an address teamree will run git against, or a reason it is not.
- *
- * The allowlist is `checkTransport` in `src/shared/origin.ts` and this is the
- * clone side asking it. It used to be a second list kept here, and a second list
- * is one that can disagree with the one the runtime enforces — this one did
- * disagree, in both directions: it read the host of an scp-style
- * `gitlab.example:team/api.git` as a transport called `gitlab.example` and
- * refused a remote real teams have, while the runtime wrote `ext::sh` into a
- * checkout's config without a word. One list cannot drift from itself.
- *
- * What stays here is where it is asked. This runs before anything is done with
- * an invitation's origin and again inside `cloneRepository`, because that is the
- * function that starts a git process: a guarantee belongs at the point where it
- * has to hold and not only in whichever caller checked last.
+ * Whether this is an address teamree will run git against. The allowlist is
+ * `checkTransport` in `src/shared/origin.ts`; a second list here once disagreed
+ * with the runtime's in both directions. Asked again inside `cloneRepository`,
+ * the function that starts the process, where the guarantee has to hold.
  */
 export function checkCloneable(origin: string): CloneableCheck {
   return checkTransport(origin)
@@ -70,19 +45,12 @@ export type CloneOptions = {
 }
 
 /**
- * Copies the repository, or says why it could not in words git wrote.
- *
- * ssh runs in batch mode, the same way a publish runs it and for the same
- * reason: `GIT_TERMINAL_PROMPT=0` stops *git* asking for anything and does
- * nothing at all to ssh, which opens `/dev/tty` directly for a key passphrase or
- * for a host key it has never seen. The caller here is usually an agent with no
- * tty worth prompting on, so without this a first clone from a host this Mac has
- * never met waits ten minutes on a question nobody will ever see. Batch mode
- * turns that wait into a refusal with a sentence in it.
+ * Copies the repository, or says why it could not in words git wrote. ssh runs
+ * in batch mode: `GIT_TERMINAL_PROMPT=0` does nothing to ssh, which opens
+ * `/dev/tty` itself for a passphrase or an unknown host key and would wait ten minutes.
  */
 export async function cloneRepository(options: CloneOptions): Promise<CloneOutcome> {
-  // Checked again here rather than trusted from the caller: this is the function
-  // that starts the process, so this is where the guarantee has to hold.
+  // This is the function that starts the process, so the guarantee holds here.
   const cloneable = checkCloneable(options.origin)
   if (!cloneable.ok) {
     return {
@@ -94,18 +62,14 @@ export async function cloneRepository(options: CloneOptions): Promise<CloneOutco
   }
 
   const runner = createGitRunner()
-  // The same ssh a publish uses, read the same way: the caller's own, with the
-  // one thing added that stops it asking this machine's user a question nobody
-  // will see. `cwd` rather than the checkout, because there is no checkout yet —
-  // so what it picks up is the global config and the environment, which is all
-  // there is to pick up before a repository exists.
+  // The same ssh a publish uses; `cwd` because there is no checkout yet, so
+  // only global config and the environment can be read.
   const ssh = await sshCommand(runner, options.cwd)
 
   let result
   try {
     result = await runner.tryRun({
-      // `--` first, so an origin that begins with a dash is a repository and
-      // never an option. The origin arrives in a link somebody was sent.
+      // `--` first: the origin arrives in a link somebody was sent and must never be an option.
       args: ['clone', '--progress', '--', options.origin, options.into],
       cwd: options.cwd,
       timeoutMs: CLONE_TIMEOUT_MS,
@@ -115,9 +79,7 @@ export async function cloneRepository(options: CloneOptions): Promise<CloneOutco
       }
     })
   } catch (error) {
-    // `tryRun` resolves for a git that ran and refused; it rejects only for one
-    // that never finished or never started, and the first of those is the one
-    // worth its own sentence.
+    // `tryRun` rejects only for a git that never finished or never started.
     if (!(error instanceof GitCommandError)) throw error
     if (error.timedOut) {
       return {
@@ -143,21 +105,13 @@ export async function cloneRepository(options: CloneOptions): Promise<CloneOutco
 }
 
 /**
- * Which kind of refusal this is.
- *
- * It reuses the push classifier rather than growing a second copy of the same
- * regular expressions. What those patterns actually read is the transport —
- * ssh's host-key sentence, git's "terminal prompts disabled", a host answering
- * 403 — and a clone and a push meet exactly the same transport. `rejected` is
- * the one verdict that belongs to a push alone and cannot be reached from here:
- * there is no ref to be behind when there is no repository yet.
+ * Which kind of refusal this is, via the push classifier: those patterns read
+ * the transport, which a clone and a push share. `rejected` cannot be reached
+ * here, since there is no ref to be behind yet.
  */
 function cloneFailureKind(stderr: string): CloneFailure {
-  // Asked before the classifier, because `pushFailureKind` reads "repository
-  // not found" as an authentication failure — which is the right reading for a
-  // push, where the repository is one you were pushing to a moment ago, and the
-  // wrong one here, where a typo in an address is the ordinary cause. A caller
-  // branching on `kind` would send somebody to their ssh agent about a URL.
+  // Before the classifier: `pushFailureKind` reads "repository not found" as
+  // an auth failure, right for a push and wrong for a typo in an address.
   if (NOT_FOUND.test(stderr)) return 'other'
   const kind = pushFailureKind(stderr)
   return kind === 'auth' || kind === 'host-key' ? kind : 'other'
@@ -167,12 +121,8 @@ function cloneFailureKind(stderr: string): CloneFailure {
 const NOT_FOUND = /repository not found|does not appear to be a git repository|not a git repository/i
 
 /**
- * The one thing to do about a clone that did not happen.
- *
- * "Repository not found" is the case worth separating by hand: over https it is
- * what a host says both for a repository that is not there and for one this
- * account may not read, and sending somebody to check their ssh agent about a
- * typo in a URL would be an instruction dressed as a diagnosis.
+ * The one thing to do about a clone that did not happen. Over https "repository
+ * not found" covers both a missing repository and one this account may not read.
  */
 function cloneRefusal(stderr: string, origin: string): string {
   const text = stderr.trim()

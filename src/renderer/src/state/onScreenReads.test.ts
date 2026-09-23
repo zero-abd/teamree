@@ -1,14 +1,6 @@
-// What one file changing in one worktree is allowed to cost.
-//
-// The watcher's invalidation names no worktree, so every coarse `worktrees`
-// event puts every ready worktree in the workspace up for a `git status` and a
-// `git merge-tree` — in every project, whether or not anything is showing their
-// numbers. Leave an agent editing files and that repeats up to once a second.
-//
-// The double here is only a call counter: what is under test is which ids this
-// store asks about, which is entirely its own bookkeeping. The other half of
-// the bargain is tested too, because narrowing reads to what is rendered is
-// only safe if a row coming into view is read the moment it does.
+// What one file changing in one worktree is allowed to cost: a coarse `worktrees` event must not
+// put every ready worktree in every project up for `git status` and `git merge-tree`, and narrowing
+// to what is rendered is only safe if a row coming into view is read the moment it does.
 
 import { expect, it, vi } from 'vitest'
 import type { WorkspaceEvent } from '@shared/methods'
@@ -22,8 +14,7 @@ import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from './workspaceStore'
 
 it('spends a git read only on the worktrees that are on screen', async () => {
-  // The store's own stream callback, so a coarse invalidation can be delivered
-  // exactly the way the runtime's watcher delivers one.
+  // The store's own stream callback, so a coarse invalidation is delivered the way the watcher delivers one.
   let invalidate: ((event: WorkspaceEvent) => void) | undefined
   const watch = vi.spyOn(runtimeClient, 'watchWorkspace').mockImplementation((onEvent) => {
     invalidate = onEvent
@@ -60,13 +51,11 @@ it('spends a git read only on the worktrees that are on screen', async () => {
 
     invalidate!({ type: 'worktrees' })
 
-    // Every status of one batch is issued together, so the open tab appearing
-    // means the whole batch has been issued.
+    // Every status of one batch is issued together, so the open tab appearing means the whole batch has.
     await vi.waitFor(() => expect(asked('worktree.status')).toContain(open))
     await vi.waitFor(() => expect(asked('worktree.mergePreview')).toContain(open))
 
-    // A row in an expanded project is on screen even with no tab open, and is
-    // still worth its read.
+    // A row in an expanded project is on screen even with no tab open.
     for (const worktreeId of sameProject) {
       expect(asked('worktree.status')).toContain(worktreeId)
     }
@@ -76,8 +65,7 @@ it('spends a git read only on the worktrees that are on screen', async () => {
       expect(asked('worktree.mergePreview')).not.toContain(worktreeId)
     }
 
-    // And the moment it comes back into view it is read, so nobody ever looks
-    // at a number that stopped moving while it was hidden.
+    // And the moment it comes back into view it is read.
     call.mockClear()
     useWorkspaceStore.getState().toggleProject(elsewhere.id)
     await vi.waitFor(() => expect(asked('worktree.status')).toContain(collapsed[0]!))

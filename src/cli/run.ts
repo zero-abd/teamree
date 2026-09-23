@@ -25,10 +25,7 @@ export type CliOptions = {
 const HELP_TOKENS = new Set(['--help', '-h'])
 const JSON_TOKENS = new Set(['--json', '-j', '--json=true'])
 
-/**
- * Read before parsing: an invocation that is too broken to parse still has to
- * report its failure in the format the caller asked for.
- */
+/** Read before parsing, so even an unparseable invocation fails in the requested format. */
 function prescan(tokens: readonly string[]): { json: boolean; help: boolean } {
   let json = false
   let help = false
@@ -94,9 +91,7 @@ export async function runCli(argv: readonly string[], options: CliOptions = {}):
     const timeoutMs = readNumber(parsed.flags, 'timeout') ?? readTimeoutFromEnv(env) ?? DEFAULT_TIMEOUT_MS
 
     const override = readString(parsed.flags, 'endpoint')
-    // The flag names the profile over the environment, so a command line
-    // generated for one runtime can never be steered to another by whatever
-    // the process that runs it inherited.
+    // The flag beats the environment, so a generated command line cannot be steered by inherited env.
     const profile = readString(parsed.flags, 'userDataDir')
     const base: DiscoveryHost = options.host ?? { ...defaultDiscoveryHost(), env }
     const host: DiscoveryHost =
@@ -126,8 +121,7 @@ export async function runCli(argv: readonly string[], options: CliOptions = {}):
         client.close()
       }
     } catch (thrown) {
-      // Past its arguments, a silent command has nobody to tell: see
-      // `CommandSpec.silent`.
+      // Past its arguments, a silent command has nobody to tell (`CommandSpec.silent`).
       if (spec.silent) return ExitCode.Success
       throw thrown
     }

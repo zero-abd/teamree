@@ -1,16 +1,6 @@
-// What everybody else is doing to one of this machine's panes, in the shape a
-// pane asks the question.
-//
-// The runtime answers `teamwork.watchers` per project, because that is how a
-// roster is scoped. A pane knows its own id and nothing about projects, so the
-// lookup is here rather than in a view — and it is a pure function of the map
-// the store already holds, so nothing has to be fetched to answer it.
-//
-// LIVENESS IS COMPUTED, NEVER STORED. A typist record says when its last
-// keystroke was; whether that counts as "typing" is a question about the clock,
-// asked again on every tick. A view that believed a stored boolean would go on
-// saying somebody is at the keyboard for as long as nothing else happened,
-// which is the one direction this display must never be wrong in.
+// What everybody else is doing to one of this machine's panes, looked up by pane id across the
+// per-project `teamwork.watchers` answers. LIVENESS IS COMPUTED, NEVER STORED: whether a typist
+// counts as "typing" is a question about the clock, asked again on every tick.
 
 import { TYPING_WINDOW_MS, type PaneTypist, type PaneWatcher, type PaneWatchers } from '@shared/entities'
 
@@ -47,11 +37,8 @@ export function typingNow(typists: readonly PaneTypist[], now: number): PaneTypi
 }
 
 /**
- * Whether anybody has ever typed here, which is a different question and
- * outlives the answer above.
- *
- * A pane somebody typed into an hour ago is a pane whose history is not the
- * owner's alone, and the window says so even when nothing is happening now.
+ * Whether anybody has ever typed here, which outlives `typingNow`: a pane somebody typed into an
+ * hour ago is not the owner's alone.
  */
 export function hasBeenTyped(attention: PaneAttention): boolean {
   return attention.typists.some((typist) => typist.writes > 0 || typist.refused > 0)

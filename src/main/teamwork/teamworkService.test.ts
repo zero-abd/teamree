@@ -28,11 +28,7 @@ type Harness = {
   seed: (handle: string, publicKey: string) => Promise<void>
 }
 
-/**
- * A git that has no email to give. Unsetting it in the repository is not
- * enough: the machine running the suite has a global config, and the point of
- * these two tests is the machine that has never configured one at all.
- */
+/** A git with no email to give. Unsetting it in the repository is not enough: this machine has a global config. */
 function withoutEmail(inner: GitRunner): GitRunner {
   const unset = (args: readonly string[]): boolean => args[0] === 'config' && args.includes('user.email')
   return {
@@ -161,8 +157,7 @@ describe('joining a project', () => {
     const written = await readFile(path.join(harness.repo.repoPath, '.teamree/members/ada.pub'), 'utf8')
     expect(written).toContain('handle: ada')
     expect(written).toContain('added: 2026-09-13')
-    // The file is sitting there untracked. Getting it into the repository is
-    // the step that means something, so the app must not have taken it.
+    // Untracked: getting it into the repository is the step that means something, and the app must not take it.
     expect(await harness.repo.git(['status', '--porcelain'])).toContain('.teamree/')
     expect(await harness.repo.git(['log', '--oneline'])).not.toContain('member')
   })
@@ -232,9 +227,7 @@ describe('joining a project', () => {
 
 describe('a roster that changed on disk', () => {
   it('sees a teammate’s key arrive by pulling it, without being restarted', async () => {
-    // The belt-and-braces half of the watch on `.teamree`: opening the dialog
-    // is itself a read, and a read that finds the directory has moved has to
-    // tell the rest of the app, or the sidebar goes on showing yesterday.
+    // Opening the dialog is itself a read, and a read that finds `.teamree` moved has to tell the rest of the app.
     const harness = await wire({ email: 'ada@example.com' })
     await harness.service.joinProject({ projectId: harness.project.id })
     expect(harness.changes).toBe(1)
@@ -247,8 +240,7 @@ describe('a roster that changed on disk', () => {
   })
 
   it('announces nothing when a read finds the roster it already knew', async () => {
-    // Otherwise the announcement causes a re-read, which announces: the window
-    // and the runtime would chase each other for as long as the app ran.
+    // Otherwise the announcement causes a re-read, which announces, and the two chase each other for ever.
     const harness = await wire({ email: 'ada@example.com' })
     await harness.seed('grace', GRACE)
 
@@ -280,8 +272,7 @@ describe('the relay a project meets on', () => {
     expect(setting.source).toBe('repository')
     const written = await readFile(path.join(harness.repo.repoPath, '.teamree/relay'), 'utf8')
     expect(written).toContain('wss://relay.example/v1/relay')
-    // Untracked, exactly like a member file: pushing it is what makes it the
-    // team's, and the app must not have taken that step.
+    // Untracked, exactly like a member file: pushing it is what makes it the team's.
     expect(await harness.repo.git(['status', '--porcelain'])).toContain('.teamree/')
     expect(harness.changes).toBe(1)
   })
@@ -298,9 +289,7 @@ describe('the relay a project meets on', () => {
   })
 
   it('says the environment was looked at and had nothing in it', async () => {
-    // The answer to "I set the variable and nothing happened": an app opened
-    // from Finder inherits no shell environment, and until now nothing in the
-    // app could say whether the override had been seen at all.
+    // An app opened from Finder inherits no shell environment, and nothing could say whether the override was seen.
     const harness = await wire({ email: 'ada@example.com', env: {} })
 
     const setting = await harness.service.readRelay({ projectId: harness.project.id })
@@ -337,16 +326,9 @@ describe('adding the origin remote', () => {
     expect(await repo.git(['remote', 'get-url', 'origin'])).toBe('https://github.com/ada/pager.git')
   })
 
-  // Two layers, pinned separately and on purpose.
-  //
-  // `checkOrigin` refuses a URL beginning with `-`, and that is the whole of
-  // what has kept an option out of git's argv. But it lives three calls away
-  // from the command, and a defence that cannot be seen from the call site is
-  // one that lasts exactly until somebody relaxes it for a good reason. So the
-  // call site passes `--` as well, and both halves are asserted here — the
-  // refusal, and that the separator genuinely makes git read such a value as
-  // data. A separator that quietly did not work for this subcommand would be
-  // worse than none, because it would look like defence and be decoration.
+  // Two layers, pinned separately: `checkOrigin` refuses a URL beginning with `-`, but it lives three
+  // calls away from the command, so the call site passes `--` as well and both halves are asserted —
+  // a separator that quietly did not work for this subcommand would look like defence and be decoration.
   it('refuses an origin that is really a flag, and hands git a separator so it could not be one', async () => {
     const { service, project, repo } = await wire({})
 
@@ -354,11 +336,7 @@ describe('adding the origin remote', () => {
       /not an origin teamree can use/
     )
 
-    // The call site itself, read off what git was actually handed. Asserting
-    // git's behaviour with a separator typed here by hand would have proved
-    // something about git and nothing about this service — the first version of
-    // this test did exactly that, and deleting the separator from the service
-    // left it green.
+    // Read off what git was actually handed: a separator typed here by hand would prove something about git only.
     const asked: string[][] = []
     const watched = new TeamworkService({
       store: { getProject: (id) => (id === project.id ? project : undefined) },
@@ -379,16 +357,12 @@ describe('adding the origin remote', () => {
 
     const wrote = asked.find((args) => args[0] === 'remote' && (args[1] === 'add' || args[1] === 'set-url'))
     expect(wrote).toBeDefined()
-    // Immediately before the two operands, which is the only position that
-    // means "everything after this is data".
+    // Immediately before the two operands, the only position that means "everything after this is data".
     expect(wrote?.[2]).toBe('--')
     expect(wrote?.at(-1)).toBe('https://github.com/ada/pager.git')
 
-    // And git really does accept it there, for both spellings of the command —
-    // a separator that were silently unsupported would look like defence and be
-    // decoration.
-    // `set-url` here rather than `add`, because the call above has just made an
-    // origin — which is itself the state this service meets most often.
+    // And git really does accept it there, for both spellings. `set-url` rather than `add`, because the
+    // call above has just made an origin.
     await repo.git(['remote', 'set-url', '--', 'origin', '--upload-pack=notacommand'])
     expect(await repo.git(['remote', 'get-url', 'origin'])).toBe('--upload-pack=notacommand')
     await repo.git(['remote', 'remove', 'origin'])
@@ -396,9 +370,7 @@ describe('adding the origin remote', () => {
     expect(await repo.git(['remote', 'get-url', 'origin'])).toBe('-also-a-flag')
   })
 
-  // The whole reason somebody reaches this is an origin teamree cannot compare.
-  // "There is already an origin" would be the app naming the problem and
-  // declining to fix it — so it replaces, and says so.
+  // "There is already an origin" would be the app naming the problem and declining to fix it — so it replaces.
   it('replaces one that is already there, and reports that it did', async () => {
     const { service, project, repo } = await wire({ withRemote: true })
 
@@ -408,11 +380,8 @@ describe('adding the origin remote', () => {
     expect(await repo.git(['remote', 'get-url', 'origin'])).toBe('ssh://git@example.com/ada/pager.git')
   })
 
-  // A path is a perfectly good git remote and a useless project identity,
-  // because nobody else can clone it. Refused before git is ever run.
-  // A repository on a shared volume is a remote everybody really can reach, so
-  // the path is set — normalised, because those characters are the project's
-  // identity and a teammate has to be given them exactly.
+  // A path is a good git remote and a useless project identity, because nobody else can clone it. A
+  // repository on a shared volume is reachable, so the path is set — normalised, since it is the identity.
   it('sets the path a shared repository is mounted at, in its normalised spelling', async () => {
     const { service, project, repo } = await wire()
 
@@ -431,16 +400,9 @@ describe('adding the origin remote', () => {
     expect(await repo.git(['remote'])).toBe('')
   })
 
-  // The runtime is the layer this had to be fixed in. `ext::<command>` is git's
-  // remote-helper syntax — the helper runs what follows — and it used to read
-  // here as a URL with a host called `ext`, so this method would have written it
-  // into the checkout's config as `origin`. Nothing would have executed on a
-  // stock install, because git refuses that transport unless `protocol.ext.allow`
-  // says otherwise; the refusal was a default belonging to another program that
-  // nothing in this process can see. `checkCloneable` in `src/cli/clone.ts` had
-  // said no to this string for a while, and the window and the runtime cannot
-  // reach `src/cli`, so the list moved to `src/shared/origin.ts` where both
-  // halves of the app ask the one copy of it.
+  // `ext::<command>` is git's remote-helper syntax — the helper runs what follows — and it used to read
+  // here as a URL with a host called `ext`. Only `protocol.ext.allow`, a default belonging to another
+  // program, stopped it executing. The list lives in `src/shared/origin.ts`, where both halves of the app ask one copy.
   it('refuses an origin that names a transport, and leaves the checkout without one', async () => {
     const { service, project, repo } = await wire()
 
@@ -458,8 +420,7 @@ describe('adding the origin remote', () => {
     )
   })
 
-  // The step goes green without a restart because the status is re-read, and it
-  // is re-read because something told the window that `.teamree` moved.
+  // Green without a restart because the status is re-read, because something told the window `.teamree` moved.
   it('announces the change, so the blocked step is asked about again', async () => {
     const harness = await wire()
     const before = harness.changes
@@ -495,8 +456,7 @@ describe('what committing and pushing would do', () => {
     expect(plan.blocker).toBeNull()
   })
 
-  // A button that looks live and then explains itself only once it is pressed
-  // is the thing this whole change exists to remove.
+  // A button that looks live and explains itself only once pressed is what this change exists to remove.
   it('says a repository with no remote cannot push, and names where to fix it', async () => {
     const harness = await wire({ email: 'ada@example.com' })
     await harness.service.joinProject({ projectId: harness.project.id })
@@ -521,8 +481,7 @@ describe('committing and pushing', () => {
     expect(committed.split('\n').sort()).toEqual(['.teamree/members/ada.pub', '.teamree/relay'])
   })
 
-  // `git add -A` would sweep somebody's half-finished work into a commit they
-  // never asked for. The paths are named, and the commit is path-limited too.
+  // `git add -A` would sweep somebody's half-finished work into a commit; the paths are named, the commit path-limited.
   it('leaves everything else exactly where it was, staged or not', async () => {
     const harness = await wire({ email: 'ada@example.com', withRemote: true })
     await harness.service.joinProject({ projectId: harness.project.id })
@@ -536,14 +495,11 @@ describe('committing and pushing', () => {
     expect(await harness.repo.git(['diff', '--cached', '--name-only'])).toBe('mine.txt')
   })
 
-  // A commit that landed and a push that was refused is the ordinary way this
-  // goes wrong, and calling the whole thing a failure would leave somebody
-  // believing no commit exists.
+  // A commit that landed and a push refused is the ordinary failure; calling it all a failure would hide the commit.
   it('reports the commit and git’s own words when the push is refused', async () => {
     const harness = await wire({ email: 'ada@example.com', withRemote: true })
     await harness.service.joinProject({ projectId: harness.project.id })
-    // A remote that is not there at all: git refuses, and what it says about it
-    // is the only thing worth printing.
+    // A remote that is not there: git refuses, and what it says is the only thing worth printing.
     await harness.repo.git(['remote', 'set-url', 'origin', path.join(harness.repo.base, 'not-a-repo')])
 
     const result = await harness.service.publish({ projectId: harness.project.id })
@@ -585,8 +541,7 @@ describe('the command that stands a relay up', () => {
     expect(relay.deploy).toEqual({ command: '/somewhere/relay/teamree-relay deploy', reason: null })
   })
 
-  // A disabled button whose reason nobody can read is the same as one that does
-  // nothing, so the reason travels with the absence.
+  // A disabled button whose reason nobody can read does nothing, so the reason travels with the absence.
   it('says why there is none, when this build carries none', async () => {
     const { service, project } = await wire({
       relayDeploy: { command: null, reason: 'this build does not carry the relay project' }

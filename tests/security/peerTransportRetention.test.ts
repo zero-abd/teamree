@@ -1,36 +1,8 @@
-// FIXED: a teammate could make the runtime retain unbounded attacker-chosen
-// memory, and could make one relay frame cost the runtime hundreds of
-// dispatches. These tests are the attack, and they now assert that it fails.
-//
-// `peerTransport.handleRequest` keeps a set of the subscription ids the peer
-// has asked to release:
-//
-//     if (method === 'unsubscribe') {
-//       const subscription = subscriptionOf(value)
-//       if (subscription !== undefined) releasing.add(subscription)
-//     }
-//
-// It was added *before* the dispatch, so nothing the dispatcher or
-// `Params.unsubscribe` would say about the id had happened yet — and the only
-// place anything was ever removed from it is the subscription-ended callback:
-//
-//     const asked = releasing.delete(subscriptionId)
-//
-// An id that named no subscription therefore stayed in the set for the life of
-// the link, with no cap on the set's size and no cap on the length of a member;
-// `MAX_PEER_SUBSCRIPTIONS` guards `peer.subscribe` and `terminal.subscribe` and
-// does not guard `unsubscribe`. Worse than the memory: the hub mints `sub_<n>`
-// from a counter, so an id could be named *before it existed* and be believed
-// when it did — which swallowed the owner's "I closed this pane".
-//
-// The set now only ever remembers ids this link actually holds, which the
-// transport knows because they are the ids its own answers carried. An id from
-// the wire that names nothing here is answered and forgotten.
-//
-// The second half is the rate. One Noise transport message is a byte stream of
-// newline-delimited JSON, so one relay frame is as many requests as fit in
-// 65,455 bytes — and a per-link token bucket in `handleRequest` is what stops
-// that being as many dispatches.
+// FIXED: `peerTransport.handleRequest` filed every `unsubscribe` id in `releasing` before dispatch, so
+// ids naming nothing stayed for the life of the link (unbounded, any length), and since the hub mints
+// `sub_<n>` from a counter an id named before it existed was believed when it did, swallowing the owner's
+// "I closed this pane". The set now holds only ids this link's own answers carried. Second half: one
+// Noise message is 65,455 bytes of newline-delimited JSON, so a per-link token bucket caps dispatches.
 
 import { describe, expect, it } from 'vitest'
 import { Params } from '../../src/shared/methods'
@@ -53,13 +25,7 @@ type Rig = {
   dispatched: () => number
 }
 
-/**
- * The owner's peer transport, with an attacker on the far end that frames its
- * own bytes instead of using a transport.
- *
- * The Noise session and the framing are the real ones; only the relay is gone,
- * because what is under test is what the runtime does with the plaintext.
- */
+/** The owner's peer transport with an attacker framing its own bytes; real Noise and framing, no relay. */
 function rig(): Rig {
   const [attackerSession, ownerSession]: [PeerSession, PeerSession] = handshakenPair()
   const hub = new SubscriptionHub()
@@ -83,8 +49,7 @@ function rig(): Rig {
 
   const owner: PeerTransport = createPeerTransport({
     session: ownerSession,
-    // Decrypted straight back into text, so the attacker sees the answers the
-    // way its own line reader would.
+    // Decrypted straight back into text, as the attacker's own line reader would see it.
     send: (message) => {
       tail += Buffer.from(attackerSession.decrypt(message)).toString('utf8')
       for (;;) {
@@ -143,10 +108,8 @@ describe('what a teammate can make the peer transport hold on to', () => {
   it('ATTACK: an id named in `unsubscribe` before it exists is not believed when it does', async () => {
     const owner = rig()
 
-    // The subscription hub mints `sub_<n>` from a counter, so the id the next
-    // subscribe will be answered with is known in advance. Naming it now used
-    // to file it under `releasing` without asking anything whether it was real,
-    // and the transport then read the owner's own teardown as the peer's.
+    // The next subscribe's id is known in advance; naming it now used to make the owner's own
+    // teardown read as the peer's.
     owner.sendRaw([JSON.stringify({ id: 'x', method: 'unsubscribe', params: { subscription: 'sub_1' } })])
     await settle()
 
@@ -154,18 +117,14 @@ describe('what a teammate can make the peer transport hold on to', () => {
     await settle()
     owner.pane('t1')?.close()
 
-    // The owner's "I closed this pane" goes out, which is the thing the
-    // swallowed goodbye cost: a watcher left looking at a window that stopped
-    // updating reads it as a teammate gone quiet.
+    // The owner's "I closed this pane" goes out; swallowed, a watcher reads a stopped window as silence.
     expect(eventsOn(owner.replies(), 'sub_1')).toContainEqual(LOST)
   })
 
   it('ATTACK: ids that name nothing are not accumulated, however many are sent', async () => {
     const owner = rig()
 
-    // Hundreds of ids that name nothing at all, including every id the hub is
-    // about to mint. Nothing is remembered from any of them, so the watch
-    // opened afterwards behaves exactly as the control does.
+    // Hundreds of ids naming nothing, including every id the hub is about to mint.
     const junk: string[] = []
     for (let n = 0; n < 120; n += 1) {
       junk.push(JSON.stringify({ id: `j${n}`, method: 'unsubscribe', params: { subscription: `sub_${n}` } }))
@@ -189,10 +148,8 @@ describe('what a teammate can make the peer transport hold on to', () => {
 
   it('ATTACK: an id of any length the frame decoder allows is answered and forgotten', async () => {
     const owner = rig()
-    // `Params.unsubscribe` is `z.string().min(1)` with no maximum and the only
-    // ceiling is MAX_PEER_FRAME_CHARS, which is 4 MiB per line — so the fix is
-    // not a length check, it is that an id the link does not hold is never
-    // written down at all.
+    // `Params.unsubscribe` has no maximum short of MAX_PEER_FRAME_CHARS (4 MiB), so the fix is not a
+    // length check: an id the link does not hold is never written down.
     const huge = 'Z'.repeat(512 * 1024)
     owner.sendRaw([JSON.stringify({ id: 'x', method: 'unsubscribe', params: { subscription: huge } })])
     await settle()
@@ -200,8 +157,7 @@ describe('what a teammate can make the peer transport hold on to', () => {
     // Answered, and answered honestly: there was no such subscription.
     expect(owner.replies()).toContainEqual({ id: 'x', ok: true, result: { unsubscribed: false } })
 
-    // And nothing was kept: the link behaves as a fresh one for the watch that
-    // follows, which is the only thing retention could have changed.
+    // And nothing was kept: the watch that follows behaves as on a fresh link.
     owner.sendRaw([JSON.stringify({ id: 'a', method: 'terminal.subscribe', params: { terminalId: 't1' } })])
     await settle()
     owner.pane('t1')?.close()
@@ -210,10 +166,7 @@ describe('what a teammate can make the peer transport hold on to', () => {
 
   it('ATTACK: one Noise transport message is no longer hundreds of dispatches', () => {
     const owner = rig()
-    // A Noise transport message carries up to 65,455 bytes of plaintext, and
-    // the plaintext is a byte stream of newline-delimited JSON. Nothing counted
-    // requests, so the relay's 200-frames-a-second budget was not a bound on
-    // how much work one second of wire could buy. The per-link bucket is.
+    // The relay's 200-frames-a-second budget bounded frames, not requests; the per-link bucket does.
     const lines: string[] = []
     let bytes = 0
     for (let n = 0; bytes < 60_000; n += 1) {
@@ -225,10 +178,8 @@ describe('what a teammate can make the peer transport hold on to', () => {
     owner.sendRaw(lines)
 
     expect(lines.length).toBeGreaterThan(800)
-    // The burst, plus whatever the bucket earned back while the frame was being
-    // decrypted — real milliseconds on a loaded machine, so this is asserted
-    // with room rather than to the token. What matters is the shape: hundreds
-    // of requests in one frame are no longer hundreds of dispatches.
+    // The burst plus whatever the bucket earned back during decryption (real milliseconds on a
+    // loaded machine), so asserted with room rather than to the token.
     expect(owner.dispatched() - before).toBeLessThanOrEqual(PEER_REQUEST_BURST * 2)
     expect(owner.dispatched() - before).toBeLessThan(lines.length / 2)
     // Every one of the rest is answered rather than dropped.

@@ -1,14 +1,6 @@
-// What the user is told when "Reveal in Finder" cannot reveal anything.
-//
-// The OS call is silent on a missing path, so every one of these cases used to
-// look identical from the outside: a button pressed and a screen that did not
-// change. The assertions are therefore on the wording as much as on the
-// outcome — a refusal that does not name the path it is about is no better than
-// the silence it replaced.
-//
-// The happy paths run against a real temporary directory rather than a stubbed
-// `exists`, because the fact under test is what the filesystem says, and a stub
-// would only ever repeat what this file already believes.
+// What the user is told when "Reveal in Finder" cannot reveal anything. The
+// assertions are on the wording as much as the outcome, against a real
+// temporary directory rather than a stubbed `exists`.
 
 import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
@@ -70,9 +62,7 @@ describe('revealing a path', () => {
     expect(os1.shown).toEqual([dir])
   })
 
-  // The case this module exists for: the checkout was deleted underneath the
-  // app. `showItemInFolder` does nothing and says nothing about it, so the
-  // refusal has to name the path and suggest what became of it.
+  // `showItemInFolder` on a deleted checkout does nothing and says nothing.
   it('names the path that is not there rather than calling the OS and going quiet', async () => {
     const dir = await tempDir()
     const gone = path.join(dir, 'a-checkout-that-was-deleted')
@@ -117,9 +107,7 @@ describe('revealing a path', () => {
     expect(reason).toContain('would not show')
   })
 
-  // A symlink whose target has gone is still an entry the file manager can
-  // select inside its parent folder, which is why existence is asked with
-  // `lstat` and not `stat`.
+  // A dangling symlink is still an entry to select: `lstat`, not `stat`.
   const itPosix = process.platform === 'win32' ? it.skip : it
 
   itPosix('shows a broken symlink, because the link itself is something to look at', async () => {

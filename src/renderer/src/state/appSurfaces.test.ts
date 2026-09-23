@@ -1,15 +1,8 @@
 /** @vitest-environment jsdom */
 
-// The parts of the store that are about the window rather than about the work:
-// which app-level page has the main area, the two preferences kept beside the
-// sidebar's width, and the one action in this renderer that leaves the app
-// entirely to ask the OS for a file manager.
-//
-// jsdom, because all three need a window — a `localStorage` to write to and a
-// `window.teamree` bridge to call. The rest of the store's tests run under node
-// and that is the reason `revealInFinder` asks whether there is a window before
-// it reaches for one: without that guard, importing this store in a node test
-// and pressing the wrong button was a ReferenceError rather than a refusal.
+// The parts of the store about the window: which app-level page has the main
+// area, two preferences, and the one action that asks the OS for a file manager.
+// jsdom because all three need a window; the rest of the store's tests run under node.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -38,10 +31,8 @@ beforeEach(() => {
 })
 
 describe('which page has the main area', () => {
-  // One area, one occupant. Each of these used to be a separate boolean nobody
-  // cleared, and the shape of that bug is a settings page rendered behind a
-  // pane board that is also open, where whichever early return comes first
-  // wins and the other is simply unreachable.
+  // One area, one occupant: separate booleans nobody cleared rendered a
+  // settings page behind a pane board that was also open.
   it('gives the area to settings, taking it from everything else', () => {
     useWorkspaceStore.setState({ dashboardOpen: true, teamworkProjectId: 'p1', helpOpen: true })
     store().toggleSettings()
@@ -59,8 +50,7 @@ describe('which page has the main area', () => {
     expect(store().dashboardOpen).toBe(false)
   })
 
-  // The chord that opened it is the chord that closes it. A key that does
-  // nothing on the second press is a key people stop trusting.
+  // The chord that opened it closes it; a key that does nothing on the second press loses trust.
   it('gives it back when the same page is asked for twice', () => {
     store().toggleSettings()
     store().toggleSettings()
@@ -129,11 +119,8 @@ describe('showing a path in the file manager', () => {
     expect(store().notices).toEqual([])
   })
 
-  // The case the whole feature is built around: `shell.showItemInFolder` on a
-  // path that is gone does nothing and says nothing, so the main process checks
-  // first and answers with a reason. A reason nobody shows is the same silence
-  // arriving by a longer route, so it has to reach the notices — named for the
-  // thing that was pressed as well as the path that was missing.
+  // `shell.showItemInFolder` on a path that is gone does nothing and says
+  // nothing, so the main process checks first and its reason has to reach the notices.
   it('says why, naming what was pressed, when the path is not there', async () => {
     Object.assign(window, {
       teamree: {
@@ -149,9 +136,7 @@ describe('showing a path in the file manager', () => {
     )
   })
 
-  // A window with no bridge is a window running outside Electron — a vite
-  // preview, a test harness. It must say it cannot rather than throw past the
-  // button that called it.
+  // No bridge means outside Electron (a vite preview, a test harness): say it cannot rather than throw.
   it('says it cannot rather than throwing, when there is no bridge to ask', async () => {
     await store().revealInFinder('/repos/pager', 'the pager repository')
 

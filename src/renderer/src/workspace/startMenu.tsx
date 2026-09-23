@@ -1,7 +1,4 @@
-// What the strip's `+` offers: everything that can be started in the worktree
-// on screen. The fixed rows are listed here; the agents are whatever the
-// runtime's probe found, in its order, so a machine without one gets no row
-// for it rather than a row that fails.
+// What the strip's `+` offers: fixed rows, then the agents the runtime's probe found, in its order.
 
 import type { InstalledAgent } from '@shared/entities'
 import type { PlatformModifier } from '../keyboard/platformModifier'

@@ -1,12 +1,5 @@
-// Where project and worktree records live.
-//
-// The git service does not own durability. It reads and writes through this
-// port, which is deliberately the subset of the runtime's WorkspaceStore that
-// deals in projects and worktrees — so the runtime can hand its own store
-// straight in and get persistence for free:
-//
-//   new GitService({ store: context.store, worktreesRoot })
-//
+// Where project and worktree records live: the subset of WorkspaceStore that
+// deals in projects and worktrees, so the runtime hands its own store in.
 // Without one, an in-memory store is used, which is what the tests run against.
 
 import type { Project, Worktree } from '../../shared/entities'

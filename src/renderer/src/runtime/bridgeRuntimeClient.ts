@@ -1,7 +1,5 @@
-// An object-shaped façade over the module-level client, for UI code that wants
-// one injectable dependency instead of imported functions. It also tracks
-// whether the runtime is answering at all, which is the only connection state a
-// renderer speaking over IPC can actually observe.
+// An object-shaped façade over the module-level client, which also tracks whether the runtime answers:
+// the only connection state IPC can observe.
 
 import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WatchedPaneEvent, WorkspaceEvent } from '@shared/methods'
 import { call, openStream, RuntimeCallError, subscribeTerminal, type Subscription } from './runtimeClient'
@@ -28,10 +26,7 @@ export type RuntimeClient = {
   subscribeTerminal(terminalId: string, onEvent: (event: TerminalEvent) => void): Promise<Subscription>
   /** Live output for one of a teammate's panes. Read-only; there is no write. */
   watchPane(projectId: string, paneId: string, onEvent: (event: WatchedPaneEvent) => void): Promise<WatchedPaneHandle>
-  /**
-   * Starts watching workspace changes and keeps the stream up. Replaces polling:
-   * every event names a collection the caller should refetch.
-   */
+  /** Watches workspace changes and keeps the stream up; each event names a collection to refetch. */
   watchWorkspace(onEvent: (event: WorkspaceEvent) => void): WorkspaceWatch
   readonly connection: ConnectionState
   onConnectionChange(listener: (state: ConnectionState) => void): () => void
@@ -69,25 +64,21 @@ export function createRuntimeClient(): RuntimeClient {
         if (state.phase !== 'ready') setState({ phase: 'ready' })
         return result
       } catch (error) {
-        // A served error means the runtime is alive and disagreeing; only a
-        // transport failure says the connection itself is gone.
+        // A served error means the runtime is alive; only a transport failure means the link is gone.
         if (!(error instanceof RuntimeCallError)) setState({ phase: 'offline', detail: describe(error) })
         throw error
       }
     },
     subscribeTerminal,
     async watchPane(projectId, paneId, onEvent) {
-      // The dimensions come back with the subscription rather than after it,
-      // which is why this cannot be the generic subscribe: the viewer needs the
-      // owner's size before it draws anything.
+      // Not the generic subscribe: the viewer needs the owner's size before it draws.
       const { subscription, result } = await openStream('teamwork.watch', { projectId, paneId }, (event) =>
         onEvent(event as WatchedPaneEvent)
       )
       return { subscription, cols: result.cols, rows: result.rows, handle: result.handle }
     },
     watchWorkspace: (onEvent) =>
-      // A stream that cannot be opened says as much about the connection as a
-      // failed call does, so the status bar learns about it either way.
+      // A failed stream says as much about the connection as a failed call.
       watchWorkspace(onEvent, { onError: (error) => setState({ phase: 'offline', detail: describe(error) }) }),
     get connection() {
       return state

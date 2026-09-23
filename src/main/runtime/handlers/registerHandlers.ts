@@ -1,25 +1,6 @@
-// THE HANDLER SEAM.
-//
-// `registerHandlers(registry)` is the one place feature areas are wired into the
-// runtime. To add an area: write `handlers/<area>Handlers.ts` exporting
-// `register<Area>Handlers(registry: MethodRegistry): void`, and add one call
-// below, after the placeholders.
-//
-// Inside your module call `registry.register(method, schema, handler)` with the
-// schema from `Params` in src/shared/methods.ts. Registration order matters only
-// in that a later registration replaces an earlier one, which is how a real
-// handler takes over from its placeholder. Handlers get `(params, call)`:
-// `params` is already validated, `call.connectionId` identifies the caller and is
-// the key for `registry.context.subscriptions`. Process-wide dependencies —
-// version, endpoint, the workspace store, the subscription hub — hang off
-// `registry.context`. Throw `RuntimeError` (see runtimeError.ts) for anything the
-// caller should see as a structured error code; any other throw becomes
-// `internal`.
-//
-// An area that changes workspace state also belongs on the change stream: after
-// registering it, publish its changes onto `registry.context.workspaceEvents`
-// (see workspaceEventSources.ts). Publishing at the service, not at a transport,
-// is what lets a GUI subscriber see a mutation the CLI made.
+// The handler seam: the one place feature areas are wired into the runtime.
+// A later registration replaces an earlier one, which is how a real handler
+// takes over from its placeholder; areas that mutate state also publish events.
 
 import { dirname } from 'node:path'
 import type { MethodRegistry } from '../methodRegistry'
@@ -54,59 +35,29 @@ export type RegisteredAreas = {
   git: GitService
   /** Filesystem watches behind live git status. Released when the app quits. */
   worktreeFiles: { close: () => void }
-  /**
-   * Filesystem watches on each project's `.teamree`, which is what makes a
-   * teammate's key arriving in a pull reach the app without a restart.
-   */
+  /** Watches on each project's `.teamree`, so a teammate's key arriving in a pull needs no restart. */
   teamworkFiles: { close: () => void }
-  /**
-   * Outbound relay connections, one per teammate. Started after the dispatcher
-   * exists, because a peer that reached a half-built registry would be told a
-   * method does not exist when it merely does not exist yet.
-   */
+  /** Outbound relay connections, one per teammate. Started after the dispatcher exists. */
   peers: PeerService
-  /**
-   * The update check. It owns one timer and nothing else, which is the whole
-   * reason it is on this list: quitting must never be waiting on GitHub.
-   */
+  /** The update check: one timer, and quitting must never be waiting on GitHub. */
   updates: UpdateService
 }
 
 export type RegisterHandlersOptions = {
-  /**
-   * Opens a URL in the user's browser. Absent in a runtime with no Electron
-   * around it — the acceptance host, a vitest worker — where the update check's
-   * download call then refuses rather than pretending to have opened something.
-   */
+  /** Opens a URL in the user's browser. Absent with no Electron around, where the download call refuses. */
   openExternal?: (url: string) => Promise<void>
-  /**
-   * Where each pane's output is kept between launches. Opened by the runtime
-   * rather than here because opening it reads a directory, and this function is
-   * the synchronous assembly of a registry. Absent, panes still come back — with
-   * nothing above their prompt.
-   */
+  /** Where each pane's output is kept between launches. Absent, panes come back with nothing above their prompt. */
   scrollback?: ScrollbackRepository
   /**
-   * Parent of every checkout the git service creates. Absent, the git service's
-   * own default — `~/.teamree/worktrees` — stands, which is what the app wants
-   * and what every harness with a temporary home does not. See `RuntimeOptions`
-   * in startRuntime.ts for why isolating the store is not enough.
+   * Parent of every checkout. Absent, `~/.teamree/worktrees` stands; see
+   * `RuntimeOptions` in startRuntime.ts for why a harness must set it.
    */
   worktreesRoot?: string
-  /**
-   * Announces an agent pane that has stopped, which in the app is an OS
-   * notification. Absent in every runtime with no window around it — the
-   * acceptance host, a vitest worker — where nothing has anywhere to raise one.
-   */
+  /** Announces an agent pane that has stopped (an OS notification in the app). Absent with no window around. */
   onAgentNotice?: (notice: AgentNotice) => void
   /**
-   * Ends the app, for `app.quit`. `app.quit()` in the main process and nothing
-   * else: it is the one ending that runs `before-quit`, and `before-quit` is
-   * where the ptys are killed and awaited.
-   *
-   * Absent in every runtime with no app around it — the acceptance host, a
-   * vitest worker — where the method refuses rather than half-quitting a
-   * process that has no quit.
+   * Ends the app: `app.quit()` and nothing else, the one ending that runs
+   * `before-quit`, where the ptys are killed and awaited. Absent, the method refuses.
    */
   requestQuit?: () => void
 }
@@ -117,46 +68,29 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   registerQuitHandler(registry, options.requestQuit === undefined ? {} : { requestQuit: options.requestQuit })
   registerUnsubscribeHandler(registry)
   registerWorkspaceSubscribeHandler(registry)
-  // Two reads and a write against the store, with no resource behind them.
   registerAppearanceHandlers(registry)
   const workspaceEvents = registry.context.workspaceEvents
 
-  // The private key belongs beside the workspace file, in the app's own data
-  // directory, and never anywhere under a repository. That directory is not on
-  // the runtime context, but the store's path is exactly it plus a file name,
-  // and the store is already the authority on where this app keeps things.
+  // The private key belongs beside the workspace file, never under a repository.
   const dataDir = dirname(registry.context.store.filePath)
-  // Found once, here, because two areas need it: the installer below links
-  // it onto PATH, and every agent pane's hooks run it.
+  // Found once: the installer links it onto PATH and every agent pane's hooks run it.
   const shippedCli = findShippedCli({ resourcesPath: process.resourcesPath })
 
   const terminals = createTerminalService({
     subscriptions: registry.context.subscriptions,
-    // Terminals open in their worktree's checkout, so the store is the authority
-    // on where that is.
     resolveWorktreeCwd: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.path,
     resolveWorktreeTask: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.task,
     layouts: registry.context.store,
     sessions: registry.context.store,
-    // Beside the workspace file rather than in it: a pane's description belongs
-    // in the file this app must be able to read, and a pane's transcript is
-    // orders of magnitude larger, rewritten constantly, and worth nothing if it
-    // is lost. `scrollbackArchive.ts` makes the argument in full.
+    // Beside the workspace file rather than in it; `scrollbackArchive.ts` says why.
     ...(options.scrollback === undefined ? {} : { scrollback: options.scrollback }),
-    // An agent that takes hooks per launch is asked to report its own state,
-    // through this app's CLI, to this profile's runtime. Without a CLI to run
-    // there is nothing to ask with, and the pane is read off the pty alone.
+    // Agent hooks report the agent's state through this app's CLI; without one
+    // the pane is read off the pty alone.
     ...(shippedCli === null ? {} : { agentHooks: { userDataDir: dataDir, cli: shippedCli.path } }),
-    // A pane going busy or quiet is what this app knows about an agent from
-    // the outside, and what the sidebar reads when the agent has not said.
     // Two events per burst of work, not one per chunk of output.
     onActivityChange: () => workspaceEvents.emit({ type: 'terminals' }),
-    // And the half of that worth leaving the window for. The worktree's *name*
-    // is attached here rather than by whoever raises the notification, because
-    // the store is the only thing that knows it and the notifier has no
-    // business asking a workspace anything: a notification titled with a
-    // worktree id would be addressed to nobody. A pane whose worktree has
-    // already been removed is dropped for the same reason.
+    // The worktree's *name* is attached here because only the store knows it;
+    // a pane whose worktree is already removed is dropped for the same reason.
     ...(options.onAgentNotice === undefined
       ? {}
       : {
@@ -173,59 +107,42 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
           }
         })
   })
-  // Terminals first: each recorded one comes back under the id its panes
-  // already name, an agent pane comes back with its conversation resumed, and
-  // every other one comes back showing what it printed before the app quit,
-  // under a line saying that is what it is.
+  // Terminals first: recorded panes come back under their ids, agent panes with
+  // their conversation resumed.
   terminals.restoreSessions()
-  // Then the layouts, for whatever did not come back — a worktree deleted while
-  // the app was closed, a shell that no longer exists. Without this the UI
-  // renders panes bound to dead ids.
+  // Then the layouts, for whatever did not come back; otherwise the UI renders
+  // panes bound to dead ids.
   terminals.reconcileLayouts()
   registerTerminalHandlers(registry, terminals)
-  // Wraps the handlers just registered, so every terminal and layout change
-  // reaches the workspace stream whichever transport asked for it.
+  // Wraps the handlers just registered so every change reaches the workspace stream.
   publishTerminalEvents(registry, terminals, workspaceEvents)
-  // What the panes are costing, read from the pids the service holds. Not a
-  // terminal method: the app's own processes are on the answer too, and the
-  // kill is guarded by the sample rather than by a pane.
+  // Not a terminal method: the app's own processes are on the answer too.
   registerResourcesHandlers(registry, { panes: () => terminals.manager.paneProcesses() })
 
   const git = new GitService({
     store: registry.context.store,
-    // Spread rather than passed as `undefined`, because `undefined` is a value
-    // the option reader would have to know to ignore; an absent key is the
-    // default, said once, in the service that owns it.
+    // Spread rather than passed as `undefined`, so the service's own default stands.
     ...(options.worktreesRoot === undefined ? {} : { worktreesRoot: options.worktreesRoot }),
-    // The one seam between "a checkout is ready" and "a pane is open in it".
-    // Git knows the moment, terminals own the pane, and this is where the two
-    // meet — for a create from the GUI and a create from the CLI alike, because
-    // both of them come through the same `worktree.create`.
+    // The one seam between "a checkout is ready" and "a pane is open in it",
+    // for a GUI create and a CLI create alike.
     startSetup: ({ worktree, command }) => {
       const terminal = startSetupCommand(terminals.manager, { worktreeId: worktree.id, command })
-      // Announced by hand: the pane was opened by the runtime rather than by a
-      // `terminal.create` call, so the wrapper in workspaceEventSources.ts that
-      // usually says so never runs. Without this the setup pane is invisible to
-      // every window until something else invalidates the list.
+      // Announced by hand: the pane was not opened by `terminal.create`, so the
+      // wrapper in workspaceEventSources.ts never runs.
       workspaceEvents.emit({ type: 'terminals' })
       workspaceEvents.emit({ type: 'layout', worktreeId: terminal.worktreeId })
       return terminal.id
     }
   })
-  // A worktree removed takes its panes with it, and nothing else does this: a
-  // terminal record is dropped only by an explicit close, so without this the
-  // agents that were running in the checkout keep running — in a directory
-  // that is gone, invisible to the sidebar and the dashboard alike, and still
-  // counted by the status bar.
+  // A removed worktree takes its panes with it; nothing else drops a terminal
+  // record, so without this the agents keep running in a directory that is gone.
   git.events.on((event) => {
     if (event.type !== 'worktree.removed') return
     void closeWorktreeTerminals(terminals, event.worktreeId)
       .then(() => {
-        // Closing the last pane saves the worktree's layout, which would put
-        // back the record the removal just deleted.
+        // Closing the last pane saves the layout, which would put back the record just deleted.
         registry.context.store.removeLayout(event.worktreeId)
-        // The list every client holds is shorter now, and the panes that left
-        // it were not closed by any call of theirs.
+        // The panes that left were not closed by any client's call.
         workspaceEvents.emit({ type: 'terminals' })
       })
       .catch((error: unknown) => console.error('[terminals]', error))
@@ -234,20 +151,15 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   // offered as a retry rather than left stuck in `creating`.
   git.reviveRestoredRecords()
   registerGitHandlers(registry, git)
-  // Git transitions a worktree on a background task long after the call
-  // returned, so its own emitter is the only honest source for those.
+  // Git transitions a worktree on a background task long after the call returned.
   publishGitEvents(git, workspaceEvents)
-  // Committing and pushing change what status answers without moving any
-  // record, so they have to say so themselves.
+  // Committing and pushing change what status answers without moving any record.
   publishGitWrites(registry, git, workspaceEvents)
-  // Git status has no call behind it, so file changes are the only thing that
-  // can keep it honest between one command and the next.
+  // Git status has no call behind it; file changes are what keep it honest.
   const worktreeFiles = publishWorktreeFileEvents(git, workspaceEvents)
 
-  // `.teamree` lives in the primary checkout, and a pull that brings in a
-  // teammate's key or the team's relay is nobody's method call. Without this
-  // both machines sit on the roster they read before the pull, and the runbook
-  // had to tell people to quit the app and open it again.
+  // A pull that brings in a teammate's key or the team's relay is nobody's
+  // method call; without this both machines sit on the roster read before it.
   const teamworkWatcher = new TeamreeWatcher({
     onChange: () => workspaceEvents.emit({ type: 'members' }),
     onDegraded: (event) => console.warn(`[teamwork] ${degradedTeamreeWatchReport(event)}`)
@@ -259,28 +171,22 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     new TeamworkService({
       store: registry.context.store,
       dataDir,
-      // So a roster read can say whether it will stay true by itself, rather
-      // than letting a list nothing is following look as live as one that is.
+      // So a roster read can say whether it will stay true by itself.
       watching: (projectId) => teamworkWatcher.watches(projectId),
-      // Writing a member file or a relay is this app's own change to `.teamree`,
-      // and the watch above can be degraded, so the service says so itself.
+      // The watch above can be degraded, so the service's own `.teamree` writes say so themselves.
       onRosterChange: () => workspaceEvents.emit({ type: 'members' })
     })
   )
 
-  // Nothing to tear down and nothing to watch: putting the CLI on PATH is two
-  // reads and, at most, one symlink. The privileged runner is handed over here
-  // rather than defaulted inside the service, so that the only code that can
-  // reach osascript is code that asked for it.
+  // The privileged runner is handed over here so the only code that can reach
+  // osascript is code that asked for it.
   registerCliHandlers(
     registry,
     new CliService({
       source: shippedCli?.path ?? null,
       packaged: shippedCli?.packaged ?? false,
       administrator: createAdministratorRunner(),
-      // The offer made on first run is asked once and never again, so the
-      // answer goes where the rest of this installation's state already
-      // lives. Nothing new on disk: the workspace file gains one field.
+      // Asked once and never again; the workspace file gains one field.
       prompt: {
         askedAt: () => registry.context.store.askedAt('installCli'),
         markAsked: (at) => registry.context.store.markAsked('installCli', at)
@@ -288,17 +194,12 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     })
   )
 
-  // Two probes of PATH and, at most, one detached process. Nothing to tear down
-  // and nothing to watch: an editor teamree started is not its child in any
-  // sense that matters, and quitting must not close the window somebody is
-  // working in.
+  // Nothing to tear down: an editor teamree started is not its child, and
+  // quitting must not close the window somebody is working in.
   registerEditorHandlers(registry, createEditorActions())
 
-  // One timer and no other resource, and nothing here reaches the network until
-  // it fires — `start()` is the runtime's to call, well after a window is up.
-  // The preference and the rate limit's clock go in the workspace file beside
-  // the CLI question's answer: that is where this installation's own state
-  // already lives, and one boolean does not earn a second file.
+  // One timer; nothing reaches the network until `start()`, which the runtime
+  // calls well after a window is up.
   const updates = registerUpdateHandlers(
     registry,
     new UpdateService({
@@ -310,10 +211,8 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
         rememberLatest: (version) => registry.context.store.rememberLatestVersion(version)
       },
       openExternal: options.openExternal,
-      // A window hears about a check it did not start — the one half a minute
-      // after launch, and the one behind the macOS app menu — the same way it
-      // hears about a worktree the CLI made: the runtime says something moved
-      // and the client re-reads it.
+      // A window hears about a check it did not start the way it hears about a
+      // worktree the CLI made.
       onChange: () => workspaceEvents.emit({ type: 'updates' })
     })
   )
@@ -328,41 +227,31 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
       },
       dataDir,
       subscriptions: registry.context.subscriptions,
-      // The owner's mutes, kept beside the terminal records they are about, so
-      // a pane restored under the id it had comes back as muted as it was left.
+      // Kept beside the terminal records, so a restored pane comes back as muted as it was left.
       mutes: {
         list: () => registry.context.store.listMutedTerminals(),
         set: (terminalId, muted) => registry.context.store.setTerminalMuted(terminalId, muted)
       },
-      // And the permissions, kept in the same file for the same reason: the
-      // owner decided once, about a pane that comes back under the id it had.
+      // Same file for the same reason.
       consent: {
         list: () => registry.context.store.listStandingConsent(),
         set: (terminalId, publicKey, since) => registry.context.store.setStandingConsent(terminalId, publicKey, since)
       },
       onChange: () => workspaceEvents.emit({ type: 'teammates' }),
-      // Nothing a peer does should be able to fail quietly here. A snapshot
-      // refused, a watch that could not be started: none of them stop the app,
-      // and without this none of them leave a trace either — which is how a
-      // sidebar showing a teammate's yesterday looks exactly like one showing
-      // their today.
+      // Nothing a peer does may fail quietly: none of it stops the app, and
+      // without this none of it leaves a trace either.
       onError: (error) => console.error('[teamwork]', error)
     })
   )
-  // A teammate's view of this machine rides the same bus everything else does,
-  // so a worktree created on the CLI reaches their sidebar for the same reason
-  // it reaches this window's.
+  // A teammate's view of this machine rides the same bus everything else does.
   workspaceEvents.on((event) => {
-    // `teammates` is this service's own event. Feeding it back in would have a
-    // link changing phase cost every peer a fresh snapshot of a workspace that
-    // did not move.
+    // `teammates` is this service's own event; fed back in, a link changing
+    // phase would cost every peer a fresh snapshot of a workspace that did not move.
     if (event.type === 'teammates') return
     // A project added or removed changes which checkouts are watched.
     if (event.type === 'projects') teamworkWatcher.sync(registry.context.store.listProjects())
-    // The same line the service's own failures get. A reconcile that throws
-    // after the project facts are in place leaves full rosters with no links,
-    // and the panel then has to describe that state without ever being told
-    // what happened — which was silence in the log and a lie on screen.
+    // A reconcile that throws after the project facts are in place leaves full
+    // rosters with no links; silence here was a lie on screen.
     if (event.type === 'projects' || event.type === 'members') {
       void peers.reconcile().catch((error: unknown) => console.error('[teamwork]', error))
     }
@@ -373,14 +262,9 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
 }
 
 /**
- * Closes every pane of a worktree that has just been removed.
- *
- * The checkout is already gone by the time the event arrives, so nothing here
- * may depend on the directory: closing kills a process tree by pid, drops a
- * record by id and ends the streams, none of which needs a cwd. One at a time,
- * because each close reads and rewrites the same worktree's layout. And each
- * one on its own: a pane that will not die must not be the reason the rest of
- * them stay alive, so a failure is reported and the next pane is closed anyway.
+ * Closes every pane of a removed worktree. The checkout is already gone, so
+ * nothing here may depend on the directory. One at a time, because each close
+ * rewrites the same layout; each on its own, so one stuck pane does not keep the rest alive.
  */
 async function closeWorktreeTerminals(terminals: TerminalService, worktreeId: string): Promise<void> {
   for (const terminal of terminals.manager.list(worktreeId)) {

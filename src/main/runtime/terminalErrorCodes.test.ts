@@ -1,11 +1,5 @@
-// Terminal and layout failures as a caller actually receives them.
-//
-// Driven through the dispatcher on purpose. That is the seam where an error's
-// code was being lost — a handler's thrown object can carry a perfectly good
-// `not_found` and still reach the wire as `internal`, and a test that asserts on
-// the throw rather than on the response cannot tell the difference. The
-// protocol promises callers branch on these codes and never on message text, so
-// what matters is what comes back out of `dispatch`.
+// Terminal and layout failures as a caller receives them. Driven through the
+// dispatcher, the seam where a `not_found` was reaching the wire as `internal`.
 
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -46,9 +40,7 @@ async function harness(): Promise<Harness> {
   temporaryDirs.push(checkout)
   const store = await WorkspaceStore.open(join(checkout, 'workspace.json'))
   const hub = new SubscriptionHub()
-  // terminal.subscribe goes through the hub, and the hub refuses a connection it
-  // has never seen — so without this the subscribe case would prove nothing
-  // about the terminal service.
+  // The hub refuses a connection it has never seen.
   hub.openConnection('c1', () => {})
   const context = createRuntimeContext({ version: 'test', store, subscriptions: hub })
   const registry = new MethodRegistry(context)
@@ -135,8 +127,7 @@ describePty('terminal error codes over a real pty', () => {
       if (!opened.ok) throw new Error('terminal.create failed')
       const pane = opened.result as Terminal
 
-      // Waited out rather than raced: the write has to land after the exit has
-      // settled, or the pty simply swallows it and nothing is proved.
+      // The write has to land after the exit has settled, or the pty swallows it.
       await waitUntil(
         () => terminals.manager.list(WORKTREE).some((each) => each.id === pane.id && !each.running),
         'the pane to exit'

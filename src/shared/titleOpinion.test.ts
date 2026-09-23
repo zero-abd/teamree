@@ -1,8 +1,5 @@
-// The titles in here are transcripts. Each one was read off a pty running the
-// real binary on 2026-09-23, and the reason they are quoted verbatim rather
-// than paraphrased is that the table is only worth anything while it still
-// matches what the binaries write: when an agent changes its title, this is the
-// file that should fail.
+// The titles in here are transcripts read off a pty running the real binary on
+// 2026-09-23, quoted verbatim: when an agent changes its title, this file should fail.
 
 import { describe, expect, it } from 'vitest'
 import { TITLE_RULES, titleOpinion } from './titleOpinion'
@@ -15,10 +12,8 @@ describe('reading a claude title', () => {
     expect(titleOpinion('claude', '◓ Claude Code')).toBe('working')
   })
 
-  // The whole reason the bell exists as a second source. Claude Code writes the
-  // same star while it is blocked on its own permission prompt as it writes
-  // when the turn is finished, so this title cannot separate them and must not
-  // pretend to.
+  // Why the bell exists as a second source: Claude Code writes the same star
+  // blocked on a permission prompt as when the turn is finished.
   it('has no opinion about the star, which it writes both when asking and when done', () => {
     expect(titleOpinion('claude', '✳ Bash tool sw_vers productVersion')).toBeNull()
     expect(titleOpinion('claude', '✳ Claude Code')).toBeNull()
@@ -49,8 +44,7 @@ describe('what the table does not claim', () => {
     expect(titleOpinion('opencode', '⠏ anything')).toBeNull()
   })
 
-  // One agent's glyph is not another's: the rows are keyed by the binary that
-  // was watched writing them, and a title shape carries no meaning on its own.
+  // Rows are keyed by the binary watched writing them; a title shape means nothing alone.
   it('does not lend one agent another agent’s glyph', () => {
     expect(titleOpinion('codex', '◐ Date command')).toBeNull()
     expect(titleOpinion('claude', '⠏ teamree')).toBeNull()
@@ -69,9 +63,8 @@ describe('what the table does not claim', () => {
 })
 
 describe('the table itself', () => {
-  // A row claiming `waiting` would be a claim that some agent says so in its
-  // title. None was found to, and this is what should fail when one is added
-  // without the observation being written into the header comment beside it.
+  // No agent was found to say `waiting` in its title; adding one needs the
+  // observation written into the header comment beside it.
   it('claims only that agents say when they are working, never that they say they are waiting', () => {
     expect(TITLE_RULES.map((rule) => rule.says)).toEqual(['working', 'working'])
   })

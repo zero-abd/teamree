@@ -19,13 +19,7 @@ import {
   type WorkspaceDocument
 } from './workspaceDocument'
 
-/**
- * The update check's preference and clock, with the defaults filled in.
- *
- * Declared here rather than imported from the service that reads it: this file
- * is what a preference is kept in, and the service names its own seam for what
- * it needs, the way the CLI's one-time question does.
- */
+/** The update check's preference and clock, with the defaults filled in. */
 export type UpdateSettings = {
   automatic: boolean
   lastCheckedAt: number | null
@@ -40,12 +34,8 @@ export type WorkspaceSnapshot = {
 }
 
 /**
- * Something about the file on disk that the app has to say out loud.
- *
- * None of these stops the store working — it holds everything in memory — and
- * that is exactly the danger: a workspace that opens empty because its file
- * could not be read looks identical to a first launch, and the first mutation
- * used to overwrite the only copy.
+ * Something about the file on disk the app has to say out loud. None stops the
+ * store working, which is the danger: an unreadable file looks like a first launch.
  */
 export type StoreProblem =
   /** The file was there and could not be read. Nothing has been lost yet. */
@@ -124,12 +114,8 @@ export class WorkspaceStore {
   }
 
   /**
-   * Opens the file, and starts empty where there is nothing to open.
-   *
-   * A file that could not be read is not the same event as no file at all, and
-   * is not treated as one: the store still opens — an app that refuses to start
-   * because of one bad file is worse than one that starts — but it says so, and
-   * it will not write over those bytes until they are safely somewhere else.
+   * Opens the file, or starts empty. An unreadable file still opens the store,
+   * but nothing writes over those bytes until they are kept aside.
    */
   static async open(filePath: string, options: WorkspaceStoreOptions = {}): Promise<WorkspaceStore> {
     const read = await openJsonFile(filePath)
@@ -217,22 +203,14 @@ export class WorkspaceStore {
     return layout
   }
 
-  /**
-   * Drops a worktree's layout on its own. `removeWorktree` already takes the
-   * layout with it, so this is for the one case that outlives it: closing the
-   * panes of a worktree that has just been removed writes the emptied layout
-   * back, and the record the removal deleted would return with it.
-   */
+  /** Drops a layout on its own: closing the panes of a removed worktree would write the emptied layout back. */
   removeLayout(worktreeId: string): boolean {
     const removed = this.layouts.delete(worktreeId)
     if (removed) this.persist()
     return removed
   }
 
-  /**
-   * Terminal records, which are descriptions rather than live terminals: the
-   * PTY they name died with the process that started it.
-   */
+  /** Terminal records: descriptions, not live terminals. */
   listTerminals(): TerminalRecord[] {
     return [...this.terminals.values()]
   }
@@ -245,14 +223,8 @@ export class WorkspaceStore {
 
   removeTerminal(terminalId: string): boolean {
     const removed = this.terminals.delete(terminalId)
-    // The mute goes with the record it was about. A pane that has been closed
-    // is not a pane the owner is still silencing, and keying the two together
-    // is what makes a mute durable without anything ever having to be swept.
+    // The mute and the permissions go with the record, so nothing needs sweeping.
     const unmuted = this.mutedTerminals.delete(terminalId)
-    // And the permissions, for exactly the same reason. A pane that has been
-    // closed is not a pane anybody still has permission to type in, and keying
-    // the two together is what makes a grant durable without anything ever
-    // having to be swept.
     let forgotten = false
     for (const [key, grant] of this.standingConsent) {
       if (grant.terminalId !== terminalId) continue
@@ -263,12 +235,7 @@ export class WorkspaceStore {
     return removed
   }
 
-  /**
-   * Standing permissions as they stand between runs.
-   *
-   * Read once at startup by the peer service, which judges every keystroke from
-   * its own copy: the answer has to be instant, and a file read is not.
-   */
+  /** Standing permissions between runs; read once at startup by the peer service. */
   listStandingConsent(): StandingConsentRecord[] {
     return [...this.standingConsent.values()]
   }
@@ -281,12 +248,7 @@ export class WorkspaceStore {
     if (changed) this.persist()
   }
 
-  /**
-   * Panes the owner has muted, as the decision stands between runs.
-   *
-   * Read once at startup by the peer service, which answers every keystroke
-   * from its own copy: a mute has to be instant, and a file read is not.
-   */
+  /** Panes the owner has muted; read once at startup by the peer service. */
   listMutedTerminals(): string[] {
     return [...this.mutedTerminals]
   }
@@ -297,58 +259,31 @@ export class WorkspaceStore {
     if (changed) this.persist()
   }
 
-  /**
-   * When this installation was asked a one-time question, or undefined if it
-   * never was. Deliberately not part of `snapshot()`: it is a fact about the
-   * installation rather than a thing in the workspace.
-   */
+  /** When this installation was asked a one-time question, or undefined. Not part of `snapshot()`. */
   askedAt(question: AskedQuestion): number | undefined {
     return this.asked[question]
   }
 
-  /**
-   * Records that the question has now been put. The first answer stands: a
-   * date that moved on every launch would make "asked once" unprovable.
-   */
+  /** Records that the question has been put. The first date stands. */
   markAsked(question: AskedQuestion, at: number = this.now()): void {
     if (this.asked[question] !== undefined) return
     this.asked = { ...this.asked, [question]: at }
     this.persist()
   }
 
-  /**
-   * How this installation is painted, as it stands between runs.
-   *
-   * Answered from memory like everything else here, because the main process
-   * reads it to colour a window before that window exists and a file read at
-   * that moment would be a frame of the wrong colour.
-   */
+  /** How this installation is painted; from memory, since a window is coloured before it exists. */
   getAppearance(): Appearance {
     return this.appearance
   }
 
-  /**
-   * Replaces the whole choice, sanitised on the way in.
-   *
-   * Sanitised here rather than trusted from the caller because this is the last
-   * place before the bytes hit the disk, and the file is the thing a future
-   * launch has to be able to open. A colour that is not a colour is dropped;
-   * the rest of somebody's theme survives it.
-   */
+  /** Replaces the whole choice, sanitised here: the last place before the bytes hit the disk. */
   setAppearance(appearance: unknown): Appearance {
     this.appearance = sanitizeAppearance(appearance)
     this.persist()
     return this.appearance
   }
 
-  /**
-   * The update check's preference and clock, defaults applied.
-   *
-   * Automatic unless somebody has said otherwise: an app that stops looking
-   * because a field is missing is an app that goes quiet on every machine whose
-   * workspace file predates this feature — which is every machine there is on
-   * the day it ships.
-   */
+  /** The update check's preference and clock. Automatic when the field is missing, or every older file goes quiet. */
   updateSettings(): UpdateSettings {
     return {
       automatic: this.updates.automatic ?? true,
@@ -363,13 +298,7 @@ export class WorkspaceStore {
     this.persist()
   }
 
-  /**
-   * When the app last asked GitHub anything, which is the rate limit's clock.
-   *
-   * On disk rather than in memory because the case it exists for is the one
-   * memory cannot see: quitting and relaunching. An hour of restarts is one
-   * check, the way it would be for an app nobody quit.
-   */
+  /** The rate limit's clock, on disk so an hour of restarts is one check. */
   recordUpdateCheck(at: number): void {
     this.updates = { ...this.updates, lastCheckedAt: at }
     this.persist()
@@ -418,10 +347,7 @@ export class WorkspaceStore {
         this.reportedWriteFailure = false
       } catch (error) {
         this.writeError = error
-        // Said the first time rather than at shutdown. A read-only or full disk
-        // means the workspace has stopped persisting for the rest of the
-        // session, and finding that out while quitting is finding it out too
-        // late to do anything about it.
+        // Said the first time: finding out at shutdown is too late.
         if (!this.reportedWriteFailure) {
           this.reportedWriteFailure = true
           this.onProblem({ kind: 'writeFailed', filePath: this.filePath, reason: describeError(error) })
@@ -430,14 +356,7 @@ export class WorkspaceStore {
     })
   }
 
-  /**
-   * Moves an unreadable file out of the way before anything writes over it.
-   *
-   * Returns false when it could not, which stops the write: a file this
-   * process failed to read is still somebody's workspace, and a bad parse is a
-   * far likelier cause than a genuinely empty one. Losing it to recover from
-   * it would be the worst trade in the app.
-   */
+  /** Moves an unreadable file aside before anything writes over it; false stops the write. */
   private async keepUnreadableFile(): Promise<boolean> {
     if (this.unreadableReason === undefined) return true
     const keptAt = `${this.filePath}.unreadable-${new Date(this.now()).toISOString().replace(/[:.]/g, '-')}`
@@ -465,23 +384,12 @@ export class WorkspaceStore {
   }
 }
 
-/**
- * One pane, one teammate. Both halves, because a permission that named only the
- * pane would be "anyone may type here" — the default the prompt exists to
- * remove — and one that named only the person would be a permission nobody was
- * asked for.
- */
+/** One pane, one teammate: a pane-only key would be "anyone may type here". */
 function consentKey(terminalId: string, publicKey: string): string {
   return `${terminalId}\u0000${publicKey}`
 }
 
-/**
- * The record without a version in it, because nothing is the absence of a key.
- *
- * `lastSeenVersion: undefined` and no `lastSeenVersion` serialise to the same
- * JSON, so this is about the in-memory record matching the file it writes
- * rather than about the file itself.
- */
+/** The record without a version in it, so memory matches the JSON it writes. */
 function omitLastSeen(updates: UpdateRecord): UpdateRecord {
   const { lastSeenVersion: _dropped, ...rest } = updates
   return rest

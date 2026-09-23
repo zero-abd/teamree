@@ -1,15 +1,6 @@
-// Where the command that stands a relay up is, from inside this process.
-//
-// Two places, for the same reason `cli/shippedCli.ts` has two: a packaged app
-// carries it under `Contents/Resources/relay`, which is what
-// `process.resourcesPath` names, and a development run has it in the checkout
-// under `relay/`. The panel used to print the packaged path unconditionally,
-// which is a path that does not exist on the machine of everybody running from
-// a clone — including every one of this project's own contributors.
-//
-// Finding neither is an answer rather than a failure. A build with no relay in
-// it cannot deploy one, and a disabled button saying so is better than an
-// enabled button that runs a path that is not there.
+// Where the command that stands a relay up is: under `process.resourcesPath` in
+// a packaged app, under `relay/` in a checkout. Finding neither is an answer,
+// not a failure: a disabled button saying so beats one running a missing path.
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -35,12 +26,7 @@ export function shippedRelayCandidates(options: ShippedRelayOptions = {}): strin
   return candidates
 }
 
-/**
- * The deploy command as this installation can run it, or why it has none.
- *
- * The shape is the one `RelaySetting.deploy` carries, so the caller has nothing
- * left to decide.
- */
+/** The deploy command as this installation can run it, or why it has none, in the shape `RelaySetting.deploy` carries. */
 export function shippedRelayCommand(
   options: ShippedRelayOptions = {}
 ): { command: string; reason: null } | { command: null; reason: string } {
@@ -58,11 +44,8 @@ export function shippedRelayCommand(
 }
 
 /**
- * The path as one word to a shell, quoted only when it has to be.
- *
- * It reaches a shell rather than execve: the deploy runs in a pane, which is a
- * login shell with a command in it, and `/Users/Ada Lovelace/…` unquoted is two
- * arguments and a command not found.
+ * The path as one word to a shell, quoted only when it has to be: the deploy
+ * runs in a pane, and `/Users/Ada Lovelace/…` unquoted is two arguments.
  */
 function quoteForShell(path: string): string {
   return /^[\w./@%+:,-]+$/.test(path) ? `${path} deploy` : `'${path.replaceAll("'", String.raw`'\''`)}' deploy`

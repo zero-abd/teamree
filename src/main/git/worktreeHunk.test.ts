@@ -1,10 +1,5 @@
-// Real repositories, real `git apply`, real index.
-//
-// A mocked runner here would prove that this file and `worktreeHunk.ts` agree
-// about which flags to pass, which is the one thing that was never in doubt.
-// What is in doubt is whether the patch that gets built out of a parsed hunk is
-// one git will take, and whether the index afterwards holds exactly that hunk
-// and nothing else — and only git can answer either.
+// Real repositories, real `git apply`, real index: only git can say whether the
+// patch built from a parsed hunk is one it will take.
 
 import { afterEach, describe, expect, it } from 'vitest'
 import { readFile, writeFile } from 'node:fs/promises'
@@ -117,9 +112,8 @@ describe('staging one hunk', () => {
     expect(cached).toContain('+N')
   })
 
-  // The refusal this feature exists to make. `git apply --cached` compares the
-  // hunk against the index, which nobody edited, so it would happily stage a
-  // patch read before the last four saves.
+  // `git apply --cached` compares against the index, which nobody edited, so it
+  // would happily stage a patch read before the last four saves.
   it('refuses a hunk whose file has moved on, and leaves the index alone', async () => {
     const repo = await twoHunks()
     const hunk = (await hunksOf(repo))[1] as PatchHunk
@@ -215,8 +209,7 @@ describe('staging one hunk', () => {
       staged: true
     })
 
-    // `core.quotePath=false` so the comparison is against the name rather than
-    // against git's C-escaped rendering of it.
+    // `core.quotePath=false`: compare against the name, not git's C-escaped rendering.
     expect(await repo.git(['-c', 'core.quotePath=false', 'diff', '--cached', '--name-only'])).toBe(name)
   })
 

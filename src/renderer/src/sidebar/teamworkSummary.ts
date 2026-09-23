@@ -1,47 +1,17 @@
-// One line about whether teamwork is working, for the project header.
-//
-// The whole difficulty is that "no teammates on screen" has six causes and
-// five of them are not each other:
-//
-//   * nobody has set a relay up here — a thing to do, not a fault;
-//   * this machine's own key was never pushed — nobody can address it;
-//   * the relay cannot be reached — this machine's network, or the relay's;
-//   * the relay is fine and the teammate is not connected — their machine;
-//   * somebody answered and did not authenticate — a real problem;
-//   * everything is up and they simply have no worktrees.
-//
-// Collapsing those into "offline" would send somebody to check their wifi
-// because a colleague shut a laptop. So each is its own phrase, and the one
-// that wins is the one that most needs acting on.
-//
-// "Connected" has the same problem one layer down. A link is torn down when
-// nothing has decrypted for two and a half keepalives, so `connected` is a
-// claim with up to five minutes of slack in it, and for those five minutes a
-// shut laptop and a working one read identically. A link quiet for longer than
-// an ordinary gap between keepalives therefore carries the age of that silence,
-// and this says it — `1 connected · silent 4m` — while a link that is talking
-// carries nothing and this says nothing new about it.
+// One line about whether teamwork is working, for the project header. "No
+// teammates on screen" has six causes, each its own phrase; the one that wins
+// most needs acting on. `connected` has up to five minutes of slack, so a silent link carries its age.
 
 import type { PeerLink, TeamworkRead, TeamworkStatus } from '@shared/entities'
 import { ADD_KEY_BUTTON } from '../teamwork/startTeamwork'
 import { agoLabel, sinceLabel } from './agentRows'
 
-/**
- * The word on the control in the project header that opens the setup panel.
- *
- * Shared with the sidebar that renders it, because the tooltip below tells
- * somebody to press it by name: a name written out twice is a name that can
- * end up pointing at a button nobody can find.
- */
+/** The word on the header control that opens the setup panel; the tooltip names it, so shared. */
 export const TEAMWORK_BUTTON_LABEL = 'Teamwork'
 
 /**
  * What that control reads, with the state folded in: `Teamwork · off`,
  * `Teamwork · 2 connected`, or the bare word before anything has been read.
- *
- * One control rather than a chip and a button. The header used to show a chip
- * reading "Teamwork off" beside a button reading "Teamwork", which is the same
- * word twice, one of them pressable, and no way to tell which by looking.
  */
 export function teamworkControlLabel(summary: TeamworkSummary | null): string {
   return summary === null ? TEAMWORK_BUTTON_LABEL : `${TEAMWORK_BUTTON_LABEL} · ${summary.label}`
@@ -59,35 +29,22 @@ export type TeamworkTone =
 
 export type TeamworkSummary = {
   tone: TeamworkTone
-  /**
-   * The state, lower-case and short enough to follow the word "Teamwork" in a
-   * sidebar header: `off`, `no key`, `1 connected · 1 away`. Never a sentence
-   * — the sentence is `detail`, and it is read on hover.
-   */
+  /** The state, short enough to follow "Teamwork" in a header: `off`, `1 connected · 1 away`. */
   label: string
   /** The whole of it, for the title attribute. */
   detail: string
 }
 
 /**
- * `now` is this machine's clock, and every timestamp below was stamped by the
- * same one — the runtime's, in the same process family, never a teammate's.
- *
- * Passed in rather than read here for the reason `teammateStaleness.ts` takes
- * one: an age is the one number in this sidebar that changes when nothing
- * happens, so the caller that owns the tick owns the clock.
+ * `now` is this machine's clock, which stamped every timestamp below. Passed
+ * in because an age changes when nothing happens: the caller that owns the tick owns the clock.
  */
 export function teamworkSummary(status: TeamworkStatus | undefined, now: number): TeamworkSummary | null {
-  // Not asked yet. An absent answer is not an answer, and rendering one as
-  // "off" would be this app claiming something it has not established.
+  // Not asked yet; rendering that as "off" would claim something not established.
   if (!status) return null
 
-  // Asked, and answered "nothing has been read about this project yet" — the
-  // beat after a project is added, and the first moments of a restored session.
-  // A row, because a project that has just appeared in this sidebar with no
-  // line under it reads as a project teamwork has nothing to say about. But not
-  // "off" and not a fault: nothing has been found, so nothing may be named, and
-  // the tone is the one that means "in progress, and not yours to fix".
+  // Nothing read yet: the beat after a project is added. A row, but not "off"
+  // and not a fault, since nothing has been found and nothing may be named.
   if (status.state === 'unread') {
     return {
       tone: 'pending',
@@ -99,11 +56,8 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
   if (status.disabledReason !== null) {
     return { tone: 'off', label: 'off', detail: status.disabledReason }
   }
-  // Before any phase, because every phase below would be a sentence about
-  // somebody else's machine. An unenrolled key means each link is parked on a
-  // rendezvous the teammate has no key to compute, so they all sit at
-  // `waiting` and the header reads "Nobody connected" — pointing at the one
-  // machine that is doing nothing wrong.
+  // Before any phase: an unenrolled key parks every link on a rendezvous the
+  // teammate cannot compute, and "Nobody connected" would blame the wrong machine.
   if (!status.enrolled) {
     return {
       tone: 'off',
@@ -125,10 +79,8 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
   const unreachable = status.links.filter((link) => link.phase === 'unreachable')
   const connected = counted('connected')
 
-  // Ordered by what would make somebody look. A failed handshake outranks
-  // everything: it is the state most worth reading. It does NOT mean somebody
-  // was there and was wrong — this end raising an error before a byte is sent
-  // reaches the same phase, so the wording claims only that it failed.
+  // A failed handshake outranks everything. It does NOT mean somebody was
+  // there and wrong: this end erroring before a byte is sent reaches the same phase.
   if (refused.length > 0) {
     return {
       tone: 'problem',
@@ -155,11 +107,8 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
   }
   if (connected > 0) {
     const away = status.links.length - connected
-    // The longest silence among the links that are still up, and only the ones
-    // that carry a `lastHeardAt` at all — which a link only does once its
-    // silence has outlasted an ordinary gap. A team that is talking adds
-    // nothing here, which is the point: "connected" earns its place by being
-    // the only thing there is to say.
+    // The longest silence among links still up; a link carries `lastHeardAt`
+    // only once its silence has outlasted an ordinary gap.
     const silences = status.links
       .filter((link) => link.phase === 'connected')
       .map((link) => quietFor(link, now))
@@ -168,11 +117,8 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
     if (away > 0) parts.push(`${away} away`)
     if (silences.length > 0) parts.push(`silent ${sinceLabel(Math.max(...silences))}`)
     return {
-      // Still `live`, because the link is: nothing has failed and nothing has
-      // been established about the teammate's machine. What was wrong was the
-      // silence being invisible, not the tone it was shown in, and a colour
-      // that changed every time somebody's laptop paused for two minutes would
-      // be a fault light for something that is not a fault.
+      // Still `live`: nothing has failed, and a colour that changed every time
+      // a laptop paused would be a fault light for something that is not a fault.
       tone: 'live',
       label: parts.join(' · '),
       detail: status.links.map((link) => linkLine(link, now)).join('\n')
@@ -182,10 +128,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
     return {
       tone: 'pending',
       label: 'nobody connected',
-      // Per link underneath, because they do not all say the same thing: a link
-      // that has waited across two hourly rendezvous rotations has waited
-      // longer than a colleague who stepped out, and what it has to say about
-      // that is the only place the clock and the relay file get named.
+      // Per link underneath, because they do not all say the same thing.
       detail: [
         `${relayLabel(status)} is reachable. No teammate’s machine is connected to it right now.`,
         ...status.links.filter((link) => link.detail !== undefined).map((link) => `${link.handle}: ${link.detail}`)
@@ -200,31 +143,16 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
 }
 
 /**
- * How long this link has been silent, or nothing when that is not yet a fact.
- *
- * The link decides when it is. `lastHeardAt` is absent until the silence has
- * outlasted `LINK_QUIET_AFTER_MS`, so there is one threshold for this in the
- * whole app and it lives in `peerLink.ts`, beside the keepalive interval it is
- * derived from.
+ * How long this link has been silent, or nothing until `lastHeardAt` appears:
+ * the one threshold is `LINK_QUIET_AFTER_MS` in `peerLink.ts`.
  */
 function quietFor(link: PeerLink, now: number): number | undefined {
   return link.lastHeardAt === undefined ? undefined : Math.max(0, now - link.lastHeardAt)
 }
 
 /**
- * One link, per line, under the header: what it has to say for itself, and how
- * long it has been since anybody said anything.
- *
- * The detail wins over the phase where there is one, because a link that is
- * connecting *because this machine has just woken up* knows something the word
- * "connecting" does not carry. The age is appended to either, because it is a
- * different fact from the phase and not a substitute for it — a link can be
- * connected and four minutes silent at the same time, which is the whole
- * reason the number is here.
- *
- * Rounded down by `sinceLabel`, as every other age in this sidebar is, so a
- * silence is never flattered: "4m" while the fifth minute runs is the wrong way
- * round for a number whose job is to say nothing has arrived.
+ * One link per line under the header. The detail wins over the phase where
+ * there is one; the age is appended to either, since a link can be connected and four minutes silent.
  */
 function linkLine(link: PeerLink, now: number): string {
   const quiet = quietFor(link, now)

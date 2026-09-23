@@ -1,9 +1,5 @@
-// Whether two checkouts on two machines are the same project.
-//
-// Getting this wrong is invisible rather than loud: two people with the same
-// repository whose keys disagree simply see nothing of each other and are told
-// nothing is wrong. So the normalisation is tested against the spellings people
-// actually have, not against one canonical form.
+// Whether two checkouts on two machines are the same project. Getting this wrong is invisible: two people
+// whose keys disagree see nothing of each other, so the normalisation is tested against the spellings people have.
 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -19,12 +15,8 @@ describe('one repository, however it was cloned', () => {
       'ssh://git@github.com/team/repo.git',
       'https://github.com/team/repo.git',
       'https://github.com/team/repo',
-      // Spelled in pieces rather than written out. A clone URL carrying
-      // credentials is a spelling git really produces and this really has to
-      // normalise, but written literally it reads to a secret scanner as a
-      // leaked password — and it reported one. Nothing here was ever a
-      // credential, and an alert that is false every time is an alert people
-      // stop opening.
+      // Spelled in pieces: written literally, a clone URL carrying credentials reads to a secret scanner
+      // as a leaked password, and it reported one.
       `https://${['user', 'token'].join(':')}@github.com/team/repo.git`,
       'git://github.com/team/repo.git',
       'GIT@GitHub.com:Team/Repo.git'
@@ -56,10 +48,8 @@ describe('the key itself', () => {
     expect(key).not.toContain('github')
   })
 
-  // The keys in the field are URLs' keys, and a rule that moved one of them
-  // would be a team that stops meeting after an update with nothing on either
-  // machine to say why. The digests below are written out rather than computed,
-  // because a test that recomputed the rule could only agree with it.
+  // A rule that moved a key in the field is a team that stops meeting after an update with nothing to say
+  // why. The digests are written out rather than computed, because a recomputed rule could only agree with itself.
   it('has not moved for a URL now that a path can have one too', () => {
     expect(projectKeyFor(normaliseRemote('git@github.com:team/repo.git')!)).toBe(
       '24de3cb4cf47f1c5c2c4b6a1bbe9851f7b07d5b2c2a14789ed0d9879b188f350'
@@ -79,11 +69,8 @@ describe('reading it out of a checkout', () => {
     })
   })
 
-  // A repository on a file server or a shared volume is a perfectly good git
-  // remote and is how plenty of teams already work. It takes part on the terms
-  // the path itself can support: the same absolute path on both Macs is the
-  // same project, and the key is the path rather than anything read off this
-  // machine's disk, so it is computable with the volume unmounted.
+  // A repository on a shared volume takes part on the terms the path supports: the same absolute path on
+  // both Macs is the same project, and the key is the path, computable with the volume unmounted.
   it('takes a shared volume as the project, at the path it is mounted at', async () => {
     for (const remote of ['/Volumes/team/app.git', 'file:///Volumes/team/app.git', '/Volumes/team/app.git/']) {
       const result = await readProjectKey(fixedRemoteRunner(remote), '/anywhere')
@@ -102,10 +89,8 @@ describe('reading it out of a checkout', () => {
     )
   })
 
-  // The refusals that are left are the paths that cannot be an identity at all,
-  // and each of them names the origin git has before saying what is wrong with
-  // it: nobody typed this remote, so "a relative path" on its own would leave
-  // somebody working out which of their remotes was being talked about.
+  // The refusals left are paths that cannot be an identity, each naming the origin git has: nobody typed
+  // this remote, so "a relative path" alone would leave somebody working out which one was meant.
   it('refuses a path no two machines could agree on, naming the origin it read', async () => {
     for (const [remote, fault] of [
       ['../app.git', /relative path/],

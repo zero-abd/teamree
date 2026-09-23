@@ -1,24 +1,6 @@
-// The menu a sidebar row opens, built out of plain elements.
-//
-// Not Electron's `Menu.popup`, and that is not a preference. The renderer has
-// no Electron in it at all — `docs/renderer-boundary.md` enumerates the whole
-// of what the preload grants, and a native menu is not on it — so a menu drawn
-// by the OS would have to be published to the main process, chosen there, and
-// routed back, which is the machinery the menu bar already needs and earns. A
-// row menu earns none of it: nothing here has to be a menu bar item, nothing
-// has to survive the window being closed, and everything in it is a call the
-// window can already make.
-//
-// What a DOM menu does not get for free is the keyboard, so that is written
-// out. The row opens this with the context-menu key or Shift+F10 as readily as
-// with the right mouse button, arrows move, Enter chooses, Escape closes, and
-// the focus goes back to the row it came from — which is the caller's job,
-// because the caller is the only thing that still knows which row that was.
-//
-// The items are `div`s with `role="menuitem"` rather than buttons on purpose. A
-// button activates itself on Enter and on Space, which would fire alongside the
-// key handling here and choose twice; roving `tabIndex` over non-buttons is
-// what the ARIA menu pattern asks for anyway.
+// The menu a sidebar row opens, built out of plain elements: the renderer has
+// no Electron in it (`docs/renderer-boundary.md`). Items are `div`s with
+// `role="menuitem"`, not buttons, which would activate on Enter and choose twice.
 
 import { useEffect, useRef, useState } from 'react'
 
@@ -55,16 +37,13 @@ export function RowMenu({ label, items, anchor, onClose, opener }: RowMenuProps)
   const entries = useRef<(HTMLDivElement | null)[]>([])
   const [active, setActive] = useState(0)
 
-  // The focus moves to the item rather than the menu keeping it and describing
-  // which item is current: a screen reader then reads the item that is actually
-  // focused, and there is one place the next keystroke can go.
+  // The focus moves to the item, so a screen reader reads the item actually focused.
   useEffect(() => {
     entries.current[active]?.focus()
   }, [active])
 
-  // A press anywhere else is a dismissal. On `pointerdown` rather than `click`
-  // so that pressing a control outside the menu does not first have to close it
-  // and then be pressed again.
+  // On `pointerdown` rather than `click`, so a control outside the menu does
+  // not have to be pressed twice.
   useEffect(() => {
     const dismiss = (event: PointerEvent): void => {
       if (menu.current?.contains(event.target as Node) === true) return
@@ -76,8 +55,7 @@ export function RowMenu({ label, items, anchor, onClose, opener }: RowMenuProps)
   }, [onClose, opener])
 
   const choose = (item: RowMenuItem): void => {
-    // Closed first, so that the focus the caller puts back on the row is not
-    // then taken by whatever the item opens — a dialog, most of the time.
+    // Closed first, so the focus put back on the row is not taken by whatever the item opens.
     onClose()
     item.onChoose()
   }
@@ -110,8 +88,7 @@ export function RowMenu({ label, items, anchor, onClose, opener }: RowMenuProps)
       }
       case 'Escape':
       case 'Tab':
-        // Tab closes rather than moving through the items: a menu is one stop
-        // on the way round a window, not a dozen.
+        // Tab closes rather than moving through the items.
         event.preventDefault()
         onClose()
         return

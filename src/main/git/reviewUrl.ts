@@ -1,29 +1,7 @@
-// Where a branch that was just pushed gets read by somebody else.
-//
-// A push ends with the work on a server and the person who pushed it looking at
-// a terminal. The page that closes that gap — GitHub's compare view, GitLab's
-// new merge request, Bitbucket's new pull request — is derivable from two
-// things this app already holds: the URL the remote is known by, and the branch
-// that went up. So it is derived, here, and nothing is asked of anyone.
-//
-// **Nothing here touches the network.** Whether a pull request for this branch
-// already exists is a question only the forge's API can answer, and answering
-// it would mean credentials, a request on the push path, and a failure mode for
-// a link. So this is a link to the page that *starts* a review; a forge that
-// already has one redirects there itself, which is the forge's job.
-//
-// The other half of that discipline is refusing to guess. A host this cannot
-// recognise gets no URL rather than a plausible one: a button that opens the
-// wrong page is worse than no button, because the wrong page looks like an
-// answer. GitHub Enterprise is the clearest case — an installation is reachable
-// at whatever name its company chose, and there is nothing in `git@git.acme.
-// example/o/r.git` that says which software is behind it.
-//
-// GitLab is the one exception, and it is a narrow one: `gitlab.<company>.<tld>`
-// is the naming its own documentation uses for a self-managed install, so a
-// host whose first label is `gitlab` is recognised. Bitbucket is `bitbucket.org`
-// and only that — Data Center installs answer on a different URL shape
-// entirely, so matching them on a name would be matching them on nothing.
+// Where a branch that was just pushed gets read: the forge's "start a review"
+// page, derived from the remote URL and the branch. Nothing touches the network,
+// and an unrecognised host gets no URL rather than a plausible one (GitHub Enterprise
+// is unrecognisable by name; `gitlab.<company>` is GitLab's own naming; Bitbucket is `bitbucket.org` only).
 
 /** What the review page needs to know, all of it already on this machine. */
 export type ReviewUrlOptions = {
@@ -38,12 +16,8 @@ export type ReviewUrlOptions = {
 }
 
 /**
- * The page to open a review on, or nothing at all.
- *
- * Nothing is the answer for a host that is not recognised, for a remote URL
- * that does not parse, and for a push of the base branch itself — there is no
- * review to open for a branch against itself, and offering one would be an
- * invitation to open an empty diff.
+ * The page to open a review on, or nothing: for an unrecognised host, an unparseable
+ * remote URL, or a push of the base branch itself (an empty diff).
  */
 export function reviewUrl(options: ReviewUrlOptions): string | undefined {
   const branch = bareRef(options.branch, options.remote ?? 'origin')
@@ -54,16 +28,14 @@ export function reviewUrl(options: ReviewUrlOptions): string | undefined {
   if (remote === null) return undefined
 
   const repository = `https://${remote.host}/${remote.path}`
-  // Every branch name reaching a query string or a path segment goes through
-  // `encodeURIComponent`: `feature/#3` and `fix?x` are legal git refs, and one
-  // of them ends a URL early.
+  // `encodeURIComponent` on every branch name: `feature/#3` and `fix?x` are legal
+  // git refs, and one of them ends a URL early.
   const from = encodeURIComponent(branch)
   const into = encodeURIComponent(base)
 
   switch (forgeOf(remote.host)) {
     case 'github':
-      // `expand=1` is what makes it the form rather than the diff, which is the
-      // difference between "look at this" and "open a review".
+      // `expand=1` makes it the form rather than the diff.
       return `${repository}/compare/${into}...${from}?expand=1`
     case 'gitlab':
       return (
@@ -89,12 +61,8 @@ function forgeOf(host: string): Forge {
 type RemoteAddress = { host: string; path: string }
 
 /**
- * The host and repository path in a remote URL, in any of the three shapes git
- * accepts for one.
- *
- * The scp-like `git@host:owner/repo.git` is not a URL and `new URL` does not
- * read it — it is the shape a forge's "clone with SSH" button hands out, so it
- * is the one most likely to be in a repository's config.
+ * Host and repository path from any of the three shapes git accepts. The scp-like
+ * `git@host:owner/repo.git` is not a URL for `new URL`, and is what "clone with SSH" hands out.
  */
 function parseRemoteUrl(url: string): RemoteAddress | null {
   const text = url.trim()
@@ -121,19 +89,12 @@ function address(host: string, rawPath: string): RemoteAddress | null {
     .replace(/^\/+/, '')
     .replace(/\/+$/, '')
     .replace(/\.git$/, '')
-  // Two segments at least: a forge URL names an owner and a repository, and a
-  // path with one segment is not a repository on any of these.
+  // Two segments at least: a forge URL names an owner and a repository.
   if (host.length === 0 || path.split('/').filter(Boolean).length < 2) return null
   return { host: host.toLowerCase(), path }
 }
 
-/**
- * A ref as the forge names it: no `refs/heads/`, and no remote in front of it.
- *
- * A project's base ref is written the way a person would type it at git, which
- * is `origin/main` as often as `main`. The forge has never heard of the remote
- * this machine calls `origin`; it has a branch called `main`.
- */
+/** A ref as the forge names it: no `refs/heads/`, and no remote in front — the forge has never heard of `origin`. */
 function bareRef(ref: string, remote: string): string {
   const withoutRefs = ref.trim().replace(/^refs\/heads\//, '')
   return withoutRefs.startsWith(`${remote}/`) ? withoutRefs.slice(remote.length + 1) : withoutRefs

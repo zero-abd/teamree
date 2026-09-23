@@ -1,8 +1,6 @@
-// The runbook said "quit teamree and open it again, on both machines, after the
-// last pull". These are the tests that delete that step, so the first one uses
-// a real checkout and a real filesystem watch: a fake would prove the class
-// calls its own callback and nothing about whether a key landing in the
-// directory ever reaches this process.
+// The tests that delete "quit teamree and open it again after the last pull".
+// The first ones use a real checkout and a real filesystem watch: a fake proves
+// nothing about whether a key landing in the directory reaches this process.
 
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -164,14 +162,9 @@ function fakeClock(): { sweep: (run: () => void, delayMs: number) => () => void;
 }
 
 describe('the sweep under the watch', () => {
-  // The failure this whole file is about, made deterministic: the platform
-  // delivers nothing at all, and the roster still has to stop being stale.
-  //
-  // The fake below never calls anybody back, which is not a pessimistic
-  // hypothetical but the measured common case. Running the three tests above on
-  // a mac with every raw `fs.watch` callback logged: in three runs out of eight
-  // no handle spoke at all, and under parallel load more than nine in ten went
-  // that way. Each of those was reported by the sweep and by nothing else.
+  // The failure this file is about, made deterministic: the platform delivers
+  // nothing. Measured on a mac with every raw `fs.watch` callback logged: in
+  // three runs out of eight no handle spoke at all; under load, nine in ten.
   it('notices a key that no watch ever mentioned', async () => {
     const root = await checkout()
     await writeMemberFile(root, 'ana')
@@ -239,11 +232,9 @@ describe('the sweep under the watch', () => {
   })
 
   it('backs off, so a project nothing is happening to is not being polled', () => {
-    // The cost of the floor, stated: a run of close sweeps over the window a
-    // fresh handle is deaf for, then four steps to half a minute, and no
-    // further. The close run is the part that is not negotiable — a single
-    // sample after an attach can land before the change does, and on darwin the
-    // event that would have covered the difference is the one that was lost.
+    // A run of close sweeps over the window a fresh handle is deaf for, then
+    // four steps to half a minute. The close run is not negotiable: on darwin
+    // the event that would have covered the difference is the one that was lost.
     const fake = fakeWatches()
     const clock = fakeClock()
     const watcher = new TeamreeWatcher({ onChange: () => {}, watch: fake.watch, sweep: clock.sweep })
@@ -267,10 +258,8 @@ describe('the sweep under the watch', () => {
   })
 
   it('does not back off while it is still the thing finding the changes', async () => {
-    // The old shape answered "the watch missed that" by looking less often, so
-    // every miss bought the next miss a longer silence. A sweep that finds
-    // something no watch mentioned is evidence about the watch, and the answer
-    // to it is to stay close until things go quiet.
+    // A sweep that finds something no watch mentioned is evidence about the
+    // watch, so the answer is to stay close until things go quiet, not back off.
     const root = await checkout()
     const fake = fakeWatches()
     const clock = fakeClock()
@@ -300,11 +289,8 @@ describe('the sweep under the watch', () => {
   })
 
   it('sweeps closely again when a watch dies, because that is when nothing is listening', () => {
-    // A branch switch that removes `.teamree` kills two watches, and what has
-    // to notice the directory coming back is a watch on the same stream the
-    // loss just rebuilt. Leaving the backoff where it was left the project up
-    // to half a minute behind its own checkout — and marked unwatched — waiting
-    // for the report that would have re-attached it.
+    // A branch switch that removes `.teamree` kills two watches; leaving the
+    // backoff where it was left the project half a minute behind its own checkout.
     const fake = fakeWatches()
     const clock = fakeClock()
     const watcher = new TeamreeWatcher({ onChange: () => {}, watch: fake.watch, sweep: clock.sweep })
@@ -324,10 +310,9 @@ describe('the sweep under the watch', () => {
   })
 
   it('finds a key that landed after the first sweep had already looked', async () => {
-    // The failing case on macOS, with the timing taken out of it: the watch
-    // delivers nothing, and the one sweep that was scheduled for just after the
-    // attach runs a moment too early. What used to happen next was 800ms of
-    // silence, then 3.2s, then 12.8s — past every budget anyone gives a pull.
+    // The failing case on macOS: the watch delivers nothing and the one sweep
+    // after the attach runs a moment too early. What followed was 800ms of
+    // silence, then 3.2s, then 12.8s.
     const root = await checkout()
     const fake = fakeWatches()
     const clock = fakeClock()
@@ -362,9 +347,8 @@ describe('the sweep under the watch', () => {
   })
 
   it('starts over from the short delay when a watch has just been attached', () => {
-    // Attaching is the moment an event is most likely to be lost — on darwin a
-    // new handle rebuilds the stream every other watch in the process is
-    // listening on — so the backoff is not something to have already spent.
+    // Attaching is the moment an event is most likely lost: on darwin a new
+    // handle rebuilds the stream every other watch in the process listens on.
     const fake = fakeWatches()
     const clock = fakeClock()
     const missing = Object.assign(new Error('no such file'), { code: 'ENOENT' })
@@ -432,14 +416,9 @@ describe('the watch set', () => {
   })
 
   it('reports on what .teamree did, whatever the platform called the event', async () => {
-    // The filter used to read the event's filename, and the filename is the one
-    // thing here that is not the same on two platforms. Two CI failures, two
-    // guesses at the string, and both guesses rested on a description of macOS
-    // that libuv's own `fsevents.c` contradicts — see the note beside the filter.
-    //
-    // So the names below are deliberately the wrong shape on purpose: an
-    // absolute path, an empty string, and nothing at all. What the watcher
-    // reports on is what `.teamree` actually did.
+    // The filter used to read the event's filename, which differs between
+    // platforms (libuv's `fsevents.c` contradicts the usual description of
+    // macOS). So the names below are the wrong shape on purpose.
     const root = await checkout()
     const fake = fakeWatches()
     let reports = 0
@@ -458,15 +437,13 @@ describe('the watch set', () => {
     })
     watcher.sync([{ id: 'p1', path: root }])
 
-    // Nothing has happened to `.teamree` yet, and these are the checkout's own
-    // churn — a build writing where builds write.
+    // Nothing has happened to `.teamree` yet: the checkout's own churn.
     fake.fire(root, 'node_modules/.vite/deps/chunk.js')
     fake.fire(root, '')
     run?.()
     expect(reports).toBe(0)
 
-    // Now it genuinely arrives, and the event is named the least helpful way
-    // available: the absolute path of a file three levels down.
+    // Now it genuinely arrives, named the least helpful way: an absolute path.
     await writeMemberFile(root, 'bo')
     fake.fire(root, join(root, '.teamree', 'members', 'bo.pub'))
     run?.()
@@ -482,11 +459,9 @@ describe('the watch set', () => {
   })
 
   it('catches a key arriving when only the checkout-root watch fires', async () => {
-    // What the root watch has to be able to say on its own, whichever of the
-    // three is the one that speaks. A key landing in `members/` changes that
-    // directory's mtime and leaves `.teamree`'s alone, so a mark of `.teamree`
-    // by itself said nothing had happened, and one CI failure came of exactly
-    // that. Only the root watch is fired here, deliberately.
+    // A key landing in `members/` changes that directory's mtime and leaves
+    // `.teamree`'s alone, so a mark of `.teamree` alone said nothing had
+    // happened (one CI failure). Only the root watch is fired here, deliberately.
     const root = await checkout()
     await writeMemberFile(root, 'ana')
     const fake = fakeWatches()
@@ -511,8 +486,7 @@ describe('the watch set', () => {
     run?.()
     expect(reports).toBe(1)
 
-    // And the relay file, which changes neither directory's mtime: editing a
-    // file leaves its parent alone, so this is the third thing to mark.
+    // And the relay file, which changes neither directory's mtime.
     await writeFile(join(root, '.teamree', 'relay'), 'wss://relay.example/v1/relay\n', 'utf8')
     fake.fire(root, null)
     run?.()
@@ -522,14 +496,9 @@ describe('the watch set', () => {
   })
 
   it('does not cost a roster read for a build writing in the checkout', async () => {
-    // The reason the checkout root is filtered at all. A checkout is where an
-    // agent works and a build writes, and a report per file would mean reading
-    // and parsing the roster thousands of times for events that have nothing to
-    // do with it.
-    //
-    // A real directory rather than a made-up path, because the filter now asks
-    // the filesystem what `.teamree` did instead of reading the event's name,
-    // and a path that does not exist cannot answer that question honestly.
+    // A checkout is where a build writes, and a report per file would read the
+    // roster thousands of times. A real directory, because the filter asks the
+    // filesystem what `.teamree` did.
     const root = await checkout()
     await writeMemberFile(root, 'ana')
     const fake = fakeWatches()
@@ -575,15 +544,8 @@ describe('the watch set', () => {
   })
 
   it('stops saying a project is unwatched once its watches are back', async () => {
-    // A branch switch that removes `.teamree` kills its watches, and a dying
-    // watch is what marks a project unwatched. The directory comes back on the
-    // way out of that branch and every watch re-attaches — so the warning has to
-    // go with it.
-    //
-    // Leaving it standing is this area's own failure pointed the other way: the
-    // thing worth warning about is a roster that has quietly stopped following
-    // its file, and a warning left over a roster that is being followed is how
-    // somebody learns to ignore it.
+    // A dying watch marks a project unwatched; when the directory comes back and
+    // every watch re-attaches, the warning has to go, or somebody learns to ignore it.
     const root = await checkout()
     await writeMemberFile(root, 'ana')
     const fake = fakeWatches()

@@ -1,17 +1,5 @@
-// Launches scripts/smoke.mjs under Electron.
-//
-// It is a separate launcher rather than part of the npm script because how
-// Electron has to be started depends on the machine — which switches it needs
-// (see electron-sandbox.mjs) and whether it has a display to open a window on
-// (see virtual-display.mjs) — and because the smoke script itself runs as the
-// Electron main process and so cannot choose its own command line.
-//
-// It also compiles `src/shared/peer` on the way in and hands the smoke test the
-// result, and makes the throwaway user data directory the app is to run
-// against. Both are here rather than in `smoke.mjs` for the same reason as
-// everything else in this file: they want plain Node and a process that is
-// still around afterwards to clean up, and `smoke.mjs` is an Electron main
-// process that has exited by then.
+// Launches scripts/smoke.mjs under Electron with the switches and display this machine needs, after
+// building the peer bundle and the throwaway profile in plain Node, which outlives the Electron run.
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -23,32 +11,16 @@ import { FIXTURE_REPO_FLAG, PEER_BUNDLE_FLAG, USER_DATA_FLAG, namedArg } from '.
 import { displayPlan } from './virtual-display.mjs'
 
 const peerBundle = await buildPeerBundle()
-// A path inside a throwaway directory rather than the throwaway directory
-// itself, so that the one the app runs against does not exist yet and Electron
-// has to create it. That is the difference between a smoke run that asserts the
-// permissions of `mkdtemp` — which are 0700 by definition and prove nothing —
-// and one that asserts the permissions Electron gives the user data directory,
-// which is what everything in `docs/local-access.md` rests on.
+// A path inside the temp dir, so Electron creates it and the check reads Electron's permissions, not mkdtemp's.
 const smokeRoot = mkdtempSync(join(tmpdir(), 'teamree-smoke-'))
 const userDataDir = join(smokeRoot, 'teamree')
 
-// A repository for the window to open, so the checks that need a worktree have
-// one. Three synchronous calls, and deliberately outside the Electron process:
-// a fixture that failed to build in there would be reported as the window being
-// broken, which is the opposite of what these checks are for.
-//
-// `-c` rather than `git config`, so nothing is read from or written to whoever
-// is running this. A commit needs an identity and an empty repository has no
-// branch to create a worktree from, hence the commit.
+// Built out here so a fixture failure does not read as a broken window. `-c`, not `git config`, so
+// nothing touches the runner's config; the commit gives the worktree a branch to start from.
 const fixtureRepo = join(smokeRoot, 'repo')
 mkdirSync(fixtureRepo, { recursive: true })
 const fixtureGit = ['-c', 'user.email=smoke@teamree.invalid', '-c', 'user.name=smoke', '-c', 'commit.gpgsign=false']
-// A committed file, so that a worktree made from this has something to *change*
-// rather than only something to add. The difference matters to exactly one
-// check: a patch over an untracked file is additions from line one, and the
-// numbers in a diff's two gutters are only worth asserting where the two sides
-// disagree — which needs context lines, which needs a file that was there
-// before. Named `.ts` so the tokenizer has a table for it.
+// A committed file, so a diff has context lines and both gutters mean something; `.ts` for the tokenizer.
 writeFileSync(join(fixtureRepo, 'note.ts'), 'const one = 1\nconst two = 2\nconst three = 3\n')
 const fixtureSteps = [
   ['init', '-b', 'main'],
@@ -59,9 +31,7 @@ let fixture = fixtureRepo
 for (const args of fixtureSteps) {
   const step = spawnSync('git', args, { cwd: fixtureRepo, encoding: 'utf8' })
   if (step.status !== 0) {
-    // Not fatal. The window-level checks do not need it, and a machine without
-    // a usable git should be told which checks it lost rather than handed a
-    // failure that looks like the app.
+    // Not fatal: the window-level checks do not need it.
     console.error(`run-smoke: no fixture repository (git ${args[0]} failed), so worktree checks are skipped`)
     fixture = ''
     break
@@ -78,9 +48,7 @@ const plan = displayPlan(electron, [
 if (plan.note) console.log(`run-smoke: ${plan.note}`)
 if (plan.advice) console.error(`run-smoke: ${plan.advice}`)
 
-// The checkouts the worktree checks make go under the same throwaway root as
-// the profile, and are gone with it. Without this every run left one behind in
-// `~/.teamree/worktrees/smoke/`, in the folder the real app lists.
+// Worktrees under the throwaway root, not `~/.teamree/worktrees/smoke/` where the real app lists them.
 const result = spawnSync(plan.command, plan.args, {
   stdio: 'inherit',
   env: { ...process.env, TEAMREE_WORKTREES_ROOT: join(smokeRoot, 'worktrees') }

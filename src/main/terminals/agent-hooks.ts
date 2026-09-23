@@ -1,36 +1,9 @@
-// Asking the agent to say when it needs somebody.
-//
-// Everything else this app knows about a pane it reads off the pty, and the
-// pty is silent about the one thing that matters most. Claude Code 2.1.280,
-// run in a pane on a dated afternoon, wrote no bell and no telling title over
-// a whole session — its title while blocked on a permission prompt is the
-// title it writes when a turn is over — so a pane sitting on a question showed
-// as merely quiet, in the same words as a pane that had finished. That is the
-// gap `titleOpinion.ts` describes and could not close from the outside.
-//
-// The agent has hooks: commands it runs itself at the moments this app cares
-// about. `Notification` is the agent saying it needs attention — a permission
-// prompt, a question, an idle prompt. `UserPromptSubmit` is a turn starting,
-// `Stop` is one ending, and the two session events bracket the rest. Each
-// hook runs this app's own CLI, which reports to the runtime that started the
-// pane, which records it on the pane and tells every window. Nothing is
-// inferred anywhere along that path.
-//
-// The hooks are handed over in a settings file of this app's own, one per
-// pane, passed with `--settings`. Claude Code merges that file with the
-// user's own settings by the same rules as its other layers (documented, and
-// checked on the machine this was written on): a key set here wins over the
-// same key in theirs, and every key they set and this file does not is kept —
-// hooks are lists and merge. Nothing of theirs is read, copied or written,
-// and the file lives under this app's profile and never under `~/.claude`.
-//
-// Only Claude Code, for now. Codex 0.146.0 has hooks of its own with the same
-// shape, but a hook must be trusted by hash before it runs, from `~/.codex` or
-// a project's `.codex`; a definition generated per pane would need trusting
-// per pane, and the one flag that skips that is named "dangerously" for a
-// reason. Its older `notify` key can be set per launch but reports only that
-// a turn completed, which the pty already shows. So a Codex pane is read the
-// old way until its hooks can be given per launch.
+// Asking the agent to say when it needs somebody. Claude Code 2.1.280 writes no
+// bell and the same title blocked on a permission prompt as at the end of a
+// turn, so the pty cannot tell the two apart. Its hooks run this app's CLI,
+// handed over in a per-pane `--settings` file that Claude Code merges with the
+// user's own (hooks are lists and merge). Codex 0.146.0 requires hooks trusted
+// by hash under `~/.codex`, so a Codex pane is still read off the pty.
 
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -45,14 +18,7 @@ export type AgentHookOptions = {
   cli: string
 }
 
-/**
- * The events subscribed to, in the agent's own names.
- *
- * Five and no more, and deliberately not the per-tool ones: every hook is a
- * process the agent starts and waits for, and a hook on every tool call is a
- * tax on every tool call. These fire at the edges of a turn and at its one
- * interruption, which is exactly the set of moments a pane's state changes.
- */
+/** The events subscribed to. Not the per-tool ones: every hook is a process the agent waits for. */
 export const AGENT_HOOK_EVENTS: readonly AgentEventName[] = [
   'SessionStart',
   'UserPromptSubmit',
@@ -61,13 +27,7 @@ export const AGENT_HOOK_EVENTS: readonly AgentEventName[] = [
   'SessionEnd'
 ]
 
-/**
- * How long the agent waits for one hook, in the agent's unit, seconds.
- *
- * The CLI's own request budget is shorter (below), so this is reached only if
- * the CLI itself cannot start. Well under the agent's default of ten minutes:
- * a hung hook is a hung turn.
- */
+/** How long the agent waits for one hook, in seconds; a hung hook is a hung turn. */
 const HOOK_TIMEOUT_SECONDS = 10
 
 /** The CLI's per-request budget, in milliseconds: a runtime that is not answering is not waited on. */
@@ -87,20 +47,10 @@ export function hookSettingsPath(userDataDir: string, terminalId: string): strin
 }
 
 /**
- * The one line every hook runs.
- *
- * The pane and the profile are on the line rather than in the environment,
- * because the environment is the agent's and the agent's is the pane's: a
- * hook inheriting `TEAMREE_USER_DATA_DIR` from wherever the app was started
- * could report a pane to a runtime that never opened it. `|| true` is the
- * whole failure policy: whatever this CLI does, the agent is never told a
- * hook failed, because a line in its transcript saying so would be this app's
- * bug put in front of the person the hook exists to spare. The CLI is silent
- * on stdout by design, which matters on `UserPromptSubmit`, where anything a
- * hook prints becomes part of the agent's context.
- *
- * Quoted for `sh`, which is what runs a hook's command line on macOS and
- * Linux; a profile path has a space in it on every Mac.
+ * The one line every hook runs. The profile is on the line, not inherited: a
+ * hook could otherwise report to a runtime that never opened the pane. `|| true`
+ * so the agent is never told a hook failed; stdout stays silent because on
+ * `UserPromptSubmit` it becomes agent context.
  */
 export function hookCommand(options: AgentHookOptions, terminalId: string, event: AgentEventName): string {
   const argv = [
@@ -119,14 +69,7 @@ export function hookCommand(options: AgentHookOptions, terminalId: string, event
   return `${argv.map(quoteArgument).join(' ')} || true`
 }
 
-/**
- * The settings file for one pane.
- *
- * No matcher on `Notification`: every notification type is reported and the
- * reader decides which are requests. Filtering here would put the list of
- * types that mean "waiting on you" on the runtime's disk, where a reader
- * could not see it, and would silence a type this version has not met.
- */
+/** The settings file for one pane. No matcher on `Notification`: the reader decides which are requests. */
 export function hookSettings(options: AgentHookOptions, terminalId: string): HookSettingsFile {
   const hooks = {} as HookSettingsFile['hooks']
   for (const event of AGENT_HOOK_EVENTS) {
@@ -141,15 +84,8 @@ export function hookSettings(options: AgentHookOptions, terminalId: string): Hoo
 const SETTINGS_FLAG: Partial<Record<AgentKind, string>> = { claude: '--settings' }
 
 /**
- * The command, now handing the agent its settings file — or the command as it
- * was, for every case where that is the honest answer.
- *
- * Unchanged for an agent with no per-launch hooks, for a line that cannot be
- * modelled (see `insertArguments`), and for a command that already carries a
- * settings file of the user's own. Claude Code takes one such flag; putting
- * this app's after theirs would drop whatever they put in it without a word,
- * and putting it before would drop this app's. Theirs stands, and the pane is
- * read the old way — which is what every pane was until now.
+ * The command handing the agent its settings file, or unchanged: no per-launch
+ * hooks, an unmodellable line, or a `--settings` of the user's own, which stands.
  */
 export function hookedLaunch(command: string, agent: AgentKind, settingsPath: string): string {
   const flag = SETTINGS_FLAG[agent]
@@ -164,14 +100,7 @@ function carriesFlag(command: string, flag: string): boolean {
   return tokenized.tokens.some((token) => token === flag || token.startsWith(`${flag}=`))
 }
 
-/**
- * Writes the file, making its directory on the way.
- *
- * Synchronous on purpose: this runs on the way to spawning the pane, and the
- * agent reads the file the moment it starts. Written whole every time — on a
- * launch, a relaunch and a restore alike — so a file this version writes is
- * always this version's, whatever an older one left under the same name.
- */
+/** Writes the file whole, synchronously: the agent reads it the moment it starts. */
 export function writeHookSettings(path: string, settings: HookSettingsFile): void {
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, `${JSON.stringify(settings, null, 2)}\n`, 'utf8')

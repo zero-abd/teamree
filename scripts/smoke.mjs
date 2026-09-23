@@ -1,39 +1,8 @@
-// Boots the built app with the window hidden, asserts the renderer mounted, the
-// preload bridge is reachable and the runtime behind it answers, then exits. Run
-// by `npm run smoke`, which is one of the gates `npm run release` refuses to
-// publish without.
-//
-// It boots the real main process — `out/main/index.js`, the file the packaged
-// app starts — rather than opening a window of its own onto the renderer. It
-// used to do the latter, and the difference mattered: nothing in this process
-// installed the IPC bridge, so every call the renderer made on mount was
-// answered by Electron with "No handler registered for 'teamree:rpc:call'", the
-// window put up "Could not reach the runtime", and the smoke test called that a
-// pass. It asserted that a renderer can mount, which it can do with nothing
-// behind it at all. Booting the real main process is also the only way the
-// assembly in startRuntime.ts is ever exercised outside a unit test.
-//
-// The app is pointed at the throwaway user data directory the launcher named,
-// before anything else happens. That is not tidiness: the runtime restores the
-// last session's panes from there, so a smoke test that read a developer's
-// workspace would spawn their agents, take the single-instance lock their
-// running copy holds, and write to the file that copy is keeping.
-//
-// That directory does not exist when this starts, which is deliberate and is
-// what lets the last check below mean anything: Electron creates it, so its
-// permissions are the ones a first launch would produce rather than a temporary
-// directory's. See `checkLocalBoundary`.
-//
-// It also runs the peer library's cipher check here, in a genuine Electron main
-// process, which is the process the teamwork feature's handshakes actually
-// happen in. `src/shared/peer/electronRuntime.test.ts` runs the same check under
-// every `npm test` with `ELECTRON_RUN_AS_NODE=1`, which is the same binary and
-// the same BoringSSL but not the same process type — and the whole reason this
-// check exists is that a runtime difference nobody had exercised took the
-// feature out of every shipped build. So it is exercised in both.
-//
-// Electron does not pump its event loop until this module finishes evaluating,
-// so everything here hangs off callbacks rather than top-level await.
+// Boots the built app hidden, asserts the renderer mounted, the preload bridge
+// is reachable and the runtime answers, then exits; a `npm run release` gate.
+// Boots the real `out/main/index.js`: a window of its own had no IPC bridge
+// behind it and passed anyway. Callbacks, not top-level await — Electron does
+// not pump its event loop until this module finishes evaluating.
 import { app, Menu } from 'electron'
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
@@ -52,40 +21,26 @@ const bail = setTimeout(() => {
   process.exit(1)
 }, TIMEOUT_MS)
 
-// Both of these are settled before the app's own module body runs, which is why
-// the import of it is deferred rather than written at the top of this file: the
-// first is read while Electron is still deciding whether this process is a
-// second instance, and the second while the window is deciding whether to show
-// itself.
-//
-// A run with no directory to point at stops here rather than continuing into
-// the real one. Refusing is the whole safeguard: the alternative is a gate that
-// reads the workspace of whoever ran it, restores their panes, and spawns the
-// agents in them.
+// Both settled before the app's module body runs, hence the deferred import.
+// Refusing without a directory is the safeguard: the runtime restores the last
+// session's panes, so a run on a developer's workspace would spawn their agents.
 const userDataDir = readNamedArg(USER_DATA_FLAG)
 if (!userDataDir) {
   console.error('smoke: no user data directory was passed; run this through scripts/run-smoke.mjs')
   process.exit(1)
 }
 app.setPath('userData', userDataDir)
-// The app shows its window as soon as it can paint unless this says otherwise.
-// A gate has no business taking focus from whoever is running it; the packaged
-// app check sets the same variable for the same reason. Set here rather than by
-// the launcher so it holds however this script was started.
+// A gate must not take focus from whoever runs it; set here rather than by the
+// launcher so it holds however this script was started.
 process.env.TEAMREE_BACKGROUND_LAUNCH = '1'
 
 // Without this, closing the hidden window would quit before assertions finish.
 app.on('window-all-closed', () => {})
 
-// Attached at construction: the app loads the renderer into the window in the
-// same breath as it creates it, and a listener added after that would miss
-// whatever the first load had to say.
-// Raised only while `checkRendererBoundary` is deliberately provoking the
-// content security policy. Chromium reports a script it refused to run as a
-// console *error*, and a refusal is what that check is asking for — so for the
-// length of it the refusal is collected from the page's own
-// `securitypolicyviolation` event and the console line it also produces is not
-// counted as a fault. Nothing else in this file turns it on.
+// Attached at construction: the renderer loads in the same breath as the window
+// is created, and a later listener would miss the first load.
+// `provoking` is on only while `checkRendererBoundary` provokes the CSP: Chromium
+// reports a refused script as a console error, and there the refusal is wanted.
 let provoking = false
 
 const opened = new Promise((resolve) => {
@@ -108,40 +63,19 @@ function finish() {
   if (failures.length) {
     for (const failure of failures) console.error(`smoke: ${failure}`)
     process.exitCode = 1
-    // And again at the last moment, because `process.exitCode` alone does not
-    // survive this exit. Electron's `app.quit()` ends the process through
-    // `Browser::Quit` with an exit code of its own, which is zero unless
-    // somebody names another — so every failure this file has ever found was
-    // printed in full and then reported as a pass. `will-quit` is the safe
-    // moment to name one: the quit sequence has already stopped the runtime by
-    // then, so every pty is dead and there is no exit callback left to wake in
-    // a closing environment, which is the whole reason `app.exit()` is not
-    // called here directly. See the note below.
+    // `process.exitCode` alone does not survive `app.quit()`: `Browser::Quit`
+    // exits zero unless told otherwise, so every failure used to print and pass.
+    // `will-quit` is the safe moment: the runtime is stopped and every pty dead.
     app.once('will-quit', () => process.exit(1))
   } else {
     console.log('smoke: renderer mounted, preload bridge reachable, runtime answering')
     process.exitCode = 0
   }
-  // `app.quit()` rather than `app.exit()`, and the difference is the whole of
-  // the fix. This gate used to print its success line and then die with
-  // SIGABRT — "terminating due to uncaught exception of type Napi::Error" —
-  // on any run that had opened a pane, and the mechanism is in node-pty's
-  // `SetupExitCallback` (src/unix/pty.cc): every pty gets a thread of its own
-  // that waits for the child to die and then calls back into JavaScript
-  // through a ThreadSafeFunction. `app.exit()` starts tearing the Node
-  // environment down while those children are still alive; they die as the
-  // process goes, their threads wake, and a callback into an environment that
-  // is closing throws a C++ exception that nothing on that thread catches.
-  // How often it happened tracked how many panes were open — one was usually
-  // fine, three was every time — and the menu bar's arrival shifted the
-  // timing enough that one pane started to hit it too.
-  //
-  // `quit` goes through the app's own `before-quit`, and that sequence stops
-  // the runtime first, which kills every pty and *awaits* each exit callback
-  // (`terminals.shutdown()` in `startRuntime.ts`) before the process leaves.
-  // No thread is left to wake late. It is the sequence a person pressing ⌘Q
-  // gets, and it is the one that ends cleanly; the exit code rides on
-  // `process.exitCode`, which `quit` honours and `exit` never needed to.
+  // `quit`, never `exit`: `app.exit()` tears Node down while ptys are alive, and
+  // node-pty's per-pty exit thread (`SetupExitCallback`, src/unix/pty.cc) then
+  // calls into a closing environment — an uncaught Napi::Error, SIGABRT after
+  // the success line. `quit` runs `before-quit`, which stops the runtime and
+  // awaits every pty exit (`terminals.shutdown()`), and honours `process.exitCode`.
   app.quit()
 }
 
@@ -159,9 +93,7 @@ async function waitFor(probe, failure) {
 }
 
 async function run() {
-  // After `whenReady`, which is safe — a `whenReady` asked for later resolves
-  // just the same — and which is what lets the two settings above be made
-  // before the app reads them.
+  // After `whenReady`, so the two settings above are made before the app reads them.
   await import(pathToFileURL(join(root, 'out/main/index.js')).href)
 
   const window = await opened
@@ -179,9 +111,7 @@ async function run() {
     () => ask('typeof window.teamree?.versions?.electron === "string"'),
     'preload bridge is not exposed on window.teamree'
   )
-  // The assertion the old harness could not make: a call placed by the renderer,
-  // over the bridge the product uses, answered by the runtime this launch
-  // started. Anything less proves only that a window can open.
+  // A call over the bridge the product uses, answered by the runtime this launch started.
   await waitFor(
     () => ask('window.teamree.runtime.call("status.get", {}).then((response) => response.ok === true, () => false)'),
     'the runtime did not answer a call from the renderer'
@@ -197,32 +127,12 @@ async function run() {
 }
 
 /**
- * That the surfaces which take the main area can actually be reached.
- *
- * Everything else in this file proves the window is alive and correctly walled
- * off. None of it proves anybody can get anywhere, and that is a real gap: a
- * surface can have a component, a store action, a full set of passing unit
- * tests, and no way in. Settings and Help both shipped in exactly that state —
- * reachable from the empty state and from each other, and absent from the rail
- * and the palette, so anybody with a worktree open could not get to either. The
- * unit tests were green throughout, because each one rendered the component it
- * was about.
- *
- * So this presses the buttons. It is deliberately the shallowest possible
- * version of that — is the control there, does pressing it put the surface on
- * screen, and does the surface have its own heading — because a smoke test that
- * asserted layout would break on every honest change and be deleted. What it
- * pins is the thing unit tests structurally cannot: the wiring between a rail
- * button and the area it is supposed to fill.
- *
- * Run against the first-launch state, with no repository added, which is the
- * one state this harness has. Both of these are window-level surfaces rather
- * than worktree ones, so that is exactly where they have to work.
+ * That the surfaces which take the main area can be reached. Settings and Help
+ * both shipped absent from the rail and the palette with green unit tests, so
+ * this presses the button and waits for the heading — deliberately no more.
  */
 async function checkWindowSurfaces(ask) {
-  // By the words on them rather than by class or position: the label is the
-  // thing a person looks for, and a selector that survived a renamed class
-  // while the button said something else would be worse than no check.
+  // By the words on them: a selector that outlived a relabelled button is worse than none.
   const press = (label) =>
     ask(
       `(() => {
@@ -252,25 +162,10 @@ async function checkWindowSurfaces(ask) {
 }
 
 /**
- * Text nobody can read, measured rather than eyeballed.
- *
- * Every colour in this window comes out of one palette, and the palette has a
- * legibility pass — including for the ones a person builds by hand, which is
- * the whole argument for letting them edit all forty-two. What that pass cannot
- * see is a *pairing*: a token that is perfectly legible on the ground it was
- * designed for, used by a new element on a ground it was not. Dim-on-dim is the
- * ordinary way an interface goes quietly unreadable, and it is invisible to
- * every other check here, because nothing about it is an error.
- *
- * So this reads the computed colour of every text node on screen, walks up for
- * the first ancestor that actually paints an opaque background, composites the
- * two, and computes the WCAG contrast ratio. The threshold is AA — 4.5:1, or
- * 3:1 for text that is genuinely large — which is the floor Apple's own
- * accessibility guidance points at.
- *
- * It ran clean on every surface the first time it was written, which is the
- * result worth having: it is not fixing anything, it is holding something that
- * is already true.
+ * Text nobody can read, measured. The palette's legibility pass cannot see a
+ * pairing — a legible token used on a ground it was not designed for — so this
+ * composites each text node on its first opaque ancestor and checks WCAG AA
+ * (4.5:1, or 3:1 for large text).
  */
 const MEASURE_CONTRAST = `(() => {
   const parse = (value) => {
@@ -329,46 +224,21 @@ const MEASURE_CONTRAST = `(() => {
 })()`
 
 /**
- * Measures what is on screen now, and records anything unreadable.
- *
- * The local array is deliberately not called `failures`. The first version of
- * this named it that, which shadowed the module-level one it was supposed to be
- * reporting into — so every finding was pushed onto the list that had just been
- * parsed out of the page and thrown away, and the check could not fail. It was
- * only caught by insisting on a mutation that should break it.
+ * Records anything unreadable on screen now. The local is not called `failures`:
+ * that shadowed the module-level list once and the check could not fail.
  */
 async function checkContrast(ask, surface) {
   const unreadable = JSON.parse(await ask(MEASURE_CONTRAST))
-  // Named individually rather than counted: a count tells somebody a number,
-  // and this tells them which sentence to go and look at.
+  // Named, not counted: a name says which sentence to go and look at.
   for (const one of unreadable.slice(0, 6)) failures.push(`unreadable on ${surface}: ${one}`)
   if (unreadable.length > 6) failures.push(`and ${unreadable.length - 6} more unreadable on ${surface}`)
 }
 
 /**
- * That the menu bar has this app's commands in it, and that choosing one works.
- *
- * The menu bar is the one surface in this app that no unit test can see the
- * whole of, because it is assembled across the process boundary: the window
- * works out what its menus should contain — labels, chords, and which items
- * could do anything right now — and the main process draws what it is told.
- * Each half has tests of its own and both were green through a version of this
- * where the window published to a channel nothing served, so the menu bar was
- * the platform's roles and nothing else and the app looked exactly as it had
- * before. Only a running app can say otherwise.
- *
- * Two things are asserted, and the second is the one worth the trouble. That
- * the commands are in the menu at all, read off `Menu.getApplicationMenu()` —
- * the object the platform is showing, not a template. And that choosing one
- * reaches the window: the item's own click is invoked and the surface it opens
- * is waited for, which is the full round trip of menu to main to renderer to
- * screen.
- *
- * Run against the first-launch state, so the pane commands are correctly greyed
- * and there is not much left that can be chosen. The dashboard item is the one
- * picked because it is a window-level view that needs nothing open — the same
- * reason `checkWindowSurfaces` uses Settings and Help — and because it toggles,
- * so this can put the window back the way it found it for the checks below.
+ * That the menu bar carries this app's commands and choosing one reaches the
+ * window. Assembled across the process boundary, so both halves were green
+ * while the window published to a channel nothing served. Read off
+ * `Menu.getApplicationMenu()` — what the platform shows, not a template.
  */
 async function checkMenuBar(ask) {
   const named = (label) => {
@@ -376,8 +246,7 @@ async function checkMenuBar(ask) {
     return walk(Menu.getApplicationMenu()).find((item) => item.label === label)
   }
 
-  // Waited for rather than read once: the window publishes its menus on mount,
-  // and the main process installs them when the message arrives.
+  // Waited for: the window publishes its menus on mount.
   const arrived = await waitFor(
     async () => named('New task') !== undefined,
     'the window\u2019s commands never reached the menu bar'
@@ -387,26 +256,17 @@ async function checkMenuBar(ask) {
   for (const [label, accelerator] of [
     ['New task', 'CommandOrControl+N'],
     ['Close pane', 'CommandOrControl+W'],
-    // \u2318, opens the settings page — the one with the CLI link, the update
-    // preference and the relay on it. It used to open the theme editor, which
-    // now has an item of its own under View and no chord at all.
+    // \u2318, opens the settings page, not the theme editor (own item under View, no chord).
     ['Settings\u2026', 'CommandOrControl+,'],
     ['All panes', 'CommandOrControl+E'],
     ['Toggle right panel', 'CommandOrControl+J'],
-    // The four moves. Worth reading off a running app rather than trusting the
-    // unit tests, because these are the ones whose chords are not characters:
-    // the arrows and Return are spelled for Electron's parser rather than for
-    // `KeyboardEvent.key`, and a name it does not recognise is rejected where
-    // no test in the renderer can see it — the item draws with no chord beside
-    // it, or the whole menu fails to build.
+    // Chords that are not characters: arrows and Return are spelled for
+    // Electron's parser, and a name it rejects draws no chord or breaks the menu.
     ['Previous worktree', 'CommandOrControl+Alt+Up'],
     ['Next worktree', 'CommandOrControl+Alt+Down'],
     ['Focus previous pane', 'CommandOrControl+['],
     ['Maximize pane', 'CommandOrControl+Shift+Enter'],
-    // In the Help menu, which carries the `help` role. Reading it off a running
-    // app proves the submenu survived the role — that Electron built both onto
-    // one item — and no more than that: whether macOS adopted it as the app's
-    // Help menu is not something `Menu.getApplicationMenu()` can say.
+    // Under the `help` role: proves Electron built the submenu onto the role item.
     ['Shortcuts', 'CommandOrControl+/']
   ]) {
     const item = named(label)
@@ -414,27 +274,21 @@ async function checkMenuBar(ask) {
       failures.push(`the menu bar has no ${label} item`)
       continue
     }
-    // The chord beside the item is the chord that fires. A menu that printed a
-    // different one would be a wrong answer given to somebody who came to the
-    // menu because they did not know.
+    // The chord beside the item is the one that fires.
     if (item.accelerator !== accelerator) {
       failures.push(`the menu bar shows ${item.accelerator} for ${label}, not ${accelerator}`)
     }
   }
 
-  // The mnemonic marker, which this platform does not have. `&File` is how
-  // Windows and Linux are told that Alt-F opens the menu, and there the `&` is
-  // consumed rather than drawn; macOS consumes nothing, so an unconditional
-  // marker is an ampersand in the menu bar. Only a running app can say what the
-  // bar actually reads, and the submenu walk above never looks at the top row.
+  // `&File` is consumed on Windows and Linux; macOS draws the ampersand, and
+  // the submenu walk above never looks at the top row.
   for (const item of process.platform === 'darwin' ? (Menu.getApplicationMenu()?.items ?? []) : []) {
     if ((item.label ?? '').includes('&')) {
       failures.push(`the menu bar draws ${item.label} with a mnemonic marker macOS does not use`)
     }
   }
 
-  // Nothing offered that cannot work: on a first launch there is no pane, so
-  // the pane commands are grey and the window-level ones are not.
+  // First launch: no pane, so pane commands are grey and window-level ones are not.
   if (named('Close pane')?.enabled !== false) {
     failures.push('Close pane is live in a window with no pane in it')
   }
@@ -442,10 +296,8 @@ async function checkMenuBar(ask) {
     failures.push('the menu bar greys a command that needs nothing to be open')
   }
 
-  // The theme editor's own item, which is what stops \u2318, from landing on it.
-  // Read off the running menu rather than trusted to the unit tests, because an
-  // item with no accelerator is one Electron could drop on its way through:
-  // `appMenu.ts` has to hand it `undefined` rather than an empty string.
+  // An item with no accelerator is one Electron could drop: `appMenu.ts` has to
+  // hand it `undefined` rather than an empty string.
   const appearance = named('Appearance\u2026')
   if (!appearance) {
     failures.push('the menu bar has no Appearance\u2026 item, so \u2318, is the only way to the theme editor')
@@ -453,26 +305,21 @@ async function checkMenuBar(ask) {
     failures.push(`the menu bar shows ${appearance.accelerator} for Appearance\u2026, which nothing binds`)
   }
 
-  // And the two git commands, which the menu bar could not reach at all. Grey
-  // on a first launch, with no worktree and nothing to send.
+  // Grey on a first launch: no worktree, nothing to send.
   for (const label of ['Commit\u2026', 'Push']) {
     const item = named(label)
     if (!item) failures.push(`the menu bar has no ${label} item`)
     else if (item.enabled !== false) failures.push(`${label} is live in a window with no worktree in it`)
   }
 
-  // And the round trip. `click()` on the item is what the platform does when
-  // somebody chooses it, so this goes the whole way: main names the command to
-  // the window, the window runs it through the same dispatcher a chord uses,
-  // and the view changes.
+  // `click()` on the item is what the platform does: main to window to dispatcher to view.
   const showsDashboard = () =>
     ask('[...document.querySelectorAll("h1")].some((node) => node.textContent?.trim() === "All panes")')
 
   named('All panes')?.click()
   const reached = await waitFor(showsDashboard, 'choosing a menu item did not reach the window')
 
-  // And away again, which is both what that command does and what leaves the
-  // window as the checks after this one expect to find it.
+  // Toggled back so the checks below find the window as expected.
   if (reached) {
     named('All panes')?.click()
     await waitFor(async () => !(await showsDashboard()), 'choosing the same menu item again did not put the view away')
@@ -480,22 +327,10 @@ async function checkMenuBar(ask) {
 }
 
 /**
- * The surfaces that only exist once there is a worktree open.
- *
- * `checkWindowSurfaces` above presses the two buttons that work on a first
- * launch. Everything else in this window needs a repository, and so until now
- * the strip of terminal tabs and the behaviour of closing a pane had never been
- * observed anywhere — they had unit tests, and unit tests render a component
- * against props they were handed. Whether a pane that the runtime made appears
- * as a tab is a question about the wiring between them, which is the seam no
- * unit test on either side can see.
- *
- * Driven through `window.teamree.runtime.call` — the renderer's own bridge, the
- * one the product uses — so that what is being exercised is the path a person
- * clicking would take, not a back door into the store.
- *
- * Skipped, loudly, when the launcher could not build a repository. A check that
- * quietly does nothing is worse than one that is not there.
+ * The surfaces that only exist with a worktree open, driven through
+ * `window.teamree.runtime.call` — the product's bridge, not the store — since
+ * whether a pane the runtime made appears as a tab is a seam no unit test sees.
+ * Skipped loudly when the launcher could not build a repository.
  */
 async function checkWorktreeSurfaces(ask) {
   const repo = readNamedArg(FIXTURE_REPO_FLAG)
@@ -527,24 +362,17 @@ async function checkWorktreeSurfaces(ask) {
   }
   const worktreeId = worktree.result.id
 
-  // A checkout is made on a thread of its own and the record says `creating`
-  // until it is there. Opening a terminal in one that is not ready is a race
-  // this check would report as a broken window.
+  // The record says `creating` until the checkout exists; a terminal opened
+  // before then is a race this check would report as a broken window.
   const ready = await waitFor(async () => {
     const read = await call('worktree.get', { worktreeId })
     return read.ok === true && read.result.state === 'ready'
   }, 'the worktree never became ready, so nothing below it could be checked')
   if (!ready) return
 
-  // Opened the way a person opens it: by pressing its row in the sidebar. The
-  // runtime making a worktree does not put it on screen, and driving the store
-  // directly would skip the wiring this check exists to exercise.
-  // Pressed the way a person presses it, and only once it can be pressed. The
-  // row is deliberately disabled while the checkout is still being made — there
-  // is nothing to open yet — and the first version of this check clicked it
-  // anyway and reported the window as broken, because a click on a disabled
-  // button succeeds at doing nothing. The runtime saying `ready` is not the same
-  // fact as this window having heard it.
+  // Pressed in the sidebar, and only once it can be: the row is disabled while
+  // the checkout is being made, and a click on a disabled button succeeds at
+  // nothing. The runtime saying `ready` is not the window having heard it.
   const opened = await waitFor(
     () =>
       ask(
@@ -561,24 +389,15 @@ async function checkWorktreeSurfaces(ask) {
   )
   if (!opened) return
 
-  // And that pressing it actually took the area. Opening a worktree is supposed
-  // to release whatever else had it — this check runs straight after the one
-  // that leaves Help on screen, which is exactly the case that would otherwise
-  // pass while the panes were nowhere to be seen.
+  // Opening a worktree must release Help, which the previous check left on screen.
   await waitFor(
     () => ask(`document.querySelector('.workspace') !== null && document.querySelector('.help') === null`),
     'pressing the worktree did not give the main area back to the workspace'
   )
 
-  // The row's own menu, opened the way a right mouse button opens it.
-  //
-  // Everything about what is in that menu is a unit test. What only a running
-  // window can say is that the event a real right-click delivers reaches the
-  // row at all: the handler is on the `<li>` and every control inside it is a
-  // button of its own, so a menu wired one element off is invisible to a test
-  // that renders the component and asks it nicely. This is also the only place
-  // the row's one destructive action is now reached from, which makes "does the
-  // menu open" the same question as "can this worktree be removed".
+  // The row's menu, opened by a real contextmenu event: the handler is on the
+  // `<li>` and every control inside is a button, so a menu wired one element
+  // off is invisible to a test that renders the component and asks nicely.
   const rightClicked = await ask(
     `(() => {
        const row = [...document.querySelectorAll('.worktree')].find(
@@ -603,8 +422,7 @@ async function checkWorktreeSurfaces(ask) {
         `JSON.stringify([...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((node) => node.textContent.trim()))`
       )
     )
-    // Last, and only last: the whole point of the menu is that the destructive
-    // item is somewhere nobody arrives at by momentum.
+    // Last: the destructive item is where nobody arrives by momentum.
     if (items.at(-1) !== 'Remove') failures.push(`the row menu does not end with Remove: ${JSON.stringify(items)}`)
     if (items.length !== 5) failures.push(`the row menu has ${items.length} items rather than five`)
   }
@@ -625,10 +443,8 @@ async function checkWorktreeSurfaces(ask) {
     return
   }
 
-  // The strip above the panes carries one tab per pane in the worktree on
-  // screen. Matched on the pane's own title rather than on a count, because a
-  // strip showing some other worktree's panes — which is exactly what this
-  // replaced — would satisfy a count and is the thing being ruled out.
+  // Matched on the pane's title, not a count: a strip showing another
+  // worktree's panes would satisfy a count.
   const title = terminal.result.title
   await waitFor(
     () =>
@@ -642,17 +458,14 @@ async function checkWorktreeSurfaces(ask) {
 
   await checkPaneLinks(ask, call, terminal.result.id)
 
-  // The menu bar's New terminal, chosen the way the platform chooses it, opens
-  // a second pane in this worktree. `checkMenuBar` above proved a menu item
-  // reaches the window; this proves one that needs a worktree open acts on the
-  // right one, which the enablement alone cannot say.
+  // A menu item that needs a worktree open acts on the right one; enablement
+  // alone cannot say so.
   const menuItem = (label) => {
     const walk = (menu) => (menu?.items ?? []).flatMap((item) => [item, ...(item.submenu ? walk(item.submenu) : [])])
     return walk(Menu.getApplicationMenu()).find((item) => item.label === label)
   }
-  // Tabs, not buttons: every tab carries its own close button beside it, so a
-  // count of buttons rises by two per pane and a check written against it
-  // reported the menu as broken the first time it ran.
+  // Tabs, not buttons: every tab has its own close button, so a button count
+  // rises by two per pane.
   const tabCount = () => ask(`document.querySelectorAll('[role="tab"]').length`)
   const before = await tabCount()
   const newTerminal = menuItem('New terminal')
@@ -673,11 +486,8 @@ async function checkWorktreeSurfaces(ask) {
     }
   }
 
-  // And that the panes' own strip carries the same command, which is the gap
-  // this function exists for. Splitting and opening a pane used to be words in
-  // the header above the strip; they are icons at the end of it now, and an
-  // icon that calls nothing looks exactly like one that works. Pressed by its
-  // accessible name, because an icon has no text to match on.
+  // The strip carries the same command as an icon, and an icon that calls
+  // nothing looks like one that works. Pressed by accessible name.
   const pressLabel = (label) =>
     ask(
       `(() => {
@@ -728,17 +538,13 @@ async function checkWorktreeSurfaces(ask) {
 
   await checkPatch(ask, worktreeId)
 
-  // No row between the strip and the panes. The worktree's name is in the
-  // sidebar's selected row and in the status bar, the way to its directory is
-  // in the row's menu, and its counts are the status bar's — so a header that
-  // came back would be a fourth copy of things said three times already.
+  // No header row: the name, path and counts are already in the sidebar row,
+  // its menu and the status bar.
   const head = await ask(`document.querySelector('.workspace__head') !== null`)
   if (head === true) failures.push('a worktree header row is drawn between the pane strip and the panes')
 
-  // And the decision that a quiet shell closes on one press. A pane running an
-  // agent, or one still producing output, is asked about first — that is
-  // deliberate, and so is this: a question on every close is one people learn
-  // to press through. A fresh shell is the ordinary case and must not ask.
+  // A quiet fresh shell closes on one press; only a busy pane or an agent is
+  // asked about, because a question on every close is one people press through.
   const closed = await ask(
     `(() => {
        const button = document.querySelector('.pane__close')
@@ -760,25 +566,14 @@ async function checkWorktreeSurfaces(ask) {
 }
 
 /**
- * That a pane which printed while somebody was looking at another one says so.
- *
- * The one behaviour in this window whose two halves are both real: when a pty
- * last spoke, which only a running runtime knows, and when its pane was last in
- * front of this person, which only a rendered window does. A unit test can say
- * that a class is drawn from a set; nothing short of a launch can say that
- * output arriving in one pane while the focus is in another ends as a mark on
- * the right row.
- *
- * Last in this function, and after the close above rather than before it: a
- * pane is busy for four seconds after it prints, and a busy pane is one the
- * window is right to ask about before closing — so printing into one earlier
- * would have this check break the one below it.
+ * That a pane which printed while another was focused says so. Both halves are
+ * real here: when the pty last spoke and when its pane was last in front.
+ * After the close above, not before: a pane is busy for four seconds after it
+ * prints, and a busy pane is asked about before closing.
  */
 async function checkUnreadPanes(ask, call, worktreeId) {
-  // Every pane is read first, by pressing each tab in turn: focusing a pane
-  // writes down both the one taken and the one left behind. So whatever is
-  // marked afterwards is what this check caused, rather than a prompt that
-  // happened to print while the panes were being opened.
+  // Every tab pressed first, so whatever is marked afterwards is what this
+  // check caused rather than a prompt that printed while panes were opening.
   const strip = await ask(`document.querySelectorAll('[role="tab"]').length`)
   for (let index = 0; index < strip; index += 1) {
     await ask(
@@ -790,8 +585,7 @@ async function checkUnreadPanes(ask, call, worktreeId) {
     )
   }
 
-  // Which pane the last of those presses landed on, read twice so a `layout.set`
-  // still in flight cannot be mistaken for the answer.
+  // Read twice so a `layout.set` still in flight is not mistaken for the answer.
   let focusedPaneId = null
   const settled = await waitFor(async () => {
     const read = await call('layout.get', { worktreeId })
@@ -815,9 +609,8 @@ async function checkUnreadPanes(ask, call, worktreeId) {
     return
   }
 
-  // Both surfaces in one wait rather than two, because the budget this whole
-  // gate runs on is thirty seconds and a wait that never comes true spends
-  // fifteen of them.
+  // One wait for both surfaces: the gate has thirty seconds and a failed wait
+  // spends fifteen.
   const marked = await waitFor(
     () =>
       ask(
@@ -838,8 +631,7 @@ async function checkUnreadPanes(ask, call, worktreeId) {
     'a pane that printed while another was focused was not marked unread on the strip and in the sidebar'
   )
   if (!marked) {
-    // What the window actually had, so the failure names a cause rather than a
-    // selector.
+    // So the failure names a cause rather than a selector.
     const said = await ask(
       `JSON.stringify({
          tabs: [...document.querySelectorAll('[role="tab"]')].map((tab) => ({
@@ -855,22 +647,9 @@ async function checkUnreadPanes(ask, call, worktreeId) {
 }
 
 /**
- * That a patch on screen is something a person can read a line number off.
- *
- * The changes panel is the surface this app exists for the moment an agent says
- * it is done, and until now the only thing observed about it was that the
- * button opening it was there. What a unit test cannot say about it is whether
- * a real patch — produced by real git, over a file a real command changed —
- * comes out of the runtime, through the bridge, and onto the screen as hunks
- * with numbers beside them. Every part of that is a seam between two halves
- * that each have their own passing tests.
- *
- * The worktree is dirtied through the shipped CLI rather than by writing a file
- * from here, and that is the point rather than a flourish: `teamree terminal
- * run` is the command an agent is given, it goes in over the same socket a
- * teammate's would, and the file it changes is changed by a process in the
- * worktree. Writing the file from this process would prove the panel can render
- * a diff of something this process did, which is not the situation.
+ * That a patch on screen carries hunk headers and line numbers. The worktree is
+ * dirtied through the shipped CLI, over the same socket a teammate's would use,
+ * so the diff is of something a process in the worktree did — not this one.
  */
 async function checkPatch(ask, worktreeId) {
   const changed = await runCli([
@@ -878,11 +657,8 @@ async function checkPatch(ask, worktreeId) {
     'run',
     '--worktree',
     worktreeId,
-    // One line changed and one added, so the patch has context on both sides of
-    // them — which is the only arrangement where the two gutters disagree, and
-    // so the only one where their numbers mean anything. Written as four
-    // `echo`s rather than one `printf` because a `\n` would have to survive
-    // this file, a JSON frame, and a shell, and it only has to be four lines.
+    // One line changed and one added, so the two gutters disagree. Four `echo`s
+    // because a `\n` would have to survive this file, a JSON frame and a shell.
     '--command',
     "{ echo 'const one = 1'; echo 'const two = TWO'; echo 'const three = 3'; echo 'const four = 4'; } > note.ts"
   ])
@@ -891,9 +667,7 @@ async function checkPatch(ask, worktreeId) {
     return
   }
 
-  // Opened by its own control, the way the window-level surfaces above are, and
-  // by the name rather than the class: the count is part of the name, so the
-  // match is on the start of it.
+  // By name, not class; the count is part of the name, so the match is on its start.
   const pressed = await waitFor(
     () =>
       ask(
@@ -925,10 +699,7 @@ async function checkPatch(ask, worktreeId) {
   )
   if (!selected) return
 
-  // The two things the panel could not say before: which hunk this is, and
-  // which line. A patch with no `@@` separator and no gutter is the monospace
-  // block this replaced, and it would satisfy any check written against the
-  // text of the diff.
+  // A patch with no `@@` and no gutter would satisfy any check on the diff's text.
   await waitFor(
     () => ask(`document.querySelector('.patch__hunkHead')?.textContent?.startsWith('@@') === true`),
     'the patch on screen has no hunk header to say where in the file it is'
@@ -938,24 +709,15 @@ async function checkPatch(ask, worktreeId) {
     'the patch on screen has no line number in its gutter'
   )
 
-  // And that the whole of it — the gutters, the hunk header, the syntax colour,
-  // the two words above it — is legible. This surface paints more colours than
-  // any other in the window, and every one of them is a palette token used on a
-  // ground it was not designed for until this says otherwise.
+  // This surface paints more palette tokens on foreign grounds than any other.
   await checkContrast(ask, 'the patch')
 
   await checkFilesTab(ask)
 }
 
 /**
- * That the files tab lists the checkout the runtime made, with the letter the
- * changes tab printed a moment ago beside the file the CLI changed — `M`,
- * because the fixture commits `note.ts` before the CLI edits it.
- *
- * The tree is read one directory per call through `worktree.files`, which is
- * the seam this proves: a real directory, listed by the runtime, drawn by the
- * window — and git's verdict on the file, read off the same list the patch
- * came from, on the same row.
+ * That the files tab lists the checkout with `M` beside `note.ts` — the fixture
+ * commits it before the CLI edits it. One directory per `worktree.files` call.
  */
 async function checkFilesTab(ask) {
   const pressed = await ask(
@@ -981,22 +743,14 @@ async function checkFilesTab(ask) {
     'the files tab never listed note.ts with the modified mark beside it'
   )
 
-  // Back to the changes tab, which is where the checks after this one expect
-  // the panel to be.
+  // Back to the changes tab, where the checks after this expect the panel.
   await ask(`document.querySelector('[role="tab"][aria-label^="Changes"]')?.click()`)
 }
 
 /**
- * Runs the built CLI against this launch's runtime, and comes back with what it
- * said.
- *
- * `ELECTRON_RUN_AS_NODE` because `process.execPath` here is Electron, and
- * `TEAMREE_RUNTIME_FILE` because the CLI would otherwise look in the real user
- * data directory — which is the developer's, and whose app is not this one.
- *
- * Spawned rather than `spawnSync`: the runtime the CLI is dialling is *this*
- * process, so blocking this event loop until the CLI returns is a wait for an
- * answer that cannot be written.
+ * Runs the built CLI against this launch's runtime. `ELECTRON_RUN_AS_NODE` since
+ * `process.execPath` is Electron; `TEAMREE_RUNTIME_FILE` so it does not dial the
+ * developer's app. Spawned, not `spawnSync`: the runtime it dials is this process.
  */
 function runCli(args) {
   return new Promise((resolve) => {
@@ -1021,31 +775,15 @@ function runCli(args) {
 }
 
 /**
- * That a URL an agent printed is a link, in a window that was really built.
- *
- * The unit tests state that the addon offers a link and that activating one
- * ends in `window.open`. Neither says the pane loaded the addon: a `loadAddon`
- * deleted from `TerminalView` takes nothing red with it, because every one of
- * those tests builds its own emulator. That is the gap this closes, and it can
- * only be closed here — the thing to observe is a decoration on an emulator
- * that a real pane created.
- *
- * Observed through the cursor, which is the one piece of xterm's link handling
- * that reaches the DOM whatever is drawing the cells: a link under the pointer
- * puts `xterm-cursor-pointer` on the screen element and takes it off again on
- * the way out. The underline is drawn by the renderer — into a canvas under
- * WebGL — and is not a thing a selector can find.
- *
- * So the pointer is swept along the row the URL landed on. Coarsely, in steps
- * of a few pixels, because the cell width is a function of the font this
- * machine resolved and guessing it would be a check that passes on the machine
- * it was written on. A sweep that finds nothing is retried by `waitFor`, which
- * is also what gives the shell time to print.
+ * That a URL an agent printed is a link on an emulator a real pane created — no
+ * unit test proves `TerminalView` loaded the addon. Observed through the cursor:
+ * a link under the pointer puts `xterm-cursor-pointer` on the screen element,
+ * while the underline is on a WebGL canvas. Swept in pixel steps because the
+ * cell width depends on the font this machine resolved.
  */
 async function checkPaneLinks(ask, call, terminalId) {
   const url = 'https://example.com/x'
-  // Printed rather than typed as a bare word, so the pane is not left with a
-  // command in its history that somebody's shell might later try to run.
+  // Printed, not typed bare, so nobody's shell later runs it from history.
   const printed = await call('terminal.write', { terminalId, data: `printf '%s\\n' ${url}\r` })
   if (printed.ok !== true) {
     failures.push(`could not print a URL into the pane: ${JSON.stringify(printed.error ?? printed)}`)
@@ -1080,30 +818,11 @@ async function checkPaneLinks(ask, call, terminalId) {
 }
 
 /**
- * What the window does with bytes it did not write.
- *
- * Every line of `docs/renderer-boundary.md` rests on four settings and one
- * refusal, and none of them can be read off the source with any confidence: a
- * `webPreferences` is a request, what the window ended up with is a fact, and
- * the two are only the same until somebody adds a second window or a default
- * changes under the app. So they are read back off the running window.
- *
- * Two of the three settings turn out to pin themselves, which was worth finding
- * out rather than assuming. Turning the sandbox on breaks the preload outright —
- * it is an ES module and a sandboxed preload is a classic script — and turning
- * `contextIsolation` off makes `contextBridge` refuse to run at all; this
- * harness already fails on a preload that will not load, so neither can be done
- * quietly. `nodeIntegration` is the one that can: with context isolation still
- * on, turning it on injects nothing the page can see, the bridge is still there,
- * the runtime still answers, and every check below this one but the first would
- * pass. That is the setting this reads back.
- *
- * The navigation check is the one that found something. A navigated-to document
- * keeps this window's preload — which is the whole runtime, the same catalogue
- * `docs/local-access.md` describes — and brings no policy of its own, because
- * the app's is a `<meta>` tag in the app's own HTML. That was watched happening
- * before `will-navigate` existed: the window went to a file written seconds
- * earlier and `window.teamree.runtime.call('status.get')` answered from it.
+ * What the window does with bytes it did not write: `docs/renderer-boundary.md`
+ * read back off the running window, since `webPreferences` is a request. The
+ * sandbox and `contextIsolation` pin themselves (the preload is an ES module,
+ * `contextBridge` refuses); `nodeIntegration` can turn on quietly, and a
+ * navigated-to document keeps the preload and brings no `<meta>` policy.
  */
 async function checkRendererBoundary(window, ask) {
   const prefs = window.webContents.getLastWebPreferences() ?? {}
@@ -1112,9 +831,7 @@ async function checkRendererBoundary(window, ask) {
     if (prefs[setting] !== want) failures.push(`webPreferences.${setting} is ${prefs[setting]}, expected ${want}`)
   }
 
-  // The consequence of the two above, rather than a restatement of them: with
-  // context isolation on and node integration off there is no Node in the page
-  // at all, which is what makes the bridge the only way out of it.
+  // No Node in the page is what makes the bridge the only way out of it.
   const nodeInThePage = JSON.parse(
     await ask('JSON.stringify([typeof require, typeof process, typeof module, typeof Buffer])')
   )
@@ -1122,10 +839,8 @@ async function checkRendererBoundary(window, ask) {
     failures.push(`the renderer can see Node: require/process/module/Buffer are ${nodeInThePage.join(', ')}`)
   }
 
-  // The policy in index.html, enforced rather than merely present. `script-src`
-  // is not set there, so this is `default-src 'self'` doing the work — which is
-  // the half of a meta policy worth checking, because a meta policy is also the
-  // half that a navigation leaves behind.
+  // `script-src` is not set in index.html, so this is `default-src 'self'` doing
+  // the work — the half of a meta policy a navigation leaves behind.
   provoking = true
   const refusal = await ask(
     'new Promise((resolve) => {' +
@@ -1141,8 +856,7 @@ async function checkRendererBoundary(window, ask) {
   if (refusal !== 'script-src-elem') failures.push(`an inline script in the renderer was answered with ${refusal}`)
   if (inlineRan) failures.push('an inline script ran in the renderer, so the content security policy is not enforced')
 
-  // And the refusal the document is mostly about. A page that could navigate
-  // could replace itself with anything and keep the bridge.
+  // A page that could navigate could replace itself and keep the bridge.
   const onTheApp = window.webContents.getURL()
   const elsewhere = pathToFileURL(join(root, 'package.json')).href
   await ask(`(() => { location.href = ${JSON.stringify(elsewhere)}; return "asked" })()`)
@@ -1155,21 +869,10 @@ async function checkRendererBoundary(window, ask) {
 }
 
 /**
- * Who on this machine can drive the runtime this launch started.
- *
- * The CLI socket serves the whole catalogue — create and remove worktrees,
- * spawn terminals, read any pane and type into it — so what stands in front of
- * it is two permissions and nothing else, and both of them are only ever real
- * in a running app. `docs/local-access.md` is the argument; this is the place
- * where it is checked against a Mac rather than against a unit test's tmpdir.
- *
- * The directory is the half this project does not set. Electron creates the
- * user data directory 0700 and every unit test that could assert it has a
- * `mkdtemp` directory, which is 0700 whatever anybody intended — so this is the
- * only check in the repository where a failure would mean something. If it ever
- * goes red, the enclosing directory is being made by something other than
- * Electron (every `mkdir` in this repository would leave 0755) and the local
- * model is wrong rather than merely undocumented.
+ * Who on this machine can drive the runtime: two permissions, only real in a
+ * running app. Electron creates the user data directory 0700 and every unit
+ * test's `mkdtemp` is 0700 regardless — so this is the only check where red
+ * would mean the local model in `docs/local-access.md` is wrong.
  */
 function checkLocalBoundary() {
   const mode = (path) => statSync(path).mode & 0o777
@@ -1183,17 +886,15 @@ function checkLocalBoundary() {
     failures.push('the runtime wrote no runtime.json, so the CLI has no way to find it')
     return
   }
-  // Followed rather than assumed: `resolveEndpoint` puts the socket beside this
-  // file, but falls back to a shared directory when the path would not fit in
-  // sun_path, and the point of the mode below is that case.
+  // `resolveEndpoint` falls back to a shared directory when the path would not
+  // fit in sun_path, and the mode below is about that case.
   const { endpoint } = JSON.parse(readFileSync(discoveryPath, 'utf8'))
   if (!existsSync(endpoint)) {
     failures.push(`runtime.json names ${endpoint}, which does not exist`)
     return
   }
   const endpointMode = mode(endpoint)
-  // ENDPOINT_MODE in src/main/runtime/socketServer.ts, spelled out because this
-  // file is plain JavaScript in an Electron main process and imports no TypeScript.
+  // ENDPOINT_MODE in src/main/runtime/socketServer.ts; this file imports no TypeScript.
   if (endpointMode !== 0o600) failures.push(`CLI socket is ${octal(endpointMode)}, expected 0600`)
   if (failures.length === 0) {
     console.log(`smoke: user data directory ${octal(dirMode)}, CLI socket ${octal(endpointMode)}`)
@@ -1201,10 +902,9 @@ function checkLocalBoundary() {
 }
 
 /**
- * The peer library, in this process. `run-smoke.mjs` compiled it and named the
- * directory on the command line; without one, say so rather than quietly
- * checking nothing, because a check that can skip itself is how the cipher
- * defect survived 1803 passing tests.
+ * The peer library in a genuine Electron main process, the process type the
+ * handshakes happen in. Without a bundle, fail rather than skip: a check that
+ * can skip itself is how the cipher defect survived 1803 passing tests.
  */
 async function checkPeerCrypto() {
   const bundle = readNamedArg(PEER_BUNDLE_FLAG)
@@ -1215,8 +915,7 @@ async function checkPeerCrypto() {
   const result = await runPeerCheck(bundle)
   for (const failure of result.failures) failures.push(`peer crypto: ${failure}`)
   if (result.nativeChaCha) {
-    // Not a failure — but it means this run proved less than it looks like it
-    // did, and the reader should know which runtime actually answered.
+    // Not a failure, but this run proved less than it looks like it did.
     console.log(`smoke: note — ${result.runtime} has a native chacha20-poly1305, which Electron 38 did not`)
   }
   if (result.failures.length === 0) {

@@ -1,14 +1,6 @@
-// A teammate's pane as the window holds it: opened from a sidebar row, focused
-// and closed by the same paths as your own panes, and never once written into a
-// layout the runtime owns.
-//
-// That last one is the load-bearing part. The runtime reconciles every stored
-// layout against the sessions it actually has, so a leaf naming a pane on
-// somebody else's laptop would be pruned at the next launch — and before that,
-// a `layout.set` carrying one would be this window telling the runtime it has a
-// terminal it has never heard of. So the focus for a watched pane lives here,
-// beside the panes themselves, and the assertions below are as much about what
-// is *not* sent as about what is.
+// A teammate's pane as the window holds it, never written into a layout the
+// runtime owns: the runtime prunes stored layouts against the sessions it has,
+// and a `layout.set` naming somebody else's pane would name a terminal it has never heard of.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -47,9 +39,6 @@ describe('opening and closing one', () => {
     expect(store().focusedWatchId).toBe(watchedPaneId('p1', 'priya:t7'))
   })
 
-  // The floating card could only ever be one because it was one card. Several
-  // teammates side by side is the thing a pane in the workspace can do and it
-  // could not.
   it('opens a second beside the first, in the order they were asked for', () => {
     store().toggleWatchedPane('p1', theirs('priya:t7'))
     store().toggleWatchedPane('p1', theirs('ana:t2'))
@@ -88,8 +77,7 @@ describe('what a watched pane has printed', () => {
     expect(store().watchTails[id]).toBe('running tests')
   })
 
-  // A chunk that was in flight when the pane closed would otherwise leave a
-  // tail behind for a pane nobody can see, quoted on a row that is not live.
+  // A chunk in flight when the pane closed would leave a tail quoted on a row that is not live.
   it('drops what arrives after the pane has gone, rather than keeping a tail for it', () => {
     store().toggleWatchedPane('p1', theirs('priya:t7'))
     const id = watchedPaneId('p1', 'priya:t7')
@@ -131,8 +119,7 @@ describe('the same keyboard as every other pane', () => {
     call.mockRestore()
   })
 
-  // The tree the new pane would go in is on their machine, and this window has
-  // no say in it.
+  // The tree the new pane would go in is on their machine.
   it('does not split a teammate’s pane', async () => {
     await openAWorktree()
     store().toggleWatchedPane('p1', theirs('priya:t7'))
@@ -142,9 +129,8 @@ describe('the same keyboard as every other pane', () => {
     call.mockRestore()
   })
 
-  // Find searches an emulator's scrollback, and a watched pane's is a picture
-  // of somebody else's screen with no search addon on it. Opening the field
-  // over a pane that is not the focused one would be worse than not opening it.
+  // A watched pane's scrollback is a picture of somebody else's screen with no
+  // search addon; opening the field over an unfocused pane is worse than not opening it.
   it('does not open the find bar over a teammate’s pane', async () => {
     await openAWorktree()
     store().toggleWatchedPane('p1', theirs('priya:t7'))

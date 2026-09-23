@@ -1,52 +1,6 @@
-// Setting teamwork up, as five steps instead of a document.
-//
-// Every piece of this already worked and every piece already had a method
-// behind it. What did not exist was one place that says where you are and what
-// the next thing is, so doing it meant following `docs/trying-teamwork.md` with
-// a terminal in the other hand. The steps here are that runbook's 3, 4 and 5.
-//
-// Every step here is a button now, and that is the change. It used to hand out
-// shell commands: `git remote add origin <url>` to run somewhere else, a deploy
-// to paste into Terminal.app, and a `git add && git commit && git push` block
-// to copy. An app that runs PTYs for a living and owns git should not be doing
-// that, and somebody said so.
-//
-// What that does *not* change is consent, so each of the three is built the
-// same way:
-//
-// **Nothing acts silently.** The origin field says what it will set, and for a
-// path says what the other Mac will have to match to meet this one; the
-// deploy runs in a pane in this window where it can be watched; the push names
-// the files, the message, the remote and the branch before it is pressed, and
-// then reports what git said in git's own words.
-//
-// **Nothing is enabled that cannot work.** A missing relay in this build, a
-// detached HEAD, a repository with no origin, a git with no identity: each is a
-// disabled control and one sentence naming the fix, rather than a button that
-// fails when it is pressed.
-//
-// **teamree still runs no relay.** It runs the deploy that puts one on the
-// team's own Cloudflare account, and it says so. There is no hosted relay and
-// this project deliberately has none.
-//
-// Three things arrived later, all from one report: that setting a team up
-// worked and was confusing, and that it appeared to hang on the push.
-//
-// **It asks which of the two jobs this is, before anything else.** The five
-// steps are the same five for both, and what they mean is not: one person
-// chooses a relay and invites, the other pulls one and answers. A panel that
-// could not tell them apart had to write every sentence for both at once, and
-// the reader had to work out which half was theirs.
-//
-// **Every step says what the other machine sees.** This is a two-sided
-// protocol whose ordinary failure is two people each waiting for the other, and
-// nothing in the window used to say what the far end was waiting for.
-//
-// **The push reports itself while it runs.** It streams git's own progress,
-// counts the wait, says so when git has gone quiet for long enough to mean
-// something, and has a Stop beside it — and afterwards a Try again, because
-// "somebody pushed first" is the ordinary outcome and it is fixed in two steps
-// rather than by starting over.
+// Setting teamwork up, as five steps instead of a document. Every step is a
+// button; nothing acts silently, nothing is enabled that cannot work, and
+// teamree still runs no relay.
 
 import { useEffect, useId, useRef, useState } from 'react'
 import {
@@ -109,12 +63,7 @@ import {
 } from './startTeamwork'
 
 export type TeamworkStepsProps = {
-  /**
-   * Absolute path to the primary checkout, for the commands in step 4 to start
-   * with. `.teamree` is there and a pane is never there, so the commands
-   * without it run in the wrong directory. Undefined only while the project is
-   * not in the store, and then the `cd` is left off rather than guessed at.
-   */
+  /** Primary checkout, so step 4's commands run where `.teamree` is; undefined leaves the `cd` off. */
   projectPath: string | undefined
   list: MemberList | undefined
   relay: RelaySetting | undefined
@@ -138,27 +87,16 @@ export type TeamworkStepsProps = {
   /** Points this checkout's `origin` at a URL. Validated before it is called. */
   onSetOrigin: (url: string) => void
 
-  /**
-   * The relay command running in a pane in this window, or undefined when none
-   * is. One slot, shared by all three verbs, which is why it carries its kind.
-   */
+  /** The relay command running in a pane in this window; one slot shared by all three verbs. */
   pane: RelayPaneState | undefined
   /**
-   * Runs one of the launcher's verbs in a pane. Never offered when the build
-   * carries no relay — `relay.deploy.command` is null then — nor when the
-   * reported command is not a shape the verb can be swapped on, nor while
-   * another pane is open: each is a disabled button and a sentence beside it.
+   * Runs a launcher verb in a pane. Disabled, with a sentence beside it, when the build carries no
+   * relay (`relay.deploy.command` is null), the command is not a swappable shape, or a pane is open.
    */
   onStartRelayPane: (kind: RelayPaneKind, argument?: string) => void
   /** Closes the pane. */
   onClosePane: () => void
-  /**
-   * Renders the pane itself.
-   *
-   * A slot rather than the component, because the component is xterm and this
-   * file is otherwise a pure function of its props — which is what lets the
-   * whole of what it says be rendered in a test without a canvas.
-   */
+  /** Renders the pane. A slot, because the component is xterm and this file must render in a test without a canvas. */
   renderRelayPane: (terminalId: string) => React.ReactNode
 
   /** What the commit-and-push button would do, is doing, and last did. */
@@ -172,22 +110,9 @@ export type TeamworkStepsProps = {
   onChoosePath: (path: TeamworkPath | null) => void
   /** The project's name, for the invitation to say what it is an invitation to. */
   projectName: string
-  /**
-   * Puts text on the clipboard.
-   *
-   * A prop rather than a call to `navigator.clipboard`, so this file stays a
-   * pure function of what it is given — which is what lets the whole of what it
-   * says be rendered in a test without a browser's permission model in the way.
-   */
+  /** Puts text on the clipboard. A prop, so the file renders in a test without the browser's permission model. */
   onCopy: (text: string) => void
-  /**
-   * Now, as the panel should measure it.
-   *
-   * Passed in rather than read, because everything it is used for is a
-   * duration somebody is watching — how long this push has been going, how long
-   * git has been silent — and a clock a test cannot set is a clock those
-   * sentences cannot be asserted against.
-   */
+  /** Now, as the panel measures it. Passed in so a test can assert the durations. */
   now?: number
 }
 
@@ -196,20 +121,15 @@ const MARK_GLYPHS: Record<StepMark, string> = { done: '✓', 'this-run': '✓', 
 
 const MARK_WORDS: Record<StepMark, string> = {
   done: 'done',
-  // A tick with a caveat rather than a cross: the override is what the panel's
-  // own tunnel option tells people to use, and it is genuinely not committed.
+  // A tick with a caveat: the override the tunnel option recommends is not committed.
   'this-run': 'done for this run',
   todo: 'not done yet',
-  // Never a tick and never a cross: teamree cannot see a commit, and both
-  // marks would be it claiming it can.
+  // Never a tick nor a cross: teamree cannot see a commit.
   unchecked: 'yours to do — teamree does not check this',
   blocked: 'blocked'
 }
 
-/**
- * The steps, separately from the dialog that wires them to the store, so the
- * whole of what this says in each state can be rendered in a test.
- */
+/** The steps, apart from the dialog that wires them to the store, so every state can be rendered in a test. */
 export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
   const flow = startTeamworkFlow({
     list: props.list,
@@ -224,9 +144,7 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
     status: props.status,
     publish: props.publish.result
   })
-  // A repository where this already works has no question left to ask, and
-  // putting the two paths in front of somebody who is connected would be the
-  // app asking what they came here to do after they have done it.
+  // Somebody already connected is not asked what they came here to do.
   const asking = props.path === null && outcome?.done !== true
 
   return (
@@ -273,16 +191,7 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
   )
 }
 
-/**
- * The question this panel used not to ask, and the whole reason the rest of it
- * can now be written in the second person.
- *
- * Both options are offered, both say what the other person does, and the one
- * the repository points at is marked and put first — marked, not taken. Reading
- * a relay file and a colleague's key is very good evidence about what is going
- * on here and still a guess about somebody's intent, and this panel does not
- * take those quietly.
- */
+/** Which of the two jobs this is. The one the repository points at is marked and put first — marked, not taken. */
 function PathChoice({
   list,
   relay,
@@ -317,13 +226,7 @@ function PathChoice({
   )
 }
 
-/**
- * The answer, kept on screen and changeable — because people pick the wrong one.
- *
- * The choice is quoted as the button said it and nothing is written around it.
- * The titles are imperatives, and an imperative lowercased into a sentence
- * ("You are start a team here.") reads as a predicate that was never one.
- */
+/** The answer, kept on screen and changeable. Quoted as the button said it: the titles are imperatives. */
 function ChosenPath({ path, onChange }: { path: TeamworkPath; onChange: () => void }): React.JSX.Element {
   const chosen = TEAMWORK_PATHS.find((option) => option.id === path) as (typeof TEAMWORK_PATHS)[number]
   return (
@@ -346,8 +249,7 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
       }
       return <IdentityBody list={props.list} />
     case 'key':
-      // No retry here even when the roster read failed: it is the same read as
-      // step 1's, and two buttons for one question are two answers to it.
+      // No retry here: it is the same read as step 1's.
       return step.mark === 'done' || props.list === undefined ? null : (
         <JoinBody
           list={props.list}
@@ -365,9 +267,7 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
         <RelayBody
           path={props.path}
           relay={props.relay}
-          // The options are a decision, and a relay already chosen is that
-          // decision taken: offering them again is a wall of choices about a
-          // thing that has been chosen.
+          // A relay already chosen is the decision taken; the options are not offered again.
           options={step.mark !== 'done' && step.mark !== 'this-run'}
           pending={props.relayPending}
           error={props.relayError}
@@ -398,13 +298,7 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
   }
 }
 
-/**
- * The way out of a read that threw.
- *
- * What failed is already the step's summary, so this is only the button. The
- * panel used to have neither: three steps said "Reading…" for the life of the
- * window and the whole of the explanation was in a toast that had gone.
- */
+/** The way out of a read that threw. What failed is already the step's summary, so this is only the button. */
 function ReadFailure({ onRetry }: { onRetry: () => void }): React.JSX.Element {
   return (
     <div className="step__body">
@@ -427,15 +321,7 @@ function IdentityBody({ list }: { list: MemberList }): React.JSX.Element {
   )
 }
 
-/**
- * What a key grants, and then the button that grants it. In that order, and
- * not collapsed behind anything.
- *
- * `docs/teamwork.md` says this outright — "this is remote code execution, by
- * design and by request" — and a setup flow that let somebody add a colleague
- * without reading it would be the one place that sentence never reached the
- * person it is about.
- */
+/** What a key grants, then the button that grants it: `docs/teamwork.md` calls this remote code execution by design. */
 function JoinBody({
   list,
   pending,
@@ -451,8 +337,7 @@ function JoinBody({
 }): React.JSX.Element {
   const [handle, setHandle] = useState('')
   const chosen = handle.trim() || list.self.handle
-  // The name the runtime will file this under, which is not what was typed:
-  // `Ada Lovelace` is written as `ada-lovelace.pub`.
+  // The runtime files this under a different name: `Ada Lovelace` becomes `ada-lovelace.pub`.
   const file = memberFilePreview(list, handle)
 
   const submit = (event: React.FormEvent): void => {
@@ -471,8 +356,7 @@ function JoinBody({
             value={handle}
             onChange={(event) => {
               setHandle(event.target.value)
-              // The refusal named this box. Answering it is the keystroke that
-              // makes it stale, so it goes then rather than on the next submit.
+              // The refusal named this box; answering it is what makes it stale.
               onClearError()
             }}
             placeholder={list.self.handle ?? 'pick a name'}
@@ -482,9 +366,7 @@ function JoinBody({
           />
           <span className="field__hint">{hintFor(list, handle, file)}</span>
         </label>
-        {/* Under the field, never in a corner: every refusal the runtime raises
-            here ends in "choose another handle", and that is an instruction
-            about this box. */}
+        {/* Under the field: every refusal here ends in "choose another handle". */}
         {error === null ? null : <p className="field__error">{error}</p>}
         <button type="submit" className="button button--primary" disabled={pending || chosen === null}>
           {pending ? 'Writing…' : ADD_KEY_BUTTON}
@@ -503,31 +385,16 @@ function hintFor(list: MemberList, typed: string, file: string | null): string {
 }
 
 /**
- * The remote everybody shares, as a field and a button.
- *
- * This was `git remote add origin <url>` printed in a panel, in an app that
- * owns git and knows exactly which directory the command belongs in. The
- * verdict is reached while somebody is still typing, because the answer here is
- * rarely a typo: it is a path, and a path is an identity only on a condition
- * nothing can check afterwards. So a path that will work is accepted and
- * immediately told what has to be true of the other Mac, in the same breath as
- * the button that sets it — this is the last moment at which anybody is looking
- * at the string that matters.
+ * The remote everybody shares, as a field and a button. A path origin is accepted and told what
+ * the other Mac must match while the string is still on screen: nothing can check that afterwards.
  */
 function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: (url: string) => void }) {
   const [draft, setDraft] = useState('')
   const [why, setWhy] = useState(false)
-  // What the refusal is attached to, rather than a caption under the field. The
-  // field said "Runs git remote add origin in this checkout." under its own
-  // label, which is what pressing Add origin does and what this component's
-  // docblock above already says; an example URL in the box is the whole of what
-  // a developer needs from a field called Origin. The id stays, aimed at the
-  // refusal, so a screen reader reads why a URL was rejected rather than
-  // reading a description of the button on every focus.
+  // Aimed at the refusal, so a screen reader hears why a URL was rejected rather than a button description on every focus.
   const hint = useId()
   const check = checkOriginDraft(draft)
-  // What the field itself refused beats what git last said: the reader is
-  // typing, and the older message is about a URL that is no longer in the box.
+  // What the field refused beats what git last said: the older message is about a URL no longer in the box.
   const refusal = check.state === 'bad' ? check.reason : draft.trim() === '' ? origin.error : null
 
   const submit = (event: React.FormEvent): void => {
@@ -555,9 +422,7 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
           {refusal}
         </p>
       )}
-      {/* The condition, in front of the person who is about to accept it, on
-          the one screen where the exact string is still visible. It is a note
-          rather than a refusal: this origin works, and works on terms. */}
+      {/* A note, not a refusal: this origin works, on terms. */}
       {check.state === 'ok' && check.note !== null ? <p className="field__note">{check.note}</p> : null}
       <button type="submit" className="button button--primary" disabled={origin.pending || check.state !== 'ok'}>
         {origin.pending ? 'Adding…' : 'Add origin'}
@@ -572,10 +437,6 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
           <span className="disclosure__caret" aria-hidden="true">
             {why ? '▾' : '▸'}
           </span>
-          {/* A noun, because that is what a control that opens a list of
-              conditions is called. What is behind it is not something the
-              buttons imply — normalisation, and the one condition a path origin
-              carries — so the disclosure stays and only its name changes. */}
           Requirements
         </button>
         {why ? <p className="disclosure__body">{ORIGIN_DETAIL}</p> : null}
@@ -584,16 +445,7 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
   )
 }
 
-/**
- * Why one of the launcher's buttons cannot be pressed, or null when it can.
- *
- * Three reasons, in the order they stop being true of a machine: this build
- * carries no relay at all and the runtime says so in its own words; the command
- * it does report is not a shape another verb can be swapped onto; a pane is
- * already open and there is one slot. Every one of them is a sentence beside a
- * grey button rather than a button that fails when it is pressed, which is the
- * rule this whole panel is built on.
- */
+/** Why a launcher button cannot be pressed, or null: no relay in this build, an unswappable command, or a pane already open. */
 function launcherBlocked(relay: RelaySetting, derived: string | null, pane: RelayPaneState | undefined): string | null {
   if (relay.deploy.command === null) return relay.deploy.reason
   if (derived === null) return RELAY_LAUNCHER_UNKNOWN
@@ -602,20 +454,8 @@ function launcherBlocked(relay: RelaySetting, derived: string | null, pane: Rela
 }
 
 /**
- * The relay: two buttons that produce one, the field that writes one down, the
- * check that says whether any of it can be reached — and, folded away, every
- * other way to get one.
- *
- * The order is the change. The deploy used to be several paragraphs of
- * Cloudflare, Durable Object pricing and what `cd relay` means before anything
- * pressable; now it is a button first, with the reasoning behind a disclosure
- * and the rest in `relay/README.md`.
- *
- * Running one yourself sits beside the deploy with equal weight rather than
- * inside "other ways", because the launcher ships it: it is one command and no
- * account, and for a team on one network it is the better answer. It is not the
- * better answer for two laptops behind two routers, and that is printed beside
- * its button rather than left to be discovered.
+ * The relay: deploy and serve buttons, the field that writes one down, the check, and every other
+ * way folded away. Serve is wrong for two laptops behind two routers, and says so beside its button.
  */
 function RelayBody({
   path,
@@ -651,16 +491,11 @@ function RelayBody({
 
   return (
     <div className="step__body">
-      {/* The one warning a joiner needs and a starter does not. Somebody who
-          was invited and finds no relay here is a step ahead of whoever
-          invited them, and the wrong answer — standing a second relay up — is
-          also the one this page is otherwise encouraging. */}
+      {/* A joiner who finds no relay is ahead of whoever invited them; standing a second one up is the wrong answer. */}
       {path === 'join' && relay.onDisk.url === null ? (
         <p className="relay-waiting">Nobody has pushed {relay.file} yet. Pull in a moment.</p>
       ) : null}
-      {/* The override that is set, unreadable, and silently costing this
-          project its relay. Said first, because every other sentence on this
-          step is about a relay the app is not going to dial. */}
+      {/* An unreadable override, said first: every other sentence here is about a relay the app will not dial. */}
       {brokenRelayOverride(relay) === null ? null : (
         <p className="relay-broken-override">{brokenRelayOverride(relay)}</p>
       )}
@@ -672,23 +507,13 @@ function RelayBody({
               {relay.source === 'environment' ? `from ${relay.override.name}` : `from ${relay.file}`}
             </span>
           </p>
-          {/* The check, beside the URL this project is actually going to dial.
-              This is the moment it answers a question somebody has: a joiner
-              who pulled a relay and a starter who just wrote one both want to
-              know whether the address works, and neither of them has a way to
-              ask. It is offered beside the paste field too, so a URL can be
-              tried before it is committed as well as after — the two are the
-              same control on two different strings. */}
+          {/* The same control as the one beside the paste field, on the URL this project will actually dial. */}
           <RelayCheck url={relay.url} relay={relay} pane={pane} onStart={onStartRelayPane} />
         </>
       )}
       {options ? (
         <>
-          {/* Two ways, side by side and equally weighted. Neither is folded
-              away, because they answer different questions — one puts the relay
-              somewhere both of you can always reach, the other puts it on this
-              Mac in a minute with no account — and a reader who cannot see both
-              cannot choose between them. */}
+          {/* Side by side and equally weighted: they answer different questions. */}
           <RelayDeploy relay={relay} pane={pane} onStart={onStartRelayPane} />
           <RelayServe relay={relay} pane={pane} onStart={onStartRelayPane} />
         </>
@@ -720,9 +545,7 @@ function RelayBody({
           <button type="submit" className="button" disabled={pending || check.state !== 'ok'}>
             {pending ? 'Writing…' : 'Write relay file'}
           </button>
-          {/* Checking before it is written down, which is the cheaper order:
-              an address that answers nothing is worth finding out about before
-              it is a commit in everybody's repository. */}
+          {/* Checking before it is written: cheaper than a dead address in everybody's repository. */}
           <RelayCheck
             url={check.state === 'ok' ? check.url : null}
             label={RELAY_CHECK.draftButton}
@@ -739,18 +562,8 @@ function RelayBody({
 }
 
 /**
- * The deploy, as a button rather than a command to take elsewhere.
- *
- * Three things it will not do. It will not pretend to be enabled when this
- * build carries no relay — the runtime says so and the sentence is the
- * runtime's. It will not hide the command, because somebody will always want to
- * run it themselves and that is a legitimate answer. And it will not write the
- * URL the deploy printed into the repository on its own: the URL is offered on
- * a button, because a relay is a team-wide fact and a fact is somebody's to
- * assert.
- *
- * The pane it runs in is rendered by `RelayPaneBlock` below rather than here,
- * because there is one pane and three things that can be in it.
+ * The deploy as a button. Never enabled without a relay in the build, never hides the command, and
+ * never writes the printed URL on its own: a relay is a team-wide fact. The pane is `RelayPaneBlock`.
  */
 function RelayDeploy({
   relay,
@@ -772,8 +585,7 @@ function RelayDeploy({
       >
         {RELAY_DEPLOY.button}
       </button>
-      {/* Why it cannot be pressed, always beside it: a control that is grey for
-          a reason nobody can read is the same as one that does nothing. */}
+      {/* Why it cannot be pressed, always beside it. */}
       {blocked === null ? null : <p className="relay-deploy__blocked">{blocked}</p>}
       <p className="relay-deploy__note">{pane?.kind === 'deploy' ? RELAY_DEPLOY.watching : RELAY_DEPLOY.browser}</p>
       {relay.deploy.command === null ? null : (
@@ -787,16 +599,8 @@ function RelayDeploy({
 }
 
 /**
- * The relay somebody runs on their own machine, with the sentence that says who
- * it will not work for standing between the description and the button.
- *
- * That order is deliberate and it is the whole reason this block is not just a
- * second copy of the deploy. A relay on this Mac is the fastest way to a working
- * team and a dead end for two people on two home networks, and which of those it
- * is depends on a fact about somebody's network that teamree cannot see. So the
- * limit is not a footnote, not a disclosure and not in a README: it is on screen
- * above the button, at the only moment where reading it changes what somebody
- * does.
+ * A relay on this Mac: fastest for one network, a dead end for two home networks, and teamree cannot
+ * see which. The limit sits above the button, the one moment where reading it changes what somebody does.
  */
 function RelayServe({
   relay,
@@ -811,9 +615,7 @@ function RelayServe({
   const blocked = launcherBlocked(relay, command, pane)
   return (
     <div className="relay-deploy relay-deploy--serve">
-      {/* Above the button, never beside the outcome: a limitation somebody
-          meets after the relay is running is a wasted evening, and this one is
-          the exact thing a relay exists to solve. */}
+      {/* Above the button: a limitation met after the relay is running is a wasted evening. */}
       <p className="relay-deploy__limit">{RELAY_SERVE.limit}</p>
       <button type="button" className="button" disabled={blocked !== null} onClick={() => onStart('serve')}>
         {RELAY_SERVE.button}
@@ -831,18 +633,8 @@ function RelayServe({
 }
 
 /**
- * Dialling a relay and saying what answered.
- *
- * Offered in the two places a person has a URL and a doubt: beside the one this
- * project is configured with, and beside the one that has just been typed and
- * not yet written down. They are the same control on two different strings, and
- * neither moment is the wrong one — the first is the joiner who pulled a relay
- * and cannot tell whether it is alive, the second is the person about to commit
- * an address to everybody's repository.
- *
- * What a pass means is beside it rather than under it, because the check runs
- * here: it is a fact about this Mac's network and no other, and a green answer
- * read as "the team can meet" would end the investigation at the wrong machine.
+ * Dials a relay and says what answered. Offered beside the configured URL and beside the typed one.
+ * A pass is a fact about this Mac's network only, and the note beside the button says so.
  */
 function RelayCheck({
   url,
@@ -853,10 +645,7 @@ function RelayCheck({
 }: {
   /** The URL to dial, or null when there is nothing typed or configured yet. */
   url: string | null
-  /**
-   * What this one is called. The two can be on screen together and they dial
-   * different addresses, so they are not allowed to share a name.
-   */
+  /** Its name. Two can be on screen dialling different addresses, so they may not share one. */
   label?: string
   relay: RelaySetting
   pane: RelayPaneState | undefined
@@ -864,8 +653,7 @@ function RelayCheck({
 }): React.JSX.Element {
   const command =
     relay.deploy.command === null || url === null ? null : relayLauncherCommand(relay.deploy.command, 'check', url)
-  // Nothing to dial outranks everything else it could say: the fix is in the
-  // field above rather than in the build or in the pane.
+  // Nothing to dial outranks every other reason: the fix is in the field above.
   const blocked = url === null ? RELAY_CHECK.nothing : launcherBlocked(relay, command, pane)
   return (
     <span className="relay-check">
@@ -887,36 +675,9 @@ function RelayCheck({
 }
 
 /**
- * The one pane, whatever is in it.
- *
- * One slot per project, as it has always been: a second deploy of the same
- * relay is never what somebody meant, and replacing a running pane would throw
- * away the output they are in the middle of reading. So it says which of the
- * three it is holding, and the buttons that would start another are grey with
- * that same fact beside them.
- *
- * A URL is offered out of it only for the two commands that produce one, and
- * only while it is true. Three conditions, and the panel checks all three
- * rather than trusting anything upstream to have done it:
- *
- * The verb. A check echoes the URL it was handed, and offering somebody their
- * own input back as a discovery would be the panel pretending to have found
- * something. The store will not scrape one out of a check pane — and a check's
- * scrollback literally contains `teamree-relay: dialling ws://…`, so the day
- * that rule is loosened by one character this block would offer a URL the check
- * had just proved dead. It is cheap to also refuse it here, and this is the
- * side a reader looks at.
- *
- * The outcome. A relay you run here is a promise about a process on this Mac,
- * and a `serve` that has exited is a closed port: the address it printed is
- * still in the scrollback and answers nothing. Offering it to be written into
- * everybody's repository is how a team commits an address that worked for one
- * afternoon. A deploy is the opposite — the pane exiting is how it succeeds,
- * and the Worker outlives it.
- *
- * And having anything at all. A pane that has finished and printed no URL used
- * to render nothing between its title and its terminal, which reads exactly
- * like a pane that is still working.
+ * The one pane, whatever is in it. A URL is offered out of it for a deploy, and for a serve only while
+ * it runs: an exited serve is a closed port, and a check echoes its own input (its scrollback contains
+ * `teamree-relay: dialling ws://…`, so this refuses it even though the store never scrapes a check).
  */
 function RelayPaneBlock({
   pane,
@@ -933,10 +694,8 @@ function RelayPaneBlock({
 }): React.JSX.Element {
   const live = pane.kind !== 'check' && (pane.kind !== 'serve' || pane.running)
   const url = live ? pane.url : null
-  // Everything else this Mac printed, for the person who knows which of their
-  // addresses their teammates can actually reach. Only for a relay run here: a
-  // deploy has one endpoint and a second URL in that pane is a second deploy,
-  // which the offer above already takes as the one that was meant.
+  // Every other address this Mac printed, for the person who knows which one teammates can reach.
+  // Serve only: a second URL in a deploy pane is a second deploy.
   const alternatives = pane.kind === 'serve' && url !== null ? pane.urls.filter((other) => other !== url) : []
   return (
     <div className="relay-deploy__pane">
@@ -974,10 +733,7 @@ function RelayPaneBlock({
               </ul>
             </div>
           )}
-          {/* What committing *this* address means, beside the button that
-              commits it. Not a refusal: a private address is the right answer
-              for a team that is all on that network, and the wrong one for a
-              team that is not, and only the person reading this knows which. */}
+          {/* Not a refusal: a private address is right for a team all on that network, and only the reader knows. */}
           {pane.kind === 'serve' ? <p className="relay-deploy__limit">{RELAY_SERVE.committing}</p> : null}
         </>
       )}
@@ -995,12 +751,8 @@ function RelayPaneBlock({
 }
 
 /**
- * Why the typed address was refused, and the corrected one to use instead.
- *
- * Offered as a button rather than substituted quietly: `https://host` is what a
- * deploy prints and the relay is that host with a path on it, which is a guess
- * that is right often enough to be trusted and wrong on the one deployment
- * whose relay is not at the root.
+ * Why the typed address was refused, and the corrected one as a button rather than substituted:
+ * host-plus-path is a guess, and wrong on the one deployment whose relay is not at the root.
  */
 function RelayRefusal({
   check,
@@ -1023,18 +775,8 @@ function RelayRefusal({
 }
 
 /**
- * Every other way to get a relay, behind one button.
- *
- * All of them, now, and none of them in front of anybody by default. The
- * recommendation stopped being an item in a list the moment it became a button,
- * and what is left is genuinely for a team that already has the network or the
- * server — which is a question somebody asks rather than a wall they should
- * have to read past.
- *
- * A button with `aria-expanded` rather than a `details` element: what is inside
- * is not rendered until it is asked for, so it is absent from the page rather
- * than merely hidden, and nothing can read out or tab into an option nobody
- * opened.
+ * Every other way to get a relay, behind one button. `aria-expanded` rather than `details`: the
+ * contents are not rendered until asked for, so nothing can read out or tab into an unopened option.
  */
 function RelayOptions(): React.JSX.Element {
   const [showMore, setShowMore] = useState(false)
@@ -1096,22 +838,12 @@ function RelayOptionCard({ option }: { option: RelayOption }): React.JSX.Element
 }
 
 /**
- * What the environment said, when it said anything.
- *
- * An override that is set is a live fact about what this run is dialling and
- * outranks the file, so it is on screen. The paragraph for the *absence* of one
- * is the answer to "I set TEAMREE_RELAY_URL and nothing happened" — a real
- * question on macOS, where an app opened from Finder inherits no shell
- * environment — and an answer is a thing to have available, not a thing to put
- * in front of everybody who ever opens this panel.
+ * What the environment said. The disclosure for the absence of an override answers "I set
+ * TEAMREE_RELAY_URL and nothing happened": on macOS an app opened from Finder inherits no shell environment.
  */
 function Override({ relay }: { relay: RelaySetting }): React.JSX.Element | null {
   const [open, setOpen] = useState(false)
-  // An override that cannot be read is already said in full at the top of the
-  // step, and what is below is written for an override that is *winning*. This
-  // one is not winning, it is breaking, and two paragraphs about one variable
-  // that disagree about what it is doing is worse than one — so this stands
-  // down and leaves the sentence that names the fix on its own.
+  // An unreadable override is already said in full at the top of the step; what is below is written for one that is winning.
   if (brokenRelayOverride(relay) !== null) return null
   if (relay.override.value === null) {
     return (
@@ -1145,14 +877,8 @@ function Override({ relay }: { relay: RelaySetting }): React.JSX.Element | null 
 }
 
 /**
- * The commit that makes both files the team's, said in full before it is made.
- *
- * This is the outward-facing one — it writes history into somebody's repository
- * and sends it to a remote they share — so the plan is on screen above the
- * button rather than behind a confirmation nobody reads: the files, the message,
- * the remote, the branch, and whether this push is what sets the upstream. The
- * runtime answers all five, because the branch and the upstream are git's facts
- * and a panel that guessed them would be describing a different push.
+ * The commit that makes both files the team's, said in full first: files, message, remote, branch,
+ * upstream. The runtime answers all five, because branch and upstream are git's facts.
  */
 function PushBody({
   list,
@@ -1173,10 +899,8 @@ function PushBody({
 }): React.JSX.Element | null {
   const local = pushPlan(list, relay, projectPath)
   const { plan } = publish
-  // The files come from what is on disk rather than from the plan, and the plan
-  // supplies what only git knows. The two are read at different moments — the
-  // roster is watched, the plan is asked for — and the one that can be a moment
-  // behind must not be what decides whether this step has anything in it.
+  // Files come from disk and the plan supplies what only git knows; the one that can be a moment
+  // behind must not decide whether this step has anything in it.
   const files = local?.files ?? plan?.files ?? []
   if (files.length === 0) return null
   const activity = publishActivity(publish.progress, now)
@@ -1199,10 +923,7 @@ function PushBody({
         >
           {publish.pending ? 'Pushing…' : failed === null ? PUBLISH_BUTTON : RETRY_PUBLISH_BUTTON}
         </button>
-        {/* Beside the button and not behind a menu. A push can wait ten minutes
-            on something nobody can answer, and a way out of that is not a
-            refinement — it is the difference between a slow step and a dead
-            window. */}
+        {/* Beside the button: a push can wait ten minutes on something nobody can answer. */}
         {publish.pending ? (
           <button type="button" className="button" onClick={onCancelPublish} disabled={activity?.cancelling === true}>
             {activity?.cancelling === true ? 'Stopping…' : CANCEL_PUBLISH_BUTTON}
@@ -1226,14 +947,8 @@ function PushBody({
 }
 
 /**
- * The push while it is happening: what it is doing, for how long, and what git
- * last said.
- *
- * `aria-live` because this is the one part of the panel that changes on its
- * own, and somebody who cannot see the lines move is exactly the reader for
- * whom "it appears stuck" was worst. Polite rather than assertive: it is a
- * progress report, not an alarm — except for the silence, which is its own
- * paragraph and is genuinely worth interrupting for.
+ * The push while it runs. `aria-live="polite"`: the one part of the panel that changes on its own,
+ * and "it appears stuck" was worst for the reader who cannot see the lines move.
  */
 function PublishProgress({ activity }: { activity: ReturnType<typeof publishActivity> }): React.JSX.Element | null {
   if (activity === null) return null
@@ -1302,14 +1017,7 @@ function PublishPlan({ plan, files }: { plan: TeamworkPublishPlan; files: string
   )
 }
 
-/**
- * What actually happened, in both halves.
- *
- * A commit that landed and a push that was refused is the ordinary way this
- * goes wrong — a teammate pushed first — and git's own words are printed whole
- * rather than paraphrased, because the paraphrase is not what anybody can
- * search for and the advice under it is teamree's opinion rather than git's.
- */
+/** What happened, in both halves. Git's own words are printed whole: the paraphrase is not what anybody can search for. */
 function PublishResult({ result, took }: { result: TeamworkPublish; took: number | null }): React.JSX.Element {
   return (
     <div className="push__result">
@@ -1317,9 +1025,7 @@ function PublishResult({ result, took }: { result: TeamworkPublish; took: number
         {result.commit === null
           ? 'Nothing new to commit.'
           : `Committed ${result.commit.shortSha} — “${result.commit.message}”.`}
-        {/* Reported after the fact as well as during, because how long it took
-            is the answer to "was that normal?" — which is the question a person
-            who has just sat through a slow one actually has. */}
+        {/* How long it took answers "was that normal?". */}
         {took === null ? '' : ` Took ${formatElapsed(took)}.`}
       </p>
       {result.push.ok ? (
@@ -1331,9 +1037,7 @@ function PublishResult({ result, took }: { result: TeamworkPublish; took: number
         </p>
       ) : (
         <>
-          {/* Only when it adds something. For a refusal teamree has no opinion
-              about, the advice is git's own first line and printing it twice
-              makes the page look like it is repeating itself. */}
+          {/* Only when it adds something: for a refusal teamree has no opinion about, the advice is git's first line. */}
           {result.push.advice === firstLineOf(result.push.error) ? null : (
             <p className="push__error">{result.push.advice}</p>
           )}
@@ -1355,21 +1059,15 @@ function firstLineOf(text: string): string {
 }
 
 /**
- * Where this ended up, at the bottom, as four separate verdicts.
- *
- * A page of steps answers "what do I do next" and never answers "did that
- * work", because the answer to the second one is usually "partly": the commit
- * landed and the push did not, or everything here is done and the person at the
- * other end has not opened the app. One overall tick would have to pick one of
- * those to be wrong about. Four facts do not.
+ * Where this ended up, as four separate verdicts: "did that work" is usually "partly", and one
+ * overall tick would have to be wrong about something.
  */
 function Outcome({
   outcome,
   ...props
 }: TeamworkStepsProps & { outcome: SetupOutcome | null }): React.JSX.Element | null {
   if (outcome === null) return null
-  // Nothing to name the repository with until the origin has been read, and the
-  // invitation says so rather than filling the gap in.
+  // Nothing to name the repository with until the origin has been read.
   const origin = teamworkFacts(props.status)?.origin
   const invite = inviteText({
     originUrl: origin?.ok === true ? origin.url : null,
@@ -1401,23 +1099,12 @@ function Outcome({
 }
 
 /**
- * The thing to send somebody, written out and copyable in one press.
- *
- * There is no invitation in this protocol — nothing is sent, and push access is
- * the whole of membership — which is precisely why the person doing this has to
- * write one: they have to explain a system with no invitations to somebody who
- * is waiting for one. Leaving them to compose that from a five-step page is how
- * the second half of a team ends up with instructions that miss the push.
- *
- * It is shown rather than hidden behind the button, because it goes to a
- * colleague under this person's name and nobody should send words they have not
- * read.
+ * The thing to send somebody, copyable in one press. Shown rather than hidden behind the button:
+ * it goes out under this person's name, and nobody should send words they have not read.
  */
 function Invite({ invite, onCopy }: { invite: string; onCopy: (text: string) => void }): React.JSX.Element {
   const [copied, setCopied] = useState(false)
-  // A confirmation that outstays the act is a confirmation about the last thing
-  // rather than this one, and the timer is cleared on the way out so a panel
-  // that is closed mid-flash cannot set state on a component that has gone.
+  // Cleared on the way out, so a panel closed mid-flash cannot set state on a component that has gone.
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(timer.current), [])
   return (
@@ -1451,9 +1138,7 @@ function ConnectedBody({
   status: TeamworkStatus | undefined
 }): React.JSX.Element | null {
   if (list === undefined && status === undefined) return null
-  // No link rows while teamwork has not read this project: the links are made
-  // out of the roster and the relay, and neither has been read. The step's own
-  // summary says so in words; an empty list under it would say nothing.
+  // No link rows until teamwork has read this project; the step's summary says so in words.
   const links = teamworkFacts(status)?.links ?? []
   return (
     <div className="step__body">
@@ -1475,14 +1160,7 @@ function ConnectedBody({
   )
 }
 
-/**
- * One teammate, and how this machine is getting on with reaching them.
- *
- * The detail is the runtime's own and is the point of the row: a link that has
- * waited across two hourly rendezvous rotations says so, and names the two
- * things checkable from this side — that both machines agree about the time,
- * and that `.teamree/relay` names the same relay on both.
- */
+/** One teammate and how this machine is getting on with reaching them; the detail is the runtime's own. */
 function LinkRow({ link }: { link: PeerLink }): React.JSX.Element {
   return (
     <li className={`link link--${link.phase}`}>
@@ -1531,11 +1209,7 @@ function MemberRow({ member }: { member: Member }): React.JSX.Element {
   )
 }
 
-/**
- * Files that are in the directory and are not members. Named rather than
- * counted: a skipped file is somebody's key that is not working, and the only
- * useful version of that message is the one with the path in it.
- */
+/** Files in the directory that are not members, named rather than counted: the useful version has the path in it. */
 function Problems({ list }: { list: MemberList }): React.JSX.Element | null {
   if (list.problems.length === 0) return null
   return (
@@ -1554,14 +1228,7 @@ function Problems({ list }: { list: MemberList }): React.JSX.Element | null {
   )
 }
 
-/**
- * Whether this list will stay true on its own.
- *
- * Said only when it will not. A roster that follows the file needs no
- * reassurance; one that nothing is watching is a list that was true when it was
- * read, and somebody about to believe it deserves to know which of the two they
- * are looking at.
- */
+/** Said only when the list will not stay true on its own: nothing is watching the file. */
 function Freshness({ list }: { list: MemberList }): React.JSX.Element | null {
   if (list.watched) return null
   return (

@@ -1,9 +1,5 @@
-// What the window keeps between two answers from `system.resources`.
-//
-// The runtime answers one instant. The sparkline wants the last thirty, per
-// row, and the popover wants the panes under the worktrees the sidebar names
-// — both of which are this window's to hold, because the runtime has neither
-// a history nor a name for anything.
+// What the window keeps between two `system.resources` answers: per-row history for the sparkline and
+// the sidebar's names; the runtime has neither.
 
 import type { PaneResources, SystemResources, Terminal, Worktree } from '@shared/entities'
 import { paneNames } from '../sidebar/agentRows'
@@ -17,10 +13,7 @@ export const APP_ROW = 'app'
 /** Readings per row, oldest first. */
 export type ResourceHistory = Readonly<Record<string, readonly number[]>>
 
-/**
- * The history with one more sample on every row the sample has, and without
- * any row it does not: a pane that closed takes its line with it.
- */
+/** The history plus one sample per row present; a closed pane's row is dropped. */
 export function recordSample(history: ResourceHistory, sample: SystemResources): ResourceHistory {
   const next: Record<string, readonly number[]> = {}
   const push = (key: string, cpu: number): void => {
@@ -52,13 +45,7 @@ export type ResourceRow = { pane: PaneResources; name: string; terminal: Termina
 
 export type ResourceGroup = { worktreeId: string; name: string; panes: ResourceRow[] }
 
-/**
- * The panes under their worktrees, in the sidebar's order and under the
- * sidebar's names — `paneNames`, so two `claude` panes are told apart here
- * the way they are told apart there. A worktree the window cannot name is
- * still a group, under its id: the honest answer, and better than a pane
- * dropped from a list of what the machine is doing.
- */
+/** The panes under their worktrees in sidebar order and names; an unnamed worktree is grouped by id. */
 export function groupByWorktree(
   sample: SystemResources,
   worktrees: readonly Worktree[],

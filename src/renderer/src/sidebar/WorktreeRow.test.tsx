@@ -1,17 +1,7 @@
 /** @vitest-environment jsdom */
 
-// One worktree on the sidebar, in each of the three shapes it has.
-//
-// A worktree is a background job, and the row is the only place its progress
-// and its failures are ever reported — submitting the composer closes it and
-// says nothing more. So the states this file is mostly about are the two a
-// happy path never reaches: a checkout still being made, where the row must not
-// pretend it can be opened, and one that failed, where the reason has to be on
-// the row in words with the way out beside it.
-//
-// The other half is attention. `docs/teamwork.md` argues a project where
-// anyone can type is survivable because nothing can be done invisibly, and this
-// row is where a pane somebody else is reading or typing into says so.
+// One worktree on the sidebar, in each of its shapes. The row is the only place a checkout's
+// progress and failures are reported, and where a pane somebody else is reading or typing into says so.
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -129,9 +119,7 @@ beforeEach(() => {
   for (const handler of Object.values(handlers)) handler.mockReset()
 })
 
-// The fourth shape, found in a profile rather than designed: the checkout was
-// deleted from disk with git none the wiser, and the row went on saying
-// `ready` until starting an agent in it failed with a path.
+// The fourth shape: the checkout deleted from disk with git none the wiser, and the row saying `ready`.
 describe('a worktree whose directory is gone', () => {
   it('says so, dimmed, and cannot be opened', () => {
     mount({ worktree: worktree({ missing: true }) })
@@ -178,8 +166,7 @@ describe('a worktree still being made', () => {
     expect(screen.queryByLabelText(/git status/)).toBeNull()
   })
 
-  // The row is the only place a failed creation is ever reported, so it can
-  // still be removed — from the menu, which a row in any state has.
+  // The row is the only place a failed creation is reported, so it can always be removed.
   it('can always be removed, whatever state it is in', () => {
     mount({ worktree: worktree({ state: 'creating' }) })
     fireEvent.contextMenu(row())
@@ -198,8 +185,7 @@ describe('a worktree that failed to be made', () => {
     expect(handlers.onRetry).toHaveBeenCalledOnce()
   })
 
-  // A failure with no message is still a failure, and a blank row would read as
-  // a rendering fault rather than as a job that did not finish.
+  // A blank row would read as a rendering fault rather than a job that did not finish.
   it('says something even when nothing said why', () => {
     mount({ worktree: worktree({ state: 'failed' }) })
     expect(screen.getByText('Creation failed')).toBeTruthy()
@@ -237,8 +223,7 @@ describe('a worktree that is ready', () => {
     expect(chips.textContent).toContain('3')
   })
 
-  // "Could not read" and "nothing wrong" look the same at a glance and mean
-  // opposite things, so the row has to say which it is — and how old.
+  // "Could not read" and "nothing wrong" look the same at a glance and mean opposite things.
   it('admits when the numbers on it could not be confirmed', () => {
     // The chips read the wall clock themselves, so this one is stated against it.
     useWorkspaceStore.setState({ unreadableSince: { w1: Date.now() - 120_000 } })
@@ -275,8 +260,7 @@ describe('what the panes under it are doing', () => {
     expect(handlers.onFocusTerminal).toHaveBeenCalledExactlyOnceWith('t1')
   })
 
-  // An empty quotation reads as an answer — "the pane printed nothing" and
-  // "teamree has nothing to quote" are different facts.
+  // "The pane printed nothing" and "teamree has nothing to quote" are different facts.
   it('quotes nothing at all when there is nothing worth quoting', () => {
     mount({ terminals: [terminal({ id: 't1' })], evidence: { t1: null } })
     expect(document.querySelector('.pane-row__evidence')).toBeNull()
@@ -290,8 +274,7 @@ describe('what the panes under it are doing', () => {
     expect(screen.getByText('ana and bo are watching')).toBeTruthy()
   })
 
-  // Somebody running commands as you outranks somebody reading, in the one slot
-  // the row has.
+  // Typing outranks reading in the one slot the row has.
   it('says who is typing, in the present tense, over who is merely watching', () => {
     mount({
       terminals: [terminal({ id: 't1' })],
@@ -309,8 +292,7 @@ describe('what the panes under it are doing', () => {
     expect(screen.queryByText(/watching/)).toBeNull()
   })
 
-  // Liveness is computed, never stored: somebody who stopped an hour ago must
-  // not still be announced as at the keyboard.
+  // Liveness is computed, never stored.
   it('stops saying somebody is typing once they have stopped', () => {
     mount({
       terminals: [terminal({ id: 't1' })],
@@ -336,8 +318,7 @@ describe('what the panes under it are doing', () => {
     expect(screen.getByText('ana is watching')).toBeTruthy()
   })
 
-  // The record outlives the keystroke: a pane a teammate typed in an hour ago
-  // is not a pane whose history is the owner's alone.
+  // The record outlives the keystroke.
   it('keeps the count of what was typed and what was refused, on hover', () => {
     mount({
       terminals: [terminal({ id: 't1' })],
@@ -401,13 +382,8 @@ describe('what the panes under it are doing', () => {
   })
 })
 
-// One menu, three ways in, and the destructive item at the bottom of it rather
-// than on the row.
-//
-// What this replaces is the whole point of it: the row's only control was a `×`
-// that removed the checkout, so the most destructive action in the app was the
-// easiest thing on the row to hit by accident — and reveal, copy and open were
-// not reachable from the sidebar at all.
+// One menu, three ways in, and the destructive item at the bottom of it rather than on the row,
+// where a `×` was the easiest thing to hit by accident.
 describe('the row menu', () => {
   it('opens on a right-click, with the five things a row can do, in order', () => {
     mount()
@@ -417,8 +393,7 @@ describe('the row menu', () => {
     expect(labels()).toEqual(['Reveal in Finder', 'Copy path', 'Copy branch', 'Open in Zed', 'Remove'])
   })
 
-  // The heart of the change. A one-pixel miss on a `×` used to open the
-  // question that destroys a checkout; now nothing on the row does.
+  // A one-pixel miss on the row must not open the question that destroys a checkout.
   it('leaves no remove control on the row itself', () => {
     mount()
     expect(screen.queryByRole('button', { name: /^Remove/ })).toBeNull()
@@ -465,9 +440,7 @@ describe('the row menu', () => {
   })
 })
 
-// A menu reachable only with a mouse is a row that lost its only control to
-// anybody who does not use one, which is what taking the `×` off would have
-// meant without this.
+// A menu reachable only with a mouse is a row with no control for anybody who does not use one.
 describe('the row menu from the keyboard', () => {
   it('opens on the context-menu key and on Shift+F10, with the first item focused', () => {
     mount()
@@ -496,8 +469,7 @@ describe('the row menu from the keyboard', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  // Wrapping, so the destructive item is one press away from the top in the
-  // direction nobody reaches it by accident.
+  // Wrapping, so the destructive item is one press from the top in the direction nobody reaches by accident.
   it('wraps upwards from the first item', () => {
     mount()
     openButton().focus()
@@ -519,10 +491,7 @@ describe('the row menu from the keyboard', () => {
   })
 })
 
-// Which panes have said something since this person last read them. The row is
-// where the question is answered for a worktree that is not the one on screen,
-// which is the whole of the gap: the sidebar used to read identically whether a
-// worktree had been triaged a second ago or yesterday.
+// The row is where "unread" is answered for a worktree that is not the one on screen.
 describe('panes that have printed since they were read', () => {
   it('marks the pane, and the worktree above it', () => {
     mount({ terminals: [terminal({ id: 't1', agent: 'claude' })], unread: ['t1'] })

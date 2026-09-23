@@ -1,13 +1,7 @@
 /** @vitest-environment jsdom */
 
-// The teamwork setup as a place in the window rather than a box over it.
-//
-// What the steps say is covered by `TeamworkSteps.test.tsx` and by the model's
-// own tests. This is about the view: that it is a landmark somebody can be sent
-// to and land in, that it has a way out that does not depend on clicking beside
-// it, and — the part this file exists for now — that the three things that used
-// to be shell commands are buttons wired to the store, each of them honest
-// about what it will do and about being unable to do it.
+// The teamwork view: a landmark with a way out, and three buttons wired to
+// the store. What the steps say is `TeamworkSteps.test.tsx`'s business.
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -45,14 +39,7 @@ const roster = (): MemberList => ({
   readAt: 0
 })
 
-/**
- * A pane's terminal as the runtime lists it.
- *
- * The view takes `running` off the terminal rather than off the pane — the
- * runtime is the authority on whether a process is alive — so a test about a
- * relay that is up has to seed one, and one about a relay that has stopped has
- * to seed it stopped.
- */
+/** A pane's terminal as the runtime lists it; the view takes `running` off the terminal, not the pane. */
 const terminal = (id: string, running: boolean): Terminal => ({
   id,
   worktreeId: 'teamwork:serve:p1',
@@ -171,14 +158,7 @@ const open = (): void => {
   render(<TeamworkView projectId="p1" />)
 }
 
-/**
- * The panel with the first question answered, which is where every assertion
- * about the steps themselves belongs.
- *
- * The question is new and is the point of it: the five steps mean two different
- * things depending on which end of this you are, and the page used to have to
- * write every sentence for both at once.
- */
+/** The panel with the first question answered, where every assertion about the steps belongs. */
 const mount = (path: 'start' | 'join' = 'start'): void => {
   open()
   const label = path === 'start' ? 'Start a team here' : 'Join a team I was invited to'
@@ -203,16 +183,14 @@ beforeEach(() => {
 })
 
 describe('the setup as a place in the window', () => {
-  // A modal is named by the box; this is named by the area it fills, which is
-  // what lets somebody sent here by a sidebar button know where they landed.
+  // Named by the area it fills, so somebody sent here by a sidebar button knows where they landed.
   it('is a landmark that names the repository it is setting up', () => {
     mount()
     expect(screen.getByRole('main', { name: 'Set up teamwork in pager' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Start teamwork' })).toBeTruthy()
   })
 
-  // Reached from a button somewhere else in the window, so the keyboard has to
-  // come with it: without this, Tab walks the sidebar it was opened from.
+  // Reached from a button elsewhere, so the keyboard has to come with it.
   it('takes the focus when it opens, so the keyboard is in it', () => {
     mount()
     expect(document.activeElement).toBe(screen.getByRole('main', { name: 'Set up teamwork in pager' }))
@@ -234,8 +212,7 @@ describe('the setup as a place in the window', () => {
     expect(closeTeamwork).toHaveBeenCalledTimes(2)
   })
 
-  // A dialog opened on top owns Escape. Closing both with one press takes away
-  // more than the reader asked for.
+  // A dialog opened on top owns Escape.
   it('leaves Escape to a dialog opened over it', () => {
     seed({ dialog: { kind: 'new-task', projectId: 'p1' } })
     mount()
@@ -251,8 +228,6 @@ describe('the setup as a place in the window', () => {
 })
 
 describe('how many ways to get a relay are put in front of somebody', () => {
-  // The recommendation is a button now, so nothing is a list of equals and
-  // nothing is in front of a reader who has not asked for it.
   it('leads with the button and shows no option list at all', () => {
     mount()
     expect(screen.getByRole('button', { name: 'Deploy a relay' })).toBeTruthy()
@@ -261,8 +236,7 @@ describe('how many ways to get a relay are put in front of somebody', () => {
     expect(screen.queryByText(/A tunnel to a relay on your own machine/)).toBeNull()
   })
 
-  // The others are real and documented; they are behind a control that says
-  // whether it is open, not deleted and not hidden in a way nothing can find.
+  // The others are behind a control that says whether it is open, not hidden.
   it('keeps the rest one keyboard-reachable press away, and says it is folded', () => {
     mount()
     const more = screen.getByRole('button', { name: 'Other ways to get a relay' })
@@ -275,8 +249,7 @@ describe('how many ways to get a relay are put in front of somebody', () => {
     expect(screen.queryByText(/A VPS you rent/)).toBeNull()
   })
 
-  // Somebody joining a team that already has a relay has no decision to make:
-  // theirs arrives in the repository.
+  // A joiner whose team has a relay has no decision to make: theirs arrives in the repository.
   it('offers none of it to somebody whose team already has one', () => {
     seed({ relays: { p1: relayOnDisk() } })
     mount()
@@ -292,12 +265,8 @@ describe('the deploy, as a button rather than a command to take elsewhere', () =
     expect(startRelayPane).toHaveBeenCalledWith('p1', 'deploy', undefined)
   })
 
-  // A control that is grey for a reason nobody can read is the same as one that
-  // does nothing, so the runtime's own sentence is beside it — beside *each* of
-  // them, now that there are two ways to get a relay. Both come out of the one
-  // project this build either carries or does not, so both go grey together and
-  // both say why: a reader looking at the one they wanted must not have to
-  // infer the reason from the other one.
+  // Both buttons come out of the one project this build carries or does not,
+  // so both go grey together and each says why.
   it('disables both ways to a relay, each with the reason, when this build carries none', () => {
     seed({ relays: { p1: { ...noRelay(), deploy: { command: null, reason: 'this build carries no relay project' } } } })
     mount()
@@ -307,8 +276,7 @@ describe('the deploy, as a button rather than a command to take elsewhere', () =
     expect(screen.getAllByText(/this build carries no relay project/)).toHaveLength(2)
   })
 
-  // The URL is offered rather than written: a relay is a team-wide fact, and a
-  // fact is somebody's to assert.
+  // Offered rather than written: a relay is a team-wide fact, and somebody's to assert.
   it('offers the URL the deploy printed instead of writing it in', () => {
     const setRelay = vi.fn()
     seed({
@@ -336,18 +304,15 @@ describe('the deploy, as a button rather than a command to take elsewhere', () =
     expect(closeRelayPane).toHaveBeenCalledWith('p1')
   })
 
-  // The command still has to be readable: running it yourself is a legitimate
-  // answer, and it is the only answer on a machine where the app cannot.
+  // Running it yourself is the only answer on a machine where the app cannot.
   it('keeps the command itself, one disclosure away', () => {
     mount()
     expect(screen.getByText('/apps/teamree.app/Contents/Resources/relay/teamree-relay deploy')).toBeTruthy()
   })
 })
 
-// The second first-class way: the same launcher, a different verb, the same
-// pane. It is a button rather than a line in a disclosure because the launcher
-// ships it — and it carries the sentence about who it will not work for,
-// because the panel cannot see anybody's network.
+// The same launcher, a different verb, the same pane; it carries the sentence
+// about who it will not work for, because the panel cannot see anybody's network.
 describe('running a relay on this Mac, as the other button', () => {
   it('runs the launcher’s serve verb in a pane in this window', () => {
     mount()
@@ -360,8 +325,7 @@ describe('running a relay on this Mac, as the other button', () => {
     expect(screen.getByText(/Only reachable from machines that can already reach this Mac/)).toBeTruthy()
   })
 
-  // One slot. Starting a second is refused rather than allowed to replace the
-  // output somebody is in the middle of reading, and the panel says which.
+  // One slot: a second is refused rather than replacing output somebody is reading.
   it('is disabled while another pane is open, and names the one that is', () => {
     seed({ relayPanes: { p1: { kind: 'deploy', terminalId: 'term_9', url: null, urls: [], running: true } } })
     mount()
@@ -391,10 +355,8 @@ describe('running a relay on this Mac, as the other button', () => {
     expect(setRelay).toHaveBeenCalledWith('p1', 'ws://192.168.1.23:8787/v1/relay')
   })
 
-  // The address a relay printed is a promise about a process on this Mac, and
-  // the runtime is who knows whether that process is still there. A serve that
-  // has exited leaves a closed port and a URL still sitting in the scrollback,
-  // and offering it would be how a team commits an address that worked once.
+  // A serve that has exited leaves a closed port and a URL still in the
+  // scrollback; offering it is how a team commits an address that worked once.
   it('takes the offer away once the runtime says that relay has stopped', () => {
     seed(servePane(false))
     mount()
@@ -404,9 +366,7 @@ describe('running a relay on this Mac, as the other button', () => {
 })
 
 describe('checking a relay from the panel', () => {
-  // Beside the URL this project is actually going to dial: a joiner who pulled
-  // a relay and a starter who just wrote one both want to know whether the
-  // address works, and until now neither had a way to ask.
+  // Beside the URL this project is actually going to dial.
   it('dials the configured relay, passing that URL to the launcher', () => {
     seed({ relays: { p1: relayOnDisk() } })
     mount()
@@ -414,7 +374,7 @@ describe('checking a relay from the panel', () => {
     expect(startRelayPane).toHaveBeenCalledWith('p1', 'check', 'wss://relay.example/v1/relay')
   })
 
-  // The check runs here. A pass read as "the team can meet" would end the
+  // The check runs here; a pass read as "the team can meet" ends the
   // investigation at the wrong machine.
   it('says what a pass proves and what it does not', () => {
     seed({ relays: { p1: relayOnDisk() } })
@@ -422,9 +382,8 @@ describe('checking a relay from the panel', () => {
     expect(screen.getAllByText('Dialled from this Mac only.').length).toBeGreaterThan(0)
   })
 
-  // Two buttons, two strings, two names: the one beside the configured relay
-  // and the one beside the field are not the same address and must not read as
-  // the same control.
+  // The one beside the configured relay and the one beside the field dial
+  // different addresses and must not read as the same control.
   it('is disabled with the fix named when nothing has been typed to check', () => {
     mount()
     expect((screen.getByRole('button', { name: 'Check the URL you typed' }) as HTMLButtonElement).disabled).toBe(true)
@@ -453,9 +412,8 @@ describe('the origin remote, as a field rather than a command to go and run', ()
     expect(setOrigin).toHaveBeenCalledWith('p1', 'https://github.com/ada/pager.git')
   })
 
-  // The whole of what a team sharing a repository over a volume used to get was
-  // a refusal. They get the remote set, and the one condition it comes with —
-  // while the string it is about is still on the screen in front of them.
+  // A shared volume gets the remote set and the one condition it comes with,
+  // while the string is still on screen.
   it('takes the path a shared volume is mounted at, saying what the other Mac must match', () => {
     seed({ teamwork: { p1: noOrigin() } })
     mount()
@@ -496,8 +454,7 @@ describe('committing and pushing, which is the one that leaves the machine', () 
       ...overrides
     })
 
-  // The whole of the confirmation this owes somebody, and it is on screen
-  // before the button rather than behind one nobody reads.
+  // The confirmation is on screen before the button, not behind one nobody reads.
   it('names the files, the message, the remote and the branch before it is pressed', () => {
     ready()
     mount()
@@ -534,9 +491,8 @@ describe('committing and pushing, which is the one that leaves the machine', () 
     expect(screen.getByText(/so there is nothing to push/)).toBeTruthy()
   })
 
-  // A commit that landed and a push that was refused is the ordinary way this
-  // goes wrong, and reporting it as one failure would leave somebody believing
-  // they had made no commit.
+  // A commit that landed and a push that was refused reported as one failure
+  // would leave somebody believing they had made no commit.
   it('reports the commit and git’s own words when the push was refused', () => {
     ready({
       publishResults: {
@@ -556,8 +512,7 @@ describe('committing and pushing, which is the one that leaves the machine', () 
       }
     })
     mount()
-    // Scoped to step 4: the same advice is repeated at the bottom of the page,
-    // in the summary of which halves worked, and both places should say it.
+    // Scoped to step 4: the summary at the bottom repeats the same advice.
     const step = within(pushStep())
     expect(step.getByText(/Committed abc1234/)).toBeTruthy()
     expect(step.getByText(/Pull or rebase onto origin\/main/)).toBeTruthy()
@@ -566,8 +521,7 @@ describe('committing and pushing, which is the one that leaves the machine', () 
 })
 
 describe('the question the panel asks before anything else', () => {
-  // One entry point, two honest paths. The five steps describe two different
-  // jobs and the page used to have to write every sentence for both at once.
+  // One entry point, two honest paths.
   it('offers both, takes neither, and shows no steps until one is chosen', () => {
     open()
     expect(screen.getByRole('button', { name: 'Start a team here' })).toBeTruthy()
@@ -601,9 +555,7 @@ describe('a push while it is running', () => {
     })
 
   // `teamwork.publish` does not answer until the push is over, so without a
-  // second question there is nothing to show for the minutes in between. This
-  // is the fix for "it gets stuck at git push" on the window's side of the
-  // wire.
+  // second question there is nothing to show for the minutes in between.
   it('asks what it is doing, and only while one is running', () => {
     pushing()
     mount()
@@ -638,8 +590,7 @@ describe('a push while it is running', () => {
     expect(step.getByText(/^1[123]s$/)).toBeTruthy()
   })
 
-  // A way out of a call that can wait ten minutes on something nobody can
-  // answer is not a refinement.
+  // A call can wait ten minutes on something nobody can answer.
   it('has a Stop that stops it', () => {
     pushing()
     mount()

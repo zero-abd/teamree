@@ -1,9 +1,4 @@
-// The comparison, which is the part of this feature that can be quietly wrong.
-//
-// Every case below is a version pair somebody could actually be looking at: a
-// two-digit minor against a one-digit one, a candidate against the release it
-// precedes, a tag with its `v` against one without. A string comparison passes
-// about half of them, which is why there are this many.
+// Version pairs somebody could actually be looking at; a string comparison passes about half of them.
 
 import { describe, expect, it } from 'vitest'
 import { compareVersions, isNewerRelease, isPrereleaseVersion, parseVersion } from './semver'
@@ -44,8 +39,7 @@ describe('parsing a version', () => {
 })
 
 describe('which of two versions is the later', () => {
-  // The whole reason this module exists rather than a `>`: as strings, '0.9.0'
-  // sorts after '0.10.0', and somebody on 0.9.0 is then told they are current.
+  // As strings, '0.9.0' sorts after '0.10.0'.
   it('compares the numbers as numbers', () => {
     expect(newer('0.10.0', '0.9.0')).toBe(true)
     expect(newer('0.9.0', '0.10.0')).toBe(false)
@@ -70,8 +64,7 @@ describe('which of two versions is the later', () => {
       const after = ascending[index] as string
       expect(compareVersions(version(after), version(before)), `${after} after ${before}`).toBeGreaterThan(0)
     }
-    // Numeric identifiers have lower precedence than alphanumeric ones, which
-    // is the rule a text comparison gets backwards.
+    // Numeric identifiers have lower precedence than alphanumeric ones.
     expect(compareVersions(version('1.0.0-1'), version('1.0.0-alpha'))).toBeLessThan(0)
   })
 })

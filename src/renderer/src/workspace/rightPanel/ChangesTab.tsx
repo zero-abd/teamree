@@ -1,17 +1,5 @@
-// What this worktree has actually changed, beside the terminals that changed it.
-//
-// The sidebar chips answer "is there anything here". This answers "what", which
-// is the question you have the moment you are about to commit — and the one an
-// agent's work leaves you with when you come back to a worktree it has been
-// busy in for ten minutes.
-//
-// One tab of the right panel now. The rail above it carries the name, the
-// count and the way to put it away, so none of those is repeated here; what is
-// here is the list, the commit box, the commits and the patch, exactly as they
-// were when this was a panel of its own.
-//
-// It rides the same invalidation as everything else, so an edit made in a pane
-// two inches to the left moves this list without anyone asking it to.
+// What this worktree has changed: the list, the commit box, the commits and the patch, as a tab of the
+// right panel. It rides the same invalidation as everything else, so pane edits move it.
 
 import { useState } from 'react'
 import { useWorkspaceStore } from '../../state/workspaceStore'
@@ -44,10 +32,7 @@ export function ChangesTab(): React.JSX.Element | null {
   const commitStaged = useWorkspaceStore((state) => state.commitStaged)
   const committing = useWorkspaceStore((state) => state.committing)
   const log = useWorkspaceStore((state) => (worktreeId ? state.logs[worktreeId] : undefined))
-  // Kept per worktree, because this panel is never remounted when the tabs
-  // change under it. A message typed for one worktree, still in the box over
-  // another one's diff, is a sentence about work that is not there — and the
-  // commit button beside it will happily put it on the change that is.
+  // Per worktree: the panel is not remounted on tab change, and a message could land on the wrong diff.
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const message = draftFor(drafts, worktreeId)
 
@@ -62,11 +47,7 @@ export function ChangesTab(): React.JSX.Element | null {
 
   const commit = (): void => {
     if (!canCommit) return
-    // The message is the one thing on this screen the app cannot reconstruct,
-    // and a commit can be refused for a reason the user has to go and fix —
-    // an unset git identity, a conflict, nothing staged. Clearing the box on
-    // the way out would make them type it again to try. A commit that landed
-    // is the one that empties the selection, so that is what is asked.
+    // The message is the one thing the app cannot reconstruct; only a commit that landed clears it.
     void commitStaged(message).then(() => {
       if (useWorkspaceStore.getState().stagedPaths.length === 0) setMessage('')
     })
@@ -242,15 +223,7 @@ export function ChangesTab(): React.JSX.Element | null {
   )
 }
 
-/**
- * The commit message for one worktree, which is the only worktree it is about.
- *
- * Held rather than cleared on the way out. The panel already refuses to empty
- * the box when a commit is refused, for the reason that a message is the one
- * thing on this screen the app cannot reconstruct; going to look at another
- * worktree's diff is a weaker reason to throw it away than a failed commit, so
- * it is not one either.
- */
+/** The commit message for one worktree, kept when looking at another. */
 export function draftFor(drafts: Record<string, string>, worktreeId: string | null): string {
   return worktreeId === null ? '' : (drafts[worktreeId] ?? '')
 }
@@ -263,14 +236,7 @@ export function withDraft(drafts: Record<string, string>, worktreeId: string, me
   return next
 }
 
-/**
- * What an empty changes list means, which is three different things.
- *
- * "No changes" is a claim about the worktree, and it is the wrong one to make
- * when the base could not be compared against at all: an agent that has just
- * committed a day of work leaves exactly this screen behind, and the words
- * would tell somebody the work is gone.
- */
+/** What an empty changes list means; "No changes" is wrong when the base could not be compared. */
 export function emptyChangesLabel(log: WorktreeLog | undefined): string {
   if (log?.unavailable !== undefined) return 'Nothing uncommitted'
   if ((log?.commits.length ?? 0) > 0) return 'All committed'

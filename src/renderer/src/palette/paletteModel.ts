@@ -1,8 +1,4 @@
-// What the palette offers, and how typing narrows it.
-//
-// Kept apart from the component because the interesting part is not the list,
-// it is the ranking: with twenty worktrees open, a palette that matches the
-// right thing third is a palette nobody uses twice.
+// What the palette offers, and how typing narrows and ranks it.
 
 import {
   hasCheckout,
@@ -17,17 +13,7 @@ import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { MENU_ORDER, menuLabel } from '../menu/menuBar'
 import { automaticUpdatesLabel } from '../updates/updateNotice'
 
-/**
- * What a row can be asked to do: every command this window has, plus the few
- * things the palette offers that are not commands.
- *
- * The commands are not listed here. They used to be — a hand-written dozen that
- * had fallen six behind the menu bar, so Push, Commit, Close pane, Maximize
- * pane, both pane walks and both worktree walks were in every menu and in no
- * palette. Deriving the union from `WorkspaceCommand` is what makes that
- * impossible: a command added to the table is a row here without anybody
- * remembering to add one.
- */
+/** Every command this window has (derived from `WorkspaceCommand`, so none go missing) plus the palette's own rows. */
 export type PaletteAction =
   | WorkspaceCommand
   | 'toggle-changes'
@@ -42,8 +28,7 @@ export type PaletteItem =
   | { kind: 'worktree'; id: string; label: string; hint: string; detail: string; search: string }
   /** Run something. */
   | { kind: 'action'; id: PaletteAction; label: string; hint: string; detail: string; search: string }
-  /** Start one of the coding agents this machine has, in the worktree on
-   * screen. `id` is the command to run, which is what starting one needs. */
+  /** Start a coding agent in the worktree on screen; `id` is the command to run. */
   | { kind: 'agent'; id: string; label: string; hint: string; detail: string; search: string }
 
 export type PaletteContext = {
@@ -52,34 +37,19 @@ export type PaletteContext = {
   activeWorktreeId: string | null
   /** Coding agents found on this machine, as probed at startup. */
   agents: readonly InstalledAgent[]
-  /**
-   * The agent kind this machine's owner said they always use, if any. It only
-   * decides which of the agent rows comes first.
-   */
+  /** The agent kind the owner always uses; it only decides which agent row comes first. */
   defaultAgent: string
-  /**
-   * What the runtime knows about newer releases, or null before it has been
-   * asked. Only the preference is read from it: it decides which way round the
-   * toggle's label reads.
-   */
+  /** What the runtime knows about releases, or null; only the preference is read, for the toggle's label. */
   update: UpdateState | null
   /** Shortcut labels, so the palette shows the key that does the same thing. */
   hintFor: (action: PaletteAction) => string
-  /**
-   * How this machine's CLI link stands, which is what one of the actions below
-   * is named after. Null until the first read has answered.
-   */
+  /** How this machine's CLI link stands, which names one action. Null until first read. */
   cli: CliStatus | null
 }
 
 /**
- * Actions come after worktrees. Jumping is what the palette is opened for nine
- * times in ten, and an action typed by name still sorts to the top once its
- * letters are in the query.
- *
- * The agents sit between the two: they act on the worktree in front of you,
- * which is nearer to jumping than to "add a project", and they are the only
- * rows here whose existence depends on the machine.
+ * Worktrees first (jumping is what the palette is for), then agents (they act on the worktree in
+ * front), then actions; a typed action name still sorts to the top.
  */
 export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
   const projectName = new Map(context.projects.map((project) => [project.id, project.name]))
@@ -94,18 +64,13 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
         label: worktree.name,
         hint: worktree.branch,
         detail: hasCheckout(worktree) ? project : `${project} · ${worktree.missing ? 'missing' : worktree.state}`,
-        // Everything you might reach for it by, in one string: a branch name is
-        // often the only part a person remembers.
+        // A branch name is often the only part a person remembers.
         search: `${worktree.name} ${worktree.branch} ${project}`
       }
     })
 
   const actions: PaletteItem[] = [...commandActions(), ...ACTIONS, ...updateActions(context)].map((action) => {
-    // One action is named after a state rather than fixed, because "Put teamree
-    // on my PATH" is the wrong sentence to offer somebody whose PATH already
-    // has a teamree on it that leads nowhere. The keywords stay whatever the
-    // list says: they are what somebody types looking for it, and they must not
-    // move when the label does.
+    // Named after the link's state; the keywords stay fixed so a search does not move with the label.
     const label = action.id === 'install-cli' ? cliActionLabel(context.cli) : action.label
     return {
       kind: 'action',
@@ -121,32 +86,14 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
 }
 
 /**
- * One row per agent this machine actually has, starting it in the worktree
- * already on screen.
- *
- * Built from the probe rather than from a list of names, because the palette
- * offering an agent nobody has installed is worse than offering none: the row
- * is a promise that pressing Return will do something. For the same reason
- * there are none of these until there is a ready worktree to start one in —
- * `startAgent` acts on the active worktree, and a checkout still being made
- * has no directory to run a shell in.
- *
- * The wording carries the whole distinction from "New task": both start an
- * agent, and only one of them does it here. Somebody who wants a fresh
- * checkout should not land on this row, and somebody looking at the worktree
- * they want the agent in should not be sent through a dialog that makes
- * another one.
+ * One row per agent the probe found, starting it in the ready worktree on screen; none until there is one.
+ * Worded as "here" to keep it apart from "New task", which makes another checkout.
  */
 function agentItems(context: PaletteContext): PaletteItem[] {
   const active = context.worktrees.find((worktree) => worktree.id === context.activeWorktreeId)
   if (active === undefined || !hasCheckout(active)) return []
 
-  // The preferred one first, and the rest in the probe's own order behind it.
-  // The palette is a keyboard surface: the row that is already under the cursor
-  // when it opens is the one that gets pressed, so "the agent I always use"
-  // being third is the same defect as the composer preselecting the wrong one.
-  // A preference naming an agent this machine does not have moves nothing,
-  // which is the same answer the composer gives.
+  // The preferred agent first so it is under the cursor on open; an unknown preference moves nothing.
   const preferred = context.agents.filter((agent) => agent.kind === context.defaultAgent)
   const rest = context.agents.filter((agent) => agent.kind !== context.defaultAgent)
 
@@ -156,26 +103,13 @@ function agentItems(context: PaletteContext): PaletteItem[] {
     label: `Start ${agent.command} in this worktree`,
     hint: active.name,
     detail: 'Opens a pane here',
-    // "here" and "this worktree" are what somebody types when the distinction
-    // from a new task is the thing they are unsure about. Short, in this order,
-    // and without the word "agent": the matcher takes the first word-starting
-    // letter it can, so every extra word is another place a query can be sent
-    // past the word it meant — with "this" ahead of "here", typing "claude this
-    // worktree" jumped the h to "here" and matched nothing at all. And "agents"
-    // is how somebody reaches the all-panes view.
+    // No "agent": the matcher takes the first word-start it can, and "this" before "here" once sent
+    // "claude this worktree" past the h. "agents" reaches the all-panes view.
     search: `Start ${agent.command} here in this worktree pane`
   }))
 }
 
-/**
- * The two update rows, which are here rather than in the list below because one
- * of them says something different depending on how it is set.
- *
- * The preference has no other home — this app has no settings window, and a
- * window's worth of chrome for one boolean would be the wrong trade — so the
- * palette is where somebody who does not want to be told about releases goes to
- * say so. The card offers the same thing at the moment it matters.
- */
+/** The two update rows; the toggle's wording depends on the current preference. */
 function updateActions(context: PaletteContext): { id: PaletteAction; label: string; keywords: string }[] {
   return [
     {
@@ -191,16 +125,7 @@ function updateActions(context: PaletteContext): { id: PaletteAction; label: str
   ]
 }
 
-/**
- * One row per command, in the order the menus read, called what the menu calls
- * it.
- *
- * The labels are not written here and must not be: the whole defect this
- * replaces was a palette keeping its own wording and its own list, so that
- * `Split pane right` in the menu was `Split right` in the palette and half the
- * menu was in the palette not at all. `menuLabel` is the one answer to what a
- * command is called, and `MENU_ORDER` the one answer to the order.
- */
+/** One row per command, in menu order, named by `menuLabel`; the palette keeps no wording of its own. */
 function commandActions(): { id: PaletteAction; label: string; keywords: string }[] {
   return MENU_ORDER.map((command) => ({
     id: command,
@@ -209,16 +134,7 @@ function commandActions(): { id: PaletteAction; label: string; keywords: string 
   }))
 }
 
-/**
- * What somebody types looking for each command, beyond its own label.
- *
- * Total over the command union, for the reason `PLACEMENT` and `GROUP_OF` are:
- * a command added to the table with no thought about what a person would type
- * to find it stops the build here rather than shipping a row reachable only by
- * its exact name. Keywords matter more now than they did — the matcher requires
- * every typed word to actually appear — so a word left out is a word that finds
- * nothing.
- */
+/** What somebody types looking for each command. Total over the union, so a new command fails the build here. */
 const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'new-worktree': 'new task create worktree branch start agent checkout',
   'new-terminal': 'new terminal shell pane open',
@@ -235,14 +151,9 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'open-dashboard': 'all panes agents dashboard overview attention waiting failed working everywhere',
   'toggle-sidebar': 'toggle sidebar hide show projects',
   'toggle-right-panel': 'toggle right panel hide show files changes panes',
-  // The page with everything about this machine on it. The keywords are what
-  // people call the things that live there rather than what this app calls
-  // them: somebody looking for the CLI link or the relay is not typing
-  // "settings".
+  // What people call the things on that page, not "settings".
   'open-settings': 'settings preferences options config cli path relay start point font size updates editor',
-  // Every word somebody might reach for the theme editor by, including both
-  // spellings of the one word it is mostly about. Not "settings": there is a
-  // page by that name now, and this is not it.
+  // Both spellings; not "settings", which is the other page.
   'open-appearance': 'appearance theme colour color dark black contrast accent ground swatch',
   'commit-changes': 'commit changes diff git stage staged message files review',
   'push-worktree': 'push send remote origin upload publish branch ahead',
@@ -256,33 +167,15 @@ const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[]
   { id: 'add-project', label: 'Add project', keywords: 'add project repository repo folder clone' },
   {
     id: 'install-cli',
-    // Replaced at build time by `cliActionLabel` when the link is the problem
-    // rather than its absence. This is the wording for the ordinary case.
+    // Replaced by `cliActionLabel` when the link is the problem rather than its absence.
     label: 'Put teamree on my PATH',
     keywords: 'cli command line terminal install link symlink usr local bin path agent broken fix dangling'
   }
 ]
 
 /**
- * Whether this row answers the query at all, and how well.
- *
- * The floor first, because the palette had none: every word typed has to be
- * *in* the row — as a run of characters, or as the initials of consecutive
- * words, which is how `nw` reaches "New worktree". Anything else returns null.
- * What it replaces accepted any subsequence of the typed letters scattered
- * anywhere at all, which is how `push` came back with "Stop checking for
- * updates automatically" (s-t-o-**p**… **u**pdates… **s**topping at whatever
- * letter came next) and `commit` with "Fix the broken teamree command". Those
- * are not near misses; they contain nothing of what was typed, and a palette
- * that answers with them is one nobody types into twice.
- *
- * Then the ranking, in the order a person would rank it: the whole query
- * appearing together beats the same words apart, a match that starts a word
- * beats one buried mid-word, an early match beats a late one, and an initialism
- * comes last — it is the loosest of the three ways in, so it settles ties among
- * rows that have already passed rather than admitting rows of its own.
- *
- * Returns null when any word of the query is not there.
+ * How well this row answers the query, or null when any typed word is absent (as a run, or as the
+ * initials of consecutive words). Ranks whole-query > word start > early > initialism.
  */
 export function score(text: string, query: string): number | null {
   const trimmed = query.trim()
@@ -296,8 +189,7 @@ export function score(text: string, query: string): number | null {
     points += found
   }
 
-  // The whole query as typed, in one piece. Worth more than any arrangement of
-  // its words, and worth more again at the start of one.
+  // The whole query in one piece beats any arrangement of its words.
   const whole = haystack.indexOf(trimmed.toLowerCase())
   if (whole !== -1) points += 1000 + (isWordStart(haystack, whole) ? 200 : 0) - Math.min(whole, 100)
 
@@ -315,14 +207,7 @@ function place(haystack: string, word: string): number | null {
   return null
 }
 
-/**
- * The next place this word could match, preferring one that starts a word.
- *
- * Taking the first occurrence outright is the obvious implementation and the
- * wrong one: "pane" against "Close pane" would match at the p of "pane" either
- * way, but "term" against "Show interminable output, new terminal" would score
- * the buried one and rank the row by it.
- */
+/** The next place this word could match, preferring a word start over the first occurrence. */
 function nextOccurrence(haystack: string, word: string, from: number): number {
   const first = haystack.indexOf(word, from)
   if (first === -1) return -1
@@ -332,14 +217,7 @@ function nextOccurrence(haystack: string, word: string, from: number): number {
   return first
 }
 
-/**
- * Where this word matches the initials of consecutive words, or -1.
- *
- * An initialism is how a palette gets used once somebody knows it — `nw` for
- * "New worktree", `sr` for "Split pane right" — and it is the one loose match
- * worth keeping. Consecutive is what keeps it from being the old defect again:
- * letters may not skip a word to find the next one.
- */
+/** Where this word matches the initials of consecutive words (`nw` for "New worktree"), or -1. */
 function initialsAt(haystack: string, word: string): number {
   if (word.length < 2) return -1
   const starts: number[] = []
@@ -365,11 +243,7 @@ function isWordStart(text: string, index: number): boolean {
   return before === ' ' || before === '/' || before === '-' || before === '_' || before === '.'
 }
 
-/**
- * The list as typed narrows it. Ties keep the order they were built in, so an
- * empty query shows worktrees first and the list does not reshuffle itself
- * under the cursor as someone types and deletes a character.
- */
+/** The list narrowed by the query; ties keep build order so the list does not reshuffle under the cursor. */
 export function filterPalette(items: readonly PaletteItem[], query: string): PaletteItem[] {
   const trimmed = query.trim()
   if (trimmed === '') return [...items]

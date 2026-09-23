@@ -12,18 +12,13 @@ export type ResourceSamplerHost = {
   now: () => number
 }
 
-/**
- * A whole machine's table is a few hundred kilobytes; a megabyte or so is a
- * machine with more processes than this app will ever draw rows for.
- */
+/** A whole machine's table is a few hundred kilobytes. */
 const PS_MAX_BUFFER = 8 * 1024 * 1024
 
 export const defaultResourceSamplerHost: ResourceSamplerHost = {
   ps: () =>
     new Promise((resolve) => {
-      // No `ps` on Windows, and no session groups either: the answer there is
-      // a sample with nothing under any pane, not an error on every open of
-      // the popover.
+      // No `ps` on Windows: an empty sample, not an error on every open of the popover.
       if (process.platform === 'win32') return resolve('')
       execFile('ps', [...PS_ARGS], { maxBuffer: PS_MAX_BUFFER }, (error, stdout) => resolve(error ? '' : stdout))
     }),
@@ -41,9 +36,7 @@ export function createResourceSampler(deps: {
   const appPid = deps.appPid ?? process.pid
   return {
     sample: async () => {
-      // Panes first, then ps: a pane opened between the two is missing from
-      // this sample and present in the next, which is the cheaper of the two
-      // ways to be out of date. The other order shows a pane with no tree.
+      // Panes first, then ps: the other order shows a pane with no tree.
       const panes = deps.panes()
       const table = await host.ps()
       return aggregateResources({ sampledAt: host.now(), processes: parsePsTable(table), panes, appPid })

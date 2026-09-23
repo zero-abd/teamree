@@ -1,15 +1,6 @@
-// Two runtimes on one machine, and something in the middle of them.
-//
-// There are two middles here and the difference matters. `createFakeRelay`
-// speaks the documented protocol in this process, which is what makes the
-// failure paths testable at all: a relay that restarts mid-session, a peer that
-// vanishes, a rendezvous claimed twice. `relayProcess.ts` runs the real relay
-// and is what stops any of that being a story about a mock.
-//
-// Everything is driven by a manual clock and a manual timer queue. Nothing here
-// sleeps: a test that waits on wall-clock time is a test that fails on a busy
-// machine and passes on a quiet one, and the relay's own suite already holds
-// that line.
+// Two runtimes on one machine, and something in the middle: `createFakeRelay` speaks the documented
+// protocol in-process so failure paths are testable; `relayProcess.ts` runs the real relay.
+// Everything is driven by a manual clock and timer queue. Nothing here sleeps.
 
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -37,14 +28,8 @@ export type ManualScheduler = LinkScheduler & {
   /** Runs every timer due at or before `now + ms`, advancing as it goes. */
   advance: (ms: number) => Promise<void>
   /**
-   * A machine suspended for `ms`: no timer ran, and the clocks come back
-   * disagreeing about it, which is the only trace a sleep leaves.
-   *
-   * Platforms split over whether their monotonic source counts time spent
-   * suspended — macOS's does — so both shapes are offered. `counted` wakes with
-   * every overdue timer firing at once, having measured far longer than it was
-   * armed for; `uncounted` wakes with the timers still owing their original
-   * wait and the wall clock an hour ahead of them.
+   * A machine suspended for `ms`: no timer ran, and the clocks come back disagreeing. Platforms split on
+   * whether the monotonic source counts suspended time (macOS's does), so both shapes are offered.
    */
   sleep: (ms: number, monotonic?: 'counted' | 'uncounted') => Promise<void>
   /** Lets queued microtasks and promise callbacks run without moving the clock. */
@@ -54,13 +39,7 @@ export type ManualScheduler = LinkScheduler & {
 
 export function createManualScheduler(startAt = 1_700_000_000_000): ManualScheduler {
   let current = startAt
-  /**
-   * The clock timers actually run on, kept apart from the wall clock.
-   *
-   * Real timers are armed against a monotonic source rather than against
-   * `Date.now()`, and the whole of the sleep problem lives in the gap between
-   * the two, so a scheduler that conflated them could not express it.
-   */
+  /** The clock timers run on, apart from the wall clock: the whole sleep problem lives in the gap. */
   let monotonic = 0
   let sequence = 0
   const timers = new Map<number, { at: number; run: () => void }>()
@@ -112,8 +91,7 @@ export function createManualScheduler(startAt = 1_700_000_000_000): ManualSchedu
       await settle()
     },
     sleep: async (ms, monotonicCounts = 'counted') => {
-      // Nothing runs while the machine is suspended, which is the point: the
-      // wall clock moves without a single timer firing.
+      // Nothing runs while suspended: the wall clock moves without a single timer firing.
       current += ms
       if (monotonicCounts === 'counted') monotonic += ms
       // And on waking, whatever is now overdue fires.
@@ -137,11 +115,7 @@ export type FakeRelay = {
   connections: () => number
   /** Every rendezvous token that has been presented, in order. */
   greetings: () => readonly string[]
-  /**
-   * Stops forwarding content while still pairing, which is the shape a peer is
-   * left in by a replayer: the handshake completes and nothing can ever be said
-   * over it.
-   */
+  /** Stops forwarding content while still pairing: the shape a replayer leaves a peer in. */
   holdContent: () => void
   releaseContent: () => void
 }
@@ -159,12 +133,9 @@ type FakePeer = {
 }
 
 /**
- * The relay's rules, as `relay/README.md` states them and only those.
- *
- * Registration is one synchronous step, so whichever hello is read first parks
- * and the second pairs with it; a third connection on a live rendezvous ends
- * that session with `4002` for both and parks the newcomer; a peer that goes
- * closes its partner with `4001`.
+ * The relay's rules, as `relay/README.md` states them: first hello parks, second pairs; a third on a live
+ * rendezvous ends that session with `4002` for both and parks the newcomer; a peer that goes closes its
+ * partner with `4001`.
  */
 export function createFakeRelay(): FakeRelay {
   const waiting = new Map<string, FakePeer>()
@@ -191,9 +162,7 @@ export function createFakeRelay(): FakeRelay {
     seen.push(peer.token)
     const existing = sessions.get(peer.token)
     if (existing) {
-      // It cannot tell the two apart — they are two anonymous connections that
-      // presented the same token — so ending the session is the only answer
-      // that is right whichever of them came back.
+      // Two anonymous connections presented the same token, so ending the session is right whichever came back.
       sessions.delete(peer.token)
       for (const member of existing) if (member.open) member.close(4002, 'superseded')
     }
@@ -226,14 +195,8 @@ export function createFakeRelay(): FakeRelay {
         handlers.onClosed(code, reason)
       },
       /**
-       * Everything the relay says to a peer is queued rather than called.
-       *
-       * A real relay writes frames onto a socket, and a peer reads them in the
-       * order they were written and no sooner. Calling the handler in place
-       * lets one peer's reaction to a frame reach the other before that other
-       * has been told it is paired at all — which is not something the real
-       * relay can do, so a fake that can is a fake that hides bugs and invents
-       * others. Microtasks are FIFO, so order per connection is kept.
+       * Everything the relay says is queued, never called in place: calling in place lets one peer's
+       * reaction reach the other before it is told it is paired. Microtasks are FIFO, so order is kept.
        */
       sayTo: (say) => queueMicrotask(say),
       text: (frame) => {
@@ -337,25 +300,12 @@ export type PeerRuntime = {
   subscriptions: SubscriptionHub
   workspace: FakeWorkspace
   dataDir: string
-  /**
-   * Real PTYs, when the runtime was built with them.
-   *
-   * A watch test needs a pane that actually exists on the owner's machine: the
-   * point of milestone C is that a teammate reaches `terminal.subscribe` and
-   * `terminal.read` as the terminal service already implements them, and a
-   * stand-in for that service would be testing the stand-in.
-   */
+  /** Real PTYs, when built with them: a watch test needs a pane that actually exists on the owner's machine. */
   terminals?: TerminalService
   /** Fires the change the workspace bus would have fired. */
   changed: () => void
   changes: () => number
-  /**
-   * Everything the service reported through `onError`, in order.
-   *
-   * Collected always rather than opted into, because a failure this service
-   * swallows is indistinguishable from one that never happened — which is the
-   * shape of bug these tests exist to catch.
-   */
+  /** Everything reported through `onError`, in order. Always collected: a swallowed failure looks like none. */
   errors: () => readonly unknown[]
 }
 
@@ -366,40 +316,19 @@ export type PeerRuntimeOptions = {
   env?: NodeJS.ProcessEnv
   /** Ready-made keypair directory; one is created when this is left out. */
   dataDir?: string
-  /**
-   * Stands in for git. Real repositories are used where the question is about
-   * git; everywhere else the only thing asked of it is the origin remote, and a
-   * fixed answer keeps the test about the transport.
-   */
+  /** Stands in for git; only the origin remote is asked of it, so a fixed answer keeps the test on the transport. */
   runner?: GitRunner
   /** Lets a test drive the cache directly, and flush it before a restart. */
   cache?: TeammateCache
-  /**
-   * Standing permissions this machine already holds when it starts.
-   *
-   * The shape a real runtime reads out of the workspace file, so a test whose
-   * subject is something other than the prompt can say "the owner settled this
-   * last week" in one line rather than by driving the prompt through first.
-   */
+  /** Standing permissions this machine already holds at start, as a real runtime reads them from the workspace. */
   consent?: ConsentStore
-  /**
-   * Panes this machine already has silenced when it starts.
-   *
-   * The mutes' half of `consent` above, and there for the same reason: "I
-   * muted that pane last week" is a fact a runtime restores before it has read
-   * a single repository, so a test about what is knowable before the first
-   * reconcile needs to be able to say it in one line.
-   */
+  /** Panes this machine already has silenced when it starts; the mutes' half of `consent`. */
   mutes?: MuteStore
   /** Lets a test wait on a condition instead of on the clock. */
   onChange?: () => void
   /** Stands in for Electron's power monitor, which no test process has. */
   watchWake?: WakeWatch
-  /**
-   * Registers the real terminal service, with real PTYs, and reports its panes
-   * as this runtime's terminals. Off by default: most peer tests are about the
-   * transport and have no use for a process.
-   */
+  /** Registers the real terminal service, with real PTYs. Off by default: most peer tests have no use for a process. */
   withTerminals?: boolean
 }
 
@@ -450,26 +379,21 @@ export async function makeProjectDir(members: readonly { handle: string; publicK
 }
 
 /**
- * One runtime, assembled the way `startRuntime` assembles the real one:
- * registry, then handlers, then the dispatcher, then the peer service — because
- * a peer that reached a half-built registry would be told a method does not
- * exist when it merely did not exist yet.
+ * One runtime, assembled in the real order — registry, handlers, dispatcher, peer service — so a peer
+ * reaching a half-built registry is not told a method does not exist when it merely did not yet.
  */
 export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<PeerRuntime> {
   const dataDir = options.dataDir ?? (await mkdtemp(join(tmpdir(), 'teamree-peer-')))
   const subscriptions = new SubscriptionHub()
   const context = createRuntimeContext({
     version: 'test',
-    // The peer service reads the workspace through its own narrow port, so the
-    // store on the context is only here to satisfy the shape.
+    // The peer service reads the workspace through its own port; the store is only here for the shape.
     store: {} as never,
     subscriptions
   })
   const registry = new MethodRegistry(context)
 
-  // Registered before the dispatcher exists, exactly as the real runtime does
-  // it, so a teammate that arrives early cannot be told a method is missing
-  // when it merely was not registered yet.
+  // Registered before the dispatcher exists, as the real runtime does.
   const terminals = options.withTerminals
     ? createTerminalService({
         subscriptions,
@@ -477,9 +401,7 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
       })
     : undefined
   if (terminals) registerTerminalHandlers(registry, terminals)
-  // Transport-level and always present in the real runtime. Without it every
-  // stream a test opened would stay open, which is the opposite of what the
-  // bytes-on-demand rule is for.
+  // Transport-level and always present in the real runtime; without it every stream a test opened stays open.
   registerUnsubscribeHandler(registry)
 
   let changes = 0
@@ -489,8 +411,7 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
       listProjects: () => options.workspace.projects,
       listWorktrees: (projectId) =>
         options.workspace.worktrees.filter((worktree) => projectId === undefined || worktree.projectId === projectId),
-      // Real panes when there are real panes, so a snapshot a watcher resolves
-      // a pane id against describes a process that is genuinely running.
+      // Real panes when there are real panes, so a snapshot describes a process genuinely running.
       listTerminals: (worktreeId) =>
         terminals
           ? terminals.manager.list(worktreeId)
@@ -531,15 +452,8 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
 }
 
 /**
- * What teamwork has read about one project, for a test that has already made it
- * read.
- *
- * `teamwork.status` answers a union: a project the workspace has and teamwork
- * has not read yet is its own answer rather than an error. Every caller here
- * has started the service and let it reconcile first, so the unread answer is
- * not a case to narrow past — it is the service failing to have done what the
- * test just did, and it is worth saying so where it happens rather than reading
- * as an absent link three assertions later.
+ * What teamwork has read about one project. Every caller has let the service reconcile first, so an
+ * unread answer is the service failing, said here rather than as an absent link three assertions later.
  */
 export function statusOf(service: PeerService, projectId: string): TeamworkRead {
   const status = service.status({ projectId })
@@ -550,10 +464,7 @@ export function statusOf(service: PeerService, projectId: string): TeamworkRead 
 /** The roster and the rows on it, for a test that has already reconciled. */
 export function presenceOf(service: PeerService, projectId: string): TeammatePresenceRead {
   const presence = service.presence({ projectId })
-  // `statusOf`'s argument, about the other half of the same reconcile: an
-  // unread roster here is the service not having read a project the test put in
-  // front of it, and saying so beats an empty `worktrees` read three lines
-  // later as "the snapshot never arrived".
+  // `statusOf`'s argument, for the other half of the same reconcile.
   if (presence.state !== 'read') throw new Error(`teamwork has not read ${projectId}’s roster yet`)
   return presence
 }
@@ -594,11 +505,8 @@ export function terminal(id: string, worktreeId: string, overrides: Partial<Term
 }
 
 /**
- * The owner's standing "yes" for one teammate on one pane, already in place.
- *
- * What a real runtime reads out of the workspace file at startup, in the shape
- * `PeerServiceOptions.consent` wants it. `set` records what a test asked for so
- * a test about the durable half can read it back.
+ * The owner's standing "yes" for one teammate on one pane, in the shape `PeerServiceOptions.consent`
+ * wants. `set` records what a test asked for so a test about the durable half can read it back.
  */
 export function standingConsent(
   grants: readonly { terminalId: string; publicKey: string }[] = []
@@ -617,13 +525,7 @@ export function standingConsent(
   }
 }
 
-/**
- * Panes the owner has already silenced, in the shape `PeerServiceOptions.mutes`
- * wants them.
- *
- * `standingConsent`'s twin, and the other half of what a runtime knows about
- * its own panes before it has read anything off a repository.
- */
+/** Panes the owner has already silenced, in the shape `PeerServiceOptions.mutes` wants; `standingConsent`'s twin. */
 export function standingMutes(terminalIds: readonly string[] = []): MuteStore {
   const held = new Set(terminalIds)
   return {
@@ -636,12 +538,8 @@ export function standingMutes(terminalIds: readonly string[] = []): MuteStore {
 }
 
 /**
- * A verdict a test expected the owner's machine to reach on its own.
- *
- * Written as a throw rather than as an assertion so that a write which is
- * suddenly held — because somebody changed what needs asking about — fails the
- * test that is about something else with a sentence saying so, rather than with
- * `undefined is not true`.
+ * A verdict the owner's machine was expected to reach on its own. A throw, so a write suddenly held fails
+ * a test about something else with a sentence rather than `undefined is not true`.
  */
 export function decided(verdict: RemoteWriteVerdict): RemoteWriteDecision {
   if ('held' in verdict) throw new Error('this keystroke was held for the owner rather than decided')

@@ -1,17 +1,5 @@
-// Starting work: describe the task, pick who does it, and where from.
-//
-// The unit of work is the task, not the checkout — so this is one action that
-// creates the worktree and starts the agent in it, rather than a dialog that
-// makes a directory and leaves the user to go and find an agent button. The
-// description is the prominent field because it is the only one the user has to
-// think about; everything else has a defensible default.
-//
-// Who does it is a count per agent rather than one name, because the workflow
-// this app is for is several attempts at one description — two models against
-// each other, or two runs of the same one, which is just as common a race.
-//
-// Submitting closes the dialog at once. Creation is a background job and its
-// progress, including its failures, belongs on the sidebar row.
+// Starting work: describe the task, pick who does it (a count per agent, for racing attempts), and
+// where from. One action makes the worktree and starts the agents; progress lives on the sidebar row.
 
 import { useEffect, useState } from 'react'
 import { MAX_AGENT_ARGS_CHARS } from '@shared/agentLaunch'
@@ -51,30 +39,10 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   const project = projects.find((entry) => entry.id === projectId)
   const { state: startPoints, reload } = useStartPoints(projectId)
 
-  // What the box starts out saying, in order of who asked for it.
-  //
-  // A ref stored in settings for this project wins over the repository's base
-  // ref, because it is the same person saying where their branches start and
-  // they said it more recently. When the listing names that ref the option
-  // behind it is attached too, so the picker shows its sha and its badges;
-  // when it does not — a ref that has since been deleted, or one the runtime's
-  // cap dropped — the text stands on its own, which `commitStartPoint` already
-  // treats as a candidate in its own right.
-  //
-  // Otherwise the listing's base ref replaces the placeholder as it lands, as
-  // it always has. Either way nothing overwrites what the user has already put
-  // in the box; switching project clears `touched`, which is what lets the new
-  // project's answer take over.
-  //
-  // The dependency list is `[startPoints, touched]` and must stay that way,
-  // even though the body now also reads `projectId` and the stored refs. This
-  // effect may only act on a listing, and the listing is the thing that arrives
-  // late: adding `projectId` here makes it run the instant the project select
-  // changes, while `startPoints` in this render's closure is still the previous
-  // project's — which put the old repository's base ref back into a box the
-  // select had just cleared. Both of the values read without being listed are
-  // read on the render where the new listing lands, by which time they are the
-  // new project's.
+  // The project's stored start ref wins over the base ref; otherwise the listing's base ref replaces
+  // the placeholder as it lands. Nothing overwrites what the user typed.
+  // Deps must stay `[startPoints, touched]`: adding `projectId` runs this with the previous project's
+  // listing still in closure, putting the old base ref back into a box the select just cleared.
   useEffect(() => {
     if (touched || startPoints.phase !== 'ready') return
     const preferred = startPointDefaults[projectId]
@@ -91,20 +59,14 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
 
   if (!project) return null
 
-  // Null until the user steps something, so the preferred agent — or the first
-  // one found, when there is no preference or it is not installed here — is
-  // preselected without overwriting a choice made while the probe was still in
-  // flight.
+  // Null until the user steps something, so the preselection never overwrites an early choice.
   const counts = agentCounts ?? defaultAgentCounts(agents, defaultAgent)
   const selection = fanOut(agents, counts)
 
-  // Empty until there is something to slugify: the rule's fallback is the word
-  // "worktree", and showing it before a key is pressed promises a branch name
-  // that has nothing to do with the task about to be typed.
+  // Empty until there is text: the fallback slug "worktree" would promise an unrelated branch name.
   const branchName = task.trim() ? branchNameFromTask(taskName(task)) : ''
   const startedFrom = startPoint.text.trim()
-  // The text goes to the agent on one command line, so it is bounded where
-  // that line is; a paste past the bound is refused here rather than cut.
+  // Bounded by the agent's command line; a paste past it is refused, not cut.
   const tooLong = task.trim().length > MAX_AGENT_ARGS_CHARS
   const canSubmit = task.trim().length > 0 && !tooLong && startedFrom.length > 0
 
@@ -128,8 +90,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
             className="field__input field__input--task"
             value={task}
             onChange={(event) => setTask(event.target.value)}
-            // Enter submits because this is the field people finish in; a
-            // description long enough to need paragraphs still gets them.
+            // Enter submits: this is the field people finish in.
             onKeyDown={(event) => {
               if (event.key !== 'Enter' || event.shiftKey) return
               event.preventDefault()

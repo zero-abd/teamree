@@ -1,9 +1,5 @@
-// What a new checkout is given, and everything it is refused.
-//
-// Driven against real repositories and a real filesystem, like the rest of this
-// folder: the whole subject is what git considers tracked, what it considers
-// ignored, and what the filesystem does with a symlink, and mocking any of the
-// three would only prove our idea of them is self-consistent.
+// What a new checkout is given, and everything it is refused. Driven against
+// real repositories: the subject is what git considers tracked and ignored.
 
 import { existsSync } from 'node:fs'
 import { lstat, mkdir, readFile, readlink, writeFile } from 'node:fs/promises'
@@ -25,16 +21,14 @@ afterEach(async () => {
 })
 
 /**
- * A repository shaped like the one this feature is for: a tracked source file,
- * an installed dependency directory, and a secret — the last two ignored, which
- * is exactly why `git worktree add` leaves both behind.
+ * A tracked source file, an installed dependency directory, and a secret — the last
+ * two ignored, which is why `git worktree add` leaves both behind.
  */
 async function fixture(): Promise<TempRepo> {
   const repo = await createTempRepo()
   repos.push(repo)
-  // Two spellings of an ignore rule on purpose. `node_modules/` matches only a
-  // directory, and a symlink is not one — see the removal tests at the foot of
-  // this file, where the difference decides which refusal a removal gives.
+  // Two spellings of an ignore rule on purpose: `node_modules/` matches only a
+  // directory, and a symlink is not one — see the removal tests at the foot.
   await repo.write('.gitignore', 'node_modules/\n.venv\n.env\n.cache/\nvendor.bin\n')
   await repo.write('src/index.ts', 'export const answer = 42\n')
   await repo.commit('a repository with things to ignore')
@@ -87,8 +81,7 @@ describe('preparing a new checkout', () => {
     const link = path.join(worktreePath, 'node_modules')
     expect((await lstat(link)).isSymbolicLink()).toBe(true)
     expect(await readlink(link)).toBe(path.join(repo.repoPath, 'node_modules'))
-    // Reachable through the link, which is the whole point: `npm test` in this
-    // checkout resolves the same install the primary checkout has.
+    // Reachable through the link: `npm test` here resolves the primary checkout's install.
     expect(existsSync(path.join(link, 'left-pad/index.js'))).toBe(true)
   })
 
@@ -191,9 +184,8 @@ describe('the copy budget', () => {
       prepareWorktree(repo.runner, {
         repoPath: repo.repoPath,
         worktreePath,
-        // Both lists, so the assertion below is about the whole preparation and
-        // not only about the entry that was refused: the budget is checked
-        // before the first symlink exists, so neither of these landed.
+        // Both lists: the budget is checked before the first symlink exists, so
+        // neither of these landed.
         linkedPaths: ['node_modules'],
         copiedPaths: ['.env', '.cache'],
         budget: tiny
@@ -289,9 +281,8 @@ describe('removing a worktree that has a symlinked directory in it', () => {
   }
 
   it('names the link in the ignored-files refusal, when the rule covers a symlink', async () => {
-    // `.venv` with no trailing slash matches anything of that name, symlink
-    // included, so the safeguard sees it and says which entry it is refusing
-    // over — exactly as it would for a real directory.
+    // `.venv` with no trailing slash matches a symlink too, so the safeguard sees
+    // it and names the entry it refuses over.
     const { service, worktree } = await prepared('.venv')
 
     await expect(service.removeWorktree({ worktreeId: worktree.id })).rejects.toThrow(/ignored/)
@@ -300,12 +291,9 @@ describe('removing a worktree that has a symlinked directory in it', () => {
   })
 
   it('still refuses when the rule has a trailing slash and git calls the link untracked', async () => {
-    // `node_modules/` matches directories and a symlink is not one, so git does
-    // not consider the link ignored at all: it is an untracked file, and the
-    // refusal is the one `git worktree remove` gives for a dirty checkout. A
-    // different sentence, the same answer — nothing is deleted, and in
-    // particular git never treats the link as a directory whose contents are
-    // about to go.
+    // `node_modules/` matches directories and a symlink is not one, so git calls
+    // the link untracked and the refusal is the dirty-checkout one. A different
+    // sentence, the same answer: git never treats the link as a directory to walk.
     const { service, worktree } = await prepared('node_modules')
 
     await expect(service.removeWorktree({ worktreeId: worktree.id })).rejects.toThrow(/uncommitted|ignored/)
@@ -319,9 +307,8 @@ describe('removing a worktree that has a symlinked directory in it', () => {
     await service.removeWorktree({ worktreeId: worktree.id, force: true })
 
     expect(existsSync(worktree.path)).toBe(false)
-    // The line this whole block exists for: a forced removal deletes everything
-    // in the checkout, and the primary checkout's install is on the other end
-    // of one of those entries. git unlinks the symlink rather than walking it.
+    // A forced removal deletes everything in the checkout, and the primary
+    // checkout's install is on the other end of a symlink. git unlinks it rather than walking it.
     expect(await readFile(path.join(repo.repoPath, 'node_modules/left-pad/index.js'), 'utf8')).toContain('module')
   })
 })

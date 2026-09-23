@@ -1,33 +1,9 @@
-// Which packaged app a verification script should look at.
-//
-// One copy, imported by both scripts/verify-package.mjs and
-// scripts/verify-quarantine-advice.mjs, because they had a copy each and both
-// copies were wrong in the same way — which is what a copy does.
-//
-// electron-builder does not clean `dist/` between runs, and a universal build
-// removes its own per-architecture intermediates once it has merged them. So a
-// `dist/mac/` or `dist/mac-arm64/` left behind by any earlier single-
-// architecture build stays there permanently, and a fixed order that named it
-// before `dist/mac-universal/` would verify the old app, report PASS, and leave
-// somebody shipping a `.dmg` nothing had looked at. `install:verify` would go
-// further and copy the stale bundle into /Applications.
-//
-// Which one exists is the wrong question; which one was just built is the right
-// one. So the newest wins, read off the bundle's own executable, which every
-// pack rewrites. A fixed order cannot be right for both kinds of build: naming
-// the universal app first has the mirror of the same fault, quietly checking a
-// stale universal bundle for somebody who has just built a single-architecture
-// one with `package:dir`.
+// Which packaged app a verification script should look at: the newest, by its executable's mtime.
+// electron-builder never cleans `dist/`, so a fixed order verifies a stale build for one kind or the other.
 import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-/**
- * Every place a packaged app lands, newest first.
- *
- * Ties — two builds within the same millisecond, or a tree whose executable
- * cannot be stat'd — fall back to the order written here, universal first,
- * because the universal `.dmg` is the only macOS artifact this project ships.
- */
+/** Every place a packaged app lands, newest first; ties go universal first, the only shipped .dmg. */
 export function packagedAppCandidates(platform = process.platform) {
   const candidates =
     platform === 'darwin'
@@ -48,8 +24,7 @@ function builtAt(root, platform) {
     platform === 'darwin'
       ? join(root, 'Contents', 'MacOS', 'teamree')
       : join(root, platform === 'win32' ? 'teamree.exe' : 'teamree')
-  // The bundle directory is the fallback rather than the first choice: adding a
-  // file inside Contents/ does not touch the mtime of the directory above it.
+  // The directory is the fallback: adding a file in Contents/ does not touch its mtime.
   for (const path of [binary, root]) {
     try {
       return statSync(path).mtimeMs

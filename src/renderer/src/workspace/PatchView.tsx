@@ -1,22 +1,6 @@
-// The patch itself, laid out so it can be talked about.
-//
-// What was here before was the patch as git printed it, in a monospace block
-// coloured by the first character of each line. That is enough to see that
-// something changed. It is not enough to review: there is no line number to
-// cite, no file boundary to fold away, and no way to hold one hunk still while
-// reading the next — so a four-hundred-line change from an agent sends somebody
-// back to their editor, which is the one moment this app exists for.
-//
-// So: files fold, hunks fold, every line carries its number on both sides, and
-// the `@@` header sticks to the top of its hunk while you read down it, because
-// the header is the only thing on screen that says where you are.
-//
-// The patch stays the source of truth. Nothing here reads the working tree and
-// nothing here is an editor — text is rendered as text, a line at a time, and
-// the colour on it comes from a tokenizer that knows a handful of languages and
-// declines to guess at the rest (`src/shared/syntax.ts`). An editor component
-// here would be a different decision about what this panel is for, and it would
-// bring its own model of the file, which is exactly the thing a patch is not.
+// The patch laid out for review: files and hunks fold, lines carry both numbers, and the `@@` header
+// sticks while you read its hunk. The patch stays the source of truth; colour comes from the small
+// tokenizer in `src/shared/syntax.ts`, not an editor with its own model of the file.
 
 import { useMemo } from 'react'
 import { parsePatch, type PatchFile, type PatchHunk, type PatchLine } from '@shared/patch'
@@ -31,13 +15,7 @@ const STATUS_NOTE: Record<PatchFile['status'], string> = {
   modified: ''
 }
 
-/**
- * What the control on a hunk header does, and the word on it.
- *
- * A verb and nothing else. The panel is narrow, the two words are opposites,
- * and which one appears is already decided by which half of the patch the hunk
- * is in — a sentence explaining that would be longer than the patch.
- */
+/** The verb on a hunk header's control; which one follows from the half of the patch the hunk is in. */
 export type HunkAction = 'Stage' | 'Unstage'
 
 export function PatchView({
@@ -51,24 +29,19 @@ export function PatchView({
   patch: string
   truncated: boolean
   layout: DiffLayout
-  /**
-   * The verb every hunk here is offered. Absent leaves the patch read-only,
-   * which is what every other caller of this component wants.
-   */
+  /** The verb every hunk here is offered; absent leaves the patch read-only. */
   action?: HunkAction
   /** True while one is in flight, so a second click cannot race the first. */
   busy?: boolean
   onHunk?: (file: PatchFile, hunk: PatchHunk) => void
 }): React.JSX.Element {
-  // Parsed once per patch rather than per render: the panel re-renders on every
-  // refresh tick the worktree produces, and a patch is a few thousand lines.
+  // Once per patch: the panel re-renders on every refresh tick and a patch is thousands of lines.
   const files = useMemo(() => parsePatch(patch), [patch])
 
   return (
     <div className={`patch patch--${layout}`}>
       {files.map((file, index) => (
-        // The index, because two files in one patch can share a path: a rename
-        // of A to B in the same patch as an edit to A is two entries called A.
+        // The index: a rename of A to B plus an edit to A is two entries called A.
         <details className="patch__file" key={`${file.path}-${index}`} open>
           <summary className="patch__fileHead">
             {/* Split here rather than through the panel's own helpers, which
@@ -90,9 +63,7 @@ export function PatchView({
             <p className="patch__binary">No content changed.</p>
           ) : (
             file.hunks.map((hunk, at) => (
-              // By position: two hunks of a patch cut short at a byte ceiling
-              // can arrive with the same header and no content to tell them
-              // apart, and a duplicate key drops one of them from the screen.
+              // By position: hunks of a truncated patch can share a header, and a duplicate key drops one.
               <HunkView
                 hunk={hunk}
                 key={at}
@@ -144,9 +115,7 @@ function HunkView({
             type="button"
             className="patch__stage"
             disabled={busy}
-            // The header is a `summary`, so a click inside it folds the hunk
-            // unless the button keeps it. Nobody asking to stage a hunk is also
-            // asking to stop looking at it.
+            // Inside a `summary`, a click folds the hunk unless the button stops it.
             onClick={(event) => {
               event.preventDefault()
               event.stopPropagation()
@@ -166,8 +135,7 @@ function HunkView({
               </div>
             ))
           : hunk.lines.map((line, index) => (
-              // The index is the only identity a diff line has: two lines of a
-              // patch can be byte-identical and still be different lines.
+              // Two lines can be byte-identical and still be different lines.
               <div className={`patch__row patch__row--${line.kind}`} key={index}>
                 <span className="patch__num">{line.oldNumber ?? ''}</span>
                 <span className="patch__num">{line.newNumber ?? ''}</span>
@@ -225,15 +193,7 @@ export type PatchRow = {
   new: PatchLine | null
 }
 
-/**
- * A hunk's lines paired into rows, for the two-column layout.
- *
- * Git writes a replacement as every removal followed by every addition, so the
- * pairing is by position within a run and not by content: the first line taken
- * out sits beside the first line put in. Where one run is longer, the short
- * side gets a gap rather than a line borrowed from the next run — the numbers
- * in the gutters have to keep meaning what they say.
- */
+/** A hunk's lines paired into two-column rows by position within a run; the short side gets a gap. */
 export function pairLines(lines: readonly PatchLine[]): PatchRow[] {
   const rows: PatchRow[] = []
   let at = 0

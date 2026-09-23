@@ -45,15 +45,9 @@ type Pending = {
 
 type ObservedTimeout = { cancel: () => void }
 
-/**
- * A deadline that only fires on time this process was awake for.
- *
- * A one-shot armed for fifteen seconds comes back the moment a lid reopens,
- * having measured hours, and spending the budget there blames the runtime for a
- * silence nobody was listening to. `startTimedWindow` recognises that gap, and
- * the timer is re-armed instead; a connection that actually died still rejects
- * through the socket's own error and close handlers.
- */
+// A deadline that only counts time this process was awake for: a one-shot fires
+// the moment a lid reopens, blaming the runtime for a silence nobody heard.
+// A connection that actually died still rejects through the socket's own handlers.
 function observedTimeout(ms: number, fire: () => void): ObservedTimeout {
   let timer: NodeJS.Timeout | undefined
   const arm = (): void => {
@@ -98,8 +92,7 @@ export function connectRuntime(options: ConnectOptions): Promise<RuntimeClient> 
 
     const pending = new Map<string, Pending>()
     const streams = new Map<string, (event: unknown) => void>()
-    // Events can land before the subscribing call's response is handled, so
-    // hold them until a handler claims that subscription id.
+    // Events can land before the subscribing call's response; held until a handler claims the id.
     const orphanEvents = new Map<string, unknown[]>()
     const decode = createFrameDecoder()
 
@@ -212,9 +205,7 @@ export function connectRuntime(options: ConnectOptions): Promise<RuntimeClient> 
           )
         })
         pending.set(id, { resolve: resolveCall, reject: rejectCall, timer, method })
-        // Requests share the frame encoder: the protocol's framing is one JSON
-        // value per line in both directions, even though `Frame` names only the
-        // server's half.
+        // Framing is one JSON value per line in both directions; `Frame` names only the server's half.
         socket.write(encodeFrame(request as unknown as Frame))
       })
     }

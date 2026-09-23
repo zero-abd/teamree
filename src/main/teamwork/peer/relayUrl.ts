@@ -1,40 +1,12 @@
-// Where the relay is, and why it is written down there.
-//
-// THE DECISION: the relay URL lives in the repository, at `.teamree/relay`,
-// beside the member keys — and `TEAMREE_RELAY_URL` in the environment overrides
-// it for one run. There is deliberately no default: teams self-host, nobody
-// runs one for them, and a URL baked in here would be either a lie or a server
-// this project is quietly asking a team to trust.
-//
-// The repository is the right place for the same reason the roster is. A relay
-// is a team-wide fact, not a per-machine preference: everybody on the team has
-// to name the same one or they never meet. Anywhere else — a settings pane, a
-// per-machine config file — is a second list to keep in step with the first,
-// which is the thing `docs/teamwork.md` spends its identity section avoiding.
-// Committing it means one person deploys a relay, pushes a one-line file, and
-// the team is connected, with the change visible in a diff like every other
-// decision about the project.
-//
-// The obvious objection — whoever can push can point the team at a relay they
-// run — costs nothing that is not already conceded. A relay is never trusted
-// with content: `IK` authenticates both static keys, so the worst a hostile
-// relay does is refuse to pair or drop frames, which is denial of service by
-// someone who could also just delete everyone's keys. `docs/teamwork.md`
-// already says a repository you can push to is a repository whose members you
-// can rewrite.
-//
-// The environment override is for the case the relay's own README describes:
-// an ephemeral `cloudflared` URL that changes every time the tunnel restarts.
-// That is a thing to try, not a thing to commit, so it goes somewhere that is
-// gone when the process is.
+// Where the relay is: `.teamree/relay` in the repository (a team-wide fact, reviewed in a diff), overridden
+// for one run by `TEAMREE_RELAY_URL` (for an ephemeral `cloudflared` URL). Deliberately no default: a URL
+// baked in here would be a server this project is quietly asking a team to trust. A relay never sees content.
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { parseRelayUrl } from '../../../shared/relayUrl'
 
-// The grammar is shared with the window, which has to refuse an address
-// while it is being typed rather than after a round trip. Re-exported here
-// so the rest of the runtime still asks this module about relay URLs.
+// The grammar is shared with the window, which refuses an address while it is being typed.
 export { parseRelayUrl, RELAY_ENDPOINT_PATH, websocketFormOf } from '../../../shared/relayUrl'
 export type { RelayUrlParse } from '../../../shared/relayUrl'
 
@@ -76,15 +48,8 @@ export function relayFileTemplate(url: string): string {
 }
 
 /**
- * Writes the file that whoever stood the relay up would otherwise write by
- * hand, and stops there: it is not staged, not committed and not pushed, for
- * the same reason a member file is not.
- *
- * Replaces what is there, unlike a member file, which is refused rather than
- * overwritten because it is somebody else's key. A relay is the project's one
- * team-wide fact and a team has exactly one — changing it *is* what setting it
- * means — and the change is reviewed where every other decision about the
- * project is, in the diff the author has to commit.
+ * Writes the relay file and stops there: not staged, committed or pushed. Replaces what is there, unlike
+ * a member file: a team has exactly one relay, and the change is reviewed in the diff the author commits.
  */
 export async function writeRelayFile(projectPath: string, url: string): Promise<string> {
   const target = join(projectPath, ...RELAY_FILE_SEGMENTS)
@@ -93,12 +58,7 @@ export async function writeRelayFile(projectPath: string, url: string): Promise<
   return RELAY_FILE_NAME
 }
 
-/**
- * The relay for one project.
- *
- * `env` is passed in rather than read from `process.env` so a test can say what
- * the environment holds without editing the process it runs in.
- */
+/** The relay for one project. `env` is passed in so a test can say what the environment holds. */
 export async function readRelayConfig(projectPath: string, env: NodeJS.ProcessEnv = process.env): Promise<RelayConfig> {
   const override = relayOverride(env)
   if (override !== null) {
@@ -120,12 +80,8 @@ export function relayOverride(env: NodeJS.ProcessEnv = process.env): string | nu
 export type RelayFileRead = { ok: true; url: string } | { ok: false; reason: string }
 
 /**
- * What the file in the checkout says, on its own.
- *
- * Read separately from the environment because the two are worth showing side
- * by side: an override in effect does not stop the team's relay being a fact
- * about this repository, and a person asking why they are not meeting anybody
- * needs to see both answers rather than whichever one won.
+ * What the file in the checkout says, on its own. Read separately from the environment because a person
+ * asking why they are not meeting anybody needs to see both answers rather than whichever one won.
  */
 export async function readRelayFile(projectPath: string): Promise<RelayFileRead> {
   let text: string

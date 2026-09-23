@@ -1,10 +1,5 @@
-// The compact git readout on a worktree row: divergence counts and a single
-// dirty indicator. Anything more detailed belongs in the worktree itself.
-//
-// Whether these numbers are still being confirmed is read from the store here
-// rather than passed in, because it belongs to the chips and to nothing else on
-// the row: a count the app has stopped being able to verify is the chips'
-// problem to admit to, wherever they happen to be rendered.
+// The compact git readout on a worktree row. Staleness is read from the store
+// here, not passed in: a count the app cannot verify is the chips' problem to admit to.
 
 import type { WorktreeStatus } from '@shared/entities'
 import { useNow } from '../state/useNow'
@@ -20,13 +15,11 @@ export function GitStatusChips({ status }: { status: WorktreeStatus | undefined 
   const stale = statusStaleness({ status, unreadableSince, now })
   if (!summary) return null
 
-  // Ignored entries are not a change and never colour the row's tone. They are
-  // here because removing the checkout deletes them and git's own refusal does
-  // not cover them, so this chip is the only notice they get.
+  // Ignored entries never colour the row's tone. Removing the checkout deletes
+  // them and git's own refusal does not cover them, so this chip is the only notice they get.
   const ignored = status?.ignored ?? 0
   const counts = ignored > 0 ? `${summary.description} · ${ignored} ignored` : summary.description
-  // Staleness wraps the counts rather than joining them: it qualifies every
-  // number here, including the ignored one.
+  // Staleness qualifies every number here, including the ignored one.
   const description = stale ? `${stale.detail} ${counts}` : counts
 
   return (

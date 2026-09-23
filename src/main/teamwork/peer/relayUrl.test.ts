@@ -1,8 +1,5 @@
-// Where the relay comes from, and what happens when it does not come from
-// anywhere. The second half is most of this file: a project with no relay is
-// the ordinary state of a project nobody has set teamwork up on, and what the
-// app says about it is the difference between a setting to fill in and a fault
-// to investigate.
+// Where the relay comes from, and what the app says when it does not: a project
+// with no relay is a setting to fill in, not a fault to investigate.
 
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -119,9 +116,8 @@ describe('what counts as a relay URL', () => {
 
   it('refuses the host on its own, which dials a path no relay can serve', () => {
     // The half-followed instruction: scheme corrected, endpoint never added.
-    // Accepting it dialled wss://host/<rendezvous>, the relay answered 404, the
-    // failed upgrade read as a socket error, and both machines said the relay
-    // was unreachable — about a relay that was up.
+    // Accepting it dialled wss://host/<rendezvous>, the relay answered 404, and
+    // both machines called a relay that was up unreachable.
     const parsed = parseRelayUrl('wss://my-relay.example.workers.dev')
     expect(parsed.ok).toBe(false)
     expect(parsed.ok === false && parsed.suggestion).toBe('wss://my-relay.example.workers.dev/v1/relay')

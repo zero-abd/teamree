@@ -1,33 +1,11 @@
-// What `npm run package:mac` does about a signing identity, when there is one.
-//
-// `electron-builder.yml` pins `identity: '-'`, `hardenedRuntime: false` and
-// `notarize: false`, which is what produces the ad-hoc build this project has
-// always made. Those three settings are the whole of the difference between a
-// build that opens here and a build somebody can download, and until now the
-// way to change them was a paragraph of comment telling a maintainer which
-// flags to type. A flag you have to type is a flag you can mistype, and the
-// failure is silent in the worst direction: an unsigned `.dmg` published as a
-// signed one looks identical until it is on somebody else's Mac.
-//
-// So the decision moved here, and it is made from the environment. Set nothing
-// and the build is exactly the build it was; set a complete set of credentials
-// and the same command produces a signed, notarized one. Set half a set and it
-// refuses, by name, rather than quietly falling back to unsigned — falling back
-// is the one behaviour that could send an unsigned build out under the belief
-// that it was signed.
-//
-// Nothing here has been run against a real certificate. See `docs/releasing.md`
-// for exactly which steps that leaves unverified.
+// What `npm run package:mac` does about signing, decided from the environment: nothing set gives the
+// ad-hoc build, a complete set signs and notarizes, half a set refuses by name rather than falling
+// back to unsigned. Untested against a real certificate; see docs/releasing.md.
 
 /** The identity to sign with: the full string, as `security find-identity` prints it. */
 const IDENTITY = 'APPLE_SIGNING_IDENTITY'
 
-/**
- * The certificate itself, when it is not already in the login keychain.
- *
- * electron-builder reads both of these by itself; they are named here only so
- * that half a pair is caught before a forty-minute build rather than inside it.
- */
+/** The certificate when it is not in the login keychain; named so half a pair fails before the build. */
 const CERTIFICATE = ['CSC_LINK', 'CSC_KEY_PASSWORD']
 
 /** App Store Connect API key: the form Apple recommends, and the only one with no password in it. */
@@ -39,30 +17,12 @@ const NOTARY_APPLE_ID = ['APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_
 /** Sign, but do not notarize. An escape hatch with a warning attached, not a default. */
 const SKIP_NOTARIZE = 'TEAMREE_SKIP_NOTARIZE'
 
-/**
- * Every variable whose presence means somebody intended to sign.
- *
- * The list is what makes "set nothing, get the old behaviour" and "set half a
- * set, get a refusal" distinguishable. Without it, a missing `CSC_KEY_PASSWORD`
- * and an unconfigured machine look the same.
- */
+/** Every variable whose presence means somebody intended to sign; separates "unset" from "half set". */
 export const MAC_SIGNING_VARIABLES = [IDENTITY, ...CERTIFICATE, ...NOTARY_API_KEY, ...NOTARY_APPLE_ID]
 
 /**
- * The identity as electron-builder wants it, from the identity as Apple prints it.
- *
- * `security find-identity -v -p codesigning` — the command anybody would use to
- * find out what to put here — prints the full string, prefix and all:
- *
- *   "Developer ID Application: Your Name (AB12CD34EF)"
- *
- * Hand that to electron-builder and it refuses, with
- * "Please remove prefix \"Developer ID Application:\" from the specified name".
- * That is a real refusal seen from this repository, and it arrives at the end of
- * the packing step, several minutes in, after the app has been assembled.
- *
- * So both spellings are accepted here and the prefix is taken off. The
- * alternative is a documented variable whose obvious value is wrong.
+ * Strips "Developer ID Application:" from the identity as `security find-identity` prints it;
+ * electron-builder refuses the prefix minutes into packing.
  */
 export function certificateName(identity) {
   return identity.trim().replace(/^Developer ID Application:\s*/i, '')
@@ -78,17 +38,8 @@ function missingFrom(env, group) {
 }
 
 /**
- * How `npm run package:mac` should be run, given this environment.
- *
- * Returns one of three shapes, all of them with a `mode`:
- *
- *   `unsigned`  no signing variable is set. `flags` is empty and the build is
- *               byte-for-byte the build this repository has always produced.
- *   `signed`    a complete set is present. `flags` carries the three
- *               `-c.mac.*` overrides, and `notarize` says whether the ticket
- *               will be requested.
- *   `refused`   something is set and something else is missing. `problems`
- *               names each one and what to do about it; no build is started.
+ * How `npm run package:mac` should run: `unsigned` (no flags), `signed` (`-c.mac.*` flags and
+ * `notarize`), or `refused` (`problems` names each missing piece; no build starts).
  */
 export function resolveMacSigning(env = process.env) {
   const configured = MAC_SIGNING_VARIABLES.filter((name) => present(env, name))
@@ -137,10 +88,7 @@ export function resolveMacSigning(env = process.env) {
     mode: 'signed',
     notarize: notarization.notarize,
     identity: certificateName(env[IDENTITY]),
-    // `hardenedRuntime` and `notarize` move together because Apple's notary
-    // service rejects a submission without the hardened runtime, so signing
-    // with one and not the other buys a rejection at the end of the build.
-    // build/entitlements.mac.plist is already written for it.
+    // Together: the notary service rejects a submission without the hardened runtime.
     flags: [
       `-c.mac.identity=${certificateName(env[IDENTITY])}`,
       '-c.mac.hardenedRuntime=true',
