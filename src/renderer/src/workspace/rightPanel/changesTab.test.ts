@@ -87,3 +87,19 @@ describe('commit message drafts', () => {
     expect(after).toEqual({ 'wt-b': 'bump the relay' })
   })
 })
+
+describe('changedCount', () => {
+  it('counts everything a commit would have to deal with', () => {
+    expect(changedCount({ staged: 2, unstaged: 4, untracked: 1, conflicted: 2 })).toBe(9)
+  })
+
+  // Ahead and behind describe the branch, not the tree, so they belong to the
+  // status bar rather than to this badge.
+  it('is zero for a clean worktree, however far the branch has drifted', () => {
+    expect(changedCount({ staged: 0, unstaged: 0, untracked: 0, conflicted: 0 })).toBe(0)
+  })
+
+  it('is zero when the status has not been read yet', () => {
+    expect(changedCount(undefined)).toBe(0)
+  })
+})

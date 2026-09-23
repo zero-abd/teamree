@@ -76,18 +76,7 @@ export function CommandPalette({ modifier }: { modifier: PlatformModifier }): Re
           pushing
         })
       }),
-    [
-      items,
-      consent,
-      projects,
-      worktrees,
-      activeWorktreeId,
-      layouts,
-      watches,
-      focusedWatchId,
-      statuses,
-      pushing
-    ]
+    [items, consent, projects, worktrees, activeWorktreeId, layouts, watches, focusedWatchId, statuses, pushing]
   )
 
   const matches = useMemo(() => filterPalette(offered, query), [offered, query])
