@@ -19,6 +19,7 @@ import {
   restartSessionCommand,
   type AgentKind
 } from './agent-command'
+import type { ConversationEvidence, ConversationQuestion } from './agent-conversations'
 import { appendPane, parsePaneNode, removePane, splitPane, terminalIdsIn } from './pane-tree'
 import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
 import { CHECKPOINT_SOURCE_BYTES, ScrollbackCheckpoints } from './scrollbackCheckpoints'
@@ -129,6 +130,15 @@ export type TerminalSessionManagerOptions = {
    * prompt, which is every shell for almost all of its life.
    */
   onAgentSettled?: (settled: AgentSettled) => void
+  /**
+   * Whether the conversation a restored pane would resume is on this disk.
+   *
+   * The default reads the agents' own stores under the user's home directory,
+   * which is the whole point of it — see `agent-conversations.ts`. Overridable
+   * so a test can point the same question at a store it built, rather than at
+   * whatever the machine running the suite happens to have in it.
+   */
+  conversationEvidence?: (question: ConversationQuestion) => ConversationEvidence
 }
 
 /**
@@ -508,7 +518,7 @@ export class TerminalSessionManager {
     let resumed = 0
     for (const record of records) {
       if (this.sessions.has(record.id)) continue
-      const launch = restoreLaunch(record)
+      const launch = restoreLaunch(record, this.options.conversationEvidence)
       // A pane that resumes a conversation is about to print that conversation
       // itself, from the agent's own store, so replaying a transcript into it
       // would show the same exchange twice — once as a record of what the agent
@@ -550,7 +560,10 @@ export class TerminalSessionManager {
             // Only where a conversation is being asked for. Everything else
             // here either is the fresh start already or is a plain shell, and
             // neither has anything to fall back from.
-            ...(launch.resumed && launch.fallback !== undefined ? { fallback: launch.fallback } : {})
+            ...(launch.resumed && launch.fallback !== undefined ? { fallback: launch.fallback } : {}),
+            // Said in the pane before anything starts in it, where this launch
+            // is not the one the record asked for and nothing else would say so.
+            ...(launch.note === undefined ? {} : { startupNote: launch.note })
           },
           restoring,
           launch.resumed ? 'agent' : 'shell'
@@ -642,6 +655,8 @@ export class TerminalSessionManager {
       /** What this pane runs instead if the resume it is being given is refused. */
       fallback?: { command: string; agentSessionId?: string }
       recordStartsBelow?: string
+      /** A line the pane prints before its command, saying why this is not a resume. */
+      startupNote?: string
     },
     restoring?: TerminalRecord,
     restored?: 'shell' | 'agent'
@@ -683,6 +698,7 @@ export class TerminalSessionManager {
       ...(restored === undefined ? {} : { restored }),
       ...(params.restoredRecord === undefined ? {} : { restoredRecord: params.restoredRecord }),
       ...(params.recordStartsBelow === undefined ? {} : { recordStartsBelow: params.recordStartsBelow }),
+      ...(params.startupNote === undefined ? {} : { startupNote: params.startupNote }),
       ...(agent === undefined ? {} : { agent }),
       ...(fallback === undefined
         ? {}

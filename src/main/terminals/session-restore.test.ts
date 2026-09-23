@@ -6,7 +6,13 @@ import type { Layout } from '../../shared/entities'
 import type { TerminalEvent } from '../../shared/methods'
 import { MAX_RECORD_BYTES, ScrollbackArchive } from '../store/scrollbackArchive'
 import { canSpawnPty, waitUntil } from './pty-test-support'
-import { INERT_RECORD } from './scrollbackRecord'
+import {
+  claudeTranscriptPath,
+  conversationOnDisk,
+  type ConversationEvidence,
+  type ConversationQuestion
+} from './agent-conversations'
+import { INERT_RECORD, noConversationMark } from './scrollbackRecord'
 import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
 import { TerminalSessionManager, type LayoutRepository, type SessionRepository } from './session-manager'
 
@@ -23,9 +29,22 @@ function record(overrides: Partial<TerminalRecord> = {}): TerminalRecord {
   }
 }
 
+/**
+ * What the agents' stores are answering, said out loud by every unit test here.
+ *
+ * `restoreLaunch` asks whether the conversation a pane would resume is on this
+ * disk, and the real answer comes from the home directory of whoever is running
+ * the suite — which is not a thing a test may depend on in either direction.
+ * Naming the world each case is in also keeps the two questions apart: what the
+ * store says, and what this app watched somebody type.
+ */
+const stored = (): ConversationEvidence => 'present'
+const missing = (): ConversationEvidence => 'absent'
+const unknowable = (): ConversationEvidence => 'unknown'
+
 describe('restoreLaunch', () => {
   it('resumes an agent by the id that was pinned for it', () => {
-    const launch = restoreLaunch(record({ command: 'claude', agent: 'claude', agentSessionId: 'abc', typed: true }))
+    const launch = restoreLaunch(record({ command: 'claude', agent: 'claude', agentSessionId: 'abc' }), stored)
     expect(launch.command).toBe('claude --resume abc')
     expect(launch.resumed).toBe(true)
   })
@@ -35,7 +54,8 @@ describe('restoreLaunch', () => {
   // it. Everything this command is built from lives on the record.
   it('carries a way to start the agent over if that resume is refused', () => {
     const launch = restoreLaunch(
-      record({ command: 'claude --session-id old-zzz', agent: 'claude', agentSessionId: 'old-zzz', typed: true })
+      record({ command: 'claude --session-id old-zzz', agent: 'claude', agentSessionId: 'old-zzz' }),
+      stored
     )
     expect(launch.command).toBe('claude --resume old-zzz')
     // A fresh id, not the refused one: an id the agent has already declined to
@@ -50,7 +70,7 @@ describe('restoreLaunch', () => {
   // Nothing of ours is on this line, so there is nothing of ours to replace,
   // and starting the agent over means running exactly what the pane ran.
   it('starts a session-less agent over with the command it was launched with', () => {
-    const launch = restoreLaunch(record({ command: 'codex', agent: 'codex', typed: true }))
+    const launch = restoreLaunch(record({ command: 'codex', agent: 'codex' }), stored)
     expect(launch.command).toBe('codex resume --last')
     expect(launch.resumed).toBe(true)
     expect(launch.fallback).toEqual({ command: 'codex' })
@@ -68,7 +88,8 @@ describe('restoreLaunch', () => {
     // turn up inside a new one by chance — about one run in a couple of hundred
     // for three characters, which is a test that fails for nobody's reason.
     const launch = restoreLaunch(
-      record({ command: 'claude --session-id old-zzz', agent: 'claude', agentSessionId: 'old-zzz', typed: false })
+      record({ command: 'claude --session-id old-zzz', agent: 'claude', agentSessionId: 'old-zzz', typed: false }),
+      unknowable
     )
 
     expect(launch.resumed).toBe(false)
@@ -88,7 +109,7 @@ describe('restoreLaunch', () => {
   // Its "resume the last session here" is worse than useless for a pane that
   // had no session: it would pick up whatever else was run in this directory.
   it('starts an agent that mints its own ids over too, with nothing pinned', () => {
-    expect(restoreLaunch(record({ command: 'codex', agent: 'codex', typed: false }))).toEqual({
+    expect(restoreLaunch(record({ command: 'codex', agent: 'codex', typed: false }), unknowable)).toEqual({
       command: 'codex',
       resumed: false,
       repinned: { command: 'codex' }
@@ -102,10 +123,13 @@ describe('restoreLaunch', () => {
   // world exactly once, on the launch after an upgrade, which is a worse
   // version of the bug this whole change is about.
   it('still tries the resume for a record written before any of this existed', () => {
-    const pinned = restoreLaunch(record({ command: 'claude --session-id abc', agent: 'claude', agentSessionId: 'abc' }))
+    const pinned = restoreLaunch(
+      record({ command: 'claude --session-id abc', agent: 'claude', agentSessionId: 'abc' }),
+      unknowable
+    )
     expect(pinned.command).toBe('claude --resume abc')
     expect(pinned.resumed).toBe(true)
-    const latest = restoreLaunch(record({ command: 'codex', agent: 'codex' }))
+    const latest = restoreLaunch(record({ command: 'codex', agent: 'codex' }), unknowable)
     expect(latest.command).toBe('codex resume --last')
     expect(latest.resumed).toBe(true)
   })
@@ -122,7 +146,7 @@ describe('restoreLaunch', () => {
       "claude --session-id 'unclosed"
     ]) {
       const agent = command.includes('codex') ? 'codex' : 'claude'
-      expect(restoreLaunch(record({ command, agent, typed: false })), command).toEqual({ resumed: false })
+      expect(restoreLaunch(record({ command, agent, typed: false }), unknowable), command).toEqual({ resumed: false })
     }
   })
 
@@ -131,11 +155,11 @@ describe('restoreLaunch', () => {
   // there — and `pinSessionCommand` already steps back from this same case
   // rather than argue with it.
   it('leaves a session somebody chose by hand alone, typed into or not', () => {
-    expect(restoreLaunch(record({ command: 'claude --resume chosen-by-hand', agent: 'claude' }))).toEqual({
+    expect(restoreLaunch(record({ command: 'claude --resume chosen-by-hand', agent: 'claude' }), missing)).toEqual({
       command: 'claude --resume chosen-by-hand',
       resumed: true
     })
-    expect(restoreLaunch(record({ command: 'codex resume chosen-by-hand', agent: 'codex' }))).toEqual({
+    expect(restoreLaunch(record({ command: 'codex resume chosen-by-hand', agent: 'codex' }), missing)).toEqual({
       command: 'codex resume chosen-by-hand',
       resumed: true
     })
@@ -154,10 +178,59 @@ describe('restoreLaunch', () => {
     expect(restoreLaunch(record())).toEqual({ resumed: false })
   })
 
+  // The second way into "No conversation found with session ID", and the reason
+  // the question is asked of the store at all. Every worktree is a directory the
+  // agent has never seen, so the first `claude` in one puts up "Is this a
+  // project you trust?" with "No, exit" selected — and an arrow key or an Enter
+  // there is a keystroke that reaches a gate rather than an agent. The pane
+  // wrote down that somebody had typed, the store stayed empty, and the resume
+  // asked for a conversation nobody ever had.
+  it('starts over a pane whose conversation is not in the store, whatever was typed into it', () => {
+    const launch = restoreLaunch(
+      record({ command: 'claude --session-id old-zzz', agent: 'claude', agentSessionId: 'old-zzz', typed: true }),
+      missing
+    )
+
+    expect(launch.resumed).toBe(false)
+    expect(launch.command).not.toContain('--resume')
+    expect(launch.command).not.toContain('old-zzz')
+    expect(launch.repinned?.agentSessionId).toBeDefined()
+    // And it says so, because a pane that comes back as a fresh agent looks
+    // exactly like a pane that came back as a fresh agent for any other reason.
+    expect(launch.note).toBe(noConversationMark('claude'))
+  })
+
+  // The same evidence read the other way, which is the half that proves this is
+  // evidence rather than a second heuristic. A conversation on the disk is a
+  // conversation to resume, whatever this app did or did not watch somebody do
+  // — a pane driven by something other than a keyboard, a `typed: false` written
+  // by a restart that then went on to have a conversation.
+  it('resumes a pane whose conversation is in the store though nothing was seen typed into it', () => {
+    const launch = restoreLaunch(
+      record({ command: 'claude --session-id abc', agent: 'claude', agentSessionId: 'abc', typed: false }),
+      stored
+    )
+
+    expect(launch).toEqual({ command: 'claude --resume abc', resumed: true, fallback: expect.anything() })
+    expect(launch.note).toBeUndefined()
+  })
+
+  // A pane that starts over because nobody ever typed into it is not being told
+  // anything it can act on: the pane it is describing is the empty one on the
+  // screen. The line is for the other case, where this app looked somewhere the
+  // reader cannot see and came back with an answer.
+  it('says nothing extra when it is only the old heuristic starting a pane over', () => {
+    const launch = restoreLaunch(record({ command: 'claude', agent: 'claude', typed: false }), unknowable)
+    expect(launch.resumed).toBe(false)
+    expect(launch.note).toBeUndefined()
+  })
+
   it('opens a plain shell when the agent offers no way back at all', () => {
     // Recorded as an agent, but this one can neither resume an id nor find the
     // last session, so there is nothing honest to re-issue.
-    expect(restoreLaunch(record({ command: 'gemini', agent: 'gemini', typed: true }))).toEqual({ resumed: false })
+    expect(restoreLaunch(record({ command: 'gemini', agent: 'gemini', typed: true }), unknowable)).toEqual({
+      resumed: false
+    })
   })
 })
 
@@ -354,12 +427,22 @@ describePty('restoring terminals across a restart', () => {
     checkout: string,
     scrollback?: ScrollbackArchive,
     /** Shortened from fifteen seconds, so a test can watch a checkpoint happen. */
-    checkpointIntervalMs?: number
+    checkpointIntervalMs?: number,
+    /**
+     * What the agents' stores say about these panes, for the tests that are
+     * about that. Everything else here gets "unknown" — not the real probe,
+     * which would read the home directory of whoever is running the suite and
+     * answer "there is no conversation" for a checkout it made in /tmp a second
+     * ago, quietly turning every resume in this file into a fresh start. Unknown
+     * is the answer that leaves those tests testing what they say they test.
+     */
+    conversationEvidence: (question: ConversationQuestion) => ConversationEvidence = () => 'unknown'
   ): TerminalSessionManager {
     const created = new TerminalSessionManager({
       resolveWorktreeCwd: (worktreeId) => (worktreeId === 'wt_1' ? checkout : undefined),
       layouts: repositories,
       sessions: repositories,
+      conversationEvidence,
       ...(scrollback === undefined ? {} : { scrollback }),
       ...(checkpointIntervalMs === undefined ? {} : { checkpointIntervalMs })
     })
@@ -916,6 +999,120 @@ describePty('restoring terminals across a restart', () => {
     // Typing into it is what makes the next restart a resume.
     second.write(opened.id, 'now there is something to come back to\r')
     expect(repositories.listTerminals()[0]?.typed).toBe(true)
+  }, 20_000)
+
+  /**
+   * A stand-in home directory with Claude Code's store inside it, and a way to
+   * put a conversation where the real CLI would have written one.
+   *
+   * The path is asked for rather than spelled again here. What the slug rule is
+   * belongs in `agent-conversations.test.ts`, which pins it against a literal;
+   * what this file is about is what the app does with the answer.
+   */
+  async function claudeStore(): Promise<{
+    evidence: (question: ConversationQuestion) => ConversationEvidence
+    recordConversation: (cwd: string, sessionId: string) => Promise<void>
+  }> {
+    const base = await mkdtemp(path.join(os.tmpdir(), 'teamree-home-'))
+    created.push(base)
+    // The store exists and is empty, which is the state of a machine that runs
+    // the agent and has never had this conversation — and is what makes a
+    // missing file mean "absent" rather than "this cannot be answered".
+    await mkdir(path.join(base, '.claude', 'projects'), { recursive: true })
+    return {
+      evidence: (question) => conversationOnDisk(question, base),
+      recordConversation: async (cwd, sessionId) => {
+        const transcript = claudeTranscriptPath(cwd, sessionId, base)
+        await mkdir(path.dirname(transcript), { recursive: true })
+        await writeFile(transcript, '{"type":"user","message":"hello"}\n', 'utf8')
+      }
+    }
+  }
+
+  // The second way into "No conversation found with session ID", and the one
+  // typing could never have caught. Every worktree is a directory the agent has
+  // never seen, so the first `claude` in one asks "Is this a project you trust?"
+  // with "No, exit" selected — and the Enter or the arrow key somebody answers
+  // with is a keystroke into the pane that no agent ever heard. The pane wrote
+  // down that it had been typed into, the store stayed empty, and the next
+  // launch asked for a conversation that had never been written.
+  it('starts a fresh agent, saying why, when the store has nothing under the pinned id', async () => {
+    const { checkout, launch } = await fakeAgent('claude')
+    const store = await claudeStore()
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    const first = manager(repositories, checkout, archive, undefined, store.evidence)
+    const opened = first.create({ worktreeId: 'wt_1', command: launch })
+    await waitUntil(() => first.read(opened.id).includes('AGENT ARGS:'), 'the agent to print its arguments')
+    const pinned = repositories.listTerminals()[0]?.agentSessionId
+    expect(pinned).toBeDefined()
+
+    // The keystroke at the gate. Nothing is said to any agent, and nothing is
+    // written to any store — and this is exactly what the app used to take for
+    // proof that there was a conversation to come back to.
+    first.write(opened.id, '\r')
+    await waitUntil(() => repositories.listTerminals()[0]?.typed === true, 'the pane to write down the keystroke')
+    await first.shutdown()
+
+    const reopened = await ScrollbackArchive.open(archive.directory, [opened.id])
+    const second = manager(repositories, checkout, reopened, undefined, store.evidence)
+    // Not resumed, and honestly counted as not resumed.
+    expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
+
+    // Everything below that line is this launch, and the line is what separates
+    // it from the record of the run before — which does contain the old id.
+    const below = (): string => second.read(opened.id).split(noConversationMark('claude'))[1] ?? ''
+    await waitUntil(() => below().includes('AGENT ARGS:'), 'the fresh agent to print its arguments under that line')
+
+    // A fresh agent under an id of its own, with nothing asked of it about the
+    // id that named nothing.
+    const thisLaunch = below()
+    expect(thisLaunch).toContain('--session-id')
+    expect(thisLaunch).not.toContain('--resume')
+    expect(thisLaunch).not.toContain(pinned as string)
+    expect(second.list('wt_1')[0]?.running).toBe(true)
+
+    // And the record names the conversation now being had, so the next launch
+    // asks about that one rather than about this one all over again.
+    const rewritten = repositories.listTerminals()[0]
+    expect(rewritten?.agentSessionId).toBeDefined()
+    expect(rewritten?.agentSessionId).not.toBe(pinned)
+    expect(rewritten?.typed).toBe(false)
+  }, 20_000)
+
+  // The same evidence read the other way, which is the half that makes this
+  // evidence rather than a second guess. The conversation is on the disk, so it
+  // is resumed — whatever this app did or did not watch somebody do.
+  it('resumes a pane whose conversation the store has, with nothing ever typed into it', async () => {
+    const { checkout, launch } = await recordingAgent('claude')
+    const store = await claudeStore()
+    const repositories = createRepositories()
+
+    const first = manager(repositories, checkout, undefined, undefined, store.evidence)
+    const opened = first.create({ worktreeId: 'wt_1', command: launch })
+    await waitUntil(() => first.read(opened.id).includes('AGENT ARGS:'), 'the agent to print its arguments')
+    const pinned = repositories.listTerminals()[0]?.agentSessionId as string
+    expect(pinned).toBeDefined()
+    // Nobody typed into this pane, and under the old reading that was the end of
+    // it: the pane came back as a fresh agent and the conversation was lost.
+    expect(repositories.listTerminals()[0]?.typed).toBe(false)
+
+    // The agent wrote its conversation down, which is the thing that decides
+    // whether there is anything to resume. A pane can be spoken to by something
+    // other than a keyboard, and a `typed: false` can be left behind by a
+    // restart that then went on to have a conversation.
+    await store.recordConversation(checkout, pinned)
+    await first.shutdown()
+
+    const second = manager(repositories, checkout, undefined, undefined, store.evidence)
+    expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 1 })
+
+    await waitUntil(() => second.read(opened.id).includes('AGENT ARGS:'), 'the resumed agent to print its arguments')
+    const shown = second.read(opened.id)
+    expect(shown).toContain(`--resume ${pinned}`)
+    expect(shown).not.toContain(NOT_FOUND)
+    expect(shown).not.toContain(noConversationMark('claude'))
   }, 20_000)
 
   // The exit and the quit are both endings, and a machine that loses power has
