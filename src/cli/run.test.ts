@@ -215,6 +215,13 @@ describe('exit codes', () => {
     const result = await cli.run(['worktree', 'remove', 'fix-login'])
     expect(result.code).toBe(ExitCode.Failure)
     expect(result.err).toMatch(/worktree is dirty/)
+    // The runtime's sentence, as every other error prints: no RPC method
+    // name in front of it. The method is for scripts, and rides in the JSON.
+    expect(result.err).toBe('error: worktree is dirty\n')
+    const asJson = await cli.run(['worktree', 'remove', 'fix-login', '--json'])
+    const document = JSON.parse(asJson.err) as { error: { message: string; method?: string } }
+    expect(document.error.message).toBe('worktree is dirty')
+    expect(document.error.method).toBe('worktree.remove')
   })
 
   it('returns 1 for an ambiguous selector', async () => {
@@ -348,6 +355,36 @@ describe('text output', () => {
   it('prints terminal scrollback raw', async () => {
     const cli = await harness()
     expect((await cli.run(['terminal', 'read', 't_1'])).out).toBe('build ok\n')
+  })
+
+  it('dates a start point by the commit, not by 1970', async () => {
+    const cli = await harness((method) => {
+      if (method === 'project.list') return PROJECTS
+      if (method === 'worktree.startPoints')
+        return {
+          baseRef: 'main',
+          options: [
+            {
+              ref: 'main',
+              kind: 'localBranch',
+              sha: 'fbdaa75000000000000000000000000000000000',
+              shortSha: 'fbdaa75',
+              refName: 'refs/heads/main',
+              isBase: true,
+              isCurrent: true,
+              // Unix seconds, as git's %ct prints them: 2026-09-23T03:11:14Z.
+              updatedAt: 1790149874
+            }
+          ],
+          total: 1,
+          limit: 50,
+          truncated: false
+        }
+      throw new StubError('unknown_method', method)
+    })
+    const result = await cli.run(['worktree', 'start-points', 'api'])
+    expect(result.out).toContain('2026-09-23')
+    expect(result.out).not.toContain('1970')
   })
 })
 

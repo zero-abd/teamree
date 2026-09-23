@@ -331,6 +331,7 @@ export type StartPoint = {
   isBase: boolean
   /** True for the branch the primary checkout currently has out. */
   isCurrent: boolean
+  /** Commit or tag time in Unix seconds, as git's %ct prints it; not milliseconds. */
   updatedAt: number
 }
 

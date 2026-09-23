@@ -84,7 +84,11 @@ export function selectOne<T extends Selectable>(kind: string, token: string, ite
     message: `No ${kind} matches "${token}".`,
     exitCode: ExitCode.Failure,
     hint:
-      items.length === 0 ? `No ${kind}s exist yet.` : `Known ${kind}s: ${items.map((item) => item.name).join(', ')}.`,
+      items.length === 0
+        ? `No ${kind}s exist yet.`
+        : // Quoted because a name may hold spaces ("fix login codex"), and a
+          // comma-separated list of those cannot be read back apart.
+          `Known ${kind}s: ${items.map((item) => JSON.stringify(item.name)).join(', ')}.`,
     data: { known: items.map((item) => ({ id: item.id, name: item.name, path: item.path })) }
   })
 }

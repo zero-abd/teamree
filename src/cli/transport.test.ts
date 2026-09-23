@@ -65,7 +65,9 @@ describe('connectRuntime', () => {
     await client.call('worktree.status', { worktreeId: 'nope' }).catch((error: RuntimeCallError) => {
       expect(error.code).toBe('not_found')
       expect(error.exitCode).toBe(1)
-      expect(error.message).toContain('worktree.status')
+      expect(error.message).toBe('no such worktree')
+      expect(error.method).toBe('worktree.status')
+      expect(error.serialize()).toMatchObject({ method: 'worktree.status', message: 'no such worktree' })
     })
   })
 
