@@ -97,7 +97,8 @@ about the CLI socket.
 `src/preload/index.ts` exposes exactly one object. `selectProjectFolder` opens a
 directory picker. `revealPath` asks the OS file manager to show one path and is
 described below. `platform` and `versions` are strings. `menu` is two functions
-and is described below, and so is `notices`, which is two more. `runtime` is three
+and is described below, and so is `notices`, which is two more, and `keepAwake`,
+which is one. `runtime` is three
 functions: `call(method, params)`, `onStream(listener)` and `release()`. There
 is no method allow-list on `call` — the window is one of the three transports
 the runtime answers, and unlike the peer link (six methods, `PEER_METHODS`) it
@@ -197,6 +198,24 @@ click in that gap is dropped rather than thrown.
 Against the paragraph about `runtime.call` this adds nothing, and for the third
 time for the same reason. It is listed because the enumeration is meant to be
 complete.
+
+`keepAwake` is the fourth thing on the bridge that is not the runtime, and it is
+one function, outward: `publish({ mode, agentBusy })`. The mode is the one
+somebody chose on the status bar — awake always, awake while an agent pane is
+working or waiting on you, or the OS's own rules — and the boolean is that
+reading, made by the sidebar's own reducer in the window, because the rule that
+ranks a hook's word over a bell over a title is written there once. The main
+process holds one `powerSaveBlocker` assertion on the answer and nothing else:
+`readKeepAwakeState` rebuilds the pair out of the two fields it verified and
+drops anything else, the publish is refused from any frame but the window's
+main one, and the assertion goes with the web contents that published it, so a
+page that is gone cannot leave a laptop awake. Nothing comes back on this
+channel.
+
+What it grants is exactly the feature: a page in this window can keep this
+machine from idle-sleeping while the window is open. Against the paragraph
+about `runtime.call` — which lets the same page run a command that does
+`caffeinate` — this adds nothing, for the fourth time for the same reason.
 
 ## The gap that was here: nothing stopped the window navigating
 

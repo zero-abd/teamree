@@ -22,6 +22,9 @@ const MENU_COMMAND_CHANNEL = 'teamree:menu:command'
 // what comes back is one pane to go to.
 const NOTICE_PUBLISH_CHANNEL = 'teamree:notices:publish'
 const NOTICE_REVEAL_CHANNEL = 'teamree:notices:reveal'
+// And this one with src/main/keepAwake.ts. Outward only: the window says
+// which way it wants this Mac's sleep, and nothing comes back.
+const KEEP_AWAKE_PUBLISH_CHANNEL = 'teamree:keep-awake:publish'
 
 /**
  * What the main process answers a reveal with, declared structurally here.
@@ -59,6 +62,13 @@ type MenuBarItem = {
  */
 type NoticeSettings = { preference: string; focusedPaneId: string | null }
 type PaneAddress = { worktreeId: string; terminalId: string }
+
+/**
+ * What the window says about sleep, declared structurally for the same reason
+ * `NoticeSettings` is. `mode` is a plain string: the main process parses it
+ * against its own three and ignores anything else.
+ */
+type KeepAwakeState = { mode: string; agentBusy: boolean }
 
 // The renderer never sees ipcRenderer: it gets three plain functions over the
 // context bridge. Everything crossing the bridge is structured-cloneable, so the
@@ -162,6 +172,23 @@ const notices = {
   }
 } as const
 
+/**
+ * Whether this Mac may sleep.
+ *
+ * One function, outward. The window publishes the mode somebody chose and
+ * whether any agent pane is on something, whenever either changes, and the
+ * main process starts or stops one power-save assertion on that. This grants
+ * the page one thing: it can hold this machine awake while it is open, which
+ * is the feature. It cannot hold it awake after the window is gone — the
+ * assertion goes with the web contents that published it — and it cannot ask
+ * for anything else.
+ */
+const keepAwake = {
+  publish(state: KeepAwakeState): void {
+    ipcRenderer.send(KEEP_AWAKE_PUBLISH_CHANNEL, state)
+  }
+} as const
+
 const api = {
   selectProjectFolder(): Promise<string | null> {
     return ipcRenderer.invoke('teamree:select-project-folder')
@@ -187,7 +214,8 @@ const api = {
   },
   runtime,
   menu,
-  notices
+  notices,
+  keepAwake
 } as const
 
 export type TeamreeRuntimeBridge = typeof runtime

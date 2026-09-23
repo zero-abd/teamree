@@ -4,8 +4,8 @@
 // task in a given project starts from by default, whether an agent that stops
 // while you are elsewhere is allowed to say so, which editor that project's
 // checkouts open in, whether a patch is read down one column or across two,
-// which agent the composer offers first, and what each agent is always
-// launched with. All are stored the way the sidebar's width already is — in
+// which agent the composer offers first, what each agent is always launched
+// with, and whether this Mac may sleep. All are stored the way the sidebar's width already is — in
 // this window's `localStorage`, behind a clamp, with every read and write
 // wrapped so that storage being unavailable costs a default rather than a
 // render.
@@ -58,6 +58,45 @@ export function writeStoredAgentNotices(
   } catch {
     // As with the size above: the choice holds for this window and is forgotten
     // on the next.
+  }
+}
+
+const KEEP_AWAKE_KEY = 'teamree.keepAwake'
+
+/**
+ * Whether this Mac may sleep: never while the app runs, not while an agent
+ * pane is working or waiting on you, or whenever the OS would.
+ *
+ * Read by the main process, which is the only one that can hold a power
+ * assertion — `useKeepAwake` publishes it over the preload bridge whenever it
+ * changes, beside whether any agent is busy.
+ */
+export type KeepAwakeMode = 'on' | 'agent' | 'off'
+
+export const KEEP_AWAKE_MODES: readonly KeepAwakeMode[] = ['on', 'agent', 'off']
+
+/**
+ * Follow the agents. The app's premise is that you start three agents and go
+ * and do something else, and a laptop that sleeps ten minutes into that stops
+ * all three mid-turn; a default of `on` would hold the machine up all night
+ * for a window with nothing running in it.
+ */
+export const KEEP_AWAKE_DEFAULT: KeepAwakeMode = 'agent'
+
+export function readStoredKeepAwake(storage: Pick<Storage, 'getItem'> | undefined): KeepAwakeMode {
+  try {
+    const raw = storage?.getItem(KEEP_AWAKE_KEY)
+    return KEEP_AWAKE_MODES.find((value) => value === raw) ?? KEEP_AWAKE_DEFAULT
+  } catch {
+    return KEEP_AWAKE_DEFAULT
+  }
+}
+
+export function writeStoredKeepAwake(storage: Pick<Storage, 'setItem'> | undefined, mode: KeepAwakeMode): void {
+  try {
+    storage?.setItem(KEEP_AWAKE_KEY, mode)
+  } catch {
+    // As above: the choice holds for this window and is forgotten on the next.
   }
 }
 

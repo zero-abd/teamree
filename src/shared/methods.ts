@@ -13,11 +13,13 @@ import type {
   PaneNode,
   PaneWatchers,
   PeerPresence,
+  ProcessKill,
   Project,
   RelaySetting,
   RemoteWriteLog,
   RuntimeStatus,
   StartPointList,
+  SystemResources,
   TeammatePresence,
   TeamworkOrigin,
   TeamworkPublish,
@@ -800,6 +802,20 @@ export const Params = {
    * patch, which removes a whole class of state-divergence bugs and costs one
    * small request per change. This is what lets a GUI reflect work a CLI did.
    */
+  /**
+   * What everything this app spawned is costing, right now, from one `ps`
+   * call — see `src/main/resources`. Read by the status bar and by
+   * `teamree resources`.
+   */
+  systemResources: z.object({}),
+  /**
+   * SIGTERM to one process in a pane's tree, or to the whole group when the
+   * pid is the pane's own child. Refused for any pid that is not under a pane,
+   * which is what keeps it off this app's own processes: the runtime looks the
+   * pid up in a fresh sample before it signals anything.
+   */
+  systemKill: z.object({ pid: z.number().int().positive() }),
+
   workspaceSubscribe: z.object({}),
 
   unsubscribe: z.object({ subscription: z.string().min(1) })
@@ -941,6 +957,9 @@ export type MethodContract = {
 
   'layout.get': { params: z.infer<typeof Params.layoutGet>; result: Layout }
   'layout.set': { params: z.infer<typeof Params.layoutSet>; result: Layout }
+
+  'system.resources': { params: z.infer<typeof Params.systemResources>; result: SystemResources }
+  'system.kill': { params: z.infer<typeof Params.systemKill>; result: ProcessKill }
 
   'workspace.subscribe': { params: z.infer<typeof Params.workspaceSubscribe>; result: { subscription: string } }
 

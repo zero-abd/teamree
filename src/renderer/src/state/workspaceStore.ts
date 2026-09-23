@@ -69,9 +69,11 @@ import {
   readStoredDefaultAgent,
   readStoredDiffLayout,
   readStoredEditorCommands,
+  readStoredKeepAwake,
   readStoredStartPoints,
   readStoredTerminalFontSize,
   type AgentNoticePreference,
+  type KeepAwakeMode,
   withAgentArgs,
   withEditorCommand,
   withStartPoint,
@@ -80,6 +82,7 @@ import {
   writeStoredDefaultAgent,
   writeStoredDiffLayout,
   writeStoredEditorCommands,
+  writeStoredKeepAwake,
   writeStoredStartPoints,
   writeStoredTerminalFontSize
 } from './preferences'
@@ -595,6 +598,12 @@ type WorkspaceState = {
    * re-renders on would only reach the other process on the next launch.
    */
   agentNotices: AgentNoticePreference
+  /**
+   * Whether this Mac may sleep. Held here for the reason `agentNotices` is:
+   * the reader is the main process, and `useKeepAwake` publishes it over the
+   * bridge whenever it changes.
+   */
+  keepAwake: KeepAwakeMode
   /** Each project's editor command, by project id. Empty means "whatever is on PATH". */
   editorCommands: Record<string, string>
   /**
@@ -865,6 +874,8 @@ type WorkspaceState = {
   setTerminalFontSize: (size: number) => void
   /** Sets what an agent going quiet may do, and remembers it. */
   setAgentNotices: (preference: AgentNoticePreference) => void
+  /** Sets whether this Mac may sleep, and remembers it. */
+  setKeepAwake: (mode: KeepAwakeMode) => void
   /** Sets whether a patch is read down one column or across two, and remembers it. */
   setDiffLayout: (layout: DiffLayout) => void
   /** Sets one project's preferred start point, or clears it when given null. */
@@ -1539,6 +1550,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     terminalFontSize: readStoredTerminalFontSize(storage),
     startPointDefaults: readStoredStartPoints(storage),
     agentNotices: readStoredAgentNotices(storage),
+    keepAwake: readStoredKeepAwake(storage),
     editorCommands: readStoredEditorCommands(storage),
     editors: null,
     paneSeenAt: readPaneSeen(storage),
@@ -2792,6 +2804,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     setAgentNotices(preference) {
       set({ agentNotices: preference })
       writeStoredAgentNotices(storage, preference)
+    },
+
+    setKeepAwake(mode) {
+      set({ keepAwake: mode })
+      writeStoredKeepAwake(storage, mode)
     },
 
     setDiffLayout(layout) {

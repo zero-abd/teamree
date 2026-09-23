@@ -1,0 +1,52 @@
+// One sample: the pane list, one `ps`, and the tree read from both.
+
+import { execFile } from 'node:child_process'
+import type { SystemResources } from '../../shared/entities'
+import { parsePsTable, PS_ARGS } from './psTable'
+import { aggregateResources, type PaneProcess } from './resourceTree'
+
+/** Everything the sampler needs from the OS, so a test can hand it a table. */
+export type ResourceSamplerHost = {
+  /** The text of `ps -axo pid,ppid,pcpu,rss,comm`, or empty where there is no ps. */
+  ps: () => Promise<string>
+  now: () => number
+}
+
+/**
+ * A whole machine's table is a few hundred kilobytes; a megabyte or so is a
+ * machine with more processes than this app will ever draw rows for.
+ */
+const PS_MAX_BUFFER = 8 * 1024 * 1024
+
+export const defaultResourceSamplerHost: ResourceSamplerHost = {
+  ps: () =>
+    new Promise((resolve) => {
+      // No `ps` on Windows, and no session groups either: the answer there is
+      // a sample with nothing under any pane, not an error on every open of
+      // the popover.
+      if (process.platform === 'win32') return resolve('')
+      execFile('ps', [...PS_ARGS], { maxBuffer: PS_MAX_BUFFER }, (error, stdout) => resolve(error ? '' : stdout))
+    }),
+  now: () => Date.now()
+}
+
+export type ResourceSampler = { sample: () => Promise<SystemResources> }
+
+export function createResourceSampler(deps: {
+  panes: () => readonly PaneProcess[]
+  appPid?: number
+  host?: ResourceSamplerHost
+}): ResourceSampler {
+  const host = deps.host ?? defaultResourceSamplerHost
+  const appPid = deps.appPid ?? process.pid
+  return {
+    sample: async () => {
+      // Panes first, then ps: a pane opened between the two is missing from
+      // this sample and present in the next, which is the cheaper of the two
+      // ways to be out of date. The other order shows a pane with no tree.
+      const panes = deps.panes()
+      const table = await host.ps()
+      return aggregateResources({ sampledAt: host.now(), processes: parsePsTable(table), panes, appPid })
+    }
+  }
+}
