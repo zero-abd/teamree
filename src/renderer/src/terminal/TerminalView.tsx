@@ -45,6 +45,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere } from './handsHere'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOptions } from './paneSearchModel'
 import { TerminalSearchBar } from './TerminalSearchBar'
+import { TERMINAL_LINE_HEIGHT } from './paneMetrics'
 import { readSearchDecorations, readTerminalTheme, TERMINAL_FONT_FAMILY } from './terminalTheme'
 
 type TerminalViewProps = {
@@ -128,7 +129,7 @@ export function TerminalView({
       // whole emulator — and its scrollback, and its subscription — a thing
       // that had to be torn down and rebuilt to change a number.
       fontSize: fontSizeRef.current,
-      lineHeight: 1.25,
+      lineHeight: TERMINAL_LINE_HEIGHT,
       letterSpacing: 0,
       scrollback: 5000,
       theme: readTerminalTheme(document.documentElement),
@@ -282,9 +283,39 @@ export function TerminalView({
       })
     }
 
+    /**
+     * The first fit, made now rather than on the next frame.
+     *
+     * The pty was spawned at the size this window measured before it asked for
+     * the pane — see `paneMetrics.ts` — or, for a pane the CLI opened, at the
+     * runtime's own 80x24. Either way the emulator on screen is the authority
+     * the moment it exists, and a full-screen agent lays its whole frame out to
+     * whatever size it was last told: every frame between its first output and
+     * this call is drawn at the wrong width.
+     *
+     * The size is sent even when the fit moved nothing, which is the case the
+     * measurement got right: xterm raises `onResize` only on a change, so
+     * without this the pane that was born correct is the one pane that never
+     * confirms its size at all.
+     */
+    const fitOnMount = (): void => {
+      if (!alive || host.clientWidth === 0 || host.clientHeight === 0) return
+      const before = `${term.cols}x${term.rows}`
+      try {
+        fit.fit()
+      } catch {
+        return
+      }
+      if (`${term.cols}x${term.rows}` !== before) return
+      void runtimeClient
+        .call('terminal.resize', { terminalId, cols: term.cols, rows: term.rows })
+        .then((record) => useWorkspaceStore.getState().recordTerminal(record))
+        .catch(() => {})
+    }
+
     const observer = new ResizeObserver(scheduleFit)
     observer.observe(host)
-    scheduleFit()
+    fitOnMount()
 
     return () => {
       alive = false
