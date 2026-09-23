@@ -56,7 +56,7 @@ describe('pushRefusal', () => {
   it('says when the remote would not let this machine in, and what to do about it', () => {
     const general = pushRefusal('fatal: Authentication failed for https://example.invalid/x.git', 'origin', 'work')
     expect(general).toContain('fatal: Authentication failed')
-    expect(general).toContain('Check that this account has push access')
+    expect(general).toContain('check push access')
 
     expect(
       pushRefusal("fatal: could not read Username for 'https://x': terminal prompts disabled", 'origin', 'work')
@@ -70,8 +70,22 @@ describe('pushRefusal', () => {
   // ssh refusing a host it has never met is neither a credential nor a rejection.
   it('says when ssh has never accepted the host key, rather than blaming the account', () => {
     const message = pushRefusal('Host key verification failed.', 'origin', 'work')
-    expect(message).toContain('never accepted the host key')
+    expect(message).toContain('Unknown ssh host key for origin')
     expect(message).not.toContain('push access')
+  })
+
+  it('says each refusal in one line, with no sentence-ending full stop', () => {
+    for (const stderr of [
+      ' ! [rejected]   main -> main (non-fast-forward)',
+      'Host key verification failed.',
+      'fatal: Authentication failed for https://example.invalid/x.git',
+      "fatal: could not read Username for 'https://x': terminal prompts disabled",
+      'git@example.invalid: Permission denied (publickey).'
+    ]) {
+      const message = pushRefusal(stderr, 'origin', 'main')
+      expect(message, stderr).not.toMatch(/[\p{L})]\.(\s|$)/u)
+      expect(message, stderr).not.toContain('\n')
+    }
   })
 
   // The shape of the refusal is reported separately from its prose.

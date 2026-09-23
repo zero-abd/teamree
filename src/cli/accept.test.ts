@@ -320,14 +320,10 @@ describe('team accept, when it must not go on', () => {
   })
 
   it('passes a blocked publish on in the runtime’s own words and says the rest is done', async () => {
-    const cli = await harness(
-      acceptHandler(
-        world({ blocker: 'This checkout is not on a branch, so there is nothing to push. Check one out first.' })
-      )
-    )
+    const cli = await harness(acceptHandler(world({ blocker: 'Not on a branch · git switch -c main' })))
     const result = await cli.run(['team', 'accept', LINK])
     expect(result.code).toBe(ExitCode.Failure)
-    expect(result.err).toContain('not on a branch')
+    expect(result.err).toContain('Not on a branch')
     expect(result.err).toContain('teamree team publish api')
   })
 
@@ -358,7 +354,7 @@ describe('team accept, when it must not go on', () => {
     const hostile = formatInvitation({ origin: 'ext::sh', relay: RELAY_URL, project: 'api', from: 'ana' })
     const result = await cli.run(['team', 'accept', hostile, '--into', join(cli.cwd, 'api')])
     expect(result.code).toBe(ExitCode.Failure)
-    expect(result.err).toContain('not a transport teamree hands git')
+    expect(result.err).toContain('not ext::')
     expect(existsSync(join(cli.cwd, 'api'))).toBe(false)
     expect(methodsCalled(cli.stub)).not.toContain('project.add')
     expect(methodsCalled(cli.stub)).not.toContain('teamwork.setOrigin')

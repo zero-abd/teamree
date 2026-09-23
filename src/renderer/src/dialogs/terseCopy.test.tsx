@@ -35,6 +35,8 @@ const { CommandPalette } = await import('../palette/CommandPalette')
 const { resolvePlatformModifier } = await import('../keyboard/platformModifier')
 const { relayPanel } = await import('../settings/settingsModel')
 const { TeamworkSteps } = await import('../teamwork/TeamworkSteps')
+const { checkOriginDraft, checkRelayDraft } = await import('../teamwork/startTeamwork')
+const { muteTitle } = await import('../terminal/TerminalView')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -315,6 +317,66 @@ describe('the settings relay row', () => {
   })
 })
 
+describe('the pane mute button', () => {
+  it('names the state or the action', () => {
+    expect([muteTitle(true), muteTitle(false)]).toEqual(['Muted for teammates', 'Mute for teammates'])
+  })
+})
+
+/** One line: no sentence stop, at most one ` · ` join, and short enough to read at a glance. */
+function oneLine(reason: string): boolean {
+  return !SENTENCE_STOP.test(reason) && reason.split(' · ').length <= 2 && reason.length <= 90
+}
+
+describe('typed-URL validation', () => {
+  it('refuses every bad origin in one line', () => {
+    const origins = [
+      'pager',
+      'https://example.com/a repo',
+      'ext::sh -c id',
+      'svn://example.com/repo',
+      'file:%zz',
+      'file://fileserver/team/app.git',
+      'file:///Volumes/team/app%E0%A4%A.git',
+      '/Volumes/team/app\n.git',
+      '~/shared/app.git',
+      '../pager',
+      '/Volumes/team/../team/pager.git',
+      '/'
+    ]
+    for (const origin of origins) {
+      const checked = checkOriginDraft(origin)
+      expect(checked.state, origin).toBe('bad')
+      if (checked.state === 'bad') expect(oneLine(checked.reason), `${origin}: ${checked.reason}`).toBe(true)
+    }
+    const path = checkOriginDraft('/Volumes/team/app.git')
+    expect(path.state === 'ok' && path.note !== null && oneLine(path.note)).toBe(true)
+  })
+
+  it('refuses every bad relay URL in one line', () => {
+    const relays = [
+      'not a url',
+      'https://teamree-relay.example.workers.dev',
+      'http://127.0.0.1:8787/v1/relay',
+      'ftp://relay.example/v1/relay',
+      'wss://relay.example/v1/relay?token=abc',
+      'wss://my-relay.example.workers.dev'
+    ]
+    for (const relay of relays) {
+      const checked = checkRelayDraft(relay)
+      expect(checked.state, relay).toBe('bad')
+      if (checked.state === 'bad') expect(oneLine(checked.reason), `${relay}: ${checked.reason}`).toBe(true)
+    }
+  })
+
+  it('says the fix and what was typed instead', () => {
+    expect(checkRelayDraft('https://relay.example/v1/relay')).toMatchObject({
+      reason: 'Use wss://relay.example/v1/relay, not https://'
+    })
+    expect(checkRelayDraft('ftp://relay.example/v1/relay')).toMatchObject({ reason: 'Use ws:// or wss://, not ftp://' })
+  })
+})
+
 describe('the teamwork page', () => {
   const props = {
     projectPath: '/repos/pager',
@@ -358,6 +420,16 @@ describe('the teamwork page', () => {
       const host = document.createElement('div')
       host.innerHTML = renderToStaticMarkup(<TeamworkSteps {...props} {...input} />)
       expect(sentenceStops(host), JSON.stringify(input.path)).toEqual([])
+    }
+  })
+
+  it('says no sentence under the origin field, refused or accepted', () => {
+    const blocked = status({ origin: { ok: false, reason: 'no origin remote' } })
+    const view = render(<TeamworkSteps {...props} list={roster(true)} relay={onDisk()} status={blocked} path="start" />)
+    const field = view.getByRole('textbox', { name: 'Origin' })
+    for (const draft of ['~/shared/pager.git', '/Volumes/team/pager.git']) {
+      fireEvent.change(field, { target: { value: draft } })
+      expect(sentenceStops(document.body), draft).toEqual([])
     }
   })
 })

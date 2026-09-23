@@ -844,7 +844,7 @@ describe('a push that did not land', () => {
           ok: false,
           kind: 'rejected',
           error: '! [rejected] main -> main (fetch first)',
-          advice: 'origin has commits that main does not. Pull or rebase onto origin/main and push again.'
+          advice: 'origin has commits that main does not · pull or rebase onto origin/main'
         })
       )
     )
@@ -878,7 +878,7 @@ describe('a push that did not land', () => {
           ok: false,
           kind: 'cancelled',
           error: 'the push was stopped before it finished',
-          advice: 'You stopped this push, so nothing reached origin. The commit is still here.'
+          advice: 'Nothing reached origin · commit kept'
         })
       )
     )

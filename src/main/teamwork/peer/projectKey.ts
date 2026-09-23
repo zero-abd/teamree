@@ -44,9 +44,8 @@ export async function readProjectKey(runner: GitRunner, projectPath: string): Pr
 
   const checked = checkOrigin(remote)
   if (!checked.ok) {
-    // The refusal names the origin git actually has: nobody typed this field, so the sentence has to
-    // say which remote it is talking about.
-    return { ok: false, reason: `origin is ${remote}, and ${checked.reason}` }
+    // Names the origin git has: nobody typed this remote, so the reason must say which one it means.
+    return { ok: false, reason: `origin ${remote}: ${checked.reason}` }
   }
   // The normalised spelling for a path, git's own for a URL: an invitation wants the characters being hashed.
   return { ok: true, key: projectKeyFor(checked.normalised), url: checked.remote }

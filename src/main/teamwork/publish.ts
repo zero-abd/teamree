@@ -44,10 +44,7 @@ export type PublishTarget = {
   onOutput?: (line: string) => void
 }
 
-/**
- * What the button would do, in the words it will be described with. Every
- * blocker names its fix in one sentence.
- */
+/** What the button would do, in the words it will be described with. Every blocker names its fix. */
 export async function readPublishPlan(runner: GitRunner, target: PublishTarget): Promise<TeamworkPublishPlan> {
   const remote = target.remote ?? 'origin'
   const files = [...target.files]
@@ -76,27 +73,16 @@ async function blockerFor(
   remote: string,
   branch: string | null
 ): Promise<string | null> {
-  if (target.files.length === 0) {
-    return 'There is nothing to push yet. Add your key, or set the relay, and this is what sends them.'
-  }
-  if (branch === null) {
-    return 'This checkout is not on a branch, so there is nothing to push. Check one out first: git switch -c main.'
-  }
-  if (!(await hasRemote(runner, target.projectPath, remote))) {
-    return `This checkout has no ${remote} remote, so there is nowhere to push. Add it at the top of this page.`
-  }
+  if (target.files.length === 0) return 'Nothing to push yet · add your key or set the relay'
+  if (branch === null) return 'Not on a branch · git switch -c main'
+  if (!(await hasRemote(runner, target.projectPath, remote))) return `No ${remote} remote · add it above`
   const { exitCode } = await runner.tryRun({
     args: ['var', 'GIT_AUTHOR_IDENT'],
     cwd: target.projectPath,
     readOnly: true,
     timeoutMs: 30_000
   })
-  if (exitCode !== 0) {
-    return (
-      'git does not know who you are, so it will not write a commit. Set it once, in a terminal: ' +
-      'git config --global user.name "Your Name" and git config --global user.email "you@example.com".'
-    )
-  }
+  if (exitCode !== 0) return 'No git identity · set user.name and user.email with git config --global'
   return null
 }
 
@@ -209,9 +195,7 @@ async function pushOnce(
         ok: false,
         kind: 'cancelled',
         error: clip(error.stderr) || 'the push was stopped before it finished',
-        advice:
-          'You stopped this push, so nothing reached ' +
-          `${remote}. The commit is still here; pressing the button again sends it.`
+        advice: `Nothing reached ${remote} · commit kept`
       }
     }
     if (error.timedOut) {
@@ -219,9 +203,7 @@ async function pushOnce(
         ok: false,
         kind: 'timeout',
         error: clip(error.stderr) || `git push produced nothing for ${Math.round(PUSH_TIMEOUT_MS / 60_000)} minutes`,
-        advice:
-          `git never finished talking to ${remote}. That is usually a credential this app cannot be asked for, or ` +
-          'a host that is not answering; running the same push once in Terminal says which.'
+        advice: `No answer from ${remote} · push once in Terminal to see why`
       }
     }
     throw error

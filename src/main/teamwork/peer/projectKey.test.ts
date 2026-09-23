@@ -94,13 +94,13 @@ describe('reading it out of a checkout', () => {
   it('refuses a path no two machines could agree on, naming the origin it read', async () => {
     for (const [remote, fault] of [
       ['../app.git', /relative path/],
-      ['~/shared/app.git', /~ is a different directory/],
-      ['/Volumes/team/../team/app.git', /\.\. segment/]
+      ['~/shared/app.git', /not ~/],
+      ['/Volumes/team/../team/app.git', /no \.\. segment/]
     ] as const) {
       const result = await readProjectKey(fixedRemoteRunner(remote), '/anywhere')
       expect(result.ok, remote).toBe(false)
       if (result.ok) continue
-      expect(result.reason, remote).toContain(`origin is ${remote}`)
+      expect(result.reason, remote).toContain(`origin ${remote}: `)
       expect(result.reason, remote).toMatch(fault)
     }
   })
@@ -108,7 +108,7 @@ describe('reading it out of a checkout', () => {
   it('still says only that it cannot compare a remote that is neither a path nor a URL', async () => {
     const result = await readProjectKey(fixedRemoteRunner('just-a-word'), '/anywhere')
     expect(result.ok).toBe(false)
-    expect(result.ok === false && result.reason).toContain('neither a URL with a host in it')
+    expect(result.ok === false && result.reason).toContain('not a URL with a host')
   })
 
   it('says a project with no origin cannot be matched, rather than matching it to nothing', async () => {

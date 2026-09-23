@@ -167,8 +167,7 @@ describe('stopping a push', () => {
     expect(result.push.ok).toBe(false)
     if (!result.push.ok) {
       expect(result.push.kind).toBe('cancelled')
-      expect(result.push.advice).toMatch(/You stopped this push/)
-      expect(result.push.advice).toMatch(/commit is still here/)
+      expect(result.push.advice).toBe('Nothing reached origin · commit kept')
     }
   })
 
@@ -249,7 +248,7 @@ describe('a push the remote would not take', () => {
     expect(result.push.ok).toBe(false)
     if (!result.push.ok) {
       expect(result.push.kind).toBe('rejected')
-      expect(result.push.advice).toMatch(/Pull or rebase onto origin\/main/)
+      expect(result.push.advice).toBe('origin has commits that main does not · pull or rebase onto origin/main')
       expect(result.push.advice).not.toMatch(/force/i)
     }
   })
@@ -266,7 +265,7 @@ describe('a push the remote would not take', () => {
     expect(result.push.ok).toBe(false)
     if (!result.push.ok) {
       expect(result.push.kind).toBe('timeout')
-      expect(result.push.advice).toMatch(/never finished talking to origin/)
+      expect(result.push.advice).toBe('No answer from origin · push once in Terminal to see why')
     }
   })
 })
