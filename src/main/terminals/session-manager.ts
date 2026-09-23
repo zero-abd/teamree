@@ -8,6 +8,7 @@
 import { randomUUID } from 'node:crypto'
 import { statSync } from 'node:fs'
 import type { Layout, PaneNode, Terminal } from '../../shared/entities'
+import { evidenceLine } from '../../shared/outputEvidence'
 import type { ParamsOf, TerminalEvent } from '../../shared/methods'
 import { detectAgent, newSessionId, pinSessionCommand, pinsOwnSessionId, type AgentKind } from './agent-command'
 import { appendPane, parsePaneNode, removePane, splitPane, terminalIdsIn } from './pane-tree'
@@ -102,7 +103,41 @@ export type TerminalSessionManagerOptions = {
    * published, so the manager stays unaware of the workspace stream.
    */
   onActivityChange?: (terminalId: string) => void
+  /**
+   * Called when a pane that is running an agent stops — its output has gone
+   * quiet, or its process has ended.
+   *
+   * A narrower event than the one above and deliberately a separate one. That
+   * one is both edges of every pane, which is what a sidebar dot is drawn from;
+   * this is the half of one edge that is worth interrupting somebody for. A
+   * shell is never reported: a shell going quiet is a shell sitting at its
+   * prompt, which is every shell for almost all of its life.
+   */
+  onAgentSettled?: (settled: AgentSettled) => void
 }
+
+/**
+ * An agent pane that has stopped.
+ *
+ * The line is read here rather than by the caller because this is the only
+ * place holding the pane's buffer, and it is read at the moment of the edge:
+ * asking a second later would be asking a pane that has since printed a prompt.
+ */
+export type AgentSettled = {
+  terminalId: string
+  worktreeId: string
+  agent: AgentKind
+  reason: 'quiet' | 'exit'
+  /** The pane's last line worth quoting, or null when there is not one. */
+  line: string | null
+}
+
+/**
+ * How much of a settled pane's tail to look at for a line worth quoting. The
+ * same budget the sidebar's evidence reads use, and for the same reason: enough
+ * to walk back past a prompt, a run of blank lines and a redrawn progress line.
+ */
+const SETTLED_TAIL_BYTES = 4096
 
 type AttachedStream = { channel: StreamChannel; detach: () => void }
 
@@ -112,6 +147,17 @@ export class TerminalSessionManager {
   private readonly sessions = new Map<string, PtySession>()
   private readonly streams = new Map<string, Set<AttachedStream>>()
   private readonly exitListeners = new Set<TerminalExitListener>()
+  /**
+   * Panes brought back from the last launch that have not gone quiet yet.
+   *
+   * A restored agent pane replays its conversation and then stops, which looks
+   * exactly like an agent finishing a piece of work and is not one — so without
+   * this every launch would raise a notification for every agent pane the last
+   * one left open, seconds after the window opened, about work that finished
+   * yesterday. The id leaves this set on that first edge, so the next time the
+   * pane goes quiet it is announced like any other.
+   */
+  private readonly resuming = new Set<string>()
   private readonly ownSubscriptions = new Map<string, { terminalId: string; end: () => void }>()
   private readonly layouts: LayoutRepository
   private readonly records: SessionRepository
@@ -507,13 +553,22 @@ export class TerminalSessionManager {
             // been refused would ask for it again, and be refused again.
             onRestart: (started: PtySession) => this.rememberRestart(started.id, fallback)
           }),
-      ...(this.options.onActivityChange === undefined
+      ...(this.options.onActivityChange === undefined && this.options.onAgentSettled === undefined
         ? {}
-        : { onActivityChange: (session: PtySession) => this.options.onActivityChange?.(session.id) }),
+        : {
+            onActivityChange: (session: PtySession) => {
+              this.options.onActivityChange?.(session.id)
+              // The quiet half of the edge only, and not the one an exit
+              // produces: `settleExit` reports the same edge on its way past,
+              // and the exit below is the better of the two to announce.
+              if (!session.isBusy && session.isRunning) this.reportSettled(session, 'quiet')
+            }
+          }),
       ...(this.options.scrollbackCapBytes === undefined ? {} : { scrollbackCapBytes: this.options.scrollbackCapBytes })
     })
 
     this.sessions.set(session.id, session)
+    if (restored !== undefined) this.resuming.add(session.id)
     this.watchSession(session)
     const snapshot = session.snapshot()
     this.records.putTerminal({
@@ -554,6 +609,32 @@ export class TerminalSessionManager {
   }
 
   /**
+   * Hands on a pane that has stopped, when it is a pane worth reporting.
+   *
+   * Every filter is here rather than in the caller so that both edges — quiet
+   * and exit — are answered by one rule: an agent, and only an agent.
+   */
+  private reportSettled(session: PtySession, reason: 'quiet' | 'exit'): void {
+    // First, so a pane leaves that set on its first edge whether or not anybody
+    // is listening to these at all.
+    const resuming = this.resuming.delete(session.id)
+    const settled = this.options.onAgentSettled
+    const agent = session.agent
+    if (settled === undefined || agent === undefined) return
+    // The resume finishing is not work finishing; see `resuming`. An exit still
+    // is, because an agent that will not resume says so and leaves, and that is
+    // worth hearing about.
+    if (resuming && reason === 'quiet') return
+    settled({
+      terminalId: session.id,
+      worktreeId: session.worktreeId,
+      agent,
+      reason,
+      line: evidenceLine(session.read(SETTLED_TAIL_BYTES))
+    })
+  }
+
+  /**
    * Drops everything this launch keeps about a terminal.
    *
    * The pane's record and the pane's transcript go together, always, and from
@@ -570,6 +651,7 @@ export class TerminalSessionManager {
    * user deliberately shut coming back with output on the next launch.
    */
   private forget(terminalId: string): void {
+    this.resuming.delete(terminalId)
     this.checkpoints?.cancel(terminalId)
     this.records.removeTerminal(terminalId)
     this.scrollback?.remove(terminalId)
@@ -685,6 +767,7 @@ export class TerminalSessionManager {
       // running can lose; this one is the pane that has finished, written in
       // full and never written again.
       this.scrollback?.put(session.id, session.recordedOutput())
+      this.reportSettled(session, 'exit')
       for (const listener of this.exitListeners) listener(session.id, event.exitCode)
     })
   }

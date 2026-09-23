@@ -9,6 +9,7 @@
 // ptys under a window that never opened.
 
 import { join } from 'node:path'
+import type { AgentNotice } from '../agentNotices'
 import { ScrollbackArchive, SCROLLBACK_DIR_NAME } from '../store/scrollbackArchive'
 import { WorkspaceStore } from '../store/workspaceStore'
 import { createDispatcher, type Dispatcher } from './dispatcher'
@@ -64,6 +65,13 @@ export type RuntimeOptions = {
    * it — the acceptance host, a vitest worker — simply has none.
    */
   openExternal?: (url: string) => Promise<void>
+  /**
+   * Announces an agent pane that has stopped working. Passed in for the same
+   * reason `openExternal` is: raising an OS notification is something only a
+   * process with a window behind it can honestly do, so a runtime without one
+   * is handed no way to try.
+   */
+  onAgentNotice?: (notice: AgentNotice) => void
   onError?: (error: unknown) => void
 }
 
@@ -93,6 +101,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     serveTeamwork = true,
     checkForUpdates = true,
     openExternal,
+    onAgentNotice,
     onError
   } = options
   const report = onError ?? ((error: unknown) => console.error('[runtime]', error))
@@ -111,7 +120,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   const subscriptions = new SubscriptionHub()
   const context = createRuntimeContext({ version, store, subscriptions })
   const registry = new MethodRegistry(context)
-  const areas = registerHandlers(registry, { openExternal, scrollback, worktreesRoot })
+  const areas = registerHandlers(registry, { openExternal, onAgentNotice, scrollback, worktreesRoot })
   const dispatch = createDispatcher(registry)
 
   let socketServer: RuntimeSocketServer | undefined

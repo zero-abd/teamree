@@ -28,7 +28,7 @@ import type { Project } from '@shared/entities'
 import { cliOutcome, cliPanel } from '../dialogs/cliInstallModel'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
-import { TERMINAL_FONT_MAX_PX, TERMINAL_FONT_MIN_PX } from '../state/preferences'
+import { TERMINAL_FONT_MAX_PX, TERMINAL_FONT_MIN_PX, type AgentNoticePreference } from '../state/preferences'
 import { useNow } from '../state/useNow'
 import { modalOnScreen } from '../dialogs/modalLayer'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -109,6 +109,7 @@ export function SettingsView({ modifier }: { modifier: PlatformModifier }): Reac
         <div className="settings__column">
           <CliSection />
           <UpdatesSection />
+          <NoticesSection />
           <PanesSection />
           <AppearanceSection modifier={modifier} />
           <ProjectsSection projects={projects} />
@@ -231,6 +232,44 @@ function UpdatesSection(): React.JSX.Element {
           not reach GitHub is not something the reader has to do anything about,
           and it belongs beside the button that tried. */}
       {panel.problem ? <p className="settings-warning">{panel.problem}</p> : null}
+    </section>
+  )
+}
+
+/**
+ * What an agent that has stopped may do when you are not looking at the window.
+ *
+ * One row and no paragraph under it. Everything else on this page explains
+ * something that cannot be worked out by reading the control — what a link on
+ * the PATH is for, what "automatically" means in hours, which of two places a
+ * relay came from. The three words in this select are the whole of what this
+ * setting does.
+ */
+function NoticesSection(): React.JSX.Element {
+  const agentNotices = useWorkspaceStore((state) => state.agentNotices)
+  const setAgentNotices = useWorkspaceStore((state) => state.setAgentNotices)
+
+  return (
+    <section className="settings-section" aria-labelledby="settings-notices">
+      <h2 className="settings-section__title" id="settings-notices">
+        Notifications
+      </h2>
+
+      <div className="settings-field">
+        <label className="settings-field__label" htmlFor="settings-agent-notices">
+          When an agent stops
+        </label>
+        <select
+          id="settings-agent-notices"
+          className="settings-field__select"
+          value={agentNotices}
+          onChange={(event) => setAgentNotices(event.target.value as AgentNoticePreference)}
+        >
+          <option value="off">Nothing</option>
+          <option value="notify">Notify</option>
+          <option value="sound">Notify with sound</option>
+        </select>
+      </div>
     </section>
   )
 }

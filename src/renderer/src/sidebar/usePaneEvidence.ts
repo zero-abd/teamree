@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Terminal } from '@shared/entities'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { EVIDENCE_TAIL_BYTES, forgetClosed, terminalsToRead, type EvidenceRead } from './evidenceReads'
-import { evidenceLine } from './outputEvidence'
+import { evidenceLine } from '@shared/outputEvidence'
 
 /** How often the policy is consulted. Shorter than the per-pane interval so a
  *  pane that has just appeared is read promptly rather than on the next beat. */

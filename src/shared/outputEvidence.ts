@@ -1,5 +1,15 @@
 // Picks the one line of a terminal's output that is worth putting on a sidebar
-// row.
+// row — or into a notification, which is why this is here rather than beside
+// the sidebar that was its only reader.
+//
+// It is in the contract directory for the narrow reason that two processes now
+// answer the same question about the same bytes: the window writes this line on
+// a row, and the main process writes it in the body of the notification it
+// raises when an agent stops. A second copy in `src/main` would be a second
+// idea of what a pane last said, and the two would drift on the first program
+// that redraws its last line. Nothing else about this is contract — it types no
+// method and crosses no wire — and it has no dependencies at all, so it costs
+// the renderer and the CLI nothing to have it here.
 //
 // This is evidence, not status: teamree watches a PTY, so all it ever has is
 // what a program printed. Nothing here knows what the program meant, and the

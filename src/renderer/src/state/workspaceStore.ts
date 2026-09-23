@@ -60,11 +60,14 @@ import {
 } from '../shell/sidebarWidth'
 import {
   clampTerminalFontSize,
+  readStoredAgentNotices,
   readStoredStartPoints,
   readStoredTerminalFontSize,
   withStartPoint,
+  writeStoredAgentNotices,
   writeStoredStartPoints,
-  writeStoredTerminalFontSize
+  writeStoredTerminalFontSize,
+  type AgentNoticePreference
 } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
@@ -513,6 +516,16 @@ type WorkspaceState = {
    */
   terminalFontSize: number
   startPointDefaults: Record<string, string>
+  /**
+   * Whether an agent stopping while you are elsewhere may say so, and whether
+   * it may make a sound.
+   *
+   * Held here rather than read straight out of storage where it is used,
+   * because the reader is the main process: `useAgentNotices` publishes it over
+   * the preload bridge whenever it changes, and a preference nothing
+   * re-renders on would only reach the other process on the next launch.
+   */
+  agentNotices: AgentNoticePreference
 
   /**
    * How this window is painted, as the runtime last told it.
@@ -732,6 +745,8 @@ type WorkspaceState = {
   revealInFinder: (path: string, what: string) => Promise<void>
   /** Sets the size of the text in every pane, and remembers it. */
   setTerminalFontSize: (size: number) => void
+  /** Sets what an agent going quiet may do, and remembers it. */
+  setAgentNotices: (preference: AgentNoticePreference) => void
   /** Sets one project's preferred start point, or clears it when given null. */
   setStartPointDefault: (projectId: string, ref: string | null) => void
   /**
@@ -1294,6 +1309,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     notices: [],
     terminalFontSize: readStoredTerminalFontSize(storage),
     startPointDefaults: readStoredStartPoints(storage),
+    agentNotices: readStoredAgentNotices(storage),
 
     // The default until the runtime answers, which is the same palette
     // `tokens.css` already painted the first frame in — so the window does not
@@ -2358,6 +2374,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const clamped = clampTerminalFontSize(size)
       set({ terminalFontSize: clamped })
       writeStoredTerminalFontSize(storage, clamped)
+    },
+
+    setAgentNotices(preference) {
+      set({ agentNotices: preference })
+      writeStoredAgentNotices(storage, preference)
     },
 
     setStartPointDefault(projectId, ref) {

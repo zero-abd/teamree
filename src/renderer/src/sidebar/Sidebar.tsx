@@ -23,7 +23,7 @@ import { cliActionLabel, cliTitle, offerCliInstall } from '../dialogs/cliInstall
 import type { PaneAttention } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { evidenceLine } from './outputEvidence'
+import { evidenceLine } from '@shared/outputEvidence'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
 import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
 import { teamworkSummary, TEAMWORK_BUTTON_LABEL } from './teamworkSummary'

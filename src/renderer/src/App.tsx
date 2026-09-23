@@ -10,6 +10,7 @@ import { TaskComposerDialog } from './dialogs/TaskComposerDialog'
 import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModifier'
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
 import { useMenuBar } from './menu/useMenuBar'
+import { useAgentNotices } from './notices/useAgentNotices'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmClosePaneDialog } from './dialogs/ConfirmClosePaneDialog'
 import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
@@ -38,6 +39,10 @@ export function App(): React.JSX.Element {
   // thing: the chord and the menu item run one dispatcher over one table, so
   // neither can offer what the other refuses. See src/renderer/src/menu.
   useMenuBar()
+  // And the only other thing this window says about itself to the process
+  // outside it: what it wants an agent going quiet to do, and which pane it is
+  // already looking at. See src/renderer/src/notices.
+  useAgentNotices()
 
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)

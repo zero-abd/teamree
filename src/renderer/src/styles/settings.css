@@ -291,6 +291,41 @@
   box-shadow: var(--ring);
 }
 
+/* A choice out of three, so it is sized to the longest of them rather than to
+   the column: a select stretched across the page reads as a text field that
+   will not take text. The arrow is drawn rather than the platform's, the same
+   way the dialog's selects draw theirs. */
+.settings-field__select {
+  align-self: start;
+  min-width: 0;
+  padding: 5px var(--s5) 5px var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background-color: var(--bg-input);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--fg-muted) 50%),
+    linear-gradient(135deg, var(--fg-muted) 50%, transparent 50%);
+  background-position: right 15px center, right 10px center;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+}
+
+/* Said rather than inherited: an open list is drawn by the platform on a ground
+   this page never painted, and a colour that only works on ours would be
+   unreadable in it. */
+.settings-field__select option {
+  background-color: var(--bg-input);
+  color: var(--fg);
+}
+
+.settings-field__select:focus-visible {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: var(--ring);
+}
+
 /* Projects ---------------------------------------------------------------- */
 
 .settings-project {
