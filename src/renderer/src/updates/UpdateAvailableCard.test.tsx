@@ -1,11 +1,7 @@
 /** @vitest-environment jsdom */
 
-// The card, and the one property of it that is a security property rather than
-// a design one: a release body is text from the internet, and this renders it.
-//
-// The rest is about it being quiet — absent when there is nothing to say,
-// out of the way when the first-run question is up, and gone when somebody has
-// said they do not want it.
+// The card: release notes rendered safely, and quiet — absent when there is
+// nothing to say, out of the way of modals, gone until a newer release after Later.
 
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -25,6 +21,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { UpdateAvailableCard } = await import('./UpdateAvailableCard')
+const { INSTALL_DOCUMENT } = await import('./updateNotice')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -79,6 +76,7 @@ beforeEach(() => {
   fetchInstaller.mockClear()
   openInstaller.mockClear()
   setAutomaticUpdates.mockClear()
+  localStorage.clear()
   useWorkspaceStore.setState({
     ...INITIAL,
     cli: settledCli(),
@@ -130,40 +128,83 @@ describe('the update card', () => {
     expect(screen.getByText('Checksum mismatch; the file was deleted.')).toBeTruthy()
   })
 
-  // The one that matters. A release body is attacker-influenceable text in the
-  // general case, and this card is the only thing in the app that shows one.
-  it('renders release notes as text, so a body full of markup stays a body full of markup', () => {
-    const notes = '<img src=x onerror="globalThis.owned = true"><script>globalThis.owned = true</script>'
+  // A release body is text from the internet: formatted, but never markup of its own.
+  it('renders release notes as markdown, and a body full of markup stays text', () => {
+    const notes = [
+      '### What changed',
+      '- **Faster** panes',
+      '',
+      '<img src=x onerror="globalThis.owned = true"><script>globalThis.owned = true</script>',
+      '',
+      '[run](javascript:globalThis.owned=true) ![pixel](https://example.com/p.png)'
+    ].join('\n')
     useWorkspaceStore.setState({ update: update({ available: { ...update().available!, notes } }) })
 
     const { container } = render(<UpdateAvailableCard />)
+    const body = container.querySelector('.update-card__notes') as HTMLElement
 
-    // The characters are on screen, exactly as written.
-    expect(screen.getByText(notes)).toBeTruthy()
-    // And no element was made out of them. `querySelector` reads the real DOM,
-    // so this fails the moment anything here starts rendering markup.
-    expect(container.querySelector('img')).toBeNull()
-    expect(container.querySelector('script')).toBeNull()
+    expect(body.querySelector('h3')?.textContent).toBe('What changed')
+    expect(body.querySelector('li strong')?.textContent).toBe('Faster')
+    expect(body.textContent).toContain('<script>globalThis.owned = true</script>')
+    expect(body.querySelector('img, script, [onerror]')).toBeNull()
+    expect(body.querySelector('a[href^="javascript"]')).toBeNull()
     expect((globalThis as Record<string, unknown>).owned).toBeUndefined()
   })
 
-  it('stops the checking and goes away when somebody says so', () => {
+  it('opens a link in the notes in the browser', () => {
+    const opened = vi.fn()
+    vi.stubGlobal('open', opened)
+    const notes = 'See [the diff](https://github.com/zero-abd/teamree/compare/v0.1.0...v0.2.0).'
+    useWorkspaceStore.setState({ update: update({ available: { ...update().available!, notes } }) })
     render(<UpdateAvailableCard />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Stop checking' }))
-    expect(setAutomaticUpdates).toHaveBeenCalledWith(false)
+    fireEvent.click(screen.getByRole('link', { name: 'the diff' }))
+    expect(opened).toHaveBeenCalledWith(
+      'https://github.com/zero-abd/teamree/compare/v0.1.0...v0.2.0',
+      '_blank',
+      'noopener'
+    )
+    vi.unstubAllGlobals()
+  })
+
+  it('opens the install steps in the browser', () => {
+    const opened = vi.fn()
+    vi.stubGlobal('open', opened)
+    render(<UpdateAvailableCard />)
+
+    fireEvent.click(screen.getByRole('link', { name: 'Install steps' }))
+    expect(opened).toHaveBeenCalledWith(INSTALL_DOCUMENT, '_blank', 'noopener')
+    vi.unstubAllGlobals()
+  })
+
+  it('goes away on Later and leaves automatic checks alone', () => {
+    render(<UpdateAvailableCard />)
+
+    expect(screen.queryByRole('button', { name: 'Stop checking' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }))
+    expect(setAutomaticUpdates).not.toHaveBeenCalled()
     expect(screen.queryByText(/is available/)).toBeNull()
   })
 
-  it('comes back for a check made after it was waved away, because that one was asked for', () => {
-    const { rerender } = render(<UpdateAvailableCard />)
-    fireEvent.click(screen.getByRole('button', { name: 'Stop checking' }))
-    expect(screen.queryByText(/is available/)).toBeNull()
+  it('stays away for the same version, across checks and launches', () => {
+    const { unmount } = render(<UpdateAvailableCard />)
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }))
+    unmount()
 
     useWorkspaceStore.setState({ update: update({ checkedAt: 1_700_000_600_000 }) })
+    const { container } = render(<UpdateAvailableCard />)
+    expect(container.querySelector('.update-card')).toBeNull()
+  })
+
+  it('comes back when a check finds a newer version', () => {
+    const { rerender } = render(<UpdateAvailableCard />)
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }))
+
+    const available = { ...update().available!, version: '0.3.0', tag: 'v0.3.0' }
+    useWorkspaceStore.setState({ update: update({ available, checkedAt: 1_700_000_600_000 }) })
     rerender(<UpdateAvailableCard />)
 
-    expect(screen.getByText(/teamree 0\.2\.0 is available/)).toBeTruthy()
+    expect(screen.getByText(/teamree 0\.3\.0 is available/)).toBeTruthy()
   })
 })
 

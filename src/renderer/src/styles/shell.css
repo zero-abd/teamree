@@ -224,7 +224,7 @@
   box-shadow: var(--ring);
 }
 
-/* Transient messages, stacked above the status rail.
+/* Transient messages and the update card, stacked above the status rail.
 
    Above the modal layer, not below it: the errors a dialog raises — a folder
    that is not a git checkout, a handle that collides — arrive here, and under
@@ -235,16 +235,23 @@
    between the cards are part of its box, and over a dialog that box would be
    swallowing clicks meant for the form behind it. */
 
-.notices {
+.corner-stack {
   position: fixed;
   right: var(--s4);
   bottom: 34px;
   z-index: 70;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s2);
+  pointer-events: none;
+}
+
+.notices {
+  display: flex;
+  flex-direction: column;
   gap: var(--s2);
   max-width: 420px;
-  pointer-events: none;
 }
 
 .notice {

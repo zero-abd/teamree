@@ -1,13 +1,41 @@
 // The one time teamree mentions a release by itself: a corner card, never a modal, since the news is
-// never urgent. Download leaves the card up so the notes stay readable. The notes are somebody else's
-// words: render them only as a text child, never as markup (`plainText` already stripped controls).
+// never urgent. Download leaves the card up so the notes stay readable.
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { cliOffer } from '../dialogs/cliInstallModel'
 import { modalOnScreen } from '../dialogs/modalLayer'
+import { openInBrowser } from '../shell/openInBrowser'
 import { InstallerButton } from './InstallerButton'
+import { releaseNotesHtml } from './releaseNotes'
 import { INSTALL_DOCUMENT, installerStep, updateNotice } from './updateNotice'
+
+const LATER_KEY = 'teamree.updates.later'
+const storage = typeof window === 'undefined' ? undefined : window.localStorage
+
+function readLater(): string | null {
+  try {
+    return storage?.getItem(LATER_KEY) ?? null
+  } catch {
+    return null
+  }
+}
+
+function writeLater(version: string): void {
+  try {
+    storage?.setItem(LATER_KEY, version)
+  } catch {
+    // Blocked storage only costs the card coming back next launch.
+  }
+}
+
+/** Links in the card go to the browser, never this window. */
+function openLink(event: React.MouseEvent): void {
+  const anchor = event.target instanceof Element ? event.target.closest('a') : null
+  if (anchor === null) return
+  event.preventDefault()
+  openInBrowser(anchor.href)
+}
 
 export function UpdateAvailableCard(): React.JSX.Element | null {
   const update = useWorkspaceStore((state) => state.update)
@@ -15,47 +43,45 @@ export function UpdateAvailableCard(): React.JSX.Element | null {
   const dialog = useWorkspaceStore((state) => state.dialog)
   // A remote-keystrokes question is not in `dialog` but has a scrim, so the card waits under it.
   const consent = useWorkspaceStore((state) => state.consent)
-  const setAutomaticUpdates = useWorkspaceStore((state) => state.setAutomaticUpdates)
 
-  // Dismissal is keyed by the check it saw; a later check is a new answer and shows again.
-  const [dismissed, setDismissed] = useState<number | null>(null)
+  // Later is kept per version: only a newer release brings the card back.
+  const [later, setLater] = useState(readLater)
 
   const notice = updateNotice(update)
   const step = installerStep(update)
-  // Nothing to say, something modal on top, or the first-run question (same corner, asked first).
+  const notes = notice?.notes ?? null
+  const notesHtml = useMemo(() => (notes === null ? null : releaseNotesHtml(notes)), [notes])
+
+  // Nothing to say, something modal on top, or the first-run question (asked first).
   if (notice === null || step === null || modalOnScreen({ dialog, consent }) || cliOffer(cli) !== null) return null
-  if (dismissed !== null && dismissed === update?.checkedAt) return null
+  const version = update?.available?.version ?? ''
+  if (later === version) return null
 
   return (
-    <aside className="update-card" aria-label="A newer version of teamree is available">
+    <aside className="update-card" aria-label="A newer version of teamree is available" onClick={openLink}>
       <p className="update-card__headline">{notice.headline}</p>
       <p className="update-card__detail">{notice.detail}</p>
 
-      {notice.notes === null ? null : (
-        // `pre-wrap` in the stylesheet keeps the breaks without sideways scrolling.
-        <p className="update-card__notes">{notice.notes}</p>
+      {notesHtml === null ? null : (
+        // Safe as HTML: `releaseNotesHtml` escapes every tag the body carries.
+        <div className="update-card__notes" dangerouslySetInnerHTML={{ __html: notesHtml }} />
       )}
 
       {step.problem === null ? null : <p className="update-card__problem">{step.problem}</p>}
 
-      <p className="update-card__install">
-        {notice.install}{' '}
-        <a className="update-card__link" href={INSTALL_DOCUMENT} target="_blank" rel="noreferrer">
-          Open it
-        </a>
-      </p>
-
       <div className="update-card__actions">
+        <a className="update-card__link" href={INSTALL_DOCUMENT}>
+          {notice.install}
+        </a>
         <button
           type="button"
           className="button button--ghost"
           onClick={() => {
-            // Turning the preference off stops the runtime offering this release on every launch.
-            setDismissed(update?.checkedAt ?? 0)
-            void setAutomaticUpdates(false)
+            writeLater(version)
+            setLater(version)
           }}
         >
-          {notice.silence}
+          Later
         </button>
         <InstallerButton step={step} className="button button--primary" />
       </div>

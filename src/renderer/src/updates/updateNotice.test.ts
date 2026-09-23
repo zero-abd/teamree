@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { UpdateState } from '@shared/entities'
-import { automaticUpdatesLabel, installerStep, updateNotice } from './updateNotice'
+import { INSTALL_DOCUMENT, automaticUpdatesLabel, installerStep, updateNotice } from './updateNotice'
 
 function state(overrides: Partial<UpdateState> = {}): UpdateState {
   return {
@@ -43,10 +43,13 @@ describe('what the card says', () => {
   })
 
   it('sends the reader to the install steps rather than reciting them', () => {
-    // The quarantine command lives in docs/install.md, where a script runs it
-    // against a real build. A copy here would be a copy nothing checks.
-    expect(updateNotice(state())?.install).toContain('docs/install.md')
-    expect(updateNotice(state())?.install).not.toContain('xattr')
+    // The quarantine command lives in docs/install.md, where a script runs it against a real build.
+    expect(updateNotice(state())?.install).toBe('Install steps')
+    expect(INSTALL_DOCUMENT).toMatch(/docs\/install\.md$/)
+  })
+
+  it('leaves stopping the checks to Settings', () => {
+    expect(updateNotice(state())).not.toHaveProperty('silence')
   })
 
   it('offers the release page when there is no image to download', () => {

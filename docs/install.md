@@ -476,9 +476,10 @@ way this copy was: drag it to Applications over the old one, and if you had to
 clear the quarantine flag before, do it again for the new copy.
 
 You can ask at any time: **teamree → Check for Updates…** in the menu bar, or
-"Check for updates" in the command palette. And you can tell it to stop looking
-— the card's **Stop checking** button, or "Stop checking for updates
-automatically" in the palette. That answer is remembered between launches, and
+"Check for updates" in the command palette. **Later** on the card
+hides it until a newer release than that one comes out. And you can tell it to
+stop looking — **Settings › Updates › Check automatically**, or "Stop checking
+for updates automatically" in the palette. That answer is remembered between launches, and
 the menu item still works when you want it.
 
 ## Uninstalling

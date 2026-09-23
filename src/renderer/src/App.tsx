@@ -99,45 +99,44 @@ export function App(): React.JSX.Element {
 
       <StatusBar />
 
-      {notices.length > 0 ? (
-        <div className="notices" role="status" aria-live="polite">
-          {notices.map((notice) => (
-            <div className={`notice notice--${notice.tone}`} key={notice.id}>
-              <span className="notice__text">{notice.text}</span>
-              {notice.action === undefined ? null : (
-                // The verb is the whole button.
+      {/* Bottom right above the status bar: notices stack above the update card, never over it. */}
+      <div className="corner-stack">
+        {notices.length > 0 ? (
+          <div className="notices" role="status" aria-live="polite">
+            {notices.map((notice) => (
+              <div className={`notice notice--${notice.tone}`} key={notice.id}>
+                <span className="notice__text">{notice.text}</span>
+                {notice.action === undefined ? null : (
+                  // The verb is the whole button.
+                  <button
+                    type="button"
+                    className="notice__action"
+                    onClick={() => openInBrowser(notice.action?.url ?? '')}
+                  >
+                    {notice.action.label}
+                  </button>
+                )}
                 <button
                   type="button"
-                  className="notice__action"
-                  onClick={() => openInBrowser(notice.action?.url ?? '')}
+                  className="notice__close"
+                  aria-label="Dismiss message"
+                  onClick={() => dismissNotice(notice.id)}
                 >
-                  {notice.action.label}
+                  <svg viewBox="0 0 12 12" aria-hidden="true">
+                    <path d="M3 3 L9 9 M9 3 L3 9" />
+                  </svg>
                 </button>
-              )}
-              <button
-                type="button"
-                className="notice__close"
-                aria-label="Dismiss message"
-                onClick={() => dismissNotice(notice.id)}
-              >
-                <svg viewBox="0 0 12 12" aria-hidden="true">
-                  <path d="M3 3 L9 9 M9 3 L3 9" />
-                </svg>
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
+        <UpdateAvailableCard />
+      </div>
 
       {/* Nothing is focused and nothing is blocked: the window is usable
-          whether or not anybody answers this. Both cards stand aside for
-          anything modal, which now means a keystroke question as well as a
-          dialog — see `modalLayer.ts`. */}
+          whether or not anybody answers this. It stands aside for anything
+          modal, which means a keystroke question as well as a dialog. */}
       <FirstRunCliOffer />
-
-      {/* The same corner and the same terms: nothing focused, nothing blocked,
-          and it stands aside while the first-run question is on screen. */}
-      <UpdateAvailableCard />
 
       {dialog?.kind === 'palette' ? <CommandPalette modifier={modifier} /> : null}
       {dialog?.kind === 'confirm-remove' ? (
