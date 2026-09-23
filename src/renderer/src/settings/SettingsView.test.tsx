@@ -19,7 +19,7 @@
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CliStatus, PaneConsent, Project, RelaySetting, UpdateState } from '@shared/entities'
+import type { CliStatus, InstalledAgent, PaneConsent, Project, RelaySetting, UpdateState } from '@shared/entities'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
@@ -109,6 +109,9 @@ const relay = (): RelaySetting => ({
   readAt: 0
 })
 
+const claude: InstalledAgent = { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }
+const codex: InstalledAgent = { kind: 'codex', command: 'codex', binary: '/opt/bin/codex' }
+
 const toggleSettings = vi.fn()
 const loadCli = vi.fn()
 const loadUpdate = vi.fn()
@@ -117,6 +120,8 @@ const revealInFinder = vi.fn()
 const setStartPointDefault = vi.fn()
 const setProjectPaths = vi.fn()
 const setTerminalFontSize = vi.fn()
+const setDefaultAgent = vi.fn()
+const setAgentArgs = vi.fn()
 const setAutomaticUpdates = vi.fn()
 const checkForUpdates = vi.fn()
 const openTeamwork = vi.fn()
@@ -140,6 +145,8 @@ function seed(overrides: Record<string, unknown> = {}): void {
       setStartPointDefault,
       setProjectPaths,
       setTerminalFontSize,
+      setDefaultAgent,
+      setAgentArgs,
       setAutomaticUpdates,
       checkForUpdates,
       openTeamwork,
@@ -169,6 +176,8 @@ beforeEach(() => {
     setStartPointDefault,
     setProjectPaths,
     setTerminalFontSize,
+    setDefaultAgent,
+    setAgentArgs,
     setAutomaticUpdates,
     checkForUpdates,
     openTeamwork,
@@ -462,5 +471,68 @@ describe('the relay a project meets on', () => {
     const block = within(relayBlock())
     expect(block.getByText('Teamwork has no relay to dial in this repository.')).toBeTruthy()
     expect(block.getByText('no .teamree/relay in this project')).toBeTruthy()
+  })
+})
+
+// The two per-machine agent preferences, and the one thing on this page that
+// is neither a label nor a control: the line a pane will run. A field holding
+// a fragment of a command line cannot be checked by looking at it — where the
+// fragment lands is the whole question — so the page composes the line with
+// the same function the runtime composes it with and shows the result.
+describe('the agent you always use', () => {
+  it('offers the installed agents, and first-found as the way to mean no preference', () => {
+    seed({ agents: [claude, codex] })
+    render(<SettingsView modifier={modifier} />)
+
+    const select = screen.getByLabelText('Default agent') as HTMLSelectElement
+    expect([...select.options].map((option) => option.value)).toEqual(['', 'claude', 'codex'])
+
+    fireEvent.change(select, { target: { value: 'codex' } })
+    expect(setDefaultAgent).toHaveBeenCalledWith('codex')
+  })
+
+  it('shows the full command each agent will be launched with, verbatim', () => {
+    seed({ agents: [claude, codex], agentArgs: { claude: '--model opus' } })
+    render(<SettingsView modifier={modifier} />)
+
+    const section = screen.getByRole('heading', { name: 'Agents' }).parentElement as HTMLElement
+    // One line per field, in the fields' own order, so the line under a field
+    // is never a line some other field explains. The agent nobody has typed
+    // anything for shows the command as it stands.
+    expect([...section.querySelectorAll('code')].map((node) => node.textContent)).toEqual([
+      'claude --model opus',
+      'codex'
+    ])
+  })
+
+  it('shows the command changing as it is typed, before anything is committed', () => {
+    seed({ agents: [claude] })
+    render(<SettingsView modifier={modifier} />)
+
+    fireEvent.change(screen.getByLabelText('claude'), { target: { value: '--permission-mode plan' } })
+    expect(screen.getByText('claude --permission-mode plan')).toBeTruthy()
+    expect(setAgentArgs).not.toHaveBeenCalled()
+
+    fireEvent.blur(screen.getByLabelText('claude'))
+    expect(setAgentArgs).toHaveBeenCalledWith('claude', '--permission-mode plan')
+  })
+
+  // Null rather than the empty string, for the same reason the start point
+  // above passes null: the store treats the two differently on purpose.
+  it('clears an agent’s arguments rather than storing an empty string', () => {
+    seed({ agents: [claude], agentArgs: { claude: '--model opus' } })
+    render(<SettingsView modifier={modifier} />)
+
+    const field = screen.getByLabelText('claude')
+    fireEvent.change(field, { target: { value: '  ' } })
+    fireEvent.blur(field)
+    expect(setAgentArgs).toHaveBeenCalledWith('claude', null)
+  })
+
+  // Every control in the section is about an agent this machine has.
+  it('is not on the page at all when the machine has no agent', () => {
+    seed({ agents: [] })
+    render(<SettingsView modifier={modifier} />)
+    expect(screen.queryByRole('heading', { name: 'Agents' })).toBeNull()
   })
 })

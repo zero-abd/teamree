@@ -12,6 +12,9 @@ import { describe, expect, it } from 'vitest'
 import {
   clampTerminalFontSize,
   DIFF_LAYOUT_DEFAULT,
+  NO_DEFAULT_AGENT,
+  readStoredAgentArgs,
+  readStoredDefaultAgent,
   readStoredDiffLayout,
   readStoredEditorCommands,
   readStoredStartPoints,
@@ -19,8 +22,11 @@ import {
   TERMINAL_FONT_DEFAULT_PX,
   TERMINAL_FONT_MAX_PX,
   TERMINAL_FONT_MIN_PX,
+  withAgentArgs,
   withEditorCommand,
   withStartPoint,
+  writeStoredAgentArgs,
+  writeStoredDefaultAgent,
   writeStoredDiffLayout,
   writeStoredEditorCommands,
   writeStoredStartPoints,
@@ -210,5 +216,73 @@ describe('how a patch is laid out', () => {
     expect(readStoredDiffLayout(refusingStorage)).toBe('inline')
     expect(() => writeStoredDiffLayout(refusingStorage, 'split')).not.toThrow()
     expect(readStoredDiffLayout(undefined)).toBe('inline')
+  })
+})
+
+describe('the agent you always use', () => {
+  it('comes back as it was stored', () => {
+    const storage = memoryStorage()
+    writeStoredDefaultAgent(storage, 'codex')
+    expect(readStoredDefaultAgent(storage)).toBe('codex')
+  })
+
+  // Nothing stored is not the same as "no agent": it means nobody has said,
+  // and the first-found rule is what answers instead.
+  it('is empty until somebody chooses one', () => {
+    expect(readStoredDefaultAgent(memoryStorage())).toBe(NO_DEFAULT_AGENT)
+  })
+
+  it('can be cleared back to no preference', () => {
+    const storage = memoryStorage()
+    writeStoredDefaultAgent(storage, 'codex')
+    writeStoredDefaultAgent(storage, NO_DEFAULT_AGENT)
+    expect(readStoredDefaultAgent(storage)).toBe(NO_DEFAULT_AGENT)
+  })
+
+  it('survives a storage that refuses, in both directions', () => {
+    expect(readStoredDefaultAgent(refusingStorage)).toBe(NO_DEFAULT_AGENT)
+    expect(() => writeStoredDefaultAgent(refusingStorage, 'claude')).not.toThrow()
+    expect(readStoredDefaultAgent(undefined)).toBe(NO_DEFAULT_AGENT)
+  })
+})
+
+describe('the flag you always pass', () => {
+  it('comes back as it was stored, per agent', () => {
+    const storage = memoryStorage()
+    writeStoredAgentArgs(storage, { claude: '--model opus', codex: '--full-auto' })
+    expect(readStoredAgentArgs(storage)).toEqual({ claude: '--model opus', codex: '--full-auto' })
+  })
+
+  // The decision this ships with: no agent is given an argument nobody typed.
+  it('is empty until somebody types one', () => {
+    expect(readStoredAgentArgs(memoryStorage())).toEqual({})
+  })
+
+  it('sets one agent without disturbing another', () => {
+    expect(withAgentArgs({ claude: '--model opus' }, 'codex', '--full-auto')).toEqual({
+      claude: '--model opus',
+      codex: '--full-auto'
+    })
+  })
+
+  it('removes the entry rather than storing an empty one', () => {
+    expect(withAgentArgs({ claude: '--model opus' }, 'claude', null)).toEqual({})
+    expect(withAgentArgs({ claude: '--model opus' }, 'claude', '   ')).toEqual({})
+  })
+
+  // This ends up on a command line, so a stored value that is not a string has
+  // to stop here rather than in the middle of one.
+  it('drops anything that is not a fragment, and anything that is not a map of them', () => {
+    expect(readStoredAgentArgs(memoryStorage({ 'teamree.agent.args': 'not json at all' }))).toEqual({})
+    expect(readStoredAgentArgs(memoryStorage({ 'teamree.agent.args': '["--model opus"]' }))).toEqual({})
+    expect(readStoredAgentArgs(memoryStorage({ 'teamree.agent.args': '{"claude":7,"codex":"-a","x":""}' }))).toEqual({
+      codex: '-a'
+    })
+  })
+
+  it('survives a storage that refuses, in both directions', () => {
+    expect(readStoredAgentArgs(refusingStorage)).toEqual({})
+    expect(() => writeStoredAgentArgs(refusingStorage, { claude: '--model opus' })).not.toThrow()
+    expect(readStoredAgentArgs(undefined)).toEqual({})
   })
 })

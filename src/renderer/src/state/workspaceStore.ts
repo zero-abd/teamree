@@ -61,19 +61,24 @@ import {
 } from '../shell/sidebarWidth'
 import {
   clampTerminalFontSize,
+  readStoredAgentArgs,
   readStoredAgentNotices,
-  readStoredEditorCommands,
+  readStoredDefaultAgent,
   readStoredDiffLayout,
+  readStoredEditorCommands,
   readStoredStartPoints,
   readStoredTerminalFontSize,
+  type AgentNoticePreference,
+  withAgentArgs,
   withEditorCommand,
   withStartPoint,
+  writeStoredAgentArgs,
   writeStoredAgentNotices,
-  writeStoredEditorCommands,
+  writeStoredDefaultAgent,
   writeStoredDiffLayout,
+  writeStoredEditorCommands,
   writeStoredStartPoints,
-  writeStoredTerminalFontSize,
-  type AgentNoticePreference
+  writeStoredTerminalFontSize
 } from './preferences'
 import { forgetClosedPanes, markSeen, readPaneSeen, writePaneSeen, type PaneSeen } from './paneSeen'
 import type { DiffLayout } from './preferences'
@@ -560,6 +565,17 @@ type WorkspaceState = {
   editors: { command: string; label: string }[] | null
   /** Whether the patch in the changes panel is laid out inline or side by side. */
   diffLayout: DiffLayout
+  /**
+   * The agent kind the composer offers first, or `NO_DEFAULT_AGENT`, and what
+   * each agent kind is always launched with.
+   *
+   * Local to this machine for the same reason as the two above — see
+   * `preferences.ts`. Which agent you reach for and which flag you always pass
+   * it are facts about the person at this keyboard, and the machine is the only
+   * thing that knows whether that agent is installed at all.
+   */
+  defaultAgent: string
+  agentArgs: Record<string, string>
 
   /**
    * How this window is painted, as the runtime last told it.
@@ -791,6 +807,10 @@ type WorkspaceState = {
   setDiffLayout: (layout: DiffLayout) => void
   /** Sets one project's preferred start point, or clears it when given null. */
   setStartPointDefault: (projectId: string, ref: string | null) => void
+  /** Sets the agent the composer offers first; `NO_DEFAULT_AGENT` clears it. */
+  setDefaultAgent: (kind: string) => void
+  /** Sets one agent's launch arguments, or clears them when given null. */
+  setAgentArgs: (kind: string, args: string | null) => void
   /**
    * Sets what one project's new worktrees carry over from its primary
    * checkout. Each list given replaces the stored one; an omitted list is left
@@ -1231,6 +1251,21 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   }
 
   /**
+   * What this machine's owner always passes the agent behind `command`.
+   *
+   * Resolved from the command rather than taken from the caller because the
+   * command is the only thing the two launch paths have in common: the
+   * composer picked an agent, the palette row carries the command it will run,
+   * and both of those strings came out of the same probe. Undefined when the
+   * command is not one of the probed agents — a relay pane, a plain shell —
+   * which is the one answer that leaves the line exactly as it was.
+   */
+  const extraArgsFor = (command: string): string | undefined => {
+    const kind = get().agents.find((agent) => agent.command === command)?.kind
+    return kind === undefined ? undefined : get().agentArgs[kind]
+  }
+
+  /**
    * Shows a layout without writing it back.
    *
    * For a tree the runtime has already saved: a write-back would send the whole
@@ -1377,6 +1412,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     editors: null,
     paneSeenAt: readPaneSeen(storage),
     diffLayout: readStoredDiffLayout(storage),
+    defaultAgent: readStoredDefaultAgent(storage),
+    agentArgs: readStoredAgentArgs(storage),
 
     // The default until the runtime answers, which is the same palette
     // `tokens.css` already painted the first frame in — so the window does not
@@ -1525,7 +1562,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
               // The pane is named after the task it was opened for, because the
               // task is what somebody would call it and the agent's binary is
               // what every other pane on this screen is also called.
-              await runtimeClient.call('terminal.create', { worktreeId: worktree.id, command: agentCommand, label })
+              const agentArgs = extraArgsFor(agentCommand)
+              await runtimeClient.call('terminal.create', {
+                worktreeId: worktree.id,
+                command: agentCommand,
+                label,
+                ...(agentArgs === undefined ? {} : { agentArgs })
+              })
             }
             return worktree
           })
@@ -1969,7 +2012,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       try {
         // Straight through terminal.create: the runtime is what pins the
         // session id, so a pane started here resumes like any other.
-        const terminal = await runtimeClient.call('terminal.create', { worktreeId, command })
+        const agentArgs = extraArgsFor(command)
+        const terminal = await runtimeClient.call('terminal.create', {
+          worktreeId,
+          command,
+          ...(agentArgs === undefined ? {} : { agentArgs })
+        })
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
         refresher.request(refreshTargets({ layouts: [worktreeId] }))
         await refresher.flush()
@@ -2541,6 +2589,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const startPointDefaults = withStartPoint(get().startPointDefaults, projectId, ref)
       set({ startPointDefaults })
       writeStoredStartPoints(storage, startPointDefaults)
+    },
+
+    setDefaultAgent(kind) {
+      const defaultAgent = kind.trim()
+      set({ defaultAgent })
+      writeStoredDefaultAgent(storage, defaultAgent)
+    },
+
+    setAgentArgs(kind, args) {
+      const agentArgs = withAgentArgs(get().agentArgs, kind, args)
+      set({ agentArgs })
+      writeStoredAgentArgs(storage, agentArgs)
     },
 
     async setProjectPaths(projectId, paths) {

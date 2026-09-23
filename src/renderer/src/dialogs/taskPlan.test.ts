@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { InstalledAgent } from '@shared/entities'
 import {
+  agentByKind,
   agentCount,
   defaultAgentCounts,
+  defaultAgentKind,
   fanOut,
   MAX_PER_AGENT,
+  NO_AGENT,
   submitLabel,
   taskCreates,
   taskPlanNote,
@@ -53,6 +56,35 @@ describe('the plan the dialog submits', () => {
       { name: 'Rewrite the pager codex', agentCommand: 'codex' },
       { name: 'Rewrite the pager claude 2', agentCommand: 'claude' }
     ])
+  })
+})
+
+describe('the agent the dialog opens with', () => {
+  it('gives the preferred agent the one count', () => {
+    expect(defaultAgentCounts(found, 'codex')).toEqual({ codex: 1 })
+    expect(defaultAgentCounts([claude], 'codex')).toEqual({ claude: 1 })
+  })
+
+  // The gap this closes: the composer used to offer whichever agent the probe
+  // happened to find first, which is alphabetical order dressed up as a choice.
+  it('preselects the agent this machine’s owner said they always use', () => {
+    expect(defaultAgentKind(found, 'codex')).toBe('codex')
+  })
+
+  // A preference travels between machines in somebody's head, and the machines
+  // do not have to agree about what is installed. The honest answer on the one
+  // without it is the rule that was there before.
+  it('falls back to the first one found when the preferred agent is not installed here', () => {
+    expect(defaultAgentKind([claude], 'codex')).toBe('claude')
+    expect(defaultAgentKind([], 'codex')).toBe(NO_AGENT)
+  })
+
+  it('treats no preference as no preference', () => {
+    expect(defaultAgentKind(found, NO_AGENT)).toBe('claude')
+  })
+
+  it('resolves a choice back to the agent that will run', () => {
+    expect(agentByKind(found, 'codex')).toEqual(codex)
   })
 
   it('makes one bare create when no agent was asked for', () => {

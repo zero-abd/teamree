@@ -7,6 +7,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { statSync } from 'node:fs'
+import { agentLaunchCommand } from '../../shared/agentLaunch'
 import type { Layout, PaneNode, Terminal } from '../../shared/entities'
 import { evidenceLine } from '../../shared/outputEvidence'
 import type { ParamsOf, TerminalEvent } from '../../shared/methods'
@@ -656,7 +657,15 @@ export class TerminalSessionManager {
     // the next launch has something to resume rather than something to guess.
     // A restore arrives with its command already settled and must not be
     // rewritten again.
-    const launch = restoring ? { command: params.command } : pinAgentSession(params.command)
+    //
+    // The caller's own arguments go on first, so everything `agent-command.ts`
+    // decides — where the selector goes, and whether the line can be touched at
+    // all — is decided about the line that will actually run. See
+    // `src/shared/agentLaunch.ts`. A restore skips this too: the arguments are
+    // already in the command that was written down.
+    const launch = restoring
+      ? { command: params.command }
+      : pinAgentSession(params.command === undefined ? undefined : agentLaunchCommand(params.command, params.agentArgs))
     const agent = restoring?.agent ?? launch.agent
     const fallback = params.fallback
     // The record's name wins on a restore: it is the one the user has been

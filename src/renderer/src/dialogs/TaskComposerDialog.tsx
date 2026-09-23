@@ -37,6 +37,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   const agentsProbed = useWorkspaceStore((state) => state.agentsProbed)
   const startTask = useWorkspaceStore((state) => state.startTask)
   const startPointDefaults = useWorkspaceStore((state) => state.startPointDefaults)
+  const defaultAgent = useWorkspaceStore((state) => state.defaultAgent)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
 
   const [projectId, setProjectId] = useState(openedFor)
@@ -88,10 +89,11 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
 
   if (!project) return null
 
-  // Null until the user steps something, so the first agent found is
+  // Null until the user steps something, so the preferred agent — or the first
+  // one found, when there is no preference or it is not installed here — is
   // preselected without overwriting a choice made while the probe was still in
   // flight.
-  const counts = agentCounts ?? defaultAgentCounts(agents)
+  const counts = agentCounts ?? defaultAgentCounts(agents, defaultAgent)
   const selection = fanOut(agents, counts)
 
   // Empty until there is something to slugify: the rule's fallback is the word
