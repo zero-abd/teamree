@@ -13,8 +13,9 @@
 // Both are silent, and both are checked here.
 
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_APPEARANCE, resolvePalette, THEME_TOKENS } from '@shared/theme'
-import { readSearchDecorations, readTerminalTheme } from './terminalTheme'
+import { Terminal as XTerm } from '@xterm/xterm'
+import { DEFAULT_APPEARANCE, resolvePalette, THEME_TOKENS, type Palette } from '@shared/theme'
+import { readSearchDecorations, readTerminalColors, readTerminalTheme } from './terminalTheme'
 
 /** A root element carrying one palette, the way the renderer sets one. */
 function rootWith(values: Record<string, string>): HTMLElement {
@@ -68,3 +69,32 @@ describe('the colours used when there is no element to read', () => {
     expect(decorations.activeMatchBorder).toBe(palette['accent-bright'])
   })
 })
+
+// Agents pick truecolour for a dark ground; codex's footer is (243,227,188), 1.2:1 on white.
+describe('the contrast floor the emulator is handed', () => {
+  const light = resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'light' })
+  const dark = resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark' })
+
+  it('lifts colours to 4.5:1 on a light ground', () => {
+    expect(readTerminalColors(rootWith(asProperties(light))).minimumContrastRatio).toBe(4.5)
+  })
+
+  it('leaves a dark ground as the program painted it', () => {
+    expect(readTerminalColors(rootWith(asProperties(dark))).minimumContrastRatio).toBe(1)
+    expect(readTerminalColors(null).minimumContrastRatio).toBe(1)
+  })
+
+  it('reaches a running emulator with the theme', () => {
+    const term = new XTerm()
+    Object.assign(term.options, readTerminalColors(rootWith(asProperties(light))))
+    expect(term.options.minimumContrastRatio).toBe(4.5)
+    expect(term.options.theme?.background).toBe(light['term-bg'])
+    Object.assign(term.options, readTerminalColors(rootWith(asProperties(dark))))
+    expect(term.options.minimumContrastRatio).toBe(1)
+    term.dispose()
+  })
+})
+
+function asProperties(palette: Palette): Record<string, string> {
+  return Object.fromEntries(THEME_TOKENS.map((token) => [`--${token}`, palette[token]]))
+}

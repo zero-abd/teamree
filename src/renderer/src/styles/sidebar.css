@@ -303,7 +303,7 @@
    are somebody else's", which is exactly what it means. */
 .project__count--teammate {
   margin-left: var(--s1);
-  color: var(--accent);
+  color: var(--accent-bright);
 }
 
 /* The base ref and the teamwork control share one line, so the header stays
@@ -965,7 +965,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--accent);
+  color: var(--accent-bright);
   font-size: var(--text-xs);
   font-weight: 600;
 }
@@ -1041,7 +1041,7 @@
   flex: 0 0 auto;
   max-width: 45%;
   overflow: hidden;
-  color: var(--accent);
+  color: var(--accent-bright);
   font-size: var(--text-xs);
   font-weight: 600;
   text-overflow: ellipsis;

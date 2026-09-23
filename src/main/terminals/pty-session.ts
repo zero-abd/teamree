@@ -30,6 +30,7 @@ import { ErrorCode } from '../../shared/protocol'
 import { agentForProcess, type AgentKind } from './agent-command'
 import { TitleSequenceScanner } from './title-sequence'
 import { titleOpinion, type TitleOpinion } from '../../shared/titleOpinion'
+import type { Tone } from '../../shared/theme'
 
 /** How long close() waits for the tree to die before giving up on the exit event. */
 const CLOSE_TIMEOUT_MS = 5_000
@@ -74,6 +75,8 @@ export type PtySessionInit = {
   cols: number
   rows: number
   env?: NodeJS.ProcessEnv
+  /** The window's tone when the pane starts, told to the child as COLORFGBG. */
+  tone?: Tone
   platform?: NodeJS.Platform
   scrollbackCapBytes?: number
   /** Set when this session is a previous run's pane being brought back. */
@@ -593,7 +596,7 @@ export class PtySession {
 function startChild(init: PtySessionInit, command: string | undefined, platform: NodeJS.Platform): IPty {
   const { file, args } = buildShellCommand(init.shell, command, platform)
   // The login shell's PATH, not the one launchd handed a desktop-launched app.
-  const env = buildTerminalEnv(init.env, platform, loginShellPath({ platform }))
+  const env = buildTerminalEnv(init.env, platform, loginShellPath({ platform }), init.tone)
 
   // Windows refuses a missing shell in spawn(); POSIX forks fine and the helper's
   // execvp failure goes to the pty, so the pane appears and vanishes. Ask first.

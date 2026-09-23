@@ -156,6 +156,19 @@ describe('buildTerminalEnv', () => {
     // An empty one is not a resolved PATH, and does not displace a real one.
     expect(buildTerminalEnv({ PATH: '/usr/bin' }, 'darwin', '').PATH).toBe('/usr/bin')
   })
+
+  // `fg;bg` in ANSI numbers; vim, codex and friends read it to choose colours for the ground.
+  it('tells programs the tone of the ground they print on', () => {
+    expect(buildTerminalEnv({ PATH: '/usr/bin' }, 'darwin', undefined, 'light').COLORFGBG).toBe('0;15')
+    expect(buildTerminalEnv({ PATH: '/usr/bin' }, 'darwin', undefined, 'dark').COLORFGBG).toBe('15;0')
+  })
+
+  it('drops the COLORFGBG of whatever terminal launched the app', () => {
+    expect(buildTerminalEnv({ PATH: '/usr/bin', COLORFGBG: '15;0' }).COLORFGBG).toBeUndefined()
+    expect(buildTerminalEnv({ PATH: '/usr/bin', COLORFGBG: '15;0' }, 'darwin', undefined, 'light').COLORFGBG).toBe(
+      '0;15'
+    )
+  })
 })
 
 describe('loginShellPath', () => {

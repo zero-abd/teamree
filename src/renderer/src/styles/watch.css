@@ -52,7 +52,7 @@
    changes what every other fact on the bar means. */
 .watch__owner {
   flex: none;
-  color: var(--accent);
+  color: var(--accent-bright);
   font-size: var(--text-xs);
   font-weight: 600;
 }

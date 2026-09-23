@@ -5,6 +5,7 @@
 import { spawnSync } from 'node:child_process'
 import { accessSync, constants, statSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
+import type { Tone } from '../../shared/theme'
 
 /** Advertised terminal type. xterm.js implements this set. */
 export const TERMINAL_TYPE = 'xterm-256color'
@@ -25,6 +26,8 @@ const STRIPPED_ENV_VARS = new Set([
   'TERM_PROGRAM_VERSION',
   'TERMCAP',
   'COLORTERM',
+  // The launching terminal's ground, not this window's.
+  'COLORFGBG',
   'COLUMNS',
   'LINES',
   // Agent CLIs read these to decide they are unattended and must not prompt.
@@ -324,7 +327,8 @@ export function encodeWindowsCommandLine(args: readonly string[]): string {
 export function buildTerminalEnv(
   base: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
-  searchPath?: string
+  searchPath?: string,
+  tone?: Tone
 ): Record<string, string> {
   const env: Record<string, string> = {}
 
@@ -348,6 +352,8 @@ export function buildTerminalEnv(
   env.TERM = TERMINAL_TYPE
   env.COLORTERM = 'truecolor'
   env.TERM_PROGRAM = TERMINAL_PROGRAM
+  // `fg;bg` as ANSI colour numbers, the rxvt convention TUIs read to pick colours for the ground.
+  if (tone !== undefined) env.COLORFGBG = tone === 'light' ? '0;15' : '15;0'
 
   return env
 }
