@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Terminal } from '@shared/entities'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { shownScreen } from '../terminal/shownPanes'
-import { EVIDENCE_TAIL_BYTES, forgetClosed, terminalsToRead, type EvidenceRead } from './evidenceReads'
+import { EVIDENCE_TAIL_BYTES, forgetClosed, readsTrueScreen, terminalsToRead, type EvidenceRead } from './evidenceReads'
 import { replayScreen, SCREEN_ROWS_READ, screenEvidence } from './paneScreen'
 
 /** How often the policy is consulted; shorter than the per-pane interval so a new pane is read promptly. */
@@ -27,11 +27,17 @@ export function usePaneEvidence(
 
     const readOne = async (terminal: Terminal): Promise<void> => {
       // Marked before the call, not after: a slow read must not be issued twice.
-      reads.current[terminal.id] = { readAt: Date.now(), wasRunning: terminal.running }
+      const mark: EvidenceRead = {
+        readAt: Date.now(),
+        wasRunning: terminal.running,
+        wasBusy: terminal.busy,
+        outputAt: terminal.lastOutputAt
+      }
+      reads.current[terminal.id] = mark
       try {
-        // A mounted pane's own emulator already holds its screen; any other has its tail replayed onto one.
+        // A mounted pane's own emulator holds its screen while busy; otherwise the tail is replayed onto one.
         const screen =
-          shownScreen(terminal.id, SCREEN_ROWS_READ) ??
+          (readsTrueScreen(terminal) ? null : shownScreen(terminal.id, SCREEN_ROWS_READ)) ??
           (await replayScreen(
             (
               await runtimeClient.call('terminal.read', { terminalId: terminal.id, tailBytes: EVIDENCE_TAIL_BYTES })
@@ -39,7 +45,8 @@ export function usePaneEvidence(
             terminal.cols,
             terminal.rows
           ))
-        if (stopped) return
+        // A slower, older read landing late must not undo a newer one.
+        if (stopped || reads.current[terminal.id] !== mark) return
         const line = screenEvidence(screen, terminal)
         setEvidence((current) => (current[terminal.id] === line ? current : { ...current, [terminal.id]: line }))
       } catch {

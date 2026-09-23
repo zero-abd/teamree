@@ -1,6 +1,6 @@
 // When to ask a pane what it last printed, and how little to ask for. A
 // subscription would stream every byte into the renderer, so reads are rationed:
-// on-screen panes only, no oftener than the eye can use, only after new output, once more after exit.
+// on-screen panes only, no oftener than the eye can use, only after new output, once more after a burst or exit.
 
 import type { Terminal } from '@shared/entities'
 
@@ -21,6 +21,10 @@ export type EvidenceRead = {
   readAt: number
   /** Whether the pane was still running then; if not, it is finished with. */
   wasRunning: boolean
+  /** Whether output was still arriving then; if so, the pane is read once more when it stops. */
+  wasBusy: boolean
+  /** The runtime's `lastOutputAt` then; compared only with itself, never with the renderer's clock. */
+  outputAt: number
 }
 
 export type EvidenceReadPlan = {
@@ -48,6 +52,11 @@ export function forgetClosed<T>(known: Record<string, T>, terminals: Record<stri
   return entries.length === Object.keys(known).length ? known : Object.fromEntries(entries)
 }
 
+/** Whether a read must skip a mounted pane's emulator for the runtime's tail, which a flood cannot put behind. */
+export function readsTrueScreen(terminal: Terminal): boolean {
+  return !terminal.running || !terminal.busy
+}
+
 function isDue(terminal: Terminal, read: EvidenceRead | undefined, now: number, intervalMs: number): boolean {
   if (!read) return true
   // Read once after the exit, then stop: a dead PTY writes nothing more.
@@ -55,7 +64,7 @@ function isDue(terminal: Terminal, read: EvidenceRead | undefined, now: number, 
   if (now - read.readAt < intervalMs) return false
   // Busy means bytes are still arriving; `lastOutputAt` only advances on the edges of the burst.
   if (terminal.busy) return true
-  return terminal.lastOutputAt > read.readAt
+  return read.wasBusy || terminal.lastOutputAt !== read.outputAt
 }
 
 function lastReadAt(read: EvidenceRead | undefined): number {
