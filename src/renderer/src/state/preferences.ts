@@ -1,7 +1,8 @@
 // The preferences that belong to a person at a machine rather than to the work.
 //
-// Two of them live here: how big the text in a pane is, and which ref a new
-// task in a given project starts from by default. Both are stored the way the
+// Three of them live here: how big the text in a pane is, which ref a new task
+// in a given project starts from by default, and whether an agent that stops
+// while you are elsewhere is allowed to say so. All are stored the way the
 // sidebar's width already is — in this window's `localStorage`, behind a
 // clamp, with every read and write wrapped so that storage being unavailable
 // costs a default rather than a render.
@@ -18,7 +19,13 @@
 // that stays exactly where it is; this only decides which ref the composer
 // offers first, and anything typed over it still wins.
 //
-// The consequence worth knowing is that neither preference follows you to
+// Notifications are the clearest case of the three. Whether a machine is
+// allowed to interrupt you is a fact about the machine you are sitting at and
+// the room you are sitting in, not about the task; a laptop in a meeting and a
+// desktop at home should not have to agree about it, and a teammate pulling
+// your workspace must not inherit your sound.
+//
+// The consequence worth knowing is that no preference here follows you to
 // another machine, which is the same bargain the sidebar width already makes.
 
 /** Below this the emulator's own glyphs stop being glyphs; above it a pane holds nothing. */
@@ -29,6 +36,48 @@ export const TERMINAL_FONT_DEFAULT_PX = 12
 
 const FONT_SIZE_KEY = 'teamree.terminal.fontSize'
 const START_POINTS_KEY = 'teamree.worktree.startPoints'
+const AGENT_NOTICES_KEY = 'teamree.agent.notices'
+
+/**
+ * What an agent pane going quiet is allowed to do: nothing, raise a
+ * notification, or raise one with the OS's sound.
+ *
+ * Three values rather than two booleans, because a sound with no notification
+ * is not a state anybody wants and offering it would be a setting that can be
+ * put somewhere meaningless.
+ */
+export type AgentNoticePreference = 'off' | 'notify' | 'sound'
+
+export const AGENT_NOTICE_PREFERENCES: readonly AgentNoticePreference[] = ['off', 'notify', 'sound']
+
+/**
+ * On, silently. The app's whole premise is that you start three agents and go
+ * and do something else, and a default of `off` would be shipping that premise
+ * turned off — while a default that makes noise is a decision about the room
+ * somebody is in that this app is in no position to make.
+ */
+export const AGENT_NOTICE_DEFAULT: AgentNoticePreference = 'notify'
+
+export function readStoredAgentNotices(storage: Pick<Storage, 'getItem'> | undefined): AgentNoticePreference {
+  try {
+    const raw = storage?.getItem(AGENT_NOTICES_KEY)
+    return AGENT_NOTICE_PREFERENCES.find((value) => value === raw) ?? AGENT_NOTICE_DEFAULT
+  } catch {
+    return AGENT_NOTICE_DEFAULT
+  }
+}
+
+export function writeStoredAgentNotices(
+  storage: Pick<Storage, 'setItem'> | undefined,
+  preference: AgentNoticePreference
+): void {
+  try {
+    storage?.setItem(AGENT_NOTICES_KEY, preference)
+  } catch {
+    // As with the size above: the choice holds for this window and is forgotten
+    // on the next.
+  }
+}
 
 export function clampTerminalFontSize(size: number): number {
   if (!Number.isFinite(size)) return TERMINAL_FONT_DEFAULT_PX

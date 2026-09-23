@@ -276,6 +276,11 @@ export class PtySession {
     return this.running
   }
 
+  /** Whether output is still arriving; see `noteActivity` for what that means. */
+  get isBusy(): boolean {
+    return this.busy
+  }
+
   /** Subscribes to data, exit and title events. Returns an unsubscribe function. */
   on(listener: TerminalEventListener): () => void {
     this.listeners.add(listener)

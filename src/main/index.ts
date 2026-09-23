@@ -1,5 +1,6 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, shell } from 'electron'
+import { installAgentNotices, type AgentNoticeChannel } from './agentNotices'
 import { applicationMenuTemplate, type ApplicationMenuOptions } from './appMenu'
 import { installMenuBar } from './menuBar'
 import { DEFAULT_APPEARANCE, resolvePalette } from '../shared/theme'
@@ -94,6 +95,23 @@ function windowBackground(): string {
 }
 
 let runtime: Runtime | undefined
+let notices: AgentNoticeChannel | undefined
+
+/** The window, for the handful of things that act on whichever one is open. */
+function mainWindow(): BrowserWindow | undefined {
+  return BrowserWindow.getAllWindows()[0]
+}
+
+/**
+ * Puts a number on the dock icon, and takes it off again at zero.
+ *
+ * macOS only, and asked for rather than assumed: `app.dock` is undefined on the
+ * other two platforms, and a badge is the one part of this feature that has no
+ * equivalent there worth faking.
+ */
+function setDockBadge(count: number): void {
+  app.dock?.setBadge(count === 0 ? '' : String(count))
+}
 
 if (!app.requestSingleInstanceLock()) {
   app.quit()
@@ -142,6 +160,42 @@ if (!app.requestSingleInstanceLock()) {
     }
     installMenu()
 
+    // An agent stopping, told to somebody who is not looking at the window.
+    // Installed before the runtime because the runtime is what reports the
+    // panes: by the time `startRuntime` returns it has already brought the last
+    // session's panes back, and one of them can settle in that same breath.
+    //
+    // What it needs from the window — which pane has the focus, and whether the
+    // person wants any of this — arrives on the channel this opens. Whether the
+    // *window* has the focus is the one fact this process holds itself.
+    notices = installAgentNotices(ipcMain, {
+      windowFocused: () => mainWindow()?.isFocused() ?? false,
+      show: (spec) => {
+        // Never on a machine with no notification centre to show it, where
+        // constructing one would be a listener kept for an event that cannot
+        // arrive.
+        if (!Notification.isSupported()) return
+        const notification = new Notification({ title: spec.title, body: spec.body, silent: spec.silent })
+        notification.on('click', spec.onActivate)
+        notification.show()
+      },
+      setBadge: setDockBadge,
+      focusWindow: () => {
+        const window = mainWindow()
+        if (!window) return
+        if (window.isMinimized()) window.restore()
+        window.show()
+        window.focus()
+      },
+      // The same guard the folder picker, the reveal and the menu publish make:
+      // a subframe is not the window and does not speak for it.
+      fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame
+    })
+    // Whichever window it is: the badge counts what happened while the app was
+    // not being looked at, and coming back to any window of it is being looked
+    // at again.
+    app.on('browser-window-focus', () => notices?.noteWindowFocus())
+
     // And the window's own menus, rebuilt whenever its answer changes. What
     // arrives is checked before it is drawn and the choice goes back to the
     // frame that published it; see src/main/menuBar.ts for both.
@@ -180,7 +234,8 @@ if (!app.requestSingleInstanceLock()) {
         version: APP_VERSION,
         // The one way this process opens a browser, handed over explicitly so
         // that the update check's download link is the only thing that can.
-        openExternal: (url) => shell.openExternal(url)
+        openExternal: (url) => shell.openExternal(url),
+        onAgentNotice: (notice) => notices?.deliver(notice)
       })
     } catch (error) {
       console.error('[runtime] failed to start', error)

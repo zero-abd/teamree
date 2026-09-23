@@ -82,7 +82,12 @@ describe('the renderer transport names one set of channels', () => {
       // module that serves them, and they are named here for the reason above
       // — adding a channel should make somebody come to this list and say where
       // it is answered.
-      ...(await channelsNamedIn('src/main/menuBar.ts'))
+      ...(await channelsNamedIn('src/main/menuBar.ts')),
+      // And the agent notifications' two, the same arrangement a third time:
+      // the window publishes what it wants and which pane it is looking at, the
+      // main process raises the notification and says which pane a click was
+      // about. Named here for the reason above.
+      ...(await channelsNamedIn('src/main/agentNotices.ts'))
     ])
 
     expect([...preload].filter((channel) => !served.has(channel))).toEqual([])

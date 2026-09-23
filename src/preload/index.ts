@@ -17,6 +17,11 @@ const REVEAL_PATH_CHANNEL = 'teamree:reveal-path'
 // published a moment earlier.
 const MENU_PUBLISH_CHANNEL = 'teamree:menu:publish'
 const MENU_COMMAND_CHANNEL = 'teamree:menu:command'
+// And these two with src/main/agentNotices.ts. The same shape as the pair
+// above: the window says what it wants and which pane it is looking at, and
+// what comes back is one pane to go to.
+const NOTICE_PUBLISH_CHANNEL = 'teamree:notices:publish'
+const NOTICE_REVEAL_CHANNEL = 'teamree:notices:reveal'
 
 /**
  * What the main process answers a reveal with, declared structurally here.
@@ -42,6 +47,18 @@ type MenuBarItem = {
   section: string
   enabled: boolean
 }
+
+/**
+ * What the window tells the main process about notifications, and what comes
+ * back — both declared structurally here for the same reason `MenuBarItem` is.
+ *
+ * `preference` is a plain string rather than the union of the three the window
+ * knows: the main process parses it against its own list and ignores anything
+ * else, which is the behaviour a wide type makes obvious and a narrow one would
+ * hide behind a cast.
+ */
+type NoticeSettings = { preference: string; focusedPaneId: string | null }
+type PaneAddress = { worktreeId: string; terminalId: string }
 
 // The renderer never sees ipcRenderer: it gets three plain functions over the
 // context bridge. Everything crossing the bridge is structured-cloneable, so the
@@ -111,6 +128,40 @@ const menu = {
   }
 } as const
 
+const revealListeners = new Set<(pane: PaneAddress) => void>()
+
+ipcRenderer.on(NOTICE_REVEAL_CHANNEL, (_event, pane: PaneAddress) => {
+  // Copied first, for the reason the two sets above are.
+  for (const listener of [...revealListeners]) listener(pane)
+})
+
+/**
+ * Notifications for an agent that stopped while nobody was looking.
+ *
+ * Only the main process can raise one, and it is the process that knows least
+ * about what is going on: which pane has the focus and whether the person wants
+ * to be told at all are both facts about the window. So `publish` hands those
+ * over whenever they change, and `onReveal` is how a click on a notification
+ * comes back — as one pane, which the window then opens the way the sidebar
+ * opens one.
+ *
+ * This grants the page nothing: what arrives is a worktree and a terminal to go
+ * to, and going there is the window's own code doing what pressing a sidebar
+ * row already does.
+ */
+const notices = {
+  publish(settings: NoticeSettings): void {
+    ipcRenderer.send(NOTICE_PUBLISH_CHANNEL, settings)
+  },
+
+  onReveal(listener: (pane: PaneAddress) => void): () => void {
+    revealListeners.add(listener)
+    return () => {
+      revealListeners.delete(listener)
+    }
+  }
+} as const
+
 const api = {
   selectProjectFolder(): Promise<string | null> {
     return ipcRenderer.invoke('teamree:select-project-folder')
@@ -135,7 +186,8 @@ const api = {
     node: process.versions.node
   },
   runtime,
-  menu
+  menu,
+  notices
 } as const
 
 export type TeamreeRuntimeBridge = typeof runtime

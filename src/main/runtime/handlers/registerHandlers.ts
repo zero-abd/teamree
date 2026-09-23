@@ -31,6 +31,7 @@ import { createTerminalService, registerTerminalHandlers } from '../../terminals
 import { UpdateService, registerUpdateHandlers } from '../../updates'
 import type { TerminalService } from '../../terminals/method-handlers'
 import type { ScrollbackRepository } from '../../terminals/session-manager'
+import type { AgentNotice } from '../../agentNotices'
 import { registerAppearanceHandlers } from './appearanceHandlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerStatusHandler } from './statusHandler'
@@ -88,6 +89,12 @@ export type RegisterHandlersOptions = {
    * in startRuntime.ts for why isolating the store is not enough.
    */
   worktreesRoot?: string
+  /**
+   * Announces an agent pane that has stopped, which in the app is an OS
+   * notification. Absent in every runtime with no window around it — the
+   * acceptance host, a vitest worker — where nothing has anywhere to raise one.
+   */
+  onAgentNotice?: (notice: AgentNotice) => void
 }
 
 export function registerHandlers(registry: MethodRegistry, options: RegisterHandlersOptions = {}): RegisteredAreas {
@@ -114,7 +121,28 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     // A pane going busy or quiet is the only thing this app knows about what an
     // agent is doing, and it is what the sidebar reads. Two events per burst of
     // work, not one per chunk of output.
-    onActivityChange: () => workspaceEvents.emit({ type: 'terminals' })
+    onActivityChange: () => workspaceEvents.emit({ type: 'terminals' }),
+    // And the half of that worth leaving the window for. The worktree's *name*
+    // is attached here rather than by whoever raises the notification, because
+    // the store is the only thing that knows it and the notifier has no
+    // business asking a workspace anything: a notification titled with a
+    // worktree id would be addressed to nobody. A pane whose worktree has
+    // already been removed is dropped for the same reason.
+    ...(options.onAgentNotice === undefined
+      ? {}
+      : {
+          onAgentSettled: (settled) => {
+            const worktree = registry.context.store.getWorktree(settled.worktreeId)
+            if (!worktree) return
+            options.onAgentNotice?.({
+              terminalId: settled.terminalId,
+              worktreeId: settled.worktreeId,
+              worktree: worktree.name,
+              reason: settled.reason,
+              line: settled.line
+            })
+          }
+        })
   })
   // Terminals first: each recorded one comes back under the id its panes
   // already name, an agent pane comes back with its conversation resumed, and

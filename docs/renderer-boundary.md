@@ -97,7 +97,7 @@ about the CLI socket.
 `src/preload/index.ts` exposes exactly one object. `selectProjectFolder` opens a
 directory picker. `revealPath` asks the OS file manager to show one path and is
 described below. `platform` and `versions` are strings. `menu` is two functions
-and is described below. `runtime` is three
+and is described below, and so is `notices`, which is two more. `runtime` is three
 functions: `call(method, params)`, `onStream(listener)` and `release()`. There
 is no method allow-list on `call` — the window is one of the three transports
 the runtime answers, and unlike the peer link (six methods, `PEER_METHODS`) it
@@ -136,9 +136,9 @@ rather than in the runtime catalogue for the same reason `revealPath` is: a menu
 bar is the window's, the `teamree` command has none, and a teammate across a
 relay must never be able to put an item in one on this machine.
 
-It is also the **only inbound channel on this bridge other than the RPC
-stream**, which is the part worth being exact about. What comes in is one
-string. The window looks it up in its own table of commands (`commandNamed`) and
+It is one of the **two inbound channels on this bridge other than the RPC
+stream** — the other is `notices`, below — which is the part worth being exact
+about. What comes in is one string. The window looks it up in its own table of commands (`commandNamed`) and
 runs it through the same dispatcher a keystroke goes through, against the same
 availability check — so a command that arrives here can do nothing that pressing
 the chord could not, and nothing at all when the window says that command is not
@@ -159,6 +159,44 @@ running and no window open is not showing a row of lit items that do nothing.
 Against the paragraph above this adds nothing either, and for the same reason.
 It is listed because the enumeration is meant to be complete.
 
+`notices` is the third thing on the bridge that is not the runtime, and it is
+the notification an agent raises when it stops while nobody is looking at the
+window. Only the main process can raise one, and — as with the menu bar — it is
+the process that knows least about what is going on: whether the person at this
+machine wants to be interrupted is in this window's own storage beside the
+terminal font size, and which pane has the focus is a fact about a layout the
+window is drawing. So `publish({ preference, focusedPaneId })` hands both over
+whenever either changes, and the main process keeps no second copy of either.
+It rides this bridge rather than the runtime catalogue for the same reason
+`revealPath` and `menu` do: a notification is raised by the window's own
+machine, the `teamree` command has no notification centre, and a teammate across
+a relay must never be able to make this Mac chime.
+
+**`onCommand`'s counterpart, and the second inbound channel.** What comes in is
+one pane — a worktree id and a terminal id, the address of the pane the
+notification was about — and it arrives because somebody clicked the
+notification. The window checks the worktree against the list it holds and then
+calls `revealPane`, which is exactly what pressing that pane's row in the
+sidebar calls: it opens a tab and moves the focus. So a message on this channel
+can do nothing that clicking in the window could not, and an id for a worktree
+this window does not have does nothing at all.
+
+Outbound, the main process does not trust what it is handed either, for the
+reason the menu publish does not: `readNoticeSettings` rebuilds the pair out of
+the two fields it verified — the preference has to be one of the three the
+window can offer, and the focused pane has to be a string or `null` — and drops
+the whole message otherwise, so nothing a sender put on the side reaches the
+code that decides whether to interrupt somebody. It refuses a publish that did
+not come from the window's main frame, the same guard the folder picker, the
+reveal and the menu publish make. And the reveal goes back to the web contents
+that published, and only while it is still there: a notification outlives the
+window it was raised for by however long the notification centre keeps it, and a
+click in that gap is dropped rather than thrown.
+
+Against the paragraph about `runtime.call` this adds nothing, and for the third
+time for the same reason. It is listed because the enumeration is meant to be
+complete.
+
 ## The gap that was here: nothing stopped the window navigating
 
 `setWindowOpenHandler` was already in place and denies every `window.open`.
@@ -174,7 +212,7 @@ then asked the page that arrived:
 ```
 DID-NAVIGATE   file:///tmp/drop-NO75mv/dropped.html
 BRIDGE-AFTER   {"teamree":"object","keys":["selectProjectFolder","platform","versions","runtime"], …}
-               (the run that produced this predates `revealPath` and `menu`;
+               (the run that produced this predates `revealPath`, `menu` and `notices`;
                 the surface as it stands is enumerated above)
 RPC-AFTER      ok=true
 ```
@@ -403,6 +441,8 @@ the code this document describes.
 | a published accelerator is one the table could have spelled             | `src/main/menuBar.test.ts`                            |
 | the menu's items go away with the window that published them            | `src/main/menuBar.test.ts`                            |
 | an item that is not the shape it should be takes the whole message down | same                                             |
+| a publish of notice settings that is not a pair of them is dropped      | `src/main/agentNotices.test.ts`                       |
+| a notification is raised only when nobody is looking at that pane       | same                                                  |
 | a command arriving from the menu is one this window has                 | `src/renderer/src/keyboard/platformModifier.test.ts`  |
 | a menu command does nothing the window says it cannot do                | `src/renderer/src/keyboard/workspaceCommands.test.ts` |
 | the menu bar really carries this app's commands, in a running app       | `scripts/smoke.mjs` · `checkMenuBar`                  |
