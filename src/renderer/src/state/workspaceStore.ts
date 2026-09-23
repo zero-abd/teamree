@@ -584,6 +584,8 @@ type WorkspaceState = {
    * buttons is a guard somebody adds a fourth button beside.
    */
   closeTerminal: (terminalId: string) => Promise<void>
+  /** Names a pane, or clears the name when given nothing. */
+  renamePane: (terminalId: string, label: string) => Promise<void>
   /** Goes through with it, once the question this app asked has been answered. */
   forceCloseTerminal: (terminalId: string) => Promise<void>
   /** Runs an exited pane's program again, in the same pane. */
@@ -1471,7 +1473,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         })
 
         if (agentCommand) {
-          await runtimeClient.call('terminal.create', { worktreeId: ready.id, command: agentCommand })
+          // The pane is named after the task it was opened for, because the
+          // task is what somebody would call it and the agent's binary is what
+          // every other pane on this screen is also called.
+          await runtimeClient.call('terminal.create', { worktreeId: ready.id, command: agentCommand, label: name })
         }
         await get().openWorktree(ready.id)
       })().catch(failed('Could not start the task'))
@@ -1723,6 +1728,34 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
       } catch (error) {
         failed('Could not run this pane again')(error)
+      }
+    },
+
+    /**
+     * Names a pane the way the person looking at it would name it.
+     *
+     * Optimistic, because a rename is the one edit whose result the user is
+     * already looking at: the tab they typed into must say the new name as
+     * they press Enter, not a round trip later. The runtime's answer replaces
+     * the guess, and a refusal puts the old name back with it.
+     */
+    async renamePane(terminalId, label) {
+      const named = label.trim()
+      const previous = get().terminals[terminalId]
+      if (!previous) return
+      const shown: Terminal = { ...previous }
+      if (named.length === 0) delete shown.label
+      else shown.label = named
+      set((state) => ({ terminals: { ...state.terminals, [terminalId]: shown } }))
+      try {
+        const terminal = await runtimeClient.call('terminal.rename', {
+          terminalId,
+          label: named.length === 0 ? null : named
+        })
+        set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
+      } catch (error) {
+        set((state) => ({ terminals: { ...state.terminals, [terminalId]: previous } }))
+        failed('Could not rename the pane')(error)
       }
     },
 

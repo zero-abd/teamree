@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { Terminal } from '@shared/entities'
-import { activityOf, agentRows, paneLabel, sinceLabel, watchedBy, worktreeActivity, type AgentRow } from './agentRows'
+import {
+  activityOf,
+  agentRows,
+  paneLabel,
+  paneName,
+  paneNames,
+  sinceLabel,
+  truncateName,
+  watchedBy,
+  worktreeActivity,
+  type AgentRow
+} from './agentRows'
 
 function terminal(overrides: Partial<Terminal> & { id: string }): Terminal {
   return {
@@ -92,6 +103,106 @@ describe('agentRows', () => {
 
   it('has no evidence at all when none has been read yet', () => {
     expect(agentRows([terminal({ id: 'a' })], 'wt1', 0)[0]?.evidence).toBeNull()
+  })
+})
+
+describe('paneName', () => {
+  // The gap this whole file is about: the agent's binary is the one fact three
+  // panes started on three different jobs have in common.
+  it('prefers the name somebody gave the pane to the agent running in it', () => {
+    expect(paneName(terminal({ id: 't', agent: 'claude', label: 'auth refactor' }))).toBe('auth refactor')
+  })
+
+  it('falls back to the agent, and then to what the pane is running', () => {
+    expect(paneName(terminal({ id: 't', agent: 'claude', title: 'node' }))).toBe('claude')
+    expect(paneName(terminal({ id: 't', title: 'npm test' }))).toBe('npm test')
+  })
+
+  // A pane called "   " is a pane with no name drawn as though it had one.
+  it('ignores a name that is only whitespace', () => {
+    expect(paneName(terminal({ id: 't', agent: 'claude', label: '   ' }))).toBe('claude')
+  })
+})
+
+describe('paneNames', () => {
+  it('numbers panes that would otherwise read identically', () => {
+    const names = paneNames([
+      terminal({ id: 'a', agent: 'claude', title: 'node' }),
+      terminal({ id: 'b', agent: 'claude', title: 'node' }),
+      terminal({ id: 'c', agent: 'claude', title: 'node' })
+    ])
+
+    expect(names).toEqual(['claude 1', 'claude 2', 'claude 3'])
+  })
+
+  it('leaves a name alone when nothing else in the worktree reads like it', () => {
+    const names = paneNames([
+      terminal({ id: 'a', agent: 'claude', title: 'node' }),
+      terminal({ id: 'b', title: 'npm test' })
+    ])
+
+    expect(names).toEqual(['claude', 'npm test'])
+  })
+
+  // Numbering somebody's own words back at them would be the app overruling
+  // the one thing on the row it did not make up.
+  it('never numbers a name somebody typed, and counts only the unnamed', () => {
+    const names = paneNames([
+      terminal({ id: 'a', agent: 'claude', label: 'auth refactor' }),
+      terminal({ id: 'b', agent: 'claude', label: 'auth refactor' }),
+      terminal({ id: 'c', agent: 'claude', title: 'node' })
+    ])
+
+    expect(names).toEqual(['auth refactor', 'auth refactor', 'claude'])
+  })
+})
+
+describe('truncateName', () => {
+  it('leaves a name that fits exactly as it was typed', () => {
+    expect(truncateName('auth refactor')).toBe('auth refactor')
+  })
+
+  it('cuts a longer one to the row and says it was cut', () => {
+    const cut = truncateName('rewrite the pager so it streams instead of buffering', 20)
+    expect(cut).toHaveLength(20)
+    expect(cut.endsWith('…')).toBe(true)
+  })
+})
+
+describe('agentRows naming', () => {
+  it('gives two unnamed panes of the same agent an index apiece', () => {
+    const rows = agentRows(
+      [terminal({ id: 'a', agent: 'claude', title: 'node' }), terminal({ id: 'b', agent: 'claude', title: 'node' })],
+      'wt1',
+      0
+    )
+
+    expect(rows.map((entry) => entry.label)).toEqual(['claude 1', 'claude 2'])
+  })
+
+  // Only within the worktree being drawn: a pane in another one is not on this
+  // row and cannot be what a reader is confusing it with.
+  it('counts only the panes of the worktree it is listing', () => {
+    const rows = agentRows(
+      [
+        terminal({ id: 'a', agent: 'claude', title: 'node' }),
+        terminal({ id: 'b', agent: 'claude', title: 'node', worktreeId: 'other' })
+      ],
+      'wt1',
+      0
+    )
+
+    expect(rows.map((entry) => entry.label)).toEqual(['claude'])
+  })
+
+  it('calls a named pane what it was named, whole', () => {
+    const rows = agentRows(
+      [terminal({ id: 'a', agent: 'claude', label: 'rewrite the pager so it streams instead of buffering' })],
+      'wt1',
+      0
+    )
+
+    expect(rows[0]?.label).toBe('rewrite the pager so it streams instead of buffering')
   })
 })
 

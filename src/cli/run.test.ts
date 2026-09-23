@@ -105,6 +105,8 @@ const defaultHandler: StubHandler = (method) => {
         terminal: { ...TERMINAL, id: 't_2' },
         layout: { worktreeId: 'wt_1', root: null, focusedTerminalId: 't_2' }
       }
+    case 'terminal.rename':
+      return { ...TERMINAL, label: 'auth refactor' }
     case 'terminal.close':
       return { closed: true }
     default:
@@ -226,6 +228,41 @@ describe('exit codes', () => {
   })
 })
 
+describe('naming a pane from the CLI', () => {
+  // An agent reading this listing is in exactly the position the sidebar is:
+  // three panes running the same binary, and only the name says which is which.
+  it('shows a pane’s name in the listing and in the JSON', async () => {
+    const cli = await harness((method, params, context) =>
+      method === 'terminal.list'
+        ? [TERMINAL, { ...TERMINAL, id: 't_2', label: 'auth refactor' }]
+        : defaultHandler(method, params, context)
+    )
+
+    const text = await cli.run(['terminal', 'list'])
+    expect(text.out).toContain('auth refactor')
+
+    const json = await cli.run(['terminal', 'list', '--json'])
+    const document = soleJsonDocument(json.out)
+    expect(JSON.stringify(document['data'])).toContain('auth refactor')
+  })
+
+  it('renames a pane, and clears the name when told none', async () => {
+    const seen: Array<Record<string, unknown>> = []
+    const cli = await harness((method, params, context) => {
+      if (method !== 'terminal.rename') return defaultHandler(method, params, context)
+      seen.push(params as Record<string, unknown>)
+      return { ...TERMINAL, label: (params as { label: string | null }).label ?? undefined }
+    })
+
+    expect((await cli.run(['terminal', 'rename', 't_1', '--name', 'auth refactor'])).code).toBe(ExitCode.Success)
+    expect((await cli.run(['terminal', 'rename', 't_1'])).code).toBe(ExitCode.Success)
+    expect(seen).toEqual([
+      { terminalId: 't_1', label: 'auth refactor' },
+      { terminalId: 't_1', label: null }
+    ])
+  })
+})
+
 describe('--json output', () => {
   it('prints exactly one JSON document per command', async () => {
     const cli = await harness()
@@ -243,6 +280,7 @@ describe('--json output', () => {
       ['terminal read', ['terminal', 'read', 't_1']],
       ['terminal send', ['terminal', 'send', 't_1', '--text', 'ls']],
       ['terminal split', ['terminal', 'split', 't_1', '--direction', 'row']],
+      ['terminal rename', ['terminal', 'rename', 't_1', '--name', 'auth refactor']],
       ['terminal close', ['terminal', 'close', 't_1']]
     ]
     for (const [name, argv] of invocations) {
@@ -427,7 +465,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(50)
+    expect(data.commands.length).toBe(51)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })

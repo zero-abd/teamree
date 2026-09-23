@@ -78,12 +78,13 @@ const focusPane = vi.fn()
 const closeTerminal = vi.fn(async () => {})
 const createTerminal = vi.fn(async () => {})
 const splitFocusedPane = vi.fn(async () => {})
+const renamePane = vi.fn(async () => {})
 
 const MAC = resolvePlatformModifier('darwin')
 
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
-    { ...INITIAL, focusPane, closeTerminal, createTerminal, splitFocusedPane, ...overrides },
+    { ...INITIAL, focusPane, closeTerminal, createTerminal, splitFocusedPane, renamePane, ...overrides },
     true
   )
 }
@@ -100,6 +101,7 @@ beforeEach(() => {
   closeTerminal.mockReset()
   createTerminal.mockReset()
   splitFocusedPane.mockReset()
+  renamePane.mockReset()
   seed()
 })
 
@@ -328,6 +330,86 @@ describe('the pane buttons at the end of the strip', () => {
     for (const name of ['Split right', 'Split down', 'New terminal']) {
       expect(screen.getByRole('button', { name })).toBeTruthy()
     }
+  })
+})
+
+// The gap the whole feature is for: three agents started on three approaches
+// read `claude`, `claude`, `claude`, and the strip is what somebody is looking
+// at when they wish one of them said which was the auth refactor.
+describe('naming a pane', () => {
+  const threeAgents = (): void => {
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout('w1', row('t1', 't2', 't3'), 't1') },
+      terminals: byId(
+        terminal({ id: 't1', agent: 'claude', title: 'node' }),
+        terminal({ id: 't2', agent: 'claude', title: 'node' }),
+        terminal({ id: 't3', agent: 'claude', title: 'node', label: 'auth refactor' })
+      )
+    })
+    mount()
+  }
+
+  it('tells two panes of the same agent apart, and calls the named one what it was named', () => {
+    threeAgents()
+    expect(tabNames()).toEqual(['claude 1', 'claude 2', 'auth refactor'])
+  })
+
+  // A button rather than a double-click alone: a name is the one thing on this
+  // strip somebody has to be able to set without a mouse.
+  it('opens the field from a button that says which pane it renames', () => {
+    threeAgents()
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 2' }))
+    expect(screen.getByRole('textbox', { name: 'Pane name' })).toBeTruthy()
+  })
+
+  it('renames from a double-click on the tab', () => {
+    threeAgents()
+    fireEvent.doubleClick(screen.getByRole('tab', { name: 'claude 1' }))
+    const field = screen.getByRole('textbox', { name: 'Pane name' })
+    fireEvent.change(field, { target: { value: 'pager streaming' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(renamePane).toHaveBeenCalledExactlyOnceWith('t1', 'pager streaming')
+  })
+
+  it('throws the typing away on Escape', () => {
+    threeAgents()
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 1' }))
+    const field = screen.getByRole('textbox', { name: 'Pane name' })
+    fireEvent.change(field, { target: { value: 'never mind' } })
+    fireEvent.keyDown(field, { key: 'Escape' })
+    fireEvent.blur(field)
+    expect(renamePane).not.toHaveBeenCalled()
+    expect(screen.queryByRole('textbox', { name: 'Pane name' })).toBeNull()
+  })
+
+  // The field sits in a strip whose every other control takes the focus away,
+  // and a name thrown away because somebody reached for the pane they were
+  // naming would be the worst of the three possible answers.
+  it('keeps what was typed when the focus leaves the field', () => {
+    threeAgents()
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane claude 1' }))
+    const field = screen.getByRole('textbox', { name: 'Pane name' })
+    fireEvent.change(field, { target: { value: 'pager streaming' } })
+    fireEvent.blur(field)
+    expect(renamePane).toHaveBeenCalledExactlyOnceWith('t1', 'pager streaming')
+  })
+
+  // Shortened where it is drawn and nowhere behind it: the tooltip and the
+  // record both still have the whole of what somebody typed.
+  it('shortens a long name on the tab and keeps all of it in the hover text', () => {
+    const long = 'rewrite the pager so it streams instead of buffering'
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout('w1', row('t1'), 't1') },
+      terminals: byId(terminal({ id: 't1', agent: 'claude', label: long }))
+    })
+    mount()
+
+    const tab = screen.getAllByRole('tab')[0]!
+    expect(tab.textContent).not.toBe(long)
+    expect(tab.textContent?.endsWith('…')).toBe(true)
+    expect(tab.getAttribute('title')).toContain(long)
   })
 })
 

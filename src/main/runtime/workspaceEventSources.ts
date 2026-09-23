@@ -185,6 +185,15 @@ export function publishTerminalEvents(
     return result
   })
 
+  // A name is what every client draws the pane with, so the rename has to
+  // reach the windows that did not make the call — including the sidebar of
+  // whoever renamed it, which reads the same list the strip does.
+  registry.register('terminal.rename', schemas['terminal.rename'], async (params, call) => {
+    const terminal = await handlers['terminal.rename'](params, call)
+    bus.emit({ type: 'terminals' })
+    return terminal
+  })
+
   // The only keystroke worth announcing: the first one into a restored pane,
   // which retires its badge. Every other write changes nothing a client holds,
   // and publishing per keystroke would be absurd — hence the manager reporting

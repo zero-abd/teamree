@@ -89,6 +89,21 @@ describe('paneTabs', () => {
     expect(tabs.map((tab) => tab.activity)).toEqual(['working', 'quiet', 'done', 'failed'])
   })
 
+  // The strip is the other half of the same answer: a sidebar that numbers its
+  // rows and a tab strip that does not would be two answers about three panes.
+  it('numbers unnamed panes that would read identically, and leaves named ones whole', () => {
+    const tabs = paneTabs(
+      row('one', 'two', 'named'),
+      byId(
+        terminal({ id: 'one', agent: 'claude', title: 'node' }),
+        terminal({ id: 'two', agent: 'claude', title: 'node' }),
+        terminal({ id: 'named', agent: 'claude', title: 'node', label: 'auth refactor' })
+      )
+    )
+
+    expect(tabs.map((tab) => tab.label)).toEqual(['claude 1', 'claude 2', 'auth refactor'])
+  })
+
   it('has nothing to show for a worktree with no panes in it', () => {
     expect(paneTabs(null, {})).toEqual([])
   })

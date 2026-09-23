@@ -12,10 +12,17 @@
 // above the panes' own strip rather than in it. They act on the focused pane —
 // the one this strip is already drawing as current — so the strip says what
 // they will happen to.
+//
+// It is also where a pane gets renamed, because this is where the name is a
+// problem: three agents on three approaches read `claude`, `claude`, `claude`
+// along the top, and the strip is what somebody is looking at when they wish
+// one of them said which was the auth refactor.
 
+import { useEffect, useRef, useState } from 'react'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { paneTabs, paneTabTitle } from './paneTabs'
+import { truncateName } from '../sidebar/agentRows'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
 export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): React.JSX.Element | null {
@@ -34,6 +41,8 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
   const focusPane = useWorkspaceStore((state) => state.focusPane)
   const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
+  const renamePane = useWorkspaceStore((state) => state.renamePane)
+  const [renaming, setRenaming] = useState<string | null>(null)
 
   const tabs = paneTabs(layout?.root ?? null, terminals)
   if (tabs.length === 0) return null
@@ -47,23 +56,55 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
           const active = tab.terminalId === focusedTerminalId
           return (
             <div className={`tab${active ? ' tab--active' : ''}`} key={tab.terminalId}>
+              {renaming === tab.terminalId ? (
+                <RenameField
+                  name={terminals[tab.terminalId]?.label ?? ''}
+                  onCommit={(name) => {
+                    setRenaming(null)
+                    void renamePane(tab.terminalId, name)
+                  }}
+                  onCancel={() => setRenaming(null)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  className="tab__main"
+                  title={paneTabTitle(tab)}
+                  onClick={() => focusPane(tab.terminalId)}
+                  onDoubleClick={() => setRenaming(tab.terminalId)}
+                >
+                  {/* The sidebar's dot, borrowed rather than reinvented, exactly as
+                      the dashboard borrows it: this is the same reading of the same
+                      PTY, and a second dot would be a second vocabulary for four
+                      states the app can only honestly describe one way. */}
+                  <span
+                    className={tab.activity === null ? 'activity' : `activity activity--${tab.activity}`}
+                    aria-hidden="true"
+                  />
+                  {/* Shortened here and nowhere behind here. The strip is narrow
+                      and a name can be a whole task description; the tooltip
+                      above and the record underneath both keep all of it. */}
+                  <span className="tab__name">{truncateName(tab.label)}</span>
+                </button>
+              )}
+              {/*
+                A button rather than the double-click alone, because a name is the
+                one thing on this strip somebody has to be able to set without a
+                mouse, and the modifier-free key that would do it — F2 — is a
+                brightness control on the keyboard this app is built for.
+              */}
               <button
                 type="button"
-                role="tab"
-                aria-selected={active}
-                className="tab__main"
-                title={paneTabTitle(tab)}
-                onClick={() => focusPane(tab.terminalId)}
+                className="tab__rename"
+                title={`Rename pane ${tab.label}`}
+                aria-label={`Rename pane ${tab.label}`}
+                onClick={() => setRenaming(tab.terminalId)}
               >
-                {/* The sidebar's dot, borrowed rather than reinvented, exactly as
-                    the dashboard borrows it: this is the same reading of the same
-                    PTY, and a second dot would be a second vocabulary for four
-                    states the app can only honestly describe one way. */}
-                <span
-                  className={tab.activity === null ? 'activity' : `activity activity--${tab.activity}`}
-                  aria-hidden="true"
-                />
-                <span className="tab__name">{tab.label}</span>
+                <svg viewBox="0 0 12 12" aria-hidden="true">
+                  <path d="M8.2 1.8 L10.2 3.8 L4 10 L1.8 10.2 L2 8 Z" />
+                </svg>
               </button>
               {/*
                 The same close the pane's own bar offers, because there is exactly
@@ -136,5 +177,64 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
         </button>
       </div>
     </div>
+  )
+}
+
+/**
+ * The name being typed, in the tab's own slot.
+ *
+ * Blur commits, like Enter: the field is inside a strip whose every other
+ * control takes the focus away, and a name thrown away because somebody reached
+ * for the pane they were naming would be the worst of the three possible
+ * answers. Escape is the one that discards, and it sets the flag the blur then
+ * reads — the cancel arrives as a blur too.
+ */
+function RenameField({
+  name,
+  onCommit,
+  onCancel
+}: {
+  name: string
+  onCommit: (name: string) => void
+  onCancel: () => void
+}): React.JSX.Element {
+  const [draft, setDraft] = useState(name)
+  const cancelled = useRef(false)
+  const fieldRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => {
+    const field = fieldRef.current
+    if (!field) return
+    field.focus()
+    field.select()
+  }, [])
+
+  return (
+    <input
+      ref={fieldRef}
+      className="tab__rename-field"
+      type="text"
+      spellCheck={false}
+      autoComplete="off"
+      aria-label="Pane name"
+      placeholder="Pane name"
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          onCommit(draft)
+          return
+        }
+        if (event.key !== 'Escape') return
+        event.preventDefault()
+        cancelled.current = true
+        onCancel()
+      }}
+      onBlur={() => {
+        if (cancelled.current) return
+        onCommit(draft)
+      }}
+    />
   )
 }

@@ -123,16 +123,83 @@ export function agentRows(
   now: number,
   evidence: Readonly<Record<string, string | null>> = {}
 ): AgentRow[] {
-  return terminals
-    .filter((terminal) => terminal.worktreeId === worktreeId)
-    .map((terminal) => ({
-      terminalId: terminal.id,
-      agent: terminal.agent,
-      label: terminal.agent ?? paneLabel(terminal),
-      activity: activityOf(terminal),
-      quietFor: Math.max(0, now - terminal.lastOutputAt),
-      evidence: evidence[terminal.id] ?? null
-    }))
+  const mine = terminals.filter((terminal) => terminal.worktreeId === worktreeId)
+  const names = paneNames(mine)
+  return mine.map((terminal, index) => ({
+    terminalId: terminal.id,
+    agent: terminal.agent,
+    label: names[index] ?? paneName(terminal),
+    activity: activityOf(terminal),
+    quietFor: Math.max(0, now - terminal.lastOutputAt),
+    evidence: evidence[terminal.id] ?? null
+  }))
+}
+
+/**
+ * Everything a pane's name can be read from: the name somebody gave it, the
+ * agent it runs, and the two raw facts underneath both.
+ *
+ * A teammate's pane is exactly these fields minus the first, which is why they
+ * are listed rather than a `Terminal` being asked for.
+ */
+export type PaneNameSource = { label?: string; agent?: AgentKind; title: string; shell: string }
+
+/**
+ * What one pane is called, in order of who said it.
+ *
+ * The name a person typed beats the program's own, because the program's own
+ * is what made this necessary: three agents started on three approaches all
+ * call themselves `claude`, and a sidebar that answers "which of these is the
+ * auth refactor" with the binary's name is answering a question nobody asked.
+ */
+export function paneName(pane: PaneNameSource): string {
+  const label = pane.label?.trim()
+  if (label !== undefined && label.length > 0) return label
+  return pane.agent ?? paneLabel(pane)
+}
+
+/**
+ * The names for one worktree's panes, disambiguated against each other.
+ *
+ * Two panes reading `claude` are the gap this whole file is about, and a name
+ * that does not tell two things apart is not a name. So panes that would read
+ * identically and were named by nobody get an index — `claude 1`, `claude 2` —
+ * counted only among themselves.
+ *
+ * Panes a person named are left exactly as they typed them, duplicates
+ * included. Numbering somebody's own words back at them would be the app
+ * overruling the one thing on the row it did not make up.
+ */
+export function paneNames(panes: readonly PaneNameSource[]): string[] {
+  const names = panes.map(paneName)
+  const chosen = panes.map((pane) => (pane.label?.trim() ?? '').length > 0)
+  const totals = new Map<string, number>()
+  for (const [index, name] of names.entries()) {
+    if (chosen[index]) continue
+    totals.set(name, (totals.get(name) ?? 0) + 1)
+  }
+
+  const seen = new Map<string, number>()
+  return names.map((name, index) => {
+    if (chosen[index] || (totals.get(name) ?? 0) < 2) return name
+    const position = (seen.get(name) ?? 0) + 1
+    seen.set(name, position)
+    return `${name} ${position}`
+  })
+}
+
+/**
+ * How much of a name a row draws.
+ *
+ * Applied where the name is drawn and nowhere else: a pane started from a
+ * three-line task description is called that, in the record and in the
+ * tooltip, and the strip along the top is merely narrow. Shortening it on the
+ * way in would make the app forget what it was told to stay inside a CSS box.
+ */
+export const PANE_NAME_MAX_CHARS = 32
+
+export function truncateName(name: string, maxChars: number = PANE_NAME_MAX_CHARS): string {
+  return name.length <= maxChars ? name : `${name.slice(0, maxChars - 1).trimEnd()}…`
 }
 
 /**

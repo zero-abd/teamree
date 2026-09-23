@@ -15,7 +15,7 @@
 // way round for a number whose job is to say something has been sitting there.
 
 import { teammatesHeard, type PeerPane, type TeammatePresence, type TeammateWorktree } from '@shared/entities'
-import { activityOf, paneLabel, worktreeActivity, type AgentActivity, type AgentRow } from './agentRows'
+import { activityOf, paneName, worktreeActivity, type AgentActivity, type AgentRow } from './agentRows'
 import { teammateStaleness, type TeammateStaleness } from './teammateStaleness'
 
 export type TeammatePaneRow = AgentRow & {
@@ -88,7 +88,7 @@ function paneRow(pane: PeerPane, handle: string, heardAgoMs: number, evidence: s
   return {
     terminalId: pane.id,
     agent: pane.agent,
-    label: pane.agent ?? paneLabel(pane),
+    label: paneName(pane),
     activity: activityOf(pane),
     // The owner's measurement plus the time it has been sitting here. Adding
     // the two is the only arithmetic that does not involve believing somebody

@@ -96,6 +96,13 @@ function utf8Length(text: string): number {
  */
 export const MAX_TERMINAL_ID_CHARS = 256
 
+/**
+ * Cap on a pane's name, checked here so a paste of a whole file cannot become
+ * one. Generous on purpose: what a user typed is kept whole and shortened only
+ * where it is drawn, because a row is narrow and a record is not.
+ */
+export const MAX_PANE_LABEL_CHARS = 512
+
 export const Params = {
   statusGet: z.object({}),
 
@@ -519,6 +526,8 @@ export const Params = {
     shell: z.string().min(1).optional(),
     /** Run this instead of an interactive shell. */
     command: z.string().min(1).optional(),
+    /** What to call the pane, for a caller that knows better than the program will. */
+    label: z.string().min(1).max(MAX_PANE_LABEL_CHARS).optional(),
     cwd: z.string().min(1).optional(),
     cols: z.number().int().positive().optional(),
     rows: z.number().int().positive().optional()
@@ -536,6 +545,15 @@ export const Params = {
     rows: z.number().int().positive()
   }),
   terminalClose: z.object({ terminalId: z.string().min(1) }),
+  /**
+   * Renames a pane. Null clears the name rather than setting an empty one, so
+   * there is one way to say "go back to being called whatever you are" and the
+   * pane falls back to the program's own name instead of drawing a blank row.
+   */
+  terminalRename: z.object({
+    terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
+    label: z.string().max(MAX_PANE_LABEL_CHARS).nullable()
+  }),
   /** Point-in-time scrollback snapshot; for live output use terminal.subscribe. */
   terminalRead: z.object({
     terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
@@ -698,6 +716,7 @@ export type MethodContract = {
   'terminal.write': { params: z.infer<typeof Params.terminalWrite>; result: { written: true } }
   'terminal.resize': { params: z.infer<typeof Params.terminalResize>; result: Terminal }
   'terminal.close': { params: z.infer<typeof Params.terminalClose>; result: { closed: true } }
+  'terminal.rename': { params: z.infer<typeof Params.terminalRename>; result: Terminal }
   'terminal.read': { params: z.infer<typeof Params.terminalRead>; result: { data: string } }
   'terminal.subscribe': { params: z.infer<typeof Params.terminalSubscribe>; result: { subscription: string } }
   'terminal.split': { params: z.infer<typeof Params.terminalSplit>; result: { terminal: Terminal; layout: Layout } }

@@ -30,10 +30,14 @@ export const terminalCommands: readonly CommandSpec[] = [
       return {
         data: terminals,
         text: formatTable(
-          ['ID', 'WORKTREE', 'TITLE', 'SIZE', 'RUNNING', 'CWD'],
+          // NAME before TITLE: the name is the one somebody chose, and a strip
+          // of panes all titled `claude` is exactly the listing this column
+          // exists to tell apart.
+          ['ID', 'WORKTREE', 'NAME', 'TITLE', 'SIZE', 'RUNNING', 'CWD'],
           terminals.map((terminal) => [
             terminal.id,
             terminal.worktreeId,
+            terminal.label ?? '-',
             terminal.title,
             `${terminal.cols}x${terminal.rows}`,
             terminal.running ? 'yes' : `no (exit ${terminal.exitCode ?? '?'})`,
@@ -210,6 +214,29 @@ export const terminalCommands: readonly CommandSpec[] = [
           ['agent', terminal.agent ?? '-'],
           ['cwd', terminal.cwd],
           ['running', terminal.running ? 'yes' : 'no']
+        ])
+      }
+    }
+  },
+  {
+    path: ['terminal', 'rename'],
+    summary: 'Name a terminal, or clear the name.',
+    details:
+      'The name is what the sidebar and the tab strip call the pane, in place of the program it runs. ' +
+      "It survives a restart. Omit --name to go back to the program's own name.",
+    args: [TERMINAL_ARG],
+    flags: [{ name: 'name', kind: 'string', placeholder: '<name>', description: 'What to call the pane.' }],
+    examples: ['teamree terminal rename t_12 --name "auth refactor"'],
+    run: async (context) => {
+      const terminalId = context.args[0] as string
+      const name = readString(context.flags, 'name')
+      const terminal = await context.client.call('terminal.rename', { terminalId, label: name ?? null })
+      return {
+        data: terminal,
+        text: formatFields([
+          ['id', terminal.id],
+          ['name', terminal.label ?? '-'],
+          ['title', terminal.title]
         ])
       }
     }
