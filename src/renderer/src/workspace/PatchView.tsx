@@ -2,7 +2,7 @@
 // sticks while you read its hunk. The patch stays the source of truth; colour comes from the small
 // tokenizer in `src/shared/syntax.ts`, not an editor with its own model of the file.
 
-import { useMemo } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { parsePatch, type PatchFile, type PatchHunk, type PatchLine } from '@shared/patch'
 import { syntaxLanguage, tokenizeLine, type SyntaxLanguage } from '@shared/syntax'
 import type { DiffLayout } from '../state/preferences'
@@ -14,6 +14,16 @@ const STATUS_NOTE: Record<PatchFile['status'], string> = {
   renamed: 'renamed',
   modified: ''
 }
+
+/** A hunk heavier than this starts folded; see `drawCost`. */
+const FOLD_OVER = 500
+
+/** What one patch draws when it opens; hunks past it start folded. */
+const DRAW_BUDGET = 2000
+
+/** Lockfiles and minified output: nobody reads them line by line. */
+const GENERATED =
+  /(^|\/)([^/]*-lock\.(json|yaml)|npm-shrinkwrap\.json|go\.sum|[^/]+\.lock|[^/]+\.min\.(js|mjs|cjs|css)|[^/]+\.map)$/
 
 /** Below this many pixels two columns of code are too narrow to read. */
 export const SPLIT_MIN_WIDTH = 720
@@ -48,6 +58,7 @@ export function PatchView({
 }): React.JSX.Element {
   // Once per patch: the panel re-renders on every refresh tick and a patch is thousands of lines.
   const files = useMemo(() => parsePatch(patch), [patch])
+  const folded = useMemo(() => foldOnOpen(files), [files])
 
   return (
     <div className={`patch patch--${layout}`}>
@@ -80,6 +91,7 @@ export function PatchView({
                 key={at}
                 language={syntaxLanguage(file.path)}
                 layout={layout}
+                startFolded={folded[index]?.[at] ?? false}
                 busy={busy}
                 {...(action === undefined || onHunk === undefined
                   ? {}
@@ -100,10 +112,32 @@ export function PatchView({
   )
 }
 
+/** Which hunks open folded: generated files, heavy hunks, and whatever is past the patch's budget. */
+function foldOnOpen(files: readonly PatchFile[]): boolean[][] {
+  let drawn = 0
+  return files.map((file) => {
+    const generated = GENERATED.test(file.path)
+    return file.hunks.map((hunk) => {
+      const cost = drawCost(hunk)
+      const fold = generated || cost > FOLD_OVER || drawn + cost > DRAW_BUDGET
+      if (!fold) drawn += cost
+      return fold
+    })
+  })
+}
+
+/** A hunk's lines, a long one counting once per 120 characters: a minified line is thousands of tokens. */
+function drawCost(hunk: PatchHunk): number {
+  let cost = 0
+  for (const line of hunk.lines) cost += Math.max(1, Math.ceil(line.text.length / 120))
+  return cost
+}
+
 function HunkView({
   hunk,
   language,
   layout,
+  startFolded,
   action,
   busy,
   onHunk,
@@ -112,17 +146,21 @@ function HunkView({
   hunk: PatchHunk
   language: SyntaxLanguage | null
   layout: DiffLayout
+  startFolded: boolean
   action?: HunkAction
   busy: boolean
   onHunk?: () => void
   onDiscard?: () => void
 }): React.JSX.Element {
+  const [folded, setFolded] = useState(startFolded)
+  const head = useRef<HTMLElement | null>(null)
+  const count = hunk.lines.length
   return (
     <details className="patch__hunk" open>
       {/* Sticky, and the reason the whole diff scrolls in one container: the
           `@@` line is the only thing on screen that says which part of the file
           is underneath the cursor, and it is the first thing to scroll away. */}
-      <summary className="patch__hunkHead">
+      <summary className="patch__hunkHead" ref={head}>
         {/* The header in a span of its own, so the control beside it is not
             part of the line somebody reads the position off. */}
         <span className="patch__hunkAt">{hunk.header}</span>
@@ -133,26 +171,105 @@ function HunkView({
           <HunkButton label={action} busy={busy} onClick={onHunk} className="patch__stage" />
         )}
       </summary>
-      <div className="patch__lines">
-        {layout === 'split'
-          ? pairLines(hunk.lines).map((row, index) => (
-              <div className="patch__row patch__row--split" key={index}>
-                <Side line={row.old} side="old" language={language} />
-                <Side line={row.new} side="new" language={language} />
-              </div>
-            ))
-          : hunk.lines.map((line, index) => (
-              // Two lines can be byte-identical and still be different lines.
-              <div className={`patch__row patch__row--${line.kind}`} key={index}>
-                <span className="patch__num">{line.oldNumber ?? ''}</span>
-                <span className="patch__num">{line.newNumber ?? ''}</span>
-                <Text line={line} language={language} />
-              </div>
-            ))}
-      </div>
+      {folded ? (
+        <button
+          type="button"
+          className="patch__more"
+          onClick={() => {
+            setFolded(false)
+            // The button goes; the header keeps the keyboard in this hunk.
+            head.current?.focus()
+          }}
+        >
+          Show {count.toLocaleString('en-US')} {count === 1 ? 'line' : 'lines'}
+        </button>
+      ) : (
+        // Keyed by layout, so a switch redraws from the top rather than all at once.
+        <HunkLines key={layout} hunk={hunk} language={language} layout={layout} />
+      )}
     </details>
   )
 }
+
+/** Rows drawn per task once a hunk is shown: a long one appears at once and fills in behind. */
+const ROWS_PER_TASK = 500
+
+// Memoised: a Stage click flips `busy` on every hunk, and a shown hunk can be thousands of rows.
+const HunkLines = memo(function HunkLines({
+  hunk,
+  language,
+  layout
+}: {
+  hunk: PatchHunk
+  language: SyntaxLanguage | null
+  layout: DiffLayout
+}): React.JSX.Element {
+  const rows = useMemo(() => (layout === 'split' ? pairLines(hunk.lines) : null), [hunk, layout])
+  const total = rows?.length ?? hunk.lines.length
+  const [drawn, setDrawn] = useState(ROWS_PER_TASK)
+  useEffect(() => {
+    if (drawn >= total) return
+    const next = setTimeout(() => setDrawn((now) => now + ROWS_PER_TASK), 0)
+    return () => clearTimeout(next)
+  }, [drawn, total])
+  const slices: number[] = []
+  for (let from = 0; from < Math.min(drawn, total); from += ROWS_PER_TASK) slices.push(from)
+  return (
+    <div className="patch__lines">
+      {slices.map((from) =>
+        rows === null ? (
+          <InlineRows key={from} lines={hunk.lines} from={from} language={language} />
+        ) : (
+          <SplitRows key={from} rows={rows} from={from} language={language} />
+        )
+      )}
+    </div>
+  )
+})
+
+const InlineRows = memo(function InlineRows({
+  lines,
+  from,
+  language
+}: {
+  lines: readonly PatchLine[]
+  from: number
+  language: SyntaxLanguage | null
+}): React.JSX.Element {
+  return (
+    <>
+      {lines.slice(from, from + ROWS_PER_TASK).map((line, index) => (
+        // Two lines can be byte-identical and still be different lines.
+        <div className={`patch__row patch__row--${line.kind}`} key={index}>
+          <span className="patch__num">{line.oldNumber ?? ''}</span>
+          <span className="patch__num">{line.newNumber ?? ''}</span>
+          <Text line={line} language={language} />
+        </div>
+      ))}
+    </>
+  )
+})
+
+const SplitRows = memo(function SplitRows({
+  rows,
+  from,
+  language
+}: {
+  rows: readonly PatchRow[]
+  from: number
+  language: SyntaxLanguage | null
+}): React.JSX.Element {
+  return (
+    <>
+      {rows.slice(from, from + ROWS_PER_TASK).map((row, index) => (
+        <div className="patch__row patch__row--split" key={index}>
+          <Side line={row.old} side="old" language={language} />
+          <Side line={row.new} side="new" language={language} />
+        </div>
+      ))}
+    </>
+  )
+})
 
 function HunkButton({
   label,
