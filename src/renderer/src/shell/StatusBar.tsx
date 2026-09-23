@@ -4,7 +4,7 @@
 // Everything here is a fact. Two of them are also the way into something: the
 // git line opens the changes panel, and the two utilities open small panels of
 // their own. It shows state and never instructions; the chords are in the
-// menu bar, the palette and the help page.
+// menu bar, the palette, the help page and the front door, and nowhere else.
 
 import { collectTerminalIds } from '../panes/paneLayout'
 import { formatReadAge, summarizeWorktreeStatus } from '../sidebar/worktreeStatusSummary'
