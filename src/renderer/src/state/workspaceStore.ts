@@ -30,7 +30,7 @@ import type {
   WorktreeMergePreview,
   WorktreeStatus
 } from '@shared/entities'
-import { DEFAULT_APPEARANCE, type Appearance } from '@shared/theme'
+import { DEFAULT_APPEARANCE, type Appearance, type Tone } from '@shared/theme'
 import {
   DEFAULT_MARKDOWN_PATH,
   fileLeaf,
@@ -111,6 +111,7 @@ import type { ProjectAddRefusal, ResultOf } from '@shared/methods'
 import type { DiffLayout } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
+import { readSystemTone } from '../theme/systemTone'
 import {
   changesOnScreen,
   readStoredRightPanel,
@@ -365,6 +366,8 @@ type WorkspaceState = {
 
   /** How this window is painted. Held here so a colour edited in the dialog is live in the panes behind it. */
   appearance: Appearance
+  /** What `prefers-color-scheme` says; main points it at the OS under Match System. */
+  systemTone: Tone
 
   bootstrap: () => Promise<void>
   /** Opens the change stream. Returns the stop function an effect cleans up with. */
@@ -572,6 +575,7 @@ type WorkspaceState = {
    * The runtime coalesces disk writes, so a colour being dragged is cheap enough to save every frame of.
    */
   setAppearance: (appearance: Appearance) => Promise<void>
+  setSystemTone: (tone: Tone) => void
   openDialog: (dialog: NonNullable<DialogState>) => void
   closeDialog: () => void
   dismissNotice: (id: number) => void
@@ -1095,6 +1099,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     // The palette `tokens.css` painted the first frame in, so the window does not change shade on the way to its theme.
     appearance: DEFAULT_APPEARANCE,
+    systemTone: readSystemTone(),
 
     /** The first read of everything, through the same queue as the stream, so the snapshot cannot be overtaken by an event in flight. */
     async bootstrap() {
@@ -2411,6 +2416,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       } catch (error) {
         failed('Could not save the appearance')(error)
       }
+    },
+
+    setSystemTone(systemTone) {
+      if (get().systemTone !== systemTone) set({ systemTone })
     },
 
     openTeamwork(projectId) {

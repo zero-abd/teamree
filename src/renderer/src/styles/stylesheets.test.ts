@@ -175,6 +175,12 @@ describe('stylesheets', () => {
       expect(declared.get(`--${token}`)).toBe(resolved[token])
     })
 
+    it.each(THEME_TOKENS)('--%s under a light system is the value the Light preset resolves to', (token) => {
+      expect(customProperties('tokens.css', LIGHT_SCHEME).get(`--${token}`)).toBe(
+        resolvePalette(DEFAULT_APPEARANCE, 'light')[token]
+      )
+    })
+
     // Both directions: a token either side lacks is unstyleable or left behind by a theme switch.
     it('declares every themeable token and no colour outside them', () => {
       const themeable = new Set(THEME_TOKENS.map((token) => `--${token}`))
@@ -185,10 +191,15 @@ describe('stylesheets', () => {
   })
 })
 
-/** Every custom property `:root` declares in one stylesheet, in order. */
-function customProperties(name: string): Map<string, string> {
+const LIGHT_SCHEME = '(prefers-color-scheme: light)'
+
+/** Every custom property `:root` declares in one stylesheet, at the top level or inside one `@media`. */
+function customProperties(name: string, media?: string): Map<string, string> {
   const found = new Map<string, string>()
   postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkRules(':root', (rule) => {
+    const parent = rule.parent
+    const within = parent?.type === 'atrule' ? (parent as postcss.AtRule).params : undefined
+    if (within !== media) return
     rule.walkDecls(/^--/, (decl) => {
       found.set(decl.prop, decl.value.trim())
     })

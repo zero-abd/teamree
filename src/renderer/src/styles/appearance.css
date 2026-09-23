@@ -36,6 +36,44 @@
   text-transform: uppercase;
 }
 
+/* Mode -------------------------------------------------------------------- */
+
+.appearance__modes {
+  display: flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-input);
+}
+
+.appearance__mode {
+  padding: var(--s1) var(--s3);
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.appearance__mode:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.appearance__mode--current,
+.appearance__mode--current:hover {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+.appearance__mode:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
 /* Presets ----------------------------------------------------------------- */
 
 .appearance__themes {

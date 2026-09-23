@@ -125,6 +125,62 @@
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
+/* The Light preset as `theme.ts` resolves it: the first frame of a light window, since main
+   points `prefers-color-scheme` at the chosen mode. `stylesheets.test.ts` holds it to the source. */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --bg-window: #ffffff;
+    --bg-rail: #f5f5f6;
+    --bg-panel: #f3f3f4;
+    --bg-raised: #e9eaec;
+    --bg-input: #ffffff;
+    --bg-hover: rgb(28 34 51 / 5%);
+    --bg-press: rgb(28 34 51 / 9%);
+    --scrim: rgb(14 17 26 / 22%);
+    --line: #e4e4e7;
+    --line-strong: #cfd1d4;
+    --fg: #15171c;
+    --fg-secondary: #505155;
+    --fg-muted: #68696b;
+    --accent: #8b8cf7;
+    --accent-bright: #6162ad;
+    --accent-soft: rgb(139 140 247 / 16%);
+    --accent-line: rgb(139 140 247 / 55%);
+    --on-accent: #0e0e19;
+    --success: #357653;
+    --warning: #85642e;
+    --danger: #af4944;
+    --info: #3b6e96;
+    --term-bg: #ffffff;
+    --term-fg: #15171c;
+    --term-cursor: #6162ad;
+    --term-selection: #d8d8fc;
+    --term-black: #282a2e;
+    --term-red: #c4524c;
+    --term-green: #3b845d;
+    --term-yellow: #947033;
+    --term-blue: #427ba8;
+    --term-magenta: #806ab6;
+    --term-cyan: #38817e;
+    --term-white: #737477;
+    --term-bright-black: #75767c;
+    --term-bright-red: #99403b;
+    --term-bright-green: #2e6749;
+    --term-bright-yellow: #735728;
+    --term-bright-blue: #336083;
+    --term-bright-magenta: #64538e;
+    --term-bright-cyan: #2c6562;
+    --term-bright-white: #15171c;
+  }
+}
+
+/* On a light ground a shadow can announce a floating panel, so it only needs to be soft. */
+:root[data-tone='light'] {
+  --shadow-pop: 0 18px 44px rgb(20 24 36 / 20%), 0 2px 8px rgb(20 24 36 / 12%);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

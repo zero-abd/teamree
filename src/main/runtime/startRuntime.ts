@@ -4,6 +4,7 @@
 
 import { join } from 'node:path'
 import type { AgentNotice } from '../agentNotices'
+import type { Appearance } from '../../shared/theme'
 import { ScrollbackArchive, SCROLLBACK_DIR_NAME } from '../store/scrollbackArchive'
 import { WorkspaceStore } from '../store/workspaceStore'
 import { createDispatcher, type Dispatcher } from './dispatcher'
@@ -49,6 +50,8 @@ export type RuntimeOptions = {
   onAgentNotice?: (notice: AgentNotice) => void
   /** Ends the app, for `teamree quit`; `app.quit` in the main process. Absent, the method refuses. */
   requestQuit?: () => void
+  /** Hears each stored appearance, so the app can point macOS's own appearance at it. */
+  onAppearance?: (appearance: Appearance) => void
   onError?: (error: unknown) => void
 }
 
@@ -80,6 +83,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     trashItem,
     onAgentNotice,
     requestQuit,
+    onAppearance,
     onError
   } = options
   const report = onError ?? ((error: unknown) => console.error('[runtime]', error))
@@ -103,7 +107,8 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     onAgentNotice,
     scrollback,
     worktreesRoot,
-    ...(requestQuit === undefined ? {} : { requestQuit })
+    ...(requestQuit === undefined ? {} : { requestQuit }),
+    ...(onAppearance === undefined ? {} : { onAppearance })
   })
   const dispatch = createDispatcher(registry)
 

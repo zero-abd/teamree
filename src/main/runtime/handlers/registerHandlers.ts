@@ -16,6 +16,7 @@ import { UpdateService, registerUpdateHandlers } from '../../updates'
 import type { TerminalService } from '../../terminals/method-handlers'
 import type { ScrollbackRepository } from '../../terminals/session-manager'
 import type { AgentNotice } from '../../agentNotices'
+import type { Appearance } from '../../../shared/theme'
 import { registerAppearanceHandlers } from './appearanceHandlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerQuitHandler } from './quitHandler'
@@ -67,6 +68,8 @@ export type RegisterHandlersOptions = {
    * `before-quit`, where the ptys are killed and awaited. Absent, the method refuses.
    */
   requestQuit?: () => void
+  /** Hears each stored appearance. Absent with no window around. */
+  onAppearance?: (appearance: Appearance) => void
 }
 
 export function registerHandlers(registry: MethodRegistry, options: RegisterHandlersOptions = {}): RegisteredAreas {
@@ -75,7 +78,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   registerQuitHandler(registry, options.requestQuit === undefined ? {} : { requestQuit: options.requestQuit })
   registerUnsubscribeHandler(registry)
   registerWorkspaceSubscribeHandler(registry)
-  registerAppearanceHandlers(registry)
+  registerAppearanceHandlers(registry, options.onAppearance)
   // One file of a worktree at a time, for a file pane.
   registerFileHandlers(registry)
   const workspaceEvents = registry.context.workspaceEvents

@@ -167,20 +167,61 @@ export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
       mutedContrast: 4.5,
       lineWeight: 1.1
     }
+  },
+  {
+    id: 'light',
+    name: 'Light',
+    seed: {
+      ground: '#ffffff',
+      surface: '#1c2233',
+      ink: '#15171c',
+      accent: DEFAULT_ACCENT,
+      hues: HUES,
+      mutedContrast: 4.5,
+      lineWeight: 1
+    }
+  },
+  {
+    id: 'paper',
+    name: 'Paper',
+    seed: {
+      ground: '#f7f5f0',
+      surface: '#3a2e1c',
+      ink: '#1f1c17',
+      accent: DEFAULT_ACCENT,
+      hues: HUES,
+      mutedContrast: 4.5,
+      lineWeight: 1
+    }
   }
 ]
 
 export const DEFAULT_THEME_ID = 'black'
+export const DEFAULT_LIGHT_THEME_ID = 'light'
 
 export function themeById(id: string): BuiltInTheme {
   return BUILT_IN_THEMES.find((theme) => theme.id === id) ?? (BUILT_IN_THEMES[0] as BuiltInTheme)
 }
 
+export type Tone = 'light' | 'dark'
+export type AppearanceMode = 'system' | Tone
+export const APPEARANCE_MODES: readonly AppearanceMode[] = ['system', 'light', 'dark']
+
+/** Whether a preset is painted on a light ground or a dark one. */
+export function themeTone(themeId: string): Tone {
+  return isDark(parseColor(themeById(themeId).seed.ground) ?? black()) ? 'dark' : 'light'
+}
+
+/** Whether a resolved palette is light or dark, read off its ground. */
+export function paletteTone(palette: Palette): Tone {
+  return isDark(parseColor(palette['bg-window']) ?? black()) ? 'dark' : 'light'
+}
+
 /**
- * A person's appearance choice, as stored and as it travels: a preset, then a
- * ground and accent, then literal per-token edits; each layer overrides the one above.
+ * One slot's choice: a preset, then a ground and accent, then literal per-token
+ * edits; each layer overrides the one above.
  */
-export type Appearance = {
+export type ThemeChoice = {
   themeId: string
   /** Replaces the preset's ground, and with it the whole elevation ramp. */
   ground: string | null
@@ -193,15 +234,55 @@ export type Appearance = {
   overrides: Readonly<Record<string, string>>
 }
 
+/** As stored and as it travels: the dark slot at the top level, the light slot beside it. */
+export type Appearance = ThemeChoice & {
+  /** Absent in files written before modes existed; those windows were dark and stay dark. */
+  mode?: AppearanceMode
+  /** Absent until edited: the Light preset as shipped. */
+  light?: ThemeChoice
+}
+
 export const DEFAULT_APPEARANCE: Appearance = {
   themeId: DEFAULT_THEME_ID,
   ground: null,
   accent: null,
-  overrides: {}
+  overrides: {},
+  mode: 'system'
+}
+
+const DEFAULT_LIGHT_CHOICE: ThemeChoice = { themeId: DEFAULT_LIGHT_THEME_ID, ground: null, accent: null, overrides: {} }
+
+/** The tone on screen; `system` is what the OS is showing. */
+export function resolveTone(appearance: Appearance, system: Tone): Tone {
+  const mode = appearance.mode ?? 'dark'
+  return mode === 'system' ? system : mode
+}
+
+/** The slot the window is painted from, and the one the editor changes. */
+export function activeChoice(appearance: Appearance, system: Tone): ThemeChoice {
+  return choiceFor(appearance, resolveTone(appearance, system))
+}
+
+/** The same appearance with one slot replaced. */
+export function withChoice(appearance: Appearance, tone: Tone, choice: ThemeChoice): Appearance {
+  if (tone === 'light') return { ...appearance, light: choice }
+  return {
+    ...appearance,
+    themeId: choice.themeId,
+    ground: choice.ground,
+    accent: choice.accent,
+    overrides: choice.overrides
+  }
+}
+
+function choiceFor(appearance: Appearance, tone: Tone): ThemeChoice {
+  if (tone === 'light') return appearance.light ?? DEFAULT_LIGHT_CHOICE
+  const { themeId, ground, accent, overrides } = appearance
+  return { themeId, ground, accent, overrides }
 }
 
 /** True when nothing has been changed away from the preset. */
-export function isPristine(appearance: Appearance): boolean {
+export function isPristine(appearance: ThemeChoice): boolean {
   return appearance.ground === null && appearance.accent === null && Object.keys(appearance.overrides).length === 0
 }
 
@@ -212,11 +293,19 @@ export function isPristine(appearance: Appearance): boolean {
 export function sanitizeAppearance(raw: unknown): Appearance {
   if (typeof raw !== 'object' || raw === null) return DEFAULT_APPEARANCE
   const record = raw as Record<string, unknown>
+  const appearance: Appearance = sanitizeChoice(record, DEFAULT_THEME_ID)
+  if ((APPEARANCE_MODES as readonly unknown[]).includes(record.mode)) appearance.mode = record.mode as AppearanceMode
+  if (typeof record.light === 'object' && record.light !== null) {
+    appearance.light = sanitizeChoice(record.light as Record<string, unknown>, DEFAULT_LIGHT_THEME_ID)
+  }
+  return appearance
+}
 
+function sanitizeChoice(record: Record<string, unknown>, fallbackThemeId: string): ThemeChoice {
   const themeId =
     typeof record.themeId === 'string' && BUILT_IN_THEMES.some((theme) => theme.id === record.themeId)
       ? record.themeId
-      : DEFAULT_THEME_ID
+      : fallbackThemeId
 
   const overrides: Record<string, string> = {}
   if (typeof record.overrides === 'object' && record.overrides !== null) {
@@ -240,9 +329,9 @@ function hexOrNull(value: unknown): string | null {
   return parsed === null ? null : toHex(parsed)
 }
 
-/** The whole pipeline: preset, then the two choices, then the literal edits. */
-export function resolvePalette(appearance: Appearance): Palette {
-  const clean = sanitizeAppearance(appearance)
+/** The whole pipeline: the slot on screen, its preset, then the two choices, then the literal edits. */
+export function resolvePalette(appearance: Appearance, system: Tone = 'dark'): Palette {
+  const clean = activeChoice(sanitizeAppearance(appearance), system)
   const base = themeById(clean.themeId).seed
   const seed: ThemeSeed = { ...base, ground: clean.ground ?? base.ground, accent: clean.accent ?? base.accent }
   return guard(applyOverrides(buildPalette(seed), clean.overrides), seed)
@@ -317,7 +406,7 @@ export function buildPalette(seed: ThemeSeed): Palette {
     'bg-input': toHex(input),
     'bg-hover': withAlpha(surface, 0.05),
     'bg-press': withAlpha(surface, 0.09),
-    scrim: withAlpha(mix(ground, black(), 0.5), 0.66),
+    scrim: darkGround ? withAlpha(mix(ground, black(), 0.5), 0.66) : withAlpha(mix(surface, black(), 0.5), 0.22),
     line: toHex(line),
     'line-strong': toHex(lineStrong),
     fg: toHex(ink),
@@ -339,14 +428,15 @@ export function buildPalette(seed: ThemeSeed): Palette {
     // Solid, not translucent: the search addon parses this itself and understands
     // nothing but `#rrggbb`; alpha would quietly fall back to another theme's colour.
     'term-selection': toHex(mix(termBg, accent, 0.34)),
-    'term-black': toHex(mix(termBg, surface, 0.14)),
+    // On a light ground black is ink, not a shade of the ground.
+    'term-black': toHex(darkGround ? mix(termBg, surface, 0.14) : mix(ink, ground, 0.08)),
     'term-red': toHex(red),
     'term-green': toHex(green),
     'term-yellow': toHex(yellow),
     'term-blue': toHex(blue),
     'term-magenta': toHex(magenta),
     'term-cyan': toHex(cyan),
-    'term-white': toHex(mix(ink, ground, 0.18)),
+    'term-white': toHex(mix(ink, ground, darkGround ? 0.18 : 0.4)),
     // Most coding agents print their reasoning in dim grey, so it is held to the body-text floor.
     'term-bright-black': toHex(ensureContrast(mix(termBg, surface, 0.42), termBg, Math.max(seed.mutedContrast, 4.5))),
     'term-bright-red': toHex(bright(red)),
@@ -403,8 +493,12 @@ function guard(palette: Palette, seed: ThemeSeed): Palette {
     ['term-bright-white', 'term-bg', 7]
   ]
 
+  const termBg = parseColor(palette['term-bg'])
+  const extra: [ThemeToken, ThemeToken, number][] =
+    termBg !== null && !isDark(termBg) ? [['term-black', 'term-bg', floor]] : []
+
   const next: Palette = { ...palette }
-  for (const [ink, surface, target] of pairs) {
+  for (const [ink, surface, target] of [...pairs, ...extra]) {
     const foreground = parseColor(next[ink])
     const background = parseColor(next[surface])
     if (foreground === null || background === null) continue

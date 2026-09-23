@@ -16,13 +16,17 @@ import { describe, expect, it } from 'vitest'
 import { contrastRatio, ensureContrast, parseColor, toHex, type Rgb } from './color'
 import {
   BUILT_IN_THEMES,
+  DEFAULT_ACCENT,
   DEFAULT_APPEARANCE,
   DEFAULT_THEME_ID,
   isPristine,
   resolvePalette,
+  resolveTone,
   sanitizeAppearance,
   THEME_TOKENS,
   themeById,
+  themeTone,
+  withChoice,
   type Appearance,
   type Palette,
   type ThemeToken
@@ -80,7 +84,7 @@ const PAIRS: readonly { ink: ThemeToken; on: ThemeToken; least: number; why: str
 const ELEVATIONS: readonly ThemeToken[] = ['bg-rail', 'bg-panel', 'bg-raised']
 
 describe.each(BUILT_IN_THEMES.map((theme) => [theme.id, theme.name] as const))('%s (%s)', (id) => {
-  const palette = resolvePalette({ ...DEFAULT_APPEARANCE, themeId: id })
+  const palette = resolvePalette(showing(id))
 
   it('gives every token a value', () => {
     const missing = THEME_TOKENS.filter((token) => !palette[token])
@@ -110,6 +114,82 @@ describe.each(BUILT_IN_THEMES.map((theme) => [theme.id, theme.name] as const))('
   // module exists to remove.
   it('paints the terminal on the same ground as the window', () => {
     expect(palette['term-bg']).toBe(palette['bg-window'])
+  })
+})
+
+// On a light ground ANSI black is the colour text is printed in, not a shade of the ground.
+describe.each(BUILT_IN_THEMES.filter((theme) => themeTone(theme.id) === 'light').map((theme) => theme.id))(
+  'light preset %s',
+  (id) => {
+    const palette = resolvePalette(showing(id))
+
+    it('sits on a light ground', () => {
+      expect(ratio(palette, 'bg-window', 'fg')).toBeGreaterThanOrEqual(11)
+      expect(contrastRatio(rgb(palette['bg-window']), rgb('#ffffff'))).toBeLessThan(1.2)
+    })
+
+    it('prints ANSI black readably', () => {
+      expect(ratio(palette, 'term-black', 'term-bg')).toBeGreaterThanOrEqual(4.5)
+    })
+
+    it('keeps the violet accent', () => {
+      expect(palette.accent).toBe(DEFAULT_ACCENT)
+    })
+  }
+)
+
+describe('light and dark', () => {
+  it('ships a preset called Light', () => {
+    expect(themeById('light').name).toBe('Light')
+    expect(themeTone('light')).toBe('light')
+    expect(themeTone('black')).toBe('dark')
+  })
+
+  it('follows the system on a new installation', () => {
+    expect(DEFAULT_APPEARANCE.mode).toBe('system')
+    expect(resolveTone(DEFAULT_APPEARANCE, 'light')).toBe('light')
+    expect(resolveTone(DEFAULT_APPEARANCE, 'dark')).toBe('dark')
+  })
+
+  it('keeps the chosen dark preset for when the system goes dark again', () => {
+    const appearance: Appearance = { ...DEFAULT_APPEARANCE, themeId: 'midnight', mode: 'system' }
+    expect(resolvePalette(appearance, 'dark')['bg-window']).toBe(themeById('midnight').seed.ground)
+    expect(resolvePalette(appearance, 'light')['bg-window']).toBe(themeById('light').seed.ground)
+  })
+
+  it('ignores the system when told Light or Dark', () => {
+    expect(resolveTone({ ...DEFAULT_APPEARANCE, mode: 'light' }, 'dark')).toBe('light')
+    expect(resolveTone({ ...DEFAULT_APPEARANCE, mode: 'dark' }, 'light')).toBe('dark')
+  })
+
+  it('leaves a window stored before modes existed dark', () => {
+    const stored = sanitizeAppearance({ themeId: 'graphite', ground: null, accent: null, overrides: {} })
+    expect(resolveTone(stored, 'light')).toBe('dark')
+    expect(resolvePalette(stored, 'light')['bg-window']).toBe(themeById('graphite').seed.ground)
+  })
+
+  it('edits only the slot being shown', () => {
+    const edited = withChoice({ ...DEFAULT_APPEARANCE, themeId: 'midnight' }, 'light', {
+      themeId: 'paper',
+      ground: null,
+      accent: '#e0a13e',
+      overrides: {}
+    })
+    expect(edited.themeId).toBe('midnight')
+    expect(edited.accent).toBeNull()
+    expect(resolvePalette(edited, 'light').accent).toBe('#e0a13e')
+    expect(resolvePalette(edited, 'dark').accent).toBe(DEFAULT_ACCENT)
+  })
+
+  it('reads the mode and the light slot back, dropping what it cannot use', () => {
+    const read = sanitizeAppearance({
+      ...DEFAULT_APPEARANCE,
+      mode: 'sepia',
+      light: { themeId: 'light', ground: 'nope', accent: '#f0f', overrides: { line: '#123456', bogus: '#fff' } }
+    })
+    expect(read.mode).toBeUndefined()
+    expect(read.light).toEqual({ themeId: 'light', ground: null, accent: '#ff00ff', overrides: { line: '#123456' } })
+    expect(sanitizeAppearance({ ...DEFAULT_APPEARANCE, mode: 'light' }).mode).toBe('light')
   })
 })
 
@@ -231,6 +311,12 @@ describe('the contrast maths itself', () => {
     )
   })
 })
+
+/** An appearance that puts this preset on screen, through the slot its tone belongs to. */
+function showing(id: string): Appearance {
+  if (themeTone(id) === 'dark') return { ...DEFAULT_APPEARANCE, mode: 'dark', themeId: id }
+  return { ...DEFAULT_APPEARANCE, mode: 'light', light: { themeId: id, ground: null, accent: null, overrides: {} } }
+}
 
 function ratio(palette: Palette, ink: ThemeToken, on: ThemeToken): number {
   return contrastRatio(rgb(palette[ink]), rgb(palette[on]))

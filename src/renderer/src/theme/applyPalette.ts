@@ -12,9 +12,13 @@
 // off the same element, which is why switching a theme reaches a pane that has
 // been running for an hour.
 
-import { THEME_TOKENS, type Palette } from '@shared/theme'
+import { paletteTone, THEME_TOKENS, type Palette } from '@shared/theme'
 
 export function applyPalette(root: HTMLElement | null, palette: Palette): void {
   if (!root) return
   for (const token of THEME_TOKENS) root.style.setProperty(`--${token}`, palette[token])
+  // From the ground itself, so an edited ground gets the scrollbars and shadows that suit it.
+  const tone = paletteTone(palette)
+  root.style.colorScheme = tone
+  root.dataset.tone = tone
 }

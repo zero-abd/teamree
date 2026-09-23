@@ -5,6 +5,7 @@ import {
   dialog,
   ipcMain,
   Menu,
+  nativeTheme,
   Notification,
   powerSaveBlocker,
   protocol,
@@ -17,7 +18,8 @@ import { FILE_SCHEME, FILE_SCHEME_PRIVILEGES, fileGrants, serveGrantedFile } fro
 import { installKeepAwake } from './keepAwake'
 import { frontsExistingWindow, isBackgroundLaunch, launchData, userDataOverride } from './launchProfile'
 import { installMenuBar } from './menuBar'
-import { DEFAULT_APPEARANCE, resolvePalette } from '../shared/theme'
+import { DEFAULT_APPEARANCE, type Appearance } from '../shared/theme'
+import { installNativeAppearance, windowBackground } from './nativeAppearance'
 import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
 import { APP_VERSION } from './appVersion'
 import { createQuitSequence } from './quitSequence'
@@ -46,7 +48,7 @@ function createWindow(): BrowserWindow {
       ? { trafficLightPosition: { x: TRAFFIC_LIGHT_X_PX, y: TRAFFIC_LIGHT_Y_PX } }
       : {}),
     // The chosen theme's ground, or the first frame flashes the wrong colour.
-    backgroundColor: windowBackground(),
+    backgroundColor: windowBackground(currentAppearance(), nativeTheme),
     webPreferences: {
       preload: join(import.meta.dirname, '../preload/index.mjs'),
       // Off because the preload is an ES module: a sandboxed preload is
@@ -89,12 +91,12 @@ function createWindow(): BrowserWindow {
   return window
 }
 
-/** The window's backdrop from the last chosen appearance; the default is the same ground `tokens.css` declares. */
-function windowBackground(): string {
-  return resolvePalette(runtime?.context.store.getAppearance() ?? DEFAULT_APPEARANCE)['bg-window']
+function currentAppearance(): Appearance {
+  return runtime?.context.store.getAppearance() ?? DEFAULT_APPEARANCE
 }
 
 let runtime: Runtime | undefined
+let followAppearance: ((appearance: Appearance) => void) | undefined
 let notices: AgentNoticeChannel | undefined
 
 /** The window, for the handful of things that act on whichever one is open. */
@@ -235,12 +237,18 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
         trashItem: (path) => shell.trashItem(path),
         onAgentNotice: (notice) => notices?.deliver(notice),
         // `teamree quit`: only `app.quit` runs `before-quit`. See quitSequence.ts.
-        requestQuit: () => app.quit()
+        requestQuit: () => app.quit(),
+        onAppearance: (appearance) => followAppearance?.(appearance)
       })
     } catch (error) {
       console.error('[runtime] failed to start', error)
     }
 
+    followAppearance = installNativeAppearance({
+      nativeTheme,
+      appearance: currentAppearance,
+      windows: () => BrowserWindow.getAllWindows()
+    })
     createWindow()
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow()

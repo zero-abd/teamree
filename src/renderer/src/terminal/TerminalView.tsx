@@ -84,6 +84,7 @@ export function TerminalView({
   const typing = useMemo(() => typingNow(attention.typists, now), [attention.typists, now])
   const mutePane = useWorkspaceStore((state) => state.mutePane)
   const appearance = useWorkspaceStore((state) => state.appearance)
+  const systemTone = useWorkspaceStore((state) => state.systemTone)
   // Read live so a size change in settings reaches panes that have been running for hours.
   const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
   const terminalOptions = useWorkspaceStore((state) => state.terminalOptions)
@@ -315,7 +316,7 @@ export function TerminalView({
     if (!term) return
     term.options.theme = readTerminalTheme(document.documentElement)
     decorationsRef.current = readSearchDecorations(document.documentElement)
-  }, [appearance])
+  }, [appearance, systemTone])
 
   // Re-running on every keystroke keeps the counter live; `incremental` keeps
   // the current selection so the viewport does not hop between matches.
