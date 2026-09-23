@@ -28,16 +28,12 @@
 <meta name="twitter:description" content="An ADE built for teamwork. Several coding agents at once, each in its own git worktree, all of them in one window.">
 <meta name="twitter:image" content="https://teamree.us/og.png">
 <style>
-/* The page is built the way the window is: a rail on the left that names
-   things, a pane on the right that holds them. Three tones from brand/ do the
-   whole job — the ground, the tile, the ink — and the accent is spent only
-   where the app spends it: a link, a focus ring, the one status dot.
+/* Three tones from brand/ do the whole job — the ground, the tile, the ink —
+   and the accent is spent only where the app spends it: a link, a focus ring,
+   the one dot. A raised surface is the tile on the ground; a well (a terminal)
+   is the ground inside the tile. That is the entire vocabulary.
 
-   Emphasis is never a glow. A raised surface is the tile tone on the ground;
-   a well (a terminal) is the ground inside the tile. That is the entire
-   vocabulary, and it is the app's own.
-
-   Type is the system face, on purpose. This is a macOS application and the
+   Type is the system face, on purpose: this is a macOS application and the
    page sets in the face the window sets in; nothing is downloaded and nothing
    swaps after the first paint. Commands are set in the system monospace.
 
@@ -59,13 +55,11 @@
   --accent-2:#A9AAFF;
   --working:#4ade80;
   --waiting:#e3aa4f;
-  --failed:#f0625a;
 
   --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
   --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
 
   --t-13:.8125rem; --t-15:.9375rem; --t-17:1.0625rem; --t-20:1.25rem;
-  --t-24:1.5rem;
   --t-h2:clamp(1.5rem,1.2rem + 1vw,1.75rem);
   --t-h1:clamp(2.5rem,1.4rem + 4.4vw,4.5rem);
 
@@ -86,10 +80,7 @@
 }
 
 *,*::before,*::after{ box-sizing:border-box; }
-html{
-  -webkit-text-size-adjust:100%; background:var(--ground);
-  scroll-padding-top:calc(var(--nav-h) + 24px);
-}
+html{ -webkit-text-size-adjust:100%; background:var(--ground); scroll-padding-top:calc(var(--nav-h) + 24px); }
 body{
   margin:0; background:var(--ground); color:var(--ink);
   font-family:var(--font); font-size:var(--t-17); line-height:1.6;
@@ -109,7 +100,7 @@ a:hover{ text-decoration:underline; text-underline-offset:3px; }
 @media (forced-colors:active){ :focus-visible{ outline:3px solid Highlight; } }
 ::selection{ background:rgb(139 140 247 / 35%); color:#fff; }
 code,kbd,pre{ font-family:var(--mono); }
-strong,b{ color:var(--ink); font-weight:600; }
+p code{ font-size:.9em; color:var(--ink); background:var(--tile-2); border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
 
 .wrap{ width:100%; max-width:var(--maxw); margin:0 auto; padding:0 var(--pad); }
 @media (max-width:560px){ :root{ --pad:20px; } }
@@ -119,19 +110,18 @@ strong,b{ color:var(--ink); font-weight:600; }
 
 /* ------------------------------------------------------------------ header -- */
 /* A bar, not a pill. Transparent over the hero; once the page has moved it
-   becomes a material — the ground at 72% behind a blur, with a hairline — so
-   the content passing under it is felt rather than hidden. */
+   becomes a material — the ground at 72% behind a blur, with a hairline. */
 .site-header{
   position:fixed; top:0; left:0; right:0; z-index:100; height:var(--nav-h);
   background:transparent; border-bottom:1px solid transparent;
   transition:background var(--quick) var(--ease), border-color var(--quick) var(--ease);
 }
-.site-header.scrolled, .site-header[data-nav="open"], .site-header:has(.nav:target){
+.site-header.scrolled{
   background:rgb(11 12 14 / 72%); border-color:var(--line);
   backdrop-filter:blur(20px) saturate(140%); -webkit-backdrop-filter:blur(20px) saturate(140%);
 }
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
-  .site-header.scrolled, .site-header[data-nav="open"], .site-header:has(.nav:target){ background:rgb(11 12 14 / 96%); }
+  .site-header.scrolled{ background:rgb(11 12 14 / 96%); }
 }
 .header-row{ display:flex; align-items:center; justify-content:space-between; gap:24px; height:var(--nav-h); }
 .brand{ display:inline-flex; align-items:center; color:var(--ink); min-height:44px; }
@@ -151,7 +141,6 @@ strong,b{ color:var(--ink); font-weight:600; }
    leaves the address bar alone. */
 @media (max-width:820px){
   .site-header{ height:auto; min-height:var(--nav-h); }
-  /* The row grows with the panel, so the header's ground is under all of it. */
   .header-row{ flex-wrap:wrap; height:auto; min-height:var(--nav-h); }
   .nav-toggle{
     display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:0 4px;
@@ -160,102 +149,73 @@ strong,b{ color:var(--ink); font-weight:600; }
   .nav-toggle:hover, .site-header[data-nav="open"] .nav-toggle{ color:var(--ink); text-decoration:none; }
   .nav-toggle svg{ width:12px; height:12px; fill:currentColor; transition:transform var(--quick) var(--ease); }
   .site-header[data-nav="open"] .nav-toggle svg{ transform:rotate(180deg); }
-  .nav{
-    display:none; width:100%; flex-direction:column; align-items:stretch; gap:0;
-    padding:8px 0 12px; border-top:1px solid var(--line);
-  }
+  .nav{ display:none; width:100%; flex-direction:column; align-items:stretch; gap:0; padding:8px 0 12px; border-top:1px solid var(--line); }
   .site-header[data-nav="open"] .nav, .nav:target{ display:flex; }
   .nav a{ min-height:48px; }
   /* Opened, the panel lies over the headline: a surface, not a veil. Two
      rules, not one list, so a browser without :has() keeps the working one. */
-  .site-header[data-nav="open"]{ background:rgb(11 12 14 / 96%); border-color:var(--line); }
-  .site-header:has(.nav:target){ background:rgb(11 12 14 / 96%); border-color:var(--line); }
-}
-
-/* -------------------------------------------------------------------- hero -- */
-/* The hero sits on the same rail and pane as everything below it: the mark in
-   the rail, the words in the pane. */
-.hero{ padding:calc(var(--nav-h) + 96px) 0 80px; }
-.hero-mark{ width:168px; height:126px; display:block; margin:6px 0 0 -10px; color:var(--ink); }
-.hero .rail{ position:static; }
-.hero h1{ max-width:16ch; }
-.hero .lede{ margin-top:28px; max-width:52ch; font-size:var(--t-20); line-height:1.5; color:var(--ink-2); }
-.cta{ margin-top:40px; display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
-.btn, .btn-2{
-  display:inline-flex; align-items:center; gap:10px; min-height:48px; padding:0 20px;
-  border-radius:var(--r2); font:inherit; font-weight:600; font-size:var(--t-15); line-height:1.2;
-  text-decoration:none; cursor:pointer; -webkit-tap-highlight-color:transparent;
-  transition:transform 480ms var(--ease), background var(--quick) var(--ease), border-color var(--quick) var(--ease);
-  transition-timing-function:var(--spring), var(--ease), var(--ease);
-}
-.btn{ background:var(--ink); color:var(--ground); border:1px solid var(--ink); }
-.btn:hover{ background:#fff; border-color:#fff; text-decoration:none; }
-.btn-2{ background:transparent; color:var(--ink); border:1px solid var(--line-2); }
-.btn-2:hover{ border-color:var(--ink-3); background:var(--tile); text-decoration:none; }
-.btn:active, .btn-2:active{ transform:scale(.97); transition-duration:60ms; }
-.btn .apple{ width:16px; height:20px; fill:currentColor; flex:none; margin-top:-2px; }
-.btn-2 svg{ width:16px; height:16px; fill:currentColor; flex:none; }
-.btn .stack{ display:flex; flex-direction:column; text-align:left; }
-.btn .stack small{ font-size:var(--t-13); font-weight:500; opacity:.7; }
-.hero-note{ margin-top:20px; font-size:var(--t-15); color:var(--ink-3); }
-.hero-note code{ color:var(--ink-2); }
-@media (max-width:900px){
-  .hero{ padding:calc(var(--nav-h) + 48px) 0 56px; }
-  .hero-mark{ width:112px; height:84px; margin:0 0 4px -6px; }
+  .site-header[data-nav="open"]{ background:var(--ground); border-color:var(--line); }
+  .site-header:has(.nav:target){ background:var(--ground); border-color:var(--line); }
 }
 
 /* -------------------------------------------------------------- the rows -- */
-/* Every section is a rail and a pane. The rail holds the heading and stays put
-   while the pane scrolls past, which is what the sidebar does in the window. */
-section{ padding:88px 0; border-top:1px solid var(--line); }
+/* A rail on the left that names things, a pane on the right that holds them,
+   which is how the window is built. */
 .row{ display:grid; grid-template-columns:var(--rail) minmax(0,1fr); gap:0 var(--gutter); align-items:start; }
-.rail{ position:sticky; top:calc(var(--nav-h) + 32px); }
-.rail h2{ max-width:12ch; }
-.rail .status{ margin-top:20px; }
 .pane{ min-width:0; }
-.pane > :first-child{ margin-top:0; }
-.prose{ max-width:60ch; }
-.prose p{ margin-top:20px; color:var(--ink-2); }
-.prose p:first-child{ margin-top:0; }
-.prose ul{ margin-top:20px; padding-left:0; list-style:none; }
-.prose ul > li{ position:relative; padding-left:20px; margin-top:8px; color:var(--ink-2); }
-.prose ul > li::before{ content:""; position:absolute; left:2px; top:.72em; width:6px; height:6px; border-radius:50%; background:var(--ink-3); }
-.prose .steps{ margin-top:24px; }
-.prose code, .steps code, .hero-note code, .dialog code{
-  font-size:.9em; color:var(--ink); background:var(--tile-2); border:1px solid var(--line);
-  border-radius:4px; padding:1px 5px;
-}
-.lede-2{ font-size:var(--t-20); line-height:1.5; color:var(--ink-2); max-width:56ch; }
+section{ padding:88px 0; border-top:1px solid var(--line); }
 @media (max-width:900px){
   section{ padding:64px 0; }
-  .row{ grid-template-columns:minmax(0,1fr); gap:28px 0; }
-  .rail{ position:static; }
-  .rail h2{ max-width:22ch; }
+  .row{ grid-template-columns:minmax(0,1fr); gap:24px 0; }
 }
 
-/* The status motif: the four states a pane can be in, set the way the window
-   sets them. Content, not ornament — the section beside it is about exactly
-   this. */
-.status{ display:flex; flex-wrap:wrap; gap:6px 16px; font-family:var(--mono); font-size:var(--t-13); color:var(--ink-3); }
-.status span{ display:inline-flex; align-items:center; gap:7px; }
-.status i{ width:7px; height:7px; border-radius:50%; flex:none; }
-.status .w i{ background:var(--working); }
-.status .p i{ background:var(--waiting); }
-.status .d i{ background:var(--ink-3); }
-.status .f i{ background:var(--failed); }
+/* -------------------------------------------------------------------- hero -- */
+.hero{ padding:calc(var(--nav-h) + 96px) 0 64px; }
+.hero-mark{ width:168px; height:126px; display:block; margin:6px 0 0 -10px; color:var(--ink); }
+.hero h1{ max-width:14ch; }
+.hero .lede{ margin-top:24px; max-width:44ch; font-size:var(--t-20); line-height:1.5; color:var(--ink-2); }
+.cta{ margin-top:36px; display:flex; flex-wrap:wrap; align-items:center; gap:12px 24px; }
+.btn{
+  display:inline-flex; align-items:center; gap:10px; min-height:48px; padding:0 20px;
+  border-radius:var(--r2); font:inherit; font-weight:600; font-size:var(--t-15); line-height:1.2;
+  background:var(--ink); color:var(--ground); border:1px solid var(--ink); cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  transition:transform 480ms var(--ease), background var(--quick) var(--ease);
+  transition-timing-function:var(--spring), var(--ease);
+}
+.btn:hover{ background:#fff; border-color:#fff; text-decoration:none; }
+.btn:active{ transform:scale(.97); transition-duration:60ms; }
+.btn .apple{ width:16px; height:20px; fill:currentColor; flex:none; margin-top:-2px; }
+.cta .more{ color:var(--ink-2); font-weight:500; font-size:var(--t-15); display:inline-flex; align-items:center; gap:8px; min-height:44px; }
+.cta .more:hover{ color:var(--ink); }
+.cta .more svg{ width:16px; height:16px; fill:currentColor; }
+@media (max-width:900px){
+  .hero{ padding:calc(var(--nav-h) + 48px) 0 48px; }
+  .hero-mark{ width:112px; height:84px; margin:0 0 4px -6px; }
+}
 
 /* -------------------------------------------------------------- the media -- */
 /* The frame reserves its ratio and both the <video> and the <img> fill it, so
    swapping one for the other moves nothing. The tile is the mat; the ground is
    the well inside it. */
-.shot{ margin-top:48px; border:1px solid var(--line); border-radius:var(--r3); background:var(--tile); padding:6px; }
+.shot{ margin:0 0 96px; border:1px solid var(--line); border-radius:var(--r3); background:var(--tile); padding:6px; }
 .shot-frame{ position:relative; aspect-ratio:1400 / 900; overflow:hidden; border-radius:calc(var(--r3) - 6px); background:var(--ground); }
 .shot-frame > img, .shot-frame > video{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; }
 .shot-frame > video{ background:transparent; }
-.shot-cap{ margin-top:14px; font-size:var(--t-15); color:var(--ink-3); }
-@media (max-width:900px){ .shot{ margin-top:32px; } }
+@media (max-width:900px){ .shot{ margin-bottom:64px; } }
 
-.demo-figure{ margin-top:32px; min-width:0; }
+/* ---------------------------------------------------------------- features -- */
+/* Four blocks on two columns. Each carries the slot for its clip above a title
+   and one line; while the clips are parked the slot is gone and the block is
+   the title and the line. */
+.features{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:56px var(--gutter); list-style:none; padding:0; }
+.feature{ min-width:0; }
+.feature h3{ font-size:var(--t-20); }
+.feature p{ margin-top:8px; color:var(--ink-2); max-width:40ch; }
+.feature .demo-figure{ margin:0 0 20px; }
+@media (max-width:700px){ .features{ grid-template-columns:minmax(0,1fr); gap:40px; } }
+
+.demo-figure{ min-width:0; }
 .demo-frame{ position:relative; border:1px solid var(--line); border-radius:var(--r3); overflow:hidden; background:var(--tile); }
 /* The aspect ratio is fixed here and the video carries width/height attributes,
    so nothing on the page moves while a clip loads — or if it never loads.
@@ -281,7 +241,7 @@ section{ padding:88px 0; border-top:1px solid var(--line); }
 /* While a clip is moving the button recedes; it never leaves. */
 [data-paused="no"] .demo-play{ opacity:.25; }
 [data-paused="no"] .demo-play:hover, [data-paused="no"] .demo-play:focus-visible, [data-paused="no"]:focus-within .demo-play{ opacity:1; }
-.demo-cap{ margin-top:14px; font-size:var(--t-15); color:var(--ink-3); }
+.demo-cap{ margin-top:12px; font-size:var(--t-15); color:var(--ink-3); }
 /* The clips are parked inside HTML comments until they land, so there is no
    <video> in the frame. While they are parked the figure is gone. Un-parking
    (`node site/tools/sync-demos.mjs`) puts a <video> back and the figure with it.
@@ -289,18 +249,19 @@ section{ padding:88px 0; border-top:1px solid var(--line); }
    placeholder underneath becomes the picture. */
 .demo-figure:not(:has(video)):not(:has([data-failed])){ display:none; }
 
-/* -------------------------------------------------------------------- code -- */
-.cmd{ position:relative; margin-top:24px; }
-pre{
-  margin:0; background:var(--ground); border:1px solid var(--line); border-radius:var(--r2);
-  padding:16px 20px; overflow-x:auto; font-size:var(--t-13); line-height:1.75; color:var(--ink-2); tab-size:2;
-}
-pre code{ font-size:inherit; }
+/* ---------------------------------------------------------------- teamwork -- */
+.team p{ color:var(--ink-2); max-width:56ch; font-size:var(--t-20); line-height:1.5; }
+.team .demo-figure{ margin-top:32px; max-width:720px; }
+
+/* ----------------------------------------------------------------- install -- */
+.install p{ color:var(--ink-2); max-width:56ch; }
+.install p + p{ margin-top:28px; }
+.cmd{ position:relative; margin-top:12px; max-width:720px; }
+.cmd.has-copy{ background:var(--ground); border:1px solid var(--line); border-radius:var(--r2); padding:16px 20px; padding-right:96px; }
+pre{ margin:0; overflow-x:auto; font-size:var(--t-13); line-height:1.75; color:var(--ink); tab-size:2; }
 pre[tabindex]{ scrollbar-gutter:stable; }
 /* The copy chip lives on the wrapper, which does not scroll; the strip inside
    stops short of its gutter so no command can pass beneath it. */
-.cmd.has-copy{ background:var(--ground); border:1px solid var(--line); border-radius:var(--r2); padding:16px 20px; padding-right:96px; }
-.cmd.has-copy > pre{ background:none; border:0; border-radius:0; padding:0; }
 .cmd-copy{
   position:absolute; top:9px; right:9px; min-height:32px; padding:0 12px; cursor:pointer;
   font:inherit; font-size:var(--t-13); font-weight:500; color:var(--ink-2);
@@ -317,45 +278,7 @@ pre[tabindex]{ scrollbar-gutter:stable; }
   .cmd-copy{ top:auto; bottom:10px; right:10px; min-height:40px; }
 }
 @media (max-width:820px){ .cmd-copy{ min-height:44px; } }
-.tok-c{ color:var(--ink-3); }
-.tok-p{ color:var(--ink); }
-.tok-s{ color:var(--working); }
-.tok-f{ color:var(--waiting); }
-
-/* ------------------------------------------------------------------- steps -- */
-/* The install is the one sequence on the page, so it is the one thing numbered. */
-.steps{ list-style:none; padding:0; counter-reset:step; max-width:64ch; }
-.steps li{ counter-increment:step; display:grid; grid-template-columns:40px minmax(0,1fr); gap:0 16px; padding:24px 0; border-top:1px solid var(--line); }
-.steps li:first-child{ border-top:0; padding-top:0; }
-.steps li::before{ content:counter(step); font-family:var(--mono); font-size:var(--t-15); color:var(--ink-3); line-height:1.3; padding-top:3px; }
-.steps p{ margin-top:8px; color:var(--ink-2); }
-.steps .cmd{ margin-top:16px; }
-.steps-after{ margin-top:24px; font-size:var(--t-15); }
-
-/* ------------------------------------------------------------- the dialog -- */
-/* macOS's own dialog, redrawn so a reader recognises it before they meet it.
-   Its two buttons are set exactly as prominent as macOS sets them, because
-   that prominence is the whole hazard. */
-.dialog{
-  margin-top:24px; max-width:420px; padding:24px 24px 20px; text-align:center;
-  background:var(--tile-2); border:1px solid var(--line-2); border-radius:var(--r3);
-}
-.dialog svg{ width:56px; height:56px; margin:0 auto 12px; display:block; }
-.dialog b{ display:block; font-size:var(--t-15); }
-.dialog p{ margin-top:6px; font-size:var(--t-13); color:var(--ink-2); line-height:1.45; }
-.dialog .buttons{ display:flex; gap:10px; margin-top:20px; }
-.dialog .buttons span{ flex:1; min-height:32px; display:inline-flex; align-items:center; justify-content:center; border-radius:7px; font-size:var(--t-13); font-weight:500; }
-.dialog .trash{ background:rgb(243 242 238 / 8%); color:var(--ink); }
-.dialog .done{ background:var(--accent); color:#0B0C0E; }
-.warn{ margin-top:24px; padding:14px 16px; border-left:2px solid var(--waiting); background:var(--tile); border-radius:0 var(--r) var(--r) 0; max-width:60ch; }
-.warn p{ margin:0; color:var(--ink-2); }
-.prose .aside{ font-size:var(--t-15); color:var(--ink-3); }
-.prose .aside b{ color:var(--ink-2); }
-
-/* -------------------------------------------------------------------- get -- */
-.get .row{ align-items:center; }
-.get .cta{ margin-top:0; }
-.get .hero-note{ margin-top:16px; }
+.install .note{ margin-top:28px; font-size:var(--t-15); color:var(--ink-3); }
 
 /* ----------------------------------------------------------------- footer -- */
 .site-footer{ border-top:1px solid var(--line); padding:48px 0 56px; color:var(--ink-3); font-size:var(--t-15); }
@@ -363,7 +286,7 @@ pre[tabindex]{ scrollbar-gutter:stable; }
 .footer-links{ display:flex; flex-wrap:wrap; gap:0 24px; }
 .footer-links a{ color:var(--ink-2); display:inline-flex; align-items:center; min-height:44px; }
 .footer-links a:hover{ color:var(--ink); }
-.footer-note{ margin-top:16px; max-width:60ch; }
+.footer-note{ margin-top:12px; }
 
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{ transition-duration:1ms !important; animation:none !important; }
@@ -390,11 +313,6 @@ pre[tabindex]{ scrollbar-gutter:stable; }
   <g transform="translate(0 1.08) scale(.39)"><path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/></g>
   <g transform="translate(142)"><path fill-rule="evenodd" d="M8 12H20V27H38V39H20V69Q20 78 30 78H39V90H28Q8 90 8 70V39H2V27H8ZM54 56Q54 25 78 25Q101 25 101 51V60H67Q69 78 84 78Q94 78 101 71V85Q93 90 81 90Q54 90 54 61ZM67 49H88Q88 37 78 37Q68 37 67 49ZM114 48Q114 25 138 25Q160 25 160 47V88H148V81Q140 90 129 90Q111 90 111 73Q111 55 134 55H148V48Q148 37 138 37Q128 37 128 48ZM148 66H135Q123 66 123 73Q123 79 132 79Q148 79 148 66ZM178 27H190V35Q197 25 209 25Q222 25 228 37Q235 25 248 25Q268 25 268 48V88H256V50Q256 38 247 38Q234 38 234 54V88H222V50Q222 38 213 38Q190 38 190 59V88H178ZM286 27H298V37Q305 25 319 25H324V38H318Q298 38 298 60V88H286ZM336 56Q336 25 360 25Q383 25 383 51V60H349Q351 78 366 78Q376 78 383 71V85Q375 90 363 90Q336 90 336 61ZM349 49H370Q370 37 360 37Q350 37 349 49ZM390 56Q390 25 414 25Q437 25 437 51V60H403Q405 78 420 78Q430 78 437 71V85Q429 90 417 90Q390 90 390 61ZM403 49H424Q424 37 414 37Q404 37 403 49Z"/></g>
     </symbol>
-    <symbol id="app-icon" viewBox="0 0 1024 1024">
-  <defs><linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#101114"/><stop offset="1" stop-color="#0B0C0E"/></linearGradient></defs>
-  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)"/>
-  <g fill="#F3F2EE" transform="translate(256.5 237.875) scale(2.1291667)"><path fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190ZM140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/></g>
-    </symbol>
     <symbol id="chev" viewBox="0 0 16 16"><path d="M8 10.6 2.7 5.3l1.3-1.3L8 8l4-4 1.3 1.3z"/></symbol>
     <symbol id="gh" viewBox="0 0 16 16">
       <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
@@ -410,11 +328,9 @@ pre[tabindex]{ scrollbar-gutter:stable; }
     </a>
     <a class="nav-toggle" href="#site-nav" aria-controls="site-nav">Menu<svg aria-hidden="true" focusable="false"><use href="#chev"/></svg></a>
     <nav class="nav" id="site-nav" aria-label="Primary">
-      <a href="#what">Worktrees</a>
-      <a href="#terminals">Terminals</a>
-      <a href="#cli">CLI</a>
+      <a href="#features">Features</a>
       <a href="#teamwork">Teamwork</a>
-      <a href="#start">Install</a>
+      <a href="#install">Install</a>
       <a class="ghlink" href="https://github.com/zero-abd/teamree" rel="noopener"><svg aria-hidden="true" focusable="false"><use href="#gh"/></svg>GitHub</a>
     </nav>
   </div>
@@ -423,81 +339,56 @@ pre[tabindex]{ scrollbar-gutter:stable; }
 <main id="main">
 
 <div class="wrap hero row">
-  <div class="rail">
-  <!-- The mark, drawn as two slabs so each can move. At rest this is exactly
-       brand/mark.svg; as the page scrolls the windows straighten into two
-       panes and the slabs part. Script only rewrites the four numbers. -->
-  <svg class="hero-mark" id="hero-mark" viewBox="-16 20 288 216" role="img" aria-label="The teamree mark: two slabs, each with a window, facing a shared centre" fill="currentColor">
-    <path data-slab="l" fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190Z"/>
-    <path data-slab="r" fill-rule="evenodd" d="M140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/>
-  </svg>
+  <div>
+    <!-- The mark, drawn as two slabs so each can move. At rest this is exactly
+         brand/mark.svg; as the page scrolls the windows straighten into two
+         panes and the slabs part. Script only rewrites the numbers. -->
+    <svg class="hero-mark" id="hero-mark" viewBox="-16 20 288 216" role="img" aria-label="The teamree mark: two slabs, each with a window, facing a shared centre" fill="currentColor">
+      <path data-slab="l" fill-rule="evenodd" d="M16 28H116V228H16Q8 228 8 220V36Q8 28 16 28ZM32 66L96 50V206L32 190Z"/>
+      <path data-slab="r" fill-rule="evenodd" d="M140 28H240Q248 28 248 36V220Q248 228 240 228H140ZM160 48L224 68V188L160 208Z"/>
+    </svg>
   </div>
   <div class="pane">
-  <h1>Five agents. Five worktrees. One window.</h1>
-  <p class="lede">
-    Every task gets its own git worktree and its own terminals, with a coding agent in each.
-    Teammates watch any pane from their own machine and, once you allow it, type into it.
-  </p>
-  <div class="cta">
-    <a class="btn" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg">
-      <svg class="apple" aria-hidden="true" focusable="false"><use href="#apple"/></svg>
-      <span class="stack">Download for macOS<small>Universal, Apple Silicon and Intel</small></span>
-    </a>
-    <a class="btn-2" href="https://github.com/zero-abd/teamree" rel="noopener"><svg aria-hidden="true" focusable="false"><use href="#gh"/></svg>Read the source</a>
-  </div>
-  <p class="hero-note">Free. macOS 12 or later. Signed ad-hoc, so the first launch takes <a href="#start">one command</a>.</p>
+    <h1>Parallel coding agents, one window.</h1>
+    <p class="lede">A git worktree per task, with its own terminals. Teammates watch, and type when allowed.</p>
+    <div class="cta">
+      <a class="btn" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg"><svg class="apple" aria-hidden="true" focusable="false"><use href="#apple"/></svg>Download for macOS</a>
+      <a class="more" href="https://github.com/zero-abd/teamree" rel="noopener"><svg aria-hidden="true" focusable="false"><use href="#gh"/></svg>Source on GitHub</a>
+    </div>
   </div>
 </div>
 
-<section id="window">
-  <div class="wrap">
-    <div class="row">
-      <div class="rail">
-        <h2>Three worktrees, four panes, and no question about which one stopped.</h2>
-        <p class="status" aria-label="The four pane states">
-          <span class="w"><i></i>working</span><span class="p"><i></i>waiting</span><span class="d"><i></i>finished</span><span class="f"><i></i>failed</span>
-        </p>
-      </div>
-      <div class="pane">
-        <p class="lede-2">
-          Every pane in every worktree shows what it is doing and how long since it last printed
-          anything. teamree watches the PTY, not the agent&rsquo;s protocol: &ldquo;waiting&rdquo;
-          means the output stopped, not that the agent asked you something.
-        </p>
-      </div>
+<div class="wrap">
+  <figure class="shot">
+    <!-- The media slot. The frame reserves 1400x900 and both the <video> and
+         the <img> inside it fill it absolutely, so replacing one with the
+         other reflows nothing. The <img> is the fallback a browser that plays
+         neither source lands on, which is why it carries its own alt text.
+
+         BOTH the clip and that still were captured before 0.2.0 and look it:
+         the window in them is the old slate ground rather than the absolute
+         black teamree now ships, the status rail reads "Runtime ready 0.1.2",
+         the teamwork panel is the one that did not ask which end you were on,
+         and a watched pane is still the corner card it stopped being. They
+         want retaking on a Mac; nothing here has to change when they are.
+
+         The width/height are the clip's real intrinsic size read off the
+         decoded video (videoWidth is 1281), 0.4% off the 1400x900 the box
+         reserves, which object-fit:cover absorbs. This frame is deliberately
+         not one of the four that site/tools/sync-demos.mjs reconciles and
+         carries no `demo:video:parked` marker. -->
+    <div class="shot-frame" data-media="tour">
+      <video width="1281" height="820" muted loop playsinline preload="metadata" controls
+             poster="/demos/showcase.jpg"
+             aria-label="Screen capture: a tour of teamree — three worktrees each on their own branch, the panes in them and what each one is doing, the teamree command driving the window, and a teammate's worktree arriving over an encrypted session.">
+        <source src="/demos/showcase.webm" type="video/webm">
+        <source src="/demos/showcase.mp4" type="video/mp4">
+        <img src="/screenshot.png" width="1400" height="900" decoding="async"
+             alt="The teamree window: a sidebar listing three worktrees, each with its panes and a coloured status dot, beside two split terminals — one showing a change being applied, one showing the test suite that disagrees with it.">
+      </video>
     </div>
-    <figure class="shot">
-      <!-- The media slot. The frame reserves 1400x900 and both the <video> and
-           the <img> inside it fill it absolutely, so replacing one with the
-           other reflows nothing. The <img> is the fallback a browser that plays
-           neither source lands on, which is why it carries its own alt text.
-
-           BOTH the clip and that still were captured before 0.2.0 and look it:
-           the window in them is the old slate ground rather than the absolute
-           black teamree now ships, the status rail reads "Runtime ready 0.1.2",
-           the teamwork panel is the one that did not ask which end you were on,
-           and a watched pane is still the corner card it stopped being. They
-           want retaking on a Mac; nothing here has to change when they are.
-
-           The width/height are the clip's real intrinsic size read off the
-           decoded video (videoWidth is 1281), 0.4% off the 1400x900 the box
-           reserves, which object-fit:cover absorbs. This frame is deliberately
-           not one of the four that site/tools/sync-demos.mjs reconciles and
-           carries no `demo:video:parked` marker. -->
-      <div class="shot-frame" data-media="tour">
-        <video width="1281" height="820" muted loop playsinline preload="metadata" controls
-               poster="/demos/showcase.jpg"
-               aria-label="Screen capture: a tour of teamree — three worktrees each on their own branch, the panes in them and what each one is doing, the teamree command driving the window, and a teammate's worktree arriving over an encrypted session.">
-          <source src="/demos/showcase.webm" type="video/webm">
-          <source src="/demos/showcase.mp4" type="video/mp4">
-          <img src="/screenshot.png" width="1400" height="900" decoding="async"
-               alt="The teamree window: a sidebar listing three worktrees, each with its panes and a coloured status dot, beside two split terminals — one showing a change being applied, one showing the test suite that disagrees with it.">
-        </video>
-      </div>
-      <figcaption class="shot-cap">A tour: three worktrees, the panes in them, and a teammate joining.</figcaption>
-    </figure>
-  </div>
-</section>
+  </figure>
+</div>
 
 <!-- demo-sections:start — the width/height on each <video> and the aspect ratio
      in .demo-frame::before come from public/demos/manifest.json. Run
@@ -507,40 +398,17 @@ pre[tabindex]{ scrollbar-gutter:stable; }
      ranges: a metadata preload cannot be a partial fetch there. Nothing is
      fetched until a clip is scrolled to; the poster covers the gap, and the
      width/height attributes mean the layout never waited on the metadata. -->
-<section id="what">
-  <div class="wrap row">
-    <div class="rail"><h2>Start five things at once. Keep five checkouts apart.</h2></div>
-    <div class="pane">
-      <div class="prose">
-        <p>
-          Add a repository, then start a worktree from any point in its history. Each is its own
-          checkout on its own branch: five attempts at the same task never see each other&rsquo;s
-          files, and abandoning one is deleting a directory, not unpicking a commit.
-        </p>
-        <ul>
-          <li>Start from a base ref, a local branch, a tag, a commit or a remote branch</li>
-          <li>Created in the background, with progress and a recoverable failure</li>
-          <li>Listed against real git state, not against what teamree last remembered</li>
-          <li>Delete the worktree, and its branch with it if you say so</li>
-        </ul>
-        <p>
-          Status per worktree comes from watching the checkout, not polling it: an edit an agent
-          makes ten minutes into a shell session moves the chips immediately. A panel shows the
-          changed paths and the patch for any of them.
-        </p>
-        <p>
-          See what changed, tick what should go in, commit it, and check whether the branch would
-          merge into its base, answered in memory. Push when it is ready. There is no force push
-          and no flag to ask for one.
-        </p>
-      </div>
-      <figure class="demo-figure">
-        <div class="demo-frame" data-demo="worktrees">
-          <div class="demo-pending" aria-hidden="true">
-            <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
-            <span>worktrees</span>
-          </div>
-          <!-- demo:video:parked
+<section id="features">
+  <div class="wrap">
+    <ul class="features">
+      <li class="feature">
+        <figure class="demo-figure">
+          <div class="demo-frame" data-demo="worktrees">
+            <div class="demo-pending" aria-hidden="true">
+              <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
+              <span>worktrees</span>
+            </div>
+            <!-- demo:video:parked
 <video width="1600" height="1000" muted loop playsinline preload="none" controls
                poster="/demos/worktrees.jpg"
                aria-label="Screen capture: starting three parallel tasks in teamree, each in its own git worktree.">
@@ -548,50 +416,20 @@ pre[tabindex]{ scrollbar-gutter:stable; }
           <source src="/demos/worktrees.mp4" type="video/mp4">
         </video>
 demo:video:parked -->
-        </div>
-        <figcaption class="demo-cap">Starting parallel tasks, each in its own git worktree.</figcaption>
-      </figure>
-    </div>
-  </div>
-</section>
-
-<section id="terminals">
-  <div class="wrap row">
-    <div class="rail"><h2>Split the pane. Run the work side by side.</h2></div>
-    <div class="pane">
-      <div class="prose">
-        <p>
-          Arbitrarily nested, resizable panes per worktree, with a real PTY behind each one. At
-          startup teamree looks on your PATH for the agents it knows how to resume &mdash;
-          <code>claude</code>, <code>codex</code>, <code>gemini</code>, <code>opencode</code> and
-          <code>droid</code> &mdash; and offers what it finds; anything else you type into a pane
-          yourself.
-        </p>
-        <p>
-          One view lists every pane in every worktree, ordered by what would make you look:
-          failures first, then work in progress, then waiting, then finished &mdash; and within
-          each, the one that has been silent longest. Counts per state sit above it, and a row
-          takes you to that pane.
-        </p>
-        <p>
-          Quitting kills every shell. A pane running a coding agent returns with its conversation
-          resumed; an ordinary pane returns as a shell in the same directory, and its command is
-          never re-run.
-        </p>
-        <p>
-          The window is absolute black by default, and every colour in it is yours: four presets,
-          forty-two colours you can edit, and a legibility pass over whatever you build, so an
-          editor this open cannot leave teamree unreadable. Terminals follow the window, all
-          sixteen ANSI colours with them.
-        </p>
-      </div>
-      <figure class="demo-figure">
-        <div class="demo-frame" data-demo="terminals">
-          <div class="demo-pending" aria-hidden="true">
-            <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
-            <span>terminals</span>
           </div>
-          <!-- demo:video:parked
+          <figcaption class="demo-cap">Starting parallel tasks, each in its own git worktree.</figcaption>
+        </figure>
+        <h3>One worktree per task</h3>
+        <p>Start from any ref. Attempts never see each other&rsquo;s files; abandoning one is deleting a directory.</p>
+      </li>
+      <li class="feature">
+        <figure class="demo-figure">
+          <div class="demo-frame" data-demo="terminals">
+            <div class="demo-pending" aria-hidden="true">
+              <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
+              <span>terminals</span>
+            </div>
+            <!-- demo:video:parked
 <video width="1600" height="1000" muted loop playsinline preload="none" controls
                poster="/demos/terminals.jpg"
                aria-label="Screen capture: splitting a terminal in teamree and running two commands side by side.">
@@ -599,43 +437,20 @@ demo:video:parked -->
           <source src="/demos/terminals.mp4" type="video/mp4">
         </video>
 demo:video:parked -->
-        </div>
-        <figcaption class="demo-cap">Splitting terminals and running work side by side.</figcaption>
-      </figure>
-    </div>
-  </div>
-</section>
-
-<section id="cli">
-  <div class="wrap row">
-    <div class="rail"><h2>A surface an agent can hold.</h2></div>
-    <div class="pane">
-      <div class="prose">
-        <p>
-          <code>teamree</code> talks to the running app over a local socket, so an agent can
-          create a worktree, open a terminal, run a command and read the output back. The window
-          reflects all of it live.
-        </p>
-        <p>
-          Every command takes <code>--json</code> and emits exactly one JSON document on stdout,
-          with errors on stderr and exit codes: 0 success, 1 the command failed, 2 you typed it
-          wrong, 3 nothing is running to talk to. If the app is not running it says so and exits
-          3, rather than hanging.
-        </p>
-      </div>
-      <div class="cmd">
-<pre tabindex="0" role="region" aria-label="Example teamree CLI commands. Scrolls horizontally."><code><span class="tok-p">teamree</span> worktree create <span class="tok-f">--project</span> app <span class="tok-f">--name</span> <span class="tok-s">"fix login"</span>
-<span class="tok-p">teamree</span> worktree wait fix-login
-<span class="tok-p">teamree</span> terminal run <span class="tok-f">--worktree</span> fix-login <span class="tok-f">--command</span> <span class="tok-s">"npm test"</span>
-<span class="tok-p">teamree</span> worktree changes fix-login <span class="tok-f">--json</span></code></pre>
-      </div>
-      <figure class="demo-figure">
-        <div class="demo-frame" data-demo="cli">
-          <div class="demo-pending" aria-hidden="true">
-            <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
-            <span>cli</span>
           </div>
-          <!-- demo:video:parked
+          <figcaption class="demo-cap">Splitting terminals and running work side by side.</figcaption>
+        </figure>
+        <h3>Split terminals</h3>
+        <p>Nested, resizable panes, a real PTY in each. Finds <code>claude</code>, <code>codex</code>, <code>gemini</code>, <code>opencode</code> and <code>droid</code> on your PATH.</p>
+      </li>
+      <li class="feature">
+        <figure class="demo-figure">
+          <div class="demo-frame" data-demo="cli">
+            <div class="demo-pending" aria-hidden="true">
+              <svg viewBox="0 0 64 64" focusable="false"><use href="#mark"/></svg>
+              <span>cli</span>
+            </div>
+            <!-- demo:video:parked
 <video width="1600" height="1000" muted loop playsinline preload="none" controls
                poster="/demos/cli.jpg"
                aria-label="Screen capture: a coding agent driving teamree through the teamree command line, with the window updating as it goes.">
@@ -643,83 +458,25 @@ demo:video:parked -->
           <source src="/demos/cli.mp4" type="video/mp4">
         </video>
 demo:video:parked -->
-        </div>
-        <figcaption class="demo-cap">An agent driving the app through the teamree CLI.</figcaption>
-      </figure>
-    </div>
+          </div>
+          <figcaption class="demo-cap">An agent driving the app through the teamree CLI.</figcaption>
+        </figure>
+        <h3>A CLI agents can drive</h3>
+        <p>Create worktrees, run commands and read output over a local socket. Every command takes <code>--json</code>.</p>
+      </li>
+      <li class="feature">
+        <h3>Status per pane</h3>
+        <p>Working, waiting, finished or failed, read off the PTY. One view lists every pane, failures first.</p>
+      </li>
+    </ul>
   </div>
 </section>
 
 <section id="teamwork">
-  <div class="wrap row">
-    <div class="rail"><h2>Watch a teammate&rsquo;s pane. Ask to answer the prompt it is stuck on.</h2></div>
+  <div class="wrap row team">
+    <h2>Teamwork</h2>
     <div class="pane">
-      <div class="prose">
-        <p>
-          A teammate&rsquo;s worktrees appear in your sidebar, and one of their panes opens as a
-          pane of your own &mdash; beside your work rather than floating over it, moved, resized
-          and closed like any other. You can read what a pane is doing and type into it; what you
-          type runs when its owner allows it.
-        </p>
-        <p>
-          <strong>Adding a teammate&rsquo;s key lets them ask to run commands on your machine, as
-          you.</strong> Their keystrokes are held until you have been shown who is asking, which
-          pane, and the bytes themselves &mdash; then you allow them once, for the session, from
-          now on in that pane, or not at all. Anything nobody answers expires, and they are told
-          so. None of it can be used invisibly: the pane says it is being watched and by whom,
-          typing is attributed live, and every remote write is recorded on your machine with who
-          and when. Mute is instant and yours, and answers the question before it is asked.
-        </p>
-        <p>
-          Be plain about what the prompt is: a guard against accident and inattention &mdash; a
-          paste into the wrong window, an answer to a question the pane has already moved past
-          &mdash; and not a boundary against somebody who means you harm, who can be allowed once,
-          legitimately, and then type anything. Add the keys of people you would hand an unlocked
-          laptop to.
-        </p>
-        <p>
-          Every guard sits at the owner&rsquo;s end: their machine refuses unless your key is on
-          the roster, refuses outright when they have muted the pane, holds the keystroke until
-          they have read it and allowed it, caps one write, and records who typed how much into
-          which pane in a log that survives a restart.
-        </p>
-        <p>
-          <strong>Built, not weathered.</strong> All five stages have landed &mdash; identity, the
-          relay and presence, watching a pane, typing into one, staleness. Two Macs in two places
-          is the one thing still untested.
-        </p>
-        <p><strong>What it takes to set up.</strong> None of it is inside the app alone:</p>
-        <ul>
-          <li>A git repository you can both push to, cloned by each of you, with an <code>origin</code> remote &mdash; push access <em>is</em> membership</li>
-          <li>A relay your team deploys, its <code>wss://</code> URL committed to <code>.teamree/relay</code></li>
-          <li>Each person&rsquo;s public key committed to <code>.teamree/members/&lt;handle&gt;.pub</code> <em>and pushed</em> &mdash; written is not enough</li>
-          <li>Node 20 or newer, a Cloudflare account and one browser sign-in, on whichever machine deploys the relay</li>
-        </ul>
-        <p>
-          Both machines dial out to a small relay that splices their connections together and is
-          never trusted with what crosses it. A team runs its own, as a Cloudflare Worker; the
-          installed app carries it, so deploying is one command from any directory, with no clone
-          of the repository.
-        </p>
-        <p>
-          <a href="https://github.com/zero-abd/teamree/blob/main/docs/trying-teamwork.md" rel="noopener">Trying teamwork</a>
-          is the walkthrough in order, with what you should see after each step.
-        </p>
-      </div>
-      <div class="cmd">
-<pre tabindex="0" role="region" aria-label="Example teamree team commands. Scrolls horizontally."><code><span class="tok-p">teamree</span> team status app          <span class="tok-c"># on? who is connected? which relay?</span>
-<span class="tok-p">teamree</span> team members app         <span class="tok-c"># the roster, as the repository records it</span>
-<span class="tok-p">teamree</span> team watch app ana <span class="tok-f">--follow</span>
-<span class="tok-p">teamree</span> team type app ana <span class="tok-f">--text</span> y <span class="tok-f">--enter</span>
-<span class="tok-p">teamree</span> team requests app        <span class="tok-c"># keystrokes held, waiting on your word</span>
-<span class="tok-p">teamree</span> team allow ask_3         <span class="tok-c"># the answer, from a machine nobody is at</span>
-<span class="tok-p">teamree</span> team write-log            <span class="tok-c"># every remote keystroke, kept</span></code></pre>
-      </div>
-      <div class="cmd has-copy">
-        <pre tabindex="0" role="region" aria-label="Command to deploy the relay. Scrolls horizontally."><code id="cmd-relay">/Applications/teamree.app/Contents/Resources/relay/teamree-relay deploy</code></pre>
-        <button class="cmd-copy" type="button" data-copy="cmd-relay"
-                data-what="the relay deploy command" aria-label="Copy the relay deploy command">Copy</button>
-      </div>
+      <p>Add a teammate&rsquo;s key and they can watch your panes and ask to type; keystrokes run only when you allow them. <a href="https://github.com/zero-abd/teamree/blob/main/docs/trying-teamwork.md" rel="noopener">Trying teamwork</a> is the walkthrough.</p>
       <figure class="demo-figure">
         <div class="demo-frame" data-demo="teamwork">
           <div class="demo-pending" aria-hidden="true">
@@ -741,155 +498,21 @@ demo:video:parked -->
   </div>
 </section>
 
-<section id="start">
-  <div class="wrap row">
-    <div class="rail">
-      <h2>Download, clear one flag, open it.</h2>
-      <p class="status">teamree is signed ad-hoc, not with a Developer ID, so macOS asks once.</p>
-    </div>
-    <div class="pane">
-      <ol class="steps">
-        <li>
-          <div>
-            <h3>Drag it to Applications</h3>
-            <p>One universal <code>.dmg</code>. There is an Applications shortcut in the window to drag onto, and no licence to agree to. macOS 12 or later.</p>
-          </div>
-        </li>
-        <li>
-          <div>
-            <h3>Open it once, press Done</h3>
-            <p>macOS refuses the first launch with a dialog whose two buttons are Move to Trash and Done. <strong>Do not press Move to Trash</strong> &mdash; it is the prominent button and it deletes the app you just downloaded.</p>
-          </div>
-        </li>
-        <li>
-          <div>
-            <h3>Clear the quarantine flag</h3>
-            <p>Then open it normally. It will not ask again.</p>
-            <div class="cmd has-copy">
-              <pre tabindex="0" role="region" aria-label="Command to clear the quarantine flag. Scrolls horizontally."><code id="cmd-quarantine">xattr -dr com.apple.quarantine /Applications/teamree.app</code></pre>
-              <button class="cmd-copy" type="button" data-copy="cmd-quarantine"
-                      data-what="the quarantine command" aria-label="Copy the quarantine command">Copy</button>
-            </div>
-          </div>
-        </li>
-      </ol>
-      <p class="steps-after"><a href="#install">Why macOS says that, and what it does not mean</a></p>
-    </div>
-  </div>
-</section>
-
 <section id="install">
-  <div class="wrap row">
-    <div class="rail"><h2>First launch, and the one command it needs.</h2></div>
+  <div class="wrap row install">
+    <h2>Install</h2>
     <div class="pane">
-      <div class="prose">
-        <p>
-          teamree is signed ad-hoc, with no Developer ID behind it, so macOS has no way to tell
-          who built it. The first time you open it, macOS refuses with this dialog:
-        </p>
-        <figure class="dialog" role="group" aria-label="The macOS dialog, as it appears">
-          <svg viewBox="0 0 1024 1024" aria-hidden="true" focusable="false"><use href="#app-icon"/></svg>
-          <b>&ldquo;teamree&rdquo; Not Opened</b>
-          <p>Apple could not verify &ldquo;teamree&rdquo; is free of malware that may harm your Mac or compromise your privacy.</p>
-          <div class="buttons" aria-hidden="true"><span class="trash">Move to Trash</span><span class="done">Done</span></div>
-        </figure>
-        <div class="warn">
-          <p><strong>Do not press Move to Trash.</strong> It is the prominent button and it is the wrong one &mdash; it deletes the app you just downloaded. Press <b>Done</b>.</p>
-        </div>
-        <p>
-          Nothing has been found wrong with teamree. macOS has not examined it and detected
-          something; it is telling you the file arrived without a certificate naming who built it.
-          What the missing signature costs you is the guarantee that the file was not altered on
-          its way here, and a checksum gives you that by another route &mdash; which is why every
-          release publishes one.
-        </p>
-        <ol class="steps">
-          <li><div><h3>Open the <code>.dmg</code> and drag teamree to Applications.</h3></div></li>
-          <li><div><h3>Open it, get the dialog above, and press Done.</h3></div></li>
-          <li>
-            <div>
-              <h3>Clear the quarantine flag, once.</h3>
-              <p>Every file a browser downloads is marked with <code>com.apple.quarantine</code>; removing it tells macOS this is a file you put there on purpose.</p>
-              <div class="cmd has-copy">
-                <pre tabindex="0" role="region" aria-label="Command to clear the quarantine flag, repeated here in the full instructions. Scrolls horizontally."><code id="cmd-xattr">xattr -dr com.apple.quarantine /Applications/teamree.app</code></pre>
-                <button class="cmd-copy" type="button" data-copy="cmd-xattr"
-                        data-what="the quarantine command, from the full instructions"
-                        aria-label="Copy the quarantine command, from the full instructions">Copy</button>
-              </div>
-            </div>
-          </li>
-          <li><div><h3>Open it normally.</h3><p>It will not ask again.</p></div></li>
-        </ol>
-        <p>
-          <strong>There is no &ldquo;Open Anyway&rdquo; button in that dialog.</strong> Through macOS 14
-          you could Control-click the app and choose Open; macOS 15 removed that, and on 15 and
-          later &mdash; macOS 26 included &mdash; the dialog offers no way through at all. If you
-          would rather not type a command, the button does exist elsewhere: after pressing Done,
-          go to <b>System Settings &rarr; Privacy &amp; Security</b> and scroll to the Security
-          section, where a line naming teamree appears with <b>Open Anyway</b> beside it. Expect
-          it to ask for your password or Touch ID.
-        </p>
-        <p class="aside">
-          Being exact about that last paragraph, because the rest of this was written from
-          watching a real download install itself: the command above was run against this build
-          and watched to work, the dialog is quoted off the screen, and <b>Done</b> was pressed
-          on it and dismissed it. The System Settings route was not clicked through.
-          <code>Open Anyway</code> is the button macOS ships for this case, but nobody here has
-          confirmed how that pane looks on macOS 26 with teamree in it. If you take that route
-          and it does not match, the command is the one that was tested.
-        </p>
-        <p>
-          <strong>Two silences that look like something worse than they are.</strong> Before you clear
-          the flag, <code>open teamree.app</code> from a terminal prints nothing and exits 0,
-          and the app still does not start. The bundled <code>teamree</code> CLI is killed
-          outright &mdash; no stdout, no stderr, exit status 137. Neither is a broken build; both
-          are this.
-        </p>
-        <p>
-          <strong>And one thing that will look like failure afterwards.</strong>
-          <code>spctl -a -vv</code> says <code>rejected</code> before you clear quarantine and
-          after. Clearing the attribute removes what makes macOS enforce the check; it does not
-          give the app a signature, and nothing short of a Developer ID will make
-          <code>spctl</code> say <code>accepted</code>. The app opens regardless. If you went
-          looking for a way to confirm the fix worked, open the app &mdash; do not ask
-          <code>spctl</code>.
-        </p>
-        <p>
-          <strong>Check the download against the release.</strong> Compare the output of this
-          against <code>SHA256SUMS.txt</code>, published beside the <code>.dmg</code> on the
-          release page. If they agree, the file you have is the file the build produced. It
-          lists the same digest twice, once under the release&rsquo;s versioned file name and
-          once under the name you downloaded: one image, published under both.
-        </p>
-        <div class="cmd has-copy">
-          <pre tabindex="0" role="region" aria-label="Command to check the download&#39;s checksum. Scrolls horizontally."><code id="cmd-sum">shasum -a 256 teamree-mac-universal.dmg</code></pre>
-          <button class="cmd-copy" type="button" data-copy="cmd-sum"
-                  data-what="the checksum command" aria-label="Copy the checksum command">Copy</button>
-        </div>
-        <p class="aside">
-          The macOS builds <em>are</em> signed, but only ad-hoc &mdash; a signature with no identity
-          attached, which is the floor Apple Silicon needs to execute a binary at all. It is not
-          a Developer ID, it is not notarised, and the <code>.dmg</code> itself is not signed at
-          all. The full account, including what <code>codesign</code> prints if you check, is in
-          <a href="https://github.com/zero-abd/teamree/blob/main/docs/install.md" rel="noopener">docs/install.md</a>.
-        </p>
+      <p>Free, macOS 12 or later, signed ad-hoc. macOS refuses the first launch: press <b>Done</b>, not Move to Trash, then clear the flag.</p>
+      <div class="cmd has-copy">
+        <pre tabindex="0" role="region" aria-label="Command to clear the quarantine flag. Scrolls horizontally."><code id="cmd-quarantine">xattr -dr com.apple.quarantine /Applications/teamree.app</code></pre>
+        <button class="cmd-copy" type="button" data-copy="cmd-quarantine" data-what="the quarantine command" aria-label="Copy the quarantine command">Copy</button>
       </div>
-    </div>
-  </div>
-</section>
-
-<section id="get" class="get">
-  <div class="wrap row">
-    <div class="rail"><h2>One file, one drag, one command.</h2></div>
-    <div class="pane">
-      <div class="cta">
-        <a class="btn" href="https://github.com/zero-abd/teamree/releases/latest/download/teamree-mac-universal.dmg">
-          <svg class="apple" aria-hidden="true" focusable="false"><use href="#apple"/></svg>
-          <span class="stack">Download for macOS<small>Universal, Apple Silicon and Intel</small></span>
-        </a>
-        <a class="btn-2" href="https://github.com/zero-abd/teamree/releases/latest" rel="noopener">Release notes and checksums</a>
+      <p>Check the download against <code>SHA256SUMS.txt</code> on the release page.</p>
+      <div class="cmd has-copy">
+        <pre tabindex="0" role="region" aria-label="Command to check the download&#39;s checksum. Scrolls horizontally."><code id="cmd-sum">shasum -a 256 teamree-mac-universal.dmg</code></pre>
+        <button class="cmd-copy" type="button" data-copy="cmd-sum" data-what="the checksum command" aria-label="Copy the checksum command">Copy</button>
       </div>
-      <p class="hero-note">Then <code>xattr -dr com.apple.quarantine /Applications/teamree.app</code> &mdash; <a href="#install">why</a>.</p>
+      <p class="note">Why macOS asks, and what it does not mean: <a href="https://github.com/zero-abd/teamree/blob/main/docs/install.md" rel="noopener">docs/install.md</a>.</p>
     </div>
   </div>
 </section>
@@ -911,10 +534,7 @@ demo:video:parked -->
         <a href="https://github.com/zero-abd/teamree/blob/main/ROADMAP.md" rel="noopener">Roadmap</a>
       </nav>
     </div>
-    <p class="footer-note">
-      An ADE built for teamwork. The source is on GitHub, and so is an honest account
-      of what has and has not been run.
-    </p>
+    <p class="footer-note">An ADE built for teamwork.</p>
   </div>
 </footer>
 
