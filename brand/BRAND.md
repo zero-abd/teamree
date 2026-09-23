@@ -166,7 +166,7 @@ Sections, in order, six at most:
    as its poster; the frame never resizes when a clip swaps in.
 2. **A worktree per task.** h2, one line: `Start from any ref. Attempts never
    see each other's files; abandoning one is deleting a directory.` Clip slot
-   `data-demo="every-pane"`. A second row, media on the left, h3 `Changes open
+   `data-demo="open-anything"`. A second row, media on the left, h3 `Changes open
    beside panes`: `The diff opens beside the panes. Stage or discard a hunk,
    commit, publish the branch, then open its review on the forge.` Clip slot
    `data-demo="review-and-ship"`.
@@ -174,7 +174,7 @@ Sections, in order, six at most:
    read off the PTY. One view lists every pane, failures first.` Beside it the
    four dots with their words, in the app's colours. Then: `Split terminals,
    nested, a real PTY in each. Finds claude, codex, gemini, opencode and droid on
-   your PATH.` Clip slot `data-demo="waiting-on-you"`. A second row, media on
+   your PATH.` Clip slot `data-demo="every-pane"`. A second row, media on
    the left, h3 `Pane history survives relaunch`: `Quit and relaunch: file tabs
    and shell scrollback come back, each shell starts fresh, and an agent with a
    conversation resumes it.` Clip slot `data-demo="pick-it-back-up"`.

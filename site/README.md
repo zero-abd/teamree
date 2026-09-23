@@ -42,18 +42,16 @@ sh site/og/render.sh        # needs Google Chrome; CHROME=/path/to/chrome to ove
 
 ## The feature clips
 
-Six short screen captures of the real application: `new-task` in the hero,
-`every-pane` and `review-and-ship` under "A worktree per task",
-`waiting-on-you` and `pick-it-back-up` under "A state per pane". `open-anything`
-(⌘P opening a code file, a markdown page and an image) is shot and listed but
-has no frame on the page, which `sync-demos.mjs` reports and otherwise leaves
-alone. `waiting-on-you` is from the 0.2.0 package; the other five were shot from
-a `main` build in a hidden window on a throwaway profile, against a small demo
-repository with a local bare remote, driven over CDP and recorded with
+Five short screen captures of the real application: `new-task` in the hero,
+`open-anything` and `review-and-ship` under "A worktree per task", `every-pane`
+and `pick-it-back-up` under "A state per pane". They were shot from a `main`
+build in a hidden window on a throwaway profile, against a small demo repository
+with a local bare remote, driven over CDP and recorded with
 `Page.startScreencast`. Their agent panes run the real `claude` and `codex`; the
 other panes are plain shells playing scripted output. Each ships as `<id>.mp4`
-(H.264, 1728x1080, no audio, 13-15 s, under 2 MB) and an `<id>.jpg` poster, listed in
-`public/demos/manifest.json` with a width, a height, a title and a caption.
+(H.264, 1728x1080, no audio, 13-15 s, under 2 MB) and an `<id>.jpg` poster,
+listed in `public/demos/manifest.json` with a width, a height, a title and a
+caption.
 `sync-demos.mjs` finds each by the `data-demo` id on its frame, un-parks its
 `<video>`, and writes the size and the caption from the manifest; a frame whose
 id is not in the manifest — `cli`, and `teamwork`, which needs two machines to
