@@ -31,18 +31,17 @@ describe('mergeBadge', () => {
 
   // Two branches git cannot tell apart — one whose work is all in the base, and
   // one that never did any — must not be labelled as though it could, or
-  // somebody deletes a worktree they had not finished with.
-  it('says there are no commits, and never says "merged"', () => {
-    const badge = mergeBadge(preview({ state: 'nothingToMerge', ahead: 0 }))
-    expect(badge?.label).toBe('no commits')
-    expect(badge?.label).not.toContain('merged')
-    expect(badge?.tone).toBe('spent')
+  // somebody deletes a worktree they had not finished with. So nothing is said:
+  // every fresh worktree is in this state, and a chip on every row is a chip
+  // on no row.
+  it('says nothing at all when there is nothing to merge', () => {
+    expect(mergeBadge(preview({ state: 'nothingToMerge', ahead: 0 }))).toBeNull()
   })
 
   // It shares a sidebar row with the worktree's name, which is the thing
   // somebody is actually reading.
   it('keeps every label short enough to sit beside a name', () => {
-    const states = ['nothingToMerge', 'clean', 'unrelated', 'unavailable'] as const
+    const states = ['clean', 'unrelated', 'unavailable'] as const
     for (const state of states) {
       expect(mergeBadge(preview({ state }))?.label.length, state).toBeLessThanOrEqual(12)
     }

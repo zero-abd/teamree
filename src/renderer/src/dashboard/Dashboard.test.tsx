@@ -28,10 +28,8 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { Dashboard } = await import('./Dashboard')
-const { resolvePlatformModifier } = await import('../keyboard/platformModifier')
 
 const INITIAL = useWorkspaceStore.getState()
-const MODIFIER = resolvePlatformModifier('darwin')
 
 const toggleDashboard = vi.fn()
 
@@ -100,14 +98,14 @@ beforeEach(() => {
 
 describe('leaving the board', () => {
   it('closes on Escape, which is what a reader tries first', () => {
-    render(<Dashboard modifier={MODIFIER} />)
+    render(<Dashboard />)
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(toggleDashboard).toHaveBeenCalledTimes(1)
   })
 
   it('stands aside while a dialog this window opened is on top of it', () => {
     seed({ dialog: { kind: 'palette' } })
-    render(<Dashboard modifier={MODIFIER} />)
+    render(<Dashboard />)
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(toggleDashboard).not.toHaveBeenCalled()
   })
@@ -119,7 +117,7 @@ describe('leaving the board', () => {
   // neither see through nor get out of without answering.
   it('stands aside for a question about a teammate’s keystrokes, which nobody here opened', () => {
     seed({ consent: { p1: ASKING } })
-    render(<Dashboard modifier={MODIFIER} />)
+    render(<Dashboard />)
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(toggleDashboard).not.toHaveBeenCalled()
   })
@@ -127,7 +125,7 @@ describe('leaving the board', () => {
 
 describe('where the keyboard lands', () => {
   it('puts the focus on the first row, which is both the answer and the way to it', () => {
-    render(<Dashboard modifier={MODIFIER} />)
+    render(<Dashboard />)
     const row = screen.getByRole('button', { name: /atlas/ })
     expect(document.activeElement).toBe(row)
   })
@@ -138,11 +136,16 @@ describe('where the keyboard lands', () => {
   // at all. This is the shape of every launch.
   it('lands on the first row that arrives after the board was already open', () => {
     seed({ worktrees: [], terminals: {} })
-    const view = render(<Dashboard modifier={MODIFIER} />)
+    const view = render(<Dashboard />)
     expect(screen.getByText('Nothing running')).toBeTruthy()
+    // The heading is the whole of it. "Open a terminal with ⌘T." under it was
+    // an instruction where a state belongs, and a fifth place teaching a chord.
+    expect(document.querySelector('.placeholder__body')).toBeNull()
+    expect(document.querySelector('.placeholder kbd')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Back to the panes' }).getAttribute('title')).toBe('Back to the panes')
 
     useWorkspaceStore.setState({ worktrees: [WORKTREE], terminals: { [PANE.id]: PANE } })
-    view.rerender(<Dashboard modifier={MODIFIER} />)
+    view.rerender(<Dashboard />)
 
     expect(document.activeElement).toBe(screen.getByRole('button', { name: /atlas/ }))
   })
@@ -165,7 +168,7 @@ describe('the unread filter', () => {
 
   it('hides the panes that have already been read', () => {
     seedTwo()
-    render(<Dashboard modifier={MODIFIER} />)
+    render(<Dashboard />)
     expect(screen.getByText('alpha')).toBeTruthy()
     expect(screen.getByText('beta')).toBeTruthy()
 
@@ -177,7 +180,7 @@ describe('the unread filter', () => {
 
   it('goes back to every pane when it is pressed again', () => {
     seedTwo()
-    render(<Dashboard modifier={MODIFIER} />)
+    render(<Dashboard />)
     const toggle = screen.getByRole('button', { name: 'Unread only' })
 
     fireEvent.click(toggle)

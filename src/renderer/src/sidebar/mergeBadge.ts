@@ -10,8 +10,8 @@ import type { WorktreeMergePreview } from '@shared/entities'
 export type MergeBadge = {
   /** What the row shows. */
   label: string
-  /** Drives the colour; neither `unknown` nor `spent` is a warning. */
-  tone: 'clean' | 'conflicts' | 'unknown' | 'spent'
+  /** Drives the colour; `unknown` is not a warning. */
+  tone: 'clean' | 'conflicts' | 'unknown'
   /** The full sentence, for the title attribute. */
   detail: string
 }
@@ -23,17 +23,13 @@ export function mergeBadge(preview: WorktreeMergePreview | undefined): MergeBadg
 
   switch (preview.state) {
     case 'nothingToMerge':
-      return {
-        // Short on purpose. This sits in a sidebar beside the worktree's name,
-        // and the name is what somebody is reading; the least important thing
-        // on the row must not be what pushes it out of view.
-        label: 'no commits',
-        tone: 'spent',
-        // Never "merged": a branch whose commits are all in the base and one
-        // that never made any are the same fact to git, and the row must not
-        // talk somebody into deleting a worktree they had not finished with.
-        detail: preview.reason ?? `Nothing here that ${preview.baseRef} does not already have.`
-      }
+      // Nothing, and on purpose. Every fresh worktree is in this state, so a
+      // chip here was a chip on every row, saying the one thing a row with no
+      // ahead count already says. And never "merged": a branch whose commits
+      // are all in the base and one that never made any are the same fact to
+      // git, and the row must not talk somebody into deleting a worktree they
+      // had not finished with.
+      return null
     case 'clean':
       return {
         label: 'merges',

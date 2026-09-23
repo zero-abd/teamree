@@ -12,8 +12,7 @@
 // runtime, so a pane keeps running and keeps its scrollback while this is up.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { PlatformModifier } from '../keyboard/platformModifier'
-import { shortcutHint } from '../keyboard/workspaceShortcuts'
+
 import { modalOnScreen } from '../dialogs/modalLayer'
 import { ACTIVITY_LABEL, ACTIVITY_NOUN, agoLabel, sinceLabel, truncateName } from '../sidebar/agentRows'
 import { useNow } from '../state/useNow'
@@ -21,7 +20,7 @@ import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { ACTIVITIES_BY_ATTENTION, activityCounts, dashboardRows } from './dashboardRows'
 
-export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
+export function Dashboard(): React.JSX.Element {
   const terminals = useWorkspaceStore((state) => state.terminals)
   const worktrees = useWorkspaceStore((state) => state.worktrees)
   const projects = useWorkspaceStore((state) => state.projects)
@@ -103,7 +102,7 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
           <h1 className="board__title">All panes</h1>
           <p className="board__lede">
             {shown.length === 0
-              ? 'No panes anywhere yet.'
+              ? 'No panes'
               : `${shown.length} pane${shown.length === 1 ? '' : 's'} across ${worktreeCount(shown)} worktree${
                   worktreeCount(shown) === 1 ? '' : 's'
                 }`}
@@ -137,7 +136,7 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
         <button
           type="button"
           className="board__close"
-          title={`Back to the panes · ${shortcutHint('open-dashboard', modifier)}`}
+          title="Back to the panes"
           aria-label="Back to the panes"
           onClick={toggleDashboard}
         >
@@ -148,9 +147,11 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
       </header>
 
       {shown.length === 0 ? (
+        /* The heading is the whole message. The sentence that used to follow
+           it — "Open a terminal with ⌘T." — was an instruction where a state
+           belongs, and one more place teaching a chord. */
         <div className="placeholder">
           <h2 className="placeholder__title">{unreadOnly && rows.length > 0 ? 'Nothing unread' : 'Nothing running'}</h2>
-          {unreadOnly && rows.length > 0 ? <p className="placeholder__body">Every pane has been read.</p> : null}
         </div>
       ) : (
         <ul className="board__list" ref={list}>
@@ -171,7 +172,7 @@ export function Dashboard({ modifier }: { modifier: PlatformModifier }): React.J
                   {unread.has(row.terminalId) ? <span className="pip" aria-hidden="true" /> : null}
                   <span className="board-row__label">{truncateName(row.label)}</span>
                   {/* An agent pane is named by its agent, so only a shell needs saying. */}
-                  {row.agent ? null : <span className="board-row__kind">shell</span>}
+                  {row.agent ? null : <span className="chip board-row__kind">shell</span>}
                 </span>
                 <span className="board-row__state">{ACTIVITY_NOUN[row.activity]}</span>
                 <span className="board-row__where">

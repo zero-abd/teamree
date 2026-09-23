@@ -660,14 +660,14 @@ describe('a checkout with no origin', () => {
 })
 
 describe('the button the project header sends people to', () => {
-  // The header's "Your key is not here" tooltip is the one sentence somebody
-  // reads when nothing is working, and it tells them which button to press. It
+  // The header's "no key" tooltip is the one sentence somebody reads when
+  // nothing is working, and it tells them which button to press. It
   // went on naming a Members dialog for as long as this panel has existed,
   // because this panel is what replaced it. Rendering the two together is what
   // keeps them from drifting apart again.
   it('is on this panel, under the name the tooltip gives it', () => {
     const summary = teamworkSummary(status({ enrolled: false }), Date.now())
-    expect(summary?.label).toBe('Your key is not here')
+    expect(summary?.label).toBe('no key')
     expect(summary?.detail).toContain(ADD_KEY_BUTTON)
     expect(text(render())).toContain(ADD_KEY_BUTTON)
   })

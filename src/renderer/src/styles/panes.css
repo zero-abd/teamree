@@ -120,17 +120,9 @@
   color: var(--fg-secondary);
 }
 
-.pane__dot {
-  width: 5px;
-  height: 5px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--success);
-}
-
-.pane__dot--stopped {
-  background: var(--fg-muted);
-}
+/* The dot on the bar is `.activity`, the sidebar's, with the sidebar's reading
+   of the same PTY — the bar used to draw its own, green or grey, which beside
+   a tab pulsing amber for the same pane was a second vocabulary. */
 
 .pane__title {
   overflow: hidden;
@@ -144,14 +136,9 @@
   color: var(--fg);
 }
 
+/* `exited`, and the code: the chip's own shape, on the bar's own ground. */
 .pane__exit {
-  flex: none;
-  padding: 0 6px;
-  border-radius: 999px;
   background: var(--bg-input);
-  color: var(--fg-muted);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
 }
 
 /* The one thing to do with a pane that has exited, beside the badge saying it
@@ -162,7 +149,7 @@
   flex: none;
   padding: 0 6px;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r1);
   background: transparent;
   color: var(--fg-secondary);
   font: inherit;
@@ -178,9 +165,10 @@
   color: var(--fg-muted);
 }
 
-/* The pane's size, which is the least urgent thing on its bar. Dimmed with a
-   colour rather than with opacity, so it lands on the palette's own floor
-   instead of underneath it — the bar is already the quietest text in the
+/* A watched pane's size — theirs, which a reader never changes, and the one
+   bar that still prints one. A local pane's grid is on its name's hover. Dimmed
+   with a colour rather than with opacity, so it lands on the palette's own
+   floor instead of underneath it — the bar is already the quietest text in the
    window, and a fraction of that is nothing at all. */
 .pane__meta {
   margin-left: auto;
@@ -296,17 +284,8 @@
 }
 
 /* Says how a pane got here after a restart, and only until the user types into
-   it — by then they know what they are looking at. */
-.pane__restored {
-  padding: 0 var(--s1);
-  flex: none;
-  border-radius: var(--r1);
-  background: var(--bg-press);
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-  letter-spacing: 0.03em;
-}
-
+   it — by then they know what they are looking at. The chip's own shape,
+   coloured only when an agent's session came back with it. */
 .pane__restored--agent {
   background: var(--accent-soft);
   color: var(--accent-bright);

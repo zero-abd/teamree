@@ -1,34 +1,6 @@
-/* Putting the CLI on PATH: the panel, and the one line in the sidebar that
-   offers it while there is anything to offer. */
-
-.sidebar__foot {
-  flex: none;
-  padding: var(--s2) var(--s4) var(--s4);
-  border-top: 1px solid var(--line);
-}
-
-.sidebar__cli {
-  width: 100%;
-  padding: var(--s2) var(--s3);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r2);
-  background: none;
-  color: var(--fg-secondary);
-  font: inherit;
-  font-size: var(--text-xs);
-  text-align: left;
-  cursor: pointer;
-}
-
-.sidebar__cli:hover {
-  border-color: var(--accent-line);
-  color: var(--accent-bright);
-}
-
-.sidebar__cli:focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
-}
+/* Putting the CLI on PATH: the panel. While there is anything to fix, the
+   sidebar says so with a mark on its Settings entry — `.rail__badge` in
+   sidebar.css — rather than with a line of its own. */
 
 .cli-install {
   display: flex;
@@ -98,9 +70,9 @@
 }
 
 /* The offer teamree makes by itself, once, on a machine where the command is
-   not linked yet. Bottom left, over the sidebar's foot, which is where the
-   quiet version of the same affordance lives afterwards — and the opposite
-   corner from the notices, so neither can cover the other. */
+   not linked yet. Bottom left, under the sidebar whose Settings entry carries
+   the quiet version of the same fact afterwards — and the opposite corner
+   from the notices, so neither can cover the other. */
 .cli-offer {
   position: fixed;
   bottom: 34px;

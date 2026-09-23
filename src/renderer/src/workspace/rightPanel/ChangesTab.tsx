@@ -266,15 +266,15 @@ export function withDraft(drafts: Record<string, string>, worktreeId: string, me
 /**
  * What an empty changes list means, which is three different things.
  *
- * "Nothing changed here yet" is a claim about the worktree, and it is the wrong
- * one to make when the base could not be compared against at all: an agent that
- * has just committed a day of work leaves exactly this screen behind, and the
- * sentence would tell somebody the work is gone.
+ * "No changes" is a claim about the worktree, and it is the wrong one to make
+ * when the base could not be compared against at all: an agent that has just
+ * committed a day of work leaves exactly this screen behind, and the words
+ * would tell somebody the work is gone.
  */
 export function emptyChangesLabel(log: WorktreeLog | undefined): string {
-  if (log?.unavailable !== undefined) return 'Nothing uncommitted here.'
-  if ((log?.commits.length ?? 0) > 0) return 'Everything here is committed.'
-  return 'Nothing changed here yet.'
+  if (log?.unavailable !== undefined) return 'Nothing uncommitted'
+  if ((log?.commits.length ?? 0) > 0) return 'All committed'
+  return 'No changes'
 }
 
 /** The path up to the file name, kept dim so the name itself reads first. */

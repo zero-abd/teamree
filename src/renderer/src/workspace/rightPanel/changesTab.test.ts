@@ -22,8 +22,8 @@ describe('emptyChangesLabel', () => {
   }
 
   it('separates a worktree that has committed from one that has not', () => {
-    expect(emptyChangesLabel(log({ commits: [commit] }))).toBe('Everything here is committed.')
-    expect(emptyChangesLabel(log({}))).toBe('Nothing changed here yet.')
+    expect(emptyChangesLabel(log({ commits: [commit] }))).toBe('All committed')
+    expect(emptyChangesLabel(log({}))).toBe('No changes')
   })
 
   // The screen an agent leaves behind the moment it commits. Claiming nothing
@@ -33,7 +33,7 @@ describe('emptyChangesLabel', () => {
     const text = emptyChangesLabel(log({ unavailable: 'base ref "origin/main" does not resolve' }))
 
     expect(text).not.toContain('Nothing changed')
-    expect(text).toBe('Nothing uncommitted here.')
+    expect(text).toBe('Nothing uncommitted')
   })
 })
 

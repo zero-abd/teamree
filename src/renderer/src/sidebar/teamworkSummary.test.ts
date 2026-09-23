@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PeerLink, TeamworkRead } from '@shared/entities'
 import { ADD_KEY_BUTTON } from '../teamwork/startTeamwork'
-import { teamworkSummary, TEAMWORK_BUTTON_LABEL } from './teamworkSummary'
+import { teamworkControlLabel, teamworkSummary, TEAMWORK_BUTTON_LABEL } from './teamworkSummary'
 
 function status(overrides: Partial<TeamworkRead> = {}): TeamworkRead {
   return {
@@ -54,17 +54,17 @@ describe('what the project header says about teamwork', () => {
 
   it('reads a project with no relay as something to set up, not something broken', () => {
     const summary = teamworkSummary(status({ disabledReason: 'no .teamree/relay in this project' }), NOW)
-    expect(summary).toMatchObject({ tone: 'off', label: 'Teamwork off' })
+    expect(summary).toMatchObject({ tone: 'off', label: 'off' })
     expect(summary?.detail).toContain('.teamree/relay')
   })
 
   it('distinguishes a relay it cannot reach from a teammate who is not connected', () => {
     const unreachable = teamworkSummary(status({ links: [link({ phase: 'unreachable' })] }), NOW)
-    expect(unreachable).toMatchObject({ tone: 'problem', label: 'Relay unreachable' })
+    expect(unreachable).toMatchObject({ tone: 'problem', label: 'relay unreachable' })
     // This one is somebody else's laptop, and saying "unreachable" would send
     // the reader to check their own network.
     const away = teamworkSummary(status({ links: [link({ phase: 'waiting' })] }), NOW)
-    expect(away).toMatchObject({ tone: 'pending', label: 'Nobody connected' })
+    expect(away).toMatchObject({ tone: 'pending', label: 'nobody connected' })
   })
 
   it('carries what a connecting link has to say, so a wake does not read as ordinary', () => {
@@ -79,7 +79,7 @@ describe('what the project header says about teamwork', () => {
       }),
       NOW
     )
-    expect(summary).toMatchObject({ tone: 'pending', label: 'Connecting…' })
+    expect(summary).toMatchObject({ tone: 'pending', label: 'connecting…' })
     expect(summary?.detail).toContain('this machine was asleep')
   })
 
@@ -123,7 +123,7 @@ describe('what the project header says about teamwork', () => {
       }),
       NOW
     )
-    expect(summary).toMatchObject({ tone: 'pending', label: 'Nobody connected' })
+    expect(summary).toMatchObject({ tone: 'pending', label: 'nobody connected' })
     expect(summary?.detail).toContain('marcus: nobody has answered on this rendezvous')
   })
 
@@ -142,7 +142,7 @@ describe('what the project header says about teamwork', () => {
       NOW
     )
     expect(summary?.tone).toBe('problem')
-    expect(summary?.label).toBe('Handshake failed')
+    expect(summary?.label).toBe('handshake failed')
     expect(summary?.detail).toContain('marcus')
   })
 
@@ -164,13 +164,13 @@ describe('what the project header says about teamwork', () => {
     expect(talking?.label).toBe('1 connected')
 
     const silent = teamworkSummary(status({ links: [link({ handle: 'priya', lastHeardAt: NOW - 245_000 })] }), NOW)
-    expect(silent).toMatchObject({ tone: 'live', label: '1 connected · last heard 4m ago' })
+    expect(silent).toMatchObject({ tone: 'live', label: '1 connected · silent 4m' })
     expect(silent?.detail).toContain('priya: connected, last heard 4m ago')
 
     // Rounded down, like every other age in this sidebar, so a silence is
     // never flattered into being shorter than it is.
     const nearly = teamworkSummary(status({ links: [link({ handle: 'priya', lastHeardAt: NOW - 299_000 })] }), NOW)
-    expect(nearly?.label).toBe('1 connected · last heard 4m ago')
+    expect(nearly?.label).toBe('1 connected · silent 4m')
 
     // The worst silence among the links that are up, beside the count of the
     // ones that are not — two different facts, and the header keeps both.
@@ -184,7 +184,7 @@ describe('what the project header says about teamwork', () => {
       }),
       NOW
     )
-    expect(mixed?.label).toBe('2 connected · 1 away · last heard 4m ago')
+    expect(mixed?.label).toBe('2 connected · 1 away · silent 4m')
   })
 
   it('names the one cause that is this machine, rather than blaming the teammate', () => {
@@ -196,7 +196,7 @@ describe('what the project header says about teamwork', () => {
       status({ enrolled: false, links: [link({ handle: 'ana', phase: 'waiting' })] }),
       NOW
     )
-    expect(summary).toMatchObject({ tone: 'off', label: 'Your key is not here' })
+    expect(summary).toMatchObject({ tone: 'off', label: 'no key' })
     expect(summary?.detail).toContain('.teamree/members')
     expect(summary?.detail).toContain('Add my key')
   })
@@ -218,14 +218,45 @@ describe('what the project header says about teamwork', () => {
       status({ enrolled: false, disabledReason: 'no .teamree/relay in this project' }),
       NOW
     )
-    expect(summary).toMatchObject({ tone: 'off', label: 'Teamwork off' })
+    expect(summary).toMatchObject({ tone: 'off', label: 'off' })
   })
 
   it('says an empty roster is an empty roster, not a connection problem', () => {
     expect(teamworkSummary(status({ links: [] }), NOW)).toMatchObject({
       tone: 'off',
-      label: 'No teammates'
+      label: 'no teammates'
     })
+  })
+
+  // The header has one control for teamwork, and its text is the state. Two
+  // things reading "Teamwork off" and "Teamwork" side by side were a chip and
+  // a button saying the same word to somebody who had to guess which to press.
+  it('folds the state into the control’s own label, and reads as the plain word until there is one', () => {
+    expect(teamworkControlLabel(null)).toBe(TEAMWORK_BUTTON_LABEL)
+    expect(teamworkControlLabel(teamworkSummary(status({ disabledReason: 'no relay' }), NOW))).toBe('Teamwork · off')
+    expect(teamworkControlLabel(teamworkSummary(status({ links: [link()] }), NOW))).toBe('Teamwork · 1 connected')
+  })
+
+  // A label is read at a glance beside a branch name; every one of them has
+  // to be a state, not a sentence.
+  it('keeps every label a lower-case state, never a sentence', () => {
+    const labels = [
+      teamworkSummary({ state: 'unread', projectId: 'p1', readAt: NOW }, NOW),
+      teamworkSummary(status({ disabledReason: 'no relay' }), NOW),
+      teamworkSummary(status({ enrolled: false }), NOW),
+      teamworkSummary(status({ links: [] }), NOW),
+      teamworkSummary(status({ links: [link({ phase: 'refused' })] }), NOW),
+      teamworkSummary(status({ links: [link({ phase: 'stopped' })] }), NOW),
+      teamworkSummary(status({ links: [link({ phase: 'unreachable' })] }), NOW),
+      teamworkSummary(status({ links: [link({ phase: 'waiting' })] }), NOW),
+      teamworkSummary(status({ links: [link({ phase: 'connecting' })] }), NOW),
+      teamworkSummary(status({ links: [link()] }), NOW)
+    ].map((summary) => summary?.label ?? '')
+    for (const label of labels) {
+      expect(label, label).toMatch(/^[a-z0-9]/)
+      expect(label, label).not.toMatch(/\.$/)
+      expect(label.length, label).toBeLessThanOrEqual(24)
+    }
   })
 
   it('names where the relay came from, because a surprising URL needs a source', () => {

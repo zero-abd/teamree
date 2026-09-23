@@ -159,6 +159,28 @@ kbd {
   font-size: var(--text-xs);
 }
 
+/* A chip: one or two words about a row, beside the thing they are about —
+   `creating`, `exited 1`, `2 conflicts`, `resumed`, `shell`. One rule for the
+   shape and the size, wherever the chip is, so the same kind of fact reads the
+   same way on a worktree row, a pane bar and a board row. A surface adds its
+   own class for the colour and nothing else: the radius and the type size are
+   what make five chips one kind of thing, and they used to be chosen five
+   times — 3px, 99px and 999px between them. */
+.chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  padding: 0 5px;
+  border-radius: var(--r1);
+  background: var(--bg-press);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  line-height: 15px;
+  white-space: nowrap;
+}
+
 .button--icon {
   width: 22px;
   height: 22px;

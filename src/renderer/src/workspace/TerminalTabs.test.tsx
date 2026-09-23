@@ -24,7 +24,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Layout, PaneNode, Terminal } from '@shared/entities'
-import { resolvePlatformModifier } from '../keyboard/platformModifier'
 import { leaf } from '../panes/paneLayout'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
@@ -81,8 +80,6 @@ const splitFocusedPane = vi.fn(async () => {})
 const renamePane = vi.fn(async () => {})
 const toggleSidebar = vi.fn()
 
-const MAC = resolvePlatformModifier('darwin')
-
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
     { ...INITIAL, focusPane, closeTerminal, createTerminal, splitFocusedPane, renamePane, toggleSidebar, ...overrides },
@@ -91,7 +88,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
 }
 
 const mount = (): void => {
-  render(<TerminalTabs modifier={MAC} />)
+  render(<TerminalTabs />)
 }
 
 /** The names on the strip, in the order it puts them. */
@@ -315,14 +312,21 @@ describe('the pane buttons at the end of the strip', () => {
     expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1')
   })
 
-  // They are icons, so the hover is the only thing that can name the chord that
-  // does the same job. Teaching it is the point: the buttons are for the first
-  // hour and the chord is for every hour after.
-  it('names the chord each one stands in for', () => {
+  // They are icons, so the hover names what they do — and only that. The
+  // chords are taught in the menu bar, in Help and in the palette; a fourth
+  // place was the strip explaining itself.
+  it('names what each one does on hover, and no chord', () => {
     onePane()
-    expect(screen.getByRole('button', { name: 'Split right' }).getAttribute('title')).toBe('Split right · ⌘D')
-    expect(screen.getByRole('button', { name: 'Split down' }).getAttribute('title')).toBe('Split down · ⌘⇧D')
-    expect(screen.getByRole('button', { name: 'New terminal' }).getAttribute('title')).toBe('New terminal · ⌘T')
+    expect(screen.getByRole('button', { name: 'Split right' }).getAttribute('title')).toBe('Split right')
+    expect(screen.getByRole('button', { name: 'Split down' }).getAttribute('title')).toBe('Split down')
+    expect(screen.getByRole('button', { name: 'New terminal' }).getAttribute('title')).toBe('New terminal')
+  })
+
+  it('carries no words of its own besides the tab names', () => {
+    onePane()
+    const strip = document.querySelector('.tabs') as HTMLElement
+    const words = Array.from(strip.querySelectorAll('button')).map((button) => button.textContent?.trim() ?? '')
+    expect(words.filter((text) => text.length > 0)).toEqual(['npm test'])
   })
 
   // An icon with no label is a button nothing on screen names, and a screen
@@ -446,7 +450,9 @@ describe('the way back to the sidebar', () => {
     seed({ sidebarVisible: false })
     mount()
     const show = screen.getByRole('button', { name: 'Show sidebar' })
-    expect(show.getAttribute('title')).toBe('Show sidebar · ⌘B')
+    expect(show.getAttribute('title')).toBe('Show sidebar')
+    expect(show.textContent).toBe('')
+    expect(show.querySelector('svg')).toBeTruthy()
     expect(show.parentElement?.classList.contains('tabs')).toBe(true)
     expect(show.parentElement?.firstElementChild).toBe(show)
     fireEvent.click(show)

@@ -119,7 +119,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
 }
 
 const mount = (): void => {
-  render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" />)
+  render(<Sidebar searchHint="⌘K" />)
 }
 
 beforeEach(() => {
@@ -149,7 +149,9 @@ describe('the sidebar’s own header', () => {
     expect(document.querySelector('.titlebar')).toBeNull()
   })
 
-  it('puts the sidebar away from its own header', () => {
+  // The chord is taught in the menu bar, in Help and in the palette; a hover
+  // is not a fourth place.
+  it('puts the sidebar away from its own header, without naming a chord', () => {
     mount()
     const hide = screen.getByRole('button', { name: 'Hide sidebar' })
     expect(hide.getAttribute('title')).toBe('Hide sidebar')
@@ -234,13 +236,21 @@ describe('a project header', () => {
     }
     seed({ teamwork: { p1: status } })
     mount()
-    const badge = screen.getByText('Teamwork off')
-    expect(badge.getAttribute('title')).toBe('no .teamree/relay in this project')
+    // One control, whose text is the state and whose hover is the reason. It
+    // used to be a chip reading "Teamwork off" beside a button reading
+    // "Teamwork", which is the same word twice and no way to tell which to press.
+    const control = screen.getByRole('button', { name: 'Teamwork · off in pager' })
+    expect(control.textContent).toBe('Teamwork · off')
+    expect(control.getAttribute('title')).toBe('no .teamree/relay in this project')
+    expect(control.classList.contains('project__teamwork--off')).toBe(true)
+    expect(screen.queryByText('Teamwork off')).toBeNull()
+    expect(document.querySelectorAll('.project__meta button')).toHaveLength(1)
   })
 
   it('says nothing about teamwork before anything has been read', () => {
     mount()
-    expect(screen.queryByText(/Teamwork off|No teammates|refused/)).toBeNull()
+    expect(screen.queryByText(/off|No teammates|refused/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Teamwork in pager' }).textContent).toBe('Teamwork')
   })
 
   // Named with the project, because the rail above the tree has an entry of
@@ -252,9 +262,19 @@ describe('a project header', () => {
     expect(openTeamwork).toHaveBeenCalledWith('p1')
   })
 
+  it('lays the base ref and the teamwork control out as the one row under the name', () => {
+    mount()
+    const meta = document.querySelector('.project__meta') as HTMLElement
+    expect(meta.firstElementChild?.textContent).toBe('origin/main')
+    expect(meta.lastElementChild).toBe(screen.getByRole('button', { name: 'Teamwork in pager' }))
+    expect(meta.children).toHaveLength(2)
+  })
+
   it('starts a new task in the project the button belongs to', () => {
     mount()
-    screen.getByRole('button', { name: 'New task in pager' }).click()
+    const add = screen.getByRole('button', { name: 'New task in pager' })
+    expect(add.getAttribute('title')).toBe('New task in pager')
+    add.click()
     expect(openDialog).toHaveBeenCalledWith({ kind: 'new-task', projectId: 'p1' })
   })
 })
@@ -320,13 +340,22 @@ describe('watching a teammate’s pane', () => {
   })
 })
 
-describe('the CLI offer', () => {
-  it('is absent while there is nothing to offer', () => {
+// The CLI is a Settings concern, and it used to be a red pill pinned to the
+// bottom of the sidebar for as long as the link was wrong — which on a machine
+// running from a checkout is always. Now it is a dot on the Settings entry: the
+// row that leads to the fix carries the mark, and nothing else in the sidebar
+// argues for itself.
+describe('the CLI mark on Settings', () => {
+  const badge = (): HTMLElement | null => document.querySelector('.rail__badge')
+
+  it('is absent while there is nothing to fix', () => {
     mount()
-    expect(screen.queryByRole('button', { name: 'Put teamree on my PATH' })).toBeNull()
+    expect(badge()).toBeNull()
+    expect(screen.queryByRole('button', { name: /PATH|teamree command/ })).toBeNull()
+    expect(document.querySelector('.sidebar__foot')).toBeNull()
   })
 
-  it('appears only while the CLI is not linked to this build, and opens the panel', () => {
+  it('marks the Settings entry while the CLI is not linked to this build, and says why on hover', () => {
     seed({
       cli: {
         installable: true,
@@ -343,13 +372,20 @@ describe('the CLI offer', () => {
         // never reports and tests a sentence nobody is ever shown.
         impermanent: null,
         onPath: 'environment'
-      }
+      },
+      toggleSettings
     })
     mount()
-    const offer = screen.getByRole('button', { name: 'Put teamree on my PATH' })
-    expect(offer.getAttribute('title')).toContain('/usr/local/bin/teamree')
-    offer.click()
-    expect(openDialog).toHaveBeenCalledWith({ kind: 'install-cli' })
+    const mark = badge()
+    expect(mark).toBeTruthy()
+    expect(mark?.getAttribute('title')).toContain('/usr/local/bin/teamree')
+    expect(mark?.getAttribute('aria-label')).toBe('Put teamree on my PATH')
+    // Inside the Settings entry, so pressing the mark is pressing Settings.
+    const settings = screen.getByRole('button', { name: /Settings/ })
+    expect(settings.contains(mark)).toBe(true)
+    expect(document.querySelector('.sidebar__foot')).toBeNull()
+    act(() => settings.click())
+    expect(toggleSettings).toHaveBeenCalled()
   })
 
   it('goes as soon as it is linked', () => {
@@ -363,7 +399,7 @@ describe('the CLI offer', () => {
       }
     })
     mount()
-    expect(screen.queryByRole('button', { name: 'Put teamree on my PATH' })).toBeNull()
+    expect(badge()).toBeNull()
   })
 })
 
@@ -421,7 +457,7 @@ describe('the rail above the tree', () => {
     mount()
     const teamwork = screen.getByRole('button', { name: 'Teamwork' }) as HTMLButtonElement
     expect(teamwork.disabled).toBe(true)
-    expect(teamwork.getAttribute('title')).toBe('Teamwork is set up per repository, and there is none here yet.')
+    expect(teamwork.getAttribute('title')).toBe('No projects yet')
   })
 })
 
@@ -492,7 +528,7 @@ describe('the order the chords walk', () => {
       worktree({ id: 'w4', projectId: 'p2', name: 'four' })
     ]
     seed({ projects, worktrees })
-    const { container } = render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" />)
+    const { container } = render(<Sidebar searchHint="⌘K" />)
 
     const drawn = [...container.querySelectorAll('.worktree__name')].map((node) => node.textContent)
     expect(drawn).toEqual(['one', 'three', 'two', 'four'])

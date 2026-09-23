@@ -202,7 +202,7 @@ describe('a worktree that failed to be made', () => {
   // a rendering fault rather than as a job that did not finish.
   it('says something even when nothing said why', () => {
     mount({ worktree: worktree({ state: 'failed' }) })
-    expect(screen.getByText('Creation failed.')).toBeTruthy()
+    expect(screen.getByText('Creation failed')).toBeTruthy()
   })
 
   it('cannot be opened, because there is nothing to open', () => {

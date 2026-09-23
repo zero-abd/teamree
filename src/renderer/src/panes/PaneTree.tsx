@@ -4,7 +4,7 @@
 
 import type { PaneNode, Terminal } from '@shared/entities'
 import { freshAgentLabel } from '@shared/paneRestore'
-import { paneNames } from '../sidebar/agentRows'
+import { ACTIVITY_LABEL, activityOf, paneNames } from '../sidebar/agentRows'
 import { TerminalView } from '../terminal/TerminalView'
 import { collectTerminalIds } from './paneLayout'
 import { SplitFrame } from './SplitFrame'
@@ -24,7 +24,6 @@ export type PaneCallbacks = {
   onRelaunch: (terminalId: string) => void
   onResize: (path: number[], sizes: number[]) => void
   isAppChord: (event: KeyboardEvent) => boolean
-  closeHint: string
   /** The one pane showing the find bar, if any. */
   searchTerminalId: string | null
   searchToken: number
@@ -64,7 +63,6 @@ function PaneLeaf({
   onClose,
   onRelaunch,
   isAppChord,
-  closeHint,
   searchTerminalId,
   searchToken,
   onCloseSearch
@@ -77,14 +75,30 @@ function PaneLeaf({
   // One name per pane. The strip, this bar, the close button and the question
   // asked before closing all read it from the same rule.
   const name = names?.[terminalId] ?? terminal?.title ?? 'terminal'
+  // The same reading the sidebar row, the tab and the board give this pane.
+  // The bar used to draw a dot of its own — green for running, grey for
+  // exited — which beside a tab pulsing amber for the same pane was a second
+  // vocabulary for what one PTY is doing.
+  const activity = terminal === undefined ? null : activityOf(terminal)
+  // The grid is on the name's hover rather than on the bar. It is a fact about
+  // the PTY that nobody acts on, and it was the one thing every bar printed.
+  const hover = terminal === undefined ? name : `${name} · ${terminal.cols}×${terminal.rows}`
 
   return (
     <section className={`pane${focused ? ' pane--focused' : ''}${exited ? ' pane--exited' : ''}`} aria-label={name}>
       <header className="pane__bar">
-        <span className={`pane__dot${exited ? ' pane__dot--stopped' : ''}`} aria-hidden="true" />
-        <span className="pane__title">{name}</span>
+        <span
+          className={activity === null ? 'activity' : `activity activity--${activity}`}
+          title={activity === null ? undefined : ACTIVITY_LABEL[activity]}
+          aria-hidden="true"
+        />
+        <span className="pane__title" title={hover}>
+          {name}
+        </span>
         {exited ? (
-          <span className="pane__exit">exited{terminal?.exitCode === undefined ? '' : ` ${terminal.exitCode}`}</span>
+          <span className="chip pane__exit">
+            exited{terminal?.exitCode === undefined ? '' : ` ${terminal.exitCode}`}
+          </span>
         ) : null}
         {/* Beside the badge that says the pane is dead, because the next thing
             anybody does about a dead pane is this. An agent is named, since
@@ -95,15 +109,14 @@ function PaneLeaf({
           </button>
         ) : null}
         {terminal?.restored === undefined ? null : (
-          <span className={`pane__restored pane__restored--${terminal.restored}`} title={restoredTitle(terminal)}>
+          <span className={`chip pane__restored pane__restored--${terminal.restored}`} title={restoredTitle(terminal)}>
             {restoredBadge(terminal)}
           </span>
         )}
-        <span className="pane__meta">{terminal ? `${terminal.cols}×${terminal.rows}` : ''}</span>
         <button
           type="button"
           className="pane__close"
-          title={`Close pane · ${closeHint}`}
+          title="Close pane"
           aria-label={`Close pane ${name}`}
           onClick={() => onClose(terminalId)}
         >
