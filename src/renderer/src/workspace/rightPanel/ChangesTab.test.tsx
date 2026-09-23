@@ -21,7 +21,8 @@ vi.mock('../../runtimeClient/currentRuntimeClient', () => ({
 vi.mock('../../shell/openInBrowser', () => ({ openInBrowser: (url: string) => openInBrowser(url) }))
 
 const { useWorkspaceStore } = await import('../../state/workspaceStore')
-const { ChangesTab } = await import('./ChangesTab')
+const { ChangesTab, canDiscard } = await import('./ChangesTab')
+const { ConfirmDiscardDialog } = await import('../../dialogs/ConfirmDiscardDialog')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -171,5 +172,92 @@ describe('ticking every file', () => {
     expect(all).toHaveProperty('checked', true)
     expect(screen.getByText('2/2')).toBeTruthy()
     expect(screen.queryByText(/selected/)).toBeNull()
+  })
+})
+
+describe('discarding a file', () => {
+  const rows = [
+    { path: 'README.md', kind: 'modified' as const, staged: false, unstaged: true },
+    { path: 'src/new.ts', kind: 'untracked' as const, staged: false, unstaged: true },
+    { path: 'src/done.ts', kind: 'modified' as const, staged: true, unstaged: false }
+  ]
+
+  function withRows(): void {
+    seed()
+    useWorkspaceStore.setState({
+      changes: { w1: { worktreeId: 'w1', changes: rows, total: 3, limit: 500, truncated: false, readAt: 0 } }
+    })
+  }
+
+  /** The tab and whatever discard question it raised, as the app lays them out. */
+  function Tab(): React.JSX.Element {
+    const dialog = useWorkspaceStore((state) => state.dialog)
+    return (
+      <>
+        <ChangesTab />
+        {dialog?.kind === 'confirm-discard' ? <ConfirmDiscardDialog {...dialog} /> : null}
+      </>
+    )
+  }
+
+  it('asks, naming the file, and only then restores it', () => {
+    withRows()
+    render(<Tab />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard README.md…' }))
+    expect(call).not.toHaveBeenCalledWith('worktree.discardPath', expect.anything())
+    expect(screen.getByRole('dialog', { name: 'Discard changes to README.md?' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(call).toHaveBeenCalledWith('worktree.discardPath', { worktreeId: 'w1', path: 'README.md' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('changes nothing when the answer is to keep it', () => {
+    withRows()
+    render(<Tab />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard README.md…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }))
+
+    expect(call).not.toHaveBeenCalledWith('worktree.discardPath', expect.anything())
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('offers the same from the row’s right-click menu', () => {
+    withRows()
+    render(<Tab />)
+
+    fireEvent.contextMenu(screen.getByTitle('README.md'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Discard…' }))
+
+    expect(screen.getByRole('dialog', { name: 'Discard changes to README.md?' })).toBeTruthy()
+  })
+
+  it('says an untracked file goes to the Trash', () => {
+    withRows()
+    render(<Tab />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard src/new.ts…' }))
+
+    expect(screen.getByRole('dialog').textContent).toContain('Moves to the Trash')
+  })
+
+  it('offers nothing for a file whose change is all staged', () => {
+    withRows()
+    render(<Tab />)
+    expect(screen.queryByRole('button', { name: 'Discard src/done.ts…' })).toBeNull()
+  })
+})
+
+describe('what can be discarded', () => {
+  it('is an unstaged change git can put back or a file the Trash can take', () => {
+    expect(canDiscard({ path: 'a', kind: 'modified', staged: true, unstaged: true })).toBe(true)
+    expect(canDiscard({ path: 'a', kind: 'untracked', staged: false, unstaged: true })).toBe(true)
+    expect(canDiscard({ path: 'a', kind: 'deleted', staged: false, unstaged: true })).toBe(true)
+    expect(canDiscard({ path: 'a', kind: 'modified', staged: true, unstaged: false })).toBe(false)
+    expect(canDiscard({ path: 'a', kind: 'conflicted', staged: false, unstaged: true })).toBe(false)
+    // Intent-to-add: the runtime refuses it, so it is not offered.
+    expect(canDiscard({ path: 'a', kind: 'added', staged: false, unstaged: true })).toBe(false)
   })
 })

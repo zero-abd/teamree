@@ -28,6 +28,7 @@ const { RemoteKeystrokesDialog } = await import('./RemoteKeystrokesDialog')
 const { InstallCliDialog } = await import('./InstallCliDialog')
 const { FirstRunCliOffer } = await import('./FirstRunCliOffer')
 const { ConfirmRemoveDialog } = await import('./ConfirmRemoveDialog')
+const { ConfirmDiscardDialog } = await import('./ConfirmDiscardDialog')
 const { ConfirmCloseFileDialog } = await import('./ConfirmCloseFileDialog')
 const { closePaneWarning } = await import('./closePaneModel')
 const { cliOutcome } = await import('./cliInstallModel')
@@ -289,6 +290,28 @@ describe('dialogs', () => {
     render(<ConfirmCloseFileDialog terminalId="file:1" />)
     expect(document.body.textContent).toContain('Discard unsaved changes?')
     expect(sentenceStops(document.body)).toEqual([])
+  })
+
+  it('discarding a file or a hunk from the Changes tab: no sentence', () => {
+    seed({
+      changes: {
+        w1: {
+          worktreeId: 'w1',
+          changes: [{ path: 'src/new.ts', kind: 'untracked', staged: false, unstaged: true }],
+          total: 1,
+          limit: 500,
+          truncated: false,
+          readAt: 0
+        }
+      }
+    })
+    const hunk = { header: '@@ -1,1 +1,1 @@', oldStart: 1, oldCount: 1, newStart: 1, newCount: 1, lines: [] }
+    for (const props of [{ path: 'src/app.ts' }, { path: 'src/new.ts' }, { path: 'src/app.ts', hunk }]) {
+      const { unmount } = render(<ConfirmDiscardDialog worktreeId="w1" {...props} />)
+      expect(document.body.textContent).toContain('src/')
+      expect(sentenceStops(document.body)).toEqual([])
+      unmount()
+    }
   })
 })
 

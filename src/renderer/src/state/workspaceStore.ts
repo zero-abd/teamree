@@ -133,6 +133,8 @@ export type DialogState =
   | { kind: 'confirm-close-pane'; terminalId: string }
   /** A file pane with edits not on disk. */
   | { kind: 'confirm-close-file'; terminalId: string }
+  /** Throwing away a path's unstaged change, or one hunk of it. */
+  | { kind: 'confirm-discard'; worktreeId: string; path: string; hunk?: PatchHunk }
   | null
 
 /** Why the removal was asked for: a retry removes the old checkout to build a new one, and the confirmation says so. */
@@ -436,6 +438,8 @@ type WorkspaceState = {
   commitStaged: (message: string) => Promise<void>
   /** Puts one hunk into the index, or takes it out. The hunk is exactly what was on screen; the runtime refuses it if the file moved on. */
   applyHunk: (path: string, hunk: PatchHunk, staged: boolean) => Promise<void>
+  /** Throws away a path's unstaged change, or one unstaged hunk. The index is never touched. */
+  discardChange: (worktreeId: string, path: string, hunk?: PatchHunk) => Promise<void>
   /** Sends the active worktree's branch to its remote. Never forces. */
   pushActiveWorktree: () => Promise<void>
   /** Opens a pane already running one of the agents found on this machine. */
@@ -1720,6 +1724,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // ride, so this one must not get ahead of them.
       } catch (error) {
         failed(staged ? 'Could not stage that hunk' : 'Could not unstage that hunk')(error)
+      } finally {
+        set({ hunkPending: false })
+      }
+    },
+
+    async discardChange(worktreeId, path, hunk) {
+      if (get().hunkPending) return
+      set({ hunkPending: true })
+      try {
+        if (hunk === undefined) await runtimeClient.call('worktree.discardPath', { worktreeId, path })
+        else await runtimeClient.call('worktree.discardHunk', { worktreeId, path, hunk })
+      } catch (error) {
+        failed(hunk === undefined ? `Could not discard ${path}` : 'Could not discard that hunk')(error)
       } finally {
         set({ hunkPending: false })
       }

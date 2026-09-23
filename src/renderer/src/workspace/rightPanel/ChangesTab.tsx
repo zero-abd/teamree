@@ -2,12 +2,14 @@
 // right panel. It rides the same invalidation as everything else, so pane edits move it.
 
 import { useState } from 'react'
+import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { openInBrowser } from '../../shell/openInBrowser'
 import { useWorkspaceStore, type PushState } from '../../state/workspaceStore'
 import { PatchView } from '../PatchView'
+import type { PatchHunk } from '@shared/patch'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
 import type { DiffLayout } from '../../state/preferences'
-import type { WorktreeLog, WorktreeStatus } from '@shared/entities'
+import type { WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 
 /** The two layouts, and the two words that offer them. */
 const LAYOUTS: readonly [DiffLayout, string][] = [
@@ -37,6 +39,8 @@ export function ChangesTab(): React.JSX.Element | null {
   const push = useWorkspaceStore((state) => (worktreeId ? state.pushes[worktreeId] : undefined))
   const pushing = useWorkspaceStore((state) => state.pushing)
   const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
+  const [menu, setMenu] = useState<{ path: string; at: RowMenuAnchor } | null>(null)
   // Per worktree: the panel is not remounted on tab change, and a message could land on the wrong diff.
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const message = draftFor(drafts, worktreeId)
@@ -51,6 +55,8 @@ export function ChangesTab(): React.JSX.Element | null {
   const canCommit = ticked.size > 0 && message.trim().length > 0 && !committing
 
   const offer = pushOffer(status, push)
+  const discard = (path: string, hunk?: PatchHunk): void =>
+    openDialog({ kind: 'confirm-discard', worktreeId, path, ...(hunk === undefined ? {} : { hunk }) })
 
   const commit = (): void => {
     if (!canCommit) return
@@ -109,6 +115,11 @@ export function ChangesTab(): React.JSX.Element | null {
                 className={`change${change.path === selectedPath ? ' change--selected' : ''}`}
                 title={change.from === undefined ? change.path : `${change.from} → ${change.path}`}
                 onClick={() => selectChange(change.path === selectedPath ? null : change.path)}
+                onContextMenu={(event) => {
+                  if (!canDiscard(change)) return
+                  event.preventDefault()
+                  setMenu({ path: change.path, at: { x: event.clientX, y: event.clientY } })
+                }}
               >
                 <span className={`change__kind change__kind--${change.kind}`} aria-label={KIND_LABEL[change.kind]}>
                   {KIND_LETTER[change.kind]}
@@ -123,9 +134,28 @@ export function ChangesTab(): React.JSX.Element | null {
                   </span>
                 ) : null}
               </button>
+              {canDiscard(change) ? (
+                <button
+                  type="button"
+                  className="change__discard"
+                  aria-label={`Discard ${change.path}…`}
+                  disabled={hunkPending}
+                  onClick={() => discard(change.path)}
+                >
+                  Discard…
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>
+      )}
+      {menu === null ? null : (
+        <RowMenu
+          label={`Actions for ${menu.path}`}
+          anchor={menu.at}
+          onClose={() => setMenu(null)}
+          items={[{ label: 'Discard…', danger: true, onChoose: () => discard(menu.path) }]}
+        />
       )}
 
       {rows.length > 0 ? (
@@ -243,6 +273,7 @@ export function ChangesTab(): React.JSX.Element | null {
                       action="Stage"
                       busy={hunkPending}
                       onHunk={(file, hunk) => void applyHunk(file.path, hunk, true)}
+                      onDiscard={(file, hunk) => discard(file.path, hunk)}
                     />
                   </>
                 )}
@@ -266,6 +297,12 @@ export function pushOffer(status: WorktreeStatus | undefined, push: PushState | 
   if (status.ahead > 0 || push?.phase === 'pushing') return { kind: 'push' }
   if (push?.phase === 'pushed' && push.reviewUrl !== undefined) return { kind: 'review', url: push.reviewUrl }
   return null
+}
+
+/** An unstaged change git can put back, or an untracked file the Trash can take. Intent-to-add is refused. */
+export function canDiscard(change: WorktreeChange): boolean {
+  if (!change.unstaged || change.kind === 'conflicted') return false
+  return !(change.kind === 'added' && !change.staged)
 }
 
 /** The commit message for one worktree, kept when looking at another. */
