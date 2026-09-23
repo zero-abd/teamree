@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { allocateBranchName, branchCollides, checkoutDirName, slugify } from './worktreeNaming'
+import { allocateBranchName, branchCollides, checkoutDirName, slugify, taskNamesForAgents } from './worktreeNaming'
 
 describe('slugify', () => {
   it('reduces a task title to a safe branch fragment', () => {
@@ -40,5 +40,49 @@ describe('allocateBranchName', () => {
 describe('checkoutDirName', () => {
   it('flattens a namespaced branch into one directory level', () => {
     expect(checkoutDirName('feature/add-oauth')).toBe('feature-add-oauth')
+  })
+})
+
+describe('taskNamesForAgents', () => {
+  it('leaves one agent with the task name it would have had alone', () => {
+    expect(taskNamesForAgents('task', ['claude'])).toEqual(['task'])
+    expect(taskNamesForAgents('task', [])).toEqual(['task'])
+  })
+
+  it('names the later attempts after the agent that runs them', () => {
+    expect(taskNamesForAgents('task', ['claude', 'codex', 'claude'])).toEqual(['task', 'task codex', 'task claude 2'])
+  })
+
+  // Racing two runs of one model is as ordinary as racing two models, so the
+  // repeat has to get a number rather than the same suffix twice.
+  it('counts an agent that comes round again', () => {
+    expect(taskNamesForAgents('task', ['claude', 'claude', 'claude'])).toEqual([
+      'task',
+      'task claude 2',
+      'task claude 3'
+    ])
+  })
+
+  it('slugifies into the branch names the suffix promises', () => {
+    const branches = taskNamesForAgents('task', ['claude', 'codex', 'claude']).map(slugify)
+    expect(branches).toEqual(['task', 'task-codex', 'task-claude-2'])
+  })
+
+  // The suffix distinguishes the runs from each other; it says nothing about
+  // what the repository already holds, which is still the allocator's job.
+  it('leaves collisions with existing branches to the allocator', () => {
+    const taken: string[] = []
+    for (const name of taskNamesForAgents('task', ['claude', 'codex', 'claude'])) {
+      taken.push(allocateBranchName(name, taken))
+    }
+    expect(taken).toEqual(['task', 'task-codex', 'task-claude-2'])
+
+    const second: string[] = ['task', 'task-codex', 'task-claude-2']
+    const names = taskNamesForAgents('task', ['claude', 'codex']).map((name) => {
+      const branch = allocateBranchName(name, second)
+      second.push(branch)
+      return branch
+    })
+    expect(names).toEqual(['task-2', 'task-codex-2'])
   })
 })

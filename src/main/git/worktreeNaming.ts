@@ -9,13 +9,22 @@ import path from 'node:path'
 import { ErrorCode } from '../../shared/protocol'
 import { describeError, GitServiceError } from './errors'
 import { pathKey } from './pathIdentity'
-import { slugifyBranchName } from '../../shared/branchName'
+import { slugifyBranchName, taskNamesForAgents } from '../../shared/branchName'
 
 /**
  * The slug rule lives in shared so the create dialog previews exactly what gets
  * created. Re-exported here because this module is where callers expect it.
  */
 export const slugify = slugifyBranchName
+
+/**
+ * One task, several agents: the rule that keeps their names apart. It lives in
+ * shared for the same reason the slug does — the composer has to show what it
+ * is about to create — and the names it hands out go through
+ * `allocateBranchName` like any others, which is what makes the suffix a
+ * distinguisher rather than a second collision rule.
+ */
+export { taskNamesForAgents }
 
 /**
  * Windows refuses to create a file or directory whose name is a DOS device,

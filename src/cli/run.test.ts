@@ -433,6 +433,81 @@ describe('selectors and flags reach the runtime', () => {
   })
 })
 
+// Several attempts at one task, from a shell: the flag is repeatable, and each
+// repeat is a whole worktree with its own agent in it.
+describe('worktree create --agent, repeated', () => {
+  it('creates one worktree per repeat, names them apart, and starts each agent', async () => {
+    const made: Array<Record<string, unknown>> = []
+    const cli = await harness((method, params) => {
+      if (method === 'project.list') return PROJECTS
+      if (method === 'worktree.create') {
+        const name = (params as { name: string }).name
+        const worktree = {
+          ...WORKTREES[0],
+          id: `wt_made_${made.length + 1}`,
+          name,
+          branch: name.replace(/\W+/g, '-'),
+          path: `/repos/api-${made.length + 1}`,
+          state: 'ready'
+        }
+        made.push(worktree)
+        return worktree
+      }
+      if (method === 'worktree.list') return made
+      if (method === 'terminal.create') return TERMINAL
+      throw new StubError('unknown_method', `no handler for ${method}`)
+    })
+
+    const result = await cli.run([
+      'worktree',
+      'create',
+      '--project',
+      'api',
+      '--name',
+      'fix login',
+      '--agent',
+      'claude',
+      '--agent',
+      'claude',
+      '--agent',
+      'codex',
+      '--json'
+    ])
+
+    expect(result.code).toBe(ExitCode.Success)
+    const records = soleJsonDocument(result.out)['data'] as Array<{ id: string; name: string }>
+    expect(records).toHaveLength(3)
+    expect(records.map((record) => record.name)).toEqual(['fix login', 'fix login claude 2', 'fix login codex'])
+
+    // All three branch from the same place, which is what makes them comparable.
+    const creates = cli.stub.received.filter((call) => call.method === 'worktree.create')
+    expect(creates).toHaveLength(3)
+    expect(creates.every((call) => (call.params as { projectId: string }).projectId === 'p_api')).toBe(true)
+
+    // One pane each, running the agent that worktree was made for. The waits run
+    // in parallel, so the pairing is what matters rather than the order.
+    const panes = cli.stub.received
+      .filter((call) => call.method === 'terminal.create')
+      .map((call) => call.params as { worktreeId: string; command: string })
+    expect(panes).toHaveLength(3)
+    expect(new Map(panes.map((pane) => [pane.worktreeId, pane.command]))).toEqual(
+      new Map([
+        ['wt_made_1', 'claude'],
+        ['wt_made_2', 'claude'],
+        ['wt_made_3', 'codex']
+      ])
+    )
+  })
+
+  it('leaves a create with no --agent exactly as it was: one record, no pane', async () => {
+    const cli = await harness()
+    const result = await cli.run(['worktree', 'create', '--project', 'api', '--name', 'x', '--json'])
+    const record = soleJsonDocument(result.out)['data'] as { id: string }
+    expect(record.id).toBe('wt_1')
+    expect(cli.stub.received.some((call) => call.method === 'terminal.create')).toBe(false)
+  })
+})
+
 describe('help', () => {
   it('prints the root help for no arguments and for --help', async () => {
     const cli = await harness(defaultHandler, { discovery: 'none' })
