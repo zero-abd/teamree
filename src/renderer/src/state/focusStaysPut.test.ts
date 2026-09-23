@@ -186,4 +186,34 @@ describe('a layout arriving from the stream with its focus moved', () => {
 
     expect(typingInto()).toEqual({ worktreeId: 'w1', terminalId: 't3' })
   })
+
+  it('focuses the pane you started from the agent picker, and not the one the runtime opens after it', async () => {
+    // The picker is a click, the same as the new-terminal button, and its pane
+    // goes in front. The pane that arrives next on the stream — an agent on
+    // the CLI, a hook — is nobody's click here, and it does not.
+    runtimeSays({
+      'terminal.create': (params) => {
+        expect(params).toMatchObject({ worktreeId: 'w1', command: 'claude' })
+        return terminal('t3', 'w1')
+      },
+      'terminal.list': () => [...Object.values(store().terminals), terminal('t3', 'w1')],
+      'layout.get': () => layout('w1', split('t1', 't2', 't3'), 't3'),
+      'layout.set': (params) => (params as { layout: Layout }).layout
+    })
+
+    await store().startAgent('claude')
+
+    expect(typingInto()).toEqual({ worktreeId: 'w1', terminalId: 't3' })
+
+    useWorkspaceStore.setState((state) => ({ terminals: { ...state.terminals, t4: terminal('t4', 'w1') } }))
+    runtimeSays({
+      'terminal.list': () => Object.values(store().terminals),
+      'layout.get': () => layout('w1', split('t1', 't2', 't3', 't4'), 't4')
+    })
+
+    push({ type: 'layout', worktreeId: 'w1' })
+    await vi.waitFor(() => expect(store().layouts.w1?.root).toEqual(split('t1', 't2', 't3', 't4')))
+
+    expect(typingInto()).toEqual({ worktreeId: 'w1', terminalId: 't3' })
+  })
 })

@@ -2214,6 +2214,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           ...(agentArgs === undefined ? {} : { agentArgs })
         })
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
+        // A click on the picker, like a click on the new-terminal button: the
+        // one kind of pane whose focus the layout may carry in. Named before
+        // the refresh that reads it, same as `createTerminal`.
+        panesAskedFor.add(terminal.id)
         refresher.request(refreshTargets({ layouts: [worktreeId] }))
         await refresher.flush()
       } catch (error) {
