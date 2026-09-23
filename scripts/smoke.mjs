@@ -155,6 +155,7 @@ async function run() {
     'the runtime did not answer a call from the renderer'
   )
 
+  await checkContrast(ask, 'first launch')
   await checkWindowSurfaces(ask)
   await checkWorktreeSurfaces(ask)
   await checkRendererBoundary(window, ask)
@@ -213,7 +214,102 @@ async function checkWindowSurfaces(ask) {
       continue
     }
     await waitFor(() => heading(title), `pressing ${label} did not put the ${title} surface on screen`)
+    await checkContrast(ask, title)
   }
+}
+
+/**
+ * Text nobody can read, measured rather than eyeballed.
+ *
+ * Every colour in this window comes out of one palette, and the palette has a
+ * legibility pass — including for the ones a person builds by hand, which is
+ * the whole argument for letting them edit all forty-two. What that pass cannot
+ * see is a *pairing*: a token that is perfectly legible on the ground it was
+ * designed for, used by a new element on a ground it was not. Dim-on-dim is the
+ * ordinary way an interface goes quietly unreadable, and it is invisible to
+ * every other check here, because nothing about it is an error.
+ *
+ * So this reads the computed colour of every text node on screen, walks up for
+ * the first ancestor that actually paints an opaque background, composites the
+ * two, and computes the WCAG contrast ratio. The threshold is AA — 4.5:1, or
+ * 3:1 for text that is genuinely large — which is the floor Apple's own
+ * accessibility guidance points at.
+ *
+ * It ran clean on every surface the first time it was written, which is the
+ * result worth having: it is not fixing anything, it is holding something that
+ * is already true.
+ */
+const MEASURE_CONTRAST = `(() => {
+  const parse = (value) => {
+    const found = value.match(/rgba?\\(([^)]+)\\)/)
+    if (!found) return null
+    const parts = found[1].split(',').map((part) => parseFloat(part))
+    return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 }
+  }
+  const channel = (value) => {
+    const v = value / 255
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+  }
+  const luminance = (c) => 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b)
+  const composite = (fg, bg) => ({
+    r: fg.r * fg.a + bg.r * (1 - fg.a),
+    g: fg.g * fg.a + bg.g * (1 - fg.a),
+    b: fg.b * fg.a + bg.b * (1 - fg.a),
+    a: 1
+  })
+  // Up the tree until something actually paints. A translucent fill is not a
+  // ground; compositing against it would flatter every pairing above it.
+  const groundOf = (element) => {
+    let node = element
+    while (node && node !== document.documentElement) {
+      const found = parse(getComputedStyle(node).backgroundColor)
+      if (found && found.a > 0.95) return found
+      node = node.parentElement
+    }
+    return { r: 0, g: 0, b: 0, a: 1 }
+  }
+
+  const failures = []
+  for (const element of document.querySelectorAll('*')) {
+    const own = [...element.childNodes]
+      .filter((node) => node.nodeType === 3)
+      .map((node) => node.textContent.trim())
+      .join('')
+    if (own === '') continue
+    const style = getComputedStyle(element)
+    if (style.visibility === 'hidden' || style.display === 'none' || parseFloat(style.opacity) < 0.1) continue
+    const colour = parse(style.color)
+    if (!colour) continue
+    const ground = groundOf(element)
+    const front = luminance(composite(colour, ground))
+    const back = luminance(ground)
+    const ratio = (Math.max(front, back) + 0.05) / (Math.min(front, back) + 0.05)
+    const size = parseFloat(style.fontSize)
+    const weight = parseInt(style.fontWeight, 10) || 400
+    const large = size >= 24 || (size >= 18.66 && weight >= 700)
+    const needed = large ? 3 : 4.5
+    if (ratio + 0.005 < needed) {
+      failures.push(own.slice(0, 40) + ' at ' + (Math.round(ratio * 100) / 100) + ':1, needs ' + needed)
+    }
+  }
+  return JSON.stringify(failures)
+})()`
+
+/**
+ * Measures what is on screen now, and records anything unreadable.
+ *
+ * The local array is deliberately not called `failures`. The first version of
+ * this named it that, which shadowed the module-level one it was supposed to be
+ * reporting into — so every finding was pushed onto the list that had just been
+ * parsed out of the page and thrown away, and the check could not fail. It was
+ * only caught by insisting on a mutation that should break it.
+ */
+async function checkContrast(ask, surface) {
+  const unreadable = JSON.parse(await ask(MEASURE_CONTRAST))
+  // Named individually rather than counted: a count tells somebody a number,
+  // and this tells them which sentence to go and look at.
+  for (const one of unreadable.slice(0, 6)) failures.push(`unreadable on ${surface}: ${one}`)
+  if (unreadable.length > 6) failures.push(`and ${unreadable.length - 6} more unreadable on ${surface}`)
 }
 
 /**
