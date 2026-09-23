@@ -358,22 +358,49 @@ function matchSelector(selectors: readonly Selector[], token: string): Selector 
  * complains, rather than being handed a command with a hole cut in it.
  */
 function spliceSelector(command: string, agent: AgentKind, argv: readonly string[]): string {
+  return spliceArguments(command, agent, argv, AGENTS[agent].selectors) ?? `${command} ${quoteArguments(argv)}`
+}
+
+/**
+ * Puts arguments of this app's own on an agent's command line, in front of the
+ * agent's `--` terminator where there is one and after everything else.
+ *
+ * The path the session selectors take, with nothing cut out along it. Null
+ * rather than appended when the line cannot be modelled — a pipeline, an
+ * unclosed quote, an agent this module cannot see in command position —
+ * because an argument put after a terminator, or into a pipeline, would not
+ * reach the agent, and a caller of this has somewhere honest to fall back to
+ * that a caller of the selector splice does not: the line as it was.
+ */
+export function insertArguments(command: string, agent: AgentKind, argv: readonly string[]): string | null {
+  return spliceArguments(command, agent, argv, [])
+}
+
+function quoteArguments(argv: readonly string[]): string {
+  return argv.map(quoteArgument).join(' ')
+}
+
+function spliceArguments(
+  command: string,
+  agent: AgentKind,
+  argv: readonly string[],
+  selectors: readonly Selector[]
+): string | null {
   const spec = AGENTS[agent]
-  const addition = argv.map(quoteArgument).join(' ')
-  const appended = `${command} ${addition}`
+  const addition = quoteArguments(argv)
 
   const tokenized = tokenizeCommand(command)
-  if (!tokenized.ok) return appended
+  if (!tokenized.ok) return null
   const { tokens, spans } = tokenized
   const start = executableIndex(tokens, spec.executables)
-  if (start === -1) return appended
+  if (start === -1) return null
 
   // Only whitespace may separate tokens. Anything else between two words is
   // syntax this module did not model, and splicing around it is not safe.
   for (let index = 0; index <= tokens.length; index += 1) {
     const gapStart = index === 0 ? 0 : (spans[index - 1] as Span).end
     const gapEnd = index === tokens.length ? command.length : (spans[index] as Span).start
-    if (!/^[ \t]*$/.test(command.slice(gapStart, gapEnd))) return appended
+    if (!/^[ \t]*$/.test(command.slice(gapStart, gapEnd))) return null
   }
 
   const cuts: Span[] = []
@@ -387,7 +414,7 @@ function spliceSelector(command: string, agent: AgentKind, argv: readonly string
       terminator = (spans[index] as Span).start
       break
     }
-    const selector = matchSelector(spec.selectors, token)
+    const selector = matchSelector(selectors, token)
     if (!selector) continue
 
     let cutStart = (spans[index] as Span).start

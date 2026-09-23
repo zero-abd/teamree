@@ -72,6 +72,7 @@ const EXPECTED = [
   'team unmute',
   'team write-log',
   'agent list',
+  'agent event',
   'cli status',
   'cli install'
 ]

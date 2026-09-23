@@ -26,7 +26,12 @@ export type CommandContext = {
   cwd: string
   /** Where the endpoint came from; `status` reports it. */
   endpointSource: string
-  /** Everything on stdin, for a flag whose value is `-`. */
+  /**
+   * Everything on stdin, read once. For a flag whose value is `-`, and for the
+   * one command another program runs with something on its stdin — an agent's
+   * hook, handing over the hook's JSON, which is read bounded (see
+   * `stdin.ts`) and comes back empty when nothing was piped.
+   */
   stdin: () => Promise<string>
   /**
    * For the one command that streams. `teamree team watch --follow` writes a
@@ -50,6 +55,16 @@ export type CommandSpec = {
   args?: readonly ArgSpec[]
   flags?: readonly FlagSpec[]
   examples?: readonly string[]
+  /**
+   * Prints nothing and exits 0 whatever happens after its arguments parse —
+   * no runtime, a refused call, a broken socket. For a command another
+   * program runs from a hook, where anything on stdout lands in that
+   * program's context and any non-zero exit lands in its transcript as this
+   * app's failure. A usage error is still one: the line is generated, so
+   * getting it wrong is a bug worth hearing about, and it can only be typed
+   * by a person.
+   */
+  silent?: boolean
   run: (context: CommandContext) => Promise<CommandOutput>
 }
 
@@ -67,6 +82,12 @@ export const GLOBAL_FLAGS: readonly FlagSpec[] = [
     kind: 'string',
     placeholder: '<path>',
     description: 'Socket path to use instead of the discovered one.'
+  },
+  {
+    name: 'user-data-dir',
+    kind: 'string',
+    placeholder: '<dir>',
+    description: 'Profile whose runtime to talk to; overrides TEAMREE_USER_DATA_DIR.'
   }
 ]
 

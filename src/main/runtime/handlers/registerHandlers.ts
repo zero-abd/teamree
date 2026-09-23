@@ -120,6 +120,15 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   registerAppearanceHandlers(registry)
   const workspaceEvents = registry.context.workspaceEvents
 
+  // The private key belongs beside the workspace file, in the app's own data
+  // directory, and never anywhere under a repository. That directory is not on
+  // the runtime context, but the store's path is exactly it plus a file name,
+  // and the store is already the authority on where this app keeps things.
+  const dataDir = dirname(registry.context.store.filePath)
+  // Found once, here, because two areas need it: the installer below links
+  // it onto PATH, and every agent pane's hooks run it.
+  const shippedCli = findShippedCli({ resourcesPath: process.resourcesPath })
+
   const terminals = createTerminalService({
     subscriptions: registry.context.subscriptions,
     // Terminals open in their worktree's checkout, so the store is the authority
@@ -133,9 +142,13 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     // orders of magnitude larger, rewritten constantly, and worth nothing if it
     // is lost. `scrollbackArchive.ts` makes the argument in full.
     ...(options.scrollback === undefined ? {} : { scrollback: options.scrollback }),
-    // A pane going busy or quiet is the only thing this app knows about what an
-    // agent is doing, and it is what the sidebar reads. Two events per burst of
-    // work, not one per chunk of output.
+    // An agent that takes hooks per launch is asked to report its own state,
+    // through this app's CLI, to this profile's runtime. Without a CLI to run
+    // there is nothing to ask with, and the pane is read off the pty alone.
+    ...(shippedCli === null ? {} : { agentHooks: { userDataDir: dataDir, cli: shippedCli.path } }),
+    // A pane going busy or quiet is what this app knows about an agent from
+    // the outside, and what the sidebar reads when the agent has not said.
+    // Two events per burst of work, not one per chunk of output.
     onActivityChange: () => workspaceEvents.emit({ type: 'terminals' }),
     // And the half of that worth leaving the window for. The worktree's *name*
     // is attached here rather than by whoever raises the notification, because
@@ -226,12 +239,6 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   // can keep it honest between one command and the next.
   const worktreeFiles = publishWorktreeFileEvents(git, workspaceEvents)
 
-  // The private key belongs beside the workspace file, in the app's own data
-  // directory, and never anywhere under a repository. That directory is not on
-  // the runtime context, but the store's path is exactly it plus a file name,
-  // and the store is already the authority on where this app keeps things.
-  const dataDir = dirname(registry.context.store.filePath)
-
   // `.teamree` lives in the primary checkout, and a pull that brings in a
   // teammate's key or the team's relay is nobody's method call. Without this
   // both machines sit on the roster they read before the pull, and the runbook
@@ -260,7 +267,6 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   // reads and, at most, one symlink. The privileged runner is handed over here
   // rather than defaulted inside the service, so that the only code that can
   // reach osascript is code that asked for it.
-  const shippedCli = findShippedCli({ resourcesPath: process.resourcesPath })
   registerCliHandlers(
     registry,
     new CliService({

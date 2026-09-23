@@ -98,6 +98,61 @@ describe('activityOf', () => {
   })
 })
 
+describe('activityOf, when the agent has said something', () => {
+  // The agent's own word outranks every reading of its bytes. Claude Code
+  // writes no bell and no telling title while it sits on a permission prompt,
+  // which is how a pane blocked on a question showed as merely quiet; a hook
+  // reporting the prompt is the agent saying so.
+  it('is waiting when the agent reported a notification, whatever the bytes say', () => {
+    const said = { event: 'Notification' as const, at: 1_000, detail: 'permission_prompt' }
+    expect(activityOf(terminal({ id: 't', busy: true, titleSays: 'working', agentEvent: said }))).toBe('waiting')
+    expect(activityOf(terminal({ id: 't', busy: false, agentEvent: said }))).toBe('waiting')
+  })
+
+  it('is waiting when the agent has been idle at its prompt long enough to say so', () => {
+    const said = { event: 'Notification' as const, at: 1_000, detail: 'idle_prompt' }
+    expect(activityOf(terminal({ id: 't', busy: false, agentEvent: said }))).toBe('waiting')
+  })
+
+  // A model call prints nothing for a while, and a long tool call prints
+  // nothing for minutes. The turn is running because the agent said it started.
+  it('is working after a prompt was submitted, even with no output arriving', () => {
+    const said = { event: 'UserPromptSubmit' as const, at: 1_000 }
+    expect(activityOf(terminal({ id: 't', busy: false, agentEvent: said }))).toBe('working')
+    expect(activityOf(terminal({ id: 't', busy: false, lastBellAt: 900, agentEvent: said }))).toBe('working')
+  })
+
+  // The turn is over. A title still saying otherwise is a title nobody has
+  // repainted, and a bell in the burst that ended was part of that turn.
+  it('is quiet once the agent reported the turn ended, even mid-output', () => {
+    for (const event of ['Stop', 'SessionStart', 'SessionEnd'] as const) {
+      const said = { event, at: 1_000 }
+      expect(activityOf(terminal({ id: 't', busy: true, titleSays: 'working', agentEvent: said }))).toBe('quiet')
+      expect(activityOf(terminal({ id: 't', busy: false, lastBellAt: 900, agentEvent: said }))).toBe('quiet')
+    }
+  })
+
+  // Some notifications are about the agent, not aimed at the person: a login
+  // that succeeded, a quota timer. They say nothing about whether you are
+  // needed, so the bytes are read instead.
+  it('falls back to the bytes for a notification that is not a request', () => {
+    const said = { event: 'Notification' as const, at: 1_000, detail: 'auth_success' }
+    expect(activityOf(terminal({ id: 't', busy: true, agentEvent: said }))).toBe('working')
+    expect(activityOf(terminal({ id: 't', busy: false, agentEvent: said }))).toBe('quiet')
+  })
+
+  it('reads the bytes when the agent has said nothing', () => {
+    expect(activityOf(terminal({ id: 't', busy: true }))).toBe('working')
+    expect(activityOf(terminal({ id: 't', busy: false, lastBellAt: 1 }))).toBe('waiting')
+  })
+
+  it('reports an exit over anything the agent said before it', () => {
+    const said = { event: 'UserPromptSubmit' as const, at: 1_000 }
+    expect(activityOf(terminal({ id: 't', running: false, exitCode: 0, agentEvent: said }))).toBe('done')
+    expect(activityOf(terminal({ id: 't', running: false, exitCode: 1, agentEvent: said }))).toBe('failed')
+  })
+})
+
 describe('agentRows', () => {
   it('takes only this worktree’s panes', () => {
     const rows = agentRows(

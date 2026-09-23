@@ -7,7 +7,7 @@
 import type { RestoredAs } from '../../shared/paneRestore'
 import { spawn } from 'node-pty'
 import type { IDisposable, IPty } from 'node-pty'
-import type { Terminal } from '../../shared/entities'
+import type { AgentEvent, Terminal } from '../../shared/entities'
 import type { TerminalEvent } from '../../shared/methods'
 import { killProcessTree } from './process-tree'
 import { recoverTailOnTeardown } from './pty-tail'
@@ -218,6 +218,8 @@ export class PtySession {
    * attached a minute later would otherwise have no way to learn that.
    */
   private lastBellAt: number | undefined
+  /** What the agent last said about itself; see `Terminal.agentEvent`. */
+  private agentEvent: AgentEvent | undefined
   private lastOutputAt: number
   private readonly startedAt: number
   private cancelQuietWatch: (() => void) | undefined
@@ -312,8 +314,21 @@ export class PtySession {
       // is a reading of. A reader with both fields is reading one fact.
       ...(titleSays === null ? {} : { titleSays }),
       ...(this.lastBellAt === undefined ? {} : { lastBellAt: this.lastBellAt }),
+      ...(this.agentEvent === undefined ? {} : { agentEvent: this.agentEvent }),
       lastOutputAt: this.lastOutputAt
     }
+  }
+
+  /**
+   * Records what the agent in this pane has just said about itself.
+   *
+   * Replaced, never merged: the latest word is the pane's state, and the one
+   * before it is history nobody draws. Kept apart from the bell and the title
+   * on purpose — those are cleared by a fresh burst of output, and output is
+   * exactly the reading this outranks.
+   */
+  noteAgentEvent(event: AgentEvent): void {
+    this.agentEvent = { ...event }
   }
 
   get isRunning(): boolean {
@@ -377,6 +392,13 @@ export class PtySession {
       // would leave the pane asking for something it has just been given. An
       // emulator's reply answers nobody's question, so it leaves the bell up.
       this.lastBellAt = undefined
+      // The same for what the agent said, when it was about a turn in
+      // progress. A request has just been answered; a running turn may have
+      // just been interrupted, and the agent reports no hook for that. Either
+      // way the bytes are the better reading until the agent speaks again. A
+      // turn that ended stays ended: typing the next prompt is not starting it,
+      // and the agent says when it does.
+      if (overtakenByTyping(this.agentEvent)) this.agentEvent = undefined
     }
     this.pty.write(data)
   }
@@ -827,4 +849,9 @@ function scheduleUnref(run: () => void, delayMs: number): () => void {
   const timer = setTimeout(run, delayMs)
   timer.unref?.()
   return () => clearTimeout(timer)
+}
+
+/** The events a keystroke overtakes: a request, and a turn the agent said was running. */
+function overtakenByTyping(event: AgentEvent | undefined): boolean {
+  return event !== undefined && (event.event === 'Notification' || event.event === 'UserPromptSubmit')
 }

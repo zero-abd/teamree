@@ -112,6 +112,14 @@ export const MAX_PANE_LABEL_CHARS = 512
 export { MAX_AGENT_ARGS_CHARS }
 
 /**
+ * How long an agent event's qualifier may be. It is a notification type — a
+ * word with underscores in it — copied from the agent's own stdin by a CLI
+ * that does not check it, so the bound is here, where every other string on
+ * the wire is bounded.
+ */
+export const MAX_AGENT_EVENT_DETAIL_CHARS = 64
+
+/**
  * How long a project's setup command may be.
  *
  * The same generous bound `MAX_AGENT_ARGS_CHARS` is, and for the same reason:
@@ -738,6 +746,22 @@ export const Params = {
    * while the pane is still running: there is nothing to run again yet.
    */
   terminalRelaunch: z.object({ terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS) }),
+  /**
+   * The agent in a pane reporting its own state, through a hook this app
+   * configured for it -- see `src/main/terminals/agent-hooks.ts`.
+   *
+   * Called by `teamree agent event` from inside the agent's process, which is
+   * why it is a method rather than something the pty could read: the one fact
+   * the sidebar most needs, that the agent is blocked on a question, leaves no
+   * byte in the pty. The event names are the agent's own; the detail is capped
+   * because it is copied from the agent's stdin and shown nowhere.
+   */
+  terminalAgentEvent: z.object({
+    terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
+    event: z.enum(['SessionStart', 'UserPromptSubmit', 'Notification', 'Stop', 'SessionEnd']),
+    at: z.number().int().nonnegative(),
+    detail: z.string().max(MAX_AGENT_EVENT_DETAIL_CHARS).optional()
+  }),
   terminalSplit: z.object({
     /** Pane to divide. The new terminal takes half of it. */
     terminalId: z.string().min(1),
@@ -908,6 +932,8 @@ export type MethodContract = {
    * pane, which is the same record wearing a new process.
    */
   'terminal.relaunch': { params: z.infer<typeof Params.terminalRelaunch>; result: Terminal }
+  /** Answers with the pane, now carrying what its agent just said. */
+  'terminal.agentEvent': { params: z.infer<typeof Params.terminalAgentEvent>; result: Terminal }
 
   /** How this installation is painted. Per machine, not per project. */
   'appearance.get': { params: z.infer<typeof Params.appearanceGet>; result: Appearance }

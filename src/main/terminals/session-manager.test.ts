@@ -674,6 +674,7 @@ describe('registerTerminalHandlers', () => {
       'agent.list',
       'layout.get',
       'layout.set',
+      'terminal.agentEvent',
       'terminal.close',
       'terminal.create',
       'terminal.list',
@@ -689,4 +690,77 @@ describe('registerTerminalHandlers', () => {
     // same declaration the CLI and the renderer are typed from.
     expect(registered.get('terminal.create')).toBe(service.schemas['terminal.create'])
   })
+})
+
+// What the agent says about itself, as the runtime keeps it.
+//
+// One field, the latest thing said, and it is overtaken by exactly one thing:
+// a keystroke, when what was said was about a turn in progress. A request the
+// person has just answered is not a request any more, and a turn the person
+// has just interrupted is not running — but a turn that ended stays ended
+// until the agent says otherwise, because typing the next prompt is not
+// starting it.
+describePty('terminal.agentEvent', () => {
+  it(
+    'records the latest event on the pane and answers with the pane',
+    async () => {
+      const service = newService()
+      const terminal = await newTerminal(service)
+
+      const said = await service.handlers['terminal.agentEvent']({
+        terminalId: terminal.id,
+        event: 'Notification',
+        at: 5_000,
+        detail: 'permission_prompt'
+      })
+      expect(said.agentEvent).toEqual({ event: 'Notification', at: 5_000, detail: 'permission_prompt' })
+      expect((await service.handlers['terminal.list']({}))[0]?.agentEvent).toEqual(said.agentEvent)
+
+      const later = await service.handlers['terminal.agentEvent']({ terminalId: terminal.id, event: 'Stop', at: 6_000 })
+      expect(later.agentEvent).toEqual({ event: 'Stop', at: 6_000 })
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'lets a keystroke overtake a request or a running turn, but not a turn that ended',
+    async () => {
+      const service = newService()
+      const terminal = await newTerminal(service)
+      const said = async (event: 'Notification' | 'UserPromptSubmit' | 'Stop'): Promise<void> => {
+        await service.handlers['terminal.agentEvent']({ terminalId: terminal.id, event, at: 1 })
+      }
+      const current = async (): Promise<string | undefined> =>
+        (await service.handlers['terminal.list']({}))[0]?.agentEvent?.event
+
+      await said('Notification')
+      await service.handlers['terminal.write']({ terminalId: terminal.id, data: 'y' })
+      expect(await current()).toBeUndefined()
+
+      await said('UserPromptSubmit')
+      await service.handlers['terminal.write']({ terminalId: terminal.id, data: '\x1b' })
+      expect(await current()).toBeUndefined()
+
+      await said('Stop')
+      await service.handlers['terminal.write']({ terminalId: terminal.id, data: 'next prompt' })
+      expect(await current()).toBe('Stop')
+
+      // The emulator answering the program's own questions is nobody typing.
+      await said('Notification')
+      await service.handlers['terminal.write']({ terminalId: terminal.id, data: '\x1b[?1;2c', byHand: false })
+      expect(await current()).toBe('Notification')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'refuses a pane that does not exist',
+    async () => {
+      const service = newService()
+      await expect(
+        service.handlers['terminal.agentEvent']({ terminalId: 'term_nope', event: 'Stop', at: 1 })
+      ).rejects.toSatisfy((error: unknown) => isTerminalServiceError(error) && error.code === ErrorCode.NotFound)
+    },
+    TEST_TIMEOUT_MS
+  )
 })

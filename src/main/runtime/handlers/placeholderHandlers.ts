@@ -39,6 +39,7 @@ export function registerPlaceholderHandlers(registry: MethodRegistry): void {
   placeholder(registry, 'terminal.subscribe', Params.terminalSubscribe)
   placeholder(registry, 'terminal.split', Params.terminalSplit)
   placeholder(registry, 'terminal.relaunch', Params.terminalRelaunch)
+  placeholder(registry, 'terminal.agentEvent', Params.terminalAgentEvent)
 
   placeholder(registry, 'layout.get', Params.layoutGet)
   placeholder(registry, 'layout.set', Params.layoutSet)

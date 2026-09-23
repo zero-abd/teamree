@@ -192,6 +192,10 @@ describe('dispatcher', () => {
       'teamwork.watch',
       'teamwork.watchers',
       'teamwork.writeLog',
+      // Local by nature: this is the agent in a pane reporting on itself,
+      // through the CLI socket on the machine the pane runs on. A teammate
+      // watching a pane does not get to say what its agent is doing.
+      'terminal.agentEvent',
       'terminal.close',
       'terminal.create',
       'terminal.list',

@@ -19,8 +19,16 @@
 // saying so, has said something positive about itself — and that, and only
 // that, is what `waiting` is read from. A pane with neither stays `quiet`, in
 // the same words as before, because about that pane nothing more is known.
+//
+// And then the one source that is not bytes at all. An agent with hooks
+// reports its own state through this app's CLI — a question put up, a turn
+// started, a turn ended — and that is the program speaking, at the moment it
+// changed, in words it chose. It outranks every reading above, because every
+// reading above was only ever a stand-in for it: the whole of `waiting` was
+// built from a bell and a title because nothing better was reachable, and
+// Claude Code writes neither while it sits on a permission prompt.
 
-import type { AgentKind, PaneWatcher, Terminal } from '@shared/entities'
+import type { AgentEvent, AgentKind, PaneWatcher, Terminal } from '@shared/entities'
 import type { TitleOpinion } from '@shared/titleOpinion'
 
 export type AgentActivity =
@@ -135,10 +143,58 @@ export type PaneActivitySource = {
   titleSays?: TitleOpinion
   /** When the bell last rang, if it rang in the burst of output that just ended. */
   lastBellAt?: number
+  /** What the agent last reported about itself, when it reports at all. */
+  agentEvent?: AgentEvent
+}
+
+/**
+ * Notification types that are about the agent rather than aimed at you.
+ *
+ * Every other type is a request — a permission prompt, a question, an idle
+ * prompt, a dialog — and a type this version has not met is read as one too,
+ * because a request missed is the failure this whole file exists to prevent
+ * and a login announced as "waiting on you" is a glance at a pane.
+ */
+const NOT_A_REQUEST = new Set([
+  'auth_success',
+  'agent_completed',
+  'quota_auto_resume_fired',
+  'quota_auto_resume_stale',
+  'quota_auto_resume_disabled'
+])
+
+/**
+ * What the agent's last word says the pane is doing, or null when it says
+ * nothing about that.
+ *
+ * `Notification` is the agent needing somebody, unless its type says it is
+ * merely telling them something. `UserPromptSubmit` is a turn under way, and
+ * it stands however long the pane is silent — a model call prints nothing.
+ * `Stop` is the turn over; the two session events bracket a session and mean
+ * the same thing, an agent at its prompt with nothing running.
+ */
+export function agentSays(event: AgentEvent | undefined): AgentActivity | null {
+  if (event === undefined) return null
+  switch (event.event) {
+    case 'Notification':
+      return event.detail !== undefined && NOT_A_REQUEST.has(event.detail) ? null : 'waiting'
+    case 'UserPromptSubmit':
+      return 'working'
+    case 'Stop':
+    case 'SessionStart':
+    case 'SessionEnd':
+      return 'quiet'
+  }
 }
 
 /**
  * The order is the argument.
+ *
+ * An exit first, because a process that has ended has nothing more to say and
+ * whatever it said before is about a process that is gone. Then the agent's
+ * own word, when it has given one; everything after this line is a reading
+ * of bytes, kept for the panes whose agent has not spoken and the notes that
+ * were never about the person.
  *
  * A title claiming to be waiting is the pane saying so in the present tense, so
  * it outranks even output still arriving — an agent can print its question and
@@ -152,6 +208,8 @@ export type PaneActivitySource = {
  */
 export function activityOf(terminal: PaneActivitySource): AgentActivity {
   if (!terminal.running) return terminal.exitCode === 0 ? 'done' : 'failed'
+  const said = agentSays(terminal.agentEvent)
+  if (said !== null) return said
   if (terminal.titleSays === 'waiting') return 'waiting'
   if (terminal.busy) return 'working'
   if (terminal.lastBellAt !== undefined) return 'waiting'
