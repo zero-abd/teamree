@@ -51,6 +51,8 @@ export type RegisterHandlersOptions = {
   downloadsDirectory?: string
   /** `shell.openPath`: opens the fetched `.dmg`. Absent with no Electron around. */
   openPath?: (path: string) => Promise<string>
+  /** `shell.trashItem`, for discarding an untracked file. Absent with no Electron around, where that refuses. */
+  trashItem?: (path: string) => Promise<void>
   /** Where each pane's output is kept between launches. Absent, panes come back with nothing above their prompt. */
   scrollback?: ScrollbackRepository
   /**
@@ -130,6 +132,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     store: registry.context.store,
     // Spread rather than passed as `undefined`, so the service's own default stands.
     ...(options.worktreesRoot === undefined ? {} : { worktreesRoot: options.worktreesRoot }),
+    ...(options.trashItem === undefined ? {} : { trash: options.trashItem }),
     // The one seam between "a checkout is ready" and "a pane is open in it",
     // for a GUI create and a CLI create alike.
     startSetup: ({ worktree, command }) => {

@@ -206,6 +206,15 @@ export type WorktreeHunkStage = {
   appliedAt: number
 }
 
+/** What discarding a path or one hunk did. A receipt; the caller re-reads through the usual invalidation. */
+export type WorktreeDiscard = {
+  worktreeId: string
+  path: string
+  /** `trashed`: an untracked file went to the Trash. `restored`: back to staged, else committed. */
+  outcome: 'trashed' | 'restored' | 'hunk'
+  discardedAt: number
+}
+
 /**
  * Whether a worktree's branch would merge into its project's base ref.
  * Answered without checking anything out, so it is cheap to ask for every worktree.

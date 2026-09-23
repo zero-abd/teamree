@@ -548,6 +548,29 @@ describe('handler seam', () => {
     expect(await handlers['worktree.remove']({ worktreeId: created.id })).toEqual({ removed: true })
     expect(await handlers['project.remove']({ projectId: project.id })).toEqual({ removed: true })
   })
+
+  it('hands an untracked file to the Trash it was given, and refuses one without', async () => {
+    const repo = await newRepo()
+    const trashed: string[] = []
+    const service = newService(repo, { trash: async (target) => void trashed.push(target) })
+    const project = await service.addProject({ path: repo.repoPath })
+    const worktree = await readyWorktree(service, project.id, 'discard')
+    await repo.write('new.txt', 'x\n', worktree.path)
+
+    const handlers = createGitHandlers(service)
+    const result = await handlers['worktree.discardPath']({ worktreeId: worktree.id, path: 'new.txt' })
+
+    expect(result.outcome).toBe('trashed')
+    expect(trashed).toEqual([path.join(worktree.path, 'new.txt')])
+    const bare = newService(repo)
+    const again = await bare.addProject({ path: repo.repoPath })
+    const other = await readyWorktree(bare, again.id, 'no trash')
+    await repo.write('new.txt', 'x\n', other.path)
+    expect((await rejection(bare.worktreeDiscardPath({ worktreeId: other.id, path: 'new.txt' }))).code).toBe(
+      ErrorCode.Conflict
+    )
+    expect(existsSync(path.join(other.path, 'new.txt'))).toBe(true)
+  })
 })
 
 describe('the command a project runs in every new worktree', () => {

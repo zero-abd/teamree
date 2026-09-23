@@ -43,6 +43,8 @@ export type RuntimeOptions = {
   downloadsDirectory?: string
   /** Opens the fetched `.dmg`; `shell.openPath` in the app. */
   openPath?: (path: string) => Promise<string>
+  /** Moves a discarded untracked file to the Trash; `shell.trashItem` in the app. */
+  trashItem?: (path: string) => Promise<void>
   /** Announces an agent pane that has stopped. Passed in for the same reason `openExternal` is. */
   onAgentNotice?: (notice: AgentNotice) => void
   /** Ends the app, for `teamree quit`; `app.quit` in the main process. Absent, the method refuses. */
@@ -75,6 +77,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     openExternal,
     downloadsDirectory,
     openPath,
+    trashItem,
     onAgentNotice,
     requestQuit,
     onError
@@ -96,6 +99,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     openExternal,
     downloadsDirectory,
     openPath,
+    ...(trashItem === undefined ? {} : { trashItem }),
     onAgentNotice,
     scrollback,
     worktreesRoot,

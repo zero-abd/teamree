@@ -12,6 +12,7 @@ import type {
   WorktreeChanges,
   WorktreeCommit,
   WorktreeDiff,
+  WorktreeDiscard,
   WorktreeFileMatches,
   WorktreeFiles,
   WorktreeHunkStage,
@@ -35,6 +36,7 @@ import { readMergePreview } from './mergePreview'
 import { readWorktreeLog } from './worktreeLog'
 import { commitWorktree } from './worktreeCommit'
 import { applyHunk } from './worktreeHunk'
+import { discardHunk, discardPath, type Trash } from './worktreeDiscard'
 import { pushWorktree } from './worktreePush'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
 import { findWorktreeFiles, readWorktreeFiles } from './worktreeFiles'
@@ -92,6 +94,8 @@ export type GitServiceOptions = {
    * pane id. Handed in because opening a pane needs the terminal service.
    */
   startSetup?: (input: { worktree: Worktree; project: Project; command: string }) => string | undefined
+  /** `shell.trashItem`. Absent, discarding an untracked file is refused. */
+  trash?: Trash
 }
 
 /** What the runtime persists between launches. */
@@ -117,6 +121,7 @@ export class GitService {
   readonly #now: () => number
   readonly #createId: () => string
   readonly #startSetup: GitServiceOptions['startSetup']
+  readonly #trash: Trash | undefined
   readonly #ensureVersion: (cwd: string) => Promise<unknown>
 
   readonly #store: GitRecordStore
@@ -139,6 +144,7 @@ export class GitService {
     this.#now = options.now ?? Date.now
     this.#createId = options.createId ?? randomUUID
     this.#startSetup = options.startSetup
+    this.#trash = options.trash
     this.#ensureVersion = createVersionProbe(this.#runner)
   }
 
@@ -491,6 +497,30 @@ export class GitService {
       path: params.path,
       hunk: params.hunk,
       staged,
+      now: this.#now
+    })
+  }
+
+  /** Throws away a path's unstaged change; see `worktreeDiscard.ts`. Never writes the index. */
+  async worktreeDiscardPath(params: ParamsOf<'worktree.discardPath'>): Promise<WorktreeDiscard> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'discarding')
+    return discardPath(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      path: params.path,
+      ...(this.#trash === undefined ? {} : { trash: this.#trash }),
+      now: this.#now
+    })
+  }
+
+  /** Reverses one unstaged hunk out of the file on disk. Never writes the index. */
+  async worktreeDiscardHunk(params: ParamsOf<'worktree.discardHunk'>): Promise<WorktreeDiscard> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'discarding')
+    return discardHunk(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      path: params.path,
+      hunk: params.hunk,
       now: this.#now
     })
   }

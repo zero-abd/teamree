@@ -52,6 +52,19 @@ export function publishGitWrites(registry: MethodRegistry, git: GitService, bus:
     return result
   })
 
+  // Discarding writes the working tree; announced for the same reason staging is.
+  registry.register('worktree.discardPath', Params.worktreeDiscardPath, async (params) => {
+    const result = await git.worktreeDiscardPath(params)
+    bus.emit({ type: 'worktrees' })
+    return result
+  })
+
+  registry.register('worktree.discardHunk', Params.worktreeDiscardHunk, async (params) => {
+    const result = await git.worktreeDiscardHunk(params)
+    bus.emit({ type: 'worktrees' })
+    return result
+  })
+
   registry.register('worktree.push', Params.worktreePush, async (params) => {
     const result = await git.worktreePush(params)
     // Ahead and behind moved even when nothing was sent.
