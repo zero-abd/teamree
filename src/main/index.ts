@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, powerSaveBlock
 import { installAgentNotices, type AgentNoticeChannel } from './agentNotices'
 import { applicationMenuTemplate, type ApplicationMenuOptions } from './appMenu'
 import { installKeepAwake } from './keepAwake'
+import { frontsExistingWindow, isBackgroundLaunch, launchData, userDataOverride } from './launchProfile'
 import { installMenuBar } from './menuBar'
 import { DEFAULT_APPEARANCE, resolvePalette } from '../shared/theme'
 import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
@@ -39,7 +40,7 @@ function createWindow(): BrowserWindow {
   })
 
   window.on('ready-to-show', () => {
-    if (process.env.TEAMREE_BACKGROUND_LAUNCH !== '1') window.show()
+    if (!isBackgroundLaunch(process.env)) window.show()
   })
 
   // A link in a pane arrives here via `window.open`; windowNavigation.ts decides.
@@ -81,12 +82,17 @@ function setDockBadge(count: number): void {
   app.dock?.setBadge(count === 0 ? '' : String(count))
 }
 
-if (!app.requestSingleInstanceLock()) {
+// Before the lock: Chromium keys the single-instance lock on the profile, so a
+// throwaway profile runs beside the installed app instead of knocking on it.
+const profile = userDataOverride(process.env, process.cwd())
+if (profile) app.setPath('userData', profile)
+
+if (!app.requestSingleInstanceLock(launchData(process.env))) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, _argv, _cwd, knocking) => {
     const [existing] = BrowserWindow.getAllWindows()
-    if (!existing) return
+    if (!existing || !frontsExistingWindow(process.env, knocking)) return
     if (existing.isMinimized()) existing.restore()
     existing.focus()
   })
