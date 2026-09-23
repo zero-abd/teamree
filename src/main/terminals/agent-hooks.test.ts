@@ -6,12 +6,14 @@
 // pty half is the file's life: written for the pane, kept across the pane's
 // program starting again, and gone with the pane.
 
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { AGENT_HOOK_EVENTS, hookSettings, hookSettingsPath, hookedLaunch } from './agent-hooks'
+import { shippedCliCandidates } from '../cli/shippedCli'
+import { AGENT_HOOK_EVENTS, hookCommand, hookSettings, hookSettingsPath, hookedLaunch } from './agent-hooks'
 import { canSpawnPty, waitUntil, writeFakeAgent } from './pty-test-support'
 import type { TerminalRecord } from './session-restore'
 import { TerminalSessionManager, type SessionRepository } from './session-manager'
@@ -52,6 +54,48 @@ describe('hookSettings', () => {
 
   it('does not name a matcher, so every notification type is heard', () => {
     expect(settings.hooks.Notification[0]).not.toHaveProperty('matcher')
+  })
+})
+
+// The line names the CLI by the path the app found it at, and the app finds it
+// in one of two places (see `shippedCli.ts`). Both are spelled out here as the
+// hook would carry them, because a hook pointing at the checkout from inside an
+// installed app, or at a path with a bare space in it, fails without a word:
+// `|| true` sees to that, by design.
+describe('hookCommand', () => {
+  const [packaged, checkout] = shippedCliCandidates({
+    resourcesPath: '/Applications/teamree.app/Contents/Resources',
+    cwd: '/Users/ana/My Projects/teamree'
+  })
+
+  it('runs the CLI where the installed app keeps it, with the profile path quoted', () => {
+    expect(packaged).toEqual({ path: '/Applications/teamree.app/Contents/Resources/cli/teamree', packaged: true })
+    expect(hookCommand({ userDataDir: USER_DATA, cli: packaged?.path ?? '' }, 'term_7', 'Stop')).toBe(
+      '/Applications/teamree.app/Contents/Resources/cli/teamree agent event --terminal term_7 --event Stop ' +
+        "--user-data-dir '/Users/ana/Library/Application Support/teamree' --timeout 3000 || true"
+    )
+  })
+
+  it('runs the CLI out of the checkout on a development run, quoted when the checkout has a space in it', () => {
+    expect(checkout).toEqual({ path: '/Users/ana/My Projects/teamree/resources/cli/teamree', packaged: false })
+    expect(hookCommand({ userDataDir: '/tmp/profile', cli: checkout?.path ?? '' }, 'term_7', 'Stop')).toBe(
+      "'/Users/ana/My Projects/teamree/resources/cli/teamree' agent event --terminal term_7 --event Stop " +
+        '--user-data-dir /tmp/profile --timeout 3000 || true'
+    )
+  })
+
+  // The hook runs under whatever environment the agent has, which is the
+  // pane's login shell, and an installed app cannot assume that shell has a
+  // Node on its PATH. The launcher the line names runs the bundle under the
+  // app's own binary and reaches for a system `node` only in a checkout.
+  it('names a launcher that needs no node on PATH inside the installed app', () => {
+    const launcher = fileURLToPath(new URL('../../../resources/cli/teamree', import.meta.url))
+    expect(statSync(launcher).mode & 0o111).not.toBe(0)
+    const script = readFileSync(launcher, 'utf8')
+    expect(script.startsWith('#!/bin/sh')).toBe(true)
+    expect(script).toContain('ELECTRON_RUN_AS_NODE=1 exec "$host" "$bundle" "$@"')
+    // The app's binary is tried before PATH is consulted at all.
+    expect(script.indexOf('ELECTRON_RUN_AS_NODE=1')).toBeLessThan(script.indexOf('command -v node'))
   })
 })
 
@@ -148,15 +192,21 @@ describePty('the settings file over a real pty', () => {
       const sessions = new Records()
       const first = manager(checkout, userDataDir, sessions)
 
-      const terminal = first.create({ worktreeId: WORKTREE, command: launch })
+      // With a first prompt, which goes on the running line and not the record:
+      // the flag has to be on both, and in front of the prompt.
+      const terminal = first.create({ worktreeId: WORKTREE, command: launch, prompt: 'first words' })
       const file = hookSettingsPath(userDataDir, terminal.id)
       expect(existsSync(file)).toBe(true)
       const written = JSON.parse(readFileSync(file, 'utf8')) as ReturnType<typeof hookSettings>
       expect(written.hooks.Stop[0]?.hooks[0]?.command).toContain(`--terminal ${terminal.id}`)
 
       // The fake agent prints its arguments, so the pane shows what it was handed.
-      await waitUntil(() => first.read(terminal.id).includes('--settings'), 'the agent to print its arguments')
-      expect(first.read(terminal.id)).toContain(file)
+      await waitUntil(() => first.read(terminal.id).includes('first words'), 'the agent to print its arguments')
+      const printed = first.read(terminal.id)
+      expect(printed).toContain(file)
+      expect(printed.indexOf('--settings')).toBeLessThan(printed.indexOf('first words'))
+      expect(sessions.listTerminals()[0]?.command).toContain('--settings')
+      expect(sessions.listTerminals()[0]?.command).not.toContain('first words')
 
       // Ended, and started again: the same pane, the same file.
       await waitUntil(() => !first.list().find((row) => row.id === terminal.id)?.running, 'the agent to exit')
