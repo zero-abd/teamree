@@ -113,6 +113,8 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'split-down': { section: 'window' },
   'focus-previous-pane': { section: 'window' },
   'focus-next-pane': { section: 'window' },
+  'select-previous-pane': { section: 'window' },
+  'select-next-pane': { section: 'window' },
   // Which pane fills the window is the same subject as how they are arranged,
   // so it is read under the same menu — and under the walk rather than above
   // it, because it is the thing you do once you have arrived.
@@ -192,7 +194,7 @@ export const ACCELERATOR_KEY_NAMES: Readonly<Record<string, string>> = {
  * arrows are the exception, and `ACCELERATOR_KEY_NAMES` above is all of it.
  */
 export function acceleratorForChord(chord: Chord): string {
-  const parts = ['CommandOrControl']
+  const parts = [chord.ctrl ? 'Control' : 'CommandOrControl']
   if (chord.alt) parts.push('Alt')
   if (chord.shift) parts.push('Shift')
   parts.push(ACCELERATOR_KEY_NAMES[chord.key] ?? (chord.key.length === 1 ? chord.key.toUpperCase() : chord.key))

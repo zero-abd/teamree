@@ -20,11 +20,13 @@ export type MenuBarItem = {
 }
 
 /**
- * The only spelling of an accelerator the window can produce; a page that could
- * publish any string could publish `CommandOrControl+Q`. Named keys are listed
- * one by one: `Tab`, `Escape` and `F4` are keys a menu item can take off the platform.
+ * The only spellings of an accelerator the window can produce. Named keys are listed one by one:
+ * `Escape` and `F4` are keys a menu item can take off the platform; Tab only with Control, for the tab walk.
  */
-const ACCELERATOR = /^CommandOrControl(\+Alt)?(\+Shift)?\+([^+\s]|Up|Down|Left|Right|Enter)$/
+const ACCELERATOR = /^(CommandOrControl(\+Alt)?(\+Shift)?\+([^+\s]|Up|Down|Left|Right|Enter)|Control(\+Shift)?\+Tab)$/
+
+/** Quit, Hide and Minimize: an item of ours above the platform's would take the key. */
+const PLATFORM_KEYS = /^CommandOrControl\+[QHM]$/i
 
 /** The table has twelve; a page publishing hundreds is not describing a menu. */
 const MOST_ITEMS = 64
@@ -38,7 +40,7 @@ function isMenuBarItem(value: unknown): value is MenuBarItem {
     typeof item.label === 'string' &&
     item.label.length > 0 &&
     typeof item.accelerator === 'string' &&
-    (item.accelerator === '' || ACCELERATOR.test(item.accelerator)) &&
+    (item.accelerator === '' || (ACCELERATOR.test(item.accelerator) && !PLATFORM_KEYS.test(item.accelerator))) &&
     typeof item.section === 'string' &&
     typeof item.enabled === 'boolean'
   )

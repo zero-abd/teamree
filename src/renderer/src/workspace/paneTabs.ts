@@ -47,6 +47,19 @@ export function paneTabs(root: PaneNode | null, terminals: Readonly<Record<strin
   })
 }
 
+/** The tab ⌘`n` shows among `ids` in strip order: the Nth for 1–8, the last for 9. */
+export function numberedTab(ids: readonly string[], n: number): string | null {
+  return (n === 9 ? ids.at(-1) : ids[n - 1]) ?? null
+}
+
+/** The tab `step` along from `current`, wrapping; from no tab, forwards is the first and backwards the last. */
+export function tabAfter(ids: readonly string[], current: string | null, step: 1 | -1): string | null {
+  if (ids.length === 0) return null
+  const index = current === null ? -1 : ids.indexOf(current)
+  const from = index === -1 ? (step === 1 ? -1 : 0) : index
+  return ids[(from + step + ids.length) % ids.length] ?? null
+}
+
 /** A leaf whose record has not arrived, as a name is read from it. */
 const UNARRIVED: PaneNameSource = { title: 'terminal', shell: '' }
 

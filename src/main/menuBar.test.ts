@@ -49,6 +49,11 @@ describe('reading a published menu', () => {
       'CommandOrControl+Alt+Up',
       'CommandOrControl+Alt+Down',
       'CommandOrControl+Shift+Enter',
+      'CommandOrControl+1',
+      'CommandOrControl+9',
+      // The tab walk is Control on every platform.
+      'Control+Tab',
+      'Control+Shift+Tab',
       // No key at all claims nothing from the platform.
       ''
     ]) {
@@ -65,10 +70,22 @@ describe('reading a published menu', () => {
       'CommandOrControl+Tab',
       'CommandOrControl+F4',
       'CommandOrControl+Space',
-      'CommandOrControl+UpDown'
+      'CommandOrControl+UpDown',
+      // Tab is Control's alone, and Control takes nothing else.
+      'Control+D',
+      'Control+Q',
+      'Control+Alt+Tab'
     ]) {
       expect(readMenuBarItems([{ ...ITEM, accelerator }]), accelerator).toBeNull()
     }
+  })
+
+  // Quit, Hide and Minimize are the platform's; an item of ours above them would take the key.
+  it('refuses the keys the platform’s own items answer', () => {
+    for (const accelerator of ['CommandOrControl+Q', 'CommandOrControl+H', 'CommandOrControl+M']) {
+      expect(readMenuBarItems([{ ...ITEM, accelerator }]), accelerator).toBeNull()
+    }
+    expect(readMenuBarItems([{ ...ITEM, accelerator: 'CommandOrControl+Shift+M' }])).toHaveLength(1)
   })
 
   it('refuses a list longer than any menu bar', () => {

@@ -145,6 +145,8 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'split-down': 'split pane down horizontal row',
   'focus-previous-pane': 'focus previous pane back left',
   'focus-next-pane': 'focus next pane forward right',
+  'select-next-pane': 'select next pane tab switch cycle',
+  'select-previous-pane': 'select previous pane tab switch cycle back',
   'expand-pane': 'maximize maximise expand pane full zoom',
   'previous-worktree': 'previous worktree up back',
   'next-worktree': 'next worktree down forward',

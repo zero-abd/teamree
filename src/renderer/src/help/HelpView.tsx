@@ -11,6 +11,7 @@ import {
   CLI_TITLE,
   cliHelp,
   HELP_TITLE,
+  paneNumberRows,
   README_DOCUMENT,
   shortcutGroups,
   TEAMWORK_DOCUMENT,
@@ -93,6 +94,14 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
                     <kbd className="help-key__chord">{shortcut.chord ? formatChord(shortcut.chord, modifier) : ''}</kbd>
                   </li>
                 ))}
+                {group.id === 'panes'
+                  ? paneNumberRows(modifier).map((row) => (
+                      <li className="help-key" key={row.title}>
+                        <span className="help-key__what">{row.title}</span>
+                        <kbd className="help-key__chord">{row.chord}</kbd>
+                      </li>
+                    ))
+                  : null}
               </ul>
             </div>
           ))}
