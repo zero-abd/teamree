@@ -2,8 +2,8 @@
 // returns the public half and the *path* of the private one; `loadStaticPrivateKey` is the only way to the
 // bytes, and nothing it returns may reach a method result, a `RuntimeError`, or a log line.
 
-import { createPrivateKey, createPublicKey, generateKeyPairSync } from 'node:crypto'
-import { chmod, mkdir, open, readFile } from 'node:fs/promises'
+import { createPrivateKey, createPublicKey, generateKeyPairSync, randomUUID } from 'node:crypto'
+import { chmod, link, mkdir, open, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { internal } from '../runtime/runtimeError'
 
@@ -38,18 +38,24 @@ export async function loadIdentity(dataDir: string): Promise<Identity> {
   await mkdir(dataDir, { recursive: true })
   const pem = generateKeyPairSync('x25519').privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
 
+  // Written aside and linked into place: `link` is exclusive like `wx`, but no
+  // other runtime can read the file before the key is in it.
+  const staged = `${privateKeyPath}.${randomUUID()}.tmp`
   try {
-    const handle = await open(privateKeyPath, 'wx', PRIVATE_KEY_MODE)
+    const handle = await open(staged, 'wx', PRIVATE_KEY_MODE)
     try {
       await handle.writeFile(pem, 'utf8')
       await handle.sync()
     } finally {
       await handle.close()
     }
+    await link(staged, privateKeyPath)
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
     const won = await readFile(privateKeyPath, 'utf8')
     return { publicKey: publicKeyOf(won, privateKeyPath), privateKeyPath }
+  } finally {
+    await rm(staged, { force: true })
   }
 
   await restrict(privateKeyPath)
