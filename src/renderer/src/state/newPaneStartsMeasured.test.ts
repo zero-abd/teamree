@@ -18,7 +18,7 @@ vi.mock('../terminal/paneMetrics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../terminal/paneMetrics')>()
   return {
     ...actual,
-    newPaneSize: (fontSize: number, root: unknown) => {
+    newPaneSize: (fontSize: number, _fontFamily: string, root: unknown) => {
       measurement.asked.push({ fontSize, root })
       return measurement.size
     }

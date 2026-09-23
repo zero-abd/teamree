@@ -105,6 +105,79 @@ export function writeStoredTerminalFontSize(storage: Pick<Storage, 'setItem'> | 
   }
 }
 
+const TERMINAL_OPTIONS_KEY = 'teamree.terminal.options'
+
+export type TerminalCursorStyle = 'bar' | 'block' | 'underline'
+
+export const TERMINAL_CURSOR_STYLES: readonly TerminalCursorStyle[] = ['bar', 'block', 'underline']
+
+export const TERMINAL_SCROLLBACK_MIN = 1_000
+export const TERMINAL_SCROLLBACK_MAX = 100_000
+
+/** How every pane draws and reads keys, apart from its text size. */
+export type TerminalOptions = {
+  /** A CSS font stack. */
+  fontFamily: string
+  cursorStyle: TerminalCursorStyle
+  cursorBlink: boolean
+  /** Option sends ESC-prefixed keys (word motion in shells and agent TUIs) instead of composing characters. */
+  optionIsMeta: boolean
+  copyOnSelect: boolean
+  scrollback: number
+}
+
+export const TERMINAL_OPTIONS_DEFAULT: TerminalOptions = {
+  fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace',
+  cursorStyle: 'bar',
+  cursorBlink: true,
+  optionIsMeta: false,
+  copyOnSelect: false,
+  scrollback: 5_000
+}
+
+/** Each field checked on its own, so one bad value costs that field its default and no other. */
+export function sanitizeTerminalOptions(raw: unknown): TerminalOptions {
+  const value = raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+  const fallback = TERMINAL_OPTIONS_DEFAULT
+  const flag = (key: 'cursorBlink' | 'optionIsMeta' | 'copyOnSelect'): boolean => {
+    const stored = value[key]
+    return typeof stored === 'boolean' ? stored : fallback[key]
+  }
+  const font = typeof value.fontFamily === 'string' ? value.fontFamily.trim() : ''
+  const scrollback = value.scrollback
+  return {
+    fontFamily: font.length > 0 ? font : fallback.fontFamily,
+    cursorStyle: TERMINAL_CURSOR_STYLES.find((style) => style === value.cursorStyle) ?? fallback.cursorStyle,
+    cursorBlink: flag('cursorBlink'),
+    optionIsMeta: flag('optionIsMeta'),
+    copyOnSelect: flag('copyOnSelect'),
+    scrollback:
+      typeof scrollback === 'number' && Number.isFinite(scrollback)
+        ? Math.min(Math.max(Math.round(scrollback), TERMINAL_SCROLLBACK_MIN), TERMINAL_SCROLLBACK_MAX)
+        : fallback.scrollback
+  }
+}
+
+export function readStoredTerminalOptions(storage: Pick<Storage, 'getItem'> | undefined): TerminalOptions {
+  try {
+    const raw = storage?.getItem(TERMINAL_OPTIONS_KEY)
+    return sanitizeTerminalOptions(raw === null || raw === undefined ? null : JSON.parse(raw))
+  } catch {
+    return TERMINAL_OPTIONS_DEFAULT
+  }
+}
+
+export function writeStoredTerminalOptions(
+  storage: Pick<Storage, 'setItem'> | undefined,
+  options: TerminalOptions
+): void {
+  try {
+    storage?.setItem(TERMINAL_OPTIONS_KEY, JSON.stringify(sanitizeTerminalOptions(options)))
+  } catch {
+    // As above: the choice holds for this window and is forgotten on the next.
+  }
+}
+
 /**
  * Each project's preferred start point, by project id. Anything that is not an object of non-empty
  * strings is dropped whole, so a corrupt entry cannot put `[object Object]` into a git ref field.

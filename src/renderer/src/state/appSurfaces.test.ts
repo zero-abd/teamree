@@ -19,7 +19,8 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('./workspaceStore')
-const { TERMINAL_FONT_DEFAULT_PX, TERMINAL_FONT_MAX_PX } = await import('./preferences')
+const { TERMINAL_FONT_DEFAULT_PX, TERMINAL_FONT_MAX_PX, TERMINAL_OPTIONS_DEFAULT, TERMINAL_SCROLLBACK_MAX } =
+  await import('./preferences')
 
 const INITIAL = useWorkspaceStore.getState()
 const store = (): ReturnType<typeof useWorkspaceStore.getState> => useWorkspaceStore.getState()
@@ -90,6 +91,23 @@ describe('the size of the text in a pane', () => {
   it('clamps rather than refusing, so a control cannot put a pane out of reach', () => {
     store().setTerminalFontSize(400)
     expect(store().terminalFontSize).toBe(TERMINAL_FONT_MAX_PX)
+  })
+})
+
+describe('how a pane draws and reads keys', () => {
+  it('changes one option, keeps the rest, and remembers all of them', () => {
+    store().setTerminalOptions({ cursorStyle: 'block', optionIsMeta: true })
+    expect(store().terminalOptions).toEqual({ ...TERMINAL_OPTIONS_DEFAULT, cursorStyle: 'block', optionIsMeta: true })
+    expect(JSON.parse(window.localStorage.getItem('teamree.terminal.options') ?? '{}')).toMatchObject({
+      cursorStyle: 'block',
+      optionIsMeta: true
+    })
+  })
+
+  it('holds what it is given to what a pane can use', () => {
+    store().setTerminalOptions({ scrollback: 10_000_000, fontFamily: '  ' })
+    expect(store().terminalOptions.scrollback).toBe(TERMINAL_SCROLLBACK_MAX)
+    expect(store().terminalOptions.fontFamily).toBe(TERMINAL_OPTIONS_DEFAULT.fontFamily)
   })
 })
 

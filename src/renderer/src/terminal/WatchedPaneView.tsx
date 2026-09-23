@@ -11,7 +11,7 @@ import type { WatchedPaneEvent } from '@shared/methods'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere, type HandsHere } from './handsHere'
-import { readTerminalTheme, TERMINAL_FONT_FAMILY } from './terminalTheme'
+import { readTerminalTheme } from './terminalTheme'
 
 /** Written into the pane itself, because that is where the fact belongs. */
 const DIM = '\u001b[38;5;244m'
@@ -88,6 +88,8 @@ export function WatchedPaneView({
   // The reader's own setting: cell size on *this* screen, not the owner's columns and rows.
   const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
   const fontSizeRef = useRef(fontSize)
+  const fontFamily = useWorkspaceStore((state) => state.terminalOptions.fontFamily)
+  const fontFamilyRef = useRef(fontFamily)
   const termRef = useRef<XTerm | null>(null)
   const refitRef = useRef<(() => void) | null>(null)
   const openedAtRef = useRef(0)
@@ -260,8 +262,8 @@ export function WatchedPaneView({
           // The cursor is the owner's, drawn in the bytes they send.
           cursorBlink: false,
           cursorInactiveStyle: 'none',
-          fontFamily: TERMINAL_FONT_FAMILY,
-          // From the ref: this effect is keyed on the pane, and the emulator must not be rebuilt for a number.
+          // From the refs: this effect is keyed on the pane, and the emulator must not be rebuilt for a preference.
+          fontFamily: fontFamilyRef.current,
           fontSize: fontSizeRef.current,
           lineHeight: 1.25,
           scrollback: 5000,
@@ -344,6 +346,14 @@ export function WatchedPaneView({
     term.options.fontSize = fontSize
     refitRef.current?.()
   }, [fontSize])
+
+  useEffect(() => {
+    fontFamilyRef.current = fontFamily
+    const term = termRef.current
+    if (term === null || term.options.fontFamily === fontFamily) return
+    term.options.fontFamily = fontFamily
+    refitRef.current?.()
+  }, [fontFamily])
 
   // Repaints when the palette moves: xterm cannot read CSS. Read off the document
   // after `App` has written it — that write is a *layout* effect; React flushes
