@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Worktree, WorktreeFileMatches } from '@shared/entities'
+import { fileViewerFor } from '@shared/filePane'
 import { runtimeClient } from '../../runtimeClient/currentRuntimeClient'
 import { editorLabel } from '../../sidebar/Sidebar'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
@@ -36,6 +37,7 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
   const editorCommand = useWorkspaceStore((state) => state.editorCommands[worktree.projectId])
   const editors = useWorkspaceStore((state) => state.editors)
   const openInEditor = useWorkspaceStore((state) => state.openInEditor)
+  const openFilePane = useWorkspaceStore((state) => state.openFilePane)
   const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
   const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
 
@@ -94,7 +96,12 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
   }, [query, worktree.id])
 
   const absolute = (path: string): string => `${worktree.path}/${path}`
-  const open = (path: string): void => void openInEditor(absolute(path), editorCommand, path)
+  // A file the app has a viewer for opens as a pane; the row menu still offers the editor.
+  const open = (path: string): void => {
+    if (fileViewerFor(path) !== null) openFilePane(worktree.id, path)
+    else void openInEditor(absolute(path), editorCommand, path)
+  }
+  const openInTheEditor = (path: string): void => void openInEditor(absolute(path), editorCommand, path)
   const reveal = (path: string): void => void revealInFinder(absolute(path), path)
 
   const toggle = (row: TreeRow): void => {
@@ -247,7 +254,7 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
           anchor={menu.at}
           onClose={() => setMenu(null)}
           items={[
-            { label: `Open in ${label}`, onChoose: () => open(menu.path) },
+            { label: `Open in ${label}`, onChoose: () => openInTheEditor(menu.path) },
             { label: 'Reveal in Finder', onChoose: () => reveal(menu.path) },
             {
               label: 'Copy path',

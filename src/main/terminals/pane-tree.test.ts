@@ -288,3 +288,42 @@ describe('parsePaneNode', () => {
     expect(parsePaneNode(deep)).toBeNull()
   })
 })
+
+describe('file leaves', () => {
+  const file: PaneNode = { kind: 'leaf', terminalId: 'file:1', pane: 'file', path: 'docs/NOTES.md' }
+
+  it('round-trips a file leaf and a legacy leaf without `pane` through the untrusted parser', () => {
+    const root = parsePaneNode({
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [{ kind: 'leaf', terminalId: 'a' }, file]
+    })
+    expect(root).toEqual({
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [leafPane('a'), file]
+    })
+    expectWellFormed(root)
+  })
+
+  it('drops the file fields a leaf cannot honour, and refuses a file leaf with no path', () => {
+    expect(parsePaneNode({ kind: 'leaf', terminalId: 'a', pane: 'terminal' })).toEqual(leafPane('a'))
+    expect(parsePaneNode({ kind: 'leaf', terminalId: 'a', pane: 'video', path: 'x' })).toEqual(leafPane('a'))
+    expect(parsePaneNode({ kind: 'leaf', terminalId: 'file:1', pane: 'file' })).toBeNull()
+    expect(parsePaneNode({ kind: 'leaf', terminalId: 'file:1', pane: 'file', path: '' })).toBeNull()
+  })
+
+  it('keeps a file leaf through a split and a removal beside it', () => {
+    const split = splitPane(file, 'file:1', 'column', 'b')
+    expect(split).toEqual({
+      kind: 'split',
+      direction: 'column',
+      sizes: [0.5, 0.5],
+      children: [file, leafPane('b')]
+    })
+    expect(removePane(split, 'b')).toEqual(file)
+    expect(terminalIdsIn(split)).toEqual(['file:1', 'b'])
+  })
+})

@@ -65,6 +65,26 @@ describe('workspace store', () => {
     expect(reopened.getWorktree('w1')?.task).toBe('Make the pager stream')
   })
 
+  it('brings a file leaf back with its path', async () => {
+    const store = await WorkspaceStore.open(filePath)
+    store.putProject(project)
+    store.putWorktree(worktree('w1'))
+    const root = {
+      kind: 'split' as const,
+      direction: 'row' as const,
+      sizes: [0.5, 0.5],
+      children: [
+        { kind: 'leaf' as const, terminalId: 't1' },
+        { kind: 'leaf' as const, terminalId: 'file:1', pane: 'file' as const, path: 'NOTES.md' }
+      ]
+    }
+    store.putLayout({ worktreeId: 'w1', root, focusedTerminalId: 'file:1' })
+    await store.flush()
+
+    const reopened = await WorkspaceStore.open(filePath)
+    expect(reopened.getLayout('w1')?.root).toEqual(root)
+  })
+
   it('coalesces a burst of mutations into a durable final state', async () => {
     const store = await WorkspaceStore.open(filePath)
     store.putProject(project)

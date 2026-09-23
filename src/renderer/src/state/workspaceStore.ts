@@ -31,10 +31,25 @@ import type {
   WorktreeStatus
 } from '@shared/entities'
 import { DEFAULT_APPEARANCE, type Appearance } from '@shared/theme'
+import {
+  DEFAULT_MARKDOWN_PATH,
+  fileLeaf,
+  fileLeavesIn,
+  isFilePaneId,
+  isMarkdownPath,
+  newFilePaneId
+} from '@shared/filePane'
 import { closePaneWarning } from '../dialogs/closePaneModel'
 import { noticeLifetime } from '../notices/noticeLifetime'
 import type { TaskCreate } from '../dialogs/taskPlan'
-import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
+import {
+  appendPane,
+  closePane,
+  collectTerminalIds,
+  neighbourTerminalId,
+  setSizesAt,
+  splitPaneWith
+} from '../panes/paneLayout'
 import { worktreeAfter, worktreeOrder } from '../sidebar/worktreeOrder'
 import {
   isWatchedPaneId,
@@ -211,6 +226,15 @@ type WorkspaceState = {
   /** The pane filling the workspace, or null. Not in a `Layout`: maximising is a way of looking, not an arrangement. */
   expandedTerminalId: string | null
 
+  /** File panes with edits not yet on disk, by pane id; each tab draws a dot. */
+  unsavedFiles: Record<string, true>
+  /** A markdown editor holds the keyboard, so ⌘B and ⌘E are bold and code, not the window's. */
+  editingMarkdown: boolean
+  /** The worktree whose strip asks for a file name, because NOTES.md is already open. */
+  namingMarkdown: string | null
+  /** Bumped when the runtime says a worktree's files moved; a file pane re-reads on it. */
+  worktreeFilesEpoch: number
+
   /** When each pane was last in front of this person, by terminal id. Local, from `localStorage`; see `paneSeen.ts`. */
   paneSeenAt: PaneSeen
 
@@ -367,6 +391,14 @@ type WorkspaceState = {
   /** Runs an exited pane's program again, in the same pane. */
   relaunchTerminal: (terminalId: string) => Promise<void>
   createTerminal: (worktreeId: string) => Promise<void>
+  /** Opens a file pane on `path` beside the focused pane, or focuses the one already on it. */
+  openFilePane: (worktreeId: string, path: string) => void
+  /** `New markdown`: NOTES.md, or a name asked for in the strip when that is already open. */
+  newMarkdown: (worktreeId: string) => void
+  /** Answers the strip's question with a name, or null to withdraw it. */
+  nameMarkdown: (name: string | null) => void
+  setFileUnsaved: (paneId: string, dirty: boolean) => void
+  setEditingMarkdown: (editing: boolean) => void
   focusNextPane: () => void
   /** The other way round the same cycle. See `paneCycle`. */
   focusPreviousPane: () => void
@@ -782,6 +814,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     if (targets.updates) reads.push(get().loadUpdate())
     for (const worktreeId of targets.layouts) reads.push(refreshLayout(worktreeId))
     if (targets.worktrees) {
+      set((state) => ({ worktreeFilesEpoch: state.worktreeFilesEpoch + 1 }))
       reads.push(
         refreshWorktrees().then((ready) => {
           for (const worktreeId of ready) stale.add(worktreeId)
@@ -956,6 +989,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     terminals: {},
     layouts: {},
     expandedTerminalId: null,
+    unsavedFiles: {},
+    editingMarkdown: false,
+    namingMarkdown: null,
+    worktreeFilesEpoch: 0,
 
     mergePreviews: {},
     members: {},
@@ -1335,6 +1372,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
      * The question lives here and not on the buttons, so a fourth button is not written without it.
      */
     async closeTerminal(terminalId) {
+      // Nothing runs behind a file pane, and it flushes its last edit on unmount.
+      if (isFilePaneId(terminalId)) {
+        await get().forceCloseTerminal(terminalId)
+        return
+      }
       const warning = closePaneWarning(get().terminals[terminalId])
       if (warning !== null) {
         set({ dialog: { kind: 'confirm-close-pane', terminalId } })
@@ -1350,6 +1392,24 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     async forceCloseTerminal(terminalId) {
       const { activeWorktreeId } = get()
       if (!activeWorktreeId || !get().layouts[activeWorktreeId]) return
+
+      if (isFilePaneId(terminalId)) {
+        // No session to end: closing is taking the leaf out of the tree.
+        const layout = get().layouts[activeWorktreeId]
+        if (!layout) return
+        const nextFocus = neighbourTerminalId(layout.root, terminalId)
+        persistLayout({
+          worktreeId: activeWorktreeId,
+          root: closePane(layout.root, terminalId),
+          focusedTerminalId: layout.focusedTerminalId === terminalId ? nextFocus : layout.focusedTerminalId
+        })
+        set((state) => {
+          const unsavedFiles = { ...state.unsavedFiles }
+          delete unsavedFiles[terminalId]
+          return { unsavedFiles, ...(state.expandedTerminalId === terminalId ? { expandedTerminalId: null } : {}) }
+        })
+        return
+      }
 
       try {
         await runtimeClient.call('terminal.close', { terminalId })
@@ -1413,6 +1473,56 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
+    openFilePane(worktreeId, path) {
+      const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
+      const open = fileLeavesIn(layout.root).find((leaf) => leaf.path === path)
+      if (open) {
+        get().focusPane(open.terminalId)
+        return
+      }
+      const added = fileLeaf(newFilePaneId(), path)
+      const focused = layout.focusedTerminalId
+      const root =
+        focused !== null && collectTerminalIds(layout.root).includes(focused)
+          ? splitPaneWith(layout.root, focused, 'row', added)
+          : appendPane(layout.root, added)
+      set({ namingMarkdown: null })
+      persistLayout({ worktreeId, root, focusedTerminalId: added.terminalId })
+    },
+
+    newMarkdown(worktreeId) {
+      const layout = get().layouts[worktreeId]
+      const open = fileLeavesIn(layout?.root ?? null).some((leaf) => leaf.path === DEFAULT_MARKDOWN_PATH)
+      if (!open) {
+        get().openFilePane(worktreeId, DEFAULT_MARKDOWN_PATH)
+        return
+      }
+      // The default is taken: the strip asks what to call the next one.
+      set({ namingMarkdown: worktreeId })
+    },
+
+    nameMarkdown(name) {
+      const worktreeId = get().namingMarkdown
+      set({ namingMarkdown: null })
+      const typed = (name ?? '').trim().replace(/^\/+/, '')
+      if (worktreeId === null || typed.length === 0) return
+      get().openFilePane(worktreeId, isMarkdownPath(typed) ? typed : `${typed}.md`)
+    },
+
+    setFileUnsaved(paneId, dirty) {
+      set((state) => {
+        if (Boolean(state.unsavedFiles[paneId]) === dirty) return {}
+        const unsavedFiles = { ...state.unsavedFiles }
+        if (dirty) unsavedFiles[paneId] = true
+        else delete unsavedFiles[paneId]
+        return { unsavedFiles }
+      })
+    },
+
+    setEditingMarkdown(editing) {
+      if (get().editingMarkdown !== editing) set({ editingMarkdown: editing })
+    },
+
     async createTerminal(worktreeId) {
       try {
         const terminal = await runtimeClient.call('terminal.create', { worktreeId, ...paneSizeFor(worktreeId) })
@@ -1458,9 +1568,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     openPaneSearch() {
       // A watched pane's scrollback is a scaled picture with no search addon; the field opens only over your own.
+      // A file pane has no scrollback.
       if (get().focusedWatchId !== null) return
       const focused = activeLayout()?.focusedTerminalId
-      if (!focused) return
+      if (!focused || isFilePaneId(focused)) return
       set((state) => ({ paneSearch: { terminalId: focused, token: (state.paneSearch?.token ?? 0) + 1 } }))
     },
 

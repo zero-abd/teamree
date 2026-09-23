@@ -261,6 +261,8 @@ describe('what a teammate can reach', () => {
     // Nor does a teammate get to start a program on somebody else's machine.
     expect(PEER_METHODS).not.toHaveProperty('editor.list')
     expect(PEER_METHODS).not.toHaveProperty('editor.open')
+    expect(PEER_METHODS).not.toHaveProperty('file.read')
+    expect(PEER_METHODS).not.toHaveProperty('file.write')
     // Nor ask GitHub anything, change a preference, or open a page in a browser.
     expect(PEER_METHODS).not.toHaveProperty('update.check')
     expect(PEER_METHODS).not.toHaveProperty('update.download')

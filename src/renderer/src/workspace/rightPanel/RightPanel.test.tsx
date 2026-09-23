@@ -12,6 +12,7 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fileLeavesIn } from '@shared/filePane'
 import type { Layout, Project, Worktree, WorktreeChanges, WorktreeFiles, WorktreeStatus } from '@shared/entities'
 
 const call = vi.fn()
@@ -271,16 +272,25 @@ describe('the files tab', () => {
     const tree = await screen.findByRole('tree', { name: 'Files' })
     await within(tree).findByText('README.md')
 
-    fireEvent.click(within(tree).getByRole('button', { name: /^README\.md/ }))
-    await waitFor(() =>
-      expect(call).toHaveBeenCalledWith('editor.open', { path: '/repos/pager-wt/rewrite/README.md', command: 'mate' })
-    )
-
     fireEvent.click(within(tree).getByRole('button', { name: /^src/ }))
     fireEvent.click(await within(tree).findByRole('button', { name: /^app\.ts/ }))
     await waitFor(() =>
       expect(call).toHaveBeenCalledWith('editor.open', { path: '/repos/pager-wt/rewrite/src/app.ts', command: 'mate' })
     )
+  })
+
+  it('opens a markdown file as a pane beside the terminals rather than in the editor', async () => {
+    seed({ rightPanelOpen: true, rightPanelTab: 'files', editorCommands: { p1: 'mate' } })
+    mount()
+    const tree = await screen.findByRole('tree', { name: 'Files' })
+    await within(tree).findByText('README.md')
+
+    fireEvent.click(within(tree).getByRole('button', { name: /^README\.md/ }))
+    await waitFor(() => expect(call).toHaveBeenCalledWith('layout.set', expect.objectContaining({ worktreeId: 'w1' })))
+    const layout = useWorkspaceStore.getState().layouts.w1!
+    expect(fileLeavesIn(layout.root).map((leaf) => leaf.path)).toEqual(['README.md'])
+    expect(layout.focusedTerminalId).toBe(fileLeavesIn(layout.root)[0]?.terminalId)
+    expect(call).not.toHaveBeenCalledWith('editor.open', expect.anything())
   })
 
   it('finds files by name through the runtime, and opens one the same way', async () => {

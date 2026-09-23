@@ -8,6 +8,7 @@ import type { RowMenuItem } from '../sidebar/RowMenu'
 /** What choosing a row does; the strip binds each to the store. */
 export type StartMenuActions = {
   newTerminal: () => void
+  newMarkdown: () => void
   startAgent: (command: string) => void
   openAgentSettings: () => void
 }
@@ -31,6 +32,12 @@ export const MENU_ROWS: readonly StartMenuGroup[] = [
       command: 'new-terminal',
       icon: <TerminalGlyph />,
       run: (actions) => actions.newTerminal()
+    },
+    {
+      label: 'New markdown',
+      command: 'new-markdown',
+      icon: <PageGlyph />,
+      run: (actions) => actions.newMarkdown()
     }
   ],
   'agents',
@@ -74,6 +81,14 @@ function TerminalGlyph(): React.JSX.Element {
   return (
     <svg viewBox="0 0 12 12" aria-hidden="true">
       <path d="M1.5 2.5 H10.5 V9.5 H1.5 Z M3.5 4.8 L5.3 6.2 L3.5 7.6 M6.3 7.6 H8.5" />
+    </svg>
+  )
+}
+
+function PageGlyph(): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M3 1.5 H7.5 L10 4 V10.5 H3 Z M7.5 1.5 V4 H10 M4.5 6.5 H8.5 M4.5 8.5 H8.5" />
     </svg>
   )
 }

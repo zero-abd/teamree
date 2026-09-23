@@ -15,9 +15,14 @@ export function leaf(terminalId: string): PaneNode {
 }
 
 export function collectTerminalIds(node: PaneNode | null): string[] {
+  return collectLeaves(node).map((leaf) => leaf.terminalId)
+}
+
+/** Every leaf in reading order, terminal and file alike. */
+export function collectLeaves(node: PaneNode | null): Extract<PaneNode, { kind: 'leaf' }>[] {
   if (!node) return []
-  if (node.kind === 'leaf') return [node.terminalId]
-  return node.children.flatMap(collectTerminalIds)
+  if (node.kind === 'leaf') return [node]
+  return node.children.flatMap(collectLeaves)
 }
 
 export function hasTerminal(node: PaneNode | null, terminalId: string): boolean {
@@ -104,10 +109,20 @@ export function splitPane(
   direction: 'row' | 'column',
   newTerminalId: string
 ): PaneNode {
-  if (!root) return leaf(newTerminalId)
+  return splitPaneWith(root, terminalId, direction, leaf(newTerminalId))
+}
+
+/** `splitPane` for a leaf built by the caller, which is how a file pane arrives. */
+export function splitPaneWith(
+  root: PaneNode | null,
+  terminalId: string,
+  direction: 'row' | 'column',
+  added: PaneNode
+): PaneNode {
+  if (!root) return added
   if (root.kind === 'leaf') {
     return root.terminalId === terminalId
-      ? { kind: 'split', direction, sizes: [0.5, 0.5], children: [root, leaf(newTerminalId)] }
+      ? { kind: 'split', direction, sizes: [0.5, 0.5], children: [root, added] }
       : root
   }
 
@@ -116,7 +131,7 @@ export function splitPane(
     const sizes = normalizeSizes(root.sizes, root.children.length)
     const share = sizes[index] ?? 1 / sizes.length
     const children = [...root.children]
-    children.splice(index + 1, 0, leaf(newTerminalId))
+    children.splice(index + 1, 0, added)
     const nextSizes = [...sizes]
     nextSizes.splice(index, 1, share / 2, share / 2)
     return { kind: 'split', direction: root.direction, sizes: normalizeSizes(nextSizes, children.length), children }
@@ -126,8 +141,19 @@ export function splitPane(
     kind: 'split',
     direction: root.direction,
     sizes: normalizeSizes(root.sizes, root.children.length),
-    children: root.children.map((child) => splitPane(child, terminalId, direction, newTerminalId))
+    children: root.children.map((child) => splitPaneWith(child, terminalId, direction, added))
   }
+}
+
+/** Adds a pane at the top level, the way the runtime's `terminal.create` does. */
+export function appendPane(root: PaneNode | null, added: PaneNode, direction: 'row' | 'column' = 'row'): PaneNode {
+  if (!root) return added
+  if (root.kind === 'split' && root.direction === direction) {
+    const share = 1 / (root.children.length + 1)
+    const sizes = normalizeSizes(root.sizes, root.children.length).map((size) => size * (1 - share))
+    return { kind: 'split', direction, sizes: [...sizes, share], children: [...root.children, added] }
+  }
+  return { kind: 'split', direction, sizes: [0.5, 0.5], children: [root, added] }
 }
 
 /**
@@ -183,7 +209,7 @@ export function setSizesAt(root: PaneNode, path: readonly number[], sizes: reado
  */
 export function shownRoot(root: PaneNode | null, expandedTerminalId: string | null): PaneNode | null {
   if (expandedTerminalId === null) return root
-  return hasTerminal(root, expandedTerminalId) ? leaf(expandedTerminalId) : root
+  return collectLeaves(root).find((node) => node.terminalId === expandedTerminalId) ?? root
 }
 
 /**

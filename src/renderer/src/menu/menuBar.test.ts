@@ -99,6 +99,7 @@ describe('the menu bar is built from the table the keyboard reads', () => {
     expect(sectionOrder('file')).toEqual([
       'new-worktree',
       'new-terminal',
+      'new-markdown',
       'close-pane',
       'commit-changes',
       'push-worktree'
@@ -146,6 +147,7 @@ describe('what the menu bar says can be done', () => {
       'previous-worktree': false,
       'next-worktree': false,
       'new-terminal': false,
+      'new-markdown': false,
       'new-worktree': false,
       'commit-changes': false,
       'push-worktree': false,

@@ -19,6 +19,7 @@ const MENU_GAP_PX = 4
 export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const createTerminal = useWorkspaceStore((state) => state.createTerminal)
+  const newMarkdown = useWorkspaceStore((state) => state.newMarkdown)
   const startAgent = useWorkspaceStore((state) => state.startAgent)
   const openSettings = useWorkspaceStore((state) => state.openSettings)
   const agents = useWorkspaceStore((state) => state.agents)
@@ -38,6 +39,9 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   const focusPane = useWorkspaceStore((state) => state.focusPane)
   const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
   const renamePane = useWorkspaceStore((state) => state.renamePane)
+  const unsavedFiles = useWorkspaceStore((state) => state.unsavedFiles)
+  const namingMarkdown = useWorkspaceStore((state) => state.namingMarkdown)
+  const nameMarkdown = useWorkspaceStore((state) => state.nameMarkdown)
   const [renaming, setRenaming] = useState<string | null>(null)
   const plus = useRef<HTMLButtonElement | null>(null)
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
@@ -76,6 +80,8 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
           {tabs.map((tab) => {
             const active = tab.terminalId === focusedTerminalId
             const isUnread = unread.has(tab.terminalId)
+            const isFile = tab.kind === 'file'
+            const unsaved = isFile && unsavedFiles[tab.terminalId] === true
             return (
               <div
                 className={`tab${active ? ' tab--active' : ''}${isUnread ? ' tab--unread' : ''}`}
@@ -99,35 +105,53 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                     role="tab"
                     aria-selected={active}
                     className="tab__main"
-                    title={isUnread ? `${paneTabTitle(tab)} · unread` : paneTabTitle(tab)}
+                    title={
+                      unsaved
+                        ? `${tab.label} · unsaved`
+                        : isUnread
+                          ? `${paneTabTitle(tab)} · unread`
+                          : paneTabTitle(tab)
+                    }
                     onClick={() => focusPane(tab.terminalId)}
-                    onDoubleClick={() => setRenaming(tab.terminalId)}
+                    onDoubleClick={() => {
+                      if (!isFile) setRenaming(tab.terminalId)
+                    }}
                   >
                     {/* The sidebar's dot, borrowed rather than reinvented, exactly as
                       the dashboard borrows it: this is the same reading of the same
                       PTY, and a second dot would be a second vocabulary for four
                       states the app can only honestly describe one way. */}
-                    <span
-                      className={tab.activity === null ? 'activity' : `activity activity--${tab.activity}`}
-                      aria-hidden="true"
-                    />
+                    {isFile ? (
+                      <span
+                        className={`md-dot${unsaved ? ' md-dot--unsaved' : ''}`}
+                        data-testid={unsaved ? 'unsaved' : 'saved'}
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <span
+                        className={tab.activity === null ? 'activity' : `activity activity--${tab.activity}`}
+                        aria-hidden="true"
+                      />
+                    )}
                     {/* Shortened here only; the tooltip and the record keep all of it. */}
                     {isUnread ? <span className="pip" aria-hidden="true" /> : null}
                     <span className="tab__name">{truncateName(tab.label)}</span>
                   </button>
                 )}
                 {/* A button besides double-click: F2 is a brightness key on a Mac keyboard. */}
-                <button
-                  type="button"
-                  className="tab__rename"
-                  title={`Rename pane ${tab.label}`}
-                  aria-label={`Rename pane ${tab.label}`}
-                  onClick={() => setRenaming(tab.terminalId)}
-                >
-                  <svg viewBox="0 0 12 12" aria-hidden="true">
-                    <path d="M8.2 1.8 L10.2 3.8 L4 10 L1.8 10.2 L2 8 Z" />
-                  </svg>
-                </button>
+                {isFile ? null : (
+                  <button
+                    type="button"
+                    className="tab__rename"
+                    title={`Rename pane ${tab.label}`}
+                    aria-label={`Rename pane ${tab.label}`}
+                    onClick={() => setRenaming(tab.terminalId)}
+                  >
+                    <svg viewBox="0 0 12 12" aria-hidden="true">
+                      <path d="M8.2 1.8 L10.2 3.8 L4 10 L1.8 10.2 L2 8 Z" />
+                    </svg>
+                  </button>
+                )}
                 {/* The pane's own close: it kills the process, since a hidden-but-running pane has no leaf. */}
                 <button
                   type="button"
@@ -143,6 +167,18 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
               </div>
             )
           })}
+          {/* NOTES.md is already open: the next file's name, asked where its tab will be. */}
+          {namingMarkdown === activeWorktreeId && activeWorktreeId !== null ? (
+            <div className="tab">
+              <RenameField
+                name=""
+                label="File name"
+                placeholder="name.md"
+                onCommit={(name) => nameMarkdown(name)}
+                onCancel={() => nameMarkdown(null)}
+              />
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -214,6 +250,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
           onClose={closeMenu}
           items={startMenuItems(agents, modifier, {
             newTerminal: () => void createTerminal(activeWorktreeId),
+            newMarkdown: () => newMarkdown(activeWorktreeId),
             startAgent: (command) => void startAgent(command),
             openAgentSettings: () => openSettings('agents')
           })}
@@ -226,10 +263,14 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
 /** The rename field; blur commits like Enter, and Escape sets the flag the following blur reads. */
 function RenameField({
   name,
+  label = 'Pane name',
+  placeholder = 'Pane name',
   onCommit,
   onCancel
 }: {
   name: string
+  label?: string
+  placeholder?: string
   onCommit: (name: string) => void
   onCancel: () => void
 }): React.JSX.Element {
@@ -251,8 +292,8 @@ function RenameField({
       type="text"
       spellCheck={false}
       autoComplete="off"
-      aria-label="Pane name"
-      placeholder="Pane name"
+      aria-label={label}
+      placeholder={placeholder}
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
       onKeyDown={(event) => {

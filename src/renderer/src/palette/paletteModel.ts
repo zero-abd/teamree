@@ -138,6 +138,7 @@ function commandActions(): { id: PaletteAction; label: string; keywords: string 
 const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'new-worktree': 'new task create worktree branch start agent checkout',
   'new-terminal': 'new terminal shell pane open',
+  'new-markdown': 'new markdown notes page document write md file',
   'close-pane': 'close pane kill stop shut terminal',
   'find-in-pane': 'find search pane scrollback text',
   'split-right': 'split pane right vertical column',

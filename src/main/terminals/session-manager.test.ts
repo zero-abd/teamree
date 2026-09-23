@@ -6,6 +6,7 @@ import type { Layout, Terminal } from '../../shared/entities'
 import { ErrorCode } from '../../shared/protocol'
 import type { TerminalEvent } from '../../shared/methods'
 import { createTerminalService, registerTerminalHandlers } from './method-handlers'
+import { TerminalSessionManager } from './session-manager'
 import type { MethodRegistry, StreamChannel, TerminalService } from './method-handlers'
 import { isProcessAlive } from './process-tree'
 import { canSpawnPty, printThenExit, waitUntil, writeFakeAgent, writeProcessTreeProbe } from './pty-test-support'
@@ -731,4 +732,35 @@ describePty('terminal.agentEvent', () => {
     },
     TEST_TIMEOUT_MS
   )
+})
+
+describe('splitting beside a file pane', () => {
+  it('opens the new shell in the worktree and puts it beside the file leaf', async () => {
+    const file = { kind: 'leaf' as const, terminalId: 'file:1', pane: 'file' as const, path: 'NOTES.md' }
+    const layouts = new Map<string, Layout>([['w1', { worktreeId: 'w1', root: file, focusedTerminalId: 'file:1' }]])
+    const manager = new TerminalSessionManager({
+      layouts: {
+        getLayout: (id) => layouts.get(id),
+        putLayout: (layout) => {
+          layouts.set(layout.worktreeId, layout)
+          return layout
+        },
+        listLayouts: () => [...layouts.values()]
+      },
+      resolveWorktreeCwd: () => process.cwd()
+    })
+    try {
+      const { terminal, layout } = manager.split({ terminalId: 'file:1', direction: 'column' })
+      expect(terminal.worktreeId).toBe('w1')
+      expect(layout.root).toEqual({
+        kind: 'split',
+        direction: 'column',
+        sizes: [0.5, 0.5],
+        children: [file, { kind: 'leaf', terminalId: terminal.id }]
+      })
+      expect(() => manager.split({ terminalId: 'file:nowhere', direction: 'row' })).toThrow(/no such terminal/)
+    } finally {
+      await manager.shutdown()
+    }
+  })
 })
