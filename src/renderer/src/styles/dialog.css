@@ -105,8 +105,60 @@ select.field__input {
   color: var(--accent-bright);
 }
 
-/* Agent and project: two short choices that belong on one line, and stack when
-   the modal is narrower than they are. */
+/* One row per installed agent, each with a count: the table is the whole
+   choice, so it reads as a list rather than as a control. */
+.agents {
+  gap: var(--s1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.agents__row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 2px 0;
+}
+
+.agents__name {
+  flex: 1;
+  font-size: var(--text-base);
+}
+
+.agents__step {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.agents__step:disabled {
+  color: var(--fg-muted);
+  cursor: default;
+}
+
+.agents__step:focus-visible {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: var(--ring);
+}
+
+/* A fixed width so the rows do not shuffle sideways as the counts change. */
+.agents__count {
+  min-width: 14px;
+  color: var(--fg-secondary);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Project, and whatever joins it: short choices that belong on one line, and
+   stack when the modal is narrower than they are. */
 .form__row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));

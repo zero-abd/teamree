@@ -17,9 +17,16 @@ export type FlagSpec = {
   /** Shown in help for value-taking flags, e.g. `<id>`. */
   placeholder?: string
   default?: string | number | boolean
+  /**
+   * May be given more than once, and every value is kept in the order typed.
+   * Reads back as a list through `readStrings`, never as a bare value: one
+   * `--agent claude` is a list of one, so a caller cannot accidentally handle
+   * the single case and drop the rest.
+   */
+  repeatable?: boolean
 }
 
-export type FlagValue = string | number | boolean
+export type FlagValue = string | number | boolean | string[]
 export type ParsedFlags = Record<string, FlagValue | undefined>
 
 export type ParsedArgs = {
@@ -30,6 +37,11 @@ export type ParsedArgs = {
 /** `delete-branch` reads as `deleteBranch` in command code. */
 export function flagKey(name: string): string {
   return name.replace(/-([a-z0-9])/g, (_, character: string) => character.toUpperCase())
+}
+
+function pushRepeated(flags: ParsedFlags, spec: FlagSpec, value: FlagValue): void {
+  const previous = flags[flagKey(spec.name)]
+  flags[flagKey(spec.name)] = [...(Array.isArray(previous) ? previous : []), String(value)]
 }
 
 export function flagLabel(spec: FlagSpec): string {
@@ -105,14 +117,18 @@ export function parseArgs(tokens: readonly string[], specs: readonly FlagSpec[])
     }
 
     if (inlineValue !== undefined) {
-      flags[flagKey(spec.name)] = coerce(spec, inlineValue)
+      const value = coerce(spec, inlineValue)
+      if (spec.repeatable) pushRepeated(flags, spec, value)
+      else flags[flagKey(spec.name)] = value
       continue
     }
 
     const next = tokens[index + 1]
     if (next === undefined) throw new UsageError(`--${spec.name} needs a value.`)
     index += 1
-    flags[flagKey(spec.name)] = coerce(spec, next)
+    const value = coerce(spec, next)
+    if (spec.repeatable) pushRepeated(flags, spec, value)
+    else flags[flagKey(spec.name)] = value
   }
 
   for (const spec of specs) {
@@ -141,6 +157,13 @@ export function requireString(flags: ParsedFlags, name: string): string {
   const value = readString(flags, name)
   if (value === undefined || value.length === 0) throw new UsageError(`--${name} is required.`)
   return value
+}
+
+/** Every value a repeatable flag was given, in order; empty when it was not. */
+export function readStrings(flags: ParsedFlags, name: string): string[] {
+  const value = flags[flagKey(name)]
+  if (Array.isArray(value)) return value
+  return typeof value === 'string' ? [value] : []
 }
 
 export function readNumber(flags: ParsedFlags, name: string): number | undefined {

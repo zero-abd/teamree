@@ -69,6 +69,10 @@ waiting to close; [`ROADMAP.md`](ROADMAP.md) has the reasoning.
 ## What it does
 
 - **A worktree per task**, created from any base ref.
+- **Several attempts at one task.** The composer takes a count per agent — two
+  models against each other, or two runs of one — and starts a worktree each from
+  the same ref, named for the agent that runs in it. `--agent`, repeated, does
+  the same from a shell.
 - **Split terminals** per worktree, arbitrarily nested, with a real PTY behind each.
 - **Panes that come back.** A pane running a coding agent returns with its
   conversation resumed; one nobody ever typed into has no conversation to resume,

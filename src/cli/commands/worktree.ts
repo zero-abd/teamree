@@ -1,10 +1,11 @@
-import type { PaneNode } from '../../shared/entities.js'
-import type { CommandSpec } from '../command-spec.js'
-import { readBoolean, readNumber, readString, requireString } from '../argv.js'
+import type { PaneNode, Worktree } from '../../shared/entities.js'
+import { taskNamesForAgents } from '../../main/git/worktreeNaming.js'
+import type { CommandContext, CommandSpec } from '../command-spec.js'
+import { readBoolean, readNumber, readString, readStrings, requireString } from '../argv.js'
 import { formatFields, formatTable } from '../output.js'
 import { resolveProject, resolveWorktree } from '../selectors.js'
 import { DEFAULT_WAIT_TIMEOUT_MS, waitForState } from '../waiting.js'
-import { CliError } from '../exit.js'
+import { CliError, ExitCode } from '../exit.js'
 
 export const worktreeCommands: readonly CommandSpec[] = [
   {
@@ -36,7 +37,12 @@ export const worktreeCommands: readonly CommandSpec[] = [
   {
     path: ['worktree', 'create'],
     summary: 'Create a worktree and its branch.',
-    details: 'Returns as soon as the runtime accepts the request; the row may still be in the "creating" state.',
+    details:
+      'Returns as soon as the runtime accepts the requests; the rows may still be in the "creating" state.\n' +
+      'Repeat --agent to race one task in several checkouts: each gets its own worktree from the same ' +
+      'start point, named for the agent that runs in it, and the agent is started once the checkout is ' +
+      'ready. With --agent, --json carries every created record as a list; without it, the one record as ' +
+      'before.',
     flags: [
       {
         name: 'project',
@@ -62,30 +68,101 @@ export const worktreeCommands: readonly CommandSpec[] = [
         name: 'branch',
         kind: 'string',
         placeholder: '<branch>',
-        description: 'Explicit branch name instead of one derived from --name.'
+        description: 'Explicit branch name instead of one derived from --name. One worktree only.'
+      },
+      {
+        name: 'agent',
+        kind: 'string',
+        placeholder: '<command>',
+        repeatable: true,
+        description: 'Start this command in the new worktree. Repeat it for one worktree each.'
+      },
+      {
+        name: 'timeout-ms',
+        kind: 'number',
+        placeholder: '<ms>',
+        description: `How long to wait for each checkout before starting its agent. Defaults to ${DEFAULT_WAIT_TIMEOUT_MS}.`
       }
     ],
-    examples: ['teamree worktree create --project api --name fix-login --from origin/main'],
+    examples: [
+      'teamree worktree create --project api --name fix-login --from origin/main',
+      'teamree worktree create --project api --name fix-login --agent claude --agent claude --agent codex'
+    ],
     run: async (context) => {
       const project = await resolveProject(context.client, requireString(context.flags, 'project'))
       const startedFrom = readString(context.flags, 'from')
       const branch = readString(context.flags, 'branch')
-      const worktree = await context.client.call('worktree.create', {
-        projectId: project.id,
-        name: requireString(context.flags, 'name'),
-        ...(startedFrom === undefined ? {} : { startedFrom }),
-        ...(branch === undefined ? {} : { branch })
-      })
+      const agents = readStrings(context.flags, 'agent')
+      const timeoutMs = readNumber(context.flags, 'timeout-ms') ?? DEFAULT_WAIT_TIMEOUT_MS
+
+      // An explicit branch name is one name, so it cannot answer for several
+      // checkouts. Refusing is the only honest reading: silently creating one,
+      // or appending to what was asked for, both ignore half the request.
+      if (branch !== undefined && agents.length > 1) {
+        throw new CliError({
+          code: 'branch_for_several',
+          message: '--branch names one branch, so it cannot be used with more than one --agent.',
+          exitCode: ExitCode.Usage
+        })
+      }
+
+      // Created in order, because that is the order the names were handed out
+      // in and the runtime allocates branches as the requests arrive.
+      const created: Worktree[] = []
+      for (const name of taskNamesForAgents(requireString(context.flags, 'name'), agents)) {
+        created.push(
+          await context.client.call('worktree.create', {
+            projectId: project.id,
+            name,
+            ...(startedFrom === undefined ? {} : { startedFrom }),
+            ...(branch === undefined ? {} : { branch })
+          })
+        )
+      }
+
+      // Waited for in parallel: a race that starts its second agent only after
+      // the first checkout has settled is not a race.
+      const started = await Promise.all(
+        created.map(async (worktree, index) => {
+          const agent = agents[index]
+          if (agent === undefined) return worktree
+          const ready = await waitForCheckout(context, worktree, timeoutMs)
+          await context.client.call('terminal.create', { worktreeId: ready.id, command: agent })
+          return ready
+        })
+      )
+
+      // A create with no --agent is still a create, so there is always a first
+      // row: `taskNamesForAgents` hands out one name for a selection of none.
+      const one = started[0] as Worktree
+      if (agents.length === 0) {
+        return {
+          data: one,
+          text: formatFields([
+            ['id', one.id],
+            ['name', one.name],
+            ['branch', one.branch],
+            ['from', one.startedFrom],
+            ['state', one.state],
+            ['path', one.path]
+          ])
+        }
+      }
+
       return {
-        data: worktree,
-        text: formatFields([
-          ['id', worktree.id],
-          ['name', worktree.name],
-          ['branch', worktree.branch],
-          ['from', worktree.startedFrom],
-          ['state', worktree.state],
-          ['path', worktree.path]
-        ])
+        data: started,
+        text: formatTable(
+          ['ID', 'NAME', 'BRANCH', 'AGENT', 'STATE', 'PATH'],
+          started.map((worktree, index) => [
+            worktree.id,
+            worktree.name,
+            worktree.branch,
+            agents[index] as string,
+            worktree.state,
+            worktree.path
+          ]),
+          'No worktrees.'
+        )
       }
     }
   },
@@ -464,6 +541,33 @@ export const worktreeCommands: readonly CommandSpec[] = [
     }
   }
 ]
+
+/**
+ * Blocks until one checkout exists, because an agent started before it does has
+ * nowhere to run. A worktree that settles as failed is reported as such rather
+ * than having a pane opened in it.
+ */
+async function waitForCheckout(context: CommandContext, worktree: Worktree, timeoutMs: number): Promise<Worktree> {
+  const settled = await waitForState({
+    client: context.client,
+    what: `worktree ${worktree.name}`,
+    read: async () => {
+      const rows = await context.client.call('worktree.list', {})
+      return rows.find((row) => row.id === worktree.id)
+    },
+    settled: (row) => row === undefined || row.state === 'ready' || row.state === 'failed',
+    timeoutMs
+  })
+  if (settled === undefined || settled.state !== 'ready') {
+    throw new CliError({
+      code: 'worktree_failed',
+      message: `Worktree ${worktree.name} never became ready: ${settled?.error ?? settled?.state ?? 'it disappeared'}`,
+      exitCode: ExitCode.Failure,
+      ...(settled === undefined ? {} : { data: settled })
+    })
+  }
+  return settled
+}
 
 /** One line per node, indented by depth; a split names its axis and its shares. */
 function renderPane(node: PaneNode, indent: string, focused: string | null): string {

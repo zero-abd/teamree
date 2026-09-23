@@ -25,6 +25,7 @@ function flagEntries(flags: readonly FlagSpec[]): Array<readonly [string, string
   return flags.map((flag) => {
     const notes: string[] = []
     if (flag.required) notes.push('required')
+    if (flag.repeatable) notes.push('repeatable')
     if (flag.choices) notes.push(`one of ${flag.choices.join('|')}`)
     return [flagLabel(flag), notes.length > 0 ? `${flag.description} (${notes.join('; ')})` : flag.description] as const
   })
@@ -103,6 +104,7 @@ function describeFlags(flags: readonly FlagSpec[]): unknown[] {
     kind: flag.kind,
     alias: flag.alias ?? null,
     required: flag.required === true,
+    repeatable: flag.repeatable === true,
     choices: flag.choices ?? null,
     description: flag.description
   }))

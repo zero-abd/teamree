@@ -100,6 +100,12 @@ async function open(projectId = 'p1'): Promise<void> {
 const task = (): HTMLTextAreaElement => screen.getByRole('textbox', { name: /^Task/ })
 const startPoint = (): HTMLInputElement => screen.getByRole('combobox', { name: 'Start from' })
 const submit = (): HTMLButtonElement => screen.getByRole('button', { name: /Start task|Create worktree/ })
+const more = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `One more ${command}` })
+const fewer = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `One fewer ${command}` })
+const bothAgents = [
+  { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' },
+  { kind: 'codex', command: 'codex', binary: '/opt/bin/codex' }
+]
 
 beforeEach(() => {
   call.mockReset()
@@ -210,9 +216,29 @@ describe('what it submits', () => {
     submit().click()
     expect(startTask).toHaveBeenCalledWith({
       projectId: 'p1',
-      task: 'Rewrite the pager',
       startedFrom: 'origin/main',
-      agentCommand: 'claude'
+      creates: [{ name: 'Rewrite the pager', agentCommand: 'claude' }]
+    })
+  })
+
+  // The opportunity the whole dialog exists for: one description, several
+  // attempts, told apart before anything is created.
+  it('submits one create per agent asked for, in the order they will be made', async () => {
+    seed({ agents: bothAgents })
+    await open()
+    fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
+    fireEvent.click(more('claude'))
+    fireEvent.click(more('codex'))
+    expect(screen.getByText('3 worktrees · claude, codex, claude')).toBeTruthy()
+    submit().click()
+    expect(startTask).toHaveBeenCalledWith({
+      projectId: 'p1',
+      startedFrom: 'origin/main',
+      creates: [
+        { name: 'Rewrite the pager', agentCommand: 'claude' },
+        { name: 'Rewrite the pager codex', agentCommand: 'codex' },
+        { name: 'Rewrite the pager claude 2', agentCommand: 'claude' }
+      ]
     })
   })
 
@@ -235,12 +261,12 @@ describe('what it submits', () => {
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     expect(screen.getByRole('button', { name: 'Create worktree' })).toBeTruthy()
     expect(screen.getByText('No coding agent on your login shell’s PATH.')).toBeTruthy()
-    expect(screen.getByRole('combobox', { name: 'Agent' })).toHaveProperty('disabled', true)
+    expect(screen.queryByRole('group', { name: 'Agents' })).toBeNull()
     submit().click()
     expect(startTask).toHaveBeenCalledWith({
       projectId: 'p1',
-      task: 'Rewrite the pager',
-      startedFrom: 'origin/main'
+      startedFrom: 'origin/main',
+      creates: [{ name: 'Rewrite the pager' }]
     })
   })
 
@@ -250,13 +276,14 @@ describe('what it submits', () => {
     expect(screen.getByText('Looking for coding agents…')).toBeTruthy()
   })
 
-  it('drops the agent when the user asks for the worktree alone', async () => {
+  it('drops the agent when the user steps it back to none', async () => {
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
-    fireEvent.change(screen.getByRole('combobox', { name: 'Agent' }), { target: { value: '' } })
-    expect(screen.getByText('No agent in it.')).toBeTruthy()
+    fireEvent.click(fewer('claude'))
+    expect(screen.getByText('1 worktree · no agent')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Create worktree' })).toBeTruthy()
     submit().click()
-    expect(startTask.mock.calls[0]?.[0]).not.toHaveProperty('agentCommand')
+    expect(startTask.mock.calls[0]?.[0].creates).toEqual([{ name: 'Rewrite the pager' }])
   })
 
   it('shows the branch the task will get, and only once there is a task', async () => {

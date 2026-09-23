@@ -6,6 +6,7 @@ import {
   readBoolean,
   readNumber,
   readString,
+  readStrings,
   requireString,
   type FlagSpec
 } from './argv.js'
@@ -129,5 +130,26 @@ describe('flag readers', () => {
 
   it('requireString throws a usage error when absent', () => {
     expect(() => requireString(flags, 'direction')).toThrow(UsageError)
+  })
+})
+
+// A flag somebody means to repeat has to keep every value: last-one-wins would
+// quietly turn three agents into one.
+describe('repeatable flags', () => {
+  const specs: FlagSpec[] = [{ name: 'agent', kind: 'string', repeatable: true, description: 'agent' }]
+
+  it('keeps every value, in the order they were typed', () => {
+    const parsed = parseArgs(['--agent', 'claude', '--agent=codex', '--agent', 'claude'], specs)
+    expect(readStrings(parsed.flags, 'agent')).toEqual(['claude', 'codex', 'claude'])
+  })
+
+  it('reads one value as a list of one, and none as an empty list', () => {
+    expect(readStrings(parseArgs(['--agent', 'claude'], specs).flags, 'agent')).toEqual(['claude'])
+    expect(readStrings(parseArgs([], specs).flags, 'agent')).toEqual([])
+  })
+
+  it('leaves a flag that is not repeatable alone', () => {
+    const parsed = parseArgs(['--name', 'one', '--name', 'two'], OPTIONAL)
+    expect(readString(parsed.flags, 'name')).toBe('two')
   })
 })

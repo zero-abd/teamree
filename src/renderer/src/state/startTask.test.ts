@@ -1,5 +1,6 @@
 // The composer's whole promise, through the in-memory runtime: one submission
-// creates the worktree, waits for it, and leaves the agent running in it.
+// creates the worktrees, waits for them, and leaves each agent running in its
+// own.
 
 import { expect, it, vi } from 'vitest'
 import { collectTerminalIds } from '../panes/paneLayout'
@@ -9,6 +10,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', async () => {
   return { runtimeClient: createSeededRuntimeClient() }
 })
 
+import { taskCreates } from '../dialogs/taskPlan'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from './workspaceStore'
 
@@ -38,7 +40,11 @@ it('creates the worktree, then runs the chosen agent in it', { timeout: 20_000 }
     const agent = (await runtimeClient.call('agent.list', {}))[0]!
     const call = vi.spyOn(runtimeClient, 'call')
 
-    store.startTask({ projectId, task: 'Rewrite the pager', startedFrom: 'origin/main', agentCommand: agent.command })
+    store.startTask({
+      projectId,
+      startedFrom: 'origin/main',
+      creates: [{ name: 'Rewrite the pager', agentCommand: agent.command }]
+    })
 
     // The dialog is gone before any of the work is: the sidebar row narrates it.
     expect(useWorkspaceStore.getState().dialog).toBeNull()
@@ -95,7 +101,7 @@ it('reports why a task that could not be created failed, and starts no agent', {
 
     // The seeded runtime fails any task whose name says so, which is the only
     // way to reach this path without a real repository to break.
-    store.startTask({ projectId, task: 'fail on purpose', agentCommand: 'claude' })
+    store.startTask({ projectId, creates: [{ name: 'fail on purpose', agentCommand: 'claude' }] })
 
     await until(() => useWorkspaceStore.getState().notices.length > 0, 'the failure to be reported')
 
@@ -103,6 +109,60 @@ it('reports why a task that could not be created failed, and starts no agent', {
     expect(notice.tone).toBe('error')
     expect(notice.text).toContain('Could not start the task')
     expect(call.mock.calls.filter(([method]) => method === 'terminal.create')).toHaveLength(0)
+
+    call.mockRestore()
+  } finally {
+    stop()
+  }
+})
+
+// The workflow the app is for: one description, several attempts at it, each in
+// its own checkout with its own agent.
+it('creates one worktree per selected agent, each running its own', { timeout: 30_000 }, async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const stop = store.startWatching()
+  try {
+    const projectId = useWorkspaceStore.getState().projects[0]!.id
+    const agents = await runtimeClient.call('agent.list', {})
+    const claude = agents[0]!
+    const codex = agents[1]!
+    const call = vi.spyOn(runtimeClient, 'call')
+
+    store.startTask({
+      projectId,
+      startedFrom: 'origin/main',
+      creates: taskCreates('Race the pager', [claude, codex, claude])
+    })
+
+    const names = ['Race the pager', 'Race the pager codex', 'Race the pager claude 2']
+    await until(
+      () => names.every((name) => useWorkspaceStore.getState().worktrees.some((one) => one.name === name)),
+      'all three worktrees to be created'
+    )
+
+    const made = names.map((name) => useWorkspaceStore.getState().worktrees.find((one) => one.name === name)!)
+    // Three branches, not one branch and two failures: the suffix is what keeps
+    // them apart before the runtime ever allocates anything.
+    expect(new Set(made.map((one) => one.branch)).size).toBe(3)
+
+    await until(
+      () =>
+        made.every((one) =>
+          call.mock.calls.some(
+            ([method, params]) =>
+              method === 'terminal.create' && (params as { worktreeId: string }).worktreeId === one.id
+          )
+        ),
+      'each worktree to get its agent'
+    )
+
+    const panes = call.mock.calls
+      .filter(([method]) => method === 'terminal.create')
+      .map(([, params]) => params as { worktreeId: string; command: string })
+    expect(panes).toHaveLength(3)
+    expect(panes.map((pane) => pane.command)).toEqual([claude.command, codex.command, claude.command])
+    expect(panes.map((pane) => pane.worktreeId)).toEqual(made.map((one) => one.id))
 
     call.mockRestore()
   } finally {

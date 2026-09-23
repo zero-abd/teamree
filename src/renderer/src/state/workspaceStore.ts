@@ -31,6 +31,7 @@ import type {
 } from '@shared/entities'
 import { DEFAULT_APPEARANCE, type Appearance } from '@shared/theme'
 import { closePaneWarning } from '../dialogs/closePaneModel'
+import type { TaskCreate } from '../dialogs/taskPlan'
 import { closePane, collectTerminalIds, neighbourTerminalId, setSizesAt } from '../panes/paneLayout'
 import { worktreeAfter, worktreeOrder } from '../sidebar/worktreeOrder'
 import {
@@ -94,14 +95,16 @@ export type DialogState =
  */
 export type RemoveIntent = 'remove' | 'retry'
 
-/** What the task composer submits: a description, who runs it, and from where. */
+/** What the task composer submits: what to make, who runs it, and from where. */
 export type TaskDraft = {
   projectId: string
-  /** The task as written. Names the worktree and seeds its branch. */
-  task: string
   startedFrom?: string
-  /** Command for the agent's pane. Absent means the worktree alone. */
-  agentCommand?: string
+  /**
+   * One worktree per entry, in the order they are created, each already named
+   * by `taskCreates`. Several attempts at one task is the ordinary case, so
+   * this is a list rather than one name and one command.
+   */
+  creates: readonly TaskCreate[]
 }
 
 export type Notice = { id: number; text: string; tone: 'error' | 'info' }
@@ -1443,42 +1446,65 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     /**
      * One action, three steps, none of which the user waits on: the composer
-     * closes immediately and the new row appears in its creating state, because
-     * a worktree can take tens of seconds and the sidebar already narrates that
-     * better than a spinner in a box would.
+     * closes immediately and the new rows appear in their creating state,
+     * because a worktree can take tens of seconds and the sidebar already
+     * narrates that better than a spinner in a box would.
+     *
+     * A draft can carry several creates — the same task tried by several agents
+     * — and each is exactly the create a lone one used to be. The requests are
+     * made in order, because the order is what the names were handed out in and
+     * the runtime allocates branches as they arrive; what happens after each
+     * create is not, because waiting for the first checkout before asking for
+     * the second would make a race run in single file. The one thing left
+     * serial is the open at the end, and only the first is opened: the others
+     * are on the sidebar, which is where the user compares them anyway.
      */
-    startTask({ projectId, task, startedFrom, agentCommand }) {
+    startTask({ projectId, startedFrom, creates }) {
       set({ dialog: null })
-      const name = task.trim()
 
       void (async () => {
-        const created = await runtimeClient.call(
-          'worktree.create',
-          startedFrom ? { projectId, name, startedFrom } : { projectId, name }
-        )
-        set((state) => ({
-          worktrees: [...state.worktrees.filter((entry) => entry.id !== created.id), created],
-          collapsedProjects: { ...state.collapsedProjects, [projectId]: false }
-        }))
+        const started: Array<{ worktreeId: string; agentCommand?: string; label: string }> = []
+        for (const create of creates) {
+          const name = create.name.trim()
+          const created = await runtimeClient.call(
+            'worktree.create',
+            startedFrom ? { projectId, name, startedFrom } : { projectId, name }
+          )
+          set((state) => ({
+            worktrees: [...state.worktrees.filter((entry) => entry.id !== created.id), created],
+            collapsedProjects: { ...state.collapsedProjects, [projectId]: false }
+          }))
+          started.push({
+            worktreeId: created.id,
+            label: name,
+            ...(create.agentCommand === undefined ? {} : { agentCommand: create.agentCommand })
+          })
+        }
         // The project may have been collapsed until now, and its other rows
         // with it.
         readOnScreen()
 
-        // The agent needs a checkout to run in, so the pane waits for one. A
-        // failure here is already on the row, with its reason and its retry.
-        const ready = await awaitWorktreeReady({
-          worktreeId: created.id,
-          read: (worktreeId) => runtimeClient.call('worktree.get', { worktreeId }),
-          watch: (onChange) => runtimeClient.watchWorkspace(onChange)
-        })
+        const ready = await Promise.all(
+          started.map(async ({ worktreeId, agentCommand, label }) => {
+            // The agent needs a checkout to run in, so the pane waits for one. A
+            // failure here is already on the row, with its reason and its retry.
+            const worktree = await awaitWorktreeReady({
+              worktreeId,
+              read: (id) => runtimeClient.call('worktree.get', { worktreeId: id }),
+              watch: (onChange) => runtimeClient.watchWorkspace(onChange)
+            })
+            if (agentCommand) {
+              // The pane is named after the task it was opened for, because the
+              // task is what somebody would call it and the agent's binary is
+              // what every other pane on this screen is also called.
+              await runtimeClient.call('terminal.create', { worktreeId: worktree.id, command: agentCommand, label })
+            }
+            return worktree
+          })
+        )
 
-        if (agentCommand) {
-          // The pane is named after the task it was opened for, because the
-          // task is what somebody would call it and the agent's binary is what
-          // every other pane on this screen is also called.
-          await runtimeClient.call('terminal.create', { worktreeId: ready.id, command: agentCommand, label: name })
-        }
-        await get().openWorktree(ready.id)
+        const first = ready[0]
+        if (first) await get().openWorktree(first.id)
       })().catch(failed('Could not start the task'))
     },
 

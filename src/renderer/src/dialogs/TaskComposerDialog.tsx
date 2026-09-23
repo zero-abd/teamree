@@ -6,6 +6,10 @@
 // description is the prominent field because it is the only one the user has to
 // think about; everything else has a defensible default.
 //
+// Who does it is a count per agent rather than one name, because the workflow
+// this app is for is several attempts at one description — two models against
+// each other, or two runs of the same one, which is just as common a race.
+//
 // Submitting closes the dialog at once. Creation is a background job and its
 // progress, including its failures, belongs on the sidebar row.
 
@@ -14,7 +18,17 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { branchNameFromTask } from './branchNameFromTask'
 import { Modal } from './Modal'
 import { StartPointPicker, type StartPointValue } from './StartPointPicker'
-import { agentByKind, defaultAgentKind, NO_AGENT, submitLabel, taskPlanNote } from './taskPlan'
+import {
+  agentCount,
+  defaultAgentCounts,
+  fanOut,
+  MAX_PER_AGENT,
+  submitLabel,
+  taskCreates,
+  taskPlanNote,
+  withAgentCount,
+  type AgentCounts
+} from './taskPlan'
 import { useStartPoints } from './useStartPoints'
 
 export function TaskComposerDialog({ projectId: openedFor }: { projectId: string }): React.JSX.Element | null {
@@ -27,7 +41,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
 
   const [projectId, setProjectId] = useState(openedFor)
   const [task, setTask] = useState('')
-  const [agentKind, setAgentKind] = useState<string | null>(null)
+  const [agentCounts, setAgentCounts] = useState<AgentCounts | null>(null)
   const [startPoint, setStartPoint] = useState<StartPointValue>({ text: '', option: null })
   const [touched, setTouched] = useState(false)
 
@@ -74,10 +88,11 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
 
   if (!project) return null
 
-  // Null until the user picks, so the first agent found is preselected without
-  // overwriting a choice made while the probe was still in flight.
-  const chosenKind = agentKind ?? defaultAgentKind(agents)
-  const agent = agentByKind(agents, chosenKind)
+  // Null until the user steps something, so the first agent found is
+  // preselected without overwriting a choice made while the probe was still in
+  // flight.
+  const counts = agentCounts ?? defaultAgentCounts(agents)
+  const selection = fanOut(agents, counts)
 
   // Empty until there is something to slugify: the rule's fallback is the word
   // "worktree", and showing it before a key is pressed promises a branch name
@@ -88,7 +103,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
 
   const submit = (): void => {
     if (!canSubmit) return
-    startTask({ projectId, task, startedFrom, ...(agent ? { agentCommand: agent.command } : {}) })
+    startTask({ projectId, startedFrom, creates: taskCreates(task, selection) })
   }
 
   return (
@@ -128,24 +143,43 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
           </span>
         </label>
 
-        <div className="form__row">
-          <label className="field">
-            <span className="field__label">Agent</span>
-            <select
-              className="field__input"
-              value={chosenKind}
-              disabled={agents.length === 0}
-              onChange={(event) => setAgentKind(event.target.value)}
-            >
-              {agents.map((entry) => (
-                <option value={entry.kind} key={entry.kind} title={entry.binary}>
-                  {entry.command}
-                </option>
-              ))}
-              <option value={NO_AGENT}>No agent</option>
-            </select>
-          </label>
+        {agents.length > 0 ? (
+          <fieldset className="field agents">
+            <legend className="field__label">Agents</legend>
+            {agents.map((entry) => {
+              const count = agentCount(counts, entry.kind)
+              const step = (to: number): void => setAgentCounts(withAgentCount(counts, entry.kind, to))
+              return (
+                <div className="agents__row" key={entry.kind}>
+                  <span className="agents__name" title={entry.binary}>
+                    {entry.command}
+                  </span>
+                  <button
+                    type="button"
+                    className="agents__step"
+                    aria-label={`One fewer ${entry.command}`}
+                    disabled={count === 0}
+                    onClick={() => step(count - 1)}
+                  >
+                    −
+                  </button>
+                  <output className="agents__count">{count}</output>
+                  <button
+                    type="button"
+                    className="agents__step"
+                    aria-label={`One more ${entry.command}`}
+                    disabled={count === MAX_PER_AGENT}
+                    onClick={() => step(count + 1)}
+                  >
+                    +
+                  </button>
+                </div>
+              )
+            })}
+          </fieldset>
+        ) : null}
 
+        <div className="form__row">
           <label className="field">
             <span className="field__label">Project</span>
             <select
@@ -179,12 +213,12 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
         />
 
         <footer className="form__actions">
-          <p className="form__note">{taskPlanNote(agents, agentsProbed, agent)}</p>
+          <p className="form__note">{taskPlanNote(agents, agentsProbed, selection)}</p>
           <button type="button" className="button button--ghost" onClick={closeDialog}>
             Cancel
           </button>
           <button type="submit" className="button button--primary" disabled={!canSubmit}>
-            {submitLabel(agent)}
+            {submitLabel(selection)}
           </button>
         </footer>
       </form>
