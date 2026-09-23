@@ -97,7 +97,6 @@ function WorkspaceMain({
   const focusPane = useWorkspaceStore((state) => state.focusPane)
   const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
   const createTerminal = useWorkspaceStore((state) => state.createTerminal)
-  const splitFocusedPane = useWorkspaceStore((state) => state.splitFocusedPane)
   const applySplitSizes = useWorkspaceStore((state) => state.applySplitSizes)
   const changesOpen = useWorkspaceStore((state) => state.changesOpen)
   const toggleChanges = useWorkspaceStore((state) => state.toggleChanges)
@@ -111,7 +110,6 @@ function WorkspaceMain({
   const paneSearch = useWorkspaceStore((state) => state.paneSearch)
   const closePaneSearch = useWorkspaceStore((state) => state.closePaneSearch)
   const dashboardOpen = useWorkspaceStore((state) => state.dashboardOpen)
-  const toggleDashboard = useWorkspaceStore((state) => state.toggleDashboard)
   const projects = useWorkspaceStore((state) => state.projects)
   const connection = useWorkspaceStore((state) => state.connection)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
@@ -360,108 +358,100 @@ function WorkspaceMain({
 
   return (
     <main className="workspace">
-      <TerminalTabs />
+      <TerminalTabs modifier={modifier} />
 
+      {/*
+        One line, and only what is true of this worktree rather than what can
+        be done to it. The row used to carry All panes, Split right, Split down
+        and New terminal beside the two repository buttons, and every one of
+        those four has a home already — the rail, the strip below, the chords
+        the status bar prints, the palette. A path sixty characters long sat
+        under the name as well, read on every screen by nobody.
+      */}
       <header className="workspace__head">
-        <div className="workspace__identity">
-          <h1 className="workspace__title">{worktree.name}</h1>
-          {/*
-            The path was already printed here and was already the answer to
-            "where is this on disk"; what it was not was a way of getting there.
-            Pressing it opens the checkout in the file manager — the one thing
-            somebody wants from a path they can read but not click.
+        <h1 className="workspace__title">{worktree.name}</h1>
 
-            Only while the checkout is `ready`, and that is the whole point of
-            the condition rather than tidiness: a worktree still being created
-            has a path recorded and nothing at it yet, and a failed one has a
-            path that was never made. Offering the button in either state would
-            be offering a button whose only possible outcome is the refusal the
-            main process writes for a missing directory. In those states this
-            stays exactly what it was, a line of text.
-          */}
-          {worktree.state === 'ready' ? (
-            <button
-              type="button"
-              className="workspace__path workspace__path--reveal"
-              title={`Show ${worktree.path} in the file manager`}
-              onClick={() => void revealInFinder(worktree.path, `the ${worktree.name} checkout`)}
-            >
-              {worktree.path}
-              <span className="workspace__reveal-hint">Reveal</span>
-            </button>
-          ) : (
-            <p className="workspace__path">{worktree.path}</p>
-          )}
-        </div>
         {/*
-          Fixed buttons only, and deliberately no button per agent. This row is
-          for acting on the worktree in front of you, not a launcher for
-          whatever binaries happen to be on this machine's PATH: one button per
-          discovered agent made the bar grow with somebody's tool collection,
-          and put the two things that touch their repository — Changes and Push
-          — beside a row of names that varies from laptop to laptop. Starting an
-          agent in this worktree lives in the palette, which costs no width
-          until it is asked for, and on the empty state of a worktree with no
-          panes.
+          All that is left of the printed path, which is the only thing the
+          path could do that nothing else here can: get you to the directory.
+          The characters themselves were never the answer to anything — the
+          sidebar and this heading both say which worktree this is.
+
+          Only while the checkout is `ready`, and that is the point of the
+          condition rather than tidiness: a worktree still being created has a
+          path recorded and nothing at it yet, and a failed one has a path that
+          was never made, so the button's only possible outcome in either state
+          is the refusal the main process writes for a missing directory.
+        */}
+        {worktree.state === 'ready' ? (
+          <button
+            type="button"
+            className="workspace__reveal"
+            title={`Show ${worktree.path} in the file manager`}
+            aria-label={`Show the ${worktree.name} checkout in the file manager`}
+            onClick={() => void revealInFinder(worktree.path, `the ${worktree.name} checkout`)}
+          >
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M1 3 H4.5 L6 4.5 H11 V9.5 H1 Z" />
+            </svg>
+          </button>
+        ) : null}
+
+        {/*
+          Two counts, and no third thing. Both are facts this worktree's
+          repository has and nowhere else on this screen states, which is the
+          test everything that used to be beside them failed: an icon says
+          which, the number says how much, and the hover carries the one
+          sentence worth keeping — that Push never forces.
         */}
         <div className="workspace__tools">
           <button
             type="button"
-            className="button button--ghost button--small"
-            title={`Every pane in every worktree, by what needs you · ${shortcutHint('open-dashboard', modifier)}`}
-            onClick={toggleDashboard}
-          >
-            All panes
-          </button>
-          <button
-            type="button"
             className={`button button--ghost button--small${changesOpen ? ' button--on' : ''}`}
             aria-pressed={changesOpen}
-            title={`Show what changed in this worktree · ${shortcutHint('open-palette', modifier)} to jump anywhere`}
+            // The count is in the name as well as on the button. A control
+            // whose visible words are "3 changed" and whose accessible name is
+            // "Changes" is one a speech-input user cannot say out loud, and
+            // two names for one button is the thing this whole change is about.
+            aria-label={changedCount(status) > 0 ? `Changes, ${changedCount(status)} changed` : 'Changes'}
+            title={
+              changedCount(status) > 0
+                ? `${changedCount(status)} changed in this worktree`
+                : 'Nothing changed in this worktree'
+            }
             onClick={toggleChanges}
           >
-            Changes
-            {changedCount(status) > 0 ? <span className="button__count">{changedCount(status)}</span> : null}
+            <svg className="button__icon" viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M3.5 1.5 H7 L9 3.5 V10.5 H3.5 Z M4.8 5.5 H7.7 M4.8 7.5 H7.7" />
+            </svg>
+            {changedCount(status) > 0 ? <span className="tool__count">{changedCount(status)} changed</span> : null}
           </button>
           <button
             type="button"
             className="button button--ghost button--small"
             disabled={pushing}
+            aria-label={
+              pushing ? 'Pushing' : status !== undefined && status.ahead > 0 ? `Push, ${status.ahead} to push` : 'Push'
+            }
             title={
-              status === undefined
-                ? 'Send this branch to its remote'
-                : status.ahead > 0
-                  ? `Send ${status.ahead} commit${status.ahead === 1 ? '' : 's'} to the remote. Never forces.`
-                  : 'Nothing to send; the remote already has this branch.'
+              pushing
+                ? 'Pushing…'
+                : status === undefined
+                  ? 'Send this branch to its remote'
+                  : status.ahead > 0
+                    ? `Send ${status.ahead} commit${status.ahead === 1 ? '' : 's'} to the remote. Never forces.`
+                    : 'Nothing to send; the remote already has this branch.'
             }
             onClick={() => void pushActiveWorktree()}
           >
-            {pushing ? 'Pushing…' : 'Push'}
-            {status !== undefined && status.ahead > 0 ? <span className="button__count">{status.ahead}</span> : null}
-          </button>
-          <button
-            type="button"
-            className="button button--ghost button--small"
-            title={`Split right · ${shortcutHint('split-right', modifier)}`}
-            onClick={() => void splitFocusedPane('row')}
-          >
-            Split right
-          </button>
-          <button
-            type="button"
-            className="button button--ghost button--small"
-            title={`Split down · ${shortcutHint('split-down', modifier)}`}
-            onClick={() => void splitFocusedPane('column')}
-          >
-            Split down
-          </button>
-          <button
-            type="button"
-            className="button button--small"
-            title={`New terminal · ${shortcutHint('new-terminal', modifier)}`}
-            onClick={() => void createTerminal(activeWorktreeId)}
-          >
-            New terminal
+            <svg className="button__icon" viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M6 9.5 V2.5 M3 5.5 L6 2.5 L9 5.5" />
+            </svg>
+            {pushing ? (
+              <span className="tool__count">pushing…</span>
+            ) : status !== undefined && status.ahead > 0 ? (
+              <span className="tool__count">{status.ahead} to push</span>
+            ) : null}
           </button>
         </div>
       </header>

@@ -546,6 +546,39 @@ async function checkWorktreeSurfaces(ask) {
     }
   }
 
+  // And that the panes' own strip carries the same command, which is the gap
+  // this function exists for. Splitting and opening a pane used to be words in
+  // the header above the strip; they are icons at the end of it now, and an
+  // icon that calls nothing looks exactly like one that works. Pressed by its
+  // accessible name, because an icon has no text to match on.
+  const pressLabel = (label) =>
+    ask(
+      `(() => {
+         const found = [...document.querySelectorAll('button')].find(
+           (button) => button.getAttribute('aria-label') === ${JSON.stringify(label)}
+         )
+         if (!found || found.disabled) return false
+         found.click()
+         return true
+       })()`
+    )
+
+  const beforeStrip = await tabCount()
+  if (!(await pressLabel('New terminal'))) {
+    failures.push('the pane strip has no New terminal control, so no pointer can open a pane')
+    return
+  }
+  await waitFor(
+    async () => (await tabCount()) > beforeStrip,
+    'pressing New terminal on the pane strip did not open a pane'
+  )
+
+  // The reveal on the worktree header, which is all that is left of a path
+  // sixty characters long. Checked for and deliberately not pressed: pressing
+  // it would open a file manager on whoever is running the gate.
+  const reveal = await ask(`document.querySelector('.workspace__head button[aria-label^="Show the"]') !== null`)
+  if (reveal !== true) failures.push('the worktree header offers no way to reach the checkout on disk')
+
   // And the decision that a quiet shell closes on one press. A pane running an
   // agent, or one still producing output, is asked about first — that is
   // deliberate, and so is this: a question on every close is one people learn

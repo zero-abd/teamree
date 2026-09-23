@@ -27,15 +27,67 @@
   flex-shrink: 0;
   display: flex;
   align-items: stretch;
-  gap: 1px;
   padding: var(--s2) var(--s3) 0;
-  overflow-x: auto;
-  scrollbar-width: none;
   background: var(--bg-rail);
 }
 
-.tabs::-webkit-scrollbar {
+/* The list scrolls; the three buttons beside it do not. They are the only way
+   to split or open a pane with a pointer, so a twentieth tab must not push
+   them off the end of the strip. */
+.tabs__list {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs__list::-webkit-scrollbar {
   display: none;
+}
+
+.tabs__actions {
+  display: flex;
+  flex: none;
+  align-self: center;
+  gap: 1px;
+  margin-left: var(--s2);
+}
+
+.tabs__action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.tabs__action svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tabs__action:hover,
+.tabs__action:focus-visible {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.tabs__action:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .tab {
@@ -123,78 +175,82 @@
 .workspace__head {
   display: flex;
   flex: none;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--s4);
-  padding: var(--s3) var(--s4);
+  gap: var(--s2);
+  padding: var(--s2) var(--s4);
   border-bottom: 1px solid var(--line);
 }
 
-.workspace__identity {
-  flex: 1 1 180px;
-  min-width: 0;
-}
-
 .workspace__title {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--text-lg);
+  font-size: var(--text-sm);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
-.workspace__path {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--fg-muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-}
-
-/* The same line of text, now pressable. It deliberately does not look like a
-   button until the pointer is over it: the path is read far more often than it
-   is pressed, and a filled control here would put a second loud thing beside
-   the worktree's name. */
-button.workspace__path--reveal {
+/* What is left of the path: the one thing it could do, without the sixty
+   characters nobody read. Quiet until the pointer is on it, because the name
+   beside it is what this line is for. */
+.workspace__reveal {
   display: flex;
-  align-items: baseline;
-  gap: var(--s2);
-  max-width: 100%;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: 0;
-  background: none;
-  text-align: left;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
   cursor: pointer;
 }
 
-.workspace__reveal-hint {
-  flex: none;
-  opacity: 0;
-  color: var(--accent-bright);
-  font-family: var(--font-ui);
-  transition: opacity 120ms ease;
+.workspace__reveal svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.workspace__path--reveal:hover .workspace__reveal-hint,
-.workspace__path--reveal:focus-visible .workspace__reveal-hint {
-  opacity: 1;
+.workspace__reveal:hover,
+.workspace__reveal:focus-visible {
+  background: var(--bg-hover);
+  color: var(--fg);
 }
 
-.workspace__path--reveal:hover,
-.workspace__path--reveal:focus-visible {
-  color: var(--fg-secondary);
-}
-
+/* Pushed to the far end, so the name and the way to its directory stay one
+   group on the left rather than drifting into the counts. */
 .workspace__tools {
-  flex-wrap: wrap;
-  max-width: 100%;
   display: flex;
+  flex: none;
   align-items: center;
   gap: var(--s2);
-  flex: none;
+  margin-left: auto;
+}
+
+.button__icon {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The count rides in the button's own colour rather than a pill of its own:
+   one control, one voice, and a ghost button already earns its contrast. */
+.tool__count {
+  color: inherit;
+  font-variant-numeric: tabular-nums;
 }
 
 .workspace__panes {
@@ -319,18 +375,6 @@ button.workspace__path--reveal {
 
 /* The badge on the Changes button. Tabular figures so it does not jitter as the
    count ticks between one width of number and another. */
-.button__count {
-  margin-left: var(--s2);
-  padding: 0 var(--s1);
-  min-width: 15px;
-  display: inline-block;
-  border-radius: var(--r1);
-  background: var(--bg-press);
-  color: var(--fg-secondary);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
 
 .changes {
   width: 340px;
