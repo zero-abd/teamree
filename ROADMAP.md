@@ -512,6 +512,141 @@ the pane existed.
 - [x] Pruned with the pane it belongs to, the way a mute is, and swept at
       startup of anything a crash orphaned
 
+## M28 — One place for each command
+
+Twelve commands, none of them in the menu bar, and a strip over the panes that had
+grown into a second copy of the window.
+
+- [x] Every one of this app's commands in the macOS menu bar, built from the same
+      shortcut table the key handler reads, greyed by the same predicate and
+      dispatched through the same function — with `Settings…` in the application
+      menu and a Help menu, so a menu item, a chord and a palette row cannot
+      disagree
+- [x] The main process refuses an accelerator a table chord could not have spelled,
+      and a list longer than sixty-four items; the menu goes away with the window
+      that published it
+- [x] The worktree header is one line — the name, a folder icon carrying the path on
+      its hover, and `3 changed` / `2 to push` when there is something to report.
+      The sixty characters of path, All panes, Split right, Split down and New
+      terminal are gone from it
+- [x] Split right, split down and new terminal moved onto the panes' own strip,
+      outside the scrolling tabs, each hover naming the chord it stands in for
+- [x] Four more chords, and everything downstream with them because everything
+      downstream is generated: `⌘⌥↑` / `⌘⌥↓` walk the worktrees in the sidebar's own
+      order and wrap, `⌘[` / `⌘]` walk the panes, `⌘⇧↩` maximises one and restores
+      it without touching the stored layout
+- [x] A menu on the worktree row — Reveal in Finder, Copy path, Copy branch, Open in
+      *editor*, Remove — from right-click, from `⋯`, and from the keyboard. The `×`
+      that destroyed a checkout is off the row; the confirmation it opens is
+      unchanged
+- [x] `editor.list` and `editor.open`, additive and local-only: PATH is probed for
+      `code`, `cursor`, `zed`, `idea`, `subl`, a per-project command overrides it,
+      and the checkout is one entry in an argv with no shell anywhere in the path
+
+## M29 — A worktree you can run in
+
+`git worktree add` writes the tracked files and stops. Minute three of a first
+session is an agent running `npm test` in a checkout with no `node_modules`.
+
+- [x] Per project, gitignored directories symlinked into every new checkout
+      (`node_modules`, `.venv`) and gitignored files copied (`.env`) — `linkedPaths`
+      and `copiedPaths`, additive on `Project`, so every workspace file on disk
+      parses unchanged
+- [x] Every path judged before anything is written — relative, inside the repository,
+      present, untracked, ignored — and each refusal names the path and the reason
+      rather than skipping it quietly; copies measured against a byte and entry
+      budget with an early stop, so `node_modules` on the copy list is a refusal and
+      not a four-minute freeze
+- [x] Prepared after `git worktree add` succeeds and before the record flips to
+      `ready`, so a pane never opens on a half-made checkout
+- [x] Two fields per project in Settings, and `teamree project linked` /
+      `teamree project copied` from a shell, typed from one `project.setPaths`
+      declaration
+
+## M30 — Told when an agent stops, and what you missed
+
+You start three agents and go and do something else. Nothing ever left the window:
+no notification, no badge, no unread.
+
+- [x] A pane running an agent raises a notification when it goes quiet or exits —
+      the worktree's name, and the pane's last evidence line as the body. Never for
+      a plain shell, never for the first quiet edge of a restored pane, and
+      suppressed only when the window has the focus *and* that pane is the focused
+      one
+- [x] Clicking it focuses the window and reveals that pane, through the renderer's
+      own `revealPane`; a macOS dock badge counts the panes that went quiet while
+      the window was away and clears when it comes back
+- [x] One preference — nothing, notify, or notify with sound — in this window's
+      storage rather than in the workspace file, because whether a machine may
+      interrupt you is a fact about the room you are sitting in
+- [x] `notices` joins `menu` on the preload bridge with exactly its shape, both
+      written down in [`docs/renderer-boundary.md`](docs/renderer-boundary.md);
+      `evidenceLine` moved to `src/shared/` so the notification body and the sidebar
+      row cannot be two lines
+- [x] Unread, per terminal id: a pane is unread when it printed after the last
+      moment it was actually on screen. Weight on the name and one static pip beside
+      the activity dot, in the sidebar, on the strip and on the board — never a
+      count. The board gets an **Unread only** filter, deliberately not remembered
+      across launches
+
+## M31 — Panes you can tell apart, start again, and start several of
+
+The sidebar read `claude`, `claude`, `claude`; an exited pane offered nothing; and a
+second attempt at one task meant opening the dialog again.
+
+- [x] A pane is named after the job: an explicit rename first (the pencil on the tab,
+      or a double-click), then the description the composer was submitted with, then
+      what it is running. `Terminal.label` is additive, durable, and read by the
+      sidebar, the strip and the board through one function
+- [x] `teamree terminal rename`, and a NAME column on `terminal list`
+- [x] `terminal.relaunch` runs an exited pane again in place — same terminal id, same
+      leaf, same directory, the same agent under a freshly pinned session id, with
+      what the dead pane printed carried over above the banner. A running pane is
+      refused, and a pane that was not running an agent comes back as a shell
+- [x] One control for it in the pane header beside the `exited N` badge —
+      `Run claude again`, or `New shell` — and `teamree terminal relaunch <id>`
+- [x] The composer takes a count per installed agent and creates one worktree each
+      from the same start point, expanded one round at a time; the first attempt
+      keeps the task's name and every later one is suffixed with the agent that runs
+      in it. `teamree worktree create --agent ... --agent ...` does the same, the
+      flag parser having gained repeatable flags
+- [x] A default agent and a command-line fragment per agent, both in this window's
+      storage: the composer preselects it when it is installed here, the palette puts
+      its row first, and Settings shows the full command that will run, composed by
+      the same function the runtime composes it with
+- [x] The fragment is joined **before** the session-id rewriting, so a pipeline or an
+      unterminated quote leaves the command byte-for-byte as typed
+- [x] Panes stop coming back to a conversation nobody wrote down: the
+      `CLAUDECODE` and `CLAUDE_CODE_CHILD_SESSION` markers are stripped from what a
+      pane inherits, so an app started from inside an agent's own session no longer
+      hands its panes a transcript that is never written
+
+## M32 — A diff you can review, and output you can act on
+
+The changes panel handed over the patch as git printed it, coloured by the first
+character of each line; a URL an agent printed was dead text.
+
+- [x] `parsePatch` in `src/shared/` — files, hunks and lines, each line carrying its
+      number on both sides, counted off the hunk rather than trusted from its header,
+      and tolerant of a patch cut short at the byte ceiling
+- [x] A line-at-a-time tokenizer for ts/tsx/js/json/css/md/sh/py with no dependency
+      and an honest fallback: an extension it has no table for gets no colour rather
+      than a guess
+- [x] Files fold, hunks fold, the `@@` header is sticky, both line-number gutters are
+      drawn, and the view reads **Inline** or **Side by side** — the choice kept in
+      this window's storage. Every shade is a palette token, so a theme switch
+      carries the patch with it
+- [x] A bare `https://` in the scrollback is a link, and so is an OSC 8 hyperlink;
+      both end in `window.open`, which the existing window-open handler already
+      answers, so there is no new preload channel and no second scheme check
+- [x] `⌘C` with a selection copies it and sends the pty nothing, `⌘C` with no
+      selection sends the interrupt, and `⌘V` goes in through the emulator so
+      bracketed paste is xterm's. A watched pane gets none of it
+- [x] The gates stopped leaving worktrees in the real `~/.teamree/worktrees` —
+      `TEAMREE_WORKTREES_ROOT`, main process only — and the smoke gate leaves
+      through `app.quit()`, which awaits every pty exit callback rather than
+      tearing the environment down under node-pty's watcher thread
+
 ## Known gaps
 
 Milestone 1 is complete and verified. These are the honest limits of what it does,
@@ -627,36 +762,48 @@ recorded so none of them is discovered by surprise later.
   said, rather than running it twice — which is the honest outcome and not a
   workaround for the missing half. Keeping the process itself alive would still mean
   moving PTYs into a daemon that outlives the app, and that has not been done.
-- **A pane whose resume fails comes back dead rather than live.** The pane that
-  is brought back to pick a conversation up runs one command, and if the
-  conversation is not there the agent refuses in a line and exits. Everything
-  around that is now honest — the badge is retracted rather than left standing over
-  a dead pane, the record the pane was holding back is released so what it printed
-  before the restart is above the refusal and is no longer at risk of being written
-  over, and a dim line in the pane says in as many words that nothing was resumed,
-  that the agent's own reason is directly above it, and that a conversation can be
-  gone for ordinary reasons. What none of that does is leave you with a working
-  pane. You are looking at a scrollback, and carrying on takes one press.
-
-  Not a silent restart, which was the fix rejected here and still is. A pane that
+- **A pane whose resume fails still costs a press.** The pane brought back to pick
+  a conversation up runs one command, and if the conversation is not there the
+  agent refuses in a line and exits. Everything around that is honest — the badge
+  is retracted, the record is released so what the pane printed before the restart
+  is above the refusal, and a dim line says in as many words that nothing was
+  resumed and why one can be gone. The offer is now in the pane's own header
+  (`Run claude again`, M31), so carrying on takes one press rather than a new pane.
+  It is pressed rather than done for you, deliberately: a pane that silently
   started a fresh conversation in place of the one it could not find would look
   exactly like a resume that worked, in the one case where the difference matters
-  most: the agent knows nothing of the work being continued, and the first person
-  to notice would be whoever read its answer and believed it. Starting over is
-  what a never-typed pane does, and it is safe there precisely because there was
-  nothing to lose. Here there was something, and it is gone, and saying so and
-  stopping is the smaller wrong. The offer this entry described as the shape of
-  the fix is now in the pane's own header — `Run claude again`, beside the badge
-  saying it exited — and `terminal.relaunch` is what it calls: same pane, same id,
-  same leaf, the agent started over under a fresh session id, with everything the
-  dead pane printed kept above a line saying where the new run begins. It is
-  pressed rather than done for you, which is the whole of the difference.
+  most.
 
-  It is one launch rather than every launch, at least. The pane writes down that
-  there is nothing to resume, so the launch after the refusal starts the agent
-  over and comes back working, with the failed launch kept above it in the
-  record like any other history. So this costs a restart, in the case where the
-  conversation was already gone, rather than costing the pane.
+- **A keystroke was taken for a conversation.** The trust gate that a brand-new
+  worktree puts up on the first `claude` used to be the second way into the
+  failure above: the key that answered it recorded `typed: true`, no conversation
+  was ever written under the id reserved for the pane, and the next launch asked
+  for one that never existed. "Has a conversation" is now read from the agent's
+  own store on disk (#103) rather than from keystrokes. Two things that change
+  found are open: a pane records `typed: true` within a second of opening because
+  xterm answers the agent's own device queries through `terminal.write`, and that
+  same write clears `restored`, so the fresh-agent restart above does not fire
+  for such a pane in the real app. Both are being fixed together, by telling the
+  runtime which writes were a person's.
+
+- **Staging by hunk is not there.** The patch reads as a review — files and hunks
+  fold, both gutters are drawn, inline or side by side — and staging is still
+  whole-file. Staging a hunk means writing a patch back to git rather than reading
+  one, which is a different operation with its own failure modes, and it is a
+  follow-up rather than an omission.
+
+- **Nothing runs on create.** A new worktree gets its linked directories and its
+  copied files (M29) and no setup command: `npm ci`, a migration, a generator are
+  all still yours to type in the first pane. Running arbitrary code on create is a
+  separate decision about what this app does to a machine on your behalf, and it
+  has deliberately not been taken.
+
+- **Unread is about this machine's own panes.** The mark is per terminal id against
+  the moment that pane was last on screen here, and a teammate's pane is neither —
+  it is somebody else's pty seen over a link, and this window has no record of when
+  its output was last looked at. So a watched pane carries an activity dot and no
+  unread mark, and there is no "mark unread" anywhere, for want of a pane menu to
+  put it in.
 - **One download, universal, unsigned.** A decision, recorded so nobody
   "fixes" it back: macOS ships as a single `teamree-<version>.dmg` carrying both
   architectures rather than a menu of four files. The cost is size and it is

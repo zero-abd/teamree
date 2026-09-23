@@ -110,7 +110,8 @@ document: **there is no partial compromise of this renderer.** Anything that can
 run script in that page has the machine. Which is why the rest of this is about
 making sure nothing ever does.
 
-`revealPath` is the only thing on the bridge that is not the runtime, and it is
+`revealPath` is the first of the three things on the bridge that are not the
+runtime — `menu` and `notices` are below — and it is
 worth being exact about why it is not a method on it. Revealing a path is an
 action of the window somebody is looking at: the `teamree` command has no file
 manager to drive, and a teammate across a relay must never be able to open a
