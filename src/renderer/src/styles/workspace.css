@@ -1,4 +1,5 @@
-/* Tabs, the worktree header, and the empty states that stand in for panes. */
+/* The pane strip, the column it heads, and the empty states that stand in for
+   panes. */
 
 .workspace {
   display: flex;
@@ -18,17 +19,43 @@
 
 /* Tabs -------------------------------------------------------------------- */
 
+/* The strip and whatever the area shows under it, stacked. The strip is the
+   window's top edge on this side of the seam and is drawn whatever is under
+   it, which is why the stacking is a column of its own rather than the
+   open-worktree view's business. */
+.workspace-column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 /* One tab per terminal in the worktree you are looking at — the sidebar is the
    list of sessions, so the strip is the list of what is running inside the one
    you opened. The dot is `.activity`, borrowed from the sidebar exactly as the
    dashboard borrows it: same reading of the same PTY, so a second dot here
-   would be a second vocabulary. */
+   would be a second vocabulary.
+
+   It is also the window's drag region on this side, the same height as the
+   sidebar's header and — once the sidebar is away — the row the macOS window
+   buttons sit on; shell.css moves their inset onto it then. The tabs sit on the
+   strip's bottom edge so the active one runs into the pane below it. */
 .tabs {
-  flex-shrink: 0;
+  -webkit-app-region: drag;
+  flex: none;
   display: flex;
-  align-items: stretch;
-  padding: var(--s2) var(--s3) 0;
+  align-items: flex-end;
+  gap: var(--s2);
+  height: var(--titlebar-h, 38px);
+  padding: 0 var(--s3);
   background: var(--bg-rail);
+}
+
+/* First in the strip once the sidebar is away, and centred on the row the
+   window buttons are centred on. */
+.tabs > .shell__toggle {
+  align-self: center;
 }
 
 /* The list scrolls; the three buttons beside it do not. They are the only way
@@ -41,6 +68,10 @@
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: none;
+  /* Sat on the strip's bottom edge, which `align-items: flex-end` above does
+     for the list as a whole; this keeps the list from growing into the row
+     when a tab is being renamed. */
+  align-self: flex-end;
 }
 
 .tabs__list::-webkit-scrollbar {
@@ -52,7 +83,6 @@
   flex: none;
   align-self: center;
   gap: 1px;
-  margin-left: var(--s2);
 }
 
 .tabs__action {
@@ -197,88 +227,7 @@
   color: var(--fg);
 }
 
-/* Header ------------------------------------------------------------------ */
-
-.workspace__head {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--s2);
-  padding: var(--s2) var(--s4);
-  border-bottom: 1px solid var(--line);
-}
-
-.workspace__title {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-/* What is left of the path: the one thing it could do, without the sixty
-   characters nobody read. Quiet until the pointer is on it, because the name
-   beside it is what this line is for. */
-.workspace__reveal {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r1);
-  background: transparent;
-  color: var(--fg-muted);
-  cursor: pointer;
-}
-
-.workspace__reveal svg {
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.workspace__reveal:hover,
-.workspace__reveal:focus-visible {
-  background: var(--bg-hover);
-  color: var(--fg);
-}
-
-/* Pushed to the far end, so the name and the way to its directory stay one
-   group on the left rather than drifting into the counts. */
-.workspace__tools {
-  display: flex;
-  flex: none;
-  align-items: center;
-  gap: var(--s2);
-  margin-left: auto;
-}
-
-.button__icon {
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-/* The count rides in the button's own colour rather than a pill of its own:
-   one control, one voice, and a ghost button already earns its contrast. */
-.tool__count {
-  color: inherit;
-  font-variant-numeric: tabular-nums;
-}
+/* Panes ------------------------------------------------------------------- */
 
 .workspace__panes {
   display: flex;

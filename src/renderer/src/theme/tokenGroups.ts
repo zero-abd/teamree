@@ -26,7 +26,7 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
     blurb: 'The window, the chrome around it, and the things that float over both.',
     tokens: [
       { token: 'bg-window', label: 'Window', about: 'The ground everything sits on, and the terminal background.' },
-      { token: 'bg-rail', label: 'Rail', about: 'The title strip, the sidebar and the status bar.' },
+      { token: 'bg-rail', label: 'Rail', about: 'The sidebar, the pane strip and the status bar.' },
       { token: 'bg-panel', label: 'Panel', about: 'Pane headers, tab strips and the changes list.' },
       { token: 'bg-raised', label: 'Raised', about: 'Dialogs, the palette, buttons and pop-ups.' },
       { token: 'bg-input', label: 'Field', about: 'The inside of a text field.' },
@@ -39,7 +39,7 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
     title: 'Lines',
     blurb: 'Hairlines and separators.',
     tokens: [
-      { token: 'line', label: 'Hairline', about: 'Borders between regions, and under the title strip.' },
+      { token: 'line', label: 'Hairline', about: 'Borders between regions.' },
       { token: 'line-strong', label: 'Strong line', about: 'Button and field borders, and the key caps.' }
     ]
   },

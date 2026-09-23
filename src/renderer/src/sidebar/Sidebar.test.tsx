@@ -99,6 +99,7 @@ const closeTeamwork = vi.fn()
 const toggleDashboard = vi.fn()
 const toggleSettings = vi.fn()
 const toggleHelp = vi.fn()
+const toggleSidebar = vi.fn()
 
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
@@ -110,6 +111,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
       openTeamwork,
       closeTeamwork,
       toggleDashboard,
+      toggleSidebar,
       ...overrides
     },
     true
@@ -117,7 +119,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
 }
 
 const mount = (): void => {
-  render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" appearanceHint="⌘," helpHint="⌘/" />)
+  render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" appearanceHint="⌘," helpHint="⌘/" sidebarHint="⌘B" />)
 }
 
 beforeEach(() => {
@@ -130,7 +132,38 @@ beforeEach(() => {
   openTeamwork.mockReset()
   closeTeamwork.mockReset()
   toggleDashboard.mockReset()
+  toggleSidebar.mockReset()
   seed()
+})
+
+// The app's name used to sit in a strip of its own across the whole window,
+// above the sidebar and the panes alike. The strip is gone: the sidebar's own
+// header is where the name lives now, beside the one control that puts the
+// sidebar away, and the window buttons sit on the same row.
+describe('the sidebar’s own header', () => {
+  it('carries the app name, in the sidebar rather than in a strip of its own', () => {
+    mount()
+    const header = document.querySelector('.sidebar__brand') as HTMLElement
+    expect(header).toBeTruthy()
+    expect(within(header).getByText('teamree')).toBeTruthy()
+    expect(document.querySelector('.titlebar')).toBeNull()
+  })
+
+  it('puts the sidebar away from its own header, and names the chord that does the same', () => {
+    mount()
+    const hide = screen.getByRole('button', { name: 'Hide sidebar' })
+    expect(hide.getAttribute('title')).toBe('Hide sidebar · ⌘B')
+    fireEvent.click(hide)
+    expect(toggleSidebar).toHaveBeenCalledOnce()
+  })
+
+  // The header is what the window is dragged by on macOS, so the button in it
+  // has to opt back out of the drag region — a class the stylesheet keys on.
+  it('keeps the control inside the header, where the drag region can exempt it', () => {
+    mount()
+    const header = document.querySelector('.sidebar__brand') as HTMLElement
+    expect(within(header).getByRole('button', { name: 'Hide sidebar' })).toBeTruthy()
+  })
 })
 
 describe('having nothing to show', () => {
@@ -456,7 +489,9 @@ describe('the order the chords walk', () => {
       worktree({ id: 'w4', projectId: 'p2', name: 'four' })
     ]
     seed({ projects, worktrees })
-    const { container } = render(<Sidebar newWorktreeHint="⌘N" searchHint="⌘K" appearanceHint="⌘," helpHint="⌘/" />)
+    const { container } = render(
+      <Sidebar newWorktreeHint="⌘N" searchHint="⌘K" appearanceHint="⌘," helpHint="⌘/" sidebarHint="⌘B" />
+    )
 
     const drawn = [...container.querySelectorAll('.worktree__name')].map((node) => node.textContent)
     expect(drawn).toEqual(['one', 'three', 'two', 'four'])

@@ -25,6 +25,7 @@ import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { evidenceLine } from '@shared/outputEvidence'
+import { Brand, SidebarGlyph } from '../shell/Brand'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
 import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
 import { teamworkSummary, TEAMWORK_BUTTON_LABEL } from './teamworkSummary'
@@ -36,12 +37,14 @@ export function Sidebar({
   newWorktreeHint,
   searchHint,
   appearanceHint,
-  helpHint
+  helpHint,
+  sidebarHint
 }: {
   newWorktreeHint: string
   searchHint: string
   appearanceHint: string
   helpHint: string
+  sidebarHint: string
 }): React.JSX.Element {
   const projects = useWorkspaceStore((state) => state.projects)
   const worktrees = useWorkspaceStore((state) => state.worktrees)
@@ -76,6 +79,7 @@ export function Sidebar({
   const teamworkProjectId = useWorkspaceStore((state) => state.teamworkProjectId)
   const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
   const closeTeamwork = useWorkspaceStore((state) => state.closeTeamwork)
+  const toggleSidebar = useWorkspaceStore((state) => state.toggleSidebar)
 
   // Which editors are on this machine, asked once and from here: the row menu
   // names one and the sidebar is the only thing that is always mounted while a
@@ -133,6 +137,25 @@ export function Sidebar({
 
   return (
     <div className="sidebar">
+      {/* The top edge of the window, on this side of the seam: the lockup, and
+          the one control that puts the sidebar away. On macOS the window
+          buttons sit on this row too, and it is what the window is dragged by
+          — the stylesheet makes it a drag region and exempts the button. The
+          same command is the chord beside it and a row in the palette and
+          the menu bar; the way back is the strip's left end. */}
+      <header className="sidebar__brand">
+        <Brand />
+        <button
+          type="button"
+          className="shell__toggle"
+          title={`Hide sidebar · ${sidebarHint}`}
+          aria-label="Hide sidebar"
+          onClick={toggleSidebar}
+        >
+          <SidebarGlyph />
+        </button>
+      </header>
+
       <nav className="rail" aria-label="Go to">
         {/* A button, not an input: it opens the palette, which is the search
             this app actually has. Dressing it as a field is about where the eye

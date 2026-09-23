@@ -1,5 +1,13 @@
-// The right-hand side: which worktree is open, what it is doing, and its panes
-// — and, beside them, whatever teammates' panes this window has open.
+// The right-hand side: the panes of the worktree that is open, under the strip
+// that lists them — and, beside them, whatever teammates' panes this window has
+// open.
+//
+// Nothing else. There used to be a header row between the strip and the panes
+// — the worktree's name, a way to its directory, two counts — and every one of
+// those is said somewhere already: the sidebar's selected row and the status
+// bar name the worktree, the row's menu reveals the checkout, and the status
+// bar's git line carries the counts and opens the changes panel. A row that
+// repeats three other surfaces is a row of nothing.
 //
 // The teammates' panes are held out here rather than inside the worktree's own
 // tree for one reason, and it is about their lifetime rather than about the
@@ -85,7 +93,31 @@ export function WorkspaceArea({
   )
 }
 
+/**
+ * The strip, then whatever the area is showing under it.
+ *
+ * The strip is outside the view rather than inside the open-worktree branch of
+ * it, because it is the window's top edge on this side and has to be there
+ * whatever is under it: the empty states, the pane board, settings and help are
+ * all drawn under the same row the window is dragged by and — with the sidebar
+ * away — the macOS window buttons sit on. `TerminalTabs` decides what to list.
+ */
 function WorkspaceMain({
+  modifier,
+  isAppChord
+}: {
+  modifier: PlatformModifier
+  isAppChord: (event: KeyboardEvent) => boolean
+}): React.JSX.Element {
+  return (
+    <div className="workspace-column">
+      <TerminalTabs modifier={modifier} />
+      <WorkspaceView modifier={modifier} isAppChord={isAppChord} />
+    </div>
+  )
+}
+
+function WorkspaceView({
   modifier,
   isAppChord
 }: {
@@ -111,15 +143,8 @@ function WorkspaceMain({
   const relaunchTerminal = useWorkspaceStore((state) => state.relaunchTerminal)
   const createTerminal = useWorkspaceStore((state) => state.createTerminal)
   const applySplitSizes = useWorkspaceStore((state) => state.applySplitSizes)
-  const changesOpen = useWorkspaceStore((state) => state.changesOpen)
-  const toggleChanges = useWorkspaceStore((state) => state.toggleChanges)
-  const status = useWorkspaceStore((state) =>
-    state.activeWorktreeId ? state.statuses[state.activeWorktreeId] : undefined
-  )
-  const pushing = useWorkspaceStore((state) => state.pushing)
   const agents = useWorkspaceStore((state) => state.agents)
   const startAgent = useWorkspaceStore((state) => state.startAgent)
-  const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
   const paneSearch = useWorkspaceStore((state) => state.paneSearch)
   const closePaneSearch = useWorkspaceStore((state) => state.closePaneSearch)
   const dashboardOpen = useWorkspaceStore((state) => state.dashboardOpen)
@@ -134,7 +159,6 @@ function WorkspaceMain({
   const helpOpen = useWorkspaceStore((state) => state.helpOpen)
   const toggleHelp = useWorkspaceStore((state) => state.toggleHelp)
   const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
-  const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
   const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
   const teamwork = useWorkspaceStore((state) => state.teamwork)
 
@@ -385,104 +409,6 @@ function WorkspaceMain({
 
   return (
     <main className="workspace">
-      <TerminalTabs modifier={modifier} />
-
-      {/*
-        One line, and only what is true of this worktree rather than what can
-        be done to it. The row used to carry All panes, Split right, Split down
-        and New terminal beside the two repository buttons, and every one of
-        those four has a home already — the rail, the strip below, the chords
-        the status bar prints, the palette. A path sixty characters long sat
-        under the name as well, read on every screen by nobody.
-      */}
-      <header className="workspace__head">
-        <h1 className="workspace__title">{worktree.name}</h1>
-
-        {/*
-          All that is left of the printed path, which is the only thing the
-          path could do that nothing else here can: get you to the directory.
-          The characters themselves were never the answer to anything — the
-          sidebar and this heading both say which worktree this is.
-
-          Only while the checkout is `ready`, and that is the point of the
-          condition rather than tidiness: a worktree still being created has a
-          path recorded and nothing at it yet, and a failed one has a path that
-          was never made, so the button's only possible outcome in either state
-          is the refusal the main process writes for a missing directory.
-        */}
-        {worktree.state === 'ready' ? (
-          <button
-            type="button"
-            className="workspace__reveal"
-            title={`Show ${worktree.path} in the file manager`}
-            aria-label={`Show the ${worktree.name} checkout in the file manager`}
-            onClick={() => void revealInFinder(worktree.path, `the ${worktree.name} checkout`)}
-          >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M1 3 H4.5 L6 4.5 H11 V9.5 H1 Z" />
-            </svg>
-          </button>
-        ) : null}
-
-        {/*
-          Two counts, and no third thing. Both are facts this worktree's
-          repository has and nowhere else on this screen states, which is the
-          test everything that used to be beside them failed: an icon says
-          which, the number says how much, and the hover carries the one
-          sentence worth keeping — that Push never forces.
-        */}
-        <div className="workspace__tools">
-          <button
-            type="button"
-            className={`button button--ghost button--small${changesOpen ? ' button--on' : ''}`}
-            aria-pressed={changesOpen}
-            // The count is in the name as well as on the button. A control
-            // whose visible words are "3 changed" and whose accessible name is
-            // "Changes" is one a speech-input user cannot say out loud, and
-            // two names for one button is the thing this whole change is about.
-            aria-label={changedCount(status) > 0 ? `Changes, ${changedCount(status)} changed` : 'Changes'}
-            title={
-              changedCount(status) > 0
-                ? `${changedCount(status)} changed in this worktree`
-                : 'Nothing changed in this worktree'
-            }
-            onClick={toggleChanges}
-          >
-            <svg className="button__icon" viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M3.5 1.5 H7 L9 3.5 V10.5 H3.5 Z M4.8 5.5 H7.7 M4.8 7.5 H7.7" />
-            </svg>
-            {changedCount(status) > 0 ? <span className="tool__count">{changedCount(status)} changed</span> : null}
-          </button>
-          <button
-            type="button"
-            className="button button--ghost button--small"
-            disabled={pushing}
-            aria-label={
-              pushing ? 'Pushing' : status !== undefined && status.ahead > 0 ? `Push, ${status.ahead} to push` : 'Push'
-            }
-            title={
-              pushing
-                ? 'Pushing…'
-                : status === undefined
-                  ? 'Send this branch to its remote'
-                  : status.ahead > 0
-                    ? `Send ${status.ahead} commit${status.ahead === 1 ? '' : 's'} to the remote. Never forces.`
-                    : 'Nothing to send; the remote already has this branch.'
-            }
-            onClick={() => void pushActiveWorktree()}
-          >
-            <svg className="button__icon" viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M6 9.5 V2.5 M3 5.5 L6 2.5 L9 5.5" />
-            </svg>
-            {pushing ? (
-              <span className="tool__count">pushing…</span>
-            ) : status !== undefined && status.ahead > 0 ? (
-              <span className="tool__count">{status.ahead} to push</span>
-            ) : null}
-          </button>
-        </div>
-      </header>
-
       <div className="workspace__body">
         <div className="workspace__panes">
           {paneRoot ? (
@@ -541,16 +467,4 @@ function WorkspaceMain({
       </div>
     </main>
   )
-}
-
-/**
- * What the button's badge counts: everything a commit would have to deal with.
- * Ahead and behind are about the branch rather than the tree, so they are the
- * status bar's business, not this button's.
- */
-export function changedCount(
-  status: { staged: number; unstaged: number; untracked: number; conflicted: number } | undefined
-): number {
-  if (!status) return 0
-  return status.staged + status.unstaged + status.untracked + status.conflicted
 }

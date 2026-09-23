@@ -1,22 +1,33 @@
-// The window's title strip. It carries the brand lockup and, more importantly,
-// it is the window's drag region: with the native title bar hidden on macOS
-// there is nothing else to grab the window by.
+// The brand lockup: the mark on its tile, then the wordmark. It used to be the
+// whole of a title strip across the top of the window; the strip is gone and
+// the lockup is the sidebar's, drawn in the sidebar's own header.
 
-import { titleBarClassName } from './titleBarClass'
-
-export function TitleBar({ platform }: { platform: string | undefined }): React.JSX.Element {
+export function Brand(): React.JSX.Element {
   return (
-    <header className={titleBarClassName(platform)}>
-      <span className="brand">
-        <span className="brand__tile" aria-hidden="true">
-          <BrandMark />
-        </span>
-        <span className="wordmark">
-          teamree
-          <span className="wordmark__dot" aria-hidden="true" />
-        </span>
+    <span className="brand">
+      <span className="brand__tile" aria-hidden="true">
+        <BrandMark />
       </span>
-    </header>
+      <span className="wordmark">
+        teamree
+        <span className="wordmark__dot" aria-hidden="true" />
+      </span>
+    </span>
+  )
+}
+
+/**
+ * The glyph on both sidebar toggles: a window with its left panel marked. The
+ * same drawing whether the sidebar is being put away or brought back, because
+ * the button's position says which — the sidebar's header for one, the left
+ * end of the pane strip for the other — and the label says it in words.
+ */
+export function SidebarGlyph(): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 14 14" aria-hidden="true">
+      <rect x="1.5" y="2.5" width="11" height="9" rx="1.5" />
+      <path d="M5.5 2.5 V11.5" />
+    </svg>
   )
 }
 

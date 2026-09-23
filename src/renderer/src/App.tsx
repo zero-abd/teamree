@@ -21,9 +21,9 @@ import { RemoteKeystrokesDialog } from './dialogs/RemoteKeystrokesDialog'
 import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
 import { openInBrowser } from './shell/openInBrowser'
+import { shellClassName } from './shell/shellClass'
 import { SidebarResizer } from './shell/SidebarResizer'
 import { StatusBar } from './shell/StatusBar'
-import { TitleBar } from './shell/TitleBar'
 import { useWorkspaceStore } from './state/workspaceStore'
 import { applyPalette } from './theme/applyPalette'
 import { UpdateAvailableCard } from './updates/UpdateAvailableCard'
@@ -88,7 +88,11 @@ export function App(): React.JSX.Element {
 
   return (
     <div
-      className={`shell${sidebarVisible ? '' : ' shell--collapsed'}`}
+      // There is no title strip. The window's top edge is the sidebar's own
+      // header on the left and the pane strip on the right, and on macOS the
+      // window buttons sit over whichever of the two is at the left edge —
+      // the class list says which, and the stylesheet moves the inset.
+      className={shellClassName(platform, sidebarVisible)}
       style={{
         ['--sidebar-width' as string]: `${sidebarWidth}px`,
         // Both come from src/shared/windowChrome.ts, which the main process also
@@ -97,8 +101,6 @@ export function App(): React.JSX.Element {
         ['--titlebar-inset' as string]: `${MAC_CONTENT_INSET_PX}px`
       }}
     >
-      <TitleBar platform={platform} />
-
       {sidebarVisible ? (
         <>
           <Sidebar
@@ -106,6 +108,7 @@ export function App(): React.JSX.Element {
             searchHint={shortcutHint('open-palette', modifier)}
             appearanceHint={shortcutHint('open-appearance', modifier)}
             helpHint={shortcutHint('open-help', modifier)}
+            sidebarHint={shortcutHint('toggle-sidebar', modifier)}
           />
           <SidebarResizer />
         </>

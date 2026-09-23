@@ -1,5 +1,8 @@
 // The bottom rail: is the runtime there, what am I looking at, how much of it
-// is running. Everything here is a fact, never an action.
+// is running. Everything here is a fact. One of them — the git line — is also
+// the way into the changes panel, because it is the line that already says what
+// the panel is about; the row above the panes that used to carry a button for
+// the same fact is gone.
 
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
@@ -26,6 +29,8 @@ export function StatusBar({ modifier }: { modifier: PlatformModifier }): React.J
     state.activeWorktreeId ? state.statuses[state.activeWorktreeId] : undefined
   )
   const totalTerminals = useWorkspaceStore((state) => Object.keys(state.terminals).length)
+  const changesOpen = useWorkspaceStore((state) => state.changesOpen)
+  const toggleChanges = useWorkspaceStore((state) => state.toggleChanges)
 
   const paneCount = collectTerminalIds(layout?.root ?? null).length
   const summary = summarizeWorktreeStatus(status)
@@ -54,10 +59,21 @@ export function StatusBar({ modifier }: { modifier: PlatformModifier }): React.J
       </span>
 
       {summary && status ? (
-        <span className="statusbar__item" title={`read ${formatReadAge(status.readAt, Date.now())}`}>
+        // The count is in the name as well as on the button, so somebody
+        // driving this by voice can say what they see. Offered for a clean tree
+        // too: the panel is where the last commits are read, not only where
+        // dirty files are staged.
+        <button
+          type="button"
+          className={`statusbar__item statusbar__button${changesOpen ? ' statusbar__button--on' : ''}`}
+          aria-pressed={changesOpen}
+          aria-label={`Changes, ${summary.description}`}
+          title={`Changes · read ${formatReadAge(status.readAt, Date.now())}`}
+          onClick={toggleChanges}
+        >
           <span className="statusbar__muted">git</span>
           {summary.description}
-        </span>
+        </button>
       ) : null}
 
       <span className="statusbar__spacer" />
