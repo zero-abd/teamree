@@ -129,24 +129,24 @@
 }
 
 /* A task item may sit in a plain list beside bulleted ones, as GFM allows. */
-.md-editor li[data-type='taskItem'] {
+.md-editor li[data-checked] {
   display: flex;
   align-items: flex-start;
   gap: var(--s2);
   list-style: none;
 }
 
-.md-editor li[data-type='taskItem'] > label {
+.md-editor li[data-checked] > label {
   flex: none;
   margin-top: 0.3em;
 }
 
-.md-editor li[data-type='taskItem'] > div {
+.md-editor li[data-checked] > div {
   flex: 1;
   min-width: 0;
 }
 
-.md-editor li[data-type='taskItem'][data-checked='true'] > div {
+.md-editor li[data-checked='true'] > div {
   color: var(--fg-muted);
   text-decoration: line-through;
 }
