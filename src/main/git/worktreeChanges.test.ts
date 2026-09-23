@@ -3,6 +3,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { cutToBytes, parseChangeRecords, readWorktreeChanges, readWorktreeDiff, sortChanges } from './worktreeChanges'
 import { createTempRepo, type TempRepo } from './testRepository'
+import { discardPath } from './worktreeDiscard'
 
 /** Builds a NUL-separated status stream the way git writes one. */
 const records = (...entries: string[]): string => entries.map((entry) => `${entry}\0`).join('')
@@ -407,5 +408,122 @@ describe('changes and diffs against a real repository', () => {
 
     expect(result.changes.map((change) => change.path)).toEqual(['only-here.ts'])
     await rm(checkout, { recursive: true, force: true })
+  })
+})
+
+// An empty `git diff` for one path used to be read as "untracked", so an untouched
+// file came back as the patch that adds all of it.
+describe('the patch for one path', () => {
+  const repos: TempRepo[] = []
+  afterEach(async () => {
+    await Promise.all(repos.splice(0).map((repo) => repo.cleanup()))
+  })
+
+  const seeded = async (): Promise<TempRepo> => {
+    const repo = await createTempRepo()
+    repos.push(repo)
+    await repo.write('.gitignore', 'build.log\n')
+    await repo.write('src/math.ts', 'export const one = 1\n')
+    await repo.write('src/big.ts', 'export const big = true\n')
+    await repo.commit('seed')
+    return repo
+  }
+
+  const halves = async (repo: TempRepo, file: string): Promise<{ working: string; staged: string }> => {
+    const read = (staged: boolean): Promise<{ patch: string }> =>
+      readWorktreeDiff(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath, path: file, staged })
+    const [working, staged] = await Promise.all([read(false), read(true)])
+    return { working: working.patch, staged: staged.patch }
+  }
+
+  const changesAt = async (repo: TempRepo, file: string): Promise<number> =>
+    (await readWorktreeChanges(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath, path: file })).total
+
+  it('is empty for a tracked file nobody touched', async () => {
+    const repo = await seeded()
+
+    expect(await halves(repo, 'src/big.ts')).toEqual({ working: '', staged: '' })
+    expect(await changesAt(repo, 'src/big.ts')).toBe(0)
+  })
+
+  it('is the edit for a tracked file that was changed', async () => {
+    const repo = await seeded()
+    await repo.write('src/math.ts', 'export const one = 2\n')
+
+    const { working, staged } = await halves(repo, 'src/math.ts')
+
+    expect(working).toContain('-export const one = 1')
+    expect(working).toContain('+export const one = 2')
+    expect(working).not.toContain('new file')
+    expect(staged).toBe('')
+    expect(await changesAt(repo, 'src/math.ts')).toBe(1)
+  })
+
+  it('is the whole file for one git is not tracking', async () => {
+    const repo = await seeded()
+    await repo.write('src/fresh/new.ts', 'export const fresh = true\n')
+
+    const { working, staged } = await halves(repo, 'src/fresh/new.ts')
+
+    expect(working).toContain('+export const fresh = true')
+    expect(staged).toBe('')
+    expect(await changesAt(repo, 'src/fresh/new.ts')).toBe(1)
+  })
+
+  it('is empty for an ignored file', async () => {
+    const repo = await seeded()
+    await repo.write('build.log', 'noise\n')
+
+    expect(await halves(repo, 'build.log')).toEqual({ working: '', staged: '' })
+    expect(await changesAt(repo, 'build.log')).toBe(0)
+  })
+
+  it('is the removal for a deleted file', async () => {
+    const repo = await seeded()
+    await rm(path.join(repo.repoPath, 'src/math.ts'))
+
+    const { working } = await halves(repo, 'src/math.ts')
+
+    expect(working).toContain('deleted file')
+    expect(working).toContain('-export const one = 1')
+  })
+
+  it('keeps a staged-only change in the staged half', async () => {
+    const repo = await seeded()
+    await repo.write('src/math.ts', 'export const one = 2\n')
+    await repo.git(['add', 'src/math.ts'])
+
+    const { working, staged } = await halves(repo, 'src/math.ts')
+
+    expect(working).toBe('')
+    expect(staged).toContain('+export const one = 2')
+    expect(staged).not.toContain('new file')
+  })
+
+  it('keeps a staged rename in the staged half', async () => {
+    const repo = await seeded()
+    await repo.git(['mv', 'src/math.ts', 'src/sum.ts'])
+
+    const { working, staged } = await halves(repo, 'src/sum.ts')
+
+    expect(working).toBe('')
+    expect(staged).toContain('+export const one = 1')
+    expect(await changesAt(repo, 'src/sum.ts')).toBe(1)
+  })
+
+  it('refuses a path outside the repository', async () => {
+    const repo = await seeded()
+    await writeFile(path.join(repo.base, 'outside.ts'), 'export {}\n')
+
+    await expect(halves(repo, '../outside.ts')).rejects.toThrow()
+  })
+
+  it('is empty again once the change is discarded', async () => {
+    const repo = await seeded()
+    await repo.write('src/math.ts', 'export const one = 2\n')
+    await discardPath(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath, path: 'src/math.ts' })
+
+    expect(await halves(repo, 'src/math.ts')).toEqual({ working: '', staged: '' })
+    expect(await changesAt(repo, 'src/math.ts')).toBe(0)
   })
 })

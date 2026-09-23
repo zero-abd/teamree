@@ -137,6 +137,8 @@ export function withoutPreparedPaths(
 export type ChangesReadOptions = {
   worktreeId: string
   worktreePath: string
+  /** Restricts the list to one path. */
+  path?: string
   limit?: number
   /** What this project carries into every worktree, and so is not a change. */
   prepared?: PreparedPaths
@@ -150,7 +152,7 @@ export async function readWorktreeChanges(runner: GitRunner, options: ChangesRea
   // in ~/.gitconfig for a large repository, and this read would then answer
   // "nothing untracked" for a checkout whose status chip says otherwise.
   const { stdout } = await runner.run({
-    args: ['status', '--porcelain=v2', '-z', '--untracked-files=normal'],
+    args: ['status', '--porcelain=v2', '-z', '--untracked-files=normal', ...pathspec(options.path)],
     cwd: options.worktreePath,
     readOnly: true,
     ...(options.signal ? { signal: options.signal } : {}),
@@ -196,10 +198,13 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
   const context = options.contextLines ?? DEFAULT_DIFF_CONTEXT_LINES
   const nullDevice = options.nullDevice ?? (process.platform === 'win32' ? 'NUL' : '/dev/null')
 
-  const base = ['diff', '--no-color', `--unified=${context}`]
-  const args = staged
-    ? [...base, '--cached', ...(options.path ? ['--', options.path] : [])]
-    : [...base, ...(options.path ? ['--', options.path] : [])]
+  const args = [
+    'diff',
+    '--no-color',
+    `--unified=${context}`,
+    ...(staged ? ['--cached'] : []),
+    ...pathspec(options.path)
+  ]
 
   // One byte past the budget is enough to know the patch overflows. A 40MB log
   // read whole used to overrun the runner's hard cap and render as "No patch for this path".
@@ -220,12 +225,11 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
   // Nothing is untracked in the index, so a staged patch is already complete.
   if (!staged) {
     let untracked: string[] = []
-    if (options.path === undefined) {
+    // An empty patch for a path is as likely an untouched file as an untracked one; only status tells them apart.
+    if (options.path === undefined || !patch) {
       const listed = await listUntrackedFiles(runner, options)
       untracked = listed.paths
       cutShort = listed.cutShort
-    } else if (!patch && !isPreparedPath(options.prepared, options.path, true)) {
-      untracked = [options.path]
     }
 
     for (const file of untracked) {
@@ -256,15 +260,15 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
 }
 
 /**
- * The untracked files a whole-worktree patch carries. `--untracked-files=all`: a
- * patch of a directory is not a thing.
+ * The untracked files a patch carries, under its path if it has one.
+ * `--untracked-files=all`: a patch of a directory is not a thing.
  */
 async function listUntrackedFiles(
   runner: GitRunner,
   options: DiffReadOptions
 ): Promise<{ paths: string[]; cutShort: boolean }> {
   const { stdout } = await runner.run({
-    args: ['status', '--porcelain=v2', '-z', '--untracked-files=all'],
+    args: ['status', '--porcelain=v2', '-z', '--untracked-files=all', ...pathspec(options.path)],
     cwd: options.worktreePath,
     readOnly: true,
     ...(options.signal ? { signal: options.signal } : {}),
@@ -278,6 +282,10 @@ async function listUntrackedFiles(
 
   const limit = options.untrackedLimit ?? DEFAULT_DIFF_UNTRACKED_LIMIT
   return { paths: paths.slice(0, limit), cutShort: paths.length > limit }
+}
+
+function pathspec(path: string | undefined): string[] {
+  return path === undefined ? [] : ['--', path]
 }
 
 /**

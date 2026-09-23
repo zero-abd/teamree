@@ -220,6 +220,8 @@ export const Params = {
   /** Every changed path, for a review pass before committing. */
   worktreeChanges: z.object({
     worktreeId: z.string().min(1),
+    /** Restricts the list to one path. */
+    path: z.string().min(1).optional(),
     limit: z.number().int().positive().optional()
   }),
   /** Commits staged work plus the paths named. Deliberately no "commit everything". */

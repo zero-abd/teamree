@@ -475,6 +475,7 @@ export class GitService {
     return readWorktreeChanges(this.#runner, {
       worktreeId: worktree.id,
       worktreePath: worktree.path,
+      ...(params.path === undefined ? {} : { path: params.path }),
       ...(params.limit === undefined ? {} : { limit: params.limit }),
       prepared: this.#preparedPaths(worktree.projectId),
       now: this.#now

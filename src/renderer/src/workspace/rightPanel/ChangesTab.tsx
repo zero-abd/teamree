@@ -242,7 +242,7 @@ export function ChangesTab(): React.JSX.Element | null {
             {diffPending ? (
               <p className="changes__empty">Reading the patch…</p>
             ) : (diff === null || diff.patch === '') && stagedDiff === null ? (
-              <p className="changes__empty">No patch</p>
+              <p className="changes__empty">No changes</p>
             ) : (
               <>
                 {/* The staged half first, because it is what the next commit

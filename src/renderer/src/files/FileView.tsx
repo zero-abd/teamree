@@ -45,6 +45,7 @@ export function FileView({
   const [conflict, setConflict] = useState(false)
   const [showDiff, setShowDiff] = useState(false)
   const [diffs, setDiffs] = useState<Diffs | null>(null)
+  const [changed, setChanged] = useState<boolean | null>(null)
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
   const more = useRef<HTMLButtonElement | null>(null)
   const editor = useRef<CodeEditorHandle | null>(null)
@@ -84,6 +85,19 @@ export function FileView({
       alive = false
     }
   }, [worktreeId, path, filesEpoch, draft])
+
+  useEffect(() => {
+    let alive = true
+    runtimeClient
+      .call('worktree.changes', { worktreeId, path, limit: 1 })
+      .then((changes) => {
+        if (alive && changes) setChanged(changes.total > 0)
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [worktreeId, path, filesEpoch])
 
   useEffect(() => {
     if (!showDiff) return
@@ -172,6 +186,8 @@ export function FileView({
           type="button"
           className={`file__tool${showDiff ? ' file__tool--on' : ''}`}
           aria-pressed={showDiff}
+          // Left enabled while open, so a diff emptied by a discard can still be closed.
+          disabled={changed === false && !showDiff}
           onClick={() => setShowDiff((current) => !current)}
         >
           Diff

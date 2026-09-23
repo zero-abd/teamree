@@ -51,9 +51,14 @@
   cursor: pointer;
 }
 
-.file__tool:hover {
+.file__tool:hover:not(:disabled) {
   background: var(--bg-press);
   color: var(--fg);
+}
+
+.file__tool:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .file__tool--on {
