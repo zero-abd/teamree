@@ -18,7 +18,7 @@ export type CommandState = {
   consent: Readonly<Record<string, { requests: ConsentRequest[] }>>
   dialog: DialogState
   projects: readonly { id: string }[]
-  worktrees: readonly { id: string; projectId: string; missing?: true }[]
+  worktrees: readonly { id: string; projectId: string; missing?: true; state?: string }[]
   activeWorktreeId: string | null
   layouts: Readonly<Record<string, Layout>>
   watches: readonly unknown[]
@@ -122,8 +122,10 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
   // A remote-keystrokes question owns the window outright, the palette included.
   if (firstQuestion(state.consent) !== null) return false
 
-  // A dialog of this window's own too, except the palette, whose command closes it.
-  if (state.dialog) return command === 'open-palette' && state.dialog.kind === 'palette'
+  // A dialog of this window's own too, except the palette, whose two chords switch or close it.
+  if (state.dialog) {
+    if (state.dialog.kind !== 'palette' || (command !== 'open-palette' && command !== 'go-to-file')) return false
+  }
 
   switch (command) {
     case 'split-right':
@@ -147,6 +149,10 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
       return (
         state.activeWorktreeId !== null &&
         !state.worktrees.some((worktree) => worktree.id === state.activeWorktreeId && worktree.missing === true)
+      )
+    case 'go-to-file':
+      return state.worktrees.some(
+        (worktree) => worktree.id === state.activeWorktreeId && worktree.state === 'ready' && worktree.missing !== true
       )
     case 'toggle-right-panel':
       // The panel shows one worktree's files, changes and panes; with none
@@ -261,10 +267,13 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       store.stepWorktree(1)
       break
     case 'open-palette':
-      // The one case a dialog lets through: here the command puts the palette away.
-      if (store.dialog?.kind === 'palette') store.closeDialog()
-      else store.openDialog({ kind: 'palette' })
+    case 'go-to-file': {
+      // The chord of the mode on screen puts the palette away; the other one switches to its mode.
+      const mode = command === 'go-to-file' ? 'files' : 'all'
+      if (store.dialog?.kind === 'palette' && (store.dialog.mode ?? 'all') === mode) store.closeDialog()
+      else store.openDialog(mode === 'files' ? { kind: 'palette', mode } : { kind: 'palette' })
       break
+    }
     case 'find-in-pane':
       store.openPaneSearch()
       break

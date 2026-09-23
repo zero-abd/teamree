@@ -138,7 +138,9 @@ export function App(): React.JSX.Element {
           modal, which means a keystroke question as well as a dialog. */}
       <FirstRunCliOffer />
 
-      {dialog?.kind === 'palette' ? <CommandPalette modifier={modifier} /> : null}
+      {dialog?.kind === 'palette' ? (
+        <CommandPalette key={dialog.mode ?? 'all'} modifier={modifier} mode={dialog.mode ?? 'all'} />
+      ) : null}
       {dialog?.kind === 'confirm-remove' ? (
         <ConfirmRemoveDialog worktreeId={dialog.worktreeId} reason={dialog.reason} />
       ) : null}

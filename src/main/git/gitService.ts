@@ -502,6 +502,7 @@ export class GitService {
       worktreePath: worktree.path,
       query: params.query,
       ...(params.limit === undefined ? {} : { limit: params.limit }),
+      ...(params.fuzzy === undefined ? {} : { fuzzy: params.fuzzy }),
       now: this.#now
     })
   }

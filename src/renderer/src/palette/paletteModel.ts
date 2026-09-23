@@ -8,6 +8,7 @@ import {
   type UpdateState,
   type Worktree
 } from '@shared/entities'
+import { fuzzyPathScore } from '@shared/fuzzyPath'
 import { cliActionLabel } from '../dialogs/cliInstallModel'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { MENU_ORDER, menuLabel } from '../menu/menuBar'
@@ -30,6 +31,13 @@ export type PaletteItem =
   | { kind: 'action'; id: PaletteAction; label: string; hint: string; detail: string; search: string }
   /** Start a coding agent in the worktree on screen; `id` is the command to run. */
   | { kind: 'agent'; id: string; label: string; hint: string; detail: string; search: string }
+  /** Open a file of the worktree on screen; `id` is its path. */
+  | { kind: 'file'; id: string; label: string; hint: string; detail: string; search: string }
+
+/** How many files ⌘P lists, and how many ⌘K adds under Files once the query is long enough to mean one. */
+export const FILE_MODE_LIMIT = 50
+export const FILES_IN_COMMANDS = 5
+export const FILES_IN_COMMANDS_MIN_QUERY = 2
 
 export type PaletteContext = {
   worktrees: readonly Worktree[]
@@ -153,6 +161,7 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'previous-worktree': 'previous worktree up back',
   'next-worktree': 'next worktree down forward',
   'open-palette': 'go to worktree command palette search anything',
+  'go-to-file': 'go to file open quick find path',
   'open-dashboard': 'all panes agents dashboard overview attention waiting failed working everywhere',
   'toggle-sidebar': 'toggle sidebar hide show projects',
   'toggle-right-panel': 'toggle right panel hide show files changes panes',
@@ -270,4 +279,34 @@ export function filterPalette(items: readonly PaletteItem[], query: string): Pal
 export function moveSelection(count: number, current: number, delta: number): number {
   if (count === 0) return 0
   return (current + delta + count) % count
+}
+
+/**
+ * The files to list: recent ones that match first, best match first, then the runtime's answer, which
+ * may be for a shorter query and is narrowed here so it does not wait on the next reply.
+ */
+export function rankFiles(found: readonly string[], recent: readonly string[], query: string, limit: number): string[] {
+  const wanted = query.trim()
+  if (wanted === '') return recent.slice(0, limit)
+  const hits = recent
+    .map((path, order) => ({ path, order, points: fuzzyPathScore(path, wanted) }))
+    .filter((hit): hit is { path: string; order: number; points: number } => hit.points !== null)
+    .sort((left, right) => right.points - left.points || left.order - right.order)
+    .map((hit) => hit.path)
+  const listed = new Set(hits)
+  const rest = found.filter((path) => !listed.has(path) && fuzzyPathScore(path, wanted) !== null)
+  return [...hits, ...rest].slice(0, limit)
+}
+
+/** A file row: the name to read, its directory beside it. */
+export function fileItem(path: string): PaletteItem {
+  const slash = path.lastIndexOf('/')
+  return {
+    kind: 'file',
+    id: path,
+    label: path.slice(slash + 1),
+    hint: slash === -1 ? '' : path.slice(0, slash),
+    detail: '',
+    search: path
+  }
 }

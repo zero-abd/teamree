@@ -133,7 +133,8 @@ export type DialogState =
   | { kind: 'appearance' }
   | { kind: 'install-cli' }
   | { kind: 'new-task'; projectId: string }
-  | { kind: 'palette' }
+  /** `files`: ⌘P, only the worktree's files. */
+  | { kind: 'palette'; mode?: 'files' }
   /** Raised only when the runtime has already refused: there is something here to lose. */
   | { kind: 'confirm-remove'; worktreeId: string; reason: string; intent: RemoveIntent }
   /** Raised only when the pane is doing work a close would kill. See `closePaneModel`. */
@@ -259,6 +260,8 @@ type WorkspaceState = {
   editingMarkdown: boolean
   /** The worktree whose strip asks for a file name, because NOTES.md is already open. */
   namingMarkdown: string | null
+  /** Paths opened in file panes this session, per worktree, latest first; Go to File lists them first. */
+  recentFiles: Record<string, readonly string[]>
   /** The pane whose tab shows the name field, or null. */
   editingPaneName: string | null
   /** Bumped when the runtime says a worktree's files moved; a file pane re-reads on it. */
@@ -429,8 +432,11 @@ type WorkspaceState = {
   /** Runs an exited pane's program again, in the same pane. */
   relaunchTerminal: (terminalId: string) => Promise<void>
   createTerminal: (worktreeId: string) => Promise<void>
-  /** Opens a file pane on `path` beside the focused pane, or focuses the one already on it; `diff` shows its diff. */
-  openFilePane: (worktreeId: string, path: string, mode?: 'diff') => void
+  /**
+   * Opens a file pane on `path` beside the focused pane, or focuses the one already on it; `diff` shows its
+   * diff, `split` puts it to the right of the focused pane.
+   */
+  openFilePane: (worktreeId: string, path: string, mode?: 'diff' | 'split') => void
   /** Shows a file pane's diff, or its text again. */
   setPaneDiff: (paneId: string, on: boolean) => void
   /** `New markdown`: NOTES.md, or a name asked for in the strip when that is already open. */
@@ -625,6 +631,8 @@ let noticeSeq = 0
 
 /** The status-bar notice for a pane refused for want of room. */
 const NO_ROOM = 'No room for another pane'
+
+const RECENT_FILES_KEPT = 30
 /** Stands in for the pane a split would make, to measure it before asking. */
 const SPLIT_PROBE_ID = 'probe:split'
 
@@ -1108,6 +1116,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     diffPanes: {},
     editingMarkdown: false,
     namingMarkdown: null,
+    recentFiles: {},
     editingPaneName: null,
     worktreeFilesEpoch: 0,
 
@@ -1634,6 +1643,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     openFilePane(worktreeId, path, mode) {
+      set((state) => {
+        const recent = [path, ...(state.recentFiles[worktreeId] ?? []).filter((entry) => entry !== path)]
+        return { recentFiles: { ...state.recentFiles, [worktreeId]: recent.slice(0, RECENT_FILES_KEPT) } }
+      })
       const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
       const open = fileLeavesIn(layout.root).find((leaf) => leaf.path === path)
       if (open) {
@@ -1643,15 +1656,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
       const added = fileLeaf(newFilePaneId(), path)
       const focused = layout.focusedTerminalId
+      const inTree = focused !== null && collectTerminalIds(layout.root).includes(focused) ? focused : null
       const files = fileLeavesIn(layout.root)
       // Files stack in one column beside the terminals, so each new one does not halve a shell.
       const besideFile = files.find((leaf) => leaf.terminalId === focused) ?? files.at(-1)
       const root = withRoom(
         layout.root,
-        besideFile !== undefined
-          ? splitPaneWith(layout.root, besideFile.terminalId, 'column', added)
-          : focused !== null && collectTerminalIds(layout.root).includes(focused)
-            ? splitPaneWith(layout.root, focused, 'row', added)
+        inTree !== null && (mode === 'split' || besideFile === undefined)
+          ? splitPaneWith(layout.root, inTree, 'row', added)
+          : besideFile !== undefined
+            ? splitPaneWith(layout.root, besideFile.terminalId, 'column', added)
             : appendPane(layout.root, added),
         (grid) => placePaneWithin(layout.root, added, grid.area, grid.minPane)
       )
