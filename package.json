@@ -1,7 +1,7 @@
 {
   "name": "teamree",
   "version": "0.2.0",
-  "description": "The agentic development environment for teams: coding agents side by side, one git worktree each, one window.",
+  "description": "Your whole team ships in parallel. Every agent in its own git worktree. Every teammate in the same window.",
   "author": "teamree contributors",
   "license": "MIT",
   "homepage": "https://github.com/zero-abd/teamree",

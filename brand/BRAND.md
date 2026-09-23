@@ -57,8 +57,8 @@ surface states a fact.
 | Site meta / og description | `The agentic development environment for teams. Claude Code, Codex and other coding agents shipping side by side, each in its own git worktree, in one window your teammates can watch.` |
 | og card | h1 `Your whole team ships in parallel.` — line `Every agent in its own git worktree. Every teammate in the same window.` — foot `teamree.us` |
 | README first line | `**Your whole team ships in parallel.**` then the sub-line |
-| README description (GitHub, `package.json`) | `The agentic development environment for teams: coding agents side by side, one git worktree each, one window.` |
-| GitHub repo description | `Your whole team ships in parallel. The agentic development environment for teams, for macOS.` |
+| `package.json` description | `Your whole team ships in parallel. Every agent in its own git worktree. Every teammate in the same window.` |
+| GitHub repo description | `Your whole team ships in parallel.` |
 | App About / DMG | `teamree` — `Your whole team ships in parallel.` — version |
 | App welcome (empty window) | Unchanged: `No terminals here yet` and the three buttons. No slogan in the app. |
 | 404 | `Not found.` — `The link is old or the page moved.` — `Back to teamree` |
