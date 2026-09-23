@@ -52,6 +52,15 @@ const TWO_PANES: CommandState = {
   }
 }
 
+/** Two worktrees under one project, so there is a list to walk. */
+const TWO_WORKTREES: CommandState = {
+  ...WORKING,
+  worktrees: [
+    { id: 'w1', projectId: 'p1' },
+    { id: 'w2', projectId: 'p1' }
+  ]
+}
+
 /** One waiting question, as `teamwork.requests` hands it over. */
 const QUESTION: Record<string, { requests: ConsentRequest[] }> = {
   p1: {
@@ -83,6 +92,9 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
     createTerminal: vi.fn(async () => {}),
     closeWatchedPane: vi.fn(),
     focusNextPane: vi.fn(),
+    focusPreviousPane: vi.fn(),
+    toggleExpandedPane: vi.fn(),
+    stepWorktree: vi.fn(),
     openPaneSearch: vi.fn(),
     toggleSidebar: vi.fn(),
     toggleDashboard: vi.fn(),
@@ -135,6 +147,8 @@ describe('what a window can be asked to do', () => {
     expect(isCommandAvailable('split-right', watching)).toBe(false)
     expect(isCommandAvailable('split-down', watching)).toBe(false)
     expect(isCommandAvailable('find-in-pane', watching)).toBe(false)
+    // Nor is there a tree for their pane to fill, or one to give back after.
+    expect(isCommandAvailable('expand-pane', watching)).toBe(false)
     // Closing one, though, is the whole of stopping the watch.
     expect(isCommandAvailable('close-pane', watching)).toBe(true)
   })
@@ -159,6 +173,42 @@ describe('what a window can be asked to do', () => {
     // And one of theirs alone is not, for the same reason one of your own is not.
     expect(isCommandAvailable('focus-next-pane', { ...EMPTY, watches: [{ id: 'watch:p1:priya:t7' }] })).toBe(false)
   })
+
+  // Backwards is the same walk and answers the same question. Written out
+  // rather than folded into the case above, because two directions sharing a
+  // rule is the claim being made.
+  it('offers the walk backwards exactly where it offers it forwards', () => {
+    for (const state of [EMPTY, WORKING, TWO_PANES, { ...WORKING, watches: [{ id: 'watch:p1:priya:t7' }] }]) {
+      expect(isCommandAvailable('focus-previous-pane', state)).toBe(isCommandAvailable('focus-next-pane', state))
+    }
+  })
+
+  it('offers maximising only with a pane of your own in front of you', () => {
+    expect(isCommandAvailable('expand-pane', EMPTY)).toBe(false)
+    // One pane is enough: maximising it puts away the tab strip and the header.
+    expect(isCommandAvailable('expand-pane', WORKING)).toBe(true)
+  })
+
+  it('offers the worktree moves only where there is a second worktree', () => {
+    for (const command of ['previous-worktree', 'next-worktree'] as const) {
+      expect(isCommandAvailable(command, EMPTY), command).toBe(false)
+      // One worktree: the walk wraps straight back onto the one already open.
+      expect(isCommandAvailable(command, WORKING), command).toBe(false)
+      expect(isCommandAvailable(command, TWO_WORKTREES), command).toBe(true)
+      // A worktree whose project is not in the sidebar is nowhere to walk to:
+      // the list these chords move down does not have a row for it.
+      expect(
+        isCommandAvailable(command, {
+          ...TWO_WORKTREES,
+          worktrees: [
+            { id: 'w1', projectId: 'p1' },
+            { id: 'w2', projectId: 'gone' }
+          ]
+        }),
+        command
+      ).toBe(false)
+    }
+  })
 })
 
 describe('running a command', () => {
@@ -171,6 +221,12 @@ describe('running a command', () => {
       ['new-worktree', 'openDialog', [{ kind: 'new-task', projectId: 'p1' }]],
       ['toggle-sidebar', 'toggleSidebar', []],
       ['focus-next-pane', 'focusNextPane', []],
+      ['focus-previous-pane', 'focusPreviousPane', []],
+      ['expand-pane', 'toggleExpandedPane', []],
+      // One method, and the direction is the argument — which is what makes the
+      // two chords each other's undo rather than two walks of one list.
+      ['previous-worktree', 'stepWorktree', [-1]],
+      ['next-worktree', 'stepWorktree', [1]],
       ['open-palette', 'openDialog', [{ kind: 'palette' }]],
       ['find-in-pane', 'openPaneSearch', []],
       ['open-dashboard', 'toggleDashboard', []],
@@ -179,8 +235,11 @@ describe('running a command', () => {
     ]
 
     for (const [command, method, args] of cases) {
-      // The walk needs somewhere to walk to; everything else is happy with one pane.
-      const store = workspace(command === 'focus-next-pane' ? TWO_PANES : WORKING)
+      // Each walk needs somewhere to walk to; everything else is happy with the
+      // one pane and the one worktree.
+      const paneWalk = command === 'focus-next-pane' || command === 'focus-previous-pane'
+      const worktreeWalk = command === 'previous-worktree' || command === 'next-worktree'
+      const store = workspace(paneWalk ? TWO_PANES : worktreeWalk ? TWO_WORKTREES : WORKING)
       runWorkspaceCommand(command, store)
       expect(store[method], command).toHaveBeenCalledExactlyOnceWith(...args)
       // And nothing else moved, so a command cannot quietly do two things.

@@ -87,6 +87,16 @@ describe('formatChord', () => {
     expect(formatChord({ key: 'd' }, pc)).toBe('Ctrl+D')
     expect(formatChord({ key: 'd', shift: true }, pc)).toBe('Ctrl+Shift+D')
   })
+
+  // A key whose name is a word is drawn as the glyph on the keycap. `ArrowUp`
+  // printed in a menu beside "Previous worktree" is the browser's word for a
+  // key, offered to somebody looking for an arrow.
+  it('draws the named keys as the marks on the keys', () => {
+    expect(formatChord({ key: 'ArrowUp', alt: true }, mac)).toBe('⌘⌥↑')
+    expect(formatChord({ key: 'ArrowDown', alt: true }, mac)).toBe('⌘⌥↓')
+    expect(formatChord({ key: 'Enter', shift: true }, mac)).toBe('⌘⇧↩')
+    expect(formatChord({ key: 'ArrowUp', alt: true }, pc)).toBe('Ctrl+Alt+↑')
+  })
 })
 
 describe('workspace shortcuts', () => {
@@ -96,6 +106,17 @@ describe('workspace shortcuts', () => {
     expect(commandForEvent(event({ key: 'w', metaKey: true }), mac)).toBe('close-pane')
     expect(commandForEvent(event({ key: 'd', ctrlKey: true }), pc)).toBe('split-right')
     expect(commandForEvent(event({ key: 'e', metaKey: true }), mac)).toBe('open-dashboard')
+    // The four moves, by the `KeyboardEvent.key` each of them really arrives
+    // as: the brackets unshifted, because shift and a bracket is a brace and a
+    // different key name entirely, and the arrows spelled the browser's way.
+    expect(commandForEvent(event({ key: '[', metaKey: true }), mac)).toBe('focus-previous-pane')
+    expect(commandForEvent(event({ key: ']', metaKey: true }), mac)).toBe('focus-next-pane')
+    expect(commandForEvent(event({ key: 'Enter', metaKey: true, shiftKey: true }), mac)).toBe('expand-pane')
+    expect(commandForEvent(event({ key: 'ArrowUp', metaKey: true, altKey: true }), mac)).toBe('previous-worktree')
+    expect(commandForEvent(event({ key: 'ArrowDown', metaKey: true, altKey: true }), mac)).toBe('next-worktree')
+    // And without alt they are nobody's: ⌘↑ and ⌘↓ belong to whatever is
+    // running in the pane.
+    expect(commandForEvent(event({ key: 'ArrowUp', metaKey: true }), mac)).toBeNull()
   })
 
   it('claims nothing without the modifier', () => {
@@ -113,6 +134,10 @@ describe('workspace shortcuts', () => {
   it('labels commands with the platform spelling', () => {
     expect(shortcutHint('close-pane', mac)).toBe('⌘W')
     expect(shortcutHint('close-pane', pc)).toBe('Ctrl+W')
+    expect(shortcutHint('previous-worktree', mac)).toBe('⌘⌥↑')
+    expect(shortcutHint('next-worktree', mac)).toBe('⌘⌥↓')
+    expect(shortcutHint('focus-previous-pane', mac)).toBe('⌘[')
+    expect(shortcutHint('expand-pane', mac)).toBe('⌘⇧↩')
   })
 
   // The menu bar sends a command's name back from the main process, so a

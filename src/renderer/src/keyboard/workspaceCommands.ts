@@ -27,6 +27,7 @@
 import type { ConsentRequest, Layout } from '@shared/entities'
 import { firstQuestion } from '../dialogs/modalLayer'
 import { collectTerminalIds } from '../panes/paneLayout'
+import { worktreeOrder } from '../sidebar/worktreeOrder'
 import type { DialogState } from '../state/workspaceStore'
 import type { WorkspaceCommand } from './workspaceShortcuts'
 
@@ -56,6 +57,9 @@ export type CommandActions = {
   createTerminal: (worktreeId: string) => Promise<void>
   closeWatchedPane: (id: string) => void
   focusNextPane: () => void
+  focusPreviousPane: () => void
+  toggleExpandedPane: () => void
+  stepWorktree: (step: 1 | -1) => void
   openPaneSearch: () => void
   toggleSidebar: () => void
   toggleDashboard: () => void
@@ -126,11 +130,30 @@ export function isCommandAvailable(command: WorkspaceCommand, state: CommandStat
     case 'new-worktree':
       return projectForNewTask(state) !== undefined
     case 'focus-next-pane':
+    case 'focus-previous-pane':
       // Two or more in the cycle, counting a teammate's pane the way the walk
       // itself does. With one pane the walk lands on the pane that already has
       // the focus and `focusPane` returns early — nothing happens — and an item
       // that is lit over nothing happening is exactly what this rule forbids.
+      // Both directions, because a cycle of one is as circular one way as the
+      // other.
       return collectTerminalIds(activeLayout(state)?.root ?? null).length + state.watches.length >= 2
+    case 'expand-pane':
+      // A pane of your own, which is `splitFocusedPane`'s rule and here for the
+      // same reason: a teammate's pane is not in this tree, so there is no tree
+      // for it to fill. Available with one pane too — maximising a lone pane
+      // hides the tab strip and the header around it, which is a thing somebody
+      // can want and a thing this does.
+      return ownFocusedPane(state) !== null
+    case 'previous-worktree':
+    case 'next-worktree':
+      // Two rows in the sidebar to move between. With one, the walk wraps
+      // straight back onto the worktree that is already open, and the rule
+      // against offering what cannot do anything covers a command that lands
+      // where it started as squarely as one that lands nowhere. Counted off the
+      // sidebar's own order, so a worktree whose project is not on screen — one
+      // this window could not walk to — is not counted as somewhere to go.
+      return worktreeOrder(state.projects, state.worktrees).length >= 2
     case 'toggle-sidebar':
     case 'open-palette':
     case 'open-dashboard':
@@ -186,6 +209,18 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       break
     case 'focus-next-pane':
       store.focusNextPane()
+      break
+    case 'focus-previous-pane':
+      store.focusPreviousPane()
+      break
+    case 'expand-pane':
+      store.toggleExpandedPane()
+      break
+    case 'previous-worktree':
+      store.stepWorktree(-1)
+      break
+    case 'next-worktree':
+      store.stepWorktree(1)
       break
     case 'open-palette':
       // Available with the palette already up, which is the one case a dialog

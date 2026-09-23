@@ -12,6 +12,10 @@ export type WorkspaceCommand =
   | 'new-worktree'
   | 'toggle-sidebar'
   | 'focus-next-pane'
+  | 'focus-previous-pane'
+  | 'expand-pane'
+  | 'previous-worktree'
+  | 'next-worktree'
   | 'open-palette'
   | 'find-in-pane'
   | 'open-dashboard'
@@ -31,7 +35,26 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'new-terminal', chord: { key: 't' }, title: 'New terminal' },
   { command: 'new-worktree', chord: { key: 'n' }, title: 'New task' },
   { command: 'toggle-sidebar', chord: { key: 'b' }, title: 'Toggle sidebar' },
+  // Brackets, the pair every app that walks a list of things uses for it, and
+  // unshifted for the reason the help chord below is: `matchesChord` compares
+  // `KeyboardEvent.key`, and on a US layout shift and a bracket produce a brace
+  // instead. A chord written as "shift plus bracket" would be a binding for a
+  // character whose key name is not the one in the table.
+  { command: 'focus-previous-pane', chord: { key: '[' }, title: 'Focus previous pane' },
   { command: 'focus-next-pane', chord: { key: ']' }, title: 'Focus next pane' },
+  // Return, because maximising a pane is the same gesture as opening the thing
+  // that has the focus, and shifted because an unshifted ⌘↩ is a send key in
+  // half the things people run inside these panes. Pressed again it restores —
+  // one chord for both halves, so there is nothing to remember about getting
+  // back.
+  { command: 'expand-pane', chord: { key: 'Enter', shift: true }, title: 'Maximise pane' },
+  // The arrows, because the list these walk is drawn vertically and up and down
+  // are what a person reaches for against a vertical list. With alt, because ⌘↑
+  // and ⌘↓ alone are document-movement keys inside a pane — an agent's prompt
+  // and every editor in one answer to them — and taking them at the window
+  // level would be taking them from every pane in it.
+  { command: 'previous-worktree', chord: { key: 'ArrowUp', alt: true }, title: 'Previous worktree' },
+  { command: 'next-worktree', chord: { key: 'ArrowDown', alt: true }, title: 'Next worktree' },
   { command: 'open-palette', chord: { key: 'k' }, title: 'Go to worktree or command' },
   { command: 'find-in-pane', chord: { key: 'f' }, title: 'Find in pane' },
   { command: 'open-dashboard', chord: { key: 'e' }, title: 'Every pane, by what needs you' },

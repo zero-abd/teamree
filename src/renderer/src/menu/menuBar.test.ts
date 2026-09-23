@@ -15,7 +15,7 @@ import type { ModifierState } from '../keyboard/platformModifier'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 import type { CommandState } from '../keyboard/workspaceCommands'
 import { commandForEvent, WORKSPACE_SHORTCUTS } from '../keyboard/workspaceShortcuts'
-import { acceleratorForChord, menuBarSpec } from './menuBar'
+import { ACCELERATOR_KEY_NAMES, acceleratorForChord, menuBarSpec } from './menuBar'
 
 const MAC = resolvePlatformModifier('darwin')
 
@@ -40,11 +40,22 @@ const WORKING: CommandState = {
   layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } }
 }
 
+/**
+ * `KeyboardEvent.key` for the key Electron spells this way, for the two names
+ * that differ. Built by turning the table in `menuBar.ts` round rather than by
+ * listing them again: this is the round trip, and a second hand-written copy of
+ * the mapping would be a round trip through itself.
+ */
+const EVENT_KEY_NAMES: Record<string, string> = Object.fromEntries(
+  Object.entries(ACCELERATOR_KEY_NAMES).map(([key, name]) => [name, key])
+)
+
 /** The keypress an accelerator stands for, read back out of its own spelling. */
 function keypressFor(accelerator: string): ModifierState & { key: string } {
   const parts = accelerator.split('+')
+  const key = parts[parts.length - 1] ?? ''
   return {
-    key: parts[parts.length - 1] ?? '',
+    key: EVENT_KEY_NAMES[key] ?? key,
     metaKey: parts.includes('CommandOrControl'),
     ctrlKey: false,
     shiftKey: parts.includes('Shift'),
@@ -75,6 +86,13 @@ describe('the menu bar is built from the table the keyboard reads', () => {
     expect(acceleratorForChord({ key: ',' })).toBe('CommandOrControl+,')
     expect(acceleratorForChord({ key: '/' })).toBe('CommandOrControl+/')
     expect(acceleratorForChord({ key: ']' })).toBe('CommandOrControl+]')
+    // The arrows are the one place Electron's name for a key is not the
+    // browser's. Getting this wrong is silent: the item draws, and the chord
+    // beside it is one nothing can press.
+    expect(acceleratorForChord({ key: 'ArrowUp', alt: true })).toBe('CommandOrControl+Alt+Up')
+    expect(acceleratorForChord({ key: 'ArrowDown', alt: true })).toBe('CommandOrControl+Alt+Down')
+    // Return is already spelled the same in both, so it goes through whole.
+    expect(acceleratorForChord({ key: 'Enter', shift: true })).toBe('CommandOrControl+Shift+Enter')
   })
 
   // Labels come from the table too, so there is one wording of a command in the
@@ -107,8 +125,20 @@ describe('the menu bar is built from the table the keyboard reads', () => {
         .map((item) => item.command)
 
     expect(sectionOrder('file')).toEqual(['new-worktree', 'new-terminal', 'close-pane'])
-    expect(sectionOrder('view')).toEqual(['open-palette', 'open-dashboard', 'toggle-sidebar'])
-    expect(sectionOrder('window')).toEqual(['split-right', 'split-down', 'focus-next-pane'])
+    expect(sectionOrder('view')).toEqual([
+      'open-palette',
+      'previous-worktree',
+      'next-worktree',
+      'open-dashboard',
+      'toggle-sidebar'
+    ])
+    expect(sectionOrder('window')).toEqual([
+      'split-right',
+      'split-down',
+      'focus-previous-pane',
+      'focus-next-pane',
+      'expand-pane'
+    ])
     expect(sectionOrder('edit')).toEqual(['find-in-pane'])
     expect(sectionOrder('help')).toEqual(['open-help'])
   })
@@ -137,6 +167,10 @@ describe('what the menu bar says can be done', () => {
       'close-pane': false,
       'find-in-pane': false,
       'focus-next-pane': false,
+      'focus-previous-pane': false,
+      'expand-pane': false,
+      'previous-worktree': false,
+      'next-worktree': false,
       'new-terminal': false,
       'new-worktree': false,
       'toggle-sidebar': true,
@@ -148,9 +182,11 @@ describe('what the menu bar says can be done', () => {
   })
 
   it('lights them once there is a worktree open with a pane in it', () => {
+    // All but the walks, which with one pane and one worktree have nowhere to
+    // go — a chord that lands where it started is one this app does not offer.
+    const nowhere = ['focus-next-pane', 'focus-previous-pane', 'previous-worktree', 'next-worktree']
     for (const item of menuBarSpec(WORKING)) {
-      // All but the walk, which with one pane has nowhere to go.
-      expect(item.enabled, item.command).toBe(item.command !== 'focus-next-pane')
+      expect(item.enabled, item.command).toBe(!nowhere.includes(item.command))
     }
   })
 })

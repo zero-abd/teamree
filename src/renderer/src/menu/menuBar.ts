@@ -79,6 +79,11 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'find-in-pane': { section: 'edit' },
 
   'open-palette': { section: 'view' },
+  // Between the palette and the board, because all three answer "show me
+  // something else" — and these two are the answer for the case the palette is
+  // three presses too slow for, which is moving one row at a time.
+  'previous-worktree': { section: 'view' },
+  'next-worktree': { section: 'view' },
   'open-dashboard': { section: 'view' },
   'toggle-sidebar': { section: 'view' },
 
@@ -87,7 +92,12 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   // Front.
   'split-right': { section: 'window' },
   'split-down': { section: 'window' },
+  'focus-previous-pane': { section: 'window' },
   'focus-next-pane': { section: 'window' },
+  // Which pane fills the window is the same subject as how they are arranged,
+  // so it is read under the same menu — and under the walk rather than above
+  // it, because it is the thing you do once you have arrived.
+  'expand-pane': { section: 'window' },
 
   // And the Help menu, which every macOS app has and this one did not.
   'open-help': { section: 'help' }
@@ -114,19 +124,38 @@ export type MenuBarItem = {
 }
 
 /**
+ * The keys Electron does not spell the way `KeyboardEvent.key` does.
+ *
+ * Only the arrows, and only because the table binds two of them: the browser
+ * calls the key `ArrowUp` and Electron's accelerator parser calls it `Up`, and
+ * nothing anywhere would tell you which of the two a menu item silently failed
+ * to register. Exported so the round-trip in `menuBar.test.ts` reads the same
+ * table on the way back rather than repeating it — a second copy of this is how
+ * a menu comes to advertise a chord that does not fire. Everything else — the
+ * letters, the punctuation, `Enter` — is already spelt the same in both.
+ */
+export const ACCELERATOR_KEY_NAMES: Readonly<Record<string, string>> = {
+  ArrowUp: 'Up',
+  ArrowDown: 'Down',
+  ArrowLeft: 'Left',
+  ArrowRight: 'Right'
+}
+
+/**
  * A chord as Electron spells an accelerator.
  *
  * `CommandOrControl` rather than `Command`, for the same reason
  * `platformModifier.ts` has two tables: the modifier is ⌘ on a Mac and Ctrl
- * everywhere else, and one token says so. The key names go through untouched
+ * everywhere else, and one token says so. Most key names go through untouched
  * because Electron's key codes are the characters themselves — `,`, `/`, `]` —
- * and a letter is written uppercase the way its accelerators are written.
+ * and a letter is written uppercase the way its accelerators are written; the
+ * arrows are the exception, and `ACCELERATOR_KEY_NAMES` above is all of it.
  */
 export function acceleratorForChord(chord: Chord): string {
   const parts = ['CommandOrControl']
   if (chord.alt) parts.push('Alt')
   if (chord.shift) parts.push('Shift')
-  parts.push(chord.key.length === 1 ? chord.key.toUpperCase() : chord.key)
+  parts.push(ACCELERATOR_KEY_NAMES[chord.key] ?? (chord.key.length === 1 ? chord.key.toUpperCase() : chord.key))
   return parts.join('+')
 }
 

@@ -378,6 +378,16 @@ async function checkMenuBar(ask) {
     ['Close pane', 'CommandOrControl+W'],
     ['Settings\u2026', 'CommandOrControl+,'],
     ['Every pane, by what needs you', 'CommandOrControl+E'],
+    // The four moves. Worth reading off a running app rather than trusting the
+    // unit tests, because these are the ones whose chords are not characters:
+    // the arrows and Return are spelled for Electron's parser rather than for
+    // `KeyboardEvent.key`, and a name it does not recognise is rejected where
+    // no test in the renderer can see it — the item draws with no chord beside
+    // it, or the whole menu fails to build.
+    ['Previous worktree', 'CommandOrControl+Alt+Up'],
+    ['Next worktree', 'CommandOrControl+Alt+Down'],
+    ['Focus previous pane', 'CommandOrControl+['],
+    ['Maximise pane', 'CommandOrControl+Shift+Enter'],
     // In the Help menu, which carries the `help` role. Reading it off a running
     // app proves the submenu survived the role — that Electron built both onto
     // one item — and no more than that: whether macOS adopted it as the app's
