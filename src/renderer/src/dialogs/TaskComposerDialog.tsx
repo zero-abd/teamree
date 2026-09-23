@@ -8,7 +8,7 @@ import { harnessName } from '../agents/harnesses'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { branchNameFromTask } from './branchNameFromTask'
 import { Modal } from './Modal'
-import { StartPointPicker, type StartPointValue } from './StartPointPicker'
+import { Chevron, StartPointPicker, type StartPointValue } from './StartPointPicker'
 import {
   agentCount,
   defaultAgentCounts,
@@ -123,7 +123,11 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
               return (
                 <div className="agents__row" key={entry.kind}>
                   <span className="agents__name">
-                    <AgentGlyph kind={entry.kind} />
+                    {/* The name beside it says it once; the mark's own label would say it twice. */}
+                    <span aria-hidden="true" className="agents__mark">
+                      <AgentGlyph kind={entry.kind} />
+                    </span>
+                    {harnessName(entry.kind)}
                   </span>
                   <button
                     type="button"
@@ -153,22 +157,27 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
         <div className="form__row">
           <label className="field">
             <span className="field__label">Project</span>
-            <select
-              className="field__input"
-              value={projectId}
-              onChange={(event) => {
-                setProjectId(event.target.value)
-                // The old project's base ref has no meaning in the new one.
-                setTouched(false)
-                setStartPoint({ text: '', option: null })
-              }}
-            >
-              {projects.map((entry) => (
-                <option value={entry.id} key={entry.id}>
-                  {entry.name}
-                </option>
-              ))}
-            </select>
+            <span className="picker">
+              <select
+                className="field__input picker__input"
+                value={projectId}
+                onChange={(event) => {
+                  setProjectId(event.target.value)
+                  // The old project's base ref has no meaning in the new one.
+                  setTouched(false)
+                  setStartPoint({ text: '', option: null })
+                }}
+              >
+                {projects.map((entry) => (
+                  <option value={entry.id} key={entry.id}>
+                    {entry.name}
+                  </option>
+                ))}
+              </select>
+              <span className="picker__chevron">
+                <Chevron />
+              </span>
+            </span>
           </label>
         </div>
 

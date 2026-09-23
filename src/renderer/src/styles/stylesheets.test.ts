@@ -147,6 +147,31 @@ describe('stylesheets', () => {
       expect(findRule('dialog.css', '.form__actions')).toBeUndefined()
       expect(findRule('dialog.css', '.consent__actions')).toBeUndefined()
     })
+
+    // A fieldset's legend is a label too; its default inset put "Agents" off the other labels' edge.
+    it('sizes and insets every field label alike', () => {
+      expect(declarationOf(ruleFor('dialog.css', '.field__label'), 'padding')).toBe('0')
+      const overrides: string[] = []
+      postcss.parse(readFileSync(path.join(here, 'dialog.css'), 'utf8')).walkRules((rule) => {
+        if (rule.selector !== '.field__label' && rule.selector.includes('field__label')) overrides.push(rule.selector)
+      })
+      expect(overrides).toEqual([])
+    })
+
+    it('draws every picker at one height and size, the ref face changing only the family', () => {
+      const picker = ruleFor('dialog.css', '.picker__input')
+      expect(declarationOf(picker, 'height')).toBeDefined()
+      expect(declarationOf(picker, 'font-size')).toBe('var(--text-base)')
+      const ref = ruleFor('dialog.css', '.picker__input--ref')
+      expect(declarationOf(ref, 'font-family')).toBe('var(--font-mono)')
+      expect(declarationOf(ref, 'font-size')).toBeUndefined()
+    })
+
+    it('fades a stepper that cannot step, like every other disabled button', () => {
+      expect(declarationOf(ruleFor('dialog.css', '.agents__step:disabled'), 'opacity')).toBe(
+        declarationOf(ruleFor('base.css', '.button:disabled'), 'opacity')
+      )
+    })
   })
 
   /** Properties the shell writes onto elements itself: two from `windowChrome.ts`, one a dragged width. */

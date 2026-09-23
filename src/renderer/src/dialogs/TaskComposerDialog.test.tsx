@@ -10,7 +10,7 @@
 // dialog away, and that switching project does not leave the old repository's
 // base ref pointing at a branch the new one has never heard of.
 
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StartPoint, StartPointList } from '@shared/entities'
 
@@ -134,6 +134,38 @@ describe('the dialog itself', () => {
   it('renders nothing at all for a project that is no longer there', () => {
     render(<TaskComposerDialog projectId="gone" />)
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+})
+
+describe('how it reads', () => {
+  it('names each agent beside its mark, with the stepper after the name', async () => {
+    seed({ agents: bothAgents })
+    await open()
+    const rows = [...document.querySelectorAll<HTMLElement>('.agents__row')]
+    expect(rows).toHaveLength(2)
+    rows.forEach((row, index) => {
+      const name = within(row).getByText(['Claude Code', 'Codex'][index] ?? '', { selector: 'span' })
+      const minus = within(row).getAllByRole('button')[0] as HTMLElement
+      expect(name.compareDocumentPosition(minus)).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
+    })
+    expect(fewer('Codex').disabled).toBe(true)
+  })
+
+  it('draws Project and Start from as one control with one chevron, mono only for the ref', async () => {
+    await open()
+    const pickers = [screen.getByRole('combobox', { name: 'Project' }), startPoint()]
+    const chevrons = pickers.map((control) => control.parentElement?.querySelector('svg path')?.getAttribute('d'))
+    expect(chevrons[0]).toBeTruthy()
+    expect(chevrons[1]).toBe(chevrons[0])
+    expect(pickers.map((control) => control.classList.contains('picker__input'))).toEqual([true, true])
+    expect(pickers.map((control) => control.classList.contains('picker__input--ref'))).toEqual([false, true])
+  })
+
+  it('previews the branch as a fragment', async () => {
+    await open()
+    fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
+    const preview = document.getElementById(startPoint().getAttribute('aria-describedby') ?? '')
+    expect(preview?.textContent).toBe('new branch rewrite-the-pager from origin/main @ originm')
   })
 })
 
