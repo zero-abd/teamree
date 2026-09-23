@@ -1,5 +1,5 @@
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, powerSaveBlocker, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, powerSaveBlocker, screen, shell } from 'electron'
 import { installAgentNotices, type AgentNoticeChannel } from './agentNotices'
 import { applicationMenuTemplate, type ApplicationMenuOptions } from './appMenu'
 import { installKeepAwake } from './keepAwake'
@@ -12,11 +12,17 @@ import { createQuitSequence } from './quitSequence'
 import { registerRevealHandler } from './reveal/revealPath'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
 import { navigationVerdict, windowOpenAnswer } from './windowNavigation'
+import { loadWindowState, placeWindow, saveWindowState, trackWindowState, WINDOW_STATE_FILE } from './windowState'
 
 function createWindow(): BrowserWindow {
+  const stateFile = join(app.getPath('userData'), WINDOW_STATE_FILE)
+  const opened = placeWindow(
+    loadWindowState(stateFile),
+    screen.getAllDisplays().map((display) => display.workArea),
+    screen.getPrimaryDisplay().workArea
+  )
   const window = new BrowserWindow({
-    width: 1400,
-    height: 900,
+    ...opened.bounds,
     minWidth: 800,
     minHeight: 560,
     show: false,
@@ -39,8 +45,14 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  trackWindowState(window, opened, (state) => saveWindowState(stateFile, state))
+
   window.on('ready-to-show', () => {
-    if (!isBackgroundLaunch(process.env)) window.show()
+    // Both modes show a hidden window, so a background launch applies neither.
+    if (isBackgroundLaunch(process.env)) return
+    if (opened.maximized) window.maximize()
+    window.show()
+    if (opened.fullScreen) window.setFullScreen(true)
   })
 
   // A link in a pane arrives here via `window.open`; windowNavigation.ts decides.
