@@ -14,7 +14,7 @@ import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import { GitService, type GitServiceOptions } from './gitService'
 import { createTempRepo, type TempRepo } from './testRepository'
-import { normalizePreparedPath, prepareWorktree, type CopyBudget } from './worktreePreparation'
+import { isPreparedPath, normalizePreparedPath, prepareWorktree, type CopyBudget } from './worktreePreparation'
 
 const repos: TempRepo[] = []
 const services: GitService[] = []
@@ -323,5 +323,83 @@ describe('removing a worktree that has a symlinked directory in it', () => {
     // in the checkout, and the primary checkout's install is on the other end
     // of one of those entries. git unlinks the symlink rather than walking it.
     expect(await readFile(path.join(repo.repoPath, 'node_modules/left-pad/index.js'), 'utf8')).toContain('module')
+  })
+})
+
+describe('what teamree put in a checkout is not what the developer did there', () => {
+  async function prepared(): Promise<{ repo: TempRepo; service: GitService; worktree: Worktree }> {
+    const repo = await fixture()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    await service.setProjectPaths({ projectId: project.id, linkedPaths: ['node_modules'], copiedPaths: ['.env'] })
+    const worktree = await readyWorktree(service, project.id, 'fresh start')
+    expect(worktree.state).toBe('ready')
+    return { repo, service, worktree }
+  }
+
+  it('is born clean: nothing to review, nothing counted', async () => {
+    const { service, worktree } = await prepared()
+
+    const status = await service.worktreeStatus({ worktreeId: worktree.id })
+    const changes = await service.worktreeChanges({ worktreeId: worktree.id })
+
+    expect(changes.changes).toEqual([])
+    expect(changes.total).toBe(0)
+    expect(status.untracked).toBe(0)
+    expect(status.staged + status.unstaged + status.conflicted).toBe(0)
+  })
+
+  it('counts what the developer did, and the chip agrees with the list', async () => {
+    const { repo, service, worktree } = await prepared()
+    await repo.write('src/index.ts', 'export const answer = 43\n', worktree.path)
+    await repo.write('notes.md', '# scratch\n', worktree.path)
+
+    const status = await service.worktreeStatus({ worktreeId: worktree.id })
+    const changes = await service.worktreeChanges({ worktreeId: worktree.id })
+
+    expect(changes.changes.map((change) => change.path)).toEqual(['src/index.ts', 'notes.md'])
+    expect(status.unstaged).toBe(1)
+    expect(status.untracked).toBe(1)
+    expect(status.staged + status.unstaged + status.untracked + status.conflicted).toBe(changes.total)
+  })
+
+  it('puts every listed change in the patch, the untracked one included', async () => {
+    const { repo, service, worktree } = await prepared()
+    await repo.write('src/index.ts', 'export const answer = 43\n', worktree.path)
+    await repo.write('notes.md', '# scratch\n', worktree.path)
+
+    const diff = await service.worktreeDiff({ worktreeId: worktree.id })
+
+    expect(diff.patch).toContain('+export const answer = 43')
+    expect(diff.patch).toContain('+# scratch')
+    expect(diff.patch).not.toContain('node_modules')
+    expect(diff.patch).not.toContain('.env')
+  })
+})
+
+describe('isPreparedPath', () => {
+  const prepared = { linkedPaths: ['node_modules'], copiedPaths: ['.config'] }
+
+  it('claims a linked path whatever state git reports it in', () => {
+    expect(isPreparedPath(prepared, 'node_modules', true)).toBe(true)
+    expect(isPreparedPath(prepared, 'node_modules', false)).toBe(true)
+  })
+
+  it('claims a copied path only while git has not been told about it', () => {
+    expect(isPreparedPath(prepared, '.config', true)).toBe(true)
+    expect(isPreparedPath(prepared, '.config', false)).toBe(false)
+  })
+
+  it('reaches inside, because git names a directory by the directory', () => {
+    // `? .config/` is how status spells an untracked directory, and
+    // `--untracked-files=all` spells the same thing one file at a time.
+    expect(isPreparedPath(prepared, '.config/', true)).toBe(true)
+    expect(isPreparedPath(prepared, '.config/settings.json', true)).toBe(true)
+  })
+
+  it('claims nothing that merely starts with the same letters', () => {
+    expect(isPreparedPath(prepared, 'node_modules.bak', true)).toBe(false)
+    expect(isPreparedPath(prepared, 'src/node_modules', true)).toBe(false)
+    expect(isPreparedPath(undefined, 'node_modules', true)).toBe(false)
   })
 })

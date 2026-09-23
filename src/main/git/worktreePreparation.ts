@@ -258,3 +258,70 @@ async function copyTree(source: string, target: string): Promise<void> {
 function refusal(code: ErrorCode, message: string): GitServiceError {
   return new GitServiceError(code, message)
 }
+
+/**
+ * The two lists a project carries over, as anything outside preparation reads
+ * them: together.
+ *
+ * Preparation keeps them apart because linking and copying are different acts.
+ * Every other reader has the opposite question — "did teamree put this here, or
+ * did the developer?" — and that one is asked of both lists at once.
+ */
+export type PreparedPaths = {
+  linkedPaths?: readonly string[]
+  copiedPaths?: readonly string[]
+}
+
+/** Whether either list has anything in it. */
+export function hasPreparedPaths(prepared: PreparedPaths | undefined): boolean {
+  if (!prepared) return false
+  return (prepared.linkedPaths?.length ?? 0) > 0 || (prepared.copiedPaths?.length ?? 0) > 0
+}
+
+/**
+ * Whether a path in a worktree is one preparation put there.
+ *
+ * A linked path is ours in whatever state git reports it. The link is the
+ * reason this matters at all: an ignore rule written `node_modules/` matches
+ * directories and a symlink is not one, so git lists the link as untracked and
+ * every count downstream reports teamree's own plumbing as the developer's
+ * work.
+ *
+ * A copied path is ours only while git has not been told about it. Once it is
+ * staged somebody has decided the copy belongs to the branch, and hiding it
+ * from the list would hide a file from the commit it is about to be in.
+ *
+ * Matching is by path prefix because git names an untracked directory by the
+ * directory — `.config/` — and names what is inside a copied one file by file.
+ */
+export function isPreparedPath(prepared: PreparedPaths | undefined, entryPath: string, untracked: boolean): boolean {
+  if (!prepared) return false
+  if (covers(prepared.linkedPaths, entryPath)) return true
+  return untracked && covers(prepared.copiedPaths, entryPath)
+}
+
+function covers(roots: readonly string[] | undefined, entryPath: string): boolean {
+  if (!roots || roots.length === 0) return false
+  const entry = tidyPath(entryPath)
+  if (!entry) return false
+  return roots.some((raw) => {
+    const root = tidyPath(raw)
+    return root.length > 0 && (entry === root || entry.startsWith(`${root}/`))
+  })
+}
+
+/**
+ * The comparable spelling of a path: separators collapsed, `.` segments and a
+ * trailing slash gone.
+ *
+ * Deliberately not `normalizePreparedPath`, which refuses what it cannot make
+ * sense of. This one is asked about paths git chose, in a loop that runs per
+ * change, and a comparison has nothing to refuse — an unrecognisable path is
+ * simply not one of ours.
+ */
+function tidyPath(raw: string): string {
+  return raw
+    .split(/[\\/]+/)
+    .filter((segment) => segment.length > 0 && segment !== '.')
+    .join('/')
+}

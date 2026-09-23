@@ -9,6 +9,7 @@
 import type { WorktreeStatus } from '../../shared/entities'
 import type { GitRunner } from './gitProcess'
 import { assertRefShape, comparesAgainstItself } from './repository'
+import { isPreparedPath, type PreparedPaths } from './worktreePreparation'
 
 export type ParsedStatus = {
   branch: string
@@ -38,10 +39,14 @@ export const IGNORED_SAMPLE_LIMIT = 6
  * neither the walk nor the output grows with what is inside node_modules — but
  * only while untracked files are listed normally, which is why that is pinned
  * here rather than left to whatever `status.showUntrackedFiles` says.
+ *
+ * `-z` is not an optimisation either. Without it git C-quotes any path with a
+ * space or a non-ASCII byte in it, and these paths are compared against the
+ * project's carried-over list and shown to the user by name.
  */
-const IGNORED_ARGS = ['--ignored=traditional', '--untracked-files=normal']
+const IGNORED_ARGS = ['-z', '--ignored=traditional', '--untracked-files=normal']
 
-export function parsePorcelainV2(raw: string): ParsedStatus {
+export function parsePorcelainV2(raw: string, prepared?: PreparedPaths): ParsedStatus {
   const parsed: ParsedStatus = {
     branch: '',
     detached: false,
@@ -56,24 +61,27 @@ export function parsePorcelainV2(raw: string): ParsedStatus {
     ignoredPaths: []
   }
 
-  for (const rawLine of raw.split('\n')) {
-    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
-    if (!line) continue
-    const marker = line[0]
+  const { records, nulSeparated } = splitRecords(raw)
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index] as string
+    const marker = record[0]
 
     if (marker === '#') {
-      applyHeader(parsed, line)
+      applyHeader(parsed, record)
       continue
     }
     if (marker === '?') {
-      parsed.untracked += 1
+      // The same question the change list asks, asked the same way: a checkout
+      // teamree linked `node_modules` into is not a checkout the developer has
+      // touched, and a chip that says otherwise is wrong on every new worktree.
+      if (!isPreparedPath(prepared, record.slice(2), true)) parsed.untracked += 1
       continue
     }
     if (marker === '!') {
       // Never a change — but `git worktree remove` deletes these along with
       // everything else, and counts that leave them out are why it can.
       parsed.ignored += 1
-      if (parsed.ignoredPaths.length < IGNORED_SAMPLE_LIMIT) parsed.ignoredPaths.push(line.slice(2))
+      if (parsed.ignoredPaths.length < IGNORED_SAMPLE_LIMIT) parsed.ignoredPaths.push(record.slice(2))
       continue
     }
     if (marker === 'u') {
@@ -85,14 +93,36 @@ export function parsePorcelainV2(raw: string): ParsedStatus {
     if (marker === '1' || marker === '2') {
       // "1 <XY> ..." / "2 <XY> ..." — X is the index state, Y the worktree
       // state, '.' meaning unchanged.
-      const index = line[2]
-      const worktree = line[3]
-      if (index && index !== '.') parsed.staged += 1
+      const indexState = record[2]
+      const worktree = record[3]
+      if (indexState && indexState !== '.') parsed.staged += 1
       if (worktree && worktree !== '.') parsed.unstaged += 1
+      // Under `-z` the record after a rename is the path it came from, not a
+      // second change; on one line per record git puts it after a tab on the
+      // same one. Consuming it here is what keeps it out of the counts.
+      if (marker === '2' && nulSeparated) index += 1
     }
   }
 
   return parsed
+}
+
+/**
+ * The records of a status stream, however it was asked for.
+ *
+ * `-z` is what the reads in this file ask for, and its records are separated by
+ * a byte that cannot occur in a path — so nothing is quoted and nothing needs
+ * unquoting. A stream arriving one record per line is still read, because a
+ * line ending is the one thing that differs between platforms and a parser that
+ * only understood one of them would be a Windows-only bug nobody could see.
+ */
+function splitRecords(raw: string): { records: string[]; nulSeparated: boolean } {
+  // No path can hold a NUL, so its presence says which spelling this is.
+  const nulSeparated = raw.includes('\0')
+  const lines = nulSeparated
+    ? raw.split('\0')
+    : raw.split('\n').map((line) => (line.endsWith('\r') ? line.slice(0, -1) : line))
+  return { records: lines.filter((line) => line.length > 0), nulSeparated }
 }
 
 function applyHeader(parsed: ParsedStatus, line: string): void {
@@ -121,6 +151,8 @@ export type StatusReadOptions = {
   fallbackBranch: string
   /** Compared against when the branch has no upstream. */
   baseRef?: string
+  /** What this project carries into every worktree, and so is not a change. */
+  prepared?: PreparedPaths
   signal?: AbortSignal
   now?: () => number
 }
@@ -136,7 +168,7 @@ export async function readWorktreeStatus(runner: GitRunner, options: StatusReadO
     signal: options.signal,
     timeoutMs: 30_000
   })
-  const parsed = parsePorcelainV2(stdout)
+  const parsed = parsePorcelainV2(stdout, options.prepared)
 
   if (!parsed.upstream && options.baseRef) {
     const divergence = await readDivergence(runner, options.worktreePath, options.baseRef, options.signal)

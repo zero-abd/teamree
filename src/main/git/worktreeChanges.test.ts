@@ -1,4 +1,4 @@
-import { rm } from 'node:fs/promises'
+import { mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { cutToBytes, parseChangeRecords, readWorktreeChanges, readWorktreeDiff, sortChanges } from './worktreeChanges'
@@ -299,6 +299,110 @@ describe('changes and diffs against a real repository', () => {
     expect(diff.truncated).toBe(true)
     expect(diff.patch).toContain('+xxx')
     expect(Buffer.byteLength(diff.patch, 'utf8')).toBeLessThanOrEqual(64 * 1024)
+  })
+
+  // The defect this guards: a fresh worktree is born holding whatever the
+  // project carries over, and git has no way to tell that from the developer's
+  // own work. An ignore rule written `node_modules/` matches directories, a
+  // symlink is not one, and so the link teamree made is reported untracked.
+  it('leaves out the directory teamree linked in, and reports it when nothing says it is ours', async () => {
+    const repo = await repository()
+    await repo.write('.gitignore', 'node_modules/\n')
+    await repo.commit('ignore installed packages')
+    await mkdir(path.join(repo.base, 'installed'), { recursive: true })
+    await symlink(path.join(repo.base, 'installed'), path.join(repo.repoPath, 'node_modules'))
+
+    const unfiltered = await readWorktreeChanges(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath })
+    const result = await readWorktreeChanges(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      prepared: { linkedPaths: ['node_modules'] }
+    })
+
+    expect(unfiltered.changes.map((change) => change.path)).toEqual(['node_modules'])
+    expect(result.changes).toEqual([])
+    expect(result.total).toBe(0)
+  })
+
+  // The other half of the rule: ours until somebody stages it, and theirs from
+  // then on, or the fix would hide a file from the commit it is about to be in.
+  it('keeps showing a copied file once git has been told about it', async () => {
+    const repo = await repository()
+    await repo.write('.gitignore', '.env\n')
+    await repo.commit('ignore the environment')
+    await repo.write('.env', 'TOKEN=hunter2\n')
+    const prepared = { copiedPaths: ['.env'] }
+
+    const before = await readWorktreeChanges(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath, prepared })
+    await repo.git(['add', '--force', '.env'])
+    const after = await readWorktreeChanges(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath, prepared })
+
+    expect(before.changes).toEqual([])
+    expect(after.changes.map((change) => change.path)).toEqual(['.env'])
+  })
+
+  // Three changes listed and one shown was the whole complaint.
+  it('shows untracked files in the whole-worktree patch, not only when named', async () => {
+    const repo = await repository()
+    await repo.write('tracked.ts', 'const one = 1\n')
+    await repo.commit('add tracked')
+    await repo.write('tracked.ts', 'const one = 2\n')
+    await repo.write('src/brand-new.ts', 'export const fresh = true\n')
+
+    const diff = await readWorktreeDiff(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath })
+
+    expect(diff.patch).toContain('+const one = 2')
+    expect(diff.patch).toContain('src/brand-new.ts')
+    expect(diff.patch).toContain('+export const fresh = true')
+    expect(diff.truncated).toBe(false)
+  })
+
+  it('keeps the prepared paths out of the patch, as it keeps them out of the list', async () => {
+    const repo = await repository()
+    await repo.write('.gitignore', 'node_modules/\n.env\n')
+    await repo.commit('ignore what a worktree carries over')
+    await mkdir(path.join(repo.base, 'installed'), { recursive: true })
+    await symlink(path.join(repo.base, 'installed'), path.join(repo.repoPath, 'node_modules'))
+    await repo.write('.env', 'TOKEN=hunter2\n')
+    await repo.write('mine.ts', 'export const mine = true\n')
+
+    const diff = await readWorktreeDiff(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      prepared: { linkedPaths: ['node_modules'], copiedPaths: ['.env'] }
+    })
+
+    expect(diff.patch).toContain('+export const mine = true')
+    expect(diff.patch).not.toContain('node_modules')
+    expect(diff.patch).not.toContain('.env')
+  })
+
+  it('says a binary file differs rather than spelling out its bytes', async () => {
+    const repo = await repository()
+    await writeFile(path.join(repo.repoPath, 'logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02, 0x00]))
+
+    const diff = await readWorktreeDiff(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath })
+
+    expect(diff.patch).toContain('Binary files')
+    expect(diff.patch).not.toContain('+\u0089PNG')
+  })
+
+  // Each untracked file costs a process, so the patch stops rather than spends
+  // a minute — and says it stopped, which is the same thing it says when the
+  // bytes run out.
+  it('stops adding untracked files at the cap and calls the patch truncated', async () => {
+    const repo = await repository()
+    for (let index = 0; index < 4; index += 1) await repo.write(`new-${index}.ts`, 'export {}\n')
+
+    const diff = await readWorktreeDiff(repo.runner, {
+      worktreeId: 'wt',
+      worktreePath: repo.repoPath,
+      untrackedLimit: 2
+    })
+
+    expect(diff.truncated).toBe(true)
+    expect(diff.patch).toContain('new-0.ts')
+    expect(diff.patch).not.toContain('new-3.ts')
   })
 
   it('reads a worktree that is not the primary checkout', async () => {
