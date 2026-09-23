@@ -1,69 +1,10 @@
-/* The help page: the chords, what a worktree is, and where the rest is
-   written. It takes the whole main area, so it is laid out like the pane board
-   rather than like a dialog — the same head, the same close, and a body that
-   scrolls under it.
-
-   The one thing it does that the board does not is hold its prose to a column.
-   A paragraph set across a window this wide is a paragraph whose next line the
-   eye cannot find, and this is the only surface in the app with paragraphs on
-   it. */
-
-.help {
-  overflow-y: auto;
-}
-
-.help__head {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s4);
-  padding: var(--s4) var(--s4) var(--s3);
-  border-bottom: 1px solid var(--line);
-}
-
-.help__identity {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-
-.help__title {
-  font-size: var(--text-xl);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.help__close {
-  padding: var(--s1);
-  display: grid;
-  place-items: center;
-  flex: none;
-  border: 0;
-  border-radius: var(--r1);
-  background: none;
-  color: var(--fg-muted);
-  cursor: pointer;
-}
-
-.help__close:hover {
-  background: var(--bg-hover);
-  color: var(--fg);
-}
-
-.help__close svg {
-  width: 11px;
-  height: 11px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-}
+/* The help page, inside the page frame. It holds its prose to a measure: a paragraph set across a
+   window this wide is one whose next line the eye cannot find. */
 
 .help__body {
   display: flex;
   flex-direction: column;
   gap: var(--s6);
-  padding: var(--s5) var(--s4) var(--s6);
 }
 
 /* The measure. 74 characters is about as wide as a line of this size can be

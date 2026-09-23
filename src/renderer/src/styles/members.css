@@ -220,58 +220,10 @@
 
 /* ---------------------------------------------------------- the setup flow */
 
-/* This was a dialog, and the dialog was the problem: five steps, two files to
-   write and a block of commands to copy do not fit in a box you dismiss by
-   clicking beside it. It takes the main area now, like the pane board. */
-.teamwork-view {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-
-.teamwork-view:focus-visible {
-  outline: none;
-}
-
-.teamwork-view__head {
-  flex: none;
-  padding: var(--s5) var(--s5) var(--s4);
-  border-bottom: 1px solid var(--line);
-}
-
-.teamwork-view__head-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--s4);
-}
-
-.teamwork-view__identity {
-  min-width: 0;
-}
-
-.teamwork-view__title {
-  font-size: var(--text-xl);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.teamwork-view__body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--s5);
-}
-
 /* Wide enough for a command block, narrow enough to read: the steps are prose
    with code in them, and prose the width of a monitor is not read. */
-.teamwork-view__column {
-  max-width: 78ch;
-  margin: 0 auto;
-}
-
 .steps {
+  max-width: 78ch;
   display: flex;
   flex-direction: column;
   gap: var(--s3);

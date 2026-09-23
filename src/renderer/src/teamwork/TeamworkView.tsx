@@ -1,12 +1,13 @@
 // Setting teamwork up, given the whole main area. What the steps say is
 // `TeamworkSteps`'s business and what they mean is `startTeamwork.ts`'s; this
-// owns the chrome, the reads, the way out, which job this visit is, and the push clock.
+// owns the reads, which job this visit is, and the push clock.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { copyText } from '../clipboard/clipboard'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { TerminalView } from '../terminal/TerminalView'
+import { PageFrame } from '../workspace/PageFrame'
 import { TeamworkSteps } from './TeamworkSteps'
 import type { TeamworkPath } from './startTeamwork'
 
@@ -127,28 +128,6 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
     }
   }, [noteRelayPane, projectId, terminalId])
 
-  // Escape closes it. Capture, for the reason the chords are captured: a
-  // focused pane must not eat it first.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      // A dialog opened on top owns Escape; closing both with one press takes too much.
-      if (useWorkspaceStore.getState().dialog) return
-      event.preventDefault()
-      closeTeamwork()
-    }
-    window.addEventListener('keydown', onKeyDown, true)
-    return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [closeTeamwork])
-
-  // Reached from a button elsewhere, so the keyboard has to come with it.
-  // Focusing the region puts the next Tab on the first step's button and reads
-  // the view's name out on arrival.
-  const region = useRef<HTMLElement>(null)
-  useEffect(() => {
-    region.current?.focus()
-  }, [projectId])
-
   // The pane is rendered here so the steps stay a pure function of their props.
   const [paneFocused, setPaneFocused] = useState(false)
   const renderRelayPane = useCallback(
@@ -173,63 +152,46 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   const [path, setPath] = useState<TeamworkPath | null>(null)
 
   return (
-    <main className="workspace teamwork-view" aria-label={`Set up teamwork in ${name}`} tabIndex={-1} ref={region}>
-      <header className="teamwork-view__head">
-        {/* Laid out over the same column the steps are, so the title sits above
-            the thing it titles rather than out at the window's edge. */}
-        <div className="teamwork-view__column teamwork-view__head-row">
-          <div className="teamwork-view__identity">
-            <h1 className="teamwork-view__title">Start teamwork</h1>
-          </div>
-          <button type="button" className="button button--ghost button--small" onClick={closeTeamwork}>
-            Close
-          </button>
-        </div>
-      </header>
-
-      <div className="teamwork-view__body">
-        <div className="teamwork-view__column">
-          <TeamworkSteps
-            projectPath={project?.path}
-            list={list}
-            relay={relay}
-            status={status}
-            membersPending={membersPending}
-            membersError={membersError}
-            relayPending={relayPending}
-            relayError={relayError}
-            readErrors={readErrors ?? {}}
-            onJoin={(handle) => void joinProject(projectId, handle)}
-            onClearMembersError={clearMembersError}
-            onSetRelay={(url) => void setRelay(projectId, url)}
-            onRetry={(read) => {
-              if (read === 'list') void loadMembers(projectId)
-              else if (read === 'relay') void loadRelay(projectId)
-              else void loadTeamwork(projectId)
-            }}
-            origin={{ pending: originPending, error: originError }}
-            onSetOrigin={(url) => void setOrigin(projectId, url)}
-            pane={pane === undefined ? undefined : { ...pane, running: paneRunning }}
-            onStartRelayPane={(kind, argument) => void startRelayPane(projectId, kind, argument)}
-            onClosePane={() => void closeRelayPane(projectId)}
-            renderRelayPane={renderRelayPane}
-            publish={{
-              plan: publishPlan,
-              pending: publishPending,
-              error: publishError,
-              result: publishResult,
-              progress: publishProgress
-            }}
-            onPublish={() => void publishTeamwork(projectId)}
-            onCancelPublish={() => void cancelPublish(projectId)}
-            now={now}
-            path={path}
-            onChoosePath={setPath}
-            projectName={name}
-            onCopy={copyText}
-          />
-        </div>
-      </div>
-    </main>
+    <PageFrame label={`Set up teamwork in ${name}`} title="Start teamwork" onClose={closeTeamwork} focusKey={projectId}>
+      <TeamworkSteps
+        projectPath={project?.path}
+        list={list}
+        relay={relay}
+        status={status}
+        membersPending={membersPending}
+        membersError={membersError}
+        relayPending={relayPending}
+        relayError={relayError}
+        readErrors={readErrors ?? {}}
+        onJoin={(handle) => void joinProject(projectId, handle)}
+        onClearMembersError={clearMembersError}
+        onSetRelay={(url) => void setRelay(projectId, url)}
+        onRetry={(read) => {
+          if (read === 'list') void loadMembers(projectId)
+          else if (read === 'relay') void loadRelay(projectId)
+          else void loadTeamwork(projectId)
+        }}
+        origin={{ pending: originPending, error: originError }}
+        onSetOrigin={(url) => void setOrigin(projectId, url)}
+        pane={pane === undefined ? undefined : { ...pane, running: paneRunning }}
+        onStartRelayPane={(kind, argument) => void startRelayPane(projectId, kind, argument)}
+        onClosePane={() => void closeRelayPane(projectId)}
+        renderRelayPane={renderRelayPane}
+        publish={{
+          plan: publishPlan,
+          pending: publishPending,
+          error: publishError,
+          result: publishResult,
+          progress: publishProgress
+        }}
+        onPublish={() => void publishTeamwork(projectId)}
+        onCancelPublish={() => void cancelPublish(projectId)}
+        now={now}
+        path={path}
+        onChoosePath={setPath}
+        projectName={name}
+        onCopy={copyText}
+      />
+    </PageFrame>
   )
 }

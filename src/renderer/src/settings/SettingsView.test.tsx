@@ -192,6 +192,13 @@ describe('the page itself', () => {
     expect(loadUpdate).toHaveBeenCalled()
   })
 
+  it('sits in the shared page frame, sections inside its column', () => {
+    render(<SettingsView modifier={modifier} />)
+    const main = screen.getByRole('main', { name: 'Settings' })
+    expect(main.querySelector('.page__head h1')?.textContent).toBe('Settings')
+    expect(main.querySelector('.page__body .page__column .settings__layout')).not.toBeNull()
+  })
+
   // Opened at that section from the strip's + menu, not at the top.
   it('scrolls to the section it was opened at, once, and forgets it', () => {
     const scrollIntoView = vi.fn()

@@ -109,6 +109,46 @@ describe('stylesheets', () => {
     })
   })
 
+  // Settings, Help, Teamwork and All panes share one head and one column, so their edges line up.
+  describe('one page frame', () => {
+    it('measures the head and the body with one column', () => {
+      const column = ruleFor('page.css', '.page__column')
+      expect(declarationOf(column, 'max-width')).toBeDefined()
+      expect(declarationOf(column, 'margin')).toBe('0 auto')
+      const head = declarationOf(ruleFor('page.css', '.page__head'), 'padding')
+      const body = declarationOf(ruleFor('page.css', '.page__body'), 'padding')
+      expect(head?.split(' ')[1]).toBe(body?.split(' ')[1])
+    })
+
+    it('lets no page draw its own head, close or column', () => {
+      for (const [sheet, selector] of [
+        ['settings.css', '.settings__head'],
+        ['settings.css', '.settings__close'],
+        ['settings.css', '.settings__column'],
+        ['help.css', '.help__head'],
+        ['help.css', '.help__close'],
+        ['dashboard.css', '.board__head'],
+        ['dashboard.css', '.board__close'],
+        ['members.css', '.teamwork-view__head'],
+        ['members.css', '.teamwork-view__column']
+      ] as const) {
+        expect(findRule(sheet, selector), selector).toBeUndefined()
+      }
+    })
+
+    // A border on the current entry reads as a focus ring; the ring is keyboard focus's alone.
+    it('marks the current rail entry the way the current worktree is marked', () => {
+      const current = ruleFor('sidebar.css', '.rail__link--current')
+      expect(declarationOf(current, 'border-color')).toBeUndefined()
+      expect(declarationOf(current, 'background')).toBe(
+        declarationOf(ruleFor('sidebar.css', '.worktree--active .worktree__row'), 'background')
+      )
+      expect(declarationOf(ruleFor('sidebar.css', '.rail__link--current::before'), 'background')).toBe(
+        declarationOf(ruleFor('sidebar.css', '.worktree--active::before'), 'background')
+      )
+    })
+  })
+
   // The frame pads the body on the same edge as the head; no content class pads itself.
   describe('one dialog frame', () => {
     it('puts the body on the title’s edge', () => {

@@ -58,6 +58,7 @@
 }
 
 .rail__link {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--s2);
@@ -100,10 +101,21 @@
 
 /* Where you are. Said in `aria-current` first; this is the same fact for eyes
    that are not reading the accessibility tree. */
+/* Marked like the current worktree row, fill and left bar; a border here read as a focus ring. */
 .rail__link--current {
   background: var(--accent-soft);
-  border-color: var(--accent-line);
   color: var(--fg);
+}
+
+.rail__link--current::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 1px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
 }
 
 .rail__icon {

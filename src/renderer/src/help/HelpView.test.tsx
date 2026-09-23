@@ -145,6 +145,13 @@ describe('the teamree command', () => {
 })
 
 describe('leaving', () => {
+  it('sits in the shared page frame', () => {
+    render(<HelpView modifier={APPLE} />)
+    const main = screen.getByRole('main', { name: 'Help' })
+    expect(main.querySelector('.page__head h1')).not.toBeNull()
+    expect(main.querySelector('.page__body .page__column #help-keys')).not.toBeNull()
+  })
+
   it('closes on the button', () => {
     render(<HelpView modifier={APPLE} />)
     fireEvent.click(screen.getByRole('button', { name: 'Back to the panes' }))
