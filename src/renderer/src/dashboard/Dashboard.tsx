@@ -110,7 +110,7 @@ export function Dashboard(): React.JSX.Element {
             title="Only panes that have printed since you last read them"
             onClick={() => setUnreadOnly((on) => !on)}
           >
-            Unread only
+            Unread Only
           </button>
         </>
       }

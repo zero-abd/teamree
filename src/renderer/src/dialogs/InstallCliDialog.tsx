@@ -29,7 +29,7 @@ export function InstallCliDialog(): React.JSX.Element {
   const panel = cliPanel(status)
 
   return (
-    <Modal title="Put teamree on your PATH" onClose={closeDialog}>
+    <Modal title="Install Command Line Tool" onClose={closeDialog}>
       <div className="cli-install">
         <p className="cli-install__headline">{panel.headline}</p>
         {panel.detail ? <p className="cli-install__detail">{panel.detail}</p> : null}

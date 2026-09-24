@@ -127,6 +127,12 @@
   font-weight: 560;
 }
 
+/* `None`, as the empty fields say it: not a value. */
+.settings-fact--none {
+  color: var(--fg-secondary);
+  font-weight: 400;
+}
+
 .settings-fact--mono {
   font-family: var(--font-mono);
   font-weight: 500;

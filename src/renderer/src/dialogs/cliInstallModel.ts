@@ -98,7 +98,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
       detail: `${status.destination} → ${status.resolved}${status.dangling ? ' (missing)' : ''}`,
       promise: `${status.destination} → ${status.source}`,
       password,
-      action: 'Point it at this app',
+      action: 'Repair',
       manual: null,
       pathWarning: pathWarning(status)
     }
@@ -109,7 +109,7 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     detail: null,
     promise: `${status.destination} → ${status.source}`,
     password,
-    action: 'Put teamree on my PATH',
+    action: 'Install',
     manual: null,
     pathWarning: pathWarning(status)
   }
@@ -169,7 +169,7 @@ export function cliOffer(status: CliStatus | null): CliOffer | null {
     promise: panel.promise,
     password: panel.password,
     accept: panel.action,
-    decline: 'No thanks'
+    decline: 'No Thanks'
   }
 }
 

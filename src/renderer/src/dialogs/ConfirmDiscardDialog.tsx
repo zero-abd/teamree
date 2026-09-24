@@ -23,7 +23,7 @@ export function ConfirmDiscardDialog({
     <Confirm
       title={hunk === undefined ? `Discard changes to ${path}?` : `Discard this hunk of ${path}?`}
       body={untracked && hunk === undefined ? 'Moves to the Trash' : 'Cannot be undone; staged changes stay'}
-      cancel="Keep it"
+      cancel="Keep"
       confirm="Discard"
       onCancel={closeDialog}
       onConfirm={() => {

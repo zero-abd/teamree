@@ -67,7 +67,7 @@ describe('the question the owner is asked', () => {
   it('answers with the number of keystrokes the owner was shown', async () => {
     const user = userEvent.setup()
     render(<RemoteKeystrokesDialog request={request({ writes: 4 })} />)
-    await user.click(screen.getByRole('button', { name: 'Allow this once' }))
+    await user.click(screen.getByRole('button', { name: 'Allow Once' }))
     expect(decideConsent).toHaveBeenCalledWith('ask_1', 'once', 4)
   })
 
@@ -76,8 +76,8 @@ describe('the question the owner is asked', () => {
     decideConsent.mockClear()
     render(<RemoteKeystrokesDialog request={request()} />)
     await user.click(screen.getByRole('button', { name: 'Refuse' }))
-    await user.click(screen.getByRole('button', { name: 'Allow until this session ends' }))
-    await user.click(screen.getByRole('button', { name: 'Always allow priya here' }))
+    await user.click(screen.getByRole('button', { name: 'Allow This Session' }))
+    await user.click(screen.getByRole('button', { name: 'Always Allow' }))
     expect(decideConsent.mock.calls.map((call) => call[1])).toEqual(['deny', 'session', 'always'])
   })
 

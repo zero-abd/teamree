@@ -211,3 +211,21 @@ describe('a layout arriving from the stream with its focus moved', () => {
     expect(typingInto()).toEqual({ worktreeId: 'w1', terminalId: 't3' })
   })
 })
+
+describe('running a dead pane again', () => {
+  it('puts the keyboard in the pane that was run again', async () => {
+    const { onRegionRequest } = await import('../shell/regions')
+    const asked: string[] = []
+    const stop = onRegionRequest((region) => asked.push(region))
+    runtimeSays({
+      'terminal.relaunch': () => ({ ...terminal('t2', 'w1'), running: true }),
+      'layout.set': (params) => (params as { layout: Layout }).layout
+    })
+
+    await store().relaunchTerminal('t2')
+
+    expect(typingInto()).toEqual({ worktreeId: 'w1', terminalId: 't2' })
+    expect(asked).toEqual(['panes'])
+    stop()
+  })
+})

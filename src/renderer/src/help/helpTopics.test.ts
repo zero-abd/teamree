@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CliStatus } from '@shared/entities'
 import { WORKSPACE_SHORTCUTS, type WorkspaceShortcut } from '../keyboard/workspaceShortcuts'
-import { CLI_HELP_COMMAND, cliHelp, shortcutGroups, WORKTREE_PARAGRAPHS } from './helpTopics'
+import { CLI_HELP_COMMAND, cliHelp, shortcutGroups, WORKTREE_LINE } from './helpTopics'
 
 /** Every shortcut the groups hold, flattened back out in group order. */
 function grouped(): WorkspaceShortcut[] {
@@ -72,15 +72,14 @@ describe('the shortcut groups', () => {
 })
 
 describe('what a worktree is', () => {
-  it('answers the question rather than gesturing at it', () => {
-    const prose = WORKTREE_PARAGRAPHS.join(' ')
-    expect(prose).toContain('second working directory')
-    expect(prose).toContain('own branch')
-    // The two facts nobody works out unaided, and the two this app is most
-    // likely to be blamed for: where a pane's shell is, and what a removal
-    // takes with it.
-    expect(prose).toContain('start in its directory')
-    expect(prose).toContain('closes its panes')
+  it('answers the question in one line rather than gesturing at it', () => {
+    expect(WORKTREE_LINE).toContain('second working directory')
+    expect(WORKTREE_LINE).toContain('own branch')
+    // The two facts this app is most likely to be blamed for: where a pane's shell is, and what a removal takes.
+    expect(WORKTREE_LINE).toContain('panes start in it')
+    expect(WORKTREE_LINE).toContain('closes them')
+    expect(WORKTREE_LINE).not.toMatch(/\.(\s|$)/)
+    expect(WORKTREE_LINE.length).toBeLessThanOrEqual(110)
   })
 })
 
@@ -94,8 +93,8 @@ describe('the CLI section', () => {
 
   it('sends you to the command once the command exists', () => {
     const help = cliHelp(status({ state: 'linked' }))
-    expect(help.command).toContain(CLI_HELP_COMMAND)
-    expect(help.settings).toBeNull()
+    expect(help.command).toBe(CLI_HELP_COMMAND)
+    expect(help.settings).toBe(false)
   })
 
   // The one thing this section must not do. A command that is not on PATH is a
@@ -105,14 +104,14 @@ describe('the CLI section', () => {
     for (const state of ['absent', 'elsewhere', 'file', 'directory'] as const) {
       const help = cliHelp(status({ state }))
       expect(help.command, state).toBeNull()
-      expect(help.settings, state).toContain(CLI_HELP_COMMAND)
+      expect(help.settings, state).toBe(true)
     }
   })
 
   it('points nowhere at all until the first read has come back', () => {
     const help = cliHelp(null)
     expect(help.command).toBeNull()
-    expect(help.settings).toBeNull()
+    expect(help.settings).toBe(false)
   })
 
   // A link that was made and still will not be found is the one case where

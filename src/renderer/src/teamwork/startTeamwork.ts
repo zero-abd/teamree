@@ -1,6 +1,6 @@
 // Where a project is in setting teamwork up: `members.list`, `teamwork.relay`
-// and `teamwork.status` read as five steps, holding no state of its own. It never
-// claims the push happened, and "no origin" is not folded into "no relay".
+// and `teamwork.status` read as five steps, holding no state of its own. A push
+// is done only when this panel made it, and "no origin" is not folded into "no relay".
 
 import {
   teamworkFacts,
@@ -18,6 +18,7 @@ import {
 import { sanitiseHandle } from '@shared/handle'
 import { checkOrigin, type OriginKind } from '@shared/origin'
 import { parseRelayUrl } from '@shared/relayUrl'
+import { TEAMWORK_BUTTON_LABEL } from '../sidebar/teamworkSummary'
 
 export type StepId = 'identity' | 'key' | 'relay' | 'push' | 'connected'
 
@@ -77,10 +78,12 @@ export type StartTeamworkInput = {
   failedReads?: StartTeamworkReadErrors | undefined
   /** Which of the two jobs this is. Null before anybody has said. */
   path?: TeamworkPath | null | undefined
+  /** What the last push from this panel did; the only way the push step is ever done. */
+  publish?: TeamworkPublish | undefined
 }
 
 /** Named here because the sidebar's "Your key is not here" tooltip tells people which button to press. */
-export const ADD_KEY_BUTTON = 'Add my key'
+export const ADD_KEY_BUTTON = 'Add My Key'
 
 /**
  * What adding a key grants: remote code execution by design (`docs/teamwork.md`).
@@ -90,14 +93,13 @@ export const KEY_GRANT_WARNING = 'Anyone on this roster can type into any pane h
 
 /** The deploy, in the fewest words that are still true. `relay/README.md` has the rest. */
 export const RELAY_DEPLOY = {
-  button: 'Deploy a relay',
+  button: 'Deploy a Relay',
+  /** The button's hover: what pressing it opens. */
   browser: 'Cloudflare sign-in in your browser',
   /** Said while it runs, so somebody watching the pane knows what finishing looks like. */
   watching: 'Waiting for a wss:// URL',
   /** The label on the button that takes the URL the deploy printed. */
-  use: 'Use this relay URL',
-  /** Above the command itself, kept for anybody who would rather run it themselves. */
-  manual: 'Run it yourself'
+  use: 'Use This URL'
 } as const
 
 /**
@@ -105,21 +107,19 @@ export const RELAY_DEPLOY = {
  * behind two home routers is what a relay exists to solve, and this one does not.
  */
 export const RELAY_SERVE = {
-  button: 'Run a relay yourself',
+  button: 'Run on This Mac',
   limit: 'Same LAN or VPN only',
   /** Said while it runs, so somebody watching the pane knows what finishing looks like. */
   watching: 'Waiting for a URL',
   /** The label on the button that takes the URL the relay printed. */
-  use: 'Use this relay URL',
+  use: 'Use This URL',
   /** Beside the button, not instead of it: right for one LAN, a trap otherwise, and teamree cannot tell which. */
   committing: 'Private address: same network only',
   /**
    * The relay's first address is a guess — the OS lists wifi, VPN and container
    * bridges in no ranking — so the person who knows the network picks.
    */
-  choice: 'Other addresses on this Mac',
-  /** Above the command itself, kept for anybody who would rather run it themselves. */
-  manual: 'Run it yourself'
+  choice: 'Other addresses on this Mac'
 } as const
 
 /**
@@ -127,16 +127,17 @@ export const RELAY_SERVE = {
  * is a fact about this Mac's network and nobody else's.
  */
 export const RELAY_CHECK = {
-  button: 'Check this relay',
+  button: 'Check Relay',
   /** A different label from `button`: both can be on screen at once and dial different addresses. */
-  draftButton: 'Check the URL you typed',
-  proves: 'From this Mac only',
-  /** Why the button beside the paste field is grey, which is always the same reason. */
-  nothing: 'No URL yet'
+  draftButton: 'Check URL',
+  proves: 'From this Mac only'
 } as const
 
-/** The disclosure's label, named so the panel and its test agree. */
-export const MORE_RELAYS_BUTTON = 'Other ways to get a relay'
+/** The button that opens the relay field. */
+export const PASTE_RELAY_BUTTON = 'Paste URL…'
+
+/** The one disclosure holding every other way to a relay. */
+export const MORE_RELAYS_BUTTON = 'More'
 
 /** Said above the folded options. Only the container options still need a clone. */
 export const MORE_RELAYS_LEAD = 'Container options need a teamree clone'
@@ -282,7 +283,7 @@ function singleQuote(value: string): string {
 }
 
 /** The button that pushes, named once so the panel and its tests agree. */
-export const PUBLISH_BUTTON = 'Commit and push'
+export const PUBLISH_BUTTON = 'Commit and Push'
 
 /** Which of the launcher's verbs a pane is running; one slot holds all three. */
 export type RelayPaneKind = 'deploy' | 'serve' | 'check'
@@ -436,7 +437,7 @@ export function formatElapsed(ms: number): string {
 export const CANCEL_PUBLISH_BUTTON = 'Stop'
 
 /** The label on the button that tries a refused push again. */
-export const RETRY_PUBLISH_BUTTON = 'Try the push again'
+export const RETRY_PUBLISH_BUTTON = 'Retry Push'
 
 /**
  * Whether trying again could help. A rejection needs a pull first; an auth
@@ -526,7 +527,7 @@ export function checkOriginDraft(raw: string): OriginDraftCheck {
 export const ORIGIN_DETAIL = 'Scheme, port and trailing .git ignored · a path origin must be the same path on every Mac'
 
 /** The label on the button that copies the invitation. Named so a test can find it. */
-export const COPY_INVITE_BUTTON = 'Copy the invitation'
+export const COPY_INVITE_BUTTON = 'Copy Invitation'
 
 /**
  * The message to send a teammate. Push access is membership, so the protocol
@@ -556,120 +557,14 @@ export function inviteText(input: {
     // Whose word the URL is on: read off `origin`, and nothing here has tried to clone it.
     '   (That is this checkout’s origin as git has it; teamree has not checked that it clones.)',
     '2. Open teamree on your Mac and add that checkout as a project.',
-    `3. Press Teamwork in the project header, choose “${TEAMWORK_PATHS[1].button}”, and press Add my key.`,
-    '4. Press Commit and push. That is what puts you on the team.',
+    `3. Open ${TEAMWORK_BUTTON_LABEL} in the sidebar, choose “${TEAMWORK_PATHS[1].button}”, and press ${ADD_KEY_BUTTON}.`,
+    `4. Press ${PUBLISH_BUTTON}. That is what puts you on the team.`,
     ...mount,
     '',
     relay,
     '',
     'Anyone on the roster can type into any pane on your machine, as you.'
   ].join('\n')
-}
-
-/** One thing that is either true or not at the end of setup. */
-export type SetupFact = {
-  label: string
-  /** `unknown` is reserved for the push, which teamree genuinely cannot check. */
-  state: 'yes' | 'no' | 'unknown'
-  detail: string
-}
-
-/** Where this ended up, in four facts. Half-working is the normal outcome, so four verdicts rather than one tick. */
-export type SetupOutcome = {
-  /** The sentence at the top. Never "done" unless every fact agrees. */
-  head: string
-  done: boolean
-  facts: SetupFact[]
-  /** The one thing left to do, or null when there is nothing. */
-  next: string | null
-}
-
-export function setupOutcome(
-  input: StartTeamworkInput & { publish?: TeamworkPublish | undefined }
-): SetupOutcome | null {
-  const { list, relay, status, publish } = input
-  if (list === undefined || relay === undefined) return null
-
-  const others = list.members.filter((member) => !member.isSelf)
-  // A status teamwork has not read yet has no links to count, and counting none
-  // is right: this fact says who is connected, and nobody is known to be.
-  const connected = teamworkFacts(status)?.links.filter((link) => link.phase === 'connected') ?? []
-  const pushed: SetupFact['state'] = publish === undefined ? 'unknown' : publish.push.ok ? 'yes' : 'no'
-
-  const facts: SetupFact[] = [
-    {
-      label: 'Your key',
-      state: list.enrolled ? 'yes' : 'no',
-      detail: list.enrolled ? `${selfFileOf(list) ?? list.selfFile}` : 'Not in this checkout'
-    },
-    {
-      label: 'The relay',
-      state: relay.url === null ? 'no' : 'yes',
-      detail:
-        relay.url === null
-          ? // The runtime's reason first: a broken override leaves the file fine, so
-            // `onDisk.problem` alone put a false sentence on screen and in the sidebar.
-            clause(relay.problem ?? relay.onDisk.problem ?? `${relay.file} does not name a relay`)
-          : `${relay.url} · from ${relay.source === 'environment' ? relay.override.name : relay.file}`
-    },
-    {
-      label: 'Pushed',
-      state: pushed,
-      detail:
-        publish === undefined
-          ? 'Not pushed from here · check git status'
-          : publish.push.ok
-            ? `${publish.branch} on ${publish.remote}`
-            : // "Refused" is the remote's verdict; a stopped or unfinished push is not.
-              `${
-                publish.push.kind === 'cancelled'
-                  ? 'Stopped'
-                  : publish.push.kind === 'timeout'
-                    ? 'Timed out'
-                    : 'Refused'
-              }: ${clause(publish.push.advice)}`
-    },
-    {
-      label: 'Connected',
-      state: connected.length > 0 ? 'yes' : 'no',
-      detail:
-        connected.length > 0
-          ? namesOf(connected)
-          : others.length === 0
-            ? 'Nobody else on the roster'
-            : `${namesOfMembers(others)} not connected`
-    }
-  ]
-
-  const done = facts.every((fact) => fact.state === 'yes')
-  // Only the first three are this machine's to finish; "Connected" is about somebody else's laptop.
-  const stalled = facts.filter((fact) => fact.label !== 'Connected').find((fact) => fact.state === 'no')
-  return {
-    done,
-    facts,
-    head: done
-      ? 'Teamwork is working'
-      : publish !== undefined && !publish.push.ok && publish.commit !== null
-        ? 'Committed, not pushed'
-        : stalled === undefined
-          ? 'Waiting on a teammate'
-          : `Not finished: ${stalled.label.toLowerCase()}`,
-    next: done ? null : nextStepFor(stalled)
-  }
-}
-
-/** The single thing to do next, from the first fact of this machine's that is not true. */
-function nextStepFor(stalled: SetupFact | undefined): string | null {
-  switch (stalled?.label) {
-    case 'Your key':
-      return `Step 2: ${ADD_KEY_BUTTON}`
-    case 'The relay':
-      return 'Step 3: choose a relay'
-    case 'Pushed':
-      return `Step 4: ${PUBLISH_BUTTON}`
-    default:
-      return null
-  }
 }
 
 /** The two jobs: `title` once chosen, `button` on the choice itself. */
@@ -711,9 +606,9 @@ type StepCore = StartTeamworkStep
 
 export function startTeamworkFlow(input: StartTeamworkInput): StartTeamworkFlow {
   const steps = [identityStep(input), keyStep(input), relayStep(input), pushStep(input), connectedStep(input)]
-  // `unchecked` is deliberately not settled: the push step never self-completes
-  // and is the one to lead with for as long as anything is written.
-  const current = steps.find((step) => step.mark !== 'done' && step.mark !== 'this-run')
+  // `unchecked` is not settled: the push leads until this panel has pushed or a teammate is connected.
+  const connected = steps[steps.length - 1]?.mark === 'done'
+  const current = connected ? undefined : steps.find((step) => step.mark !== 'done' && step.mark !== 'this-run')
   // No blocker while the origin is unknown: an unread project is not a checkout that cannot take part.
   const origin = teamworkFacts(input.status)?.origin
   return {
@@ -743,7 +638,7 @@ export function shortKey(publicKey: string): string {
 }
 
 function identityStep({ list, failedReads }: StartTeamworkInput): StepCore {
-  const title = 'Your identity'
+  const title = 'Identity'
   if (list === undefined) {
     if (failedReads?.list !== undefined) {
       return {
@@ -761,7 +656,7 @@ function identityStep({ list, failedReads }: StartTeamworkInput): StepCore {
 }
 
 function keyStep({ list, failedReads }: StartTeamworkInput): StepCore {
-  const title = 'Your key is in this repository'
+  const title = 'Your Key'
   if (list === undefined) {
     if (failedReads?.list !== undefined) {
       return {
@@ -791,7 +686,7 @@ function keyStep({ list, failedReads }: StartTeamworkInput): StepCore {
 }
 
 function relayStep({ relay, failedReads }: StartTeamworkInput): StepCore {
-  const title = 'The team’s relay'
+  const title = 'Relay'
   if (relay === undefined) {
     if (failedReads?.relay !== undefined) {
       return {
@@ -831,7 +726,10 @@ function relayStep({ relay, failedReads }: StartTeamworkInput): StepCore {
 }
 
 function pushStep(input: StartTeamworkInput): StepCore {
-  const title = 'Commit and push'
+  const title = PUBLISH_BUTTON
+  if (input.publish?.push.ok === true) {
+    return { id: 'push', title, mark: 'done', summary: `${input.publish.branch} on ${input.publish.remote}` }
+  }
   // No path: the commands with the `cd` are rendered by the panel that knows where the checkout is.
   const plan = pushPlan(input.list, input.relay, undefined)
   if (plan === null) {

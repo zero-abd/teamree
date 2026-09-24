@@ -2,6 +2,7 @@
 
 // Every dialog, card and page outside Help says a label, a state or an error clause: no subtitle, no
 // hint sentence, nothing ending in a full stop. Commands and git's own output (`<pre>`) are exempt.
+// Buttons and titles are Title Case, as the menus are; body text stays sentence case.
 
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -43,6 +44,10 @@ const { muteTitle } = await import('../terminal/TerminalView')
 const { ChangesTab, pushFailedText } = await import('../workspace/rightPanel/ChangesTab')
 const { runtimeClient } = await import('../runtimeClient/currentRuntimeClient')
 const { pushFailureLabel } = await import('../../../main/git/worktreePush')
+const { ConfirmClosePaneDialog } = await import('./ConfirmClosePaneDialog')
+const { Welcome } = await import('../workspace/Welcome')
+const { HelpView } = await import('../help/HelpView')
+const { SettingsView } = await import('../settings/SettingsView')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -70,6 +75,55 @@ function unsavedAnswers(): { lines: string[]; buttons: string[]; focused: string
     buttons: [...(dialog?.querySelectorAll('.modal__actions .button') ?? [])].map((button) => button.textContent ?? ''),
     focused: document.activeElement?.textContent ?? ''
   }
+}
+
+/** Lower case inside a Title Case label: articles, conjunctions and prepositions under four letters. */
+const MINOR_WORDS = new Set([
+  'a',
+  'an',
+  'the',
+  'and',
+  'but',
+  'or',
+  'nor',
+  'for',
+  'as',
+  'at',
+  'by',
+  'in',
+  'of',
+  'on',
+  'to',
+  'vs'
+])
+
+/** A word Title Case leaves alone: a path, URL, command, number or the lower-case brand. */
+const verbatim = (word: string): boolean => !/^\p{L}/u.test(word) || /[\d/:@_=~]|\.\w/.test(word) || word === 'teamree'
+
+function titleCased(label: string): boolean {
+  const words = label.split(' ').map((word) => word.replace(/^[“"‘(]+|[”"’),.…]+$/g, ''))
+  return words.every((word, index) => {
+    if (word === '' || verbatim(word)) return true
+    const inner = index > 0 && index < words.length - 1
+    return /^\p{Lu}/u.test(word) || (inner && MINOR_WORDS.has(word))
+  })
+}
+
+/**
+ * Every button, tab and dialog or page title under `root` that is not Title Case; a question title is a
+ * sentence, and a theme card is the theme's name.
+ */
+function casingFaults(root: ParentNode): string[] {
+  const found: string[] = []
+  for (const element of root.querySelectorAll('button, [role="tab"], .modal__title, .page__title')) {
+    if (element.matches('.appearance__theme')) continue
+    const copy = element.cloneNode(true) as Element
+    for (const skipped of copy.querySelectorAll('[aria-hidden="true"], kbd, code, svg')) skipped.remove()
+    const label = (copy.textContent ?? '').replace(/\s+/g, ' ').trim()
+    if (label === '' || (element.matches('.modal__title') && label.endsWith('?'))) continue
+    if (!titleCased(label)) found.push(label)
+  }
+  return found
 }
 
 const clauses = (...texts: (string | null | undefined)[]): string[] =>
@@ -237,7 +291,7 @@ describe('dialogs', () => {
   it('appearance: theme cards are a name and a swatch, the colour list has no prose', () => {
     seed({ appearance: { themeId: 'black', ground: null, accent: '#ff00ff', overrides: {} } })
     const view = render(<AppearanceSettings />)
-    fireEvent.click(view.getByRole('button', { name: /Every colour/ }))
+    fireEvent.click(view.getByRole('button', { name: 'All Colours' }))
     for (const card of document.querySelectorAll('.appearance__theme')) {
       expect(card.textContent?.trim()).toMatch(/^[\w ,]+$/)
     }
@@ -566,6 +620,167 @@ describe('the teamwork page', () => {
     for (const draft of ['~/shared/pager.git', '/Volumes/team/pager.git']) {
       fireEvent.change(field, { target: { value: draft } })
       expect(sentenceStops(document.body), draft).toEqual([])
+    }
+  })
+})
+
+describe('buttons and titles', () => {
+  it('know Title Case from sentence case', () => {
+    for (const label of [
+      'Open Folder…',
+      'Check for Updates',
+      'Start a Team',
+      'Use wss://relay/v1',
+      'Put teamree on PATH'
+    ])
+      expect(titleCased(label), label).toBe(true)
+    for (const label of ['New task', 'Check for updates', 'Add my key', 'Not that'])
+      expect(titleCased(label), label).toBe(false)
+  })
+
+  it('are Title Case in every dialog', async () => {
+    seed({
+      cloneProject: vi.fn(async () => 'Repository not found'),
+      agents: [
+        { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' },
+        { kind: 'codex', command: 'codex', binary: '/usr/local/bin/codex' }
+      ],
+      terminals: { t2: { id: 't2', title: 'claude', running: true, busy: true, agent: 'claude' } },
+      statuses: {
+        w1: { worktreeId: 'w1', branch: 'b', staged: 1, unstaged: 2, untracked: 0, conflicted: 0, ignored: 3 }
+      },
+      editedFiles: { 'file:1': { worktreeId: 'w1', path: 'src/math.ts' } },
+      cli: cli()
+    })
+    const dialogs = [
+      <CloneProjectDialog key="clone" />,
+      <ProjectRefusedDialog key="refused" folder="/tmp/x" refusal="not-a-repository" />,
+      <TaskComposerDialog key="task" projectId="p1" />,
+      <InstallCliDialog key="cli" />,
+      <FirstRunCliOffer key="offer" />,
+      <ConfirmRemoveDialog key="remove" worktreeId="w1" />,
+      <ConfirmDiscardDialog key="discard" worktreeId="w1" path="src/app.ts" />,
+      <ConfirmCloseFileDialog key="file" terminalId="file:1" />,
+      <ConfirmUnsavedDialog key="unsaved" paneIds={['file:1']} />,
+      <ConfirmClosePaneDialog key="pane" terminalId="t2" />
+    ]
+    for (const dialog of dialogs) {
+      const view = render(dialog)
+      expect(casingFaults(document.body), String(dialog.key)).toEqual([])
+      view.unmount()
+    }
+    for (const overrides of CLI_STATES) {
+      seed({ cli: cli(overrides), loadCli: vi.fn() })
+      const view = render(<InstallCliDialog />)
+      expect(casingFaults(document.body), JSON.stringify(overrides)).toEqual([])
+      view.unmount()
+    }
+  })
+
+  // Commands and agents; a worktree or file row is somebody's name for it.
+  it('are Title Case in the palette, every command it offers with nothing typed', () => {
+    seed({ worktrees: [worktree()], activeWorktreeId: 'w1', cli: cli() })
+    render(<CommandPalette modifier={resolvePlatformModifier('darwin')} />)
+    const labels = [...document.querySelectorAll('[role="option"]:is([data-kind="action"], [data-kind="agent"])')].map(
+      // A theme row ends in the theme's own name, as its card does.
+      (row) => (row.querySelector('.palette__label')?.textContent ?? '').replace(/^(Theme): .*/, '$1')
+    )
+    expect(labels.length).toBeGreaterThan(0)
+    expect(labels.filter((label) => label !== '' && !titleCased(label))).toEqual([])
+  })
+
+  it('are Title Case where somebody else’s keystrokes are asked about, the title naming who', () => {
+    render(<RemoteKeystrokesDialog request={request()} />)
+    expect(casingFaults(document.body)).toEqual(['priya wants to type in t_7'])
+  })
+
+  it('are Title Case on the welcome, in Help, Appearance and Settings, and on the Changes tab', () => {
+    for (const project of [undefined, { id: 'p1', name: 'pager', path: '/repos/pager', baseRef: 'origin/main' }]) {
+      const view = render(<Welcome modifier={resolvePlatformModifier('darwin')} project={project} />)
+      expect(casingFaults(document.body)).toEqual([])
+      view.unmount()
+    }
+    for (const state of ['absent', 'linked'] as const) {
+      seed({ cli: cli({ state }), loadCli: vi.fn() })
+      const view = render(<HelpView modifier={resolvePlatformModifier('darwin')} />)
+      expect(casingFaults(document.body), state).toEqual([])
+      view.unmount()
+    }
+    seed({ appearance: { themeId: 'black', ground: null, accent: null, overrides: {} } })
+    const appearance = render(<AppearanceSettings />)
+    fireEvent.click(appearance.getByRole('button', { name: 'All Colours' }))
+    expect(casingFaults(document.body)).toEqual([])
+    appearance.unmount()
+    seed({ statuses: { w1: { ...pushStatus(), upstream: null } } })
+    const changes = render(<ChangesTab />)
+    expect(casingFaults(document.body)).toEqual([])
+    changes.unmount()
+    seed({
+      settingsOpen: true,
+      relays: { p1: noRelay() },
+      cli: cli(),
+      update: {
+        current: '1.4.0',
+        checkable: true,
+        automatic: true,
+        available: null,
+        checking: false,
+        checkedAt: null,
+        problem: null
+      },
+      loadCli: vi.fn(),
+      loadUpdate: vi.fn(),
+      loadRelay: vi.fn()
+    })
+    render(<SettingsView />)
+    expect(casingFaults(document.body)).toEqual([])
+  })
+
+  it('are Title Case on the teamwork page, every step opened', () => {
+    const props = {
+      projectPath: '/repos/pager',
+      membersPending: false,
+      membersError: null,
+      relayPending: false,
+      relayError: null,
+      readErrors: { status: 'timed out' },
+      onJoin: () => {},
+      onClearMembersError: () => {},
+      onSetRelay: () => {},
+      onRetry: () => {},
+      origin: { pending: false, error: null },
+      onSetOrigin: () => {},
+      pane: undefined,
+      onStartRelayPane: () => {},
+      onClosePane: () => {},
+      renderRelayPane: () => null,
+      publish: { plan: undefined, pending: false, error: null, result: undefined, progress: undefined },
+      onPublish: () => {},
+      onCancelPublish: () => {},
+      onChoosePath: () => {},
+      projectName: 'pager',
+      onCopy: () => {}
+    }
+    const cases = [
+      { list: roster(false), relay: noRelay(), status: undefined, path: null },
+      { list: roster(false), relay: noRelay(), status: undefined, path: 'start' as const },
+      {
+        list: roster(true),
+        relay: noRelay(),
+        status: status({ origin: { ok: false, reason: 'no origin' } }),
+        path: 'start' as const
+      },
+      { list: roster(true), relay: onDisk(), status: status(), path: 'join' as const }
+    ]
+    for (const input of cases) {
+      const view = render(<TeamworkSteps {...props} {...input} />)
+      for (const step of view.container.querySelectorAll<HTMLButtonElement>('.step__toggle')) {
+        fireEvent.click(step)
+        for (const more of view.queryAllByRole('button', { name: /^(More|Paste URL…)$/ })) fireEvent.click(more)
+        expect(casingFaults(document.body), `${input.path} ${step.textContent}`).toEqual([])
+      }
+      expect(casingFaults(document.body), String(input.path)).toEqual([])
+      view.unmount()
     }
   })
 })

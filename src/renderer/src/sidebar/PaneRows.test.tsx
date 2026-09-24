@@ -2,8 +2,8 @@
 
 // A pane row shows its harness as a glyph and keeps its text for what the glyph cannot say.
 
-import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import type { Terminal } from '@shared/entities'
 import { agentRows } from './agentRows'
 import { PaneRows } from './PaneRows'
@@ -162,5 +162,47 @@ describe('a pane named after its worktree', () => {
       terminal({ id: 't2', title: 'npm test' })
     )
     expect(other?.querySelector('.pane-row__label')?.textContent).toBe('npm test')
+  })
+})
+
+// Enter goes to the pane, so typing lands in it; Space shows it and leaves the keyboard on the row.
+describe('the keyboard on a pane row', () => {
+  const mountKeys = async (): Promise<{ row: HTMLElement; focus: ReturnType<typeof vi.fn>; asked: string[] }> => {
+    const { onRegionRequest } = await import('../shell/regions')
+    const asked: string[] = []
+    onRegionRequest((region) => asked.push(region))
+    const focus = vi.fn(async () => {})
+    render(
+      <PaneRows
+        rows={agentRows([terminal({ id: 't1' })], 'w1', 0)}
+        watchers={{}}
+        unread={new Set()}
+        now={0}
+        onFocusTerminal={focus}
+      />
+    )
+    return { row: screen.getByRole('button'), focus, asked }
+  }
+
+  it('takes Enter to the pane itself', async () => {
+    const { row, focus, asked } = await mountKeys()
+    row.focus()
+    fireEvent.keyDown(row, { key: 'Enter' })
+    expect(focus).toHaveBeenCalledExactlyOnceWith('t1')
+    await vi.waitFor(() => expect(asked).toEqual(['panes']))
+  })
+
+  it('shows the pane on Space and keeps the keyboard on the row', async () => {
+    const { row, focus, asked } = await mountKeys()
+    // The pane coming to the front takes the focus, as a terminal does.
+    const pane = document.body.appendChild(document.createElement('textarea'))
+    focus.mockImplementation(async () => pane.focus())
+    row.focus()
+    fireEvent.keyDown(row, { key: ' ' })
+    fireEvent.click(row, { detail: 0 })
+    expect(focus).toHaveBeenCalledExactlyOnceWith('t1')
+    await vi.waitFor(() => expect(document.activeElement).toBe(row))
+    expect(asked).toEqual([])
+    pane.remove()
   })
 })

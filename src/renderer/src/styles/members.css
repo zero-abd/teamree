@@ -97,10 +97,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--s3);
-  padding: var(--s4);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r2);
-  background: var(--bg-panel);
   color: var(--fg-secondary);
   font-size: var(--text-sm);
   line-height: 1.45;
@@ -110,14 +106,8 @@
   align-items: stretch;
 }
 
-.members__self-head {
-  color: var(--fg);
-  font-weight: 500;
-}
-
-.members__self strong {
-  color: var(--fg);
-  font-family: var(--font-mono);
+.members__self--join .button {
+  align-self: flex-start;
 }
 
 /* The other team-wide fact, in the same dialog and with the same bargain as a
@@ -126,18 +116,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--s3);
-  padding: var(--s4);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r2);
-  background: var(--bg-panel);
   color: var(--fg-secondary);
   font-size: var(--text-sm);
   line-height: 1.45;
-}
-
-.members__relay-head {
-  color: var(--fg);
-  font-weight: 500;
 }
 
 .members__relay-current {
@@ -164,13 +145,6 @@
   font-size: var(--text-xs);
 }
 
-/* Not configured is not broken: it is the ordinary state of a project nobody
-   has done this to yet. */
-.members__relay-none {
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-}
-
 .members__relay-note {
   color: var(--fg-muted);
   font-size: var(--text-xs);
@@ -186,17 +160,6 @@
 .members__relay-error {
   color: var(--danger);
   font-size: var(--text-xs);
-}
-
-.members__push {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-}
-
-.members__push code {
-  color: var(--fg-secondary);
-  font-family: var(--font-mono);
 }
 
 .members__push-commands {
@@ -273,30 +236,43 @@
 .steps__list {
   display: flex;
   flex-direction: column;
-  gap: var(--s2);
+  padding: 0;
   list-style: none;
 }
 
+/* One line each; the open one grows under its line. */
 .step {
   display: flex;
   flex-direction: column;
   gap: var(--s2);
-  padding: var(--s3);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--bg-panel);
+  border-bottom: 1px solid var(--line);
 }
 
-/* The one to act on, and the only one the eye should land on first. */
-.step--current {
-  border-color: var(--accent-line);
-  background: var(--bg-raised);
+.step--open {
+  padding-bottom: var(--s4);
 }
 
 .step__head {
+  font: inherit;
+}
+
+.step__toggle {
   display: flex;
   align-items: baseline;
   gap: var(--s2);
+  width: 100%;
+  padding: var(--s2) 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.step__toggle:focus-visible {
+  border-radius: var(--r1);
+  box-shadow: var(--ring);
 }
 
 .step__mark {
@@ -317,26 +293,18 @@
 .step__title {
   flex: 1;
   min-width: 0;
-  color: var(--fg);
+  color: var(--fg-secondary);
   font-size: var(--text-base);
+  font-weight: 500;
+}
+
+.step--open .step__title {
+  color: var(--fg);
   font-weight: 600;
 }
 
-.step__state {
-  flex: none;
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-}
-
-.step--done .step__state {
-  color: var(--success);
-}
-
-.step--blocked .step__state {
-  color: var(--danger);
-}
-
 .step__summary {
+  padding-left: calc(14px + var(--s2));
   color: var(--fg-secondary);
   font-size: var(--text-sm);
   line-height: 1.55;
@@ -347,6 +315,7 @@
   flex-direction: column;
   gap: var(--s3);
   padding-top: var(--s1);
+  padding-left: calc(14px + var(--s2));
 }
 
 .step__identity {
@@ -361,8 +330,6 @@
   font-weight: 600;
 }
 
-/* What a key grants, in the place it cannot be skipped: above the button that
-   grants it. */
 /* A refusal that names the box it is about, under the box it is about.
    These used to arrive only as a notice, which the modal's own scrim painted
    over — so pressing the button with a taken handle showed nothing at all. */
@@ -383,19 +350,43 @@
 
 /* What a key grants, in one line, above the button that grants it. */
 .grant {
-  padding: var(--s3);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r2);
   color: var(--fg);
   font-size: var(--text-sm);
   font-weight: 600;
   line-height: 1.5;
 }
 
-.relay-options {
+/* Deploy a Relay, Paste URL… and More, on one row. */
+.relay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: center;
+}
+
+/* Everything behind More, flat: no card around it. */
+.relay-more {
   display: flex;
   flex-direction: column;
   gap: var(--s3);
+}
+
+.relay-serve {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s2);
+}
+
+.relay-serve__limit,
+.relay-more__env {
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+.relay-more__env code {
+  font-family: var(--font-mono);
 }
 
 .relay-options__lead {
@@ -430,37 +421,11 @@
   font-weight: 600;
 }
 
-/* The recommendation, said once and in a badge rather than in another
-   paragraph: the option's own first sentence already says to start here. */
-.relay-option__tier {
-  padding: 0 6px;
-  border: 1px solid var(--accent-line);
-  border-radius: 99px;
-  background: var(--accent-soft);
-  color: var(--accent-bright);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.relay-option--lead {
-  border-color: var(--accent-line);
-  background: var(--bg-raised);
-}
-
 /* Says which way the press will go. Decorative: the button's own
    `aria-expanded` is the fact, and this is that fact for the eye. */
 .disclosure__caret {
   color: var(--fg-muted);
   font-size: var(--text-xs);
-}
-
-/* The two nobody should have to read, and the way to them. */
-.relay-options__more {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--s2);
 }
 
 .relay-option__what {
@@ -517,27 +482,6 @@
 
 .relay-option__keep--override {
   color: var(--fg);
-}
-
-/* The deploy: a button first, and everything that used to be in front of it
-   either behind a disclosure or in relay/README.md. */
-.relay-deploy {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  align-items: flex-start;
-  padding: var(--s3);
-  border: 1px solid var(--accent-line);
-  border-radius: var(--r2);
-  background: var(--bg-raised);
-}
-
-/* The relay somebody runs here: the same block, without the accent. Both are
-   real answers and the deploy is the one that works for two people on two
-   networks, so it keeps the emphasis and this keeps the weight. */
-.relay-deploy--serve {
-  border-color: var(--line);
-  background: transparent;
 }
 
 /* Who this will not work for, above the button rather than after the relay is running. */
@@ -598,7 +542,7 @@
 
 .relay-check__blocked {
   flex: 1 1 16rem;
-  color: var(--danger);
+  color: var(--fg-secondary);
   font-size: var(--text-xs);
   line-height: 1.55;
 }
@@ -609,7 +553,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--s2);
-  align-items: flex-start;
+  align-items: center;
 }
 
 /* An override that is set, unreadable, and silently costing this project its
@@ -636,12 +580,6 @@
   color: var(--fg);
   font-size: var(--text-xs);
   line-height: 1.55;
-}
-
-.relay-deploy__manual summary {
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-  cursor: pointer;
 }
 
 .relay-deploy__pane {
@@ -817,9 +755,6 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--s2);
-  padding: var(--s2) var(--s3);
-  border-radius: var(--r2);
-  background: var(--bg-raised);
   font-size: var(--text-sm);
 }
 
@@ -905,83 +840,6 @@
 .push__retry-hint {
   color: var(--fg-secondary);
   font-size: var(--text-xs);
-  line-height: 1.55;
-}
-
-/* Whether it worked, and when it half worked, which half. */
-.outcome {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  padding: var(--s4);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--bg-panel);
-}
-
-.outcome--done {
-  border-color: var(--success);
-}
-
-.outcome__head {
-  color: var(--fg);
-  font-size: var(--text-base);
-  font-weight: 600;
-}
-
-.outcome__facts {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  list-style: none;
-}
-
-.outcome__fact {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--s2);
-  font-size: var(--text-sm);
-}
-
-.outcome__mark {
-  flex: none;
-  width: 14px;
-  color: var(--fg-muted);
-  text-align: center;
-}
-
-.outcome__fact--yes .outcome__mark,
-.outcome__fact--yes .outcome__state {
-  color: var(--success);
-}
-
-.outcome__fact--no .outcome__state {
-  color: var(--fg);
-}
-
-.outcome__label {
-  min-width: 6rem;
-  color: var(--fg);
-  font-weight: 600;
-}
-
-.outcome__state {
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-}
-
-.outcome__detail {
-  flex-basis: 100%;
-  padding-left: calc(14px + var(--s2));
-  color: var(--fg-secondary);
-  font-size: var(--text-xs);
-  line-height: 1.55;
-}
-
-.outcome__next {
-  color: var(--fg);
-  font-size: var(--text-sm);
   line-height: 1.55;
 }
 

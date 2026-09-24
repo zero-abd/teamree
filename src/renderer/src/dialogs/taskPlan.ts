@@ -111,7 +111,7 @@ export function taskCreates(task: string, selection: readonly InstalledAgent[]):
 }
 
 export function submitLabel(selection: readonly InstalledAgent[]): string {
-  return selection.length === 0 ? 'Create worktree' : 'Start task'
+  return selection.length === 0 ? 'Create Worktree' : 'Start Task'
 }
 
 /** What the button will do, in one line; `probed` separates "not looked yet" from "found nothing". */

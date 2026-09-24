@@ -29,7 +29,7 @@ export function updateNotice(state: UpdateState | null): UpdateNotice | null {
     // An unsigned build cannot replace itself, so the download is a `.dmg` installed like this one.
     detail: `Running ${state.current} · disk image, install by hand`,
     notes: release.notes,
-    action: release.downloadUrl === null ? 'Open the release page' : `Download ${release.version}`,
+    action: release.downloadUrl === null ? 'Open Release Page' : `Download ${release.version}`,
     install: 'Install steps'
   }
 }

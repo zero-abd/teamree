@@ -1,3 +1,4 @@
+import { homedir } from 'node:os'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { Response, StreamEvent } from '../shared/protocol'
 
@@ -166,6 +167,12 @@ const api = {
   selectProjectFolder(): Promise<string | null> {
     return ipcRenderer.invoke('teamree:select-project-folder')
   },
+  /** A folder to put something in, starting at `defaultPath`; null when cancelled. */
+  chooseFolder(defaultPath: string): Promise<string | null> {
+    return ipcRenderer.invoke('teamree:choose-folder', defaultPath)
+  },
+  /** This user's home folder, so a `~` path can be shown as the runtime will resolve it. */
+  homeDir: homedir(),
   /** Where a dropped file or folder is on disk; empty for one that is not on disk. */
   pathForFile(file: File): string {
     return webUtils.getPathForFile(file)

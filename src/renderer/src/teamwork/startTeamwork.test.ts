@@ -1,5 +1,5 @@
 // What the setup panel says at each point of setting teamwork up. The push
-// step must never show a tick: nothing in the window can see a commit.
+// step ticks only for a push this panel made: nothing in the window can see another commit.
 
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
@@ -11,7 +11,9 @@ import type {
   TeamworkPublishProgress,
   TeamworkRead
 } from '@shared/entities'
+import { TEAMWORK_BUTTON_LABEL } from '../sidebar/teamworkSummary'
 import {
+  ADD_KEY_BUTTON,
   brokenRelayOverride,
   checkOriginDraft,
   checkRelayDraft,
@@ -20,6 +22,7 @@ import {
   memberFilePreview,
   MORE_RELAYS_LEAD,
   ORIGIN_DETAIL,
+  PUBLISH_BUTTON,
   PUBLISH_QUIET_MS,
   publishActivity,
   pushPlan,
@@ -36,11 +39,9 @@ import {
   relayUrlFromOutput,
   relayUrlsFromOutput,
   retryHint,
-  setupOutcome,
   startTeamworkFlow,
   suggestedPath,
   TEAMWORK_PATHS,
-  type SetupOutcome,
   type StartTeamworkInput,
   type StepId
 } from './startTeamwork'
@@ -421,10 +422,6 @@ describe('checking a relay', () => {
     expect(RELAY_CHECK.proves).toBe('From this Mac only')
   })
 
-  it('says why the button is grey when there is no URL to check', () => {
-    expect(RELAY_CHECK.nothing).toBe('No URL yet')
-  })
-
   // Both can be on screen at once and dial different addresses.
   it('calls the two of them different things', () => {
     expect(RELAY_CHECK.draftButton).not.toBe(RELAY_CHECK.button)
@@ -468,23 +465,6 @@ describe('an override that is set and cannot be read', () => {
     const blocked = step({ ...fresh, relay: broken() }, 'relay')
     expect(blocked.mark).toBe('blocked')
     expect(blocked.summary).toBe(BROKEN_REASON)
-  })
-
-  // The outcome also feeds the sidebar, so a false sentence here leaves the panel entirely.
-  it('gives the outcome the runtime’s reason rather than one rebuilt from the file', () => {
-    const result = setupOutcome({ list: enrolled(), relay: broken(), status: status() })
-    const fact = result?.facts.find((entry) => entry.label === 'The relay')
-    expect(fact?.state).toBe('no')
-    expect(fact?.detail).toBe(BROKEN_REASON)
-    expect(fact?.detail).not.toMatch(/does not name a relay/)
-    expect(result?.head).toBe('Not finished: the relay')
-  })
-
-  it('says the same thing in the step and in the outcome', () => {
-    const input = { list: enrolled(), relay: broken(), status: status() }
-    expect(step(input, 'relay').summary).toBe(
-      setupOutcome(input)?.facts.find((entry) => entry.label === 'The relay')?.detail
-    )
   })
 
   it('names the variable, what is wrong with it, and the fix', () => {
@@ -765,15 +745,41 @@ describe('which step to lead with', () => {
     expect(startTeamworkFlow(written).currentId).toBe('push')
   })
 
-  it('is the push step for as long as anything is written, because that never self-completes', () => {
+  it('is the push step for as long as anything is written and nobody is connected', () => {
+    expect(startTeamworkFlow(written).currentId).toBe('push')
+    expect(step(written, 'push').mark).toBe('unchecked')
+  })
+
+  // A teammate on the other end is the evidence a push could not give; nothing is left to lead with.
+  it('is none once a teammate is connected, the push still unticked', () => {
     const connected = startTeamworkFlow({ ...written, status: status({ links: [link({ phase: 'connected' })] }) })
-    expect(connected.currentId).toBe('push')
+    expect(connected.currentId).toBeNull()
     expect(connected.steps.filter((entry) => entry.mark === 'done').map((entry) => entry.id)).toEqual([
       'identity',
       'key',
       'relay',
       'connected'
     ])
+  })
+
+  it('ticks the push only when this panel pushed and git said so', () => {
+    const publish = (ok: boolean): TeamworkPublish => ({
+      projectId: 'p1',
+      files: ['.teamree/members/ada.pub'],
+      commit: null,
+      remote: 'origin',
+      branch: 'main',
+      push: ok
+        ? { ok: true, upstream: 'origin/main', setUpstream: false, alreadyUpToDate: false }
+        : { ok: false, kind: 'rejected', error: 'rejected', advice: 'pull first' },
+      at: 0
+    })
+    expect(step({ ...written, publish: publish(true) }, 'push')).toMatchObject({
+      mark: 'done',
+      summary: 'main on origin'
+    })
+    expect(step({ ...written, publish: publish(false) }, 'push').mark).toBe('unchecked')
+    expect(startTeamworkFlow({ ...written, publish: publish(true) }).currentId).toBe('connected')
   })
 })
 
@@ -1104,10 +1110,12 @@ describe('the message to send a teammate', () => {
   it('names the repository, every step, and the one that people forget', () => {
     const text = invite() ?? ''
     expect(text).toContain('git clone https://example.com/ada/pager.git')
-    expect(text).toContain('Add my key')
-    // The button as the page names it, so the invited person can find it.
+    // Every control as the app names it, so the invited person can find it: the sidebar's entry first.
+    expect(text).toContain(`Open ${TEAMWORK_BUTTON_LABEL} in the sidebar`)
     expect(text).toContain(`choose “${TEAMWORK_PATHS[1].button}”`)
-    expect(text).toContain('Commit and push')
+    expect(text).toContain(`press ${ADD_KEY_BUTTON}`)
+    expect(text).toContain(`Press ${PUBLISH_BUTTON}`)
+    expect(text).not.toMatch(/project header/)
     expect(text).toMatch(/That is what puts you on the team/)
     expect(text).toContain('wss://relay.example/v1/relay')
   })
@@ -1153,62 +1161,5 @@ describe('the message to send a teammate', () => {
     const text = invite() ?? ''
     expect(text).toMatch(/origin as git has it/)
     expect(text).toMatch(/not checked/)
-  })
-})
-
-describe('where this ended up', () => {
-  const pushed = (overrides?: TeamworkPublish['push']): TeamworkPublish => ({
-    projectId: 'p1',
-    files: ['.teamree/members/ada.pub'],
-    commit: { sha: 'abc1234def', shortSha: 'abc1234', message: 'Add my key to the team' },
-    remote: 'origin',
-    branch: 'main',
-    push: overrides ?? { ok: true, upstream: 'origin/main', setUpstream: false, alreadyUpToDate: false },
-    at: 0
-  })
-
-  const outcome = (input: Partial<StartTeamworkInput> & { publish?: TeamworkPublish } = {}): SetupOutcome | null =>
-    setupOutcome({ list: enrolled(), relay: relayOnDisk(), status: status(), ...input })
-
-  // Half-working is the normal outcome here, and a single tick would be wrong about one half.
-  it('answers whether it worked as four separate facts', () => {
-    const result = outcome({ publish: pushed(), status: status({ links: [link({ phase: 'connected' })] }) })
-    expect(result?.done).toBe(true)
-    expect(result?.head).toBe('Teamwork is working')
-    expect(result?.facts.map((fact) => fact.label)).toEqual(['Your key', 'The relay', 'Pushed', 'Connected'])
-    expect(result?.facts.every((fact) => fact.state === 'yes')).toBe(true)
-    expect(result?.next).toBeNull()
-  })
-
-  it('names which half when the commit landed and the push did not', () => {
-    const result = outcome({
-      publish: pushed({
-        ok: false,
-        kind: 'rejected',
-        error: '! [rejected] main -> main (fetch first)',
-        advice: 'origin has commits that main does not · pull or rebase onto origin/main'
-      })
-    })
-    expect(result?.head).toBe('Committed, not pushed')
-    const push = result?.facts.find((fact) => fact.label === 'Pushed')
-    expect(push?.state).toBe('no')
-    expect(push?.detail).toBe('Refused: Origin has commits that main does not · pull or rebase onto origin/main')
-  })
-
-  // A tick or a cross would be teamree claiming it can see a commit made in a terminal.
-  it('refuses to guess at a push it did not make', () => {
-    const push = outcome()?.facts.find((fact) => fact.label === 'Pushed')
-    expect(push?.state).toBe('unknown')
-    expect(push?.detail).toMatch(/git status/)
-  })
-
-  it('says what is left, and that waiting for somebody is not a fault', () => {
-    expect(outcome({ publish: pushed() })?.head).toBe('Waiting on a teammate')
-    expect(outcome({ list: list() })?.next).toContain('Add my key')
-    expect(outcome({ relay: relay() })?.next).toMatch(/Step 3/)
-  })
-
-  it('has nothing to say before the reads have landed', () => {
-    expect(setupOutcome({ list: undefined, relay: undefined, status: undefined })).toBeNull()
   })
 })

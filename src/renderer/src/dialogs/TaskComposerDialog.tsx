@@ -79,7 +79,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   }
 
   return (
-    <Modal title="New task" onClose={closeDialog}>
+    <Modal title="New Task" onClose={closeDialog}>
       <form
         className="form"
         onSubmit={(event) => {

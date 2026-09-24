@@ -31,13 +31,13 @@ function status(extra: Partial<CliStatus> = {}): CliStatus {
 describe('before anything is pressed', () => {
   it('says where the link goes and what it will point at', () => {
     const panel = cliPanel(status())
-    expect(panel.action).toBe('Put teamree on my PATH')
+    expect(panel.action).toBe('Install')
     expect(panel.promise).toBe(`/usr/local/bin/teamree → ${APP_CLI}`)
   })
 
   it('links a checkout’s CLI where it is', () => {
     const panel = cliPanel(status({ packaged: false, source: CHECKOUT_CLI, bundle: `${CHECKOUT_CLI}.mjs` }))
-    expect(panel.action).toBe('Put teamree on my PATH')
+    expect(panel.action).toBe('Install')
     expect(panel.promise).toContain(CHECKOUT_CLI)
   })
 
@@ -53,7 +53,7 @@ describe('before anything is pressed', () => {
   it('warns when the link will be made somewhere no shell looks', () => {
     const panel = cliPanel(status({ onPath: null }))
     expect(panel.pathWarning).toBe('/usr/local/bin not on PATH')
-    expect(panel.action).toBe('Put teamree on my PATH')
+    expect(panel.action).toBe('Install')
   })
 
   it('has nothing to warn about when the directory is on PATH', () => {
@@ -75,7 +75,7 @@ describe('a link that is already there', () => {
     const panel = cliPanel(status({ state: 'elsewhere', resolved: older }))
     expect(panel.headline).toBe('Linked to another copy')
     expect(panel.detail).toBe(`/usr/local/bin/teamree → ${older}`)
-    expect(panel.action).toBe('Point it at this app')
+    expect(panel.action).toBe('Repair')
     expect(panel.promise).toContain(APP_CLI)
   })
 })
@@ -227,15 +227,15 @@ describe('the offer made once, unprompted, on first run', () => {
     // The same sentences the panel uses, so the two cannot drift apart.
     expect(offer?.promise).toBe(cliPanel(status({ needsAdministrator: true })).promise)
     expect(offer?.password).toBe(cliPanel(status({ needsAdministrator: true })).password)
-    expect(offer?.accept).toBe('Put teamree on my PATH')
-    expect(offer?.decline).toBe('No thanks')
+    expect(offer?.accept).toBe('Install')
+    expect(offer?.decline).toBe('No Thanks')
   })
 
   it('says the other thing when the link exists and leads to another copy', () => {
     const older = '/Users/ann/Downloads/teamree.app/Contents/Resources/cli/teamree'
     const offer = cliOffer(status({ state: 'elsewhere', resolved: older }))
     expect(offer?.headline).toContain('another copy')
-    expect(offer?.accept).toBe('Point it at this app')
+    expect(offer?.accept).toBe('Repair')
   })
 
   it('is not made again once this installation has been asked', () => {
@@ -308,7 +308,7 @@ describe('a link to a teamree that is not there any more', () => {
     expect(panel.headline).toBe('Broken link')
     expect(panel.detail).toBe(`/usr/local/bin/teamree → ${gone} (missing)`)
     // Still the same thing to press: pointing it here is exactly the repair.
-    expect(panel.action).toBe('Point it at this app')
+    expect(panel.action).toBe('Repair')
     expect(panel.promise).toContain(APP_CLI)
   })
 

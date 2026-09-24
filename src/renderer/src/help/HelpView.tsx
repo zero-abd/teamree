@@ -16,7 +16,7 @@ import {
   README_DOCUMENT,
   shortcutGroups,
   TEAMWORK_DOCUMENT,
-  WORKTREE_PARAGRAPHS,
+  WORKTREE_LINE,
   WORKTREE_TITLE
 } from './helpTopics'
 
@@ -25,6 +25,8 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
   const toggleHelp = useWorkspaceStore((state) => state.toggleHelp)
   const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
   const loadCli = useWorkspaceStore((state) => state.loadCli)
+  const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
+  const rightPanelOpen = useWorkspaceStore((state) => state.rightPanelOpen)
 
   // Asked on arrival: a terminal in this window may have linked the CLI since the last look.
   useEffect(() => {
@@ -56,7 +58,9 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
               <ul className="help-keys">
                 {group.shortcuts.map((shortcut) => (
                   <li className="help-key" key={shortcut.command}>
-                    <span className="help-key__what">{menuLabel(shortcut.command)}</span>
+                    <span className="help-key__what">
+                      {menuLabel(shortcut.command, { sidebarVisible, rightPanelOpen })}
+                    </span>
                     {/* Always there: `shortcutGroups` lists the bindings, and a
                         command the table binds to nothing is not one. */}
                     <kbd className="help-key__chord">{shortcut.chord ? formatChord(shortcut.chord, modifier) : ''}</kbd>
@@ -79,11 +83,7 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
           <h2 className="help__heading" id="help-worktree">
             {WORKTREE_TITLE}
           </h2>
-          {WORKTREE_PARAGRAPHS.map((paragraph) => (
-            <p className="help__prose" key={paragraph.slice(0, 32)}>
-              {paragraph}
-            </p>
-          ))}
+          <p className="help__prose">{WORKTREE_LINE}</p>
         </section>
 
         <section className="help__section" aria-labelledby="help-cli">
@@ -94,18 +94,21 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
               the two surfaces cannot come to disagree about one link. */}
           <p className="help__state">{cliSection.headline}</p>
 
-          {cliSection.command === null ? null : <p className="help__prose">{cliSection.command}</p>}
+          {cliSection.command === null ? null : (
+            <p className="help__prose">
+              <code>{cliSection.command}</code>
+            </p>
+          )}
 
           {cliSection.caveat === null ? null : <p className="help__caveat">{cliSection.caveat}</p>}
 
-          {cliSection.settings === null ? null : (
+          {cliSection.settings ? (
             <p className="help__prose">
-              {cliSection.settings}{' '}
-              <button type="button" className="button button--ghost button--small" onClick={toggleSettings}>
+              <button type="button" className="button button--small" onClick={toggleSettings}>
                 {CLI_SETTINGS_BUTTON}
               </button>
             </p>
-          )}
+          ) : null}
 
           {/* Addresses rather than a copy of the prose. The main process sends
               an external link to the browser and keeps this window on the page

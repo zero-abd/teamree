@@ -46,8 +46,8 @@ function Question({
     <Confirm
       title="Stop this agent?"
       body="claude is working in “claude”"
-      cancel="Leave it open"
-      confirm="Stop it and close"
+      cancel="Leave Open"
+      confirm="Stop and Close"
       tone={tone}
       onCancel={onCancel}
       onConfirm={onConfirm}
@@ -61,7 +61,7 @@ describe('what it draws', () => {
     const dialog = screen.getByRole('dialog', { name: 'Stop this agent?' })
     expect(dialog.querySelector('.modal__body .confirm__body')?.textContent).toBe('claude is working in “claude”')
     const buttons = [...dialog.querySelectorAll<HTMLButtonElement>('.modal__actions .button')]
-    expect(buttons.map((button) => button.textContent)).toEqual(['Leave it open', 'Stop it and close'])
+    expect(buttons.map((button) => button.textContent)).toEqual(['Leave Open', 'Stop and Close'])
     // The destructive answer is the red one, and it is the one on the right.
     expect(buttons[1]?.classList.contains('button--danger')).toBe(true)
     expect(buttons[0]?.classList.contains('button--danger')).toBe(false)
@@ -69,7 +69,7 @@ describe('what it draws', () => {
 
   it('draws a question that destroys nothing with a primary confirm instead', () => {
     render(<Question tone="primary" onCancel={vi.fn()} onConfirm={vi.fn()} />)
-    const confirm = screen.getByRole('button', { name: 'Stop it and close' })
+    const confirm = screen.getByRole('button', { name: 'Stop and Close' })
     expect(confirm.classList.contains('button--primary')).toBe(true)
     expect(confirm.classList.contains('button--danger')).toBe(false)
   })
@@ -118,7 +118,7 @@ describe('what the keys do', () => {
     const onCancel = vi.fn()
     const onConfirm = vi.fn()
     render(<Question tone="danger" onCancel={onCancel} onConfirm={onConfirm} />)
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Leave it open' }))
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Leave Open' }))
     await user.keyboard('{Enter}')
     expect(onCancel).toHaveBeenCalledOnce()
     expect(onConfirm).not.toHaveBeenCalled()
@@ -129,7 +129,7 @@ describe('what the keys do', () => {
     const onCancel = vi.fn()
     const onConfirm = vi.fn()
     render(<Question tone="primary" onCancel={onCancel} onConfirm={onConfirm} />)
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Stop it and close' }))
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Stop and Close' }))
     await user.keyboard('{Enter}')
     expect(onConfirm).toHaveBeenCalledOnce()
     expect(onCancel).not.toHaveBeenCalled()
@@ -138,8 +138,8 @@ describe('what the keys do', () => {
   it('keeps Tab between the two answers', async () => {
     const user = userEvent.setup()
     render(<Question tone="danger" onCancel={vi.fn()} onConfirm={vi.fn()} />)
-    const cancel = screen.getByRole('button', { name: 'Leave it open' })
-    const confirm = screen.getByRole('button', { name: 'Stop it and close' })
+    const cancel = screen.getByRole('button', { name: 'Leave Open' })
+    const confirm = screen.getByRole('button', { name: 'Stop and Close' })
     await user.tab()
     expect(document.activeElement).toBe(confirm)
     await user.tab()

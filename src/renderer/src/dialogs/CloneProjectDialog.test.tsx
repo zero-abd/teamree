@@ -31,12 +31,14 @@ beforeEach(() => {
   closeDialog.mockReset()
   cloneProject.mockReset()
   useWorkspaceStore.setState({ cloneProject, closeDialog })
+  // No preload here unless a test puts one in.
+  Object.assign(window, { teamree: undefined })
 })
 
 describe('cloning', () => {
   it('is only the clone form, and Cancel closes it', () => {
     openClone()
-    expect(screen.getByRole('dialog', { name: 'Clone repository' })).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: 'Clone Repository' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Folder/ })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -57,6 +59,37 @@ describe('cloning', () => {
     fireEvent.change(destination(), { target: { value: '~/src/api' } })
     fireEvent.change(url(), { target: { value: 'git@github.com:acme/web.git' } })
     expect(destination().value).toBe('~/src/api')
+  })
+
+  it('spells the destination out from the home folder, as git will be given it', () => {
+    Object.assign(window, { teamree: { homeDir: '/Users/ada', chooseFolder: vi.fn() } })
+    openClone()
+    fireEvent.change(url(), { target: { value: 'git@github.com:acme/api.git' } })
+    expect(destination().value).toBe('/Users/ada/code/api')
+  })
+
+  it('picks the folder the checkout goes in with Choose…, the repository name still following the URL', async () => {
+    const chooseFolder = vi.fn(async () => '/Volumes/work')
+    Object.assign(window, { teamree: { homeDir: '/Users/ada', chooseFolder } })
+    openClone()
+    fireEvent.change(url(), { target: { value: 'git@github.com:acme/api.git' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Choose…' }))
+    })
+    expect(chooseFolder).toHaveBeenCalledExactlyOnceWith('/Users/ada/code')
+    expect(destination().value).toBe('/Volumes/work/api')
+    fireEvent.change(url(), { target: { value: 'git@github.com:acme/web.git' } })
+    expect(destination().value).toBe('/Volumes/work/web')
+  })
+
+  it('keeps the destination when the folder picker is cancelled', async () => {
+    Object.assign(window, { teamree: { homeDir: '/Users/ada', chooseFolder: vi.fn(async () => null) } })
+    openClone()
+    fireEvent.change(url(), { target: { value: 'git@github.com:acme/api.git' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Choose…' }))
+    })
+    expect(destination().value).toBe('/Users/ada/code/api')
   })
 
   it('clones what was typed, and says in one line why it did not', async () => {

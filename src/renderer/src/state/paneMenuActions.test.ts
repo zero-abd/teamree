@@ -73,14 +73,14 @@ describe('Close Others', () => {
     })
     expect(call.mock.calls.filter(([method]) => method === 'terminal.close')).toHaveLength(0)
 
-    // "Leave it open" on the first: the next question comes, the quiet pane closes on the way.
+    // "Leave Open" on the first: the next question comes, the quiet pane closes on the way.
     useWorkspaceStore.getState().closeDialog()
     await vi.waitFor(() =>
       expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-close-pane', terminalId: busyTwo })
     )
     expect(shown(worktreeId)).toEqual([keep, busyOne, busyTwo])
 
-    // "Stop it and close" on the last, as the dialog does it.
+    // "Stop and Close" on the last, as the dialog does it.
     useWorkspaceStore.getState().closeDialog()
     await useWorkspaceStore.getState().forceCloseTerminal(busyTwo)
     expect(useWorkspaceStore.getState().dialog).toBeNull()

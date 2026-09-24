@@ -63,17 +63,17 @@ export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest })
             Refuse
           </button>
           <button type="button" className="button" onClick={() => void decideConsent(request.id, 'once', shown)}>
-            Allow this once
+            Allow Once
           </button>
           <button type="button" className="button" onClick={() => void decideConsent(request.id, 'session', shown)}>
-            Allow until this session ends
+            Allow This Session
           </button>
           <button
             type="button"
             className="button button--primary"
             onClick={() => void decideConsent(request.id, 'always', shown)}
           >
-            Always allow {request.handle} here
+            Always Allow
           </button>
         </div>
 

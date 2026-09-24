@@ -30,7 +30,7 @@ export function closePaneWarning(terminal: Terminal | undefined): ClosePaneWarni
       body: terminal.busy
         ? `${harnessName(terminal.agent)} is working in ${where}`
         : `${harnessName(terminal.agent)} is quiet in ${where} — waiting or finished`,
-      confirm: 'Stop it and close'
+      confirm: 'Stop and Close'
     }
   }
 
@@ -38,7 +38,7 @@ export function closePaneWarning(terminal: Terminal | undefined): ClosePaneWarni
     return {
       title: 'Stop what is running here?',
       body: `Output still arriving in ${where}`,
-      confirm: 'Stop it and close'
+      confirm: 'Stop and Close'
     }
   }
 

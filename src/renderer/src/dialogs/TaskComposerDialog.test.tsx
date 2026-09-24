@@ -99,7 +99,7 @@ async function open(projectId = 'p1'): Promise<void> {
 // "Task" plus that hint rather than "Task" alone; see the note in the report.
 const task = (): HTMLTextAreaElement => screen.getByRole('textbox', { name: /^Task/ })
 const startPoint = (): HTMLInputElement => screen.getByRole('combobox', { name: 'Start from' })
-const submit = (): HTMLButtonElement => screen.getByRole('button', { name: /Start task|Create worktree/ })
+const submit = (): HTMLButtonElement => screen.getByRole('button', { name: /Start Task|Create Worktree/ })
 const more = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `One more ${command}` })
 const fewer = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `One fewer ${command}` })
 const bothAgents = [
@@ -121,7 +121,7 @@ beforeEach(() => {
 describe('the dialog itself', () => {
   it('is a modal named for what it does, under the project it will act on', async () => {
     await open()
-    const dialog = screen.getByRole('dialog', { name: 'New task' })
+    const dialog = screen.getByRole('dialog', { name: 'New Task' })
     expect(dialog.getAttribute('aria-modal')).toBe('true')
     expect((screen.getByRole('combobox', { name: 'Project' }) as HTMLSelectElement).value).toBe('p1')
   })
@@ -286,13 +286,13 @@ describe('what it submits', () => {
   })
 
   // The claim on the button is a promise about what happens next, and on a
-  // machine with no agent on PATH "Start task" would be one the user only
+  // machine with no agent on PATH "Start Task" would be one the user only
   // discovers was false afterwards.
   it('promises only a worktree when no agent will run, and omits the command', async () => {
     seed({ agents: [] })
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
-    expect(screen.getByRole('button', { name: 'Create worktree' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Create Worktree' })).toBeTruthy()
     expect(screen.getByText('No coding agent on your login shell’s PATH')).toBeTruthy()
     expect(screen.queryByRole('group', { name: 'Agents' })).toBeNull()
     submit().click()
@@ -308,7 +308,7 @@ describe('what it submits', () => {
   it('refuses a task too long for one command line, and says by how much', async () => {
     await open()
     fireEvent.change(task(), { target: { value: 'x'.repeat(4097) } })
-    expect((screen.getByRole('button', { name: 'Start task' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Start Task' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/4097 \/ 4096 chars/)).toBeTruthy()
     expect(startTask).not.toHaveBeenCalled()
   })
@@ -324,7 +324,7 @@ describe('what it submits', () => {
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     fireEvent.click(fewer('Claude Code'))
     expect(screen.getByText('1 worktree · no agent')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Create worktree' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Create Worktree' })).toBeTruthy()
     submit().click()
     expect(startTask.mock.calls[0]?.[0].creates).toEqual([{ name: 'Rewrite the pager', task: 'Rewrite the pager' }])
   })

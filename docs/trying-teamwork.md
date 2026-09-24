@@ -94,7 +94,7 @@ anywhere; it is only which half of the work is left, so that the page can say
 sentence for both of you at once. The option the repository points at is the
 primary button, with the reason under it — a `.teamree/relay` already in the checkout, a colleague's key
 already on the roster — and neither is chosen for you. If you pick the wrong
-one, **Not that** puts the question back.
+one, **Back** puts the question back.
 
 ## What you need
 
@@ -184,7 +184,7 @@ writes for your teammate names the path to mount at; `docs/teamwork.md` has the
 full rule, including what is and is not normalised away.
 
 If you open **Teamwork** on a checkout that has no usable origin, the
-panel says so at the top and puts an **Origin** field and an **Add origin**
+panel says so at the top and puts an **Origin** field and an **Add Origin**
 button directly under the sentence, so the fix is where the problem is reported
 rather than in another window. It takes either kind of answer, and refuses the
 paths that could not be an identity for anybody — a relative path, a `~`, a path
@@ -309,15 +309,15 @@ avoiding. One person deploys a relay, pushes a one-line file, and the team is
 connected, visibly, in a diff.
 
 **Whoever set the relay up** does it in the app, in the same **Teamwork**
-panel step 4 uses — the **Teamwork** button in the project header opens it, and
+panel step 4 uses — the **Teamwork** entry at the top of the sidebar opens it, and
 step 3 of it is the relay.
 
-That step leads with **Deploy a relay**, which runs the deploy that ships inside
+That step leads with **Deploy a Relay**, which runs the deploy that ships inside
 teamree in a terminal pane inside the window: you watch it happen rather than
 copying a command into Terminal.app, a browser opens once for the Cloudflare
 sign-in, and when it finishes teamree reads the `wss://` URL it printed and
-offers **Use this relay URL**. The command itself is still there, one disclosure
-down, for anybody who would rather run it themselves — and the button is
+offers **Use This URL**. The command itself is under **More**, for anybody who
+would rather run it themselves — and the button is
 disabled with a sentence when the build in front of you carries no relay
 project. teamree still runs no relay of its own: it runs a deploy to your team's
 own Cloudflare account, and nobody hosts one for you.
@@ -329,8 +329,8 @@ up yourself if the two of you have agreed that you are the one doing it. Two
 relays is two halves of a team that never meet, and it looks like nothing being
 wrong on either machine.
 
-If you already have a URL, paste it into **Or paste a relay URL** and press
-**Write relay file**. Paste the whole message your teammate sent if that is what
+If you already have a URL, press **Paste URL…**, paste it into **Relay URL** and
+press **Write Relay File**. Paste the whole message your teammate sent if that is what
 you have — the field takes the URL out of it, and a full stop on the end of a
 sentence does not count. That writes `.teamree/relay` — the same file, with the
 same comment header — and stops there, exactly as adding your key does. The
@@ -370,7 +370,7 @@ private half never leaves it, and the public half goes in the repository at
 if you can push that file, you are on the team.
 
 In the app, open the project's **Teamwork** panel — the **Teamwork**
-button is in the project header in the sidebar — and press **Add my key** in
+entry at the top of the sidebar — and press **Add My Key** in
 step 2. What that grants is written above the button rather than under it: a key
 in `.teamree/members/` lets that person run commands on your machine, as you.
 
@@ -394,7 +394,7 @@ execution.
 the app's own data directory, at `~/Library/Application Support/teamree/identity.key`,
 and it is this machine's identity in *every* project it takes part in rather
 than in this one. If you also work on a desktop, open teamree there and press
-**Add my key** there too, typing a handle of its own — `ana` and `ana-desktop`
+**Add My Key** there too, typing a handle of its own — `ana` and `ana-desktop`
 in the roster is the intended shape, not a mess to tidy up. Copying
 `identity.key` across looks like it worked, because the second machine correctly
 says you are already in, and then nothing settles afterwards: "Two machines, one
@@ -430,7 +430,7 @@ shows git's own progress line, how long it has been going, and — if git has sa
 nothing for half a minute — that a push this quiet is usually waiting for a
 credential teamree cannot be asked for. **Stop** is beside the button the whole
 time, and stopping it leaves whatever was committed committed. Afterwards
-there is **Try the push again**, with the one thing to do first: `git pull
+there is **Retry Push**, with the one thing to do first: `git pull
 --rebase` after a rejection, or fixing the credential, which is not something
 this window can do for you.
 
@@ -756,7 +756,7 @@ node scripts/teamwork/two-peers.mjs --keep
 ```
 
 It runs the whole of step 4 and step 5 for you: each runtime generates its own
-keypair, joins the roster through the same `members.join` the **Add my key**
+keypair, joins the roster through the same `members.join` the **Add My Key**
 button calls, and the pair meet over a relay child process on a port the OS
 picked. `--keep` leaves them up with the CLI commands to drive each one.
 
@@ -839,7 +839,7 @@ generates a new keypair on a run that finds no file:
 mv ~/Library/Application\ Support/teamree/identity.key ~/identity.key.old
 ```
 
-Then press **Add my key** in that project with a handle of its own typed in the
+Then press **Add My Key** in that project with a handle of its own typed in the
 field — `ana-desktop` rather than `ana`, which is taken by your other machine —
 and commit and push the file it writes. Two member files for one person is the
 shape this is meant to have.
@@ -851,7 +851,7 @@ a machine that has lost `identity.key` — a new laptop, a reinstall, or a file
 moved aside because the app said it was not a usable identity — comes back with
 a new key and no claim on the member file the old one is filed under.
 
-Press **Add my key** there and you are told something that sounds worse than it
+Press **Add My Key** there and you are told something that sounds worse than it
 is: *`.teamree/members/ana.pub` is already somebody else's key; choose another
 handle*. It is your file. The app cannot tell — all it sees is a handle in the
 roster whose key is not the key this machine holds, which is also exactly what a
@@ -870,7 +870,7 @@ cd ~/teamree-example
 git rm .teamree/members/ana.pub
 ```
 
-Then press **Add my key**. Your handle is free now, so it defaults back to it —
+Then press **Add My Key**. Your handle is free now, so it defaults back to it —
 if the panel still refuses, close and reopen it, which re-reads the directory.
 Commit both halves together and push:
 

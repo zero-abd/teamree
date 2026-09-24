@@ -252,6 +252,18 @@ button.picker__chevron:hover {
   gap: var(--s4);
 }
 
+/* The destination field and its folder picker, on one line. */
+.clone__destination {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--s2);
+}
+
+.clone__destination .field {
+  flex: 1;
+  min-width: 0;
+}
+
 /* git's own last line, as it redraws its meter. */
 .clone__progress {
   margin: 0;

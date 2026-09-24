@@ -9,20 +9,27 @@ import { Modal } from './Modal'
 
 const PROGRESS_POLL_MS = 300
 
+/** `~/code` with the home folder spelt out, as the runtime will resolve it; `~` with no preload (a test). */
+function defaultParent(): string {
+  const home = window.teamree?.homeDir
+  return home ? `${home}${DEFAULT_CLONE_PARENT.slice(1)}` : DEFAULT_CLONE_PARENT
+}
+
 export function CloneProjectDialog(): React.JSX.Element {
   const cloneProject = useWorkspaceStore((state) => state.cloneProject)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
 
   const [url, setUrl] = useState('')
-  // Null until edited: until then it follows the URL.
+  // Null until edited: until then it follows the URL, inside `parent`.
   const [editedDestination, setEditedDestination] = useState<string | null>(null)
+  const [parent, setParent] = useState(defaultParent)
   const [running, setRunning] = useState<string | null>(null)
   const [line, setLine] = useState('')
   const [error, setError] = useState('')
   const cancelled = useRef(false)
 
   const name = repositoryNameFromUrl(url)
-  const destination = editedDestination ?? (name ? `${DEFAULT_CLONE_PARENT}/${name}` : '')
+  const destination = editedDestination ?? (name ? `${parent}/${name}` : '')
   const canSubmit = url.trim().length > 0 && running === null
 
   useEffect(() => {
@@ -59,6 +66,13 @@ export function CloneProjectDialog(): React.JSX.Element {
     void runtimeClient.call('project.cancelClone', { url: running }).catch(() => undefined)
   }
 
+  const choose = async (): Promise<void> => {
+    const chosen = await window.teamree?.chooseFolder(parent)
+    if (!chosen) return
+    setParent(chosen)
+    setEditedDestination(null)
+  }
+
   const submit = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault()
     if (!canSubmit) return
@@ -73,7 +87,7 @@ export function CloneProjectDialog(): React.JSX.Element {
   }
 
   return (
-    <Modal title="Clone repository" onClose={closeDialog}>
+    <Modal title="Clone Repository" onClose={closeDialog}>
       <form className="form" onSubmit={(event) => void submit(event)}>
         <label className="field">
           <span className="field__label">Repository URL</span>
@@ -91,21 +105,26 @@ export function CloneProjectDialog(): React.JSX.Element {
             disabled={running !== null}
           />
         </label>
-        <label className="field">
-          <span className="field__label">Destination</span>
-          <input
-            className="field__input field__input--mono"
-            value={destination}
-            onChange={(event) => {
-              setEditedDestination(event.target.value)
-              setError('')
-            }}
-            placeholder={`${DEFAULT_CLONE_PARENT}/repo`}
-            autoComplete="off"
-            spellCheck={false}
-            disabled={running !== null}
-          />
-        </label>
+        <div className="clone__destination">
+          <label className="field">
+            <span className="field__label">Destination</span>
+            <input
+              className="field__input field__input--mono"
+              value={destination}
+              onChange={(event) => {
+                setEditedDestination(event.target.value)
+                setError('')
+              }}
+              placeholder={`${parent}/repo`}
+              autoComplete="off"
+              spellCheck={false}
+              disabled={running !== null}
+            />
+          </label>
+          <button type="button" className="button" onClick={() => void choose()} disabled={running !== null}>
+            Choose…
+          </button>
+        </div>
         {running !== null ? <pre className="clone__progress">{line || 'Cloning…'}</pre> : null}
         {error ? (
           <span className="field__error" role="alert">

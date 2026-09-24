@@ -1,9 +1,11 @@
+/** @vitest-environment jsdom */
+
 // What the setup panel puts on screen, rendered rather than reasoned about: that a step's
 // state reaches a reader as words, and that what a key grants is above the button that
-// grants it. `renderToStaticMarkup`: nothing here depends on layout or on an effect.
+// grants it. Markup is read after the clicks a test names: a step opened, More, Paste URL….
 
-import { describe, expect, it } from 'vitest'
-import { renderToStaticMarkup } from 'react-dom/server'
+import { cleanup, fireEvent, render as mount } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
 import type {
   MemberList,
   PeerLink,
@@ -20,7 +22,8 @@ import {
   RELAY_PANE_NO_URL,
   RELAY_SERVE,
   RELAY_SERVE_STOPPED,
-  type RelayPaneState
+  type RelayPaneState,
+  type StepId
 } from './startTeamwork'
 import { teamworkSummary } from '../sidebar/teamworkSummary'
 
@@ -91,12 +94,17 @@ const link = (overrides: Partial<PeerLink> = {}): PeerLink => ({
 })
 
 /** The button itself: its words also appear in step 4's suggested commit message. */
-const JOIN_BUTTON = 'Add my key</button>'
+const JOIN_BUTTON = 'Add My Key</button>'
 
 /** Where `.teamree` is: the primary checkout, which is not where a pane is. */
 const PROJECT_PATH = '/Users/ada/code/teamree'
 
-function render(overrides: Partial<TeamworkStepsProps> = {}): string {
+/** What to press before reading: a step to open, and the relay step's two disclosures. */
+type Presses = { open?: StepId; more?: boolean; paste?: boolean }
+
+afterEach(() => cleanup())
+
+function render(overrides: Partial<TeamworkStepsProps> = {}, presses: Presses = {}): string {
   const props: TeamworkStepsProps = {
     projectPath: PROJECT_PATH,
     list: roster(),
@@ -127,8 +135,18 @@ function render(overrides: Partial<TeamworkStepsProps> = {}): string {
     onCopy: () => {},
     ...overrides
   }
-  return renderToStaticMarkup(<TeamworkSteps {...props} />)
+  cleanup()
+  const { container, queryByRole } = mount(<TeamworkSteps {...props} />)
+  const toggle = container.querySelector(`[data-step="${presses.open}"] .step__toggle`)
+  if (toggle !== null && toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle)
+  if (presses.more) fireEvent.click(queryByRole('button', { name: 'More' }) as HTMLElement)
+  if (presses.paste) fireEvent.click(queryByRole('button', { name: 'Paste URL…' }) as HTMLElement)
+  return container.innerHTML
 }
+
+/** The relay step opened, with whatever else the test presses. */
+const relayStep = (overrides: Partial<TeamworkStepsProps> = {}, presses: Presses = {}): string =>
+  render(overrides, { open: 'relay', ...presses })
 
 /** One relay pane, in whichever of its states the test is about. */
 const pane = (overrides: Partial<RelayPaneState> & Pick<RelayPaneState, 'kind'>): RelayPaneState => ({
@@ -142,6 +160,10 @@ const pane = (overrides: Partial<RelayPaneState> & Pick<RelayPaneState, 'kind'>)
 /** The labels of the buttons that cannot be pressed: the attribute that decides it, not the button's presence. */
 const disabledButtons = (markup: string): string[] =>
   [...markup.matchAll(/<button[^>]*\sdisabled=""[^>]*>(.*?)<\/button>/g)].map((match) => text(match[1] ?? '').trim())
+
+/** One step's markup, from its line to the end of its body. */
+const stepIn = (markup: string, id: StepId): string =>
+  markup.slice(markup.indexOf(`data-step="${id}"`), markup.indexOf('</li>', markup.indexOf(`data-step="${id}"`)))
 
 /** Undoes the escaping the markup applies, so assertions read like the page. */
 const text = (markup: string): string =>
@@ -208,17 +230,26 @@ describe('a refused handle', () => {
 
 describe('each step says whether it is done', () => {
   it('marks a fresh project’s steps not done, in words and not only in colour', () => {
-    const shown = text(render())
-    expect(shown).toContain('1. Your identity')
-    expect(shown).toContain('2. Your key is in this repository')
-    expect(shown).toContain('3. The team’s relay')
-    expect(shown).toContain('4. Commit and push')
-    expect(shown).toContain('5. Connected')
-    expect(render()).toContain('class="step step--todo step--current"')
+    const markup = render()
+    expect([...markup.matchAll(/class="step__title">([^<]*)</g)].map((found) => found[1])).toEqual([
+      'Identity',
+      'Your Key',
+      'Relay',
+      'Commit and Push',
+      'Connected'
+    ])
+    expect([...markup.matchAll(/role="img" aria-label="([^"]*)"/g)].map((found) => found[1])).toEqual([
+      'done',
+      'not done yet',
+      'not done yet',
+      'not done yet',
+      'not done yet'
+    ])
+    expect(markup).toContain('class="step step--todo step--open" data-step="key"')
   })
 
   it('shows the identity’s handle and the short form of its key', () => {
-    const shown = text(render())
+    const shown = text(render({}, { open: 'identity' }))
     expect(shown).toContain('ada')
     expect(shown).toContain('c2VsZmtleXNlbGZr…')
     expect(shown).not.toContain(SELF_KEY)
@@ -226,8 +257,9 @@ describe('each step says whether it is done', () => {
 
   it('marks the key and relay steps done once both files are in the checkout', () => {
     const markup = render({ list: enrolled(), relay: relayOnDisk() })
+    expect(markup).toContain('class="step step--done" data-step="key"')
+    expect(markup).toContain('class="step step--done" data-step="relay"')
     expect(markup).toContain('.teamree/members/ada.pub')
-    expect(markup).toContain('wss://relay.example/v1/relay')
     expect(text(markup)).toContain('git commit -m "Set up teamwork"')
   })
 
@@ -240,8 +272,9 @@ describe('each step says whether it is done', () => {
 
   // teamree cannot see a commit; either mark would claim it can.
   it('never claims the push happened', () => {
-    const shown = text(render({ list: enrolled(), relay: relayOnDisk() }))
-    expect(shown).toContain('yours to do — teamree does not check this')
+    expect(render({ list: enrolled(), relay: relayOnDisk() })).toContain(
+      'aria-label="yours to do — teamree does not check this"'
+    )
   })
 
   // The promise belongs where it is kept: on screen, above the button.
@@ -278,11 +311,14 @@ describe('each step says whether it is done', () => {
   it('shows a teammate’s link with the runtime’s own detail, not a phase code', () => {
     const waited = 'nobody has answered on this rendezvous across two hourly rotations'
     const shown = text(
-      render({
-        list: enrolled(),
-        relay: relayOnDisk(),
-        status: status({ links: [link({ detail: waited })] })
-      })
+      render(
+        {
+          list: enrolled(),
+          relay: relayOnDisk(),
+          status: status({ links: [link({ detail: waited })] })
+        },
+        { open: 'connected' }
+      )
     )
     expect(shown).toContain('priya')
     expect(shown).toContain('not connected')
@@ -292,98 +328,125 @@ describe('each step says whether it is done', () => {
 
 describe('choosing a relay', () => {
   // The answer is a button; everything else is a disclosure away.
-  it('leads with the button, and the command the runtime says this build carries', () => {
-    const shown = text(render())
-    expect(shown).toContain('Deploy a relay')
-    expect(shown).toContain('/apps/teamree.app/Contents/Resources/relay/teamree-relay deploy')
-    expect(shown).toContain('Cloudflare sign-in in your browser')
+  it('leads with the button, and the command the runtime says this build carries behind More', () => {
+    const markup = relayStep()
+    // The step toggles hold their title in spans, so these are the step's own buttons.
+    expect(buttonsIn(stepIn(markup, 'relay'))).toEqual([
+      { label: 'Deploy a Relay', primary: true },
+      { label: 'Paste URL…', primary: false },
+      { label: 'More', primary: false }
+    ])
+    expect(markup).toContain('title="Cloudflare sign-in in your browser"')
+    expect(text(relayStep({}, { more: true }))).toContain(
+      '/apps/teamree.app/Contents/Resources/relay/teamree-relay deploy'
+    )
   })
 
-  it('puts no other option in front of anybody who has not asked for one', () => {
-    const shown = text(render())
+  it('puts nothing else in front of anybody who has not asked for it', () => {
+    const shown = text(relayStep())
     expect(shown).not.toContain('A tunnel to a relay on your own machine')
-    expect(shown).not.toContain('A mesh VPN, or a box on the LAN')
     expect(shown).not.toContain('A VPS you rent')
-    expect(shown).toContain('Other ways to get a relay')
+    expect(shown).not.toContain('teamree-relay')
+    expect(shown).not.toContain('Run on This Mac')
+    expect(shown).not.toContain('Relay URL')
+    expect(shown).not.toContain('TEAMREE_RELAY_URL')
+    const more = text(relayStep({}, { more: true }))
+    expect(more).toContain('A tunnel to a relay on your own machine')
+    expect(more).toContain('A mesh VPN, or a box on the LAN')
+    expect(more).toContain('A VPS you rent')
+    expect(more).toMatch(/TEAMREE_RELAY_URL\s+not in this app’s environment/)
+  })
+
+  it('says “Run it yourself” nowhere', () => {
+    expect(text(relayStep({}, { more: true, paste: true }))).not.toContain('Run it yourself')
+    expect(text(render({ list: enrolled(), relay: relayOnDisk() }))).not.toContain('Run it yourself')
   })
 
   // Each of these is answerable; none is a thing to wade through. "Is this going to bill me" is
   // asked before the button is pressed, so one sentence answers its shape; the figures are not ours.
   it('leaves the reasoning to relay/README.md rather than printing it', () => {
-    const shown = text(render())
+    const shown = text(relayStep({}, { more: true }))
     expect(shown).not.toMatch(/Durable Objects/)
     expect(shown).not.toMatch(/normalised/)
-    expect(shown).not.toMatch(/does not inherit your shell/)
   })
 
   it('prints no price list under the button', () => {
-    const shown = text(render())
+    const shown = text(relayStep())
     expect(shown).not.toMatch(/free plan|daily allowance|pricing/i)
     expect(shown).not.toMatch(/reset at 00:00 UTC/)
   })
 
   it('says this build carries no relay, rather than offering a button that cannot work', () => {
-    const shown = text(render({ relay: { ...noRelay(), deploy: { command: null, reason: 'no relay in this build' } } }))
-    expect(shown).toContain('no relay in this build')
-    expect(shown).not.toContain('teamree-relay deploy')
+    const markup = relayStep(
+      { relay: { ...noRelay(), deploy: { command: null, reason: 'no relay in this build' } } },
+      { more: true }
+    )
+    expect(text(markup)).toContain('no relay in this build')
+    expect(disabledButtons(markup)).toContain('Deploy a Relay')
+    expect(markup).not.toContain('teamree-relay deploy')
   })
 
   // A relay that arrives in the repository is a decision already taken.
   it('shows none of that to somebody whose team already has one', () => {
-    const shown = text(render({ list: enrolled(), relay: relayOnDisk() }))
-    expect(shown).not.toContain('Deploy a relay')
-    expect(shown).not.toContain('Other ways to get a relay')
-    expect(shown).toContain('Change the relay for this project')
+    const markup = relayStep({ list: enrolled(), relay: relayOnDisk() })
+    const shown = text(markup)
+    expect(shown).not.toContain('Deploy a Relay')
+    expect(markup).not.toContain('>More</button>')
+    expect(shown).toContain('Paste URL…')
+    expect(text(relayStep({ list: enrolled(), relay: relayOnDisk() }, { paste: true }))).toContain('Replaces')
   })
 
   it('never suggests anybody but the team hosts the relay', () => {
-    expect(text(render())).not.toMatch(/our relay|teamree’s relay/i)
+    expect(text(relayStep({}, { more: true }))).not.toMatch(/our relay|teamree’s relay/i)
   })
 })
 
 // A relay on your own Mac is fastest for one network and a dead end for two home networks, and
 // teamree cannot see which; the sentence saying so is on screen before the button.
-describe('running a relay yourself', () => {
-  it('stands beside the deploy rather than inside the other ways', () => {
-    const markup = render()
-    const serve = markup.indexOf('Run a relay yourself')
-    const more = markup.indexOf('Other ways to get a relay')
-    expect(serve).toBeGreaterThan(-1)
-    expect(serve).toBeLessThan(more)
+describe('running a relay on this Mac', () => {
+  it('is behind More, first in it', () => {
+    const markup = relayStep({}, { more: true })
+    const serve = markup.indexOf('Run on This Mac</button>')
+    expect(serve).toBeGreaterThan(markup.indexOf('>More</button>'))
+    expect(serve).toBeLessThan(markup.indexOf('A tunnel to a relay on your own machine'))
   })
 
   it('says it is waiting for a URL only while a relay is running', () => {
-    expect(text(render())).not.toContain(RELAY_SERVE.watching)
-    expect(text(render({ pane: pane({ kind: 'serve' }) }))).toContain(RELAY_SERVE.watching)
+    expect(text(relayStep({}, { more: true }))).not.toContain(RELAY_SERVE.watching)
+    expect(text(relayStep({ pane: pane({ kind: 'serve' }) }, { more: true }))).toContain(RELAY_SERVE.watching)
   })
 
-  it('says who it will not work for, above the button and not after it', () => {
-    const markup = render()
-    const limit = markup.indexOf('Same LAN or VPN only')
-    const button = markup.indexOf('Run a relay yourself</button>')
-    expect(limit).toBeGreaterThan(-1)
+  it('says who it will not work for, beside the button', () => {
+    const markup = relayStep({}, { more: true })
+    const limit = markup.indexOf(RELAY_SERVE.limit)
+    const button = markup.indexOf('Run on This Mac</button>')
     expect(button).toBeGreaterThan(-1)
-    expect(limit).toBeLessThan(button)
-    expect(text(markup)).toContain(RELAY_SERVE.limit)
+    expect(limit).toBeGreaterThan(button)
   })
 
   // The runtime's command with the verb swapped: never a guess at a program, never hidden.
-  it('shows the command it will run, one disclosure away', () => {
-    expect(text(render())).toContain('/apps/teamree.app/Contents/Resources/relay/teamree-relay serve')
+  it('shows the command it will run', () => {
+    expect(text(relayStep({}, { more: true }))).toContain(
+      '/apps/teamree.app/Contents/Resources/relay/teamree-relay serve'
+    )
   })
 
   it('is disabled with the runtime’s own sentence when this build carries no relay', () => {
-    const markup = render({ relay: { ...noRelay(), deploy: { command: null, reason: 'no relay in this build' } } })
-    expect(markup).toContain('Run a relay yourself</button>')
+    const markup = relayStep(
+      { relay: { ...noRelay(), deploy: { command: null, reason: 'no relay in this build' } } },
+      { more: true }
+    )
+    expect(disabledButtons(markup)).toContain('Run on This Mac')
     expect(markup).not.toContain('teamree-relay serve')
     expect(text(markup)).toContain('no relay in this build')
   })
 
   // Stripping the last word off an unrecognised command would run something nobody can predict.
   it('is disabled, rather than guessing, when the reported command is not the launcher', () => {
-    const markup = render({
-      relay: { ...noRelay(), deploy: { command: 'npx wrangler deploy --cwd relay', reason: null } }
-    })
+    const markup = relayStep(
+      { relay: { ...noRelay(), deploy: { command: 'npx wrangler deploy --cwd relay', reason: null } } },
+      { more: true }
+    )
     expect(text(markup)).toContain('Unrecognised relay command')
     expect(markup).not.toContain('npx wrangler serve')
   })
@@ -393,25 +456,27 @@ describe('checking a relay', () => {
   const deployPane = pane({ kind: 'deploy', terminalId: 'term_1' })
 
   it('is offered beside the relay this project is configured with', () => {
-    const markup = render({ list: enrolled(), relay: relayOnDisk() })
+    const markup = relayStep({ list: enrolled(), relay: relayOnDisk() })
     const url = markup.indexOf('wss://relay.example/v1/relay')
-    const check = markup.indexOf('Check this relay</button>')
+    const check = markup.indexOf('Check Relay</button>')
     expect(url).toBeGreaterThan(-1)
     expect(check).toBeGreaterThan(url)
   })
 
   it('says what a pass proves, and what it says nothing about', () => {
-    expect(text(render({ list: enrolled(), relay: relayOnDisk() }))).toContain(RELAY_CHECK.proves)
+    expect(text(relayStep({ list: enrolled(), relay: relayOnDisk() }))).toContain(RELAY_CHECK.proves)
   })
 
   // The other place somebody has a URL and a doubt: the one typed and not yet committed.
-  it('is disabled beside the paste field until something is typed, and says so', () => {
-    const shown = text(render())
-    expect(shown).toContain(RELAY_CHECK.nothing)
+  it('is disabled beside the paste field until something is typed, with no error before any typing', () => {
+    const markup = relayStep({}, { paste: true })
+    expect(disabledButtons(markup)).toContain(RELAY_CHECK.draftButton)
+    expect(markup).not.toMatch(/relay-check__blocked|members__relay-error|field__error|aria-invalid="true"/)
+    expect(text(markup)).not.toContain('No URL yet')
   })
 
   it('cannot be pressed while a pane is already open, and says which one', () => {
-    const shown = text(render({ list: enrolled(), relay: relayOnDisk(), pane: deployPane }))
+    const shown = text(relayStep({ list: enrolled(), relay: relayOnDisk(), pane: deployPane }))
     expect(shown).toContain('Deploy pane open below')
   })
 })
@@ -419,46 +484,46 @@ describe('checking a relay', () => {
 // One slot, three things that can be in it; a second is refused rather than replacing what somebody is reading.
 describe('the one relay pane', () => {
   it('says which of the three it is holding', () => {
-    const shown = text(render({ pane: pane({ kind: 'serve' }) }))
+    const shown = text(relayStep({ pane: pane({ kind: 'serve' }) }))
     expect(shown).toContain('Running a relay on this Mac')
   })
 
-  // Disabled, not merely present: `Deploy a relay` is on the page either way.
+  // Disabled, not merely present: `Deploy a Relay` is on the page either way.
   it('greys the other buttons while one is open, with the reason beside them', () => {
-    const markup = render({ pane: pane({ kind: 'serve' }) })
+    const markup = relayStep({ pane: pane({ kind: 'serve' }) })
     expect(markup).toContain('disabled=""')
-    expect(disabledButtons(markup)).toContain('Deploy a relay')
+    expect(disabledButtons(markup)).toContain('Deploy a Relay')
     expect(text(markup)).toContain('Relay pane open below')
   })
 
   // Offered rather than written, with what committing it means beside the button.
   it('offers the URL a relay run here printed, and says what committing it costs', () => {
-    const markup = render({
+    const markup = relayStep({
       pane: pane({ kind: 'serve', url: 'ws://192.168.1.23:8787/v1/relay', urls: ['ws://192.168.1.23:8787/v1/relay'] })
     })
     const shown = text(markup)
     expect(shown).toContain('Relay at')
     expect(shown).toContain('ws://192.168.1.23:8787/v1/relay')
-    expect(markup).toContain('Use this relay URL</button>')
+    expect(markup).toContain('Use This URL</button>')
     expect(shown).toContain(RELAY_SERVE.committing)
   })
 
   // A check echoes its input, and its scrollback says `dialling ws://…`: one loosened scheme list
   // upstream would put a dead relay under a button that commits it.
   it('offers nothing out of a check pane, even one that somehow carries a URL', () => {
-    const markup = render({
+    const markup = relayStep({
       list: enrolled(),
       relay: relayOnDisk(),
       pane: pane({ kind: 'check', terminalId: 'term_3', running: false, url: 'ws://10.0.0.4:8787/v1/relay' })
     })
     expect(markup).toContain('Checking a relay')
-    expect(markup).not.toContain('Use this relay URL</button>')
+    expect(markup).not.toContain('Use This URL</button>')
     expect(text(markup)).not.toContain('The relay is at')
   })
 
   // An exited serve is a closed port; the address in the scrollback answers nothing.
   it('withdraws the offer when the relay it was running has stopped, and says why', () => {
-    const markup = render({
+    const markup = relayStep({
       pane: pane({
         kind: 'serve',
         running: false,
@@ -466,13 +531,13 @@ describe('the one relay pane', () => {
         urls: ['ws://192.168.1.23:8787/v1/relay']
       })
     })
-    expect(markup).not.toContain('Use this relay URL</button>')
+    expect(markup).not.toContain('Use This URL</button>')
     expect(text(markup)).toContain(RELAY_SERVE_STOPPED)
   })
 
   // The gate is on the verb, not `running`: a deploy exiting is how it succeeds, and the Worker outlives the pane.
   it('keeps offering what a finished deploy printed, because that outlives the pane', () => {
-    const markup = render({
+    const markup = relayStep({
       pane: pane({
         kind: 'deploy',
         running: false,
@@ -480,17 +545,17 @@ describe('the one relay pane', () => {
         urls: ['wss://teamree-relay.ada.workers.dev/v1/relay']
       })
     })
-    expect(markup).toContain('Use this relay URL</button>')
+    expect(markup).toContain('Use This URL</button>')
     expect(text(markup)).toContain('Deployed at')
   })
 
   // A finished pane with nothing to show reads exactly like one still working.
   it('says so when a command has finished and printed no relay URL', () => {
-    expect(text(render({ pane: pane({ kind: 'deploy', running: false }) }))).toContain(RELAY_PANE_NO_URL)
+    expect(text(relayStep({ pane: pane({ kind: 'deploy', running: false }) }))).toContain(RELAY_PANE_NO_URL)
   })
 
   it('says none of that while the command is still running', () => {
-    const shown = text(render({ pane: pane({ kind: 'deploy' }) }))
+    const shown = text(relayStep({ pane: pane({ kind: 'deploy' }) }))
     expect(shown).not.toContain(RELAY_PANE_NO_URL)
     expect(shown).not.toContain(RELAY_SERVE_STOPPED)
   })
@@ -507,7 +572,7 @@ describe('a Mac with more than one address', () => {
     })
 
   it('offers every other address the pane printed, each with a button of its own', () => {
-    const markup = render({ pane: several() })
+    const markup = relayStep({ pane: several() })
     expect(markup).toContain('Use ws://192.168.1.23:8787/v1/relay</button>')
     expect(markup).toContain('Use ws://127.0.0.1:8787/v1/relay</button>')
     // The one already offered above is not offered twice.
@@ -515,11 +580,11 @@ describe('a Mac with more than one address', () => {
   })
 
   it('says the one it leads with is a guess, and that the order is not a ranking', () => {
-    expect(text(render({ pane: several() }))).toContain(RELAY_SERVE.choice)
+    expect(text(relayStep({ pane: several() }))).toContain(RELAY_SERVE.choice)
   })
 
   it('says none of that when the relay printed one address', () => {
-    const markup = render({
+    const markup = relayStep({
       pane: pane({ kind: 'serve', url: 'ws://192.168.1.23:8787/v1/relay', urls: ['ws://192.168.1.23:8787/v1/relay'] })
     })
     expect(text(markup)).not.toContain(RELAY_SERVE.choice)
@@ -538,22 +603,20 @@ describe('an override that is set and cannot be read', () => {
   })
 
   it('names the variable and the fix, above everything else on the step', () => {
-    const markup = render({ relay: broken() })
+    const markup = relayStep({ relay: broken() })
     const said = text(markup)
     expect(said).toContain('TEAMREE_RELAY_URL=wss//typo.example/v1/relay is not a relay URL and hides .teamree/relay')
     // First on the step: every other line is about a relay the app will not dial.
-    expect(markup.indexOf('TEAMREE_RELAY_URL=wss//typo')).toBeLessThan(
-      markup.indexOf('Change the relay for this project')
-    )
+    expect(markup.indexOf('TEAMREE_RELAY_URL=wss//typo')).toBeLessThan(markup.indexOf('Paste URL…'))
   })
 
   // The foot-of-step paragraph is written for an override that is winning; this one is breaking.
   it('does not also claim the environment is beating the file', () => {
-    expect(text(render({ relay: broken() }))).not.toContain('the environment is beating it for this run')
+    expect(text(relayStep({ relay: broken() }))).not.toContain('the environment is beating it for this run')
   })
 
   it('says none of that when the override is one teamree can dial', () => {
-    expect(text(render({ list: enrolled(), relay: relayOnDisk() }))).not.toContain('is not a relay URL')
+    expect(text(relayStep({ list: enrolled(), relay: relayOnDisk() }))).not.toContain('is not a relay URL')
   })
 })
 
@@ -571,14 +634,14 @@ describe('a checkout with no origin', () => {
     const shown = text(render({ status: noOrigin }))
     expect(shown).toMatch(/No origin remote/)
     expect(shown).toContain('Origin')
-    expect(shown).toContain('Add origin')
+    expect(shown).toContain('Add Origin')
     // Both kinds of answer are one disclosure away, rather than in the banner.
     expect(shown).toContain('Requirements')
   })
 
   it('marks the connected step blocked, in a word', () => {
-    expect(render({ status: noOrigin })).toContain('step--blocked')
-    expect(text(render({ status: noOrigin }))).toContain('blocked')
+    expect(render({ status: noOrigin })).toContain('class="step step--blocked" data-step="connected"')
+    expect(render({ status: noOrigin })).toContain('aria-label="blocked"')
   })
 
   it('says none of that when origin is fine', () => {
@@ -598,33 +661,33 @@ describe('the button the project header sends people to', () => {
 
 describe('before anything has been read', () => {
   it('says it is reading rather than reporting nothing as “not set up”', () => {
-    const shown = text(render({ list: undefined, relay: undefined, status: undefined }))
-    expect(shown.match(/Reading…/g)?.length).toBe(3)
-    expect(render({ list: undefined, relay: undefined, status: undefined })).not.toContain(JOIN_BUTTON)
+    const unread = { list: undefined, relay: undefined, status: undefined }
+    expect(text(render(unread))).toContain('Reading…')
+    for (const open of ['relay', 'connected'] as const) expect(text(render(unread, { open }))).toContain('Reading…')
+    expect(render(unread)).not.toContain(JOIN_BUTTON)
   })
 })
 
 describe('a read that threw', () => {
   // A zero-byte identity.key is the common one.
   it('says what failed, in the step it failed for, and offers to read again', () => {
-    const shown = text(
-      render({
-        list: undefined,
-        status: undefined,
-        readErrors: { list: 'EISDIR: illegal operation on a directory, read', status: 'identity.key is empty' }
-      })
-    )
+    const failed: Partial<TeamworkStepsProps> = {
+      list: undefined,
+      status: undefined,
+      readErrors: { list: 'EISDIR: illegal operation on a directory, read', status: 'identity.key is empty' }
+    }
+    const shown = text(render(failed))
     expect(shown).toContain('EISDIR: illegal operation on a directory, read')
-    expect(shown).toMatch(/identity\.key is empty/i)
     expect(shown).not.toMatch(/Reading this machine’s identity/)
-    expect(shown).toContain('Try again')
+    expect(shown).toContain('Try Again')
+    expect(text(render(failed, { open: 'connected' }))).toMatch(/identity\.key is empty/i)
   })
 })
 
 describe('a roster nothing is watching', () => {
   // The sweep is the floor under a lost watch: the roster catches up on a timer.
   it('says the list is only as fresh as this read, rather than telling somebody to reopen it', () => {
-    const shown = text(render({ list: roster({ watched: false }), relay: relayOnDisk() }))
+    const shown = text(render({ list: roster({ watched: false }), relay: relayOnDisk() }, { open: 'connected' }))
     expect(shown).toContain('Not watching · may be stale')
     expect(shown).not.toMatch(/Open this dialog again after a pull/)
   })
@@ -640,10 +703,10 @@ describe('a relay that only the environment names', () => {
   })
 
   // The tunnel option tells people to do this; following it must not leave step 3 not done for ever.
-  it('stops offering the four ways to get one to somebody who has followed one', () => {
-    const shown = text(render({ list: enrolled(), relay: overridden() }))
-    expect(shown).not.toContain('A VPS you rent')
-    expect(shown).toContain('done for this run')
+  it('stops offering the other ways to get one to somebody who has followed one', () => {
+    const markup = relayStep({ list: enrolled(), relay: overridden() })
+    expect(markup).not.toContain('>More</button>')
+    expect(markup).toContain('aria-label="done for this run"')
   })
 })
 
@@ -663,7 +726,7 @@ describe('the choice before the steps', () => {
     expect(markup).toContain('Join…</button>')
     expect(shown).not.toContain('?')
     // A wall of steps under an unanswered question is what the question replaced.
-    expect(shown).not.toContain('1. Your identity')
+    expect(markup).not.toContain('step__title')
   })
 
   // One primary, and no card around either button or around the pair.
@@ -710,13 +773,14 @@ describe('the choice before the steps', () => {
       }
     })
     expect(working).not.toContain('Join…</button>')
-    expect(text(working)).toContain('Teamwork is working')
+    expect(working).toContain('class="step step--done step--open" data-step="connected"')
+    expect(text(working)).toContain('priya connected')
   })
 
   // People pick the wrong one, and a choice that cannot be unmade is a trap.
   it('keeps the answer on screen with a way to take it back', () => {
     const shown = text(render({ path: 'join' }))
-    expect(shown).toContain('Not that')
+    expect(render({ path: 'join' })).toContain('Back</button>')
     expect(shown).toContain('Join a Team')
     expect(shown).not.toMatch(/You are/)
   })
@@ -733,21 +797,23 @@ describe('what a step puts on screen', () => {
 
   it('reads the same whichever of the two jobs it is', () => {
     const steps = (path: 'start' | 'join'): string[] =>
-      [...render({ path }).matchAll(/class="step__summary">([^<]*)</g)].map((found) => found[1] as string)
+      (['identity', 'key', 'relay', 'push', 'connected'] as const).map(
+        (open) => render({ path }, { open }).match(/class="step__summary">([^<]*)</)?.[1] ?? ''
+      )
     expect(steps('start')).toEqual(steps('join'))
-    expect(steps('start').length).toBe(5)
+    expect(steps('start').filter(Boolean).length).toBe(5)
   })
 
   // Two relays is two halves of a team that never meet.
   it('warns a joiner whose team has not pushed a relay yet, before offering them one', () => {
-    const shown = text(render({ path: 'join' }))
+    const shown = text(relayStep({ path: 'join' }))
     const warning = shown.indexOf('.teamree/relay not pushed yet')
     expect(warning).toBeGreaterThan(-1)
-    expect(warning).toBeLessThan(shown.indexOf('Deploy a relay'))
+    expect(warning).toBeLessThan(shown.indexOf('Deploy a Relay'))
   })
 
   it('says none of that to somebody who already has a relay', () => {
-    expect(text(render({ path: 'join', relay: relayOnDisk() }))).not.toContain('Nobody has pushed')
+    expect(text(relayStep({ path: 'join', relay: relayOnDisk() }))).not.toContain('not pushed yet')
   })
 })
 
@@ -855,7 +921,7 @@ describe('a push that did not land', () => {
         })
       )
     )
-    expect(shown).toContain('Try the push again')
+    expect(shown).toContain('Retry Push')
     expect(shown).toContain('git pull --rebase')
     expect(shown).not.toMatch(/--force/)
   })
@@ -916,43 +982,45 @@ describe('a push that did not land', () => {
   })
 })
 
-describe('how it ends', () => {
-  const finished = (overrides: Partial<TeamworkStepsProps> = {}): Partial<TeamworkStepsProps> => ({
-    list: enrolled(),
-    relay: relayOnDisk(),
-    ...overrides
+// One next action: the open step and its one primary button, nothing repeated underneath.
+describe('the page as a whole', () => {
+  it('opens only the step to do next, the rest one line each', () => {
+    const markup = render()
+    expect(markup.match(/class="step__summary"/g)?.length).toBe(1)
+    expect(markup.match(/aria-expanded="true"/g)?.length).toBe(1)
+    expect(markup).toContain('class="step step--done" data-step="identity"')
+    expect(text(markup)).not.toMatch(/not done yet|blocked/)
   })
 
-  // Half-working is the normal outcome, so the ending is four verdicts and not one.
-  it('says which halves worked, one line each', () => {
-    const shown = text(render(finished()))
-    expect(shown).toContain('Your key')
-    expect(shown).toContain('The relay')
-    expect(shown).toContain('Pushed')
-    expect(shown).toContain('Connected')
-    expect(shown).toContain('teamree cannot check this')
+  it('opens another step when its line is pressed, and closes the one that was open', () => {
+    const markup = render({}, { open: 'push' })
+    expect(markup).toContain('class="step step--todo step--open" data-step="push"')
+    expect(markup).not.toContain(JOIN_BUTTON)
   })
 
-  it('names the one thing left to do', () => {
-    expect(text(render(finished({ list: roster() })))).toContain('Step 2: Add my key')
+  it('has one primary button on the open step', () => {
+    for (const presses of [{}, { open: 'relay' as const }]) {
+      expect(buttonsIn(render({}, presses)).filter((button) => button.primary)).toHaveLength(1)
+    }
+    expect(buttonsIn(render({ list: enrolled(), relay: relayOnDisk() })).filter((b) => b.primary)).toHaveLength(1)
+  })
+
+  it('repeats no step underneath the steps', () => {
+    const shown = text(render({ list: enrolled(), relay: relayOnDisk() }))
+    expect(shown).not.toMatch(/Not finished|Step \d|teamree cannot check this/)
   })
 
   // There is no invitation in this protocol, which is why the person setting it up has to write one.
   it('writes the invitation out in full, and offers to copy it', () => {
-    const shown = text(render(finished()))
-    expect(shown).toContain('Invite somebody')
+    const shown = text(render({ list: enrolled(), relay: relayOnDisk() }))
     expect(shown).toContain('git clone https://example.com/ada/pager.git')
-    expect(shown).toContain('Copy the invitation')
+    expect(shown).toContain('Copy Invitation')
   })
 
-  it('offers no invitation for a checkout with no repository URL to send', () => {
-    const shown = text(
-      render(
-        finished({
-          status: status({ origin: { ok: false, reason: 'this project has no origin remote' } })
-        })
-      )
-    )
-    expect(shown).not.toContain('Invite somebody')
+  it('offers no invitation without a repository URL, to a joiner, or before this key is on the roster', () => {
+    const noOrigin = status({ origin: { ok: false, reason: 'this project has no origin remote' } })
+    expect(text(render({ status: noOrigin }))).not.toContain('Copy Invitation')
+    expect(text(render({ path: 'join' }))).not.toContain('Copy Invitation')
+    expect(text(render())).not.toContain('Copy Invitation')
   })
 })

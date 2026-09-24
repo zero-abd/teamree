@@ -63,10 +63,22 @@ describe('the keyboard section', () => {
   // commands here would be the second hand-written copy of the bindings that
   // the generated section exists to avoid.
   // Named as the menu bar and the palette name it.
-  it.each(BOUND.map((shortcut) => [menuLabel(shortcut.command), shortcut] as const))('lists %s', (label, shortcut) => {
+  it.each(BOUND.map((shortcut) => [menuLabel(shortcut.command, INITIAL), shortcut] as const))(
+    'lists %s',
+    (label, shortcut) => {
+      render(<HelpView modifier={APPLE} />)
+      expect(screen.getByText(label)).toBeDefined()
+      expect(screen.getByText(formatChord(shortcut.chord as Chord, APPLE)).tagName).toBe('KBD')
+    }
+  )
+
+  // One label, the menu's: what pressing it does now.
+  it('names the panel toggles for what they do now', () => {
+    useWorkspaceStore.setState({ sidebarVisible: false, rightPanelOpen: true })
     render(<HelpView modifier={APPLE} />)
-    expect(screen.getByText(label)).toBeDefined()
-    expect(screen.getByText(formatChord(shortcut.chord as Chord, APPLE)).tagName).toBe('KBD')
+    expect(screen.getByText('Show Sidebar')).toBeDefined()
+    expect(screen.getByText('Hide Right Panel')).toBeDefined()
+    expect(screen.queryByText(/Show\/Hide/)).toBeNull()
   })
 
   it('lists no more and no fewer than the table has', () => {
@@ -108,8 +120,9 @@ describe('what a worktree is', () => {
   it('answers the question the rest of the window assumes you know', () => {
     render(<HelpView modifier={APPLE} />)
     expect(screen.getByRole('heading', { name: 'What a worktree is' })).toBeDefined()
-    expect(screen.getByText(/second working directory/)).toBeDefined()
-    expect(screen.getByText(/closes its panes/)).toBeDefined()
+    const section = screen.getByRole('heading', { name: 'What a worktree is' }).closest('section') as HTMLElement
+    expect(section.querySelectorAll('p')).toHaveLength(1)
+    expect(section.textContent).toMatch(/second working directory.*closes them/)
   })
 })
 
@@ -121,8 +134,8 @@ describe('the teamree command', () => {
 
   it('says what to type once the command is on PATH', () => {
     render(<HelpView modifier={APPLE} />)
-    expect(screen.getByText(/teamree help/)).toBeDefined()
-    expect(screen.queryByRole('button', { name: 'Open settings' })).toBeNull()
+    expect(screen.getByText('teamree help').tagName).toBe('CODE')
+    expect(screen.queryByRole('button', { name: 'Open Settings' })).toBeNull()
   })
 
   it('sends you to settings instead when it is not', () => {
@@ -130,8 +143,10 @@ describe('the teamree command', () => {
     render(<HelpView modifier={APPLE} />)
     expect(screen.getByText('Not on your PATH')).toBeDefined()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open settings' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Settings' }))
     expect(toggleSettings).toHaveBeenCalled()
+    const section = screen.getByRole('heading', { name: 'The teamree command' }).closest('section') as HTMLElement
+    expect(section.textContent).not.toMatch(/[a-z]\.(\s|$)/)
   })
 
   it('offers the documents in the reader’s own browser', () => {

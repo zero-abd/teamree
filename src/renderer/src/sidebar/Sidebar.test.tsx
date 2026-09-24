@@ -170,13 +170,12 @@ describe('having nothing to show', () => {
     expect(screen.queryByText('No projects yet')).toBeNull()
   })
 
-  it('offers to start one when a project has no worktrees', () => {
+  // The project row's New Task button is the way in; a sentence under it would be a second.
+  it('draws nothing under a project with no worktrees', () => {
     mount()
-    expect(screen.getByText(/No worktrees yet/)).toBeTruthy()
-    const start = screen.getByRole('button', { name: 'Start one' })
-    expect(start.className).toBe('button button--ghost button--tiny')
-    start.click()
-    expect(openDialog).toHaveBeenCalledWith({ kind: 'new-task', projectId: 'p1' })
+    expect(screen.queryByText(/No worktrees yet/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Start one' })).toBeNull()
+    expect(document.querySelector('.project__none')).toBeNull()
   })
 
   // Never heard from is not away and not "no worktrees"; inventing a row would be inventing work.

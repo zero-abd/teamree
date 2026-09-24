@@ -270,6 +270,17 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
       })
       return result.canceled ? null : (result.filePaths[0] ?? null)
     })
+    ipcMain.handle('teamree:choose-folder', async (event, defaultPath: unknown) => {
+      const owner = BrowserWindow.fromWebContents(event.sender)
+      if (!owner || event.senderFrame !== event.sender.mainFrame) return null
+      const result = await dialog.showOpenDialog(owner, {
+        title: 'Choose Folder',
+        properties: ['openDirectory', 'createDirectory'],
+        buttonLabel: 'Choose',
+        ...(typeof defaultPath === 'string' ? { defaultPath } : {})
+      })
+      return result.canceled ? null : (result.filePaths[0] ?? null)
+    })
     // "Reveal in Finder" rides this bridge, not the runtime contract: a teammate
     // across the relay must never open a window here. See src/main/reveal.
     registerRevealHandler(ipcMain, {

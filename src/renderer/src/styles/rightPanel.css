@@ -93,12 +93,15 @@
   cursor: pointer;
 }
 
+/* Down the edge a count sits under its glyph, clear of it: a corner badge covered the icon. */
 .panel__rail--edge .panel__tab {
-  position: relative;
+  flex-direction: column;
   justify-content: center;
-  width: 28px;
-  height: 26px;
-  padding: 0;
+  gap: 2px;
+  width: 24px;
+  min-height: 26px;
+  height: auto;
+  padding: 4px 0;
 }
 
 .panel__tab svg {
@@ -135,15 +138,12 @@
   text-align: center;
 }
 
-/* Down the edge the count sits in the tab's own corner, inside the rail. */
 .panel__rail--edge .panel__count {
-  position: absolute;
-  top: 1px;
-  right: 3px;
-  min-width: 11px;
-  padding: 0 2px;
-  font-size: 8.5px;
-  line-height: 11px;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 3px;
+  font-size: 9px;
+  line-height: 12px;
 }
 
 .panel__fold {
