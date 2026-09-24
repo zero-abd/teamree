@@ -1095,6 +1095,8 @@ function SetupCommand({ project }: { project: Project }): React.JSX.Element {
   const commit = (): void => {
     const next = draft.trim()
     if (next === stored) return
+    // Emptied, the field falls back to the repository's command, and says so.
+    if (next === '' && shared !== undefined) setDraft(shared)
     void setProjectPaths(project.id, { setupCommand: next })
   }
 
@@ -1167,6 +1169,7 @@ function PathList({
       .map((line) => line.trim())
       .filter((line) => line.length > 0)
     if (next.join('\n') === stored) return
+    if (next.length === 0 && repository !== undefined) setDraft(repository.join('\n'))
     save(next)
   }
 

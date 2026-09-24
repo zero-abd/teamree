@@ -1079,6 +1079,16 @@ describe('setup shared through .teamree/project.json', () => {
     expect(setProjectPaths).toHaveBeenCalledWith('p1', { setupCommand: '' })
   })
 
+  it('shows the repository’s command again when the field is emptied', () => {
+    seed({ projects: [{ ...project, setupCommand: 'pnpm i', repository: { setupCommand: 'npm ci' } }] })
+    render(<SettingsView />)
+    const field = screen.getByLabelText('Setup command') as HTMLInputElement
+    fireEvent.change(field, { target: { value: '' } })
+    fireEvent.blur(field)
+    expect(setProjectPaths).toHaveBeenCalledWith('p1', { setupCommand: '' })
+    expect(field.value).toBe('npm ci')
+  })
+
   it('says nothing about a source for a value the repository does not carry', () => {
     seed({ projects: [{ ...project, setupCommand: 'npm ci' }] })
     render(<SettingsView />)
