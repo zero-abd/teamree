@@ -157,7 +157,7 @@ export function CommandPalette({
             editingMarkdown,
             terminalFontSize,
             closedPanes,
-            closedFiles
+            closedFiles,
             terminals,
             paneSeenAt
           })
