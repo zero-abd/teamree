@@ -23,6 +23,8 @@ export type TerminalMethodName =
   | 'terminal.split'
   | 'terminal.relaunch'
   | 'terminal.agentEvent'
+  | 'terminal.closed'
+  | 'terminal.reopen'
   | 'layout.get'
   | 'layout.set'
   | 'agent.list'
@@ -47,6 +49,8 @@ export const terminalMethodSchemas = {
   'terminal.split': Params.terminalSplit,
   'terminal.relaunch': Params.terminalRelaunch,
   'terminal.agentEvent': Params.terminalAgentEvent,
+  'terminal.closed': Params.terminalClosed,
+  'terminal.reopen': Params.terminalReopen,
   'layout.get': Params.layoutGet,
   'layout.set': Params.layoutSet,
   'agent.list': Params.agentList
@@ -126,6 +130,8 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
         ...(params.detail === undefined ? {} : { detail: params.detail }),
         ...(params.message === undefined ? {} : { message: params.message })
       }),
+    'terminal.closed': async (params) => manager.closedPanes(params.worktreeId),
+    'terminal.reopen': async (params) => manager.reopen(params),
     'layout.get': async (params) => manager.layoutGet(params.worktreeId),
     'layout.set': async (params) => manager.layoutSet(params)
   }
@@ -158,6 +164,8 @@ export function registerTerminalHandlers(registry: MethodRegistry, service: Term
     service.schemas['terminal.agentEvent'],
     service.handlers['terminal.agentEvent']
   )
+  registry.register('terminal.closed', service.schemas['terminal.closed'], service.handlers['terminal.closed'])
+  registry.register('terminal.reopen', service.schemas['terminal.reopen'], service.handlers['terminal.reopen'])
   registry.register('layout.get', service.schemas['layout.get'], service.handlers['layout.get'])
   registry.register('layout.set', service.schemas['layout.set'], service.handlers['layout.set'])
   registry.register('agent.list', service.schemas['agent.list'], service.handlers['agent.list'])

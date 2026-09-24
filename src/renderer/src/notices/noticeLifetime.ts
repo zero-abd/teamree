@@ -15,9 +15,13 @@ import type { Notice } from '../state/workspaceStore'
  */
 export const NOTICE_LIFETIME_MS = 8_000
 
+/** How long an Undo is offered: its window, not a reading time. */
+export const UNDO_LIFETIME_MS = 10_000
+
 /** How long this notice stays, or null for as long as it takes to be dismissed. */
 export function noticeLifetime(notice: Pick<Notice, 'tone' | 'action'>): number | null {
   if (notice.tone === 'error') return null
+  if (notice.action !== undefined && 'undo' in notice.action) return UNDO_LIFETIME_MS
   if (notice.action !== undefined) return null
   return NOTICE_LIFETIME_MS
 }

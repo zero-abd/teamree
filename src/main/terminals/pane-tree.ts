@@ -100,6 +100,65 @@ export function removePane(root: PaneNode | null, terminalId: string): PaneNode 
   return normalisePane({ kind: 'split', direction: root.direction, sizes: keptSizes, children: kept })
 }
 
+/** Where a pane sat: the panes of the sibling beside it, the split's direction, and which side. */
+export type PanePlace = { beside: string[]; direction: SplitDirection; before: boolean }
+
+/** The place of pane `id` in `root`, or undefined when it has no sibling to sit beside. */
+export function placeOf(root: PaneNode | null, id: string): PanePlace | undefined {
+  if (root === null || root.kind === 'leaf') return undefined
+  const index = root.children.findIndex((child) => child.kind === 'leaf' && child.terminalId === id)
+  if (index < 0 || isFileColumn(root)) {
+    for (const child of root.children) {
+      const found = placeOf(child, id)
+      if (found !== undefined) return found
+    }
+    return undefined
+  }
+  const sibling = root.children[index - 1] ?? root.children[index + 1]
+  if (sibling === undefined) return undefined
+  return { beside: terminalIdsIn(sibling), direction: root.direction, before: index === 0 }
+}
+
+/**
+ * Puts pane `id` back at `place`: beside the sibling in a split of that direction, taking half
+ * the sibling's share; else dividing the first of the sibling's panes still open. Null when none is.
+ */
+export function insertBeside(root: PaneNode | null, place: PanePlace, id: string): PaneNode | null {
+  if (root === null) return null
+  const beside = new Set(place.beside)
+  const isSibling = (node: PaneNode): boolean => {
+    const ids = terminalIdsIn(node)
+    return ids.length > 0 && ids.every((each) => beside.has(each))
+  }
+  const pair = (node: PaneNode): PaneNode[] => (place.before ? [leafPane(id), node] : [node, leafPane(id)])
+
+  let placed = false
+  const within = (node: PaneNode): PaneNode => {
+    if (placed || node.kind === 'leaf') return node
+    const index = isFileColumn(node) || node.direction !== place.direction ? -1 : node.children.findIndex(isSibling)
+    if (index < 0) return { ...node, children: node.children.map(within) }
+    placed = true
+    const sizes = normaliseSizes(node.sizes, node.children.length)
+    const half = (sizes[index] ?? 0) / 2
+    return {
+      ...node,
+      children: node.children.flatMap((child, at) => (at === index ? pair(child) : [child])),
+      sizes: sizes.flatMap((size, at) => (at === index ? [half, half] : [size]))
+    }
+  }
+  const target = terminalIdsIn(root).find((each) => beside.has(each))
+  const divided = (node: PaneNode): PaneNode => {
+    if ((node.kind === 'leaf' || isFileColumn(node)) && target !== undefined && containsTerminal(node, target)) {
+      return { kind: 'split', direction: place.direction, sizes: [0.5, 0.5], children: pair(node) }
+    }
+    return node.kind === 'leaf' ? node : { ...node, children: node.children.map(divided) }
+  }
+
+  const next = within(root)
+  if (placed) return normalisePane(next)
+  return target === undefined ? null : normalisePane(divided(root))
+}
+
 /** Sizes for `count` children: one non-negative fraction each, summing to 1. */
 export function normaliseSizes(sizes: readonly number[], count: number): number[] {
   if (count <= 0) return []

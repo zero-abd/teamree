@@ -7,6 +7,7 @@ import { hasCheckout } from '@shared/entities'
 import type {
   CliInstall,
   CliStatus,
+  ClosedPane,
   ConsentDecision,
   InstalledAgent,
   Layout,
@@ -17,6 +18,7 @@ import type {
   Project,
   PushFailureData,
   RelaySetting,
+  RemovedWorktree,
   TeammatePresence,
   TeamworkPublish,
   TeamworkPublishPlan,
@@ -58,6 +60,15 @@ import {
 import { closePaneWarning } from '../dialogs/closePaneModel'
 import { openInBrowser } from '../shell/openInBrowser'
 import { noticeLifetime } from '../notices/noticeLifetime'
+import {
+  nextToReopen,
+  readClosedFiles,
+  withClosedFile,
+  withoutClosedFile,
+  writeClosedFiles,
+  type ClosedFile,
+  type ClosedFiles
+} from './closedPanes'
 import type { TaskCreate } from '../dialogs/taskPlan'
 import {
   addTab,
@@ -79,6 +90,7 @@ import {
   withoutColumn
 } from '../panes/paneLayout'
 import { worktreeAfter, worktreeOrder } from '../sidebar/worktreeOrder'
+import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import {
   isWatchedPaneId,
   neighbourWatchId,
@@ -202,9 +214,14 @@ export type Notice = {
   id: number
   text: string
   tone: 'error' | 'info'
-  /** One thing to do about the notice: a page to open (`shell/openInBrowser.ts`), or a side to hide for room. */
-  action?: { label: string; url: string } | { label: string; hide: keyof Sides }
+  /** One thing to do about the notice: a page to open (`shell/openInBrowser.ts`), a side to hide for room, or an undo. */
+  action?: { label: string; url: string } | { label: string; hide: keyof Sides } | { label: string; undo: UndoTarget }
 }
+
+/** What an Undo puts back: a removed worktree, or one discard's paths. */
+export type UndoTarget =
+  | { kind: 'remove'; projectId: string; removedId: string }
+  | { kind: 'discard'; worktreeId: string; trashId: string }
 
 /** The last push of one worktree, as the Changes tab shows it. A failure is one clause, and git's words. */
 export type PushState =
@@ -406,6 +423,11 @@ type WorkspaceState = {
   agentsProbed: boolean
   /** True while a hunk is being staged or unstaged, so the controls settle. */
   hunkPending: boolean
+  /** Removed worktrees that can be restored, newest first, as last read. */
+  removedWorktrees: RemovedWorktree[]
+  /** Closed terminals the runtime can reopen, and closed file panes, by worktree id, newest first. */
+  closedPanes: Record<string, ClosedPane[]>
+  closedFiles: ClosedFiles
 
   collapsedProjects: Record<string, boolean>
   openWorktreeIds: string[]
@@ -475,6 +497,10 @@ type WorkspaceState = {
   confirmRemoveWorktree: (worktreeId: string, force: boolean) => Promise<void>
   /** Shown at once; a refusal puts the old name back. A blank name is ignored. */
   renameWorktree: (worktreeId: string, name: string) => Promise<void>
+  loadRemovedWorktrees: () => Promise<void>
+  /** Checks a removed worktree out again with its uncommitted work, and opens it. */
+  restoreWorktree: (projectId: string, removedId: string) => Promise<void>
+  undo: (target: UndoTarget) => Promise<void>
 
   openWorktree: (worktreeId: string) => Promise<void>
   closeWorktreeTab: (worktreeId: string) => void
@@ -490,6 +516,11 @@ type WorkspaceState = {
   splitFocusedPane: (direction: 'row' | 'column') => Promise<void>
   /** Closes a pane, asking first when the close would kill work. Every close path comes through here, so the question is asked once. */
   closeTerminal: (terminalId: string) => Promise<void>
+  loadClosedPanes: (worktreeId: string) => Promise<void>
+  /** Brings back the open worktree's last closed pane, of either kind. */
+  reopenClosedPane: () => Promise<void>
+  /** Brings back one closed terminal, or the last one; an agent resumes its conversation. */
+  reopenTerminal: (worktreeId: string, terminalId?: string) => Promise<void>
   /** Names a pane, or clears the name when given nothing. */
   renamePane: (terminalId: string, label: string) => Promise<void>
   /** Opens the tab's name field on a pane, or shuts it with null. */
@@ -736,6 +767,9 @@ let noticeSeq = 0
 
 /** The status-bar notice for a pane refused for want of room. */
 const NO_ROOM = 'No room for another pane'
+
+/** A title short enough to leave room for its notice's button. */
+const shortened = (title: string): string => (title.length > 32 ? `${title.slice(0, 31).trimEnd()}…` : title)
 
 const RECENT_FILES_KEPT = 30
 /** Stands in for the pane a split would make, to measure it before asking. */
@@ -1255,6 +1289,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   }
 
   /** Drops a worktree from this window once the runtime has really removed it. */
+  const keepClosedFile = (worktreeId: string, file: ClosedFile): void => {
+    const files = withClosedFile(get().closedFiles, worktreeId, file)
+    set({ closedFiles: files })
+    writeClosedFiles(storage, files)
+  }
+
   const forgetWorktree = (worktreeId: string): void => {
     forgetEdits(editedIn(worktreeId))
     useWorkspaceStore.getState().closeWorktreeTab(worktreeId)
@@ -1374,6 +1414,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     agents: [],
     agentsProbed: false,
     hunkPending: false,
+    removedWorktrees: [],
+    closedPanes: {},
+    closedFiles: readClosedFiles(storage),
 
     // Folded projects are remembered with the sidebar's width. Tabs are restored in `bootstrap`,
     // once the runtime has said which worktrees still exist.
@@ -1647,9 +1690,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
       set({ dialog: null })
       try {
-        await runtimeClient.call('worktree.remove', force ? { worktreeId, force: true } : { worktreeId })
+        const removed = await runtimeClient.call(
+          'worktree.remove',
+          force ? { worktreeId, force: true } : { worktreeId }
+        )
         forgetWorktree(worktreeId)
         if (retrying && worktree) await recreateWorktree(worktree)
+        else if (worktree && removed.trashId !== undefined) {
+          const undo: UndoTarget = { kind: 'remove', projectId: worktree.projectId, removedId: removed.trashId }
+          notify(`Removed "${shortened(worktreeLabel(worktreeDisplay(worktree)))}"`, 'info', { label: 'Undo', undo })
+        }
       } catch (error) {
         // Something appeared since the dialog read the checkout: ask again, and it reads again.
         if (!force && isRefusal(error)) {
@@ -1657,6 +1707,37 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           return
         }
         failed(retrying ? 'Retry failed' : 'Could not remove the worktree')(error)
+      }
+    },
+
+    async loadRemovedWorktrees() {
+      // Silent: the lists that read it are menus, and an empty one says as much.
+      const removed = await runtimeClient.call('worktree.removed', {}).catch(() => null)
+      if (removed !== null) set({ removedWorktrees: removed })
+    },
+
+    async restoreWorktree(projectId, removedId) {
+      try {
+        const worktree = await runtimeClient.call('worktree.restore', { projectId, removedId })
+        set((state) => ({
+          worktrees: [...state.worktrees.filter((entry) => entry.id !== worktree.id), worktree],
+          removedWorktrees: state.removedWorktrees.filter((entry) => entry.id !== removedId)
+        }))
+        await get().openWorktree(worktree.id)
+      } catch (error) {
+        failed('Could not restore the worktree')(error)
+      }
+    },
+
+    async undo(target) {
+      if (target.kind === 'remove') {
+        await get().restoreWorktree(target.projectId, target.removedId)
+        return
+      }
+      try {
+        await runtimeClient.call('worktree.undoDiscard', { worktreeId: target.worktreeId, trashId: target.trashId })
+      } catch (error) {
+        failed('Could not undo the discard')(error)
       }
     },
 
@@ -1683,6 +1764,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           : {})
       }))
       if (changesOnScreen(get())) readChangesNow(worktreeId)
+      void get().loadClosedPanes(worktreeId)
       // Through the queue, so opening a tab cannot interleave with an in-flight refetch.
       refresher.request(refreshTargets({ terminals: true, layouts: [worktreeId], statuses: [worktreeId] }))
       await refresher.flush()
@@ -1850,6 +1932,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         forgetEdits([terminalId])
         get().setPaneDiff(terminalId, false)
         if (get().expandedTerminalId === terminalId) set({ expandedTerminalId: null })
+        const leaf = fileLeavesIn(layout.root).find((entry) => entry.terminalId === terminalId)
+        if (leaf !== undefined) keepClosedFile(activeWorktreeId, { leaf, closedAt: Date.now() })
         return
       }
 
@@ -1879,6 +1963,56 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // Closing the pane that filled the workspace is asking for the tree back.
         return { terminals, ...(state.expandedTerminalId === terminalId ? { expandedTerminalId: null } : {}) }
       })
+      await get().loadClosedPanes(activeWorktreeId)
+    },
+
+    async loadClosedPanes(worktreeId) {
+      const closed = await runtimeClient.call('terminal.closed', { worktreeId }).catch(() => null)
+      if (closed !== null) set((state) => ({ closedPanes: { ...state.closedPanes, [worktreeId]: closed } }))
+    },
+
+    async reopenClosedPane() {
+      const worktreeId = get().activeWorktreeId
+      if (worktreeId === null) return
+      const next = nextToReopen(get().closedPanes[worktreeId] ?? [], get().closedFiles[worktreeId] ?? [])
+      if (next === null) return
+      if (next.kind === 'terminal') {
+        await get().reopenTerminal(worktreeId, next.terminalId)
+        return
+      }
+      const files = withoutClosedFile(get().closedFiles, worktreeId, next.file)
+      set({ closedFiles: files })
+      writeClosedFiles(storage, files)
+      const { leaf } = next.file
+      if (isWorktreeFileLeaf(leaf)) {
+        get().openFilePane(worktreeId, leaf.path)
+        return
+      }
+      const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
+      placeFileLeaf(layout, { ...leaf, terminalId: newFilePaneId() })
+    },
+
+    async reopenTerminal(worktreeId, terminalId) {
+      if (get().expandedTerminalId !== null) restoreZoom()
+      const room = roomOrRefuse(worktreeId)
+      if (!room) return
+      try {
+        const terminal = await runtimeClient.call('terminal.reopen', {
+          worktreeId,
+          ...(terminalId === undefined ? {} : { terminalId }),
+          ...(room.area === undefined ? {} : { area: room.area }),
+          ...(room.cell === undefined ? {} : { cell: room.cell }),
+          ...(room.minPane === undefined ? {} : { minPane: room.minPane })
+        })
+        set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
+        panesAskedFor.add(terminal.id)
+        refresher.request(refreshTargets({ layouts: [worktreeId] }))
+        await refresher.flush()
+        requestRegionFocus('panes')
+      } catch (error) {
+        failed('Could not reopen the pane')(error)
+      }
+      await get().loadClosedPanes(worktreeId)
     },
 
     /** Runs an exited pane again, in place. Nothing is asked first: the pane is dead, and its output stays above the new run. */
@@ -2356,8 +2490,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (get().hunkPending) return
       set({ hunkPending: true })
       try {
-        if (hunk === undefined) await runtimeClient.call('worktree.discardPath', { worktreeId, path })
-        else await runtimeClient.call('worktree.discardHunk', { worktreeId, path, hunk })
+        const discarded =
+          hunk === undefined
+            ? await runtimeClient.call('worktree.discardPath', { worktreeId, path })
+            : await runtimeClient.call('worktree.discardHunk', { worktreeId, path, hunk })
+        if (discarded.trashId !== undefined) {
+          const undo: UndoTarget = { kind: 'discard', worktreeId, trashId: discarded.trashId }
+          notify(hunk === undefined ? `Discarded ${path}` : 'Discarded hunk', 'info', { label: 'Undo', undo })
+        }
       } catch (error) {
         failed(hunk === undefined ? `Could not discard ${path}` : 'Could not discard that hunk')(error)
       } finally {

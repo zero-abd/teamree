@@ -80,6 +80,10 @@ export function CommandPalette({
   const editedFiles = useWorkspaceStore((state) => state.editedFiles)
   const editingMarkdown = useWorkspaceStore((state) => state.editingMarkdown)
   const terminalFontSize = useWorkspaceStore((state) => state.terminalFontSize)
+  const closedPanes = useWorkspaceStore((state) => state.closedPanes)
+  const closedFiles = useWorkspaceStore((state) => state.closedFiles)
+  const removedWorktrees = useWorkspaceStore((state) => state.removedWorktrees)
+  const loadRemovedWorktrees = useWorkspaceStore((state) => state.loadRemovedWorktrees)
   const appearance = useWorkspaceStore((state) => state.appearance)
   const systemTone = useWorkspaceStore((state) => state.systemTone)
   const loadEditors = useWorkspaceStore((state) => state.loadEditors)
@@ -89,6 +93,9 @@ export function CommandPalette({
   useEffect(() => {
     void loadEditors()
   }, [loadEditors])
+  useEffect(() => {
+    void loadRemovedWorktrees()
+  }, [loadRemovedWorktrees])
 
   const active = worktrees.find((worktree) => worktree.id === activeWorktreeId)
   const activeBase = projects.find((project) => project.id === active?.projectId)?.baseRef
@@ -145,9 +152,12 @@ export function CommandPalette({
             diffPanes,
             editedFiles,
             editingMarkdown,
-            terminalFontSize
+            terminalFontSize,
+            closedPanes,
+            closedFiles
           })
         },
+        removed: removedWorktrees,
         openIn: targets.map((target) => target.label),
         land: activeWorktreeId === null ? null : landOffer(landings[activeWorktreeId], statuses[activeWorktreeId]),
         appearance: { mode: appearance.mode ?? 'dark', themeId: activeChoice(appearance, systemTone).themeId },
@@ -177,6 +187,9 @@ export function CommandPalette({
       editedFiles,
       editingMarkdown,
       terminalFontSize,
+      closedPanes,
+      closedFiles,
+      removedWorktrees,
       targets,
       active,
       activeBase,
@@ -264,6 +277,11 @@ export function CommandPalette({
     if (item.id.startsWith('compare:')) {
       const other = worktrees.find((worktree) => `compare:${worktree.id}` === item.id)
       if (active && other) void store.openCompare(active.id, other.id, compareTitle(active, other))
+      return
+    }
+    if (item.id.startsWith('restore:')) {
+      const removed = removedWorktrees.find((entry) => `restore:${entry.id}` === item.id)
+      if (removed) void store.restoreWorktree(removed.projectId, removed.id)
       return
     }
     if (item.id.startsWith('open-in:')) {

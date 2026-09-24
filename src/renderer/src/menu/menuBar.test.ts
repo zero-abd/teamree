@@ -126,6 +126,7 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'clone-repository',
       'go-to-file',
       'close-pane',
+      'reopen-closed-pane',
       'save-file',
       'save-all',
       'review-changes',
@@ -195,6 +196,7 @@ describe('what the menu bar says can be done', () => {
       'split-right': false,
       'split-down': false,
       'close-pane': false,
+      'reopen-closed-pane': false,
       'save-file': false,
       'save-all': false,
       'find-in-pane': false,
@@ -236,8 +238,9 @@ describe('what the menu bar says can be done', () => {
 
   it('lights them once there is a worktree open with a pane in it', () => {
     // All but the walks (one pane, one worktree: nowhere to go), the git commands (no status read yet),
-    // Actual Size (already there) and the saves (nothing edited).
+    // Actual Size (already there), the saves (nothing edited) and the reopen (nothing closed).
     const nowhere = [
+      'reopen-closed-pane',
       'save-file',
       'save-all',
       'actual-size',

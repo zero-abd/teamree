@@ -8,7 +8,7 @@ import type { Layout, PaneNode, Project, Worktree } from '../../shared/entities'
 import { MAX_PANE_LABEL_CHARS } from '../../shared/methods'
 import { sanitizeAppearance, type Appearance } from '../../shared/theme'
 import { AgentKindOnRead } from '../terminals/agent-command'
-import type { TerminalRecord } from '../terminals/session-restore'
+import type { ClosedTerminalRecord, TerminalRecord } from '../terminals/session-restore'
 
 export const WORKSPACE_DOCUMENT_VERSION = 1
 
@@ -90,6 +90,20 @@ const TerminalRecordSchema = z.object({
   createdAt: z.number()
 })
 
+/** A closed pane kept for `terminal.reopen`. */
+const ClosedTerminalSchema = z.object({
+  record: TerminalRecordSchema,
+  ordinal: z.number().int().positive().optional(),
+  closedAt: z.number(),
+  place: z
+    .object({
+      beside: z.array(z.string().min(1)).max(64),
+      direction: z.enum(['row', 'column']),
+      before: z.boolean()
+    })
+    .optional()
+})
+
 /** Questions this installation only ever asks once, and when. A closed set, not a bag. */
 const AskedSchema = z.object({ installCli: z.number().optional() })
 
@@ -118,6 +132,8 @@ export type WorkspaceDocument = {
   worktrees: Worktree[]
   layouts: Layout[]
   terminals: TerminalRecord[]
+  /** Closed panes that can be reopened, newest first; see `CLOSED_PANES_KEPT`. */
+  closedTerminals: ClosedTerminalRecord[]
   /**
    * Panes the owner has stopped remote keystrokes reaching, by terminal id.
    * Durable because the id survives a restart; pruned by `removeTerminal`.
@@ -155,6 +171,7 @@ export function emptyWorkspaceDocument(): WorkspaceDocument {
     worktrees: [],
     layouts: [],
     terminals: [],
+    closedTerminals: [],
     mutedTerminals: [],
     standingConsent: [],
     asked: {},
@@ -177,6 +194,7 @@ export function parseWorkspaceDocument(raw: unknown): WorkspaceDocument {
     worktrees: salvage(record.worktrees, WorktreeSchema),
     layouts: salvage(record.layouts, LayoutSchema),
     terminals: salvage(record.terminals, TerminalRecordSchema) as TerminalRecord[],
+    closedTerminals: salvage(record.closedTerminals, ClosedTerminalSchema) as ClosedTerminalRecord[],
     mutedTerminals: salvage(record.mutedTerminals, z.string().min(1)),
     standingConsent: salvage(record.standingConsent, StandingConsentSchema),
     // A hand-edited date means the question has not been asked, never that the file is unusable.

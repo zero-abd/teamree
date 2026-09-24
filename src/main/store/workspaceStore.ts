@@ -5,7 +5,7 @@
 
 import { rename } from 'node:fs/promises'
 import type { Layout, Project, Worktree } from '../../shared/entities'
-import type { TerminalRecord } from '../terminals/session-restore'
+import type { ClosedTerminalRecord, TerminalRecord } from '../terminals/session-restore'
 import { samePath } from '../git/pathIdentity'
 import { openJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
 import { DEFAULT_APPEARANCE, sanitizeAppearance, type Appearance } from '../../shared/theme'
@@ -66,6 +66,8 @@ export function describeStoreProblem(problem: StoreProblem): string {
   }
 }
 
+const CLOSED_KEPT_MS = 14 * 24 * 60 * 60_000
+
 export type WorkspaceStoreOptions = {
   /** Defaults to reporting; never to silence. */
   onProblem?: (problem: StoreProblem) => void
@@ -77,6 +79,7 @@ export class WorkspaceStore {
   private readonly worktrees = new Map<string, Worktree>()
   private readonly layouts = new Map<string, Layout>()
   private readonly terminals = new Map<string, TerminalRecord>()
+  private closedTerminals: ClosedTerminalRecord[] = []
   private readonly mutedTerminals = new Set<string>()
   /** Standing permissions, keyed the way `consentKey` spells one out. */
   private readonly standingConsent = new Map<string, StandingConsentRecord>()
@@ -104,6 +107,9 @@ export class WorkspaceStore {
     for (const worktree of document.worktrees) this.worktrees.set(worktree.id, worktree)
     for (const layout of document.layouts) this.layouts.set(layout.worktreeId, layout)
     for (const terminal of document.terminals) this.terminals.set(terminal.id, terminal)
+    // A fortnight, as the kept copies of removed worktrees.
+    const since = this.now() - CLOSED_KEPT_MS
+    this.closedTerminals = document.closedTerminals.filter((closed) => closed.closedAt >= since)
     for (const terminalId of document.mutedTerminals) this.mutedTerminals.add(terminalId)
     for (const grant of document.standingConsent) {
       this.standingConsent.set(consentKey(grant.terminalId, grant.publicKey), grant)
@@ -233,6 +239,15 @@ export class WorkspaceStore {
     }
     if (removed || unmuted || forgotten) this.persist()
     return removed
+  }
+
+  listClosedTerminals(): ClosedTerminalRecord[] {
+    return [...this.closedTerminals]
+  }
+
+  setClosedTerminals(closed: ClosedTerminalRecord[]): void {
+    this.closedTerminals = [...closed]
+    this.persist()
   }
 
   /** Standing permissions between runs; read once at startup by the peer service. */
@@ -375,6 +390,7 @@ export class WorkspaceStore {
     return {
       ...emptyWorkspaceDocument(),
       ...this.snapshot(),
+      closedTerminals: this.listClosedTerminals(),
       mutedTerminals: this.listMutedTerminals(),
       standingConsent: this.listStandingConsent(),
       asked: this.asked,

@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { statSync } from 'node:fs'
 import { agentLaunchCommand } from '../../shared/agentLaunch'
 import type { RestoredAs } from '../../shared/paneRestore'
-import type { AgentEvent, Layout, PaneNode, Terminal } from '../../shared/entities'
+import type { AgentEvent, ClosedPane, Layout, PaneNode, Terminal } from '../../shared/entities'
 import { fileLeavesIn } from '../../shared/filePane'
 import { evidenceLine } from '../../shared/outputEvidence'
 import { paneCellsIn, placePane, placePaneWithin, type Box } from '../../shared/paneRoom'
@@ -17,6 +17,7 @@ import {
   pinSessionCommand,
   pinsOwnSessionId,
   restartSessionCommand,
+  resumeSessionCommand,
   type AgentKind
 } from './agent-command'
 import {
@@ -28,16 +29,18 @@ import {
   type AgentHookOptions
 } from './agent-hooks'
 import {
+  insertBeside,
   leafPane,
   normalisePane,
   parsePaneNode,
+  placeOf,
   removePane,
   splitPane,
   terminalIdsIn,
   type SplitDirection
 } from './pane-tree'
 import { conversationOnDisk, type ConversationEvidence, type ConversationQuestion } from './agent-conversations'
-import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
+import { restorableRecords, restoreLaunch, type ClosedTerminalRecord, type TerminalRecord } from './session-restore'
 import { CHECKPOINT_SOURCE_BYTES, ScrollbackCheckpoints } from './scrollbackCheckpoints'
 import {
   closingMark,
@@ -79,7 +82,13 @@ export type SessionRepository = {
   listTerminals(): TerminalRecord[]
   putTerminal(record: TerminalRecord): TerminalRecord
   removeTerminal(terminalId: string): boolean
+  /** Closed panes, newest first; absent, they are kept for this run only. */
+  listClosedTerminals?(): ClosedTerminalRecord[]
+  setClosedTerminals?(closed: ClosedTerminalRecord[]): void
 }
+
+/** Closed panes kept per worktree for `terminal.reopen`. */
+export const CLOSED_PANES_KEPT = 10
 
 /**
  * Where a pane's output lives between launches — not the workspace file, which
@@ -160,6 +169,8 @@ export class TerminalSessionManager {
   private readonly ownSubscriptions = new Map<string, { terminalId: string; end: () => void }>()
   private readonly layouts: LayoutRepository
   private readonly records: SessionRepository
+  /** Used when the repository keeps no closed panes of its own. */
+  private closedHere: ClosedTerminalRecord[] = []
   private readonly scrollback: ScrollbackRepository | undefined
   private readonly checkpoints: ScrollbackCheckpoints | undefined
   /** The grid the last window-opened pane was placed on; a landscape guess until then. */
@@ -397,11 +408,22 @@ export class TerminalSessionManager {
   /** Closes a terminal: process tree, pane leaf, streams and record all go. */
   async close(terminalId: string): Promise<void> {
     const session = this.require(terminalId)
+    const layout = this.layoutFor(session.worktreeId)
+    // Kept before the record goes, so `reopen` can bring the pane back as it was.
+    const record = this.records.listTerminals().find((stored) => stored.id === terminalId)
+    if (record !== undefined) {
+      const place = placeOf(layout.root, terminalId)
+      this.keepClosed({
+        record,
+        closedAt: Date.now(),
+        ...(session.ordinal === undefined ? {} : { ordinal: session.ordinal }),
+        ...(place === undefined ? {} : { place })
+      })
+    }
     this.sessions.delete(terminalId)
     this.forget(terminalId)
     this.endStreamsFor(terminalId)
 
-    const layout = this.layoutFor(session.worktreeId)
     const root = removePane(layout.root, terminalId)
     this.saveLayout({
       worktreeId: session.worktreeId,
@@ -411,6 +433,75 @@ export class TerminalSessionManager {
     })
 
     await session.close()
+  }
+
+  /** Panes closed in a worktree that `reopen` can bring back, newest first. */
+  closedPanes(worktreeId: string): ClosedPane[] {
+    return this.closedList()
+      .filter((closed) => closed.record.worktreeId === worktreeId)
+      .map(({ record, ordinal, closedAt }) => ({
+        terminalId: record.id,
+        worktreeId: record.worktreeId,
+        ...(record.agent === undefined ? {} : { agent: record.agent }),
+        ...(record.label === undefined ? {} : { label: record.label }),
+        ...(ordinal === undefined ? {} : { ordinal }),
+        resumable:
+          record.agent !== undefined &&
+          record.command !== undefined &&
+          resumeSessionCommand(record.command, record.agent, record.agentSessionId ?? null) !== null,
+        closedAt
+      }))
+  }
+
+  /**
+   * Starts a closed pane again under its id, number and name, beside what it sat beside:
+   * an agent resuming its conversation as a restart would, anything else as a shell in its directory.
+   */
+  reopen(params: ParamsOf<'terminal.reopen'>): Terminal {
+    this.noteGrid(params)
+    if (params.minPane !== undefined) this.minPane = params.minPane
+    const closed = this.closedList()
+    const entry = closed.find(
+      (candidate) =>
+        candidate.record.worktreeId === params.worktreeId &&
+        (params.terminalId === undefined || candidate.record.id === params.terminalId)
+    )
+    if (entry === undefined) throw notFound(`no closed pane to reopen in worktree ${params.worktreeId}`)
+    const { record } = entry
+    if (this.sessions.has(record.id)) throw conflict(`terminal ${record.id} is open`)
+
+    const launch = restoreLaunch(record, this.options.conversationEvidence)
+    const restoring: TerminalRecord =
+      launch.repinned === undefined
+        ? record
+        : { ...record, command: launch.repinned.command, agentSessionId: launch.repinned.agentSessionId, typed: false }
+    const layout = this.layoutFor(record.worktreeId)
+    const added = leafPane(record.id)
+    const root =
+      (entry.place && insertBeside(layout.root, entry.place, record.id)) ??
+      normalisePane(
+        (this.minPane && placePaneWithin(layout.root, added, this.paneArea, this.minPane)) ||
+          placePane(layout.root, added, this.paneArea)
+      )
+    const size = this.cellsOnGrid(root, record.id) ?? { cols: record.cols, rows: record.rows }
+    const session = this.startSession(
+      {
+        worktreeId: record.worktreeId,
+        cwd: record.cwd,
+        shell: record.shell,
+        ...size,
+        ...(launch.command === undefined ? {} : { command: launch.command }),
+        ...(launch.repinned === undefined ? {} : this.taskFor(record)),
+        ...(launch.resumed && launch.fallback !== undefined ? { fallback: launch.fallback } : {}),
+        ...(launch.note === undefined ? {} : { startupNote: launch.note }),
+        ...(entry.ordinal === undefined ? {} : { ordinal: entry.ordinal })
+      },
+      restoring,
+      launch.resumed ? 'agent' : launch.repinned === undefined ? 'shell' : 'restarted'
+    )
+    this.setClosed(this.closedList().filter((candidate) => candidate !== entry))
+    this.saveLayout({ worktreeId: record.worktreeId, root, focusedTerminalId: record.id })
+    return session.snapshot()
   }
 
   /** Streams a terminal's events into `channel` until the teardown runs or the terminal closes. */
@@ -617,6 +708,37 @@ export class TerminalSessionManager {
     return highest + 1
   }
 
+  /** `wanted` when no open pane of that program has it here, else the next. */
+  private keptOrdinal(worktreeId: string, program: string, wanted: number | undefined): number {
+    const taken = [...this.sessions.values()].some(
+      (session) =>
+        session.worktreeId === worktreeId && (session.agent ?? session.shell) === program && session.ordinal === wanted
+    )
+    return wanted === undefined || taken ? this.nextOrdinal(worktreeId, program) : wanted
+  }
+
+  private closedList(): ClosedTerminalRecord[] {
+    return this.records.listClosedTerminals?.() ?? this.closedHere
+  }
+
+  private setClosed(closed: ClosedTerminalRecord[]): void {
+    if (this.records.setClosedTerminals === undefined) this.closedHere = closed
+    else this.records.setClosedTerminals(closed)
+  }
+
+  /** Newest first, and only the last few of each worktree. */
+  private keepClosed(entry: ClosedTerminalRecord): void {
+    const kept = [entry, ...this.closedList().filter((closed) => closed.record.id !== entry.record.id)]
+    const counts = new Map<string, number>()
+    this.setClosed(
+      kept.filter((closed) => {
+        const count = (counts.get(closed.record.worktreeId) ?? 0) + 1
+        counts.set(closed.record.worktreeId, count)
+        return count <= CLOSED_PANES_KEPT
+      })
+    )
+  }
+
   private startSession(
     params: ParamsOf<'terminal.create'> & {
       restoredRecord?: RecordedScrollback
@@ -625,6 +747,8 @@ export class TerminalSessionManager {
       recordStartsBelow?: string
       /** Printed before the command, saying why this is not a resume. */
       startupNote?: string
+      /** The number a reopened pane had; kept unless a live pane has it now. */
+      ordinal?: number
     },
     restoring?: TerminalRecord,
     restored?: RestoredAs
@@ -657,7 +781,8 @@ export class TerminalSessionManager {
     // The record's name wins on a restore.
     const label = restoring?.label ?? params.label
     // A relaunch replaces a live session under the same id, and keeps its number.
-    const ordinal = this.sessions.get(id)?.ordinal ?? this.nextOrdinal(params.worktreeId, agent ?? shell)
+    const ordinal =
+      this.sessions.get(id)?.ordinal ?? this.keptOrdinal(params.worktreeId, agent ?? shell, params.ordinal)
 
     const session = PtySession.start({
       id,

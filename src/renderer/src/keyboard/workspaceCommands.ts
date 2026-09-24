@@ -2,7 +2,7 @@
 // greys items with the same predicate the dispatcher refuses on, so the two cannot disagree.
 // The modal guards live here too: the menu bar is reachable while a modal is up.
 
-import type { ConsentRequest, Layout, WorktreeStatus } from '@shared/entities'
+import type { ClosedPane, ConsentRequest, Layout, WorktreeStatus } from '@shared/entities'
 import type { RightPanelTab } from '../workspace/rightPanel/rightPanelState'
 import { fileColumnIn, fileLeavesIn, isFilePaneId } from '@shared/filePane'
 import { firstQuestion } from '../dialogs/modalLayer'
@@ -40,12 +40,16 @@ export type CommandState = {
   /** Absent reads as shown, for both. */
   sidebarVisible?: boolean
   rightPanelOpen?: boolean
+  /** What ⌘⇧T could bring back, by worktree; absent reads as nothing. */
+  closedPanes?: Readonly<Record<string, readonly ClosedPane[]>>
+  closedFiles?: Readonly<Record<string, readonly unknown[]>>
 }
 
 /** The store's own methods, named so this module does not import the store. */
 export type CommandActions = {
   splitFocusedPane: (direction: 'row' | 'column') => Promise<void>
   closeTerminal: (terminalId: string) => Promise<void>
+  reopenClosedPane: () => Promise<void>
   saveFiles: (paneIds: readonly string[]) => Promise<boolean>
   createTerminal: (worktreeId: string) => Promise<void>
   newMarkdown: (worktreeId: string) => void
@@ -167,6 +171,12 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
     case 'close-pane':
       // Either kind: closing a teammate's pane is how a watch stops.
       return unless(state.focusedWatchId !== null || activeLayout(state)?.focusedTerminalId != null, 'no pane focused')
+    case 'reopen-closed-pane': {
+      const worktreeId = state.activeWorktreeId
+      if (worktreeId === null) return 'no worktree open'
+      const closed = (state.closedPanes?.[worktreeId]?.length ?? 0) + (state.closedFiles?.[worktreeId]?.length ?? 0)
+      return unless(closed > 0, 'nothing closed')
+    }
     case 'save-file':
       return unless(editedFocus(state) !== null, 'nothing unsaved')
     case 'save-all':
@@ -269,6 +279,9 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       if (focused) void store.closeTerminal(focused)
       break
     }
+    case 'reopen-closed-pane':
+      void store.reopenClosedPane()
+      break
     case 'save-file': {
       const focused = editedFocus(store)
       if (focused) void store.saveFiles([focused])

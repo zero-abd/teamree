@@ -9,6 +9,7 @@ import path from 'node:path'
 import type {
   CloneProgress,
   Project,
+  RemovedWorktree,
   Worktree,
   WorktreeChanges,
   WorktreeCommit,
@@ -31,7 +32,7 @@ import type {
   WorktreeUpdate,
   WorktreeUpdateAbort
 } from '../../shared/entities'
-import type { ParamsOf } from '../../shared/methods'
+import type { ParamsOf, ResultOf } from '../../shared/methods'
 import { checkTransport } from '../../shared/origin'
 import { siblingRuns } from '../../shared/runCompare'
 import { ErrorCode } from '../../shared/protocol'
@@ -52,6 +53,16 @@ import { readCompare } from './worktreeCompare'
 import { commitWorktree } from './worktreeCommit'
 import { applyHunk, unstagePath } from './worktreeHunk'
 import { discardHunk, discardPath, type Trash } from './worktreeDiscard'
+import {
+  dropTrash,
+  listTrash,
+  pruneTrash,
+  readTrash,
+  removedWorktree,
+  restoreTrash,
+  snapshotWorktree,
+  type TrashNote
+} from './worktreeTrash'
 import { pushWorktree } from './worktreePush'
 import { abortWorktreeUpdate, updateWorktree } from './worktreeUpdate'
 import { createGhProbe, createPullRequest, mergeIntoBase, readLanding, type GhProbe } from './worktreeLanding'
@@ -403,7 +414,7 @@ export class GitService {
     return settled ?? this.#store.getWorktree(worktreeId) ?? null
   }
 
-  async removeWorktree(params: ParamsOf<'worktree.remove'>): Promise<{ removed: true; checkoutLeftAt?: string }> {
+  async removeWorktree(params: ParamsOf<'worktree.remove'>): Promise<ResultOf<'worktree.remove'>> {
     const initial = this.#requireWorktree(params.worktreeId)
     if (initial.state === 'creating') await this.cancelWorktreeCreate(initial.id)
 
@@ -423,8 +434,12 @@ export class GitService {
     if (params.deleteBranch) branchVerdict = await this.#judgeBranchDeletion(project, worktree.branch, force)
 
     const previousState = worktree.state
+    // Before anything is destroyed, and a refusal if it cannot be kept.
+    const trashId = previousState === 'ready' ? await this.#keepCopy(project, worktree, 'remove') : undefined
+    const kept = trashId === undefined ? {} : { trashId }
     // Somebody else dropped the record while this was starting; nothing was destroyed.
     if (!this.#patch(worktree.id, { state: 'removing' })) {
+      if (trashId !== undefined) await dropTrash(this.#runner, project.path, trashId)
       return { removed: true, ...(await this.#surviving(worktree)) }
     }
 
@@ -433,6 +448,7 @@ export class GitService {
       detached = await this.#detachCheckout(project, worktree, force)
     } catch (error) {
       this.#patch(worktree.id, { state: previousState })
+      if (trashId !== undefined) await dropTrash(this.#runner, project.path, trashId)
       throw error
     }
 
@@ -443,7 +459,140 @@ export class GitService {
     if (branchVerdict !== 'skip') {
       await this.#deleteBranch(project, worktree.branch, branchVerdict !== 'unjudged')
     }
-    return { removed: true, ...detached }
+    return { removed: true, ...detached, ...kept }
+  }
+
+  /** Removed worktrees that can still be restored, newest first; ten unless asked. */
+  async listRemovedWorktrees(params: ParamsOf<'worktree.removed'> = {}): Promise<RemovedWorktree[]> {
+    const projects =
+      params.projectId === undefined ? this.#store.listProjects() : [this.#requireProject(params.projectId)]
+    const listed = await Promise.all(
+      projects.map(async (project) =>
+        (await listTrash(this.#runner, project.path).catch(() => []))
+          .filter((entry) => entry.note.kind === 'remove' && !this.#store.getWorktree(entry.note.worktree.id))
+          .map((entry) => removedWorktree(entry, project.id))
+      )
+    )
+    return listed
+      .flat()
+      .sort((a, b) => b.removedAt - a.removedAt)
+      .slice(0, params.limit ?? 10)
+  }
+
+  /** Checks a removed worktree out again on its branch, puts its copy back, and forgets the copy. */
+  async restoreWorktree(params: ParamsOf<'worktree.restore'>): Promise<Worktree> {
+    const project = this.#requireProject(params.projectId)
+    const entry = await readTrash(this.#runner, project.path, params.removedId)
+    const saved = entry.note.worktree
+    if (entry.note.kind !== 'remove') {
+      throw new GitServiceError(ErrorCode.InvalidParams, `"${params.removedId}" is not a removed worktree`)
+    }
+    if (this.#store.getWorktree(saved.id))
+      throw new GitServiceError(ErrorCode.Conflict, `"${saved.name}" is back already`)
+    const taken = this.#store.listWorktrees().some((other) => pathKey(other.path) === pathKey(saved.path))
+    if (taken || (await isDirectory(saved.path))) {
+      throw new GitServiceError(ErrorCode.Conflict, `${saved.path} is in use`)
+    }
+
+    // On its branch where the branch is still there; otherwise the branch comes back where it was.
+    const tip = await this.#branchTip(project, saved.branch)
+    if (tip === null && entry.note.head === null) {
+      throw new GitServiceError(ErrorCode.Conflict, `branch "${saved.branch}" is gone`)
+    }
+    const add =
+      tip === null
+        ? ['worktree', 'add', '--no-track', '-b', saved.branch, saved.path, entry.note.head as string]
+        : ['worktree', 'add', saved.path, saved.branch]
+    await mkdir(path.dirname(saved.path), { recursive: true })
+    await this.#runner.run({ args: add, cwd: project.path, timeoutMs: this.#createTimeoutMs })
+    try {
+      const settings = this.#store.getProject(project.id) ?? project
+      await prepareWorktree(this.#runner, {
+        repoPath: project.path,
+        worktreePath: saved.path,
+        ...(settings.linkedPaths === undefined ? {} : { linkedPaths: settings.linkedPaths }),
+        ...(settings.copiedPaths === undefined ? {} : { copiedPaths: settings.copiedPaths })
+      })
+      await restoreTrash(this.#runner, { worktreePath: saved.path, entry, withIndex: true })
+    } catch (error) {
+      // The copy stays, so the restore can be asked for again.
+      await this.#runner.tryRun({ args: ['worktree', 'remove', '--force', saved.path], cwd: project.path })
+      if (tip === null) await this.#runner.tryRun({ args: ['branch', '-D', saved.branch], cwd: project.path })
+      throw error
+    }
+
+    const worktree: Worktree = { ...saved, projectId: project.id, state: 'ready' }
+    this.#store.putWorktree(worktree)
+    this.events.emit({ type: 'worktree.created', worktree })
+    await dropTrash(this.#runner, project.path, entry.id)
+    return worktree
+  }
+
+  /** Puts back the paths one discard threw away, from its copy, and forgets the copy. */
+  async undoDiscard(params: ParamsOf<'worktree.undoDiscard'>): Promise<{ restored: true }> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'undoing a discard')
+    const project = this.#requireProject(worktree.projectId)
+    const entry = await readTrash(this.#runner, project.path, params.trashId)
+    if (entry.note.kind !== 'discard' || entry.note.worktree.id !== worktree.id) {
+      throw new GitServiceError(ErrorCode.InvalidParams, `"${params.trashId}" is not a discard in this worktree`)
+    }
+    await restoreTrash(this.#runner, {
+      worktreePath: worktree.path,
+      entry,
+      ...(entry.note.paths === undefined ? {} : { paths: entry.note.paths })
+    })
+    await dropTrash(this.#runner, project.path, entry.id)
+    return { restored: true }
+  }
+
+  /** Drops kept copies past their fortnight, in every project; a repository that cannot be read keeps its own. */
+  async pruneTrash(): Promise<number> {
+    let pruned = 0
+    for (const project of this.#store.listProjects()) {
+      pruned += await pruneTrash(this.#runner, project.path, this.#now()).catch(() => 0)
+    }
+    return pruned
+  }
+
+  /**
+   * Keeps a copy of the worktree's uncommitted work, or of `paths` in it, and answers its id.
+   * A checkout git cannot read has nothing to keep; any other failure refuses the action.
+   */
+  async #keepCopy(
+    project: Project,
+    worktree: Worktree,
+    kind: TrashNote['kind'],
+    paths?: readonly string[]
+  ): Promise<string | undefined> {
+    if (!(await isDirectory(worktree.path))) return undefined
+    try {
+      const entry = await snapshotWorktree(this.#runner, {
+        repoPath: project.path,
+        worktreePath: worktree.path,
+        worktree: {
+          id: worktree.id,
+          projectId: worktree.projectId,
+          name: worktree.name,
+          branch: worktree.branch,
+          path: worktree.path,
+          startedFrom: worktree.startedFrom,
+          createdAt: worktree.createdAt,
+          ...(worktree.task === undefined ? {} : { task: worktree.task })
+        },
+        kind,
+        ...(paths === undefined ? {} : { paths }),
+        now: this.#now()
+      })
+      return entry.id
+    } catch (error) {
+      if (kind === 'remove' && error instanceof GitCommandError && isNotAWorkingTree(error.stderr)) return undefined
+      throw new GitServiceError(
+        ErrorCode.Conflict,
+        `could not keep a copy first, so nothing was ${
+          kind === 'remove' ? 'removed' : 'discarded'
+        }: ${describeError(error)}`
+      )
+    }
   }
 
   async worktreeStatus(params: ParamsOf<'worktree.status'>): Promise<WorktreeStatus> {
@@ -600,6 +749,7 @@ export class GitService {
       worktreePath: worktree.path,
       path: params.path,
       ...(this.#trash === undefined ? {} : { trash: this.#trash }),
+      keep: () => this.#keepDiscard(worktree, params.path),
       now: this.#now
     })
   }
@@ -612,8 +762,15 @@ export class GitService {
       worktreePath: worktree.path,
       path: params.path,
       hunk: params.hunk,
+      keep: () => this.#keepDiscard(worktree, params.path),
       now: this.#now
     })
+  }
+
+  async #keepDiscard(worktree: Worktree, file: string): Promise<string> {
+    const id = await this.#keepCopy(this.#requireProject(worktree.projectId), worktree, 'discard', [file])
+    if (id === undefined) throw new GitServiceError(ErrorCode.Conflict, 'the checkout is not on disk')
+    return id
   }
 
   /**

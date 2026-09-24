@@ -328,6 +328,8 @@ describe('discarding one hunk from the patch', () => {
 
     render(<ConfirmDiscardDialog {...(dialog as ConfirmDiscardProps)} />)
     expect(screen.getByRole('dialog', { name: 'Discard this hunk of src/rank.ts?' })).toBeTruthy()
+    // A copy is kept first, so the question says nothing about it being final.
+    expect(screen.queryByText(/undone/)).toBeNull()
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Discard' }))
 
     expect(call).toHaveBeenCalledWith('worktree.discardHunk', {

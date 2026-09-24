@@ -4,6 +4,8 @@
 
 import { z } from 'zod'
 import type {
+  ClosedPane,
+  RemovedWorktree,
   CliInstall,
   CloneProgress,
   CliStatus,
@@ -366,6 +368,15 @@ export const Params = {
     path: z.string().min(1).max(4096),
     hunk: Hunk
   }),
+  /** Puts back what one discard threw away, from the copy its `trashId` names. */
+  worktreeUndoDiscard: z.object({ worktreeId: z.string().min(1), trashId: z.string().min(1).max(512) }),
+  /** Removed worktrees that can still be restored, newest first. */
+  worktreeRemoved: z.object({
+    projectId: z.string().min(1).optional(),
+    limit: z.number().int().positive().optional()
+  }),
+  /** Checks a removed worktree out again on its branch, with its uncommitted work put back. */
+  worktreeRestore: z.object({ projectId: z.string().min(1), removedId: z.string().min(1).max(512) }),
 
   /** Coding agents found on PATH, so a pane can start one without being told. */
   agentList: z.object({}),
@@ -624,6 +635,19 @@ export const Params = {
     detail: z.string().max(MAX_AGENT_EVENT_DETAIL_CHARS).optional(),
     message: z.string().max(MAX_AGENT_EVENT_MESSAGE_CHARS).optional()
   }),
+  /** Panes closed in a worktree that can be reopened, newest first. */
+  terminalClosed: z.object({ worktreeId: z.string().min(1) }),
+  /**
+   * Brings a closed pane back under its old id and name, where it was: an agent
+   * resuming its conversation, a shell in the same directory. Absent `terminalId`, the last one closed.
+   */
+  terminalReopen: z.object({
+    worktreeId: z.string().min(1),
+    terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS).optional(),
+    area: z.object({ width: z.number().positive(), height: z.number().positive() }).optional(),
+    minPane: z.object({ width: z.number().positive(), height: z.number().positive() }).optional(),
+    cell: z.object({ width: z.number().positive(), height: z.number().positive() }).optional()
+  }),
   terminalSplit: z.object({
     /** Pane to divide. The new terminal takes half of it. */
     terminalId: z.string().min(1),
@@ -701,9 +725,10 @@ export type MethodContract = {
   'worktree.create': { params: z.infer<typeof Params.worktreeCreate>; result: Worktree }
   // `checkoutLeftAt`: the row was dropped but the directory was not (git never
   // heard of the checkout, or refused to read it). Last thing that knows where.
+  // `trashId`: the copy kept first, which `worktree.removed` lists.
   'worktree.remove': {
     params: z.infer<typeof Params.worktreeRemove>
-    result: { removed: true; checkoutLeftAt?: string }
+    result: { removed: true; checkoutLeftAt?: string; trashId?: string }
   }
   'worktree.status': { params: z.infer<typeof Params.worktreeStatus>; result: WorktreeStatus }
   'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }
@@ -717,6 +742,9 @@ export type MethodContract = {
   'worktree.unstagePath': { params: z.infer<typeof Params.worktreeUnstagePath>; result: WorktreeUnstage }
   'worktree.discardPath': { params: z.infer<typeof Params.worktreeDiscardPath>; result: WorktreeDiscard }
   'worktree.discardHunk': { params: z.infer<typeof Params.worktreeDiscardHunk>; result: WorktreeDiscard }
+  'worktree.undoDiscard': { params: z.infer<typeof Params.worktreeUndoDiscard>; result: { restored: true } }
+  'worktree.removed': { params: z.infer<typeof Params.worktreeRemoved>; result: RemovedWorktree[] }
+  'worktree.restore': { params: z.infer<typeof Params.worktreeRestore>; result: Worktree }
   'worktree.push': { params: z.infer<typeof Params.worktreePush>; result: WorktreePush }
   'worktree.log': { params: z.infer<typeof Params.worktreeLog>; result: WorktreeLog }
   'worktree.showCommit': { params: z.infer<typeof Params.worktreeShowCommit>; result: WorktreeCommitPatch }
@@ -822,6 +850,8 @@ export type MethodContract = {
     result: { data: string; end?: number; widest?: number; exited?: boolean }
   }
   'terminal.subscribe': { params: z.infer<typeof Params.terminalSubscribe>; result: { subscription: string } }
+  'terminal.closed': { params: z.infer<typeof Params.terminalClosed>; result: ClosedPane[] }
+  'terminal.reopen': { params: z.infer<typeof Params.terminalReopen>; result: Terminal }
   'terminal.split': { params: z.infer<typeof Params.terminalSplit>; result: { terminal: Terminal; layout: Layout } }
   /** The same pane running its program again: same id, leaf, directory; agent started over, not resumed. */
   'terminal.relaunch': { params: z.infer<typeof Params.terminalRelaunch>; result: Terminal }

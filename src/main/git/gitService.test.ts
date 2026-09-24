@@ -339,7 +339,10 @@ describe('worktree.remove', () => {
     const project = await service.addProject({ path: repo.repoPath })
     const worktree = await readyWorktree(service, project.id, 'short lived')
 
-    expect(await service.removeWorktree({ worktreeId: worktree.id, deleteBranch: true })).toEqual({ removed: true })
+    expect(await service.removeWorktree({ worktreeId: worktree.id, deleteBranch: true })).toEqual({
+      removed: true,
+      trashId: expect.any(String)
+    })
 
     expect(existsSync(worktree.path)).toBe(false)
     const branches = await repo.git(['for-each-ref', '--format=%(refname:short)', 'refs/heads'])
@@ -545,7 +548,10 @@ describe('handler seam', () => {
 
     expect((await handlers['worktree.rename']({ worktreeId: created.id, name: 'renamed' })).name).toBe('renamed')
 
-    expect(await handlers['worktree.remove']({ worktreeId: created.id })).toEqual({ removed: true })
+    expect(await handlers['worktree.remove']({ worktreeId: created.id })).toEqual({
+      removed: true,
+      trashId: expect.any(String)
+    })
     expect(await handlers['project.remove']({ projectId: project.id })).toEqual({ removed: true })
   })
 

@@ -2,7 +2,10 @@
 
 import { useRef, useState } from 'react'
 import type { Project } from '@shared/entities'
-import { RowMenu, type RowMenuAnchor } from './RowMenu'
+import { useWorkspaceStore } from '../state/workspaceStore'
+import { agoLabel } from './agentRows'
+import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
+import { worktreeDisplay, worktreeLabel } from './worktreeDisplay'
 
 type ProjectHeadProps = {
   project: Project
@@ -24,6 +27,24 @@ export function ProjectHead({
 }: ProjectHeadProps): React.JSX.Element {
   const row = useRef<HTMLButtonElement | null>(null)
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
+  const removedWorktrees = useWorkspaceStore((state) => state.removedWorktrees)
+  const loadRemovedWorktrees = useWorkspaceStore((state) => state.loadRemovedWorktrees)
+  const restoreWorktree = useWorkspaceStore((state) => state.restoreWorktree)
+  const openMenu = (anchor: RowMenuAnchor): void => {
+    setMenuAt(anchor)
+    void loadRemovedWorktrees()
+  }
+  const removed: RowMenuItem[] = removedWorktrees
+    .filter((entry) => entry.projectId === project.id)
+    .map((entry) => ({
+      label: worktreeLabel(worktreeDisplay(entry)),
+      hint: agoLabel(Date.now() - entry.removedAt),
+      onChoose: () => void restoreWorktree(project.id, entry.id)
+    }))
+  const items: RowMenuItem[] = [
+    { label: 'New Task…', onChoose: onNewTask },
+    ...(removed.length === 0 ? [] : [{ label: 'Recently Removed', items: removed, onChoose: () => {} }])
+  ]
 
   /** Under the row, for a menu nobody pointed at. */
   const rowAnchor = (): RowMenuAnchor => {
@@ -43,12 +64,12 @@ export function ProjectHead({
         event.preventDefault()
         // As on a worktree row: the keys raise this with no coordinates.
         const pointed = event.detail > 0 && (event.clientX > 0 || event.clientY > 0)
-        setMenuAt(pointed ? { x: event.clientX, y: event.clientY } : rowAnchor())
+        openMenu(pointed ? { x: event.clientX, y: event.clientY } : rowAnchor())
       }}
       onKeyDown={(event) => {
         if (event.key !== 'ContextMenu' && !(event.key === 'F10' && event.shiftKey)) return
         event.preventDefault()
-        setMenuAt(rowAnchor())
+        openMenu(rowAnchor())
       }}
     >
       <button
@@ -97,12 +118,7 @@ export function ProjectHead({
         </svg>
       </button>
       {menuAt === null ? null : (
-        <RowMenu
-          label={`Actions for ${project.name}`}
-          items={[{ label: 'New Task…', onChoose: onNewTask }]}
-          anchor={menuAt}
-          onClose={closeMenu}
-        />
+        <RowMenu label={`Actions for ${project.name}`} items={items} anchor={menuAt} onClose={closeMenu} />
       )}
     </div>
   )

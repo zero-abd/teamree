@@ -69,7 +69,10 @@ describe('registerGitHandlers', () => {
     const status = await call('worktree.status', { worktreeId: created.id })
     expect(status).toMatchObject({ worktreeId: created.id, branch: 'wire-me-up', staged: 0 })
 
-    expect(await call('worktree.remove', { worktreeId: created.id, deleteBranch: true })).toEqual({ removed: true })
+    expect(await call('worktree.remove', { worktreeId: created.id, deleteBranch: true })).toEqual({
+      removed: true,
+      trashId: expect.any(String)
+    })
     expect(await call('project.remove', { projectId: project.id })).toEqual({ removed: true })
     expect(await call('project.list')).toEqual([])
   })

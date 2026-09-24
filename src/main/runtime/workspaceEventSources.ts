@@ -71,6 +71,12 @@ export function publishGitWrites(registry: MethodRegistry, git: GitService, bus:
     return result
   })
 
+  registry.register('worktree.undoDiscard', Params.worktreeUndoDiscard, async (params) => {
+    const result = await git.undoDiscard(params)
+    bus.emit({ type: 'worktrees' })
+    return result
+  })
+
   registry.register('worktree.push', Params.worktreePush, async (params) => {
     const result = await git.worktreePush(params)
     // Ahead and behind moved even when nothing was sent.
@@ -176,6 +182,12 @@ export function publishTerminalEvents(
     const result = await handlers['terminal.split'](params, call)
     announceOpened(result.terminal)
     return result
+  })
+
+  registry.register('terminal.reopen', schemas['terminal.reopen'], async (params, call) => {
+    const terminal = await handlers['terminal.reopen'](params, call)
+    announceOpened(terminal)
+    return terminal
   })
 
   // The record changed; the layout has not, since relaunch keeps the terminal id.
