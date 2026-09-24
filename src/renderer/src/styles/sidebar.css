@@ -372,6 +372,26 @@
   background: var(--accent);
 }
 
+/* Under a page the rail entry is what is selected; the worktree keeps a faint tick to come back to. */
+.sidebar--page .worktree--active .worktree__row {
+  background: none;
+}
+
+.sidebar--page .worktree--active:hover .worktree__row {
+  background: var(--bg-hover);
+}
+
+.sidebar--page .worktree--active::before {
+  opacity: 0.35;
+}
+
+/* Inside the row: rows are packed, and a ring outside one covers its neighbours' text. */
+.pane-row:focus-visible,
+.worktree__open:focus-visible,
+.project__toggle:focus-visible {
+  outline-offset: -2px;
+}
+
 .worktree__open {
   flex: 1;
   display: flex;
@@ -604,6 +624,9 @@
    writes its own. */
 .row-menu__hint {
   margin-left: var(--s4);
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--fg-muted);
   font-family: inherit;
   font-size: var(--text-xs);

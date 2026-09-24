@@ -148,11 +148,11 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
   if (file !== undefined) {
     const absolute = `${worktree.path}/${file.path}`
     return [
-      { label: 'Copy path', onChoose: () => void store.copyToClipboard(absolute, `the path to ${file.path}`) },
+      { label: 'Copy Path', onChoose: () => void store.copyToClipboard(absolute, `the path to ${file.path}`) },
       { label: 'Reveal in Finder', onChoose: () => void store.revealInFinder(absolute, file.path) },
       { label: 'Open in', onChoose: () => {}, items: openIn(worktree.projectId, absolute, file.path, true) },
       ...(fileViewerFor(file.path) === 'markdown'
-        ? [{ label: 'Open as artifact', onChoose: () => void openAsArtifact(terminalId, name) }]
+        ? [{ label: 'Open as Artifact', onChoose: () => void openAsArtifact(terminalId, name) }]
         : []),
       { ...maximize, separated: true },
       ...moves,

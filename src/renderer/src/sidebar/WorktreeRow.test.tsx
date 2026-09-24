@@ -557,7 +557,7 @@ describe('the row menu', () => {
     fireEvent.contextMenu(row())
 
     expect(screen.getByRole('menu', { name: 'Actions for Rewrite the pager' })).toBeTruthy()
-    expect(labels()).toEqual(['Rename…', 'Reveal in Finder', 'Copy path', 'Copy branch', 'Open in', 'Remove Worktree…'])
+    expect(labels()).toEqual(['Rename…', 'Reveal in Finder', 'Copy Path', 'Copy Branch', 'Open in', 'Remove Worktree…'])
   })
 
   // A one-pixel miss on the row must not open the question that destroys a checkout.
@@ -598,7 +598,7 @@ describe('the row menu', () => {
   it('chooses the item that was pressed, and closes behind it', () => {
     mount()
     fireEvent.contextMenu(row())
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy path' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy Path' }))
 
     expect(handlers.onCopyPath).toHaveBeenCalledOnce()
     expect(screen.queryByRole('menu')).toBeNull()
@@ -609,7 +609,7 @@ describe('the row menu', () => {
     fireEvent.contextMenu(row())
     fireEvent.click(screen.getByRole('menuitem', { name: 'Reveal in Finder' }))
     fireEvent.contextMenu(row())
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy branch' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy Branch' }))
 
     expect(handlers.onReveal).toHaveBeenCalledOnce()
     expect(handlers.onCopyBranch).toHaveBeenCalledOnce()

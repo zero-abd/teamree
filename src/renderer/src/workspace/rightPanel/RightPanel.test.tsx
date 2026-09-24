@@ -376,7 +376,7 @@ describe('the files tab', () => {
     fireEvent.click(await within(tree).findByRole('button', { name: /^README\.md/ }), { metaKey: true })
     fireEvent.click(within(tree).getByRole('button', { name: /^src/ }))
     fireEvent.contextMenu(await within(tree).findByRole('button', { name: /^app\.ts/ }))
-    fireEvent.click(await screen.findByRole('menuitem', { name: 'Open to the side' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Open to the Side' }))
     const root = useWorkspaceStore.getState().layouts.w1!.root
     expect(fileColumnIn(root)).toBeNull()
     expect(root).toMatchObject({ kind: 'split', direction: 'row' })

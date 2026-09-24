@@ -274,10 +274,10 @@ describe('a file tab', () => {
 
   it('offers what can be done to a file, and nothing a terminal has', () => {
     expect(labels(rightClickTab('README.md'))).toEqual([
-      'Copy path',
+      'Copy Path',
       'Reveal in Finder',
       'Open in',
-      'Open as artifact',
+      'Open as Artifact',
       'Maximize',
       'Move Pane Left',
       'Close',
@@ -286,7 +286,7 @@ describe('a file tab', () => {
   })
 
   it('copies and reveals the file by its absolute path', () => {
-    choose(rightClickTab('README.md'), 'Copy path')
+    choose(rightClickTab('README.md'), 'Copy Path')
     choose(rightClickTab('README.md'), 'Reveal in Finder')
     expect(actions.copyToClipboard).toHaveBeenCalledWith(`${worktree.path}/README.md`, 'the path to README.md')
     expect(actions.revealInFinder).toHaveBeenCalledWith(`${worktree.path}/README.md`, 'README.md')
@@ -349,7 +349,7 @@ describe('a pane header', () => {
     mount(row(leaf('t1'), fileLeaf('file:app', 'src/app.ts')))
     fireEvent.contextMenu(screen.getByTestId('file-header'), { clientX: 300, clientY: 60 })
     expect(labels(screen.getByRole('menu', { name: 'Actions for app.ts' }))).toEqual([
-      'Copy path',
+      'Copy Path',
       'Reveal in Finder',
       'Open in',
       'Maximize',
@@ -368,8 +368,8 @@ describe('a row of the Files tab', () => {
     })
     const menu = screen.getByRole('menu')
     expect(labels(menu)).toEqual([
-      ...(name.includes('.') ? ['Open to the side'] : []),
-      'Copy path',
+      ...(name.includes('.') ? ['Open to the Side'] : []),
+      'Copy Path',
       'Reveal in Finder',
       'Open in'
     ])

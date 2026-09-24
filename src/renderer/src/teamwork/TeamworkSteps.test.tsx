@@ -20,7 +20,6 @@ import {
   RELAY_PANE_NO_URL,
   RELAY_SERVE,
   RELAY_SERVE_STOPPED,
-  TEAMWORK_PATHS,
   type RelayPaneState
 } from './startTeamwork'
 import { teamworkSummary } from '../sidebar/teamworkSummary'
@@ -648,33 +647,43 @@ describe('a relay that only the environment names', () => {
   })
 })
 
-describe('the question asked before the steps', () => {
+/** Each button's label and whether it is the primary, in document order. */
+const buttonsIn = (markup: string): { label: string; primary: boolean }[] =>
+  [...markup.matchAll(/<button[^>]*class="([^"]*)"[^>]*>([^<]*)<\/button>/g)].map(([, classes, label]) => ({
+    label: label ?? '',
+    primary: (classes ?? '').split(' ').includes('button--primary')
+  }))
+
+describe('the choice before the steps', () => {
   // Five ticks describing two different jobs is what "it worked and it was confusing" meant.
-  it('puts both paths in front of somebody who has not said which they are', () => {
-    const shown = text(render({ path: null }))
-    expect(shown).toContain('Which of these are you doing?')
-    expect(shown).toContain('Start a team here')
-    expect(shown).toContain('Join a team I was invited to')
+  it('puts both paths in front of somebody who has not said which they are, as two buttons', () => {
+    const markup = render({ path: null })
+    const shown = text(markup)
+    expect(markup).toContain('Start a Team</button>')
+    expect(markup).toContain('Join…</button>')
+    expect(shown).not.toContain('?')
     // A wall of steps under an unanswered question is what the question replaced.
     expect(shown).not.toContain('1. Your identity')
   })
 
-  // Two buttons, and nothing arguing for either.
-  it('offers the two as labels, with no prose under them', () => {
-    const shown = text(render({ path: null }))
-    for (const option of TEAMWORK_PATHS) expect(shown).toContain(option.title)
-    expect(shown).not.toMatch(/Teamwork has two ends/)
-    expect(shown).not.toMatch(/Nothing is sent to them/)
+  // One primary, and no card around either button or around the pair.
+  it('makes the likelier one the primary, inside no box', () => {
+    const markup = render({ path: null })
+    expect(buttonsIn(markup)).toEqual([
+      { label: 'Start a Team', primary: true },
+      { label: 'Join…', primary: false }
+    ])
+    expect(markup).not.toMatch(/path-option|<h2/)
   })
 
   // Marked, never taken: a relay file and a colleague's key are evidence, not intent.
   it('marks the one the repository points at, with the fact behind it, and picks neither', () => {
     const markup = render({ path: null, list: enrolled(), relay: relayOnDisk() })
-    expect(markup).toContain('path-option--suggested')
     expect(text(markup)).toContain('.teamree/relay already here')
-    // Both are still buttons: nothing has been decided for anybody.
-    expect(markup).toContain('Start a team here</button>')
-    expect(markup).toContain('Join a team I was invited to</button>')
+    expect(buttonsIn(markup)).toEqual([
+      { label: 'Start a Team', primary: false },
+      { label: 'Join…', primary: true }
+    ])
   })
 
   // Somebody connected came here to look.
@@ -700,7 +709,7 @@ describe('the question asked before the steps', () => {
         }
       }
     })
-    expect(text(working)).not.toContain('Which of these are you doing?')
+    expect(working).not.toContain('Join…</button>')
     expect(text(working)).toContain('Teamwork is working')
   })
 
@@ -708,10 +717,8 @@ describe('the question asked before the steps', () => {
   it('keeps the answer on screen with a way to take it back', () => {
     const shown = text(render({ path: 'join' }))
     expect(shown).toContain('Not that')
-    // Quoted as the button said it: lowercasing an imperative after "You are" made a predicate of it.
-    expect(shown).toContain('Join a team I was invited to')
+    expect(shown).toContain('Join a Team')
     expect(shown).not.toMatch(/You are/)
-    expect(shown).not.toMatch(/invited to\./)
   })
 })
 

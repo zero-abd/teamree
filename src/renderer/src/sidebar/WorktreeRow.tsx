@@ -131,8 +131,8 @@ export function WorktreeRow({
         ...(failed && worktree.retryable ? [{ label: 'Retry', onChoose: onRetry }] : []),
         { label: 'Rename…', onChoose: () => setRenaming(true) },
         { label: 'Reveal in Finder', onChoose: onReveal },
-        { label: 'Copy path', onChoose: onCopyPath },
-        { label: 'Copy branch', onChoose: onCopyBranch },
+        { label: 'Copy Path', onChoose: onCopyPath },
+        { label: 'Copy Branch', onChoose: onCopyBranch },
         { label: 'Open in', onChoose: () => {}, items: openIn },
         remove
       ]

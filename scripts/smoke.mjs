@@ -529,7 +529,7 @@ async function checkWorktreeSurfaces(ask) {
     )
   await waitFor(async () => ((await menuRows()) ?? []).length > 0, 'pressing + on the pane strip opened no menu')
   const agents = (await call('agent.list', {})).result ?? []
-  const expectedRows = ['New terminal', 'New markdown', ...agents.map((agent) => agent.kind), 'Agent settings…']
+  const expectedRows = ['New Terminal', 'New Markdown', ...agents.map((agent) => agent.kind), 'Agent Settings…']
   const rows = await menuRows()
   if (JSON.stringify(rows) !== JSON.stringify(expectedRows)) {
     failures.push(`the + menu lists ${JSON.stringify(rows)}, not ${JSON.stringify(expectedRows)}`)
@@ -537,7 +537,7 @@ async function checkWorktreeSurfaces(ask) {
   const chose = await ask(
     `(() => {
        const row = [...document.querySelectorAll('[role="menuitem"]')].find(
-         (item) => item.querySelector('.row-menu__label')?.textContent === 'New terminal'
+         (item) => item.querySelector('.row-menu__label')?.textContent === 'New Terminal'
        )
        if (!row) return false
        row.click()

@@ -191,7 +191,7 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
   )
 }
 
-/** Which of the two jobs this is. The one the repository points at is marked and put first — marked, not taken. */
+/** Which of the two jobs this is: two buttons, the one the repository points at primary, and taken by neither. */
 function PathChoice({
   list,
   relay,
@@ -201,32 +201,27 @@ function PathChoice({
   relay: RelaySetting | undefined
   onChoose: (path: TeamworkPath) => void
 }): React.JSX.Element {
-  const suggestion = suggestedPath(list, relay)
-  const order = [...TEAMWORK_PATHS].sort((a, b) => (a.id === suggestion?.id ? -1 : b.id === suggestion?.id ? 1 : 0))
+  const suggestion = suggestedPath(list, relay) ?? { id: 'start', because: null }
   return (
     <div className="path-choice">
-      <h2 className="path-choice__head">Which of these are you doing?</h2>
-      <ul className="path-choice__list">
-        {order.map((option) => (
-          <li key={option.id} className={`path-option${option.id === suggestion?.id ? ' path-option--suggested' : ''}`}>
-            <button
-              type="button"
-              className="button button--primary path-option__button"
-              onClick={() => onChoose(option.id)}
-            >
-              {option.title}
-            </button>
-            {option.id === suggestion?.id && suggestion.because !== null ? (
-              <p className="path-option__because">{suggestion.because}</p>
-            ) : null}
-          </li>
+      <div className="path-choice__buttons">
+        {TEAMWORK_PATHS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={option.id === suggestion.id ? 'button button--primary' : 'button'}
+            onClick={() => onChoose(option.id)}
+          >
+            {option.button}
+          </button>
         ))}
-      </ul>
+      </div>
+      {suggestion.because === null ? null : <p className="path-choice__because">{suggestion.because}</p>}
     </div>
   )
 }
 
-/** The answer, kept on screen and changeable. Quoted as the button said it: the titles are imperatives. */
+/** The answer, kept on screen and changeable. */
 function ChosenPath({ path, onChange }: { path: TeamworkPath; onChange: () => void }): React.JSX.Element {
   const chosen = TEAMWORK_PATHS.find((option) => option.id === path) as (typeof TEAMWORK_PATHS)[number]
   return (

@@ -1,4 +1,4 @@
-// `Open as artifact` from a page's menu: the page as it stands, unwritten edits included, copied,
+// `Open as Artifact` from a page's menu: the page as it stands, unwritten edits included, copied,
 // then a new chat opened to paste it into.
 
 import { openInBrowser } from '../shell/openInBrowser'

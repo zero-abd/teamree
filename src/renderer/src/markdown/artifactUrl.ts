@@ -1,6 +1,6 @@
 // Where a page goes to become a Claude artifact, and how a link to one is recognised.
 
-/** `Open as artifact` copies the page and opens a new chat here to paste it into. */
+/** `Open as Artifact` copies the page and opens a new chat here to paste it into. */
 export const NEW_CHAT_URL = 'https://claude.ai/new'
 
 /** A page on claude.ai with a path: an artifact, or something beside one. */

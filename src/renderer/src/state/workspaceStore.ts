@@ -481,7 +481,7 @@ type WorkspaceState = {
   pinFilePane: (paneId: string) => void
   /** Shows a file pane's diff, or its text again. */
   setPaneDiff: (paneId: string, on: boolean) => void
-  /** `New markdown`: NOTES.md, or a name asked for in the strip when that is already open. */
+  /** `New Markdown`: NOTES.md, or a name asked for in the strip when that is already open. */
   newMarkdown: (worktreeId: string) => void
   /** Answers the strip's question with a name, or null to withdraw it. */
   nameMarkdown: (name: string | null) => void
@@ -2134,16 +2134,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       try {
         const result = await runtimeClient.call('worktree.commit', { worktreeId, message, ...(paths && { paths }) })
         // The commit can capture more than was ticked (anything staged earlier in a terminal); saying
-        // so is the difference between a notice and a surprise.
+        // so is the difference between a notice and a surprise. Otherwise the Changes tab shows it.
         const extra = paths ? result.paths.filter((path) => !paths.includes(path)) : []
-        notify(
-          extra.length === 0
-            ? `Committed ${result.shortSha}: ${result.message}`
-            : `Committed ${result.shortSha}: ${result.message} — including ${extra.length} path${
-                extra.length === 1 ? '' : 's'
-              } already staged`,
-          'info'
-        )
+        if (extra.length > 0) {
+          notify(
+            `Committed ${result.shortSha}: ${result.message} — including ${extra.length} path${
+              extra.length === 1 ? '' : 's'
+            } already staged`,
+            'info'
+          )
+        } else if (!changesOnScreen(get())) notify(`Committed ${result.shortSha}: ${result.message}`, 'info')
         // Nothing is left ticked; the list refetches on the invalidation the runtime publishes, and
         // doing it here too would be a second way for this window to disagree with the others.
         set({ stagedPaths: [], selectedChangePath: null })

@@ -86,13 +86,13 @@ roles have no meaning to the software — after setup you are two members of the
 same project with identical powers.
 
 **The app asks which of the two you are, and it is the first thing it asks.**
-Opening **Start teamwork** on a project nobody has set up leads with one
-question — *Start a team here* or *Join a team I was invited to* — and every step
+Opening **Teamwork** on a project nobody has set up leads with two buttons —
+*Start a Team* and *Join…* — and every step
 after it is worded for the answer. It is not a permission or a role stored
 anywhere; it is only which half of the work is left, so that the page can say
 "your teammate is waiting for exactly this file" instead of writing every
-sentence for both of you at once. The option the repository points at is marked
-with the reason — a `.teamree/relay` already in the checkout, a colleague's key
+sentence for both of you at once. The option the repository points at is the
+primary button, with the reason under it — a `.teamree/relay` already in the checkout, a colleague's key
 already on the roster — and neither is chosen for you. If you pick the wrong
 one, **Not that** puts the question back.
 
@@ -183,7 +183,7 @@ prints the exact string it hashes when you set the origin, and the invitation it
 writes for your teammate names the path to mount at; `docs/teamwork.md` has the
 full rule, including what is and is not normalised away.
 
-If you open **Start teamwork** on a checkout that has no usable origin, the
+If you open **Teamwork** on a checkout that has no usable origin, the
 panel says so at the top and puts an **Origin** field and an **Add origin**
 button directly under the sentence, so the fix is where the problem is reported
 rather than in another window. It takes either kind of answer, and refuses the
@@ -308,7 +308,7 @@ the first, which is the thing the identity design spends its whole argument
 avoiding. One person deploys a relay, pushes a one-line file, and the team is
 connected, visibly, in a diff.
 
-**Whoever set the relay up** does it in the app, in the same **Start teamwork**
+**Whoever set the relay up** does it in the app, in the same **Teamwork**
 panel step 4 uses — the **Teamwork** button in the project header opens it, and
 step 3 of it is the relay.
 
@@ -358,7 +358,7 @@ launched from Finder or Spotlight does not inherit your shell's environment, so
 the override only applies if you start teamree from the terminal that has the
 variable set; and because it is per-machine it is exactly the second list this
 design avoids, so use it to test a relay and then commit the real one. The
-**Start teamwork** panel says which of the two it is looking at — including *"No
+**Teamwork** panel says which of the two it is looking at — including *"No
 `TEAMREE_RELAY_URL` in this app's environment"*, which is the answer to "I set
 the variable and nothing happened".
 
@@ -369,7 +369,7 @@ private half never leaves it, and the public half goes in the repository at
 `.teamree/members/<handle>.pub`. There is no account to make and nobody to ask:
 if you can push that file, you are on the team.
 
-In the app, open the project's **Start teamwork** panel — the **Teamwork**
+In the app, open the project's **Teamwork** panel — the **Teamwork**
 button is in the project header in the sidebar — and press **Add my key** in
 step 2. What that grants is written above the button rather than under it: a key
 in `.teamree/members/` lets that person run commands on your machine, as you.
@@ -402,7 +402,7 @@ key" below is what that looks like from both ends.
 
 **Adding a key is silent, and that is worth knowing before you rely on it.**
 Nothing in the app announces that somebody joined. A new key becomes another
-person in the **Start teamwork** panel and another link in the header's count,
+person in the **Teamwork** panel and another link in the header's count,
 indistinguishable from a colleague who was there all along. Anybody who can push
 can add any key, including one belonging to somebody the rest of you have never
 met, and it is obeyed without comment. The only control is a person reading the
@@ -492,7 +492,7 @@ know they meant to.
 
 ### What to send the other person
 
-At the bottom of **Start teamwork** is the state this ended in, as four separate
+At the bottom of **Teamwork** is the state this ended in, as four separate
 verdicts rather than one: your key, the relay, the push, and whether anything is
 connected. They are separate because half-working is the ordinary outcome — the
 commit lands and the push is refused, or everything on this machine is done and
@@ -566,12 +566,12 @@ opened and settling to once every thirty seconds while nothing is happening. A
 pull the watch misses is picked up by that instead. Half a minute late is the
 worst this costs you; never noticing it at all is what it removes.
 
-Opening the **Start teamwork** panel re-reads both files as well, which is the
+Opening the **Teamwork** panel re-reads both files as well, which is the
 belt-and-braces half of the same thing — and if the watch could not be set up at
 all, that is the panel that says so rather than letting a list nothing is
 following look as live as one that is.
 
-Open the **Start teamwork** panel on both machines. Its last step, *Connected*,
+Open the **Teamwork** panel on both machines. Its last step, *Connected*,
 lists the roster above the links: two entries, one of them marked **you**. That
 part reads the directory and needs no network at all, so it is a clean check on
 step 4 before you blame anything on the relay.
@@ -781,7 +781,7 @@ cd ~/teamree-example && git pull && ls .teamree/members/
 ```
 
 Both handles, or you are not done. The app follows that directory, so the pull
-reaches the **Start teamwork** panel by itself — usually at once, and within
+reaches the **Teamwork** panel by itself — usually at once, and within
 half a minute at worst, on the timer step 5 describes. Opening the panel re-reads
 the directory in any case, which is the quickest way to skip that wait. If the
 panel shows two people and the header still says **No teammates**, that is worth
@@ -902,7 +902,7 @@ cd ~/teamree-example && git pull && cat .teamree/relay
 ```
 
 Both of you, and compare the strings exactly, scheme included — or open the
-**Start teamwork** panel on each machine, which shows the URL in effect and
+**Teamwork** panel on each machine, which shows the URL in effect and
 which of the two places it came from. If one of you has the file and the other
 does not, somebody did not push. If it says the scheme is `https`, not ws or
 wss, or that it has no path, you pasted the address the deploy printed rather

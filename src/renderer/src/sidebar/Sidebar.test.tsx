@@ -4,7 +4,7 @@
 // the same project. What is only true here is the wiring between the rows, and the
 // three different sentences for having nothing to show.
 
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Project, TeammatePresence, TeammatePresenceRead, TeamworkStatus, Worktree } from '@shared/entities'
 
@@ -191,10 +191,16 @@ describe('having nothing to show', () => {
 })
 
 describe('a project header', () => {
-  it('counts your worktrees and theirs apart, because they are not the same thing', () => {
-    seed({ worktrees: [worktree()], teammates: { p1: presence({ worktrees: [theirWorktree('priya', 'priya:t7')] }) } })
+  // Open, the rows under it are the count.
+  it('counts your worktrees and theirs apart only while folded', () => {
+    const teammates = { p1: presence({ worktrees: [theirWorktree('priya', 'priya:t7')] }) }
+    seed({ worktrees: [worktree()], teammates })
     mount()
-    const toggle = screen.getByRole('treeitem', { expanded: true, name: /^pager/ })
+    expect(screen.getByRole('treeitem', { expanded: true, name: /^pager/ }).textContent).toBe('pager')
+    cleanup()
+    seed({ worktrees: [worktree()], teammates, collapsedProjects: { p1: true } })
+    mount()
+    const toggle = screen.getByRole('treeitem', { expanded: false, name: /^pager/ })
     expect(within(toggle).getByText('1')).toBeTruthy()
     expect(within(toggle).getByText('+1')).toBeTruthy()
   })
@@ -263,8 +269,10 @@ describe('a project header', () => {
 
   it('starts a new task in the project the button belongs to', () => {
     mount()
-    const add = screen.getByRole('button', { name: 'New task in pager' })
-    expect(add.getAttribute('title')).toBe('New task in pager')
+    const add = screen.getByRole('button', { name: 'New Task in pager' })
+    expect(add.getAttribute('title')).toBe('New Task')
+    // Not the Projects header's plus, which adds a project.
+    expect(add.innerHTML).not.toBe(screen.getByRole('button', { name: 'Add project' }).innerHTML)
     add.click()
     expect(openDialog).toHaveBeenCalledWith({ kind: 'new-task', projectId: 'p1' })
   })
@@ -505,6 +513,25 @@ describe('the rail reaches the window-level surfaces', () => {
     expect(screen.getByRole('button', { name: /Settings/ }).getAttribute('aria-current')).toBe('page')
   })
 
+  // The worktree's panes are not on screen under a page, so its row stops reading as selected.
+  it('stands the open worktree down while any page holds the area', () => {
+    for (const page of [
+      { settingsOpen: true },
+      { helpOpen: true },
+      { dashboardOpen: true },
+      { teamworkProjectId: 'p1' }
+    ]) {
+      seed({ worktrees: [worktree()], activeWorktreeId: 'w1', ...page })
+      mount()
+      expect(document.querySelector('.sidebar')?.classList.contains('sidebar--page'), JSON.stringify(page)).toBe(true)
+      cleanup()
+    }
+    seed({ worktrees: [worktree()], activeWorktreeId: 'w1' })
+    mount()
+    expect(document.querySelector('.sidebar')?.classList.contains('sidebar--page')).toBe(false)
+    expect(document.querySelector('.worktree--active')).toBeTruthy()
+  })
+
   // The window has too many places explaining shortcuts; the search field keeps its one.
   it('draws no chord on any rail row but the search', () => {
     seed({ toggleHelp })
@@ -553,7 +580,7 @@ describe('the row menu acts on the worktree it was opened on', () => {
     seed({ worktrees: [worktree()] })
     openMenu()
 
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy path' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy Path' }))
     await act(async () => undefined)
 
     expect(writeText).toHaveBeenCalledWith('/repos/pager-wt/rewrite')
@@ -566,7 +593,7 @@ describe('the row menu acts on the worktree it was opened on', () => {
     seed({ worktrees: [worktree()] })
     openMenu()
 
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy branch' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy Branch' }))
     await act(async () => undefined)
 
     expect(writeText).toHaveBeenCalledWith('rewrite-the-pager')

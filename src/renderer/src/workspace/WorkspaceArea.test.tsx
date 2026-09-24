@@ -164,7 +164,7 @@ describe('when there is nothing open', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clone…' }))
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'clone-project' })
     expect(screen.queryByRole('button', { name: 'New task' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'New terminal' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'New Terminal' })).toBeNull()
   })
 
   // With a project the task button is live; agents are chosen in the composer.
@@ -176,7 +176,7 @@ describe('when there is nothing open', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New task' }))
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p1' })
     expect(screen.queryByRole('button', { name: /^Start / })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'New terminal' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'New Terminal' })).toBeNull()
   })
 
   it('starts the new task in the project added last', () => {
@@ -190,7 +190,7 @@ describe('when there is nothing open', () => {
     seed({ projects: [project] })
     mount()
     const keys = [...document.querySelectorAll('.welcome kbd')].map((node) => node.textContent)
-    expect(keys).toEqual(['⌘N', '⌘K', '⌘B'])
+    expect(keys).toEqual(['⌘K', '⌘B'])
   })
 
   // The last window's front tab is on its way: a welcome in the meantime is a screen that flashes past.
@@ -258,8 +258,8 @@ describe('a worktree with no panes in it', () => {
       startAgent: () => {},
       openAgentSettings: () => {}
     })
-    expect(startButtons()).toEqual(menu.map((item) => item.label).filter((label) => label !== 'Agent settings…'))
-    expect(startButtons()).toEqual(['New terminal', 'New markdown', 'Claude Code', 'Codex'])
+    expect(startButtons()).toEqual(menu.map((item) => item.label).filter((label) => label !== 'Agent Settings…'))
+    expect(startButtons()).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Codex'])
   })
 
   it('marks each agent with its harness glyph', () => {
@@ -272,7 +272,7 @@ describe('a worktree with no panes in it', () => {
     openEmpty()
     fireEvent.click(screen.getByRole('button', { name: 'Codex' }))
     expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex')
-    fireEvent.click(screen.getByRole('button', { name: 'New terminal' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New Terminal' }))
     expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1')
   })
 
@@ -435,7 +435,8 @@ describe('the welcome’s shortcut list and the menu bar use one set of words', 
 
     const menu = new Map(menuBarSpec(useWorkspaceStore.getState()).map((item) => [item.command, item.label]))
     const rows = [...document.querySelectorAll('.welcome__shortcuts > div')]
-    expect(rows).toHaveLength(3)
+    // New Task is the button right above; the list starts at Go to.
+    expect(rows.map((row) => row.getAttribute('data-command'))).toEqual(['open-palette', 'toggle-sidebar'])
     for (const row of rows) {
       const command = commandNamed(row.getAttribute('data-command') ?? '')
       expect(command, row.textContent ?? '').not.toBeNull()
@@ -445,13 +446,11 @@ describe('the welcome’s shortcut list and the menu bar use one set of words', 
   })
 })
 
-// Through the one browser path, so main's link policy applies.
-describe('the star', () => {
-  it('opens the repository through the window’s one browser path', async () => {
-    const { openInBrowser } = await import('../shell/openInBrowser')
+// The star is Help's and the About panel's, not the first screen's.
+describe('the first screen', () => {
+  it('asks nobody for a star', () => {
     seed({ projects: [] })
     mount()
-    fireEvent.click(screen.getByRole('button', { name: 'Star on GitHub' }))
-    expect(openInBrowser).toHaveBeenCalledExactlyOnceWith('https://github.com/zero-abd/teamree')
+    expect(screen.queryByRole('button', { name: 'Star on GitHub' })).toBeNull()
   })
 })
