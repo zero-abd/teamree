@@ -30,7 +30,7 @@ import { ErrorCode } from '../../shared/protocol'
 import { agentForProcess, type AgentKind } from './agent-command'
 import { TitleSequenceScanner } from './title-sequence'
 import { titleOpinion, type TitleOpinion } from '../../shared/titleOpinion'
-import { screenOpinion, type ScreenOpinion } from '../../shared/screenOpinion'
+import { screenOpinion, screenQuestion, type ScreenOpinion } from '../../shared/screenOpinion'
 import { screenRows } from './screenRows'
 import type { Tone } from '../../shared/theme'
 
@@ -169,6 +169,7 @@ export class PtySession {
   /** What the agent last said about itself; see `Terminal.agentEvent`. */
   private agentEvent: AgentEvent | undefined
   private screenSays: ScreenOpinion | undefined
+  private screenAsks: string | undefined
   private cancelScreenRead: (() => void) | undefined
   /** Bumped by every read and every keystroke, so a read that was overtaken lands nowhere. */
   private screenReads = 0
@@ -290,6 +291,11 @@ export class PtySession {
     return this.running
   }
 
+  /** What the screen is asking, while it reads as asking; see `screenQuestion`. */
+  get question(): string | undefined {
+    return this.screenAsks
+  }
+
   /** Whether output is still arriving; see `noteActivity` for what that means. */
   get isBusy(): boolean {
     return this.busy
@@ -328,6 +334,7 @@ export class PtySession {
       this.lastBellAt = undefined
       // So is this; the screen is read again once the answer has redrawn it.
       this.screenSays = undefined
+      this.screenAsks = undefined
       this.screenReads++
       this.cancelScreenRead?.()
       this.cancelScreenRead = undefined
@@ -498,6 +505,7 @@ export class PtySession {
     const agent = this.agent ?? this.foregroundAgent()
     const rows = agent === undefined ? [] : await screenRows(this.read(SCREEN_TAIL_BYTES), this.cols, this.rows)
     if (read !== this.screenReads || !this.running) return
+    this.screenAsks = screenQuestion(agent, rows) ?? undefined
     const says = screenOpinion(agent, rows) ?? undefined
     if (says === this.screenSays) return
     this.screenSays = says
