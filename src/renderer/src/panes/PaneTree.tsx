@@ -68,6 +68,7 @@ export function PaneTree({
 
 function FileLeaf({
   leaf,
+  tabbed = false,
   worktreeId,
   focusedTerminalId,
   onFocus,
@@ -76,7 +77,7 @@ function FileLeaf({
   searchToken,
   onCloseSearch,
   modifier
-}: PaneCallbacks & { leaf: FileLeafNode }): React.JSX.Element {
+}: PaneCallbacks & { leaf: FileLeafNode; tabbed?: boolean }): React.JSX.Element {
   const menu = usePaneMenu(modifier)
   const paneId = leaf.terminalId
   const name = fileTabName(leaf)
@@ -90,6 +91,7 @@ function FileLeaf({
         focused={focusedTerminalId === paneId}
         onFocus={() => onFocus(paneId)}
         onClose={() => onClose(paneId)}
+        tabbed={tabbed}
         onHeaderMenu={(event) => menu.onContextMenu(paneId, name, event)}
         onMenu={(event) => menu.onButton(paneId, name, event)}
         searchToken={searchTerminalId === paneId ? searchToken : 0}
@@ -164,7 +166,7 @@ function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColu
       </div>
       {tabs.map((tab) => (
         <div key={tab.terminalId} className="column__page" hidden={tab.terminalId !== shown}>
-          <FileLeaf leaf={tab} {...callbacks} />
+          <FileLeaf leaf={tab} tabbed {...callbacks} />
         </div>
       ))}
     </div>

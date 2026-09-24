@@ -564,7 +564,8 @@ async function checkWorktreeSurfaces(ask) {
   // asked about, because a question on every close is one people press through.
   const closed = await ask(
     `(() => {
-       const button = document.querySelector('.pane__close')
+       // The diff above is zoomed, so the file column may be all there is; its tab holds its close.
+       const button = document.querySelector('.pane__close, .column__close')
        if (!button) return false
        button.click()
        return true

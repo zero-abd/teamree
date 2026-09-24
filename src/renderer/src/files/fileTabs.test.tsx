@@ -8,7 +8,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { EditorView } from '@codemirror/view'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FileContent, FileView as FileViewAnswer, Layout, PaneNode, Worktree } from '@shared/entities'
-import { fileColumnIn, fileLeaf, fileLeavesIn } from '@shared/filePane'
+import { fileColumn, fileColumnIn, fileLeaf, fileLeavesIn } from '@shared/filePane'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 const call = vi.fn()
@@ -318,6 +318,14 @@ describe('the file viewer', () => {
     await waitFor(() => expect(call).toHaveBeenCalledWith('worktree.diff', { worktreeId: 'w1', path: 'src/app.ts' }))
     await waitFor(() => expect(document.querySelector('.patch')).not.toBeNull())
     expect(screen.getByRole('button', { name: 'Diff' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Code' }).getAttribute('aria-pressed')).toBe('false')
+    // The bar names the file; the patch of that one file does not name it again.
+    expect(document.querySelector('.patch__fileHead:not([hidden])')).toBeNull()
+    expect(document.querySelector('.patch__hunkHead')).not.toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Code' }))
+    expect(document.querySelector('.patch')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Code' }).getAttribute('aria-pressed')).toBe('true')
   })
 
   const changes = (total: number) => ({ worktreeId: 'w1', changes: [], total, limit: 1, truncated: false, readAt: 1 })
@@ -348,7 +356,7 @@ describe('the file viewer', () => {
     await waitFor(() => expect(diff.disabled).toBe(false))
   })
 
-  it('says No changes in an open diff once its change is discarded', async () => {
+  it('goes back to Code once its change is committed or discarded', async () => {
     let working = 'diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-b\n+a\n'
     call.mockImplementation(async (method: string, params: { staged?: boolean }) => {
       if (method === 'file.read') return text('a\n')
@@ -365,11 +373,25 @@ describe('the file viewer', () => {
 
     working = ''
     act(() => useWorkspaceStore.setState((state) => ({ worktreeFilesEpoch: state.worktreeFilesEpoch + 1 })))
-    expect(await screen.findByText('No changes')).toBeTruthy()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Code' }).getAttribute('aria-pressed')).toBe('true'))
+    expect(useWorkspaceStore.getState().diffPanes['file:1']).toBeFalsy()
     expect(document.querySelector('.patch')).toBeNull()
-    expect(diff.disabled).toBe(false)
-    fireEvent.click(diff)
+    expect(screen.queryByText('No changes')).toBeNull()
     await waitFor(() => expect(diff.disabled).toBe(true))
+  })
+
+  it('says No changes only for a file opened in Diff that never had one', async () => {
+    call.mockImplementation(async (method: string, params: { staged?: boolean }) => {
+      if (method === 'file.read') return text('a\n')
+      if (method === 'worktree.changes') return changes(0)
+      if (method === 'worktree.diff') return patchOf('', params.staged)
+      return undefined
+    })
+    useWorkspaceStore.getState().setPaneDiff('file:1', true)
+    mount()
+    expect(await screen.findByText('No changes')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Diff' }).getAttribute('aria-pressed')).toBe('true')
+    expect(useWorkspaceStore.getState().diffPanes['file:1']).toBe(true)
   })
 })
 
@@ -427,36 +449,53 @@ describe('one header for code and markdown', () => {
   })
 
   const header = (name: string): HTMLElement => screen.getByRole('region', { name }).querySelector('header')!
-  /** The bar left to right: glyph, `dir/` and name, the dot, then every button by its name. */
-  const parts = (name: string): string[] =>
-    [...header(name).children].flatMap((part) => {
-      if (part.classList.contains('file__glyph')) return ['glyph']
-      if (part.classList.contains('file__path'))
-        return [`${part.querySelector('.file__dir')?.textContent}|${part.textContent}`]
-      if (part.classList.contains('file__unsaved')) return ['dot']
-      if (part.tagName === 'BUTTON') return [part.getAttribute('aria-label') ?? part.textContent ?? '']
-      return []
-    })
+  const parts = (name: string): string[] => barParts(header(name))
   const menuLabels = (): string[] =>
     within(screen.getByRole('menu'))
       .getAllByRole('menuitem')
       .filter((item) => item.parentElement === screen.getByRole('menu'))
       .map((item) => item.querySelector('.row-menu__label')?.textContent ?? '')
 
-  it('lays both out alike: glyph, path, the dot only when dirty, tools, ⋯, ×', async () => {
+  it('lays both out alike: path, the dot only when dirty, the view, ⋯, ×', async () => {
     await screen.findByText('a', { selector: '.ProseMirror p' })
-    expect(parts('app.ts')).toEqual(['glyph', 'src/|src/app.ts', 'Diff', 'More for app.ts', 'Close pane app.ts'])
+    expect(parts('app.ts')).toEqual(['src/|src/app.ts', 'Code', 'Diff', 'More for app.ts', 'Close pane app.ts'])
     expect(parts('guide.md')).toEqual([
-      'glyph',
       'docs/|docs/guide.md',
+      'Page',
       'Diff',
       'More for guide.md',
       'Close pane guide.md'
     ])
 
     act(() => useWorkspaceStore.setState({ unsavedFiles: { 'file:code': true, 'file:md': true } }))
-    expect(parts('app.ts').slice(0, 3)).toEqual(['glyph', 'src/|src/app.ts', 'dot'])
-    expect(parts('guide.md').slice(0, 3)).toEqual(['glyph', 'docs/|docs/guide.md', 'dot'])
+    expect(parts('app.ts').slice(0, 2)).toEqual(['src/|src/app.ts', 'dot'])
+    expect(parts('guide.md').slice(0, 2)).toEqual(['docs/|docs/guide.md', 'dot'])
+  })
+
+  it('draws every toggle as a segment of one group, the layouts only while the diff is open', async () => {
+    const bar = header('app.ts')
+    const diff = within(bar).getByRole('button', { name: 'Diff' }) as HTMLButtonElement
+    await waitFor(() => expect(diff.disabled).toBe(false))
+    fireEvent.click(diff)
+    await waitFor(() => expect(parts('app.ts')).toContain('Inline'))
+    expect(parts('app.ts')).toEqual([
+      'src/|src/app.ts',
+      'Code',
+      'Diff',
+      'Inline',
+      'Side by side',
+      'More for app.ts',
+      'Close pane app.ts'
+    ])
+    const toggles = [...bar.querySelectorAll('button[aria-pressed]')]
+    expect(toggles.map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual([
+      'Code',
+      'Diff',
+      'Inline',
+      'Side by side'
+    ])
+    for (const toggle of toggles) expect(toggle.parentElement?.getAttribute('role')).toBe('group')
+    expect(bar.querySelector('.file__tool--on')).toBeNull()
   })
 
   it('draws the tab’s dirty dot as the header draws it', () => {
@@ -513,5 +552,58 @@ describe('one header for code and markdown', () => {
     act(() => useWorkspaceStore.setState((state) => ({ worktreeFilesEpoch: state.worktreeFilesEpoch + 1 })))
     const diff = within(header('guide.md')).getByRole('button', { name: 'Diff' }) as HTMLButtonElement
     await waitFor(() => expect(diff.disabled).toBe(true))
+  })
+})
+
+/** A file bar left to right: `dir/` and name, the dot, then every button by its name, segments included. */
+function barParts(bar: HTMLElement): string[] {
+  return [...bar.querySelectorAll(':scope > *, :scope > [role="group"] > *')].flatMap((part) => {
+    if (part.classList.contains('file__path'))
+      return [`${part.querySelector('.file__dir')?.textContent}|${part.textContent}`]
+    if (part.classList.contains('file__unsaved')) return ['dot']
+    if (part.tagName === 'BUTTON') return [part.getAttribute('aria-label') ?? part.textContent ?? '']
+    return []
+  })
+}
+
+describe('a file in the column', () => {
+  const MAC = resolvePlatformModifier('darwin')
+  const worktree = { id: 'w1', projectId: 'p1', name: 'w', branch: 'w', path: '/repos/w', state: 'ready' } as Worktree
+
+  it('leaves the dot and the close to its tab, and says its name once under it', async () => {
+    call.mockImplementation(async (method: string, params: { path: string }) => {
+      if (method === 'file.read') return { ...text('a\n'), path: params.path }
+      if (method === 'worktree.changes')
+        return { worktreeId: 'w1', changes: [], total: 1, limit: 1, truncated: false, readAt: 1 }
+      return undefined
+    })
+    const root = fileColumn(fileLeaf('file:code', 'src/app.ts'))
+    useWorkspaceStore.setState({
+      worktrees: [worktree],
+      layouts: { w1: { worktreeId: 'w1', root, focusedTerminalId: 'file:code' } },
+      unsavedFiles: { 'file:code': true }
+    })
+    render(
+      <PaneTree
+        node={root}
+        path={[]}
+        worktreeId="w1"
+        terminals={{}}
+        focusedTerminalId="file:code"
+        onFocus={() => {}}
+        onClose={() => {}}
+        onRelaunch={() => {}}
+        onResize={() => {}}
+        isAppChord={() => false}
+        modifier={MAC}
+        searchTerminalId={null}
+        searchToken={0}
+        onCloseSearch={() => {}}
+      />
+    )
+    const bar = screen.getByRole('region', { name: 'app.ts' }).querySelector('header')!
+    expect(barParts(bar)).toEqual(['src/|src/app.ts', 'Code', 'Diff', 'More for app.ts'])
+    expect(within(screen.getByRole('tab', { name: 'app.ts' }).parentElement!).getByTestId('unsaved')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: /^Close/ })).toHaveLength(1)
   })
 })

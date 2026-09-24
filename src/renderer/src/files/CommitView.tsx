@@ -6,7 +6,7 @@ import type { FilePaneProps } from '../panes/FilePane'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { fitLayout } from '../workspace/PatchView'
-import { CommitGlyph, FileBar } from './FileBar'
+import { FileBar } from './FileBar'
 import { LayoutTools, ReadOnlyDiffBody, useWidth } from './FileDiff'
 
 /** `path` is the tab's title, `5bb16ed Add sub`. */
@@ -17,6 +17,7 @@ export function CommitView({
   focused,
   onFocus,
   onClose,
+  tabbed,
   onHeaderMenu,
   onMenu,
   searchToken = 0,
@@ -54,11 +55,11 @@ export function CommitView({
       style={{ ['--file-font-size' as string]: `${fontSize}px` }}
     >
       <FileBar
-        path={path}
         name={path}
+        label={commit === null ? null : commitLine(commit)}
         title={commit === null ? sha : `${sha}\n${commit.author} · ${commit.committedAt}`}
         unsaved={false}
-        glyph={<CommitGlyph />}
+        tabbed={tabbed}
         onHeaderMenu={onHeaderMenu}
         onMenu={onMenu}
         onClose={onClose}
@@ -77,4 +78,11 @@ export function CommitView({
       </div>
     </section>
   )
+}
+
+/** Who and when, since the tab already reads the sha and subject. */
+function commitLine(commit: WorktreeCommitPatch): string {
+  const at = new Date(commit.committedAt)
+  if (Number.isNaN(at.getTime())) return commit.author
+  return `${commit.author} · ${at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
 }

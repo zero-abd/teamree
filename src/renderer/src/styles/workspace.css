@@ -573,6 +573,10 @@
   display: none;
 }
 
+.patch__fileHead[hidden] {
+  display: none;
+}
+
 .patch__fileHead {
   background: var(--bg-raised);
   color: var(--fg);

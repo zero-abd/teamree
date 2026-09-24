@@ -57,15 +57,59 @@
   color: var(--fg);
 }
 
-.file__tool:disabled {
+/* Every toggle on the bar: Code or Diff, and the diff's layouts. */
+.file__seg {
+  display: flex;
+  flex: none;
+  height: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  overflow: hidden;
+}
+
+.file__seg > button {
+  padding: 0 var(--s2);
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.file__seg > button + button {
+  border-left: 1px solid var(--line);
+}
+
+.file__seg > button:hover:not(:disabled) {
+  background: var(--bg-press);
+  color: var(--fg);
+}
+
+.file__seg > button[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+.file__seg > button:disabled {
   opacity: 0.45;
   cursor: default;
 }
 
-.file__tool--on {
-  border-color: var(--accent-line);
-  background: var(--accent-soft);
-  color: var(--fg);
+.file__seg > .file__icon {
+  display: grid;
+  place-items: center;
+  padding: 0 5px;
+}
+
+.file__icon svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
 }
 
 .file__more {

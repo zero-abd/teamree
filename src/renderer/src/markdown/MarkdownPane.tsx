@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FileContent } from '@shared/entities'
 import { filePaneName } from '@shared/filePane'
-import { FileBar } from '../files/FileBar'
+import { FileBar, PathLabel } from '../files/FileBar'
 import { DiffBody, DiffTools, useFileDiff } from '../files/FileDiff'
 import type { FilePaneProps } from '../panes/FilePane'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
@@ -49,6 +49,7 @@ export function MarkdownPane({
   focused,
   onFocus,
   onClose,
+  tabbed,
   onHeaderMenu,
   onMenu,
   searchToken = 0,
@@ -199,10 +200,11 @@ export function MarkdownPane({
       onMouseDownCapture={onFocus}
     >
       <FileBar
-        path={path}
         name={name}
+        label={<PathLabel path={path} name={name} />}
         title={worktreePath === undefined ? path : `${worktreePath}/${path}`}
         unsaved={dirty}
+        tabbed={tabbed}
         onHeaderMenu={onHeaderMenu}
         onMenu={onMenu}
         onClose={onClose}
@@ -217,7 +219,7 @@ export function MarkdownPane({
             Reload
           </button>
         )}
-        <DiffTools diff={diff} />
+        <DiffTools diff={diff} view="Page" />
       </FileBar>
       <div className="file__body" ref={diff.body}>
         {diff.shown ? (

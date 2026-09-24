@@ -1,5 +1,5 @@
-// A file pane's working-tree diff: whether there is one, the bar's Inline / Side by side / Diff, the
-// staged and unstaged halves with their per-hunk actions, and find over both. A read-only patch reuses the parts.
+// A file pane's working-tree diff: whether there is one, the bar's Code / Diff and layouts, the staged and
+// unstaged halves with their per-hunk actions, and find over both. A read-only patch reuses the parts.
 
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { WorktreeDiff } from '@shared/entities'
@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, type PaneSearchState } from '../terminal/paneSearchModel'
 import { TerminalSearchBar } from '../terminal/TerminalSearchBar'
 import { fitLayout, PatchView, type PatchPlace } from '../workspace/PatchView'
+import { Segments } from './FileBar'
 import { DIFF_MATCH_LIMIT, findInPatches, stepMatch, type DiffMatch } from './diffFind'
 
 type Diffs = { working: WorktreeDiff; staged: WorktreeDiff }
@@ -31,11 +32,14 @@ export function useFileDiff(paneId: string, worktreeId: string, path: string): F
   const filesEpoch = useWorkspaceStore((state) => state.worktreeFilesEpoch)
   const diffLayout = useWorkspaceStore((state) => state.diffLayout)
   const shown = useWorkspaceStore((state) => state.diffPanes[paneId] === true)
+  const setPaneDiff = useWorkspaceStore((state) => state.setPaneDiff)
   const [changed, setChanged] = useState<boolean | null>(null)
   const [diffs, setDiffs] = useState<Diffs | null>(null)
   const [error, setError] = useState<string | null>(null)
   const body = useRef<HTMLDivElement | null>(null)
   const bodyWidth = useWidth(body, shown)
+  // A diff that empties (a commit, a discard) goes back to the file; `No changes` is for one that never had any.
+  const hadChange = useRef(false)
 
   useEffect(() => {
     let alive = true
@@ -70,31 +74,43 @@ export function useFileDiff(paneId: string, worktreeId: string, path: string): F
     }
   }, [shown, worktreeId, path, filesEpoch])
 
+  useEffect(() => {
+    if (!shown || diffs === null) return
+    if (diffs.working.patch !== '' || diffs.staged.patch !== '') hadChange.current = true
+    else if (hadChange.current) {
+      hadChange.current = false
+      setPaneDiff(paneId, false)
+    }
+  }, [shown, diffs, paneId, setPaneDiff])
+
   return { paneId, shown, changed, diffs, error, layout: fitLayout(diffLayout, bodyWidth), body, bodyWidth }
 }
 
-/** The bar's diff controls: the layouts while the diff is open, and Diff itself. */
-export function DiffTools({ diff }: { diff: FileDiff }): React.JSX.Element {
+/** The bar's diff controls: the file (`view` names it) or its diff, then the layouts while the diff is open. */
+export function DiffTools({ diff, view = 'Code' }: { diff: FileDiff; view?: string }): React.JSX.Element {
   const setPaneDiff = useWorkspaceStore((state) => state.setPaneDiff)
   const { shown, layout } = diff
   return (
     <>
+      <Segments label="View">
+        <button type="button" aria-pressed={!shown} onClick={() => setPaneDiff(diff.paneId, false)}>
+          {view}
+        </button>
+        <button
+          type="button"
+          aria-pressed={shown}
+          disabled={diff.changed === false && !shown}
+          onClick={() => setPaneDiff(diff.paneId, true)}
+        >
+          Diff
+        </button>
+      </Segments>
       {shown ? <LayoutTools layout={layout} bodyWidth={diff.bodyWidth} /> : null}
-      <button
-        type="button"
-        className={`file__tool${shown ? ' file__tool--on' : ''}`}
-        aria-pressed={shown}
-        // Left enabled while open, so a diff emptied by a discard can still be closed.
-        disabled={diff.changed === false && !shown}
-        onClick={() => setPaneDiff(diff.paneId, !shown)}
-      >
-        Diff
-      </button>
     </>
   )
 }
 
-/** Inline and Side by side; the second is off where two columns would not fit. */
+/** Inline and Side by side as icons; the second is off where two columns would not fit. */
 export function LayoutTools({
   layout,
   bodyWidth
@@ -104,25 +120,33 @@ export function LayoutTools({
 }): React.JSX.Element {
   const setDiffLayout = useWorkspaceStore((state) => state.setDiffLayout)
   return (
-    <>
+    <Segments label="Layout">
       <button
         type="button"
-        className={`file__tool${layout === 'inline' ? ' file__tool--on' : ''}`}
+        className="file__icon"
+        aria-label="Inline"
+        title="Inline"
         aria-pressed={layout === 'inline'}
         onClick={() => setDiffLayout('inline')}
       >
-        Inline
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M2 3.5 H10 M2 6 H10 M2 8.5 H10" />
+        </svg>
       </button>
       <button
         type="button"
-        className={`file__tool${layout === 'split' ? ' file__tool--on' : ''}`}
+        className="file__icon"
+        aria-label="Side by side"
+        title="Side by side"
         aria-pressed={layout === 'split'}
         disabled={fitLayout('split', bodyWidth) !== 'split'}
         onClick={() => setDiffLayout('split')}
       >
-        Side by side
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M1.5 3.5 H5 M7 3.5 H10.5 M1.5 6 H5 M7 6 H10.5 M1.5 8.5 H5 M7 8.5 H10.5" />
+        </svg>
       </button>
-    </>
+    </Segments>
   )
 }
 
@@ -230,6 +254,7 @@ export function DiffBody({
               patch={staged.patch}
               truncated={staged.truncated}
               layout={layout}
+              named
               action="Unstage"
               busy={busy}
               reveal={find.reveal(0)}
@@ -244,6 +269,7 @@ export function DiffBody({
               patch={working.patch}
               truncated={working.truncated}
               layout={layout}
+              named
               action="Stage"
               busy={busy}
               reveal={find.reveal(staged === null ? 0 : 1)}
