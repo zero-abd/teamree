@@ -123,7 +123,7 @@ describe('paneTabs', () => {
   })
 
   // The glyph names the agent, so the text beside it carries only what the glyph cannot.
-  it('draws an agent by its glyph, keeping a task name and a twin’s number as text', () => {
+  it('draws an agent by its glyph, keeping a task name and a twin’s whole name as text', () => {
     const tabs = paneTabs(
       row('one', 'two', 'named', 'shell'),
       byId(
@@ -136,7 +136,7 @@ describe('paneTabs', () => {
 
     expect(tabs.map((tab) => [tab.agent, tab.text])).toEqual([
       ['codex', ''],
-      ['codex', '2'],
+      ['codex', 'Codex 2'],
       ['claude', 'auth refactor'],
       ['grok', '']
     ])
@@ -165,6 +165,26 @@ describe('paneTabs', () => {
     expect(byTab).toEqual({ agent: 'Claude Code', older: 'zsh', newer: 'zsh 2' })
     expect(bySidebar).toEqual(byTab)
     expect(Object.fromEntries(board.map((entry) => [entry.terminalId, entry.label]))).toEqual(byTab)
+  })
+
+  // Stop and Close on the task's claude, then Claude Code on the empty worktree (`29-after-close.png`).
+  it('titles a task’s restarted agent by the task, then numbers two agents from the bare name', () => {
+    const task: Worktree = {
+      ...worktree,
+      name: 'Add a sub function to src',
+      branch: 'add-a-sub-function-to-src',
+      task: 'Add a sub function to src/math.ts'
+    }
+    const again = terminal({ id: 'again', agent: 'claude', ordinal: 1 })
+    const [alone] = paneTabs(leaf('again'), byId(again), task)
+    expect(alone).toMatchObject({ label: task.task, text: task.task })
+
+    const second = terminal({ id: 'second', agent: 'claude', ordinal: 2 })
+    const both = paneTabs(row('again', 'second'), byId(again, second), task)
+    expect(both.map((tab) => [tab.label, tab.text])).toEqual([
+      ['Claude Code', ''],
+      ['Claude Code 2', 'Claude Code 2']
+    ])
   })
 
   it('has nothing to show for a worktree with no panes in it', () => {

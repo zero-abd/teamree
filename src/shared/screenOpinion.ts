@@ -85,6 +85,33 @@ function dialogAbove(written: readonly string[], hint: number): string[] {
 
 const MENU_OPTION = /^[❯›>]?\s*\d+\.\s/u
 
+/** How many written rows from the bottom a menu's last option may sit: a wrapped option, then a hint. */
+const MENU_ROWS_ASKED = 3
+
+/** The question above a numbered menu at the bottom of the screen, for a dialog drawn without a known hint. */
+export function menuQuestion(rows: readonly string[]): string | null {
+  const written = rows.filter((row) => row.trim().length > 0)
+  for (let index = written.length - 1; index >= Math.max(0, written.length - MENU_ROWS_ASKED); index--) {
+    if (MENU_OPTION.test((written[index] ?? '').trim())) return nearestQuestion(dialogAbove(written, index))
+  }
+  return null
+}
+
+/** Whether a line is one of a dialog's answers or its key hint, which quoted alone reads as an answer given. */
+export function isAnswerOrHint(line: string): boolean {
+  const row = line.trim()
+  if (MENU_OPTION.test(row) || SCREEN_RULES.some((rule) => rule.matches.test(row))) return true
+  return /^(?:press\s+)?(?:esc|enter|tab|shift\+tab)\b.*\bto\s/iu.test(row)
+}
+
+/** What an agent's Notification hook message asks, shortened: `Permission to use Edit`. */
+export function hookQuestion(message: string | undefined): string | null {
+  const said = message?.trim() ?? ''
+  if (said === '') return null
+  const tool = /\bneeds your permission to use (.+?)\.?$/u.exec(said)?.[1]
+  return tool === undefined ? said : `Permission to use ${tool}`
+}
+
 function nearestQuestion(above: readonly string[]): string | null {
   const row = above.findLast((candidate) => !MENU_OPTION.test(candidate.trim()) && candidate.trim().endsWith('?'))
   return row === undefined ? null : row.trim()

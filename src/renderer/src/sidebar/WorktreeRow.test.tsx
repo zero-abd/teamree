@@ -360,27 +360,28 @@ describe('one of several runs of a task', () => {
   const codexRun = (): Worktree =>
     worktree({ name: 'Add a subtract function to codex', branch: 'add-a-subtract-function-to-codex', task: TASK })
 
-  it('leads with its agent, glyph and name, ahead of the task', () => {
+  it('leads with its agent’s glyph, ahead of the task', () => {
     mount({ worktree: codexRun() })
     const head = document.querySelector('.worktree__title') as HTMLElement
     const slot = head.firstElementChild as HTMLElement
     expect(slot.className).toBe('worktree__agent')
     expect(slot.querySelector('[data-agent="codex"]')).not.toBeNull()
-    expect(slot.textContent).toBe('codex')
+    expect(slot.textContent).toBe('')
     expect(head.querySelector('.worktree__name')?.textContent).toBe(TASK)
   })
 
   // The stored name is cut to "Add a subtract function to", which read aloud as a dangling "to".
-  it('reads agent first, then the whole task line, and hovers the same name', () => {
+  it('reads the whole task line, then its agent in words, and hovers the same name', () => {
     mount({ worktree: codexRun() })
-    expect(screen.getByRole('treeitem', { name: `codex, ${TASK}` })).toBeTruthy()
-    expect(document.querySelector('.worktree__name')?.getAttribute('title')).toBe(`codex · ${TASK}`)
-    expect(screen.getByRole('button', { name: `More for codex · ${TASK}` })).toBeTruthy()
+    expect(screen.getByRole('treeitem', { name: `${TASK} (Codex)` })).toBeTruthy()
+    expect(document.querySelector('.worktree__name')?.getAttribute('title')).toBe(`${TASK} (Codex)`)
+    expect(screen.getByRole('button', { name: `More for ${TASK} (Codex)` })).toBeTruthy()
+    expect(document.body.innerHTML).not.toMatch(/codex ·|claude ·/u)
     expect(document.querySelector('.worktree__branch')).toBeNull()
   })
 
   // Name first, then what state it is in: glued together, "claudeAdd a subtract…stopped" is one word.
-  it('is named agent, comma, task, and described by its state and changes', () => {
+  it('is named task, then agent, and described by its state and changes', () => {
     mount({
       worktree: worktree({
         name: 'Add a subtract function to calc claude',
@@ -390,7 +391,7 @@ describe('one of several runs of a task', () => {
       terminals: [terminal({ agent: 'claude', lastOutputAt: NOW - 90_000 })],
       status: status({ unstaged: 1 })
     })
-    const button = screen.getByRole('treeitem', { name: 'claude, Add a subtract function to calc' })
+    const button = screen.getByRole('treeitem', { name: 'Add a subtract function to calc (Claude Code)' })
     expect(button.classList.contains('worktree__open')).toBe(true)
     expect(
       button
@@ -411,19 +412,24 @@ describe('one of several runs of a task', () => {
     const slot = document.querySelector('.worktree__agent') as HTMLElement
     expect(slot.querySelector('[data-agent="codex"]')).not.toBeNull()
     expect(slot.textContent).toBe('')
-    expect(screen.getByRole('treeitem', { name: `codex, ${TASK}` })).toBeTruthy()
+    expect(screen.getByRole('treeitem', { name: `${TASK} (Codex)` })).toBeTruthy()
   })
 
-  it('keeps the word beside two agent panes, or a sibling run of the same agent', () => {
+  it('names the agent in words only beside a sibling run of the same agent', () => {
     mount({
       worktree: codexRun(),
       terminals: [terminal({ id: 't1', agent: 'codex' }), terminal({ id: 't2', agent: 'codex' })]
     })
     mount({ worktree: codexRun(), terminals: [terminal({ id: 't1', agent: 'codex' })], twinRun: true })
-    expect([...document.querySelectorAll('.worktree__agent')].map((slot) => slot.textContent)).toEqual([
-      'codex',
-      'codex'
-    ])
+    expect([...document.querySelectorAll('.worktree__agent')].map((slot) => slot.textContent)).toEqual(['', 'Codex'])
+  })
+
+  // Closed, then started again from the empty worktree: the second codex this worktree has seen.
+  it('draws a restarted task agent as the task’s pane, not as a number', () => {
+    mount({ worktree: codexRun(), terminals: [terminal({ id: 't1', agent: 'codex', ordinal: 2 })] })
+    const pane = document.querySelector('.pane-row') as HTMLElement
+    expect(pane.querySelector('.pane-row__label')).toBeNull()
+    expect(pane.textContent).not.toMatch(/\b2\b/u)
   })
 
   // The task pane is named after the worktree; saying it again under the row is noise.

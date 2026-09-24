@@ -763,7 +763,7 @@ describe('the row menu acts on the worktree it was opened on', () => {
 
 // Two agents on one task were "Add a subtract function to c…" twice at the sidebar's width.
 describe('several runs of one task', () => {
-  it('leads each with its agent, then the whole task line', () => {
+  it('leads each with its agent, then the whole task line, and names it task first in words', () => {
     const task = 'Add a subtract function to src/math.ts'
     seed({
       worktrees: [
@@ -783,9 +783,12 @@ describe('several runs of one task', () => {
     })
     mount()
     const heads = [...document.querySelectorAll('.worktree__title')]
-    expect(heads.map((head) => head.querySelector('.worktree__agent')?.textContent)).toEqual(['claude', 'codex'])
+    expect(heads.map((head) => head.querySelector('.worktree__agent')?.textContent)).toEqual(['', ''])
+    expect(
+      heads.map((head) => head.querySelector('.worktree__agent [data-agent]')?.getAttribute('data-agent'))
+    ).toEqual(['claude', 'codex'])
     expect(heads.map((head) => head.querySelector('.worktree__name')?.textContent)).toEqual([task, task])
-    expect(screen.getByRole('treeitem', { name: `claude, ${task}` })).toBeTruthy()
+    expect(screen.getByRole('treeitem', { name: `${task} (Claude Code)` })).toBeTruthy()
     // The branch line said the name again, slugified.
     expect(screen.queryByText('add-a-subtract-function-to-claude')).toBeNull()
   })
@@ -823,7 +826,7 @@ describe('several runs of one task', () => {
     })
     mount()
     const words = [...document.querySelectorAll('.worktree__agent')].map((slot) => slot.textContent)
-    expect(words).toEqual(['claude', 'claude 2', ''])
+    expect(words).toEqual(['Claude Code', 'Claude Code 2', ''])
   })
 })
 

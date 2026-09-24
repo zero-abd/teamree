@@ -3,7 +3,7 @@
 
 import { slugifyBranchName } from '@shared/branchName'
 import type { AgentKind, InstalledAgent, Worktree } from '@shared/entities'
-import { HARNESSES } from '../agents/harnesses'
+import { HARNESSES, harnessName } from '../agents/harnesses'
 import { taskName, taskNames } from '../dialogs/taskPlan'
 
 export type WorktreeNameSource = Pick<Worktree, 'name' | 'branch' | 'task'>
@@ -68,9 +68,16 @@ function runAgent(
   return kind === undefined ? { text: run.text } : { text: run.text, kind }
 }
 
-/** The display on one line: `claude · Add a subtract function`; pass `, ` for an accessible name. */
-export function worktreeLabel(display: WorktreeDisplay, between: string = ' · '): string {
-  return display.agent === undefined ? display.title : `${display.agent.text}${between}${display.title}`
+/** A run's agent in words, `Claude Code 2`; a word no harness owns stays as typed. */
+export function agentName(agent: NonNullable<WorktreeDisplay['agent']>): string {
+  if (agent.kind === undefined) return agent.text
+  const nth = /\s(\d+)$/u.exec(agent.text)?.[1]
+  return nth === undefined ? harnessName(agent.kind) : `${harnessName(agent.kind)} ${nth}`
+}
+
+/** The display where no glyph can be drawn: `Add a subtract function (Claude Code)`. */
+export function worktreeLabel(display: WorktreeDisplay): string {
+  return display.agent === undefined ? display.title : `${display.title} (${agentName(display.agent)})`
 }
 
 /** A pane labelled with its worktree's name, as a task's agent is, goes by the worktree's title. */

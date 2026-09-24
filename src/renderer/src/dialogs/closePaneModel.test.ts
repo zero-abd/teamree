@@ -56,21 +56,32 @@ describe('panes worth asking about', () => {
     expect(warning?.confirm).toBe('Stop and Close')
   })
 
-  it('names the agent that is working', () => {
-    const warning = closePaneWarning(terminal({ title: 'claude', agent: 'claude', busy: true }))
-    expect(warning?.title).toBe('Stop this agent?')
-    expect(warning?.body).toContain('Claude Code is working')
+  it('names the agent that is working, and quotes the pane’s line', () => {
+    const warning = closePaneWarning(terminal({ title: 'claude', agent: 'claude', busy: true }), 'Read 6 lines')
+    expect(warning?.title).toBe('Stop Claude Code?')
+    expect(warning?.body).toBe('Read 6 lines')
   })
 
-  // The expensive one, and the case a `busy` check alone would miss entirely.
-  // An agent that has gone quiet is usually holding a question, and this app
-  // cannot tell that from finished — so the line names both possibilities
-  // rather than asserting either, and does not explain itself further.
-  it('asks about a quiet agent, and does not claim to know it is waiting', () => {
-    const warning = closePaneWarning(terminal({ title: 'claude', agent: 'claude', busy: false }))
-    expect(warning?.title).toBe('Stop this agent?')
-    expect(warning?.body).toBe('Claude Code is quiet in “Claude Code” — waiting or finished')
-    expect(warning?.body).not.toContain('teamree watches output')
+  // The question is what closing would leave unanswered.
+  it('quotes the question an asking agent is holding', () => {
+    const asking = terminal({
+      agent: 'claude',
+      agentEvent: { event: 'Notification', at: 1, message: 'Claude needs your permission to use Edit' }
+    })
+    expect(closePaneWarning(asking, 'Do you want to make this edit to math.ts?')).toEqual({
+      title: 'Stop Claude Code?',
+      body: 'Do you want to make this edit to math.ts?',
+      confirm: 'Stop and Close'
+    })
+    expect(closePaneWarning(asking, '3. No, and tell Claude…')?.body).toBe('Permission to use Edit')
+  })
+
+  // `28-close-agent.png`: the agent had finished its turn minutes before, and its row said stopped.
+  it('closes a quiet agent without asking, like a shell', () => {
+    expect(closePaneWarning(terminal({ title: 'claude', agent: 'claude', busy: false }))).toBeNull()
+    expect(
+      closePaneWarning(terminal({ agent: 'claude', busy: false, agentEvent: { event: 'Stop', at: 1 } }), 'Done')
+    ).toBeNull()
   })
 
   it('does not ask about an agent pane whose agent has exited', () => {
@@ -88,15 +99,6 @@ describe('panes worth asking about', () => {
 })
 
 describe('what the question calls the pane', () => {
-  // The pane is called by its label everywhere the person has been looking —
-  // the tab, the sidebar row — and a question that quotes the binary's name
-  // back instead ("in “claude”") is asking about a pane they cannot find.
-  it('quotes the name the pane was given, not the program it runs', () => {
-    const warning = closePaneWarning(terminal({ agent: 'claude', title: 'claude', label: 'Race two agents claude' }))
-    expect(warning?.body).toContain('in “Race two agents claude”')
-    expect(warning?.body).not.toContain('in “Claude Code”')
-  })
-
   it('falls back to the title for a pane nobody named', () => {
     const warning = closePaneWarning(terminal({ busy: true, title: 'npm test' }))
     expect(warning?.body).toContain('in “npm test”')

@@ -56,6 +56,10 @@ export function CompareView({
     }
   }, [worktreeId, other, filesEpoch])
 
+  // The runtime's refusal would name the gone run by id. Known only once this side is listed:
+  // an empty list at launch is not a removal.
+  const listed = (id: string): boolean => worktrees.some((worktree) => worktree.id === id)
+  const removed = listed(worktreeId) && !listed(other)
   const kindOf = useMemo(() => agentWords(agents), [agents])
   const runs = [worktreeId, other].map((id) =>
     runOf(
@@ -90,7 +94,14 @@ export function CompareView({
         <LayoutTools layout={layout} bodyWidth={width} onChoose={setChosen} />
       </FileBar>
       <div className="file__body" ref={body}>
-        {compared === null ? (
+        {removed ? (
+          <p className="file__state">
+            Run removed{' '}
+            <button type="button" className="file__tool" onClick={onClose}>
+              Close
+            </button>
+          </p>
+        ) : compared === null ? (
           <p className="file__state">{error ?? 'Reading…'}</p>
         ) : (
           <div className={`compare compare--${layout}`} tabIndex={-1}>

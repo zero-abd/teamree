@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react'
 import type { WorktreeChanges, WorktreeStatus } from '@shared/entities'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
-import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
+import { agentName, worktreeDisplay } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { Confirm } from './Confirm'
 
@@ -52,11 +52,12 @@ export function ConfirmRemoveDialog({ worktreeId }: { worktreeId: string }): Rea
   ]
   const retrying = dialog?.intent === 'retry'
   const force = retrying || dialog?.refused === true || files.length > 0 || ignored > 0
-  const name = worktree === undefined ? null : worktreeLabel(worktreeDisplay(worktree))
+  const display = worktree === undefined ? null : worktreeDisplay(worktree)
+  const named = display === null ? null : `"${display.title}"${display.agent ? ` (${agentName(display.agent)})` : ''}`
 
   return (
     <Confirm
-      title={name === null ? 'Remove this worktree?' : `Remove "${name}"?`}
+      title={named === null ? 'Remove this worktree?' : `Remove ${named}?`}
       titleHint={worktree?.path}
       cancel="Cancel"
       confirm={retrying ? 'Remove and Retry' : 'Remove'}

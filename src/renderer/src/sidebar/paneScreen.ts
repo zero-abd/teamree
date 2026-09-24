@@ -4,7 +4,7 @@
 import { Terminal as Emulator } from '@xterm/xterm'
 import type { Terminal } from '@shared/entities'
 import { evidenceInRows } from '@shared/outputEvidence'
-import { screenQuestion } from '@shared/screenOpinion'
+import { menuQuestion, screenQuestion } from '@shared/screenOpinion'
 import { bufferRows, type PaneScreen } from '../terminal/shownPanes'
 
 /** Rows handed to the line picker; it looks no further back than this anyway. */
@@ -30,7 +30,8 @@ export function screenEvidence(
   screen: PaneScreen,
   terminal: Pick<Terminal, 'agent' | 'foregroundAgent'>
 ): string | null {
-  const question = screenQuestion(terminal.agent ?? terminal.foregroundAgent, screen.rows)
+  const agent = terminal.agent ?? terminal.foregroundAgent
+  const question = screenQuestion(agent, screen.rows) ?? (agent === undefined ? null : menuQuestion(screen.rows))
   if (question !== null) return question
   if (screen.alternate && terminal.agent === undefined) return null
   return evidenceInRows(screen.rows)

@@ -5,12 +5,12 @@ import type { Layout, Project, Terminal, Worktree } from '@shared/entities'
 import { harnessName } from '../agents/harnesses'
 import { collectLeaves } from '../panes/paneLayout'
 import { agentRows, dotTone, TONES_BY_ATTENTION, type AgentRow, type DotTone } from '../sidebar/agentRows'
-import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
+import { worktreeDisplay } from '../sidebar/worktreeDisplay'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
 
 export type DashboardRow = AgentRow & {
   worktreeId: string
-  /** See `worktreeLabel`. */
+  /** Its title; the row's first column already names the agent. */
   worktreeName: string
   /** Absent when it only repeats the name; see `worktreeDisplay`. */
   branch?: string
@@ -46,7 +46,7 @@ export function dashboardRows(input: DashboardInput): DashboardRow[] {
         // The pane named after its worktree would repeat the next column; its agent says what it is.
         label: row.agent !== undefined && row.label === display.title ? harnessName(row.agent) : row.label,
         worktreeId: worktree.id,
-        worktreeName: worktreeLabel(display),
+        worktreeName: display.title,
         ...(display.branch === undefined ? {} : { branch: display.branch }),
         projectName: projectName.get(worktree.projectId) ?? ''
       }

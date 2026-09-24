@@ -72,10 +72,12 @@ describe('worktreeDisplay', () => {
 })
 
 describe('worktreeLabel', () => {
-  it('puts the agent first, with a pause for a screen reader', () => {
-    const display = worktreeDisplay(run(`${taskName(TASK)} claude`))
-    expect(worktreeLabel(display)).toBe(`claude · ${TASK}`)
-    expect(worktreeLabel(display, ', ')).toBe(`claude, ${TASK}`)
+  // Where no glyph can be drawn: a dialog title, a tooltip, an accessible name.
+  it('names the worktree by its title, and a run’s agent after it in words', () => {
+    expect(worktreeLabel(worktreeDisplay(run(`${taskName(TASK)} claude`)))).toBe(`${TASK} (Claude Code)`)
+    expect(worktreeLabel(worktreeDisplay(run(`${taskName(TASK)} codex 2`)))).toBe(`${TASK} (Codex 2)`)
+    const kilo = taskNamesForAgents(taskName(TASK), ['kilocode'])[0]!
+    expect(worktreeLabel(worktreeDisplay(run(`${kilo} kilocode`)))).toBe(`${TASK} (kilocode)`)
     expect(worktreeLabel(worktreeDisplay({ name: 'perf', branch: 'perf' }))).toBe('perf')
   })
 })

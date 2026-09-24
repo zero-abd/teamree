@@ -18,7 +18,7 @@ import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { WorktreeNameField } from './WorktreeNameField'
-import { worktreeDisplay, worktreeLabel, type WorktreeDisplay } from './worktreeDisplay'
+import { agentName, worktreeDisplay, worktreeLabel, type WorktreeDisplay } from './worktreeDisplay'
 
 type WorktreeRowProps = {
   worktree: Worktree
@@ -146,9 +146,8 @@ export function WorktreeRow({
   const rows = ready ? agentRows(terminals, worktree, now, evidence) : []
   const tone = worktreeTone(rows)
   const label = worktreeLabel(display)
-  // One agent pane: the pane row under this one starts with the same glyph.
-  const agentWord =
-    display.agent?.kind === undefined || twinRun || rows.filter((row) => row.agent !== undefined).length !== 1
+  // The glyph names the agent; words only where it cannot tell two runs apart.
+  const agentWord = display.agent?.kind === undefined || twinRun
   const branchSaysMore = display.branch !== undefined
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
@@ -205,7 +204,7 @@ export function WorktreeRow({
             {display.agent ? (
               <span className="worktree__agent">
                 {display.agent.kind === undefined ? null : <AgentGlyph kind={display.agent.kind} decorative />}
-                {agentWord ? display.agent.text : null}
+                {agentWord ? agentName(display.agent) : null}
               </span>
             ) : null}
             <span
@@ -301,8 +300,7 @@ export function WorktreeRow({
             }}
             aria-disabled={openable ? undefined : true}
             aria-current={active ? 'true' : undefined}
-            // Said as words with a pause between them, not the row's text run together.
-            aria-label={worktreeLabel(display, ', ')}
+            aria-label={label}
             aria-describedby={tone ? `${stateId} ${factsId}` : factsId}
           >
             {body}

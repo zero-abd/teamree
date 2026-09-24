@@ -373,6 +373,9 @@
 }
 
 .worktree-start__name {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
   font-size: var(--text-xl);
   font-weight: 600;
   letter-spacing: -0.02em;

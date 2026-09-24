@@ -84,7 +84,7 @@ describe('dashboardRows', () => {
     )
 
     const agent = rows.find((row) => row.terminalId === 'agent')
-    expect(agent).toMatchObject({ label: 'Claude Code', worktreeName: `claude · ${task}` })
+    expect(agent).toMatchObject({ label: 'Claude Code', worktreeName: task })
     expect(agent?.branch).toBeUndefined()
     const shell = rows.find((row) => row.terminalId === 'shell')
     expect(shell).toMatchObject({ label: 'bash', worktreeName: 'perf' })

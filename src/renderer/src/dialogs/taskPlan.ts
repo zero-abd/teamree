@@ -3,6 +3,7 @@
 
 import { taskNamesForAgents } from '@shared/branchName'
 import type { InstalledAgent } from '@shared/entities'
+import { harnessName } from '../agents/harnesses'
 
 /** How many runs of one agent a single task may ask for. */
 export const MAX_PER_AGENT = 9
@@ -124,6 +125,6 @@ export function taskPlanNote(
   // Names which PATH: the login shell's, so `which claude` in a pane is the check to run.
   if (agents.length === 0) return 'No coding agent on your login shell’s PATH'
   if (selection.length === 0) return '1 worktree · no agent'
-  const commands = selection.map((agent) => agent.command).join(', ')
-  return `${selection.length} worktree${selection.length === 1 ? '' : 's'} · ${commands}`
+  const names = selection.map((agent) => harnessName(agent.kind)).join(', ')
+  return `${selection.length} worktree${selection.length === 1 ? '' : 's'} · ${names}`
 }

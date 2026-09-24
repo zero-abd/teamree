@@ -257,6 +257,14 @@ describe('a worktree with no panes in it', () => {
     expect(document.querySelector('kbd')).toBeNull()
   })
 
+  // `29-after-close.png` was titled by the stored name, agent word first.
+  it('titles one of a task’s runs by the task, its agent as the glyph', () => {
+    openEmpty({ name: 'Rewrite the pager claude', branch: 'rewrite-the-pager-claude', task: 'Rewrite the pager' })
+    const heading = screen.getByRole('heading', { name: 'Rewrite the pager (Claude Code)' })
+    expect(heading.textContent).toBe('Rewrite the pager')
+    expect(heading.querySelector('[data-agent="claude"]')).not.toBeNull()
+  })
+
   it('offers every pane the + menu offers, in its order', () => {
     openEmpty()
     const menu = startMenuItems([claude, codex], MAC, {

@@ -1,6 +1,7 @@
 // An open worktree with no panes: its name and branch, and the `+` menu's pane rows as buttons.
 
 import { hasCheckout, type Worktree } from '@shared/entities'
+import { AgentGlyph } from '../agents/glyphs'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { useStartMenuItems } from './startMenu'
@@ -17,7 +18,10 @@ export function WorktreeStart({
   const display = worktreeDisplay(worktree)
   return (
     <div className="worktree-start">
-      <h1 className="worktree-start__name">{worktreeLabel(display)}</h1>
+      <h1 className="worktree-start__name" aria-label={worktreeLabel(display)}>
+        {display.agent?.kind === undefined ? null : <AgentGlyph kind={display.agent.kind} decorative />}
+        {display.title}
+      </h1>
       {display.branch === undefined ? null : <span className="worktree-start__branch">{display.branch}</span>}
       {items.length === 0 ? null : (
         <div className="worktree-start__actions">

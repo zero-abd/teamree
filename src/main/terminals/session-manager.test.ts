@@ -98,7 +98,7 @@ describePty('terminal handlers', () => {
   )
 
   it(
-    'numbers a worktree’s panes of one program from 1, never giving a closed pane’s number out again',
+    'numbers a worktree’s panes of one program from 1, counting only the panes still open',
     async () => {
       const service = newService()
       const first = await newTerminal(service)
@@ -111,6 +111,10 @@ describePty('terminal handlers', () => {
       expect(elsewhere.ordinal).toBe(1)
       const listed = await service.handlers['terminal.list']({ worktreeId: WORKTREE })
       expect(listed.map((terminal) => terminal.ordinal)).toEqual([2, 3])
+
+      await service.handlers['terminal.close']({ terminalId: second.id })
+      await service.handlers['terminal.close']({ terminalId: third.id })
+      expect((await newTerminal(service)).ordinal).toBe(1)
     },
     TEST_TIMEOUT_MS
   )
@@ -773,9 +777,15 @@ describePty('terminal.agentEvent', () => {
         terminalId: terminal.id,
         event: 'Notification',
         at: 5_000,
-        detail: 'permission_prompt'
+        detail: 'permission_prompt',
+        message: 'Claude needs your permission to use Edit'
       })
-      expect(said.agentEvent).toEqual({ event: 'Notification', at: 5_000, detail: 'permission_prompt' })
+      expect(said.agentEvent).toEqual({
+        event: 'Notification',
+        at: 5_000,
+        detail: 'permission_prompt',
+        message: 'Claude needs your permission to use Edit'
+      })
       expect((await service.handlers['terminal.list']({}))[0]?.agentEvent).toEqual(said.agentEvent)
 
       const later = await service.handlers['terminal.agentEvent']({ terminalId: terminal.id, event: 'Stop', at: 6_000 })
