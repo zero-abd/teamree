@@ -18,6 +18,7 @@ import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { MENU_ORDER, menuLabel } from '../menu/menuBar'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { automaticUpdatesLabel } from '../updates/updateNotice'
+import { landLabel, type LandOffer } from '../workspace/rightPanel/landOffer'
 
 /** Every command this window has (derived from `WorkspaceCommand`, so none go missing) plus the palette's own rows. */
 export type PaletteAction =
@@ -46,6 +47,9 @@ type WorktreeAction =
   | 'copy-worktree-branch'
   | 'update-worktree'
   | 'remove-worktree'
+  | 'create-pull-request'
+  | 'merge-into-base'
+  | 'keep-run'
 
 export type PaletteItem =
   /** Jump to a worktree; `agent` is a task run's, drawn as its glyph. */
@@ -95,6 +99,8 @@ export type PaletteContext = {
   updateFrom?: string | null
   /** The focused file pane's entry in the Changes list, if it has one. */
   focusedChange?: { path: string; discardable: boolean; staged: boolean } | null
+  /** What the worktree on screen can do with its finished branch; see `landOffer`. */
+  land?: LandOffer | null
   /** Which way the panel toggles read; absent reads as shown. */
   sidebarVisible?: boolean
   rightPanelOpen?: boolean
@@ -172,6 +178,8 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
     keywords: 'remove delete worktree checkout trash'
   }
   const change = context.focusedChange
+  const land = context.land ?? null
+  const siblings = siblingRuns(active, context.worktrees)
   // As the row's menu: a checkout gone from disk has nothing to reveal, open or copy.
   const rows: ActionRow[] = active.missing
     ? [remove]
@@ -188,7 +196,16 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
             label: `Open in ${target}`,
             keywords: 'open in editor ide terminal finder external app'
           })),
-        ...siblingRuns(active, context.worktrees).map((other) => ({
+        ...(land === null || land.kind === 'merged'
+          ? []
+          : [
+              {
+                id: land.kind === 'merge' ? ('merge-into-base' as const) : ('create-pull-request' as const),
+                label: landLabel(land),
+                keywords: 'land pull request pr merge review ship done github finish'
+              }
+            ]),
+        ...siblings.map((other) => ({
           id: `compare:${other.id}` as const,
           label: `Compare with ${runName(other)}`,
           keywords: 'compare diff runs sibling agents task side by side'
@@ -202,6 +219,15 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
               }
             ]
           : []),
+        ...(siblings.length === 0
+          ? []
+          : [
+              {
+                id: 'keep-run' as const,
+                label: 'Keep This Run…',
+                keywords: 'keep winner pick choose run remove others'
+              }
+            ]),
         remove,
         ...(change?.discardable === true
           ? [

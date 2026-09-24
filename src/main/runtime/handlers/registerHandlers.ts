@@ -10,6 +10,8 @@ import { registerFileHandlers } from '../../files'
 import { createGitRunner, GitService, registerGitHandlers } from '../../git'
 import { backgroundFetchProjects, BaseFetcher } from '../../git/baseFetch'
 import { startSetupCommand } from '../../git/worktreeSetup'
+import { findProgram } from '../../git/worktreeLanding'
+import { loginShellPath } from '../../terminals/shell-environment'
 import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
 import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
@@ -149,6 +151,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     // Spread rather than passed as `undefined`, so the service's own default stands.
     ...(options.worktreesRoot === undefined ? {} : { worktreesRoot: options.worktreesRoot }),
     ...(options.trashItem === undefined ? {} : { trash: options.trashItem }),
+    ghBinary: () => findProgram('gh', [process.env.PATH]) ?? findProgram('gh', [loginShellPath()]),
     // The one seam between "a checkout is ready" and "a pane is open in it",
     // for a GUI create and a CLI create alike.
     startSetup: ({ worktree, command }) => {

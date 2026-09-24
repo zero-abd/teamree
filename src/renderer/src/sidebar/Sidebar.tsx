@@ -34,6 +34,7 @@ export function Sidebar({
   const worktrees = useWorkspaceStore((state) => state.worktrees)
   const statuses = useWorkspaceStore((state) => state.statuses)
   const mergePreviews = useWorkspaceStore((state) => state.mergePreviews)
+  const landings = useWorkspaceStore((state) => state.landings)
   const terminals = useWorkspaceStore((state) => state.terminals)
   const revealPane = useWorkspaceStore((state) => state.revealPane)
   const paneList = useMemo(() => Object.values(terminals), [terminals])
@@ -337,6 +338,7 @@ export function Sidebar({
                           display={display}
                           status={statuses[worktree.id]}
                           mergePreview={mergePreviews[worktree.id]}
+                          {...(landings[worktree.id] === undefined ? {} : { landing: landings[worktree.id] })}
                           terminals={paneList}
                           evidence={evidence}
                           watchers={reading}
@@ -355,6 +357,9 @@ export function Sidebar({
                           onCopyBranch={() => void copyToClipboard(worktree.branch, `the branch ${worktree.branch}`)}
                           openIn={openIn(project.id, worktree.path, `the ${label} checkout`, false)}
                           twinRun={twinRun}
+                          {...(siblings.length === 0
+                            ? {}
+                            : { onKeep: () => openDialog({ kind: 'confirm-keep', worktreeId: worktree.id }) })}
                           compareWith={siblings.map((other) => ({
                             label: runName(other, kindOf),
                             onChoose: () =>

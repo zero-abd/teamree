@@ -15,6 +15,7 @@ const count = (n: number, one: string, many: string): string => `${n} ${n === 1 
 export function ConfirmRemoveDialog({ worktreeId }: { worktreeId: string }): React.JSX.Element {
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId))
   const cached = useWorkspaceStore((state) => state.statuses[worktreeId])
+  const merged = useWorkspaceStore((state) => state.landings[worktreeId]?.merged === true)
   const dialog = useWorkspaceStore((state) => (state.dialog?.kind === 'confirm-remove' ? state.dialog : null))
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
   const confirmRemoveWorktree = useWorkspaceStore((state) => state.confirmRemoveWorktree)
@@ -43,7 +44,7 @@ export function ConfirmRemoveDialog({ worktreeId }: { worktreeId: string }): Rea
   const files = changes?.changes.slice(0, FILES_SHOWN).map((change) => change.path) ?? []
   const more = (changes?.total ?? 0) - files.length
   const ignored = status?.ignored ?? 0
-  const ahead = status?.ahead ?? 0
+  const ahead = merged ? 0 : (status?.ahead ?? 0)
   const lines = [
     ...files,
     ...(more > 0 ? [`+${more} more`] : []),

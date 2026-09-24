@@ -38,6 +38,10 @@ export const GIT_METHODS = [
   'worktree.push',
   'worktree.update',
   'worktree.abortUpdate',
+  'worktree.landing',
+  'worktree.createPullRequest',
+  'worktree.mergeIntoBase',
+  'worktree.keep',
   'worktree.startPoints'
 ] as const
 
@@ -79,6 +83,10 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.push': (params) => service.worktreePush(params),
     'worktree.update': (params) => service.worktreeUpdate(params),
     'worktree.abortUpdate': (params) => service.worktreeAbortUpdate(params),
+    'worktree.landing': (params) => service.worktreeLanding(params),
+    'worktree.createPullRequest': (params) => service.worktreeCreatePullRequest(params),
+    'worktree.mergeIntoBase': (params) => service.worktreeMergeIntoBase(params),
+    'worktree.keep': (params) => service.keepWorktree(params),
     'worktree.startPoints': (params) =>
       service.listStartPoints(params.projectId, params.limit === undefined ? {} : { limit: params.limit })
   }
@@ -116,6 +124,14 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.push', Params.worktreePush, handlers['worktree.push'])
   registry.register('worktree.update', Params.worktreeUpdate, handlers['worktree.update'])
   registry.register('worktree.abortUpdate', Params.worktreeAbortUpdate, handlers['worktree.abortUpdate'])
+  registry.register('worktree.landing', Params.worktreeLanding, handlers['worktree.landing'])
+  registry.register(
+    'worktree.createPullRequest',
+    Params.worktreeCreatePullRequest,
+    handlers['worktree.createPullRequest']
+  )
+  registry.register('worktree.mergeIntoBase', Params.worktreeMergeIntoBase, handlers['worktree.mergeIntoBase'])
+  registry.register('worktree.keep', Params.worktreeKeep, handlers['worktree.keep'])
   registry.register('worktree.startPoints', Params.worktreeStartPoints, handlers['worktree.startPoints'])
   return service
 }

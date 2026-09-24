@@ -41,8 +41,12 @@ import type {
   WorktreeFileMatches,
   WorktreeFiles,
   WorktreeHunkStage,
+  WorktreeKeep,
+  WorktreeLanding,
   WorktreeLog,
+  WorktreeMerge,
   WorktreeMergePreview,
+  WorktreePullRequest,
   WorktreePush,
   WorktreeStatus,
   WorktreeUnstage,
@@ -273,6 +277,18 @@ export const Params = {
   worktreeUpdate: z.object({ worktreeId: z.string().min(1) }),
   /** Undoes an update stopped on conflicts. */
   worktreeAbortUpdate: z.object({ worktreeId: z.string().min(1) }),
+  /** Where this worktree's branch can land, and whether it already has. */
+  worktreeLanding: z.object({ worktreeId: z.string().min(1) }),
+  /** `gh pr create` when `gh` is signed in, else the host's page for one. The branch must be published. */
+  worktreeCreatePullRequest: z.object({ worktreeId: z.string().min(1) }),
+  /** Merges the branch into the base branch in the project's own checkout; refused when that checkout is dirty. */
+  worktreeMergeIntoBase: z.object({
+    worktreeId: z.string().min(1),
+    /** Answer with the plan and merge nothing. */
+    dryRun: z.boolean().optional()
+  }),
+  /** Removes the task's other runs, keeping their branches; refused over their unsaved work without `force`. */
+  worktreeKeep: z.object({ worktreeId: z.string().min(1), force: z.boolean().optional() }),
 
   /** Changes the name shown for a worktree; its branch, path and task stay as they are. */
   worktreeRename: z.object({ worktreeId: z.string().min(1), name: z.string().min(1).max(MAX_WORKTREE_NAME_CHARS) }),
@@ -709,6 +725,13 @@ export type MethodContract = {
   }
   'worktree.update': { params: z.infer<typeof Params.worktreeUpdate>; result: WorktreeUpdate }
   'worktree.abortUpdate': { params: z.infer<typeof Params.worktreeAbortUpdate>; result: WorktreeUpdateAbort }
+  'worktree.landing': { params: z.infer<typeof Params.worktreeLanding>; result: WorktreeLanding }
+  'worktree.createPullRequest': {
+    params: z.infer<typeof Params.worktreeCreatePullRequest>
+    result: WorktreePullRequest
+  }
+  'worktree.mergeIntoBase': { params: z.infer<typeof Params.worktreeMergeIntoBase>; result: WorktreeMerge }
+  'worktree.keep': { params: z.infer<typeof Params.worktreeKeep>; result: WorktreeKeep }
 
   'worktree.rename': { params: z.infer<typeof Params.worktreeRename>; result: Worktree }
 

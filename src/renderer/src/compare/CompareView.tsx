@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Worktree, WorktreeCompare } from '@shared/entities'
+import { fileColumnIn, shownTabId } from '@shared/filePane'
 import { compareRuns, type ComparedFile, type RunFile } from '@shared/runCompare'
 import { AgentGlyph } from '../agents/glyphs'
 import { FileBar } from '../files/FileBar'
@@ -17,6 +18,7 @@ type Run = { id: string; display: WorktreeDisplay; name: string }
 
 /** `path` is the tab's title, `claude vs codex`; `other` is the sibling on the right. */
 export function CompareView({
+  paneId,
   worktreeId,
   path,
   other,
@@ -38,6 +40,18 @@ export function CompareView({
   const body = useRef<HTMLDivElement | null>(null)
   const width = useWidth(body, true)
   const layout = fitLayout(chosen, width)
+  const shown = useWorkspaceStore((state) => {
+    const column = fileColumnIn(state.layouts[worktreeId]?.root ?? null)
+    return state.activeWorktreeId === worktreeId && column !== null && shownTabId(column) === paneId
+  })
+  const foldForCompare = useWorkspaceStore((state) => state.foldForCompare)
+
+  // Two runs side by side want the whole window; the sidebar and panel come back when the compare goes.
+  useEffect(() => {
+    if (!shown) return
+    foldForCompare(true)
+    return () => foldForCompare(false)
+  }, [shown, foldForCompare])
 
   useEffect(() => {
     let alive = true
@@ -138,6 +152,7 @@ function RunHead({
   side: 'left' | 'right'
 }): React.JSX.Element {
   const openWorktree = useWorkspaceStore((state) => state.openWorktree)
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
   const touched = files.flatMap((file) => (file[side] === null ? [] : [file[side]]))
   const added = touched.reduce((sum, file) => sum + file.added, 0)
   const removed = touched.reduce((sum, file) => sum + file.removed, 0)
@@ -158,6 +173,13 @@ function RunHead({
       <span className="compare__stat compare__stat--removed">−{removed}</span>
       <button type="button" className="file__tool" onClick={() => void openWorktree(run.id)}>
         Open
+      </button>
+      <button
+        type="button"
+        className="file__tool"
+        onClick={() => openDialog({ kind: 'confirm-keep', worktreeId: run.id })}
+      >
+        Keep
       </button>
     </div>
   )

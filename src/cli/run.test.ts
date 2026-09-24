@@ -473,6 +473,95 @@ describe('a push that opened a review', () => {
   })
 })
 
+describe('landing a worktree', () => {
+  const landing = (extra: Record<string, unknown> = {}) => ({
+    worktreeId: 'wt_1',
+    branch: 'feature/fix-login',
+    base: 'main',
+    host: null,
+    published: false,
+    unmerged: 1,
+    merged: false,
+    readAt: 0,
+    ...extra
+  })
+  const landed =
+    (read: Record<string, unknown>, calls: [string, unknown][] = []): StubHandler =>
+    (method, params) => {
+      calls.push([method, params])
+      if (method === 'project.list') return PROJECTS
+      if (method === 'worktree.list') return WORKTREES
+      if (method === 'worktree.landing') return landing(read)
+      if (method === 'worktree.mergeIntoBase') {
+        return {
+          worktreeId: 'wt_1',
+          into: 'main',
+          checkout: '/repos/api',
+          commits: [{ shortSha: 'abc1234', subject: 'Fix login' }],
+          fastForward: true,
+          dirty: [],
+          merged: true
+        }
+      }
+      if (method === 'worktree.createPullRequest') {
+        return { worktreeId: 'wt_1', url: 'https://github.com/o/r/pull/12', number: 12, created: true }
+      }
+      throw new StubError('unknown_method', method)
+    }
+
+  it('merges into the base where the origin is no known host', async () => {
+    const calls: [string, unknown][] = []
+    const cli = await harness(landed({}, calls))
+    const result = await cli.run(['worktree', 'land', 'fix-login'])
+
+    expect(result.code).toBe(ExitCode.Success)
+    expect(calls).toContainEqual(['worktree.mergeIntoBase', { worktreeId: 'wt_1' }])
+    expect(result.out).toContain('Merged feature/fix-login into main in /repos/api (fast-forward).')
+  })
+
+  it('opens a pull request on a known host once the branch is published', async () => {
+    const calls: [string, unknown][] = []
+    const cli = await harness(landed({ host: 'github', published: true }, calls))
+    const result = await cli.run(['worktree', 'land', 'fix-login'])
+
+    expect(calls.map(([method]) => method)).toContain('worktree.createPullRequest')
+    expect(result.out.split('\n')).toContain('https://github.com/o/r/pull/12')
+  })
+
+  it('asks for a push first when the branch is not on the host yet', async () => {
+    const cli = await harness(landed({ host: 'github', published: false }))
+    const result = await cli.run(['worktree', 'land', 'fix-login'])
+
+    expect(result.code).toBe(ExitCode.Failure)
+    expect(result.err).toContain('teamree worktree push fix-login')
+  })
+
+  it('does nothing to a branch already in its base', async () => {
+    const calls: [string, unknown][] = []
+    const cli = await harness(landed({ merged: true, unmerged: 0 }, calls))
+    const result = await cli.run(['worktree', 'land', 'fix-login'])
+
+    expect(result.code).toBe(ExitCode.Success)
+    expect(calls.map(([method]) => method)).not.toContain('worktree.mergeIntoBase')
+    expect(result.out).toContain('already in main')
+  })
+
+  it('keeps one run and passes --force through', async () => {
+    const calls: [string, unknown][] = []
+    const cli = await harness((method, params) => {
+      calls.push([method, params])
+      if (method === 'project.list') return PROJECTS
+      if (method === 'worktree.list') return WORKTREES
+      if (method === 'worktree.keep') return { worktree: { ...WORKTREES[0], name: 'fix' }, removed: ['wt_2'] }
+      throw new StubError('unknown_method', method)
+    })
+    const result = await cli.run(['worktree', 'keep', 'fix-login', '--force'])
+
+    expect(calls).toContainEqual(['worktree.keep', { worktreeId: 'wt_1', force: true }])
+    expect(result.out).toContain('Kept fix; removed 1 other run. Its branch is still there.')
+  })
+})
+
 describe('selectors and flags reach the runtime', () => {
   // The hunk number is the CLI's own convenience and never leaves it: the
   // command resolves it against a patch it reads one call earlier and sends the
@@ -1030,7 +1119,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(62)
+    expect(data.commands.length).toBe(64)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })

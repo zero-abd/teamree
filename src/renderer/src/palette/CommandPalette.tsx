@@ -15,6 +15,7 @@ import { useOpenIn } from '../sidebar/openIn'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { canDiscard, updateFrom } from '../workspace/rightPanel/ChangesTab'
+import { landOffer } from '../workspace/rightPanel/landOffer'
 import {
   buildPaletteItems,
   fileItem,
@@ -73,6 +74,7 @@ export function CommandPalette({
   const watches = useWorkspaceStore((state) => state.watches)
   const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
   const statuses = useWorkspaceStore((state) => state.statuses)
+  const landings = useWorkspaceStore((state) => state.landings)
   const pushing = useWorkspaceStore((state) => state.pushing)
   const diffPanes = useWorkspaceStore((state) => state.diffPanes)
   const editedFiles = useWorkspaceStore((state) => state.editedFiles)
@@ -147,6 +149,7 @@ export function CommandPalette({
           })
         },
         openIn: targets.map((target) => target.label),
+        land: activeWorktreeId === null ? null : landOffer(landings[activeWorktreeId], statuses[activeWorktreeId]),
         appearance: { mode: appearance.mode ?? 'dark', themeId: activeChoice(appearance, systemTone).themeId },
         focusedChange:
           change === undefined ? null : { path: change.path, discardable: canDiscard(change), staged: change.staged },
@@ -168,6 +171,7 @@ export function CommandPalette({
       watches,
       focusedWatchId,
       statuses,
+      landings,
       pushing,
       diffPanes,
       editedFiles,
@@ -299,6 +303,15 @@ export function CommandPalette({
         break
       case 'update-worktree':
         if (active) void store.updateWorktree(active.id)
+        break
+      case 'create-pull-request':
+        if (active) void store.createPullRequest(active.id)
+        break
+      case 'merge-into-base':
+        if (active) store.openDialog({ kind: 'confirm-merge', worktreeId: active.id })
+        break
+      case 'keep-run':
+        if (active) store.openDialog({ kind: 'confirm-keep', worktreeId: active.id })
         break
       case 'discard-file':
         if (active && change) store.openDialog({ kind: 'confirm-discard', worktreeId: active.id, path: change.path })

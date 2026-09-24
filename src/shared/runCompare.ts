@@ -1,6 +1,20 @@
 // Two runs of one task set side by side, file by file: what each run did to each path either touched.
 
+import { hasCheckout, type Worktree } from './entities'
 import { parsePatch, type PatchFile } from './patch'
+
+/** The other checkouts of `worktree`'s project given the same task, in the order listed. */
+export function siblingRuns(worktree: Worktree, worktrees: readonly Worktree[]): Worktree[] {
+  const task = worktree.task?.trim() ?? ''
+  if (task === '') return []
+  return worktrees.filter(
+    (other) =>
+      other.id !== worktree.id &&
+      other.projectId === worktree.projectId &&
+      other.task?.trim() === task &&
+      hasCheckout(other)
+  )
+}
 
 /** One run's change to one file: its slice of the patch as git wrote it, and the lines it adds and removes. */
 export type RunFile = { patch: string; added: number; removed: number }
