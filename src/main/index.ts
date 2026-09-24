@@ -18,6 +18,7 @@ import { installAgentNotices, type AgentNoticeChannel } from './agentNotices'
 import { aboutPanelOptions, applicationMenuTemplate, offersDevTools, type ApplicationMenuOptions } from './appMenu'
 import { FILE_SCHEME, FILE_SCHEME_PRIVILEGES, fileGrants, serveGrantedFile } from './files/fileProtocol'
 import { installKeepAwake } from './keepAwake'
+import { INVITATION_OPEN_CHANNEL, installInvitationLinks, invitationInArgv } from './invitationLinks'
 import {
   frontsExistingWindow,
   isBackgroundLaunch,
@@ -168,7 +169,27 @@ if (!app.isReady()) protocol.registerSchemesAsPrivileged([{ scheme: FILE_SCHEME,
 if (!app.requestSingleInstanceLock(launchData(process.env))) {
   app.quit()
 } else {
-  app.on('second-instance', (_event, _argv, _cwd, knocking) => {
+  // Registered before `ready`: macOS delivers the link that launched the app as the launch finishes.
+  const invitations = installInvitationLinks(ipcMain, {
+    send: (link) => {
+      const window = mainWindow()
+      if (!window) return false
+      window.webContents.send(INVITATION_OPEN_CHANNEL, link)
+      bringForward(window)
+      return true
+    },
+    fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame
+  })
+  app.on('open-url', (event, url) => {
+    event.preventDefault()
+    invitations.receive(url)
+  })
+  const launchLink = invitationInArgv(process.argv)
+  if (launchLink !== undefined) invitations.receive(launchLink)
+
+  app.on('second-instance', (_event, argv, _cwd, knocking) => {
+    const link = invitationInArgv(argv)
+    if (link !== undefined) return invitations.receive(link)
     const [existing] = BrowserWindow.getAllWindows()
     if (!existing || !frontsExistingWindow(process.env, knocking)) return
     bringForward(existing)

@@ -5,6 +5,8 @@ import { useEffect, useLayoutEffect, useMemo } from 'react'
 import { resolvePalette } from '@shared/theme'
 import { MAC_CONTENT_INSET_PX, TITLEBAR_HEIGHT_PX } from '@shared/windowChrome'
 import { CloneProjectDialog } from './dialogs/CloneProjectDialog'
+import { JoinTeamDialog } from './dialogs/JoinTeamDialog'
+import { OpenBranchDialog } from './dialogs/OpenBranchDialog'
 import { TaskComposerDialog } from './dialogs/TaskComposerDialog'
 import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModifier'
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
@@ -86,6 +88,17 @@ export function App(): React.JSX.Element {
 
   useEffect(() => watchSystemTone(useWorkspaceStore.getState().setSystemTone), [])
   useEffect(() => watchLayoutMotion(document), [])
+
+  // `teamree://join?…` links the OS opened the app with: the one that launched it, then each after.
+  useEffect(() => {
+    const links = window.teamree?.invitations
+    if (links === undefined) return
+    const open = (link: string): void => void useWorkspaceStore.getState().openInvitation(link, true)
+    void links.take().then((link) => {
+      if (link !== null) open(link)
+    })
+    return links.onLink(open)
+  }, [])
 
   // One subscription for the window, started before the first read so no bootstrap-time event is missed.
   useEffect(() => {
@@ -176,6 +189,10 @@ export function App(): React.JSX.Element {
       {dialog?.kind === 'clone-project' ? <CloneProjectDialog /> : null}
       {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
       {dialog?.kind === 'new-task' ? <TaskComposerDialog projectId={dialog.projectId} /> : null}
+      {dialog?.kind === 'join-team' ? <JoinTeamDialog invitation={dialog.invitation} /> : null}
+      {dialog?.kind === 'open-branch' ? (
+        <OpenBranchDialog projectId={dialog.projectId} pullRequests={dialog.pullRequests === true} />
+      ) : null}
 
       {/* Last, so it is on top of whatever else is open. A question about bytes
           that are about to run as this user outranks anything this user

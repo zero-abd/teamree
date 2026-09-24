@@ -302,6 +302,13 @@ export function Sidebar({
                   theirs={theirs.length}
                   onToggle={() => toggleProject(project.id)}
                   onNewTask={() => openDialog({ kind: 'new-task', projectId: project.id })}
+                  onOpenBranch={(pullRequests) =>
+                    openDialog({
+                      kind: 'open-branch',
+                      projectId: project.id,
+                      ...(pullRequests ? { pullRequests } : {})
+                    })
+                  }
                 />
                 <div className="project__meta">
                   <p className="project__base">{project.baseRef}</p>

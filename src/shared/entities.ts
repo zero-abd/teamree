@@ -32,6 +32,24 @@ export type Project = {
   setupCommand?: string
   /** False stops the timed and on-focus fetch of the base ref; absent is on. */
   fetchInBackground?: boolean
+  /**
+   * What `.teamree/project.json` in the primary checkout says. Read, never
+   * stored: each field applies where this Mac has none of its own.
+   */
+  repository?: ProjectRepositorySettings
+  /** Why `.teamree/project.json` was ignored: it is there and cannot be read. */
+  repositoryProblem?: string
+  /** The repository's setup command as this Mac last approved it; a different one asks before it runs. */
+  approvedSetupCommand?: string
+}
+
+/** A project's shared setup, as `.teamree/project.json` carries it. Every field optional. */
+export type ProjectRepositorySettings = {
+  linkedPaths?: string[]
+  copiedPaths?: string[]
+  setupCommand?: string
+  /** The ref new worktrees start from, as Settings' "Start new worktrees from" names it. */
+  startFrom?: string
 }
 
 /** A `project.clone` while it runs. */
@@ -86,6 +104,51 @@ export type Worktree = {
    * the directory can come back. Absent when the directory is where the record says.
    */
   missing?: true
+  /** What its commits are compared against when not the project's base ref: an opened pull request's base. */
+  baseRef?: string
+  /** The existing branch it was opened on, as `worktree.create`'s `checkout` took it; absent for a new branch. */
+  checkout?: string
+  /** A setup command from `.teamree/project.json` this Mac has not approved, waiting on `worktree.setup`. */
+  setupAsk?: string
+}
+
+/** A branch a worktree could be opened on as it is: not checked out anywhere yet. */
+export type BranchEntry = {
+  /** The local branch the worktree will be on. */
+  name: string
+  /** What `worktree.create` takes as `checkout`: the local name, or `origin/<name>` for a branch only on origin. */
+  checkout: string
+  remote: boolean
+  /** When its last commit was made, in epoch ms. */
+  updatedAt: number
+  author: string
+  /** Its last commit's subject, which names the worktree. */
+  subject: string
+}
+
+export type BranchList = { projectId: string; branches: BranchEntry[]; readAt: number }
+
+/** An open pull request, as `gh pr list` reports it. */
+export type PullRequestEntry = {
+  number: number
+  title: string
+  author: string
+  /** The local branch the worktree will be on. */
+  branch: string
+  /** `origin/<head>`, or `pull/<n>/head` for a pull request from a fork. */
+  checkout: string
+  /** The ref its changes are compared against, `origin/<base>`. */
+  base: string
+  updatedAt: number | null
+}
+
+/** `available` is false when `gh` is missing or refused; `reason` is its first line then. */
+export type PullRequestList = {
+  projectId: string
+  available: boolean
+  reason: string | null
+  pullRequests: PullRequestEntry[]
+  readAt: number
 }
 
 /**

@@ -500,13 +500,19 @@ the other person has not opened the app — and one tick would have to be wrong
 about one of those halves. The push is marked *teamree cannot check this* unless
 teamree made it, because it cannot see a commit you made in a terminal.
 
-Under that is **Invite somebody**: the message to send, written out in full with
-a button that copies it. There is no invitation in this protocol — nothing is
-sent anywhere, and push access is the whole of membership — which is exactly why
-one has to be written by hand: you are explaining a system with no invitations
-to somebody who is expecting one. It names the repository to clone, all four
-steps including the push people forget, and what a key in the roster grants,
-because the person receiving it is the one taking that on.
+Under that is **Copy Invitation**: one line and a `teamree://join?…` link naming
+the repository, the project and you. It carries no relay and no credential — the
+clone brings `.teamree/relay` — and grants nothing: the joiner still has to push
+their key, and you still see that key arrive in a commit you can review.
+
+**The joiner** opens the link, or pastes it (or an older invitation paragraph)
+into **Paste Invitation…** under **Join…**. One sheet asks where to clone it,
+or offers **Use Existing Checkout** when a project with that origin is already
+added; **Join** clones, adds the project, writes their key and pushes it, then
+shows the three steps a joiner has — key, push, connected — waiting for you.
+
+The `teamree` URL scheme is registered by the installed app only
+(`electron-builder.yml`); a development run never claims it.
 
 ### All of steps 2 to 4 from a shell
 
@@ -520,7 +526,7 @@ teamree team invite api
 ```
 
 That prints one line with no spaces in it — the repository, the relay, the
-project's name and the sender's handle — and refuses to print anything at all if
+project's name and the sender's handle (the app's own link leaves the relay to the repository) — and refuses to print anything at all if
 it cannot name all of the first three. An invitation that cannot say where the
 repository is is worse than no invitation.
 

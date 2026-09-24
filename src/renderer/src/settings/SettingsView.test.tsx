@@ -113,6 +113,7 @@ const openTeamwork = vi.fn()
 const openDialog = vi.fn()
 const installCli = vi.fn()
 const showAppearance = vi.fn()
+const saveProjectSettings = vi.fn()
 
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
@@ -143,6 +144,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
       openDialog,
       installCli,
       showAppearance,
+      saveProjectSettings,
       ...overrides
     },
     true
@@ -178,7 +180,8 @@ beforeEach(() => {
     openTeamwork,
     openDialog,
     installCli,
-    showAppearance
+    showAppearance,
+    saveProjectSettings
   ]) {
     mock.mockReset()
   }
@@ -1049,5 +1052,66 @@ describe('the agent you always use', () => {
     seed({ agents: [] })
     render(<SettingsView />)
     expect(screen.queryByRole('heading', { name: 'Agents' })).toBeNull()
+  })
+})
+
+describe('setup shared through .teamree/project.json', () => {
+  /** The source line under a field: its chip and, for an override, Reset. */
+  const sourceOf = (label: string): HTMLElement =>
+    screen.getByLabelText(label).closest('.settings-field')?.querySelector('.settings-source') as HTMLElement
+
+  it('shows the repository’s value with a Repository chip and nothing to reset', () => {
+    seed({ projects: [{ ...project, repository: { setupCommand: 'npm ci', copiedPaths: ['.env'] } }] })
+    render(<SettingsView />)
+    expect((screen.getByLabelText('Setup command') as HTMLInputElement).value).toBe('npm ci')
+    expect((screen.getByLabelText('Copy into every new worktree') as HTMLTextAreaElement).value).toBe('.env')
+    expect(within(sourceOf('Setup command')).getByText('Repository')).toBeTruthy()
+    expect(within(sourceOf('Setup command')).queryByRole('button', { name: 'Reset' })).toBeNull()
+  })
+
+  it('marks a value set here as This Mac, and Reset hands it back to the repository', () => {
+    seed({ projects: [{ ...project, setupCommand: 'pnpm i', repository: { setupCommand: 'npm ci' } }] })
+    render(<SettingsView />)
+    expect((screen.getByLabelText('Setup command') as HTMLInputElement).value).toBe('pnpm i')
+    const source = within(sourceOf('Setup command'))
+    expect(source.getByText('This Mac')).toBeTruthy()
+    fireEvent.click(source.getByRole('button', { name: 'Reset' }))
+    expect(setProjectPaths).toHaveBeenCalledWith('p1', { setupCommand: '' })
+  })
+
+  it('shows the repository’s command again when the field is emptied', () => {
+    seed({ projects: [{ ...project, setupCommand: 'pnpm i', repository: { setupCommand: 'npm ci' } }] })
+    render(<SettingsView />)
+    const field = screen.getByLabelText('Setup command') as HTMLInputElement
+    fireEvent.change(field, { target: { value: '' } })
+    fireEvent.blur(field)
+    expect(setProjectPaths).toHaveBeenCalledWith('p1', { setupCommand: '' })
+    expect(field.value).toBe('npm ci')
+  })
+
+  it('says nothing about a source for a value the repository does not carry', () => {
+    seed({ projects: [{ ...project, setupCommand: 'npm ci' }] })
+    render(<SettingsView />)
+    expect(sourceOf('Setup command')).toBeNull()
+  })
+
+  it('writes the file with Save to Repository, a secondary button', () => {
+    render(<SettingsView />)
+    const save = screen.getByRole('button', { name: 'Save to Repository' })
+    expect(save.className).not.toContain('button--primary')
+    fireEvent.click(save)
+    expect(saveProjectSettings).toHaveBeenCalledWith('p1')
+  })
+
+  it('says in one line when the file cannot be read', () => {
+    seed({ projects: [{ ...project, repositoryProblem: 'project.json unreadable' }] })
+    render(<SettingsView />)
+    expect(screen.getByText('project.json unreadable')).toBeTruthy()
+  })
+
+  it('starts worktrees from the repository’s ref when this Mac has not chosen one', () => {
+    seed({ projects: [{ ...project, repository: { startFrom: 'origin/dev' } }] })
+    render(<SettingsView />)
+    expect(screen.getByText('origin/dev')).toBeTruthy()
   })
 })

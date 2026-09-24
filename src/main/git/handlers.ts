@@ -15,6 +15,7 @@ export const GIT_METHODS = [
   'project.cancelClone',
   'project.remove',
   'project.setPaths',
+  'project.saveSettings',
   'worktree.list',
   'worktree.get',
   'worktree.create',
@@ -45,7 +46,10 @@ export const GIT_METHODS = [
   'worktree.createPullRequest',
   'worktree.mergeIntoBase',
   'worktree.keep',
-  'worktree.startPoints'
+  'worktree.startPoints',
+  'worktree.branches',
+  'worktree.pullRequests',
+  'worktree.setup'
 ] as const
 
 export type GitMethodName = (typeof GIT_METHODS)[number]
@@ -56,13 +60,18 @@ export type GitHandlers = {
 
 export function createGitHandlers(service: GitService): GitHandlers {
   return {
-    'project.list': async () => service.listProjects(),
+    // Read afresh on every list: a `git pull` can change `.teamree/project.json` under a running app.
+    'project.list': async () => {
+      await service.refreshProjectFiles()
+      return service.listProjects()
+    },
     'project.add': (params) => service.addProject(params),
     'project.clone': (params) => service.cloneProject(params),
     'project.cloneProgress': async (params) => service.cloneProgress(params),
     'project.cancelClone': async (params) => service.cancelClone(params),
     'project.remove': (params) => service.removeProject(params),
     'project.setPaths': (params) => service.setProjectPaths(params),
+    'project.saveSettings': (params) => service.saveProjectSettings(params),
     'worktree.list': (params) => service.listWorktrees(params),
     'worktree.get': (params) => service.getWorktree(params),
     'worktree.create': (params) => service.createWorktree(params),
@@ -94,7 +103,10 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.mergeIntoBase': (params) => service.worktreeMergeIntoBase(params),
     'worktree.keep': (params) => service.keepWorktree(params),
     'worktree.startPoints': (params) =>
-      service.listStartPoints(params.projectId, params.limit === undefined ? {} : { limit: params.limit })
+      service.listStartPoints(params.projectId, params.limit === undefined ? {} : { limit: params.limit }),
+    'worktree.branches': (params) => service.listBranches(params),
+    'worktree.pullRequests': (params) => service.listPullRequests(params),
+    'worktree.setup': (params) => service.answerSetup(params)
   }
 }
 
@@ -107,6 +119,7 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('project.cancelClone', Params.projectCancelClone, handlers['project.cancelClone'])
   registry.register('project.remove', Params.projectRemove, handlers['project.remove'])
   registry.register('project.setPaths', Params.projectSetPaths, handlers['project.setPaths'])
+  registry.register('project.saveSettings', Params.projectSaveSettings, handlers['project.saveSettings'])
   registry.register('worktree.list', Params.worktreeList, handlers['worktree.list'])
   registry.register('worktree.get', Params.worktreeGet, handlers['worktree.get'])
   registry.register('worktree.create', Params.worktreeCreate, handlers['worktree.create'])
@@ -142,5 +155,8 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.mergeIntoBase', Params.worktreeMergeIntoBase, handlers['worktree.mergeIntoBase'])
   registry.register('worktree.keep', Params.worktreeKeep, handlers['worktree.keep'])
   registry.register('worktree.startPoints', Params.worktreeStartPoints, handlers['worktree.startPoints'])
+  registry.register('worktree.branches', Params.worktreeBranches, handlers['worktree.branches'])
+  registry.register('worktree.pullRequests', Params.worktreePullRequests, handlers['worktree.pullRequests'])
+  registry.register('worktree.setup', Params.worktreeSetup, handlers['worktree.setup'])
   return service
 }

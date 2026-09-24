@@ -27,6 +27,8 @@ export type PaletteAction =
   | WorkspaceCommand
   | 'toggle-changes'
   | 'show-files'
+  | 'open-branch'
+  | 'open-pull-request'
   | 'install-cli'
   | 'check-for-updates'
   | 'toggle-automatic-updates'
@@ -157,6 +159,9 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     const unavailable =
       action.unavailable ??
       (action.id === 'install-cli' && context.cli?.state === 'linked' ? 'installed' : null) ??
+      ((action.id === 'open-branch' || action.id === 'open-pull-request') && context.projects.length === 0
+        ? 'no project'
+        : null) ??
       context.whyUnavailable?.(action.id) ??
       null
     return {
@@ -399,6 +404,12 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
 const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[] = [
   { id: 'toggle-changes', label: 'Show Changes', keywords: 'diff git status files review changes' },
   { id: 'show-files', label: 'Show Files', keywords: 'tree folder directory explorer browse open panel' },
+  {
+    id: 'open-branch',
+    label: 'Open Branch…',
+    keywords: 'checkout existing branch teammate remote worktree track take over'
+  },
+  { id: 'open-pull-request', label: 'Check Out Pull Request…', keywords: 'review pr github gh checkout teammate' },
   {
     id: 'install-cli',
     label: 'Install Command Line Tool',

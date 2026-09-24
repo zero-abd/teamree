@@ -1022,3 +1022,29 @@
   white-space: nowrap;
   color: var(--fg-secondary);
 }
+
+/* A repository's setup command waiting for this Mac's approval, across the top of the worktree. */
+.setup-ask {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-raised);
+}
+
+.setup-ask__label {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.setup-ask__command {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

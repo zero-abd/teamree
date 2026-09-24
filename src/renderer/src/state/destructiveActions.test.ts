@@ -28,6 +28,26 @@ it('retries a failed worktree without forcing away whatever is behind it', async
   call.mockRestore()
 })
 
+it('opens a failed branch checkout again as that branch, never as a new one', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  // The seeded runtime is shared, and the test above has already rebuilt its one failed row.
+  const failed = useWorkspaceStore.getState().worktrees.at(-1)!
+  useWorkspaceStore.setState((state) => ({
+    worktrees: state.worktrees.map((entry) =>
+      entry.id === failed.id ? { ...entry, checkout: 'pull/7/head', baseRef: 'origin/release' } : entry
+    )
+  }))
+
+  const call = vi.spyOn(runtimeClient, 'call')
+  store.retryWorktree(failed.id)
+  await vi.waitFor(() => expect(call.mock.calls.some(([method]) => method === 'worktree.create')).toBe(true))
+
+  const create = call.mock.calls.find(([method]) => method === 'worktree.create')?.[1]
+  expect(create).toMatchObject({ checkout: 'pull/7/head', base: 'origin/release' })
+  call.mockRestore()
+})
+
 it('keeps a pane on screen when the runtime could not close the terminal behind it', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()

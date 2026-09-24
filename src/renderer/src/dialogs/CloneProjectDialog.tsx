@@ -10,7 +10,7 @@ import { Modal } from './Modal'
 const PROGRESS_POLL_MS = 300
 
 /** `~/code` with the home folder spelt out, as the runtime will resolve it; `~` with no preload (a test). */
-function defaultParent(): string {
+export function defaultParent(): string {
   const home = window.teamree?.homeDir
   return home ? `${home}${DEFAULT_CLONE_PARENT.slice(1)}` : DEFAULT_CLONE_PARENT
 }

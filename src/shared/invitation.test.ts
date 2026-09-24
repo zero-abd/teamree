@@ -3,7 +3,13 @@
 // generous about what people paste and refuses a missing field by name.
 
 import { describe, expect, it } from 'vitest'
-import { formatInvitation, parseInvitation, withoutCredentials, type Invitation } from './invitation.js'
+import {
+  formatInvitation,
+  parseInvitation,
+  parsePastedInvitation,
+  withoutCredentials,
+  type Invitation
+} from './invitation'
 
 const ADA: Invitation = {
   origin: 'https://github.com/ada/pager.git',
@@ -156,7 +162,7 @@ describe('refusing a string that is not an invitation', () => {
   })
 
   it('names the field that is missing rather than guessing at it', () => {
-    for (const field of ['origin', 'relay', 'project', 'from'] as const) {
+    for (const field of ['origin', 'project', 'from'] as const) {
       const fields: Record<string, string> = { v: '1', ...ADA }
       delete fields[field]
       const { reason, hint } = refused(linkOf(fields))
@@ -176,5 +182,48 @@ describe('refusing a string that is not an invitation', () => {
         expect(parseInvitation(linkOf(written)), `${field}=${blank}`).toEqual(parseInvitation(linkOf(missing)))
       }
     }
+  })
+})
+
+describe('a link with no relay in it', () => {
+  // The relay is read from `.teamree/relay` after cloning, so the link names nothing the repository does not.
+  it('is written without one and reads back without one', () => {
+    const { relay: _relay, ...rest } = ADA
+    const link = formatInvitation(rest)
+    expect(link).not.toContain('relay=')
+    expect(accepted(link)).toEqual(rest)
+  })
+
+  it('refuses a bad scheme and a link with no origin', () => {
+    expect(refused('https://join?v=1&origin=x&project=p&from=a').reason).toBe(
+      'it does not contain a teamree invitation'
+    )
+    expect(refused(linkOf({ v: '1', project: 'pager', from: 'ada' })).reason).toBe('it names no origin')
+  })
+})
+
+describe('what somebody pastes into Paste Invitation…', () => {
+  it('takes the link', () => {
+    const parsed = parsePastedInvitation(`come join ${formatInvitation(ADA)}`)
+    expect(parsed.ok && parsed.invitation).toEqual(ADA)
+  })
+
+  it('takes the older invitation text, clone command and all', () => {
+    const text = [
+      'I (ada) have set up teamwork on pager in teamree. Push access is membership — nothing to accept.',
+      '',
+      "1. Clone it if you have not: git clone 'https://github.com/ada/pager.git'",
+      '2. Open teamree on your Mac and add that checkout as a project.'
+    ].join('\n')
+    const parsed = parsePastedInvitation(text)
+    expect(parsed.ok && parsed.invitation).toEqual({
+      origin: 'https://github.com/ada/pager.git',
+      project: 'pager',
+      from: 'ada'
+    })
+  })
+
+  it('refuses text with no clone command and no link', () => {
+    expect(parsePastedInvitation('see you tomorrow').ok).toBe(false)
   })
 })

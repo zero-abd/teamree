@@ -838,23 +838,23 @@ describe('what a step puts on screen', () => {
 
   it('reads the same whichever of the two jobs it is', () => {
     const steps = (path: 'start' | 'join'): string[] =>
-      (['identity', 'key', 'relay', 'push', 'connected'] as const).map(
+      (['key', 'push'] as const).map(
         (open) => render({ path }, { open }).match(/class="step__summary">([^<]*)</)?.[1] ?? ''
       )
     expect(steps('start')).toEqual(steps('join'))
-    expect(steps('start').filter(Boolean).length).toBe(5)
+    expect(steps('start').filter(Boolean).length).toBe(2)
   })
 
-  // Two relays is two halves of a team that never meet.
-  it('warns a joiner whose team has not pushed a relay yet, before offering them one', () => {
-    const shown = text(relayStep({ path: 'join' }))
-    const warning = shown.indexOf('.teamree/relay not pushed yet')
-    expect(warning).toBeGreaterThan(-1)
-    expect(warning).toBeLessThan(shown.indexOf('Deploy a Relay'))
+  // A joiner gets the relay with the clone; offering them a deploy makes two halves of a team that never meet.
+  it('offers a joiner no relay step, and says when the team has not pushed one', () => {
+    const shown = text(render({ path: 'join', list: enrolled() }, { open: 'connected' }))
+    expect(shown).not.toContain('Deploy a Relay')
+    expect(shown).not.toMatch(/Identity|Relay\b/)
+    expect(shown).toContain('.teamree/relay not pushed yet')
   })
 
   it('says none of that to somebody who already has a relay', () => {
-    expect(text(relayStep({ path: 'join', relay: relayOnDisk() }))).not.toContain('not pushed yet')
+    expect(text(render({ path: 'join', relay: relayOnDisk() }, { open: 'connected' }))).not.toContain('not pushed yet')
   })
 })
 
@@ -1052,9 +1052,9 @@ describe('the page as a whole', () => {
   })
 
   // There is no invitation in this protocol, which is why the person setting it up has to write one.
-  it('writes the invitation out in full, and offers to copy it', () => {
+  it('writes the invitation out as one line and a link, and offers to copy it', () => {
     const shown = text(render({ list: enrolled(), relay: relayOnDisk() }))
-    expect(shown).toContain('git clone https://example.com/ada/pager.git')
+    expect(shown).toContain('Join pager on teamree: teamree://join?v=1&')
     expect(shown).toContain('Copy Invitation')
   })
 

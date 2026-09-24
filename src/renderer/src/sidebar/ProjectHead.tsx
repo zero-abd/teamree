@@ -15,6 +15,8 @@ type ProjectHeadProps = {
   theirs: number
   onToggle: () => void
   onNewTask: () => void
+  /** Opens a branch as it is: `true` lists open pull requests instead. */
+  onOpenBranch: (pullRequests: boolean) => void
 }
 
 export function ProjectHead({
@@ -23,7 +25,8 @@ export function ProjectHead({
   count,
   theirs,
   onToggle,
-  onNewTask
+  onNewTask,
+  onOpenBranch
 }: ProjectHeadProps): React.JSX.Element {
   const row = useRef<HTMLButtonElement | null>(null)
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
@@ -43,6 +46,8 @@ export function ProjectHead({
     }))
   const items: RowMenuItem[] = [
     { label: 'New Task…', onChoose: onNewTask },
+    { label: 'Open Branch…', onChoose: () => onOpenBranch(false) },
+    { label: 'Check Out Pull Request…', onChoose: () => onOpenBranch(true) },
     ...(removed.length === 0 ? [] : [{ label: 'Recently Removed', items: removed, onChoose: () => {} }])
   ]
 

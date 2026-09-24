@@ -151,6 +151,8 @@ describe('dispatcher', () => {
       'project.cloneProgress',
       'project.list',
       'project.remove',
+      // Local: writes into this machine's checkout.
+      'project.saveSettings',
       // Local: what this machine's checkouts carry over is nobody else's setting.
       'project.setPaths',
       'status.get',
@@ -208,6 +210,7 @@ describe('dispatcher', () => {
       'workspace.subscribe',
       // Local: rewrites this machine's branch, as a commit does.
       'worktree.abortUpdate',
+      'worktree.branches',
       'worktree.changes',
       'worktree.commit',
       'worktree.compare',
@@ -227,12 +230,16 @@ describe('dispatcher', () => {
       'worktree.log',
       'worktree.mergeIntoBase',
       'worktree.mergePreview',
+      // Local: runs this machine's gh, with its credentials.
+      'worktree.pullRequests',
       'worktree.push',
       'worktree.remove',
       'worktree.removed',
       'worktree.rename',
       // Local: checks a copy out on this machine's disk.
       'worktree.restore',
+      // Local: approves and runs a command on this machine.
+      'worktree.setup',
       'worktree.showCommit',
       'worktree.stageHunk',
       'worktree.startPoints',

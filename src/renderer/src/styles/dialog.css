@@ -674,3 +674,26 @@ button.picker__chevron:hover {
   font-size: var(--text-xs);
   line-height: 1.5;
 }
+
+/* The Join sheet: the repository an invitation names, and the checkout it will use. */
+.join__origin {
+  margin: 0;
+  overflow: hidden;
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.join__existing {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.join__path {
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}

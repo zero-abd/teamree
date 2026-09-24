@@ -23,6 +23,9 @@ const KEEP_AWAKE_PUBLISH_CHANNEL = 'teamree:keep-awake:publish'
 const UNSAVED_PUBLISH_CHANNEL = 'teamree:unsaved:publish'
 const UNSAVED_ASK_CHANNEL = 'teamree:unsaved:ask'
 const UNSAVED_ANSWER_CHANNEL = 'teamree:unsaved:answer'
+// src/main/invitationLinks.ts; a link inward, pulled once and then pushed.
+const INVITATION_TAKE_CHANNEL = 'teamree:invitation:take'
+const INVITATION_OPEN_CHANNEL = 'teamree:invitation:open'
 
 /** What the main process answers a reveal with, declared structurally (not imported from src/main). */
 type RevealResult = { revealed: true } | { revealed: false; reason: string }
@@ -163,6 +166,26 @@ const unsaved = {
   }
 } as const
 
+const invitationListeners = new Set<(link: string) => void>()
+
+ipcRenderer.on(INVITATION_OPEN_CHANNEL, (_event, link: string) => {
+  for (const listener of [...invitationListeners]) listener(link)
+})
+
+/** `teamree://join?…` links the OS opened the app with. `take` answers the one that arrived before the window. */
+const invitations = {
+  take(): Promise<string | null> {
+    return ipcRenderer.invoke(INVITATION_TAKE_CHANNEL)
+  },
+
+  onLink(listener: (link: string) => void): () => void {
+    invitationListeners.add(listener)
+    return () => {
+      invitationListeners.delete(listener)
+    }
+  }
+} as const
+
 const api = {
   selectProjectFolder(): Promise<string | null> {
     return ipcRenderer.invoke('teamree:select-project-folder')
@@ -199,7 +222,8 @@ const api = {
   menu,
   notices,
   keepAwake,
-  unsaved
+  unsaved,
+  invitations
 } as const
 
 export type TeamreeRuntimeBridge = typeof runtime

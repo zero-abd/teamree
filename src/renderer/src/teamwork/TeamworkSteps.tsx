@@ -28,6 +28,7 @@ import {
   MORE_RELAYS_BUTTON,
   MORE_RELAYS_LEAD,
   ORIGIN_DETAIL,
+  PASTE_INVITATION_BUTTON,
   PASTE_RELAY_BUTTON,
   PUBLISH_BUTTON,
   publishActivity,
@@ -114,6 +115,10 @@ export type TeamworkStepsProps = {
   onCopy: (text: string) => void
   /** Now, as the panel measures it. Passed in so a test can assert the durations. */
   now?: number
+  /** Whose invitation this checkout was joined from, for Connected to say who it waits for. */
+  waitingFor?: string | undefined
+  /** Opens the Join sheet for a pasted invitation; answers why not, or null. */
+  onPasteInvitation?: (raw: string) => string | null
 }
 
 /** A glyph for the eye; `MARK_WORDS` is what is read out. */
@@ -137,7 +142,8 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
     status: props.status,
     failedReads: props.readErrors,
     path: props.path,
-    publish: props.publish.result
+    publish: props.publish.result,
+    waitingFor: props.waitingFor
   })
   // Undefined until a step is clicked: then the next step to do, or Connected once a teammate is.
   const [opened, setOpened] = useState<StepId | null | undefined>(undefined)
@@ -147,7 +153,6 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
   const origin = teamworkFacts(props.status)?.origin
   const invite = inviteText({
     originUrl: origin?.ok === true ? origin.url : null,
-    relayUrl: props.relay?.url ?? null,
     projectName: props.projectName,
     handle: props.list?.self.handle ?? null
   })
@@ -166,7 +171,13 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
         <PathChoice list={props.list} relay={props.relay} onChoose={props.onChoosePath} />
       ) : (
         <>
-          {props.path === null ? null : <ChosenPath path={props.path} onChange={() => props.onChoosePath(null)} />}
+          {props.path === null ? null : (
+            <ChosenPath
+              path={props.path}
+              onChange={() => props.onChoosePath(null)}
+              onPasteInvitation={props.onPasteInvitation}
+            />
+          )}
           <ol className="steps__list">
             {flow.steps.map((step) => {
               const expanded = step.id === open
@@ -239,17 +250,54 @@ function PathChoice({
   )
 }
 
-/** The answer, kept on screen and changeable. */
-function ChosenPath({ path, onChange }: { path: TeamworkPath; onChange: () => void }): React.JSX.Element {
+/** The answer, kept on screen and changeable. A joiner can paste the invitation they were sent. */
+function ChosenPath({
+  path,
+  onChange,
+  onPasteInvitation
+}: {
+  path: TeamworkPath
+  onChange: () => void
+  onPasteInvitation: ((raw: string) => string | null) | undefined
+}): React.JSX.Element {
   const chosen = TEAMWORK_PATHS.find((option) => option.id === path) as (typeof TEAMWORK_PATHS)[number]
+  const [pasting, setPasting] = useState(false)
+  const [refused, setRefused] = useState<string | null>(null)
   return (
     <div className="chosen-path">
       <p className="chosen-path__line">
         <span className="chosen-path__label">{chosen.title}</span>
       </p>
+      {path === 'join' && onPasteInvitation !== undefined && !pasting ? (
+        <button type="button" className="button button--small" onClick={() => setPasting(true)}>
+          {PASTE_INVITATION_BUTTON}
+        </button>
+      ) : null}
       <button type="button" className="button button--small" onClick={onChange}>
         Back
       </button>
+      {pasting && onPasteInvitation !== undefined ? (
+        <div className="chosen-path__paste">
+          <input
+            className="field__input field__input--mono"
+            aria-label="Invitation"
+            placeholder="teamree://join?…"
+            autoFocus
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => {
+              const raw = event.target.value
+              // Opened on the paste itself; an untyped field shows no error.
+              setRefused(raw.trim() === '' ? null : onPasteInvitation(raw))
+            }}
+          />
+          {refused === null ? null : (
+            <span className="field__error" role="alert">
+              {refused}
+            </span>
+          )}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -278,7 +326,6 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
       }
       return (
         <RelayBody
-          path={props.path}
           relay={props.relay}
           // A relay already chosen is the decision taken; the options are not offered again.
           options={step.mark !== 'done' && step.mark !== 'this-run'}
@@ -485,7 +532,6 @@ function launcherBlocked(relay: RelaySetting, derived: string | null, pane: Rela
  * every other way. A relay already chosen is shown with its check and none of the options.
  */
 function RelayBody({
-  path,
   relay,
   options,
   pending,
@@ -496,7 +542,6 @@ function RelayBody({
   onClosePane,
   renderRelayPane
 }: {
-  path: TeamworkPath | null
   relay: RelaySetting
   /** Whether the other ways to get a relay are still a decision to make. */
   options: boolean
@@ -514,10 +559,6 @@ function RelayBody({
 
   return (
     <div className="step__body">
-      {/* A joiner who finds no relay is ahead of whoever invited them; standing a second one up is the wrong answer. */}
-      {path === 'join' && relay.onDisk.url === null ? (
-        <p className="relay-waiting">{relay.file} not pushed yet · pull again soon</p>
-      ) : null}
       {/* An unreadable override, said first: everything else here is about a relay the app will not dial. */}
       {brokenRelayOverride(relay) === null ? null : (
         <p className="relay-broken-override">{brokenRelayOverride(relay)}</p>

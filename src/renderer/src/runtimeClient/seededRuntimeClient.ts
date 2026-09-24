@@ -1,6 +1,7 @@
 // A stand-in runtime that answers the whole method catalogue from memory.
 // Deliberately the only place in the renderer that fabricates data.
 
+import { effectiveProjectSettings, PROJECT_FILE } from '@shared/projectSettings'
 import type {
   CliStatus,
   ConsentGrant,
@@ -545,6 +546,32 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'projects' })
       return next
     },
+    'project.saveSettings': ({ projectId, startFrom }) => {
+      const project = required(projects.get(projectId), 'project')
+      const repository = {
+        ...effectiveProjectSettings(project),
+        ...(startFrom === undefined ? {} : { startFrom })
+      }
+      const next: Project = { ...project, repository }
+      projects.set(next.id, next)
+      announce({ type: 'projects' })
+      return { file: PROJECT_FILE, project: next }
+    },
+    'worktree.setup': ({ worktreeId }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const { setupAsk: _answered, ...next } = worktree
+      worktrees.set(next.id, next)
+      announce({ type: 'worktrees' })
+      return next
+    },
+    'worktree.branches': ({ projectId }) => ({ projectId, branches: [], readAt: Date.now() }),
+    'worktree.pullRequests': ({ projectId }) => ({
+      projectId,
+      available: false,
+      reason: 'not in a seeded window',
+      pullRequests: [],
+      readAt: Date.now()
+    }),
     'project.remove': ({ projectId }) => {
       projects.delete(projectId)
       for (const worktree of worktrees.values()) {
