@@ -777,3 +777,65 @@ describe('the tree from the keyboard', () => {
     expect(names()).toContain('Second')
   })
 })
+
+describe('starting a task in any project from the keyboard', () => {
+  const other: Project = { id: 'p2', name: 'ledger', path: '/repos/ledger', baseRef: 'origin/main' }
+  const projectRow = (name: string): HTMLElement =>
+    screen
+      .getAllByRole('treeitem')
+      .find((item) => item.getAttribute('aria-level') === '1' && item.textContent?.includes(name)) as HTMLElement
+
+  beforeEach(() => {
+    seed({
+      projects: [project, other],
+      worktrees: [worktree(), worktree({ id: 'w2', projectId: 'p2', name: 'Balance the books', branch: 'balance' })],
+      activeWorktreeId: 'w1'
+    })
+    mount()
+  })
+
+  it.each([
+    ['⇧F10', { key: 'F10', shiftKey: true }],
+    ['the menu key', { key: 'ContextMenu' }]
+  ])('offers New Task… on %s from a project row, in that project', (_, key) => {
+    const row = projectRow('ledger')
+    act(() => row.focus())
+    fireEvent.keyDown(row, key)
+    const menu = screen.getByRole('menu', { name: 'Actions for ledger' })
+    const item = within(menu).getByRole('menuitem', { name: 'New Task…' })
+    expect(document.activeElement).toBe(item)
+    fireEvent.keyDown(item, { key: 'Enter' })
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p2' })
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('opens the same menu on a right-click', () => {
+    fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
+    within(screen.getByRole('menu', { name: 'Actions for ledger' }))
+      .getByRole('menuitem', { name: 'New Task…' })
+      .click()
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p2' })
+  })
+
+  it('makes ⌘N start in the project whose row has the focus', async () => {
+    const { runWorkspaceCommand } = await import('../keyboard/workspaceCommands')
+    act(() => projectRow('ledger').focus())
+    runWorkspaceCommand('new-worktree', useWorkspaceStore.getState())
+    expect(openDialog).toHaveBeenLastCalledWith({ kind: 'new-task', projectId: 'p2' })
+  })
+
+  it('makes ⌘N start in the project of a focused worktree row, not the open one', async () => {
+    const { runWorkspaceCommand } = await import('../keyboard/workspaceCommands')
+    const row = screen.getAllByRole('treeitem').find((item) => item.textContent?.includes('Balance the books'))
+    act(() => row?.focus())
+    runWorkspaceCommand('new-worktree', useWorkspaceStore.getState())
+    expect(openDialog).toHaveBeenLastCalledWith({ kind: 'new-task', projectId: 'p2' })
+  })
+
+  it('leaves ⌘N on the open worktree’s project with the focus outside the tree', async () => {
+    const { runWorkspaceCommand } = await import('../keyboard/workspaceCommands')
+    act(() => screen.getByRole('button', { name: 'Add project' }).focus())
+    runWorkspaceCommand('new-worktree', useWorkspaceStore.getState())
+    expect(openDialog).toHaveBeenLastCalledWith({ kind: 'new-task', projectId: 'p1' })
+  })
+})

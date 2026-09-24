@@ -43,6 +43,13 @@ export function treeStop(items: readonly HTMLElement[], last: HTMLElement | null
   return items.find((item) => item.getAttribute('aria-current') === 'true') ?? items[0] ?? null
 }
 
+/** The project of the tree row holding the focus, or null with the focus outside the tree. */
+export function focusedTreeProject(): string | null {
+  if (typeof document === 'undefined') return null
+  const section = document.activeElement?.closest<HTMLElement>('[role="tree"] [data-project-id]')
+  return section?.dataset.projectId ?? null
+}
+
 /** Roving tabindex over the tree in `ref`; rows are drawn with `tabIndex={-1}` and this raises one. */
 export function useTreeKeys(ref: RefObject<HTMLElement | null>): {
   onKeyDown: (event: React.KeyboardEvent) => void

@@ -12,6 +12,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { evidenceLine } from '@shared/outputEvidence'
 import { Brand, SidebarGlyph } from '../shell/Brand'
 import { useOpenIn } from './openIn'
+import { ProjectHead } from './ProjectHead'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
 import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
 import { teamworkControlLabel, teamworkOn, teamworkSummary } from './teamworkSummary'
@@ -302,55 +303,15 @@ export function Sidebar({
             // Roster teammates never heard from: not away, and not without worktrees.
             const unheard = unheardTeammates(teammates[project.id])
             return (
-              <section className="project" key={project.id}>
-                <div className="project__head">
-                  <button
-                    type="button"
-                    className="project__toggle"
-                    role="treeitem"
-                    aria-level={1}
-                    aria-expanded={!isCollapsed}
-                    tabIndex={-1}
-                    onClick={() => toggleProject(project.id)}
-                    onKeyDown={(event) => {
-                      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
-                      if (event.key === (isCollapsed ? 'ArrowRight' : 'ArrowLeft')) {
-                        event.preventDefault()
-                        toggleProject(project.id)
-                      }
-                    }}
-                  >
-                    <svg
-                      className={`chevron${isCollapsed ? '' : ' chevron--open'}`}
-                      viewBox="0 0 12 12"
-                      aria-hidden="true"
-                    >
-                      <path d="M4.5 2.5 L8.5 6 L4.5 9.5" />
-                    </svg>
-                    <span className="project__name">{project.name}</span>
-                    <span className="project__count">{rows.length}</span>
-                    {theirs.length > 0 ? (
-                      <span
-                        className="project__count project__count--teammate"
-                        title={`${theirs.length} teammate worktree${theirs.length === 1 ? '' : 's'}`}
-                      >
-                        {`+${theirs.length}`}
-                      </span>
-                    ) : null}
-                  </button>
-                  <button
-                    type="button"
-                    className="button button--ghost button--icon"
-                    tabIndex={-1}
-                    title={`New task in ${project.name}`}
-                    aria-label={`New task in ${project.name}`}
-                    onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
-                  >
-                    <svg viewBox="0 0 14 14" aria-hidden="true">
-                      <path d="M7 2.5 L7 11.5 M2.5 7 L11.5 7" />
-                    </svg>
-                  </button>
-                </div>
+              <section className="project" key={project.id} data-project-id={project.id}>
+                <ProjectHead
+                  project={project}
+                  collapsed={isCollapsed}
+                  count={rows.length}
+                  theirs={theirs.length}
+                  onToggle={() => toggleProject(project.id)}
+                  onNewTask={() => openDialog({ kind: 'new-task', projectId: project.id })}
+                />
                 <div className="project__meta">
                   <p className="project__base">{project.baseRef}</p>
                   {/* Only where teamwork is on; the rail reaches the setup either way. Named with the
