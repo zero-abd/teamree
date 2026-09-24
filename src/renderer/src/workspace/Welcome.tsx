@@ -23,6 +23,8 @@ export function Welcome({
   project: Project | undefined
 }): React.JSX.Element {
   const openDialog = useWorkspaceStore((state) => state.openDialog)
+  const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
+  const rightPanelOpen = useWorkspaceStore((state) => state.rightPanelOpen)
 
   return (
     <div className="welcome">
@@ -60,7 +62,7 @@ export function Welcome({
       <dl className="welcome__shortcuts">
         {SHORTCUT_COMMANDS.map((command) => (
           <div key={command} data-command={command}>
-            <dt>{menuLabel(command)}</dt>
+            <dt>{menuLabel(command, { sidebarVisible, rightPanelOpen })}</dt>
             <dd>
               <kbd>{shortcutHint(command, modifier)}</kbd>
             </dd>

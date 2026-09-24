@@ -250,9 +250,9 @@ describe('buildPaletteItems', () => {
         .filter((item) => item.kind === 'action')
         .map((item) => item.label)
 
-    expect(offered(null)).toContain('Check for updates')
-    expect(offered(null)).toContain('Stop checking for updates automatically')
-    expect(offered(updateState({ automatic: false }))).toContain('Check for updates automatically')
+    expect(offered(null)).toContain('Check for Updates')
+    expect(offered(null)).toContain('Stop Checking for Updates Automatically')
+    expect(offered(updateState({ automatic: false }))).toContain('Check for Updates Automatically')
   })
 
   it('shows the key that does the same thing', () => {
@@ -311,10 +311,10 @@ describe('filterPalette', () => {
     {
       kind: 'action',
       id: 'new-terminal',
-      label: 'New terminal',
+      label: 'New Terminal',
       hint: '',
       detail: '',
-      search: 'New terminal shell'
+      search: 'New Terminal shell'
     }
   ]
 
@@ -433,7 +433,7 @@ describe('what the palette returns for what was typed', () => {
   })
 
   it('refuses a row that carries none of the query, however its letters fall', () => {
-    expect(score('Stop checking for updates automatically updates automatic quiet release notify', 'push')).toBeNull()
+    expect(score('Stop Checking for Updates Automatically updates automatic quiet release notify', 'push')).toBeNull()
     expect(score('Fix the broken teamree command cli command line terminal install link symlink', 'commit')).toBeNull()
     expect(score('Appearance… theme colour color dark black contrast accent ground', 'clau')).toBeNull()
   })
@@ -445,7 +445,7 @@ describe('what the palette returns for what was typed', () => {
 
 // One table of commands, read by the menu bar and by the palette alike. The
 // palette used to keep its own list, which is why it had no row for Push,
-// Commit, Close pane, Maximize pane, either pane walk or either worktree walk —
+// Commit, Close Pane, Maximize Pane, either pane walk or either worktree walk —
 // every one of them in the menu, none of them findable by typing its name.
 describe('every command the menu has is a row in the palette', () => {
   const MENU_STATE = {
@@ -470,6 +470,23 @@ describe('every command the menu has is a row in the palette', () => {
         entry.command
       ).toEqual([entry.label])
     }
+  })
+
+  it('says Show or Hide for a panel as the menu does', () => {
+    const panels = { sidebarVisible: false, rightPanelOpen: false }
+    const items = buildPaletteItems(context(panels))
+    for (const entry of menuBarSpec({ ...MENU_STATE, ...panels } as never)) {
+      if (entry.command !== 'toggle-sidebar' && entry.command !== 'toggle-right-panel') continue
+      expect(items.find((item) => item.id === entry.command)?.label).toBe(entry.label)
+    }
+    expect(items.find((item) => item.id === 'toggle-sidebar')?.label).toBe('Show Sidebar')
+  })
+
+  it('names its own rows as the menu names commands', () => {
+    const labels = buildPaletteItems(context())
+      .filter((item) => item.kind === 'action')
+      .map((item) => item.label)
+    expect(labels).toEqual(expect.arrayContaining(['Show Changes', 'Show Files', 'Add Project', 'Check for Updates']))
   })
 
   it('is findable by the words of that label', () => {

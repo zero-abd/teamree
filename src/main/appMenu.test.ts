@@ -3,6 +3,7 @@ import type { MenuItemConstructorOptions } from 'electron'
 import { aboutPanelOptions, applicationMenuTemplate, offersDevTools, type ApplicationMenuOptions } from './appMenu'
 import { readMenuBarItems, type MenuBarItem } from './menuBar'
 import { menuBarSpec } from '../renderer/src/menu/menuBar'
+import { buildPaletteItems } from '../renderer/src/palette/paletteModel'
 import type { CommandState } from '../renderer/src/keyboard/workspaceCommands'
 import type { WorkspaceCommand } from '../renderer/src/keyboard/workspaceShortcuts'
 
@@ -312,11 +313,11 @@ describe('the window’s own commands in the menu bar', () => {
     expect(appMenu.map((item) => item.label ?? item.role)).toContain('Settings…')
 
     // In the order the window published them.
-    expect(labelsOf(template, 'File')).toEqual(['New task', 'New terminal', 'Close pane'])
-    expect(labelsOf(template, 'Edit').slice(-2)).toEqual(['—', 'Find in pane'])
+    expect(labelsOf(template, 'File')).toEqual(['New Task', 'New Terminal', 'Close Pane'])
+    expect(labelsOf(template, 'Edit').slice(-2)).toEqual(['—', 'Find in Pane'])
     expect(labelsOf(template, 'View').slice(0, 3)).toEqual([shipped('open-palette'), shipped('open-appearance'), '—'])
-    expect(shipped('open-palette')).toBe('Go to worktree or command')
-    expect(labelsOf(template, 'Window')).toEqual(['Split pane right', '—', 'minimize', 'zoom', '—', 'front'])
+    expect(shipped('open-palette')).toBe('Go to Worktree or Command')
+    expect(labelsOf(template, 'Window')).toEqual(['Split Pane Right', '—', 'minimize', 'zoom', '—', 'front'])
     expect(labelsOf(template, 'Help')).toEqual([shipped('open-help')])
   })
 
@@ -385,7 +386,7 @@ describe('the window’s own commands in the menu bar', () => {
   it('names the command back when an item is chosen', () => {
     const choose = vi.fn()
     const template = applicationMenuTemplate({ platform: 'darwin', commands: published(choose) })
-    const item = items(template).find((entry) => entry.label === 'New task')
+    const item = items(template).find((entry) => entry.label === 'New Task')
 
     item?.click?.(undefined as never, undefined, undefined as never)
     expect(choose).toHaveBeenCalledExactlyOnceWith('new-worktree')
@@ -418,12 +419,82 @@ describe('the window’s own commands in the menu bar', () => {
   it('folds the application items into File where there is no app menu', () => {
     const template = applicationMenuTemplate({ platform: 'win32', commands: published() })
     expect(labelsOf(template, menuName('win32', 'File'))).toEqual([
-      'New task',
-      'New terminal',
-      'Close pane',
+      'New Task',
+      'New Terminal',
+      'Close Pane',
       'Settings…',
       '—',
       'quit'
     ])
+  })
+})
+
+/** Words macOS title case keeps lowercase between the first and the last. */
+const MINOR_WORDS = new Set('a an and as at but by for in nor of on or the to'.split(' '))
+/** Names spelt as their owners spell them. */
+const PROPER_NAMES = new Set(['teamree'])
+
+/** The words of `label` that break title case; empty when it is title case. */
+function titleCaseFaults(label: string): string[] {
+  const words = label.replace(/…$/, '').split(/[\s/]+/)
+  return words.filter((word, index) => {
+    if (PROPER_NAMES.has(word)) return false
+    const minor = MINOR_WORDS.has(word.toLowerCase()) && index > 0 && index < words.length - 1
+    return minor ? word !== word.toLowerCase() : !/^[\p{Lu}\p{N}]/u.test(word)
+  })
+}
+
+describe('the menu bar’s wording', () => {
+  it('knows title case when it sees it', () => {
+    expect(titleCaseFaults('Go to File…')).toEqual([])
+    expect(titleCaseFaults('Show/Hide Right Panel')).toEqual([])
+    expect(titleCaseFaults('teamree Website')).toEqual([])
+    expect(titleCaseFaults('New task')).toEqual(['task'])
+    expect(titleCaseFaults('Find In Pane')).toEqual(['In'])
+  })
+
+  it('writes every item in title case, with the panels shown and hidden', () => {
+    for (const panels of [{}, { sidebarVisible: false, rightPanelOpen: false }]) {
+      const template = applicationMenuTemplate({
+        platform: 'darwin',
+        checkForUpdates: () => {},
+        links: { version: '1.2.3', systemVersion: '15.2.0', open: () => {} },
+        commands: { items: menuBarSpec({ ...EMPTY, ...panels }), choose: () => {} }
+      })
+      const labels = items(template).flatMap((item) => (item.label === undefined ? [] : [item.label]))
+      expect(labels.length).toBeGreaterThan(40)
+      for (const label of labels) expect(titleCaseFaults(label), label).toEqual([])
+    }
+  })
+
+  // Theme rows carry the preset's own name; the CLI row is the sidebar badge's wording.
+  it('writes every palette action in title case too', () => {
+    const labels = buildPaletteItems({
+      worktrees: [
+        {
+          id: 'w1',
+          projectId: 'p1',
+          name: 'w1',
+          branch: 'w1',
+          path: '/w1',
+          startedFrom: 'main',
+          state: 'ready',
+          createdAt: 0
+        }
+      ],
+      projects: [{ id: 'p1', name: 'atlas', path: '/atlas', baseRef: 'origin/main' }],
+      activeWorktreeId: 'w1',
+      agents: [],
+      defaultAgent: '',
+      update: null,
+      cli: null,
+      hintFor: () => '',
+      openIn: ['Cursor', 'Terminal'],
+      focusedChange: { path: 'a.ts', discardable: true, staged: true }
+    })
+      .filter((item) => item.kind === 'action' && !item.id.startsWith('theme:') && item.id !== 'install-cli')
+      .map((item) => item.label)
+    expect(labels).toEqual(expect.arrayContaining(['Show Changes', 'Rename Worktree…', 'Discard File Changes…']))
+    for (const label of labels) expect(titleCaseFaults(label), label).toEqual([])
   })
 })

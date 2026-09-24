@@ -61,6 +61,16 @@ function sentenceStops(root: ParentNode): string[] {
   return found
 }
 
+/** An unsaved-changes question's lines between the title and the file list, and its buttons. */
+function unsavedAnswers(): { lines: string[]; buttons: string[]; focused: string } {
+  const dialog = document.querySelector('[role="dialog"]')
+  return {
+    lines: [...(dialog?.querySelectorAll('.confirm__body') ?? [])].map((line) => line.textContent ?? ''),
+    buttons: [...(dialog?.querySelectorAll('.modal__actions .button') ?? [])].map((button) => button.textContent ?? ''),
+    focused: document.activeElement?.textContent ?? ''
+  }
+}
+
 const clauses = (...texts: (string | null | undefined)[]): string[] =>
   texts.filter((text): text is string => typeof text === 'string' && SENTENCE_STOP.test(text))
 
@@ -300,16 +310,24 @@ describe('dialogs', () => {
     render(<ConfirmCloseFileDialog terminalId="file:1" />)
     expect(document.body.textContent).toContain('Save changes to')
     expect(sentenceStops(document.body)).toEqual([])
+    expect(unsavedAnswers()).toEqual({ lines: [], buttons: ["Don't Save", 'Cancel', 'Save'], focused: 'Save' })
   })
 
-  it('saving before a quit, a close or a removal: no sentence', () => {
-    seed({ editedFiles: { 'file:1': { worktreeId: 'w1', path: 'src/math.ts' } } })
-    for (const after of ['quit', 'close', { remove: 'w1' }] as const) {
-      const { unmount } = render(<ConfirmUnsavedDialog paneIds={['file:1']} after={after} />)
-      expect(document.body.textContent).toContain('src/math.ts')
-      expect(sentenceStops(document.body)).toEqual([])
-      unmount()
-    }
+  it('saving before a quit, a close or a removal: no sentence, the same three answers', () => {
+    seed({
+      editedFiles: {
+        'file:1': { worktreeId: 'w1', path: 'src/math.ts' },
+        'file:2': { worktreeId: 'w1', path: 'src/app.ts' }
+      }
+    })
+    const one = render(<ConfirmUnsavedDialog paneIds={['file:1']} />)
+    expect(document.body.textContent).toContain('src/math.ts')
+    expect(sentenceStops(document.body)).toEqual([])
+    expect(unsavedAnswers()).toEqual({ lines: [], buttons: ["Don't Save", 'Cancel', 'Save'], focused: 'Save' })
+    one.unmount()
+    render(<ConfirmUnsavedDialog paneIds={['file:1', 'file:2']} />)
+    expect(document.body.textContent).toContain('src/app.ts')
+    expect(unsavedAnswers()).toEqual({ lines: [], buttons: ["Don't Save", 'Cancel', 'Save All'], focused: 'Save All' })
   })
 
   it('discarding a file or a hunk from the Changes tab: no sentence', () => {

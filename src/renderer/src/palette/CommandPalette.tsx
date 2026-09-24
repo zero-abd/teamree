@@ -49,6 +49,8 @@ export function CommandPalette({
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
   // The CLI link's state names the row that fixes it.
   const cli = useWorkspaceStore((state) => state.cli)
+  const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
+  const rightPanelOpen = useWorkspaceStore((state) => state.rightPanelOpen)
 
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
@@ -102,6 +104,8 @@ export function CommandPalette({
         defaultAgent,
         update,
         cli,
+        sidebarVisible,
+        rightPanelOpen,
         // Empty for a command with no key.
         hintFor: (action) => {
           const command = commandNamed(action)
@@ -140,6 +144,8 @@ export function CommandPalette({
       defaultAgent,
       update,
       cli,
+      sidebarVisible,
+      rightPanelOpen,
       modifier,
       consent,
       layouts,

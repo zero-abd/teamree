@@ -29,6 +29,7 @@ const { ConfirmCloseFileDialog } = await import('../dialogs/ConfirmCloseFileDial
 const { ConfirmUnsavedDialog } = await import('../dialogs/ConfirmUnsavedDialog')
 const { draftFor, dropDraft, keepDraft, keptDrafts } = await import('./fileDrafts')
 const { runWorkspaceCommand } = await import('../keyboard/workspaceCommands')
+const { detectPlatform, resolvePlatformModifier } = await import('../keyboard/platformModifier')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -119,6 +120,16 @@ describe('closing a pane with edits', () => {
     expect(draftFor(id, 'w1', 'src/math.ts')).toBeUndefined()
   })
 
+  it('closes without writing on the modifier and D, as a macOS sheet does', async () => {
+    const id = editedPane()
+    await store().closeTerminal(id)
+    render(<ConfirmCloseFileDialog terminalId={id} />)
+    const modifier = resolvePlatformModifier(detectPlatform(undefined, navigator.userAgent))
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'd', [modifier.eventFlag]: true })
+    await waitFor(() => expect(fileLeavesIn(layout().root)).toEqual([]))
+    expect(writes()).toEqual([])
+  })
+
   it('keeps the pane and its edit on Cancel', async () => {
     const id = editedPane()
     await store().closeTerminal(id)
@@ -192,10 +203,11 @@ describe('quitting with edits', () => {
     const dialog = store().dialog
     expect(dialog).toEqual({ kind: 'confirm-unsaved', paneIds: [id], after: 'quit' })
     if (dialog?.kind !== 'confirm-unsaved') return
-    render(<ConfirmUnsavedDialog paneIds={dialog.paneIds} after={dialog.after} />)
+    render(<ConfirmUnsavedDialog paneIds={dialog.paneIds} />)
     expect(screen.getByText('src/math.ts', { selector: 'li' })).toBeTruthy()
     const buttons = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] .modal__actions .button')]
-    expect(buttons.map((button) => button.textContent)).toEqual(['Discard', 'Cancel', 'Save All'])
+    expect(buttons.map((button) => button.textContent)).toEqual(["Don't Save", 'Cancel', 'Save'])
+    expect(screen.getByRole('dialog', { name: 'Save changes to math.ts?' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(await answer).toBe(false)
@@ -204,13 +216,13 @@ describe('quitting with edits', () => {
     expect(draftFor(id, 'w1', 'src/math.ts')?.text).toBe('const a = 3\n')
   })
 
-  it('writes what the editor holds on Save All, then lets the quit go', async () => {
+  it('writes what the editor holds on Save, then lets the quit go', async () => {
     const id = await typedPane()
     const answer = store().askBeforeLeaving('quit')
     const dialog = store().dialog
     if (dialog?.kind !== 'confirm-unsaved') throw new Error('no question')
-    render(<ConfirmUnsavedDialog paneIds={dialog.paneIds} after={dialog.after} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Save All' }))
+    render(<ConfirmUnsavedDialog paneIds={dialog.paneIds} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await answer).toBe(true)
     expect(writes()).toEqual([
       { worktreeId: 'w1', path: 'src/math.ts', content: 'const a = 3\n', encoding: 'utf-8', expectedModifiedAt: 100 }

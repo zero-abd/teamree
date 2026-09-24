@@ -11,7 +11,6 @@ export function ConfirmCloseFileDialog({ terminalId }: { terminalId: string }): 
   return (
     <Confirm
       title={`Save changes to ${filePaneName(path ?? '')}?`}
-      body="Don't Save loses your edits"
       cancel="Cancel"
       confirm="Save"
       tone="primary"

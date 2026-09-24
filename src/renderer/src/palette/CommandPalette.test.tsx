@@ -141,10 +141,10 @@ describe('the rows that are also commands', () => {
   // reason, so a search for one does not read as "no such command".
   it('dims a command the window would refuse, says why, and runs nothing', () => {
     mount()
-    expect(labels()).toContain('Split pane right — no pane focused')
-    expect(row('Split pane right — no pane focused').getAttribute('aria-disabled')).toBe('true')
-    expect(labels()).toContain('New terminal')
-    expect(labels()).toContain('New task')
+    expect(labels()).toContain('Split Pane Right — no pane focused')
+    expect(row('Split Pane Right — no pane focused').getAttribute('aria-disabled')).toBe('true')
+    expect(labels()).toContain('New Terminal')
+    expect(labels()).toContain('New Task')
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'save' } })
     expect(labels()[0]).toBe('Save — nothing unsaved')
@@ -157,7 +157,7 @@ describe('the rows that are also commands', () => {
       layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } }
     })
     mount()
-    expect(labels()).toContain('Split pane right')
+    expect(labels()).toContain('Split Pane Right')
   })
 
   // Through the one dispatcher, which is the only way a row and a chord stay
@@ -267,7 +267,7 @@ describe('going to a file', () => {
     mount('files')
     type('new')
     await waitFor(() => expect(call).toHaveBeenCalled())
-    expect(labels()).not.toContain('New terminal')
+    expect(labels()).not.toContain('New Terminal')
   })
 
   it('adds up to five files under Files to the command results once two characters are typed', async () => {

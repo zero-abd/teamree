@@ -9,7 +9,7 @@ import { installMenuBar, MENU_COMMAND_CHANNEL, MENU_PUBLISH_CHANNEL, readMenuBar
 /** One well-formed item, which each case below spoils in exactly one way. */
 const ITEM = {
   command: 'close-pane',
-  label: 'Close pane',
+  label: 'Close Pane',
   accelerator: 'CommandOrControl+W',
   section: 'file',
   enabled: true

@@ -90,7 +90,7 @@ export function paneNumberRows(modifier: PlatformModifier): readonly { title: st
   const chord = (key: string): string => formatChord({ key }, modifier)
   return [
     { title: 'Pane 1–8', chord: `${chord('1')}–${chord('8')}` },
-    { title: 'Last pane', chord: chord('9') }
+    { title: 'Last Pane', chord: chord('9') }
   ]
 }
 

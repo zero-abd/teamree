@@ -50,18 +50,18 @@ export type WorkspaceShortcut = {
 }
 
 export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
-  { command: 'split-right', chord: { key: 'd' }, title: 'Split pane right' },
-  { command: 'split-down', chord: { key: 'd', shift: true }, title: 'Split pane down' },
-  { command: 'close-pane', chord: { key: 'w' }, title: 'Close pane' },
+  { command: 'split-right', chord: { key: 'd' }, title: 'Split Pane Right' },
+  { command: 'split-down', chord: { key: 'd', shift: true }, title: 'Split Pane Down' },
+  { command: 'close-pane', chord: { key: 'w' }, title: 'Close Pane' },
   { command: 'save-file', chord: { key: 's' }, title: 'Save' },
   { command: 'save-all', chord: { key: 's', alt: true }, title: 'Save All' },
-  { command: 'new-terminal', chord: { key: 't' }, title: 'New terminal' },
+  { command: 'new-terminal', chord: { key: 't' }, title: 'New Terminal' },
   // Shifted, because ⌘M is the platform's minimise.
-  { command: 'new-markdown', chord: { key: 'm', shift: true }, title: 'New markdown' },
-  { command: 'new-worktree', chord: { key: 'n' }, title: 'New task' },
-  { command: 'toggle-sidebar', chord: { key: 'b' }, title: 'Toggle sidebar' },
+  { command: 'new-markdown', chord: { key: 'm', shift: true }, title: 'New Markdown' },
+  { command: 'new-worktree', chord: { key: 'n' }, title: 'New Task' },
+  { command: 'toggle-sidebar', chord: { key: 'b' }, title: 'Show/Hide Sidebar' },
   // J: the side-panel key in the editors people run in these panes.
-  { command: 'toggle-right-panel', chord: { key: 'j' }, title: 'Toggle right panel' },
+  { command: 'toggle-right-panel', chord: { key: 'j' }, title: 'Show/Hide Right Panel' },
   { command: 'focus-sidebar', title: 'Focus Sidebar' },
   { command: 'focus-panes', title: 'Focus Panes' },
   { command: 'focus-right-panel', title: 'Focus Right Panel' },
@@ -69,8 +69,8 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'focus-next-region', chord: { key: 'F6', bare: true }, title: 'Focus Next Region' },
   { command: 'focus-previous-region', chord: { key: 'F6', bare: true, shift: true }, title: 'Focus Previous Region' },
   // Unshifted: `matchesChord` compares `KeyboardEvent.key`, and shift+bracket yields a brace.
-  { command: 'focus-previous-pane', chord: { key: '[' }, title: 'Focus previous pane' },
-  { command: 'focus-next-pane', chord: { key: ']' }, title: 'Focus next pane' },
+  { command: 'focus-previous-pane', chord: { key: '[' }, title: 'Focus Previous Pane' },
+  { command: 'focus-next-pane', chord: { key: ']' }, title: 'Focus Next Pane' },
   // Control on a Mac too, as in Safari and Terminal; the strip's tabs only, where ⌘] also visits teammates' panes.
   { command: 'select-next-pane', chord: { key: 'Tab', ctrl: true }, title: 'Select Next Pane' },
   { command: 'select-previous-pane', chord: { key: 'Tab', ctrl: true, shift: true }, title: 'Select Previous Pane' },
@@ -79,16 +79,16 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'previous-file-tab', chord: { key: 'PageUp', ctrl: true }, title: 'Previous File Tab' },
   // Shifted, since ⌘↩ is a send key in many pane programs; pressed again it restores. American
   // spelling to match Electron's own `minimize` role in the same menu.
-  { command: 'expand-pane', chord: { key: 'Enter', shift: true }, title: 'Maximize pane' },
+  { command: 'expand-pane', chord: { key: 'Enter', shift: true }, title: 'Maximize Pane' },
   // With alt: bare ⌘↑/⌘↓ are document keys inside a pane.
-  { command: 'previous-worktree', chord: { key: 'ArrowUp', alt: true }, title: 'Previous worktree' },
-  { command: 'next-worktree', chord: { key: 'ArrowDown', alt: true }, title: 'Next worktree' },
-  { command: 'open-palette', chord: { key: 'k' }, title: 'Go to worktree or command' },
+  { command: 'previous-worktree', chord: { key: 'ArrowUp', alt: true }, title: 'Previous Worktree' },
+  { command: 'next-worktree', chord: { key: 'ArrowDown', alt: true }, title: 'Next Worktree' },
+  { command: 'open-palette', chord: { key: 'k' }, title: 'Go to Worktree or Command' },
   // ⌘P as in every editor; this window has nothing to print.
   { command: 'go-to-file', chord: { key: 'p' }, title: 'Go to File…' },
-  { command: 'find-in-pane', chord: { key: 'f' }, title: 'Find in pane' },
+  { command: 'find-in-pane', chord: { key: 'f' }, title: 'Find in Pane' },
   // Named for the screen it opens ("All panes").
-  { command: 'open-dashboard', chord: { key: 'e' }, title: 'All panes' },
+  { command: 'open-dashboard', chord: { key: 'e' }, title: 'All Panes' },
   // ⌘, opens the settings page; `menuBar.ts` labels it Settings… in the application menu.
   { command: 'open-settings', chord: { key: ',' }, title: 'Settings' },
   // No chord: shift+comma yields `<`, so ⌘⇧, cannot be bound. Menu, palette and rail reach it.
