@@ -7,6 +7,7 @@ import {
   hasCheckout,
   type Terminal,
   type Worktree,
+  type WorktreeLanding,
   type WorktreeMergePreview,
   type WorktreeStatus
 } from '@shared/entities'
@@ -26,6 +27,8 @@ type WorktreeRowProps = {
   display?: WorktreeDisplay
   status: WorktreeStatus | undefined
   mergePreview: WorktreeMergePreview | undefined
+  /** Where its branch can land, and whether it has. */
+  landing?: WorktreeLanding
   /** Every terminal in the workspace; the row picks out its own. */
   terminals: Terminal[]
   /** Last line read from each pane, keyed by terminal id. */
@@ -54,6 +57,8 @@ type WorktreeRowProps = {
   openIn: readonly { label: string; onChoose: () => void }[]
   /** The Compare with submenu: the task's other runs. None leaves the item out. */
   compareWith?: readonly { label: string; onChoose: () => void }[]
+  /** Keeps this run and removes the task's others; absent without any. */
+  onKeep?: () => void
   /** Another run of the task runs the same agent, so the glyph alone would not tell the rows apart. */
   twinRun?: boolean
 }
@@ -63,6 +68,7 @@ export function WorktreeRow({
   display = worktreeDisplay(worktree),
   status,
   mergePreview,
+  landing,
   terminals,
   evidence,
   watchers,
@@ -81,6 +87,7 @@ export function WorktreeRow({
   onRenameShown,
   openIn,
   compareWith = [],
+  onKeep,
   twinRun = false
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
@@ -91,7 +98,10 @@ export function WorktreeRow({
   const ready = hasCheckout(worktree)
   // Still focusable when it cannot open, so the tree's arrows reach its menu.
   const openable = !creating && !failed && !missing
-  const badge = ready ? mergeBadge(mergePreview) : null
+  // Landed: whether it would merge again says nothing.
+  const merged = ready && landing?.merged === true
+  const badge = ready && !merged ? mergeBadge(mergePreview) : null
+  const pullRequest = landing?.pullRequest?.state === 'open' ? landing.pullRequest : undefined
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
   const openControl = useRef<HTMLButtonElement | null>(null)
   const opener = useRef<HTMLElement | null>(null)
@@ -128,21 +138,20 @@ export function WorktreeRow({
     return rect === undefined ? { x: 0, y: 0 } : { x: rect.left + 12, y: rect.bottom }
   }
 
-  // Last, behind a rule; it asks before anything goes.
-  const remove: RowMenuItem = { label: 'Remove Worktree…', onChoose: onRemove, separated: true, danger: true }
+  // Last, behind a rule; it asks before anything goes. First once the work has landed: done is what is left.
+  const remove: RowMenuItem = { label: 'Remove Worktree…', onChoose: onRemove, separated: !merged, danger: true }
+  const rest: RowMenuItem[] = [
+    ...(failed && worktree.retryable ? [{ label: 'Retry', onChoose: onRetry }] : []),
+    { label: 'Rename…', onChoose: () => setRenaming(true), separated: merged },
+    { label: 'Reveal in Finder', onChoose: onReveal },
+    { label: 'Copy Path', onChoose: onCopyPath },
+    { label: 'Copy Branch', onChoose: onCopyBranch },
+    { label: 'Open in', onChoose: () => {}, items: openIn },
+    ...(compareWith.length === 0 ? [] : [{ label: 'Compare with', onChoose: () => {}, items: compareWith }]),
+    ...(onKeep === undefined ? [] : [{ label: 'Keep This Run…', onChoose: onKeep }])
+  ]
   // A directory that is not there has nothing to reveal, open or copy; removal is what is left.
-  const items: RowMenuItem[] = missing
-    ? [remove]
-    : [
-        ...(failed && worktree.retryable ? [{ label: 'Retry', onChoose: onRetry }] : []),
-        { label: 'Rename…', onChoose: () => setRenaming(true) },
-        { label: 'Reveal in Finder', onChoose: onReveal },
-        { label: 'Copy Path', onChoose: onCopyPath },
-        { label: 'Copy Branch', onChoose: onCopyBranch },
-        { label: 'Open in', onChoose: () => {}, items: openIn },
-        ...(compareWith.length === 0 ? [] : [{ label: 'Compare with', onChoose: () => {}, items: compareWith }]),
-        remove
-      ]
+  const items: RowMenuItem[] = missing ? [remove] : merged ? [remove, ...rest] : [...rest, remove]
   const rows = ready ? agentRows(terminals, worktree, now, evidence) : []
   const tone = worktreeTone(rows)
   const label = worktreeLabel(display)
@@ -159,6 +168,7 @@ export function WorktreeRow({
       {/* One group, so the open row can hide what its status bar and Changes badge already say. */}
       <span className="worktree__git">
         {ready ? <GitStatusChips status={status} /> : null}
+        {merged ? <span className="chip worktree__merged">Merged</span> : null}
         {badge?.tone === 'clean' ? (
           <span
             className="worktree__merge worktree__merge--clean"
@@ -224,7 +234,7 @@ export function WorktreeRow({
             ) : null}
             <span
               className={`worktree__name${unreadHere ? ' worktree__name--unread' : ''}`}
-              title={label}
+              title={pullRequest === undefined ? label : `${label} · Pull Request #${pullRequest.number}`}
               onDoubleClick={() => setRenaming(true)}
             >
               {display.title}

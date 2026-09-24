@@ -122,6 +122,21 @@
   container-type: inline-size;
 }
 
+/* Each run wraps its lines rather than scrolling on its own: two scrollbars cannot be read together. */
+.compare__side .patch {
+  width: 100%;
+}
+
+.compare__side .patch__row {
+  white-space: pre-wrap;
+}
+
+.compare__side .patch__text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .compare--inline .compare__side + .compare__side {
   border-top: 1px dashed var(--line);
 }

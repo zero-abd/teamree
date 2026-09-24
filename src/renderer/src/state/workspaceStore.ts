@@ -28,6 +28,8 @@ import type {
   WorktreeChange,
   WorktreeChanges,
   WorktreeCommitSummary,
+  WorktreeKeep,
+  WorktreeLanding,
   WorktreeLog,
   WorktreeMergePreview,
   WorktreeStatus
@@ -52,6 +54,7 @@ import {
   shownTabId
 } from '@shared/filePane'
 import { closePaneWarning } from '../dialogs/closePaneModel'
+import { openInBrowser } from '../shell/openInBrowser'
 import { noticeLifetime } from '../notices/noticeLifetime'
 import type { TaskCreate } from '../dialogs/taskPlan'
 import {
@@ -170,6 +173,10 @@ export type DialogState =
   | { kind: 'confirm-unsaved'; paneIds: readonly string[]; after: 'quit' | 'close' | { remove: string } }
   /** Throwing away a path's unstaged change, or one hunk of it. */
   | { kind: 'confirm-discard'; worktreeId: string; path: string; hunk?: PatchHunk }
+  /** Merging a worktree's branch into the base branch in the project's own checkout. */
+  | { kind: 'confirm-merge'; worktreeId: string }
+  /** Keeping one run of a task and removing the others; `refused` once the runtime has refused one unforced. */
+  | { kind: 'confirm-keep'; worktreeId: string; refused?: true }
   | null
 
 /** A code pane with edits not on disk, and where its file is. */
@@ -312,6 +319,10 @@ type WorkspaceState = {
 
   /** Whether each ready worktree would merge into its base, as last read. */
   mergePreviews: Record<string, WorktreeMergePreview>
+  /** Where each ready worktree's branch can land, and whether it has, as last read. */
+  landings: Record<string, WorktreeLanding>
+  /** True while a pull request is being made. */
+  openingPullRequest: boolean
 
   /** The panel right of the panes. Tab, open state and width are this machine's habit; the contents are the worktree's. */
   rightPanelOpen: boolean
@@ -412,6 +423,8 @@ type WorkspaceState = {
   sidebarVisible: boolean
   /** Sides hidden for the panes' room, not by hand: the habit on disk still shows them. */
   roomHid: Sides
+  /** Sides a compare on screen hid, shown again when it goes; null with none on screen. */
+  compareHid: Sides | null
   paneSearch: PaneSearch | null
   dialog: DialogState
   notices: Notice[]
@@ -565,6 +578,14 @@ type WorkspaceState = {
   abortUpdate: (worktreeId: string) => Promise<void>
   /** Types a line into a pane without pressing Return. */
   typeIntoPane: (terminalId: string, text: string) => Promise<void>
+  /** `gh pr create` for a published branch, else the host's page for one in the browser; an open one is opened. */
+  createPullRequest: (worktreeId: string) => Promise<void>
+  /** Merges into the base branch in the project's checkout; answers with why not, or null once merged. */
+  mergeIntoBase: (worktreeId: string) => Promise<string | null>
+  /** Keeps one run of a task, removes the others and opens the one kept. Their branches stay. */
+  confirmKeepRun: (worktreeId: string, force: boolean) => Promise<void>
+  /** Hides the sidebar and panel for a compare on screen, and shows again what it hid. */
+  foldForCompare: (on: boolean) => void
   /** Opens a pane already running one of the agents found on this machine. */
   startAgent: (command: string) => Promise<void>
 
@@ -811,6 +832,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         statuses: keptFor(state.statuses, live),
         unreadableSince: keptFor(state.unreadableSince, live),
         mergePreviews: keptFor(state.mergePreviews, live),
+        landings: keptFor(state.landings, live),
         logs: keptFor(state.logs, live),
         pushes: keptFor(state.pushes, live)
       }
@@ -989,6 +1011,23 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }))
   }
 
+  /** Where the worktrees named can land, a few at a time; one unreadable worktree costs nobody else. */
+  const refreshLandings = async (worktreeIds: string[]): Promise<void> => {
+    const queue = [...worktreeIds]
+    const found: WorktreeLanding[] = []
+    const worker = async (): Promise<void> => {
+      for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+        const landing = await runtimeClient.call('worktree.landing', { worktreeId: next }).catch(() => null)
+        if (landing) found.push(landing)
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(MERGE_PREVIEW_CONCURRENCY, queue.length) }, worker))
+    if (found.length === 0) return
+    set((state) => ({
+      landings: found.reduce((map, landing) => ({ ...map, [landing.worktreeId]: landing }), { ...state.landings })
+    }))
+  }
+
   const markExited = (exits: RefreshTargets['exits']): void => {
     set((state) => {
       const terminals = { ...state.terminals }
@@ -1049,7 +1088,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const readable = [...stale].filter((worktreeId) => live.has(worktreeId) && onScreen.has(worktreeId))
     await refreshStatuses(readable)
     // After the statuses: a row without chips has nowhere for a merge badge.
-    await refreshMergePreviews(readable)
+    await Promise.all([refreshMergePreviews(readable), refreshLandings(readable)])
 
     // The panel rides the same signal as the chips, so an edit in a shell moves both at once.
     const { activeWorktreeId } = get()
@@ -1282,6 +1321,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     worktreeFilesEpoch: 0,
 
     mergePreviews: {},
+    landings: {},
+    openingPullRequest: false,
     members: {},
     membersPending: false,
     membersError: null,
@@ -1343,6 +1384,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     sidebarWidth: readStoredSidebarWidth(storage) || SIDEBAR_DEFAULT_PX,
     sidebarVisible: lastSession.sidebarVisible,
     roomHid: { panel: false, sidebar: false },
+    compareHid: null,
     paneSearch: null,
     dialog: null,
     notices: [],
@@ -2721,6 +2763,109 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         .catch(failed('Could not type into the pane'))
     },
 
+    async createPullRequest(worktreeId) {
+      const open = get().landings[worktreeId]?.pullRequest
+      if (open?.state === 'open') {
+        openInBrowser(open.url)
+        return
+      }
+      if (get().openingPullRequest) return
+      set({ openingPullRequest: true })
+      try {
+        const made = await runtimeClient.call('worktree.createPullRequest', { worktreeId })
+        if (!made.created || made.number === undefined) {
+          openInBrowser(made.url)
+          return
+        }
+        const number = made.number
+        // Said by the button at once; the next read confirms it.
+        set((state) => {
+          const landing = state.landings[worktreeId]
+          if (!landing) return {}
+          const pullRequest = { number, url: made.url, state: 'open' as const }
+          return { landings: { ...state.landings, [worktreeId]: { ...landing, pullRequest } } }
+        })
+      } catch (error) {
+        failed('Could not create the pull request')(error)
+      } finally {
+        set({ openingPullRequest: false })
+      }
+    },
+
+    async mergeIntoBase(worktreeId) {
+      try {
+        await runtimeClient.call('worktree.mergeIntoBase', { worktreeId })
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error)
+      }
+      if (get().dialog?.kind === 'confirm-merge') set({ dialog: null })
+      refresher.request(refreshTargets({ statuses: [worktreeId] }))
+      return null
+    },
+
+    async confirmKeepRun(worktreeId, force) {
+      set({ dialog: null })
+      let kept: WorktreeKeep
+      try {
+        kept = await runtimeClient.call('worktree.keep', force ? { worktreeId, force: true } : { worktreeId })
+      } catch (error) {
+        // Something appeared since the dialog read the other runs: ask again, and it reads again.
+        if (!force && isRefusal(error)) {
+          set({ dialog: { kind: 'confirm-keep', worktreeId, refused: true } })
+          return
+        }
+        failed('Could not keep this run')(error)
+        return
+      }
+      const removed = new Set(kept.removed)
+      const before = get().worktrees.find((entry) => entry.id === worktreeId)?.name
+      for (const id of removed) forgetWorktree(id)
+      // A pane named after the run goes by the task's name with it.
+      if (before !== undefined && before !== kept.worktree.name) {
+        const named = Object.values(get().terminals).filter(
+          (terminal) => terminal.worktreeId === worktreeId && terminal.label?.trim() === before
+        )
+        void Promise.all(
+          named.map((terminal) =>
+            runtimeClient
+              .call('terminal.rename', { terminalId: terminal.id, label: kept.worktree.name })
+              .catch(() => null)
+          )
+        )
+      }
+      set((state) => ({
+        worktrees: state.worktrees.map((entry) => (entry.id === kept.worktree.id ? kept.worktree : entry))
+      }))
+      await get().openWorktree(worktreeId)
+      const stale = fileLeavesIn(get().layouts[worktreeId]?.root ?? null)
+        .filter((leaf) => isCompareLeaf(leaf) && removed.has(leaf.compare))
+        .map((leaf) => leaf.terminalId)
+      if (stale.length > 0) await get().closePanes(stale)
+    },
+
+    foldForCompare(on) {
+      const before = get()
+      if (on) {
+        if (before.compareHid !== null) return
+        set({
+          compareHid: { panel: before.rightPanelOpen, sidebar: before.sidebarVisible },
+          rightPanelOpen: false,
+          sidebarVisible: false
+        })
+        return
+      }
+      const hid = before.compareHid
+      if (hid === null) return
+      set({
+        compareHid: null,
+        rightPanelOpen: before.rightPanelOpen || hid.panel,
+        sidebarVisible: before.sidebarVisible || hid.sidebar
+      })
+      const worktreeId = get().activeWorktreeId
+      if (hid.panel && !before.rightPanelOpen && worktreeId && changesOnScreen(get())) readChangesNow(worktreeId)
+      if (hid.sidebar && !before.sidebarVisible) readOnScreen()
+    },
+
     selectChange(path) {
       const worktreeId = get().activeWorktreeId
       set({ selectedChangePath: path })
@@ -3080,7 +3225,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
  */
 useWorkspaceStore.subscribe((state, previous) => {
   if (!sessionChanged(state, previous)) return
-  writeStoredSession(storage, { ...state, sidebarVisible: state.sidebarVisible || state.roomHid.sidebar })
+  writeStoredSession(storage, {
+    ...state,
+    sidebarVisible: state.sidebarVisible || state.roomHid.sidebar || state.compareHid?.sidebar === true
+  })
 })
 
 /** And one writer for what has been read, on the same terms. */

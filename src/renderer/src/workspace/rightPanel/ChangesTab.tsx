@@ -7,6 +7,7 @@ import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { openInBrowser } from '../../shell/openInBrowser'
 import { commitScope, useWorkspaceStore, type PushState } from '../../state/workspaceStore'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
+import { landLabel, landOffer, type LandOffer } from './landOffer'
 import type { PaneNode, Terminal, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 import { fileColumnIn, isCommitLeaf, shownTabId } from '@shared/filePane'
 
@@ -29,6 +30,10 @@ export function ChangesTab(): React.JSX.Element | null {
   const push = useWorkspaceStore((state) => (worktreeId ? state.pushes[worktreeId] : undefined))
   const pushing = useWorkspaceStore((state) => state.pushing)
   const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
+  const landing = useWorkspaceStore((state) => (worktreeId ? state.landings[worktreeId] : undefined))
+  const openingPullRequest = useWorkspaceStore((state) => state.openingPullRequest)
+  const createPullRequest = useWorkspaceStore((state) => state.createPullRequest)
+  const removeWorktree = useWorkspaceStore((state) => state.removeWorktree)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const openCommit = useWorkspaceStore((state) => state.openCommit)
   const updating = useWorkspaceStore((state) => state.updating)
@@ -71,11 +76,19 @@ export function ChangesTab(): React.JSX.Element | null {
   const scope = commitScope(stagedPaths, rows)
   const canCommit = rows.length > 0 && message.trim().length > 0 && !committing
 
-  // Nothing is pushed from the middle of a rebase.
-  const offer = midway === undefined ? pushOffer(status, push) : null
+  const land = midway === undefined ? landOffer(landing, status) : null
+  // Nothing is pushed from the middle of a rebase, nor once the branch has landed.
+  const pushed = midway === undefined && land?.kind !== 'merged' ? pushOffer(status, push) : null
+  // A pull request button is the review page, and more.
+  const offer = pushed?.kind === 'review' && land !== null ? null : pushed
   const offersUpdate = updateFrom(status, base) !== null && conflictRows.length === 0
-  // One primary at a time: commit what is uncommitted first, then send it.
-  const pushIsNext = rows.length === 0 && (status?.ahead ?? 0) > 0
+  // One primary at a time: commit what is uncommitted first, then send it, then land it.
+  const pushIsNext = rows.length === 0 && (status?.ahead ?? 0) > 0 && land?.kind !== 'merge'
+  const landIsNext = rows.length === 0 && !pushIsNext
+  const landNow = (next: LandOffer): void => {
+    if (next.kind === 'merge') openDialog({ kind: 'confirm-merge', worktreeId })
+    else if (next.kind !== 'merged') void createPullRequest(worktreeId)
+  }
   const discard = (path: string): void => openDialog({ kind: 'confirm-discard', worktreeId, path })
 
   const commit = (): void => {
@@ -116,6 +129,23 @@ export function ChangesTab(): React.JSX.Element | null {
               onClick={() => void pushActiveWorktree()}
             >
               {PUSH_LABEL[offer.kind][push?.phase === 'pushing' ? 1 : 0]}
+            </button>
+          ) : null}
+          {land?.kind === 'merged' ? (
+            <>
+              <span className="chip changes__merged">Merged</span>
+              <button type="button" className="button button--small" onClick={() => void removeWorktree(worktreeId)}>
+                Remove Worktree…
+              </button>
+            </>
+          ) : land ? (
+            <button
+              type="button"
+              className={`button button--small${landIsNext ? ' button--primary' : ''}`}
+              disabled={land.kind === 'create-pr' && openingPullRequest}
+              onClick={() => landNow(land)}
+            >
+              {land.kind === 'create-pr' && openingPullRequest ? 'Creating…' : landLabel(land)}
             </button>
           ) : null}
         </div>

@@ -133,6 +133,27 @@ describe('what it asks', () => {
     expect(listed()).toEqual(['3 ignored files or folders', '1 unpushed commit'])
   })
 
+  // Merged into its base, its commits are there already; what is uncommitted still goes.
+  it('leaves the commits out once the branch has landed, and still lists what is uncommitted', async () => {
+    runtimeHas({ status: status({ ahead: 1, unstaged: 1 }), changes: [modified('a.ts')] })
+    seed({
+      landings: {
+        w1: {
+          worktreeId: 'w1',
+          branch: 'rewrite-the-pager',
+          base: 'main',
+          host: null,
+          published: true,
+          unmerged: 0,
+          merged: true,
+          readAt: 0
+        }
+      }
+    })
+    await mount()
+    expect(listed()).toEqual(['a.ts'])
+  })
+
   it('lists nothing for a clean worktree with nothing to push', async () => {
     await mount()
     expect(document.querySelector('.confirm__files')).toBeNull()

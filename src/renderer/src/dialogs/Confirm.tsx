@@ -19,6 +19,8 @@ type ConfirmProps = {
   confirm: string
   /** `danger` when the confirm destroys something; it is drawn red and Enter goes to the cancel. */
   tone?: 'danger' | 'primary'
+  /** Nothing to go through with yet, or something in the way. */
+  confirmDisabled?: boolean
   onCancel: () => void
   onConfirm: () => void
   /** A third answer that goes on without the confirm's act, e.g. Don't Save; ⌘D chooses it, as in a macOS sheet. */
@@ -36,6 +38,7 @@ export function Confirm({
   cancel,
   confirm,
   tone = 'danger',
+  confirmDisabled = false,
   onCancel,
   onConfirm,
   decline,
@@ -51,7 +54,7 @@ export function Confirm({
     []
   )
   const onKeyDown = (event: React.KeyboardEvent): void => {
-    if (deleteConfirms && matchesChord(event, { key: 'Backspace' }, modifier)) {
+    if (deleteConfirms && !confirmDisabled && matchesChord(event, { key: 'Backspace' }, modifier)) {
       event.preventDefault()
       onConfirm()
       return
@@ -78,6 +81,7 @@ export function Confirm({
             type="button"
             className={`button ${destructive ? 'button--danger' : 'button--primary'}`}
             data-default={destructive ? undefined : 'true'}
+            disabled={confirmDisabled}
             onClick={onConfirm}
           >
             {confirm}

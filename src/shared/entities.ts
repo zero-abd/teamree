@@ -263,6 +263,51 @@ export type WorktreeMergePreview = {
   readAt: number
 }
 
+/** Where a worktree's branch can land: a pull request on its host, or a merge into the base branch here. */
+export type WorktreeLanding = {
+  worktreeId: string
+  branch: string
+  /** The base branch by its bare name, `main`. */
+  base: string
+  /** The forge `origin` points at; null for a path, an unknown host, or no origin. */
+  host: 'github' | 'gitlab' | 'bitbucket' | null
+  /** The branch is on `origin`. */
+  published: boolean
+  /** Commits on the branch that the base does not have. */
+  unmerged: number
+  /** The branch made commits and they are all in the base, or its pull request merged. */
+  merged: boolean
+  /** The host's page for opening a pull request from this branch. */
+  compareUrl?: string
+  /** Read with `gh`, for a GitHub origin only. */
+  pullRequest?: { number: number; url: string; state: 'open' | 'merged' | 'closed' }
+  readAt: number
+}
+
+/** A pull request made with `gh`, or, with `created` false and no number, the host's page to make one. */
+export type WorktreePullRequest = { worktreeId: string; url: string; number?: number; created: boolean }
+
+/** A merge of a worktree's branch into the base branch checked out in the project's own folder. */
+export type WorktreeMerge = {
+  worktreeId: string
+  /** The base branch, `main`. */
+  into: string
+  /** The project's own checkout, where the merge runs. */
+  checkout: string
+  /** Newest first; capped at 50. */
+  commits: { shortSha: string; subject: string }[]
+  fastForward: boolean
+  /** Uncommitted paths in `checkout`; any refuses the merge. */
+  dirty: string[]
+  /** False for a plan (`dryRun`). */
+  merged: boolean
+  /** The base branch's tip after the merge. */
+  head?: string
+}
+
+/** The run kept and the task's other runs removed, their branches left in place. */
+export type WorktreeKeep = { worktree: Worktree; removed: string[] }
+
 /** A commit this app made, reported back so the caller can see what landed. */
 export type WorktreeCommit = {
   worktreeId: string

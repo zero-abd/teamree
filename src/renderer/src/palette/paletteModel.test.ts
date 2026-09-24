@@ -580,6 +580,25 @@ describe('what the palette offers for the worktree on screen', () => {
     expect(labels().some((label) => label.startsWith('Compare with'))).toBe(false)
   })
 
+  it('offers Keep This Run… beside the compares, and none for a lone worktree', () => {
+    const task = 'Add a sub function to src/math.ts'
+    const runs = ['claude', 'codex'].map((agent, at) =>
+      worktree({ id: `r${at}`, name: `Add a sub function to src/math.ts ${agent}`, branch: `sub-${at}`, task })
+    )
+    expect(labels({ worktrees: runs, activeWorktreeId: 'r0' })).toContain('Keep This Run…')
+    expect(labels()).not.toContain('Keep This Run…')
+  })
+
+  it('offers the landing the Changes header offers, and nothing before there is one', () => {
+    expect(labels({ land: { kind: 'create-pr' } })).toContain('Create Pull Request')
+    expect(labels({ land: { kind: 'open-pr', number: 12, url: 'https://x/pull/12' } })).toContain(
+      'Open Pull Request #12'
+    )
+    expect(labels({ land: { kind: 'merge', into: 'main' } })).toContain('Merge into main…')
+    const none = labels({ land: null })
+    expect(none.some((label) => /Pull Request|Merge into/.test(label))).toBe(false)
+  })
+
   it('offers only removal for a checkout gone from disk, and nothing with no worktree open', () => {
     const missing = labels({ worktrees: [worktree({ id: 'w1', missing: true })] })
     expect(missing).toContain('Remove Worktree…')

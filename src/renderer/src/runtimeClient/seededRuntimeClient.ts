@@ -26,6 +26,7 @@ import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } fr
 import { DEFAULT_APPEARANCE, sanitizeAppearance, type Appearance } from '@shared/theme'
 import { leaf, splitPane } from '../panes/paneLayout'
 import { rankPaths } from '@shared/fuzzyPath'
+import { siblingRuns } from '@shared/runCompare'
 import { placePane, placePaneWithin } from '@shared/paneRoom'
 import type { ConnectionState, RuntimeClient, Subscription } from './RuntimeClientContract'
 
@@ -725,6 +726,36 @@ export function createSeededRuntimeClient(): RuntimeClient {
         announce({ type: 'worktrees' })
       }
       return { worktreeId, aborted }
+    },
+    // No origin here: every landing is a merge into the base, and none is ever made.
+    'worktree.landing': ({ worktreeId }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const status = statuses.get(worktreeId)
+      return {
+        worktreeId,
+        branch: worktree.branch,
+        base: 'main',
+        host: null,
+        published: (status?.upstream ?? null) !== null,
+        unmerged: status?.ahead ?? 0,
+        merged: false,
+        readAt: Date.now()
+      }
+    },
+    'worktree.createPullRequest': () => {
+      throw Object.assign(new Error('origin is not on GitHub, GitLab or Bitbucket'), { code: 'conflict' })
+    },
+    'worktree.mergeIntoBase': ({ worktreeId, dryRun }) => {
+      required(worktrees.get(worktreeId), 'worktree')
+      if (!dryRun) throw Object.assign(new Error('the demo has no checkout to merge into'), { code: 'conflict' })
+      return { worktreeId, into: 'main', checkout: '/demo', commits: [], fastForward: true, dirty: [], merged: false }
+    },
+    'worktree.keep': ({ worktreeId }) => {
+      const kept = required(worktrees.get(worktreeId), 'worktree')
+      const removed = siblingRuns(kept, [...worktrees.values()]).map((sibling) => sibling.id)
+      for (const id of removed) worktrees.delete(id)
+      announce({ type: 'worktrees' })
+      return { worktree: kept, removed }
     },
     'worktree.log': ({ worktreeId, limit }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')

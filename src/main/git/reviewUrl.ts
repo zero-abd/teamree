@@ -51,6 +51,12 @@ export function reviewUrl(options: ReviewUrlOptions): string | undefined {
 
 type Forge = 'github' | 'gitlab' | 'bitbucket' | null
 
+/** Which forge a remote URL points at, or null for a path or a host this cannot name. */
+export function remoteForge(remoteUrl: string): Forge {
+  const remote = parseRemoteUrl(remoteUrl)
+  return remote === null ? null : forgeOf(remote.host)
+}
+
 function forgeOf(host: string): Forge {
   if (host === 'github.com') return 'github'
   if (host === 'gitlab.com' || host.startsWith('gitlab.')) return 'gitlab'
@@ -95,7 +101,7 @@ function address(host: string, rawPath: string): RemoteAddress | null {
 }
 
 /** A ref as the forge names it: no `refs/heads/`, and no remote in front — the forge has never heard of `origin`. */
-function bareRef(ref: string, remote: string): string {
+export function bareRef(ref: string, remote: string): string {
   const withoutRefs = ref.trim().replace(/^refs\/heads\//, '')
   return withoutRefs.startsWith(`${remote}/`) ? withoutRefs.slice(remote.length + 1) : withoutRefs
 }

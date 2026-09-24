@@ -536,6 +536,62 @@ export const worktreeCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['worktree', 'land'],
+    summary: "Open a pull request for a worktree's branch, or merge it into the base.",
+    details:
+      'On GitHub, GitLab or Bitbucket: a pull request for the published branch, made with gh when it is ' +
+      'signed in, else the URL that opens one. Any other origin, or --merge: merges the branch into the ' +
+      "base branch in the project's own checkout, fast-forward when it can; refused over uncommitted work there.",
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [{ name: 'merge', kind: 'boolean', description: 'Merge into the base even on a known host.' }],
+    examples: ['teamree worktree land fix-login', 'teamree worktree land fix-login --merge'],
+    run: async (context) => {
+      const selector = context.args[0] as string
+      const worktree = await resolveWorktree(context.client, selector)
+      const landing = await context.client.call('worktree.landing', { worktreeId: worktree.id })
+      if (landing.merged) {
+        return { data: landing, text: `${landing.branch} is already in ${landing.base}.` }
+      }
+      if (landing.host === null || readBoolean(context.flags, 'merge')) {
+        const merged = await context.client.call('worktree.mergeIntoBase', { worktreeId: worktree.id })
+        const how = merged.fastForward ? 'fast-forward' : 'merge commit'
+        return { data: merged, text: `Merged ${landing.branch} into ${merged.into} in ${merged.checkout} (${how}).` }
+      }
+      if (!landing.published) {
+        throw new CliError({
+          code: 'not_published',
+          message: `${landing.branch} is not on origin yet. Push it first: teamree worktree push ${selector}`,
+          exitCode: ExitCode.Failure
+        })
+      }
+      const made = await context.client.call('worktree.createPullRequest', { worktreeId: worktree.id })
+      const said = made.number === undefined ? 'Open a pull request at:' : `Pull request #${made.number}:`
+      return { data: made, text: `${said}\n${made.url}` }
+    }
+  },
+  {
+    path: ['worktree', 'keep'],
+    summary: "Keep one run of a task and remove the task's other runs.",
+    details:
+      'Every other worktree made for the same task is removed; their branches stay. The kept run is named ' +
+      'after the task again. Refused while another run holds uncommitted or ignored files, unless --force.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [{ name: 'force', kind: 'boolean', description: "Remove the other runs' uncommitted work too." }],
+    examples: ['teamree worktree keep "fix login claude"'],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const force = readBoolean(context.flags, 'force')
+      const kept = await context.client.call(
+        'worktree.keep',
+        force ? { worktreeId: worktree.id, force } : { worktreeId: worktree.id }
+      )
+      const count = kept.removed.length
+      const removed = `removed ${count} other run${count === 1 ? '' : 's'}`
+      const branches = count === 1 ? 'Its branch is still there.' : 'Their branches are still there.'
+      return { data: kept, text: `Kept ${kept.worktree.name}; ${removed}.${count === 0 ? '' : ` ${branches}`}` }
+    }
+  },
+  {
     path: ['worktree', 'log'],
     summary: 'List the commits a worktree has made that its base has not.',
     details: 'Scoped to base..branch, newest first.',

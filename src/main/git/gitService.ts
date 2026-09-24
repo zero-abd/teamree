@@ -19,9 +19,13 @@ import type {
   WorktreeFileMatches,
   WorktreeFiles,
   WorktreeHunkStage,
+  WorktreeKeep,
+  WorktreeLanding,
   WorktreeUnstage,
   WorktreeLog,
+  WorktreeMerge,
   WorktreeMergePreview,
+  WorktreePullRequest,
   WorktreePush,
   WorktreeStatus,
   WorktreeUpdate,
@@ -29,6 +33,7 @@ import type {
 } from '../../shared/entities'
 import type { ParamsOf } from '../../shared/methods'
 import { checkTransport } from '../../shared/origin'
+import { siblingRuns } from '../../shared/runCompare'
 import { ErrorCode } from '../../shared/protocol'
 import { cloneDestination, cloneFailureCode, cloneFailureLine, runClone } from './clone'
 import { describeError, GitCommandError, GitServiceError, isTransient } from './errors'
@@ -49,6 +54,8 @@ import { applyHunk, unstagePath } from './worktreeHunk'
 import { discardHunk, discardPath, type Trash } from './worktreeDiscard'
 import { pushWorktree } from './worktreePush'
 import { abortWorktreeUpdate, updateWorktree } from './worktreeUpdate'
+import { createGhProbe, createPullRequest, mergeIntoBase, readLanding, type GhProbe } from './worktreeLanding'
+import { keptName } from './worktreeKeep'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
 import { findWorktreeFiles, readWorktreeFiles } from './worktreeFiles'
 import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
@@ -107,6 +114,8 @@ export type GitServiceOptions = {
   startSetup?: (input: { worktree: Worktree; project: Project; command: string }) => string | undefined
   /** `shell.trashItem`. Absent, discarding an untracked file is refused. */
   trash?: Trash
+  /** Where `gh` is, asked lazily; absent, pull requests open on the host's page instead. */
+  ghBinary?: () => string | null
 }
 
 /** What the runtime persists between launches. */
@@ -133,6 +142,7 @@ export class GitService {
   readonly #createId: () => string
   readonly #startSetup: GitServiceOptions['startSetup']
   readonly #trash: Trash | undefined
+  readonly #gh: GhProbe | undefined
   readonly #ensureVersion: (cwd: string) => Promise<unknown>
 
   readonly #store: GitRecordStore
@@ -158,6 +168,7 @@ export class GitService {
     this.#createId = options.createId ?? randomUUID
     this.#startSetup = options.startSetup
     this.#trash = options.trash
+    this.#gh = options.ghBinary === undefined ? undefined : createGhProbe(options.ghBinary, this.#now)
     this.#ensureVersion = createVersionProbe(this.#runner)
   }
 
@@ -701,6 +712,81 @@ export class GitService {
   async worktreeAbortUpdate(params: ParamsOf<'worktree.abortUpdate'>): Promise<WorktreeUpdateAbort> {
     const worktree = this.#requireReadyWorktree(params.worktreeId, 'aborting an update')
     return abortWorktreeUpdate(this.#runner, { worktreeId: worktree.id, worktreePath: worktree.path })
+  }
+
+  /** Where this worktree's branch can land, and whether it already has. */
+  async worktreeLanding(params: ParamsOf<'worktree.landing'>): Promise<WorktreeLanding> {
+    return readLanding(this.#runner, this.#landingOptions(params.worktreeId, 'landing'))
+  }
+
+  /** A pull request for the worktree's published branch, or the host's page for one. */
+  async worktreeCreatePullRequest(params: ParamsOf<'worktree.createPullRequest'>): Promise<WorktreePullRequest> {
+    return createPullRequest(this.#runner, this.#landingOptions(params.worktreeId, 'a pull request'))
+  }
+
+  /** Merges the worktree's branch into the base branch in the project's own checkout. */
+  async worktreeMergeIntoBase(params: ParamsOf<'worktree.mergeIntoBase'>): Promise<WorktreeMerge> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'a merge')
+    const project = this.#store.getProject(worktree.projectId)
+    if (!project) {
+      throw new GitServiceError(ErrorCode.NotFound, `worktree "${worktree.name}" has no project to merge into`)
+    }
+    return mergeIntoBase(this.#runner, {
+      worktreeId: worktree.id,
+      repoPath: project.path,
+      branch: worktree.branch,
+      baseRef: project.baseRef,
+      ...(params.dryRun === undefined ? {} : { dryRun: params.dryRun })
+    })
+  }
+
+  /**
+   * Keeps one run of a task and removes the others, their branches left in place. Without `force`,
+   * any run holding uncommitted or ignored files refuses the whole keep before anything goes.
+   */
+  async keepWorktree(params: ParamsOf<'worktree.keep'>): Promise<WorktreeKeep> {
+    const kept = this.#requireReadyWorktree(params.worktreeId, 'keeping a run')
+    const siblings = siblingRuns(kept, this.#store.listWorktrees())
+    const force = params.force === true
+    if (!force) {
+      const holding: string[] = []
+      for (const sibling of siblings) {
+        const status = await this.worktreeStatus({ worktreeId: sibling.id }).catch(() => null)
+        const files = status === null ? 0 : status.staged + status.unstaged + status.untracked + status.conflicted
+        if (files > 0 || (status?.ignored ?? 0) > 0) holding.push(sibling.name)
+      }
+      if (holding.length > 0) {
+        throw new GitServiceError(
+          ErrorCode.Conflict,
+          `${holding.join(', ')} ${
+            holding.length === 1 ? 'has' : 'have'
+          } uncommitted work; keep with force to remove it`
+        )
+      }
+    }
+    const removed: string[] = []
+    for (const sibling of siblings) {
+      await this.removeWorktree({ worktreeId: sibling.id, force })
+      removed.push(sibling.id)
+    }
+    const name = keptName(kept, siblings)
+    const worktree = name === null ? kept : await this.renameWorktree({ worktreeId: kept.id, name })
+    return { worktree, removed }
+  }
+
+  #landingOptions(worktreeId: string, what: string): Parameters<typeof readLanding>[1] {
+    const worktree = this.#requireReadyWorktree(worktreeId, what)
+    const project = this.#store.getProject(worktree.projectId)
+    if (!project) throw new GitServiceError(ErrorCode.NotFound, `worktree "${worktree.name}" has no project`)
+    return {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      branch: worktree.branch,
+      baseRef: project.baseRef,
+      startedFrom: worktree.startedFrom,
+      ...(this.#gh === undefined ? {} : { gh: this.#gh }),
+      now: this.#now
+    }
   }
 
   /** A worktree that can be read from; anything not yet `ready` has no checkout on disk. */

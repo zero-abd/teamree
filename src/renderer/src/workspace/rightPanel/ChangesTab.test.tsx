@@ -2,7 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WorktreeChange, WorktreeLog, WorktreePush, WorktreeStatus } from '@shared/entities'
+import type { WorktreeChange, WorktreeLanding, WorktreeLog, WorktreePush, WorktreeStatus } from '@shared/entities'
 import { fileLeavesIn, isCommitLeaf } from '@shared/filePane'
 
 const call = vi.fn()
@@ -264,6 +264,96 @@ describe('which button is the next step', () => {
     seed({ upstream: null, ahead: 1 })
     render(<ChangesTab />)
     expect(primary('Publish Branch')).toBe(true)
+  })
+})
+
+describe('landing the work', () => {
+  const primary = (name: string): boolean => screen.getByRole('button', { name }).classList.contains('button--primary')
+  const landing = (overrides: Partial<WorktreeLanding> = {}): WorktreeLanding => ({
+    worktreeId: 'w1',
+    branch: 'rewrite-the-pager',
+    base: 'main',
+    host: 'github',
+    published: true,
+    unmerged: 1,
+    merged: false,
+    compareUrl: 'https://github.com/team/pager/compare/main...rewrite-the-pager?expand=1',
+    readAt: 0,
+    ...overrides
+  })
+  const landed = (
+    overrides: Partial<WorktreeLanding>,
+    statusOverrides: Partial<WorktreeStatus> = { ahead: 0 }
+  ): void => {
+    seed(statusOverrides)
+    useWorkspaceStore.setState({ landings: { w1: landing(overrides) } })
+  }
+
+  it('is Create Pull Request once the branch is published, and opens the host’s page without gh', async () => {
+    landed({})
+    call.mockImplementation((method: string) =>
+      method === 'worktree.createPullRequest'
+        ? Promise.resolve({ worktreeId: 'w1', url: landing().compareUrl, created: false })
+        : new Promise(() => {})
+    )
+    render(<ChangesTab />)
+
+    expect(primary('Create Pull Request')).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Open review' })).toBeNull()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Create Pull Request' })))
+
+    expect(call).toHaveBeenCalledWith('worktree.createPullRequest', { worktreeId: 'w1' })
+    expect(openInBrowser).toHaveBeenCalledWith(landing().compareUrl)
+  })
+
+  it('reads Open Pull Request with its number once gh made one', async () => {
+    landed({})
+    call.mockImplementation((method: string) =>
+      method === 'worktree.createPullRequest'
+        ? Promise.resolve({ worktreeId: 'w1', url: 'https://github.com/team/pager/pull/12', number: 12, created: true })
+        : new Promise(() => {})
+    )
+    render(<ChangesTab />)
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Create Pull Request' })))
+
+    expect(openInBrowser).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Open Pull Request #12' }))
+    expect(openInBrowser).toHaveBeenCalledWith('https://github.com/team/pager/pull/12')
+  })
+
+  it('is Merge into main… for an origin on no known host, and asks before merging', () => {
+    landed({ host: null, published: false, compareUrl: undefined }, { upstream: null, ahead: 1 })
+    render(<ChangesTab />)
+
+    expect(primary('Merge into main…')).toBe(true)
+    expect(primary('Publish Branch')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Merge into main…' }))
+    expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'w1' })
+    expect(call).not.toHaveBeenCalledWith('worktree.mergeIntoBase', expect.anything())
+  })
+
+  it('waits for Push while the remote lacks commits, and for Commit while there are changes', () => {
+    landed({}, { ahead: 1 })
+    const { unmount } = render(<ChangesTab />)
+    expect(screen.queryByRole('button', { name: 'Create Pull Request' })).toBeNull()
+    expect(primary('Push')).toBe(true)
+    unmount()
+
+    landed({ host: null }, { ahead: 0, unstaged: 1 })
+    withChanges(rows)
+    render(<ChangesTab />)
+    expect(screen.queryByRole('button', { name: 'Merge into main…' })).toBeNull()
+  })
+
+  it('says Merged once the branch is in its base, and offers the removal', () => {
+    landed({ merged: true, unmerged: 0 })
+    render(<ChangesTab />)
+
+    expect(screen.getByText('Merged')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Create Pull Request' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Worktree…' }))
+    expect(useWorkspaceStore.getState().dialog).toMatchObject({ kind: 'confirm-remove', worktreeId: 'w1' })
   })
 })
 

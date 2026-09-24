@@ -7,7 +7,14 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PaneWatcher, Terminal, Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
+import type {
+  PaneWatcher,
+  Terminal,
+  Worktree,
+  WorktreeLanding,
+  WorktreeMergePreview,
+  WorktreeStatus
+} from '@shared/entities'
 import type { PaneAttention } from '../state/paneAttention'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
@@ -87,6 +94,8 @@ function mount(
     worktree?: Worktree
     status?: WorktreeStatus
     mergePreview?: WorktreeMergePreview
+    landing?: WorktreeLanding
+    onKeep?: () => void
     terminals?: Terminal[]
     evidence?: Record<string, string | null>
     watchers?: Record<string, PaneAttention>
@@ -102,6 +111,8 @@ function mount(
         worktree={overrides.worktree ?? worktree()}
         status={overrides.status}
         mergePreview={overrides.mergePreview}
+        {...(overrides.landing === undefined ? {} : { landing: overrides.landing })}
+        {...(overrides.onKeep === undefined ? {} : { onKeep: overrides.onKeep })}
         terminals={overrides.terminals ?? []}
         evidence={overrides.evidence ?? {}}
         watchers={overrides.watchers ?? {}}
@@ -909,5 +920,70 @@ describe('the row in the sidebar tree', () => {
     expect(handlers.onOpen).not.toHaveBeenCalled()
     fireEvent.keyDown(row(), { key: 'F10', shiftKey: true })
     expect(labels()[0]).toBe('Retry')
+  })
+})
+
+describe('a worktree whose work has landed', () => {
+  const landing = (overrides: Partial<WorktreeLanding> = {}): WorktreeLanding => ({
+    worktreeId: 'w1',
+    branch: 'rewrite-the-pager',
+    base: 'main',
+    host: 'github',
+    published: true,
+    unmerged: 0,
+    merged: true,
+    readAt: NOW,
+    ...overrides
+  })
+  const cleanMerge = {
+    worktreeId: 'w1',
+    baseRef: 'origin/main',
+    state: 'clean',
+    ahead: 1,
+    conflicts: [],
+    readAt: NOW
+  } as WorktreeMergePreview
+
+  it('says Merged in a plain chip instead of whether it would merge', () => {
+    mount({ status: status(), landing: landing(), mergePreview: cleanMerge })
+
+    const chip = screen.getByText('Merged')
+    expect(chip.classList.contains('chip')).toBe(true)
+    expect(screen.queryByRole('img', { name: /merge cleanly/ })).toBeNull()
+  })
+
+  it('leads its menu with Remove Worktree…', () => {
+    mount({ status: status(), landing: landing() })
+    fireEvent.contextMenu(row())
+
+    expect(labels()[0]).toBe('Remove Worktree…')
+    expect(labels().filter((label) => label === 'Remove Worktree…')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove Worktree…' }))
+    expect(handlers.onRemove).toHaveBeenCalled()
+  })
+
+  it('names an open pull request on hover, and keeps Remove last until it merges', () => {
+    mount({
+      status: status(),
+      landing: landing({
+        merged: false,
+        unmerged: 1,
+        pullRequest: { number: 12, url: 'https://github.com/a/b/pull/12', state: 'open' }
+      })
+    })
+
+    expect(screen.queryByText('Merged')).toBeNull()
+    expect(screen.getByText('Rewrite the pager').getAttribute('title')).toBe('Rewrite the pager · Pull Request #12')
+    fireEvent.contextMenu(row())
+    expect(labels().at(-1)).toBe('Remove Worktree…')
+  })
+
+  it('offers Keep This Run… when the task has other runs', () => {
+    const onKeep = vi.fn()
+    mount({ onKeep })
+    fireEvent.contextMenu(row())
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Keep This Run…' }))
+    expect(onKeep).toHaveBeenCalled()
   })
 })
