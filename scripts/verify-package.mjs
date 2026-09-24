@@ -18,6 +18,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { withoutSystemCa } from './child-env.mjs'
 import { electronSandboxArgs } from './electron-sandbox.mjs'
 import { packagedAppCandidates } from './packaged-app.mjs'
 
@@ -115,7 +116,8 @@ if (process.platform !== 'win32' && !(statSync(relayLauncher).mode & 0o111)) {
   const runRelayCommand = (args) =>
     spawnSync(isCmd ? process.env.ComSpec || 'cmd.exe' : relayLauncher, isCmd ? ['/c', relayLauncher, ...args] : args, {
       encoding: 'utf8',
-      timeout: STEP_TIMEOUT_MS
+      timeout: STEP_TIMEOUT_MS,
+      env: withoutSystemCa(process.env)
     })
 
   const target = join(mkdtempSync(join(tmpdir(), 'teamree-verify-relay-')), 'relay')
@@ -318,10 +320,15 @@ ok(`fixture repository at ${repo}`)
 // --------------------------------------------------------- launch the app --
 
 // A throwaway --user-data-dir keeps the single-instance lock from handing the run to an app the
-// developer already has open. TEAMREE_BACKGROUND_LAUNCH stops the window stealing focus.
-const child = spawn(app.binary, [`--user-data-dir=${userData}`, ...electronSandboxArgs()], {
+// developer already has open, and the mock keychain keeps its cookie key out of the login keychain.
+// TEAMREE_BACKGROUND_LAUNCH stops the window stealing focus.
+const child = spawn(app.binary, [`--user-data-dir=${userData}`, '--use-mock-keychain', ...electronSandboxArgs()], {
   // The checkout goes under the same scratch, so nothing lands in the folder the real app lists.
-  env: { ...process.env, TEAMREE_BACKGROUND_LAUNCH: '1', TEAMREE_WORKTREES_ROOT: join(scratch, 'worktrees') },
+  env: {
+    ...withoutSystemCa(process.env),
+    TEAMREE_BACKGROUND_LAUNCH: '1',
+    TEAMREE_WORKTREES_ROOT: join(scratch, 'worktrees')
+  },
   stdio: ['ignore', 'pipe', 'pipe']
 })
 let appOutput = ''
@@ -387,7 +394,7 @@ function cli(...args) {
     {
       encoding: 'utf8',
       timeout: STEP_TIMEOUT_MS,
-      env: { ...process.env, TEAMREE_USER_DATA_DIR: userData }
+      env: { ...withoutSystemCa(process.env), TEAMREE_USER_DATA_DIR: userData }
     }
   )
   if (result.error) {
@@ -407,7 +414,7 @@ function cliQuiet(...args) {
   spawnSync(isCmd ? process.env.ComSpec || 'cmd.exe' : app.launcher, isCmd ? ['/c', app.launcher, ...args] : args, {
     encoding: 'utf8',
     timeout: STEP_TIMEOUT_MS,
-    env: { ...process.env, TEAMREE_USER_DATA_DIR: userData }
+    env: { ...withoutSystemCa(process.env), TEAMREE_USER_DATA_DIR: userData }
   })
 }
 

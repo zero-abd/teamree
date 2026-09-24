@@ -15,6 +15,9 @@ import SkipAllowlist from './scripts/vitest-skip-allowlist.mjs'
 // resolution errors is not a useful way to say so.
 const skipRelay = process.env.TEAMREE_SKIP_RELAY_TESTS === '1'
 
+// Before the workers fork, so no test or child it spawns reads the macOS keychain.
+delete process.env.NODE_USE_SYSTEM_CA
+
 export default defineConfig({
   test: {
     // Reads vitest's own skip count and fails the run on any skip that is not

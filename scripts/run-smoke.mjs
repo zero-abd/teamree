@@ -7,7 +7,14 @@ import { spawnSync } from 'node:child_process'
 import electron from 'electron'
 import { electronSandboxArgs } from './electron-sandbox.mjs'
 import { buildPeerBundle } from './peer-bundle.mjs'
-import { FIXTURE_REPO_FLAG, PEER_BUNDLE_FLAG, USER_DATA_FLAG, namedArg } from './smoke-args.mjs'
+import {
+  FIXTURE_REPO_FLAG,
+  PEER_BUNDLE_FLAG,
+  SMOKE_SWITCHES,
+  USER_DATA_FLAG,
+  namedArg,
+  smokeEnv
+} from './smoke-args.mjs'
 import { displayPlan } from './virtual-display.mjs'
 
 const peerBundle = await buildPeerBundle()
@@ -40,6 +47,7 @@ for (const args of fixtureSteps) {
 
 const plan = displayPlan(electron, [
   ...electronSandboxArgs(),
+  ...SMOKE_SWITCHES,
   'scripts/smoke.mjs',
   namedArg(PEER_BUNDLE_FLAG, peerBundle),
   namedArg(USER_DATA_FLAG, userDataDir),
@@ -51,7 +59,7 @@ if (plan.advice) console.error(`run-smoke: ${plan.advice}`)
 // Worktrees under the throwaway root, not `~/.teamree/worktrees/smoke/` where the real app lists them.
 const result = spawnSync(plan.command, plan.args, {
   stdio: 'inherit',
-  env: { ...process.env, TEAMREE_WORKTREES_ROOT: join(smokeRoot, 'worktrees') }
+  env: smokeEnv(process.env, join(smokeRoot, 'worktrees'))
 })
 
 rmSync(peerBundle, { recursive: true, force: true })

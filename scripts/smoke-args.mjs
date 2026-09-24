@@ -1,5 +1,14 @@
 // What `run-smoke.mjs` tells the Electron process it launches. Named flags, not positions:
 // `--no-sandbox` prepended on root Linux once shifted argv[2] and faked a broken peer library.
+import { withoutSystemCa } from './child-env.mjs'
+
+/** On the command line: smoke.mjs loads the app after `ready`, too late for the app to append it. */
+export const SMOKE_SWITCHES = ['--use-mock-keychain']
+
+/** The smoke Electron's environment, its worktrees under the throwaway root. */
+export function smokeEnv(env, worktreesRoot) {
+  return { ...withoutSystemCa(env), TEAMREE_WORKTREES_ROOT: worktreesRoot }
+}
 
 /** Where `buildPeerBundle()` wrote the compiled peer library. */
 export const PEER_BUNDLE_FLAG = '--peer-bundle'

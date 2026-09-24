@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { withoutSystemCa } from './child-env.mjs'
 import { runPeerCheck } from './electron-peer-check.mjs'
 import { FIXTURE_REPO_FLAG, PEER_BUNDLE_FLAG, USER_DATA_FLAG, readNamedArg } from './smoke-args.mjs'
 
@@ -769,7 +770,7 @@ async function checkFilesTab(ask) {
 function runCli(args) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [join(root, 'out/cli/index.js'), ...args], {
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      env: { ...withoutSystemCa(process.env), ELECTRON_RUN_AS_NODE: '1' },
       stdio: ['ignore', 'pipe', 'pipe']
     })
     let said = ''

@@ -28,6 +28,8 @@ async function unconfiguredRepo(): Promise<{ repoPath: string; runner: GitRunner
   const blank: NodeJS.ProcessEnv = {
     HOME: home,
     USERPROFILE: home,
+    // A faked HOME has no login keychain, so a node child reading it would prompt the owner.
+    NODE_USE_SYSTEM_CA: undefined,
     XDG_CONFIG_HOME: path.join(home, 'config'),
     // Files that do not exist: how git spells "there is no config here".
     GIT_CONFIG_GLOBAL: path.join(home, 'no-global-config'),
