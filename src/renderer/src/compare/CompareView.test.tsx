@@ -129,6 +129,8 @@ describe('the compare pane', () => {
     const codex = screen.getByRole('group', { name: `${TASK} (Codex)` })
     expect(within(claude).getByText('2 files')).toBeTruthy()
     expect(within(codex).getByText('1 file')).toBeTruthy()
+    expect(claude.querySelector('.compare__agent')?.textContent).toBe('Claude Code')
+    expect(codex.querySelector('.compare__agent')?.textContent).toBe('Codex')
 
     fireEvent.click(within(codex).getByRole('button', { name: 'Open' }))
     expect(openWorktree).toHaveBeenCalledWith('w-codex')
@@ -168,7 +170,7 @@ describe('the compare pane', () => {
     expect(math.querySelectorAll('.patch__row--added')).toHaveLength(2)
 
     const test = screen.getByRole('region', { name: 'src/math.test.ts' })
-    expect(within(test).getByText('only claude')).toBeTruthy()
+    expect(within(test).getByText('only Claude Code')).toBeTruthy()
     expect(within(test).getByText('Untouched')).toBeTruthy()
     expect(test.querySelectorAll('.patch__row--added')).toHaveLength(1)
 
