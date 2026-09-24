@@ -1,9 +1,9 @@
-// The rail's word on sleep, and the three ways to change it.
+// The rail's icon for sleep, filled while it holds the machine awake, and the three ways to change it.
 
 import { useCallback, useRef, useState } from 'react'
 import { KEEP_AWAKE_MODES, type KeepAwakeMode } from '../state/preferences'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { keepAwakeLabel } from './keepAwake'
+import { anyAgentBusy, holdsAwake } from './keepAwake'
 import { StatusPopover } from './StatusPopover'
 
 const MODE_NAME: Record<KeepAwakeMode, string> = { on: 'On', agent: 'Agent', off: 'Off' }
@@ -18,6 +18,7 @@ const MODE_NOTE: Record<KeepAwakeMode, string> = {
 export function KeepAwakeControl(): React.JSX.Element {
   const mode = useWorkspaceStore((state) => state.keepAwake)
   const setKeepAwake = useWorkspaceStore((state) => state.setKeepAwake)
+  const holding = useWorkspaceStore((state) => holdsAwake(state.keepAwake, anyAgentBusy(state.terminals)))
   const [open, setOpen] = useState(false)
   const button = useRef<HTMLButtonElement | null>(null)
 
@@ -49,15 +50,22 @@ export function KeepAwakeControl(): React.JSX.Element {
       <button
         ref={button}
         type="button"
-        className={`statusbar__item statusbar__button${open ? ' statusbar__button--on' : ''}`}
+        className={`statusbar__item statusbar__button${open ? ' statusbar__button--on' : ''}${
+          holding ? ' statusbar__icon--on' : ''
+        }`}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={`Keep awake, ${MODE_NAME[mode].toLowerCase()}`}
-        title="Keep awake"
+        title={`Keep awake · ${MODE_NAME[mode]}`}
         onClick={() => (open ? close() : setOpen(true))}
       >
-        <span className={`statusbar__dot statusbar__dot--awake-${mode}`} aria-hidden="true" />
-        {keepAwakeLabel(mode)}
+        <svg className="statusbar__icon" viewBox="0 0 14 14" aria-hidden="true">
+          <path
+            className="statusbar__icon-fill"
+            d="M2.5 5.5 H10 V9 A2.5 2.5 0 0 1 7.5 11.5 H5 A2.5 2.5 0 0 1 2.5 9 Z"
+          />
+          <path d="M10 6.5 H11 A1.5 1.5 0 0 1 11 9.5 H10 M5 1.5 V3.5 M7.5 1.5 V3.5" />
+        </svg>
       </button>
       {open ? (
         <StatusPopover label="Keep awake" anchor={button.current} onClose={close}>

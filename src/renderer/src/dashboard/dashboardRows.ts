@@ -64,3 +64,17 @@ export function toneCounts(rows: readonly AgentRow[]): Record<DotTone, number> {
   for (const row of rows) counts[dotTone(row.activity, row.agent)] += 1
   return counts
 }
+
+/** Panes asking or failed, in every worktree, and the first of them in the board's order. */
+export function attention(rows: readonly DashboardRow[]): {
+  asking: number
+  failed: number
+  first: DashboardRow | null
+} {
+  const owed = rows.filter((row) => row.activity === 'waiting' || row.activity === 'failed')
+  return {
+    asking: owed.filter((row) => row.activity === 'waiting').length,
+    failed: owed.filter((row) => row.activity === 'failed').length,
+    first: owed[0] ?? null
+  }
+}

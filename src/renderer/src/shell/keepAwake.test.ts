@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { Terminal } from '@shared/entities'
-import { anyAgentBusy, keepAwakeLabel } from './keepAwake'
+import { anyAgentBusy, holdsAwake } from './keepAwake'
 
 function terminal(over: Partial<Terminal>): Terminal {
   return {
@@ -39,10 +39,11 @@ describe('anyAgentBusy', () => {
   })
 })
 
-describe('keepAwakeLabel', () => {
-  it('names the mode in one or two words', () => {
-    expect(keepAwakeLabel('on')).toBe('Awake')
-    expect(keepAwakeLabel('agent')).toBe('Awake · agent')
-    expect(keepAwakeLabel('off')).toBe('Sleep ok')
+describe('holdsAwake', () => {
+  it('is true for On, for Agent while an agent is busy, and never for Off', () => {
+    expect(holdsAwake('on', false)).toBe(true)
+    expect(holdsAwake('agent', true)).toBe(true)
+    expect(holdsAwake('agent', false)).toBe(false)
+    expect(holdsAwake('off', true)).toBe(false)
   })
 })

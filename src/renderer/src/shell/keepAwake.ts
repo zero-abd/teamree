@@ -16,16 +16,9 @@ export function anyAgentBusy(terminals: Readonly<Record<string, Terminal>>): boo
   })
 }
 
-/** What the rail's button says: the mode, in one or two words. */
-export function keepAwakeLabel(mode: KeepAwakeMode): string {
-  switch (mode) {
-    case 'on':
-      return 'Awake'
-    case 'agent':
-      return 'Awake · agent'
-    case 'off':
-      return 'Sleep ok'
-  }
+/** Whether the mode is holding the machine awake right now; the rail's icon is filled while it is. */
+export function holdsAwake(mode: KeepAwakeMode, agentBusy: boolean): boolean {
+  return mode === 'on' || (mode === 'agent' && agentBusy)
 }
 
 export function useKeepAwake(): void {
