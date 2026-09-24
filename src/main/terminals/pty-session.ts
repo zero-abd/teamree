@@ -52,6 +52,9 @@ const EXIT_DRAIN_MAX_MS = 500
  */
 export const QUIET_AFTER_MS = 4_000
 
+/** How long after a resize output counts as the child repainting for the new size, not as new output. */
+export const REDRAW_AFTER_RESIZE_MS = 300
+
 /**
  * What a pane keeps once it has exited. Trimmed rather than freed: the
  * renderer, sidebar, `terminal read` and watch snapshots all want the tail.
@@ -153,6 +156,7 @@ export class PtySession {
   /** What the agent last said about itself; see `Terminal.agentEvent`. */
   private agentEvent: AgentEvent | undefined
   private lastOutputAt: number
+  private resizedAt = Number.NEGATIVE_INFINITY
   private readonly startedAt: number
   private cancelQuietWatch: (() => void) | undefined
   /** Set when the child has been reaped but its output has not gone quiet. */
@@ -316,6 +320,8 @@ export class PtySession {
   }
 
   resize(cols: number, rows: number): void {
+    // The kernel only raises SIGWINCH when the size changes.
+    if (cols !== this.cols || rows !== this.rows) this.resizedAt = this.clock()
     this.cols = cols
     this.rows = rows
     if (!this.running || this.draining) return
@@ -400,7 +406,7 @@ export class PtySession {
   }
 
   private receive(chunk: string): void {
-    this.noteActivity()
+    if (this.clock() - this.resizedAt >= REDRAW_AFTER_RESIZE_MS) this.noteActivity()
     this.scrollback.append(chunk)
     this.emit({ type: 'data', data: chunk })
     const { titles, bells } = this.titles.scan(chunk)

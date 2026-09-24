@@ -71,16 +71,15 @@ export function forgetClosedPanes(seen: PaneSeen, terminals: Readonly<Record<str
 }
 
 /**
- * Whether a pane has printed since this person last had it in front of them. `inFront` is the rule,
- * not a shortcut: the pane being watched is never unread however long the debounce runs, which is
- * structural rather than a race. No record means unread: a PTY's `lastOutputAt` starts at open.
+ * Whether a pane has printed since this person last had it in view. A pane in view is never unread
+ * however long the debounce runs: a rule, not a race. No record means unread: `lastOutputAt` starts at open.
  */
 export function isPaneUnread(
   terminal: Pick<Terminal, 'lastOutputAt'>,
   seenAt: number | undefined,
-  inFront: boolean
+  inView: boolean
 ): boolean {
-  if (inFront) return false
+  if (inView) return false
   return terminal.lastOutputAt > (seenAt ?? 0)
 }
 
@@ -88,11 +87,11 @@ export function isPaneUnread(
 export function unreadPaneIds(
   terminals: Readonly<Record<string, Terminal>>,
   seen: PaneSeen,
-  inFront: string | null
+  inView: readonly string[]
 ): ReadonlySet<string> {
   const unread = new Set<string>()
   for (const [terminalId, terminal] of Object.entries(terminals)) {
-    if (isPaneUnread(terminal, seen[terminalId], terminalId === inFront)) unread.add(terminalId)
+    if (isPaneUnread(terminal, seen[terminalId], inView.includes(terminalId))) unread.add(terminalId)
   }
   return unread
 }
@@ -130,4 +129,11 @@ export function paneInFront(state: FrontOfWindow): string | null {
   const focused = state.layouts[state.activeWorktreeId]?.focusedTerminalId ?? null
   if (focused === null) return null
   return panesOnScreen(state).includes(focused) ? focused : null
+}
+
+/** The panes this person can see: every one on screen while the window has focus, else only the focused one. */
+export function panesInView(state: FrontOfWindow, windowFocused: boolean): string[] {
+  if (windowFocused) return panesOnScreen(state)
+  const inFront = paneInFront(state)
+  return inFront === null ? [] : [inFront]
 }
