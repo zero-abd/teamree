@@ -231,6 +231,8 @@ function buildEnv(run: GitRun): NodeJS.ProcessEnv {
     LANGUAGE: '',
     // Status is polled; the index lock on every poll would fight the user's own git.
     ...(run.readOnly ? { GIT_OPTIONAL_LOCKS: '0' } : {}),
-    ...run.env
+    ...run.env,
+    // Node started with this reads the keychain, and a hook or credential helper can be node. Undefined is left out.
+    NODE_USE_SYSTEM_CA: undefined
   }
 }

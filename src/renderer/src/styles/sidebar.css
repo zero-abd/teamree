@@ -829,17 +829,20 @@
   color: var(--fg-secondary);
 }
 
-.worktree__merge--clean svg {
+/* Ink like the clean mark: red is for the pane that needs you, not a branch that will. */
+.worktree__merge--conflicts {
+  display: inline-flex;
+  flex: none;
+  color: var(--fg-secondary);
+}
+
+.worktree__merge--clean svg,
+.worktree__merge--conflicts svg {
   width: 12px;
   height: 12px;
   fill: none;
   stroke: currentcolor;
   stroke-width: 1.2;
-}
-
-.worktree__merge--conflicts {
-  background: var(--bg-raised);
-  color: var(--fg-secondary);
 }
 
 

@@ -44,6 +44,7 @@ type WorktreeAction =
   | 'reveal-worktree'
   | 'copy-worktree-path'
   | 'copy-worktree-branch'
+  | 'update-worktree'
   | 'remove-worktree'
 
 export type PaletteItem =
@@ -90,6 +91,8 @@ export type PaletteContext = {
   openIn?: readonly string[]
   /** The mode and preset on screen, which mark their own rows as current. */
   appearance?: { mode: AppearanceMode; themeId: string }
+  /** The base's branch name when the worktree on screen is behind it and can update. */
+  updateFrom?: string | null
   /** The focused file pane's entry in the Changes list, if it has one. */
   focusedChange?: { path: string; discardable: boolean; staged: boolean } | null
   /** Which way the panel toggles read; absent reads as shown. */
@@ -190,6 +193,15 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
           label: `Compare with ${runName(other)}`,
           keywords: 'compare diff runs sibling agents task side by side'
         })),
+        ...(context.updateFrom
+          ? [
+              {
+                id: 'update-worktree' as const,
+                label: `Update from ${context.updateFrom}`,
+                keywords: 'update rebase merge pull behind base main sync'
+              }
+            ]
+          : []),
         remove,
         ...(change?.discardable === true
           ? [

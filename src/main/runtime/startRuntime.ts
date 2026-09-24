@@ -35,6 +35,10 @@ export type RuntimeOptions = {
   serveTeamwork?: boolean
   /** Off for a harness that has no business dialling GitHub; see updateService.ts. */
   checkForUpdates?: boolean
+  /** Fetches each project's base ref in the background. Off unless asked: a harness must never reach a real remote. */
+  fetchBases?: boolean
+  /** `net.isOnline` in the app; false skips a background fetch. */
+  online?: () => boolean
   /**
    * Opens a URL in the user's browser; `shell.openExternal` in the app. Passed in
    * so only code handed the means can open a browser, and a headless runtime has none.
@@ -69,6 +73,8 @@ export type Runtime = {
    * caller, the macOS app menu, is not a method call from a window.
    */
   checkForUpdates: () => Promise<void>
+  /** The window came to the front: a moment to see whether the base refs moved. */
+  noteWindowFocus: () => void
   stop: () => Promise<void>
 }
 
@@ -81,6 +87,8 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     serveRenderer = true,
     serveTeamwork = true,
     checkForUpdates = true,
+    fetchBases = false,
+    online,
     openExternal,
     downloadsDirectory,
     openPath,
@@ -116,7 +124,8 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     ...(requestQuit === undefined ? {} : { requestQuit }),
     ...(unsavedFiles === undefined ? {} : { unsavedFiles }),
     ...(onAppearance === undefined ? {} : { onAppearance }),
-    ...(systemTone === undefined ? {} : { systemTone })
+    ...(systemTone === undefined ? {} : { systemTone }),
+    ...(online === undefined ? {} : { online })
   })
   const dispatch = createDispatcher(registry)
 
@@ -141,6 +150,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     await step(uninstallBridge)
     // A pending check firing during shutdown would be a request nobody reads.
     await step(() => areas.updates.stop())
+    await step(() => areas.bases.stop())
     // Before the PTYs: a teammate must not watch panes already being killed.
     await step(() => areas.peers.stop())
     // Before the PTYs, because a shell dying rewrites files.
@@ -164,6 +174,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
 
     // Only sets a timer; startup must cost nothing for it.
     if (checkForUpdates) areas.updates.start()
+    if (fetchBases) areas.bases.start()
 
     if (serveCli) {
       const endpoint = resolveEndpoint(userDataDir)
@@ -206,6 +217,9 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     },
     checkForUpdates: async () => {
       await areas.updates.check({ force: true })
+    },
+    noteWindowFocus: () => {
+      if (fetchBases) void areas.bases.nudge()
     },
     stop
   }

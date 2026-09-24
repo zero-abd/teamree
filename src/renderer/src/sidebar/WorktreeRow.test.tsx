@@ -350,8 +350,12 @@ describe('a worktree that is ready', () => {
         readAt: NOW
       } as WorktreeMergePreview
     })
-    const badge = screen.getByText('2 conflicts')
-    expect(badge.getAttribute('title')).toContain('src/pager.ts')
+    // A mark like the clean one, not a word: the count and paths are on hover.
+    expect(screen.queryByText('2 conflicts')).toBeNull()
+    const mark = screen.getByRole('img', { name: /^Would conflict with origin\/main/ })
+    expect(mark.getAttribute('title')).toContain('src/pager.ts')
+    expect(mark.className).toContain('worktree__merge--conflicts')
+    expect(mark.querySelector('svg')).not.toBeNull()
   })
 })
 

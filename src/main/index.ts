@@ -6,6 +6,7 @@ import {
   ipcMain,
   Menu,
   nativeTheme,
+  net,
   Notification,
   powerSaveBlocker,
   protocol,
@@ -239,7 +240,10 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
       // A subframe is not the window and does not speak for it.
       fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame
     })
-    app.on('browser-window-focus', () => notices?.noteWindowFocus())
+    app.on('browser-window-focus', () => {
+      notices?.noteWindowFocus()
+      runtime?.noteWindowFocus()
+    })
 
     // The window's own menus, rebuilt whenever its answer changes; see src/main/menuBar.ts.
     installMenuBar(ipcMain, {
@@ -311,7 +315,9 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
         requestQuit: (force) => (force ? quitWithoutAsking() : app.quit()),
         unsavedFiles: () => unsaved?.paths() ?? [],
         onAppearance: (appearance) => followAppearance?.(appearance),
-        systemTone: () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
+        systemTone: () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light'),
+        fetchBases: true,
+        online: () => net.isOnline()
       })
     } catch (error) {
       console.error('[runtime] failed to start', error)

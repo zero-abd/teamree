@@ -2,10 +2,13 @@
 // --porcelain=v2 --branch` answers every counter; a second command answers
 // `behind` against the base ref, which `branch.ab` measures against the upstream.
 
+import { existsSync } from 'node:fs'
+import path from 'node:path'
 import type { WorktreeStatus } from '../../shared/entities'
 import type { GitRunner } from './gitProcess'
 import { assertRefShape, comparesAgainstItself } from './repository'
 import { isPreparedPath, type PreparedPaths } from './worktreePreparation'
+import { resolveGitDir } from './worktreeWatcher'
 
 export type ParsedStatus = {
   branch: string
@@ -159,6 +162,7 @@ export async function readWorktreeStatus(runner: GitRunner, options: StatusReadO
     }
   }
 
+  const operation = readOperation(options.worktreePath)
   return {
     worktreeId: options.worktreeId,
     branch: parsed.branch || options.fallbackBranch,
@@ -170,8 +174,18 @@ export async function readWorktreeStatus(runner: GitRunner, options: StatusReadO
     untracked: parsed.untracked,
     conflicted: parsed.conflicted,
     ignored: parsed.ignored,
+    ...(operation === undefined ? {} : { operation }),
     readAt: (options.now ?? Date.now)()
   }
+}
+
+/** The rebase or merge stopped part-way in this checkout, read off its git directory. */
+export function readOperation(worktreePath: string): 'rebase' | 'merge' | undefined {
+  const gitDir = resolveGitDir(worktreePath)
+  if (gitDir === undefined) return undefined
+  if (existsSync(path.join(gitDir, 'rebase-merge')) || existsSync(path.join(gitDir, 'rebase-apply'))) return 'rebase'
+  if (existsSync(path.join(gitDir, 'MERGE_HEAD'))) return 'merge'
+  return undefined
 }
 
 /** Ignored entries in a checkout: how many, and the first few by name. */

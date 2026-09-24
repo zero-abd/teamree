@@ -23,6 +23,7 @@ export function summarizeWorktreeStatus(status: WorktreeStatus | undefined): Wor
   const tone: StatusTone = status.conflicted > 0 ? 'conflict' : dirty > 0 ? 'dirty' : 'quiet'
 
   const parts: string[] = []
+  if (status.operation !== undefined) parts.push(status.operation === 'rebase' ? 'rebasing' : 'merging')
   if (status.ahead > 0) parts.push(`${status.ahead} ahead`)
   if (status.behind > 0) parts.push(`${status.behind} behind`)
   if (status.conflicted > 0) parts.push(`${status.conflicted} conflicted`)

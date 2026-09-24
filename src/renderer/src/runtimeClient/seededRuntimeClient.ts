@@ -700,6 +700,30 @@ export function createSeededRuntimeClient(): RuntimeClient {
         pushedAt: Date.now()
       }
     },
+    'worktree.update': ({ worktreeId }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const status = statuses.get(worktreeId)
+      const baseRef = projects.get(worktree.projectId)?.baseRef ?? 'origin/main'
+      const mode = status?.upstream ? 'merge' : 'rebase'
+      if (status && status.staged + status.unstaged + status.conflicted > 0) throw new Error('Commit or stash first')
+      if (status && status.behind > 0) {
+        seedStatus(worktree, { ...status, behind: 0 })
+        announce({ type: 'worktrees' })
+      }
+      const outcome = (status?.behind ?? 0) > 0 ? 'updated' : 'upToDate'
+      return { worktreeId, baseRef, mode, outcome, conflicts: [], updatedAt: Date.now() }
+    },
+    'worktree.abortUpdate': ({ worktreeId }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const status = statuses.get(worktreeId)
+      const aborted = status?.operation ?? null
+      if (status && aborted !== null) {
+        const { operation: _dropped, ...rest } = status
+        seedStatus(worktree, { ...rest, conflicted: 0 })
+        announce({ type: 'worktrees' })
+      }
+      return { worktreeId, aborted }
+    },
     'worktree.log': ({ worktreeId, limit }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const project = projects.get(worktree.projectId)
