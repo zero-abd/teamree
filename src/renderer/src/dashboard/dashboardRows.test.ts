@@ -168,6 +168,22 @@ describe('dashboardRows', () => {
   })
 })
 
+describe('dashboardRows, quoting', () => {
+  it('carries each pane’s last line, and nothing for a pane with none', () => {
+    const rows = dashboardRows({
+      terminals: [terminal({ id: 'a' }), terminal({ id: 'b' })],
+      worktrees: [worktree({ id: 'wt1' })],
+      projects,
+      now: NOW,
+      evidence: { a: 'Added sub to src/math.ts:9' }
+    })
+    expect(Object.fromEntries(rows.map((row) => [row.terminalId, row.evidence]))).toEqual({
+      a: 'Added sub to src/math.ts:9',
+      b: null
+    })
+  })
+})
+
 describe('toneCounts', () => {
   it('counts the panes by the colour of their dot, a quiet agent apart from a quiet shell', () => {
     const rows = build(

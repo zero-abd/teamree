@@ -26,6 +26,10 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   RUNTIME_IS_SEEDED: false
 }))
 
+/** What each pane last printed, as the sidebar's reader would have it. */
+const printed: Record<string, string | null> = {}
+vi.mock('../sidebar/usePaneEvidence', () => ({ usePaneEvidence: () => printed }))
+
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { Dashboard } = await import('./Dashboard')
 
@@ -93,10 +97,11 @@ function seed(over: Partial<ReturnType<typeof useWorkspaceStore.getState>> = {})
 
 beforeEach(() => {
   toggleDashboard.mockReset()
+  for (const key of Object.keys(printed)) delete printed[key]
   seed()
 })
 
-// `0 asking` beside two amber rows labelled idle: the legend and the rows spoke two vocabularies.
+// Six coloured dots, four of them beside a zero: only the states some pane is in are named.
 describe('the legend', () => {
   function seedMixed(): void {
     seed({
@@ -108,40 +113,63 @@ describe('the legend', () => {
     })
   }
 
-  it('has one entry per dot colour, with its dot and its word', () => {
-    seedMixed()
+  const filters = (): string[] => [...document.querySelectorAll('.board-filter')].map((f) => f.textContent ?? '')
+
+  it('names only the states some pane is in, as text, with no dots', () => {
+    seed({
+      terminals: {
+        a: { ...PANE, id: 'a', agent: 'claude', title: 'claude' },
+        b: { ...PANE, id: 'b', agent: 'codex', title: 'codex' },
+        c: { ...PANE, id: 'c', title: 'zsh' },
+        d: { ...PANE, id: 'd', title: 'zsh' }
+      }
+    })
     render(<Dashboard />)
-    const entries = [...document.querySelectorAll('.board-count')].map((entry) => [
-      entry.querySelector('.activity')?.className,
-      entry.querySelector('.board-count__label')?.textContent
-    ])
-    expect(entries).toEqual([
-      ['activity activity--failed', 'failed'],
-      ['activity activity--waiting', 'asking'],
-      ['activity activity--working', 'working'],
-      ['activity activity--quiet', 'stopped'],
-      ['activity activity--idle', 'idle'],
-      ['activity activity--done', 'finished']
-    ])
+    expect(filters()).toEqual(['2 stopped', '2 idle'])
+    expect(document.querySelectorAll('.activity')).toHaveLength(0)
   })
 
-  it('counts what the rows show, word for word, and adds up to the rows', () => {
+  it('counts what the rows show, word for word', () => {
     seedMixed()
     render(<Dashboard />)
-    const count = (word: string): number =>
-      Number(
-        [...document.querySelectorAll('.board-count')]
-          .find((entry) => entry.querySelector('.board-count__label')?.textContent === word)
-          ?.querySelector('.board-count__number')?.textContent
-      )
     const states = [...document.querySelectorAll('.board-row__state')].map((state) => state.textContent ?? '')
     expect(states.sort()).toEqual(['idle', 'stopped', 'working'])
-    for (const word of ['stopped', 'idle', 'working']) expect(count(word)).toBe(1)
-    const total = [...document.querySelectorAll('.board-count__number')].reduce(
-      (sum, number) => sum + Number(number.textContent),
-      0
-    )
-    expect(total).toBe(states.length)
+    expect(filters()).toEqual(['1 working', '1 stopped', '1 idle'])
+  })
+
+  it('shows one state’s panes when its count is pressed, and every pane when pressed again', () => {
+    seedMixed()
+    render(<Dashboard />)
+    const stopped = screen.getByRole('button', { name: '1 stopped' })
+    fireEvent.click(stopped)
+    expect(stopped.getAttribute('aria-pressed')).toBe('true')
+    expect([...document.querySelectorAll('.board-row__state')].map((state) => state.textContent)).toEqual(['stopped'])
+    fireEvent.click(stopped)
+    expect(document.querySelectorAll('.board-row')).toHaveLength(3)
+  })
+})
+
+describe('a row', () => {
+  it('quotes what its pane last printed, and draws no dot', () => {
+    printed.agent = 'Added sub to src/math.ts:9, matching the style of add and mul.'
+    seed({ terminals: { agent: { ...PANE, id: 'agent', agent: 'claude', title: 'claude' } } })
+    render(<Dashboard />)
+    const row = document.querySelector('.board-row') as HTMLElement
+    expect(row.querySelector('.board-row__evidence')?.textContent).toBe(printed.agent)
+    expect(row.querySelector('.activity')).toBeNull()
+    expect(row.querySelector('.agent-glyph')).not.toBeNull()
+  })
+
+  it('colours the state word only when the pane needs somebody', () => {
+    seed({
+      terminals: {
+        failed: { ...PANE, id: 'failed', title: 'npm test', running: false, exitCode: 1 },
+        quiet: { ...PANE, id: 'quiet', title: 'zsh' }
+      }
+    })
+    render(<Dashboard />)
+    const classes = [...document.querySelectorAll('.board-row__state')].map((state) => state.className)
+    expect(classes).toEqual(['board-row__state board-row__state--failed', 'board-row__state'])
   })
 })
 
@@ -209,6 +237,23 @@ describe('where the keyboard lands', () => {
   })
 })
 
+describe('the arrow keys', () => {
+  it('move between the rows', () => {
+    seed({
+      terminals: { alpha: { ...PANE, id: 'alpha', title: 'alpha' }, beta: { ...PANE, id: 'beta', title: 'beta' } }
+    })
+    render(<Dashboard />)
+    const [alpha, beta] = [...document.querySelectorAll<HTMLElement>('.board-row')]
+    expect(document.activeElement).toBe(alpha)
+    fireEvent.keyDown(alpha as HTMLElement, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(beta)
+    fireEvent.keyDown(beta as HTMLElement, { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(beta)
+    fireEvent.keyDown(beta as HTMLElement, { key: 'ArrowUp' })
+    expect(document.activeElement).toBe(alpha)
+  })
+})
+
 // The board is where the question "which of these said something while I was
 // away" is asked across every worktree at once, so it is the one surface that
 // gets a filter rather than only a mark.
@@ -236,20 +281,12 @@ describe('the unread filter', () => {
     expect(screen.queryByText('beta')).toBeNull()
   })
 
-  it('rings the unread pane’s dot rather than drawing a second one', () => {
+  it('marks the unread pane by weight, not by a dot', () => {
     seedTwo()
     render(<Dashboard />)
     const alpha = screen.getByText('alpha').closest('.board-row')
-    expect(alpha?.querySelectorAll('.activity, .pip')).toHaveLength(1)
-    expect(alpha?.querySelector('.activity')?.className).toBe('activity activity--idle activity--unread')
-  })
-
-  it('heads the quiet column idle', () => {
-    seedTwo()
-    render(<Dashboard />)
-    const labels = [...document.querySelectorAll('.board-count__label')].map((label) => label.textContent)
-    expect(labels).toContain('idle')
-    expect(labels).not.toContain('waiting')
+    expect(alpha?.classList.contains('board-row--unread')).toBe(true)
+    expect(alpha?.querySelectorAll('.activity, .pip')).toHaveLength(0)
   })
 
   it('goes back to every pane when it is pressed again', () => {

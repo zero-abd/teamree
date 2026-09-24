@@ -135,7 +135,7 @@ describe('a pane of theirs', () => {
         <TeammateWorktreeRow row={row!} watchingPaneIds={['priya:t7']} onWatch={onWatch} />
       </ul>
     )
-    expect(screen.getByText('running tests')).toBeTruthy()
+    expect(watchButton().querySelector('.pane-row__head .pane-row__evidence')?.textContent).toBe('running tests')
   })
 
   it('leaves the one dot to the worktree row', () => {

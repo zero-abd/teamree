@@ -80,8 +80,10 @@ describe('evidenceLine', () => {
     }
   })
 
-  it('keeps a prompt line once a command has been typed at it', () => {
-    expect(evidenceLine('user@host:~/src$ npm run build')).toBe('user@host:~/src$ npm run build')
+  it('keeps the command typed at a prompt, without the prompt', () => {
+    expect(evidenceLine('user@host:~/src$ npm run build')).toBe('npm run build')
+    expect(evidenceLine('abd@Abdullahs-MacBook-Pro pantry % git status')).toBe('git status')
+    expect(evidenceLine('[root@host src]# make')).toBe('make')
   })
 
   it('keeps a percentage, which ends in a prompt glyph but is not a prompt', () => {
@@ -259,5 +261,45 @@ describe('evidenceInRows, over an agent’s screen', () => {
     expect(evidenceLine('• Edited calc.js (+1 -0)\r\n    3 +export const sub = (a, b) => a - b\r\n')).toBe(
       'Edited calc.js (+1 -0)'
     )
+  })
+})
+
+// A prompt is the absence of output; quoting it puts the user and the machine on every row.
+describe('evidenceInRows, over a shell’s prompts', () => {
+  const ZSH = 'abd@Abdullahs-MacBook-Pro add-a-sub-function-to-claude % '
+
+  it('shows nothing for a fresh zsh, whose default prompt carries user, host and folder', () => {
+    expect(evidenceInRows([ZSH])).toBeNull()
+  })
+
+  it('skips a prompt however long its folder name', () => {
+    const long = 'abd@Abdullahs-MacBook-Pro add-a-sub-function-to-src-math-ts-private-tmp-claude-501-use % '
+    expect(evidenceInRows(['2828db8 init', long])).toBe('2828db8 init')
+  })
+
+  it('skips an earlier prompt with nothing typed at it, or only the end-of-line mark', () => {
+    expect(evidenceInRows([`${ZSH}%`, ZSH])).toBeNull()
+    expect(evidenceInRows(['Done in 2.1s', ZSH, ZSH])).toBe('Done in 2.1s')
+  })
+
+  it('reads through a bash prompt to the output above it', () => {
+    expect(evidenceInRows(['user@host:~/dir$ ls', 'README.md  src', 'user@host:~/dir$ '])).toBe('README.md src')
+  })
+
+  it('shows the command typed at the live prompt while it has printed nothing yet', () => {
+    expect(evidenceInRows(['main ❯ ', 'main ❯ npm run dev'])).toBe('npm run dev')
+  })
+
+  it('skips a virtualenv prompt', () => {
+    expect(evidenceInRows(['(venv) user@host:~/api$ '])).toBeNull()
+  })
+
+  it('skips starship’s prompt', () => {
+    expect(evidenceInRows(['3 passed', '❯ '])).toBe('3 passed')
+  })
+
+  it('keeps output that ends in a percent sign', () => {
+    expect(evidenceInRows(['Downloading 100%', ZSH])).toBe('Downloading 100%')
+    expect(evidenceInRows(['coverage: 100 %'])).toBe('coverage: 100 %')
   })
 })

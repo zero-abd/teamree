@@ -78,11 +78,10 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
                   <span className="pane-row__head">
                     <PaneGlyph agent={pane.agent} />
                     <span className="pane-row__label">{truncateName(pane.text)}</span>
+                    {/* Only ever a line the pane printed while somebody had it open. */}
+                    {pane.evidence ? <span className="pane-row__evidence">{pane.evidence}</span> : null}
                     <PaneSince tone={dotTone(pane.activity, pane.agent)} quietFor={pane.quietFor} />
                   </span>
-                  {/* Only ever a line the pane actually printed while somebody had
-                    it open, which is why it is absent on every other row. */}
-                  {pane.evidence ? <span className="pane-row__evidence">{pane.evidence}</span> : null}
                 </button>
               </li>
             )

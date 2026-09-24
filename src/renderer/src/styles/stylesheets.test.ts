@@ -72,8 +72,7 @@ describe('stylesheets', () => {
       ['sidebar.css', '.worktree__tag'],
       ['sidebar.css', '.worktree__merge'],
       ['panes.css', '.pane__exit'],
-      ['panes.css', '.pane__restored--agent'],
-      ['dashboard.css', '.board-row__kind']
+      ['panes.css', '.pane__restored--agent']
     ] as const) {
       const rule = ruleFor(sheet, selector)
       expect(declarationOf(rule, 'border-radius'), selector).toBeUndefined()
@@ -272,7 +271,13 @@ describe('stylesheets', () => {
   // Amber means an agent is asking, so nothing else may be drawn in it.
   describe('colour means state', () => {
     it('uses the asking tone only for an agent that is asking', () => {
-      const asking = new Set(['.activity--waiting', '.pane-row__since--waiting', '.statusbar__asking'])
+      const asking = new Set([
+        '.activity--waiting',
+        '.pane-row__since--waiting',
+        '.statusbar__asking',
+        '.board-filter__number--waiting',
+        '.board-row__state--waiting'
+      ])
       const elsewhere: string[] = []
       for (const name of sheets) {
         postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls((decl) => {
