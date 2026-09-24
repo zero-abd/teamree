@@ -18,6 +18,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CliStatus, PaneConsent } from '@shared/entities'
 import { formatChord, resolvePlatformModifier, type Chord, type PlatformModifier } from '../keyboard/platformModifier'
 import { WORKSPACE_SHORTCUTS, type WorkspaceShortcut } from '../keyboard/workspaceShortcuts'
+import { menuLabel } from '../menu/menuBar'
 
 /** The entries that are keys; the table also holds commands bound to none. */
 const BOUND: readonly WorkspaceShortcut[] = WORKSPACE_SHORTCUTS.filter((shortcut) => shortcut.chord !== undefined)
@@ -61,9 +62,10 @@ describe('the keyboard section', () => {
   // Written as a loop over the real table on purpose. A list of expected
   // commands here would be the second hand-written copy of the bindings that
   // the generated section exists to avoid.
-  it.each(BOUND.map((shortcut) => [shortcut.title, shortcut] as const))('lists %s', (_title, shortcut) => {
+  // Named as the menu bar and the palette name it.
+  it.each(BOUND.map((shortcut) => [menuLabel(shortcut.command), shortcut] as const))('lists %s', (label, shortcut) => {
     render(<HelpView modifier={APPLE} />)
-    expect(screen.getByText(shortcut.title)).toBeDefined()
+    expect(screen.getByText(label)).toBeDefined()
     expect(screen.getByText(formatChord(shortcut.chord as Chord, APPLE)).tagName).toBe('KBD')
   })
 
@@ -77,7 +79,7 @@ describe('the keyboard section', () => {
     render(<HelpView modifier={APPLE} />)
     expect(screen.getByText('Pane 1–8')).toBeDefined()
     expect(screen.getByText('⌘1–⌘8').tagName).toBe('KBD')
-    expect(screen.getByText('Last pane')).toBeDefined()
+    expect(screen.getByText('Last Pane')).toBeDefined()
     expect(screen.getByText('⌘9').tagName).toBe('KBD')
   })
 

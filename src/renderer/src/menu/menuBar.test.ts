@@ -6,7 +6,7 @@ import type { ModifierState } from '../keyboard/platformModifier'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 import type { CommandState } from '../keyboard/workspaceCommands'
 import { commandForEvent, WORKSPACE_SHORTCUTS } from '../keyboard/workspaceShortcuts'
-import { ACCELERATOR_KEY_NAMES, acceleratorForChord, menuBarSpec } from './menuBar'
+import { ACCELERATOR_KEY_NAMES, acceleratorForChord, menuBarSpec, menuLabel } from './menuBar'
 
 const MAC = resolvePlatformModifier('darwin')
 
@@ -90,15 +90,28 @@ describe('the menu bar is built from the table the keyboard reads', () => {
   // Labels come from the table too: one wording per command.
   it('calls each command what the table calls it', () => {
     const spec = menuBarSpec(WORKING)
-    // The platform's wording; tested below.
-    const platformNames: string[] = ['open-settings', 'open-appearance']
+    // The platform's wording, and the panel toggles; tested below.
+    const platformNames: string[] = ['open-settings', 'open-appearance', 'toggle-sidebar', 'toggle-right-panel']
     for (const shortcut of WORKSPACE_SHORTCUTS) {
       if (platformNames.includes(shortcut.command)) continue
       expect(spec.find((item) => item.command === shortcut.command)?.label, shortcut.command).toBe(shortcut.title)
     }
   })
 
-  // Menu order, not table order: "New task, New terminal, Close pane".
+  // As Finder: the item says what choosing it does now; Help and the welcome list keep the table's pair.
+  it('says Show or Hide as each panel stands', () => {
+    const label = (state: CommandState, command: string): string | undefined =>
+      menuBarSpec(state).find((item) => item.command === command)?.label
+    expect(label(WORKING, 'toggle-sidebar')).toBe('Hide Sidebar')
+    expect(label(WORKING, 'toggle-right-panel')).toBe('Hide Right Panel')
+    const hidden = { ...WORKING, sidebarVisible: false, rightPanelOpen: false }
+    expect(label(hidden, 'toggle-sidebar')).toBe('Show Sidebar')
+    expect(label(hidden, 'toggle-right-panel')).toBe('Show Right Panel')
+    expect(menuLabel('toggle-sidebar', hidden)).toBe('Show Sidebar')
+    expect(menuLabel('toggle-sidebar')).toBe('Show/Hide Sidebar')
+  })
+
+  // Menu order, not table order: "New Task, New Terminal, Close Pane".
   it('puts the items of a menu in the order they are read', () => {
     const sectionOrder = (section: string): string[] =>
       menuBarSpec(WORKING)

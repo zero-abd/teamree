@@ -254,24 +254,25 @@ async function checkMenuBar(ask) {
 
   // Waited for: the window publishes its menus on mount.
   const arrived = await waitFor(
-    async () => named('New task') !== undefined,
+    async () => named('New Task') !== undefined,
     'the window\u2019s commands never reached the menu bar'
   )
   if (!arrived) return
 
   for (const [label, accelerator] of [
-    ['New task', 'CommandOrControl+N'],
-    ['Close pane', 'CommandOrControl+W'],
+    ['New Task', 'CommandOrControl+N'],
+    ['Close Pane', 'CommandOrControl+W'],
     // \u2318, opens the settings page, not the theme editor (own item under View, no chord).
     ['Settings\u2026', 'CommandOrControl+,'],
-    ['All panes', 'CommandOrControl+E'],
-    ['Toggle right panel', 'CommandOrControl+J'],
+    ['All Panes', 'CommandOrControl+E'],
+    // Named for what choosing it does: the panel starts closed.
+    ['Show Right Panel', 'CommandOrControl+J'],
     // Chords that are not characters: arrows and Return are spelled for
     // Electron's parser, and a name it rejects draws no chord or breaks the menu.
-    ['Previous worktree', 'CommandOrControl+Alt+Up'],
-    ['Next worktree', 'CommandOrControl+Alt+Down'],
-    ['Focus previous pane', 'CommandOrControl+['],
-    ['Maximize pane', 'CommandOrControl+Shift+Enter'],
+    ['Previous Worktree', 'CommandOrControl+Alt+Up'],
+    ['Next Worktree', 'CommandOrControl+Alt+Down'],
+    ['Focus Previous Pane', 'CommandOrControl+['],
+    ['Maximize Pane', 'CommandOrControl+Shift+Enter'],
     // Under the `help` role: proves Electron built the submenu onto the role item.
     ['Shortcuts', 'CommandOrControl+/']
   ]) {
@@ -295,10 +296,10 @@ async function checkMenuBar(ask) {
   }
 
   // First launch: no pane, so pane commands are grey and window-level ones are not.
-  if (named('Close pane')?.enabled !== false) {
-    failures.push('Close pane is live in a window with no pane in it')
+  if (named('Close Pane')?.enabled !== false) {
+    failures.push('Close Pane is live in a window with no pane in it')
   }
-  if (named('All panes')?.enabled !== true) {
+  if (named('All Panes')?.enabled !== true) {
     failures.push('the menu bar greys a command that needs nothing to be open')
   }
 
@@ -322,12 +323,12 @@ async function checkMenuBar(ask) {
   const showsDashboard = () =>
     ask('[...document.querySelectorAll("h1")].some((node) => node.textContent?.trim() === "All panes")')
 
-  named('All panes')?.click()
+  named('All Panes')?.click()
   const reached = await waitFor(showsDashboard, 'choosing a menu item did not reach the window')
 
   // Toggled back so the checks below find the window as expected.
   if (reached) {
-    named('All panes')?.click()
+    named('All Panes')?.click()
     await waitFor(async () => !(await showsDashboard()), 'choosing the same menu item again did not put the view away')
   }
 }
@@ -478,14 +479,14 @@ async function checkWorktreeSurfaces(ask) {
   // rises by two per pane.
   const tabCount = () => ask(`document.querySelectorAll('[role="tab"]').length`)
   const before = await tabCount()
-  const newTerminal = menuItem('New terminal')
+  const newTerminal = menuItem('New Terminal')
   if (newTerminal?.enabled !== true) {
-    failures.push('New terminal is not live in the menu bar with a worktree open')
+    failures.push('New Terminal is not live in the menu bar with a worktree open')
   } else {
     newTerminal.click()
     const opened = await waitFor(
       async () => (await tabCount()) === before + 1,
-      'choosing New terminal from the menu bar did not open a pane in the open worktree'
+      'choosing New Terminal from the menu bar did not open a pane in the open worktree'
     )
     if (!opened) {
       // Whatever the window said about it, so the failure names a cause.

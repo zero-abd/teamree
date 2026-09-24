@@ -22,8 +22,8 @@
 // The order inside a menu is the order the record is written in. That is a real
 // property of the language — string keys enumerate in insertion order — and it
 // is the reason the record below reads File, then Edit, then View, rather than
-// in the table's order: "New task, New terminal, Close pane" is a File menu and
-// "Close pane, New terminal, New task" is a list. `menuBar.test.ts` pins it.
+// in the table's order: "New Task, New Terminal, Close Pane" is a File menu and
+// "Close Pane, New Terminal, New Task" is a list. `menuBar.test.ts` pins it.
 
 import type { Chord } from '../keyboard/platformModifier'
 import { isCommandAvailable, type CommandState } from '../keyboard/workspaceCommands'
@@ -144,18 +144,26 @@ const ORDER: readonly string[] = Object.keys(PLACEMENT)
 export const MENU_ORDER = ORDER as readonly WorkspaceCommand[]
 
 /**
- * What this command is called, anywhere it is offered.
- *
- * One wording per command, and this is where it is settled: the table's title
- * unless the menu has the platform's own word for it. The palette reads this
- * and so does the shortcut strip, because a command called two things in one
- * window is a command a person cannot search for.
+ * What this command is called in the menu, palette and Help: the table's title unless the menu has the
+ * platform's word for it. With `panels`, a panel toggle says Show or Hide as the panel stands.
  */
-export function menuLabel(
-  command: WorkspaceCommand,
-  shortcuts: readonly WorkspaceShortcut[] = WORKSPACE_SHORTCUTS
-): string {
-  return PLACEMENT[command].label ?? shortcuts.find((shortcut) => shortcut.command === command)?.title ?? command
+export function menuLabel(command: WorkspaceCommand, panels?: PanelState): string {
+  return (
+    PLACEMENT[command].label ??
+    (panels ? panelLabel(command, panels) : null) ??
+    WORKSPACE_SHORTCUTS.find((shortcut) => shortcut.command === command)?.title ??
+    command
+  )
+}
+
+/** Whether each side panel is on screen; absent reads as shown. */
+export type PanelState = Pick<CommandState, 'sidebarVisible' | 'rightPanelOpen'>
+
+/** Finder's wording: a panel's toggle names what choosing it does now. Null for every other command. */
+function panelLabel(command: WorkspaceCommand, panels: PanelState): string | null {
+  if (command === 'toggle-sidebar') return panels.sidebarVisible === false ? 'Show Sidebar' : 'Hide Sidebar'
+  if (command === 'toggle-right-panel') return panels.rightPanelOpen === false ? 'Show Right Panel' : 'Hide Right Panel'
+  return null
 }
 
 /**
@@ -229,7 +237,7 @@ export function menuBarSpec(
       const placement = PLACEMENT[shortcut.command]
       return {
         command: shortcut.command,
-        label: placement.label ?? shortcut.title,
+        label: placement.label ?? panelLabel(shortcut.command, state) ?? shortcut.title,
         // Empty for a command with no chord, which the main process draws as an
         // item with nothing beside it.
         accelerator: shortcut.chord ? acceleratorForChord(shortcut.chord) : '',

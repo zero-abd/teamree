@@ -1,34 +1,22 @@
-// Edited files, asked about once before a quit, a window close or a worktree removal.
+// Edited files, asked about once before a quit, a window close or a worktree removal, in the words
+// closing one file uses.
 
+import { filePaneName } from '@shared/filePane'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { Confirm } from './Confirm'
 
-export function ConfirmUnsavedDialog({
-  paneIds,
-  after
-}: {
-  paneIds: readonly string[]
-  after: 'quit' | 'close' | { remove: string }
-}): React.JSX.Element {
+export function ConfirmUnsavedDialog({ paneIds }: { paneIds: readonly string[] }): React.JSX.Element {
   const editedFiles = useWorkspaceStore((state) => state.editedFiles)
   const answer = useWorkspaceStore((state) => state.answerUnsaved)
-  const removing = typeof after === 'object'
   const files = paneIds.map((paneId) => editedFiles[paneId]?.path).filter((path) => path !== undefined)
-  const count = files.length === 1 ? '1 unsaved file' : `${files.length} unsaved files`
+  const several = files.length > 1
   return (
     <Confirm
-      title={
-        after === 'quit'
-          ? 'Save before quitting?'
-          : after === 'close'
-            ? 'Save before closing?'
-            : 'Save before removing?'
-      }
-      body={count}
+      title={several ? `Save changes to ${files.length} files?` : `Save changes to ${filePaneName(files[0] ?? '')}?`}
       cancel="Cancel"
-      confirm={removing ? 'Save' : 'Save All'}
+      confirm={several ? 'Save All' : 'Save'}
       tone="primary"
-      decline={{ label: removing ? "Don't Save" : 'Discard', onChoose: () => void answer('discard') }}
+      decline={{ label: "Don't Save", onChoose: () => void answer('discard') }}
       onCancel={() => void answer('cancel')}
       onConfirm={() => void answer('save')}
     >

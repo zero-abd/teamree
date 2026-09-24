@@ -80,10 +80,10 @@ describe('when it says nothing at all', () => {
 
 describe('the preference row', () => {
   it('reads as an instruction either way, never as a statement of what is set', () => {
-    expect(automaticUpdatesLabel(state({ automatic: true }))).toBe('Stop checking for updates automatically')
-    expect(automaticUpdatesLabel(state({ automatic: false }))).toBe('Check for updates automatically')
+    expect(automaticUpdatesLabel(state({ automatic: true }))).toBe('Stop Checking for Updates Automatically')
+    expect(automaticUpdatesLabel(state({ automatic: false }))).toBe('Check for Updates Automatically')
     // Before the runtime has answered, the default is what it will say.
-    expect(automaticUpdatesLabel(null)).toBe('Stop checking for updates automatically')
+    expect(automaticUpdatesLabel(null)).toBe('Stop Checking for Updates Automatically')
   })
 })
 

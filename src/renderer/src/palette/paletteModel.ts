@@ -88,6 +88,9 @@ export type PaletteContext = {
   appearance?: { mode: AppearanceMode; themeId: string }
   /** The focused file pane's entry in the Changes list, if it has one. */
   focusedChange?: { path: string; discardable: boolean; staged: boolean } | null
+  /** Which way the panel toggles read; absent reads as shown. */
+  sidebarVisible?: boolean
+  rightPanelOpen?: boolean
 }
 
 /**
@@ -122,7 +125,12 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     }
   })
 
-  const rows: ActionRow[] = [...commandActions(), ...ACTIONS, ...updateActions(context), ...appearanceActions(context)]
+  const rows: ActionRow[] = [
+    ...commandActions(context),
+    ...ACTIONS,
+    ...updateActions(context),
+    ...appearanceActions(context)
+  ]
   const actions: PaletteItem[] = rows.map((action) => {
     // Named after the link's state; the keywords stay fixed so a search does not move with the label.
     const label = action.id === 'install-cli' ? cliActionLabel(context.cli) : action.label
@@ -220,7 +228,7 @@ function appearanceActions(context: PaletteContext): ActionRow[] {
 
 /**
  * One row per agent the probe found, starting it in the ready worktree on screen; none until there is one.
- * Worded as "here" to keep it apart from "New task", which makes another checkout.
+ * Worded as "here" to keep it apart from "New Task", which makes another checkout.
  */
 function agentItems(context: PaletteContext): PaletteItem[] {
   const active = context.worktrees.find((worktree) => worktree.id === context.activeWorktreeId)
@@ -247,7 +255,7 @@ function updateActions(context: PaletteContext): { id: PaletteAction; label: str
   return [
     {
       id: 'check-for-updates',
-      label: 'Check for updates',
+      label: 'Check for Updates',
       keywords: 'version release new upgrade download latest'
     },
     {
@@ -259,10 +267,10 @@ function updateActions(context: PaletteContext): { id: PaletteAction; label: str
 }
 
 /** One row per command, in menu order, named by `menuLabel`; the palette keeps no wording of its own. */
-function commandActions(): { id: PaletteAction; label: string; keywords: string }[] {
+function commandActions(context: PaletteContext): { id: PaletteAction; label: string; keywords: string }[] {
   return MENU_ORDER.map((command) => ({
     id: command,
-    label: menuLabel(command),
+    label: menuLabel(command, context),
     keywords: COMMAND_KEYWORDS[command]
   }))
 }
@@ -311,9 +319,9 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
 
 /** The rows that are the palette's own, with no command and no menu item. */
 const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[] = [
-  { id: 'toggle-changes', label: 'Show changes', keywords: 'diff git status files review changes' },
-  { id: 'show-files', label: 'Show files', keywords: 'tree folder directory explorer browse open panel' },
-  { id: 'add-project', label: 'Add project', keywords: 'add project repository repo folder clone' },
+  { id: 'toggle-changes', label: 'Show Changes', keywords: 'diff git status files review changes' },
+  { id: 'show-files', label: 'Show Files', keywords: 'tree folder directory explorer browse open panel' },
+  { id: 'add-project', label: 'Add Project', keywords: 'add project repository repo folder clone' },
   {
     id: 'install-cli',
     // Replaced by `cliActionLabel` when the link is the problem rather than its absence.

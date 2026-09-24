@@ -148,9 +148,7 @@ export function App(): React.JSX.Element {
       ) : null}
       {dialog?.kind === 'confirm-close-pane' ? <ConfirmClosePaneDialog terminalId={dialog.terminalId} /> : null}
       {dialog?.kind === 'confirm-close-file' ? <ConfirmCloseFileDialog terminalId={dialog.terminalId} /> : null}
-      {dialog?.kind === 'confirm-unsaved' ? (
-        <ConfirmUnsavedDialog paneIds={dialog.paneIds} after={dialog.after} />
-      ) : null}
+      {dialog?.kind === 'confirm-unsaved' ? <ConfirmUnsavedDialog paneIds={dialog.paneIds} /> : null}
       {dialog?.kind === 'confirm-discard' ? (
         <ConfirmDiscardDialog
           worktreeId={dialog.worktreeId}

@@ -4,6 +4,7 @@
 import { useEffect } from 'react'
 import { formatChord, type PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint } from '../keyboard/workspaceShortcuts'
+import { menuLabel } from '../menu/menuBar'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { PageFrame } from '../workspace/PageFrame'
 import {
@@ -55,7 +56,7 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
               <ul className="help-keys">
                 {group.shortcuts.map((shortcut) => (
                   <li className="help-key" key={shortcut.command}>
-                    <span className="help-key__what">{shortcut.title}</span>
+                    <span className="help-key__what">{menuLabel(shortcut.command)}</span>
                     {/* Always there: `shortcutGroups` lists the bindings, and a
                         command the table binds to nothing is not one. */}
                     <kbd className="help-key__chord">{shortcut.chord ? formatChord(shortcut.chord, modifier) : ''}</kbd>

@@ -36,7 +36,7 @@ export function updateNotice(state: UpdateState | null): UpdateNotice | null {
 
 /** The palette's label for the preference: always an instruction, never a statement beside a tick. */
 export function automaticUpdatesLabel(state: UpdateState | null): string {
-  return state?.automatic === false ? 'Check for updates automatically' : 'Stop checking for updates automatically'
+  return state?.automatic === false ? 'Check for Updates Automatically' : 'Stop Checking for Updates Automatically'
 }
 
 /** The one button that gets the release: in the app when it can be verified, else in the browser. */
