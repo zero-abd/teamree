@@ -13,6 +13,7 @@ import {
   truncateName,
   type DotTone
 } from '../sidebar/agentRows'
+import { AnswerButtons } from '../sidebar/AnswerButtons'
 import { usePaneEvidence } from '../sidebar/usePaneEvidence'
 import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
@@ -129,7 +130,7 @@ export function Dashboard(): React.JSX.Element {
             const needsYou = state === 'waiting' || state === 'failed'
             const where = [row.worktreeName, row.branch, row.projectName].filter(Boolean).join(' · ')
             return (
-              <li key={row.terminalId}>
+              <li key={row.terminalId} className="board-item">
                 <button
                   type="button"
                   className={`board-row board-row--${row.activity}${isUnread ? ' board-row--unread' : ''}`}
@@ -149,6 +150,9 @@ export function Dashboard(): React.JSX.Element {
                   </span>
                   <span className="board-row__since">{sinceLabel(row.quietFor)}</span>
                 </button>
+                {row.choices === undefined ? null : (
+                  <AnswerButtons terminalId={row.terminalId} choices={row.choices} className="board-item__answers" />
+                )}
               </li>
             )
           })}

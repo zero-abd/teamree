@@ -302,3 +302,32 @@ describe('the unread filter', () => {
     expect(screen.getByText('beta')).toBeTruthy()
   })
 })
+
+// Answering from the board: the asking row carries its menu's answers, a working row none.
+describe('answers on the board', () => {
+  it('offers an asking pane’s answers beside its row, and nothing on the others', () => {
+    seed({
+      terminals: {
+        asks: {
+          ...PANE,
+          id: 'asks',
+          agent: 'claude',
+          screenSays: 'waiting',
+          screenMenu: {
+            prompt: 'abcd1234',
+            choices: [
+              { label: 'Trust', keys: ['\u001b[B', '\r'] },
+              { label: 'Exit', keys: ['\r'] }
+            ]
+          }
+        },
+        busy: { ...PANE, id: 'busy', agent: 'codex', busy: true }
+      }
+    })
+    render(<Dashboard />)
+    const groups = screen.getAllByRole('group', { name: 'Answer' })
+    expect(groups).toHaveLength(1)
+    expect([...groups[0]!.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Trust', 'Exit'])
+    expect(groups[0]!.closest('li')?.querySelector('.board-row__state')?.textContent).toBe('asking')
+  })
+})

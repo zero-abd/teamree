@@ -263,6 +263,32 @@ describePty('PtySession', () => {
   )
 
   it(
+    'offers the answers on its screen, and only the ones that screen still shows',
+    async () => {
+      const menu = `printf '\\n Do you want to proceed?\\n \\342\\235\\257 1. Yes\\n   2. Yes, allow all edits during this session\\n   3. No\\n\\n Esc to cancel \\302\\267 Tab to amend'`
+      const session = start({
+        agent: 'claude',
+        command: `stty raw -echo; ${menu}; dd bs=1 count=1 2>/dev/null | od -An -tx1; sleep 5`,
+        schedule: soon
+      })
+      const events = collect(session)
+
+      await waitUntil(() => session.snapshot().screenMenu !== undefined, 'the menu read')
+      const offered = session.snapshot().screenMenu
+      expect(offered?.choices.map((choice) => choice.label)).toEqual(['Yes', 'Yes, All Edits', 'No…'])
+      const prompt = offered?.prompt ?? ''
+      expect(await session.answerKeys('00000000', '2')).toBeNull()
+      expect(await session.answerKeys(prompt, '4')).toBeNull()
+      expect(await session.answerKeys(prompt, '2')).toEqual(['2'])
+
+      session.write('2')
+      expect(session.snapshot().screenMenu).toBeUndefined()
+      await waitUntil(() => outputOf(events).includes(' 32'), 'the digit, as the program read it')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'stops reading a question once the screen no longer shows it',
     async () => {
       const session = start({

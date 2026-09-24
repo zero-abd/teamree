@@ -100,6 +100,8 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   // three presses too slow for, which is moving one row at a time.
   'previous-worktree': { section: 'view' },
   'next-worktree': { section: 'view' },
+  'next-needing': { section: 'view' },
+  'previous-needing': { section: 'view' },
   'open-dashboard': { section: 'view' },
   'toggle-sidebar': { section: 'view' },
   'toggle-right-panel': { section: 'view' },

@@ -2,7 +2,7 @@
 // when an agent changes what it draws under a question, this file should fail.
 
 import { describe, expect, it } from 'vitest'
-import { hookQuestion, isAnswerOrHint, menuQuestion, screenOpinion, screenQuestion } from './screenOpinion'
+import { hookQuestion, isAnswerOrHint, menuQuestion, screenMenu, screenOpinion, screenQuestion } from './screenOpinion'
 
 const claudeTrust = [
   " Claude Code'll be able to read, edit, and execute files here.",
@@ -171,5 +171,77 @@ describe('reading a question without its key hint', () => {
     )
     expect(hookQuestion('  ')).toBeNull()
     expect(hookQuestion(undefined)).toBeNull()
+  })
+})
+
+// The buttons a row offers: each sends the keys the menu itself advertises, and none guesses at typing.
+describe('reading the answers an agent offers', () => {
+  const claudeEdit = [
+    ' Do you want to make this edit to math.ts?',
+    ' ❯ 1. Yes',
+    '   2. Yes, allow all edits during this session (shift+tab)',
+    '   3. No, and tell Claude what to do differently (esc)',
+    '',
+    ' Esc to cancel · Tab to amend'
+  ]
+  const codexApproval = [
+    '  Would you like to run the following command?',
+    '',
+    '  $ touch out/hello.txt',
+    '',
+    '› 1. Yes, proceed (y)',
+    "  2. Yes, and don't ask again for this command (a)",
+    '  3. No, and tell Codex what to do differently (esc)',
+    '',
+    '  Press enter to confirm or esc to cancel'
+  ]
+  const choices = (agent: 'claude' | 'codex', rows: readonly string[]): unknown =>
+    screenMenu(agent, rows)?.choices.map((choice) => [choice.label, choice.keys])
+
+  it('answers a claude edit with Enter, its digit, or the pane for No', () => {
+    expect(choices('claude', claudeEdit)).toEqual([
+      ['Yes', ['\r']],
+      ['Yes, All Edits', ['2']],
+      ['No…', null]
+    ])
+  })
+
+  it('answers either trust screen with Trust before Exit', () => {
+    expect(choices('claude', claudeTrust)).toEqual([
+      ['Trust', ['\u001b[B', '\r']],
+      ['Exit', ['\r']]
+    ])
+    expect(choices('codex', codexTrust)).toEqual([
+      ['Trust', ['\r']],
+      ['Exit', ['2']]
+    ])
+  })
+
+  it('answers a codex approval with the letters it shows', () => {
+    expect(choices('codex', codexApproval)).toEqual([
+      ['Run', ['\r']],
+      ['Always Run', ['a']],
+      ["Don't Run…", null]
+    ])
+  })
+
+  it('names the dialog, so a moved highlight or another question is a different prompt', () => {
+    const prompt = screenMenu('claude', claudeTrust)?.prompt
+    expect(screenMenu('claude', [...claudeTrust])?.prompt).toBe(prompt)
+    const moved = claudeTrust.map((row) =>
+      row === ' ❯ No, exit'
+        ? '   No, exit'
+        : row === '   Yes, I trust this folder'
+          ? ' ❯ Yes, I trust this folder'
+          : row
+    )
+    expect(screenMenu('claude', moved)?.prompt).not.toBe(prompt)
+    expect(screenMenu('claude', moved)?.choices[0]).toEqual({ label: 'Trust', keys: ['\r'] })
+  })
+
+  it('offers nothing to a shell, to another harness, or once the menu has gone', () => {
+    expect(screenMenu(undefined, claudeEdit)).toBeNull()
+    expect(screenMenu('codex', claudeEdit)).toBeNull()
+    expect(screenMenu('claude', [...claudeEdit, '', '────', '❯ ', '────', '  ⏸ manual mode on'])).toBeNull()
   })
 })

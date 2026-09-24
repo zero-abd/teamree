@@ -30,7 +30,14 @@ import { ErrorCode } from '../../shared/protocol'
 import { agentForProcess, type AgentKind } from './agent-command'
 import { TitleSequenceScanner } from './title-sequence'
 import { titleOpinion, type TitleOpinion } from '../../shared/titleOpinion'
-import { menuQuestion, screenOpinion, screenQuestion, type ScreenOpinion } from '../../shared/screenOpinion'
+import {
+  menuQuestion,
+  screenMenu,
+  screenOpinion,
+  screenQuestion,
+  type ScreenMenu,
+  type ScreenOpinion
+} from '../../shared/screenOpinion'
 import { screenRows } from './screenRows'
 import type { Tone } from '../../shared/theme'
 
@@ -175,6 +182,7 @@ export class PtySession {
   private tookTurn: boolean
   private screenSays: ScreenOpinion | undefined
   private screenAsks: string | undefined
+  private screenMenu: ScreenMenu | undefined
   private cancelScreenRead: (() => void) | undefined
   /** Bumped by every read and every keystroke, so a read that was overtaken lands nowhere. */
   private screenReads = 0
@@ -270,6 +278,7 @@ export class PtySession {
       // Derived, not stored, so it cannot drift from the title.
       ...(titleSays === null ? {} : { titleSays }),
       ...(this.screenSays === undefined ? {} : { screenSays: this.screenSays }),
+      ...(this.screenMenu === undefined ? {} : { screenMenu: this.screenMenu }),
       ...(this.lastBellAt === undefined ? {} : { lastBellAt: this.lastBellAt }),
       ...(this.agentEvent === undefined ? {} : { agentEvent: this.agentEvent }),
       ...(this.agent === undefined ? {} : { tookTurn: this.tookTurn }),
@@ -347,6 +356,7 @@ export class PtySession {
       // So is this; the screen is read again once the answer has redrawn it.
       this.screenSays = undefined
       this.screenAsks = undefined
+      this.screenMenu = undefined
       this.screenReads++
       this.cancelScreenRead?.()
       this.cancelScreenRead = undefined
@@ -520,9 +530,20 @@ export class PtySession {
     if (read !== this.screenReads || !this.running) return
     this.screenAsks = screenQuestion(agent, rows) ?? menuQuestion(rows) ?? undefined
     const says = screenOpinion(agent, rows) ?? undefined
-    if (says === this.screenSays) return
+    const menu = screenMenu(agent, rows) ?? undefined
+    if (says === this.screenSays && menu?.prompt === this.screenMenu?.prompt) return
     this.screenSays = says
+    this.screenMenu = menu
     this.init.onScreenChange?.(this)
+  }
+
+  /** The keypresses of `data` when the screen, read now, still shows `prompt` and offers them as one answer; else null. */
+  async answerKeys(prompt: string, data: string): Promise<readonly string[] | null> {
+    const agent = this.agent ?? this.foregroundAgent()
+    if (agent === undefined || !this.running) return null
+    const menu = screenMenu(agent, await screenRows(this.read(SCREEN_TAIL_BYTES), this.cols, this.rows))
+    if (menu === null || menu.prompt !== prompt) return null
+    return menu.choices.find((choice) => choice.keys?.join('') === data)?.keys ?? null
   }
 
   private get clock(): () => number {

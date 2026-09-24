@@ -6,6 +6,7 @@ import type { ClosedPane, ConsentRequest, Layout, WorktreeStatus } from '@shared
 import type { RightPanelTab } from '../workspace/rightPanel/rightPanelState'
 import { fileColumnIn, fileLeavesIn, isFilePaneId } from '@shared/filePane'
 import { firstQuestion } from '../dialogs/modalLayer'
+import { stepNeedingYou, type NeedingState } from '../dashboard/needingYou'
 import { collectTerminalIds, paneStops } from '../panes/paneLayout'
 import { focusedTreeProject } from '../sidebar/treeKeys'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
@@ -43,7 +44,7 @@ export type CommandState = {
   /** What ⌘⇧T could bring back, by worktree; absent reads as nothing. */
   closedPanes?: Readonly<Record<string, readonly ClosedPane[]>>
   closedFiles?: Readonly<Record<string, readonly unknown[]>>
-}
+} & Omit<NeedingState, 'projects' | 'worktrees' | 'layouts' | 'activeWorktreeId' | 'focusedWatchId'>
 
 /** The store's own methods, named so this module does not import the store. */
 export type CommandActions = {
@@ -59,6 +60,7 @@ export type CommandActions = {
   showPane: (paneId: string) => void
   toggleExpandedPane: () => void
   stepWorktree: (step: 1 | -1) => void
+  revealPane: (worktreeId: string, terminalId: string) => Promise<void>
   openPaneSearch: () => void
   toggleSidebar: () => void
   toggleRightPanel: () => void
@@ -225,6 +227,10 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
     case 'next-worktree':
       // Two rows in sidebar order; with one the walk lands where it started.
       return unless(worktreeOrder(state.projects, state.worktrees).length >= 2, 'one worktree')
+    case 'next-needing':
+      return unless(stepNeedingYou(state, 1) !== null, 'nothing needs you')
+    case 'previous-needing':
+      return unless(stepNeedingYou(state, -1) !== null, 'nothing needs you')
     case 'review-changes':
     case 'commit-changes':
       // The same count as the header's Changes chip.
@@ -351,6 +357,12 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
     case 'next-worktree':
       store.stepWorktree(1)
       break
+    case 'next-needing':
+    case 'previous-needing': {
+      const target = stepNeedingYou(store, command === 'next-needing' ? 1 : -1)
+      if (target) void store.revealPane(target.worktreeId, target.terminalId).then(() => requestRegionFocus('panes'))
+      break
+    }
     case 'open-palette':
     case 'go-to-file': {
       // The chord of the mode on screen puts the palette away; the other one switches to its mode.

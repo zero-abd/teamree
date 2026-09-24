@@ -600,7 +600,9 @@ export const Params = {
      * They belong on the pty but are not typing (`TerminalRecord.typed`). Absent
      * means a person; only the window holding the emulator can tell.
      */
-    byHand: z.boolean().optional()
+    byHand: z.boolean().optional(),
+    /** Writes only while the screen still shows this `ScreenMenu.prompt` and offers `data` as one choice's keys; refused otherwise. */
+    answering: z.string().max(64).optional()
   }),
   terminalResize: z.object({
     terminalId: z.string().min(1),

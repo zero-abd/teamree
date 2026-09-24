@@ -19,6 +19,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ILink, ILinkProvider } from '@xterm/xterm'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { openPaneLink, paneLinkAddon, PANE_LINK_HANDLER } from './TerminalView'
+import { paneFileLinks, printedPaths, worktreePath } from './paneFileLinks'
 
 const opened: Array<string | undefined> = []
 
@@ -103,5 +104,83 @@ describe('a URL printed in a pane', () => {
     openPaneLink('file:///etc/hosts')
 
     expect(opened).toEqual(['file:///etc/hosts'])
+  })
+})
+
+// A path an agent printed: `Edited src/math.ts (+2 -0)`, `Read(src/math.ts)`, `src/math.ts:7`.
+describe('a path printed in a pane', () => {
+  it('finds each path, with the line and column after it', () => {
+    const found = (row: string): unknown =>
+      printedPaths(row).map(({ path, line, column }) => [path, line, column].filter((part) => part !== undefined))
+    expect(found('Added sub to src/math.ts:7, matching add.')).toEqual([['src/math.ts', 7]])
+    expect(found('at src/math.ts:7:3')).toEqual([['src/math.ts', 7, 3]])
+    expect(found('see ./docs/NOTES.md.')).toEqual([['./docs/NOTES.md']])
+    expect(found('⏺ Read(src/math.ts)')).toEqual([['src/math.ts']])
+    expect(found('Edited src/math.ts (+2 -0)')).toEqual([['src/math.ts']])
+  })
+
+  it('leaves version numbers and URLs alone', () => {
+    expect(printedPaths('bumped to 1.2.3')).toEqual([])
+    expect(printedPaths('see https://example.com/src/math.ts')).toEqual([])
+  })
+
+  it('reads a path from the pane’s directory, never outside the worktree', () => {
+    expect(worktreePath('math.ts', '/w/src', '/w')).toBe('src/math.ts')
+    expect(worktreePath('./docs/NOTES.md', '/w', '/w')).toBe('docs/NOTES.md')
+    expect(worktreePath('/w/src/math.ts', '/w', '/w')).toBe('src/math.ts')
+    expect(worktreePath('../../etc/hosts', '/w/src', '/w')).toBeNull()
+    expect(worktreePath('/etc/hosts', '/w', '/w')).toBeNull()
+  })
+
+  function filePane(): {
+    write: (data: string) => Promise<void>
+    links: (row: number) => Promise<ILink[]>
+    opened: unknown[]
+  } {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const term = new XTerm({ allowProposedApi: true, cols: 80, rows: 24 })
+    const providers: ILinkProvider[] = []
+    const register = term.registerLinkProvider.bind(term)
+    term.registerLinkProvider = (provider) => {
+      providers.push(provider)
+      return register(provider)
+    }
+    term.open(host)
+    term.loadAddon(paneLinkAddon())
+    const opened: unknown[] = []
+    paneFileLinks(term, {
+      place: () => ({ worktreeId: 'w1', root: '/w', cwd: '/w' }),
+      exists: async (_worktreeId, path) => ['src/math.ts', 'docs/NOTES.md'].includes(path),
+      open: (...args) => opened.push(args),
+      holds: (event) => event.metaKey
+    })
+    return {
+      opened,
+      write: (data) => new Promise<void>((resolve) => term.write(data, () => setTimeout(resolve, 0))),
+      links: async (row) =>
+        (
+          await Promise.all(
+            providers.map(
+              (provider) =>
+                new Promise<ILink[]>((resolve) => provider.provideLinks(row, (links) => resolve(links ?? [])))
+            )
+          )
+        ).flat()
+    }
+  }
+
+  it('links a path that is in the worktree, and opens it at its line on a ⌘-click only', async () => {
+    const view = filePane()
+    await view.write('Added sub to src/math.ts:7 and a/b, see https://example.com/x\r\n')
+
+    const links = await view.links(1)
+    expect(links.map((link) => link.text)).toEqual(['https://example.com/x', 'src/math.ts:7'])
+
+    const path = links[1]
+    path?.activate(new MouseEvent('click'), path.text)
+    expect(view.opened).toEqual([])
+    path?.activate(new MouseEvent('click', { metaKey: true }), path.text)
+    expect(view.opened).toEqual([['w1', 'src/math.ts', 7, undefined]])
   })
 })

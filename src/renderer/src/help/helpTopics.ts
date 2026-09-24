@@ -41,6 +41,8 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
   'new-worktree': 'around',
   'previous-worktree': 'around',
   'next-worktree': 'around',
+  'next-needing': 'around',
+  'previous-needing': 'around',
   'open-palette': 'around',
   'go-to-file': 'around',
   'open-dashboard': 'around',

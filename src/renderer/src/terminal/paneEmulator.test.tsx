@@ -67,6 +67,9 @@ vi.mock('@xterm/xterm', () => {
     }
 
     attachCustomKeyEventHandler(): void {}
+    registerLinkProvider(): { dispose: () => void } {
+      return { dispose: () => {} }
+    }
     loadAddon(addon: { activate?: (term: unknown) => void }): void {
       addon.activate?.(this)
     }

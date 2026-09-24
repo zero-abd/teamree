@@ -41,6 +41,10 @@ export function FileView({
   const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
   const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
   const openInDefaultApp = useWorkspaceStore((state) => state.openInDefaultApp)
+  const goTo = useWorkspaceStore((state) =>
+    state.goToLine?.worktreeId === worktreeId && state.goToLine.path === path ? state.goToLine : null
+  )
+  const wentToLine = useWorkspaceStore((state) => state.wentToLine)
 
   const [content, setContent] = useState<FileContent | null>(null)
   const [draft] = useState<FileDraft | undefined>(() => draftFor(paneId, worktreeId, path))
@@ -238,6 +242,8 @@ export function FileView({
                 onDirtyChange={onDirtyChange}
                 onEdit={onEdit}
                 onComment={(from, lines) => setComment(quotedCode(from, lines))}
+                {...(goTo === null ? {} : { goTo })}
+                onWent={wentToLine}
               />
             </Suspense>
           ) : view.kind === 'image' ? (

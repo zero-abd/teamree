@@ -2,7 +2,7 @@
 // the key handler declines, and `runWorkspaceCommand` is what happens either way.
 
 import { describe, expect, it, vi } from 'vitest'
-import type { PaneNode, ConsentRequest } from '@shared/entities'
+import type { PaneNode, ConsentRequest, Terminal } from '@shared/entities'
 import type { CommandActions, CommandState, Workspace } from './workspaceCommands'
 import { isCommandAvailable, paneNumberTarget, runWorkspaceCommand, whyUnavailable } from './workspaceCommands'
 import { WORKSPACE_SHORTCUTS, type WorkspaceCommand } from './workspaceShortcuts'
@@ -96,6 +96,7 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
     showPane: vi.fn(),
     toggleExpandedPane: vi.fn(),
     stepWorktree: vi.fn(),
+    revealPane: vi.fn(async () => {}),
     openPaneSearch: vi.fn(),
     toggleSidebar: vi.fn(),
     toggleRightPanel: vi.fn(),
@@ -285,6 +286,41 @@ describe('the right panel', () => {
     expect(isCommandAvailable('toggle-right-panel', EMPTY)).toBe(false)
     expect(isCommandAvailable('toggle-right-panel', { ...WORKING, layouts: {} })).toBe(true)
     expect(isCommandAvailable('toggle-right-panel', WORKING)).toBe(true)
+  })
+})
+
+// The walk itself is `needingYou.test.ts`; here, that the command greys, goes, and takes the keyboard there.
+describe('going to what needs you', () => {
+  const asking: Terminal = {
+    id: 't2',
+    worktreeId: 'w1',
+    title: 'claude',
+    cwd: '/w1',
+    shell: '/bin/zsh',
+    cols: 80,
+    rows: 24,
+    running: true,
+    busy: false,
+    agent: 'claude',
+    screenSays: 'waiting',
+    lastOutputAt: 0
+  }
+
+  it('is greyed while nothing but the pane in front needs you', () => {
+    expect(whyUnavailable('next-needing', WORKING)).toBe('nothing needs you')
+    expect(isCommandAvailable('previous-needing', { ...WORKING, terminals: { t2: { ...asking, id: 't1' } } })).toBe(
+      false
+    )
+  })
+
+  it('shows the asking pane and puts the keyboard in it', async () => {
+    const regions: Region[] = []
+    const stop = onRegionRequest((region) => regions.push(region))
+    const store = workspace({ ...TWO_PANES, terminals: { t2: asking } })
+    runWorkspaceCommand('next-needing', store)
+    await vi.waitFor(() => expect(regions).toEqual(['panes']))
+    stop()
+    expect(store.revealPane).toHaveBeenCalledWith('w1', 't2')
   })
 })
 

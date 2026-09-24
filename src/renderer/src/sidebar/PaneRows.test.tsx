@@ -37,6 +37,27 @@ const mountUnread = (unread: string[], ...panes: Terminal[]): HTMLElement[] => {
 }
 
 describe('PaneRows', () => {
+  it('carries an asking pane’s answers beside its row, and only while it asks', () => {
+    const menu = {
+      prompt: 'p',
+      choices: [
+        { label: 'Trust', keys: ['\r'] },
+        { label: 'Exit', keys: ['2'] }
+      ]
+    }
+    mount(
+      terminal({ id: 't1', agent: 'codex', screenSays: 'waiting', screenMenu: menu }),
+      terminal({ id: 't2', agent: 'codex', busy: true, screenMenu: menu })
+    )
+    const [group, ...others] = screen.getAllByRole('group', { name: 'Answer' })
+    expect(others).toHaveLength(0)
+    expect(
+      within(group as HTMLElement)
+        .getAllByRole('button')
+        .map((button) => button.textContent)
+    ).toEqual(['Trust', 'Exit'])
+  })
+
   it('draws an agent as its harness glyph, labelled with the harness name only', () => {
     const [row] = mount(terminal({ id: 't1', agent: 'claude' }))
     const glyph = within(row as HTMLElement).getByRole('img')

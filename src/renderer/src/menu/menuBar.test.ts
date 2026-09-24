@@ -138,6 +138,8 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'open-palette',
       'previous-worktree',
       'next-worktree',
+      'next-needing',
+      'previous-needing',
       'open-dashboard',
       'toggle-sidebar',
       'toggle-right-panel',
@@ -209,6 +211,8 @@ describe('what the menu bar says can be done', () => {
       'expand-pane': false,
       'previous-worktree': false,
       'next-worktree': false,
+      'next-needing': false,
+      'previous-needing': false,
       'new-terminal': false,
       'new-markdown': false,
       'new-worktree': false,
@@ -237,7 +241,7 @@ describe('what the menu bar says can be done', () => {
   })
 
   it('lights them once there is a worktree open with a pane in it', () => {
-    // All but the walks (one pane, one worktree: nowhere to go), the git commands (no status read yet),
+    // All but the walks (one pane, one worktree, nothing asking: nowhere to go), the git commands (no status read yet),
     // Actual Size (already there), the saves (nothing edited) and the reopen (nothing closed).
     const nowhere = [
       'reopen-closed-pane',
@@ -253,6 +257,8 @@ describe('what the menu bar says can be done', () => {
       'previous-worktree',
       'next-worktree',
       'review-changes',
+      'next-needing',
+      'previous-needing',
       'commit-changes',
       'push-worktree'
     ]

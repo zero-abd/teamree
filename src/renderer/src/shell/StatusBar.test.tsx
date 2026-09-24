@@ -428,7 +428,7 @@ describe('what needs you', () => {
     expect(revealPane).toHaveBeenCalledWith('w2', 'b')
   })
 
-  it('counts failed panes beside them, and goes to a failed one first', () => {
+  it('counts failed panes beside them, and goes to an asking one before them', () => {
     seed({
       worktrees: [worktree, other],
       terminals: { a: asking('a', 'w1'), b: pane('b', 'w2', { agent: 'claude', running: false, exitCode: 1 }) }
@@ -437,6 +437,27 @@ describe('what needs you', () => {
     const button = screen.getByRole('button', { name: '1 asking, 1 failed' })
     expect(button.querySelector('.statusbar__failed')?.textContent).toBe('1 failed')
     fireEvent.click(button)
-    expect(revealPane).toHaveBeenCalledWith('w2', 'b')
+    expect(revealPane).toHaveBeenCalledWith('w1', 'a')
+  })
+
+  it('goes to the next one on each click, not always the first', () => {
+    const goTo = vi.fn((worktreeId: string, terminalId: string) => {
+      useWorkspaceStore.setState({
+        activeWorktreeId: worktreeId,
+        layouts: { [worktreeId]: { worktreeId, root: { kind: 'leaf', terminalId }, focusedTerminalId: terminalId } }
+      })
+      return Promise.resolve()
+    })
+    seed({
+      worktrees: [worktree, other],
+      revealPane: goTo,
+      terminals: { a: pane('a', 'w1'), b: asking('b', 'w2'), c: asking('c', 'w2') }
+    })
+    mount()
+    const button = screen.getByRole('button', { name: '2 asking' })
+    fireEvent.click(button)
+    fireEvent.click(button)
+    fireEvent.click(button)
+    expect(goTo.mock.calls.map((call) => call[1])).toEqual(['b', 'c', 'b'])
   })
 })

@@ -84,6 +84,9 @@ export function CommandPalette({
   const closedFiles = useWorkspaceStore((state) => state.closedFiles)
   const removedWorktrees = useWorkspaceStore((state) => state.removedWorktrees)
   const loadRemovedWorktrees = useWorkspaceStore((state) => state.loadRemovedWorktrees)
+  // What Go to Next Needing You reads.
+  const terminals = useWorkspaceStore((state) => state.terminals)
+  const paneSeenAt = useWorkspaceStore((state) => state.paneSeenAt)
   const appearance = useWorkspaceStore((state) => state.appearance)
   const systemTone = useWorkspaceStore((state) => state.systemTone)
   const loadEditors = useWorkspaceStore((state) => state.loadEditors)
@@ -155,6 +158,8 @@ export function CommandPalette({
             terminalFontSize,
             closedPanes,
             closedFiles
+            terminals,
+            paneSeenAt
           })
         },
         removed: removedWorktrees,
@@ -190,6 +195,8 @@ export function CommandPalette({
       closedPanes,
       closedFiles,
       removedWorktrees,
+      terminals,
+      paneSeenAt,
       targets,
       active,
       activeBase,

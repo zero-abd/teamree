@@ -18,7 +18,8 @@ import { createTerminalService, registerTerminalHandlers } from '../../terminals
 import { UpdateService, registerUpdateHandlers } from '../../updates'
 import type { TerminalService } from '../../terminals/method-handlers'
 import type { ScrollbackRepository } from '../../terminals/session-manager'
-import type { AgentNotice } from '../../agentNotices'
+import type { AgentNotice, NoticeAnswer } from '../../agentNotices'
+import type { ScreenMenu } from '../../../shared/screenOpinion'
 import { paletteTone, resolvePalette, type Appearance, type Tone } from '../../../shared/theme'
 import { registerAppearanceHandlers } from './appearanceHandlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
@@ -129,7 +130,10 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
               worktreeId: settled.worktreeId,
               worktree: worktree.name,
               reason: settled.reason,
-              line: settled.line
+              line: settled.line,
+              answers: noticeAnswers(settled.menu, (data, prompt) =>
+                terminals.manager.answer(settled.terminalId, data, prompt)
+              )
             })
           }
         })
@@ -315,4 +319,15 @@ async function closeWorktreeTerminals(terminals: TerminalService, worktreeId: st
       console.error(`[terminals] could not close ${terminal.id} of removed worktree ${worktreeId}`, error)
     }
   }
+}
+
+/** A menu's answers that need no typing, each choosing itself through `answer`, which re-reads the screen first. */
+function noticeAnswers(
+  menu: ScreenMenu | undefined,
+  answer: (data: string, prompt: string) => Promise<void>
+): NoticeAnswer[] {
+  if (menu === undefined) return []
+  return menu.choices.flatMap(({ label, keys }) =>
+    keys === null ? [] : [{ label, choose: () => answer(keys.join(''), menu.prompt) }]
+  )
 }

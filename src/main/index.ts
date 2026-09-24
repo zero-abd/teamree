@@ -224,9 +224,13 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
           title: spec.title,
           ...(spec.subtitle === undefined ? {} : { subtitle: spec.subtitle }),
           body: spec.body,
-          silent: spec.silent
+          silent: spec.silent,
+          ...(spec.actions === undefined
+            ? {}
+            : { actions: spec.actions.map((action) => ({ type: 'button' as const, text: action.label })) })
         })
         notification.on('click', spec.onActivate)
+        notification.on('action', (_event, index) => spec.actions?.[index]?.run())
         notification.show()
       },
       setBadge: setDockBadge,

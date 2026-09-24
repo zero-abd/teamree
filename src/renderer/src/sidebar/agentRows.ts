@@ -3,7 +3,7 @@
 // ended, the title, the bell, and — outranking all of them — what the agent's hooks report.
 
 import type { AgentEvent, AgentKind, PaneWatcher, Terminal } from '@shared/entities'
-import { hookQuestion, isAnswerOrHint, type ScreenOpinion } from '@shared/screenOpinion'
+import { hookQuestion, isAnswerOrHint, type ScreenChoice, type ScreenOpinion } from '@shared/screenOpinion'
 import type { TitleOpinion } from '@shared/titleOpinion'
 import { harnessName } from '../agents/harnesses'
 import { paneInWorktree, worktreeDisplay, type WorktreeNameSource } from './worktreeDisplay'
@@ -33,6 +33,8 @@ export type AgentRow = {
   quietFor: number
   /** The last line worth showing, or null. A quotation, not a reading. */
   evidence: string | null
+  /** The answers its menu offers while it asks; see `screenMenu`. */
+  choices?: readonly ScreenChoice[]
 }
 
 /** What a dot is coloured: `idle` is a quiet pane with no agent, drawn grey; a stopped agent is hollow. */
@@ -174,6 +176,7 @@ export function agentRows(
     const label = names[index] ?? paneName(terminal)
     const activity = activityOf(terminal)
     const line = evidence[terminal.id] ?? null
+    const choices = activity === 'waiting' ? terminal.screenMenu?.choices : undefined
     return {
       terminalId: terminal.id,
       agent: paneAgent(terminal),
@@ -181,7 +184,8 @@ export function agentRows(
       text: paneText(terminal, label),
       activity,
       quietFor: Math.max(0, now - terminal.lastOutputAt),
-      evidence: activity === 'waiting' ? askingLine(line, terminal.agentEvent) : line
+      evidence: activity === 'waiting' ? askingLine(line, terminal.agentEvent) : line,
+      ...(choices === undefined ? {} : { choices })
     }
   })
 }

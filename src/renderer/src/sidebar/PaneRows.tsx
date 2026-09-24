@@ -4,6 +4,7 @@
 
 import { PaneGlyph } from '../agents/glyphs'
 import { requestRegionFocus } from '../shell/regions'
+import { AnswerButtons } from './AnswerButtons'
 import { NO_ATTENTION, typingNow, type PaneAttention } from '../state/paneAttention'
 import {
   agoLabel,
@@ -55,7 +56,7 @@ export function PaneRows({
         const isUnread = unread.has(row.terminalId)
         const named = row.label !== worktreeName
         return (
-          <li key={row.terminalId} role={tree ? 'none' : undefined}>
+          <li key={row.terminalId} role={tree ? 'none' : undefined} className="pane-item">
             <button
               type="button"
               {...item}
@@ -100,6 +101,9 @@ export function PaneRows({
                 <PaneSince tone={dotTone(row.activity, row.agent)} quietFor={row.quietFor} />
               </span>
             </button>
+            {row.choices === undefined ? null : (
+              <AnswerButtons terminalId={row.terminalId} choices={row.choices} className="pane-item__answers" />
+            )}
           </li>
         )
       })}

@@ -3,10 +3,12 @@
 
 import { useMemo } from 'react'
 import { attention, dashboardRows } from '../dashboard/dashboardRows'
+import { stepNeedingYou } from '../dashboard/needingYou'
 import { paneCount } from '../sidebar/agentRows'
 import { formatReadAge, summarizeWorktreeStatus } from '../sidebar/worktreeStatusSummary'
 import { RUNTIME_IS_SEEDED } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { requestRegionFocus } from './regions'
 import { useKeepAwake } from './keepAwake'
 import { KeepAwakeControl } from './KeepAwakeControl'
 import { ResourcesControl } from './ResourcesControl'
@@ -101,7 +103,11 @@ export function StatusBar(): React.JSX.Element {
             .filter(Boolean)
             .join(', ')}
           title={`${first.label} · ${first.worktreeName}`}
-          onClick={() => void revealPane(first.worktreeId, first.terminalId)}
+          // The next one each press, as Go to Next Needing You walks; the first when it is the one in front.
+          onClick={() => {
+            const next = stepNeedingYou(useWorkspaceStore.getState(), 1) ?? first
+            void revealPane(next.worktreeId, next.terminalId).then(() => requestRegionFocus('panes'))
+          }}
         >
           {owed.asking > 0 ? <span className="statusbar__asking">{`${owed.asking} asking`}</span> : null}
           {owed.failed > 0 ? <span className="statusbar__failed">{`${owed.failed} failed`}</span> : null}

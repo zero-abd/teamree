@@ -368,6 +368,8 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'expand-pane': 'maximize maximise expand pane full zoom',
   'previous-worktree': 'previous worktree up back',
   'next-worktree': 'next worktree down forward',
+  'next-needing': 'next needing you asking failed finished unread attention question answer',
+  'previous-needing': 'previous needing you asking failed finished unread attention question answer back',
   'open-palette': 'go to worktree command palette search anything',
   'go-to-file': 'go to file open quick find path',
   'open-dashboard': 'all panes agents dashboard overview attention waiting failed working everywhere',

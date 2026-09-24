@@ -69,12 +69,28 @@
 }
 
 /* One grid for every row, so the columns line up down the whole list: which
-   pane, where it lives, what it last said, its state and how long it has been quiet. */
-.board-row {
-  width: 100%;
+   pane, where it lives, what it last said, its answers, its state and how long it has been quiet.
+   The row is a button and the answers are buttons, so the item holds the grid and the row is a subgrid. */
+.board-item {
   display: grid;
   /* The name and the worktree are capped: the last line is what the row is read for. */
-  grid-template-columns: minmax(8ch, 18ch) minmax(8ch, 28ch) minmax(0, 1fr) auto 4ch;
+  grid-template-columns: minmax(8ch, 18ch) minmax(8ch, 28ch) minmax(0, 1fr) auto auto 4ch;
+  align-items: center;
+  column-gap: var(--s3);
+  font-size: var(--text-sm);
+}
+
+.board-item__answers {
+  grid-row: 1;
+  grid-column: 4;
+  z-index: 1;
+}
+
+.board-row {
+  grid-row: 1;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
   align-items: center;
   gap: var(--s3);
   padding: var(--s2) var(--s4);
@@ -136,6 +152,7 @@
 }
 
 .board-row__state {
+  grid-column: 5;
   justify-self: end;
   color: var(--fg-muted);
   font-size: var(--text-xs);
@@ -150,6 +167,7 @@
 }
 
 .board-row__since {
+  grid-column: 6;
   justify-self: end;
   color: var(--fg-muted);
   font-size: var(--text-xs);
@@ -158,7 +176,7 @@
 
 /* On a narrow window the worktree gives its room to the last line. */
 @media (width <= 900px) {
-  .board-row {
-    grid-template-columns: minmax(6ch, 14ch) minmax(6ch, 16ch) minmax(0, 1fr) auto 4ch;
+  .board-item {
+    grid-template-columns: minmax(6ch, 14ch) minmax(6ch, 16ch) minmax(0, 1fr) auto auto 4ch;
   }
 }

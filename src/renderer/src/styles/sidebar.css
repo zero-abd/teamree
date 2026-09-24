@@ -935,9 +935,32 @@
   min-width: 0;
 }
 
-.pane-row:hover {
+.pane-row:hover,
+.pane-item:hover .pane-row {
   background: var(--bg-hover);
   color: var(--fg-secondary);
+}
+
+/* An asking pane's answers, laid over the tail of its row while the row is pointed at or focused. */
+.pane-item {
+  position: relative;
+}
+
+.pane-item__answers {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  padding-left: var(--s4);
+  visibility: hidden;
+  background:
+    linear-gradient(to right, transparent, var(--bg-hover) var(--s4)),
+    linear-gradient(to right, transparent, var(--bg-rail) var(--s4));
+}
+
+.pane-item:hover .pane-item__answers,
+.pane-item:focus-within .pane-item__answers {
+  visibility: visible;
 }
 
 .pane-row__label {
