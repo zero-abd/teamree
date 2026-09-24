@@ -202,6 +202,56 @@ describePty('PtySession', () => {
     TEST_TIMEOUT_MS
   )
 
+  // The hint Claude Code draws under its folder-trust question; no hook, bell or title says it is asking.
+  const TRUST_HINT = `printf '\\n Enter to confirm \\302\\267 Esc to cancel'`
+  const soon = (run: () => void): (() => void) => {
+    const timer = setTimeout(run, 10)
+    return () => clearTimeout(timer)
+  }
+
+  it(
+    "reads an agent's question off its screen until somebody answers",
+    async () => {
+      const session = start({ agent: 'claude', command: `${TRUST_HINT} && sleep 5`, schedule: soon })
+
+      await waitUntil(() => session.snapshot().screenSays === 'waiting', 'the question read')
+      session.write('\r')
+      expect(session.snapshot().screenSays).toBeUndefined()
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'stops reading a question once the screen no longer shows it',
+    async () => {
+      const session = start({
+        agent: 'claude',
+        command: `${TRUST_HINT} && sleep 1 && printf '\\n\\nworking on it\\n❯ \\n' && sleep 5`,
+        schedule: soon
+      })
+
+      await waitUntil(() => session.snapshot().screenSays === 'waiting', 'the question read')
+      await waitUntil(() => session.snapshot().screenSays === undefined, 'the question gone')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'never reads a shell printing the same words as asking',
+    async () => {
+      const session = start({ command: `${TRUST_HINT} && sleep 5`, schedule: soon })
+      const events = collect(session)
+
+      await waitUntil(
+        () => outputOf(events).includes('Esc to cancel') && !session.snapshot().busy,
+        'the words, then quiet'
+      )
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      expect(session.snapshot().screenSays).toBeUndefined()
+    },
+    TEST_TIMEOUT_MS
+  )
+
   it(
     'caps scrollback no matter how much the child prints',
     async () => {

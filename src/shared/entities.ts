@@ -2,6 +2,7 @@
 // them, the renderer and the CLI only ever read or request changes to them.
 
 import type { RestoredAs } from './paneRestore'
+import type { ScreenOpinion } from './screenOpinion'
 import type { TitleOpinion } from './titleOpinion'
 
 /** A tracked git repository. One project owns many worktrees. */
@@ -363,6 +364,8 @@ export type Terminal = {
    * `src/shared/titleOpinion.ts`.
    */
   titleSays?: TitleOpinion
+  /** What the bottom rows of an agent pane's screen say; see `src/shared/screenOpinion.ts`. Cleared by typing. */
+  screenSays?: ScreenOpinion
   /**
    * When this pane last rang the bell, within the current burst of output.
    * Cleared when a new burst starts and when anybody types: a bell is a request,
