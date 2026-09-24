@@ -261,7 +261,7 @@ describe('how long a notice stays', () => {
       const offer = useWorkspaceStore.getState().notices.at(-1)!
       expect(offer.action).toBeDefined()
 
-      await settle(useWorkspaceStore.getState().removeWorktree(worktreeId))
+      await settle(useWorkspaceStore.getState().confirmRemoveWorktree(worktreeId, false))
       const failure = useWorkspaceStore.getState().notices.at(-1)!
       expect(failure.tone).toBe('error')
 
@@ -356,7 +356,24 @@ it('opens the worktree a pane lives in, focuses that pane, and leaves the dashbo
   expect(useWorkspaceStore.getState().dashboardOpen).toBe(false)
 })
 
-it('never forces a worktree removal without asking first', async () => {
+it('asks before removing any worktree, and asks the runtime nothing yet', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const clean = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!
+
+  const call = vi.spyOn(runtimeClient, 'call')
+  await useWorkspaceStore.getState().removeWorktree(clean.id)
+
+  expect(call.mock.calls.filter(([method]) => method === 'worktree.remove')).toEqual([])
+  expect(useWorkspaceStore.getState().dialog).toEqual({
+    kind: 'confirm-remove',
+    worktreeId: clean.id,
+    intent: 'remove'
+  })
+  call.mockRestore()
+})
+
+it('asks again on a refusal, without the runtime’s words', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
   // A worktree with uncommitted work is exactly the case the runtime refuses.
@@ -366,14 +383,17 @@ it('never forces a worktree removal without asking first', async () => {
   })!
 
   const call = vi.spyOn(runtimeClient, 'call')
-  await useWorkspaceStore.getState().removeWorktree(dirty.id)
+  await useWorkspaceStore.getState().confirmRemoveWorktree(dirty.id, false)
 
   const attempts = call.mock.calls.filter(([method]) => method === 'worktree.remove')
-  expect(attempts).toHaveLength(1)
-  // The first attempt is unforced, so git gets to refuse.
-  expect(attempts[0]?.[1]).toEqual({ worktreeId: dirty.id })
+  expect(attempts.map(([, params]) => params)).toEqual([{ worktreeId: dirty.id }])
   expect(useWorkspaceStore.getState().worktrees.some((entry) => entry.id === dirty.id)).toBe(true)
-  expect(useWorkspaceStore.getState().dialog).toMatchObject({ kind: 'confirm-remove', worktreeId: dirty.id })
+  expect(useWorkspaceStore.getState().dialog).toEqual({
+    kind: 'confirm-remove',
+    worktreeId: dirty.id,
+    intent: 'remove',
+    refused: true
+  })
   call.mockRestore()
 })
 
@@ -387,7 +407,7 @@ it('discards the work only once that has been confirmed', async () => {
 
   await useWorkspaceStore.getState().removeWorktree(dirty.id)
   const call = vi.spyOn(runtimeClient, 'call')
-  await useWorkspaceStore.getState().forceRemoveWorktree(dirty.id)
+  await useWorkspaceStore.getState().confirmRemoveWorktree(dirty.id, true)
 
   expect(call.mock.calls.find(([method]) => method === 'worktree.remove')?.[1]).toEqual({
     worktreeId: dirty.id,
@@ -398,7 +418,7 @@ it('discards the work only once that has been confirmed', async () => {
   call.mockRestore()
 })
 
-it('removes a clean worktree without stopping to ask', async () => {
+it('removes a clean worktree once the question is answered', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
   const clean = useWorkspaceStore.getState().worktrees.find((entry) => {
@@ -411,8 +431,8 @@ it('removes a clean worktree without stopping to ask', async () => {
   })!
 
   await useWorkspaceStore.getState().removeWorktree(clean.id)
+  await useWorkspaceStore.getState().confirmRemoveWorktree(clean.id, false)
 
-  // Nagging about a clean checkout would teach people to click through the dialog that matters.
   expect(useWorkspaceStore.getState().dialog).toBeNull()
   expect(useWorkspaceStore.getState().worktrees.some((entry) => entry.id === clean.id)).toBe(false)
 })

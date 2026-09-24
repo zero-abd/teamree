@@ -46,7 +46,7 @@ type WorktreeAction =
 export type PaletteItem =
   /** Jump to a worktree. */
   | { kind: 'worktree'; id: string; label: string; hint: string; detail: string; search: string }
-  /** Run something; `unavailable` says why it would do nothing now, and the row is drawn dimmed. */
+  /** Run something; `unavailable` says why it would do nothing now (drawn dimmed); `here` acts on the worktree on screen. */
   | {
       kind: 'action'
       id: PaletteAction
@@ -55,6 +55,7 @@ export type PaletteItem =
       detail: string
       search: string
       unavailable?: string
+      here?: true
     }
   /** Start a coding agent in the worktree on screen; `id` is the command to run. */
   | { kind: 'agent'; id: string; label: string; hint: string; detail: string; search: string }
@@ -196,14 +197,14 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
             ]
           : [])
       ]
-  const name = worktreeLabel(worktreeDisplay(active))
   return rows.map((row) => ({
     kind: 'action',
     id: row.id,
     label: row.label,
-    hint: row.hint ?? name,
+    hint: row.hint ?? '',
     detail: '',
-    search: `${row.label} ${row.keywords}`
+    search: `${row.label} ${row.keywords}`,
+    here: true
   }))
 }
 
@@ -242,7 +243,7 @@ function agentItems(context: PaletteContext): PaletteItem[] {
     kind: 'agent',
     id: agent.command,
     label: `Start ${agent.command} in this worktree`,
-    hint: worktreeLabel(worktreeDisplay(active)),
+    hint: '',
     detail: '',
     // No "agent": the matcher takes the first word-start it can, and "this" before "here" once sent
     // "claude this worktree" past the h. "agents" reaches the all-panes view.
@@ -424,6 +425,66 @@ export function filterPalette(items: readonly PaletteItem[], query: string): Pal
         left.index - right.index
     )
     .map((row) => row.item)
+}
+
+/** What identifies a row across openings, for the Recent group. */
+export const paletteKey = (item: PaletteItem): string => `${item.kind}:${item.id}`
+
+/** The one column after a label: why a dimmed row would do nothing, a worktree's project and state, else the hint. */
+export function trailing(item: PaletteItem): string {
+  if (item.kind === 'action' && item.unavailable !== undefined) return item.unavailable
+  return item.kind === 'worktree' ? item.detail : item.hint
+}
+
+/** Rows under one header; a null title draws none. */
+export type PaletteGroup = { title: string | null; items: PaletteItem[] }
+
+/**
+ * The list before anything is typed: Recent, Worktrees, the worktree on screen under `here`, then
+ * Commands, each row once, rows that would do nothing last in their group; empty groups left out.
+ */
+export function paletteGroups(items: readonly PaletteItem[], recent: readonly string[], here: string): PaletteGroup[] {
+  const byKey = new Map(items.map((item) => [paletteKey(item), item]))
+  const first = recent.map((key) => byKey.get(key)).filter((item): item is PaletteItem => item !== undefined)
+  const rest = filterPalette(
+    items.filter((item) => !first.includes(item)),
+    ''
+  )
+  const onScreen = (item: PaletteItem): boolean =>
+    item.kind === 'agent' || (item.kind === 'action' && item.here === true)
+  return [
+    { title: 'Recent', items: first },
+    { title: 'Worktrees', items: rest.filter((item) => item.kind === 'worktree') },
+    { title: here, items: rest.filter(onScreen) },
+    { title: 'Commands', items: rest.filter((item) => item.kind === 'action' && !onScreen(item)) }
+  ].filter((group) => group.items.length > 0)
+}
+
+export const RECENT_KEPT = 5
+const RECENT_KEY = 'teamree.palette.recent'
+
+/** The list with `key` moved to the front, `RECENT_KEPT` at most. */
+export function withRecent(recent: readonly string[], key: string): string[] {
+  return [key, ...recent.filter((entry) => entry !== key)].slice(0, RECENT_KEPT)
+}
+
+export function readStoredRecent(storage: Pick<Storage, 'getItem'> | undefined): string[] {
+  try {
+    const parsed: unknown = JSON.parse(storage?.getItem(RECENT_KEY) ?? '[]')
+    return Array.isArray(parsed)
+      ? parsed.filter((key): key is string => typeof key === 'string').slice(0, RECENT_KEPT)
+      : []
+  } catch {
+    return []
+  }
+}
+
+export function writeStoredRecent(storage: Pick<Storage, 'setItem'> | undefined, recent: readonly string[]): void {
+  try {
+    storage?.setItem(RECENT_KEY, JSON.stringify(recent))
+  } catch {
+    // Storage full or blocked: Recent stays as it was.
+  }
 }
 
 /** Wraps around at both ends, because a palette with three rows is a ring. */

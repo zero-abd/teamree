@@ -6,8 +6,15 @@ import {
   fileItem,
   filterPalette,
   moveSelection,
+  paletteGroups,
+  paletteKey,
   rankFiles,
+  readStoredRecent,
+  RECENT_KEPT,
   score,
+  trailing,
+  withRecent,
+  writeStoredRecent,
   type PaletteItem
 } from './paletteModel'
 
@@ -216,7 +223,7 @@ describe('buildPaletteItems', () => {
   // Both start an agent and only one of them does it here, so somebody unsure
   // which they want has to be able to tell the rows apart — and to find this
   // one by the word they would reach for.
-  it('names the worktree on screen as where the agent starts', () => {
+  it('leaves naming the worktree on screen to its group, and is found by the word "here"', () => {
     const items = buildPaletteItems(
       context({
         worktrees: [worktree({ id: 'w1', name: 'login fix' })],
@@ -226,8 +233,7 @@ describe('buildPaletteItems', () => {
     )
 
     const [found] = items.filter((item) => item.kind === 'agent')
-    expect(found?.hint).toBe('login fix')
-    expect(found?.detail).toBe('')
+    expect(found === undefined ? undefined : trailing(found)).toBe('')
     for (const query of ['claude', 'start claude', 'claude here', 'claude this worktree']) {
       expect(filterPalette(items, query)[0]).toMatchObject({ kind: 'agent', id: 'claude' })
     }
@@ -639,5 +645,107 @@ describe('a command that would do nothing now', () => {
     expect(
       filterPalette(items({ 'save-file': 'nothing unsaved', 'save-all': 'nothing unsaved' }), 'sa')[0]?.label
     ).toBe('Save')
+  })
+})
+
+describe('the first screen, before anything is typed', () => {
+  const items = (): PaletteItem[] =>
+    buildPaletteItems(
+      context({
+        worktrees: [worktree({ id: 'w1', name: 'login fix' }), worktree({ id: 'w2', name: 'schema' })],
+        activeWorktreeId: 'w1',
+        agents: [agent('claude')],
+        whyUnavailable: (action) => (action === 'save-file' ? 'nothing unsaved' : null)
+      })
+    )
+
+  it('lists worktrees, then the one on screen under its own name, then every other command', () => {
+    const groups = paletteGroups(items(), [], 'login fix')
+    expect(groups.map((group) => group.title)).toEqual(['Worktrees', 'login fix', 'Commands'])
+    expect(groups[0]?.items.map((item) => item.id)).toEqual(['w2', 'w1'])
+    expect(groups[1]?.items.map((item) => item.label)).toEqual([
+      'Start claude in this worktree',
+      'Rename Worktree…',
+      'Reveal in Finder',
+      'Copy Path',
+      'Copy Branch',
+      'Remove Worktree…'
+    ])
+    // The header names the worktree once; its rows do not repeat it.
+    expect(groups[1]?.items.map(trailing)).toEqual(['', '', '', '', '', ''])
+    expect(groups[2]?.items.some((item) => item.id === 'new-terminal')).toBe(true)
+  })
+
+  it('leads with the commands last run from it, each listed once', () => {
+    const groups = paletteGroups(items(), ['action:new-terminal', 'agent:claude', 'action:gone'], 'login fix')
+    expect(groups[0]?.title).toBe('Recent')
+    expect(groups[0]?.items.map(paletteKey)).toEqual(['action:new-terminal', 'agent:claude'])
+    const rest = groups.slice(1).flatMap((group) => group.items.map(paletteKey))
+    expect(rest).not.toContain('action:new-terminal')
+    expect(rest).not.toContain('agent:claude')
+  })
+
+  it('puts what would do nothing at the end of its group', () => {
+    const commands = paletteGroups(items(), [], 'login fix').at(-1)?.items ?? []
+    const firstDimmed = commands.findIndex((item) => item.kind === 'action' && item.unavailable !== undefined)
+    expect(commands.slice(firstDimmed).map((item) => item.label)).toContain('Save')
+    expect(commands.slice(firstDimmed).every((item) => item.kind === 'action' && item.unavailable !== undefined)).toBe(
+      true
+    )
+  })
+
+  it('has no group for the worktree on screen when none is', () => {
+    const groups = paletteGroups(buildPaletteItems(context({ worktrees: [worktree({ id: 'w1' })] })), [], '')
+    expect(groups.map((group) => group.title)).toEqual(['Worktrees', 'Commands'])
+  })
+})
+
+describe('the commands last run from the palette', () => {
+  it('keeps the latest first, once each, five at most', () => {
+    let recent: string[] = []
+    for (const key of ['a', 'b', 'c', 'a', 'd', 'e', 'f']) recent = withRecent(recent, key)
+    expect(recent).toEqual(['f', 'e', 'd', 'a', 'c'])
+    expect(recent).toHaveLength(RECENT_KEPT)
+  })
+
+  it('survives a reload, and reads a corrupt entry as none', () => {
+    const kept = new Map<string, string>()
+    const storage = {
+      getItem: (key: string) => kept.get(key) ?? null,
+      setItem: (key: string, value: string) => void kept.set(key, value)
+    }
+    writeStoredRecent(storage, ['action:new-terminal', 'agent:claude'])
+    expect(readStoredRecent(storage)).toEqual(['action:new-terminal', 'agent:claude'])
+    for (const [key] of kept) kept.set(key, '{"not":"a list"}')
+    expect(readStoredRecent(storage)).toEqual([])
+    expect(readStoredRecent(undefined)).toEqual([])
+  })
+})
+
+describe('the one column after a label', () => {
+  const items = buildPaletteItems(
+    context({
+      worktrees: [worktree({ id: 'w1', name: 'login fix' })],
+      activeWorktreeId: 'w1',
+      hintFor: (action) => (action === 'new-terminal' ? '⌘T' : action === 'save-file' ? '⌘S' : ''),
+      whyUnavailable: (action) => (action === 'save-file' ? 'nothing unsaved' : null)
+    })
+  )
+  const find = (id: string): PaletteItem => items.find((item) => item.id === id) as PaletteItem
+
+  it('is the chord when there is one', () => {
+    expect(trailing(find('new-terminal'))).toBe('⌘T')
+  })
+
+  it('is why a dimmed command would do nothing', () => {
+    expect(trailing(find('save-file'))).toBe('nothing unsaved')
+  })
+
+  it('is the project and state for a worktree', () => {
+    expect(trailing(find('w1'))).toBe('atlas · current')
+  })
+
+  it('is the directory for a file', () => {
+    expect(trailing(fileItem('src/lib/math.ts'))).toBe('src/lib')
   })
 })

@@ -149,8 +149,8 @@ describe('a worktree whose directory is gone', () => {
   it('offers only removal', () => {
     mount({ worktree: worktree({ missing: true }) })
     fireEvent.click(screen.getByRole('button', { name: 'More for Rewrite the pager' }))
-    expect(labels()).toEqual(['Remove'])
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }))
+    expect(labels()).toEqual(['Remove Worktree…'])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove Worktree…' }))
     expect(handlers.onRemove).toHaveBeenCalledOnce()
   })
 })
@@ -178,7 +178,7 @@ describe('a worktree still being made', () => {
   it('can always be removed, whatever state it is in', () => {
     mount({ worktree: worktree({ state: 'creating' }) })
     fireEvent.contextMenu(row())
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove Worktree…' }))
     expect(handlers.onRemove).toHaveBeenCalledOnce()
   })
 })
@@ -530,7 +530,7 @@ describe('the row menu', () => {
     fireEvent.contextMenu(row())
 
     expect(screen.getByRole('menu', { name: 'Actions for Rewrite the pager' })).toBeTruthy()
-    expect(labels()).toEqual(['Rename…', 'Reveal in Finder', 'Copy path', 'Copy branch', 'Open in', 'Remove'])
+    expect(labels()).toEqual(['Rename…', 'Reveal in Finder', 'Copy path', 'Copy branch', 'Open in', 'Remove Worktree…'])
   })
 
   // A one-pixel miss on the row must not open the question that destroys a checkout.
@@ -611,7 +611,7 @@ describe('the row menu from the keyboard', () => {
 
     const menu = screen.getByRole('menu')
     for (let press = 0; press < 5; press += 1) fireEvent.keyDown(menu, { key: 'ArrowDown' })
-    expect(document.activeElement?.textContent).toBe('Remove')
+    expect(document.activeElement?.textContent).toBe('Remove Worktree…')
 
     fireEvent.keyDown(menu, { key: 'Enter' })
     expect(handlers.onRemove).toHaveBeenCalledOnce()
@@ -647,7 +647,7 @@ describe('the row menu from the keyboard', () => {
     fireEvent.keyDown(row(), { key: 'ContextMenu' })
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowUp' })
 
-    expect(document.activeElement?.textContent).toBe('Remove')
+    expect(document.activeElement?.textContent).toBe('Remove Worktree…')
   })
 
   it('closes on Escape and gives the row back the focus', () => {

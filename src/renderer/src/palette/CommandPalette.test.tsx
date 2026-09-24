@@ -86,6 +86,7 @@ beforeEach(() => {
   startAgent.mockReset()
   openDialog.mockReset()
   closeDialog.mockReset()
+  localStorage.clear()
   seed()
 })
 
@@ -134,6 +135,10 @@ describe('starting an agent from the palette', () => {
 const labels = (): string[] => rows().map((row) => row.querySelector('.palette__label')?.textContent ?? '')
 const row = (label: string): HTMLElement =>
   rows().find((entry) => entry.querySelector('.palette__label')?.textContent === label) as HTMLElement
+const trailingOf = (label: string): string => row(label).querySelector('.palette__trailing')?.textContent ?? ''
+/** Why the row is dimmed, or null when it would run. */
+const reason = (label: string): string | null =>
+  row(label).getAttribute('aria-disabled') === 'true' ? trailingOf(label) : null
 
 describe('the rows that are also commands', () => {
   // The window has no pane in it, so the pane commands would do nothing — the
@@ -141,13 +146,13 @@ describe('the rows that are also commands', () => {
   // reason, so a search for one does not read as "no such command".
   it('dims a command the window would refuse, says why, and runs nothing', () => {
     mount()
-    expect(labels()).toContain('Split Pane Right — no pane focused')
-    expect(row('Split Pane Right — no pane focused').getAttribute('aria-disabled')).toBe('true')
-    expect(labels()).toContain('New Terminal')
-    expect(labels()).toContain('New Task')
+    expect(reason('Split Pane Right')).toBe('no pane focused')
+    expect(reason('New Terminal')).toBeNull()
+    expect(reason('New Task')).toBeNull()
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'save' } })
-    expect(labels()[0]).toBe('Save — nothing unsaved')
+    expect(labels()[0]).toBe('Save')
+    expect(reason('Save')).toBe('nothing unsaved')
     fireEvent.click(rows()[0] as HTMLElement)
     expect(closeDialog).not.toHaveBeenCalled()
   })
@@ -157,7 +162,7 @@ describe('the rows that are also commands', () => {
       layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } }
     })
     mount()
-    expect(labels()).toContain('Split Pane Right')
+    expect(reason('Split Pane Right')).toBeNull()
   })
 
   // Through the one dispatcher, which is the only way a row and a chord stay
@@ -199,22 +204,22 @@ describe('the git rows are offered exactly when they could do something', () => 
   it('dims both on a worktree with nothing to send and nothing changed', () => {
     seed({ statuses: status() })
     mount()
-    expect(labels()).toContain('Push — nothing to push')
-    expect(labels()).toContain('Commit… — no changes')
+    expect(reason('Push')).toBe('nothing to push')
+    expect(reason('Commit…')).toBe('no changes')
   })
 
   it('offers Push once there is a commit the remote has not', () => {
     seed({ statuses: status({ ahead: 1 }) })
     mount()
-    expect(labels()).toContain('Push')
-    expect(labels()).toContain('Commit… — no changes')
+    expect(reason('Push')).toBeNull()
+    expect(reason('Commit…')).toBe('no changes')
   })
 
   it('offers Commit… once a file has changed', () => {
     seed({ statuses: status({ unstaged: 2 }) })
     mount()
-    expect(labels()).toContain('Commit…')
-    expect(labels()).toContain('Push — nothing to push')
+    expect(reason('Commit…')).toBeNull()
+    expect(reason('Push')).toBe('nothing to push')
   })
 })
 
@@ -276,7 +281,7 @@ describe('going to a file', () => {
     expect(screen.queryByText('Files')).toBeNull()
     type('big')
     await waitFor(() => expect(screen.getByText('Files')).toBeTruthy())
-    const files = rows().filter((row) => row.querySelector('.palette__hint')?.textContent?.startsWith('src/'))
+    const files = rows().filter((row) => row.querySelector('.palette__trailing')?.textContent?.startsWith('src/'))
     expect(files.length).toBeLessThanOrEqual(5)
     expect(rows().length).toBeGreaterThan(0)
     // No longer "Nothing matches" for a file name.
@@ -414,5 +419,47 @@ describe('appearance from the palette', () => {
     expect(setAppearance).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ mode: 'light', light: expect.objectContaining({ themeId: 'paper' }) })
     )
+  })
+})
+
+describe('the first screen', () => {
+  const headers = (): string[] =>
+    [...document.querySelectorAll('.palette__group')].map((header) => header.textContent ?? '')
+
+  beforeEach(() => {
+    seed({ worktrees: [worktree(), worktree({ id: 'w2', name: 'Fix the ruler', branch: 'fix-the-ruler' })] })
+  })
+
+  it('has no title over the field, and one ring-free field', () => {
+    mount()
+    expect(screen.queryByRole('heading')).toBeNull()
+    expect(screen.getByRole('dialog', { name: 'Go to' })).toBeTruthy()
+  })
+
+  it('groups worktrees, the one on screen under its name, then commands', () => {
+    mount()
+    expect(headers()).toEqual(['Worktrees', 'Rewrite the pager', 'Commands'])
+    expect(labels().slice(0, 2)).toEqual(['Fix the ruler', 'Rewrite the pager'])
+    expect(trailingOf('Rewrite the pager')).toBe('pager · current')
+    expect(trailingOf('Copy Path')).toBe('')
+    expect(trailingOf('New Task')).toBe('⌘N')
+  })
+
+  it('leads with a command once it has been run from here, after a reopen too', () => {
+    const { unmount } = render(<CommandPalette modifier={MAC} mode="all" />)
+    fireEvent.click(row('Show Files'))
+    unmount()
+
+    mount()
+    expect(headers()[0]).toBe('Recent')
+    expect(labels()[0]).toBe('Show Files')
+    expect(labels().filter((label) => label === 'Show Files')).toHaveLength(1)
+  })
+
+  it('collapses to one ranked list once something is typed', () => {
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'copy' } })
+    expect(headers()).toEqual([])
+    expect(labels()).toEqual(['Copy Path', 'Copy Branch'])
   })
 })

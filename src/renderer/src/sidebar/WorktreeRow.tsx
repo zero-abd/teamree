@@ -122,8 +122,8 @@ export function WorktreeRow({
     return rect === undefined ? { x: 0, y: 0 } : { x: rect.left + 12, y: rect.bottom }
   }
 
-  // Last, behind a rule, and it still asks the question naming the ignored files it would destroy.
-  const remove: RowMenuItem = { label: 'Remove', onChoose: onRemove, separated: true, danger: true }
+  // Last, behind a rule; it asks before anything goes.
+  const remove: RowMenuItem = { label: 'Remove Worktree…', onChoose: onRemove, separated: true, danger: true }
   // A directory that is not there has nothing to reveal, open or copy; removal is what is left.
   const items: RowMenuItem[] = missing
     ? [remove]

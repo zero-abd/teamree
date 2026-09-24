@@ -148,8 +148,8 @@ export type DialogState =
   | { kind: 'new-task'; projectId: string }
   /** `files`: ⌘P, only the worktree's files. */
   | { kind: 'palette'; mode?: 'files' }
-  /** Raised only when the runtime has already refused: there is something here to lose. */
-  | { kind: 'confirm-remove'; worktreeId: string; reason: string; intent: RemoveIntent }
+  /** Asked before every removal; `refused` once the runtime has refused one unforced. */
+  | { kind: 'confirm-remove'; worktreeId: string; intent: RemoveIntent; refused?: true }
   /** Raised only when the pane is doing work a close would kill. See `closePaneModel`. */
   | { kind: 'confirm-close-pane'; terminalId: string; rest?: readonly string[] }
   /** A file pane with edits not on disk. `rest` is what Close Others closes after Save or Don't Save. */
@@ -427,9 +427,10 @@ type WorkspaceState = {
   /** Creates the worktree, waits for it, then starts the agent in it. */
   startTask: (draft: TaskDraft) => void
   retryWorktree: (worktreeId: string) => void
+  /** Asks first, after any unsaved files; nothing is removed until `confirmRemoveWorktree`. */
   removeWorktree: (worktreeId: string) => Promise<void>
-  /** Goes through with a removal git refused, discarding the work in it. */
-  forceRemoveWorktree: (worktreeId: string) => Promise<void>
+  /** The answer to that question; unforced, a refusal asks again. */
+  confirmRemoveWorktree: (worktreeId: string, force: boolean) => Promise<void>
   /** Shown at once; a refusal puts the old name back. A blank name is ignored. */
   renameWorktree: (worktreeId: string, name: string) => Promise<void>
 
@@ -1471,34 +1472,20 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           await runtimeClient.call('worktree.remove', { worktreeId, deleteBranch: false })
         } catch (error) {
           if (!isRefusal(error)) throw error
-          set({ dialog: { kind: 'confirm-remove', worktreeId, reason: refusalReason(error), intent: 'retry' } })
+          set({ dialog: { kind: 'confirm-remove', worktreeId, intent: 'retry', refused: true } })
           return
         }
         await recreateWorktree(worktree)
       })().catch(failed('Retry failed'))
     },
 
-    /**
-     * Removes a worktree, asking first when there is something to lose. Not forced: the runtime's
-     * refusal is the only thing between a small cross in a sidebar and somebody's afternoon.
-     */
     async removeWorktree(worktreeId) {
       const edited = editedIn(worktreeId)
       if (edited.length > 0) {
         set({ dialog: { kind: 'confirm-unsaved', paneIds: edited, after: { remove: worktreeId } } })
         return
       }
-      try {
-        await runtimeClient.call('worktree.remove', { worktreeId })
-        forgetWorktree(worktreeId)
-      } catch (error) {
-        // A conflict means the runtime found something worth asking about; anything else is a real failure.
-        if (isRefusal(error)) {
-          set({ dialog: { kind: 'confirm-remove', worktreeId, reason: refusalReason(error), intent: 'remove' } })
-          return
-        }
-        failed('Could not remove the worktree')(error)
-      }
+      set({ dialog: { kind: 'confirm-remove', worktreeId, intent: 'remove' } })
     },
 
     async renameWorktree(worktreeId, name) {
@@ -1518,7 +1505,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
-    async forceRemoveWorktree(worktreeId) {
+    async confirmRemoveWorktree(worktreeId, force) {
       const dialog = get().dialog
       const retrying =
         dialog?.kind === 'confirm-remove' && dialog.worktreeId === worktreeId && dialog.intent === 'retry'
@@ -1526,10 +1513,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
       set({ dialog: null })
       try {
-        await runtimeClient.call('worktree.remove', { worktreeId, force: true })
+        await runtimeClient.call('worktree.remove', force ? { worktreeId, force: true } : { worktreeId })
         forgetWorktree(worktreeId)
         if (retrying && worktree) await recreateWorktree(worktree)
       } catch (error) {
+        // Something appeared since the dialog read the checkout: ask again, and it reads again.
+        if (!force && isRefusal(error)) {
+          set({ dialog: { kind: 'confirm-remove', worktreeId, intent: retrying ? 'retry' : 'remove', refused: true } })
+          return
+        }
         failed(retrying ? 'Retry failed' : 'Could not remove the worktree')(error)
       }
     },
@@ -2903,10 +2895,6 @@ function pushFailure(error: unknown): PushState {
   return typeof detail === 'string'
     ? { phase: 'failed', error: message, detail }
     : { phase: 'failed', error: 'Push failed', detail: message }
-}
-
-function refusalReason(error: unknown): string {
-  return error instanceof Error ? error.message : 'this worktree has work in it that is not committed anywhere'
 }
 
 /**

@@ -552,19 +552,18 @@ describe('the row menu acts on the worktree it was opened on', () => {
 
   // Reported as doing nothing, through a driver that sends press and release with no click count,
   // which never makes a click event; a mouse does, and the press lands inside the menu.
-  it('asks the runtime to remove the worktree when Remove is clicked with a mouse', async () => {
-    call.mockResolvedValue({ removed: true })
+  it('asks about removing the worktree when Remove Worktree… is clicked with a mouse', async () => {
     seed({ worktrees: [worktree()] })
     mount()
     mouseClick(screen.getByRole('button', { name: 'More for Rewrite the pager' }))
     expect(screen.getByRole('menu', { name: 'Actions for Rewrite the pager' })).toBeTruthy()
 
-    mouseClick(screen.getByRole('menuitem', { name: 'Remove' }))
+    mouseClick(screen.getByRole('menuitem', { name: 'Remove Worktree…' }))
     await act(async () => undefined)
 
-    expect(call).toHaveBeenCalledWith('worktree.remove', { worktreeId: 'w1' })
     expect(screen.queryByRole('menu')).toBeNull()
-    expect(useWorkspaceStore.getState().worktrees).toEqual([])
+    expect(useWorkspaceStore.getState().dialog).toMatchObject({ kind: 'confirm-remove', worktreeId: 'w1' })
+    expect(useWorkspaceStore.getState().worktrees).toHaveLength(1)
   })
 
   it('puts the name field up when the palette asks, and takes the request back', () => {
@@ -593,21 +592,6 @@ describe('the row menu acts on the worktree it was opened on', () => {
     expect(call).toHaveBeenCalledWith('worktree.rename', { worktreeId: 'w1', name: 'pager, the winner' })
     expect(screen.getByRole('treeitem', { name: /^pager, the winner/ })).toBeTruthy()
     expect(useWorkspaceStore.getState().worktrees.map((entry) => entry.name)).toEqual(['pager, the winner', 'other'])
-  })
-
-  it('puts the runtime’s refusal in front of you as the question it is', async () => {
-    call.mockRejectedValue(
-      Object.assign(new Error('worktree "Rewrite the pager" has uncommitted changes'), { code: 'conflict' })
-    )
-    seed({ worktrees: [worktree()] })
-    mount()
-    mouseClick(screen.getByRole('button', { name: 'More for Rewrite the pager' }))
-
-    mouseClick(screen.getByRole('menuitem', { name: 'Remove' }))
-    await act(async () => undefined)
-
-    expect(useWorkspaceStore.getState().dialog).toMatchObject({ kind: 'confirm-remove', worktreeId: 'w1' })
-    expect(useWorkspaceStore.getState().worktrees).toHaveLength(1)
   })
 
   const INSTALLED = [

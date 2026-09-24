@@ -42,7 +42,7 @@ vi.mock('./dialogs/TaskComposerDialog', () => ({
   TaskComposerDialog: ({ projectId }: { projectId: string }) => <div data-testid="new-task">{projectId}</div>
 }))
 vi.mock('./dialogs/ConfirmRemoveDialog', () => ({
-  ConfirmRemoveDialog: ({ reason }: { reason: string }) => <div data-testid="confirm-remove">{reason}</div>
+  ConfirmRemoveDialog: ({ worktreeId }: { worktreeId: string }) => <div data-testid="confirm-remove">{worktreeId}</div>
 }))
 
 const { useWorkspaceStore } = await import('./state/workspaceStore')
@@ -148,11 +148,10 @@ describe('which dialog is on screen', () => {
     expect(screen.queryByTestId('add-project')).toBeNull()
   })
 
-  it('carries the runtime’s refusal into the confirmation it caused', () => {
-    const reason = 'this worktree has 3 uncommitted changes'
-    seed({ dialog: { kind: 'confirm-remove', worktreeId: 'w1', reason, intent: 'remove' } })
+  it('hands the removal question its worktree', () => {
+    seed({ dialog: { kind: 'confirm-remove', worktreeId: 'w1', intent: 'remove' } })
     render(<App />)
-    expect(screen.getByTestId('confirm-remove').textContent).toBe(reason)
+    expect(screen.getByTestId('confirm-remove').textContent).toBe('w1')
   })
 })
 

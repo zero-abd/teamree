@@ -9,6 +9,8 @@ import { Modal } from './Modal'
 type ConfirmProps = {
   /** The question, short. It is the dialog's title and its accessible name. */
   title: string
+  /** The title's tooltip. */
+  titleHint?: string
   /** One line: what is there, and what going through with it costs. Absent when the children say it. */
   body?: string
   /** The answer that changes nothing. A verb phrase; "Cancel" only beside Save, as macOS writes it. */
@@ -21,12 +23,15 @@ type ConfirmProps = {
   onConfirm: () => void
   /** A third answer that goes on without the confirm's act, e.g. Don't Save; ⌘D chooses it, as in a macOS sheet. */
   decline?: { label: string; onChoose: () => void }
+  /** ⌘⌫ confirms, as Finder's Move to Trash does. */
+  deleteConfirms?: boolean
   /** Anything under the body line — a count, a path — that the question needs shown. */
   children?: React.ReactNode
 }
 
 export function Confirm({
   title,
+  titleHint,
   body,
   cancel,
   confirm,
@@ -34,6 +39,7 @@ export function Confirm({
   onCancel,
   onConfirm,
   decline,
+  deleteConfirms = false,
   children
 }: ConfirmProps): React.JSX.Element {
   const destructive = tone === 'danger'
@@ -45,12 +51,17 @@ export function Confirm({
     []
   )
   const onKeyDown = (event: React.KeyboardEvent): void => {
+    if (deleteConfirms && matchesChord(event, { key: 'Backspace' }, modifier)) {
+      event.preventDefault()
+      onConfirm()
+      return
+    }
     if (decline === undefined || !matchesChord(event, { key: 'd' }, modifier)) return
     event.preventDefault()
     decline.onChoose()
   }
   return (
-    <Modal title={title} onClose={onCancel}>
+    <Modal title={title} titleHint={titleHint} onClose={onCancel}>
       <div className="confirm" onKeyDown={onKeyDown}>
         {body === undefined ? null : <p className="confirm__body">{body}</p>}
         {children}

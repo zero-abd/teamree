@@ -21,13 +21,22 @@ import {
   FILES_IN_COMMANDS_MIN_QUERY,
   filterPalette,
   moveSelection,
+  paletteGroups,
+  paletteKey,
   rankFiles,
+  readStoredRecent,
+  trailing,
+  withRecent,
+  writeStoredRecent,
+  type PaletteGroup,
   type PaletteItem
 } from './paletteModel'
 import { useFileMatches } from './useFileMatches'
 import { useFocusedChange } from './useFocusedChange'
 
 const NO_PATHS: readonly string[] = []
+
+const storage = typeof window === 'undefined' ? undefined : window.localStorage
 
 const dimmed = (item: PaletteItem): item is Extract<PaletteItem, { kind: 'action' }> & { unavailable: string } =>
   item.kind === 'action' && item.unavailable !== undefined
@@ -54,6 +63,7 @@ export function CommandPalette({
 
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
+  const [recentCommands] = useState(() => readStoredRecent(storage))
 
   // Rows the window would refuse are dimmed with the reason, asked as of after the palette closes (it is a dialog too).
   const consent = useWorkspaceStore((state) => state.consent)
@@ -186,12 +196,18 @@ export function CommandPalette({
   const fileLimit = mode === 'files' ? FILE_MODE_LIMIT : FILES_IN_COMMANDS
   const found = useFileMatches(filesWanted ? filesOf : null, query, fileLimit)
 
-  const commands = useMemo(() => (mode === 'files' ? [] : filterPalette(items, query)), [mode, items, query])
   const files = useMemo(
     () => (filesWanted ? rankFiles(found?.paths ?? NO_PATHS, recent, query, fileLimit).map(fileItem) : []),
     [filesWanted, found, recent, query, fileLimit]
   )
-  const matches = useMemo(() => [...commands, ...files], [commands, files])
+  // Grouped only before anything is typed; a query is one ranked list, with files under their own header.
+  const groups = useMemo((): PaletteGroup[] => {
+    if (mode === 'files') return [{ title: null, items: files }]
+    if (wanted === '') return paletteGroups(items, recentCommands, activeName)
+    const named: PaletteGroup[] = files.length > 0 ? [{ title: 'Files', items: files }] : []
+    return [{ title: null, items: filterPalette(items, query) }, ...named]
+  }, [mode, files, wanted, items, recentCommands, activeName, query])
+  const matches = useMemo(() => groups.flatMap((group) => group.items), [groups])
   // "Nothing matches" waits for the runtime's answer to what is typed.
   const settled = !filesWanted || wanted === '' || found?.query === wanted
   // The list can shrink under a selection that was valid a keystroke ago.
@@ -207,6 +223,8 @@ export function CommandPalette({
     if (!item || dimmed(item)) return
     closeDialog()
     const store = useWorkspaceStore.getState()
+    if (item.kind === 'action' || item.kind === 'agent')
+      writeStoredRecent(storage, withRecent(recentCommands, paletteKey(item)))
 
     // The tree's click, or a split beside the focused pane with the modifier held.
     if (item.kind === 'file') {
@@ -313,7 +331,7 @@ export function CommandPalette({
   }
 
   return (
-    <Modal title={mode === 'files' ? 'Go to File' : 'Go to'} onClose={closeDialog}>
+    <Modal title={mode === 'files' ? 'Go to File' : 'Go to'} hideTitle onClose={closeDialog}>
       <div className="palette">
         <input
           className="palette__input"
@@ -336,34 +354,36 @@ export function CommandPalette({
           ) : null
         ) : (
           <ul className="palette__list" role="listbox" aria-label="Results" ref={list}>
-            {matches.map((item, index) => (
-              <li key={`${item.kind}:${item.id}`}>
-                {mode === 'all' && index === commands.length ? (
-                  <div className="palette__group" role="presentation">
-                    Files
-                  </div>
-                ) : null}
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={index === cursor}
-                  aria-disabled={dimmed(item) ? 'true' : undefined}
-                  className={`palette__row${index === cursor ? ' palette__row--selected' : ''}${
-                    dimmed(item) ? ' palette__row--dimmed' : ''
-                  }`}
-                  // Selection follows the pointer, so a click runs the row under it.
-                  onMouseMove={() => setSelected(index)}
-                  onClick={(event) => run(item, holdsModifier(event, modifier))}
-                >
-                  <span className="palette__label">
-                    {item.label}
-                    {dimmed(item) ? <span className="palette__reason">{` — ${item.unavailable}`}</span> : null}
-                  </span>
-                  <span className="palette__hint">{item.hint}</span>
-                  {item.detail ? <span className="palette__detail">{item.detail}</span> : null}
-                </button>
-              </li>
-            ))}
+            {groups.map((group) =>
+              group.items.map((item, at) => {
+                const index = matches.indexOf(item)
+                return (
+                  <li key={paletteKey(item)}>
+                    {at === 0 && group.title !== null ? (
+                      <div className="palette__group" role="presentation">
+                        {group.title}
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={index === cursor}
+                      aria-disabled={dimmed(item) ? 'true' : undefined}
+                      className={`palette__row${index === cursor ? ' palette__row--selected' : ''}${
+                        dimmed(item) ? ' palette__row--dimmed' : ''
+                      }`}
+                      title={item.kind === 'worktree' && item.hint !== '' ? item.hint : undefined}
+                      // Selection follows the pointer, so a click runs the row under it.
+                      onMouseMove={() => setSelected(index)}
+                      onClick={(event) => run(item, holdsModifier(event, modifier))}
+                    >
+                      <span className="palette__label">{item.label}</span>
+                      <span className="palette__trailing">{trailing(item)}</span>
+                    </button>
+                  </li>
+                )
+              })
+            )}
           </ul>
         )}
       </div>
