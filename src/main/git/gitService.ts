@@ -13,6 +13,7 @@ import type {
   WorktreeChanges,
   WorktreeCommit,
   WorktreeCommitPatch,
+  WorktreeCompare,
   WorktreeDiff,
   WorktreeDiscard,
   WorktreeFileMatches,
@@ -40,6 +41,7 @@ import { allocateBranchName, allocateCheckoutPath, branchCollides } from './work
 import { readMergePreview } from './mergePreview'
 import { readWorktreeLog } from './worktreeLog'
 import { readCommit } from './worktreeShowCommit'
+import { readCompare } from './worktreeCompare'
 import { commitWorktree } from './worktreeCommit'
 import { applyHunk, unstagePath } from './worktreeHunk'
 import { discardHunk, discardPath, type Trash } from './worktreeDiscard'
@@ -623,6 +625,23 @@ export class GitService {
       sha: params.sha,
       ...(params.contextLines === undefined ? {} : { contextLines: params.contextLines }),
       ...(params.maxBytes === undefined ? {} : { maxBytes: params.maxBytes }),
+      now: this.#now
+    })
+  }
+
+  /** Two worktrees of one project, each against the commit both started from. */
+  async worktreeCompare(params: ParamsOf<'worktree.compare'>): Promise<WorktreeCompare> {
+    const left = this.#requireReadyWorktree(params.worktreeId, 'a compare')
+    const right = this.#requireReadyWorktree(params.otherId, 'a compare')
+    if (left.projectId !== right.projectId) {
+      throw new GitServiceError(ErrorCode.InvalidParams, 'only worktrees of one project can be compared')
+    }
+    return readCompare(this.#runner, {
+      left: { worktreeId: left.id, worktreePath: left.path },
+      right: { worktreeId: right.id, worktreePath: right.path },
+      ...(params.contextLines === undefined ? {} : { contextLines: params.contextLines }),
+      ...(params.maxBytes === undefined ? {} : { maxBytes: params.maxBytes }),
+      prepared: this.#preparedPaths(left.projectId),
       now: this.#now
     })
   }

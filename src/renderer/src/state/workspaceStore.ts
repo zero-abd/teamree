@@ -35,6 +35,7 @@ import type {
 import { DEFAULT_APPEARANCE, type Appearance, type Tone } from '@shared/theme'
 import {
   commitLeaf,
+  compareLeaf,
   DEFAULT_MARKDOWN_PATH,
   fileColumn,
   fileColumnIn,
@@ -42,8 +43,10 @@ import {
   fileLeavesIn,
   type FileLeaf,
   isCommitLeaf,
+  isCompareLeaf,
   isFileColumn,
   isFilePaneId,
+  isWorktreeFileLeaf,
   isMarkdownPath,
   newFilePaneId,
   shownTabId
@@ -477,6 +480,8 @@ type WorkspaceState = {
   openFilePane: (worktreeId: string, path: string, mode?: 'diff' | 'split' | 'preview') => void
   /** Opens a commit read-only as a tab of the file column, or focuses the tab already on it. */
   openCommit: (worktreeId: string, commit: WorktreeCommitSummary) => void
+  /** Opens `worktreeId` with a read-only compare against `otherId` as a tab of its file column, or focuses that tab. */
+  openCompare: (worktreeId: string, otherId: string, title: string) => Promise<void>
   /** Keeps a preview tab open when the next preview comes. */
   pinFilePane: (paneId: string) => void
   /** Shows a file pane's diff, or its text again. */
@@ -1805,7 +1810,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         return { recentFiles: { ...state.recentFiles, [worktreeId]: recent.slice(0, RECENT_FILES_KEPT) } }
       })
       const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
-      const open = fileLeavesIn(layout.root).find((leaf) => leaf.path === path && !isCommitLeaf(leaf))
+      const open = fileLeavesIn(layout.root).find((leaf) => leaf.path === path && isWorktreeFileLeaf(leaf))
       if (open) {
         if (mode === 'diff') get().setPaneDiff(open.terminalId, true)
         if (mode !== 'preview') get().pinFilePane(open.terminalId)
@@ -1825,6 +1830,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         return
       }
       placeFileLeaf(layout, commitLeaf(newFilePaneId(), commit.sha, `${commit.shortSha} ${commit.subject}`))
+    },
+
+    async openCompare(worktreeId, otherId, title) {
+      if (get().activeWorktreeId !== worktreeId) await get().openWorktree(worktreeId)
+      const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
+      const open = fileLeavesIn(layout.root).find((leaf) => isCompareLeaf(leaf) && leaf.compare === otherId)
+      if (open) {
+        get().pinFilePane(open.terminalId)
+        get().focusPane(open.terminalId)
+        return
+      }
+      placeFileLeaf(layout, compareLeaf(newFilePaneId(), otherId, title))
     },
 
     pinFilePane(paneId) {

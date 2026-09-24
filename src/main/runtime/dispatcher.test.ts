@@ -205,6 +205,7 @@ describe('dispatcher', () => {
       'workspace.subscribe',
       'worktree.changes',
       'worktree.commit',
+      'worktree.compare',
       'worktree.create',
       'worktree.diff',
       // Local: throws work away on this machine's disk.

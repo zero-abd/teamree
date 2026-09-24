@@ -88,6 +88,7 @@ function FileLeaf({
         worktreeId={worktreeId}
         path={leaf.path}
         {...(leaf.commit === undefined ? {} : { commit: leaf.commit })}
+        {...(leaf.compare === undefined ? {} : { compare: leaf.compare })}
         focused={focusedTerminalId === paneId}
         onFocus={() => onFocus(paneId)}
         onClose={() => onClose(paneId)}

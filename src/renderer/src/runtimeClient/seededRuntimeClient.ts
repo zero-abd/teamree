@@ -18,6 +18,7 @@ import type {
   UpdateState,
   Worktree,
   WorktreeChange,
+  WorktreeCompareSide,
   WorktreeFileEntry,
   WorktreeStatus
 } from '@shared/entities'
@@ -738,6 +739,22 @@ export function createSeededRuntimeClient(): RuntimeClient {
         subject: 'rank results by recency, not just score',
         patch: seededPatch('src/search/rankResults.ts'),
         truncated: false,
+        readAt: Date.now()
+      }
+    },
+    'worktree.compare': ({ worktreeId, otherId }) => {
+      required(worktrees.get(worktreeId), 'worktree')
+      required(worktrees.get(otherId), 'worktree')
+      const side = (id: string, path: string): WorktreeCompareSide => ({
+        worktreeId: id,
+        head: 'b'.repeat(40),
+        patch: seededPatch(path),
+        truncated: false
+      })
+      return {
+        base: 'a'.repeat(40),
+        left: side(worktreeId, 'src/search/rankResults.ts'),
+        right: side(otherId, 'src/search/rankHits.ts'),
         readAt: Date.now()
       }
     },

@@ -652,6 +652,32 @@ describe('the row menu acts on the worktree it was opened on', () => {
     expect(useWorkspaceStore.getState().worktrees.map((entry) => entry.name)).toEqual(['pager, the winner', 'other'])
   })
 
+  // Picking the better run is why a task fans out; a lone run has nothing to be compared with.
+  it('offers a task’s run its siblings under Compare with, and opens the one chosen beside it', () => {
+    const TASK = 'Add a sub function to src/math.ts'
+    const run = (id: string, agent: string): Worktree =>
+      worktree({ id, name: `${TASK} ${agent}`, branch: `add-a-sub-${agent}`, task: TASK })
+    const openCompare = vi.fn(async () => {})
+    seed({ worktrees: [run('w-claude', 'claude'), run('w-codex', 'codex'), worktree()], openCompare })
+    mount()
+    const [, codex, lone] = [...document.querySelectorAll('.worktree')] as HTMLElement[]
+
+    fireEvent.contextMenu(lone!)
+    expect(screen.queryByRole('menuitem', { name: 'Compare with' })).toBeNull()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    fireEvent.contextMenu(codex!)
+    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: 'Compare with' }))
+    const runs = screen.getByRole('menu', { name: 'Compare with' })
+    expect(
+      within(runs)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    ).toEqual(['claude'])
+    fireEvent.click(within(runs).getByRole('menuitem', { name: 'claude' }))
+    expect(openCompare).toHaveBeenCalledWith('w-codex', 'w-claude', 'codex vs claude')
+  })
+
   const INSTALLED = [
     { command: 'com.microsoft.VSCode', label: 'VS Code', kind: 'editor' as const },
     { command: 'dev.zed.Zed', label: 'Zed', kind: 'editor' as const },

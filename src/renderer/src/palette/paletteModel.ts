@@ -11,6 +11,7 @@ import {
 import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
 import { APPEARANCE_MODES, BUILT_IN_THEMES, type AppearanceMode } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from '../settings/AppearanceSettings'
+import { runName, siblingRuns } from '../compare/siblingRuns'
 import { cliActionLabel } from '../dialogs/cliInstallModel'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { MENU_ORDER, menuLabel } from '../menu/menuBar'
@@ -33,6 +34,8 @@ export type PaletteAction =
   | `theme:${string}`
   /** An Open in target by its label. */
   | `open-in:${string}`
+  /** A compare with another run of the task on screen, by its worktree id. */
+  | `compare:${string}`
 
 /** What the sidebar row's menu does to the worktree on screen. */
 type WorktreeAction =
@@ -173,6 +176,11 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
           id: `open-in:${target}` as const,
           label: `Open in ${target}`,
           keywords: 'open in editor ide terminal finder external app'
+        })),
+        ...siblingRuns(active, context.worktrees).map((other) => ({
+          id: `compare:${other.id}` as const,
+          label: `Compare with ${runName(other)}`,
+          keywords: 'compare diff runs sibling agents task side by side'
         })),
         remove,
         ...(change?.discardable === true

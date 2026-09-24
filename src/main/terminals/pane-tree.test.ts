@@ -326,6 +326,23 @@ describe('file leaves', () => {
     })
   })
 
+  it('keeps the worktree a file leaf compares with, and drops one that is not a string', () => {
+    const compare: PaneNode = {
+      kind: 'leaf',
+      terminalId: 'file:3',
+      pane: 'file',
+      path: 'claude vs codex',
+      compare: 'wt-codex'
+    }
+    expect(parsePaneNode(compare)).toEqual(compare)
+    expect(parsePaneNode({ ...compare, compare: '' })).toStrictEqual({
+      kind: 'leaf',
+      terminalId: 'file:3',
+      pane: 'file',
+      path: 'claude vs codex'
+    })
+  })
+
   it('drops the file fields a leaf cannot honour, and refuses a file leaf with no path', () => {
     expect(parsePaneNode({ kind: 'leaf', terminalId: 'a', pane: 'terminal' })).toEqual(leafPane('a'))
     expect(parsePaneNode({ kind: 'leaf', terminalId: 'a', pane: 'video', path: 'x' })).toEqual(leafPane('a'))

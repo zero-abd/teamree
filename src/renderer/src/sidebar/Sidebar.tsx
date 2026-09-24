@@ -12,6 +12,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { evidenceLine } from '@shared/outputEvidence'
 import { Brand, SidebarGlyph } from '../shell/Brand'
 import { AddProjectButton } from './AddProjectButton'
+import { compareTitle, runName, siblingRuns } from '../compare/siblingRuns'
 import { useOpenIn } from './openIn'
 import { ProjectHead } from './ProjectHead'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
@@ -49,6 +50,7 @@ export function Sidebar({
   const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
   const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
   const openIn = useOpenIn()
+  const openCompare = useWorkspaceStore((state) => state.openCompare)
   const loadEditors = useWorkspaceStore((state) => state.loadEditors)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const teamwork = useWorkspaceStore((state) => state.teamwork)
@@ -347,6 +349,11 @@ export function Sidebar({
                           onCopyPath={() => void copyToClipboard(worktree.path, `the path to ${label}`)}
                           onCopyBranch={() => void copyToClipboard(worktree.branch, `the branch ${worktree.branch}`)}
                           openIn={openIn(project.id, worktree.path, `the ${label} checkout`, false)}
+                          compareWith={siblingRuns(worktree, worktrees).map((other) => ({
+                            label: runName(other, kindOf),
+                            onChoose: () =>
+                              void openCompare(worktree.id, other.id, compareTitle(worktree, other, kindOf))
+                          }))}
                         />
                       )
                     })}

@@ -1,6 +1,7 @@
-import type { PaneNode, Worktree } from '../../shared/entities.js'
+import type { PaneNode, Worktree, WorktreeCompare } from '../../shared/entities.js'
 import { MAX_AGENT_ARGS_CHARS } from '../../shared/agentLaunch.js'
 import { parsePatch, type PatchHunk } from '../../shared/patch.js'
+import { compareRuns, type RunFile } from '../../shared/runCompare.js'
 import { taskNamesForAgents } from '../../main/git/worktreeNaming.js'
 import type { CommandContext, CommandSpec } from '../command-spec.js'
 import { readBoolean, readNumber, readString, readStrings, requireString } from '../argv.js'
@@ -43,6 +44,36 @@ async function readPrompt(context: CommandContext, agents: number): Promise<stri
  */
 export function shownState(worktree: Pick<Worktree, 'state' | 'missing'>): string {
   return worktree.missing ? 'missing' : worktree.state
+}
+
+/** Both runs and their start, each file with what each run did to it, then the patches, one for a file both changed alike. */
+export function compareText(result: WorktreeCompare, a: Worktree, b: Worktree): string {
+  const files = compareRuns(result.left.patch, result.right.patch)
+  const stat = (run: RunFile | null): string => (run === null ? '-' : `+${run.added} -${run.removed}`)
+  const table = formatTable(
+    ['FILE', 'A', 'B', ''],
+    files.map((file) => [
+      file.path,
+      stat(file.left),
+      stat(file.right),
+      file.same ? 'same' : file.left === null ? 'only b' : file.right === null ? 'only a' : ''
+    ]),
+    'Neither run has changed anything.'
+  )
+  const patches = files.flatMap((file) => {
+    if (file.same && file.left !== null) return [`== a b  ${file.path}\n${file.left.patch.trimEnd()}`]
+    return [
+      ...(file.left === null ? [] : [`== a  ${file.path}\n${file.left.patch.trimEnd()}`]),
+      ...(file.right === null ? [] : [`== b  ${file.path}\n${file.right.patch.trimEnd()}`])
+    ]
+  })
+  const cut = result.left.truncated || result.right.truncated ? ['[cut short]'] : []
+  const head = formatFields([
+    ['a', a.name],
+    ['b', b.name],
+    ['base', result.base.slice(0, 7)]
+  ])
+  return [head, table, ...patches, ...cut].join('\n\n')
 }
 
 export const worktreeCommands: readonly CommandSpec[] = [
@@ -603,6 +634,44 @@ export const worktreeCommands: readonly CommandSpec[] = [
       // As git wrote it, so it can be piped into `git apply`.
       const text = result.patch === '' ? 'No changes.' : result.patch
       return { data: result, text: result.truncated ? `${text}\n[cut at ${result.patch.length} characters]` : text }
+    }
+  },
+  {
+    path: ['worktree', 'compare'],
+    summary: 'Compare two runs of a task, each against the commit both started from.',
+    details:
+      'Uncommitted and untracked work is included. Each file is listed with what each run did to it, then the patches.',
+    args: [
+      { name: 'a', description: 'Worktree id, name, path, or branch.', required: true },
+      { name: 'b', description: 'Worktree id, name, path, or branch.', required: true }
+    ],
+    flags: [
+      { name: 'context', kind: 'number', placeholder: '<lines>', description: 'Context lines around each hunk.' },
+      {
+        name: 'max-bytes',
+        kind: 'number',
+        placeholder: '<bytes>',
+        description: 'Ceiling on each run’s patch. It is cut at a line boundary.'
+      }
+    ],
+    examples: ['teamree worktree compare "fix-login claude" "fix-login codex"', 'teamree worktree compare a b --json'],
+    run: async (context) => {
+      const [a, b] = await Promise.all([
+        resolveWorktree(context.client, context.args[0] as string),
+        resolveWorktree(context.client, context.args[1] as string)
+      ])
+      const contextLines = readNumber(context.flags, 'context')
+      const maxBytes = readNumber(context.flags, 'max-bytes')
+      const result = await context.client.call('worktree.compare', {
+        worktreeId: a.id,
+        otherId: b.id,
+        ...(contextLines === undefined ? {} : { contextLines }),
+        ...(maxBytes === undefined ? {} : { maxBytes })
+      })
+      return {
+        data: { ...result, files: compareRuns(result.left.patch, result.right.patch) },
+        text: compareText(result, a, b)
+      }
     }
   },
   {

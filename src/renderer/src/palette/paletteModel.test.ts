@@ -571,6 +571,21 @@ describe('what the palette offers for the worktree on screen', () => {
     )
   })
 
+  it('offers a compare with each of the task’s other runs, and none for a lone worktree', () => {
+    const task = 'Add a sub function to src/math.ts'
+    const runs = ['claude', 'codex', 'claude 2'].map((agent, at) =>
+      worktree({ id: `r${at}`, name: `Add a sub function to src/math.ts ${agent}`, branch: `sub-${at}`, task })
+    )
+    const items = buildPaletteItems(context({ worktrees: [...runs, worktree({ id: 'w1' })], activeWorktreeId: 'r0' }))
+    const compares = items.filter((item) => item.kind === 'action' && item.id.startsWith('compare:'))
+    expect(compares.map((item) => [item.id, item.label])).toEqual([
+      ['compare:r1', 'Compare with codex'],
+      ['compare:r2', 'Compare with claude 2']
+    ])
+    expect(filterPalette(items, 'compare')[0]?.label).toBe('Compare with codex')
+    expect(labels().some((label) => label.startsWith('Compare with'))).toBe(false)
+  })
+
   it('offers only removal for a checkout gone from disk, and nothing with no worktree open', () => {
     const missing = labels({ worktrees: [worktree({ id: 'w1', missing: true })] })
     expect(missing).toContain('Remove Worktree…')

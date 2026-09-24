@@ -39,9 +39,25 @@ export function isCommitLeaf(node: PaneNode | null | undefined): node is CommitL
   return isFileLeaf(node) && typeof node.commit === 'string' && node.commit.length > 0
 }
 
-/** What a file-column tab reads: a commit's title whole, a file by its name. */
+/** A file-column tab comparing its worktree with the sibling `compare` names; `path` is the tab's title. */
+export type CompareLeaf = FileLeaf & { compare: string }
+
+export function compareLeaf(id: string, otherId: string, title: string): CompareLeaf {
+  return { ...fileLeaf(id, title), compare: otherId }
+}
+
+export function isCompareLeaf(node: PaneNode | null | undefined): node is CompareLeaf {
+  return isFileLeaf(node) && typeof node.compare === 'string' && node.compare.length > 0
+}
+
+/** A leaf showing a file of the worktree, not a commit or a compare. */
+export function isWorktreeFileLeaf(node: PaneNode | null | undefined): boolean {
+  return isFileLeaf(node) && !isCommitLeaf(node) && !isCompareLeaf(node)
+}
+
+/** What a file-column tab reads: a commit's or compare's title whole, a file by its name. */
 export function fileTabName(leaf: FileLeaf): string {
-  return isCommitLeaf(leaf) ? leaf.path : filePaneName(leaf.path)
+  return isCommitLeaf(leaf) || isCompareLeaf(leaf) ? leaf.path : filePaneName(leaf.path)
 }
 
 /** A fresh pane id; `random` is injected so a test can choose it. */

@@ -14,6 +14,7 @@
 @import './panes.css';
 @import './markdown.css';
 @import './files.css';
+@import './compare.css';
 @import './watch.css';
 @import './dialog.css';
 @import './appearance.css';

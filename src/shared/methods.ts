@@ -35,6 +35,7 @@ import type {
   WorktreeChanges,
   WorktreeCommit,
   WorktreeCommitPatch,
+  WorktreeCompare,
   WorktreeDiff,
   WorktreeDiscard,
   WorktreeFileMatches,
@@ -249,6 +250,13 @@ export const Params = {
   worktreeShowCommit: z.object({
     worktreeId: z.string().min(1),
     sha: z.string().regex(/^[0-9a-f]{4,64}$/i),
+    contextLines: z.number().int().min(0).max(100).optional(),
+    maxBytes: z.number().int().positive().optional()
+  }),
+  /** Two worktrees of one project, each as its patch against the commit both started from. */
+  worktreeCompare: z.object({
+    worktreeId: z.string().min(1),
+    otherId: z.string().min(1),
     contextLines: z.number().int().min(0).max(100).optional(),
     maxBytes: z.number().int().positive().optional()
   }),
@@ -682,6 +690,7 @@ export type MethodContract = {
   'worktree.push': { params: z.infer<typeof Params.worktreePush>; result: WorktreePush }
   'worktree.log': { params: z.infer<typeof Params.worktreeLog>; result: WorktreeLog }
   'worktree.showCommit': { params: z.infer<typeof Params.worktreeShowCommit>; result: WorktreeCommitPatch }
+  'worktree.compare': { params: z.infer<typeof Params.worktreeCompare>; result: WorktreeCompare }
   'worktree.mergePreview': {
     params: z.infer<typeof Params.worktreeMergePreview>
     result: WorktreeMergePreview
