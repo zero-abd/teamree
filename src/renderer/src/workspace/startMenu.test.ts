@@ -27,22 +27,22 @@ describe('the rows', () => {
   it('lists a terminal, then every agent the runtime found, then the agent settings', () => {
     const items = startMenuItems([claude, codex], mac, actions())
     expect(items.map((item) => item.label)).toEqual([
-      'New terminal',
-      'New markdown',
+      'New Terminal',
+      'New Markdown',
       'Claude Code',
       'Codex',
-      'Agent settings…'
+      'Agent Settings…'
     ])
   })
 
   it('keeps the agents in the order the runtime returned them', () => {
     const items = startMenuItems([codex, claude], mac, actions())
     expect(items.map((item) => item.label)).toEqual([
-      'New terminal',
-      'New markdown',
+      'New Terminal',
+      'New Markdown',
       'Codex',
       'Claude Code',
-      'Agent settings…'
+      'Agent Settings…'
     ])
   })
 
@@ -72,13 +72,13 @@ describe('the rows', () => {
 
   it('still offers the terminal and the settings when the probe found nothing', () => {
     const items = startMenuItems([], mac, actions())
-    expect(items.map((item) => item.label)).toEqual(['New terminal', 'New markdown', 'Agent settings…'])
+    expect(items.map((item) => item.label)).toEqual(['New Terminal', 'New Markdown', 'Agent Settings…'])
     expect(items[2]?.separated).toBe(true)
   })
 
   it('leaves the settings off when only rows that open a pane are wanted', () => {
     const items = startMenuItems([claude], mac, actions(), true)
-    expect(items.map((item) => item.label)).toEqual(['New terminal', 'New markdown', 'Claude Code'])
+    expect(items.map((item) => item.label)).toEqual(['New Terminal', 'New Markdown', 'Claude Code'])
   })
 
   // The insertion point another pane kind is added at: a fixed row before the

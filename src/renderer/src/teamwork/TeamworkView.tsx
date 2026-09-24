@@ -152,7 +152,7 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   const [path, setPath] = useState<TeamworkPath | null>(null)
 
   return (
-    <PageFrame label={`Set up teamwork in ${name}`} title="Start teamwork" onClose={closeTeamwork} focusKey={projectId}>
+    <PageFrame label={`Set up teamwork in ${name}`} title="Teamwork" onClose={closeTeamwork} focusKey={projectId}>
       <TeamworkSteps
         projectPath={project?.path}
         list={list}

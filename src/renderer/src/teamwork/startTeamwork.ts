@@ -556,7 +556,7 @@ export function inviteText(input: {
     // Whose word the URL is on: read off `origin`, and nothing here has tried to clone it.
     '   (That is this checkout’s origin as git has it; teamree has not checked that it clones.)',
     '2. Open teamree on your Mac and add that checkout as a project.',
-    '3. Press Teamwork in the project header, choose “Join a team I was invited to”, and press Add my key.',
+    `3. Press Teamwork in the project header, choose “${TEAMWORK_PATHS[1].button}”, and press Add my key.`,
     '4. Press Commit and push. That is what puts you on the team.',
     ...mount,
     '',
@@ -672,11 +672,11 @@ function nextStepFor(stalled: SetupFact | undefined): string | null {
   }
 }
 
-/** The two jobs, in the words the choice is offered in. */
+/** The two jobs: `title` once chosen, `button` on the choice itself. */
 export const TEAMWORK_PATHS = [
-  { id: 'start', title: 'Start a team here' },
-  { id: 'join', title: 'Join a team I was invited to' }
-] as const satisfies readonly { id: TeamworkPath; title: string }[]
+  { id: 'start', title: 'Start a Team', button: 'Start a Team' },
+  { id: 'join', title: 'Join a Team', button: 'Join…' }
+] as const satisfies readonly { id: TeamworkPath; title: string; button: string }[]
 
 /**
  * Which of the two this repository looks like, and the evidence (`because`, null
@@ -703,7 +703,7 @@ export function suggestedPath(
       because: `${namesOfMembers(others)} already on the roster`
     }
   }
-  // Nothing to name: the absence of both is not worth a line under "Start a team here".
+  // Nothing to name: the absence of both is not worth a line under the buttons.
   return { id: 'start', because: null }
 }
 

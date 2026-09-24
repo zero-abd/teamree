@@ -253,10 +253,10 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
           onClose={() => setMenu(null)}
           items={[
             ...(menu.file
-              ? [{ label: 'Open to the side', onChoose: () => openFilePane(worktree.id, menu.path, 'split') }]
+              ? [{ label: 'Open to the Side', onChoose: () => openFilePane(worktree.id, menu.path, 'split') }]
               : []),
             {
-              label: 'Copy path',
+              label: 'Copy Path',
               onChoose: () => void copyToClipboard(absolute(menu.path), `the path to ${menu.path}`)
             },
             { label: 'Reveal in Finder', onChoose: () => reveal(menu.path) },

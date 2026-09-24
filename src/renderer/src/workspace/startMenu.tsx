@@ -34,13 +34,13 @@ type StartMenuGroup = readonly FixedRow[] | 'agents'
 export const MENU_ROWS: readonly StartMenuGroup[] = [
   [
     {
-      label: 'New terminal',
+      label: 'New Terminal',
       command: 'new-terminal',
       icon: <TerminalGlyph />,
       run: (actions) => actions.newTerminal()
     },
     {
-      label: 'New markdown',
+      label: 'New Markdown',
       command: 'new-markdown',
       icon: <PageGlyph />,
       run: (actions) => actions.newMarkdown()
@@ -49,7 +49,7 @@ export const MENU_ROWS: readonly StartMenuGroup[] = [
   'agents',
   [
     {
-      label: 'Agent settings…',
+      label: 'Agent Settings…',
       icon: <SettingsGlyph />,
       run: (actions) => actions.openAgentSettings(),
       menuOnly: true

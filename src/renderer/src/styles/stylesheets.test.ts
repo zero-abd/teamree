@@ -156,6 +156,35 @@ describe('stylesheets', () => {
     })
   })
 
+  // A page holds the main area, so its rail entry is the one selected thing in the sidebar.
+  it('leaves the open worktree a faint tick, no fill, while a page is open', () => {
+    expect(declarationOf(ruleFor('sidebar.css', '.sidebar--page .worktree--active .worktree__row'), 'background')).toBe(
+      'none'
+    )
+    const tick = ruleFor('sidebar.css', '.sidebar--page .worktree--active::before')
+    expect(Number(declarationOf(tick, 'opacity'))).toBeLessThan(0.5)
+  })
+
+  // Drawn outside, the ring of a 23px row covers the rows above and below it.
+  it('draws the focus ring of a sidebar row inside the row', () => {
+    for (const selector of [
+      '.pane-row:focus-visible',
+      '.worktree__open:focus-visible',
+      '.project__toggle:focus-visible'
+    ]) {
+      const rule = ruleListing('sidebar.css', selector)
+      expect(rule && declarationOf(rule, 'outline-offset'), selector).toBe('-2px')
+    }
+  })
+
+  // A menu writes its chords as the menu bar does: plain text at the right, no keycaps.
+  it('draws a menu chord as plain text', () => {
+    const hint = ruleFor('sidebar.css', '.row-menu__hint')
+    expect(declarationOf(hint, 'border')).toBe('0')
+    expect(declarationOf(hint, 'background')).toBe('none')
+    expect(declarationOf(hint, 'padding')).toBe('0')
+  })
+
   // The frame pads the body on the same edge as the head; no content class pads itself.
   describe('one dialog frame', () => {
     it('puts the body on the title’s edge', () => {
@@ -390,6 +419,15 @@ function findRule(sheet: string, selector: string): postcss.Rule | undefined {
   let found: postcss.Rule | undefined
   postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkRules((rule) => {
     if (rule.selector === selector) found = rule
+  })
+  return found
+}
+
+/** The rule whose selector list includes `selector`, alone or among others. */
+function ruleListing(sheet: string, selector: string): postcss.Rule | undefined {
+  let found: postcss.Rule | undefined
+  postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkRules((rule) => {
+    if (rule.selectors.includes(selector)) found = rule
   })
   return found
 }

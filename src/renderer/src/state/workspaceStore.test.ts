@@ -157,6 +157,32 @@ it('commits only the ticked paths, and unticks them afterwards', async () => {
   call.mockRestore()
 })
 
+// The commit lands in the list the button is under; a toast would say it twice.
+it('toasts a commit only when the Changes tab is not showing it', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
+  await store.openWorktree(worktreeId)
+  if (!changesOnScreen(useWorkspaceStore.getState())) useWorkspaceStore.getState().toggleChanges()
+  await vi.waitFor(() => expect(useWorkspaceStore.getState().changes[worktreeId]?.changes.length).toBeGreaterThan(0))
+  const listed = useWorkspaceStore.getState().changes[worktreeId]!
+  const committedNotices = (): string[] =>
+    useWorkspaceStore
+      .getState()
+      .notices.map((notice) => notice.text)
+      .filter((text) => text.startsWith('Committed'))
+
+  useWorkspaceStore.setState({ notices: [] })
+  expect(await useWorkspaceStore.getState().commitStaged('on screen')).toBe(true)
+  expect(committedNotices()).toEqual([])
+
+  useWorkspaceStore.getState().toggleChanges()
+  expect(changesOnScreen(useWorkspaceStore.getState())).toBe(false)
+  useWorkspaceStore.setState((state) => ({ changes: { ...state.changes, [worktreeId]: listed } }))
+  expect(await useWorkspaceStore.getState().commitStaged('off screen')).toBe(true)
+  expect(committedNotices()).toHaveLength(1)
+})
+
 it('commits every listed change when nothing is ticked, and nothing when there is none', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
@@ -800,10 +826,10 @@ it('offers the + menu the agents agent.list reported, in its order', async () =>
     openAgentSettings: () => {}
   })
   expect(items.map((item) => item.label)).toEqual([
-    'New terminal',
-    'New markdown',
+    'New Terminal',
+    'New Markdown',
     ...reported.map((agent) => harnessName(agent.kind)),
-    'Agent settings…'
+    'Agent Settings…'
   ])
 })
 

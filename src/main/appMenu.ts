@@ -185,7 +185,7 @@ export function aboutPanelOptions(version: string, iconPath?: string): AboutPane
     version: '',
     copyright: 'Copyright © teamree contributors',
     // `website` is read on Linux only; macOS and Windows show the credits.
-    credits: SITE_URL,
+    credits: `${SITE_URL}\n${REPOSITORY_URL}`,
     website: SITE_URL,
     ...(iconPath === undefined ? {} : { iconPath })
   }
@@ -204,6 +204,7 @@ function helpLinks(
   return [
     { label: 'teamree Website', click: () => links.open(SITE_URL) },
     { label: 'Release Notes', click: () => links.open(releaseNotes) },
-    { label: 'Report an Issue', click: () => links.open(issue) }
+    { label: 'Report an Issue', click: () => links.open(issue) },
+    { label: 'Star on GitHub', click: () => links.open(REPOSITORY_URL) }
   ]
 }

@@ -941,8 +941,9 @@ describe('which of the two jobs this is', () => {
 
   it('offers the two jobs as labels, with no prose under either', () => {
     expect(TEAMWORK_PATHS.map((option) => option.id)).toEqual(['start', 'join'])
-    expect(TEAMWORK_PATHS.map((option) => option.title)).toEqual(['Start a team here', 'Join a team I was invited to'])
-    for (const option of TEAMWORK_PATHS) expect(Object.keys(option)).toEqual(['id', 'title'])
+    expect(TEAMWORK_PATHS.map((option) => option.title)).toEqual(['Start a Team', 'Join a Team'])
+    expect(TEAMWORK_PATHS.map((option) => option.button)).toEqual(['Start a Team', 'Join…'])
+    for (const option of TEAMWORK_PATHS) expect(Object.keys(option)).toEqual(['id', 'title', 'button'])
   })
 })
 
@@ -1104,6 +1105,8 @@ describe('the message to send a teammate', () => {
     const text = invite() ?? ''
     expect(text).toContain('git clone https://example.com/ada/pager.git')
     expect(text).toContain('Add my key')
+    // The button as the page names it, so the invited person can find it.
+    expect(text).toContain(`choose “${TEAMWORK_PATHS[1].button}”`)
     expect(text).toContain('Commit and push')
     expect(text).toMatch(/That is what puts you on the team/)
     expect(text).toContain('wss://relay.example/v1/relay')

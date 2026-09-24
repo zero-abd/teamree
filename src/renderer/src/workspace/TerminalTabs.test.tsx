@@ -366,31 +366,31 @@ describe('the menu the + opens', () => {
 
   it('lists a terminal, a markdown page, the agents the runtime found, and the agent settings', () => {
     onePane()
-    expect(rows(open())).toEqual(['New terminal', 'New markdown', 'Claude Code', 'Codex', 'Agent settings…'])
+    expect(rows(open())).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Codex', 'Agent Settings…'])
   })
 
   it('names the terminal chord on its row', () => {
     onePane()
-    const terminalRow = within(open()).getByRole('menuitem', { name: 'New terminal' })
+    const terminalRow = within(open()).getByRole('menuitem', { name: 'New Terminal' })
     expect(terminalRow.querySelector('kbd')?.textContent).toBe('⌘T')
   })
 
   it('lists no agent the runtime did not find', () => {
     onePane({ agents: [claude] })
-    expect(rows(open())).toEqual(['New terminal', 'New markdown', 'Claude Code', 'Agent settings…'])
+    expect(rows(open())).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Agent Settings…'])
   })
 
   it('opens a markdown page in the worktree the strip belongs to', () => {
     const newMarkdown = vi.fn()
     onePane({ newMarkdown })
-    fireEvent.click(within(open()).getByRole('menuitem', { name: /New markdown/ }))
+    fireEvent.click(within(open()).getByRole('menuitem', { name: /New Markdown/ }))
     expect(newMarkdown).toHaveBeenCalledExactlyOnceWith('w1')
     expect(createTerminal).not.toHaveBeenCalled()
   })
 
   it('opens a terminal in the worktree the strip belongs to', () => {
     onePane()
-    fireEvent.click(within(open()).getByRole('menuitem', { name: 'New terminal' }))
+    fireEvent.click(within(open()).getByRole('menuitem', { name: 'New Terminal' }))
     expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1')
     expect(startAgent).not.toHaveBeenCalled()
   })
@@ -406,7 +406,7 @@ describe('the menu the + opens', () => {
 
   it('opens the settings at the agents section', () => {
     onePane()
-    fireEvent.click(within(open()).getByRole('menuitem', { name: 'Agent settings…' }))
+    fireEvent.click(within(open()).getByRole('menuitem', { name: 'Agent Settings…' }))
     expect(openSettings).toHaveBeenCalledExactlyOnceWith('agents')
     expect(screen.queryByRole('menu')).toBeNull()
   })
@@ -414,9 +414,9 @@ describe('the menu the + opens', () => {
   it('lands the keyboard on the first row, and arrows and Enter choose', () => {
     onePane()
     const menu = open()
-    expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'New terminal' }))
+    expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'New Terminal' }))
     fireEvent.keyDown(menu, { key: 'ArrowDown' })
-    expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: /New markdown/ }))
+    expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: /New Markdown/ }))
     fireEvent.keyDown(menu, { key: 'ArrowDown' })
     fireEvent.keyDown(menu, { key: 'ArrowDown' })
     fireEvent.keyDown(menu, { key: 'Enter' })

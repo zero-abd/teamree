@@ -455,7 +455,7 @@ Recorded now, so none of them is a surprise later.
   the same reason and with the same answer — `docs/local-access.md` is that
   boundary written down, and it is the local one rather than this document's.
 - **A roster change is silent.** Nothing announces that somebody was added. A
-  new key becomes another teammate in the **Start teamwork** panel and another
+  new key becomes another teammate in the **Teamwork** panel and another
   link in the header's count, indistinguishable from a colleague who was always
   there. The only control is somebody reading the diff, so a team that wants
   this watched should watch `.teamree/members/` where it changes — in review, on

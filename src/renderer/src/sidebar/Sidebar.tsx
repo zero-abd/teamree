@@ -118,9 +118,10 @@ export function Sidebar({
   // worktree is open, else the first. Undefined only before any has been added.
   const active = worktrees.find((entry) => entry.id === activeWorktreeId)
   const railProject = projects.find((project) => project.id === active?.projectId) ?? projects[0]
+  const pageOpen = dashboardOpen || settingsOpen || helpOpen || teamworkProjectId !== null
 
   return (
-    <div className="sidebar" data-region="sidebar">
+    <div className={pageOpen ? 'sidebar sidebar--page' : 'sidebar'} data-region="sidebar">
       {/* The top edge of the window, on this side of the seam: the lockup, and
           the one control that puts the sidebar away. On macOS the window
           buttons sit on this row too, and it is what the window is dragged by

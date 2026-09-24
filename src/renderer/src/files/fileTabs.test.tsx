@@ -472,10 +472,10 @@ describe('one header for code and markdown', () => {
       fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
       fireEvent.click(screen.getByRole('button', { name: `More for ${name}` }))
       expect(menuLabels()).toEqual(rightClick)
-      expect(rightClick.includes('Open as artifact')).toBe(name === 'guide.md')
+      expect(rightClick.includes('Open as Artifact')).toBe(name === 'guide.md')
       fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
     }
-    expect(screen.queryByRole('button', { name: 'Open as artifact' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open as Artifact' })).toBeNull()
   })
 
   it('closes on a second ⋯, the focus back on it', () => {
@@ -493,7 +493,7 @@ describe('one header for code and markdown', () => {
     useWorkspaceStore.setState({ copyToClipboard: copy })
     await screen.findByText('a', { selector: '.ProseMirror p' })
     fireEvent.click(screen.getByRole('button', { name: 'More for guide.md' }))
-    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Open as artifact' }))
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Open as Artifact' }))
     await waitFor(() => expect(open).toHaveBeenCalledWith('https://claude.ai/new', '_blank', 'noopener'))
     expect(copy).toHaveBeenCalledWith('a\n', 'guide.md')
     open.mockRestore()

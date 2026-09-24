@@ -1,4 +1,4 @@
-/* The Start teamwork panel. The control in the project header that opens it
+/* The Teamwork page. The control in the project header that opens it
    is the sidebar's — `.project__teamwork` in sidebar.css. */
 
 .members {
@@ -793,54 +793,22 @@
   line-height: 1.55;
 }
 
-/* The question that used to be missing: which end of a two-sided thing you are
-   on. It gets the whole column before anything else, because a page written
-   for both answers at once is the page the feedback was about. */
+/* Which end of a two-sided thing you are on: two buttons on the page, no card around them. */
 .path-choice {
   display: flex;
   flex-direction: column;
   gap: var(--s2);
-  padding: var(--s4);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--bg-panel);
 }
 
-.path-choice__head {
-  color: var(--fg);
-  font-size: var(--text-base);
-  font-weight: 600;
-}
-
-.path-choice__list {
+.path-choice__buttons {
   display: flex;
-  flex-direction: column;
-  gap: var(--s3);
-  margin-top: var(--s2);
-  list-style: none;
-}
-
-.path-option {
-  display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: var(--s2);
-  align-items: flex-start;
-  padding: var(--s3);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
 }
 
-/* Marked, never taken. The repository is very good evidence about which of
-   these is happening and still only evidence. */
-.path-option--suggested {
-  border-color: var(--accent-line);
-  background: var(--bg-raised);
-}
-
-.path-option__because {
+.path-choice__because {
   color: var(--fg-muted);
   font-size: var(--text-xs);
-  line-height: 1.55;
 }
 
 /* The answer, kept where it can be seen and undone: people pick the wrong one. */

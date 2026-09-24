@@ -161,7 +161,7 @@ const open = (): void => {
 /** The panel with the first question answered, where every assertion about the steps belongs. */
 const mount = (path: 'start' | 'join' = 'start'): void => {
   open()
-  const label = path === 'start' ? 'Start a team here' : 'Join a team I was invited to'
+  const label = path === 'start' ? 'Start a Team' : 'Join…'
   const chooser = screen.queryByRole('button', { name: label })
   // Absent for a project where this already works, which is asked nothing.
   if (chooser !== null) fireEvent.click(chooser)
@@ -187,7 +187,7 @@ describe('the setup as a place in the window', () => {
   it('is a landmark that names the repository it is setting up', () => {
     mount()
     expect(screen.getByRole('main', { name: 'Set up teamwork in pager' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Start teamwork' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Teamwork' })).toBeTruthy()
   })
 
   // Reached from a button elsewhere, so the keyboard has to come with it.
@@ -207,7 +207,7 @@ describe('the setup as a place in the window', () => {
   it('sits in the shared page frame, closed by the same × as the other pages', () => {
     mount()
     const main = screen.getByRole('main', { name: 'Set up teamwork in pager' })
-    expect(main.querySelector('.page__head h1')?.textContent).toBe('Start teamwork')
+    expect(main.querySelector('.page__head h1')?.textContent).toBe('Teamwork')
     expect(within(main).queryByRole('button', { name: 'Close' })).toBeNull()
   })
 
@@ -562,22 +562,22 @@ describe('the question the panel asks before anything else', () => {
   // One entry point, two honest paths.
   it('offers both, takes neither, and shows no steps until one is chosen', () => {
     open()
-    expect(screen.getByRole('button', { name: 'Start a team here' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Join a team I was invited to' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Start a Team' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Join…' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: '4. Commit and push' })).toBeNull()
   })
 
   it('shows the steps once it has been answered, and says which job was chosen', () => {
     mount('join')
     expect(screen.getByRole('heading', { name: '4. Commit and push' })).toBeTruthy()
-    expect(screen.getByText(/join a team i was invited to/i)).toBeTruthy()
+    expect(screen.getByText('Join a Team')).toBeTruthy()
   })
 
   // People pick the wrong one, and a choice that cannot be unmade is a trap.
   it('lets somebody take the answer back', () => {
     mount('join')
     fireEvent.click(screen.getByRole('button', { name: 'Not that' }))
-    expect(screen.getByRole('button', { name: 'Start a team here' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Start a Team' })).toBeTruthy()
     expect(screen.queryByRole('heading', { name: '4. Commit and push' })).toBeNull()
   })
 })

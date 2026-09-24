@@ -233,7 +233,7 @@ describe('the Help menu', () => {
     return open.mock.calls.map(([url]) => url)
   }
 
-  it('lists Shortcuts, then the website, the release notes and the issue form', () => {
+  it('lists Shortcuts, then the website, the release notes, the issue form and the star', () => {
     const template = applicationMenuTemplate({
       platform: 'darwin',
       commands: published(),
@@ -244,7 +244,8 @@ describe('the Help menu', () => {
       '—',
       'teamree Website',
       'Release Notes',
-      'Report an Issue'
+      'Report an Issue',
+      'Star on GitHub'
     ])
     expect(shipped('open-help')).toBe('Shortcuts')
     expect(template.find((item) => item.label === 'Help')?.role).toBe('help')
@@ -254,7 +255,8 @@ describe('the Help menu', () => {
     expect(opened()).toEqual([
       'https://teamree.us',
       'https://github.com/zero-abd/teamree/releases/tag/v1.2.3',
-      `https://github.com/zero-abd/teamree/issues/new?body=${encodeURIComponent('\n\n---\nteamree 1.2.3\nmacOS 15.2.0\n')}`
+      `https://github.com/zero-abd/teamree/issues/new?body=${encodeURIComponent('\n\n---\nteamree 1.2.3\nmacOS 15.2.0\n')}`,
+      'https://github.com/zero-abd/teamree'
     ])
   })
 
@@ -287,18 +289,23 @@ describe('the Help menu', () => {
       platform: 'darwin',
       links: { version: '1.2.3', systemVersion: '15.2.0', open: () => {} }
     })
-    expect(labelsOf(template, 'Help')).toEqual(['teamree Website', 'Release Notes', 'Report an Issue'])
+    expect(labelsOf(template, 'Help')).toEqual([
+      'teamree Website',
+      'Release Notes',
+      'Report an Issue',
+      'Star on GitHub'
+    ])
   })
 })
 
 describe('the About panel', () => {
-  it('shows the version, a copyright line and the website', () => {
+  it('shows the version, a copyright line, the website and the repository', () => {
     expect(aboutPanelOptions('1.2.3')).toEqual({
       applicationName: 'teamree',
       applicationVersion: '1.2.3',
       version: '',
       copyright: 'Copyright © teamree contributors',
-      credits: 'https://teamree.us',
+      credits: 'https://teamree.us\nhttps://github.com/zero-abd/teamree',
       website: 'https://teamree.us'
     })
     expect(aboutPanelOptions('1.2.3', '/icon.png').iconPath).toBe('/icon.png')

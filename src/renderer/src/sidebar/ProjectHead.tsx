@@ -7,7 +7,7 @@ import { RowMenu, type RowMenuAnchor } from './RowMenu'
 type ProjectHeadProps = {
   project: Project
   collapsed: boolean
-  /** Your worktrees, then theirs, counted apart. */
+  /** Your worktrees, then theirs, counted apart; shown only while folded. */
   count: number
   theirs: number
   onToggle: () => void
@@ -72,8 +72,8 @@ export function ProjectHead({
           <path d="M4.5 2.5 L8.5 6 L4.5 9.5" />
         </svg>
         <span className="project__name">{project.name}</span>
-        <span className="project__count">{count}</span>
-        {theirs > 0 ? (
+        {collapsed ? <span className="project__count">{count}</span> : null}
+        {collapsed && theirs > 0 ? (
           <span
             className="project__count project__count--teammate"
             title={`${theirs} teammate worktree${theirs === 1 ? '' : 's'}`}
@@ -86,12 +86,14 @@ export function ProjectHead({
         type="button"
         className="button button--ghost button--icon"
         tabIndex={-1}
-        title={`New task in ${project.name}`}
-        aria-label={`New task in ${project.name}`}
+        title="New Task"
+        aria-label={`New Task in ${project.name}`}
         onClick={onNewTask}
       >
+        {/* A pencil on a page, not a plus: the plus above adds a project. */}
         <svg viewBox="0 0 14 14" aria-hidden="true">
-          <path d="M7 2.5 L7 11.5 M2.5 7 L11.5 7" />
+          <path d="M6.5 2.5h-3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-3" />
+          <path d="M10.3 2.2a1.1 1.1 0 0 1 1.5 1.5L7.2 8.3 5.5 8.8 6 7.1Z" />
         </svg>
       </button>
       {menuAt === null ? null : (

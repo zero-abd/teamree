@@ -543,6 +543,22 @@ describe('the teamwork page', () => {
     }
   })
 
+  it('opens on two buttons and no question', () => {
+    const host = document.createElement('div')
+    host.innerHTML = renderToStaticMarkup(
+      <TeamworkSteps
+        {...props}
+        list={roster(false)}
+        relay={noRelay()}
+        status={status({ enrolled: false })}
+        path={null}
+      />
+    )
+    expect([...host.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Start a Team', 'Join…'])
+    expect(host.textContent).not.toContain('?')
+    expect(sentenceStops(host)).toEqual([])
+  })
+
   it('says no sentence under the origin field, refused or accepted', () => {
     const blocked = status({ origin: { ok: false, reason: 'no origin remote' } })
     const view = render(<TeamworkSteps {...props} list={roster(true)} relay={onDisk()} status={blocked} path="start" />)
