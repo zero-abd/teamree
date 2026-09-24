@@ -8,6 +8,7 @@ export type WorkspaceCommand =
   | 'split-right'
   | 'split-down'
   | 'close-pane'
+  | 'reopen-closed-pane'
   | 'save-file'
   | 'save-all'
   | 'new-terminal'
@@ -56,6 +57,7 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'split-right', chord: { key: 'd' }, title: 'Split Pane Right' },
   { command: 'split-down', chord: { key: 'd', shift: true }, title: 'Split Pane Down' },
   { command: 'close-pane', chord: { key: 'w' }, title: 'Close Pane' },
+  { command: 'reopen-closed-pane', chord: { key: 't', shift: true }, title: 'Reopen Closed Pane' },
   { command: 'save-file', chord: { key: 's' }, title: 'Save' },
   { command: 'save-all', chord: { key: 's', alt: true }, title: 'Save All' },
   { command: 'new-terminal', chord: { key: 't' }, title: 'New Terminal' },

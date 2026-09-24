@@ -239,6 +239,19 @@ export type WorktreeDiscard = {
   /** `trashed`: an untracked file went to the Trash. `restored`: back to staged, else committed. */
   outcome: 'trashed' | 'restored' | 'hunk'
   discardedAt: number
+  /** The copy kept before the discard, for `worktree.undoDiscard`; absent from a runtime that keeps none. */
+  trashId?: string
+}
+
+/** A removed worktree kept under `refs/teamree/trash/` until restored or pruned; `id` is what `worktree.restore` takes. */
+export type RemovedWorktree = {
+  id: string
+  projectId: string
+  worktreeId: string
+  name: string
+  branch: string
+  task?: string
+  removedAt: number
 }
 
 /**
@@ -485,6 +498,17 @@ export type ResourceProcess = {
   cpu: number
   rss: number
   command: string
+}
+
+/** A pane closed in a worktree that `terminal.reopen` can bring back. `resumable`: its agent's conversation can be picked up. */
+export type ClosedPane = {
+  terminalId: string
+  worktreeId: string
+  agent?: AgentKind
+  label?: string
+  ordinal?: number
+  resumable: boolean
+  closedAt: number
 }
 
 /**

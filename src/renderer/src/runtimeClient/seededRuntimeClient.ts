@@ -916,6 +916,14 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'worktree.discardHunk': () => {
       throw new Error('the seeded runtime has no files to discard')
     },
+    'worktree.undoDiscard': () => {
+      throw new Error('the seeded runtime has no files to discard')
+    },
+    // Nothing the seeded runtime removes is kept.
+    'worktree.removed': () => [],
+    'worktree.restore': () => {
+      throw new Error('the seeded runtime keeps no removed worktrees')
+    },
 
     'teamwork.relay': ({ projectId }) => relaySetting(projectId),
     // Refused rather than faked: a demo must not lie about somebody's git history.
@@ -1320,6 +1328,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'terminal.subscribe': ({ terminalId }) => {
       required(terminals.get(terminalId), 'terminal')
       return { subscription: nextId('sub') }
+    },
+    // The seeded runtime keeps no closed panes.
+    'terminal.closed': () => [],
+    'terminal.reopen': () => {
+      throw new Error('the seeded runtime keeps no closed panes')
     },
     // Comes back alive with what it printed still above it, as for real.
     'terminal.relaunch': ({ terminalId }) => {

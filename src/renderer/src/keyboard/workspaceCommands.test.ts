@@ -86,6 +86,7 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
   return {
     splitFocusedPane: vi.fn(async () => {}),
     closeTerminal: vi.fn(async () => {}),
+    reopenClosedPane: vi.fn(async () => {}),
     saveFiles: vi.fn(async () => true),
     createTerminal: vi.fn(async () => {}),
     newMarkdown: vi.fn(),
@@ -256,6 +257,25 @@ describe('why a command is unavailable', () => {
         expect(whyUnavailable(command, state) === null).toBe(isCommandAvailable(command, state))
       }
     }
+  })
+})
+
+// ⌘⇧T: offered while the open worktree has a pane of either kind to bring back.
+describe('reopening a closed pane', () => {
+  const closed = { terminalId: 't9', worktreeId: 'w1', agent: 'claude' as const, resumable: true, closedAt: 1 }
+
+  it('is greyed until something here has been closed', () => {
+    expect(whyUnavailable('reopen-closed-pane', EMPTY)).toBe('no worktree open')
+    expect(whyUnavailable('reopen-closed-pane', WORKING)).toBe('nothing closed')
+    expect(whyUnavailable('reopen-closed-pane', { ...WORKING, closedPanes: { w2: [closed] } })).toBe('nothing closed')
+    expect(whyUnavailable('reopen-closed-pane', { ...WORKING, closedPanes: { w1: [closed] } })).toBeNull()
+    expect(whyUnavailable('reopen-closed-pane', { ...WORKING, closedFiles: { w1: [{}] } })).toBeNull()
+  })
+
+  it('asks the store for the last closed pane', () => {
+    const store = workspace({ ...WORKING, closedPanes: { w1: [closed] } })
+    runWorkspaceCommand('reopen-closed-pane', store)
+    expect(store.reopenClosedPane).toHaveBeenCalledOnce()
   })
 })
 

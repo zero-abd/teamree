@@ -179,6 +179,8 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   // A create interrupted by a quit can never resume, so it is marked failed and
   // offered as a retry rather than left stuck in `creating`.
   git.reviveRestoredRecords()
+  // Copies kept by Remove and Discard last a fortnight; nobody waits on the sweep.
+  void git.pruneTrash().catch((error: unknown) => console.error('[git]', error))
   registerGitHandlers(registry, git)
   // Git transitions a worktree on a background task long after the call returned.
   publishGitEvents(git, workspaceEvents)

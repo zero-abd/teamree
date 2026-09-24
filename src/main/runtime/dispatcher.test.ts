@@ -184,12 +184,15 @@ describe('dispatcher', () => {
       // Local: the agent in a pane reporting on itself through the CLI socket.
       'terminal.agentEvent',
       'terminal.close',
+      'terminal.closed',
       'terminal.create',
       'terminal.list',
       'terminal.read',
       // Local: a relaunch starts a process on this machine.
       'terminal.relaunch',
       'terminal.rename',
+      // Local: starts a process on this machine, as a relaunch does.
+      'terminal.reopen',
       'terminal.resize',
       'terminal.split',
       'terminal.subscribe',
@@ -226,11 +229,15 @@ describe('dispatcher', () => {
       'worktree.mergePreview',
       'worktree.push',
       'worktree.remove',
+      'worktree.removed',
       'worktree.rename',
+      // Local: checks a copy out on this machine's disk.
+      'worktree.restore',
       'worktree.showCommit',
       'worktree.stageHunk',
       'worktree.startPoints',
       'worktree.status',
+      'worktree.undoDiscard',
       'worktree.unstageHunk',
       'worktree.unstagePath',
       'worktree.update'

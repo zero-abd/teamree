@@ -278,6 +278,47 @@ export const worktreeCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['worktree', 'restore'],
+    summary: 'Bring back a removed worktree with its uncommitted work.',
+    details:
+      'Remove keeps a copy of the checkout for 14 days. With no argument, lists what can be restored, newest first.',
+    args: [
+      {
+        name: 'worktree',
+        description: 'Removed worktree: copy id, worktree id, name, or branch; the newest match.',
+        required: false
+      }
+    ],
+    examples: ['teamree worktree restore', 'teamree worktree restore fix-login'],
+    run: async (context) => {
+      const removed = await context.client.call('worktree.removed', { limit: 50 })
+      const wanted = context.args[0]
+      if (wanted === undefined) {
+        return {
+          data: removed,
+          text: formatTable(
+            ['ID', 'NAME', 'BRANCH', 'REMOVED'],
+            removed.map((entry) => [entry.id, entry.name, entry.branch, new Date(entry.removedAt).toISOString()]),
+            'Nothing to restore.'
+          )
+        }
+      }
+      const match = removed.find((entry) => [entry.id, entry.worktreeId, entry.name, entry.branch].includes(wanted))
+      if (match === undefined) {
+        throw new CliError({
+          code: 'not_found',
+          message: `no removed worktree matches "${wanted}"; list them with: teamree worktree restore`,
+          exitCode: ExitCode.Failure
+        })
+      }
+      const worktree = await context.client.call('worktree.restore', {
+        projectId: match.projectId,
+        removedId: match.id
+      })
+      return { data: worktree, text: `restored worktree ${worktree.name} (${worktree.id}) at ${worktree.path}` }
+    }
+  },
+  {
     path: ['worktree', 'rename'],
     summary: 'Rename a worktree.',
     details: 'Changes the name shown everywhere. The branch and the checkout path stay as they are.',

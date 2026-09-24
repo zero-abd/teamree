@@ -401,6 +401,10 @@
   color: var(--fg-muted);
 }
 
+.button--primary .worktree-start__icon {
+  color: inherit;
+}
+
 .worktree-start__icon svg {
   width: 14px;
   height: 14px;

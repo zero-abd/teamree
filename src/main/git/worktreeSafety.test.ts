@@ -103,7 +103,10 @@ describe('ignored files a removal would delete', () => {
     const project = await service.addProject({ path: repo.repoPath })
     const worktree = await readyWorktree(service, project.id, 'nothing to lose')
 
-    expect(await service.removeWorktree({ worktreeId: worktree.id })).toEqual({ removed: true })
+    expect(await service.removeWorktree({ worktreeId: worktree.id })).toEqual({
+      removed: true,
+      trashId: expect.any(String)
+    })
     expect(existsSync(worktree.path)).toBe(false)
   })
 
@@ -134,7 +137,10 @@ describe('ignored files a removal would delete', () => {
     const worktree = await readyWorktree(service, project.id, 'agent two')
     await repo.write('.env', 'API_KEY=hunter2\n', worktree.path)
 
-    expect(await service.removeWorktree({ worktreeId: worktree.id, force: true })).toEqual({ removed: true })
+    expect(await service.removeWorktree({ worktreeId: worktree.id, force: true })).toEqual({
+      removed: true,
+      trashId: expect.any(String)
+    })
     expect(existsSync(worktree.path)).toBe(false)
   })
 })

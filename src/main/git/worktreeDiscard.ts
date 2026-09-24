@@ -1,5 +1,5 @@
 // Throwing away working-tree changes: a whole path, or one hunk of it. The index
-// is never written, so what is staged survives; an untracked file goes to the Trash.
+// is never written, so what is staged survives; an untracked file goes to the Trash. A copy is kept first.
 
 import path from 'node:path'
 import type { WorktreeChange, WorktreeDiscard } from '../../shared/entities'
@@ -21,6 +21,8 @@ export type DiscardOptions = {
   path: string
   /** Absent, an untracked file is refused rather than deleted. */
   trash?: Trash
+  /** Keeps a copy once the discard is judged possible and before anything is written; answers its id. */
+  keep?: () => Promise<string>
   signal?: AbortSignal
   now?: () => number
 }
@@ -31,10 +33,11 @@ export type HunkDiscardOptions = Omit<DiscardOptions, 'trash'> & { hunk: HunkInp
 export async function discardPath(runner: GitRunner, options: DiscardOptions): Promise<WorktreeDiscard> {
   const absolute = insideWorktree(options)
   const change = await unstagedChange(runner, options)
+  if (change.kind === 'untracked' && options.trash === undefined) throw refusal(`no Trash here for ${options.path}`)
+  const trashId = await options.keep?.()
   if (change.kind === 'untracked') {
-    if (options.trash === undefined) throw refusal(`no Trash here for ${options.path}`)
-    await options.trash(absolute)
-    return receipt(options, 'trashed')
+    await options.trash?.(absolute)
+    return receipt(options, 'trashed', trashId)
   }
   // Pathspecs read literally, so `*.ts` restores the file of that name and nothing else.
   await runner.run({
@@ -43,7 +46,7 @@ export async function discardPath(runner: GitRunner, options: DiscardOptions): P
     timeoutMs: DISCARD_TIMEOUT_MS,
     ...(options.signal ? { signal: options.signal } : {})
   })
-  return receipt(options, 'restored')
+  return receipt(options, 'restored', trashId)
 }
 
 /** Reverses one hunk of the unstaged patch out of the file on disk. */
@@ -74,9 +77,10 @@ export async function discardHunk(runner: GitRunner, options: HunkDiscardOptions
   if (fromIndex.exitCode !== 0 || onDisk.exitCode !== 0) {
     throw refusal(`${options.path} changed since that patch was read`, (fromIndex.stderr + onDisk.stderr).trim())
   }
+  const trashId = await options.keep?.()
   const applied = await apply(['--reverse'], false)
   if (applied.exitCode !== 0) throw refusal(`that hunk no longer applies to ${options.path}`, applied.stderr.trim())
-  return receipt(options, 'hunk')
+  return receipt(options, 'hunk', trashId)
 }
 
 /**
@@ -115,6 +119,16 @@ function refusal(message: string, stderr?: string): GitServiceError {
   return new GitServiceError(ErrorCode.Conflict, message, stderr === undefined ? undefined : { stderr })
 }
 
-function receipt(options: DiscardOptions | HunkDiscardOptions, outcome: WorktreeDiscard['outcome']): WorktreeDiscard {
-  return { worktreeId: options.worktreeId, path: options.path, outcome, discardedAt: (options.now ?? Date.now)() }
+function receipt(
+  options: DiscardOptions | HunkDiscardOptions,
+  outcome: WorktreeDiscard['outcome'],
+  trashId: string | undefined
+): WorktreeDiscard {
+  return {
+    worktreeId: options.worktreeId,
+    path: options.path,
+    outcome,
+    discardedAt: (options.now ?? Date.now)(),
+    ...(trashId === undefined ? {} : { trashId })
+  }
 }

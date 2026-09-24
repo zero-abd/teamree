@@ -6,6 +6,7 @@ import {
   type CliStatus,
   type InstalledAgent,
   type Project,
+  type RemovedWorktree,
   type UpdateState,
   type Worktree
 } from '@shared/entities'
@@ -16,6 +17,7 @@ import { harnessName } from '../agents/harnesses'
 import { runName, siblingRuns } from '../compare/siblingRuns'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { MENU_ORDER, menuLabel } from '../menu/menuBar'
+import { agoLabel } from '../sidebar/agentRows'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { automaticUpdatesLabel } from '../updates/updateNotice'
 import { landLabel, type LandOffer } from '../workspace/rightPanel/landOffer'
@@ -38,6 +40,8 @@ export type PaletteAction =
   | `open-in:${string}`
   /** A compare with another run of the task on screen, by its worktree id. */
   | `compare:${string}`
+  /** A removed worktree to check out again, by its `RemovedWorktree.id`. */
+  | `restore:${string}`
 
 /** What the sidebar row's menu does to the worktree on screen. */
 type WorktreeAction =
@@ -101,6 +105,8 @@ export type PaletteContext = {
   focusedChange?: { path: string; discardable: boolean; staged: boolean } | null
   /** What the worktree on screen can do with its finished branch; see `landOffer`. */
   land?: LandOffer | null
+  /** Removed worktrees that can be restored, newest first. */
+  removed?: readonly RemovedWorktree[]
   /** Which way the panel toggles read; absent reads as shown. */
   sidebarVisible?: boolean
   rightPanelOpen?: boolean
@@ -142,6 +148,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
 
   const rows: ActionRow[] = [
     ...commandActions(context),
+    ...restoreActions(context),
     ...ACTIONS,
     ...updateActions(context),
     ...appearanceActions(context)
@@ -156,7 +163,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
       kind: 'action',
       id: action.id,
       label: action.label,
-      hint: context.hintFor(action.id),
+      hint: action.hint ?? context.hintFor(action.id),
       detail: '',
       search: `${action.label} ${action.keywords}`,
       ...(unavailable === null ? {} : { unavailable })
@@ -261,6 +268,17 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
   }))
 }
 
+/** One row per removed worktree that can still come back, its age as the hint. */
+function restoreActions(context: PaletteContext): ActionRow[] {
+  const now = Date.now()
+  return (context.removed ?? []).map((removed) => ({
+    id: `restore:${removed.id}` as const,
+    label: `Restore Worktree: ${worktreeLabel(worktreeDisplay(removed))}`,
+    keywords: `restore undo removed deleted worktree bring back ${removed.branch}`,
+    hint: agoLabel(now - removed.removedAt)
+  }))
+}
+
 /** The three modes and every preset; the ones on screen cannot run. */
 function appearanceActions(context: PaletteContext): ActionRow[] {
   const current = (on: boolean): { unavailable?: string } => (on ? { unavailable: 'current' } : {})
@@ -335,6 +353,7 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'new-terminal': 'new terminal shell pane open',
   'new-markdown': 'new markdown notes page document write md file',
   'close-pane': 'close pane kill stop shut terminal',
+  'reopen-closed-pane': 'reopen closed pane undo close resume agent session tab back',
   'save-file': 'save file write disk edits',
   'save-all': 'save all files write disk edits',
   'find-in-pane': 'find search pane scrollback text',

@@ -1119,7 +1119,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(64)
+    expect(data.commands.length).toBe(65)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })

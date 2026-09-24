@@ -1,4 +1,5 @@
-// Asked before any discard from the Changes tab. It names the file, and says where an untracked one goes.
+// Asked before any discard from the Changes tab. It names the file, and says where an untracked one goes;
+// a copy is kept first, so the notice after it offers Undo.
 
 import type { PatchHunk } from '@shared/patch'
 import { Confirm } from './Confirm'
@@ -22,7 +23,7 @@ export function ConfirmDiscardDialog({
   return (
     <Confirm
       title={hunk === undefined ? `Discard changes to ${path}?` : `Discard this hunk of ${path}?`}
-      body={untracked && hunk === undefined ? 'Moves to the Trash' : 'Cannot be undone; staged changes stay'}
+      {...(untracked && hunk === undefined ? { body: 'Moves to the Trash' } : {})}
       cancel="Keep"
       confirm="Discard"
       onCancel={closeDialog}

@@ -291,6 +291,45 @@ describe('a worktree with no panes in it', () => {
     expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1')
   })
 
+  // An agent closed here whose conversation can be picked up: resuming it is what the page is for now.
+  it('offers resuming a closed agent as the one primary button', () => {
+    const reopenTerminal = vi.fn()
+    seed({
+      projects: [project],
+      worktrees: [worktree()],
+      activeWorktreeId: 'w1',
+      agents: [claude, codex],
+      loadClosedPanes: vi.fn(),
+      reopenTerminal,
+      closedPanes: {
+        w1: [
+          { terminalId: 't2', worktreeId: 'w1', resumable: false, closedAt: 3 },
+          { terminalId: 't1', worktreeId: 'w1', agent: 'claude', resumable: true, closedAt: 2 }
+        ]
+      }
+    })
+    mount()
+    expect(startButtons()).toEqual(['Resume Claude Code', 'New Terminal', 'New Markdown', 'Claude Code', 'Codex'])
+    const primary = [...document.querySelectorAll('.worktree-start__actions .button--primary')]
+    expect(primary.map((button) => button.lastChild?.textContent)).toEqual(['Resume Claude Code'])
+    fireEvent.click(screen.getByRole('button', { name: 'Resume Claude Code' }))
+    expect(reopenTerminal).toHaveBeenCalledExactlyOnceWith('w1', 't1')
+  })
+
+  it('offers no resume when no agent closed here can pick its conversation up', () => {
+    seed({
+      projects: [project],
+      worktrees: [worktree()],
+      activeWorktreeId: 'w1',
+      agents: [claude, codex],
+      loadClosedPanes: vi.fn(),
+      closedPanes: { w1: [{ terminalId: 't1', worktreeId: 'w1', agent: 'claude', resumable: false, closedAt: 2 }] }
+    })
+    mount()
+    expect(startButtons()).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Codex'])
+    expect(document.querySelector('.worktree-start__actions .button--primary')).toBeNull()
+  })
+
   it('offers nothing to start while the checkout is still being prepared', () => {
     openEmpty({ state: 'creating' })
     expect(screen.getByRole('heading', { name: 'Rewrite the pager' })).toBeTruthy()

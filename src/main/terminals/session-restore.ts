@@ -5,6 +5,7 @@
 import type { AgentKind } from './agent-command'
 import { carriesSelector, restartSessionCommand, resumeSessionCommand } from './agent-command'
 import { conversationOnDisk, type ConversationEvidence, type ConversationQuestion } from './agent-conversations'
+import type { PanePlace } from './pane-tree'
 import { noConversationMark } from './scrollbackRecord'
 
 /** One terminal, as much of it as outlives the process that ran it. */
@@ -35,6 +36,14 @@ export type TerminalRecord = {
   cols: number
   rows: number
   createdAt: number
+}
+
+/** A closed pane as kept for `terminal.reopen`: its record, its number, and what it sat beside. */
+export type ClosedTerminalRecord = {
+  record: TerminalRecord
+  ordinal?: number
+  closedAt: number
+  place?: PanePlace
 }
 
 export type RestoreLaunch = {

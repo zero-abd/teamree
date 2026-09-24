@@ -62,6 +62,7 @@ export function App(): React.JSX.Element {
   const notices = useWorkspaceStore((state) => state.notices)
   const dismissNotice = useWorkspaceStore((state) => state.dismissNotice)
   const hideRegion = useWorkspaceStore((state) => state.hideRegion)
+  const undo = useWorkspaceStore((state) => state.undo)
   const actOn = (notice: Notice): void => {
     const action = notice.action
     if (action === undefined) return
@@ -69,8 +70,9 @@ export function App(): React.JSX.Element {
       openInBrowser(action.url)
       return
     }
-    hideRegion(action.hide)
     dismissNotice(notice.id)
+    if ('undo' in action) void undo(action.undo)
+    else hideRegion(action.hide)
   }
   const appearance = useWorkspaceStore((state) => state.appearance)
   const appearanceOpen = useWorkspaceStore((state) => state.appearanceOpen)

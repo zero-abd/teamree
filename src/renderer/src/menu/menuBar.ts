@@ -80,6 +80,7 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'clone-repository': { section: 'file' },
   'go-to-file': { section: 'file' },
   'close-pane': { section: 'file' },
+  'reopen-closed-pane': { section: 'file' },
   'save-file': { section: 'file' },
   'save-all': { section: 'file' },
   // What a person does with a worktree once the agent has stopped, and until

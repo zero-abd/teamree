@@ -947,6 +947,42 @@ describe('starting a task in any project from the keyboard', () => {
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p2' })
   })
 
+  it("lists the project's recently removed worktrees in its menu, and restores the one chosen", () => {
+    const restoreWorktree = vi.fn()
+    const loadRemovedWorktrees = vi.fn(async () => {})
+    cleanup()
+    seed({
+      projects: [project, other],
+      worktrees: [worktree()],
+      restoreWorktree,
+      loadRemovedWorktrees,
+      removedWorktrees: [
+        {
+          id: 'w9/2',
+          projectId: 'p2',
+          worktreeId: 'w9',
+          name: 'Add a sub function',
+          branch: 'add-sub',
+          removedAt: Date.now() - 180_000
+        },
+        { id: 'w8/1', projectId: 'p1', worktreeId: 'w8', name: 'Elsewhere', branch: 'elsewhere', removedAt: 1 }
+      ]
+    })
+    mount()
+    fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
+    expect(loadRemovedWorktrees).toHaveBeenCalledOnce()
+    const menu = screen.getByRole('menu', { name: 'Actions for ledger' })
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Recently Removed' }))
+    const removed = screen.getByRole('menu', { name: 'Recently Removed' })
+    expect(
+      within(removed)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    ).toEqual(['Add a sub function3m ago'])
+    fireEvent.click(within(removed).getByRole('menuitem', { name: 'Add a sub function' }))
+    expect(restoreWorktree).toHaveBeenCalledExactlyOnceWith('p2', 'w9/2')
+  })
+
   it('makes ⌘N start in the project whose row has the focus', async () => {
     const { runWorkspaceCommand } = await import('../keyboard/workspaceCommands')
     act(() => projectRow('ledger').focus())
