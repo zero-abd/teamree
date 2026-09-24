@@ -86,12 +86,14 @@ export function clockLabel(at: number): string {
 }
 
 /**
- * The output reduced to what it is safe to replay: text, whitespace controls,
- * SGR. Applied on the way in and again on the way out: the file is the boundary.
+ * The output reduced to what it is safe to replay: text, whitespace controls, SGR, and
+ * forward cursor moves as spaces. Applied on the way in and again on the way out.
  */
 export function sanitizeRecordedOutput(text: string): string {
   let kept = ''
   let index = 0
+  // Where the kept text has the cursor, so a dropped column move can become the spaces it skipped.
+  let column = 0
 
   while (index < text.length) {
     const char = text[index] as string
@@ -99,6 +101,9 @@ export function sanitizeRecordedOutput(text: string): string {
     if (char === ESC) {
       const sequence = readEscape(text, index)
       if (sequence.keep !== undefined) kept += sequence.keep
+      const pad = sequence.move === undefined ? 0 : forwardPad(sequence.move, column)
+      kept += ' '.repeat(pad)
+      column += pad
       index = sequence.end
       continue
     }
@@ -106,6 +111,9 @@ export function sanitizeRecordedOutput(text: string): string {
     // CR is how a progress line overwrote itself; BS is how a spinner erased a frame.
     if (char === '\n' || char === '\r' || char === '\t' || char === '\b') {
       kept += char
+      if (char === '\r') column = 0
+      else if (char === '\t') column = (Math.floor(column / 8) + 1) * 8
+      else if (char === '\b') column = Math.max(0, column - 1)
       index += 1
       continue
     }
@@ -128,10 +136,21 @@ export function sanitizeRecordedOutput(text: string): string {
     }
 
     kept += char
+    // The second half of a surrogate pair is the same cell.
+    if (code < 0xdc00 || code > 0xdfff) column += 1
     index += 1
   }
 
   return kept
+}
+
+/** Past this a forward move is a probe for the right edge (`ESC[999C`), not a gap between words. */
+const LAYOUT_COLUMNS = 300
+
+/** The spaces a forward move skipped over, from `column`; none for a move back or a probe. */
+function forwardPad(move: { to: 'column' | 'right'; by: number }, column: number): number {
+  const target = move.to === 'right' ? column + move.by : move.by - 1
+  return target > column && target <= LAYOUT_COLUMNS ? target - column : 0
 }
 
 /**
@@ -150,8 +169,8 @@ export function tailFromLineBoundary(text: string, capBytes: number): string {
   return newline === -1 ? cut : cut.slice(newline + 1)
 }
 
-/** One escape sequence: where it ends, and what of it is worth keeping. */
-type Escape = { end: number; keep?: string }
+/** One escape sequence: where it ends, what of it is worth keeping, and a forward cursor move it made. */
+type Escape = { end: number; keep?: string; move?: { to: 'column' | 'right'; by: number } }
 
 /**
  * Consumes the sequence at `start`. Only a CSI ending in `m` with plain digit
@@ -164,6 +183,11 @@ function readEscape(text: string, start: number): Escape {
   if (next === '[') {
     const csi = scanCsi(text, start + 2)
     if (csi.final === 'm' && /^[0-9;:]*$/.test(csi.params)) return { end: csi.end, keep: text.slice(start, csi.end) }
+    // CUF, CHA and HPA: how agents that draw with the cursor put the spaces between words.
+    if (/^\d*$/.test(csi.params) && (csi.final === 'C' || csi.final === 'G' || csi.final === '`')) {
+      const by = Math.max(1, Number(csi.params || '1'))
+      return { end: csi.end, move: { to: csi.final === 'C' ? 'right' : 'column', by } }
+    }
     return { end: csi.end }
   }
 

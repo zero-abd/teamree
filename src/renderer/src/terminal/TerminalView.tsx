@@ -424,22 +424,13 @@ function openEmulator(
   })
   copyOnSelect(term, () => emulator.view.copyOnSelect(), copyText)
 
-  // Said once: an exited pane does not un-exit, and a line per keystroke
-  // would bury the scrollback.
-  let saidExited = false
-
   /**
    * Bytes on their way to the pty. `byHand` travels with them because only
    * this window can tell a device-query reply from typing. See `handsHere.ts`.
+   * An exited pane refuses them; the notice bar already says so.
    */
   const send = (data: string, byHand = true): void => {
-    void runtimeClient.call('terminal.write', { terminalId, data, byHand }).catch((error: unknown) => {
-      const notice = refusedWriteNotice(error)
-      if (notice === null || saidExited || !alive) return
-      saidExited = true
-      output.flush()
-      term.write(notice)
-    })
+    void runtimeClient.call('terminal.write', { terminalId, data, byHand }).catch(() => {})
   }
 
   const hands = handsHere(term.element)
@@ -481,15 +472,32 @@ function openEmulator(
   const pending: Extract<TerminalEvent, { type: 'data' }>[] = []
   let replaying = true
   let subscription: { close(): void } | null = null
+  // Until the pane runs again: its next byte starts a new run.
+  let ended = false
+  const end = (): void => {
+    ended = true
+    output.flush()
+    term.write(EXIT_RESET)
+  }
 
   const onEvent = (event: TerminalEvent): void => {
     if (!alive) return
     if (event.type === 'data') {
-      if (replaying) pending.push(event)
-      else output.push(event.data)
+      if (replaying) {
+        pending.push(event)
+        return
+      }
+      if (ended) {
+        // The runtime's line saying what starts below; it goes up with the old screen.
+        ended = false
+        output.flush()
+        clearIntoScrollback(term, event.data)
+        return
+      }
+      output.push(event.data)
     } else if (event.type === 'exit') {
-      output.flush()
-      term.write(`\r\n\u001b[38;5;244m[process exited with code ${event.exitCode}]\u001b[0m\r\n`)
+      if (replaying) ended = true
+      else end()
     }
   }
 
@@ -516,6 +524,7 @@ function openEmulator(
         const unseen = afterSnapshot(chunk, snapshot.end)
         if (unseen !== '') output.push(unseen)
       }
+      if (ended || snapshot.exited === true) end()
       if (!widen) return
       output.flush()
       term.write('', () => {
@@ -567,14 +576,24 @@ function attributionTitle(attention: PaneAttention, typing: readonly PaneTypist[
 }
 
 /**
- * What a refused keystroke puts in the pane, or null. Only an exited pane is
- * worth printing, in the exit line's register. Branches on the code, never the
- * message: `conflict` is the runtime's answer for an exited terminal.
+ * Written when a pane's process ends: out of the alternate screen, colours, margins and every
+ * input mode reset, cursor hidden. Nothing is printed; the notice bar says it exited.
  */
-export function refusedWriteNotice(error: unknown): string | null {
-  const code = (error as { code?: unknown } | null | undefined)?.code
-  if (code !== 'conflict') return null
-  return '\r\n\u001b[38;5;244m[this pane has exited]\u001b[0m\r\n'
+export const EXIT_RESET =
+  '\u001b[r\u001b[?1049l\u001b[0m\u001b[?1000l\u001b[?1002l\u001b[?1003l\u001b[?1006l' +
+  '\u001b[?2004l\u001b[?1004l\u001b[?1l\u001b>\u001b[?25l'
+
+/**
+ * Scrolls the screen, then `separator`, into the scrollback and homes a visible
+ * cursor: a pane run again starts on a clear screen.
+ */
+export function clearIntoScrollback(term: Pick<XTerm, 'options' | 'write'>, separator = ''): void {
+  const clear = '\u001b[2J\u001b[H'
+  term.options.scrollOnEraseInDisplay = true
+  // Off again once this is parsed: the program's own clears keep the default.
+  term.write(`${clear}${separator === '' ? '' : `${separator}${clear}`}\u001b[?25h`, () => {
+    term.options.scrollOnEraseInDisplay = false
+  })
 }
 
 /** The preferences xterm reads, in its own names. */

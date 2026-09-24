@@ -278,6 +278,25 @@ describePty('PtySession', () => {
   )
 
   it(
+    'says whether its agent has taken a turn: by its own word, or by a title saying one runs',
+    async () => {
+      const hooked = start({ agent: 'claude', command: 'sleep 5' })
+      expect(hooked.snapshot().tookTurn).toBe(false)
+      hooked.noteAgentEvent({ event: 'SessionStart', at: 1 })
+      expect(hooked.snapshot().tookTurn).toBe(false)
+      hooked.noteAgentEvent({ event: 'UserPromptSubmit', at: 2 })
+      hooked.noteAgentEvent({ event: 'Stop', at: 3 })
+      expect(hooked.snapshot().tookTurn).toBe(true)
+
+      const titled = start({ agent: 'codex', command: `printf '\\033]0;⠏ teamree\\007' && sleep 5` })
+      await waitUntil(() => titled.snapshot().tookTurn === true, 'the working title read')
+
+      expect(start({ command: 'sleep 5' }).snapshot().tookTurn).toBeUndefined()
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'never reads a shell printing the same words as asking',
     async () => {
       const session = start({ command: `${TRUST_HINT} && sleep 5`, schedule: soon })

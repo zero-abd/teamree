@@ -101,6 +101,17 @@ describe('activityOf', () => {
     expect(activityOf(terminal({ id: 't', agent: 'claude', running: false, exitCode: 1 }))).toBe('failed')
   })
 
+  // Declining the trust prompt exits 0 within a second; that is not a finished task.
+  it('reads an agent that exits cleanly before its first turn as stopped', () => {
+    expect(activityOf(terminal({ id: 't', agent: 'claude', running: false, exitCode: 0, tookTurn: false }))).toBe(
+      'quiet'
+    )
+    expect(activityOf(terminal({ id: 't', agent: 'claude', running: false, exitCode: 0, tookTurn: true }))).toBe('done')
+    expect(activityOf(terminal({ id: 't', agent: 'claude', running: false, exitCode: 2, tookTurn: false }))).toBe(
+      'failed'
+    )
+  })
+
   it('treats a death with no code at all as a failure', () => {
     expect(activityOf(terminal({ id: 't', agent: 'claude', running: false }))).toBe('failed')
   })

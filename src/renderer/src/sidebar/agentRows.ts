@@ -101,6 +101,7 @@ export type PaneActivitySource = {
   lastBellAt?: number
   /** What the agent last reported about itself, when it reports at all. */
   agentEvent?: AgentEvent
+  tookTurn?: boolean
 }
 
 /**
@@ -141,7 +142,11 @@ export function agentSays(event: AgentEvent | undefined): AgentActivity | null {
  * then the readings of silence. A stale "working" title ranks below the bell on purpose.
  */
 export function activityOf(terminal: PaneActivitySource): AgentActivity {
-  if (!terminal.running) return terminal.exitCode === 0 ? 'done' : 'failed'
+  if (!terminal.running) {
+    if (terminal.exitCode !== 0) return 'failed'
+    // Declining a trust prompt also exits 0; only an agent that took a turn finished one.
+    return terminal.tookTurn === false ? 'quiet' : 'done'
+  }
   const said = agentSays(terminal.agentEvent)
   if (said !== null) return said
   // A shell rings for a failed tab completion: only an agent can be asking.

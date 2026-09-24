@@ -168,6 +168,8 @@ export class PtySession {
   private lastBellAt: number | undefined
   /** What the agent last said about itself; see `Terminal.agentEvent`. */
   private agentEvent: AgentEvent | undefined
+  /** See `Terminal.tookTurn`. A resumed conversation has had its turns. */
+  private tookTurn: boolean
   private screenSays: ScreenOpinion | undefined
   private screenAsks: string | undefined
   private cancelScreenRead: (() => void) | undefined
@@ -215,6 +217,7 @@ export class PtySession {
     this.title = initialTitle(init, platform)
     this.label = init.label
     this.restored = init.restored
+    this.tookTurn = init.restored === 'agent'
     this.lastOutputAt = (init.now ?? Date.now)()
     this.startedAt = this.lastOutputAt
 
@@ -264,6 +267,7 @@ export class PtySession {
       ...(this.screenSays === undefined ? {} : { screenSays: this.screenSays }),
       ...(this.lastBellAt === undefined ? {} : { lastBellAt: this.lastBellAt }),
       ...(this.agentEvent === undefined ? {} : { agentEvent: this.agentEvent }),
+      ...(this.agent === undefined ? {} : { tookTurn: this.tookTurn }),
       lastOutputAt: this.lastOutputAt
     }
   }
@@ -285,6 +289,7 @@ export class PtySession {
    */
   noteAgentEvent(event: AgentEvent): void {
     this.agentEvent = { ...event }
+    if (event.event === 'UserPromptSubmit') this.tookTurn = true
   }
 
   get isRunning(): boolean {
@@ -471,6 +476,7 @@ export class PtySession {
     for (const title of titles) {
       if (title === this.title) continue
       this.title = title
+      if (titleOpinion(this.agent, title) === 'working') this.tookTurn = true
       this.emit({ type: 'title', title })
     }
     // Each chunk after the reap pushes the quiet window out again, up to the ceiling.
@@ -590,6 +596,7 @@ export class PtySession {
     if (this.clock() - this.startedAt > RESUME_WINDOW_MS) return false
 
     this.restored = undefined
+    this.tookTurn = false
     this.resumeFailed = true
     // The conversation was expected to print itself, and it did not.
     this.recordHeld = false

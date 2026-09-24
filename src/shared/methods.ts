@@ -775,11 +775,12 @@ export type MethodContract = {
   'terminal.rename': { params: z.infer<typeof Params.terminalRename>; result: Terminal }
   /**
    * `end` places the snapshot in the stream, so a subscriber can drop the chunks it already holds;
-   * `widest` is the widest the pane has been, so a replay is never drawn narrower than it was written.
+   * `widest` is the widest the pane has been, so a replay is never drawn narrower than it was written;
+   * `exited` is set once the process has gone, for a view mounting after the exit event.
    */
   'terminal.read': {
     params: z.infer<typeof Params.terminalRead>
-    result: { data: string; end?: number; widest?: number }
+    result: { data: string; end?: number; widest?: number; exited?: boolean }
   }
   'terminal.subscribe': { params: z.infer<typeof Params.terminalSubscribe>; result: { subscription: string } }
   'terminal.split': { params: z.infer<typeof Params.terminalSplit>; result: { terminal: Terminal; layout: Layout } }
