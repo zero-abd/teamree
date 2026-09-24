@@ -26,6 +26,8 @@ export type TaskCreate = {
   agentCommand?: string
   /** The description as typed: the agent's first prompt, and the worktree's record of what it is for. */
   task: string
+  /** A branch named by hand; absent, the runtime makes one from `name`. */
+  branch?: string
 }
 
 /** The most characters a task's name keeps; see `taskName`. */
@@ -101,13 +103,23 @@ export function fanOut(agents: readonly InstalledAgent[], counts: AgentCounts): 
   return selection
 }
 
-/** One create per selected agent, named by the shared suffix rule; an empty selection is the worktree alone. */
-export function taskCreates(task: string, selection: readonly InstalledAgent[]): TaskCreate[] {
+/**
+ * One create per selected agent, named by the shared suffix rule; an empty selection is the worktree alone.
+ * A `branch` named by hand is suffixed the same way, `pager-codex`, so several runs never ask for one branch.
+ */
+export function taskCreates(task: string, selection: readonly InstalledAgent[], branch = ''): TaskCreate[] {
   const commands = selection.map((agent) => agent.command)
   const text = task.trim()
+  const branches = branch === '' ? [] : taskNamesForAgents(branch, commands).map((each) => each.replaceAll(' ', '-'))
   return taskNamesForAgents(taskName(text), commands).map((name, index) => {
     const agentCommand = commands[index]
-    return agentCommand === undefined ? { name, task: text } : { name, agentCommand, task: text }
+    const named = branches[index]
+    return {
+      name,
+      ...(agentCommand === undefined ? {} : { agentCommand }),
+      task: text,
+      ...(named === undefined ? {} : { branch: named })
+    }
   })
 }
 

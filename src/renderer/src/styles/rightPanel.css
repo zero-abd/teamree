@@ -1,5 +1,5 @@
-/* The panel on the right of the panes: a rail of three tabs, and under it
-   the worktree's files, its changes, or its panes.
+/* The panel on the right of the panes: a rail of two tabs, and under it
+   the worktree's files or its changes.
 
    Closed, the panel is the rail of icons alone, down the window's right edge,
    so the tabs stay findable. Open, the rail of words sits across the top and
@@ -201,12 +201,6 @@
   border-bottom: 1px solid var(--line);
 }
 
-.panel__toolbarText {
-  flex: 1;
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-}
-
 .panel__tool {
   display: flex;
   flex: none;
@@ -403,24 +397,6 @@
   stroke-linejoin: round;
 }
 
-/* Panes ------------------------------------------------------------------- */
-
-.panel__panes {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-}
-
-/* The sidebar indents its pane rows under a worktree name; here there is no
-   name above them, so they start at the edge. */
-.panes--panel {
-  flex: 1;
-  min-height: 0;
-  padding: var(--s2) var(--s2);
-  overflow: auto;
-}
-
 /* Changes ----------------------------------------------------------------- */
 
 /* One height whether or not a button or an error is in it, so the list below never jumps. */
@@ -521,4 +497,28 @@
   white-space: pre-wrap;
   word-break: break-word;
   user-select: text;
+}
+
+/* A narrow window lays the open panel over the panes' right edge, as the
+   Appearance sheet does, rather than taking a column the agent needs. */
+@media (width < 1200px) {
+  .workspace__body {
+    position: relative;
+  }
+
+  .panel:not(.panel--closed) {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    border-left: 1px solid var(--line-strong);
+    box-shadow: var(--shadow-pop);
+    transition: none;
+    animation: sheet-in var(--motion-base) var(--ease);
+  }
+
+  .panel__resizer {
+    display: none;
+  }
 }

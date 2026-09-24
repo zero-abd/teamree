@@ -162,11 +162,80 @@ describe('how it reads', () => {
     expect(pickers[1]?.classList.contains('picker__input--ref')).toBe(true)
   })
 
-  it('previews the branch as a fragment', async () => {
+  it('previews the branch as the branch, an arrow, and where it starts', async () => {
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     const preview = document.getElementById(startPoint().getAttribute('aria-describedby') ?? '')
-    expect(preview?.textContent).toBe('new branch rewrite-the-pager from origin/main @ originm')
+    expect(preview?.textContent).toBe('rewrite-the-pager ← origin/main originm')
+    expect(preview?.querySelector('code')).toBeNull()
+  })
+
+  // An example task in the box read as a task already typed.
+  it('asks for the task by name, with no example to mistake for one', async () => {
+    await open()
+    expect(task().placeholder).toBe('Task')
+  })
+})
+
+describe('the branch it will make', () => {
+  const branchButton = (): HTMLButtonElement => screen.getByRole('button', { name: 'rewrite-the-pager' })
+
+  it('is renamed in place, and the name typed is the branch asked for', async () => {
+    await open()
+    fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
+    fireEvent.click(branchButton())
+    const field = screen.getByRole('textbox', { name: 'Branch' })
+    expect(document.activeElement).toBe(field)
+    fireEvent.change(field, { target: { value: 'ada/pager streams' } })
+    expect(fireEvent.keyDown(field, { key: 'Enter' })).toBe(false)
+    expect(startTask).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'ada/pager-streams' })).toBeTruthy()
+    fireEvent.change(task(), { target: { value: 'Rewrite the pager fully' } })
+    submit().click()
+    expect(startTask).toHaveBeenCalledWith({
+      projectId: 'p1',
+      startedFrom: 'origin/main',
+      creates: [
+        {
+          name: 'Rewrite the pager fully',
+          agentCommand: 'claude',
+          task: 'Rewrite the pager fully',
+          branch: 'ada/pager-streams'
+        }
+      ]
+    })
+  })
+
+  it('gives each run its own branch from the name typed', async () => {
+    seed({ agents: bothAgents })
+    await open()
+    fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
+    fireEvent.click(more('Codex'))
+    fireEvent.click(branchButton())
+    const field = screen.getByRole('textbox', { name: 'Branch' })
+    fireEvent.change(field, { target: { value: 'pager' } })
+    fireEvent.blur(field)
+    submit().click()
+    expect(startTask.mock.calls[0]?.[0].creates.map((create: { branch?: string }) => create.branch)).toEqual([
+      'pager-claude',
+      'pager-codex'
+    ])
+  })
+
+  it('goes back to the task’s own on Escape or when cleared, and keeps the dialog', async () => {
+    await open()
+    fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
+    fireEvent.click(branchButton())
+    fireEvent.change(screen.getByRole('textbox', { name: 'Branch' }), { target: { value: 'other' } })
+    act(() => {
+      fireEvent.keyDown(window, { key: 'Escape' })
+    })
+    expect(closeDialog).not.toHaveBeenCalled()
+    fireEvent.click(branchButton())
+    fireEvent.change(screen.getByRole('textbox', { name: 'Branch' }), { target: { value: ' ' } })
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Branch' }), { key: 'Enter' })
+    submit().click()
+    expect(startTask.mock.calls[0]?.[0].creates[0]).not.toHaveProperty('branch')
   })
 })
 

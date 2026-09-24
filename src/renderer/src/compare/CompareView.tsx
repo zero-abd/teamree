@@ -16,7 +16,7 @@ import { fitLayout, PatchView } from '../workspace/PatchView'
 
 type Run = { id: string; display: WorktreeDisplay; name: string }
 
-/** `path` is the tab's title, `claude vs codex`; `other` is the sibling on the right. */
+/** `path` is the tab's title, `Claude Code vs Codex`; `other` is the sibling on the right. */
 export function CompareView({
   paneId,
   worktreeId,

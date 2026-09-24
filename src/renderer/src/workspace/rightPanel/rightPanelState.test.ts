@@ -70,8 +70,8 @@ describe('the remembered panel', () => {
 
   it('comes back exactly as it was written', () => {
     const storage = fakeStorage()
-    writeStoredRightPanel(storage, { open: true, tab: 'panes' })
-    expect(readStoredRightPanel(storage)).toEqual({ open: true, tab: 'panes' })
+    writeStoredRightPanel(storage, { open: true, tab: 'files' })
+    expect(readStoredRightPanel(storage)).toEqual({ open: true, tab: 'files' })
     writeStoredRightPanel(storage, { open: false, tab: 'changes' })
     expect(readStoredRightPanel(storage)).toEqual({ open: false, tab: 'changes' })
   })
@@ -85,6 +85,11 @@ describe('the remembered panel', () => {
       open: true,
       tab: 'files'
     })
+    // The Panes tab is gone; the sidebar lists the same rows.
+    expect(readStoredRightPanel(fakeStorage({ 'teamree.shell.rightPanel': '{"open":true,"tab":"panes"}' }))).toEqual({
+      open: true,
+      tab: 'files'
+    })
     expect(readStoredRightPanel(fakeStorage({ 'teamree.shell.rightPanel': '{"open":"yes","tab":"changes"}' }))).toEqual(
       {
         open: false,
@@ -95,13 +100,10 @@ describe('the remembered panel', () => {
 })
 
 describe('changesOnScreen', () => {
-  // The refresh that reads `git status` on every event is paid only while
-  // somebody could see the answer: the changes tab draws the list, the files
-  // tab draws a letter per changed file, and the panes tab draws neither.
-  it('is true for the two tabs that draw changes, and only while open', () => {
-    expect(changesOnScreen({ rightPanelOpen: true, rightPanelTab: 'changes' })).toBe(true)
-    expect(changesOnScreen({ rightPanelOpen: true, rightPanelTab: 'files' })).toBe(true)
-    expect(changesOnScreen({ rightPanelOpen: true, rightPanelTab: 'panes' })).toBe(false)
-    expect(changesOnScreen({ rightPanelOpen: false, rightPanelTab: 'changes' })).toBe(false)
+  // The refresh that reads `git status` on every event is paid only while somebody could see the answer:
+  // the changes tab draws the list, the files tab a letter per changed file.
+  it('is true for either tab, and only while open', () => {
+    expect(changesOnScreen({ rightPanelOpen: true })).toBe(true)
+    expect(changesOnScreen({ rightPanelOpen: false })).toBe(false)
   })
 })

@@ -189,7 +189,7 @@ export function Sidebar({
               type="button"
               className={`rail__link${dashboardOpen ? ' rail__link--current' : ''}`}
               aria-current={dashboardOpen ? 'page' : undefined}
-              title="All panes, by what needs you"
+              title="All Panes, by what needs you"
               onClick={toggleDashboard}
             >
               <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
@@ -198,7 +198,7 @@ export function Sidebar({
                 <rect x="2" y="7.8" width="4.2" height="4.2" rx="1" />
                 <rect x="7.8" y="7.8" width="4.2" height="4.2" rx="1" />
               </svg>
-              <span>All panes</span>
+              <span>All Panes</span>
             </button>
           </li>
           <li>

@@ -339,7 +339,7 @@ export function worktreeTone(rows: readonly AgentRow[]): DotTone | null {
 
 /** How many panes there are, by the one rule every count follows: terminals the runtime lists, file panes aside. */
 export type PaneCount = {
-  /** In the worktree on screen: what its Panes tab lists. */
+  /** In the worktree on screen. */
   here: number
   /** In every listed worktree: what the board lists. */
   total: number

@@ -1,6 +1,4 @@
-// The panes of one worktree, one row each. Lifted out of the worktree row so the right
-// panel draws the same rows: two readings of the same PTY would one day disagree about
-// which pane is waiting.
+// The panes of one worktree, one row each, under its row in the sidebar.
 
 import { PaneGlyph } from '../agents/glyphs'
 import { requestRegionFocus } from '../shell/regions'
@@ -29,8 +27,6 @@ type PaneRowsProps = {
   now: number
   /** Shows the pane; a promise when showing it has to open its worktree first. */
   onFocusTerminal: (terminalId: string) => void | Promise<void>
-  /** Added to the list's own class, for a caller that lays the rows out differently. */
-  className?: string
   /** Drawn as the sidebar tree's third level, whose arrows reach the rows instead of Tab. */
   tree?: boolean
 }
@@ -42,12 +38,11 @@ export function PaneRows({
   unread,
   now,
   onFocusTerminal,
-  className,
   tree = false
 }: PaneRowsProps): React.JSX.Element {
   const item = tree ? ({ role: 'treeitem', 'aria-level': 3, tabIndex: -1 } as const) : {}
   return (
-    <ul className={className === undefined ? 'panes' : `panes ${className}`} role={tree ? 'group' : undefined}>
+    <ul className="panes" role={tree ? 'group' : undefined}>
       {rows.map((row) => {
         const attention = watchers[row.terminalId] ?? NO_ATTENTION
         const typing = typingNow(attention.typists, now)

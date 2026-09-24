@@ -13,6 +13,7 @@ import {
   type TeamworkPublishPlan,
   type TeamworkStatus
 } from '@shared/entities'
+import { Confirm } from '../dialogs/Confirm'
 import {
   ADD_KEY_BUTTON,
   brokenRelayOverride,
@@ -333,7 +334,7 @@ function IdentityBody({ list }: { list: MemberList }): React.JSX.Element {
   )
 }
 
-/** What a key grants, then the button that grants it: `docs/teamwork.md` calls this remote code execution by design. */
+/** The handle and the button; what a key grants is the confirm's body, since `docs/teamwork.md` calls it remote code execution by design. */
 function JoinBody({
   list,
   pending,
@@ -348,18 +349,32 @@ function JoinBody({
   onClearError: () => void
 }): React.JSX.Element {
   const [handle, setHandle] = useState('')
+  const [asking, setAsking] = useState(false)
   const chosen = handle.trim() || list.self.handle
   // The runtime files this under a different name: `Ada Lovelace` becomes `ada-lovelace.pub`.
   const file = memberFilePreview(list, handle)
 
   const submit = (event: React.FormEvent): void => {
     event.preventDefault()
-    onJoin(handle.trim() || undefined)
+    if (chosen !== null) setAsking(true)
   }
 
   return (
     <div className="step__body">
-      <p className="grant">{KEY_GRANT_WARNING}</p>
+      {asking && chosen !== null ? (
+        <Confirm
+          title={`Add your key as ${chosen}?`}
+          body={KEY_GRANT_WARNING}
+          cancel="Cancel"
+          confirm={ADD_KEY_BUTTON}
+          tone="primary"
+          onCancel={() => setAsking(false)}
+          onConfirm={() => {
+            setAsking(false)
+            onJoin(handle.trim() || undefined)
+          }}
+        />
+      ) : null}
       <form className="members__self members__self--join" onSubmit={submit}>
         <label className="field">
           <span className="field__label">Handle</span>

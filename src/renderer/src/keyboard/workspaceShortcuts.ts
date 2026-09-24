@@ -97,7 +97,7 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // ⌘P as in every editor; this window has nothing to print.
   { command: 'go-to-file', chord: { key: 'p' }, title: 'Go to File…' },
   { command: 'find-in-pane', chord: { key: 'f' }, title: 'Find in Pane' },
-  // Named for the screen it opens ("All panes").
+  // Named for the screen it opens.
   { command: 'open-dashboard', chord: { key: 'e' }, title: 'All Panes' },
   // ⌘, opens the settings page; `menuBar.ts` labels it Settings… in the application menu.
   { command: 'open-settings', chord: { key: ',' }, title: 'Settings' },

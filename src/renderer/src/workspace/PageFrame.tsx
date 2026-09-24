@@ -1,4 +1,4 @@
-// The frame Settings, Help, Teamwork and All panes share: a head with the title and a ×, the page's own
+// The frame Settings, Help, Teamwork and All Panes share: a head with the title and a ×, the page's own
 // controls under them, then one measured column that scrolls under it.
 
 import { useEffect, useRef, type ReactNode, type Ref } from 'react'

@@ -177,6 +177,40 @@ button.picker__chevron:hover {
   color: var(--accent-bright);
 }
 
+/* Where the task's branch starts: refs, so mono, and quiet. */
+.combo__summary {
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+}
+
+.combo__branch {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dashed var(--line-strong);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: text;
+}
+
+.combo__branch:hover {
+  color: var(--fg);
+}
+
+.combo__branchInput {
+  padding: 0 var(--s1);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+}
+
+.combo__branchInput:focus {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
 /* One row per installed agent, each with a count: the table is the whole
    choice, so it reads as a list rather than as a control. */
 .agents {

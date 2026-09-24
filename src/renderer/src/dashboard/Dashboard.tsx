@@ -78,7 +78,7 @@ export function Dashboard(): React.JSX.Element {
   return (
     <PageFrame
       label="Every pane"
-      title="All panes"
+      title="All Panes"
       lede={
         shown.length === 0
           ? 'No panes'

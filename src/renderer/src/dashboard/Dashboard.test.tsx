@@ -178,7 +178,7 @@ describe('leaving the board', () => {
     render(<Dashboard />)
     const main = screen.getByRole('main', { name: 'Every pane' })
     const head = main.querySelector('.page__head') as HTMLElement
-    expect(head.querySelector('h1')?.textContent).toBe('All panes')
+    expect(head.querySelector('h1')?.textContent).toBe('All Panes')
     expect(head.contains(screen.getByRole('button', { name: 'Unread Only' }))).toBe(true)
     expect(main.querySelector('.page__body .page__column .board__list')).not.toBeNull()
   })

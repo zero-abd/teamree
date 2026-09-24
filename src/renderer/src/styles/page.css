@@ -1,4 +1,4 @@
-/* The frame of every full-page view (Settings, Help, Teamwork, All panes): a fixed head, then a body
+/* The frame of every full-page view (Settings, Help, Teamwork, All Panes): a fixed head, then a body
    that scrolls under it, both laid over one centred column so titles and content share a left edge. */
 
 .page {
