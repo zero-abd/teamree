@@ -388,7 +388,7 @@ describe('updates', () => {
     seed({ update: { ...release(), current: '0.0.0-dev', checkable: false } })
     render(<SettingsView />)
     expect(screen.getByText('teamree 0.0.0-dev (not a release)')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Check for updates' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Check for Updates' })).toBeNull()
     expect(screen.queryByRole('checkbox', { name: 'Check automatically' })).toBeNull()
   })
 
@@ -396,7 +396,7 @@ describe('updates', () => {
     seed({ update: { ...release(), checkedAt: Date.now() - 4 * 60_000 } })
     render(<SettingsView />)
     expect(screen.getByText('Checked 4m ago')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Check for Updates' }))
     expect(checkForUpdates).toHaveBeenCalled()
   })
 
@@ -907,11 +907,11 @@ describe('the relay a project meets on', () => {
     const block = relayBlock()
     expect(block.querySelectorAll('input')).toHaveLength(0)
     expect(block.querySelectorAll('textarea')).toHaveLength(0)
-    fireEvent.click(within(block).getByRole('button', { name: 'Open teamwork for pager' }))
+    fireEvent.click(within(block).getByRole('button', { name: 'Open Teamwork' }))
     expect(openTeamwork).toHaveBeenCalledWith('p1')
   })
 
-  it('says there is none, and why, rather than showing a blank line', () => {
+  it('says None in the secondary colour rather than a blank line or a bold sentence', () => {
     seed({
       relays: {
         p1: {
@@ -925,7 +925,8 @@ describe('the relay a project meets on', () => {
     })
     render(<SettingsView />)
     const block = within(relayBlock())
-    expect(block.getByText('No .teamree/relay')).toBeTruthy()
+    expect(block.getByText('None').className).toBe('settings-fact settings-fact--none')
+    expect(block.queryByText(/No \.teamree\/relay/)).toBeNull()
   })
 })
 

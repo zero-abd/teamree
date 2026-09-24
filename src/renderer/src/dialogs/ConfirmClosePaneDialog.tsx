@@ -24,7 +24,7 @@ export function ConfirmClosePaneDialog({ terminalId }: { terminalId: string }): 
     <Confirm
       title={warning.title}
       body={warning.body}
-      cancel="Leave it open"
+      cancel="Leave Open"
       confirm={warning.confirm}
       onCancel={closeDialog}
       onConfirm={() => {

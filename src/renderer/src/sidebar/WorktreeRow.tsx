@@ -38,7 +38,7 @@ type WorktreeRowProps = {
   /** Panes that have printed since last looked at; read once by the sidebar for every row. */
   unread: ReadonlySet<string>
   now: number
-  onFocusTerminal: (terminalId: string) => void
+  onFocusTerminal: (terminalId: string) => void | Promise<void>
   active: boolean
   onOpen: () => void
   onRetry: () => void

@@ -179,7 +179,7 @@ describe('leaving the board', () => {
     const main = screen.getByRole('main', { name: 'Every pane' })
     const head = main.querySelector('.page__head') as HTMLElement
     expect(head.querySelector('h1')?.textContent).toBe('All panes')
-    expect(head.contains(screen.getByRole('button', { name: 'Unread only' }))).toBe(true)
+    expect(head.contains(screen.getByRole('button', { name: 'Unread Only' }))).toBe(true)
     expect(main.querySelector('.page__body .page__column .board__list')).not.toBeNull()
   })
 
@@ -275,7 +275,7 @@ describe('the unread filter', () => {
     expect(screen.getByText('alpha')).toBeTruthy()
     expect(screen.getByText('beta')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Unread only' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Unread Only' }))
 
     expect(screen.getByText('alpha')).toBeTruthy()
     expect(screen.queryByText('beta')).toBeNull()
@@ -292,7 +292,7 @@ describe('the unread filter', () => {
   it('goes back to every pane when it is pressed again', () => {
     seedTwo()
     render(<Dashboard />)
-    const toggle = screen.getByRole('button', { name: 'Unread only' })
+    const toggle = screen.getByRole('button', { name: 'Unread Only' })
 
     fireEvent.click(toggle)
     expect(toggle.getAttribute('aria-pressed')).toBe('true')

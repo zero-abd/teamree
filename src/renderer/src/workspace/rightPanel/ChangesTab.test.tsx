@@ -217,7 +217,7 @@ describe('pushing from the changes tab', () => {
     seed({ upstream: null, ahead: 0 })
     useWorkspaceStore.setState({ logs: { w1: { ...log, commits: [] } } })
     render(<ChangesTab />)
-    expect(screen.queryByRole('button', { name: 'Publish branch' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Publish Branch' })).toBeNull()
   })
 
   it('offers nothing when the upstream has every commit', () => {
@@ -249,7 +249,7 @@ describe('which button is the next step', () => {
     withChanges(rows)
     render(<ChangesTab />)
     expect(primary('Commit All')).toBe(true)
-    expect(screen.queryByRole('button', { name: 'Publish branch' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Publish Branch' })).toBeNull()
   })
 
   it('offers Publish, quiet, beside Commit once the new branch has a commit', () => {
@@ -257,13 +257,13 @@ describe('which button is the next step', () => {
     withChanges(rows)
     render(<ChangesTab />)
     expect(primary('Commit All')).toBe(true)
-    expect(primary('Publish branch')).toBe(false)
+    expect(primary('Publish Branch')).toBe(false)
   })
 
   it('is Publish on a new branch with commits and nothing uncommitted', () => {
     seed({ upstream: null, ahead: 1 })
     render(<ChangesTab />)
-    expect(primary('Publish branch')).toBe(true)
+    expect(primary('Publish Branch')).toBe(true)
   })
 })
 
@@ -418,7 +418,7 @@ describe('the changes header', () => {
     const ref = document.querySelector('.changes__ref') as HTMLElement
     expect(ref.textContent).toBe('rewrite-the-pager · ↑2 ↓3')
     expect(ref.title).toBe('↑ origin/main  ↓ origin/main')
-    expect(screen.getByRole('button', { name: 'Publish branch' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Publish Branch' })).toBeTruthy()
   })
 })
 
@@ -728,7 +728,7 @@ describe('discarding a file', () => {
     render(<Tab />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Discard README.md…' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Keep it' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Keep' }))
 
     expect(call).not.toHaveBeenCalledWith('worktree.discardPath', expect.anything())
     expect(screen.queryByRole('dialog')).toBeNull()

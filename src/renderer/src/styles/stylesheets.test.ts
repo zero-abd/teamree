@@ -59,6 +59,13 @@ describe('stylesheets', () => {
     expect(declarationOf(ruleFor('updates.css', '.update-card'), 'position')).toBeUndefined()
   })
 
+  // Red on pink read as the failed tone; inline code is text on the raised ground, like a code block.
+  it('draws inline code in a markdown page in neutral ink', () => {
+    const rule = ruleFor('markdown.css', '.md-editor code')
+    expect(declarationOf(rule, 'color')).toBe('var(--fg)')
+    expect(declarationOf(rule, 'background')).toBe('var(--bg-raised)')
+  })
+
   // `text-overflow: ellipsis` cuts mid-word; a one-line clamp ends on a word.
   it('ends a quoted line under a pane row on a word, not in the middle of one', () => {
     const rule = ruleFor('sidebar.css', '.pane-row__evidence')
@@ -398,8 +405,16 @@ describe('stylesheets', () => {
       const px = (value: string | undefined): number => Number.parseFloat(value ?? 'NaN')
       const inner = px(declarationOf(ruleFor('rightPanel.css', '.panel--closed'), 'width')) - 1
       const tab = px(declarationOf(ruleFor('rightPanel.css', '.panel__rail--edge .panel__tab'), 'width'))
-      const right = px(declarationOf(ruleFor('rightPanel.css', '.panel__rail--edge .panel__count'), 'right'))
-      expect((inner - tab) / 2 + right).toBeGreaterThanOrEqual(2)
+      expect((inner - tab) / 2).toBeGreaterThanOrEqual(2)
+    })
+
+    // Over the glyph's corner, the pill covered the icon and the digit sat above the pill.
+    it('stacks a closed rail’s count under its glyph, the digit centred in the pill', () => {
+      const tab = ruleFor('rightPanel.css', '.panel__rail--edge .panel__tab')
+      const count = ruleFor('rightPanel.css', '.panel__rail--edge .panel__count')
+      expect(declarationOf(tab, 'flex-direction')).toBe('column')
+      expect(declarationOf(count, 'position')).toBeUndefined()
+      expect(declarationOf(count, 'line-height')).toBe(declarationOf(count, 'height'))
     })
   })
 

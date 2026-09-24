@@ -1,5 +1,5 @@
-// The front door, with no worktree open: the mark, the two ways to a project, New task once there is one,
-// and two chords. No agent buttons and no headline; the buttons carry the meaning.
+// The front door, with no worktree open: the mark, then the two ways to a project, or New Task once there
+// is one (the sidebar's + adds more), and the chords. No agent buttons and no headline.
 
 import type { Project } from '@shared/entities'
 import type { PlatformModifier } from '../keyboard/platformModifier'
@@ -8,7 +8,7 @@ import { menuLabel } from '../menu/menuBar'
 import { BrandMark } from '../shell/Brand'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
-/** The chords worth knowing first, as commands so label and key come from the menu's table; New Task is the button above. */
+/** The chords worth knowing first, as commands so label and key come from the menu's table. */
 const SHORTCUT_COMMANDS: readonly WorkspaceCommand[] = ['open-palette', 'toggle-sidebar']
 
 export function Welcome({
@@ -35,37 +35,41 @@ export function Welcome({
       </span>
 
       <div className="welcome__actions">
-        <button
-          type="button"
-          className={project === undefined ? 'button button--primary button--lead' : 'button button--lead'}
-          onClick={() => void chooseProjectFolder()}
-        >
-          Open Folder…
-        </button>
-        <button type="button" className="button button--lead" onClick={() => openDialog({ kind: 'clone-project' })}>
-          Clone…
-        </button>
-        {/* Only once there is a project for the composer to make the worktree in. */}
-        {project === undefined ? null : (
+        {project === undefined ? (
+          <>
+            <button
+              type="button"
+              className="button button--primary button--lead"
+              onClick={() => void chooseProjectFolder()}
+            >
+              Open Folder…
+            </button>
+            <button type="button" className="button button--lead" onClick={() => openDialog({ kind: 'clone-project' })}>
+              Clone…
+            </button>
+          </>
+        ) : (
           <button
             type="button"
             className="button button--primary button--lead"
             onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
           >
-            New task
+            New Task
           </button>
         )}
       </div>
 
       <dl className="welcome__shortcuts">
-        {SHORTCUT_COMMANDS.map((command) => (
-          <div key={command} data-command={command}>
-            <dt>{menuLabel(command, { sidebarVisible, rightPanelOpen })}</dt>
-            <dd>
-              <kbd>{shortcutHint(command, modifier)}</kbd>
-            </dd>
-          </div>
-        ))}
+        {(project === undefined ? SHORTCUT_COMMANDS : ['new-worktree' as const, ...SHORTCUT_COMMANDS]).map(
+          (command) => (
+            <div key={command} data-command={command}>
+              <dt>{menuLabel(command, { sidebarVisible, rightPanelOpen })}</dt>
+              <dd>
+                <kbd>{shortcutHint(command, modifier)}</kbd>
+              </dd>
+            </div>
+          )
+        )}
       </dl>
     </div>
   )

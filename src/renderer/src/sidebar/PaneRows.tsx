@@ -3,6 +3,7 @@
 // which pane is waiting.
 
 import { PaneGlyph } from '../agents/glyphs'
+import { requestRegionFocus } from '../shell/regions'
 import { NO_ATTENTION, typingNow, type PaneAttention } from '../state/paneAttention'
 import {
   agoLabel,
@@ -25,7 +26,8 @@ type PaneRowsProps = {
   /** Panes that have printed since this person last had them in front of them. */
   unread: ReadonlySet<string>
   now: number
-  onFocusTerminal: (terminalId: string) => void
+  /** Shows the pane; a promise when showing it has to open its worktree first. */
+  onFocusTerminal: (terminalId: string) => void | Promise<void>
   /** Added to the list's own class, for a caller that lays the rows out differently. */
   className?: string
   /** Drawn as the sidebar tree's third level, whose arrows reach the rows instead of Tab. */
@@ -59,7 +61,20 @@ export function PaneRows({
               {...item}
               className={`pane-row${isUnread ? ' pane-row--unread' : ''}`}
               title={paneTitle(row, attention, typing, isUnread)}
-              onClick={() => onFocusTerminal(row.terminalId)}
+              onClick={(event) => {
+                const button = event.currentTarget
+                const fromKeyboard = event.detail === 0
+                void Promise.resolve(onFocusTerminal(row.terminalId)).then(() => {
+                  // Space previews: the pane takes the focus as it comes to the front, so hand it back after that frame.
+                  if (fromKeyboard) requestAnimationFrame(() => setTimeout(() => button.focus()))
+                })
+              }}
+              // Enter goes into the pane, so typing lands there.
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+                event.preventDefault()
+                void Promise.resolve(onFocusTerminal(row.terminalId)).then(() => requestRegionFocus('panes'))
+              }}
             >
               <span className="pane-row__head">
                 {/* Shortened for the row only: the hover text carries the whole of it. */}

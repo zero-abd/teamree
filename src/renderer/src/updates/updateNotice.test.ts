@@ -54,7 +54,7 @@ describe('what the card says', () => {
 
   it('offers the release page when there is no image to download', () => {
     const available = { ...state().available!, downloadUrl: null }
-    expect(updateNotice(state({ available }))?.action).toBe('Open the release page')
+    expect(updateNotice(state({ available }))?.action).toBe('Open Release Page')
     expect(updateNotice(state())?.action).toContain('0.2.0')
   })
 

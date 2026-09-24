@@ -55,8 +55,10 @@ function checkedLabel(checkedAt: number, now: number): string {
 }
 
 export type RelayPanel = {
-  /** What teamwork would dial, or why there is nothing. */
+  /** What teamwork would dial, or `None`. */
   headline: string
+  /** True when the headline is `None`, drawn as an empty value rather than a fact. */
+  empty: boolean
   /** Where the URL came from. Null when there is none. */
   detail: string | null
   /** Said only when this process was started with the override set; Finder launches inherit no env. */
@@ -64,18 +66,19 @@ export type RelayPanel = {
 }
 
 export function relayPanel(relay: RelaySetting | undefined): RelayPanel {
-  if (relay === undefined) return { headline: 'Reading…', detail: null, override: null }
+  if (relay === undefined) return { headline: 'Reading…', empty: false, detail: null, override: null }
 
   const override = relay.override.value === null ? null : overrideLine(relay, relay.override.value)
 
   if (relay.url === null) {
-    // The fallback is for a shape with neither URL nor reason, which must not render empty.
-    const problem = relay.problem ?? `no relay in ${relay.file} or ${relay.override.name}`
-    return { headline: problem.charAt(0).toUpperCase() + problem.slice(1), detail: null, override }
+    // No file is the ordinary state and needs no words; anything else is the runtime's reason.
+    const problem = relay.problem === null || relay.problem === `no ${relay.file}` ? null : relay.problem
+    return { headline: 'None', empty: true, detail: problem, override }
   }
 
   return {
     headline: relay.url,
+    empty: false,
     detail: `From ${relay.source === 'environment' ? relay.override.name : relay.file}`,
     override
   }

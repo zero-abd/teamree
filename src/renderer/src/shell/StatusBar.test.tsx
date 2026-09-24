@@ -208,6 +208,13 @@ describe('the pane count', () => {
     mount()
     expect(screen.getByText('1 pane')).toBeTruthy()
   })
+
+  // The first-run welcome has nothing open; a zero there is noise.
+  it('says nothing while there are no panes', () => {
+    seed({ terminals: {} })
+    mount()
+    expect(screen.queryByText(/\bpanes?\b/)).toBeNull()
+  })
 })
 
 describe('the runtime', () => {

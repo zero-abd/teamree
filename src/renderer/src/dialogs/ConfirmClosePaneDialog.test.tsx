@@ -80,7 +80,7 @@ describe('answering it', () => {
     // hand lands on first, and the one that kills a process is the one that has
     // to be reached for.
     const buttons = screen.getAllByRole('button').map((button) => button.textContent)
-    expect(buttons.indexOf('Leave it open')).toBeLessThan(buttons.indexOf('Stop it and close'))
+    expect(buttons.indexOf('Leave Open')).toBeLessThan(buttons.indexOf('Stop and Close'))
   })
 
   // Through the one confirm the app has, so it is framed, padded and keyed like
@@ -94,14 +94,14 @@ describe('answering it', () => {
       /Claude Code is working/
     )
     const actions = [...dialog.querySelectorAll('.modal__actions > .button')]
-    expect(actions.map((button) => button.textContent)).toEqual(['Leave it open', 'Stop it and close'])
+    expect(actions.map((button) => button.textContent)).toEqual(['Leave Open', 'Stop and Close'])
     expect(actions[1]?.classList.contains('button--danger')).toBe(true)
   })
 
   it('leaves the pane alone when the answer is no', () => {
     seed(terminal())
     mount()
-    act(() => screen.getByRole('button', { name: 'Leave it open' }).click())
+    act(() => screen.getByRole('button', { name: 'Leave Open' }).click())
     expect(forceCloseTerminal).not.toHaveBeenCalled()
     expect(closeDialog).toHaveBeenCalled()
   })
@@ -112,7 +112,7 @@ describe('answering it', () => {
   it('closes the pane through the path that does not ask again', () => {
     seed(terminal())
     mount()
-    act(() => screen.getByRole('button', { name: 'Stop it and close' }).click())
+    act(() => screen.getByRole('button', { name: 'Stop and Close' }).click())
     expect(forceCloseTerminal).toHaveBeenCalledWith('t1')
   })
 })

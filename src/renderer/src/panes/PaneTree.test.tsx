@@ -182,7 +182,7 @@ describe('one pane', () => {
     mount(leaf('t1'), [terminal('t1', { title: 'claude', agent: 'claude', running: false, exitCode: 1 })])
     expect(document.querySelector('.pane__bar')).toBeNull()
     expect(screen.getByText('exited 1')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Run claude again' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Run Again' })).toBeTruthy()
     expect(document.querySelector('.pane__title')).toBeNull()
   })
 
@@ -209,16 +209,16 @@ describe('one pane', () => {
 
   // The pane that died is the one somebody is standing in front of wondering
   // what to do, and there is only ever one answer: run it again.
-  it('offers to run the agent again, by name, once the pane has exited', () => {
+  it('offers to run the agent again once the pane has exited', () => {
     mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 1, agent: 'claude' })])
-    screen.getByRole('button', { name: 'Run claude again' }).click()
+    screen.getByRole('button', { name: 'Run Again' }).click()
     expect(onRelaunch).toHaveBeenCalledExactlyOnceWith('t1')
   })
 
   it('offers a shell for an exited pane that was not running an agent', () => {
     mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 0 })])
-    expect(screen.getByRole('button', { name: 'New shell' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: /again/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'New Shell' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Again/ })).toBeNull()
   })
 
   it('offers it to the pane that died and not to the live one beside it', () => {
@@ -226,10 +226,10 @@ describe('one pane', () => {
       terminal('t1', { running: false, agent: 'claude' }),
       terminal('t2', { agent: 'claude' })
     ])
-    expect(screen.getAllByRole('button', { name: 'Run claude again' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Run Again' })).toHaveLength(1)
     // Two claude panes nobody named: `Claude Code` and `Claude Code 2`, as the strip calls them.
     const alive = screen.getByRole('region', { name: 'Claude Code 2' })
-    expect(within(alive).queryByRole('button', { name: /again|New shell/ })).toBeNull()
+    expect(within(alive).queryByRole('button', { name: /Again|New Shell/ })).toBeNull()
   })
 
   it('offers each dead pane its own, out of two', () => {
@@ -237,7 +237,9 @@ describe('one pane', () => {
       terminal('t1', { running: false, agent: 'claude' }),
       terminal('t2', { running: false, agent: 'codex' })
     ])
-    screen.getByRole('button', { name: 'Run codex again' }).click()
+    within(screen.getByRole('region', { name: 'Codex' }))
+      .getByRole('button', { name: 'Run Again' })
+      .click()
     expect(onRelaunch).toHaveBeenCalledExactlyOnceWith('t2')
   })
 

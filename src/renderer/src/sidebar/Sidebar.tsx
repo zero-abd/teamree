@@ -342,7 +342,7 @@ export function Sidebar({
                           watchers={reading}
                           unread={unread}
                           now={now}
-                          onFocusTerminal={(terminalId) => void revealPane(worktree.id, terminalId)}
+                          onFocusTerminal={(terminalId) => revealPane(worktree.id, terminalId)}
                           active={worktree.id === activeWorktreeId}
                           onOpen={() => void openWorktree(worktree.id)}
                           onRetry={() => retryWorktree(worktree.id)}
@@ -376,23 +376,10 @@ export function Sidebar({
                         {`Nothing heard yet from ${unheard.join(', ')}`}
                       </li>
                     ) : null}
-                    {rows.length === 0 && theirs.length === 0 ? (
+                    {/* An empty project says nothing: its row's New Task button is the way in. */}
+                    {rows.length === 0 && theirs.length === 0 && filter.trim().length > 0 ? (
                       <li className="project__none" role="none">
-                        {filter.trim().length > 0 ? (
-                          'No matches'
-                        ) : (
-                          <>
-                            {'No worktrees yet '}
-                            <button
-                              type="button"
-                              className="button button--ghost button--tiny"
-                              tabIndex={-1}
-                              onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
-                            >
-                              Start one
-                            </button>
-                          </>
-                        )}
+                        No matches
                       </li>
                     ) : null}
                   </ul>

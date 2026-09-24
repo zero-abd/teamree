@@ -371,6 +371,7 @@ export function CommandPalette({
                     <button
                       type="button"
                       role="option"
+                      data-kind={item.kind}
                       aria-selected={index === cursor}
                       aria-disabled={dimmed(item) ? 'true' : undefined}
                       className={`palette__row${index === cursor ? ' palette__row--selected' : ''}${

@@ -177,7 +177,7 @@ describe('what the project header says about teamwork', () => {
     )
     expect(summary).toMatchObject({ tone: 'off', label: 'no key' })
     expect(summary?.detail).toContain('.teamree/members')
-    expect(summary?.detail).toContain('Add my key')
+    expect(summary?.detail).toContain(ADD_KEY_BUTTON)
   })
 
   it('sends the reader to controls that exist, under the names they render with', () => {

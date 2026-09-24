@@ -1,4 +1,4 @@
-// A picked or dropped folder the runtime would not add: the reason, and Initialize git when that is the fix.
+// A picked or dropped folder the runtime would not add: the reason, and Initialize Git when that is the fix.
 
 import { useState } from 'react'
 import type { ProjectAddRefusal } from '@shared/methods'
@@ -28,7 +28,7 @@ export function ProjectRefusedDialog({
   }
 
   return (
-    <Modal title="Add project" onClose={closeDialog}>
+    <Modal title="Add Project" onClose={closeDialog}>
       <div className="form">
         <span className="field__error" role="alert" title={folder}>
           {`${folderName(folder)}: ${shown === 'not-a-repository' ? 'Not a git repository' : 'No commits yet'}`}
@@ -45,7 +45,7 @@ export function ProjectRefusedDialog({
               onClick={() => void initialize()}
               disabled={adding}
             >
-              Initialize git
+              Initialize Git
             </button>
           ) : null}
         </footer>

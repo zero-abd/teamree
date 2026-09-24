@@ -139,6 +139,7 @@ import type { DiffLayout } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
 import { readSystemTone } from '../theme/systemTone'
+import { requestRegionFocus } from '../shell/regions'
 import { draftFor, dropDraft, keptDrafts, saverFor } from '../files/fileDrafts'
 import {
   changesOnScreen,
@@ -1823,6 +1824,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       try {
         const terminal = await runtimeClient.call('terminal.relaunch', { terminalId })
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
+        // The press was on a button; the next keystroke is for what was run again.
+        get().focusPane(terminal.id)
+        requestRegionFocus('panes')
       } catch (error) {
         failed('Could not run this pane again')(error)
       }

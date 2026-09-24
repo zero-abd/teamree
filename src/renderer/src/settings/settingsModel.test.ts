@@ -83,7 +83,7 @@ describe('what the page says about a relay', () => {
     expect(panel.override).toBeNull()
   })
 
-  it('says there is none, in the runtime’s own words about why', () => {
+  it('says None, as an empty value, when there is no relay file', () => {
     const panel = relayPanel(
       relay({
         url: null,
@@ -92,8 +92,20 @@ describe('what the page says about a relay', () => {
         onDisk: { url: null, problem: null }
       })
     )
-    expect(panel.headline).toBe('No .teamree/relay')
-    expect(panel.detail).toBeNull()
+    expect(panel).toMatchObject({ headline: 'None', empty: true, detail: null })
+  })
+
+  // A file that is there and unreadable is not "none": the runtime's reason is the fact.
+  it('keeps the runtime’s words when something is wrong rather than absent', () => {
+    const panel = relayPanel(
+      relay({
+        url: null,
+        source: null,
+        problem: '.teamree/relay does not name a relay',
+        onDisk: { url: null, problem: '.teamree/relay does not name a relay' }
+      })
+    )
+    expect(panel).toMatchObject({ headline: 'None', empty: true, detail: '.teamree/relay does not name a relay' })
   })
 
   it('says the environment is beating the file, and that a relaunch is the way back', () => {

@@ -264,17 +264,17 @@ describe('picking with the mouse', () => {
 
   it('opens and closes from the toggle, and says which it will do', () => {
     render(<Harness />)
-    const toggle = screen.getByRole('button', { name: 'Show refs' })
+    const toggle = screen.getByRole('button', { name: 'Show Refs' })
     fireEvent.mouseDown(toggle)
     expect(screen.getByRole('listbox')).toBeTruthy()
     expect(document.activeElement).toBe(box())
-    fireEvent.mouseDown(screen.getByRole('button', { name: 'Hide refs' }))
+    fireEvent.mouseDown(screen.getByRole('button', { name: 'Hide Refs' }))
     expect(screen.queryByRole('listbox')).toBeNull()
   })
 
   it('keeps the toggle out of the tab order, because the input already opens the list', () => {
     render(<Harness />)
-    expect(screen.getByRole('button', { name: 'Show refs' }).getAttribute('tabindex')).toBe('-1')
+    expect(screen.getByRole('button', { name: 'Show Refs' }).getAttribute('tabindex')).toBe('-1')
   })
 })
 

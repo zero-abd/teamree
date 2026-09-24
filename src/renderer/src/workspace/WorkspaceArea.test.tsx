@@ -163,17 +163,20 @@ describe('when there is nothing open', () => {
     expect(openDialog).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Clone…' }))
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'clone-project' })
-    expect(screen.queryByRole('button', { name: 'New task' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'New Task' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'New Terminal' })).toBeNull()
   })
 
-  // With a project the task button is live; agents are chosen in the composer.
-  it('offers a new task in the project once there is one, and no agent by name', () => {
+  // With a project the page's one job is a task; the sidebar's + adds projects.
+  it('offers only a new task once there is a project, and no agent by name', () => {
     seed({ projects: [project], agents: [{ kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }] })
     mount()
-    expect(screen.getByRole('button', { name: 'New task' }).className).toContain('button--primary')
-    expect(screen.getByRole('button', { name: 'Open Folder…' }).className).not.toContain('button--primary')
-    fireEvent.click(screen.getByRole('button', { name: 'New task' }))
+    const actions = document.querySelector('.welcome__actions') as HTMLElement
+    expect([...actions.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['New Task'])
+    expect(screen.getByRole('button', { name: 'New Task' }).className).toContain('button--primary')
+    expect(screen.queryByRole('button', { name: 'Open Folder…' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Clone…' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New Task' }))
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p1' })
     expect(screen.queryByRole('button', { name: /^Start / })).toBeNull()
     expect(screen.queryByRole('button', { name: 'New Terminal' })).toBeNull()
@@ -182,15 +185,19 @@ describe('when there is nothing open', () => {
   it('starts the new task in the project added last', () => {
     seed({ projects: [project, { ...project, id: 'p2', name: 'ledger', path: '/repos/ledger' }] })
     mount()
-    fireEvent.click(screen.getByRole('button', { name: 'New task' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New Task' }))
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p2' })
   })
 
-  it('names the chords once there is a project for them to act on', () => {
+  it('names the chords, New Task’s first once there is a project for it', () => {
     seed({ projects: [project] })
     mount()
     const keys = [...document.querySelectorAll('.welcome kbd')].map((node) => node.textContent)
-    expect(keys).toEqual(['⌘K', '⌘B'])
+    expect(keys).toEqual(['⌘N', '⌘K', '⌘B'])
+    cleanup()
+    seed({ projects: [] })
+    mount()
+    expect([...document.querySelectorAll('.welcome kbd')].map((node) => node.textContent)).toEqual(['⌘K', '⌘B'])
   })
 
   // The last window's front tab is on its way: a welcome in the meantime is a screen that flashes past.
@@ -243,7 +250,7 @@ describe('a worktree with no panes in it', () => {
     cleanup()
     openEmpty({ branch: 'feature/pager' })
     expect(screen.getByText('feature/pager')).toBeTruthy()
-    for (const name of ['Open Folder…', 'New task', 'Star on GitHub']) {
+    for (const name of ['Open Folder…', 'New Task', 'Star on GitHub']) {
       expect(screen.queryByRole('button', { name })).toBeNull()
     }
     expect(document.querySelector('.brand__mark')).toBeNull()
@@ -420,7 +427,7 @@ describe('a teammate’s pane beside your own', () => {
   it('stays where it is with no worktree open at all', () => {
     seed({ projects: [project], watches: [watch('priya', 'priya:t7')] })
     mount()
-    expect(screen.getByRole('button', { name: 'Open Folder…' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New Task' })).toBeTruthy()
     expect(screen.getByTestId('watched-priya-priya:t7')).toBeTruthy()
   })
 })
@@ -435,8 +442,11 @@ describe('the welcome’s shortcut list and the menu bar use one set of words', 
 
     const menu = new Map(menuBarSpec(useWorkspaceStore.getState()).map((item) => [item.command, item.label]))
     const rows = [...document.querySelectorAll('.welcome__shortcuts > div')]
-    // New Task is the button right above; the list starts at Go to.
-    expect(rows.map((row) => row.getAttribute('data-command'))).toEqual(['open-palette', 'toggle-sidebar'])
+    expect(rows.map((row) => row.getAttribute('data-command'))).toEqual([
+      'new-worktree',
+      'open-palette',
+      'toggle-sidebar'
+    ])
     for (const row of rows) {
       const command = commandNamed(row.getAttribute('data-command') ?? '')
       expect(command, row.textContent ?? '').not.toBeNull()

@@ -27,6 +27,11 @@
   line-height: 1.6;
 }
 
+.help__prose code {
+  color: var(--fg);
+  font-family: var(--font-mono);
+}
+
 /* What is true on this machine right now, as opposed to what is always true.
    It gets the brighter ink because it is the sentence that changes. */
 .help__state {

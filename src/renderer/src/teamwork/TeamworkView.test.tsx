@@ -6,6 +6,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MemberList, Project, RelaySetting, Terminal, TeamworkPublishPlan, TeamworkStatus } from '@shared/entities'
+import type { StepId } from './startTeamwork'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
@@ -167,6 +168,22 @@ const mount = (path: 'start' | 'join' = 'start'): void => {
   if (chooser !== null) fireEvent.click(chooser)
 }
 
+/** One step's list item. */
+const step = (id: StepId): HTMLElement => {
+  const found = document.querySelector<HTMLElement>(`[data-step="${id}"]`)
+  if (found === null) throw new Error(`no ${id} step`)
+  return found
+}
+
+/** The panel with its relay step opened, and More or Paste URL… pressed when asked. */
+const mountRelay = (presses: { more?: boolean; paste?: boolean } = {}): void => {
+  mount()
+  const toggle = step('relay').querySelector('.step__toggle') as HTMLElement
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle)
+  if (presses.more) fireEvent.click(screen.getByRole('button', { name: 'More' }))
+  if (presses.paste) fireEvent.click(screen.getByRole('button', { name: 'Paste URL…' }))
+}
+
 beforeEach(() => {
   closeTeamwork.mockReset()
   loadMembers.mockReset()
@@ -267,8 +284,8 @@ describe('the setup as a place in the window', () => {
 
 describe('how many ways to get a relay are put in front of somebody', () => {
   it('leads with the button and shows no option list at all', () => {
-    mount()
-    expect(screen.getByRole('button', { name: 'Deploy a relay' })).toBeTruthy()
+    mountRelay()
+    expect(screen.getByRole('button', { name: 'Deploy a Relay' })).toBeTruthy()
     expect(screen.queryByText(/A VPS you rent/)).toBeNull()
     expect(screen.queryByText(/A mesh VPN/)).toBeNull()
     expect(screen.queryByText(/A tunnel to a relay on your own machine/)).toBeNull()
@@ -276,8 +293,8 @@ describe('how many ways to get a relay are put in front of somebody', () => {
 
   // The others are behind a control that says whether it is open, not hidden.
   it('keeps the rest one keyboard-reachable press away, and says it is folded', () => {
-    mount()
-    const more = screen.getByRole('button', { name: 'Other ways to get a relay' })
+    mountRelay()
+    const more = screen.getByRole('button', { name: 'More' })
     expect(more.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(more)
     expect(more.getAttribute('aria-expanded')).toBe('true')
@@ -290,16 +307,16 @@ describe('how many ways to get a relay are put in front of somebody', () => {
   // A joiner whose team has a relay has no decision to make: theirs arrives in the repository.
   it('offers none of it to somebody whose team already has one', () => {
     seed({ relays: { p1: relayOnDisk() } })
-    mount()
-    expect(screen.queryByRole('button', { name: 'Deploy a relay' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Other ways to get a relay' })).toBeNull()
+    mountRelay()
+    expect(screen.queryByRole('button', { name: 'Deploy a Relay' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'More' })).toBeNull()
   })
 })
 
 describe('the deploy, as a button rather than a command to take elsewhere', () => {
   it('starts it in a pane in this window', () => {
-    mount()
-    fireEvent.click(screen.getByRole('button', { name: 'Deploy a relay' }))
+    mountRelay()
+    fireEvent.click(screen.getByRole('button', { name: 'Deploy a Relay' }))
     expect(startRelayPane).toHaveBeenCalledWith('p1', 'deploy', undefined)
   })
 
@@ -307,8 +324,8 @@ describe('the deploy, as a button rather than a command to take elsewhere', () =
   // so both go grey together and each says why.
   it('disables both ways to a relay, each with the reason, when this build carries none', () => {
     seed({ relays: { p1: { ...noRelay(), deploy: { command: null, reason: 'this build carries no relay project' } } } })
-    mount()
-    for (const name of ['Deploy a relay', 'Run a relay yourself']) {
+    mountRelay({ more: true })
+    for (const name of ['Deploy a Relay', 'Run on This Mac']) {
       expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true)
     }
     expect(screen.getAllByText(/this build carries no relay project/)).toHaveLength(2)
@@ -329,23 +346,23 @@ describe('the deploy, as a button rather than a command to take elsewhere', () =
         }
       }
     })
-    mount()
+    mountRelay()
     expect(screen.getByText('wss://ada.workers.dev/v1/relay')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Use this relay URL' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Use This URL' }))
     expect(setRelay).toHaveBeenCalledWith('p1', 'wss://ada.workers.dev/v1/relay')
   })
 
   it('says the pane can be closed, and closes it', () => {
     seed({ relayPanes: { p1: { kind: 'deploy', terminalId: 'term_9', url: null, urls: [], running: false } } })
-    mount()
-    fireEvent.click(screen.getByRole('button', { name: 'Close this pane' }))
+    mountRelay()
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(closeRelayPane).toHaveBeenCalledWith('p1')
   })
 
   // Running it yourself is the only answer on a machine where the app cannot.
-  it('keeps the command itself, one disclosure away', () => {
-    mount()
-    expect(screen.getByText('/apps/teamree.app/Contents/Resources/relay/teamree-relay deploy')).toBeTruthy()
+  it('keeps the command itself, behind More', () => {
+    mountRelay({ more: true })
+    expect(screen.getByText(/\/apps\/teamree.app\/Contents\/Resources\/relay\/teamree-relay deploy/)).toBeTruthy()
   })
 })
 
@@ -353,21 +370,21 @@ describe('the deploy, as a button rather than a command to take elsewhere', () =
 // about who it will not work for, because the panel cannot see anybody's network.
 describe('running a relay on this Mac, as the other button', () => {
   it('runs the launcher’s serve verb in a pane in this window', () => {
-    mount()
-    fireEvent.click(screen.getByRole('button', { name: 'Run a relay yourself' }))
+    mountRelay({ more: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Run on This Mac' }))
     expect(startRelayPane).toHaveBeenCalledWith('p1', 'serve', undefined)
   })
 
   it('says who it will not work for, beside the button', () => {
-    mount()
+    mountRelay({ more: true })
     expect(screen.getByText('Same LAN or VPN only')).toBeTruthy()
   })
 
   // One slot: a second is refused rather than replacing output somebody is reading.
   it('is disabled while another pane is open, and names the one that is', () => {
     seed({ relayPanes: { p1: { kind: 'deploy', terminalId: 'term_9', url: null, urls: [], running: true } } })
-    mount()
-    expect((screen.getByRole('button', { name: 'Run a relay yourself' }) as HTMLButtonElement).disabled).toBe(true)
+    mountRelay({ more: true })
+    expect((screen.getByRole('button', { name: 'Run on This Mac' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getAllByText('Deploy pane open below').length).toBeGreaterThan(0)
   })
 
@@ -387,9 +404,9 @@ describe('running a relay on this Mac, as the other button', () => {
   it('offers the ws:// URL it printed, with what committing that address costs', () => {
     const setRelay = vi.fn()
     seed({ setRelay, ...servePane(true) })
-    mount()
+    mountRelay()
     expect(screen.getByText('Private address: same network only')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Use this relay URL' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Use This URL' }))
     expect(setRelay).toHaveBeenCalledWith('p1', 'ws://192.168.1.23:8787/v1/relay')
   })
 
@@ -397,8 +414,8 @@ describe('running a relay on this Mac, as the other button', () => {
   // scrollback; offering it is how a team commits an address that worked once.
   it('takes the offer away once the runtime says that relay has stopped', () => {
     seed(servePane(false))
-    mount()
-    expect(screen.queryByRole('button', { name: 'Use this relay URL' })).toBeNull()
+    mountRelay()
+    expect(screen.queryByRole('button', { name: 'Use This URL' })).toBeNull()
     expect(screen.getByText('Relay stopped · its address is dead')).toBeTruthy()
   })
 })
@@ -407,8 +424,8 @@ describe('checking a relay from the panel', () => {
   // Beside the URL this project is actually going to dial.
   it('dials the configured relay, passing that URL to the launcher', () => {
     seed({ relays: { p1: relayOnDisk() } })
-    mount()
-    fireEvent.click(screen.getByRole('button', { name: 'Check this relay' }))
+    mountRelay()
+    fireEvent.click(screen.getByRole('button', { name: 'Check Relay' }))
     expect(startRelayPane).toHaveBeenCalledWith('p1', 'check', 'wss://relay.example/v1/relay')
   })
 
@@ -416,16 +433,20 @@ describe('checking a relay from the panel', () => {
   // investigation at the wrong machine.
   it('says what a pass proves and what it does not', () => {
     seed({ relays: { p1: relayOnDisk() } })
-    mount()
+    mountRelay()
     expect(screen.getAllByText('From this Mac only').length).toBeGreaterThan(0)
   })
 
   // The one beside the configured relay and the one beside the field dial
   // different addresses and must not read as the same control.
-  it('is disabled with the fix named when nothing has been typed to check', () => {
-    mount()
-    expect((screen.getByRole('button', { name: 'Check the URL you typed' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText('No URL yet')).toBeTruthy()
+  it('is disabled, and says nothing red, until something is typed to check', () => {
+    mountRelay({ paste: true })
+    expect((screen.getByRole('button', { name: 'Check URL' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(document.querySelector('.relay-check__blocked, .members__relay-error')).toBeNull()
+    fireEvent.change(screen.getByRole('textbox', { name: /^Relay URL/ }), {
+      target: { value: 'wss://r.example/v1/relay' }
+    })
+    expect((screen.getByRole('button', { name: 'Check URL' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })
 
@@ -437,7 +458,7 @@ describe('the origin remote, as a field rather than a command to go and run', ()
       target: { value: '~/code/pager' }
     })
     expect(screen.getByText('Use a path starting with /, not ~')).toBeTruthy()
-    expect((screen.getByRole('button', { name: 'Add origin' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Add Origin' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('sets it when what is typed is a URL with a host', () => {
@@ -446,7 +467,7 @@ describe('the origin remote, as a field rather than a command to go and run', ()
     fireEvent.change(screen.getByRole('textbox', { name: 'Origin' }), {
       target: { value: 'https://github.com/ada/pager.git' }
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Add origin' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add Origin' }))
     expect(setOrigin).toHaveBeenCalledWith('p1', 'https://github.com/ada/pager.git')
   })
 
@@ -459,7 +480,7 @@ describe('the origin remote, as a field rather than a command to go and run', ()
       target: { value: '/Volumes/team/pager.git/' }
     })
     expect(screen.getByText('Teammates must mount it at /Volumes/team/pager.git')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Add origin' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add Origin' }))
     // Normalised, because those are the characters both machines hash.
     expect(setOrigin).toHaveBeenCalledWith('p1', '/Volumes/team/pager.git')
   })
@@ -476,12 +497,8 @@ describe('the origin remote, as a field rather than a command to go and run', ()
   })
 })
 
-/** Step 4's own card, so an assertion about it cannot be answered by step 3. */
-const pushStep = (): HTMLElement => {
-  const step = screen.getByRole('heading', { name: '4. Commit and push' }).closest('li')
-  if (step === null) throw new Error('step 4 is not in a list item')
-  return step
-}
+/** Step 4's own item, so an assertion about it cannot be answered by step 3. */
+const pushStep = (): HTMLElement => step('push')
 
 describe('committing and pushing, which is the one that leaves the machine', () => {
   const ready = (overrides: Record<string, unknown> = {}): void =>
@@ -514,7 +531,7 @@ describe('committing and pushing, which is the one that leaves the machine', () 
     ready()
     mount()
     expect(publishTeamwork).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Commit and push' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Commit and Push' }))
     expect(publishTeamwork).toHaveBeenCalledWith('p1')
   })
 
@@ -525,7 +542,7 @@ describe('committing and pushing, which is the one that leaves the machine', () 
       }
     })
     mount()
-    expect((screen.getByRole('button', { name: 'Commit and push' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Commit and Push' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText('Not on a branch · git switch -c main')).toBeTruthy()
   })
 
@@ -564,21 +581,21 @@ describe('the question the panel asks before anything else', () => {
     open()
     expect(screen.getByRole('button', { name: 'Start a Team' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Join…' })).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: '4. Commit and push' })).toBeNull()
+    expect(document.querySelector('[data-step="push"]')).toBeNull()
   })
 
   it('shows the steps once it has been answered, and says which job was chosen', () => {
     mount('join')
-    expect(screen.getByRole('heading', { name: '4. Commit and push' })).toBeTruthy()
+    expect(pushStep()).toBeTruthy()
     expect(screen.getByText('Join a Team')).toBeTruthy()
   })
 
   // People pick the wrong one, and a choice that cannot be unmade is a trap.
   it('lets somebody take the answer back', () => {
     mount('join')
-    fireEvent.click(screen.getByRole('button', { name: 'Not that' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByRole('button', { name: 'Start a Team' })).toBeTruthy()
-    expect(screen.queryByRole('heading', { name: '4. Commit and push' })).toBeNull()
+    expect(document.querySelector('[data-step="push"]')).toBeNull()
   })
 })
 
@@ -644,7 +661,7 @@ describe('the message to send a teammate', () => {
     seed({ members: { p1: enrolledRoster() }, relays: { p1: relayOnDisk() }, teamwork: { p1: working() } })
     mount()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copy the invitation' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Invitation' }))
 
     expect(writeText).toHaveBeenCalledOnce()
     const sent = writeText.mock.calls[0]?.[0] as string

@@ -140,13 +140,13 @@ describe('editing a colour directly', () => {
   it('keeps the list shut until it is asked for', () => {
     render(<AppearanceSettings />)
     expect(screen.queryByLabelText('Hairline')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /Every colour/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'All Colours' }))
     expect(screen.getByLabelText('Hairline')).toBeTruthy()
   })
 
   it('records one token without touching the others', () => {
     render(<AppearanceSettings />)
-    fireEvent.click(screen.getByRole('button', { name: /Every colour/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'All Colours' }))
     fireEvent.change(screen.getByLabelText('Hairline'), { target: { value: '#445566' } })
     expect(lastChange().overrides).toEqual({ line: '#445566' })
   })
@@ -154,7 +154,7 @@ describe('editing a colour directly', () => {
   it('takes one back out again, rather than writing the preset’s value over it', () => {
     seed({ ...DEFAULT_APPEARANCE, overrides: { line: '#445566', fg: '#ffffff' } })
     render(<AppearanceSettings />)
-    fireEvent.click(screen.getByRole('button', { name: /1 changed|2 changed|Every colour/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^All Colours.*2 changed$/ }))
     // Two rows carry an Undo, and the first in document order is the text one:
     // the groups are listed surfaces, lines, text, so `--line` comes first.
     fireEvent.click(screen.getAllByRole('button', { name: 'Undo' })[0] as HTMLElement)
@@ -166,6 +166,19 @@ describe('getting back', () => {
   it('offers no reset when there is nothing to reset', () => {
     render(<AppearanceSettings />)
     expect(screen.getByRole('button', { name: 'Reset' }).hasAttribute('disabled')).toBe(true)
+  })
+
+  // The theme's name is on its card; beside Reset it was said twice.
+  it('is Reset alone, with no theme name beside it', () => {
+    seed({ themeId: 'midnight', ground: null, accent: null, overrides: { line: '#333333' } })
+    render(<AppearanceSettings />)
+    const footer = screen.getByRole('button', { name: 'Reset' }).parentElement as HTMLElement
+    expect(footer.textContent).toBe('Reset')
+  })
+
+  it('counts nothing on the colour list until a colour is changed', () => {
+    render(<AppearanceSettings />)
+    expect(screen.getByRole('button', { name: 'All Colours' }).textContent).toBe('All Colours')
   })
 
   it('puts the whole preset back in one press', () => {

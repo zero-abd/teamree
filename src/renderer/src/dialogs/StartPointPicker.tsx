@@ -137,7 +137,7 @@ export function StartPointPicker({
             type="button"
             className="picker__chevron"
             tabIndex={-1}
-            aria-label={open ? 'Hide refs' : 'Show refs'}
+            aria-label={open ? 'Hide Refs' : 'Show Refs'}
             // Pointer-down: a click lands after the input's blur has closed the list.
             onMouseDown={(event) => {
               event.preventDefault()

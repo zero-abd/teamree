@@ -437,7 +437,7 @@ function UpdatesSection(): React.JSX.Element {
                   disabled={update?.checking ?? false}
                   onClick={() => void checkForUpdates()}
                 >
-                  {update?.checking ? 'Checking…' : 'Check for updates'}
+                  {update?.checking ? 'Checking…' : 'Check for Updates'}
                 </button>
               </div>
             ) : null}
@@ -1217,14 +1217,14 @@ function RelayBlock({ project }: { project: Project }): React.JSX.Element {
       <h4 className="settings-field__label">
         <Marked text="Relay" />
       </h4>
-      <p className="settings-fact">
+      <p className={panel.empty ? 'settings-fact settings-fact--none' : 'settings-fact'}>
         <Marked text={panel.headline} />
       </p>
       {panel.detail ? <p className="settings-note">{panel.detail}</p> : null}
       {panel.override ? <p className="settings-warning">{panel.override}</p> : null}
       <div className="settings-actions">
         <button type="button" className="button button--small" onClick={() => openTeamwork(project.id)}>
-          Open teamwork for {project.name}
+          Open Teamwork
         </button>
       </div>
     </div>

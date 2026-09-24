@@ -53,7 +53,7 @@ describe('panes worth asking about', () => {
     const warning = closePaneWarning(terminal({ busy: true }))
     expect(warning?.title).toBe('Stop what is running here?')
     expect(warning?.body).toContain('“npm test”')
-    expect(warning?.confirm).toBe('Stop it and close')
+    expect(warning?.confirm).toBe('Stop and Close')
   })
 
   it('names the agent that is working', () => {

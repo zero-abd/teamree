@@ -1,6 +1,5 @@
-// Setting teamwork up, as five steps instead of a document. Every step is a
-// button; nothing acts silently, nothing is enabled that cannot work, and
-// teamree still runs no relay.
+// Setting teamwork up, as five one-line steps with only the next one open. Nothing
+// acts silently, nothing is enabled that cannot work, and teamree still runs no relay.
 
 import { useEffect, useId, useRef, useState } from 'react'
 import {
@@ -28,6 +27,7 @@ import {
   MORE_RELAYS_BUTTON,
   MORE_RELAYS_LEAD,
   ORIGIN_DETAIL,
+  PASTE_RELAY_BUTTON,
   PUBLISH_BUTTON,
   publishActivity,
   pushPlan,
@@ -43,7 +43,6 @@ import {
   relayPaneBusy,
   RETRY_PUBLISH_BUTTON,
   retryHint,
-  setupOutcome,
   shortKey,
   startTeamworkFlow,
   suggestedPath,
@@ -54,10 +53,10 @@ import {
   type RelayOption,
   type RelayPaneKind,
   type RelayPaneState,
-  type SetupOutcome,
   type StartTeamworkRead,
   type StartTeamworkReadErrors,
   type StartTeamworkStep,
+  type StepId,
   type StepMark,
   type TeamworkPath
 } from './startTeamwork'
@@ -116,7 +115,7 @@ export type TeamworkStepsProps = {
   now?: number
 }
 
-/** A glyph for the eye; `MARK_WORDS` is what is actually read out. */
+/** A glyph for the eye; `MARK_WORDS` is what is read out. */
 const MARK_GLYPHS: Record<StepMark, string> = { done: '✓', 'this-run': '✓', todo: '○', unchecked: '—', blocked: '!' }
 
 const MARK_WORDS: Record<StepMark, string> = {
@@ -136,16 +135,21 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
     relay: props.relay,
     status: props.status,
     failedReads: props.readErrors,
-    path: props.path
-  })
-  const outcome = setupOutcome({
-    list: props.list,
-    relay: props.relay,
-    status: props.status,
+    path: props.path,
     publish: props.publish.result
   })
+  // Undefined until a step is clicked: then the next step to do, or Connected once a teammate is.
+  const [opened, setOpened] = useState<StepId | null | undefined>(undefined)
+  const open = opened === undefined ? (flow.currentId ?? 'connected') : opened
   // Somebody already connected is not asked what they came here to do.
-  const asking = props.path === null && outcome?.done !== true
+  const asking = props.path === null && flow.currentId !== null
+  const origin = teamworkFacts(props.status)?.origin
+  const invite = inviteText({
+    originUrl: origin?.ok === true ? origin.url : null,
+    relayUrl: props.relay?.url ?? null,
+    projectName: props.projectName,
+    handle: props.list?.self.handle ?? null
+  })
 
   return (
     <div className="steps">
@@ -154,9 +158,7 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
           <p className="steps__blocker-lead">
             <strong>{flow.blocker}</strong>
           </p>
-          {teamworkFacts(props.status)?.origin.ok === false ? (
-            <OriginFix origin={props.origin} onSetOrigin={props.onSetOrigin} />
-          ) : null}
+          {origin?.ok === false ? <OriginFix origin={props.origin} onSetOrigin={props.onSetOrigin} /> : null}
         </div>
       )}
       {asking ? (
@@ -165,26 +167,41 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
         <>
           {props.path === null ? null : <ChosenPath path={props.path} onChange={() => props.onChoosePath(null)} />}
           <ol className="steps__list">
-            {flow.steps.map((step, index) => (
-              <li
-                key={step.id}
-                className={`step step--${step.mark}${step.id === flow.currentId ? ' step--current' : ''}`}
-              >
-                <div className="step__head">
-                  <span className="step__mark" aria-hidden="true">
-                    {MARK_GLYPHS[step.mark]}
-                  </span>
-                  <h3 className="step__title">
-                    {index + 1}. {step.title}
+            {flow.steps.map((step) => {
+              const expanded = step.id === open
+              return (
+                <li
+                  key={step.id}
+                  className={`step step--${step.mark}${expanded ? ' step--open' : ''}`}
+                  data-step={step.id}
+                >
+                  <h3 className="step__head">
+                    <button
+                      type="button"
+                      className="step__toggle"
+                      aria-expanded={expanded}
+                      onClick={() => setOpened(expanded ? null : step.id)}
+                    >
+                      <span className="step__mark" role="img" aria-label={MARK_WORDS[step.mark]}>
+                        {MARK_GLYPHS[step.mark]}
+                      </span>
+                      <span className="step__title">{step.title}</span>
+                    </button>
                   </h3>
-                  <span className="step__state">{MARK_WORDS[step.mark]}</span>
-                </div>
-                <p className="step__summary">{step.summary}</p>
-                <StepBody step={step} {...props} />
-              </li>
-            ))}
+                  {expanded ? (
+                    <>
+                      <p className="step__summary">{step.summary}</p>
+                      <StepBody step={step} {...props} />
+                    </>
+                  ) : null}
+                </li>
+              )
+            })}
           </ol>
-          <Outcome outcome={outcome} {...props} />
+          {/* Once this machine is on the roster there is something to invite somebody to. */}
+          {invite === null || props.path === 'join' || props.list?.enrolled !== true ? null : (
+            <Invite invite={invite} onCopy={props.onCopy} />
+          )}
         </>
       )}
     </div>
@@ -230,7 +247,7 @@ function ChosenPath({ path, onChange }: { path: TeamworkPath; onChange: () => vo
         <span className="chosen-path__label">{chosen.title}</span>
       </p>
       <button type="button" className="button button--small" onClick={onChange}>
-        Not that
+        Back
       </button>
     </div>
   )
@@ -298,7 +315,7 @@ function ReadFailure({ onRetry }: { onRetry: () => void }): React.JSX.Element {
   return (
     <div className="step__body">
       <button type="button" className="button" onClick={onRetry}>
-        Try again
+        Try Again
       </button>
     </div>
   )
@@ -420,7 +437,7 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
       {/* A note, not a refusal: this origin works, on terms. */}
       {check.state === 'ok' && check.note !== null ? <p className="field__note">{check.note}</p> : null}
       <button type="submit" className="button button--primary" disabled={origin.pending || check.state !== 'ok'}>
-        {origin.pending ? 'Adding…' : 'Add origin'}
+        {origin.pending ? 'Adding…' : 'Add Origin'}
       </button>
       <div className="disclosure">
         <button
@@ -449,8 +466,8 @@ function launcherBlocked(relay: RelaySetting, derived: string | null, pane: Rela
 }
 
 /**
- * The relay: deploy and serve buttons, the field that writes one down, the check, and every other
- * way folded away. Serve is wrong for two laptops behind two routers, and says so beside its button.
+ * The relay: Deploy a Relay, Paste URL… and More, which holds running one here, the commands and
+ * every other way. A relay already chosen is shown with its check and none of the options.
  */
 function RelayBody({
   path,
@@ -476,13 +493,9 @@ function RelayBody({
   onClosePane: () => void
   renderRelayPane: (terminalId: string) => React.ReactNode
 }): React.JSX.Element {
-  const [draft, setDraft] = useState('')
-  const check = checkRelayDraft(draft)
-
-  const submit = (event: React.FormEvent): void => {
-    event.preventDefault()
-    if (check.state === 'ok') onSet(check.url)
-  }
+  const [pasting, setPasting] = useState(false)
+  const [more, setMore] = useState(false)
+  const deployBlocked = launcherBlocked(relay, relay.deploy.command, pane)
 
   return (
     <div className="step__body">
@@ -490,7 +503,7 @@ function RelayBody({
       {path === 'join' && relay.onDisk.url === null ? (
         <p className="relay-waiting">{relay.file} not pushed yet · pull again soon</p>
       ) : null}
-      {/* An unreadable override, said first: every other sentence here is about a relay the app will not dial. */}
+      {/* An unreadable override, said first: everything else here is about a relay the app will not dial. */}
       {brokenRelayOverride(relay) === null ? null : (
         <p className="relay-broken-override">{brokenRelayOverride(relay)}</p>
       )}
@@ -502,101 +515,124 @@ function RelayBody({
               {relay.source === 'environment' ? `from ${relay.override.name}` : `from ${relay.file}`}
             </span>
           </p>
-          {/* The same control as the one beside the paste field, on the URL this project will actually dial. */}
           <RelayCheck url={relay.url} relay={relay} pane={pane} onStart={onStartRelayPane} />
         </>
       )}
-      {options ? (
-        <>
-          {/* Side by side and equally weighted: they answer different questions. */}
-          <RelayDeploy relay={relay} pane={pane} onStart={onStartRelayPane} />
-          <RelayServe relay={relay} pane={pane} onStart={onStartRelayPane} />
-        </>
+      <div className="relay-actions">
+        {options ? (
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={deployBlocked !== null}
+            title={RELAY_DEPLOY.browser}
+            onClick={() => onStartRelayPane('deploy')}
+          >
+            {RELAY_DEPLOY.button}
+          </button>
+        ) : null}
+        <button type="button" className="button" aria-expanded={pasting} onClick={() => setPasting((shown) => !shown)}>
+          {PASTE_RELAY_BUTTON}
+        </button>
+        {options ? (
+          <button
+            type="button"
+            className="button button--ghost"
+            aria-expanded={more}
+            onClick={() => setMore((shown) => !shown)}
+          >
+            {MORE_RELAYS_BUTTON}
+          </button>
+        ) : null}
+      </div>
+      {/* Why Deploy cannot be pressed, beside it. */}
+      {options && deployBlocked !== null ? <p className="relay-deploy__blocked">{deployBlocked}</p> : null}
+      {pane?.kind === 'deploy' && pane.url === null ? (
+        <p className="relay-deploy__note">{RELAY_DEPLOY.watching}</p>
       ) : null}
       {pane === undefined ? null : (
         <RelayPaneBlock pane={pane} pending={pending} onUse={onSet} onClose={onClosePane} render={renderRelayPane} />
       )}
-      <form className="members__relay" onSubmit={submit}>
-        <label className="field">
-          <span className="field__label">
-            {relay.onDisk.url === null ? 'Or paste a relay URL' : 'Change the relay for this project'}
-          </span>
-          <input
-            className="field__input field__input--mono"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            placeholder="wss://your-relay.example/v1/relay"
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <span className="field__hint">
-            {relay.onDisk.url === null ? 'Writes' : 'Replaces'} <code>{relay.file}</code>
-          </span>
-        </label>
-        {check.state === 'bad' ? <RelayRefusal check={check} onUse={setDraft} /> : null}
-        {error === null ? null : <p className="members__relay-error">{error}</p>}
-        <div className="relay-draft__controls">
-          <button type="submit" className="button" disabled={pending || check.state !== 'ok'}>
-            {pending ? 'Writing…' : 'Write relay file'}
-          </button>
-          {/* Checking before it is written: cheaper than a dead address in everybody's repository. */}
-          <RelayCheck
-            url={check.state === 'ok' ? check.url : null}
-            label={RELAY_CHECK.draftButton}
-            relay={relay}
-            pane={pane}
-            onStart={onStartRelayPane}
-          />
-        </div>
-      </form>
-      {options ? <RelayOptions /> : null}
+      {pasting ? (
+        <RelayDraft
+          relay={relay}
+          pending={pending}
+          error={error}
+          onSet={onSet}
+          pane={pane}
+          onStart={onStartRelayPane}
+        />
+      ) : null}
+      {options && more ? <RelayMore relay={relay} pane={pane} onStart={onStartRelayPane} /> : null}
       <Override relay={relay} />
     </div>
   )
 }
 
-/**
- * The deploy as a button. Never enabled without a relay in the build, never hides the command, and
- * never writes the printed URL on its own: a relay is a team-wide fact. The pane is `RelayPaneBlock`.
- */
-function RelayDeploy({
+/** The field that writes a relay down, and the check that dials what was typed before it is written. */
+function RelayDraft({
   relay,
+  pending,
+  error,
+  onSet,
   pane,
   onStart
 }: {
   relay: RelaySetting
+  pending: boolean
+  error: string | null
+  onSet: (url: string) => void
   pane: RelayPaneState | undefined
-  onStart: (kind: RelayPaneKind) => void
+  onStart: (kind: RelayPaneKind, argument?: string) => void
 }): React.JSX.Element {
-  const blocked = launcherBlocked(relay, relay.deploy.command, pane)
+  const [draft, setDraft] = useState('')
+  const check = checkRelayDraft(draft)
+
+  const submit = (event: React.FormEvent): void => {
+    event.preventDefault()
+    if (check.state === 'ok') onSet(check.url)
+  }
+
   return (
-    <div className="relay-deploy">
-      <button
-        type="button"
-        className="button button--primary"
-        disabled={blocked !== null}
-        onClick={() => onStart('deploy')}
-      >
-        {RELAY_DEPLOY.button}
-      </button>
-      {/* Why it cannot be pressed, always beside it. */}
-      {blocked === null ? null : <p className="relay-deploy__blocked">{blocked}</p>}
-      <p className="relay-deploy__note">{pane?.kind === 'deploy' ? RELAY_DEPLOY.watching : RELAY_DEPLOY.browser}</p>
-      {relay.deploy.command === null ? null : (
-        <details className="relay-deploy__manual">
-          <summary>{RELAY_DEPLOY.manual}</summary>
-          <pre className="relay-option__commands">{relay.deploy.command}</pre>
-        </details>
-      )}
-    </div>
+    <form className="members__relay" onSubmit={submit}>
+      <label className="field">
+        <span className="field__label">Relay URL</span>
+        <input
+          className="field__input field__input--mono"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="wss://your-relay.example/v1/relay"
+          autoComplete="off"
+          spellCheck={false}
+          autoFocus
+        />
+        <span className="field__hint">
+          {relay.onDisk.url === null ? 'Writes' : 'Replaces'} <code>{relay.file}</code>
+        </span>
+      </label>
+      {check.state === 'bad' ? <RelayRefusal check={check} onUse={setDraft} /> : null}
+      {error === null ? null : <p className="members__relay-error">{error}</p>}
+      <div className="relay-draft__controls">
+        <button type="submit" className="button" disabled={pending || check.state !== 'ok'}>
+          {pending ? 'Writing…' : 'Write Relay File'}
+        </button>
+        {/* Checking before it is written: cheaper than a dead address in everybody's repository. */}
+        <RelayCheck
+          url={check.state === 'ok' ? check.url : null}
+          label={RELAY_CHECK.draftButton}
+          relay={relay}
+          pane={pane}
+          onStart={onStart}
+        />
+      </div>
+    </form>
   )
 }
 
 /**
- * A relay on this Mac: fastest for one network, a dead end for two home networks, and teamree cannot
- * see which. The limit sits above the button, the one moment where reading it changes what somebody does.
+ * Behind More: a relay on this Mac (its limit beside the button), the commands this build runs, and
+ * the ways that need a clone or a machine of your own.
  */
-function RelayServe({
+function RelayMore({
   relay,
   pane,
   onStart
@@ -605,23 +641,32 @@ function RelayServe({
   pane: RelayPaneState | undefined
   onStart: (kind: RelayPaneKind) => void
 }): React.JSX.Element {
-  const command = relay.deploy.command === null ? null : relayLauncherCommand(relay.deploy.command, 'serve')
-  const blocked = launcherBlocked(relay, command, pane)
+  const serve = relay.deploy.command === null ? null : relayLauncherCommand(relay.deploy.command, 'serve')
+  const blocked = launcherBlocked(relay, serve, pane)
   return (
-    <div className="relay-deploy relay-deploy--serve">
-      {/* Above the button: a limitation met after the relay is running is a wasted evening. */}
-      <p className="relay-deploy__limit">{RELAY_SERVE.limit}</p>
-      <button type="button" className="button" disabled={blocked !== null} onClick={() => onStart('serve')}>
-        {RELAY_SERVE.button}
-      </button>
+    <div className="relay-more">
+      <div className="relay-serve">
+        <button type="button" className="button" disabled={blocked !== null} onClick={() => onStart('serve')}>
+          {RELAY_SERVE.button}
+        </button>
+        <span className="relay-serve__limit">{RELAY_SERVE.limit}</span>
+      </div>
       {blocked === null ? null : <p className="relay-deploy__blocked">{blocked}</p>}
       {pane?.kind === 'serve' ? <p className="relay-deploy__note">{RELAY_SERVE.watching}</p> : null}
-      {command === null ? null : (
-        <details className="relay-deploy__manual">
-          <summary>{RELAY_SERVE.manual}</summary>
-          <pre className="relay-option__commands">{command}</pre>
-        </details>
+      {relay.deploy.command === null ? null : (
+        <pre className="relay-option__commands">{[relay.deploy.command, serve].filter(Boolean).join('\n')}</pre>
       )}
+      <p className="relay-options__lead">{MORE_RELAYS_LEAD}</p>
+      <ul className="relay-options__list">
+        {RELAY_OPTIONS.map((option) => (
+          <RelayOptionCard key={option.id} option={option} />
+        ))}
+      </ul>
+      {relay.override.value === null ? (
+        <p className="relay-more__env">
+          <code>{relay.override.name}</code> not in this app’s environment · Finder launches do not inherit your shell’s
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -647,19 +692,19 @@ function RelayCheck({
 }): React.JSX.Element {
   const command =
     relay.deploy.command === null || url === null ? null : relayLauncherCommand(relay.deploy.command, 'check', url)
-  // Nothing to dial outranks every other reason: the fix is in the field above.
-  const blocked = url === null ? RELAY_CHECK.nothing : launcherBlocked(relay, command, pane)
+  const blocked = url === null ? null : launcherBlocked(relay, command, pane)
   return (
     <span className="relay-check">
       <button
         type="button"
         className="button button--small"
-        disabled={blocked !== null}
+        disabled={url === null || blocked !== null}
         onClick={() => onStart('check', url as string)}
       >
         {label}
       </button>
-      {blocked === null ? (
+      {/* Nothing typed is not a fault: the button is grey and says nothing more. */}
+      {url === null ? null : blocked === null ? (
         <span className="relay-check__note">{RELAY_CHECK.proves}</span>
       ) : (
         <span className="relay-check__blocked">{blocked}</span>
@@ -738,7 +783,7 @@ function RelayPaneBlock({
       )}
       <div className="relay-deploy__terminal">{render(pane.terminalId)}</div>
       <button type="button" className="button button--small" onClick={onClose}>
-        {pane.running ? 'Stop and close this pane' : 'Close this pane'}
+        {pane.running ? 'Stop and Close' : 'Close'}
       </button>
     </div>
   )
@@ -770,41 +815,6 @@ function RelayRefusal({
   )
 }
 
-/**
- * Every other way to get a relay, behind one button. `aria-expanded` rather than `details`: the
- * contents are not rendered until asked for, so nothing can read out or tab into an unopened option.
- */
-function RelayOptions(): React.JSX.Element {
-  const [showMore, setShowMore] = useState(false)
-  return (
-    <div className="relay-options">
-      <div className="relay-options__more">
-        <button
-          type="button"
-          className="button button--small"
-          aria-expanded={showMore}
-          onClick={() => setShowMore((open) => !open)}
-        >
-          <span className="disclosure__caret" aria-hidden="true">
-            {showMore ? '▾' : '▸'}
-          </span>
-          {MORE_RELAYS_BUTTON}
-        </button>
-        {showMore ? (
-          <>
-            <p className="relay-options__lead">{MORE_RELAYS_LEAD}</p>
-            <ul className="relay-options__list">
-              {RELAY_OPTIONS.map((option) => (
-                <RelayOptionCard key={option.id} option={option} />
-              ))}
-            </ul>
-          </>
-        ) : null}
-      </div>
-    </div>
-  )
-}
-
 /** One way to get a relay, with what it costs and where its address belongs. */
 function RelayOptionCard({ option }: { option: RelayOption }): React.JSX.Element {
   return (
@@ -833,37 +843,9 @@ function RelayOptionCard({ option }: { option: RelayOption }): React.JSX.Element
   )
 }
 
-/**
- * What the environment said. The disclosure for the absence of an override answers "I set
- * TEAMREE_RELAY_URL and nothing happened": on macOS an app opened from Finder inherits no shell environment.
- */
+/** The environment beating the file, for this run. An unreadable override is said at the top of the step instead. */
 function Override({ relay }: { relay: RelaySetting }): React.JSX.Element | null {
-  const [open, setOpen] = useState(false)
-  // An unreadable override is already said in full at the top of the step; what is below is written for one that is winning.
-  if (brokenRelayOverride(relay) !== null) return null
-  if (relay.override.value === null) {
-    return (
-      <div className="disclosure">
-        <button
-          type="button"
-          className="button button--small"
-          aria-expanded={open}
-          onClick={() => setOpen((shown) => !shown)}
-        >
-          <span className="disclosure__caret" aria-hidden="true">
-            {open ? '▾' : '▸'}
-          </span>
-          I set {relay.override.name} and nothing happened
-        </button>
-        {open ? (
-          <p className="disclosure__body">
-            <code>{relay.override.name}</code> not in this app’s environment · Finder launches do not inherit your
-            shell’s
-          </p>
-        ) : null}
-      </div>
-    )
-  }
+  if (relay.override.value === null || brokenRelayOverride(relay) !== null) return null
   return (
     <p className="members__relay-note">
       <code>{relay.override.name}</code>=<code>{relay.override.value}</code> overrides{' '}
@@ -934,7 +916,7 @@ function PushBody({
       )}
       {local === null ? null : (
         <details className="push__manual">
-          <summary>Run it yourself</summary>
+          <summary>Commands</summary>
           <pre className="members__push-commands">{local.commands}</pre>
         </details>
       )}
@@ -1053,46 +1035,6 @@ function firstLineOf(text: string): string {
 }
 
 /**
- * Where this ended up, as four separate verdicts: "did that work" is usually "partly", and one
- * overall tick would have to be wrong about something.
- */
-function Outcome({
-  outcome,
-  ...props
-}: TeamworkStepsProps & { outcome: SetupOutcome | null }): React.JSX.Element | null {
-  if (outcome === null) return null
-  // Nothing to name the repository with until the origin has been read.
-  const origin = teamworkFacts(props.status)?.origin
-  const invite = inviteText({
-    originUrl: origin?.ok === true ? origin.url : null,
-    relayUrl: props.relay?.url ?? null,
-    projectName: props.projectName,
-    handle: props.list?.self.handle ?? null
-  })
-  return (
-    <section className={`outcome${outcome.done ? ' outcome--done' : ''}`}>
-      <h2 className="outcome__head">{outcome.head}</h2>
-      <ul className="outcome__facts">
-        {outcome.facts.map((fact) => (
-          <li key={fact.label} className={`outcome__fact outcome__fact--${fact.state}`}>
-            <span className="outcome__mark" aria-hidden="true">
-              {fact.state === 'yes' ? '✓' : fact.state === 'no' ? '○' : '—'}
-            </span>
-            <span className="outcome__label">{fact.label}</span>
-            <span className="outcome__state">
-              {fact.state === 'yes' ? 'yes' : fact.state === 'no' ? 'not yet' : 'teamree cannot check this'}
-            </span>
-            <span className="outcome__detail">{fact.detail}</span>
-          </li>
-        ))}
-      </ul>
-      {outcome.next === null ? null : <p className="outcome__next">{outcome.next}</p>}
-      {invite === null ? null : <Invite invite={invite} onCopy={props.onCopy} />}
-    </section>
-  )
-}
-
-/**
  * The thing to send somebody, copyable in one press. Shown rather than hidden behind the button:
  * it goes out under this person's name, and nobody should send words they have not read.
  */
@@ -1104,10 +1046,10 @@ function Invite({ invite, onCopy }: { invite: string; onCopy: (text: string) => 
   return (
     <div className="invite">
       <div className="invite__head">
-        <h3 className="invite__title">Invite somebody</h3>
+        <h3 className="invite__title">Invite</h3>
         <button
           type="button"
-          className="button button--primary button--small"
+          className="button button--small"
           onClick={() => {
             onCopy(invite)
             setCopied(true)

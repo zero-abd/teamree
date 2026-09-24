@@ -80,16 +80,18 @@ export function StatusBar(): React.JSX.Element {
 
       {RUNTIME_IS_SEEDED ? <span className="statusbar__badge">seeded data</span> : null}
 
-      <span
-        className="statusbar__item"
-        title={`${
-          activeWorktreeId ? `${panes.here} in this worktree · ` : ''
-        }${panes.total} across ${panes.worktrees} worktree${panes.worktrees === 1 ? '' : 's'}`}
-      >
-        {`${panes.total} pane${panes.total === 1 ? '' : 's'}${
-          panes.worktrees > 1 ? ` · ${panes.worktrees} worktrees` : ''
-        }`}
-      </span>
+      {panes.total === 0 ? null : (
+        <span
+          className="statusbar__item"
+          title={`${
+            activeWorktreeId ? `${panes.here} in this worktree · ` : ''
+          }${panes.total} across ${panes.worktrees} worktree${panes.worktrees === 1 ? '' : 's'}`}
+        >
+          {`${panes.total} pane${panes.total === 1 ? '' : 's'}${
+            panes.worktrees > 1 ? ` · ${panes.worktrees} worktrees` : ''
+          }`}
+        </span>
+      )}
 
       {first === null ? null : (
         <button

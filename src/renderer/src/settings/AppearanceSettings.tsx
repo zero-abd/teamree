@@ -181,12 +181,10 @@ export function AppearanceSettings(): React.JSX.Element {
           <svg className={`chevron${editingColours ? ' chevron--open' : ''}`} viewBox="0 0 12 12" aria-hidden="true">
             <path d="M4.5 2.5 L8 6 L4.5 9.5" />
           </svg>
-          <span>Every colour</span>
-          <span className="appearance__count">
-            {Object.keys(choice.overrides).length > 0
-              ? `${Object.keys(choice.overrides).length} changed`
-              : `${TOKEN_GROUPS.reduce((total, group) => total + group.tokens.length, 0)} of them`}
-          </span>
+          <span>All Colours</span>
+          {Object.keys(choice.overrides).length > 0 ? (
+            <span className="appearance__count">{` ${Object.keys(choice.overrides).length} changed`}</span>
+          ) : null}
         </button>
 
         {editingColours ? (
@@ -227,7 +225,6 @@ export function AppearanceSettings(): React.JSX.Element {
       </div>
 
       <div className="appearance__reset">
-        <p className="settings-aside">{edited ? `${preset.name} · edited` : preset.name}</p>
         <button
           type="button"
           className="button button--small"

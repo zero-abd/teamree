@@ -354,7 +354,7 @@ function tickOf(change: WorktreeChange, ticked: boolean): Tick {
   return change.staged ? 'mixed' : 'off'
 }
 
-const PUSH_LABEL = { push: ['Push', 'Pushing…'], publish: ['Publish branch', 'Publishing…'] } as const
+const PUSH_LABEL = { push: ['Push', 'Pushing…'], publish: ['Publish Branch', 'Publishing…'] } as const
 
 export type PushOffer = { kind: 'push' | 'publish' } | { kind: 'review'; url: string }
 
