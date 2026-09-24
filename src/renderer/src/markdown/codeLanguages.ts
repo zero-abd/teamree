@@ -37,3 +37,23 @@ export const lowlight = createLowlight({
   xml,
   yaml
 })
+
+/** The languages a code block's picker offers, by the name the fence is written with. */
+export const CODE_LANGUAGES: readonly { id: string; label: string }[] = [
+  { id: 'bash', label: 'Bash' },
+  { id: 'css', label: 'CSS' },
+  { id: 'diff', label: 'Diff' },
+  { id: 'go', label: 'Go' },
+  { id: 'xml', label: 'HTML' },
+  { id: 'java', label: 'Java' },
+  { id: 'javascript', label: 'JavaScript' },
+  { id: 'json', label: 'JSON' },
+  { id: 'markdown', label: 'Markdown' },
+  { id: 'python', label: 'Python' },
+  { id: 'rust', label: 'Rust' },
+  { id: 'shell', label: 'Shell' },
+  { id: 'sql', label: 'SQL' },
+  { id: 'swift', label: 'Swift' },
+  { id: 'typescript', label: 'TypeScript' },
+  { id: 'yaml', label: 'YAML' }
+]

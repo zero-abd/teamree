@@ -57,6 +57,28 @@ function matchingClose(tokens: readonly Token[], index: number): number {
   return -1
 }
 
+const CALLOUT_MARKER = /^\[!(note|tip|important|warning|caution)\][ \t]*(?:\n|$)/i
+
+/** A quote whose first line is only `[!KIND]` is a GitHub alert; the marker line leaves the paragraph. */
+function callouts(state: StateCore): void {
+  const tokens = state.tokens
+  for (let index = 0; index < tokens.length; index += 1) {
+    const open = tokens[index]
+    const paragraph = tokens[index + 1]
+    const inline = tokens[index + 2]
+    if (open?.type !== 'blockquote_open' || paragraph?.type !== 'paragraph_open' || inline?.type !== 'inline') continue
+    const match = CALLOUT_MARKER.exec(inline.content)
+    const close = tokens[matchingClose(tokens, index)]
+    if (match === null || close === undefined) continue
+    open.type = 'callout_open'
+    open.attrSet('kind', (match[1] ?? 'note').toLowerCase())
+    close.type = 'callout_close'
+    inline.content = inline.content.slice(match[0].length)
+    if (inline.content.length === 0) tokens.splice(index + 1, 3)
+    else if (paragraph.map !== null) paragraph.map = [paragraph.map[0] + 1, paragraph.map[1]]
+  }
+}
+
 /** A table cell holds a paragraph in the schema; markdown-it puts the line straight in. */
 function tableCells(state: StateCore): void {
   const out: Token[] = []
@@ -116,6 +138,7 @@ function createTokenizer(): MarkdownIt {
   const md = new MarkdownIt('default', { html: true, linkify: false, typographer: false })
   md.core.ruler.after('block', 'teamree_task_lists', taskLists)
   md.core.ruler.after('block', 'teamree_table_cells', tableCells)
+  md.core.ruler.after('block', 'teamree_callouts', callouts)
   md.core.ruler.after('inline', 'teamree_artifact_cards', artifactCards)
   return md
 }
@@ -150,6 +173,7 @@ const TOKENS: Record<string, ParseSpec> = {
   paragraph: { block: 'paragraph' },
   heading: { block: 'heading', getAttrs: (token) => ({ level: Number(token.tag.slice(1)) || 1 }) },
   blockquote: { block: 'blockquote' },
+  callout: { block: 'callout', getAttrs: (token) => ({ kind: token.attrGet('kind') ?? 'note' }) },
   bullet_list: { block: 'bulletList' },
   ordered_list: { block: 'orderedList', getAttrs: (token) => ({ start: Number(token.attrGet('start')) || 1 }) },
   list_item: { block: 'listItem' },
@@ -276,6 +300,13 @@ const NODES: Record<string, NodeWriter> = {
   },
   blockquote(state, node) {
     state.wrapBlock('> ', null, node, () => state.renderContent(node))
+  },
+  callout(state, node) {
+    state.wrapBlock('> ', null, node, () => {
+      state.write(`[!${String(node.attrs.kind).toUpperCase()}]`)
+      state.ensureNewLine()
+      state.renderContent(node)
+    })
   },
   codeBlock(state, node) {
     const fence = fenceFor(node.textContent)

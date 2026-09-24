@@ -105,6 +105,41 @@ describe('constructs', () => {
   })
 })
 
+describe('callouts', () => {
+  it.each(['NOTE', 'TIP', 'IMPORTANT', 'WARNING', 'CAUTION'])('reads and writes a %s callout', (kind) => {
+    const text = `> [!${kind}]\n> Body with **bold**.\n`
+    const doc = parseMarkdown(text)
+    expect(doc.content?.[0]).toMatchObject({
+      type: 'callout',
+      attrs: { kind: kind.toLowerCase() },
+      content: [{ type: 'paragraph' }]
+    })
+    expect(doc.content?.[0]?.content?.[0]?.content?.[0]).toEqual({ type: 'text', text: 'Body with ' })
+    expect(pass(text)).toBe(text)
+  })
+
+  it('keeps every paragraph of a callout, and one with none', () => {
+    const text = '> [!WARNING]\n> One.\n>\n> Two.\n\n> [!TIP]\n'
+    const doc = parseMarkdown(text)
+    expect(doc.content?.map((node) => node.type)).toEqual(['callout', 'callout'])
+    expect(doc.content?.[0]?.content).toHaveLength(2)
+    expect(pass(text)).toBe(text)
+  })
+
+  it('leaves a quote that only mentions a marker a quote, escaped when written', () => {
+    expect(parseMarkdown('> \\[!NOTE\\] x\n').content?.[0]?.type).toBe('blockquote')
+    expect(parseMarkdown('> see [!NOTE]\n').content?.[0]?.type).toBe('blockquote')
+    expect(parseMarkdown('> [!NOPE]\n> x\n').content?.[0]?.type).toBe('blockquote')
+    const quote = {
+      type: 'doc',
+      content: [
+        { type: 'blockquote', content: [{ type: 'paragraph', content: [{ type: 'text', text: '[!NOTE] x' }] }] }
+      ]
+    }
+    expect(parseMarkdown(serializeMarkdown(quote)).content?.[0]?.type).toBe('blockquote')
+  })
+})
+
 describe('lists side by side', () => {
   it('keeps a bullet list and the task list after it apart', () => {
     const text = '- one\n- two\n\n* [ ] task\n'

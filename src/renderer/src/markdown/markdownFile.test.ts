@@ -172,6 +172,23 @@ describe('an edit', () => {
     expect(changedLines(text, tilde)).toEqual({ removed: ['def f():'], added: ['def g():'] })
   })
 
+  it('to a callout rewrites that callout alone, marker included', () => {
+    const text = readFileSync(path.join(fixtures, 'callouts.md'), 'utf8')
+    const file = readMarkdownFile(text)
+    const written = writeMarkdownFile(edit(file.doc, 'Useful', 'Very useful'), file)
+    expect(changedLines(text, written)).toEqual({
+      removed: ['> Useful information.'],
+      added: ['> Very useful information.']
+    })
+    const kind = writeMarkdownFile(
+      editNode(file.doc, 'callout', 'Lower case', (node) => {
+        node.attrs = { ...node.attrs, kind: 'caution' }
+      }),
+      file
+    )
+    expect(changedLines(text, kind)).toEqual({ removed: ['> [!important]'], added: ['> [!CAUTION]'] })
+  })
+
   it('writes a changed paragraph without escaping what never needed it', () => {
     const text = readFileSync(path.join(fixtures, 'escapes.md'), 'utf8')
     const file = readMarkdownFile(text)
@@ -206,6 +223,18 @@ describe('an edit', () => {
     const written = writeMarkdownFile(removed, file)
     expect(changedLines(text, written)).toEqual({ removed: ['Second.', ''], added: [] })
     expect(written).toContain('[ref]: https://example.com')
+  })
+
+  it('deletes the first block without leaving the blank line after it', () => {
+    const text = '# Title\n\nFirst.\n\n[ref]: https://example.com\n\nSecond.\n'
+    const file = readMarkdownFile(text)
+    const content = file.doc.content ?? []
+    expect(writeMarkdownFile({ ...file.doc, content: content.slice(1) }, file)).toBe(
+      'First.\n\n[ref]: https://example.com\n\nSecond.\n'
+    )
+    expect(writeMarkdownFile({ ...file.doc, content: content.slice(2) }, file)).toBe(
+      '[ref]: https://example.com\n\nSecond.\n'
+    )
   })
 
   it('keeps a file’s CRLF endings and its missing final newline', () => {

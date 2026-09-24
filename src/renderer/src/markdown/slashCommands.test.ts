@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { SLASH_ITEMS, slashItems } from './slashCommands'
+import { SLASH_GROUPS, SLASH_ITEMS, slashItems } from './slashCommands'
 
 describe('slashItems', () => {
   it('offers every block with nothing typed, in the menu’s order', () => {
     expect(slashItems('').map((item) => item.id)).toEqual(SLASH_ITEMS.map((item) => item.id))
+  })
+
+  it('groups the rows, each group together and in the menu’s order', () => {
+    expect(SLASH_GROUPS).toEqual(['Basic blocks', 'Lists', 'Media', 'Advanced'])
+    const groups = SLASH_ITEMS.map((item) => item.group)
+    expect([...new Set(groups)]).toEqual(SLASH_GROUPS)
+    expect(groups).toEqual([...groups].sort((a, b) => SLASH_GROUPS.indexOf(a) - SLASH_GROUPS.indexOf(b)))
+  })
+
+  it('falls back to letters in order when nothing starts with what was typed', () => {
+    expect(slashItems('bltd').map((item) => item.id)).toEqual(['bullets'])
+    expect(slashItems('hd2').map((item) => item.id)).toEqual(['heading2'])
+    expect(slashItems('cllt').map((item) => item.id)).toEqual(['callout'])
   })
 
   it('narrows by label first, then by keyword', () => {
