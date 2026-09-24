@@ -22,7 +22,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { AddProjectDialog } = await import('./AddProjectDialog')
-const { AppearanceDialog } = await import('./AppearanceDialog')
+const { AppearanceSettings } = await import('../settings/AppearanceSettings')
 const { TaskComposerDialog } = await import('./TaskComposerDialog')
 const { RemoteKeystrokesDialog } = await import('./RemoteKeystrokesDialog')
 const { InstallCliDialog } = await import('./InstallCliDialog')
@@ -207,11 +207,7 @@ afterEach(() => cleanup())
 
 describe('dialogs', () => {
   it('have a title and no subtitle', () => {
-    for (const dialog of [
-      <AddProjectDialog key="a" />,
-      <AppearanceDialog key="b" />,
-      <TaskComposerDialog key="c" projectId="p1" />
-    ]) {
+    for (const dialog of [<AddProjectDialog key="a" />, <TaskComposerDialog key="c" projectId="p1" />]) {
       const { container, unmount } = render(dialog)
       expect(container.ownerDocument.querySelector('.modal__head p')).toBeNull()
       unmount()
@@ -240,7 +236,7 @@ describe('dialogs', () => {
 
   it('appearance: theme cards are a name and a swatch, the colour list has no prose', () => {
     seed({ appearance: { themeId: 'black', ground: null, accent: '#ff00ff', overrides: {} } })
-    const view = render(<AppearanceDialog />)
+    const view = render(<AppearanceSettings />)
     fireEvent.click(view.getByRole('button', { name: /Every colour/ }))
     for (const card of document.querySelectorAll('.appearance__theme')) {
       expect(card.textContent?.trim()).toMatch(/^[\w ,]+$/)

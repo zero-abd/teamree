@@ -56,6 +56,13 @@ describe('stylesheets', () => {
     expect(declarationOf(rule, 'white-space')).not.toBe('nowrap')
   })
 
+  // `break-all` split "(another copy)" as "(ano / ther copy)".
+  it('wraps a path line in settings without splitting the words beside it', () => {
+    const rule = ruleFor('settings.css', '.settings-fact--mono')
+    expect(declarationOf(rule, 'word-break')).toBeUndefined()
+    expect(declarationOf(rule, 'overflow-wrap')).toBe('anywhere')
+  })
+
   // One chip radius and size everywhere.
   it('draws every chip from one rule', () => {
     const chip = ruleFor('base.css', '.chip')
@@ -164,8 +171,7 @@ describe('stylesheets', () => {
         ['dialog.css', '.consent'],
         ['dialog.css', '.form'],
         ['dialog.css', '.palette'],
-        ['cli.css', '.cli-install'],
-        ['appearance.css', '.appearance']
+        ['cli.css', '.cli-install']
       ] as const) {
         const rule = ruleFor(sheet, selector)
         expect(declarationOf(rule, 'padding'), selector).toBeUndefined()
@@ -173,10 +179,12 @@ describe('stylesheets', () => {
       }
     })
 
-    it('centres the layer over the window', () => {
+    // A dialog whose height changes (a mode switch, a list filling) must not move under the pointer.
+    it('anchors every dialog’s top edge, as the palette’s', () => {
       const layer = ruleFor('dialog.css', '.modal-layer')
-      expect(declarationOf(layer, 'place-items')).toBe('center')
-      expect(declarationOf(layer, 'padding-top')).toBeUndefined()
+      expect(declarationOf(layer, 'place-items')).toBe('start center')
+      expect(declarationOf(layer, 'padding-block')?.split(' ')[0]).toBe('12vh')
+      expect(findRule('dialog.css', '.modal-layer:has(.palette)')).toBeUndefined()
     })
 
     it('ends every dialog in one right-aligned row with an 8px gap', () => {

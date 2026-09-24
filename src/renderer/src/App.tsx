@@ -5,7 +5,6 @@ import { useEffect, useLayoutEffect, useMemo } from 'react'
 import { resolvePalette } from '@shared/theme'
 import { MAC_CONTENT_INSET_PX, TITLEBAR_HEIGHT_PX } from '@shared/windowChrome'
 import { AddProjectDialog } from './dialogs/AddProjectDialog'
-import { AppearanceDialog } from './dialogs/AppearanceDialog'
 import { TaskComposerDialog } from './dialogs/TaskComposerDialog'
 import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModifier'
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
@@ -27,7 +26,7 @@ import { Sidebar } from './sidebar/Sidebar'
 import { openInBrowser } from './shell/openInBrowser'
 import { RegionFocus } from './shell/RegionFocus'
 import { shellClassName } from './shell/shellClass'
-import { useFolderDrop } from './shell/useFolderDrop'
+import { FolderDrop } from './shell/FolderDrop'
 import { SidebarResizer } from './shell/SidebarResizer'
 import { StatusBar } from './shell/StatusBar'
 import { useWorkspaceStore } from './state/workspaceStore'
@@ -48,8 +47,6 @@ export function App(): React.JSX.Element {
   useUnsavedFiles()
   // What this window tells the main process about agent notices. See src/renderer/src/notices.
   useAgentNotices()
-  // A folder dropped anywhere on the window becomes a project.
-  useFolderDrop()
 
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
@@ -162,7 +159,6 @@ export function App(): React.JSX.Element {
           {...(dialog.refusal === undefined ? {} : { refusal: dialog.refusal })}
         />
       ) : null}
-      {dialog?.kind === 'appearance' ? <AppearanceDialog /> : null}
       {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
       {dialog?.kind === 'new-task' ? <TaskComposerDialog projectId={dialog.projectId} /> : null}
 
@@ -170,6 +166,8 @@ export function App(): React.JSX.Element {
           that are about to run as this user outranks anything this user
           themselves has half-finished. */}
       {asking ? <RemoteKeystrokesDialog request={asking} key={asking.id} /> : null}
+      {/* A folder dropped anywhere on the window becomes a project. */}
+      <FolderDrop />
     </div>
   )
 }

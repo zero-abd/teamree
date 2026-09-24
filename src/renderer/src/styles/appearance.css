@@ -1,21 +1,10 @@
-/* The appearance dialog: presets, an accent, a ground, and every colour under
-   a disclosure.
-
-   Wider and taller than the other dialogs because it is the only one that is
-   read rather than filled in. The window behind it is the preview, and it is
-   capped well under the window's height so that the sidebar and a pane edge
-   stay visible around it while colours change. */
-
-.modal:has(.appearance) {
-  width: min(620px, 92vw);
-}
+/* Settings › Appearance: mode, presets, an accent, a ground, and every colour
+   under a disclosure. The window around it is the preview. */
 
 .appearance {
   display: flex;
   flex-direction: column;
   gap: var(--s5);
-  max-height: min(66vh, 620px);
-  overflow-y: auto;
 }
 
 .appearance__section {
@@ -190,6 +179,36 @@
   box-shadow: var(--ring);
 }
 
+/* The custom accent: a + over an empty well until a colour is picked in it. */
+.appearance__custom {
+  position: relative;
+  display: inline-grid;
+}
+
+.appearance__custom--set .appearance__well {
+  border-style: solid;
+  box-shadow: var(--ring);
+}
+
+.appearance__custom:not(.appearance__custom--set) .appearance__well::-webkit-color-swatch {
+  opacity: 0;
+}
+
+.appearance__plus {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--fg-muted);
+  font-size: var(--text-base);
+  line-height: 1;
+  pointer-events: none;
+}
+
+.appearance__custom:hover .appearance__plus {
+  color: var(--fg);
+}
+
 /* The platform's own colour picker, which has an eyedropper in it. Stripped of
    its native chrome so it reads as one more swatch in the row. */
 .appearance__well {
@@ -306,4 +325,11 @@
   font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.appearance__reset {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s3);
 }

@@ -30,19 +30,37 @@ export type TaskCreate = {
 /** The most characters a task's name keeps; see `taskName`. */
 export const MAX_TASK_NAME_CHARS = 32
 
+/** Words a cut name may not end on: `add-a-subtract-function-to` reads as a mistake. */
+const DANGLING_WORDS = /(?:\s+(?:a|an|and|for|in|of|the|to))+$/iu
+
 /**
- * What a task is called: its first line, cut at a word boundary with dangling punctuation dropped
- * (the branch is a slug of it). A word longer than the room is cut mid-word.
+ * What a task is called: its first line, cut at a word boundary with dangling punctuation and small
+ * words dropped (the branch is a slug of it). A word longer than the room is cut mid-word.
  */
 export function taskName(task: string, max = MAX_TASK_NAME_CHARS): string {
+  const { name, atWord } = cutFirstLine(task, max)
+  // An uncut "Log in" keeps its last word; only the cut leaves one dangling.
+  return atWord ? trimPunctuation(name.replace(DANGLING_WORDS, '')) : name
+}
+
+/** Every name a task's worktree may carry: `taskName`'s, and the one made before small words were dropped. */
+export function taskNames(task: string): string[] {
+  const earlier = cutFirstLine(task, MAX_TASK_NAME_CHARS).name
+  const name = taskName(task)
+  return name === earlier ? [name] : [name, earlier]
+}
+
+function cutFirstLine(task: string, max: number): { name: string; atWord: boolean } {
   const line = task.trim().split('\n', 1)[0]?.trim() ?? ''
   const characters = Array.from(line)
-  let name = line
-  if (characters.length > max) {
-    const room = characters.slice(0, max + 1).join('')
-    const boundary = room.search(/\s\S*$/u)
-    name = boundary > 0 ? room.slice(0, boundary) : characters.slice(0, max).join('')
-  }
+  if (characters.length <= max) return { name: trimPunctuation(line), atWord: false }
+  const room = characters.slice(0, max + 1).join('')
+  const boundary = room.search(/\s\S*$/u)
+  if (boundary <= 0) return { name: trimPunctuation(characters.slice(0, max).join('')), atWord: false }
+  return { name: trimPunctuation(room.slice(0, boundary)), atWord: true }
+}
+
+function trimPunctuation(name: string): string {
   return name.replace(/[\s.,;:!?…\-–—]+$/u, '')
 }
 

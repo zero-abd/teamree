@@ -127,6 +127,22 @@ describe('cloning', () => {
     expect(screen.getByRole('alert').textContent).toBe('Authentication failed')
   })
 
+  it.each([
+    ['URL', url],
+    ['destination', destination]
+  ])('drops the last failure once the %s is edited', async (_, field) => {
+    cloneProject.mockResolvedValueOnce('Repository not found')
+    openClone()
+    fireEvent.change(url(), { target: { value: 'https://github.com/acme/ap' } })
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Clone' }))
+    })
+    expect(screen.getByRole('alert').textContent).toBe('Repository not found')
+
+    fireEvent.change(field(), { target: { value: `${field().value}i` } })
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('shows what git is doing, and Cancel stops it', async () => {
     cloneProject.mockImplementationOnce(() => new Promise(() => {}))
     call.mockImplementation(async (method) =>

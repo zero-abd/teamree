@@ -143,7 +143,7 @@ function WorkspaceView({
   if (teamworkProjectId !== null) return <TeamworkView projectId={teamworkProjectId} />
 
   // Settings and help too, ahead of the empty state: a window with nothing open is where people look.
-  if (settingsOpen) return <SettingsView modifier={modifier} />
+  if (settingsOpen) return <SettingsView />
   if (helpOpen) return <HelpView modifier={modifier} />
 
   if (!worktree || !activeWorktreeId) {
@@ -167,7 +167,7 @@ function WorkspaceView({
     return (
       <main className="workspace workspace--empty">
         {/* The project ⌘N picks with nothing open, so button and chord open the same composer. */}
-        <Welcome modifier={modifier} project={projects[0]} />
+        <Welcome modifier={modifier} project={projects.at(-1)} />
       </main>
     )
   }

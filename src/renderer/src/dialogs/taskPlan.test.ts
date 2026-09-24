@@ -14,6 +14,7 @@ import {
   taskPlanNote,
   withAgentCount
 } from './taskPlan'
+import { branchNameFromTask } from './branchNameFromTask'
 
 const claude: InstalledAgent = { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }
 const codex: InstalledAgent = { kind: 'codex', command: 'codex', binary: '/opt/bin/codex' }
@@ -71,10 +72,17 @@ describe('the plan the dialog submits', () => {
     ['🚀 Ship the pager rewrite before the demo on Friday', '🚀 Ship the pager rewrite before'],
     ['a'.repeat(40), 'a'.repeat(32)],
     ['First line only\nThe second line is for the agent', 'First line only'],
-    ['  padded  ', 'padded']
+    ['  padded  ', 'padded'],
+    ['Add a subtract function to src/math.ts', 'Add a subtract function'],
+    ['Put the new save button in the corner', 'Put the new save button'],
+    ['Log in', 'Log in']
   ])('names %j %j', (task, name) => {
     expect(taskName(task)).toBe(name)
     expect(Array.from(taskName(task)).length).toBeLessThanOrEqual(32)
+  })
+
+  it('never leaves a cut branch ending in a small word', () => {
+    expect(branchNameFromTask(taskName('Add a subtract function to src/math.ts'))).toBe('add-a-subtract-function')
   })
 
   // The description is the agent's first prompt, and the name is only what the

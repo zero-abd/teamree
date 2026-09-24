@@ -1,6 +1,6 @@
 /* Modal layer and the form controls it contains.
 
-   One frame for every dialog: centred over the window, the raised surface with
+   One frame for every dialog: anchored near the top of the window, the raised surface with
    its border and radius, a head with the title, and a body the frame pads on
    the same edge as the head. The content classes below — a form, the palette,
    a confirm — lay out what is inside them and never inset themselves, which is
@@ -13,7 +13,10 @@
   inset: 0;
   z-index: 60;
   display: grid;
-  place-items: center;
+  /* Anchored near the top, so a dialog whose height changes does not move. */
+  place-items: start center;
+  padding-block: 12vh var(--s5);
+  overflow-y: auto;
   background: var(--scrim);
   backdrop-filter: blur(2px);
   animation: scrim-in var(--motion-fast) var(--ease);
@@ -439,12 +442,6 @@ button.picker__chevron:hover {
    content alone left it overflowing a 440px panel by 120px. */
 .modal:has(.palette) {
   width: min(560px, 86vw);
-}
-
-/* Anchored near the top, so the input stays put while the list under it grows and shrinks. */
-.modal-layer:has(.palette) {
-  place-items: start center;
-  padding-top: 12vh;
 }
 
 .palette__input {

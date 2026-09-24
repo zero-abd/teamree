@@ -4,7 +4,7 @@
 import { slugifyBranchName } from '@shared/branchName'
 import type { AgentKind, InstalledAgent, Worktree } from '@shared/entities'
 import { HARNESSES } from '../agents/harnesses'
-import { taskName } from '../dialogs/taskPlan'
+import { taskName, taskNames } from '../dialogs/taskPlan'
 
 export type WorktreeNameSource = Pick<Worktree, 'name' | 'branch' | 'task'>
 
@@ -37,10 +37,10 @@ export function worktreeDisplay(
 ): WorktreeDisplay {
   const name = worktree.name.trim()
   const task = worktree.task?.trim() ?? ''
-  const named = task === '' ? null : taskName(task)
-  const run = named === null || name === named ? null : taskRun(name)
+  const named = task === '' ? [] : taskNames(task)
+  const run = named.length === 0 || named.includes(name) ? null : taskRun(name)
   const display: WorktreeDisplay = { title: name }
-  if (named !== null && (name === named || run?.base === named)) display.title = taskName(task, Infinity)
+  if (named.includes(name) || (run !== null && named.includes(run.base))) display.title = taskName(task, Infinity)
   else if (run !== null && agentKind(run.word) !== undefined) display.title = run.base
   if (run !== null && display.title !== name) display.agent = runAgent(run, kindOf)
   if (worktree.branch !== slugifyBranchName(name) && worktree.branch !== slugifyBranchName(display.title)) {

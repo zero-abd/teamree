@@ -1,12 +1,12 @@
 // The settings page: machine-level facts (PATH, updates, text size, checkouts), so it takes the main
 // area rather than a drawer. Colours and relays are read here and set where they already live.
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { agentLaunchCommand } from '@shared/agentLaunch'
 import type { InstalledAgent, Project } from '@shared/entities'
+import { AgentGlyph } from '../agents/glyphs'
+import { harnessName } from '../agents/harnesses'
 import { cliOutcome } from '../dialogs/cliInstallModel'
-import type { PlatformModifier } from '../keyboard/platformModifier'
-import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import {
   NO_DEFAULT_AGENT,
   TERMINAL_FONT_MAX_PX,
@@ -21,6 +21,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { InstallerButton } from '../updates/InstallerButton'
 import { installerStep } from '../updates/updateNotice'
 import { PageFrame } from '../workspace/PageFrame'
+import { AppearanceSettings } from './AppearanceSettings'
 import { cliLine, relayPanel, updatePanel } from './settingsModel'
 
 const SECTIONS = [
@@ -38,7 +39,7 @@ type SectionId = (typeof SECTIONS)[number]['id']
 /** A heading this close to the top of the scrolling body counts as the section in view. */
 const IN_VIEW_PX = 48
 
-export function SettingsView({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
+export function SettingsView(): React.JSX.Element {
   const projects = useWorkspaceStore((state) => state.projects)
   const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
   const loadCli = useWorkspaceStore((state) => state.loadCli)
@@ -98,7 +99,7 @@ export function SettingsView({ modifier }: { modifier: PlatformModifier }): Reac
           <NoticesSection />
           <PanesSection />
           <AgentsSection />
-          <AppearanceSection modifier={modifier} />
+          <AppearanceSection />
           <ProjectsSection projects={projects} />
         </div>
       </div>
@@ -193,7 +194,9 @@ function CliSection(): React.JSX.Element {
       </h2>
       <div className="settings-group">
         <div className="settings-row">
-          <p className="settings-fact settings-fact--mono">{line.state}</p>
+          <p className="settings-fact settings-fact--mono">
+            <BreakAtSlashes text={line.state} />
+          </p>
           {line.action ? (
             <button
               type="button"
@@ -504,7 +507,7 @@ function AgentsSection(): React.JSX.Element | null {
             <option value={NO_DEFAULT_AGENT}>First found</option>
             {agents.map((agent) => (
               <option key={agent.kind} value={agent.kind}>
-                {agent.command}
+                {harnessName(agent.kind)}
               </option>
             ))}
           </select>
@@ -542,14 +545,16 @@ function AgentArguments({ agent }: { agent: InstalledAgent }): React.JSX.Element
 
   return (
     <div className="settings-field">
-      <label className="settings-field__label" htmlFor={id}>
-        {agent.command}
+      <label className="settings-field__label settings-agent" htmlFor={id}>
+        <AgentGlyph kind={agent.kind} decorative />
+        {harnessName(agent.kind)}
       </label>
       <input
         id={id}
         className="settings-field__input"
         type="text"
         value={draft}
+        placeholder="Extra arguments"
         autoComplete="off"
         spellCheck={false}
         onChange={(event) => setDraft(event.target.value)}
@@ -566,27 +571,14 @@ function AgentArguments({ agent }: { agent: InstalledAgent }): React.JSX.Element
   )
 }
 
-/** One row and a button to the existing colour editor; a second set of swatches would drift. */
-function AppearanceSection({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
-  const openDialog = useWorkspaceStore((state) => state.openDialog)
-
+function AppearanceSection(): React.JSX.Element {
   return (
     <section className="settings-section" aria-labelledby="settings-appearance">
       <h2 className="settings-section__title" id="settings-appearance" tabIndex={-1}>
         Appearance
       </h2>
       <div className="settings-group">
-        <div className="settings-row">
-          <button
-            type="button"
-            className="button button--small"
-            // No chord (⌘, is the settings page's) and no empty tooltip, which flickers open over nothing.
-            title={shortcutHint('open-appearance', modifier) || undefined}
-            onClick={() => openDialog({ kind: 'appearance' })}
-          >
-            Appearance…
-          </button>
-        </div>
+        <AppearanceSettings />
       </div>
     </section>
   )
@@ -617,7 +609,9 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
       <div className="settings-row">
         <div className="settings-project__identity">
           <h3 className="settings-project__name">{project.name}</h3>
-          <p className="settings-project__path">{project.path}</p>
+          <p className="settings-project__path">
+            <BreakAtSlashes text={project.path} />
+          </p>
         </div>
         <button
           type="button"
@@ -923,5 +917,23 @@ function RelayBlock({ project }: { project: Project }): React.JSX.Element {
         </button>
       </div>
     </div>
+  )
+}
+
+/** Lets a path wrap after each `/` rather than mid-name. */
+function BreakAtSlashes({ text }: { text: string }): React.JSX.Element {
+  return (
+    <>
+      {text.split('/').map((part, index) => (
+        <Fragment key={index}>
+          {index > 0 ? (
+            <>
+              /<wbr />
+            </>
+          ) : null}
+          {part}
+        </Fragment>
+      ))}
+    </>
   )
 }

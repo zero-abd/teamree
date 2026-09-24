@@ -57,6 +57,7 @@ export function Sidebar({
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen)
   const helpOpen = useWorkspaceStore((state) => state.helpOpen)
   const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
+  const openSettings = useWorkspaceStore((state) => state.openSettings)
   const toggleHelp = useWorkspaceStore((state) => state.toggleHelp)
   const toggleDashboard = useWorkspaceStore((state) => state.toggleDashboard)
   const teamworkProjectId = useWorkspaceStore((state) => state.teamworkProjectId)
@@ -195,17 +196,14 @@ export function Sidebar({
             </button>
           </li>
           <li>
-            {/* The one entry here that opens a dialog rather than taking the
-                main area. It is in the rail anyway because it belongs to the
-                same set — things about the window rather than about a worktree
-                — and because a preference nobody can find is a preference
-                nobody has. Reached from here, from the View menu and from the
-                palette. */}
+            {/* Settings, opened at its Appearance section: a preference nobody
+                can find is a preference nobody has. Reached from here, from the
+                View menu and from the palette. */}
             <button
               type="button"
               className="rail__link"
               title="Themes and colours"
-              onClick={() => openDialog({ kind: 'appearance' })}
+              onClick={() => openSettings('appearance')}
             >
               <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
                 <path d="M7 1.6a5.4 5.4 0 1 0 0 10.8c.9 0 1.3-.6 1.3-1.2 0-.8-.7-1.1-.7-1.8 0-.5.4-.9 1-.9h1.1a2.7 2.7 0 0 0 2.7-2.8c0-2.6-2.4-4.1-5.4-4.1Z" />

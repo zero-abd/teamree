@@ -103,6 +103,7 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
     openDialog: vi.fn(),
     closeDialog: vi.fn(),
     toggleSettings: vi.fn(),
+    openSettings: vi.fn(),
     showRightPanelTab: vi.fn(),
     pushActiveWorktree: vi.fn(async () => {}),
     setTerminalFontSize: vi.fn()
@@ -131,8 +132,8 @@ describe('what a window can be asked to do', () => {
 
   // A dialog of this window's own too, except the palette, whose two chords switch or close it.
   it('offers nothing but the palette chords while a dialog is up', () => {
-    const appearance = { ...WORKING, dialog: { kind: 'appearance' } as const }
-    for (const command of EVERY_COMMAND) expect(isCommandAvailable(command, appearance), command).toBe(false)
+    const adding = { ...WORKING, dialog: { kind: 'add-project' } as const }
+    for (const command of EVERY_COMMAND) expect(isCommandAvailable(command, adding), command).toBe(false)
 
     const palette = { ...WORKING, dialog: { kind: 'palette' } as const }
     for (const command of EVERY_COMMAND) {
@@ -326,7 +327,7 @@ describe('running a command', () => {
       ['go-to-file', 'openDialog', [{ kind: 'palette', mode: 'files' }]],
       ['find-in-pane', 'openPaneSearch', []],
       ['open-dashboard', 'toggleDashboard', []],
-      ['open-appearance', 'openDialog', [{ kind: 'appearance' }]],
+      ['open-appearance', 'openSettings', ['appearance']],
       ['open-settings', 'toggleSettings', []],
       ['open-help', 'toggleHelp', []]
     ]
@@ -341,6 +342,17 @@ describe('running a command', () => {
       // Nothing else moved.
       expect(callCount(store), command).toBe(1)
     }
+  })
+
+  it('starts a new task in the open worktree’s project, else the one added last', () => {
+    const two = { ...WORKING, projects: [{ id: 'p1' }, { id: 'p2' }] }
+    const open = workspace(two)
+    runWorkspaceCommand('new-worktree', open)
+    expect(open.openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p1' })
+
+    const none = workspace({ ...two, activeWorktreeId: null })
+    runWorkspaceCommand('new-worktree', none)
+    expect(none.openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p2' })
   })
 
   it('stops the watch when the focused pane is a teammate’s', () => {

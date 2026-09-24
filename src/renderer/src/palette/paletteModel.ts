@@ -10,7 +10,7 @@ import {
 } from '@shared/entities'
 import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
 import { APPEARANCE_MODES, BUILT_IN_THEMES, type AppearanceMode } from '@shared/theme'
-import { APPEARANCE_MODE_LABEL } from '../dialogs/AppearanceDialog'
+import { APPEARANCE_MODE_LABEL } from '../settings/AppearanceSettings'
 import { cliActionLabel } from '../dialogs/cliInstallModel'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { MENU_ORDER, menuLabel } from '../menu/menuBar'
