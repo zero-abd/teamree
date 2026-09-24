@@ -173,6 +173,21 @@ export function WorktreeRow({
               <path d="M3.5 3.8v4.4M8.5 6.3c0 1.6-2 2.2-5 2.2" />
             </svg>
           </span>
+        ) : badge?.tone === 'conflicts' ? (
+          <span
+            className="worktree__merge worktree__merge--conflicts"
+            role="img"
+            aria-label={badge.detail}
+            title={badge.detail}
+          >
+            {/* The clean mark with its join broken by a cross. */}
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <circle cx="3.5" cy="2.5" r="1.3" />
+              <circle cx="3.5" cy="9.5" r="1.3" />
+              <circle cx="8.5" cy="2.5" r="1.3" />
+              <path d="M3.5 3.8v4.4M8.5 3.8v1.4M7 7.5l3 3M10 7.5l-3 3" />
+            </svg>
+          </span>
         ) : badge ? (
           <span className={`chip worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
             {badge.label}

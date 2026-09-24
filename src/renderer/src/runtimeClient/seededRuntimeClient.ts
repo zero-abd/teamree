@@ -522,7 +522,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
     'project.cloneProgress': () => null,
     'project.cancelClone': () => ({ cancelled: false }),
-    'project.setPaths': ({ projectId, linkedPaths, copiedPaths, setupCommand }) => {
+    'project.setPaths': ({ projectId, linkedPaths, copiedPaths, setupCommand, fetchInBackground }) => {
       const project = required(projects.get(projectId), 'project')
       const next: Project = { ...project }
       if (linkedPaths !== undefined) {
@@ -538,6 +538,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
         if (trimmed.length === 0) delete next.setupCommand
         else next.setupCommand = trimmed
       }
+      if (fetchInBackground === true) delete next.fetchInBackground
+      else if (fetchInBackground === false) next.fetchInBackground = false
       projects.set(next.id, next)
       announce({ type: 'projects' })
       return next
@@ -699,6 +701,30 @@ export function createSeededRuntimeClient(): RuntimeClient {
         uncommitted: (status?.staged ?? 0) + (status?.unstaged ?? 0),
         pushedAt: Date.now()
       }
+    },
+    'worktree.update': ({ worktreeId }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const status = statuses.get(worktreeId)
+      const baseRef = projects.get(worktree.projectId)?.baseRef ?? 'origin/main'
+      const mode = status?.upstream ? 'merge' : 'rebase'
+      if (status && status.staged + status.unstaged + status.conflicted > 0) throw new Error('Commit or stash first')
+      if (status && status.behind > 0) {
+        seedStatus(worktree, { ...status, behind: 0 })
+        announce({ type: 'worktrees' })
+      }
+      const outcome = (status?.behind ?? 0) > 0 ? 'updated' : 'upToDate'
+      return { worktreeId, baseRef, mode, outcome, conflicts: [], updatedAt: Date.now() }
+    },
+    'worktree.abortUpdate': ({ worktreeId }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const status = statuses.get(worktreeId)
+      const aborted = status?.operation ?? null
+      if (status && aborted !== null) {
+        const { operation: _dropped, ...rest } = status
+        seedStatus(worktree, { ...rest, conflicted: 0 })
+        announce({ type: 'worktrees' })
+      }
+      return { worktreeId, aborted }
     },
     'worktree.log': ({ worktreeId, limit }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')

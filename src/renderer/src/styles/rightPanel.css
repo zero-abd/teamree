@@ -472,6 +472,34 @@
   color: var(--danger);
 }
 
+.changes__updateFailed {
+  flex: none;
+  margin: 0;
+  padding: var(--s2) var(--s4);
+  border-bottom: 1px solid var(--line);
+  color: var(--danger);
+  font-size: var(--text-xs);
+}
+
+.changes__conflicts {
+  flex: none;
+  border-bottom: 1px solid var(--line);
+}
+
+.changes__conflicts .changes__list {
+  flex: none;
+}
+
+.changes__conflictActions {
+  display: flex;
+  gap: var(--s2);
+  padding: var(--s1) var(--s4) var(--s3);
+}
+
+.changes__conflictActions:empty {
+  display: none;
+}
+
 /* git's own words, under the line they explain. */
 .changes__pushDetail {
   position: absolute;

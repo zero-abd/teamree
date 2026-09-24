@@ -327,6 +327,10 @@ type WorkspaceState = {
   committing: boolean
   pushing: boolean
   pushes: Record<string, PushState>
+  /** The worktree whose update from its base is running, or null. */
+  updating: string | null
+  /** Why each worktree's last update was refused, in one line; cleared by the next attempt. */
+  updateErrors: Record<string, string>
   /** Each project's roster, by project id, read on demand: most windows never open one. */
   members: Record<string, MemberList>
   /** True while a roster is being read or written, so the dialog can say so. */
@@ -555,6 +559,12 @@ type WorkspaceState = {
   discardChange: (worktreeId: string, path: string, hunk?: PatchHunk) => Promise<void>
   /** Sends the active worktree's branch to its remote. Never forces. */
   pushActiveWorktree: () => Promise<void>
+  /** Brings the base ref's new commits into a worktree: rebase if unpublished, merge if published. */
+  updateWorktree: (worktreeId: string) => Promise<void>
+  /** Undoes an update stopped on conflicts. */
+  abortUpdate: (worktreeId: string) => Promise<void>
+  /** Types a line into a pane without pressing Return. */
+  typeIntoPane: (terminalId: string, text: string) => Promise<void>
   /** Opens a pane already running one of the agents found on this machine. */
   startAgent: (command: string) => Promise<void>
 
@@ -669,7 +679,7 @@ type WorkspaceState = {
    */
   setProjectPaths: (
     projectId: string,
-    settings: { linkedPaths?: string[]; copiedPaths?: string[]; setupCommand?: string }
+    settings: { linkedPaths?: string[]; copiedPaths?: string[]; setupCommand?: string; fetchInBackground?: boolean }
   ) => Promise<void>
   /** Sets one project's editor command, or clears it when given null. */
   setEditorCommand: (projectId: string, command: string | null) => void
@@ -1305,6 +1315,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     committing: false,
     pushing: false,
     pushes: {},
+    updating: null,
+    updateErrors: {},
     cli: null,
     cliPending: false,
     cliInstall: null,
@@ -2675,6 +2687,40 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
+    async updateWorktree(worktreeId) {
+      if (get().updating !== null) return
+      set((state) => {
+        const { [worktreeId]: _cleared, ...updateErrors } = state.updateErrors
+        return { updating: worktreeId, updateErrors }
+      })
+      try {
+        await runtimeClient.call('worktree.update', { worktreeId })
+      } catch (error) {
+        const line = error instanceof Error ? error.message : String(error)
+        set((state) => ({ updateErrors: { ...state.updateErrors, [worktreeId]: line } }))
+      } finally {
+        set({ updating: null })
+        await refreshStatuses([worktreeId])
+        if (changesOnScreen(get()) && get().activeWorktreeId === worktreeId) readChangesNow(worktreeId)
+      }
+    },
+
+    async abortUpdate(worktreeId) {
+      try {
+        await runtimeClient.call('worktree.abortUpdate', { worktreeId })
+      } catch (error) {
+        failed('Could not abort')(error)
+      }
+      await refreshStatuses([worktreeId])
+      if (changesOnScreen(get()) && get().activeWorktreeId === worktreeId) readChangesNow(worktreeId)
+    },
+
+    async typeIntoPane(terminalId, text) {
+      await runtimeClient
+        .call('terminal.write', { terminalId, data: text })
+        .catch(failed('Could not type into the pane'))
+    },
+
     selectChange(path) {
       const worktreeId = get().activeWorktreeId
       set({ selectedChangePath: path })
@@ -2903,7 +2949,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // Taken from the answer: the runtime trims, de-duplicates and drops an empty list.
         set((state) => ({ projects: state.projects.map((row) => (row.id === project.id ? project : row)) }))
       } catch (error) {
-        failed('Could not save what new worktrees carry over')(error)
+        failed('Could not save the project setting')(error)
       }
     },
 

@@ -23,7 +23,9 @@ import type {
   WorktreeLog,
   WorktreeMergePreview,
   WorktreePush,
-  WorktreeStatus
+  WorktreeStatus,
+  WorktreeUpdate,
+  WorktreeUpdateAbort
 } from '../../shared/entities'
 import type { ParamsOf } from '../../shared/methods'
 import { checkTransport } from '../../shared/origin'
@@ -46,6 +48,7 @@ import { commitWorktree } from './worktreeCommit'
 import { applyHunk, unstagePath } from './worktreeHunk'
 import { discardHunk, discardPath, type Trash } from './worktreeDiscard'
 import { pushWorktree } from './worktreePush'
+import { abortWorktreeUpdate, updateWorktree } from './worktreeUpdate'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
 import { findWorktreeFiles, readWorktreeFiles } from './worktreeFiles'
 import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
@@ -276,6 +279,8 @@ export class GitService {
       if (command === undefined) delete next.setupCommand
       else next.setupCommand = command
     }
+    if (params.fetchInBackground === true) delete next.fetchInBackground
+    else if (params.fetchInBackground === false) next.fetchInBackground = false
     this.#store.putProject(next)
     this.events.emit({ type: 'project.updated', project: next })
     return next
@@ -679,6 +684,23 @@ export class GitService {
       branch: worktree.branch,
       now: this.#now
     })
+  }
+
+  /** Brings the project's base ref into this worktree; a conflict leaves it mid-way. See worktreeUpdate.ts. */
+  async worktreeUpdate(params: ParamsOf<'worktree.update'>): Promise<WorktreeUpdate> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'updating')
+    const project = this.#requireProject(worktree.projectId)
+    return updateWorktree(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      baseRef: project.baseRef,
+      now: this.#now
+    })
+  }
+
+  async worktreeAbortUpdate(params: ParamsOf<'worktree.abortUpdate'>): Promise<WorktreeUpdateAbort> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'aborting an update')
+    return abortWorktreeUpdate(this.#runner, { worktreeId: worktree.id, worktreePath: worktree.path })
   }
 
   /** A worktree that can be read from; anything not yet `ready` has no checkout on disk. */

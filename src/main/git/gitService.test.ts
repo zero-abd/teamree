@@ -606,6 +606,20 @@ describe('the command a project runs in every new worktree', () => {
     expect('setupCommand' in cleared).toBe(false)
   })
 
+  it('turns background fetching off for one project, and on again by forgetting the flag', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    expect('fetchInBackground' in project).toBe(false)
+
+    const off = await service.setProjectPaths({ projectId: project.id, fetchInBackground: false })
+    expect(off.fetchInBackground).toBe(false)
+    expect((await service.setProjectPaths({ projectId: project.id, linkedPaths: [] })).fetchInBackground).toBe(false)
+
+    const on = await service.setProjectPaths({ projectId: project.id, fetchInBackground: true })
+    expect('fetchInBackground' in on).toBe(false)
+  })
+
   it('runs it once the checkout is ready, and records the pane on the worktree', async () => {
     const repo = await newRepo()
     const { startSetup, runs } = recorder()

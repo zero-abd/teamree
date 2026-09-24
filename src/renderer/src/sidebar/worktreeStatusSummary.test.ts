@@ -36,6 +36,17 @@ describe('summarizeWorktreeStatus', () => {
     expect(summary?.description).toBe('clean, in sync')
   })
 
+  it('says first that a rebase or merge stopped part-way', () => {
+    expect(summarizeWorktreeStatus(status({ operation: 'rebase', conflicted: 1 }))?.description).toBe(
+      'rebasing · 1 conflicted'
+    )
+    expect(summarizeWorktreeStatus(status({ operation: 'merge' }))?.description).toBe('merging')
+  })
+
+  it('says how far the base has moved on', () => {
+    expect(summarizeWorktreeStatus(status({ behind: 1 }))?.description).toBe('1 behind')
+  })
+
   it('describes divergence in reading order', () => {
     expect(summarizeWorktreeStatus(status({ ahead: 2, behind: 3, unstaged: 1 }))?.description).toBe(
       '2 ahead · 3 behind · 1 uncommitted'

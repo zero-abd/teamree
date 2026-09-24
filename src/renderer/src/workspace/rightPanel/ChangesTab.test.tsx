@@ -789,3 +789,97 @@ describe('how much each file changed', () => {
     expect(stat('logo.png')).toBeUndefined()
   })
 })
+
+describe('keeping up with the base', () => {
+  const agentPane = {
+    id: 't-claude',
+    worktreeId: 'w1',
+    title: 'claude',
+    cwd: '/w1',
+    shell: 'claude',
+    cols: 80,
+    rows: 24,
+    running: true,
+    agent: 'claude',
+    busy: false,
+    lastOutputAt: 0
+  } as const
+
+  it('offers Update from main, not as the primary, when the base has moved', async () => {
+    seed({ behind: 2 })
+    call.mockImplementation((method: string) =>
+      method === 'worktree.update'
+        ? Promise.resolve({
+            worktreeId: 'w1',
+            baseRef: 'origin/main',
+            mode: 'merge',
+            outcome: 'updated',
+            conflicts: [],
+            updatedAt: 0
+          })
+        : new Promise(() => {})
+    )
+    render(<ChangesTab />)
+
+    const update = screen.getByRole('button', { name: 'Update from main' })
+    expect(update.className).not.toContain('button--primary')
+    expect(screen.getByRole('button', { name: 'Push' }).className).toContain('button--primary')
+    await act(async () => fireEvent.click(update))
+    expect(call).toHaveBeenCalledWith('worktree.update', { worktreeId: 'w1' })
+  })
+
+  it('has no update to offer when nothing is behind', () => {
+    render(<ChangesTab />)
+    expect(screen.queryByRole('button', { name: /Update from/ })).toBeNull()
+  })
+
+  it('says the refusal in one line', async () => {
+    seed({ behind: 1, unstaged: 1 })
+    call.mockImplementation((method: string) =>
+      method === 'worktree.update' ? Promise.reject(new Error('Commit or stash first')) : new Promise(() => {})
+    )
+    render(<ChangesTab />)
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Update from main' })))
+    expect(screen.getByRole('alert').textContent).toBe('Commit or stash first')
+  })
+
+  it('lists the conflicts of a stopped rebase, with Abort and the agent to ask', async () => {
+    seed({ behind: 1, operation: 'rebase', conflicted: 1 })
+    withChanges([{ path: 'src/math.ts', kind: 'conflicted', staged: false, unstaged: true }, ...rows.slice(0, 1)])
+    useWorkspaceStore.setState({ terminals: { 't-claude': agentPane } })
+    call.mockImplementation((method: string) =>
+      method === 'worktree.abortUpdate' || method === 'terminal.write'
+        ? Promise.resolve({ worktreeId: 'w1', aborted: 'rebase' })
+        : new Promise(() => {})
+    )
+    render(<ChangesTab />)
+
+    const conflicts = screen.getByRole('region', { name: 'Conflicts' })
+    expect(conflicts.textContent).toContain('Conflicts')
+    expect(conflicts.textContent).toContain('1')
+    expect(conflicts.textContent).toContain('math.ts')
+    // Not twice: the conflicted file is not also a row to tick for a commit.
+    expect(screen.getAllByText('math.ts')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /Update from/ })).toBeNull()
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Ask Claude Code to Resolve' })))
+    const write = call.mock.calls.find(([method]) => method === 'terminal.write') as [string, { data: string }]
+    expect(write[1]).toMatchObject({ terminalId: 't-claude' })
+    const typed = write[1].data
+    expect(typed).toContain('src/math.ts')
+    expect(typed).toContain('rebase')
+    // Typed, not sent: the owner reads it and presses Return.
+    expect(typed).not.toMatch(/[\r\n]/)
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Abort' })))
+    expect(call).toHaveBeenCalledWith('worktree.abortUpdate', { worktreeId: 'w1' })
+  })
+
+  it('offers no agent to ask when the worktree runs none', () => {
+    seed({ operation: 'merge', conflicted: 1 })
+    withChanges([{ path: 'src/math.ts', kind: 'conflicted', staged: false, unstaged: true }])
+    render(<ChangesTab />)
+    expect(screen.queryByRole('button', { name: /to Resolve/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Abort' })).toBeTruthy()
+  })
+})

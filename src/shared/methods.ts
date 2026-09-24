@@ -45,7 +45,9 @@ import type {
   WorktreeMergePreview,
   WorktreePush,
   WorktreeStatus,
-  WorktreeUnstage
+  WorktreeUnstage,
+  WorktreeUpdate,
+  WorktreeUpdateAbort
 } from './entities'
 import { MAX_AGENT_ARGS_CHARS } from './agentLaunch'
 import { MAX_FILE_PANE_BYTES } from './filePane'
@@ -199,7 +201,9 @@ export const Params = {
      * the stored one alone; empty string clears it. Not judged at all: it runs
      * in the developer's own shell.
      */
-    setupCommand: z.string().max(MAX_SETUP_COMMAND_CHARS).optional()
+    setupCommand: z.string().max(MAX_SETUP_COMMAND_CHARS).optional(),
+    /** Omitted leaves it alone; true is stored as absent. */
+    fetchInBackground: z.boolean().optional()
   }),
 
   worktreeList: z.object({ projectId: z.string().min(1).optional() }),
@@ -265,6 +269,10 @@ export const Params = {
   }),
   /** Whether this worktree would merge into its base, without merging it. */
   worktreeMergePreview: z.object({ worktreeId: z.string().min(1) }),
+  /** Brings the base ref's new commits in: a rebase when unpublished, a merge when published. */
+  worktreeUpdate: z.object({ worktreeId: z.string().min(1) }),
+  /** Undoes an update stopped on conflicts. */
+  worktreeAbortUpdate: z.object({ worktreeId: z.string().min(1) }),
 
   /** Changes the name shown for a worktree; its branch, path and task stay as they are. */
   worktreeRename: z.object({ worktreeId: z.string().min(1), name: z.string().min(1).max(MAX_WORKTREE_NAME_CHARS) }),
@@ -699,6 +707,8 @@ export type MethodContract = {
     params: z.infer<typeof Params.worktreeMergePreview>
     result: WorktreeMergePreview
   }
+  'worktree.update': { params: z.infer<typeof Params.worktreeUpdate>; result: WorktreeUpdate }
+  'worktree.abortUpdate': { params: z.infer<typeof Params.worktreeAbortUpdate>; result: WorktreeUpdateAbort }
 
   'worktree.rename': { params: z.infer<typeof Params.worktreeRename>; result: Worktree }
 

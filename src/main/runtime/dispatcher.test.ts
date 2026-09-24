@@ -203,6 +203,8 @@ describe('dispatcher', () => {
       'update.setAutomatic',
       'update.state',
       'workspace.subscribe',
+      // Local: rewrites this machine's branch, as a commit does.
+      'worktree.abortUpdate',
       'worktree.changes',
       'worktree.commit',
       'worktree.compare',
@@ -226,7 +228,8 @@ describe('dispatcher', () => {
       'worktree.startPoints',
       'worktree.status',
       'worktree.unstageHunk',
-      'worktree.unstagePath'
+      'worktree.unstagePath',
+      'worktree.update'
     ])
   })
 })

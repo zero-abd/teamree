@@ -2,11 +2,12 @@
 // panel; a row opens its diff in the centre. It rides the same invalidation as everything else.
 
 import { useEffect, useRef, useState } from 'react'
+import { harnessName } from '../../agents/harnesses'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { openInBrowser } from '../../shell/openInBrowser'
 import { commitScope, useWorkspaceStore, type PushState } from '../../state/workspaceStore'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
-import type { PaneNode, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
+import type { PaneNode, Terminal, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 import { fileColumnIn, isCommitLeaf, shownTabId } from '@shared/filePane'
 
 export function ChangesTab(): React.JSX.Element | null {
@@ -30,6 +31,17 @@ export function ChangesTab(): React.JSX.Element | null {
   const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const openCommit = useWorkspaceStore((state) => state.openCommit)
+  const updating = useWorkspaceStore((state) => state.updating)
+  const updateError = useWorkspaceStore((state) => (worktreeId ? state.updateErrors[worktreeId] : undefined))
+  const updateWorktree = useWorkspaceStore((state) => state.updateWorktree)
+  const abortUpdate = useWorkspaceStore((state) => state.abortUpdate)
+  const typeIntoPane = useWorkspaceStore((state) => state.typeIntoPane)
+  const focusPane = useWorkspaceStore((state) => state.focusPane)
+  const baseRef = useWorkspaceStore((state) => {
+    const projectId = state.worktrees.find((worktree) => worktree.id === worktreeId)?.projectId
+    return state.projects.find((project) => project.id === projectId)?.baseRef
+  })
+  const terminals = useWorkspaceStore((state) => state.terminals)
   const shownCommit = useWorkspaceStore((state) =>
     worktreeId ? shownCommitIn(state.layouts[worktreeId]?.root ?? null) : null
   )
@@ -42,7 +54,13 @@ export function ChangesTab(): React.JSX.Element | null {
 
   const setMessage = (next: string): void => setDrafts((current) => withDraft(current, worktreeId, next))
 
-  const rows = changes?.changes ?? []
+  const listed = changes?.changes ?? []
+  // Conflicts get a list of their own; they cannot be ticked into a commit.
+  const conflictRows = listed.filter((change) => change.kind === 'conflicted')
+  const rows = listed.filter((change) => change.kind !== 'conflicted')
+  const midway = status?.operation
+  const base = baseRef ?? log?.baseRef
+  const agentPane = agentPaneOf(terminals, worktreeId)
   const ticked = new Set(stagedPaths)
   const tick = (change: WorktreeChange): Tick => tickOf(change, ticked.has(change.path))
   const checked = (change: WorktreeChange): boolean => tick(change) === 'on' || tick(change) === 'index'
@@ -53,7 +71,9 @@ export function ChangesTab(): React.JSX.Element | null {
   const scope = commitScope(stagedPaths, rows)
   const canCommit = rows.length > 0 && message.trim().length > 0 && !committing
 
-  const offer = pushOffer(status, push)
+  // Nothing is pushed from the middle of a rebase.
+  const offer = midway === undefined ? pushOffer(status, push) : null
+  const offersUpdate = updateFrom(status, base) !== null && conflictRows.length === 0
   // One primary at a time: commit what is uncommitted first, then send it.
   const pushIsNext = rows.length === 0 && (status?.ahead ?? 0) > 0
   const discard = (path: string): void => openDialog({ kind: 'confirm-discard', worktreeId, path })
@@ -74,6 +94,16 @@ export function ChangesTab(): React.JSX.Element | null {
             <span className="changes__branch">{status.branch}</span>
             {aheadBehind(status)}
           </span>
+          {offersUpdate ? (
+            <button
+              type="button"
+              className="button button--small"
+              disabled={updating !== null}
+              onClick={() => void updateWorktree(worktreeId)}
+            >
+              {updating === worktreeId ? 'Updating…' : `Update from ${updateFrom(status, base)}`}
+            </button>
+          ) : null}
           {offer?.kind === 'review' ? (
             <button type="button" className="button button--small" onClick={() => openInBrowser(offer.url)}>
               Open review
@@ -90,13 +120,72 @@ export function ChangesTab(): React.JSX.Element | null {
           ) : null}
         </div>
       ) : null}
+      {updateError === undefined ? null : (
+        <p className="changes__updateFailed" role="alert">
+          {updateError}
+        </p>
+      )}
+      {conflictRows.length > 0 || midway !== undefined ? (
+        <section className="changes__conflicts" aria-label="Conflicts">
+          <h3 className="commits__title">
+            Conflicts
+            <span className="panel__count">{conflictRows.length}</span>
+          </h3>
+          <ul className="changes__list">
+            {conflictRows.map((change) => (
+              <li
+                className={`changes__item${change.path === selectedPath ? ' changes__item--selected' : ''}`}
+                key={change.path}
+              >
+                <button
+                  type="button"
+                  className="change"
+                  aria-current={change.path === selectedPath ? 'true' : undefined}
+                  title={change.path}
+                  onClick={() => selectChange(change.path)}
+                >
+                  <span className="change__kind change__kind--conflicted" aria-label={KIND_LABEL.conflicted}>
+                    {KIND_LETTER.conflicted}
+                  </span>
+                  <span className="change__path">
+                    <span className="change__dir">{directoryOf(change.path)}</span>
+                    <span className="change__name">{fileNameOf(change.path)}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="changes__conflictActions">
+            {agentPane !== undefined && conflictRows.length > 0 ? (
+              <button
+                type="button"
+                className="button button--small button--primary"
+                onClick={() => {
+                  const paths = conflictRows.map((change) => change.path)
+                  void typeIntoPane(agentPane.id, resolvePrompt(paths, midway, base))
+                  focusPane(agentPane.id)
+                }}
+              >
+                Ask {harnessName(agentPane.kind)} to Resolve
+              </button>
+            ) : null}
+            {midway === undefined ? null : (
+              <button type="button" className="button button--small" onClick={() => void abortUpdate(worktreeId)}>
+                Abort
+              </button>
+            )}
+          </div>
+        </section>
+      ) : null}
       {push?.phase === 'failed' ? (
         <PushFailed error={push.error} detail={push.detail} retry={() => void pushActiveWorktree()} busy={pushing} />
       ) : null}
       {changes === undefined ? (
         <p className="changes__empty">Reading…</p>
       ) : rows.length === 0 ? (
-        <p className="changes__empty">{emptyChangesLabel(log)}</p>
+        conflictRows.length > 0 ? null : (
+          <p className="changes__empty">{emptyChangesLabel(log)}</p>
+        )
       ) : (
         <ul className="changes__list">
           {rows.map((change, index) => (
@@ -187,7 +276,7 @@ export function ChangesTab(): React.JSX.Element | null {
         />
       )}
 
-      {rows.length > 0 ? (
+      {rows.length > 0 && midway === undefined ? (
         <div className="changes__commit">
           <div className="changes__all">
             <label>
@@ -267,6 +356,41 @@ export function ChangesTab(): React.JSX.Element | null {
       ) : null}
     </section>
   )
+}
+
+/** The running agent pane of this worktree, one started as an agent before one typed into a shell. */
+export function agentPaneOf(
+  terminals: Readonly<Record<string, Terminal>>,
+  worktreeId: string
+): { id: string; kind: NonNullable<Terminal['agent']> } | undefined {
+  const panes = Object.values(terminals).filter((terminal) => terminal.worktreeId === worktreeId && terminal.running)
+  const started = panes.find((terminal) => terminal.agent !== undefined)
+  if (started?.agent !== undefined) return { id: started.id, kind: started.agent }
+  const typed = panes.find((terminal) => terminal.foregroundAgent !== undefined)
+  return typed?.foregroundAgent === undefined ? undefined : { id: typed.id, kind: typed.foregroundAgent }
+}
+
+/** One line for the agent, typed and not sent: the files, and how to finish without an editor. */
+export function resolvePrompt(
+  paths: readonly string[],
+  operation: 'rebase' | 'merge' | undefined,
+  base = 'the base'
+): string {
+  const files = paths.join(', ')
+  if (operation === 'rebase') {
+    return `Resolve the conflicts in ${files} from rebasing onto ${base}, then run GIT_EDITOR=true git rebase --continue`
+  }
+  if (operation === 'merge')
+    return `Resolve the conflicts in ${files} from merging ${base}, then run git commit --no-edit`
+  return `Resolve the conflicts in ${files}`
+}
+
+/** The base's branch name (`main` for `origin/main`) when the worktree is behind it and nothing is mid-way; else null. */
+export function updateFrom(status: WorktreeStatus | undefined, baseRef: string | undefined): string | null {
+  if (!status || status.missing || status.behind === 0 || status.operation !== undefined) return null
+  if (baseRef === undefined) return 'base'
+  const slash = baseRef.indexOf('/')
+  return slash === -1 ? baseRef : baseRef.slice(slash + 1)
 }
 
 /** A failed push as one line under the header: git's words behind Details, and Retry. */

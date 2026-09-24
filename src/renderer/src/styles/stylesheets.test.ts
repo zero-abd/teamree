@@ -368,10 +368,12 @@ describe('stylesheets', () => {
       )
     })
 
-    it('draws the Settings mark, the change count and the clean-merge mark in ink', () => {
+    it('draws the Settings mark, the change count and both merge marks in ink', () => {
       expect(declarationOf(ruleFor('sidebar.css', '.rail__badge'), 'background')).toBeUndefined()
       expect(declarationOf(ruleFor('sidebar.css', '.rail__badge'), 'color')).toMatch(/^var\(--fg/)
       expect(declarationOf(ruleFor('sidebar.css', '.worktree__merge--clean'), 'color')).toMatch(/^var\(--fg/)
+      expect(declarationOf(ruleFor('sidebar.css', '.worktree__merge--conflicts'), 'color')).toMatch(/^var\(--fg/)
+      expect(declarationOf(ruleFor('sidebar.css', '.worktree__merge--conflicts'), 'background')).toBeUndefined()
       expect(declarationOf(ruleFor('sidebar.css', '.gitchip--dirty'), 'color')).toBe('var(--fg-secondary)')
     })
 

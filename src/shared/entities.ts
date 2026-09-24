@@ -30,6 +30,8 @@ export type Project = {
    * parsed or sanitised; runs on create only, never on restore or relaunch.
    */
   setupCommand?: string
+  /** False stops the timed and on-focus fetch of the base ref; absent is on. */
+  fetchInBackground?: boolean
 }
 
 /** A `project.clone` while it runs. */
@@ -117,6 +119,8 @@ export type WorktreeStatus = {
    * git's "dirty" leaves them out, so this is the only warning. Optional: never asked is not zero.
    */
   ignored?: number
+  /** A rebase or merge stopped part-way, usually on conflicts. */
+  operation?: 'rebase' | 'merge'
   /** Wall-clock time of the read, so stale reads are visible to the UI. */
   readAt: number
 }
@@ -291,6 +295,21 @@ export type WorktreePush = {
   reviewUrl?: string
   pushedAt: number
 }
+
+/** A worktree brought up to date with its base ref. */
+export type WorktreeUpdate = {
+  worktreeId: string
+  baseRef: string
+  /** Rebased when the branch was unpublished, merged when it was. */
+  mode: 'rebase' | 'merge'
+  /** `conflicts`: stopped part-way with `conflicts` unresolved, for `worktree.abortUpdate` or a fix. */
+  outcome: 'updated' | 'upToDate' | 'conflicts'
+  conflicts: string[]
+  updatedAt: number
+}
+
+/** What `worktree.abortUpdate` undid; null when nothing was in progress. */
+export type WorktreeUpdateAbort = { worktreeId: string; aborted: 'rebase' | 'merge' | null }
 
 /** `data` of a failed `worktree.push`, whose message is one clause: git's whole refusal. */
 export type PushFailureData = { detail: string }

@@ -587,6 +587,16 @@ describe('what the palette offers for the worktree on screen', () => {
     expect(labels({ activeWorktreeId: null })).not.toContain('Remove Worktree…')
   })
 
+  it('offers Update from the base only when the worktree is behind it', () => {
+    expect(labels()).not.toContain('Update from main')
+    const behind = buildPaletteItems(
+      context({ worktrees: [worktree({ id: 'w1' })], activeWorktreeId: 'w1', updateFrom: 'main' })
+    )
+    const row = behind.find((item) => item.label === 'Update from main')
+    expect(row).toMatchObject({ kind: 'action', id: 'update-worktree', here: true })
+    expect(filterPalette(behind, 'rebase')[0]?.label).toBe('Update from main')
+  })
+
   it('offers discard and unstage only for a focused file that has them', () => {
     expect(labels()).not.toContain('Discard File Changes…')
     const both = labels({ focusedChange: { path: 'src/a.ts', discardable: true, staged: true } })

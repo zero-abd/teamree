@@ -77,6 +77,18 @@ export function publishGitWrites(registry: MethodRegistry, git: GitService, bus:
     bus.emit({ type: 'worktrees' })
     return result
   })
+
+  registry.register('worktree.update', Params.worktreeUpdate, async (params) => {
+    const result = await git.worktreeUpdate(params)
+    bus.emit({ type: 'worktrees' })
+    return result
+  })
+
+  registry.register('worktree.abortUpdate', Params.worktreeAbortUpdate, async (params) => {
+    const result = await git.worktreeAbortUpdate(params)
+    bus.emit({ type: 'worktrees' })
+    return result
+  })
 }
 
 /**

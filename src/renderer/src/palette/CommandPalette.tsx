@@ -14,7 +14,7 @@ import { compareTitle } from '../compare/siblingRuns'
 import { useOpenIn } from '../sidebar/openIn'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { canDiscard } from '../workspace/rightPanel/ChangesTab'
+import { canDiscard, updateFrom } from '../workspace/rightPanel/ChangesTab'
 import {
   buildPaletteItems,
   fileItem,
@@ -89,6 +89,7 @@ export function CommandPalette({
   }, [loadEditors])
 
   const active = worktrees.find((worktree) => worktree.id === activeWorktreeId)
+  const activeBase = projects.find((project) => project.id === active?.projectId)?.baseRef
   const activeName = active === undefined ? '' : worktreeLabel(worktreeDisplay(active))
   const targets = useMemo(
     () =>
@@ -148,7 +149,8 @@ export function CommandPalette({
         openIn: targets.map((target) => target.label),
         appearance: { mode: appearance.mode ?? 'dark', themeId: activeChoice(appearance, systemTone).themeId },
         focusedChange:
-          change === undefined ? null : { path: change.path, discardable: canDiscard(change), staged: change.staged }
+          change === undefined ? null : { path: change.path, discardable: canDiscard(change), staged: change.staged },
+        updateFrom: updateFrom(active === undefined ? undefined : statuses[active.id], activeBase)
       }),
     [
       worktrees,
@@ -172,6 +174,8 @@ export function CommandPalette({
       editingMarkdown,
       terminalFontSize,
       targets,
+      active,
+      activeBase,
       appearance,
       systemTone,
       change
@@ -292,6 +296,9 @@ export function CommandPalette({
         break
       case 'remove-worktree':
         if (active) void store.removeWorktree(active.id)
+        break
+      case 'update-worktree':
+        if (active) void store.updateWorktree(active.id)
         break
       case 'discard-file':
         if (active && change) store.openDialog({ kind: 'confirm-discard', worktreeId: active.id, path: change.path })

@@ -7,7 +7,8 @@ import type { MethodRegistry } from '../methodRegistry'
 import { CliService, createAdministratorRunner, findShippedCli, registerCliHandlers } from '../../cli'
 import { createEditorActions, registerEditorHandlers } from '../../editor'
 import { registerFileHandlers } from '../../files'
-import { GitService, registerGitHandlers } from '../../git'
+import { createGitRunner, GitService, registerGitHandlers } from '../../git'
+import { backgroundFetchProjects, BaseFetcher } from '../../git/baseFetch'
 import { startSetupCommand } from '../../git/worktreeSetup'
 import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
 import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
@@ -43,6 +44,8 @@ export type RegisteredAreas = {
   peers: PeerService
   /** The update check: one timer, and quitting must never be waiting on GitHub. */
   updates: UpdateService
+  /** The background fetch of each project's base ref. Idle until started. */
+  bases: BaseFetcher
 }
 
 export type RegisterHandlersOptions = {
@@ -73,6 +76,8 @@ export type RegisterHandlersOptions = {
   onAppearance?: (appearance: Appearance) => void
   /** What macOS is showing, for an appearance that follows it. Absent, it is taken as dark. */
   systemTone?: () => Tone
+  /** `net.isOnline`: false skips a background fetch. Absent, the fetch is tried. */
+  online?: () => boolean
 }
 
 export function registerHandlers(registry: MethodRegistry, options: RegisterHandlersOptions = {}): RegisteredAreas {
@@ -179,6 +184,14 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   // Git status has no call behind it; file changes are what keep it honest.
   const worktreeFiles = publishWorktreeFileEvents(git, workspaceEvents)
 
+  // A teammate's push moves the base ref only once fetched; the watch above never sees `refs/remotes`.
+  const bases = new BaseFetcher({
+    runner: createGitRunner(),
+    projects: () => backgroundFetchProjects(git.snapshot()),
+    onMoved: () => workspaceEvents.emit({ type: 'worktrees' }),
+    ...(options.online === undefined ? {} : { online: options.online })
+  })
+
   // A pull that brings in a teammate's key or the team's relay is nobody's
   // method call; without this both machines sit on the roster read before it.
   const teamworkWatcher = new TeamreeWatcher({
@@ -281,7 +294,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     peers.notifyWorkspaceChanged()
   })
 
-  return { terminals, git, worktreeFiles, teamworkFiles: teamworkWatcher, peers, updates }
+  return { terminals, git, worktreeFiles, teamworkFiles: teamworkWatcher, peers, updates, bases }
 }
 
 /**

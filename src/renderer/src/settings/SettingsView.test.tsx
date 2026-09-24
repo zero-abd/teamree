@@ -685,6 +685,25 @@ describe('projects', () => {
   })
 })
 
+describe('fetching in the background', () => {
+  it('is on for a project that never said otherwise, and turns off for that project alone', () => {
+    render(<SettingsView />)
+    const box = screen.getByLabelText('Fetch in Background') as HTMLInputElement
+    expect(box.checked).toBe(true)
+    fireEvent.click(box)
+    expect(setProjectPaths).toHaveBeenCalledWith('p1', { fetchInBackground: false })
+  })
+
+  it('reads off, and turns back on, for a project that turned it off', () => {
+    seed({ projects: [{ ...project, fetchInBackground: false }] })
+    render(<SettingsView />)
+    const box = screen.getByLabelText('Fetch in Background') as HTMLInputElement
+    expect(box.checked).toBe(false)
+    fireEvent.click(box)
+    expect(setProjectPaths).toHaveBeenCalledWith('p1', { fetchInBackground: true })
+  })
+})
+
 describe('what a new worktree carries over from the primary checkout', () => {
   it('writes one list per line, dropping blanks, when the field is left', () => {
     render(<SettingsView />)

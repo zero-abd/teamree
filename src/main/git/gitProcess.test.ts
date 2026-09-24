@@ -122,6 +122,24 @@ describe('git runner', () => {
     await rm(base, { recursive: true, force: true })
   })
 
+  // Node started with it reads the macOS keychain, and git can start node (hooks, credential helpers).
+  it('never hands a child NODE_USE_SYSTEM_CA', async () => {
+    if (process.platform === 'win32') return
+    const base = await mkdtemp(path.join(os.tmpdir(), 'teamree-ca-'))
+    const reporter = path.join(base, 'report-ca')
+    await writeFile(reporter, '#!/bin/sh\necho "CA=${NODE_USE_SYSTEM_CA-unset}"\n', 'utf8')
+    await chmod(reporter, 0o755)
+
+    const { stdout } = await createGitRunner(reporter).run({
+      args: ['status'],
+      cwd: base,
+      env: { NODE_USE_SYSTEM_CA: '1' }
+    })
+
+    expect(stdout.trim()).toBe('CA=unset')
+    await rm(base, { recursive: true, force: true })
+  })
+
   // A caller that wanted the first megabyte must not be handed a failure for forty.
   it('clips stdout to the caller’s budget instead of failing on a huge read', async () => {
     const repo = await newRepo()
