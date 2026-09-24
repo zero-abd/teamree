@@ -9,6 +9,7 @@
 import { useMemo } from 'react'
 import type { Worktree } from '@shared/entities'
 import { agentRows } from '../../sidebar/agentRows'
+import { worktreeDisplay } from '../../sidebar/worktreeDisplay'
 import { PaneRows } from '../../sidebar/PaneRows'
 import { usePaneEvidence } from '../../sidebar/usePaneEvidence'
 import { attentionByPane } from '../../state/paneAttention'
@@ -32,7 +33,7 @@ export function PanesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
   // Cheap — one tail read per pane on the sidebar's own schedule — and only for
   // the worktree on screen.
   const evidence = usePaneEvidence(mine, terminals)
-  const rows = agentRows(mine, worktree.id, now, evidence)
+  const rows = agentRows(mine, worktree, now, evidence)
   const reading = useMemo(() => attentionByPane(watching), [watching])
 
   return (
@@ -59,7 +60,7 @@ export function PanesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
         <PaneRows
           className="panes--panel"
           rows={rows}
-          worktreeName={worktree.name}
+          worktreeName={worktreeDisplay(worktree).title}
           watchers={reading}
           unread={unread}
           now={now}

@@ -665,20 +665,29 @@ describe('the row menu acts on the worktree it was opened on', () => {
 
 // Two agents on one task were "Add a subtract function to c…" twice at the sidebar's width.
 describe('several runs of one task', () => {
-  it('leads each with its agent, so the part that differs is the part never cut', () => {
+  it('leads each with its agent, then the whole task line', () => {
+    const task = 'Add a subtract function to src/math.ts'
     seed({
       worktrees: [
-        worktree({ id: 'w1', name: 'Add a subtract function to claude', branch: 'add-a-subtract-function-to-claude' }),
-        worktree({ id: 'w2', name: 'Add a subtract function to codex', branch: 'add-a-subtract-function-to-codex' })
+        worktree({
+          id: 'w1',
+          name: 'Add a subtract function to claude',
+          branch: 'add-a-subtract-function-to-claude',
+          task
+        }),
+        worktree({
+          id: 'w2',
+          name: 'Add a subtract function to codex',
+          branch: 'add-a-subtract-function-to-codex',
+          task
+        })
       ]
     })
     mount()
     const heads = [...document.querySelectorAll('.worktree__title')]
     expect(heads.map((head) => head.querySelector('.worktree__agent')?.textContent)).toEqual(['claude', 'codex'])
-    expect(heads.map((head) => head.querySelector('.worktree__name')?.textContent)).toEqual([
-      'Add a subtract function to',
-      'Add a subtract function to'
-    ])
+    expect(heads.map((head) => head.querySelector('.worktree__name')?.textContent)).toEqual([task, task])
+    expect(screen.getByRole('treeitem', { name: `claude, ${task}` })).toBeTruthy()
     // The branch line said the name again, slugified.
     expect(screen.queryByText('add-a-subtract-function-to-claude')).toBeNull()
   })

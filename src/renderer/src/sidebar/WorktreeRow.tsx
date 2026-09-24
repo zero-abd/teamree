@@ -3,7 +3,6 @@
 // being opened is in one menu: right-click, the `⋯`, or the context-menu key.
 
 import { useEffect, useId, useRef, useState } from 'react'
-import { slugifyBranchName } from '@shared/branchName'
 import {
   hasCheckout,
   type Terminal,
@@ -13,17 +12,18 @@ import {
 } from '@shared/entities'
 import { AgentGlyph } from '../agents/glyphs'
 import type { PaneAttention } from '../state/paneAttention'
-import { agentRows, dotClass, TONE_LABEL, worktreeTone, type WorktreeTitle } from './agentRows'
+import { agentRows, dotClass, TONE_LABEL, worktreeTone } from './agentRows'
 import { PaneRows } from './PaneRows'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { WorktreeNameField } from './WorktreeNameField'
+import { worktreeDisplay, worktreeLabel, type WorktreeDisplay } from './worktreeDisplay'
 
 type WorktreeRowProps = {
   worktree: Worktree
-  /** How the name is drawn; the whole name when absent. See `worktreeTitles`. */
-  title?: WorktreeTitle
+  /** How the name is drawn; see `worktreeDisplay`. */
+  display?: WorktreeDisplay
   status: WorktreeStatus | undefined
   mergePreview: WorktreeMergePreview | undefined
   /** Every terminal in the workspace; the row picks out its own. */
@@ -53,7 +53,7 @@ type WorktreeRowProps = {
 
 export function WorktreeRow({
   worktree,
-  title = { text: worktree.name },
+  display = worktreeDisplay(worktree),
   status,
   mergePreview,
   terminals,
@@ -126,10 +126,10 @@ export function WorktreeRow({
         { label: 'Open in', onChoose: () => {}, items: openIn },
         remove
       ]
-  const rows = ready ? agentRows(terminals, worktree.id, now, evidence) : []
+  const rows = ready ? agentRows(terminals, worktree, now, evidence) : []
   const tone = worktreeTone(rows)
-  // `scratch / scratch`: a branch that is the name slugified says nothing the name does not.
-  const branchSaysMore = worktree.branch !== slugifyBranchName(worktree.name)
+  const label = worktreeLabel(display)
+  const branchSaysMore = display.branch !== undefined
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
   const stateId = `${describedBy}-state`
@@ -179,18 +179,18 @@ export function WorktreeRow({
         ) : (
           <>
             {/* The one part that differs between runs of a task, so it is the part never cut. */}
-            {title.agent ? (
+            {display.agent ? (
               <span className="worktree__agent">
-                <AgentGlyph kind={title.agent.kind} decorative />
-                {title.agent.text}
+                {display.agent.kind === undefined ? null : <AgentGlyph kind={display.agent.kind} decorative />}
+                {display.agent.text}
               </span>
             ) : null}
             <span
               className={`worktree__name${unreadHere ? ' worktree__name--unread' : ''}`}
-              title={worktree.task ?? worktree.name}
+              title={label}
               onDoubleClick={() => setRenaming(true)}
             >
-              {title.text}
+              {display.title}
             </span>
           </>
         )}
@@ -213,7 +213,7 @@ export function WorktreeRow({
       </span>
       {branchSaysMore ? (
         <span className="worktree__meta" id={factsId}>
-          <span className="worktree__branch">{worktree.branch}</span>
+          <span className="worktree__branch">{display.branch}</span>
           {facts}
         </span>
       ) : null}
@@ -276,7 +276,7 @@ export function WorktreeRow({
             aria-disabled={openable ? undefined : true}
             aria-current={active ? 'true' : undefined}
             // Said as words with a pause between them, not the row's text run together.
-            aria-label={title.agent ? `${title.agent.text}, ${title.text}` : title.text}
+            aria-label={worktreeLabel(display, ', ')}
             aria-describedby={tone ? `${stateId} ${factsId}` : factsId}
           >
             {body}
@@ -290,8 +290,8 @@ export function WorktreeRow({
           type="button"
           className="worktree__action"
           tabIndex={-1}
-          title={`More for ${worktree.name}`}
-          aria-label={`More for ${worktree.name}`}
+          title={`More for ${label}`}
+          aria-label={`More for ${label}`}
           aria-haspopup="menu"
           aria-expanded={menuAt !== null}
           onClick={(event) => {
@@ -308,14 +308,14 @@ export function WorktreeRow({
       </div>
 
       {menuAt === null ? null : (
-        <RowMenu label={`Actions for ${worktree.name}`} items={items} anchor={menuAt} onClose={closeMenu} />
+        <RowMenu label={`Actions for ${label}`} items={items} anchor={menuAt} onClose={closeMenu} />
       )}
 
       {rows.length > 0 && panesShown ? (
         <PaneRows
           tree
           rows={rows}
-          worktreeName={worktree.name}
+          worktreeName={display.title}
           watchers={watchers}
           unread={unread}
           now={now}
@@ -324,7 +324,7 @@ export function WorktreeRow({
       ) : null}
 
       {creating ? (
-        <div className="worktree__progress" role="progressbar" aria-label={`Creating ${worktree.name}`}>
+        <div className="worktree__progress" role="progressbar" aria-label={`Creating ${label}`}>
           <span className="worktree__progress-bar" />
         </div>
       ) : null}

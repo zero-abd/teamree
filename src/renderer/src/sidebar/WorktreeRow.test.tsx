@@ -7,7 +7,6 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneWatcher, Terminal, Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
 import type { PaneAttention } from '../state/paneAttention'
-import type { WorktreeTitle } from './agentRows'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
@@ -92,7 +91,6 @@ function mount(
     unread?: Iterable<string>
     active?: boolean
     openIn?: { label: string; onChoose: () => void }[]
-    title?: WorktreeTitle
   } = {}
 ): void {
   render(
@@ -107,7 +105,6 @@ function mount(
         unread={new Set(overrides.unread ?? [])}
         now={NOW}
         active={overrides.active ?? false}
-        {...(overrides.title === undefined ? {} : { title: overrides.title })}
         openIn={
           overrides.openIn ?? [
             { label: 'Zed', onChoose: openInZed },
@@ -327,22 +324,27 @@ describe('a worktree that is ready', () => {
 })
 
 describe('one of several runs of a task', () => {
-  const title: WorktreeTitle = { text: 'Add a subtract function to', agent: { kind: 'codex', text: 'codex' } }
+  const TASK = 'Add a subtract function to src/math.ts'
+  const codexRun = (): Worktree =>
+    worktree({ name: 'Add a subtract function to codex', branch: 'add-a-subtract-function-to-codex', task: TASK })
 
   it('leads with its agent, glyph and name, ahead of the task', () => {
-    mount({ worktree: worktree({ name: 'Add a subtract function to codex' }), title })
+    mount({ worktree: codexRun() })
     const head = document.querySelector('.worktree__title') as HTMLElement
     const slot = head.firstElementChild as HTMLElement
     expect(slot.className).toBe('worktree__agent')
     expect(slot.querySelector('[data-agent="codex"]')).not.toBeNull()
     expect(slot.textContent).toBe('codex')
-    expect(head.querySelector('.worktree__name')?.textContent).toBe('Add a subtract function to')
+    expect(head.querySelector('.worktree__name')?.textContent).toBe(TASK)
   })
 
-  it('reads agent first, then the task, and keeps the stored name on hover', () => {
-    mount({ worktree: worktree({ name: 'Add a subtract function to codex' }), title })
-    expect(screen.getByRole('treeitem', { name: 'codex, Add a subtract function to' })).toBeTruthy()
-    expect(document.querySelector('.worktree__name')?.getAttribute('title')).toBe('Add a subtract function to codex')
+  // The stored name is cut to "Add a subtract function to", which read aloud as a dangling "to".
+  it('reads agent first, then the whole task line, and hovers the same name', () => {
+    mount({ worktree: codexRun() })
+    expect(screen.getByRole('treeitem', { name: `codex, ${TASK}` })).toBeTruthy()
+    expect(document.querySelector('.worktree__name')?.getAttribute('title')).toBe(`codex · ${TASK}`)
+    expect(screen.getByRole('button', { name: `More for codex · ${TASK}` })).toBeTruthy()
+    expect(document.querySelector('.worktree__branch')).toBeNull()
   })
 
   // Name first, then what state it is in: glued together, "claudeAdd a subtract…stopped" is one word.
@@ -350,9 +352,9 @@ describe('one of several runs of a task', () => {
     mount({
       worktree: worktree({
         name: 'Add a subtract function to calc claude',
-        branch: 'add-a-subtract-function-to-calc-claude'
+        branch: 'add-a-subtract-function-to-calc-claude',
+        task: 'Add a subtract function to calc'
       }),
-      title: { text: 'Add a subtract function to calc', agent: { kind: 'claude', text: 'claude' } },
       terminals: [terminal({ agent: 'claude', lastOutputAt: NOW - 90_000 })],
       status: status({ unstaged: 1 })
     })
@@ -374,8 +376,7 @@ describe('one of several runs of a task', () => {
   // The task pane is named after the worktree; saying it again under the row is noise.
   it('draws the pane named after it as its glyph and last line alone', () => {
     mount({
-      worktree: worktree({ name: 'Add a subtract function to codex' }),
-      title,
+      worktree: codexRun(),
       terminals: [terminal({ id: 't1', agent: 'codex', label: 'Add a subtract function to codex' })],
       evidence: { t1: 'Edited calc.js (+1 -0)' }
     })

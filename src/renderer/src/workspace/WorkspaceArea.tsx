@@ -178,6 +178,7 @@ function WorkspaceView({
               node={paneRoot}
               path={[]}
               worktreeId={activeWorktreeId}
+              worktree={worktree}
               terminals={terminals}
               focusedTerminalId={focusedWatchId === null ? (layout?.focusedTerminalId ?? null) : null}
               onFocus={focusPane}

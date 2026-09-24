@@ -14,12 +14,12 @@ import { Brand, SidebarGlyph } from '../shell/Brand'
 import { useOpenIn } from './openIn'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
 import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
-import { agentWords, worktreeTitles } from './agentRows'
 import { teamworkControlLabel, teamworkOn, teamworkSummary } from './teamworkSummary'
 import { usePaneEvidence } from './usePaneEvidence'
 import { useTreeKeys } from './treeKeys'
 import { worktreesByProject } from './worktreeOrder'
 import { WorktreeRow } from './WorktreeRow'
+import { agentWords, worktreeDisplay, worktreeLabel } from './worktreeDisplay'
 
 export function Sidebar({
   searchHint
@@ -300,7 +300,6 @@ export function Sidebar({
             const reading = attentionByPane(watching[project.id])
             // Roster teammates never heard from: not away, and not without worktrees.
             const unheard = unheardTeammates(teammates[project.id])
-            const titles = worktreeTitles(rows, kindOf)
             return (
               <section className="project" key={project.id}>
                 <div className="project__head">
@@ -371,30 +370,34 @@ export function Sidebar({
 
                 {isCollapsed ? null : (
                   <ul className="project__worktrees" role="group">
-                    {rows.map((worktree) => (
-                      <WorktreeRow
-                        key={worktree.id}
-                        worktree={worktree}
-                        title={titles.get(worktree.id)}
-                        status={statuses[worktree.id]}
-                        mergePreview={mergePreviews[worktree.id]}
-                        terminals={paneList}
-                        evidence={evidence}
-                        watchers={reading}
-                        unread={unread}
-                        now={now}
-                        onFocusTerminal={(terminalId) => void revealPane(worktree.id, terminalId)}
-                        active={worktree.id === activeWorktreeId}
-                        onOpen={() => void openWorktree(worktree.id)}
-                        onRetry={() => retryWorktree(worktree.id)}
-                        onRemove={() => void removeWorktree(worktree.id)}
-                        onRename={(name) => void renameWorktree(worktree.id, name)}
-                        onReveal={() => void revealInFinder(worktree.path, `the ${worktree.name} checkout`)}
-                        onCopyPath={() => void copyToClipboard(worktree.path, `the path to ${worktree.name}`)}
-                        onCopyBranch={() => void copyToClipboard(worktree.branch, `the branch ${worktree.branch}`)}
-                        openIn={openIn(project.id, worktree.path, `the ${worktree.name} checkout`, false)}
-                      />
-                    ))}
+                    {rows.map((worktree) => {
+                      const display = worktreeDisplay(worktree, kindOf)
+                      const label = worktreeLabel(display)
+                      return (
+                        <WorktreeRow
+                          key={worktree.id}
+                          worktree={worktree}
+                          display={display}
+                          status={statuses[worktree.id]}
+                          mergePreview={mergePreviews[worktree.id]}
+                          terminals={paneList}
+                          evidence={evidence}
+                          watchers={reading}
+                          unread={unread}
+                          now={now}
+                          onFocusTerminal={(terminalId) => void revealPane(worktree.id, terminalId)}
+                          active={worktree.id === activeWorktreeId}
+                          onOpen={() => void openWorktree(worktree.id)}
+                          onRetry={() => retryWorktree(worktree.id)}
+                          onRemove={() => void removeWorktree(worktree.id)}
+                          onRename={(name) => void renameWorktree(worktree.id, name)}
+                          onReveal={() => void revealInFinder(worktree.path, `the ${label} checkout`)}
+                          onCopyPath={() => void copyToClipboard(worktree.path, `the path to ${label}`)}
+                          onCopyBranch={() => void copyToClipboard(worktree.branch, `the branch ${worktree.branch}`)}
+                          openIn={openIn(project.id, worktree.path, `the ${label} checkout`, false)}
+                        />
+                      )
+                    })}
                     {theirs.map((row) => (
                       <TeammateWorktreeRow
                         key={row.id}

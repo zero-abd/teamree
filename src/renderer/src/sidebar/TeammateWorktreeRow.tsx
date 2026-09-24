@@ -37,7 +37,7 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
             {/* First on the line, because it is the fact that changes what
                 every other fact on the row means. */}
             <span className="worktree__owner">{row.handle}</span>
-            <span className="worktree__branch">{row.branch}</span>
+            {row.branch === undefined ? null : <span className="worktree__branch">{row.branch}</span>}
             {/* The age, never the bare word "offline": what is known is how old
                 this picture is, and the sentence behind it says their machine
                 is away rather than anything at all about the worktree. The

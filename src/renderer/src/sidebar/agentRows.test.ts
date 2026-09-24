@@ -2,13 +2,10 @@ import { describe, expect, it } from 'vitest'
 import type { Terminal } from '@shared/entities'
 import {
   activityOf,
-  agentWords,
   paneAgent,
   paneCount,
   TONE_LABEL,
   TONES_BY_ATTENTION,
-  worktreeTitles,
-  type WorktreeTitle,
   dotClass,
   dotTone,
   agentRows,
@@ -392,6 +389,23 @@ describe('agentRows naming', () => {
 
     expect(rows[0]?.label).toBe('rewrite the pager so it streams instead of buffering')
   })
+
+  // `startTask` labels the agent's pane with the worktree's name; the pane goes by the worktree's title.
+  it('calls a pane named after its worktree by the worktree title', () => {
+    const worktree = {
+      id: 'wt1',
+      name: 'Add a subtract function to claude',
+      branch: 'add-a-subtract-function-to-claude',
+      task: 'Add a subtract function to src/math.ts'
+    }
+    const rows = agentRows(
+      [terminal({ id: 'a', agent: 'claude', label: worktree.name }), terminal({ id: 'b', label: 'server' })],
+      worktree,
+      0
+    )
+
+    expect(rows.map((entry) => entry.label)).toEqual(['Add a subtract function to src/math.ts', 'server'])
+  })
 })
 
 describe('paneLabel', () => {
@@ -554,41 +568,5 @@ describe('paneCount', () => {
 
   it('counts nothing here when no worktree is open', () => {
     expect(paneCount(panes, ['wt1', 'wt2'], null)).toEqual({ here: 0, total: 3, worktrees: 2 })
-  })
-})
-
-describe('worktreeTitles', () => {
-  const kindOf = agentWords([{ kind: 'cursor', command: 'cursor-agent', binary: '/bin/cursor-agent' }])
-  const titles = (names: string[]): (WorktreeTitle | undefined)[] => {
-    const map = worktreeTitles(
-      names.map((name, index) => ({ id: `w${index}`, name })),
-      kindOf
-    )
-    return names.map((_, index) => map.get(`w${index}`))
-  }
-
-  // At the sidebar's width both read "Add a subtract function to c…".
-  it('leads each run of one task with its agent', () => {
-    expect(titles(['Add a subtract function to claude', 'Add a subtract function to codex'])).toEqual([
-      { text: 'Add a subtract function to', agent: { kind: 'claude', text: 'claude' } },
-      { text: 'Add a subtract function to', agent: { kind: 'codex', text: 'codex' } }
-    ])
-  })
-
-  it('keeps the counter with the agent and knows installed commands', () => {
-    expect(titles(['pager claude', 'pager claude 2', 'pager cursor-agent'])).toEqual([
-      { text: 'pager', agent: { kind: 'claude', text: 'claude' } },
-      { text: 'pager', agent: { kind: 'claude', text: 'claude 2' } },
-      { text: 'pager', agent: { kind: 'cursor', text: 'cursor-agent' } }
-    ])
-  })
-
-  it('leaves a lone run, a renamed run and an ordinary name whole', () => {
-    expect(titles(['pager claude', 'scratch', 'fix login'])).toEqual([
-      { text: 'pager claude' },
-      { text: 'scratch' },
-      { text: 'fix login' }
-    ])
-    expect(titles(['fix claude', 'fix login'])).toEqual([{ text: 'fix claude' }, { text: 'fix login' }])
   })
 })

@@ -13,6 +13,7 @@ import {
   type AgentActivity,
   type PaneNameSource
 } from '../sidebar/agentRows'
+import type { WorktreeNameSource } from '../sidebar/worktreeDisplay'
 
 export type PaneTab = {
   terminalId: string
@@ -29,12 +30,19 @@ export type PaneTab = {
 }
 
 /** The tabs for one worktree in split-tree order; a leaf without its record yet still gets a tab. */
-export function paneTabs(root: PaneNode | null, terminals: Readonly<Record<string, Terminal>>): PaneTab[] {
+export function paneTabs(
+  root: PaneNode | null,
+  terminals: Readonly<Record<string, Terminal>>,
+  worktree?: WorktreeNameSource
+): PaneTab[] {
   const leaves = stripLeaves(root)
   const shells = leaves.flatMap((node) => (node.kind === 'leaf' && !isFileLeaf(node) ? [node] : []))
   const panes = shells.map((node) => terminals[node.terminalId])
   // Named together: what tells two tabs apart is the other tab. A file pane is named after its file.
-  const names = paneNames(panes.map((pane) => pane ?? UNARRIVED))
+  const names = paneNames(
+    panes.map((pane) => pane ?? UNARRIVED),
+    worktree
+  )
   return leaves.map((node) => {
     if (isFileColumn(node)) {
       const files = fileLeavesIn(node)

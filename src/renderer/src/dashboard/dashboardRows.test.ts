@@ -64,6 +64,33 @@ describe('dashboardRows', () => {
     expect(row).toMatchObject({ worktreeName: 'schema migration', branch: 'task/schema', projectName: 'ledger' })
   })
 
+  // `perf perf`, and the stored "Add a subtract function to claude" twice over.
+  it('names the worktree as the sidebar does, the branch only when it says more', () => {
+    const task = 'Add a subtract function to src/math.ts'
+    const rows = build(
+      [
+        terminal({ id: 'agent', worktreeId: 'run', agent: 'claude', label: 'Add a subtract function to claude' }),
+        terminal({ id: 'shell', worktreeId: 'perf' })
+      ],
+      [
+        worktree({
+          id: 'run',
+          name: 'Add a subtract function to claude',
+          branch: 'add-a-subtract-function-to-claude',
+          task
+        }),
+        worktree({ id: 'perf', name: 'perf', branch: 'perf' })
+      ]
+    )
+
+    const agent = rows.find((row) => row.terminalId === 'agent')
+    expect(agent).toMatchObject({ label: 'Claude Code', worktreeName: `claude · ${task}` })
+    expect(agent?.branch).toBeUndefined()
+    const shell = rows.find((row) => row.terminalId === 'shell')
+    expect(shell).toMatchObject({ label: 'bash', worktreeName: 'perf' })
+    expect(shell?.branch).toBeUndefined()
+  })
+
   // Ordered by what would make somebody look. A failure is finished and wrong;
   // a pane that has asked for something cannot move without you; work in
   // progress is merely unfinished; a finished pane asks for nothing.
@@ -98,34 +125,29 @@ describe('dashboardRows', () => {
     expect(rows.map((row) => row.terminalId)).toEqual(['rang-just-now', 'silent-an-hour', 'silent-ten-minutes'])
   })
 
-  // The pane that has been sitting there is the one being neglected.
-  it('puts the longest silence first inside a state', () => {
-    const rows = build(
-      [
-        terminal({ id: 'recent', lastOutputAt: NOW - 30_000 }),
-        terminal({ id: 'ancient', lastOutputAt: NOW - 600_000 }),
-        terminal({ id: 'middling', lastOutputAt: NOW - 120_000 })
-      ],
-      [worktree({ id: 'wt1' })]
-    )
-
-    expect(rows.map((row) => row.terminalId)).toEqual(['ancient', 'middling', 'recent'])
-  })
-
-  // A list whose order depends on the clock would reshuffle under the pointer
-  // every time the silences tick level with each other.
-  it('breaks a tie the same way every time, whatever order the panes arrive in', () => {
+  // The board once listed idle shells 1, 13, 9, 3, 7: longest silence first reshuffles with every tick.
+  it('orders a state by worktree as the sidebar lists them, then by tab, whatever the clock says', () => {
+    const trees = [worktree({ id: 'wt2', name: 'beta' }), worktree({ id: 'wt1', name: 'alpha' })]
     const panes = [
-      terminal({ id: 't1', worktreeId: 'wt2', title: 'zsh' }),
-      terminal({ id: 't2', worktreeId: 'wt1', title: 'npm test' })
+      terminal({ id: 'a1', worktreeId: 'wt1', lastOutputAt: NOW - 30_000 }),
+      terminal({ id: 'a2', worktreeId: 'wt1', lastOutputAt: NOW - 600_000 }),
+      terminal({ id: 'a3', worktreeId: 'wt1', lastOutputAt: NOW - 120_000 }),
+      terminal({ id: 'b1', worktreeId: 'wt2', lastOutputAt: NOW - 5_000 })
     ]
-    const trees = [worktree({ id: 'wt1', name: 'alpha' }), worktree({ id: 'wt2', name: 'beta' })]
+    const leaf = (terminalId: string) => ({ kind: 'leaf' as const, terminalId })
+    const layouts = {
+      wt1: {
+        root: { kind: 'split' as const, direction: 'row' as const, sizes: [1, 1], children: [leaf('a3'), leaf('a1')] }
+      }
+    }
 
-    const forwards = build(panes, trees).map((row) => row.terminalId)
-    const backwards = build([...panes].reverse(), [...trees].reverse()).map((row) => row.terminalId)
+    const order = (now: number, arrived = panes): string[] =>
+      dashboardRows({ terminals: arrived, worktrees: trees, projects, layouts, now }).map((row) => row.terminalId)
 
-    expect(forwards).toEqual(['t2', 't1'])
-    expect(backwards).toEqual(forwards)
+    // a2 is in no layout, so it follows the tabs in the order it was opened.
+    expect(order(NOW)).toEqual(['b1', 'a3', 'a1', 'a2'])
+    expect(order(NOW + 3_600_000)).toEqual(order(NOW))
+    expect(order(NOW, [panes[3]!, ...panes.slice(0, 3)])).toEqual(order(NOW))
   })
 
   // A row whose whole purpose is to say where to look is worse than no row
