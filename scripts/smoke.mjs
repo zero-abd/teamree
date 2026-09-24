@@ -433,7 +433,8 @@ async function checkWorktreeSurfaces(ask) {
       )
     )
     // Last: the destructive item is where nobody arrives by momentum.
-    if (items.at(-1) !== 'Remove') failures.push(`the row menu does not end with Remove: ${JSON.stringify(items)}`)
+    if (items.at(-1) !== 'Remove Worktree…')
+      failures.push(`the row menu does not end with Remove Worktree…: ${JSON.stringify(items)}`)
     if (items[0] !== 'Rename…') failures.push(`the row menu does not start with Rename…: ${JSON.stringify(items)}`)
     if (items.length !== 6) failures.push(`the row menu has ${items.length} items rather than six`)
   }

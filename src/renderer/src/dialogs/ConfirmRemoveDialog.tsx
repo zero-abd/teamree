@@ -1,47 +1,78 @@
-// The one dialog in the app that exists to slow somebody down.
-//
-// It is never shown speculatively: it appears only after the runtime has
-// already refused to remove the checkout, which it does for two reasons — work
-// in there that is not committed anywhere, and files a .gitignore covers, which
-// git itself would have deleted without a word. So the question is not "are you
-// sure" but "this will be thrown away, and here is what".
+// Asked before every removal: the worktree by name, and what would go with it, read fresh on open.
+// Force is sent only when the list showed something, or the runtime has already refused.
 
-import { Confirm } from './Confirm'
-import { useWorkspaceStore } from '../state/workspaceStore'
+import { useEffect, useState } from 'react'
+import type { WorktreeChanges, WorktreeStatus } from '@shared/entities'
+import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
+import { useWorkspaceStore } from '../state/workspaceStore'
+import { Confirm } from './Confirm'
 
-export function ConfirmRemoveDialog({ worktreeId, reason }: { worktreeId: string; reason: string }): React.JSX.Element {
+const FILES_SHOWN = 5
+
+const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`
+
+export function ConfirmRemoveDialog({ worktreeId }: { worktreeId: string }): React.JSX.Element {
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId))
-  const status = useWorkspaceStore((state) => state.statuses[worktreeId])
-  const retrying = useWorkspaceStore(
-    (state) => state.dialog?.kind === 'confirm-remove' && state.dialog.intent === 'retry'
-  )
+  const cached = useWorkspaceStore((state) => state.statuses[worktreeId])
+  const dialog = useWorkspaceStore((state) => (state.dialog?.kind === 'confirm-remove' ? state.dialog : null))
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
-  const forceRemoveWorktree = useWorkspaceStore((state) => state.forceRemoveWorktree)
+  const confirmRemoveWorktree = useWorkspaceStore((state) => state.confirmRemoveWorktree)
 
-  const pending = status === undefined ? 0 : status.staged + status.unstaged + status.untracked + status.conflicted
+  const [status, setStatus] = useState<WorktreeStatus | undefined>(cached)
+  const [changes, setChanges] = useState<WorktreeChanges | null>(null)
+  useEffect(() => {
+    let alive = true
+    runtimeClient
+      .call('worktree.status', { worktreeId })
+      .then((read) => {
+        if (alive) setStatus(read)
+      })
+      .catch(() => undefined)
+    runtimeClient
+      .call('worktree.changes', { worktreeId, limit: FILES_SHOWN })
+      .then((read) => {
+        if (alive) setChanges(read)
+      })
+      .catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [worktreeId])
+
+  const files = changes?.changes.slice(0, FILES_SHOWN).map((change) => change.path) ?? []
+  const more = (changes?.total ?? 0) - files.length
   const ignored = status?.ignored ?? 0
+  const ahead = status?.ahead ?? 0
+  const lines = [
+    ...files,
+    ...(more > 0 ? [`+${more} more`] : []),
+    ...(ignored > 0 ? [count(ignored, 'ignored file or folder', 'ignored files or folders')] : []),
+    ...(ahead > 0 ? [count(ahead, 'unpushed commit', 'unpushed commits')] : [])
+  ]
+  const retrying = dialog?.intent === 'retry'
+  const force = retrying || dialog?.refused === true || files.length > 0 || ignored > 0
+  const name = worktree === undefined ? null : worktreeLabel(worktreeDisplay(worktree))
 
   return (
     <Confirm
-      title={`Discard ${worktree === undefined ? 'this worktree' : worktreeLabel(worktreeDisplay(worktree))}?`}
-      body={reason}
-      cancel="Keep it"
-      confirm={retrying ? 'Discard it and start again' : 'Discard the work'}
+      title={name === null ? 'Remove this worktree?' : `Remove "${name}"?`}
+      titleHint={worktree?.path}
+      cancel="Cancel"
+      confirm={retrying ? 'Remove and Retry' : 'Remove'}
+      deleteConfirms
       onCancel={closeDialog}
-      onConfirm={() => void forceRemoveWorktree(worktreeId)}
+      onConfirm={() => void confirmRemoveWorktree(worktreeId, force)}
     >
-      {pending > 0 ? (
-        <p className="confirm__detail">
-          {pending} uncommitted change{pending === 1 ? '' : 's'}
-        </p>
+      {lines.length > 0 ? (
+        <ul className="confirm__files">
+          {lines.map((line) => (
+            <li key={line} className="confirm__path">
+              {line}
+            </li>
+          ))}
+        </ul>
       ) : null}
-      {ignored > 0 ? (
-        <p className="confirm__detail">
-          {ignored} ignored file{ignored === 1 ? '' : 's'} or folder{ignored === 1 ? '' : 's'}
-        </p>
-      ) : null}
-      {worktree ? <p className="confirm__path">{worktree.path}</p> : null}
     </Confirm>
   )
 }

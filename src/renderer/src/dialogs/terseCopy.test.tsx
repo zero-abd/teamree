@@ -279,14 +279,15 @@ describe('dialogs', () => {
     }
   })
 
-  it('discarding a worktree and closing a busy pane: no sentence', () => {
+  it('removing a worktree and closing a busy pane: no sentence', () => {
     seed({
       statuses: {
         w1: { worktreeId: 'w1', branch: 'b', staged: 1, unstaged: 2, untracked: 0, conflicted: 0, ignored: 3 }
       }
     })
-    render(<ConfirmRemoveDialog worktreeId="w1" reason="uncommitted work in rewrite" />)
+    render(<ConfirmRemoveDialog worktreeId="w1" />)
     expect(sentenceStops(document.body)).toEqual([])
+    expect(document.body.textContent).not.toMatch(/force|uncommitted changes/)
     const terminal = { id: 't1', title: 'zsh', running: true, busy: true } as never
     const agent = { id: 't2', title: 'claude', running: true, busy: false, agent: 'claude' } as never
     expect(clauses(closePaneWarning(terminal)?.body, closePaneWarning(agent)?.body)).toEqual([])
@@ -355,7 +356,8 @@ describe('the palette', () => {
     const text = document.body.textContent ?? ''
     expect(text).not.toMatch(/\bAction\b/)
     expect(text).not.toMatch(/Opens a pane here/)
-    expect(document.querySelectorAll('.palette__hint').length).toBeGreaterThan(0)
+    expect(document.querySelectorAll('.palette__trailing').length).toBeGreaterThan(0)
+    expect(document.querySelector('.modal__title')).toBeNull()
   })
 })
 

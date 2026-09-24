@@ -45,6 +45,10 @@
   padding: 0 var(--s5) var(--s5);
 }
 
+.modal__body:first-child {
+  padding-top: var(--s5);
+}
+
 /* The last row of every dialog. 8px between buttons, which is the one gap in
    these sheets off the spacing ramp: it is the gap a row of native buttons
    has, and a dialog is the one place the app draws a row of them. */
@@ -454,9 +458,9 @@ button.picker__chevron:hover {
   font-size: var(--text-base);
 }
 
+/* Always focused, so a ring would mark nothing. */
 .palette__input:focus-visible {
   outline: none;
-  box-shadow: var(--ring);
 }
 
 .palette__list {
@@ -497,10 +501,6 @@ button.picker__chevron:hover {
   cursor: default;
 }
 
-.palette__reason {
-  font-size: var(--text-sm);
-}
-
 .palette__group {
   padding: var(--s3) var(--s3) var(--s1);
   color: var(--fg-muted);
@@ -509,32 +509,27 @@ button.picker__chevron:hover {
 }
 
 .palette__label {
-  flex: none;
-  white-space: nowrap;
-}
-
-/* The branch is the middle column and the only one allowed to be clipped: it
-   is the longest and the least likely to be what is being read. */
-.palette__hint {
   min-width: 0;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--fg-muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
 }
 
-.palette__detail {
+/* One right-hand column for every row: a chord, a reason, a project, a directory. */
+.palette__trailing {
+  max-width: 45%;
   flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--fg-muted);
   font-size: var(--text-xs);
 }
 
 /* A question with two answers — see Confirm.tsx. The title is the question,
    the body one line, and whatever a question needs to add under it is a
-   detail or a path. */
+   list of paths. */
 .confirm {
   display: flex;
   flex-direction: column;
@@ -545,12 +540,6 @@ button.picker__chevron:hover {
   margin: 0;
   color: var(--fg);
   font-size: var(--text-base);
-}
-
-.confirm__detail {
-  margin: 0;
-  color: var(--warning);
-  font-size: var(--text-sm);
 }
 
 .confirm__path {

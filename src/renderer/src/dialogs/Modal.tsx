@@ -30,11 +30,15 @@ export function useEscapeClaim(claim: EscapeClaim): void {
 
 type ModalProps = {
   title: string
+  /** Named for screen readers only, when the content says what it is (the palette's field). */
+  hideTitle?: boolean
+  /** The title's tooltip, for what the question is about but need not print (a path). */
+  titleHint?: string
   onClose: () => void
   children: React.ReactNode
 }
 
-export function Modal({ title, onClose, children }: ModalProps): React.JSX.Element {
+export function Modal({ title, hideTitle = false, titleHint, onClose, children }: ModalProps): React.JSX.Element {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const claims = useRef(new Set<EscapeClaim>())
   // A symbol, not a position, so a modal leaving from the middle of the stack removes itself.
@@ -105,9 +109,13 @@ export function Modal({ title, onClose, children }: ModalProps): React.JSX.Eleme
         ref={panelRef}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <header className="modal__head">
-          <h2 className="modal__title">{title}</h2>
-        </header>
+        {hideTitle ? null : (
+          <header className="modal__head">
+            <h2 className="modal__title" title={titleHint}>
+              {title}
+            </h2>
+          </header>
+        )}
         {/* The frame pads the body on the same edge as the head. Content
             classes bring their own layout and never their own inset, so a
             line under a title starts where the title does. */}
