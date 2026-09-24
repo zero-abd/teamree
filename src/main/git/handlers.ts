@@ -48,7 +48,8 @@ export const GIT_METHODS = [
   'worktree.keep',
   'worktree.startPoints',
   'worktree.branches',
-  'worktree.pullRequests'
+  'worktree.pullRequests',
+  'worktree.setup'
 ] as const
 
 export type GitMethodName = (typeof GIT_METHODS)[number]
@@ -104,7 +105,8 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.startPoints': (params) =>
       service.listStartPoints(params.projectId, params.limit === undefined ? {} : { limit: params.limit }),
     'worktree.branches': (params) => service.listBranches(params),
-    'worktree.pullRequests': (params) => service.listPullRequests(params)
+    'worktree.pullRequests': (params) => service.listPullRequests(params),
+    'worktree.setup': (params) => service.answerSetup(params)
   }
 }
 
@@ -155,5 +157,6 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.startPoints', Params.worktreeStartPoints, handlers['worktree.startPoints'])
   registry.register('worktree.branches', Params.worktreeBranches, handlers['worktree.branches'])
   registry.register('worktree.pullRequests', Params.worktreePullRequests, handlers['worktree.pullRequests'])
+  registry.register('worktree.setup', Params.worktreeSetup, handlers['worktree.setup'])
   return service
 }

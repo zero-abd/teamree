@@ -703,6 +703,8 @@ type WorkspaceState = {
   joinTeam: (invitation: Invitation, target: JoinTarget) => Promise<void>
   /** Writes the project's setup as it applies here to `.teamree/project.json`, uncommitted. */
   saveProjectSettings: (projectId: string) => Promise<void>
+  /** Runs or skips a repository's setup command a new worktree is waiting on; Run approves it for the project. */
+  answerSetup: (worktreeId: string, run: boolean) => Promise<void>
   /**
    * Stops or restarts teammates' keystrokes reaching a pane. Applied here, not waited for from the
    * stream: a mute that took a round trip to look pressed would be pressed twice.
@@ -2803,6 +2805,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (project === undefined) return
       get().openTeamwork(project.id)
       if (!outcome.ok) notify(outcome.error)
+    },
+
+    async answerSetup(worktreeId, run) {
+      try {
+        const answered = await runtimeClient.call('worktree.setup', { worktreeId, run })
+        set((state) => ({ worktrees: state.worktrees.map((entry) => (entry.id === answered.id ? answered : entry)) }))
+      } catch (error) {
+        failed(run ? 'Could not run the setup command' : 'Could not skip the setup command')(error)
+      }
     },
 
     async saveProjectSettings(projectId) {

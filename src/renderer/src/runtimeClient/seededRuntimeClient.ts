@@ -557,6 +557,13 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'projects' })
       return { file: PROJECT_FILE, project: next }
     },
+    'worktree.setup': ({ worktreeId }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const { setupAsk: _answered, ...next } = worktree
+      worktrees.set(next.id, next)
+      announce({ type: 'worktrees' })
+      return next
+    },
     'worktree.branches': ({ projectId }) => ({ projectId, branches: [], readAt: Date.now() }),
     'worktree.pullRequests': ({ projectId }) => ({
       projectId,

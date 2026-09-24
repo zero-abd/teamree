@@ -39,6 +39,8 @@ export type Project = {
   repository?: ProjectRepositorySettings
   /** Why `.teamree/project.json` was ignored: it is there and cannot be read. */
   repositoryProblem?: string
+  /** The repository's setup command as this Mac last approved it; a different one asks before it runs. */
+  approvedSetupCommand?: string
 }
 
 /** A project's shared setup, as `.teamree/project.json` carries it. Every field optional. */
@@ -106,6 +108,8 @@ export type Worktree = {
   baseRef?: string
   /** The existing branch it was opened on, as `worktree.create`'s `checkout` took it; absent for a new branch. */
   checkout?: string
+  /** A setup command from `.teamree/project.json` this Mac has not approved, waiting on `worktree.setup`. */
+  setupAsk?: string
 }
 
 /** A branch a worktree could be opened on as it is: not checked out anywhere yet. */

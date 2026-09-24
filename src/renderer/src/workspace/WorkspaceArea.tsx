@@ -16,6 +16,7 @@ import { TeamworkView } from '../teamwork/TeamworkView'
 import { measureCell, minPaneBox } from '../terminal/paneMetrics'
 import { WatchedPaneView } from '../terminal/WatchedPaneView'
 import { RightPanel } from './rightPanel/RightPanel'
+import { SetupAsk } from './SetupAsk'
 import { useMarkPanesSeen } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { TerminalTabs } from './TerminalTabs'
@@ -108,6 +109,7 @@ function WorkspaceView({
   const applySplitSizes = useWorkspaceStore((state) => state.applySplitSizes)
   const paneSearch = useWorkspaceStore((state) => state.paneSearch)
   const closePaneSearch = useWorkspaceStore((state) => state.closePaneSearch)
+  const answerSetup = useWorkspaceStore((state) => state.answerSetup)
   const dashboardOpen = useWorkspaceStore((state) => state.dashboardOpen)
   const projects = useWorkspaceStore((state) => state.projects)
   const connection = useWorkspaceStore((state) => state.connection)
@@ -183,6 +185,9 @@ function WorkspaceView({
 
   return (
     <main className="workspace">
+      {worktree.setupAsk === undefined ? null : (
+        <SetupAsk command={worktree.setupAsk} onAnswer={(run) => void answerSetup(worktree.id, run)} />
+      )}
       <div className="workspace__body">
         <div
           className={`workspace__panes${

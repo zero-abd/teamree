@@ -334,6 +334,8 @@ export const Params = {
     /** Match the query's characters in order rather than as one run, best match first (`fuzzyPath.ts`). */
     fuzzy: z.boolean().optional()
   }),
+  /** Answers a worktree's `setupAsk`: `run` approves the command for the project and runs it, false skips it. */
+  worktreeSetup: z.object({ worktreeId: z.string().min(1), run: z.boolean() }),
   /** Branches nobody has checked out, local and on origin, for Open Branch. */
   worktreeBranches: z.object({ projectId: z.string().min(1) }),
   /** Open pull requests through `gh`, for Check Out Pull Request. */
@@ -757,6 +759,7 @@ export type MethodContract = {
   'worktree.status': { params: z.infer<typeof Params.worktreeStatus>; result: WorktreeStatus }
   'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }
   'worktree.branches': { params: z.infer<typeof Params.worktreeBranches>; result: BranchList }
+  'worktree.setup': { params: z.infer<typeof Params.worktreeSetup>; result: Worktree }
   'worktree.pullRequests': { params: z.infer<typeof Params.worktreePullRequests>; result: PullRequestList }
   'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }
   'worktree.diff': { params: z.infer<typeof Params.worktreeDiff>; result: WorktreeDiff }

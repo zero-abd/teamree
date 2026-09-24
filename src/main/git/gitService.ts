@@ -377,6 +377,30 @@ export class GitService {
     return this.#requireWorktree(params.worktreeId)
   }
 
+  /**
+   * Answers the question a repository's unapproved setup command left on a worktree. Run approves
+   * exactly that string for the project, then runs it; Skip leaves the worktree without setup.
+   */
+  async answerSetup(params: ParamsOf<'worktree.setup'>): Promise<Worktree> {
+    const worktree = this.#requireWorktree(params.worktreeId)
+    const command = worktree.setupAsk
+    if (command === undefined) {
+      throw new GitServiceError(ErrorCode.Conflict, `worktree "${worktree.name}" has no setup command waiting`)
+    }
+    if (!params.run) return this.#patch(worktree.id, { clearSetupAsk: true }) ?? worktree
+    const project = this.#requireProject(worktree.projectId)
+    const approved: Project = { ...project, approvedSetupCommand: command }
+    this.#store.putProject(approved)
+    this.events.emit({ type: 'project.updated', project: this.#present(approved) })
+    const setupTerminalId = this.#runSetup(worktree, approved, command)
+    return (
+      this.#patch(worktree.id, {
+        clearSetupAsk: true,
+        ...(setupTerminalId === undefined ? {} : { setupTerminalId })
+      }) ?? worktree
+    )
+  }
+
   /** Renames the record only: branch, path and task are left alone, in any state. */
   async renameWorktree(params: ParamsOf<'worktree.rename'>): Promise<Worktree> {
     const current = this.#requireWorktree(params.worktreeId)
@@ -1123,12 +1147,13 @@ export class GitService {
 
   #patch(
     worktreeId: string,
-    patch: Partial<Worktree> & { clearError?: boolean; clearMissing?: boolean }
+    patch: Partial<Worktree> & { clearError?: boolean; clearMissing?: boolean; clearSetupAsk?: boolean }
   ): Worktree | null {
     const current = this.#store.getWorktree(worktreeId)
     if (!current) return null
-    const { clearError, clearMissing, ...fields } = patch
+    const { clearError, clearMissing, clearSetupAsk, ...fields } = patch
     const next: Worktree = { ...current, ...fields }
+    if (clearSetupAsk) delete next.setupAsk
     if (clearError) {
       delete next.error
       delete next.retryable
@@ -1234,18 +1259,18 @@ export class GitService {
       if (start !== undefined) this.#startPoints.set(worktreeId, start)
       // In the same breath as the flip to 'ready': one write, one event, nothing
       // in between for a client to read a half-answer out of.
-      const setupTerminalId = this.#runSetup(
-        worktree,
-        this.#store.getProject(project.id) ?? project,
-        settings.setupCommand
-      )
+      const stored = this.#store.getProject(project.id) ?? project
+      const setupAsk = unapprovedSetup(stored, settings.setupCommand)
+      const setupTerminalId =
+        setupAsk === undefined ? this.#runSetup(worktree, stored, settings.setupCommand) : undefined
       // What it branched from is now a fact: the name could move, the sha cannot.
       return (
         this.#patch(worktreeId, {
           state: 'ready',
           startedFrom,
           clearError: true,
-          ...(setupTerminalId === undefined ? {} : { setupTerminalId })
+          ...(setupTerminalId === undefined ? {} : { setupTerminalId }),
+          ...(setupAsk === undefined ? {} : { setupAsk })
         }) ?? worktree
       )
     } catch (error) {
@@ -1514,6 +1539,15 @@ export class GitService {
       }
     }
   }
+}
+
+/**
+ * The command to ask about before running: the repository's, when this Mac set none of its own
+ * and has not approved this exact string. A teammate's commit must not run here unseen.
+ */
+function unapprovedSetup(project: Project, command: string | undefined): string | undefined {
+  if (command === undefined || project.setupCommand !== undefined) return undefined
+  return command === project.approvedSetupCommand ? undefined : command
 }
 
 /** Checked outside the ref regex so the regex stays free of control literals. */

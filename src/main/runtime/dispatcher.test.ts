@@ -238,6 +238,8 @@ describe('dispatcher', () => {
       'worktree.rename',
       // Local: checks a copy out on this machine's disk.
       'worktree.restore',
+      // Local: approves and runs a command on this machine.
+      'worktree.setup',
       'worktree.showCommit',
       'worktree.stageHunk',
       'worktree.startPoints',
