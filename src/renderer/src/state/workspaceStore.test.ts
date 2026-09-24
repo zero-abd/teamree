@@ -237,6 +237,8 @@ it('pushes the active worktree and says what actually happened', async () => {
   const worktreeId = (ahead ?? useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!).id
   await store.openWorktree(worktreeId)
 
+  // Pushed from the menu with the Changes tab out of sight, where only a notice says so.
+  useWorkspaceStore.setState({ rightPanelOpen: false })
   const call = vi.spyOn(runtimeClient, 'call')
   await useWorkspaceStore.getState().pushActiveWorktree()
 
@@ -265,6 +267,7 @@ describe('how long a notice stays', () => {
       await settle(store.bootstrap())
       const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
       await settle(store.openWorktree(worktreeId))
+      useWorkspaceStore.setState({ rightPanelOpen: false })
 
       const url = 'https://github.com/o/r/compare/main...work?expand=1'
       const original = runtimeClient.call.bind(runtimeClient)
@@ -317,6 +320,7 @@ it('offers the review page the push came back with', async () => {
     const result = await original(method, params as never)
     return method === 'worktree.push' ? { ...(result as WorktreePush), reviewUrl: url } : result
   })
+  useWorkspaceStore.setState({ rightPanelOpen: false })
 
   await useWorkspaceStore.getState().pushActiveWorktree()
 
@@ -334,6 +338,22 @@ it('offers nothing to open when the push named no review page', async () => {
   await useWorkspaceStore.getState().pushActiveWorktree()
 
   expect(useWorkspaceStore.getState().notices.at(-1)?.action).toBeUndefined()
+})
+
+// The sidebar row appearing is the answer; a notice is for a sidebar out of sight.
+it.each([
+  [true, []],
+  [false, ['Cloned pantry']]
+])('says a clone landed only when the sidebar cannot (sidebar shown: %s)', async (sidebarVisible, said) => {
+  const project = { id: 'cloned', name: 'pantry', path: '/code/pantry', baseRef: 'origin/main' }
+  const call = vi.spyOn(runtimeClient, 'call').mockResolvedValueOnce(project as never)
+  useWorkspaceStore.setState({ sidebarVisible, notices: [] })
+
+  expect(await useWorkspaceStore.getState().cloneProject('https://example.invalid/pantry.git', '')).toBeNull()
+
+  expect(useWorkspaceStore.getState().notices.map((notice) => notice.text)).toEqual(said)
+  expect(useWorkspaceStore.getState().projects.at(-1)?.id).toBe('cloned')
+  call.mockRestore()
 })
 
 it('never fires two pushes at once', async () => {

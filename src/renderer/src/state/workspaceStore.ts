@@ -1400,7 +1400,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           ...(init ? { init } : {})
         })
         set((state) => ({ projects: [...state.projects, project], dialog: null }))
-        notify(`Added ${project.name}`, 'info')
+        if (!get().sidebarVisible) notify(`Added ${project.name}`, 'info')
       } catch (error) {
         const refusal = (error as { data?: { refusal?: ProjectAddRefusal } } | null)?.data?.refusal
         if (refusal) return refusal
@@ -1429,7 +1429,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       try {
         const project = await runtimeClient.call('project.clone', { url, ...(path.trim() ? { path } : {}) })
         set((state) => ({ projects: [...state.projects, project], dialog: null }))
-        notify(`Cloned ${project.name}`, 'info')
+        if (!get().sidebarVisible) notify(`Cloned ${project.name}`, 'info')
         return null
       } catch (error) {
         const refusal = (error as { data?: { refusal?: ProjectAddRefusal } } | null)?.data?.refusal
@@ -2152,15 +2152,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         const result = await runtimeClient.call('worktree.commit', { worktreeId, message, ...(paths && { paths }) })
         // The commit can capture more than was ticked (anything staged earlier in a terminal); saying
         // so is the difference between a notice and a surprise. Otherwise the Changes tab shows it.
-        const extra = paths ? result.paths.filter((path) => !paths.includes(path)) : []
-        if (extra.length > 0) {
-          notify(
-            `Committed ${result.shortSha}: ${result.message} — including ${extra.length} path${
-              extra.length === 1 ? '' : 's'
-            } already staged`,
-            'info'
-          )
-        } else if (!changesOnScreen(get())) notify(`Committed ${result.shortSha}: ${result.message}`, 'info')
+        const extra = paths ? alsoCommitted(result.paths, paths) : 0
+        if (extra > 0) notify(`Also committed ${extra} staged file${extra === 1 ? '' : 's'}`, 'info')
+        else if (!changesOnScreen(get())) notify(`Committed ${result.shortSha}: ${result.message}`, 'info')
         // Nothing is left ticked; the list refetches on the invalidation the runtime publishes, and
         // doing it here too would be a second way for this window to disagree with the others.
         set({ stagedPaths: [], selectedChangePath: null })
@@ -2576,11 +2570,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       setPush({ phase: 'pushing' })
       try {
         const result = await runtimeClient.call('worktree.push', { worktreeId })
-        notify(
-          result.alreadyUpToDate ? 'Up to date' : 'Pushed',
-          'info',
-          result.reviewUrl === undefined ? undefined : { label: 'Open review', url: result.reviewUrl }
-        )
+        // The Changes header says it where it was asked: Push gives way to Open review.
+        const { rightPanelOpen, rightPanelTab } = get()
+        if (!rightPanelOpen || rightPanelTab !== 'changes') {
+          notify(
+            result.alreadyUpToDate ? 'Up to date' : 'Pushed',
+            'info',
+            result.reviewUrl === undefined ? undefined : { label: 'Open review', url: result.reviewUrl }
+          )
+        }
         setPush({ phase: 'pushed', ...(result.reviewUrl === undefined ? {} : { reviewUrl: result.reviewUrl }) })
         // The remote has every commit now; the next status read confirms it, and the tab should not offer Push until then.
         set((state) => {
@@ -2971,6 +2969,13 @@ useWorkspaceStore.subscribe((state, previous) => {
  */
 function isRefusal(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === 'conflict'
+}
+
+/** How many committed paths no ticked path covers: a ticked folder (`docs/`) covers the files under it. */
+export function alsoCommitted(committed: readonly string[], ticked: readonly string[]): number {
+  const covered = (path: string): boolean =>
+    ticked.some((entry) => entry === path || (entry.endsWith('/') && path.startsWith(entry)))
+  return committed.filter((path) => !covered(path)).length
 }
 
 /** A refused push carries its clause and git's words; anything else is a clause of our own over its message. */

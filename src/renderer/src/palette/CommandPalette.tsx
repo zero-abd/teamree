@@ -66,7 +66,7 @@ export function CommandPalette({
   const [selected, setSelected] = useState(0)
   const [recentCommands] = useState(() => readStoredRecent(storage))
 
-  // Rows the window would refuse are dimmed with the reason, asked as of after the palette closes (it is a dialog too).
+  // Rows the window would refuse are left out, asked as of after the palette closes (it is a dialog too).
   const consent = useWorkspaceStore((state) => state.consent)
   const layouts = useWorkspaceStore((state) => state.layouts)
   const watches = useWorkspaceStore((state) => state.watches)
@@ -221,7 +221,7 @@ export function CommandPalette({
   }, [cursor, matches])
 
   const run = (item: PaletteItem | undefined, split = false): void => {
-    // A dimmed row stays put with its reason showing, rather than closing on nothing.
+    // A dimmed row stays put rather than closing on nothing.
     if (!item || dimmed(item)) return
     closeDialog()
     const store = useWorkspaceStore.getState()
@@ -376,7 +376,13 @@ export function CommandPalette({
                       className={`palette__row${index === cursor ? ' palette__row--selected' : ''}${
                         dimmed(item) ? ' palette__row--dimmed' : ''
                       }`}
-                      title={item.kind === 'worktree' && item.hint !== '' ? item.hint : undefined}
+                      title={
+                        dimmed(item)
+                          ? item.unavailable
+                          : item.kind === 'worktree' && item.hint !== ''
+                            ? item.hint
+                            : undefined
+                      }
                       // Selection follows the pointer, so a click runs the row under it.
                       onMouseMove={() => setSelected(index)}
                       onClick={(event) => run(item, holdsModifier(event, modifier))}

@@ -1,7 +1,7 @@
 // What this worktree has changed: the list, the commit box and the commits, as a tab of the right
 // panel; a row opens its diff in the centre. It rides the same invalidation as everything else.
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { openInBrowser } from '../../shell/openInBrowser'
 import { commitScope, useWorkspaceStore, type PushState } from '../../state/workspaceStore'
@@ -29,7 +29,6 @@ export function ChangesTab(): React.JSX.Element | null {
   const pushing = useWorkspaceStore((state) => state.pushing)
   const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
-  const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
   const openCommit = useWorkspaceStore((state) => state.openCommit)
   const shownCommit = useWorkspaceStore((state) =>
     worktreeId ? shownCommitIn(state.layouts[worktreeId]?.root ?? null) : null
@@ -54,7 +53,7 @@ export function ChangesTab(): React.JSX.Element | null {
   const scope = commitScope(stagedPaths, rows)
   const canCommit = rows.length > 0 && message.trim().length > 0 && !committing
 
-  const offer = pushOffer(status, push, rows.length > 0)
+  const offer = pushOffer(status, push)
   // One primary at a time: commit what is uncommitted first, then send it.
   const pushIsNext = rows.length === 0 && (status?.ahead ?? 0) > 0
   const discard = (path: string): void => openDialog({ kind: 'confirm-discard', worktreeId, path })
@@ -75,13 +74,6 @@ export function ChangesTab(): React.JSX.Element | null {
             <span className="changes__branch">{status.branch}</span>
             {aheadBehind(status)}
           </span>
-          {push?.phase === 'failed' ? (
-            <span className="changes__pushError" role="alert">
-              <button type="button" title={push.detail} onClick={() => void copyToClipboard(push.detail, 'the error')}>
-                {push.error}
-              </button>
-            </span>
-          ) : null}
           {offer?.kind === 'review' ? (
             <button type="button" className="button button--small" onClick={() => openInBrowser(offer.url)}>
               Open review
@@ -97,6 +89,9 @@ export function ChangesTab(): React.JSX.Element | null {
             </button>
           ) : null}
         </div>
+      ) : null}
+      {push?.phase === 'failed' ? (
+        <PushFailed error={push.error} detail={push.detail} retry={() => void pushActiveWorktree()} busy={pushing} />
       ) : null}
       {changes === undefined ? (
         <p className="changes__empty">Reading…</p>
@@ -162,6 +157,11 @@ export function ChangesTab(): React.JSX.Element | null {
                     {change.unstaged ? 'both' : 'staged'}
                   </span>
                 ) : null}
+                {change.added === undefined || change.removed === undefined ? null : (
+                  <span className="change__stat">
+                    +{change.added} −{change.removed}
+                  </span>
+                )}
               </button>
               {canDiscard(change) ? (
                 <button
@@ -183,7 +183,7 @@ export function ChangesTab(): React.JSX.Element | null {
           label={`Actions for ${menu.path}`}
           anchor={menu.at}
           onClose={() => setMenu(null)}
-          items={[{ label: 'Discard…', danger: true, onChoose: () => discard(menu.path) }]}
+          items={[{ label: 'Discard…', onChoose: () => discard(menu.path) }]}
         />
       )}
 
@@ -269,6 +269,65 @@ export function ChangesTab(): React.JSX.Element | null {
   )
 }
 
+/** A failed push as one line under the header: git's words behind Details, and Retry. */
+function PushFailed({
+  error,
+  detail,
+  retry,
+  busy
+}: {
+  error: string
+  detail: string
+  retry: () => void
+  busy: boolean
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const line = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const outside = (event: PointerEvent): void => {
+      if (line.current?.contains(event.target as Node) !== true) setOpen(false)
+    }
+    document.addEventListener('pointerdown', outside, true)
+    return () => document.removeEventListener('pointerdown', outside, true)
+  }, [open])
+  return (
+    <div className="changes__pushFailed" ref={line}>
+      <span className="changes__pushFailedText" role="alert">
+        {pushFailedText(error)}
+      </span>
+      <button type="button" className="button button--small" aria-expanded={open} onClick={() => setOpen(!open)}>
+        Details
+      </button>
+      <button type="button" className="button button--small" disabled={busy} onClick={retry}>
+        Retry
+      </button>
+      {open ? (
+        <pre
+          className="changes__pushDetail"
+          role="dialog"
+          aria-label="git output"
+          tabIndex={-1}
+          ref={(pre) => pre?.focus()}
+          onKeyDown={(event) => {
+            if (event.key !== 'Escape') return
+            event.preventDefault()
+            event.stopPropagation()
+            setOpen(false)
+          }}
+        >
+          {detail}
+        </pre>
+      ) : null}
+    </div>
+  )
+}
+
+/** `Push failed: origin not found`, or just `Push failed` when git gave no clause. */
+export function pushFailedText(error: string): string {
+  return error === 'Push failed' ? error : `Push failed: ${error}`
+}
+
 /** ` · ↑2 ↓1` with a zero side left out, and nothing when both are zero. */
 function aheadBehind(status: WorktreeStatus): string {
   const arrows = [status.ahead > 0 ? `↑${status.ahead}` : '', status.behind > 0 ? `↓${status.behind}` : '']
@@ -299,17 +358,11 @@ const PUSH_LABEL = { push: ['Push', 'Pushing…'], publish: ['Publish branch', '
 
 export type PushOffer = { kind: 'push' | 'publish' } | { kind: 'review'; url: string }
 
-/** The header's one button: send what the remote lacks, else open the review the last push made. */
-export function pushOffer(
-  status: WorktreeStatus | undefined,
-  push: PushState | undefined,
-  hasChanges: boolean
-): PushOffer | null {
+/** The header's one button: send commits the remote lacks, else open the review the last push made. */
+export function pushOffer(status: WorktreeStatus | undefined, push: PushState | undefined): PushOffer | null {
   if (!status || status.missing) return null
-  // A new branch with nothing in it has nothing to publish.
-  if (status.upstream === null) {
-    return status.ahead > 0 || hasChanges || push?.phase === 'pushing' ? { kind: 'publish' } : null
-  }
+  // Without a commit, a published branch would be its base under another name.
+  if (status.upstream === null) return status.ahead > 0 || push?.phase === 'pushing' ? { kind: 'publish' } : null
   if (status.ahead > 0 || push?.phase === 'pushing') return { kind: 'push' }
   if (push?.phase === 'pushed' && push.reviewUrl !== undefined) return { kind: 'review', url: push.reviewUrl }
   return null

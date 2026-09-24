@@ -49,7 +49,15 @@ afterEach(async () => {
 /** What the panel would list right now. */
 const refresh = async (ticked: string[] = []): Promise<void> => {
   const changes = await readWorktreeChanges(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath })
-  useWorkspaceStore.setState({ activeWorktreeId: 'wt', changes: { wt: changes }, statuses: {}, stagedPaths: ticked })
+  useWorkspaceStore.setState({
+    activeWorktreeId: 'wt',
+    changes: { wt: changes },
+    statuses: {},
+    stagedPaths: ticked,
+    notices: [],
+    rightPanelOpen: true,
+    rightPanelTab: 'changes'
+  })
 }
 
 const committed = (): Promise<string> => repo.git(['show', '--name-only', '--format=', 'HEAD'])
@@ -120,4 +128,30 @@ it('commits a tree of only untracked files', async () => {
 
   expect((await committed()).split('\n').sort()).toEqual(['a.ts', 'dir/b.ts'])
   expect(await repo.git(['status', '--porcelain'])).toBe('')
+})
+
+const said = (): string[] => useWorkspaceStore.getState().notices.map((notice) => notice.text)
+
+it('says nothing when All was ticked, a folded folder of new files included', async () => {
+  for (let index = 0; index < 21; index += 1) await repo.write(`gen/f${index}.ts`, 'x\n')
+  await repo.write('g.txt', 'G\n')
+  await refresh()
+  expect(useWorkspaceStore.getState().changes.wt?.changes.map((change) => change.path)).toEqual(['g.txt', 'gen/'])
+  useWorkspaceStore.getState().setAllStaged(true)
+
+  expect(await useWorkspaceStore.getState().commitStaged('all of it')).toBe(true)
+
+  expect(await repo.git(['status', '--porcelain'])).toBe('')
+  expect(said()).toEqual([])
+})
+
+it('says so when the commit took in a file staged outside the panel', async () => {
+  await repo.write('g.txt', 'G\n')
+  await repo.write('h.txt', 'h\n')
+  await repo.git(['add', 'h.txt'])
+  await refresh(['g.txt'])
+
+  expect(await useWorkspaceStore.getState().commitStaged('g and h')).toBe(true)
+
+  expect(said()).toEqual(['Also committed 1 staged file'])
 })

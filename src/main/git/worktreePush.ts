@@ -42,7 +42,7 @@ export async function pushWorktree(runner: GitRunner, options: PushOptions): Pro
   if (!known.includes(remote)) {
     throw refused(
       ErrorCode.NotFound,
-      known.length === 0 ? 'No remote' : 'Remote not found',
+      known.length === 0 ? 'no remote' : `${remote} not found`,
       known.length === 0
         ? `this repository has no remotes; add one before pushing`
         : `no remote called "${remote}"; this repository has ${known.join(', ')}`
@@ -74,7 +74,7 @@ export async function pushWorktree(runner: GitRunner, options: PushOptions): Pro
       .join('\n')
     throw refused(
       ErrorCode.GitFailed,
-      pushFailureLabel(pushed.stderr, reported),
+      pushFailureLabel(pushed.stderr, reported, remote),
       said || `could not push ${options.branch}`
     )
   }
@@ -198,18 +198,20 @@ export function pushFailureKind(stderr: string, reported?: PushRefStatus | null)
 const OFFLINE =
   /could not resolve host|network is unreachable|no route to host|connection (timed out|refused)|operation timed out|failed to connect to|name resolution/i
 
-/** The one clause the Changes tab says about a failed push. A missing remote also fails git's read, so it goes first. */
-export function pushFailureLabel(stderr: string, reported?: PushRefStatus | null): string {
+/**
+ * The clause after "Push failed:" in the Changes tab, or `Push failed` itself when git gave none.
+ * A missing remote also fails git's read, so it goes first.
+ */
+export function pushFailureLabel(stderr: string, reported?: PushRefStatus | null, remote = 'remote'): string {
   const behind = /non-fast-forward|fetch first|stale info/i
-  if (behind.test(stderr) || (reported?.flag === '!' && behind.test(reported.summary)))
-    return 'Rejected: remote is ahead'
+  if (behind.test(stderr) || (reported?.flag === '!' && behind.test(reported.summary))) return 'remote is ahead'
   const kind = pushFailureKind(stderr, reported)
-  if (kind === 'rejected') return 'Rejected by remote'
+  if (kind === 'rejected') return 'rejected by remote'
   if (/does not appear to be a git repository|repository not found|no such remote/i.test(stderr))
-    return 'Remote not found'
-  if (OFFLINE.test(stderr)) return 'Offline'
-  if (kind === 'auth') return 'Sign-in failed'
-  if (kind === 'host-key') return 'Unknown host key'
+    return `${remote} not found`
+  if (OFFLINE.test(stderr)) return 'offline'
+  if (kind === 'auth') return 'sign-in failed'
+  if (kind === 'host-key') return 'unknown host key'
   return 'Push failed'
 }
 

@@ -175,6 +175,69 @@ describe('changes and diffs against a real repository', () => {
     expect(result.truncated).toBe(true)
   })
 
+  it('lists each file in a new folder, so each can be opened', async () => {
+    const repo = await repository()
+    await repo.write('docs/NOTES.md', 'one\ntwo\n')
+    await repo.write('docs/deep/more.md', 'three\n')
+
+    const result = await readWorktreeChanges(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath })
+
+    expect(result.changes.map((change) => change.path)).toEqual(['docs/deep/more.md', 'docs/NOTES.md'])
+  })
+
+  it('folds new files back into their folders once there are more than twenty', async () => {
+    const repo = await repository()
+    for (let index = 0; index < 21; index += 1) await repo.write(`generated/file-${index}.ts`, 'export {}\n')
+    await repo.write('notes.md', 'x\n')
+
+    const result = await readWorktreeChanges(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath })
+
+    expect(result.changes.map((change) => change.path)).toEqual(['generated/', 'notes.md'])
+  })
+
+  it('counts lines added and removed per file, a new file as all added and a binary one not at all', async () => {
+    const repo = await repository()
+    await repo.write('src/math.ts', 'a\nb\nc\n')
+    await repo.write('old.ts', 'x\n')
+    await repo.commit('seed')
+    await repo.write('src/math.ts', 'a\nB\nc\nd\ne\n')
+    await repo.git(['add', 'src/math.ts'])
+    await repo.write('src/math.ts', 'a\nB\nc\nd\ne\nf\n')
+    await repo.git(['rm', '-q', 'old.ts'])
+    await repo.write('docs/NOTES.md', 'one\ntwo\nthree')
+    await writeFile(path.join(repo.repoPath, 'logo.bin'), Buffer.from([0, 1, 2, 0, 3]))
+
+    const result = await readWorktreeChanges(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath })
+    const byPath = new Map(result.changes.map((change) => [change.path, change]))
+
+    expect(byPath.get('src/math.ts')).toMatchObject({ added: 4, removed: 1 })
+    expect(byPath.get('old.ts')).toMatchObject({ added: 0, removed: 1 })
+    expect(byPath.get('docs/NOTES.md')).toMatchObject({ added: 3, removed: 0 })
+    expect(byPath.get('logo.bin')).not.toHaveProperty('added')
+  })
+
+  it('counts a renamed file against where it came from', async () => {
+    const repo = await repository()
+    await repo.write('from.ts', 'one\ntwo\nthree\nfour\n')
+    await repo.commit('seed')
+    await repo.git(['mv', 'from.ts', 'to.ts'])
+    await repo.write('to.ts', 'one\ntwo\nthree\nfour\nfive\n')
+
+    const result = await readWorktreeChanges(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath })
+
+    expect(result.changes).toEqual([expect.objectContaining({ path: 'to.ts', from: 'from.ts', added: 1, removed: 0 })])
+  })
+
+  it('counts nothing, and still lists, on a branch with no commit yet', async () => {
+    const repo = await repository()
+    await repo.write('a.ts', 'x\n')
+    await repo.git(['add', 'a.ts'])
+
+    const result = await readWorktreeChanges(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath })
+
+    expect(result.changes.map((change) => change.path)).toEqual(['a.ts'])
+  })
+
   it('says nothing changed when nothing has', async () => {
     const repo = await repository()
 

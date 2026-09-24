@@ -451,22 +451,45 @@
   font-family: var(--font-mono);
 }
 
-.changes__pushError {
+.changes__pushFailed {
+  position: relative;
+  flex: none;
   display: flex;
-  min-width: 0;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s4);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-xs);
 }
 
-/* git's own words are the tooltip; a click copies them. */
-.changes__pushError button {
+.changes__pushFailedText {
+  flex: 1;
   min-width: 0;
-  padding: 0;
-  border: 0;
-  background: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--danger);
-  font: inherit;
+}
+
+/* git's own words, under the line they explain. */
+.changes__pushDetail {
+  position: absolute;
+  top: 100%;
+  left: var(--s4);
+  right: var(--s4);
+  z-index: 5;
+  max-height: 240px;
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  overflow: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
-  cursor: pointer;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
 }

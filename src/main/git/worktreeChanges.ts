@@ -2,6 +2,8 @@
 // `git status --porcelain=v2` as the counters, keeping the paths. `-z` is not an
 // optimisation: without it git C-quotes paths with spaces, quotes or non-ASCII bytes.
 
+import { lstat, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { WorktreeChange, WorktreeChangeKind, WorktreeChanges, WorktreeDiff } from '../../shared/entities'
 import type { GitRunner } from './gitProcess'
 import { hasPreparedPaths, isPreparedPath, type PreparedPaths } from './worktreePreparation'
@@ -13,6 +15,12 @@ export const DEFAULT_CHANGE_LIMIT = 500
 export const DEFAULT_DIFF_MAX_BYTES = 1024 * 1024
 
 export const DEFAULT_DIFF_CONTEXT_LINES = 3
+
+/** New files listed one by one; past this many they fold back into their folders, as `git status` shows them. */
+export const UNTRACKED_LISTED_LIMIT = 20
+
+/** A new file larger than this is listed without a line count. */
+const COUNTED_BYTES = 1024 * 1024
 
 /** Untracked files a whole-worktree patch shows before it stops; each costs a `git diff --no-index` process. */
 export const DEFAULT_DIFF_UNTRACKED_LIMIT = 100
@@ -148,21 +156,27 @@ export type ChangesReadOptions = {
 
 export async function readWorktreeChanges(runner: GitRunner, options: ChangesReadOptions): Promise<WorktreeChanges> {
   const limit = options.limit ?? DEFAULT_CHANGE_LIMIT
-  // `--untracked-files=normal` is pinned: people set `status.showUntrackedFiles=no`
+  // The untracked mode is always passed: people set `status.showUntrackedFiles=no`
   // in ~/.gitconfig for a large repository, and this read would then answer
   // "nothing untracked" for a checkout whose status chip says otherwise.
-  const { stdout } = await runner.run({
-    args: ['status', '--porcelain=v2', '-z', '--untracked-files=normal', ...pathspec(options.path)],
-    cwd: options.worktreePath,
-    readOnly: true,
-    ...(options.signal ? { signal: options.signal } : {}),
-    timeoutMs: 30_000
-  })
+  const read = async (untracked: 'all' | 'normal'): Promise<WorktreeChange[]> => {
+    const { stdout } = await runner.run({
+      args: ['status', '--porcelain=v2', '-z', `--untracked-files=${untracked}`, ...pathspec(options.path)],
+      cwd: options.worktreePath,
+      readOnly: true,
+      ...(options.signal ? { signal: options.signal } : {}),
+      timeoutMs: 30_000
+    })
+    return withoutPreparedPaths(parseChangeRecords(stdout), options.prepared)
+  }
 
-  const all = sortChanges(withoutPreparedPaths(parseChangeRecords(stdout), options.prepared))
+  let found = await read('all')
+  if (found.filter((change) => change.kind === 'untracked').length > UNTRACKED_LISTED_LIMIT)
+    found = await read('normal')
+  const all = sortChanges(found)
   return {
     worktreeId: options.worktreeId,
-    changes: all.slice(0, limit),
+    changes: await withLineCounts(runner, options, all.slice(0, limit)),
     total: all.length,
     limit,
     truncated: all.length > limit,
@@ -289,6 +303,68 @@ async function listUntrackedFiles(
 
 function pathspec(path: string | undefined): string[] {
   return path === undefined ? [] : ['--', path]
+}
+
+/** The rows with `git diff --numstat HEAD` counts, and a new file's lines read from disk. */
+async function withLineCounts(
+  runner: GitRunner,
+  options: ChangesReadOptions,
+  changes: WorktreeChange[]
+): Promise<WorktreeChange[]> {
+  if (changes.length === 0) return changes
+  // Fails on a branch with no commit yet; the rows go uncounted rather than unlisted.
+  const numstat = await runner.tryRun({
+    args: ['diff', '--numstat', '-z', 'HEAD', ...pathspec(options.path)],
+    cwd: options.worktreePath,
+    readOnly: true,
+    ...(options.signal ? { signal: options.signal } : {}),
+    timeoutMs: 30_000
+  })
+  const counts = numstat.exitCode === 0 ? parseNumstat(numstat.stdout) : new Map<string, [number, number]>()
+  return Promise.all(
+    changes.map(async (change) => {
+      const count =
+        change.kind === 'untracked' ? await newFileLines(options.worktreePath, change.path) : counts.get(change.path)
+      return count === undefined ? change : { ...change, added: count[0], removed: count[1] }
+    })
+  )
+}
+
+/**
+ * `added\tremoved\tpath` records, keyed by the path the file has now. With `-z` a rename leaves
+ * its path empty and puts the old and new paths in the next two records; binary counts are `-`.
+ */
+export function parseNumstat(raw: string): Map<string, [number, number]> {
+  const counts = new Map<string, [number, number]>()
+  const records = raw.split('\0')
+  for (let index = 0; index < records.length; index += 1) {
+    const match = /^(\d+|-)\t(\d+|-)\t(.*)$/s.exec(records[index] as string)
+    if (match === null) continue
+    let file = match[3] as string
+    if (file === '') {
+      file = records[index + 2] ?? ''
+      index += 2
+    }
+    if (match[1] !== '-' && match[2] !== '-') counts.set(file, [Number(match[1]), Number(match[2])])
+  }
+  return counts
+}
+
+/** A new regular text file's line count as git would give it, or undefined for anything else. */
+async function newFileLines(root: string, file: string): Promise<[number, number] | undefined> {
+  try {
+    const target = join(root, file)
+    const stat = await lstat(target)
+    if (!stat.isFile() || stat.size > COUNTED_BYTES) return undefined
+    const bytes = await readFile(target)
+    if (bytes.subarray(0, 8000).includes(0)) return undefined
+    let lines = 0
+    for (const byte of bytes) if (byte === 10) lines += 1
+    if (bytes.length > 0 && bytes[bytes.length - 1] !== 10) lines += 1
+    return [lines, 0]
+  } catch {
+    return undefined
+  }
 }
 
 /**

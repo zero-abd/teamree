@@ -18,7 +18,6 @@
   padding-block: 12vh var(--s5);
   overflow-y: auto;
   background: var(--scrim);
-  backdrop-filter: blur(2px);
   animation: scrim-in var(--motion-fast) var(--ease);
 }
 
