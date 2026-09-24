@@ -58,6 +58,26 @@ describe('screenEvidence', () => {
     expect(screenEvidence(screen, { agent: 'codex' })).toBe('Allow command: git push origin main?')
   })
 
+  // Composed from `06-claude-permission.png`, whose claude drew no key hint under the options.
+  it('quotes an edit permission’s question with the key hint gone', async () => {
+    const edit = [
+      ' Edit file',
+      ' src/math.ts',
+      '   7 +export function sub(a: number, b: number): number {',
+      '   8 +  return a - b',
+      '   9 +}',
+      '',
+      ' Do you want to make this edit to math.ts?',
+      ' ❯ 1. Yes',
+      '   2. Yes, allow all edits during this session (shift+tab)',
+      '   3. No, and tell Claude what to do differently (esc)'
+    ]
+    for (const rows of [edit, [...edit, '', ' Esc to cancel · Tab to amend']]) {
+      const screen = await replayScreen(`\x1b[?1049h\x1b[H${rows.join('\r\n')}`, 100, 30)
+      expect(screenEvidence(screen, { agent: 'claude' })).toBe('Do you want to make this edit to math.ts?')
+    }
+  })
+
   it('quotes what a resumed Claude last said, where the stream replay found nothing', async () => {
     expect(evidenceLine(resumedClaude)).toBeNull()
     const screen = await replayScreen(resumedClaude, 43, 39)

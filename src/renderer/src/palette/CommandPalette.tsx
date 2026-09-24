@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { hasCheckout } from '@shared/entities'
 import { fileLeavesIn, isFilePaneId, isWorktreeFileLeaf } from '@shared/filePane'
 import { activeChoice, resolveTone, themeTone, withChoice, type AppearanceMode } from '@shared/theme'
+import { AgentGlyph } from '../agents/glyphs'
 import { Modal } from '../dialogs/Modal'
 import { holdsModifier, type PlatformModifier } from '../keyboard/platformModifier'
 import { runWorkspaceCommand, whyUnavailable } from '../keyboard/workspaceCommands'
@@ -388,6 +389,7 @@ export function CommandPalette({
                       onMouseMove={() => setSelected(index)}
                       onClick={(event) => run(item, holdsModifier(event, modifier))}
                     >
+                      {item.kind === 'worktree' && item.agent !== undefined ? <AgentGlyph kind={item.agent} /> : null}
                       <span className="palette__label">{item.label}</span>
                       <span className="palette__trailing">{trailing(item)}</span>
                     </button>

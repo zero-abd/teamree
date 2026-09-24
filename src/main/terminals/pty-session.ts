@@ -30,7 +30,7 @@ import { ErrorCode } from '../../shared/protocol'
 import { agentForProcess, type AgentKind } from './agent-command'
 import { TitleSequenceScanner } from './title-sequence'
 import { titleOpinion, type TitleOpinion } from '../../shared/titleOpinion'
-import { screenOpinion, screenQuestion, type ScreenOpinion } from '../../shared/screenOpinion'
+import { menuQuestion, screenOpinion, screenQuestion, type ScreenOpinion } from '../../shared/screenOpinion'
 import { screenRows } from './screenRows'
 import type { Tone } from '../../shared/theme'
 
@@ -301,7 +301,7 @@ export class PtySession {
     return this.running
   }
 
-  /** What the screen is asking, while it reads as asking; see `screenQuestion`. */
+  /** What the screen is asking; see `screenQuestion` and, for a dialog without a known hint, `menuQuestion`. */
   get question(): string | undefined {
     return this.screenAsks
   }
@@ -518,7 +518,7 @@ export class PtySession {
     const agent = this.agent ?? this.foregroundAgent()
     const rows = agent === undefined ? [] : await screenRows(this.read(SCREEN_TAIL_BYTES), this.cols, this.rows)
     if (read !== this.screenReads || !this.running) return
-    this.screenAsks = screenQuestion(agent, rows) ?? undefined
+    this.screenAsks = screenQuestion(agent, rows) ?? menuQuestion(rows) ?? undefined
     const says = screenOpinion(agent, rows) ?? undefined
     if (says === this.screenSays) return
     this.screenSays = says

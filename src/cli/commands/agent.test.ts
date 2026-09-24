@@ -91,7 +91,12 @@ describe('agent event', () => {
     expect(result).toEqual({ code: ExitCode.Success, out: '', err: '' })
     const [request] = app.stub.received
     expect(request?.method).toBe('terminal.agentEvent')
-    expect(request?.params).toMatchObject({ terminalId: 't_1', event: 'Notification', detail: 'permission_prompt' })
+    expect(request?.params).toMatchObject({
+      terminalId: 't_1',
+      event: 'Notification',
+      detail: 'permission_prompt',
+      message: 'Claude needs your permission to use Bash'
+    })
     const at = (request?.params as { at: number } | undefined)?.at ?? Number.NaN
     expect(at).toBeGreaterThanOrEqual(before)
     expect(at).toBeLessThanOrEqual(Date.now())

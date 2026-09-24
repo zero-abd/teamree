@@ -3,10 +3,10 @@
 // ended, the title, the bell, and — outranking all of them — what the agent's hooks report.
 
 import type { AgentEvent, AgentKind, PaneWatcher, Terminal } from '@shared/entities'
-import type { ScreenOpinion } from '@shared/screenOpinion'
+import { hookQuestion, isAnswerOrHint, type ScreenOpinion } from '@shared/screenOpinion'
 import type { TitleOpinion } from '@shared/titleOpinion'
 import { harnessName } from '../agents/harnesses'
-import { paneInWorktree, type WorktreeNameSource } from './worktreeDisplay'
+import { paneInWorktree, worktreeDisplay, type WorktreeNameSource } from './worktreeDisplay'
 
 export type AgentActivity =
   /** The pane has said it wants something: it rang the bell, or its title says so. */
@@ -172,16 +172,24 @@ export function agentRows(
   const names = paneNames(mine, typeof worktree === 'string' ? undefined : worktree)
   return mine.map((terminal, index) => {
     const label = names[index] ?? paneName(terminal)
+    const activity = activityOf(terminal)
+    const line = evidence[terminal.id] ?? null
     return {
       terminalId: terminal.id,
       agent: paneAgent(terminal),
       label,
       text: paneText(terminal, label),
-      activity: activityOf(terminal),
+      activity,
       quietFor: Math.max(0, now - terminal.lastOutputAt),
-      evidence: evidence[terminal.id] ?? null
+      evidence: activity === 'waiting' ? askingLine(line, terminal.agentEvent) : line
     }
   })
+}
+
+/** An asking pane's line: never an answer or a key hint; the hook's words when the screen has nothing better. */
+export function askingLine(line: string | null, said: AgentEvent | undefined): string | null {
+  if (line !== null && !isAnswerOrHint(line)) return line
+  return said?.event === 'Notification' ? hookQuestion(said.message) : null
 }
 
 /** Everything a pane's name can be read from; a teammate's pane is these fields minus `foregroundAgent`. */
@@ -199,11 +207,11 @@ export function paneAgent(pane: PaneNameSource): AgentKind | undefined {
   return pane.agent ?? pane.foregroundAgent
 }
 
-/** What a row draws beside the glyph: a given name in full, of an agent's own name only a twin's number. */
+/** What a row draws beside the glyph: nothing for an agent's own bare name, else the name whole, never a lone number. */
 export function paneText(pane: PaneNameSource, name: string): string {
   const agent = paneAgent(pane)
   if (agent === undefined || isNamed(pane)) return name
-  return name.slice(harnessName(agent).length).trim()
+  return name === harnessName(agent) ? '' : name
 }
 
 function isNamed(pane: PaneNameSource): boolean {
@@ -212,14 +220,13 @@ function isNamed(pane: PaneNameSource): boolean {
 
 /**
  * What one pane is called, in order of who said it: a typed name beats the
- * program's own, since three agents on three approaches all call themselves `claude`.
+ * program's own, since three agents on three approaches all call themselves `claude`. Unnumbered; see `paneNames`.
  */
 export function paneName(pane: PaneNameSource): string {
   const label = pane.label?.trim()
   if (label !== undefined && label.length > 0) return label
   const agent = paneAgent(pane)
-  const name = agent === undefined ? paneLabel(pane) : harnessName(agent)
-  return hasOwnNumber(pane) && pane.ordinal !== undefined && pane.ordinal > 1 ? `${name} ${pane.ordinal}` : name
+  return agent === undefined ? paneLabel(pane) : harnessName(agent)
 }
 
 /** Whether the name is the program the pane was started as, which its `ordinal` counts; a title or a typed agent is not. */
@@ -230,13 +237,23 @@ function hasOwnNumber(pane: PaneNameSource): boolean {
 }
 
 /**
- * One worktree's panes named, in the order they were opened. A name with its own
- * number keeps it; any other name read twice gets the next number free, so no list order renames a pane.
+ * One worktree's panes named, in the order they were opened. A task's only agent goes by the task. Of panes
+ * of one program, the lowest number goes bare and the rest show theirs; any other name read twice gets the next free.
  */
 export function paneNames(panes: readonly PaneNameSource[], worktree?: WorktreeNameSource): string[] {
   const shown = panes.map((pane) => paneInWorktree(pane, worktree))
-  const names = shown.map(paneName)
-  const fixed = shown.map((pane) => isNamed(pane) || hasOwnNumber(pane))
+  const [agent, ...more] = shown.filter((pane) => pane.agent !== undefined)
+  const task = worktree?.task?.trim() ? worktreeDisplay(worktree).title : undefined
+  const titled = task !== undefined && agent !== undefined && more.length === 0 && !isNamed(agent) ? agent : null
+  const numbered = shown.filter(hasOwnNumber)
+  const names = shown.map((pane) => {
+    if (pane === titled && task !== undefined) return task
+    const name = paneName(pane)
+    if (!hasOwnNumber(pane)) return name
+    const lowest = Math.min(...numbered.filter((other) => paneName(other) === name).map((other) => other.ordinal ?? 1))
+    return pane.ordinal === undefined || pane.ordinal <= lowest ? name : `${name} ${pane.ordinal}`
+  })
+  const fixed = shown.map((pane) => isNamed(pane) || hasOwnNumber(pane) || pane === titled)
   const taken = new Set(names.filter((_name, index) => fixed[index]))
   return names.map((name, index) => {
     if (fixed[index]) return name

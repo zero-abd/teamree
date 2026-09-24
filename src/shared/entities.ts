@@ -372,7 +372,7 @@ export type Terminal = {
    * this outranks everything derived.
    */
   label?: string
-  /** Its number among the worktree's panes started as the same agent or shell, from 1; never reused while the runtime runs. */
+  /** Its number among the worktree's open panes started as the same agent or shell: one past the highest held. */
   ordinal?: number
   /**
    * True while output is still arriving. The only honest signal about whether
@@ -601,6 +601,8 @@ export type AgentEvent = {
    * `idle_prompt` -- which separates a request aimed at a person from a login that succeeded.
    */
   detail?: string
+  /** A `Notification`'s own words, e.g. `Claude needs your permission to use Edit`. */
+  message?: string
 }
 
 /** A coding agent this machine can run, found on PATH rather than configured. */

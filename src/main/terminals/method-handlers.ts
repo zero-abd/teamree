@@ -123,7 +123,8 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
       manager.agentEvent(params.terminalId, {
         event: params.event,
         at: params.at,
-        ...(params.detail === undefined ? {} : { detail: params.detail })
+        ...(params.detail === undefined ? {} : { detail: params.detail }),
+        ...(params.message === undefined ? {} : { message: params.message })
       }),
     'layout.get': async (params) => manager.layoutGet(params.worktreeId),
     'layout.set': async (params) => manager.layoutSet(params)

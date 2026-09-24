@@ -87,10 +87,13 @@ describe('buildPaletteItems', () => {
 
     const rows = items.filter((item) => item.kind === 'worktree')
     expect(rows.map((item) => [item.label, item.hint])).toEqual([
-      [`claude · ${task}`, ''],
+      [task, ''],
       ['perf', '']
     ])
+    // The glyph tells sibling runs apart on the row; typing the agent's name still finds it.
+    expect(rows[0]).toMatchObject({ agent: 'claude' })
     expect(rows[0]?.search).toContain('add-a-subtract-function-to-claude')
+    expect(rows[0]?.search).toContain('Claude Code')
   })
 
   // A search for the open worktree's task used to find only its sibling.

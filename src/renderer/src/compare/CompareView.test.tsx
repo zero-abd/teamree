@@ -124,13 +124,38 @@ describe('the compare pane', () => {
     renderCompare()
 
     expect(call).toHaveBeenCalledWith('worktree.compare', { worktreeId: 'w-claude', otherId: 'w-codex' })
-    const claude = await screen.findByRole('group', { name: `claude · ${TASK}` })
-    const codex = screen.getByRole('group', { name: `codex · ${TASK}` })
+    const claude = await screen.findByRole('group', { name: `${TASK} (Claude Code)` })
+    const codex = screen.getByRole('group', { name: `${TASK} (Codex)` })
     expect(within(claude).getByText('2 files')).toBeTruthy()
     expect(within(codex).getByText('1 file')).toBeTruthy()
 
     fireEvent.click(within(codex).getByRole('button', { name: 'Open' }))
     expect(openWorktree).toHaveBeenCalledWith('w-codex')
+  })
+
+  // `25-compare-after-remove.png`: the runtime's refusal, id and all, centred in the file column.
+  it('says the other run is gone and offers to close, never the runtime’s words', async () => {
+    call.mockRejectedValue(new Error('no worktree with id "w-codex"'))
+    useWorkspaceStore.setState({ worktrees: [worktree('w-claude', 'claude')] })
+    const onClose = vi.fn()
+    render(
+      <FilePane
+        paneId="file:x"
+        worktreeId="w-claude"
+        path="claude vs codex"
+        compare="w-codex"
+        focused
+        onFocus={() => {}}
+        onClose={onClose}
+      />
+    )
+
+    expect(await screen.findByText('Run removed')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('no worktree')
+    expect(document.body.textContent).not.toContain('w-codex')
+    const body = document.querySelector('.file__body') as HTMLElement
+    fireEvent.click(within(body).getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalled()
   })
 
   it('pairs each file both runs touched, marks one only a run touched, and offers nothing to stage', async () => {

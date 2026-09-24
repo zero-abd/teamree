@@ -112,6 +112,14 @@ describe('what it asks', () => {
     expect(dialog.textContent).not.toContain('/repos/pager-wt')
   })
 
+  it('names one of a task’s runs by the task, its agent after it in words', async () => {
+    const run = { ...worktree, name: 'Rewrite the pager to stream codex', branch: 'rewrite-the-pager-to-stream-codex' }
+    seed({ worktrees: [{ ...run, task: 'Rewrite the pager to stream' }] })
+    await mount()
+    expect(screen.getByRole('dialog', { name: 'Remove "Rewrite the pager to stream" (Codex)?' })).toBeTruthy()
+    expect(document.body.textContent).not.toMatch(/codex ·|claude ·/u)
+  })
+
   it('lists the uncommitted files, five at most, then how many more', async () => {
     const changes = ['a.ts', 'b.ts', 'c.ts', 'd.ts', 'e.ts'].map(modified)
     runtimeHas({ status: status({ unstaged: 7 }), changes, total: 7 })

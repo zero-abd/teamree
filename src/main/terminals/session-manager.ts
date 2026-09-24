@@ -149,8 +149,6 @@ export type PaneAnsweredListener = (terminalId: string) => void
 
 export class TerminalSessionManager {
   private readonly sessions = new Map<string, PtySession>()
-  /** The last `Terminal.ordinal` given, by worktree and program. */
-  private readonly ordinals = new Map<string, number>()
   private readonly streams = new Map<string, Set<AttachedStream>>()
   private readonly exitListeners = new Set<TerminalExitListener>()
   private readonly answeredListeners = new Set<PaneAnsweredListener>()
@@ -608,12 +606,15 @@ export class TerminalSessionManager {
     }
   }
 
-  /** Counted per worktree and program, and never counted back down: a closed pane's number is not given out again. */
+  /** One past the highest number an open pane of this program holds here: a gone pane counts for nothing. */
   private nextOrdinal(worktreeId: string, program: string): number {
-    const key = `${worktreeId}\n${program}`
-    const next = (this.ordinals.get(key) ?? 0) + 1
-    this.ordinals.set(key, next)
-    return next
+    let highest = 0
+    for (const session of this.sessions.values()) {
+      if (session.worktreeId === worktreeId && (session.agent ?? session.shell) === program) {
+        highest = Math.max(highest, session.ordinal ?? 0)
+      }
+    }
+    return highest + 1
   }
 
   private startSession(

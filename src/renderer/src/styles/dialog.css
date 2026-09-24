@@ -496,6 +496,11 @@ button.picker__chevron:hover {
   font-weight: 600;
 }
 
+.palette__row > .agent-glyph {
+  align-self: center;
+  margin-right: calc(var(--s1) - var(--s3));
+}
+
 .palette__label {
   min-width: 0;
   flex: 1;

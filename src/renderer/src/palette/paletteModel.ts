@@ -2,6 +2,7 @@
 
 import {
   hasCheckout,
+  type AgentKind,
   type CliStatus,
   type InstalledAgent,
   type Project,
@@ -46,8 +47,8 @@ type WorktreeAction =
   | 'remove-worktree'
 
 export type PaletteItem =
-  /** Jump to a worktree. */
-  | { kind: 'worktree'; id: string; label: string; hint: string; detail: string; search: string }
+  /** Jump to a worktree; `agent` is a task run's, drawn as its glyph. */
+  | { kind: 'worktree'; id: string; label: string; hint: string; detail: string; search: string; agent?: AgentKind }
   /** Run something; `unavailable` says why it would do nothing now (hidden unless it is all a query finds); `here` acts on the worktree on screen. */
   | {
       kind: 'action'
@@ -110,11 +111,13 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
   ].map((worktree) => {
     const project = projectName.get(worktree.projectId) ?? ''
     const display = worktreeDisplay(worktree)
-    const label = worktreeLabel(display)
+    const label = display.title
+    const agent = display.agent?.kind
     return {
       kind: 'worktree',
       id: worktree.id,
       label,
+      ...(agent === undefined ? {} : { agent }),
       hint: display.branch ?? '',
       detail: [
         project,
@@ -124,7 +127,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
         .filter(Boolean)
         .join(' · '),
       // A branch name is often the only part a person remembers.
-      search: `${label} ${worktree.branch} ${project}`
+      search: `${worktreeLabel(display)} ${worktree.branch} ${project}`
     }
   })
 

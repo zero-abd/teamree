@@ -104,6 +104,9 @@ export { MAX_AGENT_ARGS_CHARS }
  */
 export const MAX_AGENT_EVENT_DETAIL_CHARS = 64
 
+/** Cap on a notification's message, copied the same way; one line of a sidebar row. */
+export const MAX_AGENT_EVENT_MESSAGE_CHARS = 200
+
 /** Cap on a project's setup command: one shell line, bounded like `MAX_AGENT_ARGS_CHARS`. */
 export const MAX_SETUP_COMMAND_CHARS = 4096
 
@@ -586,13 +589,14 @@ export const Params = {
    * The agent in a pane reporting its own state through a hook this app
    * configured (`src/main/terminals/agent-hooks.ts`), via `teamree agent
    * event`: "blocked on a question" leaves no byte in the pty. Event names are
-   * the agent's own; `detail` is copied from its stdin and shown nowhere.
+   * the agent's own; `detail` is copied from its stdin and shown nowhere, `message` is quoted while it asks.
    */
   terminalAgentEvent: z.object({
     terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
     event: z.enum(['SessionStart', 'UserPromptSubmit', 'Notification', 'Stop', 'SessionEnd']),
     at: z.number().int().nonnegative(),
-    detail: z.string().max(MAX_AGENT_EVENT_DETAIL_CHARS).optional()
+    detail: z.string().max(MAX_AGENT_EVENT_DETAIL_CHARS).optional(),
+    message: z.string().max(MAX_AGENT_EVENT_MESSAGE_CHARS).optional()
   }),
   terminalSplit: z.object({
     /** Pane to divide. The new terminal takes half of it. */

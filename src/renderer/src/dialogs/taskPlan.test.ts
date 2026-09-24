@@ -137,8 +137,9 @@ describe('what the dialog promises', () => {
   })
 
   it('counts the worktrees and names what runs in each, in order', () => {
-    expect(taskPlanNote(found, true, [claude])).toBe('1 worktree · claude')
-    expect(taskPlanNote(found, true, [claude, codex, claude])).toBe('3 worktrees · claude, codex, claude')
+    expect(taskPlanNote(found, true, [claude])).toBe('1 worktree · Claude Code')
+    expect(taskPlanNote(found, true, [claude, codex])).toBe('2 worktrees · Claude Code, Codex')
+    expect(taskPlanNote(found, true, [claude, codex, claude])).toBe('3 worktrees · Claude Code, Codex, Claude Code')
   })
 
   it('says the worktree comes alone when the user asked for that', () => {

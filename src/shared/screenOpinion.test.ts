@@ -2,7 +2,7 @@
 // when an agent changes what it draws under a question, this file should fail.
 
 import { describe, expect, it } from 'vitest'
-import { screenOpinion, screenQuestion } from './screenOpinion'
+import { hookQuestion, isAnswerOrHint, menuQuestion, screenOpinion, screenQuestion } from './screenOpinion'
 
 const claudeTrust = [
   " Claude Code'll be able to read, edit, and execute files here.",
@@ -127,5 +127,49 @@ describe('reading the question an agent is asking', () => {
   it('asks nothing when the screen does not read as asking', () => {
     expect(screenQuestion('claude', [...claudeEdit, '', '────', '❯ ', '────', '  ⏸ manual mode on'])).toBeNull()
     expect(screenQuestion(undefined, claudeEdit)).toBeNull()
+  })
+})
+
+describe('reading a question without its key hint', () => {
+  const edit = [
+    ' Edit file',
+    ' src/math.ts',
+    '   7 +export function sub(a: number, b: number): number {',
+    '',
+    ' Do you want to make this edit to math.ts?',
+    ' ❯ 1. Yes',
+    '   2. Yes, allow all edits during this session (shift+tab)',
+    '   3. No, and tell Claude what to do differently (esc)'
+  ]
+
+  // As drawn in `06-claude-permission.png`: no hint row under the options.
+  it('quotes the question above a menu at the bottom', () => {
+    expect(menuQuestion(edit)).toBe('Do you want to make this edit to math.ts?')
+    expect(menuQuestion([...edit, '', ' Esc to back out · Tab to amend it'])).toBe(
+      'Do you want to make this edit to math.ts?'
+    )
+  })
+
+  it('finds nothing without a menu at the bottom, or a question above it', () => {
+    expect(menuQuestion([...edit, '', '❯ ', '  ? for shortcuts', '  ⏸ manual mode on'])).toBeNull()
+    expect(menuQuestion([' 1. Added sub', ' 2. Ran the tests'])).toBeNull()
+  })
+
+  it('knows an answer or a key hint when it sees one', () => {
+    expect(isAnswerOrHint('3. No, and tell Claude…')).toBe(true)
+    expect(isAnswerOrHint('❯ 1. Yes')).toBe(true)
+    expect(isAnswerOrHint('Esc to cancel · Tab to amend')).toBe(true)
+    expect(isAnswerOrHint('Press enter to confirm or esc to cancel')).toBe(true)
+    expect(isAnswerOrHint('Do you want to make this edit to math.ts?')).toBe(false)
+    expect(isAnswerOrHint('Added sub to src/math.ts:7')).toBe(false)
+  })
+
+  it('shortens what a permission hook says to what it asks', () => {
+    expect(hookQuestion('Claude needs your permission to use Edit')).toBe('Permission to use Edit')
+    expect(hookQuestion('Claude Code needs your approval for the plan')).toBe(
+      'Claude Code needs your approval for the plan'
+    )
+    expect(hookQuestion('  ')).toBeNull()
+    expect(hookQuestion(undefined)).toBeNull()
   })
 })

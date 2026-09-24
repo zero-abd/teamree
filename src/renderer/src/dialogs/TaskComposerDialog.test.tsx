@@ -262,7 +262,7 @@ describe('what it submits', () => {
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     fireEvent.click(more('Claude Code'))
     fireEvent.click(more('Codex'))
-    expect(screen.getByText('3 worktrees · claude, codex, claude')).toBeTruthy()
+    expect(screen.getByText('3 worktrees · Claude Code, Codex, Claude Code')).toBeTruthy()
     submit().click()
     expect(startTask).toHaveBeenCalledWith({
       projectId: 'p1',

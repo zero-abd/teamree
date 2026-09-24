@@ -1,5 +1,5 @@
 import type { AgentEventName } from '../../shared/entities.js'
-import { MAX_AGENT_EVENT_DETAIL_CHARS, Params } from '../../shared/methods.js'
+import { MAX_AGENT_EVENT_DETAIL_CHARS, MAX_AGENT_EVENT_MESSAGE_CHARS, Params } from '../../shared/methods.js'
 import type { CommandSpec } from '../command-spec.js'
 import { requireString } from '../argv.js'
 import { formatTable } from '../output.js'
@@ -56,33 +56,30 @@ export const agentCommands: readonly CommandSpec[] = [
       const terminalId = requireString(context.flags, 'terminal')
       // Checked against the contract by `choices`, so this is the cast it looks like.
       const event = requireString(context.flags, 'event') as AgentEventName
-      const detail = eventDetail(await context.stdin())
-      const terminal = await context.client.call('terminal.agentEvent', {
-        terminalId,
-        event,
-        at: Date.now(),
-        ...(detail === undefined ? {} : { detail })
-      })
+      const said = eventFields(await context.stdin(), event)
+      const terminal = await context.client.call('terminal.agentEvent', { terminalId, event, at: Date.now(), ...said })
       return { data: terminal, text: '' }
     }
   }
 ]
 
 /**
- * The one field of the hook's JSON worth carrying: the notification type,
- * which is what tells a permission prompt from a login. Anything else on
- * stdin — the message, the prompt, the transcript path — is the agent's and
- * is not copied. Not JSON, or not that shape, is simply no detail.
+ * The two fields of the hook's JSON worth carrying: the notification type, which tells a permission
+ * prompt from a login, and its message, quoted while the pane asks. Not JSON, or not that shape, is nothing.
  */
-export function eventDetail(stdin: string): string | undefined {
+export function eventFields(stdin: string, event: AgentEventName): { detail?: string; message?: string } {
   let parsed: unknown
   try {
     parsed = JSON.parse(stdin)
   } catch {
-    return undefined
+    return {}
   }
-  if (typeof parsed !== 'object' || parsed === null) return undefined
-  const type = (parsed as { notification_type?: unknown }).notification_type
-  if (typeof type !== 'string' || type.length === 0) return undefined
-  return type.slice(0, MAX_AGENT_EVENT_DETAIL_CHARS)
+  if (typeof parsed !== 'object' || parsed === null) return {}
+  const { notification_type: type, message } = parsed as { notification_type?: unknown; message?: unknown }
+  return {
+    ...(typeof type === 'string' && type.length > 0 ? { detail: type.slice(0, MAX_AGENT_EVENT_DETAIL_CHARS) } : {}),
+    ...(event === 'Notification' && typeof message === 'string' && message.trim().length > 0
+      ? { message: message.trim().slice(0, MAX_AGENT_EVENT_MESSAGE_CHARS) }
+      : {})
+  }
 }
