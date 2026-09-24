@@ -396,6 +396,8 @@ export type Terminal = {
    * never a denial. A keystroke overtakes one about a turn in progress; an ended turn stays ended.
    */
   agentEvent?: AgentEvent
+  /** Whether its agent has started a turn: set on agent panes only; false exits read as stopped, not done. */
+  tookTurn?: boolean
   /**
    * How this terminal came back from a previous run — see `RestoredAs`. Absent
    * for a terminal opened now; clears the moment the user types into the pane.

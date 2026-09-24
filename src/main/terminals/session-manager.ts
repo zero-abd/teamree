@@ -387,10 +387,11 @@ export class TerminalSessionManager {
     return this.require(terminalId).read(tailBytes)
   }
 
-  /** A pane's snapshot, placed in its stream and with the widest the pane has been. */
-  readPlaced(terminalId: string, tailBytes?: number): { data: string; end: number; widest: number } {
+  /** A pane's snapshot, placed in its stream, with the widest the pane has been and whether it has exited. */
+  readPlaced(terminalId: string, tailBytes?: number): { data: string; end: number; widest: number; exited?: true } {
     const session = this.require(terminalId)
-    return { data: session.read(tailBytes), end: session.outputEnd, widest: session.widestCols }
+    const placed = { data: session.read(tailBytes), end: session.outputEnd, widest: session.widestCols }
+    return session.isRunning ? placed : { ...placed, exited: true }
   }
 
   /** Closes a terminal: process tree, pane leaf, streams and record all go. */

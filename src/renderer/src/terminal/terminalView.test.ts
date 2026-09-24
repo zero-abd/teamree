@@ -1,45 +1,95 @@
 /** @vitest-environment jsdom */
 
-// The two rules `TerminalView` states as functions: what a keystroke the
-// runtime refused puts on the screen, and who a keypress in a pane belongs to.
-//
-// The pane keeps a blinking cursor after the process behind it has gone, so a
-// keystroke still looks like it went somewhere. The exit line is above it and
-// the header says "exited", but the keystroke itself is answered with nothing,
-// and nothing is the one answer this app does not give.
+// What `TerminalView` draws when a pane's process ends and starts again, and
+// who a keypress in a pane belongs to.
 
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { resolvePlatformModifier, type ModifierState } from '../keyboard/platformModifier'
 import { TERMINAL_OPTIONS_DEFAULT } from '../state/preferences'
-import { applyEmulatorOptions, copyOnSelect, emulatorOptions, paneKeyIntent, refusedWriteNotice } from './TerminalView'
+import {
+  applyEmulatorOptions,
+  clearIntoScrollback,
+  copyOnSelect,
+  emulatorOptions,
+  EXIT_RESET,
+  paneKeyIntent
+} from './TerminalView'
 
 const APPLE = resolvePlatformModifier('darwin')
 
-const refusal = (code: string, message: string): Error => Object.assign(new Error(message), { code })
+describe('an exit, drawn', () => {
+  // Claude's trust prompt, as the real binary drew it: inline, cursor parked four rows up.
+  const trust = readFileSync(
+    path.join(import.meta.dirname, '../../../main/terminals/fixtures/claude-trust.txt'),
+    'utf8'
+  )
 
-describe('refusedWriteNotice', () => {
-  // `conflict` is what the runtime answers for a terminal that has exited, and
-  // the notice matches the register of the exit line already in the buffer.
-  it('says in the pane that there is nothing left to type into', () => {
-    expect(refusedWriteNotice(refusal('conflict', 'terminal t1 has exited'))).toBe(
-      '\r\n\u001b[38;5;244m[this pane has exited]\u001b[0m\r\n'
-    )
+  it('leaves the screen the program left and writes nothing over it', async () => {
+    const term = emulator()
+    await write(term, trust)
+    const before = screen(term)
+    await write(term, EXIT_RESET)
+    expect(screen(term)).toEqual(before)
+    expect(screen(term).join('\n')).not.toMatch(/\[.*exit/)
   })
 
-  // Branching on the code and never on the message: the sentence the runtime
-  // writes is free to change, and a refusal matched by its wording would go
-  // quiet the day it did.
-  it('does not read the reason out of the message', () => {
-    expect(refusedWriteNotice(refusal('internal', 'terminal t1 has exited'))).toBeNull()
+  it('leaves the alternate screen and every mode the program turned on', async () => {
+    const term = emulator()
+    await write(term, 'repo % claude\r\n')
+    await write(term, `\x1b[?1049h\x1b[?1002h\x1b[?1006h\x1b[?2004h\x1b[?1h\x1b[5;20r\x1b[7m${trust}`)
+    await write(term, EXIT_RESET)
+    expect(term.buffer.active.type).toBe('normal')
+    expect(screen(term)[0]).toBe('repo % claude')
+    expect(screen(term).join('\n')).not.toContain('Quick safety check')
+    expect(term.modes).toMatchObject({
+      mouseTrackingMode: 'none',
+      bracketedPasteMode: false,
+      applicationCursorKeysMode: false
+    })
   })
 
-  it('has nothing to say about a failure that is not the pane being gone', () => {
-    expect(refusedWriteNotice(refusal('not_found', 'no terminal t1'))).toBeNull()
-    expect(refusedWriteNotice(new Error('the runtime is not answering'))).toBeNull()
-    expect(refusedWriteNotice(undefined)).toBeNull()
+  it('runs again on a clear screen, the old one kept in the scrollback', async () => {
+    const term = emulator()
+    await write(term, trust)
+    await write(term, EXIT_RESET)
+    clearIntoScrollback(term, '\r\n\x1b[2m[end of record]\x1b[0m\r\n')
+    await write(term, 'fresh run')
+    const rows = screen(term)
+    expect(rows[0]).toBe('fresh run')
+    expect(rows.slice(1).every((row) => row === '')).toBe(true)
+    const above = scrollback(term)
+    const question = above.findIndex((row) => row.startsWith(' Quick safety check: Is this a project'))
+    expect(question).toBeGreaterThanOrEqual(0)
+    expect(above.findIndex((row) => row.includes('Enter to confirm'))).toBeGreaterThan(question)
+    expect(above.at(-1)).toBe('[end of record]')
+    // Only that one clear goes to the scrollback; the program's own keep the terminal's default.
+    expect(term.options.scrollOnEraseInDisplay).toBe(false)
   })
 })
+
+function emulator(): XTerm {
+  return new XTerm({ cols: 100, rows: 30, scrollback: 200, allowProposedApi: true })
+}
+
+function write(term: XTerm, data: string): Promise<void> {
+  return new Promise((resolve) => term.write(data, resolve))
+}
+
+function screen(term: XTerm): string[] {
+  const buffer = term.buffer.active
+  return Array.from(
+    { length: term.rows },
+    (_, row) => buffer.getLine(buffer.baseY + row)?.translateToString(true) ?? ''
+  )
+}
+
+function scrollback(term: XTerm): string[] {
+  const buffer = term.buffer.active
+  return Array.from({ length: buffer.baseY }, (_, row) => buffer.getLine(row)?.translateToString(true) ?? '')
+}
 
 // The rule on its own, over data. `paneKeys.test.ts` drives the real emulator
 // through the handler this feeds; what is worth stating here is the one thing

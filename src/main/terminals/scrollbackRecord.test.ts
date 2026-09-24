@@ -1,5 +1,9 @@
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { Terminal as Emulator } from '@xterm/xterm'
 import { describe, expect, it } from 'vitest'
 import { evidenceLine } from '../../shared/outputEvidence'
+import { screenRows } from './screenRows'
 import {
   clockLabel,
   closingMark,
@@ -82,7 +86,59 @@ describe('sanitizeRecordedOutput', () => {
     expect(kept).toContain('real output')
     expect(kept).toContain(`${ESC}[32m`)
   })
+
+  // Claude places every word with a column move (`ESC[8G`) instead of a space.
+  it('keeps the spaces an agent laid out by moving the cursor forward', async () => {
+    const recorded = fixture('claude-trust.txt')
+    const kept = sanitizeRecordedOutput(recorded)
+    expect(kept).toMatch(INERT_RECORD)
+    const live = await screenRows(recorded, 100, 30)
+    const replayed = await screenRows(kept, 100, 30)
+    for (const line of PROSE) {
+      expect(live).toContain(line)
+      expect(replayed).toContain(line)
+    }
+    expect(sanitizeRecordedOutput(`a${ESC}[3Cb${ESC}[8Gc`)).toBe('a   b  c')
+  })
+
+  it('pads only forward, and not to a far-right probe', () => {
+    expect(sanitizeRecordedOutput(`abcdef${ESC}[2Gx`)).toBe('abcdefx')
+    expect(sanitizeRecordedOutput(`a${ESC}[999Cb`)).toBe('ab')
+    expect(sanitizeRecordedOutput(`a${ESC}[999Gb`)).toBe('ab')
+  })
+
+  it('keeps every space through a narrower and a wider window', async () => {
+    for (const output of [fixture('claude-trust.txt'), sanitizeRecordedOutput(fixture('claude-trust.txt'))]) {
+      const rows = await rowsAfterResizes(output, [60, 160])
+      for (const line of PROSE) expect(rows).toContain(line)
+    }
+  })
 })
+
+/** Lines of `claude-trust.txt` as the live emulator draws them at 100 columns. */
+const PROSE = [
+  ' Quick safety check: Is this a project you created or one you trust? (Like your own code, a',
+  " Claude Code'll be able to read, edit, and execute files here.",
+  '   Yes, I trust this folder'
+]
+
+const fixture = (name: string): string => readFileSync(path.join(import.meta.dirname, 'fixtures', name), 'utf8')
+
+/** Every buffer row after writing `output` at 100 columns and resizing through `widths`. */
+async function rowsAfterResizes(output: string, widths: number[]): Promise<string[]> {
+  const term = new Emulator({ cols: 100, rows: 30, scrollback: 100 })
+  try {
+    await new Promise<void>((resolve) => term.write(output, resolve))
+    for (const cols of widths) {
+      term.resize(cols, 30)
+      await new Promise<void>((resolve) => term.write('', resolve))
+    }
+    const buffer = term.buffer.active
+    return Array.from({ length: buffer.length }, (_, row) => buffer.getLine(row)?.translateToString(true) ?? '')
+  } finally {
+    term.dispose()
+  }
+}
 
 describe('tailFromLineBoundary', () => {
   it('returns the whole of a record that fits', () => {

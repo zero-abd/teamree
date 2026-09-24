@@ -131,6 +131,24 @@ describePty('terminal handlers', () => {
     TEST_TIMEOUT_MS
   )
 
+  // A view mounting on a dead pane has to know before any exit event could tell it.
+  it(
+    'says in the snapshot whether the pane has exited',
+    async () => {
+      const service = newService()
+      const terminal = await newTerminal(service)
+      expect((await service.handlers['terminal.read']({ terminalId: terminal.id })).exited).toBeUndefined()
+
+      await service.handlers['terminal.write']({ terminalId: terminal.id, data: 'exit\n' })
+      await waitUntil(
+        async () => (await service.handlers['terminal.list']({})).some((t) => t.id === terminal.id && !t.running),
+        'the shell to exit'
+      )
+      expect((await service.handlers['terminal.read']({ terminalId: terminal.id })).exited).toBe(true)
+    },
+    TEST_TIMEOUT_MS
+  )
+
   it(
     'names a pane, lets a rename beat the name it was created with, and clears it on request',
     async () => {
