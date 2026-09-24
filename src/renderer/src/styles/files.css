@@ -81,7 +81,7 @@
   padding: var(--s1) var(--s3);
   border-bottom: 1px solid var(--line);
   background: var(--bg-raised);
-  color: var(--warning);
+  color: var(--fg);
   font-size: var(--text-sm);
 }
 

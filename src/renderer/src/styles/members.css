@@ -84,7 +84,7 @@
 
 .members__problems-head {
   margin-bottom: var(--s1);
-  color: var(--warning);
+  color: var(--danger);
   font-weight: 500;
 }
 
@@ -184,7 +184,7 @@
 /* A refusal that carries the URL to type instead, kept beside the field it is
    about rather than in a notice in the corner. */
 .members__relay-error {
-  color: var(--warning);
+  color: var(--danger);
   font-size: var(--text-xs);
 }
 
@@ -214,7 +214,7 @@
 /* Said only when the roster is not being followed: a list that is true now and
    a list that stays true read identically, and the difference matters. */
 .members__stale {
-  color: var(--warning);
+  color: var(--fg);
   font-size: var(--text-xs);
 }
 
@@ -233,7 +233,7 @@
    them and only then learns the fifth was impossible has been wasted. */
 .steps__blocker {
   padding: var(--s3);
-  border: 1px solid var(--warning);
+  border: 1px solid var(--danger);
   border-radius: var(--r2);
   color: var(--fg-secondary);
   font-size: var(--text-sm);
@@ -241,7 +241,7 @@
 }
 
 .steps__blocker strong {
-  color: var(--warning);
+  color: var(--danger);
 }
 
 .steps__blocker-lead {
@@ -311,7 +311,7 @@
 }
 
 .step--blocked .step__mark {
-  color: var(--warning);
+  color: var(--danger);
 }
 
 .step__title {
@@ -333,7 +333,7 @@
 }
 
 .step--blocked .step__state {
-  color: var(--warning);
+  color: var(--danger);
 }
 
 .step__summary {
@@ -367,7 +367,7 @@
    These used to arrive only as a notice, which the modal's own scrim painted
    over — so pressing the button with a taken handle showed nothing at all. */
 .field__error {
-  color: var(--warning);
+  color: var(--danger);
   font-size: var(--text-xs);
   line-height: 1.55;
 }
@@ -384,9 +384,9 @@
 /* What a key grants, in one line, above the button that grants it. */
 .grant {
   padding: var(--s3);
-  border: 1px solid var(--warning);
+  border: 1px solid var(--line-strong);
   border-radius: var(--r2);
-  color: var(--warning);
+  color: var(--fg);
   font-size: var(--text-sm);
   font-weight: 600;
   line-height: 1.5;
@@ -516,7 +516,7 @@
 }
 
 .relay-option__keep--override {
-  color: var(--warning);
+  color: var(--fg);
 }
 
 /* The deploy: a button first, and everything that used to be in front of it
@@ -540,11 +540,9 @@
   background: transparent;
 }
 
-/* Who this will not work for, above the button rather than after the relay is
-   running. Warning-coloured because it is the one sentence that changes whether
-   pressing the button was the right idea. */
+/* Who this will not work for, above the button rather than after the relay is running. */
 .relay-deploy__limit {
-  color: var(--warning);
+  color: var(--fg);
   font-size: var(--text-xs);
   line-height: 1.55;
 }
@@ -600,7 +598,7 @@
 
 .relay-check__blocked {
   flex: 1 1 16rem;
-  color: var(--warning);
+  color: var(--danger);
   font-size: var(--text-xs);
   line-height: 1.55;
 }
@@ -619,9 +617,9 @@
    cause first and loudest. */
 .relay-broken-override {
   padding: var(--s2);
-  border: 1px solid var(--warning);
+  border: 1px solid var(--danger);
   border-radius: var(--r1);
-  color: var(--warning);
+  color: var(--danger);
   font-size: var(--text-sm);
   line-height: 1.55;
 }
@@ -635,7 +633,7 @@
 /* Why the button is grey, always beside it: a disabled control whose reason
    nobody can read is the same as one that does nothing. */
 .relay-deploy__blocked {
-  color: var(--warning);
+  color: var(--fg);
   font-size: var(--text-xs);
   line-height: 1.55;
 }
@@ -703,7 +701,7 @@
 
 .push__blocked,
 .push__error {
-  color: var(--warning);
+  color: var(--danger);
   font-size: var(--text-xs);
   line-height: 1.55;
 }
@@ -784,7 +782,7 @@
 .link--refused .link__phase,
 .link--stopped .link__phase,
 .link--unreachable .link__phase {
-  color: var(--warning);
+  color: var(--danger);
 }
 
 /* The runtime's own words, and the only place the clock and the relay file get
@@ -931,7 +929,7 @@
 /* git having gone quiet for long enough that "still working" is no longer the
    likeliest explanation. */
 .push__stalled {
-  color: var(--warning);
+  color: var(--fg);
   font-size: var(--text-xs);
   line-height: 1.55;
 }
@@ -991,7 +989,7 @@
 }
 
 .outcome__fact--no .outcome__state {
-  color: var(--warning);
+  color: var(--fg);
 }
 
 .outcome__label {

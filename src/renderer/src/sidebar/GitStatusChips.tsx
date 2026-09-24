@@ -42,7 +42,9 @@ export function GitStatusChips({ status }: { status: WorktreeStatus | undefined 
       ) : null}
       {summary.tone !== 'quiet' ? (
         <span className={`gitchip gitchip--${summary.tone}`}>
-          <span className="gitchip__bullet" aria-hidden="true" />
+          <span className="gitchip__glyph" aria-hidden="true">
+            {summary.tone === 'conflict' ? '!' : 'Δ'}
+          </span>
           {summary.tone === 'conflict' ? summary.conflicted : summary.dirty}
         </span>
       ) : null}

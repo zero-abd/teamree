@@ -277,8 +277,8 @@
 /* A mute that is on says so in the word on the button, never only in a colour:
    the whole control is a statement about what reaches this machine. */
 .pane-hands__mute--on {
-  border-color: var(--warning);
-  color: var(--warning);
+  border-color: var(--fg-secondary);
+  color: var(--fg);
 }
 
 .terminal-surface {
@@ -366,7 +366,7 @@
 }
 
 .pane-search__count--missed {
-  color: var(--warning);
+  color: var(--danger);
 }
 
 .pane-search__toggle {

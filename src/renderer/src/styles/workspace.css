@@ -476,7 +476,7 @@
 }
 
 .change__kind--conflicted {
-  color: var(--warning);
+  color: var(--danger);
 }
 
 .change__kind--renamed,

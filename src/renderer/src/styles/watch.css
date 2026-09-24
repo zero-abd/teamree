@@ -85,8 +85,8 @@
 /* A refusal replaces the promise rather than sitting beside it: the sentence
    about what typing does here is not true while the far end is saying no. */
 .watch__typing--refused {
-  border-color: var(--warning);
-  color: var(--warning);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 /* Waiting is not refusal, so it is not the refusal colour. Nothing has gone
@@ -127,5 +127,5 @@
 }
 
 .watch__note--ended {
-  color: var(--warning);
+  color: var(--fg-secondary);
 }

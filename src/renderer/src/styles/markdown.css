@@ -255,8 +255,9 @@
   --callout: var(--accent-bright);
 }
 
+/* The document's own yellow: the app's amber is kept for an agent asking. */
 .md-callout[data-callout='warning'] {
-  --callout: var(--warning);
+  --callout: var(--term-yellow);
 }
 
 .md-callout[data-callout='caution'] {
