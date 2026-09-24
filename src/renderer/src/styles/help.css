@@ -33,12 +33,10 @@
   color: var(--fg);
 }
 
-/* Said only when the command may not be found after all. Warning-coloured
-   rather than red: nothing is broken, and something may be about to not
-   work. */
+/* Said only when the command may not be found after all. Not red: nothing is broken yet. */
 .help__caveat {
   padding: var(--s2) var(--s3);
-  border-left: 2px solid var(--warning);
+  border-left: 2px solid var(--line-strong);
   background: var(--bg-raised);
   color: var(--fg-secondary);
   font-size: var(--text-sm);

@@ -87,16 +87,14 @@
   cursor: default;
 }
 
-/* Something about the machine wants a look, and this entry is where it is
-   dealt with. The one mark in the rail; amber, because it is a thing to fix
-   and not a fault in the work. Small for a reason: it says "look here", never how much. */
+/* Something about the machine wants a look, and this entry is where it is dealt with. */
 .rail__badge {
-  width: 5px;
-  height: 5px;
   flex: none;
   margin-left: var(--s1);
-  border-radius: 99px;
-  background: var(--warning);
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1;
 }
 
 /* Where you are. Said in `aria-current` first; this is the same fact for eyes
@@ -341,11 +339,17 @@
 }
 
 .worktree__row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--s2);
   padding: 2px var(--s2) 2px 0;
   border-radius: var(--r2);
+}
+
+/* Room for the ⋯ only while it shows, so a resting row gives its title the width. */
+.worktree:is(:hover, :focus-within, :has(.worktree__action[aria-expanded='true'])) .worktree__row:has(> .worktree__action) {
+  padding-right: calc(18px + var(--s2) * 2);
 }
 
 .worktree:hover .worktree__row {
@@ -465,6 +469,19 @@
   margin-left: 0;
 }
 
+.worktree__git {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+/* The open worktree's status bar and Changes badge already say this. */
+.worktree--active:not(:hover, :focus-within) .worktree__git {
+  display: none;
+}
+
 .worktree--creating .worktree__name,
 .worktree--failed .worktree__name {
   color: var(--fg-secondary);
@@ -500,13 +517,11 @@
   color: var(--danger);
 }
 
-.worktree__tag--missing {
-  background: color-mix(in srgb, var(--warning) 18%, transparent);
-  color: var(--warning);
-}
-
 .worktree__action {
-  flex: none;
+  position: absolute;
+  top: 50%;
+  right: var(--s2);
+  translate: 0 -50%;
   width: 18px;
   height: 18px;
   padding: 0;
@@ -702,13 +717,6 @@
   line-height: 1;
 }
 
-.gitchip__bullet {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
 /* Uncommitted work is the normal state of a task, so it is counted in ink,
    not amber: amber is kept for an agent that is asking. */
 .gitchip--dirty {
@@ -717,10 +725,6 @@
 
 .gitchip--conflict {
   color: var(--danger);
-}
-
-.gitchip--conflict .gitchip__bullet {
-  background: var(--danger);
 }
 
 /* Files a .gitignore covers. Kept at the muted weight the chips default to:
@@ -754,7 +758,7 @@
 .worktree__merge--clean {
   display: inline-flex;
   flex: none;
-  color: var(--success);
+  color: var(--fg-secondary);
 }
 
 .worktree__merge--clean svg {
@@ -766,8 +770,8 @@
 }
 
 .worktree__merge--conflicts {
-  background: color-mix(in srgb, var(--warning) 18%, transparent);
-  color: var(--warning);
+  background: var(--bg-raised);
+  color: var(--fg-secondary);
 }
 
 
@@ -1082,7 +1086,7 @@
    list is a mute they will not remember lifting. */
 .pane-row__muted {
   flex: 0 0 auto;
-  color: var(--warning);
+  color: var(--fg-secondary);
   font-size: var(--text-xs);
   font-weight: 600;
 }

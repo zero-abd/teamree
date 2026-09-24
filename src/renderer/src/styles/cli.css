@@ -39,7 +39,7 @@
 }
 
 .cli-install__warning {
-  color: var(--warning);
+  color: var(--fg);
   font-size: var(--text-xs);
   line-height: 1.5;
 }

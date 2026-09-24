@@ -291,6 +291,33 @@ describe('a worktree that is ready', () => {
     expect(mark.getAttribute('title')).toBe('2 commits merge cleanly into origin/main')
   })
 
+  // A dot beside the activity dot read as a second status.
+  it('counts uncommitted changes as text, with no dot', () => {
+    mount({ status: status({ unstaged: 1 }) })
+    const chips = screen.getByLabelText(/^git status:/)
+    expect(chips.textContent).toBe('Δ1')
+    expect(chips.querySelector('.gitchip__bullet')).toBeNull()
+  })
+
+  // The open worktree has the status bar and the Changes badge; CSS shows these on hover.
+  it('keeps the git counts and the merge mark in one group the open row can hide', () => {
+    mount({
+      active: true,
+      status: status({ unstaged: 1 }),
+      mergePreview: {
+        worktreeId: 'w1',
+        baseRef: 'origin/main',
+        state: 'clean',
+        ahead: 1,
+        conflicts: [],
+        readAt: NOW
+      } as WorktreeMergePreview
+    })
+    const git = document.querySelector('.worktree__git') as HTMLElement
+    expect(git.querySelector('.gitchips')).not.toBeNull()
+    expect(git.querySelector('.worktree__merge')).not.toBeNull()
+  })
+
   it('reads git out in words, not only as coloured chips', () => {
     mount({ status: status({ ahead: 2, unstaged: 3 }) })
     const chips = screen.getByLabelText(/^git status:/)

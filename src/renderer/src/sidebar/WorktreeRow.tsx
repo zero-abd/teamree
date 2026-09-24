@@ -147,30 +147,33 @@ export function WorktreeRow({
 
   const facts = (
     <>
-      {ready ? <GitStatusChips status={status} /> : null}
-      {badge?.tone === 'clean' ? (
-        <span
-          className="worktree__merge worktree__merge--clean"
-          role="img"
-          aria-label={badge.detail}
-          title={badge.detail}
-        >
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <circle cx="3.5" cy="2.5" r="1.3" />
-            <circle cx="3.5" cy="9.5" r="1.3" />
-            <circle cx="8.5" cy="5" r="1.3" />
-            <path d="M3.5 3.8v4.4M8.5 6.3c0 1.6-2 2.2-5 2.2" />
-          </svg>
-        </span>
-      ) : badge ? (
-        <span className={`chip worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
-          {badge.label}
-        </span>
-      ) : null}
+      {/* One group, so the open row can hide what its status bar and Changes badge already say. */}
+      <span className="worktree__git">
+        {ready ? <GitStatusChips status={status} /> : null}
+        {badge?.tone === 'clean' ? (
+          <span
+            className="worktree__merge worktree__merge--clean"
+            role="img"
+            aria-label={badge.detail}
+            title={badge.detail}
+          >
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <circle cx="3.5" cy="2.5" r="1.3" />
+              <circle cx="3.5" cy="9.5" r="1.3" />
+              <circle cx="8.5" cy="5" r="1.3" />
+              <path d="M3.5 3.8v4.4M8.5 6.3c0 1.6-2 2.2-5 2.2" />
+            </svg>
+          </span>
+        ) : badge ? (
+          <span className={`chip worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
+            {badge.label}
+          </span>
+        ) : null}
+      </span>
       {creating ? <span className="chip worktree__tag">creating</span> : null}
       {failed ? <span className="chip worktree__tag worktree__tag--failed">failed</span> : null}
       {missing ? (
-        <span className="chip worktree__tag worktree__tag--missing" title={`${worktree.path} is not on disk`}>
+        <span className="chip worktree__tag" title={`${worktree.path} is not on disk`}>
           missing
         </span>
       ) : null}

@@ -67,7 +67,7 @@
 
 .statusbar__connection--connecting .statusbar__dot,
 .statusbar__connection--retrying .statusbar__dot {
-  background: var(--warning);
+  background: var(--fg-secondary);
   animation: pulse 1.3s var(--ease) infinite;
 }
 

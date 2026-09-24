@@ -229,15 +229,11 @@ export function Sidebar({
                 <path d="M7 1.5v1.7M7 10.8v1.7M12.1 7h-1.7M3.6 7H1.9M10.6 3.4 9.4 4.6M4.6 9.4l-1.2 1.2M10.6 10.6 9.4 9.4M4.6 4.6 3.4 3.4" />
               </svg>
               <span>Settings</span>
-              {/* The one mark in the rail that is about the machine rather than
-                  the window: the CLI link is wrong, and Settings is where it is
-                  fixed. It was a red pill across the sidebar's foot for as long
-                  as the link was wrong — which from a checkout is always — and a
-                  warning that never goes away is chrome, not a warning. The
-                  mark is inside the entry, so pressing it is pressing Settings;
-                  the hover says what is wrong and what the fix will do. */}
+              {/* The CLI link is wrong and Settings › CLI fixes it. In ink: colour is for agents' state. */}
               {offerCliInstall(cli) ? (
-                <span className="rail__badge" role="img" aria-label={cliActionLabel(cli)} title={cliTitle(cli)} />
+                <span className="rail__badge" role="img" aria-label={cliActionLabel(cli)} title={cliTitle(cli)}>
+                  !
+                </span>
               ) : null}
             </button>
           </li>

@@ -358,6 +358,8 @@ describe('the CLI mark on Settings', () => {
     expect(mark).toBeTruthy()
     expect(mark?.getAttribute('title')).toContain('/usr/local/bin/teamree')
     expect(mark?.getAttribute('aria-label')).toBe('Put teamree on my PATH')
+    // Ink, not a coloured dot: colour is kept for what agents are doing.
+    expect(mark?.textContent).toBe('!')
     // Inside the Settings entry, so pressing the mark is pressing Settings.
     const settings = screen.getByRole('button', { name: /Settings/ })
     expect(settings.contains(mark)).toBe(true)

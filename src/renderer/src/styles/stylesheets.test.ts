@@ -240,6 +240,57 @@ describe('stylesheets', () => {
     })
   })
 
+  // Amber means an agent is asking, so nothing else may be drawn in it.
+  describe('colour means state', () => {
+    it('uses the asking tone only for an agent that is asking', () => {
+      const asking = new Set(['.activity--waiting', '.pane-row__since--waiting', '.statusbar__asking'])
+      const elsewhere: string[] = []
+      for (const name of sheets) {
+        postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls((decl) => {
+          if (!/var\(\s*--warning\s*\)/.test(decl.value)) return
+          const selector = (decl.parent as postcss.Rule).selector
+          if (!asking.has(selector)) elsewhere.push(`${name}: ${selector}`)
+        })
+      }
+      expect(elsewhere).toEqual([])
+    })
+
+    it('marks a folder holding changes in the file letter’s ink', () => {
+      expect(declarationOf(ruleFor('rightPanel.css', '.tree__under'), 'background')).toBe(
+        declarationOf(ruleFor('workspace.css', '.change__kind'), 'color')
+      )
+    })
+
+    it('draws the Settings mark, the change count and the clean-merge mark in ink', () => {
+      expect(declarationOf(ruleFor('sidebar.css', '.rail__badge'), 'background')).toBeUndefined()
+      expect(declarationOf(ruleFor('sidebar.css', '.rail__badge'), 'color')).toMatch(/^var\(--fg/)
+      expect(declarationOf(ruleFor('sidebar.css', '.worktree__merge--clean'), 'color')).toMatch(/^var\(--fg/)
+      expect(declarationOf(ruleFor('sidebar.css', '.gitchip--dirty'), 'color')).toBe('var(--fg-secondary)')
+    })
+
+    it('hides the open worktree’s git facts until the row is hovered or focused', () => {
+      const hidden = ruleFor('sidebar.css', '.worktree--active:not(:hover, :focus-within) .worktree__git')
+      expect(declarationOf(hidden, 'display')).toBe('none')
+    })
+
+    // The hidden ⋯ held 24px of every row; it takes room only while it shows.
+    it('keeps the row’s hidden ⋯ out of the title’s width', () => {
+      expect(declarationOf(ruleFor('sidebar.css', '.worktree__action'), 'position')).toBe('absolute')
+      const shown =
+        ".worktree:is(:hover, :focus-within, :has(.worktree__action[aria-expanded='true'])) .worktree__row:has(> .worktree__action)"
+      expect(declarationOf(ruleFor('sidebar.css', shown), 'padding-right')).toBeDefined()
+    })
+
+    // Closed, the panel is a 30px strip with a 1px border; a count on its edge was clipped.
+    it('keeps a closed rail’s counts at least 2px inside the rail', () => {
+      const px = (value: string | undefined): number => Number.parseFloat(value ?? 'NaN')
+      const inner = px(declarationOf(ruleFor('rightPanel.css', '.panel--closed'), 'width')) - 1
+      const tab = px(declarationOf(ruleFor('rightPanel.css', '.panel__rail--edge .panel__tab'), 'width'))
+      const right = px(declarationOf(ruleFor('rightPanel.css', '.panel__rail--edge .panel__count'), 'right'))
+      expect((inner - tab) / 2 + right).toBeGreaterThanOrEqual(2)
+    })
+  })
+
   /** Properties the shell writes onto elements itself: two from `windowChrome.ts`, one a dragged width. */
   const SET_BY_THE_SHELL = new Set(['--sidebar-width', '--titlebar-h', '--titlebar-inset'])
 

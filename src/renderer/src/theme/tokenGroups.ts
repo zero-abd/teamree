@@ -50,8 +50,8 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
   {
     title: 'Status',
     tokens: [
-      { token: 'success', label: 'Success', about: 'Clean merge, finished pane' },
-      { token: 'warning', label: 'Warning', about: 'Discard cost' },
+      { token: 'success', label: 'Success', about: 'Finished pane' },
+      { token: 'warning', label: 'Asking', about: 'An agent waiting on you' },
       { token: 'danger', label: 'Danger', about: 'Conflicts, failures, destructive button' },
       { token: 'info', label: 'Info', about: 'Non-error notice' }
     ]

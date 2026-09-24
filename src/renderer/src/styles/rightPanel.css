@@ -138,7 +138,7 @@
 .panel__rail--edge .panel__count {
   position: absolute;
   top: 1px;
-  right: 1px;
+  right: 3px;
   min-width: 11px;
   padding: 0 2px;
   font-size: 8.5px;
@@ -362,7 +362,7 @@
   height: 5px;
   margin-left: auto;
   border-radius: 99px;
-  background: var(--warning);
+  background: var(--fg-muted);
 }
 
 /* Shown on hover, and to the keyboard always. */

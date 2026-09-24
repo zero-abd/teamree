@@ -115,7 +115,7 @@
 }
 
 .settings-warning {
-  color: var(--warning);
+  color: var(--fg);
   font-size: var(--text-sm);
   line-height: 1.5;
 }
