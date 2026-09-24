@@ -28,7 +28,7 @@ const pane = (overrides: Partial<PeerPane> = {}): PeerPane => ({
 const theirs = (overrides: Partial<TeammateWorktree> = {}): TeammateWorktree => ({
   id: 'priya:w3',
   name: 'Fix the relay budget',
-  branch: 'fix-the-relay-budget',
+  branch: 'priya/relay-budget',
   state: 'ready',
   panes: [pane()],
   handle: 'priya',
@@ -61,14 +61,19 @@ describe('whose worktree this is', () => {
     const item = document.querySelector('.worktree') as HTMLElement
     expect(within(item).getByText('priya')).toBeTruthy()
     expect(within(item).getByText('Fix the relay budget')).toBeTruthy()
-    expect(within(item).getByText('fix-the-relay-budget')).toBeTruthy()
+    expect(within(item).getByText('priya/relay-budget')).toBeTruthy()
+  })
+
+  it('leaves out a branch that is only its name slugified', () => {
+    mount(theirs({ branch: 'fix-the-relay-budget' }))
+    expect(screen.queryByText('fix-the-relay-budget')).toBeNull()
   })
 
   it('says whose it is first on hover, because that changes what the rest means', () => {
     mount()
     const title = document.querySelector('.worktree__row')?.getAttribute('title') ?? ''
     expect(title).toContain('priya’s worktree on their machine')
-    expect(title.indexOf('priya')).toBeLessThan(title.indexOf('fix-the-relay-budget'))
+    expect(title.indexOf('priya')).toBeLessThan(title.indexOf('priya/relay-budget'))
   })
 })
 

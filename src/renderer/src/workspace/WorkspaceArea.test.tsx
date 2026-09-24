@@ -4,7 +4,7 @@
 // apart. No header over the panes. A teammate's pane is an ordinary sibling cell with a gutter, and
 // survives the navigations that replace everything else here.
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InstalledAgent, Layout, Project, Worktree, WorktreeStatus } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
@@ -201,10 +201,14 @@ describe('a worktree with no panes in it', () => {
       (button) => button.lastChild?.textContent ?? ''
     )
 
-  it('names the worktree and its branch, and none of the front door', () => {
+  // `perf / perf`: the branch is said only when it is not the name slugified.
+  it('names the worktree, its branch only when it says more, and none of the front door', () => {
     openEmpty()
     expect(screen.getByRole('heading', { name: 'Rewrite the pager' })).toBeTruthy()
-    expect(screen.getByText('rewrite-the-pager')).toBeTruthy()
+    expect(screen.queryByText('rewrite-the-pager')).toBeNull()
+    cleanup()
+    openEmpty({ branch: 'feature/pager' })
+    expect(screen.getByText('feature/pager')).toBeTruthy()
     for (const name of ['Add project', 'New task', 'Star on GitHub']) {
       expect(screen.queryByRole('button', { name })).toBeNull()
     }

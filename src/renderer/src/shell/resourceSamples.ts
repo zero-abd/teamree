@@ -3,6 +3,7 @@
 
 import type { PaneResources, SystemResources, Terminal, Worktree } from '@shared/entities'
 import { paneNames } from '../sidebar/agentRows'
+import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 
 /** A minute at the popover's cadence, which is enough to see a build start and end. */
 export const SPARKLINE_SAMPLES = 30
@@ -66,10 +67,14 @@ export function groupByWorktree(
   return order.map((worktreeId) => {
     const panes = byWorktree.get(worktreeId) ?? []
     const known = panes.map((pane) => terminals[pane.terminalId])
-    const names = paneNames(known.map((terminal) => terminal ?? { title: '', shell: '' }))
+    const worktree = worktrees.find((entry) => entry.id === worktreeId)
+    const names = paneNames(
+      known.map((terminal) => terminal ?? { title: '', shell: '' }),
+      worktree
+    )
     return {
       worktreeId,
-      name: worktrees.find((worktree) => worktree.id === worktreeId)?.name ?? worktreeId,
+      name: worktree === undefined ? worktreeId : worktreeLabel(worktreeDisplay(worktree)),
       panes: panes.map((pane, index) => ({
         pane,
         name: known[index] === undefined ? pane.terminalId : (names[index] ?? pane.terminalId),

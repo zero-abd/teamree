@@ -147,6 +147,32 @@ describe('the git segment', () => {
   })
 })
 
+describe('the worktree it names', () => {
+  // `worktree perf perf`: the branch that is the name slugified said nothing.
+  it('names it once, without a branch that only repeats it', () => {
+    mount()
+    const item = screen.getByText('worktree').parentElement as HTMLElement
+    expect(item.textContent).toBe('worktreeRewrite the pager')
+  })
+
+  it('names a run of a task by its agent and the whole task line', () => {
+    const task = 'Add a subtract function to src/math.ts'
+    seed({
+      worktrees: [
+        { ...worktree, name: 'Add a subtract function to claude', branch: 'add-a-subtract-function-to-claude', task }
+      ]
+    })
+    mount()
+    expect((screen.getByText('worktree').parentElement as HTMLElement).textContent).toBe(`worktreeclaude · ${task}`)
+  })
+
+  it('says the branch when it is not the name', () => {
+    seed({ worktrees: [{ ...worktree, branch: 'feature/pager' }] })
+    mount()
+    expect(screen.getByText('feature/pager')).toBeTruthy()
+  })
+})
+
 describe('the rail as a whole', () => {
   it('shows state and no keycaps', () => {
     mount()

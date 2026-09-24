@@ -2,9 +2,10 @@
 // PTY, not an agent's protocol: the readings are bytes arriving, how the process
 // ended, the title, the bell, and — outranking all of them — what the agent's hooks report.
 
-import type { AgentEvent, AgentKind, InstalledAgent, PaneWatcher, Terminal } from '@shared/entities'
+import type { AgentEvent, AgentKind, PaneWatcher, Terminal } from '@shared/entities'
 import type { TitleOpinion } from '@shared/titleOpinion'
-import { HARNESSES, harnessName } from '../agents/harnesses'
+import { harnessName } from '../agents/harnesses'
+import { paneInWorktree, type WorktreeNameSource } from './worktreeDisplay'
 
 export type AgentActivity =
   /** The pane has said it wants something: it rang the bell, or its title says so. */
@@ -154,12 +155,13 @@ export function activityOf(terminal: PaneActivitySource): AgentActivity {
  */
 export function agentRows(
   terminals: readonly Terminal[],
-  worktreeId: string,
+  worktree: string | (WorktreeNameSource & { id: string }),
   now: number,
   evidence: Readonly<Record<string, string | null>> = {}
 ): AgentRow[] {
+  const worktreeId = typeof worktree === 'string' ? worktree : worktree.id
   const mine = terminals.filter((terminal) => terminal.worktreeId === worktreeId)
-  const names = paneNames(mine)
+  const names = paneNames(mine, typeof worktree === 'string' ? undefined : worktree)
   return mine.map((terminal, index) => {
     const label = names[index] ?? paneName(terminal)
     return {
@@ -214,8 +216,8 @@ export function paneName(pane: PaneNameSource): string {
  * The names for one worktree's panes, disambiguated: unnamed duplicates get an
  * index counted among themselves; names a person typed are left exactly as typed.
  */
-export function paneNames(panes: readonly PaneNameSource[]): string[] {
-  const names = panes.map(paneName)
+export function paneNames(panes: readonly PaneNameSource[], worktree?: WorktreeNameSource): string[] {
+  const names = panes.map((pane) => paneName(paneInWorktree(pane, worktree)))
   const chosen = panes.map(isNamed)
   const totals = new Map<string, number>()
   for (const [index, name] of names.entries()) {
@@ -314,54 +316,6 @@ export function paneCount(
     total: counted.length,
     worktrees: new Set(counted.map((terminal) => terminal.worktreeId)).size
   }
-}
-
-/** A worktree's name as its row draws it: a run of a task shared with other agents leads with its agent. */
-export type WorktreeTitle = { text: string; agent?: { kind: AgentKind; text: string } }
-
-/** Which words name an agent: every kind, and the command each installed agent runs as. */
-export function agentWords(installed: readonly InstalledAgent[]): (word: string) => AgentKind | undefined {
-  const commands = new Map(installed.map((agent) => [agent.command, agent.kind]))
-  return (word) => (Object.hasOwn(HARNESSES, word) ? (word as AgentKind) : commands.get(word))
-}
-
-/**
- * One project's rows, keyed by id. Undoes `taskNamesForAgents`: only names that share a task with
- * another agent's run are split, so a lone `pager claude` or a renamed run keeps its name whole.
- */
-export function worktreeTitles(
-  worktrees: readonly { id: string; name: string }[],
-  kindOf: (word: string) => AgentKind | undefined
-): Map<string, WorktreeTitle> {
-  const runs = worktrees.map((worktree) => ({
-    id: worktree.id,
-    name: worktree.name,
-    run: taskRun(worktree.name, kindOf)
-  }))
-  const perTask = new Map<string, number>()
-  for (const { run } of runs) if (run) perTask.set(run.task, (perTask.get(run.task) ?? 0) + 1)
-  return new Map(
-    runs.map(({ id, name, run }) => [
-      id,
-      run && (perTask.get(run.task) ?? 0) > 1
-        ? { text: run.task, agent: { kind: run.kind, text: run.agent } }
-        : { text: name }
-    ])
-  )
-}
-
-/** `task agent` or `task agent 2`, as `taskNamesForAgents` writes them, when the word names an agent. */
-function taskRun(
-  name: string,
-  kindOf: (word: string) => AgentKind | undefined
-): { task: string; agent: string; kind: AgentKind } | null {
-  for (const shape of [/^(.*\S)\s+(\S+)(\s+\d+)$/u, /^(.*\S)\s+(\S+)()$/u]) {
-    const [, task, word, nth] = shape.exec(name.trim()) ?? []
-    const kind = word === undefined ? undefined : kindOf(word)
-    if (task !== undefined && kind !== undefined)
-      return { task, agent: `${word}${nth ?? ''}`.replace(/\s+/gu, ' '), kind }
-  }
-  return null
 }
 
 /**

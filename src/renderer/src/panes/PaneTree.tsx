@@ -8,6 +8,7 @@ import { freshAgentLabel } from '@shared/paneRestore'
 import { minExtent, type Box } from '@shared/paneRoom'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { activityOf, dotClass, dotTone, paneAgent, paneNames, TONE_LABEL } from '../sidebar/agentRows'
+import type { WorktreeNameSource } from '../sidebar/worktreeDisplay'
 import { TerminalView } from '../terminal/TerminalView'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { usePaneMenu } from '../workspace/paneMenu'
@@ -21,6 +22,8 @@ export type PaneCallbacks = {
   terminals: Record<string, Terminal>
   /** The worktree a file pane's file is read from. */
   worktreeId: string
+  /** What names that worktree; its agent pane goes by its title, as on the tab. */
+  worktree?: WorktreeNameSource
   /** Each pane's name by id, the tab strip's names, worked out once at the root; callers leave it out. */
   names?: Readonly<Record<string, string>>
   focusedTerminalId: string | null
@@ -45,7 +48,7 @@ export function PaneTree({
   path,
   ...callbacks
 }: PaneCallbacks & { node: PaneNode; path: number[] }): React.JSX.Element {
-  const names = callbacks.names ?? namesById(node, callbacks.terminals)
+  const names = callbacks.names ?? namesById(node, callbacks.terminals, callbacks.worktree)
   if (isFileLeaf(node)) {
     return <FileLeaf paneId={node.terminalId} path={node.path} {...callbacks} />
   }
@@ -150,12 +153,19 @@ function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColu
 }
 
 /** The tree's panes named together as `paneTabs` names them: label, agent, program, twins numbered. */
-function namesById(root: PaneNode, terminals: Readonly<Record<string, Terminal>>): Record<string, string> {
+function namesById(
+  root: PaneNode,
+  terminals: Readonly<Record<string, Terminal>>,
+  worktree: WorktreeNameSource | undefined
+): Record<string, string> {
   // Terminals only: a file pane is named after its file.
   const ids = collectLeaves(root)
     .filter((leaf) => !isFileLeaf(leaf))
     .map((leaf) => leaf.terminalId)
-  const names = paneNames(ids.map((id) => terminals[id] ?? { title: 'terminal', shell: '' }))
+  const names = paneNames(
+    ids.map((id) => terminals[id] ?? { title: 'terminal', shell: '' }),
+    worktree
+  )
   return Object.fromEntries(ids.map((id, index) => [id, names[index] ?? 'terminal']))
 }
 

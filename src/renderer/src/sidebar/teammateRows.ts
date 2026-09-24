@@ -5,6 +5,7 @@
 import { teammatesHeard, type PeerPane, type TeammatePresence, type TeammateWorktree } from '@shared/entities'
 import { activityOf, paneName, paneText, worktreeTone, type AgentRow, type DotTone } from './agentRows'
 import { teammateStaleness, type TeammateStaleness } from './teammateStaleness'
+import { worktreeDisplay } from './worktreeDisplay'
 
 export type TeammatePaneRow = AgentRow & {
   /** Whose pane it is, so a row is never ambiguous about that. */
@@ -19,7 +20,8 @@ export type TeammateWorktreeRowModel = {
   id: string
   handle: string
   name: string
-  branch: string
+  /** Absent when it only repeats the name; see `worktreeDisplay`. */
+  branch?: string
   state: TeammateWorktree['state']
   panes: TeammatePaneRow[]
   /** The collapsed row's dot. */
@@ -43,13 +45,14 @@ export function teammateRows(
   evidence: Readonly<Record<string, string | null>> = {}
 ): TeammateWorktreeRowModel[] {
   return worktrees.map((worktree) => {
+    const display = worktreeDisplay(worktree)
     const heardAgoMs = Math.max(0, now - worktree.heardAt)
     const panes = worktree.panes.map((pane) => paneRow(pane, worktree.handle, heardAgoMs, evidence[pane.id] ?? null))
     return {
       id: worktree.id,
       handle: worktree.handle,
-      name: worktree.name,
-      branch: worktree.branch,
+      name: display.title,
+      ...(display.branch === undefined ? {} : { branch: display.branch }),
       state: worktree.state,
       panes,
       tone: worktreeTone(panes),
@@ -81,7 +84,7 @@ function paneRow(pane: PeerPane, handle: string, heardAgoMs: number, evidence: s
 /** The hover text for a teammate's worktree row; whose it is comes first. */
 export function teammateTitle(row: TeammateWorktreeRowModel): string {
   const panes = `${row.panes.length} pane${row.panes.length === 1 ? '' : 's'}`
-  const head = `${row.name} · ${row.handle}’s worktree on their machine · ${row.branch} · ${panes}`
+  const head = [row.name, `${row.handle}’s worktree on their machine`, row.branch, panes].filter(Boolean).join(' · ')
   return row.staleness ? `${head}\n${row.staleness.detail}` : head
 }
 

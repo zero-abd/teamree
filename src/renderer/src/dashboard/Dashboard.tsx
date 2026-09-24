@@ -22,14 +22,15 @@ export function Dashboard(): React.JSX.Element {
   const terminals = useWorkspaceStore((state) => state.terminals)
   const worktrees = useWorkspaceStore((state) => state.worktrees)
   const projects = useWorkspaceStore((state) => state.projects)
+  const layouts = useWorkspaceStore((state) => state.layouts)
   const revealPane = useWorkspaceStore((state) => state.revealPane)
   const toggleDashboard = useWorkspaceStore((state) => state.toggleDashboard)
 
   const now = useNow()
   const paneList = useMemo(() => Object.values(terminals), [terminals])
   const rows = useMemo(
-    () => dashboardRows({ terminals: paneList, worktrees, projects, now }),
-    [paneList, worktrees, projects, now]
+    () => dashboardRows({ terminals: paneList, worktrees, projects, layouts, now }),
+    [paneList, worktrees, projects, layouts, now]
   )
   const counts = useMemo(() => toneCounts(rows), [rows])
 
@@ -119,7 +120,7 @@ export function Dashboard(): React.JSX.Element {
                   <span className="board-row__state">{TONE_LABEL[tone]}</span>
                   <span className="board-row__where">
                     <span className="board-row__worktree">{row.worktreeName}</span>
-                    <span className="board-row__branch">{row.branch}</span>
+                    {row.branch === undefined ? null : <span className="board-row__branch">{row.branch}</span>}
                   </span>
                   <span className="board-row__project">{row.projectName}</span>
                   <span className="board-row__since">{sinceLabel(row.quietFor)}</span>

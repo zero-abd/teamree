@@ -2,6 +2,7 @@
 // State only, never instructions; the git line and the two utilities open panels.
 
 import { paneCount } from '../sidebar/agentRows'
+import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { formatReadAge, summarizeWorktreeStatus } from '../sidebar/worktreeStatusSummary'
 import { RUNTIME_IS_SEEDED } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -34,6 +35,7 @@ export function StatusBar(): React.JSX.Element {
   // The rail is always mounted, so it keeps main told which way sleep should go.
   useKeepAwake()
 
+  const display = worktree ? worktreeDisplay(worktree) : null
   const panes = paneCount(Object.values(terminals), worktrees.map((entry) => entry.id), activeWorktreeId)
   const summary = summarizeWorktreeStatus(status)
 
@@ -58,11 +60,11 @@ export function StatusBar(): React.JSX.Element {
       <ResourcesControl />
 
       <span className="statusbar__item">
-        {worktree ? (
+        {display ? (
           <>
             <span className="statusbar__muted">worktree</span>
-            {worktree.name}
-            <span className="statusbar__branch">{worktree.branch}</span>
+            {worktreeLabel(display)}
+            {display.branch === undefined ? null : <span className="statusbar__branch">{display.branch}</span>}
           </>
         ) : (
           <span className="statusbar__muted">no worktree open</span>

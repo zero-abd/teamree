@@ -28,6 +28,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
     const worktree = state.worktrees.find((entry) => entry.id === state.activeWorktreeId)
     return worktree !== undefined && !hasCheckout(worktree)
   })
+  const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === state.activeWorktreeId))
   const splitFocusedPane = useWorkspaceStore((state) => state.splitFocusedPane)
   const layout = useWorkspaceStore((state) =>
     state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
@@ -64,7 +65,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   const unread = useUnreadPanes()
   const startItems = useStartMenuItems(activeWorktreeId, modifier)
 
-  const tabs = panesShown ? paneTabs(layout?.root ?? null, terminals) : []
+  const tabs = panesShown ? paneTabs(layout?.root ?? null, terminals, worktree) : []
 
   const focusedTerminalId = focusedWatchId === null ? layout?.focusedTerminalId : null
 

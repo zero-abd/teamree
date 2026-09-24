@@ -208,4 +208,20 @@ describe('file tabs', () => {
     })
     expect(paneTabTitle(tabs[1]!)).toBe('app.ts +3')
   })
+
+  // `startTask` labels the agent's pane with the stored name, cut to "Add a subtract function to claude".
+  it('calls the pane named after its worktree by the worktree title', () => {
+    const worktree = {
+      name: 'Add a subtract function to claude',
+      branch: 'add-a-subtract-function-to-claude',
+      task: 'Add a subtract function to src/math.ts'
+    }
+    const tabs = paneTabs(
+      row('a', 'b'),
+      byId(terminal({ id: 'a', agent: 'claude', label: worktree.name }), terminal({ id: 'b' })),
+      worktree
+    )
+
+    expect(tabs.map((tab) => tab.text)).toEqual(['Add a subtract function to src/math.ts', 'bash'])
+  })
 })

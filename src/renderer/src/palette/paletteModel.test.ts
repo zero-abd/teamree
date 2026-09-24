@@ -61,6 +61,31 @@ const context = (
 })
 
 describe('buildPaletteItems', () => {
+  // The row said the stored "Add a subtract function to claude", and `perf` hinted `perf`.
+  it('names a worktree as the sidebar does, hinting the branch only when it says more', () => {
+    const task = 'Add a subtract function to src/math.ts'
+    const items = buildPaletteItems(
+      context({
+        worktrees: [
+          worktree({
+            id: 'run',
+            name: 'Add a subtract function to claude',
+            branch: 'add-a-subtract-function-to-claude',
+            task
+          }),
+          worktree({ id: 'perf', name: 'perf', branch: 'perf' })
+        ]
+      })
+    )
+
+    const rows = items.filter((item) => item.kind === 'worktree')
+    expect(rows.map((item) => [item.label, item.hint])).toEqual([
+      [`claude · ${task}`, ''],
+      ['perf', '']
+    ])
+    expect(rows[0]?.search).toContain('add-a-subtract-function-to-claude')
+  })
+
   it('offers every worktree but the one already open', () => {
     const items = buildPaletteItems(
       context({

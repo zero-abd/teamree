@@ -12,6 +12,7 @@ import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
 import { cliActionLabel } from '../dialogs/cliInstallModel'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { MENU_ORDER, menuLabel } from '../menu/menuBar'
+import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { automaticUpdatesLabel } from '../updates/updateNotice'
 
 /** Every command this window has (derived from `WorkspaceCommand`, so none go missing) plus the palette's own rows. */
@@ -66,14 +67,16 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     .filter((worktree) => worktree.id !== context.activeWorktreeId)
     .map((worktree) => {
       const project = projectName.get(worktree.projectId) ?? ''
+      const display = worktreeDisplay(worktree)
+      const label = worktreeLabel(display)
       return {
         kind: 'worktree',
         id: worktree.id,
-        label: worktree.name,
-        hint: worktree.branch,
+        label,
+        hint: display.branch ?? '',
         detail: hasCheckout(worktree) ? project : `${project} · ${worktree.missing ? 'missing' : worktree.state}`,
         // A branch name is often the only part a person remembers.
-        search: `${worktree.name} ${worktree.branch} ${project}`
+        search: `${label} ${worktree.branch} ${project}`
       }
     })
 
@@ -109,7 +112,7 @@ function agentItems(context: PaletteContext): PaletteItem[] {
     kind: 'agent',
     id: agent.command,
     label: `Start ${agent.command} in this worktree`,
-    hint: active.name,
+    hint: worktreeLabel(worktreeDisplay(active)),
     detail: '',
     // No "agent": the matcher takes the first word-start it can, and "this" before "here" once sent
     // "claude this worktree" past the h. "agents" reaches the all-panes view.

@@ -8,6 +8,7 @@
 
 import { Confirm } from './Confirm'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 
 export function ConfirmRemoveDialog({ worktreeId, reason }: { worktreeId: string; reason: string }): React.JSX.Element {
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId))
@@ -23,7 +24,7 @@ export function ConfirmRemoveDialog({ worktreeId, reason }: { worktreeId: string
 
   return (
     <Confirm
-      title={`Discard ${worktree?.name ?? 'this worktree'}?`}
+      title={`Discard ${worktree === undefined ? 'this worktree' : worktreeLabel(worktreeDisplay(worktree))}?`}
       body={reason}
       cancel="Keep it"
       confirm={retrying ? 'Discard it and start again' : 'Discard the work'}
