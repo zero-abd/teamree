@@ -717,9 +717,16 @@ async function checkPatch(ask, worktreeId) {
   )
   if (!selected) return
 
-  // A patch with no `@@` and no gutter would satisfy any check on the diff's text.
+  // A patch with no `@@` and no gutter would satisfy any check on the diff's text; the header reads its
+  // place and keeps git's own line as its hover.
   await waitFor(
-    () => ask(`document.querySelector('.patch__hunkHead')?.textContent?.startsWith('@@') === true`),
+    () =>
+      ask(
+        `(() => {
+           const at = document.querySelector('.patch__hunkHead .patch__hunkAt')
+           return (at?.textContent ?? '') !== '' && at?.getAttribute('title')?.startsWith('@@') === true
+         })()`
+      ),
     'the patch on screen has no hunk header to say where in the file it is'
   )
   await waitFor(
