@@ -173,7 +173,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                       <FileGlyph />
                     ) : (
                       <span
-                        className={dotClass(tab.activity === null ? null : dotTone(tab.activity, tab.agent), isUnread)}
+                        className={dotClass(tab.activity === null ? null : dotTone(tab.activity, tab.agent))}
                         aria-hidden="true"
                       />
                     )}

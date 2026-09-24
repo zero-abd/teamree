@@ -310,6 +310,33 @@ describe('stylesheets', () => {
       expect(elsewhere).toEqual([])
     })
 
+    // Unread is a name's weight: a dot recoloured or ringed for it read as working, or as a second asking.
+    it('lets nothing but the state colour a dot', () => {
+      const dotRules: string[] = []
+      for (const name of sheets) {
+        postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkRules((rule) => {
+          if (/unread/.test(rule.selector) && /\.activity\b/.test(rule.selector)) dotRules.push(`${name}: ${rule.selector}`)
+        })
+      }
+      expect(dotRules).toEqual([])
+    })
+
+    it('draws working as the one violet dot, and asking as the one that moves', () => {
+      const violet: string[] = []
+      postcss.parse(readFileSync(path.join(here, 'sidebar.css'), 'utf8')).walkRules(/\.activity/, (rule) => {
+        rule.walkDecls('background', (decl) => {
+          if (/--accent/.test(decl.value)) violet.push(rule.selector)
+        })
+      })
+      expect(violet).toEqual(['.activity--working'])
+      const moving: string[] = []
+      postcss.parse(readFileSync(path.join(here, 'sidebar.css'), 'utf8')).walkDecls('animation', (decl) => {
+        const rule = decl.parent as postcss.Rule
+        if (rule.parent?.type === 'root' && /\.activity/.test(rule.selector)) moving.push(rule.selector)
+      })
+      expect(moving).toEqual(['.activity--waiting'])
+    })
+
     it('marks a folder holding changes in the file letter’s ink', () => {
       expect(declarationOf(ruleFor('rightPanel.css', '.tree__under'), 'background')).toBe(
         declarationOf(ruleFor('workspace.css', '.change__kind'), 'color')

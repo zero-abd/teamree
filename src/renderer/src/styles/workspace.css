@@ -180,7 +180,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The same mark the sidebar draws, on the same pane: see `.activity--unread` in sidebar.css. */
+/* The same mark the sidebar draws, on the same pane: see `.worktree__name--unread` in sidebar.css. */
 .tab--unread .tab__name {
   color: var(--fg);
   font-weight: 600;

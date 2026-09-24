@@ -3,8 +3,10 @@
 // One worktree on the sidebar, in each of its shapes. The row is the only place a checkout's
 // progress and failures are reported, and where a pane somebody else is reading or typing into says so.
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneWatcher, Terminal, Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
 import type { PaneAttention } from '../state/paneAttention'
 
@@ -781,12 +783,46 @@ describe('panes that have printed since they were read', () => {
     expect(pane.className).toContain('pane-row--unread')
     expect(pane.title).toContain('unread')
     expect(screen.getByText('Rewrite the pager').className).toContain('worktree__name--unread')
-    // One dot, the worktree's, ringed; the pane row says it by weight.
+    // One dot, the worktree's, saying the state alone; unread is the names' weight.
     expect(document.querySelectorAll('.pip')).toHaveLength(0)
     const dots = document.querySelectorAll('.activity')
     expect(dots).toHaveLength(1)
-    expect(dots[0]?.classList.contains('activity--unread')).toBe(true)
+    expect(dots[0]?.className).toBe('activity activity--quiet')
     expect(pane.querySelector('.activity')).toBeNull()
+  })
+
+  // In a still frame, or with reduced motion, finished-and-unread once drew the working violet.
+  describe('drawn with the stylesheet', () => {
+    const sheet = document.createElement('style')
+    sheet.textContent = readFileSync(path.join(import.meta.dirname, '../styles/sidebar.css'), 'utf8')
+    beforeAll(() => {
+      document.head.append(sheet)
+    })
+    afterAll(() => {
+      sheet.remove()
+    })
+    const dot = (): Element => document.querySelector('.activity') as Element
+
+    it('draws a stopped, unread pane apart from a working one', () => {
+      mount({ terminals: [terminal({ id: 't1', agent: 'claude' })], unread: ['t1'] })
+      const stopped = { className: dot().className, background: getComputedStyle(dot()).background }
+      cleanup()
+      mount({ terminals: [terminal({ id: 't1', agent: 'claude', busy: true })] })
+      const working = { className: dot().className, background: getComputedStyle(dot()).background }
+
+      expect(stopped.className).not.toBe(working.className)
+      expect(stopped.background).not.toBe(working.background)
+      expect(working.background).toBe('var(--accent-bright)')
+    })
+
+    it('draws asking one way, read or unread', () => {
+      const asking = terminal({ id: 't1', agent: 'claude', lastBellAt: NOW })
+      mount({ terminals: [asking], unread: ['t1'] })
+      const unread = getComputedStyle(dot())
+      expect(dot().className).toBe('activity activity--waiting')
+      expect(unread.outline).toBe('')
+      expect(unread.background).toBe('var(--warning)')
+    })
   })
 
   it('says nothing about a pane nothing has arrived in since', () => {
