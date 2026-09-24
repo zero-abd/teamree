@@ -3,7 +3,14 @@
 // only ever touches the two panes either side of the handle it grabbed.
 
 import type { PaneNode, Terminal } from '@shared/entities'
-import { filePaneName, isFileColumn, isFileLeaf, shownTabId, type FileColumn } from '@shared/filePane'
+import {
+  fileTabName,
+  isFileColumn,
+  isFileLeaf,
+  shownTabId,
+  type FileColumn,
+  type FileLeaf as FileLeafNode
+} from '@shared/filePane'
 import { freshAgentLabel } from '@shared/paneRestore'
 import { minExtent, type Box } from '@shared/paneRoom'
 import type { PlatformModifier } from '../keyboard/platformModifier'
@@ -50,7 +57,7 @@ export function PaneTree({
 }: PaneCallbacks & { node: PaneNode; path: number[] }): React.JSX.Element {
   const names = callbacks.names ?? namesById(node, callbacks.terminals, callbacks.worktree)
   if (isFileLeaf(node)) {
-    return <FileLeaf paneId={node.terminalId} path={node.path} {...callbacks} />
+    return <FileLeaf leaf={node} {...callbacks} />
   }
   if (node.kind === 'leaf') {
     return <PaneLeaf terminalId={node.terminalId} {...callbacks} names={names} />
@@ -60,8 +67,7 @@ export function PaneTree({
 }
 
 function FileLeaf({
-  paneId,
-  path,
+  leaf,
   worktreeId,
   focusedTerminalId,
   onFocus,
@@ -70,19 +76,22 @@ function FileLeaf({
   searchToken,
   onCloseSearch,
   modifier
-}: PaneCallbacks & { paneId: string; path: string }): React.JSX.Element {
+}: PaneCallbacks & { leaf: FileLeafNode }): React.JSX.Element {
   const menu = usePaneMenu(modifier)
+  const paneId = leaf.terminalId
+  const name = fileTabName(leaf)
   return (
     <>
       <FilePane
         paneId={paneId}
         worktreeId={worktreeId}
-        path={path}
+        path={leaf.path}
+        {...(leaf.commit === undefined ? {} : { commit: leaf.commit })}
         focused={focusedTerminalId === paneId}
         onFocus={() => onFocus(paneId)}
         onClose={() => onClose(paneId)}
-        onHeaderMenu={(event) => menu.onContextMenu(paneId, filePaneName(path), event)}
-        onMenu={(event) => menu.onButton(paneId, filePaneName(path), event)}
+        onHeaderMenu={(event) => menu.onContextMenu(paneId, name, event)}
+        onMenu={(event) => menu.onButton(paneId, name, event)}
         searchToken={searchTerminalId === paneId ? searchToken : 0}
         onCloseSearch={onCloseSearch}
       />
@@ -104,7 +113,7 @@ function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColu
     <div className={`column${focused ? ' column--focused' : ''}`}>
       <div className="column__tabs" role="tablist" aria-label="Open files">
         {tabs.map((tab) => {
-          const name = filePaneName(tab.path)
+          const name = fileTabName(tab)
           const on = tab.terminalId === shown
           const preview = node.preview === tab.terminalId
           return (
@@ -145,7 +154,7 @@ function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColu
       </div>
       {tabs.map((tab) => (
         <div key={tab.terminalId} className="column__page" hidden={tab.terminalId !== shown}>
-          <FileLeaf paneId={tab.terminalId} path={tab.path} {...callbacks} />
+          <FileLeaf leaf={tab} {...callbacks} />
         </div>
       ))}
     </div>

@@ -12,6 +12,8 @@ type FileBarProps = {
   onMenu?: ((event: React.MouseEvent<HTMLElement>) => void) | undefined
   onClose: () => void
   children?: React.ReactNode
+  /** Drawn before the path instead of the file glyph. */
+  glyph?: React.ReactNode
 }
 
 export function FileBar({
@@ -22,11 +24,12 @@ export function FileBar({
   onHeaderMenu,
   onMenu,
   onClose,
-  children
+  children,
+  glyph = <FileGlyph />
 }: FileBarProps): React.JSX.Element {
   return (
     <header className="pane__bar file__bar" onContextMenu={onHeaderMenu}>
-      <FileGlyph />
+      {glyph}
       <span className="pane__title file__path" title={title}>
         <span className="file__dir">{path.slice(0, path.length - name.length)}</span>
         {name}
@@ -57,6 +60,15 @@ export function FileGlyph(): React.JSX.Element {
   return (
     <svg className="file__glyph" viewBox="0 0 12 12" aria-hidden="true">
       <path d="M3 1.5 H7.5 L10 4 V10.5 H3 Z M7.5 1.5 V4 H10" />
+    </svg>
+  )
+}
+
+export function CommitGlyph(): React.JSX.Element {
+  return (
+    <svg className="file__glyph" viewBox="0 0 12 12" aria-hidden="true">
+      <circle cx="6" cy="6" r="2.25" />
+      <path d="M0.5 6 H3.75 M8.25 6 H11.5" />
     </svg>
   )
 }

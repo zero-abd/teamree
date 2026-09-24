@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { PaneNode } from './entities'
 import {
+  commitLeaf,
   fileLeaf,
   fileLeavesIn,
   filePaneName,
+  fileTabName,
+  isCommitLeaf,
   fileViewerFor,
   isFileLeaf,
   isFilePaneId,
@@ -39,6 +42,16 @@ describe('file leaves', () => {
     }
     expect(fileLeavesIn(root).map((leaf) => leaf.path)).toEqual(['docs/a.md', 'b.md'])
     expect(fileLeavesIn(null)).toEqual([])
+  })
+
+  it('keeps a commit as a file-column tab named by its title, apart from the files', () => {
+    const commit = commitLeaf('file:c', 'a'.repeat(40), '5bb16ed Fix src/math.ts')
+    const file = fileLeaf('file:f', 'src/math.ts')
+    expect(isFileLeaf(commit)).toBe(true)
+    expect(isCommitLeaf(commit)).toBe(true)
+    expect(isCommitLeaf(file)).toBe(false)
+    expect(fileTabName(commit)).toBe('5bb16ed Fix src/math.ts')
+    expect(fileTabName(file)).toBe('math.ts')
   })
 
   it('prefixes the id and names the pane after the file', () => {

@@ -47,7 +47,8 @@ const PaneNodeSchema: z.ZodType<PaneNode> = z.lazy(() =>
       kind: z.literal('leaf'),
       terminalId: z.string().min(1),
       pane: z.enum(['terminal', 'file']).optional(),
-      path: z.string().min(1).optional()
+      path: z.string().min(1).optional(),
+      commit: z.string().min(1).optional()
     }),
     z.object({
       kind: z.literal('split'),

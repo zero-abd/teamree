@@ -27,17 +27,21 @@ import type {
   Worktree,
   WorktreeChange,
   WorktreeChanges,
+  WorktreeCommitSummary,
   WorktreeLog,
   WorktreeMergePreview,
   WorktreeStatus
 } from '@shared/entities'
 import { DEFAULT_APPEARANCE, type Appearance, type Tone } from '@shared/theme'
 import {
+  commitLeaf,
   DEFAULT_MARKDOWN_PATH,
   fileColumn,
   fileColumnIn,
   fileLeaf,
   fileLeavesIn,
+  type FileLeaf,
+  isCommitLeaf,
   isFilePaneId,
   isMarkdownPath,
   newFilePaneId,
@@ -463,6 +467,8 @@ type WorkspaceState = {
    * `split` puts it to the right of the focused pane instead, `preview` replaces the preview tab.
    */
   openFilePane: (worktreeId: string, path: string, mode?: 'diff' | 'split' | 'preview') => void
+  /** Opens a commit read-only as a tab of the file column, or focuses the tab already on it. */
+  openCommit: (worktreeId: string, commit: WorktreeCommitSummary) => void
   /** Keeps a preview tab open when the next preview comes. */
   pinFilePane: (paneId: string) => void
   /** Shows a file pane's diff, or its text again. */
@@ -1127,6 +1133,36 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     set((state) => ({ worktrees: [...state.worktrees.filter((entry) => entry.id !== worktree.id), created] }))
   }
 
+  /** Puts a new file leaf in the column as a tab, or beside the focused pane; see `openFilePane`. */
+  const placeFileLeaf = (layout: Layout, added: FileLeaf, mode?: 'diff' | 'split' | 'preview'): void => {
+    const column = fileColumnIn(layout.root)
+    let root: PaneNode | null
+    if (mode !== 'split' && column !== null && layout.root !== null) {
+      // A tab takes no room from anyone, so it needs no room check.
+      const preview = column.preview
+      const replace = mode === 'preview' && preview !== undefined && !get().unsavedFiles[preview] ? preview : undefined
+      root = addTab(layout.root, added, { preview: mode === 'preview', replace })
+      if (replace !== undefined) {
+        forgetEdits([replace])
+        get().setPaneDiff(replace, false)
+      }
+    } else {
+      const focused = layout.focusedTerminalId
+      const inTree = focused !== null && collectTerminalIds(layout.root).includes(focused) ? focused : null
+      // The column is made once, beside the focused pane; a split is a file of its own there.
+      const placed = mode === 'split' ? added : fileColumn(added, mode === 'preview')
+      root = withRoom(
+        layout.root,
+        inTree !== null ? splitPaneWith(layout.root, inTree, 'row', placed) : appendPane(layout.root, placed),
+        (grid) => placePaneWithin(layout.root, placed, grid.area, grid.minPane)
+      )
+    }
+    if (root === null) return
+    set({ namingMarkdown: null })
+    if (mode === 'diff') get().setPaneDiff(added.terminalId, true)
+    persistLayout({ worktreeId: layout.worktreeId, root, focusedTerminalId: added.terminalId })
+  }
+
   /** Drops a worktree from this window once the runtime has really removed it. */
   const forgetWorktree = (worktreeId: string): void => {
     forgetEdits(editedIn(worktreeId))
@@ -1733,41 +1769,26 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         return { recentFiles: { ...state.recentFiles, [worktreeId]: recent.slice(0, RECENT_FILES_KEPT) } }
       })
       const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
-      const open = fileLeavesIn(layout.root).find((leaf) => leaf.path === path)
+      const open = fileLeavesIn(layout.root).find((leaf) => leaf.path === path && !isCommitLeaf(leaf))
       if (open) {
         if (mode === 'diff') get().setPaneDiff(open.terminalId, true)
         if (mode !== 'preview') get().pinFilePane(open.terminalId)
         get().focusPane(open.terminalId)
         return
       }
-      const added = fileLeaf(newFilePaneId(), path)
-      const column = fileColumnIn(layout.root)
-      let root: PaneNode | null
-      if (mode !== 'split' && column !== null && layout.root !== null) {
-        // A tab takes no room from anyone, so it needs no room check.
-        const preview = column.preview
-        const replace =
-          mode === 'preview' && preview !== undefined && !get().unsavedFiles[preview] ? preview : undefined
-        root = addTab(layout.root, added, { preview: mode === 'preview', replace })
-        if (replace !== undefined) {
-          forgetEdits([replace])
-          get().setPaneDiff(replace, false)
-        }
-      } else {
-        const focused = layout.focusedTerminalId
-        const inTree = focused !== null && collectTerminalIds(layout.root).includes(focused) ? focused : null
-        // The column is made once, beside the focused pane; a split is a file of its own there.
-        const placed = mode === 'split' ? added : fileColumn(added, mode === 'preview')
-        root = withRoom(
-          layout.root,
-          inTree !== null ? splitPaneWith(layout.root, inTree, 'row', placed) : appendPane(layout.root, placed),
-          (grid) => placePaneWithin(layout.root, placed, grid.area, grid.minPane)
-        )
+      placeFileLeaf(layout, fileLeaf(newFilePaneId(), path), mode)
+    },
+
+    openCommit(worktreeId, commit) {
+      set({ selectedChangePath: null })
+      const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
+      const open = fileLeavesIn(layout.root).find((leaf) => isCommitLeaf(leaf) && leaf.commit === commit.sha)
+      if (open) {
+        get().pinFilePane(open.terminalId)
+        get().focusPane(open.terminalId)
+        return
       }
-      if (root === null) return
-      set({ namingMarkdown: null })
-      if (mode === 'diff') get().setPaneDiff(added.terminalId, true)
-      persistLayout({ worktreeId, root, focusedTerminalId: added.terminalId })
+      placeFileLeaf(layout, commitLeaf(newFilePaneId(), commit.sha, `${commit.shortSha} ${commit.subject}`))
     },
 
     pinFilePane(paneId) {
@@ -1963,10 +1984,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     openPaneSearch() {
       // A watched pane's scrollback is a scaled picture with no search addon; the field opens only over your own.
-      // A file pane has one over its diff only.
+      // A file pane has one over its diff only; a commit is nothing but a diff.
       if (get().focusedWatchId !== null) return
-      const focused = activeLayout()?.focusedTerminalId
-      if (!focused || (isFilePaneId(focused) && get().diffPanes[focused] !== true)) return
+      const layout = activeLayout()
+      const focused = layout?.focusedTerminalId
+      if (!focused) return
+      const commit = fileLeavesIn(layout?.root ?? null).some(
+        (leaf) => leaf.terminalId === focused && isCommitLeaf(leaf)
+      )
+      if (isFilePaneId(focused) && get().diffPanes[focused] !== true && !commit) return
       set((state) => ({ paneSearch: { terminalId: focused, token: (state.paneSearch?.token ?? 0) + 1 } }))
     },
 

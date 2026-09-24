@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { hasCheckout } from '@shared/entities'
-import { fileLeavesIn, isFilePaneId } from '@shared/filePane'
+import { fileLeavesIn, isCommitLeaf, isFilePaneId } from '@shared/filePane'
 import { activeChoice, resolveTone, themeTone, withChoice, type AppearanceMode } from '@shared/theme'
 import { Modal } from '../dialogs/Modal'
 import { holdsModifier, type PlatformModifier } from '../keyboard/platformModifier'
@@ -90,7 +90,8 @@ export function CommandPalette({
   const focusedPane = focusedWatchId === null ? (activeLayout?.focusedTerminalId ?? null) : null
   const focusedPath =
     focusedPane !== null && isFilePaneId(focusedPane)
-      ? fileLeavesIn(activeLayout?.root ?? null).find((leaf) => leaf.terminalId === focusedPane)?.path
+      ? fileLeavesIn(activeLayout?.root ?? null).find((leaf) => leaf.terminalId === focusedPane && !isCommitLeaf(leaf))
+          ?.path
       : undefined
   const change = useFocusedChange(activeWorktreeId, focusedPath)
 
@@ -169,7 +170,14 @@ export function CommandPalette({
   const openRoot = filesOf === null ? null : (layouts[filesOf]?.root ?? null)
   // Opened this session, then whatever file panes the layout came back with.
   const recent = useMemo(
-    () => [...new Set([...opened, ...fileLeavesIn(openRoot).map((leaf) => leaf.path)])],
+    () => [
+      ...new Set([
+        ...opened,
+        ...fileLeavesIn(openRoot)
+          .filter((leaf) => !isCommitLeaf(leaf))
+          .map((leaf) => leaf.path)
+      ])
+    ],
     [opened, openRoot]
   )
 

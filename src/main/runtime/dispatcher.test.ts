@@ -220,6 +220,7 @@ describe('dispatcher', () => {
       'worktree.push',
       'worktree.remove',
       'worktree.rename',
+      'worktree.showCommit',
       'worktree.stageHunk',
       'worktree.startPoints',
       'worktree.status',

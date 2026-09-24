@@ -301,6 +301,15 @@ export type WorktreeCommitSummary = {
   subject: string
 }
 
+/** One commit and its patch against its first parent, as `worktree.showCommit` answers. */
+export type WorktreeCommitPatch = WorktreeCommitSummary & {
+  worktreeId: string
+  patch: string
+  /** True when the patch was cut short at the byte ceiling. */
+  truncated: boolean
+  readAt: number
+}
+
 /** What a worktree has done that its base has not, newest first. Scoped to `base..branch`. */
 export type WorktreeLog = {
   worktreeId: string
@@ -439,6 +448,8 @@ export type PaneNode =
       pane?: 'terminal' | 'file'
       /** The file a file leaf shows, relative to the worktree root; its extension picks the viewer. */
       path?: string
+      /** A file leaf showing this commit read-only instead of a file; `path` then holds the tab's title. */
+      commit?: string
     }
   | {
       kind: 'split'

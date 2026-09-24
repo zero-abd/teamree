@@ -1,5 +1,5 @@
 // A file pane's working-tree diff: whether there is one, the bar's Inline / Side by side / Diff, the
-// staged and unstaged halves with their per-hunk actions, and find over both.
+// staged and unstaged halves with their per-hunk actions, and find over both. A read-only patch reuses the parts.
 
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import type { WorktreeDiff } from '@shared/entities'
@@ -75,32 +75,11 @@ export function useFileDiff(paneId: string, worktreeId: string, path: string): F
 
 /** The bar's diff controls: the layouts while the diff is open, and Diff itself. */
 export function DiffTools({ diff }: { diff: FileDiff }): React.JSX.Element {
-  const setDiffLayout = useWorkspaceStore((state) => state.setDiffLayout)
   const setPaneDiff = useWorkspaceStore((state) => state.setPaneDiff)
   const { shown, layout } = diff
   return (
     <>
-      {shown ? (
-        <>
-          <button
-            type="button"
-            className={`file__tool${layout === 'inline' ? ' file__tool--on' : ''}`}
-            aria-pressed={layout === 'inline'}
-            onClick={() => setDiffLayout('inline')}
-          >
-            Inline
-          </button>
-          <button
-            type="button"
-            className={`file__tool${layout === 'split' ? ' file__tool--on' : ''}`}
-            aria-pressed={layout === 'split'}
-            disabled={fitLayout('split', diff.bodyWidth) !== 'split'}
-            onClick={() => setDiffLayout('split')}
-          >
-            Side by side
-          </button>
-        </>
-      ) : null}
+      {shown ? <LayoutTools layout={layout} bodyWidth={diff.bodyWidth} /> : null}
       <button
         type="button"
         className={`file__tool${shown ? ' file__tool--on' : ''}`}
@@ -112,6 +91,99 @@ export function DiffTools({ diff }: { diff: FileDiff }): React.JSX.Element {
         Diff
       </button>
     </>
+  )
+}
+
+/** Inline and Side by side; the second is off where two columns would not fit. */
+export function LayoutTools({
+  layout,
+  bodyWidth
+}: {
+  layout: DiffLayout
+  bodyWidth: number | null
+}): React.JSX.Element {
+  const setDiffLayout = useWorkspaceStore((state) => state.setDiffLayout)
+  return (
+    <>
+      <button
+        type="button"
+        className={`file__tool${layout === 'inline' ? ' file__tool--on' : ''}`}
+        aria-pressed={layout === 'inline'}
+        onClick={() => setDiffLayout('inline')}
+      >
+        Inline
+      </button>
+      <button
+        type="button"
+        className={`file__tool${layout === 'split' ? ' file__tool--on' : ''}`}
+        aria-pressed={layout === 'split'}
+        disabled={fitLayout('split', bodyWidth) !== 'split'}
+        onClick={() => setDiffLayout('split')}
+      >
+        Side by side
+      </button>
+    </>
+  )
+}
+
+/** One patch read-only, with find over it: no Stage, Unstage or Discard. `patch` is null while it is read. */
+export function ReadOnlyDiffBody({
+  patch,
+  truncated,
+  error,
+  layout,
+  searchToken = 0,
+  onCloseSearch
+}: {
+  patch: string | null
+  truncated: boolean
+  error: string | null
+  layout: DiffLayout
+  searchToken?: number
+  onCloseSearch?: (() => void) | undefined
+}): React.JSX.Element {
+  const scroller = useRef<HTMLDivElement | null>(null)
+  const find = useDiffFind(scroller, null, patch === '' ? null : patch, searchToken)
+  const bar = findBar(find, scroller, searchToken, onCloseSearch)
+  if (patch === null || patch === '') {
+    return (
+      <div className="file__diffs">
+        {bar}
+        <p className="file__state">{patch === null ? (error ?? 'Reading…') : 'No changes'}</p>
+      </div>
+    )
+  }
+  return (
+    <div className="file__diffs">
+      {bar}
+      <div className="file__diff" ref={scroller} tabIndex={-1}>
+        <PatchView patch={patch} truncated={truncated} layout={layout} reveal={find.reveal(0)} />
+      </div>
+    </div>
+  )
+}
+
+/** The find field over a diff, while it is open. */
+function findBar(
+  find: DiffFind,
+  scroller: React.RefObject<HTMLDivElement | null>,
+  searchToken: number,
+  onCloseSearch: (() => void) | undefined
+): React.JSX.Element | null {
+  if (searchToken === 0) return null
+  return (
+    <TerminalSearchBar
+      state={find.state}
+      focusToken={searchToken}
+      limit={DIFF_MATCH_LIMIT}
+      onQueryChange={find.query}
+      onToggle={find.toggle}
+      onStep={find.step}
+      onClose={() => {
+        onCloseSearch?.()
+        scroller.current?.focus()
+      }}
+    />
   )
 }
 
@@ -136,21 +208,7 @@ export function DiffBody({
   const scroller = useRef<HTMLDivElement | null>(null)
   const find = useDiffFind(scroller, staged?.patch ?? null, working?.patch ?? null, searchToken)
 
-  const bar =
-    searchToken > 0 ? (
-      <TerminalSearchBar
-        state={find.state}
-        focusToken={searchToken}
-        limit={DIFF_MATCH_LIMIT}
-        onQueryChange={find.query}
-        onToggle={find.toggle}
-        onStep={find.step}
-        onClose={() => {
-          onCloseSearch?.()
-          scroller.current?.focus()
-        }}
-      />
-    ) : null
+  const bar = findBar(find, scroller, searchToken, onCloseSearch)
 
   if (diffs === null || (staged === null && working === null)) {
     return (
@@ -366,7 +424,7 @@ function scrollToRange(root: HTMLElement, range: Range): void {
 }
 
 /** The element's width while `active`, kept current as it resizes; null until measured. */
-function useWidth(ref: React.RefObject<HTMLElement | null>, active: boolean): number | null {
+export function useWidth(ref: React.RefObject<HTMLElement | null>, active: boolean): number | null {
   const [width, setWidth] = useState<number | null>(null)
   useEffect(() => {
     const element = ref.current

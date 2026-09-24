@@ -28,6 +28,22 @@ export function fileLeaf(id: string, path: string): FileLeaf {
   return { kind: 'leaf', terminalId: id, pane: 'file', path }
 }
 
+/** A file-column tab showing one commit read-only; its `path` is the title the tab reads. */
+export type CommitLeaf = FileLeaf & { commit: string }
+
+export function commitLeaf(id: string, sha: string, title: string): CommitLeaf {
+  return { ...fileLeaf(id, title), commit: sha }
+}
+
+export function isCommitLeaf(node: PaneNode | null | undefined): node is CommitLeaf {
+  return isFileLeaf(node) && typeof node.commit === 'string' && node.commit.length > 0
+}
+
+/** What a file-column tab reads: a commit's title whole, a file by its name. */
+export function fileTabName(leaf: FileLeaf): string {
+  return isCommitLeaf(leaf) ? leaf.path : filePaneName(leaf.path)
+}
+
 /** A fresh pane id; `random` is injected so a test can choose it. */
 export function newFilePaneId(random: () => string = () => crypto.randomUUID()): string {
   return `${FILE_PANE_PREFIX}${random()}`

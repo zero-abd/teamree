@@ -2,7 +2,7 @@
 // A tab owns no visibility, so it is a name and a jump target; names and states are the sidebar's.
 
 import type { AgentKind, PaneNode, Terminal } from '@shared/entities'
-import { fileLeavesIn, filePaneName, isFileColumn, isFileLeaf, shownTabId, type FileColumn } from '@shared/filePane'
+import { fileLeavesIn, fileTabName, isFileColumn, isFileLeaf, shownTabId, type FileColumn } from '@shared/filePane'
 import {
   activityOf,
   dotTone,
@@ -47,7 +47,7 @@ export function paneTabs(
     if (isFileColumn(node)) {
       const files = fileLeavesIn(node)
       const shown = files.find((file) => file.terminalId === shownTabId(node)) ?? files[0]
-      const label = filePaneName(shown?.path ?? '')
+      const label = shown === undefined ? '' : fileTabName(shown)
       const ids = files.map((file) => file.terminalId)
       return {
         terminalId: shown?.terminalId ?? '',
@@ -60,7 +60,7 @@ export function paneTabs(
       }
     }
     if (isFileLeaf(node)) {
-      const label = filePaneName(node.path)
+      const label = fileTabName(node)
       return { terminalId: node.terminalId, agent: undefined, label, text: label, activity: null, kind: 'file' }
     }
     const index = shells.indexOf(node)

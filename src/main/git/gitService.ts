@@ -12,6 +12,7 @@ import type {
   Worktree,
   WorktreeChanges,
   WorktreeCommit,
+  WorktreeCommitPatch,
   WorktreeDiff,
   WorktreeDiscard,
   WorktreeFileMatches,
@@ -38,6 +39,7 @@ import { readWorktreeInventory } from './worktreeInventory'
 import { allocateBranchName, allocateCheckoutPath, branchCollides } from './worktreeNaming'
 import { readMergePreview } from './mergePreview'
 import { readWorktreeLog } from './worktreeLog'
+import { readCommit } from './worktreeShowCommit'
 import { commitWorktree } from './worktreeCommit'
 import { applyHunk, unstagePath } from './worktreeHunk'
 import { discardHunk, discardPath, type Trash } from './worktreeDiscard'
@@ -608,6 +610,19 @@ export class GitService {
       baseRef: project?.baseRef ?? 'HEAD',
       branch: worktree.branch,
       ...(params.limit === undefined ? {} : { limit: params.limit }),
+      now: this.#now
+    })
+  }
+
+  /** One commit's patch, read from the worktree, which shares the repository's objects. */
+  async worktreeShowCommit(params: ParamsOf<'worktree.showCommit'>): Promise<WorktreeCommitPatch> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'a commit')
+    return readCommit(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      sha: params.sha,
+      ...(params.contextLines === undefined ? {} : { contextLines: params.contextLines }),
+      ...(params.maxBytes === undefined ? {} : { maxBytes: params.maxBytes }),
       now: this.#now
     })
   }

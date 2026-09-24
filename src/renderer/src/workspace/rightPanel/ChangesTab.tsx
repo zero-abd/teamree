@@ -6,7 +6,8 @@ import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { openInBrowser } from '../../shell/openInBrowser'
 import { commitScope, useWorkspaceStore, type PushState } from '../../state/workspaceStore'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
-import type { WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
+import type { PaneNode, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
+import { fileColumnIn, isCommitLeaf, shownTabId } from '@shared/filePane'
 
 export function ChangesTab(): React.JSX.Element | null {
   const worktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
@@ -27,6 +28,10 @@ export function ChangesTab(): React.JSX.Element | null {
   const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
+  const openCommit = useWorkspaceStore((state) => state.openCommit)
+  const shownCommit = useWorkspaceStore((state) =>
+    worktreeId ? shownCommitIn(state.layouts[worktreeId]?.root ?? null) : null
+  )
   const [menu, setMenu] = useState<{ path: string; at: RowMenuAnchor } | null>(null)
   // Per worktree: the panel is not remounted on tab change, and a message could land on the wrong diff.
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -66,7 +71,7 @@ export function ChangesTab(): React.JSX.Element | null {
         <div className="changes__head">
           <span className="changes__ref" title={`↑ ${status.upstream ?? log?.baseRef ?? ''}  ↓ ${log?.baseRef ?? ''}`}>
             <span className="changes__branch">{status.branch}</span>
-            {` · ↑${status.ahead} ↓${status.behind}`}
+            {aheadBehind(status)}
           </span>
           {push?.phase === 'failed' ? (
             <span className="changes__pushError" role="alert">
@@ -218,16 +223,26 @@ export function ChangesTab(): React.JSX.Element | null {
 
       {log && log.commits.length > 0 ? (
         <section className="commits" aria-label="Commits this worktree has made">
-          <h3 className="commits__title">
-            {log.commits.length}
-            {log.truncated ? '+' : ''} commit{log.commits.length === 1 && !log.truncated ? '' : 's'} not in{' '}
-            {log.baseRef}
+          <h3 className="commits__title" title={`Not in ${log.baseRef}`}>
+            Commits
+            <span className="panel__count">
+              {log.commits.length}
+              {log.truncated ? '+' : ''}
+            </span>
           </h3>
           <ul className="commits__list">
             {log.commits.map((commit) => (
-              <li className="commit" key={commit.sha} title={`${commit.author} · ${commit.committedAt}`}>
-                <span className="commit__sha">{commit.shortSha}</span>
-                <span className="commit__subject">{commit.subject}</span>
+              <li className={`commit${commit.sha === shownCommit ? ' commit--selected' : ''}`} key={commit.sha}>
+                <button
+                  type="button"
+                  className="commit__open"
+                  aria-current={commit.sha === shownCommit ? 'true' : undefined}
+                  title={`${commit.author} · ${commit.committedAt}`}
+                  onClick={() => openCommit(worktreeId, commit)}
+                >
+                  <span className="commit__sha">{commit.shortSha}</span>{' '}
+                  <span className="commit__subject">{commit.subject}</span>
+                </button>
               </li>
             ))}
           </ul>
@@ -235,6 +250,21 @@ export function ChangesTab(): React.JSX.Element | null {
       ) : null}
     </section>
   )
+}
+
+/** ` · ↑2 ↓1` with a zero side left out, and nothing when both are zero. */
+function aheadBehind(status: WorktreeStatus): string {
+  const arrows = [status.ahead > 0 ? `↑${status.ahead}` : '', status.behind > 0 ? `↓${status.behind}` : '']
+  const shown = arrows.filter((arrow) => arrow !== '').join(' ')
+  return shown === '' ? '' : ` · ${shown}`
+}
+
+/** The commit the file column is showing, if its shown tab is one. */
+export function shownCommitIn(root: PaneNode | null): string | null {
+  const column = fileColumnIn(root)
+  if (column === null) return null
+  const shown = column.children.find((child) => child.kind === 'leaf' && child.terminalId === shownTabId(column))
+  return isCommitLeaf(shown) ? shown.commit : null
 }
 
 const COMMIT_LABEL = { ticked: 'Commit', staged: 'Commit Staged', all: 'Commit All' } as const

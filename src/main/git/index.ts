@@ -38,6 +38,7 @@ export { commitWorktree } from './worktreeCommit'
 export { applyHunk, hunkPatch, unstagePath } from './worktreeHunk'
 export { DEFAULT_LOG_LIMIT, parseLogRecords, readWorktreeLog } from './worktreeLog'
 export { pushRefusal, pushWorktree } from './worktreePush'
+export { readCommit } from './worktreeShowCommit'
 export { parsePorcelainV2, readWorktreeStatus, type ParsedStatus } from './worktreeStatus'
 export {
   DEFAULT_MIN_INTERVAL_MS,

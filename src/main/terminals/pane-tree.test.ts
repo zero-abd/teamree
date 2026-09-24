@@ -309,6 +309,23 @@ describe('file leaves', () => {
     expectWellFormed(root)
   })
 
+  it('keeps the commit a file leaf shows, and drops one that is not a string', () => {
+    const commit: PaneNode = {
+      kind: 'leaf',
+      terminalId: 'file:2',
+      pane: 'file',
+      path: 'abc1234 Add sub',
+      commit: 'abc1234'
+    }
+    expect(parsePaneNode(commit)).toEqual(commit)
+    expect(parsePaneNode({ ...commit, commit: 7 })).toStrictEqual({
+      kind: 'leaf',
+      terminalId: 'file:2',
+      pane: 'file',
+      path: 'abc1234 Add sub'
+    })
+  })
+
   it('drops the file fields a leaf cannot honour, and refuses a file leaf with no path', () => {
     expect(parsePaneNode({ kind: 'leaf', terminalId: 'a', pane: 'terminal' })).toEqual(leafPane('a'))
     expect(parsePaneNode({ kind: 'leaf', terminalId: 'a', pane: 'video', path: 'x' })).toEqual(leafPane('a'))

@@ -2,7 +2,7 @@
 // Raised by right-click, ⇧F10, the context-menu key or a file pane's `⋯`; the chords are the shortcut table's.
 
 import { useCallback, useState } from 'react'
-import { fileLeavesIn, fileViewerFor } from '@shared/filePane'
+import { fileLeavesIn, fileViewerFor, isCommitLeaf } from '@shared/filePane'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { openAsArtifact } from '../markdown/openAsArtifact'
@@ -136,6 +136,15 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
   ]
 
   const file = fileLeavesIn(root).find((leaf) => leaf.terminalId === terminalId)
+  if (isCommitLeaf(file)) {
+    const sha = file.commit
+    return [
+      { label: 'Copy SHA', onChoose: () => void store.copyToClipboard(sha, 'the commit id') },
+      { ...maximize, separated: true },
+      ...moves,
+      ...closing
+    ]
+  }
   if (file !== undefined) {
     const absolute = `${worktree.path}/${file.path}`
     return [

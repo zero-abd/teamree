@@ -1,9 +1,9 @@
 /** @vitest-environment jsdom */
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorktreeChange, WorktreeLog, WorktreePush, WorktreeStatus } from '@shared/entities'
-import { fileLeavesIn } from '@shared/filePane'
+import { fileLeavesIn, isCommitLeaf } from '@shared/filePane'
 
 const call = vi.fn()
 const openInBrowser = vi.fn()
@@ -24,6 +24,7 @@ vi.mock('../../shell/openInBrowser', () => ({ openInBrowser: (url: string) => op
 const { useWorkspaceStore } = await import('../../state/workspaceStore')
 const { ChangesTab, canDiscard } = await import('./ChangesTab')
 const { ConfirmDiscardDialog } = await import('../../dialogs/ConfirmDiscardDialog')
+const { FilePane } = await import('../../panes/FilePane')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -390,6 +391,121 @@ describe('the changes header', () => {
     expect(ref.textContent).toBe('rewrite-the-pager · ↑2 ↓3')
     expect(ref.title).toBe('↑ origin/main  ↓ origin/main')
     expect(screen.getByRole('button', { name: 'Publish branch' })).toBeTruthy()
+  })
+})
+
+describe('the ahead and behind arrows', () => {
+  it('shows nothing when both are zero', () => {
+    seed({ ahead: 0, behind: 0 })
+    render(<ChangesTab />)
+    expect(document.querySelector('.changes__ref')?.textContent).toBe('rewrite-the-pager')
+  })
+
+  it('shows only the arrow that is not zero', () => {
+    seed({ ahead: 2, behind: 0 })
+    render(<ChangesTab />)
+    expect(document.querySelector('.changes__ref')?.textContent).toBe('rewrite-the-pager · ↑2')
+    cleanup()
+    seed({ ahead: 0, behind: 3 })
+    render(<ChangesTab />)
+    expect(document.querySelector('.changes__ref')?.textContent).toBe('rewrite-the-pager · ↓3')
+  })
+})
+
+describe('the commits list', () => {
+  const sha = 'a'.repeat(40)
+  const patch = [
+    'diff --git a/src/rank.ts b/src/rank.ts',
+    'index 3f8a1c2..9b21e40 100644',
+    '--- a/src/rank.ts',
+    '+++ b/src/rank.ts',
+    '@@ -1,2 +1,3 @@',
+    ' export function rank() {',
+    '+  return recency()',
+    ' }',
+    ''
+  ].join('\n')
+
+  function withLayout(): void {
+    seed()
+    useWorkspaceStore.setState({
+      layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } }
+    })
+  }
+
+  it('is headed Commits with its count as a pill, the base ref in the hover', () => {
+    seed()
+    render(<ChangesTab />)
+    const heading = screen.getByRole('heading', { name: /Commits/ })
+    expect(heading.textContent).toBe('Commits1')
+    expect(heading.querySelector('.panel__count')?.textContent).toBe('1')
+    expect(heading.getAttribute('title')).toBe('Not in origin/main')
+  })
+
+  it('opens find over a commit, which is all diff', () => {
+    withLayout()
+    useWorkspaceStore.getState().openCommit('w1', log.commits[0]!)
+    useWorkspaceStore.getState().openPaneSearch()
+    const leaf = fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root)[0]!
+    expect(useWorkspaceStore.getState().paneSearch?.terminalId).toBe(leaf.terminalId)
+  })
+
+  it('opens a commit read-only in the file column, titled by its sha and subject, with the row selected', async () => {
+    withLayout()
+    call.mockImplementation((method: string) =>
+      method === 'worktree.showCommit'
+        ? Promise.resolve({
+            worktreeId: 'w1',
+            sha,
+            shortSha: 'aaaaaaa',
+            author: 'A',
+            committedAt: '',
+            subject: 'Rank by recency',
+            patch,
+            truncated: false,
+            readAt: 0
+          })
+        : new Promise(() => {})
+    )
+    render(<ChangesTab />)
+
+    const row = screen.getByRole('button', { name: 'aaaaaaa Rank by recency' })
+    fireEvent.click(row)
+
+    const leaves = fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root)
+    expect(leaves).toHaveLength(1)
+    const leaf = leaves[0]!
+    expect(isCommitLeaf(leaf) && leaf.commit).toBe(sha)
+    expect(leaf.path).toBe('aaaaaaa Rank by recency')
+    expect(useWorkspaceStore.getState().layouts.w1!.focusedTerminalId).toBe(leaf.terminalId)
+    expect(row.getAttribute('aria-current')).toBe('true')
+    expect(row.closest('li')?.className).toContain('commit--selected')
+
+    // A second click goes back to the same tab.
+    fireEvent.click(row)
+    expect(fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root)).toHaveLength(1)
+
+    cleanup()
+    render(
+      <FilePane
+        paneId={leaf.terminalId}
+        worktreeId="w1"
+        path={leaf.path}
+        commit={sha}
+        focused
+        onFocus={() => {}}
+        onClose={() => {}}
+      />
+    )
+    expect(call).toHaveBeenCalledWith('worktree.showCommit', { worktreeId: 'w1', sha })
+    await screen.findByText('recency()', { exact: false })
+    expect(screen.getByRole('region', { name: 'aaaaaaa Rank by recency' })).toBeTruthy()
+    expect(document.querySelector('.patch__row--added')).not.toBeNull()
+    expect(screen.queryByRole('button', { name: 'Stage' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Diff' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Inline' })).toBeTruthy()
+    expect(call).not.toHaveBeenCalledWith('file.read', expect.anything())
   })
 })
 
