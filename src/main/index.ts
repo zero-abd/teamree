@@ -219,7 +219,12 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
       windowFocused: () => mainWindow()?.isFocused() ?? false,
       show: (spec) => {
         if (!Notification.isSupported()) return
-        const notification = new Notification({ title: spec.title, body: spec.body, silent: spec.silent })
+        const notification = new Notification({
+          title: spec.title,
+          ...(spec.subtitle === undefined ? {} : { subtitle: spec.subtitle }),
+          body: spec.body,
+          silent: spec.silent
+        })
         notification.on('click', spec.onActivate)
         notification.show()
       },

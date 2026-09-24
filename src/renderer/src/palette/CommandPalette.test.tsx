@@ -96,7 +96,7 @@ describe('starting an agent from the palette', () => {
     const labels = rows()
       .map((row) => row.querySelector('.palette__label')?.textContent ?? '')
       .filter((label) => label.startsWith('Start '))
-    expect(labels).toEqual(['Start Claude Here', 'Start Codex Here'])
+    expect(labels).toEqual(['Start Claude Code Here', 'Start Codex Here'])
   })
 
   it('offers none when nothing is installed', () => {

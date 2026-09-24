@@ -13,6 +13,7 @@ import {
   paneLabel,
   paneName,
   paneNames,
+  paneNamesById,
   paneText,
   sinceLabel,
   truncateName,
@@ -321,7 +322,7 @@ describe('paneNames', () => {
       terminal({ id: 'c', agent: 'claude', title: 'node' })
     ])
 
-    expect(names).toEqual(['Claude Code 1', 'Claude Code 2', 'Claude Code 3'])
+    expect(names).toEqual(['Claude Code', 'Claude Code 2', 'Claude Code 3'])
   })
 
   it('leaves a name alone when nothing else in the worktree reads like it', () => {
@@ -345,6 +346,54 @@ describe('paneNames', () => {
   })
 })
 
+describe('paneNames, with the number each pane was given when it started', () => {
+  const zsh = (id: string, ordinal: number, title = ''): Terminal => terminal({ id, ordinal, title, shell: '/bin/zsh' })
+
+  it('names a pane by its own number, whatever else is open', () => {
+    expect(paneName(zsh('a', 1))).toBe('zsh')
+    expect(paneName(zsh('b', 2))).toBe('zsh 2')
+    expect(paneName(terminal({ id: 'c', agent: 'claude', ordinal: 3 }))).toBe('Claude Code 3')
+  })
+
+  // The split made last sits first in the tree: tabs and headers list it first, the sidebar and board last.
+  it('gives each pane the same name in any order it is listed in', () => {
+    const older = zsh('older', 1)
+    const newer = zsh('newer', 2)
+    expect(paneNames([older, newer])).toEqual(['zsh', 'zsh 2'])
+    expect(paneNames([newer, older])).toEqual(['zsh 2', 'zsh'])
+  })
+
+  it('keeps a pane’s number when the pane before it closes', () => {
+    expect(paneNames([zsh('newer', 2)])).toEqual(['zsh 2'])
+  })
+
+  // A title is what a program says now; the number belongs to the pane.
+  it('names a shell running something by what it runs, and by its number again at the prompt', () => {
+    expect(paneName(zsh('b', 2, 'npm test'))).toBe('npm test')
+    expect(paneName(zsh('b', 2, 'abd@studio: ~/repos/teamree'))).toBe('zsh 2')
+  })
+
+  // Typed into a shell, the agent is not the pane's identity: the pane started as an agent keeps its name.
+  it('numbers a name read off the screen around the names given at creation', () => {
+    const names = paneNames([
+      terminal({ id: 'agent', agent: 'claude', ordinal: 1 }),
+      terminal({ id: 'typed', foregroundAgent: 'claude', ordinal: 1, shell: '/bin/zsh' }),
+      terminal({ id: 'second', agent: 'claude', ordinal: 2 })
+    ])
+    expect(names).toEqual(['Claude Code', 'Claude Code 3', 'Claude Code 2'])
+  })
+})
+
+describe('paneNamesById', () => {
+  it('keys the names by terminal id', () => {
+    const names = paneNamesById([
+      terminal({ id: 'a', agent: 'codex', ordinal: 1 }),
+      terminal({ id: 'b', agent: 'codex', ordinal: 2 })
+    ])
+    expect(names).toEqual({ a: 'Codex', b: 'Codex 2' })
+  })
+})
+
 describe('paneText', () => {
   // The glyph already says which agent; the word beside it would say it again.
   it('draws nothing beside an agent that nobody named', () => {
@@ -355,7 +404,7 @@ describe('paneText', () => {
   it('keeps only the number that tells two unnamed twins apart', () => {
     const panes = [terminal({ id: 'a', agent: 'codex' }), terminal({ id: 'b', agent: 'codex' })]
     const names = paneNames(panes)
-    expect(panes.map((pane, index) => paneText(pane, names[index] ?? ''))).toEqual(['1', '2'])
+    expect(panes.map((pane, index) => paneText(pane, names[index] ?? ''))).toEqual(['', '2'])
   })
 
   it('draws a task name and a shell’s name in full', () => {
@@ -391,7 +440,7 @@ describe('agentRows naming', () => {
       0
     )
 
-    expect(rows.map((entry) => entry.label)).toEqual(['Claude Code 1', 'Claude Code 2'])
+    expect(rows.map((entry) => entry.label)).toEqual(['Claude Code', 'Claude Code 2'])
   })
 
   // A pane in another worktree is not on this row and cannot be confused with it.

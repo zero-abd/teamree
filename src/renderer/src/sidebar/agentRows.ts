@@ -184,13 +184,14 @@ export function agentRows(
   })
 }
 
-/** Everything a pane's name can be read from; a teammate's pane is these fields minus the first. */
+/** Everything a pane's name can be read from; a teammate's pane is these fields minus `foregroundAgent`. */
 export type PaneNameSource = {
   label?: string
   agent?: AgentKind
   foregroundAgent?: AgentKind
   title: string
   shell: string
+  ordinal?: number
 }
 
 /** The agent a pane runs: the one it was started as, else one seen in its foreground. */
@@ -217,29 +218,42 @@ export function paneName(pane: PaneNameSource): string {
   const label = pane.label?.trim()
   if (label !== undefined && label.length > 0) return label
   const agent = paneAgent(pane)
-  return agent === undefined ? paneLabel(pane) : harnessName(agent)
+  const name = agent === undefined ? paneLabel(pane) : harnessName(agent)
+  return hasOwnNumber(pane) && pane.ordinal !== undefined && pane.ordinal > 1 ? `${name} ${pane.ordinal}` : name
+}
+
+/** Whether the name is the program the pane was started as, which its `ordinal` counts; a title or a typed agent is not. */
+function hasOwnNumber(pane: PaneNameSource): boolean {
+  if (pane.ordinal === undefined || isNamed(pane)) return false
+  if (pane.agent !== undefined) return true
+  return pane.foregroundAgent === undefined && paneLabel(pane) === shellName(pane.shell)
 }
 
 /**
- * The names for one worktree's panes, disambiguated: unnamed duplicates get an
- * index counted among themselves; names a person typed are left exactly as typed.
+ * One worktree's panes named, in the order they were opened. A name with its own
+ * number keeps it; any other name read twice gets the next number free, so no list order renames a pane.
  */
 export function paneNames(panes: readonly PaneNameSource[], worktree?: WorktreeNameSource): string[] {
-  const names = panes.map((pane) => paneName(paneInWorktree(pane, worktree)))
-  const chosen = panes.map(isNamed)
-  const totals = new Map<string, number>()
-  for (const [index, name] of names.entries()) {
-    if (chosen[index]) continue
-    totals.set(name, (totals.get(name) ?? 0) + 1)
-  }
-
-  const seen = new Map<string, number>()
+  const shown = panes.map((pane) => paneInWorktree(pane, worktree))
+  const names = shown.map(paneName)
+  const fixed = shown.map((pane) => isNamed(pane) || hasOwnNumber(pane))
+  const taken = new Set(names.filter((_name, index) => fixed[index]))
   return names.map((name, index) => {
-    if (chosen[index] || (totals.get(name) ?? 0) < 2) return name
-    const position = (seen.get(name) ?? 0) + 1
-    seen.set(name, position)
-    return `${name} ${position}`
+    if (fixed[index]) return name
+    let free = name
+    for (let next = 2; taken.has(free); next += 1) free = `${name} ${next}`
+    taken.add(free)
+    return free
   })
+}
+
+/** `paneNames` by terminal id, for a surface that lists the panes in another order than they were opened. */
+export function paneNamesById(
+  panes: readonly (PaneNameSource & { id: string })[],
+  worktree?: WorktreeNameSource
+): Record<string, string> {
+  const names = paneNames(panes, worktree)
+  return Object.fromEntries(panes.map((pane, index) => [pane.id, names[index] ?? paneName(pane)]))
 }
 
 /**

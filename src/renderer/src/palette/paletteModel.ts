@@ -11,6 +11,7 @@ import {
 import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
 import { APPEARANCE_MODES, BUILT_IN_THEMES, type AppearanceMode } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from '../settings/AppearanceSettings'
+import { harnessName } from '../agents/harnesses'
 import { runName, siblingRuns } from '../compare/siblingRuns'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { MENU_ORDER, menuLabel } from '../menu/menuBar'
@@ -253,7 +254,7 @@ function agentItems(context: PaletteContext): PaletteItem[] {
   return [...preferred, ...rest].map((agent) => ({
     kind: 'agent',
     id: agent.command,
-    label: `Start ${agent.command.charAt(0).toUpperCase()}${agent.command.slice(1)} Here`,
+    label: `Start ${harnessName(agent.kind)} Here`,
     hint: '',
     detail: '',
     // No "agent": the matcher takes the first word-start it can, and "this" before "here" once sent

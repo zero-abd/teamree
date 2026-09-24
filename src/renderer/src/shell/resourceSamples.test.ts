@@ -103,7 +103,7 @@ describe('groupByWorktree', () => {
       }
     )
     expect(groups.map((group) => group.name)).toEqual(['fix login', 'pager'])
-    expect(groups[0]?.panes.map((row) => row.name)).toEqual(['claude 1', 'claude 2'])
+    expect(groups[0]?.panes.map((row) => row.name)).toEqual(['claude', 'claude 2'])
   })
 
   it('keeps a pane whose worktree it cannot name, under the id', () => {

@@ -372,6 +372,8 @@ export type Terminal = {
    * this outranks everything derived.
    */
   label?: string
+  /** Its number among the worktree's panes started as the same agent or shell, from 1; never reused while the runtime runs. */
+  ordinal?: number
   /**
    * True while output is still arriving. The only honest signal about whether
    * an agent is working: a quiet terminal is what "waiting for you" looks like from outside.
@@ -814,6 +816,8 @@ export type PeerPane = {
   shell: string
   /** What the owner called it, when somebody did. Absent from a peer built before names crossed. */
   label?: string
+  /** `Terminal.ordinal` on the owner's machine; absent from a peer built before it crossed. */
+  ordinal?: number
   agent?: AgentKind
   running: boolean
   exitCode?: number

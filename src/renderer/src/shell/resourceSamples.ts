@@ -2,7 +2,7 @@
 // the sidebar's names; the runtime has neither.
 
 import type { PaneResources, SystemResources, Terminal, Worktree } from '@shared/entities'
-import { paneNames } from '../sidebar/agentRows'
+import { paneNamesById } from '../sidebar/agentRows'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 
 /** A minute at the popover's cadence, which is enough to see a build start and end. */
@@ -66,19 +66,18 @@ export function groupByWorktree(
 
   return order.map((worktreeId) => {
     const panes = byWorktree.get(worktreeId) ?? []
-    const known = panes.map((pane) => terminals[pane.terminalId])
     const worktree = worktrees.find((entry) => entry.id === worktreeId)
-    const names = paneNames(
-      known.map((terminal) => terminal ?? { title: '', shell: '' }),
+    const names = paneNamesById(
+      Object.values(terminals).filter((terminal) => terminal.worktreeId === worktreeId),
       worktree
     )
     return {
       worktreeId,
       name: worktree === undefined ? worktreeId : worktreeLabel(worktreeDisplay(worktree)),
-      panes: panes.map((pane, index) => ({
+      panes: panes.map((pane) => ({
         pane,
-        name: known[index] === undefined ? pane.terminalId : (names[index] ?? pane.terminalId),
-        terminal: known[index]
+        name: names[pane.terminalId] ?? pane.terminalId,
+        terminal: terminals[pane.terminalId]
       }))
     }
   })

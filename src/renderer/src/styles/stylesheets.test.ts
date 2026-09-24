@@ -374,11 +374,23 @@ describe('stylesheets', () => {
     })
 
     // The hidden ⋯ held 24px of every row; it takes room only while it shows.
-    it('keeps the row’s hidden ⋯ out of the title’s width', () => {
+    // The row under the pointer is the one being read: its title's cut must not move when the ⋯ shows.
+    it('lays the ⋯ and the facts over the title’s tail instead of taking its width', () => {
       expect(declarationOf(ruleFor('sidebar.css', '.worktree__action'), 'position')).toBe('absolute')
-      const shown =
-        ".worktree:is(:hover, :focus-within, :has(.worktree__action[aria-expanded='true'])) .worktree__row:has(> .worktree__action)"
-      expect(declarationOf(ruleFor('sidebar.css', shown), 'padding-right')).toBeDefined()
+      const lit =
+        ".worktree:is(:hover, :has(.worktree__open:focus-visible, .worktree__action:focus-visible, .worktree__action[aria-expanded='true']))"
+      expect(declarationOf(ruleFor('sidebar.css', `${lit} .worktree__end`), 'translate')).toBeDefined()
+      expect(declarationOf(ruleFor('sidebar.css', '.worktree--active .worktree__end .worktree__git'), 'position')).toBe(
+        'absolute'
+      )
+      const reflowing: string[] = []
+      postcss.parse(readFileSync(path.join(here, 'sidebar.css'), 'utf8')).walkRules((rule) => {
+        if (!/:hover|focus/.test(rule.selector) || !/\.worktree__(row|open|title|name|end)$/.test(rule.selector)) return
+        rule.walkDecls(/^(padding|margin|width|gap|display)/, (decl) => {
+          reflowing.push(`${rule.selector} { ${decl.prop} }`)
+        })
+      })
+      expect(reflowing).toEqual([])
     })
 
     // Closed, the panel is a 30px strip with a 1px border; a count on its edge was clipped.

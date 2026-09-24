@@ -1,8 +1,9 @@
-// The window's end of agent-stopped notifications: main raises them, this publishes the focused pane
-// and the interrupt preference when they change, and turns a click into `revealPane` on a checked id.
+// The window's end of agent-stopped notifications: main raises them, this publishes the focused pane,
+// the interrupt preference and each pane's name when they change, and turns a click into `revealPane` on a checked id.
 
 import { useEffect } from 'react'
-import type { Layout } from '@shared/entities'
+import type { Layout, Terminal, Worktree } from '@shared/entities'
+import { dashboardRows } from '../dashboard/dashboardRows'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
 /** The parts of the store this reads, named so this module does not need its type. */
@@ -19,6 +20,20 @@ export function focusedOwnPaneId(state: FocusState): string | null {
   return layout?.focusedTerminalId ?? null
 }
 
+/** What a notification calls each pane: the board's name for it. */
+function paneNamesForNotices(state: {
+  terminals: Readonly<Record<string, Terminal>>
+  worktrees: readonly Worktree[]
+}): Record<string, string> {
+  const rows = dashboardRows({
+    terminals: Object.values(state.terminals),
+    worktrees: state.worktrees,
+    projects: [],
+    now: 0
+  })
+  return Object.fromEntries(rows.map((row) => [row.terminalId, row.label]))
+}
+
 export function useAgentNotices(): void {
   useEffect(() => {
     // Absent without the preload (tests, a browser on the dev server).
@@ -33,9 +48,18 @@ export function useAgentNotices(): void {
     })
 
     let published: string | null = null
+    let named: { terminals: unknown; worktrees: unknown; names: Record<string, string> } | null = null
     const publish = (): void => {
       const state = useWorkspaceStore.getState()
-      const settings = { preference: state.agentNotices, focusedPaneId: focusedOwnPaneId(state) }
+      // Output moves the store many times a second; names move only with the panes and worktrees.
+      if (named?.terminals !== state.terminals || named.worktrees !== state.worktrees) {
+        named = { terminals: state.terminals, worktrees: state.worktrees, names: paneNamesForNotices(state) }
+      }
+      const settings = {
+        preference: state.agentNotices,
+        focusedPaneId: focusedOwnPaneId(state),
+        names: named.names
+      }
       const description = JSON.stringify(settings)
       if (description === published) return
       published = description

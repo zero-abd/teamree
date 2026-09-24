@@ -156,6 +156,19 @@ describe('what the window publishes', () => {
     expect(Object.keys(read ?? {})).toEqual(['preference', 'focusedPaneId'])
   })
 
+  it('takes what each pane is called, and only names', () => {
+    const read = readNoticeSettings({
+      preference: 'notify',
+      focusedPaneId: null,
+      names: { term_1: 'Claude Code 2', term_2: 7 }
+    })
+    expect(read?.names).toEqual({ term_1: 'Claude Code 2' })
+    expect(readNoticeSettings({ preference: 'notify', focusedPaneId: null, names: 'zsh' })).toEqual({
+      preference: 'notify',
+      focusedPaneId: null
+    })
+  })
+
   it('drops anything that is not an object', () => {
     expect(readNoticeSettings('notify')).toBeNull()
     expect(readNoticeSettings(null)).toBeNull()
@@ -166,7 +179,7 @@ describe('what the window publishes', () => {
 // keystrokes ran in another worktree's agent. The only road from "an agent
 // stopped" to "open that pane" has one gate, the click on the notification.
 describe('what a stopped agent is allowed to do to the window', () => {
-  type Shown = { title: string; body: string; silent: boolean; onActivate: () => void }
+  type Shown = { title: string; subtitle?: string; body: string; silent: boolean; onActivate: () => void }
 
   function install(windowFocused = true) {
     const listeners = new Map<string, (event: IpcMainEvent, payload: unknown) => void>()
@@ -213,6 +226,19 @@ describe('what a stopped agent is allowed to do to the window', () => {
     expect(shown[0]?.title).toBe('Plan the spend summary')
     expect(sent).toEqual([])
     expect(host.focusWindow).not.toHaveBeenCalled()
+  })
+
+  // Two agents in one worktree: the title says where, the subtitle which, as the sidebar calls it.
+  it('names the pane under the worktree, as the window calls it', () => {
+    const { channel, publish, shown } = install()
+    publish({ preference: 'notify', focusedPaneId: null, names: { term_theirs: 'Claude Code 2' } })
+    channel.deliver(stopped)
+    channel.deliver({ ...stopped, terminalId: 'term_unnamed' })
+
+    expect(shown.map((spec) => [spec.title, spec.subtitle])).toEqual([
+      ['Plan the spend summary', 'Claude Code 2'],
+      ['Plan the spend summary', undefined]
+    ])
   })
 
   it('tells the window nothing when the window is not even in front', () => {

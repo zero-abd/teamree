@@ -85,20 +85,8 @@ describe('a teammate’s rows', () => {
       ],
       NOW
     )
-    expect(row?.panes.map((entry) => entry.label)).toEqual([
-      'api server',
-      'review',
-      'zsh 1',
-      'zsh 2',
-      'index compaction'
-    ])
-    expect(row?.panes.map((entry) => entry.text)).toEqual([
-      'api server',
-      'review',
-      'zsh 1',
-      'zsh 2',
-      'index compaction'
-    ])
+    expect(row?.panes.map((entry) => entry.label)).toEqual(['api server', 'review', 'zsh', 'zsh 2', 'index compaction'])
+    expect(row?.panes.map((entry) => entry.text)).toEqual(['api server', 'review', 'zsh', 'zsh 2', 'index compaction'])
   })
 
   it('adds the time since the snapshot arrived to the silence its owner measured', () => {

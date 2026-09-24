@@ -7,7 +7,7 @@ import {
   activityOf,
   dotTone,
   paneAgent,
-  paneNames,
+  paneNamesById,
   paneText,
   TONE_LABEL,
   type AgentActivity,
@@ -40,11 +40,12 @@ export function paneTabs(
   worktree?: WorktreeNameSource
 ): PaneTab[] {
   const leaves = stripLeaves(root)
-  const shells = leaves.flatMap((node) => (node.kind === 'leaf' && !isFileLeaf(node) ? [node] : []))
-  const panes = shells.map((node) => terminals[node.terminalId])
-  // Named together: what tells two tabs apart is the other tab. A file pane is named after its file.
-  const names = paneNames(
-    panes.map((pane) => pane ?? UNARRIVED),
+  const worktreeId = leaves
+    .map((node) => (node.kind === 'leaf' ? terminals[node.terminalId]?.worktreeId : undefined))
+    .find((id) => id !== undefined)
+  // Named with the worktree's other panes, in the order they were opened, as the sidebar names them.
+  const names = paneNamesById(
+    Object.values(terminals).filter((terminal) => terminal.worktreeId === worktreeId),
     worktree
   )
   return leaves.map((node) => {
@@ -64,10 +65,9 @@ export function paneTabs(
       const label = fileTabName(node)
       return { terminalId: node.terminalId, agent: undefined, label, text: label, activity: null, kind: 'file' }
     }
-    const index = shells.indexOf(node)
-    const record = panes[index]
+    const record = terminals[node.terminalId]
     const pane = record ?? UNARRIVED
-    const label = names[index] ?? 'terminal'
+    const label = names[node.terminalId] ?? 'terminal'
     const activity = record ? activityOf(record) : null
     return { terminalId: node.terminalId, agent: paneAgent(pane), label, text: paneText(pane, label), activity }
   })

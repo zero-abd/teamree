@@ -481,7 +481,7 @@ describe('naming a pane', () => {
 
   it('tells two panes of the same agent apart, and calls the named one what it was named', () => {
     threeAgents()
-    expect(tabNames()).toEqual(['Claude Code 1', 'Claude Code 2', 'auth refactor'])
+    expect(tabNames()).toEqual(['Claude Code', 'Claude Code 2', 'auth refactor'])
   })
 
   // A button as well as double-click, so a name can be set without a mouse.
@@ -494,17 +494,17 @@ describe('naming a pane', () => {
   // App-named panes have an empty stored label; the field used to open blank for them.
   it('opens the field holding the name the tab shows, selected', () => {
     threeAgents()
-    fireEvent.click(screen.getByRole('button', { name: 'Rename pane Claude Code 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane Claude Code' }))
     const field = screen.getByRole('textbox', { name: 'Pane name' }) as HTMLInputElement
-    expect(field.value).toBe('Claude Code 1')
+    expect(field.value).toBe('Claude Code')
     expect(field.selectionStart).toBe(0)
-    expect(field.selectionEnd).toBe('Claude Code 1'.length)
+    expect(field.selectionEnd).toBe('Claude Code'.length)
   })
 
   // Storing `claude 1` would freeze the number the strip made up.
   it('does not store the app’s own name back as a label', () => {
     threeAgents()
-    fireEvent.click(screen.getByRole('button', { name: 'Rename pane Claude Code 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane Claude Code' }))
     const field = screen.getByRole('textbox', { name: 'Pane name' })
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(renamePane).not.toHaveBeenCalled()
@@ -513,7 +513,7 @@ describe('naming a pane', () => {
 
   it('renames from a double-click on the tab', () => {
     threeAgents()
-    fireEvent.doubleClick(screen.getByRole('tab', { name: 'Claude Code 1' }))
+    fireEvent.doubleClick(screen.getByRole('tab', { name: 'Claude Code' }))
     const field = screen.getByRole('textbox', { name: 'Pane name' })
     fireEvent.change(field, { target: { value: 'pager streaming' } })
     fireEvent.keyDown(field, { key: 'Enter' })
@@ -522,7 +522,7 @@ describe('naming a pane', () => {
 
   it('throws the typing away on Escape', () => {
     threeAgents()
-    fireEvent.click(screen.getByRole('button', { name: 'Rename pane Claude Code 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane Claude Code' }))
     const field = screen.getByRole('textbox', { name: 'Pane name' })
     fireEvent.change(field, { target: { value: 'never mind' } })
     fireEvent.keyDown(field, { key: 'Escape' })
@@ -534,7 +534,7 @@ describe('naming a pane', () => {
   // Blur commits: every other control in the strip takes focus away.
   it('keeps what was typed when the focus leaves the field', () => {
     threeAgents()
-    fireEvent.click(screen.getByRole('button', { name: 'Rename pane Claude Code 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rename pane Claude Code' }))
     const field = screen.getByRole('textbox', { name: 'Pane name' })
     fireEvent.change(field, { target: { value: 'pager streaming' } })
     fireEvent.blur(field)
