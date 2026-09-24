@@ -30,7 +30,7 @@ import { shellClassName } from './shell/shellClass'
 import { useFolderDrop } from './shell/useFolderDrop'
 import { SidebarResizer } from './shell/SidebarResizer'
 import { StatusBar } from './shell/StatusBar'
-import { useWorkspaceStore } from './state/workspaceStore'
+import { useWorkspaceStore, type Notice } from './state/workspaceStore'
 import { watchSystemTone } from './theme/systemTone'
 import { applyPalette } from './theme/applyPalette'
 import { UpdateAvailableCard } from './updates/UpdateAvailableCard'
@@ -59,6 +59,17 @@ export function App(): React.JSX.Element {
   const asking = firstQuestion(consent)
   const notices = useWorkspaceStore((state) => state.notices)
   const dismissNotice = useWorkspaceStore((state) => state.dismissNotice)
+  const hideRegion = useWorkspaceStore((state) => state.hideRegion)
+  const actOn = (notice: Notice): void => {
+    const action = notice.action
+    if (action === undefined) return
+    if ('url' in action) {
+      openInBrowser(action.url)
+      return
+    }
+    hideRegion(action.hide)
+    dismissNotice(notice.id)
+  }
   const appearance = useWorkspaceStore((state) => state.appearance)
   const systemTone = useWorkspaceStore((state) => state.systemTone)
 
@@ -110,11 +121,7 @@ export function App(): React.JSX.Element {
                 <span className="notice__text">{notice.text}</span>
                 {notice.action === undefined ? null : (
                   // The verb is the whole button.
-                  <button
-                    type="button"
-                    className="notice__action"
-                    onClick={() => openInBrowser(notice.action?.url ?? '')}
-                  >
+                  <button type="button" className="notice__action" onClick={() => actOn(notice)}>
                     {notice.action.label}
                   </button>
                 )}

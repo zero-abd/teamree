@@ -2,7 +2,7 @@
 // panes. Those sit outside the worktree's tree because every navigation here replaces what is under
 // it, and unmounting a watched pane closes and reopens its subscription.
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Dashboard } from '../dashboard/Dashboard'
 import { HelpView } from '../help/HelpView'
 import type { PlatformModifier } from '../keyboard/platformModifier'
@@ -18,6 +18,7 @@ import { RightPanel } from './rightPanel/RightPanel'
 import { useMarkPanesSeen } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { TerminalTabs } from './TerminalTabs'
+import { useRoomForPanes } from './useRoomForPanes'
 import { Welcome } from './Welcome'
 import { WorktreeStart } from './WorktreeStart'
 
@@ -126,6 +127,8 @@ function WorkspaceView({
     () => shownRoot(layout?.root ?? null, expandedTerminalId),
     [layout?.root, expandedTerminalId]
   )
+  const [grid, setGrid] = useState<HTMLDivElement | null>(null)
+  useRoomForPanes(grid, paneRoot, minPane)
 
   const onResize = useCallback(
     (path: number[], sizes: number[]) => {
@@ -175,7 +178,7 @@ function WorkspaceView({
   return (
     <main className="workspace">
       <div className="workspace__body">
-        <div className="workspace__panes">
+        <div className="workspace__panes" ref={setGrid}>
           {paneRoot ? (
             <PaneTree
               key={activeWorktreeId}
