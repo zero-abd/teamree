@@ -466,6 +466,13 @@ describe('the file column', () => {
     expect(document.querySelectorAll('.gutter')).toHaveLength(1)
   })
 
+  it('draws no tab row for one file, which the window tab names', () => {
+    const one: PaneNode = { ...column, children: [file('file:2', 'src/app.ts')], sizes: [1] }
+    mount(row(leaf('t1'), one), [terminal('t1')], 't1')
+    expect(screen.queryByRole('tablist', { name: 'Open files' })).toBeNull()
+    expect(screen.getByTestId('viewer-file:2').closest('[hidden]')).toBeNull()
+  })
+
   it('focuses a tab on a click and closes it from its ×', () => {
     mount(row(leaf('t1'), column), [terminal('t1')], 't1')
     fireEvent.click(screen.getByRole('tab', { name: 'NOTES.md' }))

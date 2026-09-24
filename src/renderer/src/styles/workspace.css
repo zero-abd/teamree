@@ -167,7 +167,12 @@
   white-space: nowrap;
 }
 
-/* The file column's other tabs, counted. */
+/* A preview file, as its tab in the file column draws it. */
+.tab__name--preview {
+  font-style: italic;
+}
+
+/* How many files the column holds. */
 .tab__more {
   flex: none;
   color: var(--fg-muted);

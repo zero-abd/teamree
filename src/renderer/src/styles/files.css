@@ -374,6 +374,10 @@
   background: var(--bg-raised);
 }
 
+.column__tabs[hidden] {
+  display: none;
+}
+
 .column__tab {
   display: flex;
   flex: none;

@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { FileContent } from '@shared/entities'
 import { filePaneName } from '@shared/filePane'
-import { FileBar, PathLabel } from '../files/FileBar'
+import { FileBar, fileLabel } from '../files/FileBar'
 import { DiffBody, DiffTools, useFileDiff } from '../files/FileDiff'
 import type { FilePaneProps } from '../panes/FilePane'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
@@ -201,7 +201,7 @@ export function MarkdownPane({
     >
       <FileBar
         name={name}
-        label={<PathLabel path={path} name={name} />}
+        label={fileLabel(path, name, tabbed)}
         title={worktreePath === undefined ? path : `${worktreePath}/${path}`}
         unsaved={dirty}
         tabbed={tabbed}

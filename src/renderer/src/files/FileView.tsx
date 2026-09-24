@@ -8,7 +8,7 @@ import type { FilePaneProps } from '../panes/FilePane'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { CodeEditorHandle } from './CodeEditor'
-import { FileBar, PathLabel } from './FileBar'
+import { FileBar, fileLabel } from './FileBar'
 import { DiffBody, DiffTools, useFileDiff } from './FileDiff'
 import { draftFor, dropDraft, fileSize, keepDraft, registerSaver, type FileDraft } from './fileDrafts'
 import { ImageView } from './ImageView'
@@ -186,7 +186,7 @@ export function FileView({
     >
       <FileBar
         name={name}
-        label={<PathLabel path={path} name={name} />}
+        label={fileLabel(path, name, tabbed)}
         title={absolute}
         unsaved={unsaved}
         tabbed={tabbed}

@@ -177,6 +177,27 @@ describe('stylesheets', () => {
   })
 
   // A menu writes its chords as the menu bar does: plain text at the right, no keycaps.
+  // A 52px gutter left 266px of text in a 370px column.
+  it('narrows the page gutter with its column', () => {
+    const gutter = declarationOf(ruleFor('markdown.css', '.md-editor'), '--page-gutter') ?? ''
+    const at = (width: number): number => {
+      const parts = /^clamp\((\d+)px, ([\d.]+)cqi - ([\d.]+)px, (\d+)px\)$/.exec(gutter)
+      expect(parts, `--page-gutter: ${gutter}`).not.toBeNull()
+      const [low, per, less, high] = parts!.slice(1).map(Number) as [number, number, number, number]
+      return Math.min(high, Math.max(low, (per * width) / 100 - less))
+    }
+    expect(at(370)).toBeLessThanOrEqual(16)
+    expect(at(479)).toBeLessThanOrEqual(16)
+    expect(at(760)).toBeCloseTo(52, 0)
+    expect(at(600)).toBeLessThan(52)
+  })
+
+  // The editor's own `pre-wrap` split a one-line import in two.
+  it('scrolls a code block sideways rather than wrapping it', () => {
+    expect(declarationOf(ruleFor('markdown.css', '.md-editor .md-code pre'), 'white-space')).toBe('pre')
+    expect(declarationOf(ruleFor('markdown.css', '.md-code pre'), 'overflow-x')).toBe('auto')
+  })
+
   it('draws a menu chord as plain text', () => {
     const hint = ruleFor('sidebar.css', '.row-menu__hint')
     expect(declarationOf(hint, 'border')).toBe('0')

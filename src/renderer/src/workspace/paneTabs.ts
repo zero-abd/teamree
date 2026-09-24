@@ -27,6 +27,10 @@ export type PaneTab = {
   kind?: 'file'
   /** The file column's tabs, when this tab is the column; `terminalId` is the shown one. */
   files?: string[]
+  /** A column of one file that the next preview open replaces. */
+  preview?: true
+  /** Each file's name, for a column of several. */
+  names?: string[]
 }
 
 /** The tabs for one worktree in split-tree order; a leaf without its record yet still gets a tab. */
@@ -47,17 +51,14 @@ export function paneTabs(
     if (isFileColumn(node)) {
       const files = fileLeavesIn(node)
       const shown = files.find((file) => file.terminalId === shownTabId(node)) ?? files[0]
-      const label = shown === undefined ? '' : fileTabName(shown)
       const ids = files.map((file) => file.terminalId)
-      return {
-        terminalId: shown?.terminalId ?? '',
-        agent: undefined,
-        label,
-        text: label,
-        activity: null,
-        kind: 'file',
-        files: ids
-      }
+      const tab = { terminalId: shown?.terminalId ?? '', agent: undefined, activity: null, kind: 'file' as const }
+      // One file is named on this tab alone; several keep their names on the column's own tabs.
+      if (files.length > 1)
+        return { ...tab, label: `Files ${files.length}`, text: 'Files', files: ids, names: files.map(fileTabName) }
+      const label = shown === undefined ? '' : fileTabName(shown)
+      const preview = shown !== undefined && node.preview === shown.terminalId
+      return { ...tab, label, text: label, files: ids, ...(preview ? { preview: true as const } : {}) }
     }
     if (isFileLeaf(node)) {
       const label = fileTabName(node)
@@ -97,6 +98,6 @@ const UNARRIVED: PaneNameSource = { title: 'terminal', shell: '' }
 
 /** A tab's tooltip: its name, plus its dot's `TONE_LABEL` word when the state is known. */
 export function paneTabTitle(tab: PaneTab): string {
-  if (tab.files !== undefined && tab.files.length > 1) return `${tab.label} +${tab.files.length - 1}`
+  if (tab.names !== undefined) return tab.names.join(', ')
   return tab.activity === null ? tab.label : `${tab.label} · ${TONE_LABEL[dotTone(tab.activity, tab.agent)]}`
 }

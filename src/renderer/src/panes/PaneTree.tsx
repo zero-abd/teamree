@@ -124,7 +124,8 @@ function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColu
   }
   return (
     <div className={`column${focused ? ' column--focused' : ''}`} onKeyDown={onKeyDown}>
-      <div className="column__tabs" role="tablist" aria-label="Open files">
+      {/* One file is named, dotted and closed by its tab in the window's strip. */}
+      <div className="column__tabs" role="tablist" aria-label="Open files" hidden={tabs.length < 2}>
         {tabs.map((tab) => {
           const name = fileTabName(tab)
           const on = tab.terminalId === shown
