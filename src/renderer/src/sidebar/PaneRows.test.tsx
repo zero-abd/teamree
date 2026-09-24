@@ -136,9 +136,22 @@ describe('a pane named after its worktree', () => {
       terminal({ id: 't1', agent: 'codex', label: 'Add a subtract function to codex' })
     )
     expect(row?.querySelector('.pane-row__label')).toBeNull()
-    expect(row?.querySelector('.pane-row__evidence')).toBeNull()
-    expect(row?.querySelector('.pane-row__head')?.textContent).toContain('Edited calc.js (+1 -0)')
+    expect(row?.querySelector('.pane-row__head .pane-row__evidence')?.textContent).toBe('Edited calc.js (+1 -0)')
     expect(row?.title).toContain('Add a subtract function to codex')
+  })
+
+  // Every row one line high: a quoted line under some rows and not others knocked them out of line.
+  it('puts another pane’s last line beside its name, on the same line', () => {
+    const [, shell] = mountIn(
+      'pager',
+      { t2: 'Done in 2.1s' },
+      terminal({ id: 't1', agent: 'codex', label: 'pager' }),
+      terminal({ id: 't2', title: 'zsh' })
+    )
+    expect(shell?.children).toHaveLength(1)
+    const head = shell?.querySelector('.pane-row__head')
+    expect(head?.querySelector('.pane-row__label')?.textContent).toBe('zsh')
+    expect(head?.querySelector('.pane-row__evidence')?.textContent).toBe('Done in 2.1s')
   })
 
   it('keeps the name of any other pane', () => {

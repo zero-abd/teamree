@@ -30,6 +30,13 @@ describe('screenEvidence', () => {
     expect(screenEvidence(screen, { agent: 'claude' })).toBe('Added to calc.js:3:')
   })
 
+  // A narrow pane wraps zsh's default prompt; the "%" after the first is its end-of-line mark.
+  it('quotes nothing from a fresh zsh whose prompt wraps', async () => {
+    const prompt = 'abd@Abdullahs-MacBook-Pro add-a-sub-function-to-claude % '
+    const screen = await replayScreen(`${prompt}%\r\n${prompt}`, 52, 10)
+    expect(screenEvidence(screen, {})).toBeNull()
+  })
+
   it('quotes nothing from a shell’s pager or editor', async () => {
     const screen = await replayScreen('\x1b[?1049h\x1b[1;1Hcalc.js 3L, 60B', 20, 5)
     expect(screenEvidence(screen, {})).toBeNull()

@@ -1,56 +1,65 @@
-/* The all-panes view: one row per pane, ordered by what needs a person. It
-   borrows `.activity` from the sidebar, because it is the same reading of the
-   same terminal and a second dot would be a second vocabulary. */
+/* The all-panes view: one row per pane, ordered by what needs a person. No
+   dots: the state is a word, coloured only where a pane needs somebody, as on
+   the sidebar's pane rows. */
 
-.board__counts {
+/* Only the states some pane is in, as text: "2 stopped · 2 idle". Each is a
+   filter; the tone's colour is on the number alone. */
+.board__filters {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s2);
+  align-items: baseline;
   margin: 0;
   padding: 0;
   flex: none;
   list-style: none;
 }
 
-.board-count {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s2);
-  padding: var(--s1) var(--s3);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--bg-raised);
-  color: var(--fg-secondary);
-  font-size: var(--text-sm);
-}
-
-/* Kept in place at zero rather than removed: the row of counts is read at a
-   glance, and one that reflows as panes change state is read twice.
-
-   Quieted by losing its border and its fill, not by being faded. `--fg-muted`
-   is already the dimmest ink the palette will produce and it sits exactly on
-   the AA floor, so an opacity on top of it was a number nobody could read —
-   and a count of zero is still a fact somebody came here for. */
-.board-count--zero {
-  border-color: transparent;
-  background: none;
+.board__filters li + li::before {
+  content: '·';
+  padding: 0 var(--s1);
   color: var(--fg-muted);
 }
 
-.board-count .activity {
-  align-self: center;
+.board-filter {
+  padding: var(--s1) var(--s2);
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
 }
 
-.board-count__number {
+.board-filter:hover {
+  background: var(--bg-hover);
+}
+
+.board-filter[aria-pressed='true'] {
+  background: var(--bg-raised);
+  color: var(--fg);
+}
+
+.board-filter__number {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--fg);
 }
 
-.board-count--zero .board-count__number {
-  color: inherit;
-  font-weight: 400;
+.board-filter__number--failed {
+  color: var(--danger);
+}
+
+.board-filter__number--waiting {
+  color: var(--warning);
+}
+
+.board-filter__number--working {
+  color: var(--accent-bright);
+}
+
+.board-filter__number--done {
+  color: var(--success);
 }
 
 .board__list {
@@ -59,15 +68,14 @@
   list-style: none;
 }
 
-/* One grid for every row, so the columns line up down the whole list: what it
-   is, what it is doing, where it lives, and how long it has been quiet. */
+/* One grid for every row, so the columns line up down the whole list: which
+   pane, where it lives, what it last said, its state and how long it has been quiet. */
 .board-row {
   width: 100%;
   display: grid;
-  /* The name is capped rather than elastic: on a wide window a stretching name
-     column pushes the worktree it belongs to an inch away from it. */
-  grid-template-columns: auto minmax(8ch, 24ch) auto minmax(12ch, 1fr) minmax(0, 20ch) auto;
-  align-items: baseline;
+  /* The name and the worktree are capped: the last line is what the row is read for. */
+  grid-template-columns: minmax(8ch, 18ch) minmax(8ch, 28ch) minmax(0, 1fr) auto 4ch;
+  align-items: center;
   gap: var(--s3);
   padding: var(--s2) var(--s4);
   border: 0;
@@ -84,22 +92,15 @@
   background: var(--bg-hover);
 }
 
-.board-row .activity {
-  align-self: center;
-}
-
 /* Only a failure earns a marker in the margin. Everything else is ordered
    already, and a stripe on every row would rank nothing. */
 .board-row--failed {
   border-left-color: var(--danger);
 }
 
-/* The tag rides inside the name's cell rather than taking a column of its own:
-   only some rows carry one, and a column that is empty on half the list would
-   knock the others out of alignment. */
 .board-row__what {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--s2);
   min-width: 0;
 }
@@ -111,28 +112,10 @@
   font-weight: 500;
 }
 
-/* And on the board, which is where the filter above it acts. Same mark, same
-   reading: see `.activity--unread` in sidebar.css. */
+/* Unread is weight, as on the sidebar's pane rows. */
 .board-row--unread .board-row__label {
   color: var(--fg);
   font-weight: 600;
-}
-
-/* `shell`, on a row that is not an agent's: the chip's own shape, no colour. */
-.board-row__kind {
-  align-self: center;
-}
-
-.board-row__state {
-  color: var(--fg-secondary);
-  font-size: var(--text-xs);
-}
-
-.board-row__where {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s2);
-  min-width: 0;
 }
 
 .board-row__worktree {
@@ -142,14 +125,28 @@
   color: var(--fg-secondary);
 }
 
-.board-row__branch,
-.board-row__project {
+/* The pane's last printed line, in the terminal's typeface, one line. */
+.board-row__evidence {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--fg-muted);
+  color: var(--fg-secondary);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+}
+
+.board-row__state {
+  justify-self: end;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.board-row__state--waiting {
+  color: var(--warning);
+}
+
+.board-row__state--failed {
+  color: var(--danger);
 }
 
 .board-row__since {
@@ -159,14 +156,9 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The columns that say where a pane lives are the first to go: on a narrow
-   window the name and the silence are what the row is for. */
+/* On a narrow window the worktree gives its room to the last line. */
 @media (width <= 900px) {
   .board-row {
-    grid-template-columns: auto minmax(8ch, 1fr) auto minmax(8ch, 1fr) auto;
-  }
-
-  .board-row__project {
-    display: none;
+    grid-template-columns: minmax(6ch, 14ch) minmax(6ch, 16ch) minmax(0, 1fr) auto 4ch;
   }
 }

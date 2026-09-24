@@ -3,15 +3,17 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { PaneGlyph } from '../agents/glyphs'
 import {
   agoLabel,
-  dotClass,
   dotTone,
   sinceLabel,
   TONE_LABEL,
   TONES_BY_ATTENTION,
-  truncateName
+  truncateName,
+  type DotTone
 } from '../sidebar/agentRows'
+import { usePaneEvidence } from '../sidebar/usePaneEvidence'
 import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -28,18 +30,27 @@ export function Dashboard(): React.JSX.Element {
 
   const now = useNow()
   const paneList = useMemo(() => Object.values(terminals), [terminals])
+  const evidence = usePaneEvidence(paneList, terminals)
   const rows = useMemo(
-    () => dashboardRows({ terminals: paneList, worktrees, projects, layouts, now }),
-    [paneList, worktrees, projects, layouts, now]
+    () => dashboardRows({ terminals: paneList, worktrees, projects, layouts, now, evidence }),
+    [paneList, worktrees, projects, layouts, now, evidence]
   )
   const counts = useMemo(() => toneCounts(rows), [rows])
+
+  // A state nothing is in any more has no filter to press, so it filters nothing.
+  const [onlyTone, setOnlyTone] = useState<DotTone | null>(null)
+  const tone = onlyTone !== null && counts[onlyTone] > 0 ? onlyTone : null
 
   // "Said something since I last looked"; not remembered across launches, or the board would hide rows.
   const [unreadOnly, setUnreadOnly] = useState(false)
   const unread = useUnreadPanes()
   const shown = useMemo(
-    () => (unreadOnly ? rows.filter((row) => unread.has(row.terminalId)) : rows),
-    [rows, unread, unreadOnly]
+    () =>
+      rows.filter(
+        (row) =>
+          (!unreadOnly || unread.has(row.terminalId)) && (tone === null || dotTone(row.activity, row.agent) === tone)
+      ),
+    [rows, unread, unreadOnly, tone]
   )
 
   // Focus the first row once there is one: the board opens before `bootstrap` answers, and the ref keeps
@@ -54,6 +65,15 @@ export function Dashboard(): React.JSX.Element {
     first.focus()
   }, [shown.length])
 
+  const step = (event: React.KeyboardEvent<HTMLUListElement>): void => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+    const buttons = [...(list.current?.querySelectorAll<HTMLButtonElement>('.board-row') ?? [])]
+    const at = buttons.indexOf(document.activeElement as HTMLButtonElement)
+    if (at === -1) return
+    event.preventDefault()
+    buttons[Math.max(0, Math.min(buttons.length - 1, at + (event.key === 'ArrowDown' ? 1 : -1)))]?.focus()
+  }
+
   return (
     <PageFrame
       label="Every pane"
@@ -67,12 +87,18 @@ export function Dashboard(): React.JSX.Element {
       }
       actions={
         <>
-          <ul className="board__counts" aria-label="Panes by state">
-            {TONES_BY_ATTENTION.map((tone) => (
-              <li key={tone} className={`board-count${counts[tone] === 0 ? ' board-count--zero' : ''}`}>
-                <span className={dotClass(tone)} aria-hidden="true" />
-                <span className="board-count__number">{counts[tone]}</span>
-                <span className="board-count__label">{TONE_LABEL[tone]}</span>
+          <ul className="board__filters" aria-label="Panes by state">
+            {TONES_BY_ATTENTION.filter((each) => counts[each] > 0).map((each) => (
+              <li key={each}>
+                <button
+                  type="button"
+                  className="board-filter"
+                  aria-pressed={each === tone}
+                  onClick={() => setOnlyTone(each === tone ? null : each)}
+                >
+                  <span className={`board-filter__number board-filter__number--${each}`}>{counts[each]}</span>{' '}
+                  {TONE_LABEL[each]}
+                </button>
               </li>
             ))}
           </ul>
@@ -96,33 +122,31 @@ export function Dashboard(): React.JSX.Element {
           <h2 className="placeholder__title">{unreadOnly && rows.length > 0 ? 'Nothing unread' : 'Nothing running'}</h2>
         </div>
       ) : (
-        <ul className="board__list" ref={list}>
+        <ul className="board__list" ref={list} onKeyDown={step}>
           {shown.map((row) => {
-            const tone = dotTone(row.activity, row.agent)
+            const state = dotTone(row.activity, row.agent)
+            const isUnread = unread.has(row.terminalId)
+            const needsYou = state === 'waiting' || state === 'failed'
+            const where = [row.worktreeName, row.branch, row.projectName].filter(Boolean).join(' · ')
             return (
               <li key={row.terminalId}>
                 <button
                   type="button"
-                  className={`board-row board-row--${row.activity}${
-                    unread.has(row.terminalId) ? ' board-row--unread' : ''
-                  }`}
-                  title={`${row.label} in ${row.worktreeName} · ${TONE_LABEL[tone]}${
-                    unread.has(row.terminalId) ? ' · unread' : ''
-                  } · last output ${agoLabel(row.quietFor)}`}
+                  className={`board-row board-row--${row.activity}${isUnread ? ' board-row--unread' : ''}`}
+                  title={`${row.label} in ${where} · ${TONE_LABEL[state]}${
+                    isUnread ? ' · unread' : ''
+                  } · last output ${agoLabel(row.quietFor)}${row.evidence ? `\nlast printed: ${row.evidence}` : ''}`}
                   onClick={() => void revealPane(row.worktreeId, row.terminalId)}
                 >
-                  <span className={dotClass(tone, unread.has(row.terminalId))} aria-hidden="true" />
                   <span className="board-row__what">
+                    <PaneGlyph agent={row.agent} />
                     <span className="board-row__label">{truncateName(row.label)}</span>
-                    {/* An agent pane is named by its agent, so only a shell needs saying. */}
-                    {row.agent ? null : <span className="chip board-row__kind">shell</span>}
                   </span>
-                  <span className="board-row__state">{TONE_LABEL[tone]}</span>
-                  <span className="board-row__where">
-                    <span className="board-row__worktree">{row.worktreeName}</span>
-                    {row.branch === undefined ? null : <span className="board-row__branch">{row.branch}</span>}
+                  <span className="board-row__worktree">{row.worktreeName}</span>
+                  <span className="board-row__evidence">{row.evidence ?? ''}</span>
+                  <span className={needsYou ? `board-row__state board-row__state--${state}` : 'board-row__state'}>
+                    {TONE_LABEL[state]}
                   </span>
-                  <span className="board-row__project">{row.projectName}</span>
                   <span className="board-row__since">{sinceLabel(row.quietFor)}</span>
                 </button>
               </li>

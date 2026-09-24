@@ -25,6 +25,8 @@ export type DashboardInput = {
   /** Each worktree's split tree, for its tab order; a worktree not yet read keeps opening order. */
   layouts?: Readonly<Record<string, Pick<Layout, 'root'>>>
   now: number
+  /** Each pane's last printed line, keyed by terminal id; see `usePaneEvidence`. */
+  evidence?: Readonly<Record<string, string | null>>
 }
 
 /** Panes of a worktree the runtime no longer lists are dropped: a row that cannot say where is worse than none. */
@@ -36,7 +38,7 @@ export function dashboardRows(input: DashboardInput): DashboardRow[] {
     const display = worktreeDisplay(worktree)
     const tabs = collectLeaves(input.layouts?.[worktree.id]?.root ?? null).map((leaf) => leaf.terminalId)
     const place = sidebarOrder.indexOf(worktree)
-    return agentRows(input.terminals, worktree, input.now).map((row, opened) => ({
+    return agentRows(input.terminals, worktree, input.now, input.evidence).map((row, opened) => ({
       place: place === -1 ? sidebarOrder.length : place,
       tab: tabs.includes(row.terminalId) ? tabs.indexOf(row.terminalId) : tabs.length + opened,
       row: {
@@ -58,7 +60,7 @@ export function dashboardRows(input: DashboardInput): DashboardRow[] {
     .map((entry) => entry.row)
 }
 
-/** How many panes wear each dot, zeros included so the header keeps its shape. */
+/** How many panes are in each state, zeros included. */
 export function toneCounts(rows: readonly AgentRow[]): Record<DotTone, number> {
   const counts = Object.fromEntries(TONES_BY_ATTENTION.map((tone) => [tone, 0])) as Record<DotTone, number>
   for (const row of rows) counts[dotTone(row.activity, row.agent)] += 1

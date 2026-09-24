@@ -917,17 +917,6 @@
   white-space: nowrap;
 }
 
-/* The last line, in the name's place, for the pane named after its worktree. */
-.pane-row__quote {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--fg-secondary);
-  font-family: var(--font-mono);
-}
-
 .pane-row__since {
   flex: none;
   font-variant-numeric: tabular-nums;
@@ -942,24 +931,26 @@
   color: var(--danger);
 }
 
-/* The last line the pane printed, in the terminal's own typeface: it is a
-   quotation, not a status this app worked out. Indented under the label, clear
-   of the glyph.
+/* A name followed by its last line gives way to it, down to half the row. */
+.pane-row__label:has(+ .pane-row__evidence) {
+  flex: 0 1 auto;
+  max-width: 50%;
+}
 
-   One line, ended on a word. `text-overflow: ellipsis` cuts wherever the box
-   ends — "MCP startup incomplete (fai…" — and there is no telling it to stop
-   at a space. A one-line clamp is the only thing in CSS that does: the text
-   wraps at words first and the ellipsis lands after the last one that fits. */
+/* The last line the pane printed, in the terminal's own typeface: a quotation,
+   not a status. Beside the name, or in its place for the pane named after its
+   worktree, so every row is one line high. A one-line clamp rather than
+   `text-overflow`: it ends on a word, where an ellipsis cuts wherever the box does. */
 .pane-row__evidence {
   display: -webkit-box;
+  flex: 1 1 0;
+  min-width: 0;
   overflow: hidden;
-  padding-left: 20px;
-  /* A step brighter than the label above it: the quoted line is what the row
-     exists to show, and the pane's name is only there to say whose it is. */
+  /* A step brighter than the label: the quoted line is what the row exists to show. */
   color: var(--fg-secondary);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  line-height: 1.5;
+  line-height: inherit;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;

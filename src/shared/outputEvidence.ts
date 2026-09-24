@@ -35,8 +35,9 @@ export function evidenceLine(output: string, maxChars: number = EVIDENCE_MAX_CHA
 /** The last of `rows` that says something: `replayLines`' output, or the rows of an emulator's screen. */
 export function evidenceInRows(rows: readonly string[], maxChars: number = EVIDENCE_MAX_CHARS): string | null {
   const first = Math.max(0, rows.length - MAX_LINES_SCANNED)
+  const prompt = livePrompt(rows, first)
   for (let index = rows.length - 1; index >= first; index--) {
-    const candidate = tidy(rows[index] ?? '')
+    const candidate = typedAt(tidy(rows[index] ?? ''), prompt)
     if (candidate.length === 0 || isUninformative(candidate)) continue
 
     const head = messageHead(rows, index, first)
@@ -51,6 +52,25 @@ export function evidenceInRows(rows: readonly string[], maxChars: number = EVIDE
     return truncate(LEADING_BULLET.test(headRow) && !isUninformative(said) ? said : candidate, maxChars)
   }
   return null
+}
+
+/** The shell's own prompt, read off the last bare prompt on screen; null when it names nothing. */
+function livePrompt(rows: readonly string[], first: number): string | null {
+  for (let index = rows.length - 1; index >= first; index--) {
+    const line = tidy(rows[index] ?? '')
+    if (isBarePrompt(line)) return /[\p{L}\p{N}]/u.test(line) ? line : null
+  }
+  return null
+}
+
+/** A prompt's user@host, folder or path, and its glyph, when a command follows it on the line. */
+const PROMPT_HEAD = /^(?:\([^()\s]+\) )?(?:\[[^\]\s]+@[^\]]+\]|[\w.-]+@[\w.-]+(?::\S*| \S+)?|[~/]\S*) ?[$%#❯➜»] (?=\S)/u
+
+/** What was typed at a prompt, without the prompt; any other line as it is. */
+function typedAt(line: string, prompt: string | null): string {
+  if (prompt !== null && line.startsWith(`${prompt} `)) return line.slice(prompt.length + 1)
+  const head = PROMPT_HEAD.exec(line)
+  return head === null ? line : line.slice(head[0].length)
 }
 
 /** The unindented row an indented one hangs under, across blank rows, or null when it is not indented. */
@@ -244,7 +264,10 @@ function isBarePrompt(line: string): boolean {
   // prompt after whitespace or punctuation; "$" sits directly against a bash path.
   if (AMBIGUOUS_GLYPHS.includes(glyph) && /[\p{L}\p{N}]$/u.test(head)) return false
   // A prompt is a location, not a sentence; two words covers "[user@host dir]#" plus a virtualenv prefix.
-  return head.length <= 80 && head.trim().split(/\s+/).filter(Boolean).length <= 2
+  const words = head.trim().split(/\s+/).filter(Boolean)
+  // "coverage: 100 %" is a label and a number, which no prompt is.
+  if (AMBIGUOUS_GLYPHS.includes(glyph) && words.some((word) => /^[\d.,]+$|:$/u.test(word))) return false
+  return words.length <= 2
 }
 
 function truncate(line: string, maxChars: number): string {

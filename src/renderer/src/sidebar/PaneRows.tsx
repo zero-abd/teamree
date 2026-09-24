@@ -65,7 +65,8 @@ export function PaneRows({
                 {/* Shortened for the row only: the hover text carries the whole of it. */}
                 <PaneGlyph agent={row.agent} />
                 {named ? <span className="pane-row__label">{truncateName(row.text)}</span> : null}
-                {!named && row.evidence ? <span className="pane-row__quote">{row.evidence}</span> : null}
+                {/* Nothing when there is nothing worth quoting: an empty line would read as an answer. */}
+                {row.evidence ? <span className="pane-row__evidence">{row.evidence}</span> : null}
                 {/* Named, never counted: "2 watching" says nothing about who. */}
                 {typing.length > 0 || attention.watchers.length > 0 ? (
                   <span
@@ -83,8 +84,6 @@ export function PaneRows({
                 ) : null}
                 <PaneSince tone={dotTone(row.activity, row.agent)} quietFor={row.quietFor} />
               </span>
-              {/* Nothing when there is nothing worth quoting: an empty line would read as an answer. */}
-              {named && row.evidence ? <span className="pane-row__evidence">{row.evidence}</span> : null}
             </button>
           </li>
         )
