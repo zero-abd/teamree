@@ -18,9 +18,9 @@
   min-height: 100%;
 }
 
-/* The page. The side padding is the handle's gutter. */
+/* The page. The side padding is the handle's gutter: 16px up to a 480px column, 52px at 760px. */
 .md-editor {
-  --page-gutter: clamp(52px, 9cqi, 96px);
+  --page-gutter: clamp(16px, 12.86cqi - 45.7px, 96px);
   max-width: calc(720px + 2 * var(--page-gutter));
   min-height: 100%;
   margin: 0 auto;
@@ -320,6 +320,12 @@
   tab-size: 2;
 }
 
+/* Over the editor's own `pre { white-space: pre-wrap }`: a line scrolls rather than wraps. */
+.md-editor .md-code pre {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
 .md-code pre code {
   padding: 0;
   border-radius: 0;
@@ -580,6 +586,9 @@
   z-index: 3;
   align-items: center;
   height: 24px;
+  border-radius: var(--r1);
+  /* On a narrow page it sits over the text. */
+  background: var(--bg-window);
   animation: md-appear var(--motion-fast) var(--ease);
 }
 

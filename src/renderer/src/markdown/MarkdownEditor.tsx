@@ -34,6 +34,8 @@ export type MarkdownEditorProps = {
 type SlashMenuHooks = {
   show: (state: SlashMenuState | null) => void
   keyDown: (event: KeyboardEvent) => boolean
+  /** Whether the menu is open, loading or listing blocks; the page is not reported meanwhile. */
+  hold: (editor: Editor, open: boolean) => void
 }
 
 /** The `/` menu, as a ProseMirror plugin that reports to the component. */
@@ -42,6 +44,7 @@ function slashMenu(hooks: SlashMenuHooks): Extension {
     name: 'slashMenu',
     addProseMirrorPlugins() {
       const publish = (props: SuggestionProps<SlashItem, SlashItem>): void => {
+        hooks.hold(props.editor, props.loading || props.items.length > 0)
         hooks.show({
           items: props.items,
           query: props.query,
@@ -60,7 +63,10 @@ function slashMenu(hooks: SlashMenuHooks): Extension {
           render: () => ({
             onStart: publish,
             onUpdate: publish,
-            onExit: () => hooks.show(null),
+            onExit: ({ editor: target }) => {
+              hooks.hold(target, false)
+              hooks.show(null)
+            },
             onKeyDown: ({ event }: SuggestionKeyDownProps) => hooks.keyDown(event)
           })
         })
@@ -93,6 +99,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
   // The file as last read; what the page did not change is written back from it.
   const [firstFile] = useState(() => readMarkdownFile(initial))
   const file = useRef<MarkdownFile>(firstFile)
+  // The `/` and its query are never written; the page is reported once the menu closes.
+  const held = useRef(false)
 
   const showMenu = (state: SlashMenuState | null): void => {
     menuRef.current = state
@@ -100,6 +108,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
   }
   const hooks = useRef<SlashMenuHooks>({
     show: showMenu,
+    hold: (target, open) => {
+      const released = held.current && !open
+      held.current = open
+      if (released) latest.current.onChange(writeMarkdownFile(target.getJSON(), file.current))
+    },
     keyDown: (event) => {
       const current = menuRef.current
       if (current === null || current.items.length === 0) return false
@@ -138,9 +151,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
     },
     onUpdate: ({ editor: updated, transaction }) => {
       // Only the page's own upkeep changed it, such as the trailing paragraph added on focus.
-      if (!transaction.docChanged) return
+      if (!transaction.docChanged || held.current) return
       latest.current.onChange(writeMarkdownFile(updated.getJSON(), file.current))
     },
+    // A page closed with the menu open drops the query.
+    onDestroy: () => void (held.current = false),
     onFocus: () => latest.current.onFocusChange(true),
     onBlur: () => latest.current.onFocusChange(false)
   })

@@ -182,14 +182,28 @@ describe('file tabs in the store', () => {
 })
 
 describe('the strip over a file column', () => {
-  it('shows the column as one tab: the shown file, the others counted, a click focusing it', () => {
+  it('names a column of one file on its tab, which carries the dot, the close and the pin', () => {
+    useWorkspaceStore.getState().openFilePane('w1', 'src/app.ts', 'preview')
+    const app = fileLeavesIn(layout().root)[0]!.terminalId
+    useWorkspaceStore.setState({ unsavedFiles: { [app]: true } })
+    render(<TerminalTabs modifier={resolvePlatformModifier('darwin')} />)
+    const tab = screen.getByRole('tab', { name: 'app.ts' })
+    expect(tab.textContent).toBe('app.ts')
+    expect(within(tab).getByTestId('unsaved')).toBeTruthy()
+    expect(tab.querySelector('.tab__name--preview')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Close pane app.ts' })).toBeTruthy()
+    fireEvent.doubleClick(tab)
+    expect(fileColumnIn(layout().root)?.preview).toBeUndefined()
+  })
+
+  it('shows the column as one tab: Files and a count, a click focusing the shown file', () => {
     for (const path of ['a.ts', 'src/app.ts', 'b.ts', 'c.ts']) useWorkspaceStore.getState().openFilePane('w1', path)
     const app = fileLeavesIn(layout().root)[1]!.terminalId
     useWorkspaceStore.getState().focusPane(app)
     useWorkspaceStore.getState().focusPane('t1')
     render(<TerminalTabs modifier={resolvePlatformModifier('darwin')} />)
     const tabs = within(screen.getByRole('tablist', { name: 'Terminals in this worktree' })).getAllByRole('tab')
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['terminal', 'app.ts+3'])
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['terminal', 'Files4'])
     fireEvent.click(tabs[1]!)
     expect(layout().focusedTerminalId).toBe(app)
     expect(screen.getByRole('button', { name: 'Close 4 files' })).toBeTruthy()
@@ -570,7 +584,43 @@ describe('a file in the column', () => {
   const MAC = resolvePlatformModifier('darwin')
   const worktree = { id: 'w1', projectId: 'p1', name: 'w', branch: 'w', path: '/repos/w', state: 'ready' } as Worktree
 
-  it('leaves the dot and the close to its tab, and says its name once under it', async () => {
+  const drawColumn = (root: PaneNode) =>
+    render(
+      <PaneTree
+        node={root}
+        path={[]}
+        worktreeId="w1"
+        terminals={{}}
+        focusedTerminalId={fileLeavesIn(root)[0]!.terminalId}
+        onFocus={() => {}}
+        onClose={() => {}}
+        onRelaunch={() => {}}
+        onResize={() => {}}
+        isAppChord={() => false}
+        modifier={MAC}
+        searchTerminalId={null}
+        searchToken={0}
+        onCloseSearch={() => {}}
+      />
+    )
+
+  it('names a file at the root only on the window tab', async () => {
+    call.mockImplementation(async (method: string, params: { path: string }) => {
+      if (method === 'file.read') return { ...text('a\n'), path: params.path }
+      return undefined
+    })
+    const root = fileColumn(fileLeaf('file:code', 'app.ts'))
+    useWorkspaceStore.setState({
+      worktrees: [worktree],
+      layouts: { w1: { worktreeId: 'w1', root, focusedTerminalId: 'file:code' } }
+    })
+    drawColumn(root)
+    const bar = screen.getByRole('region', { name: 'app.ts' }).querySelector('header')!
+    expect(barParts(bar)).toEqual(['Code', 'Diff', 'More for app.ts'])
+    expect(bar.querySelector('.file__path')).toBeNull()
+  })
+
+  it('leaves the dot and the close to the window tab, and draws no tab row for one file', async () => {
     call.mockImplementation(async (method: string, params: { path: string }) => {
       if (method === 'file.read') return { ...text('a\n'), path: params.path }
       if (method === 'worktree.changes')
@@ -583,27 +633,11 @@ describe('a file in the column', () => {
       layouts: { w1: { worktreeId: 'w1', root, focusedTerminalId: 'file:code' } },
       unsavedFiles: { 'file:code': true }
     })
-    render(
-      <PaneTree
-        node={root}
-        path={[]}
-        worktreeId="w1"
-        terminals={{}}
-        focusedTerminalId="file:code"
-        onFocus={() => {}}
-        onClose={() => {}}
-        onRelaunch={() => {}}
-        onResize={() => {}}
-        isAppChord={() => false}
-        modifier={MAC}
-        searchTerminalId={null}
-        searchToken={0}
-        onCloseSearch={() => {}}
-      />
-    )
+    drawColumn(root)
     const bar = screen.getByRole('region', { name: 'app.ts' }).querySelector('header')!
     expect(barParts(bar)).toEqual(['src/|src/app.ts', 'Code', 'Diff', 'More for app.ts'])
-    expect(within(screen.getByRole('tab', { name: 'app.ts' }).parentElement!).getByTestId('unsaved')).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: /^Close/ })).toHaveLength(1)
+    expect(screen.queryByRole('tablist', { name: 'Open files' })).toBeNull()
+    expect(within(bar).queryByTestId('unsaved')).toBeNull()
+    expect(screen.queryAllByRole('button', { name: /^Close/ })).toHaveLength(0)
   })
 })

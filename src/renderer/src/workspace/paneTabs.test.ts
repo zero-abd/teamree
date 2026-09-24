@@ -184,7 +184,31 @@ describe('file tabs', () => {
     expect(paneTabTitle(tabs[1]!)).toBe('NOTES.md')
   })
 
-  it('gives the file column one tab, named after its shown file, with the others counted', () => {
+  it('names a column of one file after it, and says when it is the preview', () => {
+    const column: PaneNode = {
+      kind: 'split',
+      direction: 'column',
+      sizes: [1],
+      children: [{ kind: 'leaf', terminalId: 'file:1', pane: 'file', path: 'src/app.ts' }],
+      tabs: true,
+      shown: 'file:1',
+      preview: 'file:1'
+    }
+    const [tab] = paneTabs(column, {})
+    expect(tab).toEqual({
+      terminalId: 'file:1',
+      agent: undefined,
+      label: 'app.ts',
+      text: 'app.ts',
+      activity: null,
+      kind: 'file',
+      files: ['file:1'],
+      preview: true
+    })
+    expect(paneTabTitle(tab!)).toBe('app.ts')
+  })
+
+  it('calls a column of several files Files, jumping to the shown one', () => {
     const file = (id: string, path: string): PaneNode => ({ kind: 'leaf', terminalId: id, pane: 'file', path })
     const column: PaneNode = {
       kind: 'split',
@@ -200,13 +224,14 @@ describe('file tabs', () => {
     expect(tabs[1]).toEqual({
       terminalId: 'file:2',
       agent: undefined,
-      label: 'app.ts',
-      text: 'app.ts',
+      label: 'Files 4',
+      text: 'Files',
       activity: null,
       kind: 'file',
-      files: ['file:1', 'file:2', 'file:3', 'file:4']
+      files: ['file:1', 'file:2', 'file:3', 'file:4'],
+      names: ['a.ts', 'app.ts', 'b.ts', 'c.ts']
     })
-    expect(paneTabTitle(tabs[1]!)).toBe('app.ts +3')
+    expect(paneTabTitle(tabs[1]!)).toBe('a.ts, app.ts, b.ts, c.ts')
   })
 
   // `startTask` labels the agent's pane with the stored name, cut to "Add a subtract function to claude".

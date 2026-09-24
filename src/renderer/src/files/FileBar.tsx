@@ -30,9 +30,11 @@ export function FileBar({
 }: FileBarProps): React.JSX.Element {
   return (
     <header className="pane__bar file__bar" onContextMenu={onHeaderMenu}>
-      <span className="pane__title file__path" title={title}>
-        {label}
-      </span>
+      {label === null ? null : (
+        <span className="pane__title file__path" title={title}>
+          {label}
+        </span>
+      )}
       {unsaved && !tabbed ? <UnsavedDot /> : null}
       <span className="file__spacer" />
       {children}
@@ -50,8 +52,13 @@ export function FileBar({
   )
 }
 
+/** A file's label: none for a root file in the column, whose tab already says it all. */
+export function fileLabel(path: string, name: string, tabbed = false): React.ReactNode {
+  return tabbed && path === name ? null : <PathLabel path={path} name={name} />
+}
+
 /** A path as the bar reads it: `dir/` dimmed, then the name. */
-export function PathLabel({ path, name }: { path: string; name: string }): React.JSX.Element {
+function PathLabel({ path, name }: { path: string; name: string }): React.JSX.Element {
   return (
     <>
       <span className="file__dir">{path.slice(0, path.length - name.length)}</span>

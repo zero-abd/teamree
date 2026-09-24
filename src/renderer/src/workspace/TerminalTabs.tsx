@@ -46,6 +46,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
   const closePanes = useWorkspaceStore((state) => state.closePanes)
   const renamePane = useWorkspaceStore((state) => state.renamePane)
+  const pinFilePane = useWorkspaceStore((state) => state.pinFilePane)
   const unsavedFiles = useWorkspaceStore((state) => state.unsavedFiles)
   const namingMarkdown = useWorkspaceStore((state) => state.namingMarkdown)
   const nameMarkdown = useWorkspaceStore((state) => state.nameMarkdown)
@@ -161,6 +162,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                     onKeyDown={(event) => paneMenu.onKeyDown(tab.terminalId, tab.label, event)}
                     onDoubleClick={() => {
                       if (!isFile) setRenaming(tab.terminalId)
+                      else if (tab.preview) pinFilePane(tab.terminalId)
                     }}
                   >
                     {/* The sidebar's dot, borrowed rather than reinvented, exactly as
@@ -176,8 +178,10 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                       />
                     )}
                     {isFile ? null : <PaneGlyph agent={tab.agent} />}
-                    {tab.text === '' ? null : <span className="tab__name">{tab.text}</span>}
-                    {files.length > 1 ? <span className="tab__more">+{files.length - 1}</span> : null}
+                    {tab.text === '' ? null : (
+                      <span className={`tab__name${tab.preview ? ' tab__name--preview' : ''}`}>{tab.text}</span>
+                    )}
+                    {files.length > 1 ? <span className="tab__more">{files.length}</span> : null}
                     {unsaved ? <UnsavedDot /> : null}
                   </button>
                 )}

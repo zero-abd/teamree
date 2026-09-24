@@ -69,6 +69,25 @@ describe('the / menu', () => {
     expect(menu.querySelector('.md-menu__group')).toBeNull()
   })
 
+  it('reports nothing while open, and the result once it closes', async () => {
+    mount('')
+    const editor = await page()
+    act(() => void editor.chain().focus().insertContent('/h').run())
+    await screen.findByRole('listbox', { name: 'Blocks' })
+    act(() => void editor.chain().insertContent('2').run())
+    expect(onChange).not.toHaveBeenCalled()
+    act(() => void key(editor, 'Escape'))
+    expect(lastWrite()).toBe('/h2\n')
+  })
+
+  it('lets a line that matches no block through', async () => {
+    mount('')
+    const editor = await page()
+    act(() => void editor.chain().focus().insertContent('/etc/hosts').run())
+    await waitFor(() => expect(lastWrite()).toBe('/etc/hosts\n'))
+    expect(screen.queryByRole('listbox', { name: 'Blocks' })).toBeNull()
+  })
+
   it('closes on Escape and leaves the slash as typed', async () => {
     mount('')
     const editor = await page()
@@ -109,18 +128,18 @@ describe('the bar over a selection', () => {
 })
 
 describe('the handle beside a block', () => {
-  /** Lays the top-level blocks out one under another, 30px each. */
-  function layout(editor: Editor): void {
+  /** Lays the top-level blocks out one under another, 30px each, `left` from the frame's edge. */
+  function layout(editor: Editor, left = 100): void {
     editor.state.doc.forEach((_node, offset, index) => {
       const dom = editor.view.nodeDOM(offset) as HTMLElement
-      dom.getBoundingClientRect = () => new DOMRect(100, index * 30, 600, 24)
+      dom.getBoundingClientRect = () => new DOMRect(left, index * 30, 600, 24)
     })
   }
 
-  async function hover(text: string, y: number): Promise<{ editor: Editor; handle: HTMLElement }> {
+  async function hover(text: string, y: number, left = 100): Promise<{ editor: Editor; handle: HTMLElement }> {
     mount(text)
     const editor = await page()
-    layout(editor)
+    layout(editor, left)
     fireEvent.mouseMove(document.querySelector('.md-frame')!, { clientX: 300, clientY: y })
     const handle = await waitFor(() => {
       const found = document.querySelector<HTMLElement>('.md-handle')
@@ -151,10 +170,17 @@ describe('the handle beside a block', () => {
   })
 
   it('adds a line below with the / menu open', async () => {
-    const { handle } = await hover('first\n\nsecond\n', 10)
+    const { editor, handle } = await hover('first\n\nsecond\n', 10)
     act(() => void fireEvent.click(within(handle).getByRole('button', { name: 'Add below' })))
     await screen.findByRole('listbox', { name: 'Blocks' })
+    expect(onChange).not.toHaveBeenCalled()
+    act(() => void key(editor, 'Escape'))
     expect(lastWrite()).toBe('first\n\n/\n\nsecond\n')
+  })
+
+  it('stays inside a narrow page, whose gutter is narrower than the handle', async () => {
+    const { handle } = await hover('first\n\nsecond\n', 10, 16)
+    expect(parseFloat(handle.style.left)).toBeGreaterThanOrEqual(0)
   })
 
   it('starts a drag of its block', async () => {

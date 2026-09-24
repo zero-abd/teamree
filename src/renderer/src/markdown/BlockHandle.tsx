@@ -24,7 +24,7 @@ const HANDLE_HEIGHT = 24
 
 type Target = { block: Block; top: number; left: number }
 
-/** Where the handle goes for a block: left of it (of its list, for an item), level with its first line. */
+/** Where the handle goes for a block: left of it (of its list, for an item), level with its first line; over it on a narrow page. */
 function targetOf(editor: Editor, host: HTMLElement, block: Block): Target {
   const item = block.node.type.name === 'listItem' || block.node.type.name === 'taskItem'
   const edge = item ? (block.dom.parentElement ?? block.dom) : block.dom
@@ -38,7 +38,7 @@ function targetOf(editor: Editor, host: HTMLElement, block: Block): Target {
       // A block with no text to measure keeps its top edge.
     }
   }
-  return { block, top: middle - HANDLE_HEIGHT / 2, left: box.left - HANDLE_WIDTH - 4 }
+  return { block, top: middle - HANDLE_HEIGHT / 2, left: Math.max(0, box.left - HANDLE_WIDTH - 4) }
 }
 
 export function BlockHandle({

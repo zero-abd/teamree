@@ -126,6 +126,52 @@ describe('the markdown pane', () => {
   })
 })
 
+describe('the / menu', () => {
+  const key = (editor: Editor, name: string) => fireEvent.keyDown(editor.view.dom, { key: name })
+  const typeSlash = async (): Promise<Editor> => {
+    view = mount()
+    const editor = await page()
+    act(
+      () =>
+        void editor
+          .chain()
+          .focus()
+          .insertContentAt(editor.state.doc.content.size, { type: 'paragraph', content: [{ type: 'text', text: '/' }] })
+          .run()
+    )
+    await waitFor(() => expect(document.querySelector('.md-menu')).not.toBeNull())
+    await settle()
+    expect(writes()).toEqual([])
+    return editor
+  }
+  const written = (): string => ((writes().at(-1) as unknown[])[1] as { content: string }).content
+  let view: ReturnType<typeof mount>
+
+  it('keeps the slash off the disk, and Escape writes what was typed', async () => {
+    const editor = await typeSlash()
+    act(() => void key(editor, 'Escape'))
+    await settle()
+    expect(writes()).toHaveLength(1)
+    expect(written()).toBe(`${README}\n/\n`)
+  })
+
+  it('writes the chosen block without the slash', async () => {
+    const editor = await typeSlash()
+    act(() => void key(editor, 'ArrowDown'))
+    act(() => void key(editor, 'Enter'))
+    await settle()
+    expect(writes()).toHaveLength(1)
+    expect(written()).toBe(`${README}\n#\n`)
+  })
+
+  it('writes nothing when the page closes with the menu open', async () => {
+    await typeSlash()
+    view.unmount()
+    await settle()
+    expect(writes()).toEqual([])
+  })
+})
+
 describe('taking the focus', () => {
   const frames = () => act(() => new Promise((resolve) => setTimeout(resolve, 100)))
   const pane = (focused: boolean, onFocus: () => void) => (
