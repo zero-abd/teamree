@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-// Open Branch and Open Pull Request: the row chosen is the branch checked out, and an agent is optional.
+// Open Branch and Check Out Pull Request: the row chosen is the branch checked out, and an agent is optional.
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -110,7 +110,7 @@ describe('Open Branch', () => {
   })
 })
 
-describe('Open Pull Request', () => {
+describe('Check Out Pull Request', () => {
   it('checks out the head and compares against the pull request’s base', async () => {
     render(<OpenBranchDialog projectId="p1" pullRequests={true} />)
     await screen.findByText('#12 Add div · teammate')

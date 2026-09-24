@@ -409,7 +409,7 @@ const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[]
     label: 'Open Branch…',
     keywords: 'checkout existing branch teammate remote worktree track take over'
   },
-  { id: 'open-pull-request', label: 'Open Pull Request…', keywords: 'review pr github gh checkout teammate' },
+  { id: 'open-pull-request', label: 'Check Out Pull Request…', keywords: 'review pr github gh checkout teammate' },
   {
     id: 'install-cli',
     label: 'Install Command Line Tool',

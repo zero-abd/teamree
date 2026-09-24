@@ -12,7 +12,7 @@ import { fanOut, type AgentCounts } from './taskPlan'
 type Listing = { phase: 'loading' } | { phase: 'ready'; rows: OpenableRow[] } | { phase: 'error'; message: string }
 
 export const OPEN_BRANCH_TITLE = 'Open Branch'
-export const OPEN_PULL_REQUEST_TITLE = 'Open Pull Request'
+export const OPEN_PULL_REQUEST_TITLE = 'Check Out Pull Request'
 
 export function OpenBranchDialog({
   projectId,

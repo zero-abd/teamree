@@ -1,4 +1,4 @@
-// What Open Branch and Open Pull Request list, as rows: one title, one detail
+// What Open Branch and Check Out Pull Request list, as rows: one title, one detail
 // line, and what `worktree.create` is handed when a row is chosen.
 
 import type { BranchEntry, PullRequestEntry } from '@shared/entities'

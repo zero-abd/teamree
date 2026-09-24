@@ -596,7 +596,8 @@ describe('what the palette offers for the worktree on screen', () => {
     )
     expect(labels({ land: { kind: 'merge', into: 'main' } })).toContain('Merge into main…')
     const none = labels({ land: null })
-    expect(none.some((label) => /Pull Request|Merge into/.test(label))).toBe(false)
+    // Check Out Pull Request… is the project's, not the worktree's landing.
+    expect(none.some((label) => /(Create|Open) Pull Request|Merge into/.test(label))).toBe(false)
   })
 
   it('offers only removal for a checkout gone from disk, and nothing with no worktree open', () => {
@@ -797,12 +798,12 @@ describe('the one column after a label', () => {
 })
 
 describe('opening a branch as it is', () => {
-  it('offers Open Branch… and Open Pull Request…, reached by the words people use', () => {
+  it('offers Open Branch… and Check Out Pull Request…, reached by the words people use', () => {
     const items = buildPaletteItems(context())
     const branch = items.find((item) => item.id === 'open-branch')
     const pull = items.find((item) => item.id === 'open-pull-request')
     expect(branch?.label).toBe('Open Branch…')
-    expect(pull?.label).toBe('Open Pull Request…')
+    expect(pull?.label).toBe('Check Out Pull Request…')
     expect(branch?.search).toMatch(/checkout/)
     expect(pull?.search).toMatch(/review pr/)
   })

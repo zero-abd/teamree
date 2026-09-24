@@ -336,7 +336,7 @@ export const Params = {
   }),
   /** Branches nobody has checked out, local and on origin, for Open Branch. */
   worktreeBranches: z.object({ projectId: z.string().min(1) }),
-  /** Open pull requests through `gh`, for Open Pull Request. */
+  /** Open pull requests through `gh`, for Check Out Pull Request. */
   worktreePullRequests: z.object({ projectId: z.string().min(1) }),
   /**
    * Writes the project's setup as it applies here to `.teamree/project.json` in

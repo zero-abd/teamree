@@ -47,7 +47,7 @@ export function ProjectHead({
   const items: RowMenuItem[] = [
     { label: 'New Task…', onChoose: onNewTask },
     { label: 'Open Branch…', onChoose: () => onOpenBranch(false) },
-    { label: 'Open Pull Request…', onChoose: () => onOpenBranch(true) },
+    { label: 'Check Out Pull Request…', onChoose: () => onOpenBranch(true) },
     ...(removed.length === 0 ? [] : [{ label: 'Recently Removed', items: removed, onChoose: () => {} }])
   ]
 
