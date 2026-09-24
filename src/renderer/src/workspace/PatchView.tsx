@@ -46,12 +46,15 @@ export function PatchView({
   action,
   busy = false,
   reveal = null,
+  named = false,
   onHunk,
   onDiscard
 }: {
   patch: string
   truncated: boolean
   layout: DiffLayout
+  /** The pane already names the file, so a patch of one file draws no header for it. */
+  named?: boolean
   /** The verb every hunk here is offered; absent leaves the patch read-only. */
   action?: HunkAction
   /** True while one is in flight, so a second click cannot race the first. */
@@ -65,13 +68,14 @@ export function PatchView({
   // Once per patch: the panel re-renders on every refresh tick and a patch is thousands of lines.
   const files = useMemo(() => parsePatch(patch), [patch])
   const folded = useMemo(() => foldOnOpen(files), [files])
+  const headless = named && files.length === 1
 
   return (
     <div className={`patch patch--${layout}`}>
       {files.map((file, index) => (
         // The index: a rename of A to B plus an edit to A is two entries called A.
         <details className="patch__file" key={`${file.path}-${index}`} open>
-          <summary className="patch__fileHead">
+          <summary className="patch__fileHead" hidden={headless}>
             {/* Split here rather than through the panel's own helpers, which
                 would make this module and that one import each other for two
                 calls to `lastIndexOf`. A path with no slash in it takes the

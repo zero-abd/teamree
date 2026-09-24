@@ -458,8 +458,8 @@ describe('the commits list', () => {
             worktreeId: 'w1',
             sha,
             shortSha: 'aaaaaaa',
-            author: 'A',
-            committedAt: '',
+            author: 'Ada',
+            committedAt: '2026-09-20T14:05:00+00:00',
             subject: 'Rank by recency',
             patch,
             truncated: false,
@@ -506,6 +506,11 @@ describe('the commits list', () => {
     expect(screen.queryByRole('button', { name: 'Diff' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Inline' })).toBeTruthy()
     expect(call).not.toHaveBeenCalledWith('file.read', expect.anything())
+    // The tab carries the title; the bar says who and when, and the patch still names its files.
+    const bar = screen.getByRole('region', { name: 'aaaaaaa Rank by recency' }).querySelector('header')!
+    expect(bar.textContent).not.toContain('Rank by recency')
+    expect(bar.textContent).toContain('Ada')
+    expect(document.querySelector('.patch__fileHead:not([hidden])')).not.toBeNull()
   })
 })
 

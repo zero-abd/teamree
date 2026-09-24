@@ -12,6 +12,8 @@ export type FilePaneProps = {
   focused: boolean
   onFocus: () => void
   onClose: () => void
+  /** A tab of the file column, which carries the name's close and unsaved dot. */
+  tabbed?: boolean
   /** A right-click on the header: the pane's menu. */
   onHeaderMenu?: (event: React.MouseEvent<HTMLElement>) => void
   /** The header's `⋯`: the same menu, hung from it. */
