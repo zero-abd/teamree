@@ -102,7 +102,8 @@
   border-color: var(--accent-line);
 }
 
-.pane__bar {
+.pane__bar,
+.pane__notice {
   display: flex;
   align-items: center;
   gap: var(--s2);
@@ -120,9 +121,23 @@
   color: var(--fg-secondary);
 }
 
-/* The dot on the bar is `.activity`, the sidebar's, with the sidebar's reading
-   of the same PTY — the bar used to draw its own, green or grey, which beside
-   a tab pulsing amber for the same pane was a second vocabulary. */
+/* A terminal's focus is its tab's; in a split, its bar's top edge as well, never a whole frame. */
+.pane--terminal .pane__bar,
+.pane__notice {
+  height: 22px;
+}
+
+.pane--terminal.pane--focused {
+  border-color: var(--line);
+}
+
+.pane--terminal.pane--focused:has(> .pane__bar) {
+  border-top-color: var(--accent);
+}
+
+.pane--terminal.pane--focused .pane__bar {
+  background: var(--bg-raised);
+}
 
 .pane__title {
   overflow: hidden;

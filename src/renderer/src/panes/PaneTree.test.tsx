@@ -44,6 +44,7 @@ vi.mock('../files/FileView', () => ({
 
 const { PaneTree } = await import('./PaneTree')
 const { shownRoot } = await import('./paneLayout')
+const useStore = await import('../state/workspaceStore')
 
 const terminal = (id: string, overrides: Partial<Terminal> = {}): Terminal => ({
   id,
@@ -118,9 +119,19 @@ describe('one pane', () => {
   // A layout can name a terminal the store has not caught up with yet, and a
   // pane with no label at all reads as a rendering bug rather than a wait.
   it('still renders, named plainly, for a terminal the store has not got', () => {
-    mount(leaf('t1'), [])
+    mount(row(leaf('t1'), leaf('t2')), [terminal('t2')])
     expect(screen.getByRole('region', { name: 'terminal' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Close pane terminal' })).toBeTruthy()
+  })
+
+  // The tab above it already says its name and draws its dot.
+  it('draws no bar, no name and no dot of its own when it is the only pane', () => {
+    mount(leaf('t1'), [terminal('t1', { title: 'claude', busy: true })])
+    expect(screen.getByRole('region', { name: 'claude' })).toBeTruthy()
+    expect(document.querySelector('.pane__bar')).toBeNull()
+    expect(document.querySelector('.activity')).toBeNull()
+    expect(screen.queryByText('claude')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Close pane/ })).toBeNull()
   })
 
   it('says nothing about exiting while the shell is alive', () => {
@@ -149,20 +160,25 @@ describe('one pane', () => {
   // one thing on every bar that nobody acted on. It stays reachable — on the
   // name's hover — for whoever is checking that a split did what they meant.
   it('keeps the pane’s size off the bar and on the name’s hover', () => {
-    mount(leaf('t1'), [terminal('t1', { cols: 132, rows: 43 })])
+    mount(row(leaf('t1'), leaf('t2')), [terminal('t1', { cols: 132, rows: 43 }), terminal('t2')])
     expect(screen.queryByText('132×43')).toBeNull()
     expect(screen.getByText('t1').getAttribute('title')).toBe('t1 · 132×43')
   })
 
-  // The same dot, with the same reading, as the sidebar row, the tab and the
-  // board: a bar that drew its own green-or-grey mark beside a strip drawing
-  // amber for the same pane was two answers to "what is this pane doing".
-  it('draws the sidebar’s activity dot, read the same way', () => {
-    mount(leaf('t1'), [terminal('t1', { busy: true })])
-    const dot = document.querySelector('.pane__bar .activity') as HTMLElement
-    expect(dot.classList.contains('activity--working')).toBe(true)
-    expect(dot.getAttribute('title')).toBe('working')
-    expect(document.querySelector('.pane__dot')).toBeNull()
+  // The dot lives on the tab only; a bar under it drawing it again was every dot twice.
+  it('names each of two panes on a bar of its own, with no dot', () => {
+    mount(row(leaf('t1'), leaf('t2')), [terminal('t1', { busy: true }), terminal('t2')])
+    expect(document.querySelectorAll('.pane__bar')).toHaveLength(2)
+    expect(document.querySelectorAll('.activity')).toHaveLength(0)
+    expect(screen.getByText('t1').className).toBe('pane__title')
+  })
+
+  it('says a lone pane exited, and offers to run it again, without naming it', () => {
+    mount(leaf('t1'), [terminal('t1', { title: 'claude', agent: 'claude', running: false, exitCode: 1 })])
+    expect(document.querySelector('.pane__bar')).toBeNull()
+    expect(screen.getByText('exited 1')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Run claude again' })).toBeTruthy()
+    expect(document.querySelector('.pane__title')).toBeNull()
   })
 
   // The scrollback under the badge says "[no conversation to resume — fresh
@@ -258,7 +274,7 @@ describe('closing the right pane', () => {
   // The chord is taught in the menu bar, in Help, in the palette and on the
   // front door; the hover on a close button is not a fifth place.
   it('names which pane each button closes, and no chord', () => {
-    mount(leaf('t1'), [terminal('t1', { title: 'claude' })])
+    mount(row(leaf('t1'), leaf('t2')), [terminal('t1', { title: 'claude' }), terminal('t2')])
     const button = screen.getByRole('button', { name: 'Close pane claude' })
     expect(button.getAttribute('title')).toBe('Close pane')
   })
@@ -456,5 +472,19 @@ describe('the file column', () => {
     expect(onFocus).toHaveBeenCalledWith('file:1')
     fireEvent.click(screen.getByRole('button', { name: 'Close NOTES.md' }))
     expect(onClose).toHaveBeenCalledWith('file:1')
+  })
+
+  it('gives the layout back on Escape in a zoomed diff, and keeps Escape for an editor', () => {
+    const { useWorkspaceStore } = useStore
+    useWorkspaceStore.setState({ expandedTerminalId: 'file:2', diffPanes: { 'file:2': true } })
+    mount(shownRoot(row(leaf('t1'), column), 'file:2')!, [terminal('t1')], 'file:2')
+    expect(screen.queryByTestId('surface-t1')).toBeNull()
+    fireEvent.keyDown(screen.getByTestId('viewer-file:2'), { key: 'Escape' })
+    expect(useWorkspaceStore.getState().expandedTerminalId).toBeNull()
+
+    useWorkspaceStore.setState({ expandedTerminalId: 'file:2', diffPanes: {} })
+    fireEvent.keyDown(screen.getByTestId('viewer-file:2'), { key: 'Escape' })
+    expect(useWorkspaceStore.getState().expandedTerminalId).toBe('file:2')
+    useWorkspaceStore.setState({ expandedTerminalId: null })
   })
 })

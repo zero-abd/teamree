@@ -12,7 +12,7 @@ import {
   type FileColumn,
   type FileLeaf
 } from '@shared/filePane'
-import { PANE_GUTTER_PX } from '@shared/paneRoom'
+import { leavesRoom, PANE_GUTTER_PX, paneRects, type Box } from '@shared/paneRoom'
 
 /** Smallest slice of a split a pane may shrink to, as a fraction of the axis. */
 export const MIN_PANE_FRACTION = 0.08
@@ -167,6 +167,42 @@ export function splitPaneWith(
     sizes: normalizeSizes(root.sizes, root.children.length),
     children: root.children.map((child) => splitPaneWith(child, terminalId, direction, added, before))
   }
+}
+
+/**
+ * A new file column beside the largest pane that can spare it, half the centre wide where that leaves room,
+ * else under the largest shell; never under an agent. Null when every place starves a pane below `min`.
+ */
+export function placeFileColumn(
+  root: PaneNode | null,
+  column: FileColumn,
+  box: Box,
+  min: Box,
+  isAgent: (id: string) => boolean
+): PaneNode | null {
+  if (!root) return column
+  const area = (rect: { width: number; height: number }): number => Math.round(rect.width * rect.height)
+  const largest = paneRects(root, box).sort((a, b) => area(b) - area(a))
+  const tries: PaneNode[] = []
+  for (const rect of largest) {
+    const half = Math.min(1, box.width / 2 / rect.width)
+    for (const share of half > 0.5 ? [half, 0.5] : [0.5]) tries.push(inPlaceOf(root, rect.id, 'row', column, share))
+  }
+  for (const rect of largest) if (!isAgent(rect.id)) tries.push(inPlaceOf(root, rect.id, 'column', column, 0.5))
+  return tries.find((tree) => leavesRoom(root, tree, box, min)) ?? null
+}
+
+/** The leaf `id` and `added` split along `direction`, `added` after it with `share`; flattened as the runtime stores it. */
+function inPlaceOf(root: PaneNode, id: string, direction: 'row' | 'column', added: PaneNode, share: number): PaneNode {
+  const walk = (node: PaneNode): PaneNode => {
+    if (node.kind === 'leaf') {
+      return node.terminalId === id
+        ? { kind: 'split', direction, sizes: [1 - share, share], children: [node, added] }
+        : node
+    }
+    return isFileColumn(node) ? node : { ...node, children: node.children.map(walk) }
+  }
+  return flatten(walk(root))
 }
 
 /** Adds a pane at the top level, the way the runtime's `terminal.create` does. */
@@ -391,6 +427,9 @@ export function setSizesAt(root: PaneNode, path: readonly number[], sizes: reado
  */
 export function shownRoot(root: PaneNode | null, expandedTerminalId: string | null): PaneNode | null {
   if (expandedTerminalId === null) return root
+  // A file tab fills the centre with its column, the other tabs still on it.
+  const column = fileColumnIn(root)
+  if (column && hasTerminal(column, expandedTerminalId)) return column
   return collectLeaves(root).find((node) => node.terminalId === expandedTerminalId) ?? root
 }
 

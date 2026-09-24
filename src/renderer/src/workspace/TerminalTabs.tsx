@@ -12,7 +12,7 @@ import { paneTabs, paneTabTitle } from './paneTabs'
 import { useStartMenuItems } from './startMenu'
 import { PaneGlyph } from '../agents/glyphs'
 import type { PlatformModifier } from '../keyboard/platformModifier'
-import { dotClass, dotTone, truncateName } from '../sidebar/agentRows'
+import { dotClass, dotTone } from '../sidebar/agentRows'
 import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
 import { SidebarGlyph } from '../shell/Brand'
 import { useUnreadPanes } from '../state/usePaneSeen'
@@ -176,8 +176,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                       />
                     )}
                     {isFile ? null : <PaneGlyph agent={tab.agent} />}
-                    {/* Shortened here only; the tooltip and the record keep all of it. */}
-                    {tab.text === '' ? null : <span className="tab__name">{truncateName(tab.text)}</span>}
+                    {tab.text === '' ? null : <span className="tab__name">{tab.text}</span>}
                     {files.length > 1 ? <span className="tab__more">+{files.length - 1}</span> : null}
                     {unsaved ? <UnsavedDot /> : null}
                   </button>

@@ -14,7 +14,7 @@ import {
 import { freshAgentLabel } from '@shared/paneRestore'
 import { minExtent, type Box } from '@shared/paneRoom'
 import type { PlatformModifier } from '../keyboard/platformModifier'
-import { activityOf, dotClass, dotTone, paneAgent, paneNames, TONE_LABEL } from '../sidebar/agentRows'
+import { paneNames } from '../sidebar/agentRows'
 import type { WorktreeNameSource } from '../sidebar/worktreeDisplay'
 import { TerminalView } from '../terminal/TerminalView'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -60,7 +60,7 @@ export function PaneTree({
     return <FileLeaf leaf={node} {...callbacks} />
   }
   if (node.kind === 'leaf') {
-    return <PaneLeaf terminalId={node.terminalId} {...callbacks} names={names} />
+    return <PaneLeaf terminalId={node.terminalId} {...callbacks} names={names} alone={path.length === 0} />
   }
   if (isFileColumn(node)) return <FileColumnPane node={node} {...callbacks} />
   return <PaneSplit node={node} path={path} {...callbacks} names={names} />
@@ -104,13 +104,23 @@ function FileLeaf({
 function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColumn }): React.JSX.Element {
   const unsaved = useWorkspaceStore((state) => state.unsavedFiles)
   const pin = useWorkspaceStore((state) => state.pinFilePane)
+  const expanded = useWorkspaceStore((state) => state.expandedTerminalId)
+  const diffs = useWorkspaceStore((state) => state.diffPanes)
+  const restore = useWorkspaceStore((state) => state.toggleExpandedPane)
   const startDrag = useTabDrag()
   const dragged = usePaneDrag((state) => state.drag?.source.id)
   const shown = shownTabId(node)
   const tabs = node.children.filter(isFileLeaf)
   const focused = tabs.some((tab) => tab.terminalId === callbacks.focusedTerminalId)
+  // Out of a zoomed diff; an editor keeps its Escape.
+  const onKeyDown = (event: React.KeyboardEvent): void => {
+    if (event.key !== 'Escape' || event.defaultPrevented || shown === undefined || diffs[shown] !== true) return
+    if (!tabs.some((tab) => tab.terminalId === expanded)) return
+    event.preventDefault()
+    restore()
+  }
   return (
-    <div className={`column${focused ? ' column--focused' : ''}`}>
+    <div className={`column${focused ? ' column--focused' : ''}`} onKeyDown={onKeyDown}>
       <div className="column__tabs" role="tablist" aria-label="Open files">
         {tabs.map((tab) => {
           const name = fileTabName(tab)
@@ -190,8 +200,9 @@ function PaneLeaf({
   searchTerminalId,
   searchToken,
   onCloseSearch,
-  modifier
-}: PaneCallbacks & { terminalId: string }): React.JSX.Element {
+  modifier,
+  alone
+}: PaneCallbacks & { terminalId: string; alone: boolean }): React.JSX.Element {
   const menu = usePaneMenu(modifier)
   const terminal = terminals[terminalId]
   const focused = focusedTerminalId === terminalId
@@ -199,48 +210,61 @@ function PaneLeaf({
   const exited = terminal !== undefined && !terminal.running
   // One name per pane, shared by strip, bar, close button and close question.
   const name = names?.[terminalId] ?? terminal?.title ?? 'terminal'
-  // The same reading the sidebar row, the tab and the board give this pane.
-  const tone = terminal === undefined ? null : dotTone(activityOf(terminal), paneAgent(terminal))
   // The grid size is on the name's hover: nobody acts on it.
   const hover = terminal === undefined ? name : `${name} · ${terminal.cols}×${terminal.rows}`
 
-  return (
-    <section className={`pane${focused ? ' pane--focused' : ''}${exited ? ' pane--exited' : ''}`} aria-label={name}>
-      <header className="pane__bar" onContextMenu={(event) => menu.onContextMenu(terminalId, name, event)}>
-        <span className={dotClass(tone)} title={tone === null ? undefined : TONE_LABEL[tone]} aria-hidden="true" />
-        <span className="pane__title" title={hover}>
-          {name}
-        </span>
-        {exited ? (
-          <span className="chip pane__exit">
-            exited{terminal?.exitCode === undefined ? '' : ` ${terminal.exitCode}`}
-          </span>
-        ) : null}
-        {/* Beside the badge that says the pane is dead, because the next thing
-            anybody does about a dead pane is this. An agent is named, since
-            running one again is a different act from opening a shell. */}
-        {exited ? (
-          <button type="button" className="pane__again" onClick={() => onRelaunch(terminalId)}>
-            {terminal?.agent === undefined ? 'New shell' : `Run ${terminal.agent} again`}
-          </button>
-        ) : null}
-        {terminal?.restored === undefined ? null : (
-          <span className={`chip pane__restored pane__restored--${terminal.restored}`} title={restoredTitle(terminal)}>
-            {restoredBadge(terminal)}
-          </span>
-        )}
-        <button
-          type="button"
-          className="pane__close"
-          title="Close pane"
-          aria-label={`Close pane ${name}`}
-          onClick={() => onClose(terminalId)}
-        >
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M3 3 L9 9 M9 3 L3 9" />
-          </svg>
+  const status = (
+    <>
+      {exited ? (
+        <span className="chip pane__exit">exited{terminal?.exitCode === undefined ? '' : ` ${terminal.exitCode}`}</span>
+      ) : null}
+      {/* Beside the badge that says the pane is dead, because the next thing
+          anybody does about a dead pane is this. An agent is named, since
+          running one again is a different act from opening a shell. */}
+      {exited ? (
+        <button type="button" className="pane__again" onClick={() => onRelaunch(terminalId)}>
+          {terminal?.agent === undefined ? 'New shell' : `Run ${terminal.agent} again`}
         </button>
-      </header>
+      ) : null}
+      {terminal?.restored === undefined ? null : (
+        <span className={`chip pane__restored pane__restored--${terminal.restored}`} title={restoredTitle(terminal)}>
+          {restoredBadge(terminal)}
+        </span>
+      )}
+    </>
+  )
+
+  return (
+    <section
+      className={`pane pane--terminal${focused ? ' pane--focused' : ''}${exited ? ' pane--exited' : ''}`}
+      aria-label={name}
+    >
+      {alone ? (
+        // The tab is its name and its dot; what is left to say is how it ended or came back.
+        exited || terminal?.restored !== undefined ? (
+          <div className="pane__notice" onContextMenu={(event) => menu.onContextMenu(terminalId, name, event)}>
+            {status}
+          </div>
+        ) : null
+      ) : (
+        <header className="pane__bar" onContextMenu={(event) => menu.onContextMenu(terminalId, name, event)}>
+          <span className="pane__title" title={hover}>
+            {name}
+          </span>
+          {status}
+          <button
+            type="button"
+            className="pane__close"
+            title="Close pane"
+            aria-label={`Close pane ${name}`}
+            onClick={() => onClose(terminalId)}
+          >
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M3 3 L9 9 M9 3 L3 9" />
+            </svg>
+          </button>
+        </header>
+      )}
       <TerminalView
         terminalId={terminalId}
         focused={focused}
