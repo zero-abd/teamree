@@ -7,17 +7,9 @@
 
 import { describe, expect, it } from 'vitest'
 import type { PaneNode } from '@shared/entities'
-import { MIN_PANE_CELLS } from '@shared/paneRoom'
+import { MIN_PANE_CELLS, PANE_BAR_PX, PANE_CHROME, paneSizeFrom } from '@shared/paneRoom'
 import { GUTTER_PX } from '../panes/paneLayout'
-import {
-  measureCell,
-  minPaneBox,
-  newPaneRoom,
-  PANE_BAR_PX,
-  PANE_CHROME,
-  paneSizeFrom,
-  roomForNewPane
-} from './paneMetrics'
+import { cellFromChar, measureCell, minPaneBox, newPaneRoom, roomForNewPane } from './paneMetrics'
 
 const CELL = { width: 8, height: 17 }
 
@@ -33,7 +25,8 @@ describe('where the next pane lands', () => {
     expect(roomForNewPane(null, CELL, area)).toEqual({
       ...paneSizeFrom({ width: 1000 - PANE_CHROME.width, height: 800 - PANE_CHROME.height + PANE_BAR_PX }, CELL),
       area,
-      minPane: minPaneBox(CELL)
+      minPane: minPaneBox(CELL),
+      cell: CELL
     })
   })
 
@@ -72,6 +65,16 @@ describe('cells in a box', () => {
   it('answers nothing for a box that has not been laid out', () => {
     expect(paneSizeFrom({ width: 0, height: 0 }, CELL)).toBeUndefined()
     expect(paneSizeFrom({ width: 1280, height: 800 }, { width: 0, height: 0 })).toBeUndefined()
+  })
+})
+
+describe('a cell as xterm draws it', () => {
+  // The character is 7.83px wide at 13px, but xterm draws 7.5px cells on a 2x
+  // screen: counted in the character's width, a pane was born 4% narrower than drawn.
+  it('floors the width to device pixels and rounds the line as the WebGL renderer does', () => {
+    expect(cellFromChar({ width: 7.82666015625, height: 15 }, 2)).toEqual({ width: 7.5, height: 18.5 })
+    expect(cellFromChar({ width: 5.41845703125, height: 10 }, 2)).toEqual({ width: 5, height: 12.5 })
+    expect(cellFromChar({ width: 7.82666015625, height: 15 }, 1)).toEqual({ width: 7, height: 18 })
   })
 })
 

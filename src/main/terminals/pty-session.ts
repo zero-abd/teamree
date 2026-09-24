@@ -142,6 +142,9 @@ export class PtySession {
   private pty: IPty
   private readonly platform: NodeJS.Platform
   private readonly scrollback: ScrollbackBuffer
+  /** Characters of output appended since the session started; a data event carries the count after it. */
+  private appended = 0
+  private widest: number
   /** The previous run's output, when this pane is one that was brought back. */
   private readonly record: RecordedScrollback | undefined
   private readonly titles = new TitleSequenceScanner()
@@ -202,6 +205,7 @@ export class PtySession {
     this.agent = init.agent
     this.cols = init.cols
     this.rows = init.rows
+    this.widest = init.cols
     this.platform = platform
     this.pty = handle
     this.scrollback = new ScrollbackBuffer(init.scrollbackCapBytes)
@@ -214,7 +218,7 @@ export class PtySession {
     this.startedAt = this.lastOutputAt
 
     // Before the child is listened to, so it is above its first byte.
-    if (init.startupNote !== undefined) this.scrollback.append(init.startupNote)
+    if (init.startupNote !== undefined) this.append(init.startupNote)
 
     this.listen(handle)
   }
@@ -344,6 +348,7 @@ export class PtySession {
     if (cols !== this.cols || rows !== this.rows) this.resizedAt = this.clock()
     this.cols = cols
     this.rows = rows
+    this.widest = Math.max(this.widest, cols)
     if (!this.running || this.draining) return
     try {
       this.pty.resize(cols, rows)
@@ -380,6 +385,22 @@ export class PtySession {
     const joined = this.record.text.endsWith('\n') ? this.record.text : `${this.record.text}\r\n`
     const combined = `${joined}${live}`
     return capBytes === undefined ? combined : tailFromLineBoundary(combined, capBytes)
+  }
+
+  /** The widest the pane has been: none of its output was written for a wider one. */
+  get widestCols(): number {
+    return this.widest
+  }
+
+  /** Where the output stands now, in the units of a data event's `end`. */
+  get outputEnd(): number {
+    return this.appended
+  }
+
+  private append(text: string): number {
+    this.scrollback.append(text)
+    this.appended += text.length
+    return this.appended
   }
 
   get retainedBytes(): number {
@@ -429,8 +450,7 @@ export class PtySession {
 
   private receive(chunk: string): void {
     if (this.clock() - this.resizedAt >= REDRAW_AFTER_RESIZE_MS) this.noteActivity()
-    this.scrollback.append(chunk)
-    this.emit({ type: 'data', data: chunk })
+    this.emit({ type: 'data', data: chunk, end: this.append(chunk) })
     this.cancelScreenRead ??= this.scheduler(() => {
       this.cancelScreenRead = undefined
       void this.readScreen()
@@ -576,8 +596,7 @@ export class PtySession {
 
     const note = failedResumeMark(exitCode, this.record !== undefined, restarted)
     // Appended as well as emitted: a subscriber arriving after the exit reads the pane.
-    this.scrollback.append(note)
-    this.emit({ type: 'data', data: note })
+    this.emit({ type: 'data', data: note, end: this.append(note) })
 
     if (restarted) this.init.onRestart?.(this)
     return restarted

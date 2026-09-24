@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import type { PaneNode } from './entities'
-import { leavesRoom, minExtent, PANE_GUTTER_PX, paneRects, placePane, placePaneWithin } from './paneRoom'
+import {
+  leavesRoom,
+  minExtent,
+  PANE_BAR_PX,
+  PANE_CHROME,
+  PANE_GUTTER_PX,
+  paneCellsIn,
+  paneRects,
+  placePane,
+  placePaneWithin
+} from './paneRoom'
 
 const leaf = (id: string): PaneNode => ({ kind: 'leaf', terminalId: id })
 
@@ -172,5 +182,26 @@ describe('a file column', () => {
       sizes: [0.5, 0.5],
       children: [column('f1', 'f2'), leaf('n')]
     })
+  })
+})
+
+describe('paneCellsIn', () => {
+  const box = { width: 1000, height: 800 }
+  const cell = { width: 8, height: 16 }
+
+  it('counts the cells left in a pane once its chrome is off, as the fit addon does', () => {
+    const halves: PaneNode = { kind: 'split', direction: 'row', sizes: [0.5, 0.5], children: [leaf('a'), leaf('b')] }
+    expect(paneCellsIn(halves, 'b', box, cell)).toEqual({
+      cols: Math.floor(((1000 - PANE_GUTTER_PX) / 2 - PANE_CHROME.width) / 8),
+      rows: Math.floor((800 - PANE_CHROME.height) / 16)
+    })
+  })
+
+  it('gives a lone pane the rows its missing bar would have taken', () => {
+    expect(paneCellsIn(leaf('a'), 'a', box, cell)?.rows).toBe(Math.floor((800 - PANE_CHROME.height + PANE_BAR_PX) / 16))
+  })
+
+  it('answers nothing for a pane that is not in the tree', () => {
+    expect(paneCellsIn(leaf('a'), 'b', box, cell)).toBeUndefined()
   })
 })

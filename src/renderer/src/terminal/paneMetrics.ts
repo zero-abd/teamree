@@ -3,7 +3,7 @@
 // any cell this misses.
 
 import type { PaneNode } from '@shared/entities'
-import { MIN_PANE_CELLS, paneRects, placePaneWithin } from '@shared/paneRoom'
+import { MIN_PANE_CELLS, PANE_CHROME, paneCellsIn, placePaneWithin } from '@shared/paneRoom'
 
 /** The line height every pane's emulator is built with. Stated once. */
 export const TERMINAL_LINE_HEIGHT = 1.25
@@ -13,29 +13,14 @@ export type PaneSize = { cols: number; rows: number }
 /** A box in CSS pixels; the part of a DOMRect anything here reads. */
 export type Box = { width: number; height: number }
 
-/** The fraction of the pane grid a pane occupies, per axis. */
-export type PaneShare = { width: number; height: number }
-
-/** A new pane's size in cells, and the grid and floor it was worked out on, for the runtime to place it the same way. */
-export type NewPane = PaneSize & { area: Box; minPane: Box }
-
-/** xterm refuses to go below this, and so does the fit addon. */
-const MIN_CELLS = 2
+/** A new pane's size in cells, and the grid, floor and cell it was worked out on, for the runtime to place it the same way. */
+export type NewPane = PaneSize & { area: Box; minPane: Box; cell: Box }
 
 /** Characters in the probe; a run averages away per-glyph pixel rounding. */
 const PROBE_COLUMNS = 80
 
 /** Where the pane grid is drawn; `WorkspaceArea` owns the element. */
 export const PANE_GRID_SELECTOR = '.workspace__panes'
-
-/** A split pane's 22px bar and its hairline, as `panes.css` draws them; a lone pane has none. */
-export const PANE_BAR_PX = 22 + 1
-
-/**
- * Pixels between a split pane's edge and its first cell, mirroring `panes.css` (borders, bar,
- * padding). Stated because the first pane has nothing on screen to measure.
- */
-export const PANE_CHROME: Box = { width: 1 + 1 + 9 + 6, height: 1 + PANE_BAR_PX + 1 + 6 + 6 }
 
 /** Stands in for the pane not yet made; no terminal or file id looks like it. */
 const PROBE_ID = 'probe:new-pane'
@@ -52,30 +37,39 @@ export function minPaneBox(cell: Box): Box {
 export function roomForNewPane(root: PaneNode | null, cell: Box, area: Box): NewPane | 'full' {
   const minPane = minPaneBox(cell)
   const placed = placePaneWithin(root, { kind: 'leaf', terminalId: PROBE_ID }, area, minPane)
-  const rect = paneRects(placed, area).find((each) => each.id === PROBE_ID)
-  if (!rect) return 'full'
-  // Chrome comes off each pane after the split: two panes carry two sets of borders.
-  const chrome = root === null ? PANE_CHROME.height - PANE_BAR_PX : PANE_CHROME.height
-  const size = paneSizeFrom({ width: rect.width - PANE_CHROME.width, height: rect.height - chrome }, cell)
-  return size === undefined ? 'full' : { ...size, area, minPane }
-}
-
-/** Cells that fit in a share of a box as the fit addon counts them: floor, never below two. */
-export function paneSizeFrom(box: Box, cell: Box, share: PaneShare = { width: 1, height: 1 }): PaneSize | undefined {
-  if (box.width <= 0 || box.height <= 0 || cell.width <= 0 || cell.height <= 0) return undefined
-  return {
-    cols: Math.max(MIN_CELLS, Math.floor((box.width * share.width) / cell.width)),
-    rows: Math.max(MIN_CELLS, Math.floor((box.height * share.height) / cell.height))
-  }
+  const size = placed ? paneCellsIn(placed, PROBE_ID, area, cell) : undefined
+  return size === undefined ? 'full' : { ...size, area, minPane, cell }
 }
 
 /**
- * One cell of pane text, measured with the emulator's font stack, line height applied after as xterm
- * does. Undefined when there is nothing to measure; callers then send no size.
+ * One cell of pane text as xterm will draw it, measured the way xterm measures the character.
+ * Undefined when there is nothing to measure; callers then send no size.
  */
 export function measureCell(fontSize: number, fontFamily: string, doc: Document | undefined): Box | undefined {
+  const char = measureChar(fontSize, fontFamily, doc)
+  return char && cellFromChar(char, doc?.defaultView?.devicePixelRatio || 1)
+}
+
+/** xterm's cell for a character: the WebGL renderer floors the width to device pixels and rounds the line. */
+export function cellFromChar(char: Box, dpr: number): Box {
+  return {
+    width: Math.floor(char.width * dpr) / dpr,
+    height: Math.floor(Math.ceil(char.height * dpr) * TERMINAL_LINE_HEIGHT) / dpr
+  }
+}
+
+/** Canvas text metrics where there are any, as xterm prefers; a span otherwise. */
+function measureChar(fontSize: number, fontFamily: string, doc: Document | undefined): Box | undefined {
   const body = doc?.body
   if (!body) return undefined
+  const Offscreen = doc.defaultView?.OffscreenCanvas
+  const context = Offscreen ? new Offscreen(1, 1).getContext('2d') : null
+  if (context) {
+    context.font = `${fontSize}px ${fontFamily}`
+    const metrics = context.measureText('W')
+    const height = metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent
+    if (metrics.width > 0 && height > 0) return { width: metrics.width, height }
+  }
   const probe = doc.createElement('span')
   probe.setAttribute('aria-hidden', 'true')
   probe.style.cssText = [
@@ -93,7 +87,7 @@ export function measureCell(fontSize: number, fontFamily: string, doc: Document 
   const rect = probe.getBoundingClientRect()
   probe.remove()
   if (rect.width <= 0 || rect.height <= 0) return undefined
-  return { width: rect.width / PROBE_COLUMNS, height: rect.height * TERMINAL_LINE_HEIGHT }
+  return { width: rect.width / PROBE_COLUMNS, height: rect.height }
 }
 
 /** The pane grid's content box and the least pane in it, as drawn now; nothing before there is a grid. */

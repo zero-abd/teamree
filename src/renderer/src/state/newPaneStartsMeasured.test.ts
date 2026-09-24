@@ -127,3 +127,27 @@ it('refuses a split that would leave a pane under the minimum, in the direction 
   call.mockRestore()
   measurement.grid = undefined
 })
+
+it('splits a pane at the size its half will be drawn at, on the grid it was measured on', async () => {
+  const worktreeId = await openedWorktree()
+  const area = { width: 1000, height: 800 }
+  const cell = { width: 8, height: 17 }
+  measurement.grid = { area, minPane: MIN_PANE, cell }
+  const focused = useWorkspaceStore.getState().layouts[worktreeId]!.focusedTerminalId!
+  useWorkspaceStore.setState((state) => ({
+    layouts: {
+      ...state.layouts,
+      [worktreeId]: { worktreeId, root: { kind: 'leaf', terminalId: focused }, focusedTerminalId: focused }
+    }
+  }))
+
+  const call = vi.spyOn(runtimeClient, 'call')
+  await useWorkspaceStore.getState().splitFocusedPane('row')
+
+  // Half of 1000px less the gutter and a pane's chrome, in 8px cells; 800px less chrome in 17px rows.
+  expect(call.mock.calls.filter(([method]) => method === 'terminal.split').map(([, params]) => params)).toEqual([
+    { terminalId: focused, direction: 'row', cols: 60, rows: 44, area, cell }
+  ])
+  call.mockRestore()
+  measurement.grid = undefined
+})

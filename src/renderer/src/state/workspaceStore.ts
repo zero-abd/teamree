@@ -87,7 +87,7 @@ import {
 import type { ConnectionState } from '../runtimeClient/RuntimeClientContract'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { newPaneRoom, paneGrid, roomForNewPane, type Box, type NewPane } from '../terminal/paneMetrics'
-import { leavesRoom, placePaneWithin } from '@shared/paneRoom'
+import { leavesRoom, paneCellsIn, placePaneWithin } from '@shared/paneRoom'
 import { shownText } from '../terminal/shownPanes'
 import { replayLines } from '@shared/outputEvidence'
 import {
@@ -1620,10 +1620,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const layout = activeLayout()
       const terminalId = layout?.focusedTerminalId
       if (!layout || !terminalId) return
+      const split = splitPane(layout.root, terminalId, direction, SPLIT_PROBE_ID)
       // Where the person put it or nowhere.
-      if (withRoom(layout.root, splitPane(layout.root, terminalId, direction, SPLIT_PROBE_ID)) === null) return
+      if (withRoom(layout.root, split) === null) return
+      // Born at the half's size: a shell that first draws wider than its pane leaves a `%` line.
+      const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+      const size = grid && paneCellsIn(split, SPLIT_PROBE_ID, grid.area, grid.cell)
+      const measured = grid && size ? { ...size, area: grid.area, cell: grid.cell } : {}
       try {
-        const { terminal, layout: next } = await runtimeClient.call('terminal.split', { terminalId, direction })
+        const { terminal, layout: next } = await runtimeClient.call('terminal.split', {
+          terminalId,
+          direction,
+          ...measured
+        })
         set((state) => ({
           terminals: { ...state.terminals, [terminal.id]: terminal },
           layouts: { ...state.layouts, [next.worktreeId]: next }

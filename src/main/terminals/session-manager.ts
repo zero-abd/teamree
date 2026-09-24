@@ -8,7 +8,7 @@ import type { RestoredAs } from '../../shared/paneRestore'
 import type { AgentEvent, Layout, PaneNode, Terminal } from '../../shared/entities'
 import { fileLeavesIn } from '../../shared/filePane'
 import { evidenceLine } from '../../shared/outputEvidence'
-import { placePane, placePaneWithin, type Box } from '../../shared/paneRoom'
+import { paneCellsIn, placePane, placePaneWithin, type Box } from '../../shared/paneRoom'
 import type { ParamsOf, TerminalEvent } from '../../shared/methods'
 import {
   detectAgent,
@@ -27,7 +27,15 @@ import {
   writeHookSettings,
   type AgentHookOptions
 } from './agent-hooks'
-import { leafPane, normalisePane, parsePaneNode, removePane, splitPane, terminalIdsIn } from './pane-tree'
+import {
+  leafPane,
+  normalisePane,
+  parsePaneNode,
+  removePane,
+  splitPane,
+  terminalIdsIn,
+  type SplitDirection
+} from './pane-tree'
 import { conversationOnDisk, type ConversationEvidence, type ConversationQuestion } from './agent-conversations'
 import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
 import { CHECKPOINT_SOURCE_BYTES, ScrollbackCheckpoints } from './scrollbackCheckpoints'
@@ -47,6 +55,9 @@ import type { Tone } from '../../shared/theme'
 /** Size a pane starts at before the renderer measures itself and resizes. */
 const DEFAULT_COLS = 80
 const DEFAULT_ROWS = 24
+
+/** Stands in for a pane not yet made, to measure where it will land; no terminal id looks like it. */
+const PROBE_PANE_ID = 'probe:new-pane'
 
 /** One subscriber's end of a terminal's event stream; the hub's shape, so no adapter. */
 export type StreamChannel = {
@@ -154,6 +165,7 @@ export class TerminalSessionManager {
   /** The grid the last window-opened pane was placed on; a landscape guess until then. */
   private paneArea: Box = { width: 1200, height: 800 }
   private minPane: Box | undefined
+  private cell: Box | undefined
 
   constructor(private readonly options: TerminalSessionManagerOptions = {}) {
     this.layouts = options.layouts ?? new InMemoryLayoutRepository()
@@ -187,45 +199,61 @@ export class TerminalSessionManager {
 
   /** Starts a terminal in the largest pane's place (`paneRoom.ts`), on the last grid a window reported. */
   create(params: ParamsOf<'terminal.create'>): Terminal {
-    if (params.area !== undefined) this.paneArea = params.area
+    this.noteGrid(params)
     if (params.minPane !== undefined) this.minPane = params.minPane
-    const session = this.startSession(params)
-    const layout = this.layoutFor(session.worktreeId)
-    const added = leafPane(session.id)
-    // The window refuses a pane with no room before asking; a CLI caller is not refused, only placed.
-    const fitted = this.minPane && placePaneWithin(layout.root, added, this.paneArea, this.minPane)
-    this.saveLayout({
-      worktreeId: session.worktreeId,
-      root: normalisePane(fitted || placePane(layout.root, added, this.paneArea)),
-      focusedTerminalId: session.id
-    })
+    const layout = this.layoutFor(params.worktreeId)
+    const placed = (id: string): PaneNode => {
+      const added = leafPane(id)
+      // The window refuses a pane with no room before asking; a CLI caller is not refused, only placed.
+      const fitted = this.minPane && placePaneWithin(layout.root, added, this.paneArea, this.minPane)
+      return normalisePane(fitted || placePane(layout.root, added, this.paneArea))
+    }
+    const size = params.cols === undefined ? this.cellsOnGrid(placed(PROBE_PANE_ID), PROBE_PANE_ID) : undefined
+    const session = this.startSession({ ...params, ...size })
+    this.saveLayout({ worktreeId: session.worktreeId, root: placed(session.id), focusedTerminalId: session.id })
     return session.snapshot()
   }
 
-  /** Starts a terminal in half of an existing pane. */
+  /** Starts a terminal in half of an existing pane, at the size that half is drawn at. */
   split(params: ParamsOf<'terminal.split'>): { terminal: Terminal; layout: Layout } {
+    this.noteGrid(params)
     const target = this.sessions.get(params.terminalId)
+    const worktreeId = target?.worktreeId ?? this.worktreeOfPane(params.terminalId)
+    const layout = this.layoutFor(worktreeId)
+    const size =
+      params.cols !== undefined && params.rows !== undefined
+        ? { cols: params.cols, rows: params.rows }
+        : (this.cellsOnGrid(
+            splitPane(layout.root, params.terminalId, params.direction, PROBE_PANE_ID),
+            PROBE_PANE_ID
+          ) ??
+          (target && halved(target.snapshot(), params.direction)))
     const command = params.command === undefined ? {} : { command: params.command }
-    // Beside a file pane there is no session to copy: the shell opens in the
-    // worktree at the runtime's default size.
-    const session = target
-      ? this.startSession({
-          worktreeId: target.worktreeId,
-          shell: target.shell,
-          cwd: target.cwd,
-          cols: target.snapshot().cols,
-          rows: target.snapshot().rows,
-          ...command
-        })
-      : this.startSession({ worktreeId: this.worktreeOfPane(params.terminalId), ...command })
+    // Beside a file pane there is no session to copy: the shell opens in the worktree.
+    const session = this.startSession({
+      worktreeId,
+      ...(target ? { shell: target.shell, cwd: target.cwd } : {}),
+      ...size,
+      ...command
+    })
 
-    const layout = this.layoutFor(session.worktreeId)
     const saved = this.saveLayout({
-      worktreeId: session.worktreeId,
+      worktreeId,
       root: splitPane(layout.root, params.terminalId, params.direction, session.id),
       focusedTerminalId: session.id
     })
     return { terminal: session.snapshot(), layout: saved }
+  }
+
+  /** Keeps the grid a window reported, for the panes that arrive without a size. */
+  private noteGrid(params: { area?: Box; cell?: Box }): void {
+    if (params.area !== undefined) this.paneArea = params.area
+    if (params.cell !== undefined) this.cell = params.cell
+  }
+
+  /** The cells pane `id` gets in `root` on the last reported grid; undefined before a window reported a cell. */
+  private cellsOnGrid(root: PaneNode, id: string): { cols: number; rows: number } | undefined {
+    return this.cell && paneCellsIn(root, id, this.paneArea, this.cell)
   }
 
   /** The worktree whose tree holds a pane that is not a session, or not found. */
@@ -357,6 +385,12 @@ export class TerminalSessionManager {
 
   read(terminalId: string, tailBytes?: number): string {
     return this.require(terminalId).read(tailBytes)
+  }
+
+  /** A pane's snapshot, placed in its stream and with the widest the pane has been. */
+  readPlaced(terminalId: string, tailBytes?: number): { data: string; end: number; widest: number } {
+    const session = this.require(terminalId)
+    return { data: session.read(tailBytes), end: session.outputEnd, widest: session.widestCols }
   }
 
   /** Closes a terminal: process tree, pane leaf, streams and record all go. */
@@ -916,6 +950,12 @@ class InMemorySessionRepository implements SessionRepository {
   removeTerminal(terminalId: string): boolean {
     return this.records.delete(terminalId)
   }
+}
+
+/** Half of a pane along `direction`, a little under: a pty narrower than its pane only redraws, a wider one wraps. */
+function halved(size: { cols: number; rows: number }, direction: SplitDirection): { cols: number; rows: number } {
+  const half = (cells: number): number => Math.max(2, Math.floor(cells / 2) - 2)
+  return direction === 'row' ? { cols: half(size.cols), rows: size.rows } : { cols: size.cols, rows: half(size.rows) }
 }
 
 function cloneLayout(layout: Layout): Layout {
