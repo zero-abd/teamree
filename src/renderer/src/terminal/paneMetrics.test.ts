@@ -9,7 +9,15 @@ import { describe, expect, it } from 'vitest'
 import type { PaneNode } from '@shared/entities'
 import { MIN_PANE_CELLS } from '@shared/paneRoom'
 import { GUTTER_PX } from '../panes/paneLayout'
-import { measureCell, minPaneBox, newPaneRoom, PANE_CHROME, paneSizeFrom, roomForNewPane } from './paneMetrics'
+import {
+  measureCell,
+  minPaneBox,
+  newPaneRoom,
+  PANE_BAR_PX,
+  PANE_CHROME,
+  paneSizeFrom,
+  roomForNewPane
+} from './paneMetrics'
 
 const CELL = { width: 8, height: 17 }
 
@@ -20,9 +28,10 @@ function leaf(terminalId: string): PaneNode {
 describe('where the next pane lands', () => {
   const area = { width: 1000, height: 800 }
 
-  it('gives the first pane in a worktree the whole grid', () => {
+  // A lone pane draws no bar: its tab names it.
+  it('gives the first pane in a worktree the whole grid, with no bar over it', () => {
     expect(roomForNewPane(null, CELL, area)).toEqual({
-      ...paneSizeFrom({ width: 1000 - PANE_CHROME.width, height: 800 - PANE_CHROME.height }, CELL),
+      ...paneSizeFrom({ width: 1000 - PANE_CHROME.width, height: 800 - PANE_CHROME.height + PANE_BAR_PX }, CELL),
       area,
       minPane: minPaneBox(CELL)
     })

@@ -28,11 +28,14 @@ const PROBE_COLUMNS = 80
 /** Where the pane grid is drawn; `WorkspaceArea` owns the element. */
 export const PANE_GRID_SELECTOR = '.workspace__panes'
 
+/** A split pane's 22px bar and its hairline, as `panes.css` draws them; a lone pane has none. */
+export const PANE_BAR_PX = 22 + 1
+
 /**
- * Pixels between a pane's edge and its first cell, mirroring `panes.css` (borders, 24px title bar,
- * hairline, padding). Stated because the first pane has nothing on screen to measure.
+ * Pixels between a split pane's edge and its first cell, mirroring `panes.css` (borders, bar,
+ * padding). Stated because the first pane has nothing on screen to measure.
  */
-export const PANE_CHROME: Box = { width: 1 + 1 + 9 + 6, height: 1 + 24 + 1 + 1 + 6 + 6 }
+export const PANE_CHROME: Box = { width: 1 + 1 + 9 + 6, height: 1 + PANE_BAR_PX + 1 + 6 + 6 }
 
 /** Stands in for the pane not yet made; no terminal or file id looks like it. */
 const PROBE_ID = 'probe:new-pane'
@@ -52,7 +55,8 @@ export function roomForNewPane(root: PaneNode | null, cell: Box, area: Box): New
   const rect = paneRects(placed, area).find((each) => each.id === PROBE_ID)
   if (!rect) return 'full'
   // Chrome comes off each pane after the split: two panes carry two sets of borders.
-  const size = paneSizeFrom({ width: rect.width - PANE_CHROME.width, height: rect.height - PANE_CHROME.height }, cell)
+  const chrome = root === null ? PANE_CHROME.height - PANE_BAR_PX : PANE_CHROME.height
+  const size = paneSizeFrom({ width: rect.width - PANE_CHROME.width, height: rect.height - chrome }, cell)
   return size === undefined ? 'full' : { ...size, area, minPane }
 }
 

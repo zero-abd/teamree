@@ -530,8 +530,8 @@ describe('naming a pane', () => {
     expect(renamePane).toHaveBeenCalledExactlyOnceWith('t1', 'pager streaming')
   })
 
-  // Shortened where drawn; tooltip and record keep it whole.
-  it('shortens a long name on the tab and keeps all of it in the hover text', () => {
+  // The stylesheet shortens it at the tab's widest, so a lone tab is not cut with the strip empty beside it.
+  it('gives the tab the whole name to draw, and the hover text too', () => {
     const long = 'rewrite the pager so it streams instead of buffering'
     seed({
       activeWorktreeId: 'w1',
@@ -541,8 +541,7 @@ describe('naming a pane', () => {
     mount()
 
     const tab = screen.getAllByRole('tab')[0]!
-    expect(tab.textContent).not.toBe(long)
-    expect(tab.textContent?.endsWith('…')).toBe(true)
+    expect(tab.querySelector('.tab__name')?.textContent).toBe(long)
     expect(tab.getAttribute('title')).toContain(long)
   })
 })
