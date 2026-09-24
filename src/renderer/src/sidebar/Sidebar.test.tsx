@@ -462,12 +462,41 @@ describe('the rail reaches the window-level surfaces', () => {
     expect(toggleSettings).toHaveBeenCalled()
   })
 
-  it('opens settings at Appearance from the rail', () => {
-    const openSettings = vi.fn()
-    seed({ openSettings })
-    mount()
+  it('opens the appearance sheet from the rail, and closes it from there too', () => {
+    const showAppearance = vi.fn()
+    seed({ showAppearance })
+    const { unmount } = render(<Sidebar searchHint="⌘K" />)
     act(() => screen.getByRole('button', { name: /Appearance/ }).click())
-    expect(openSettings).toHaveBeenCalledExactlyOnceWith('appearance')
+    expect(showAppearance).toHaveBeenLastCalledWith(true)
+    unmount()
+
+    seed({ showAppearance, appearanceOpen: true })
+    mount()
+    const entry = screen.getByRole('button', { name: /Appearance/ })
+    expect(entry.getAttribute('aria-pressed')).toBe('true')
+    act(() => entry.click())
+    expect(showAppearance).toHaveBeenLastCalledWith(false)
+  })
+
+  // Two ways in, one control: a menu under the +, not a dialog of two buttons.
+  it('offers Open Folder… and Clone… under the projects +', () => {
+    const chooseProjectFolder = vi.fn(() => Promise.resolve())
+    seed({ chooseProjectFolder })
+    mount()
+    act(() => screen.getByRole('button', { name: 'Add project' }).click())
+    const menu = screen.getByRole('menu', { name: 'Add project' })
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    ).toEqual(['Open Folder…', 'Clone…'])
+    act(() => within(menu).getByRole('menuitem', { name: 'Open Folder…' }).click())
+    expect(chooseProjectFolder).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    act(() => screen.getByRole('button', { name: 'Add project' }).click())
+    act(() => screen.getByRole('menuitem', { name: 'Clone…' }).click())
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'clone-project' })
   })
 
   it('marks settings as the page you are on while it has the area', () => {

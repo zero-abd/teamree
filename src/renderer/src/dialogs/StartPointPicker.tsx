@@ -204,7 +204,7 @@ export function StartPointPicker({
   )
 }
 
-/** The one chevron both pickers in a form draw. */
+/** The one chevron: every select, and Start from. */
 export function Chevron(): React.JSX.Element {
   return (
     <svg viewBox="0 0 12 12" aria-hidden="true">

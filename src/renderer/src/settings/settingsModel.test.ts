@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest'
 import type { CliStatus, RelaySetting, UpdateState } from '@shared/entities'
-import { cliLine, relayPanel, updatePanel } from './settingsModel'
+import { cliLine, labelMatches, relayPanel, updatePanel } from './settingsModel'
 
 const NOW = 1_700_000_000_000
 
@@ -203,5 +203,18 @@ describe('cliLine', () => {
       manual: expect.stringContaining('ln -sf')
     })
     expect(cliLine(null)).toMatchObject({ state: 'Looking…', action: null })
+  })
+})
+
+describe('the filter', () => {
+  it('keeps a label holding the words anywhere, whatever their case', () => {
+    expect(labelMatches('Copy on select', 'SELECT')).toBe(true)
+    expect(labelMatches('Copy on select', '  on sel ')).toBe(true)
+    expect(labelMatches('Copy on select', 'paste')).toBe(false)
+  })
+
+  it('keeps everything while empty', () => {
+    expect(labelMatches('Cursor', '')).toBe(true)
+    expect(labelMatches('Cursor', '   ')).toBe(true)
   })
 })

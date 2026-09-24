@@ -151,14 +151,15 @@ describe('how it reads', () => {
     expect(fewer('Codex').disabled).toBe(true)
   })
 
-  it('draws Project and Start from as one control with one chevron, mono only for the ref', async () => {
+  // Project is the app's one select, the same as Settings'; Start from shares its chevron.
+  it('draws Project as the app’s select and Start from with the same chevron, mono only for the ref', async () => {
     await open()
     const pickers = [screen.getByRole('combobox', { name: 'Project' }), startPoint()]
     const chevrons = pickers.map((control) => control.parentElement?.querySelector('svg path')?.getAttribute('d'))
     expect(chevrons[0]).toBeTruthy()
     expect(chevrons[1]).toBe(chevrons[0])
-    expect(pickers.map((control) => control.classList.contains('picker__input'))).toEqual([true, true])
-    expect(pickers.map((control) => control.classList.contains('picker__input--ref'))).toEqual([false, true])
+    expect(pickers[0]?.className).toBe('select__input')
+    expect(pickers[1]?.classList.contains('picker__input--ref')).toBe(true)
   })
 
   it('previews the branch as a fragment', async () => {

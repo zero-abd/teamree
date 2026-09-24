@@ -130,3 +130,38 @@ export function cliLine(status: CliStatus | null): CliLine {
       return { state: `Not installed${reach}`, action: 'Install', title, manual: null }
   }
 }
+
+/** The page's sections in order, with the labels of their rows: the only text the filter reads besides titles. */
+export const SETTINGS_SECTIONS = [
+  { id: 'agents', label: 'Agents', rows: ['Default agent'] },
+  {
+    id: 'projects',
+    label: 'Projects',
+    rows: [
+      'Start new worktrees from',
+      'Symlink into every new worktree',
+      'Copy into every new worktree',
+      'Setup command',
+      'Open checkouts in',
+      'Relay'
+    ]
+  },
+  {
+    id: 'panes',
+    label: 'Panes',
+    rows: ['Terminal text size', 'Font', 'Cursor', 'Option as Meta', 'Copy on select', 'Scrollback lines']
+  },
+  { id: 'notices', label: 'Notifications', rows: ['When an agent stops'] },
+  { id: 'appearance', label: 'Appearance', rows: ['Theme'] },
+  { id: 'updates', label: 'Updates', rows: ['Check automatically'] },
+  { id: 'cli', label: 'CLI', rows: [] }
+] as const
+
+export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id']
+export type SettingsRowLabel = (typeof SETTINGS_SECTIONS)[number]['rows'][number]
+
+/** Case-insensitive, anywhere in the label; an empty filter keeps everything. */
+export function labelMatches(label: string, query: string): boolean {
+  const wanted = query.trim().toLowerCase()
+  return wanted === '' || label.toLowerCase().includes(wanted)
+}

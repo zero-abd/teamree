@@ -103,7 +103,8 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
     openDialog: vi.fn(),
     closeDialog: vi.fn(),
     toggleSettings: vi.fn(),
-    openSettings: vi.fn(),
+    showAppearance: vi.fn(),
+    chooseProjectFolder: vi.fn(),
     showRightPanelTab: vi.fn(),
     pushActiveWorktree: vi.fn(async () => {}),
     setTerminalFontSize: vi.fn()
@@ -132,7 +133,7 @@ describe('what a window can be asked to do', () => {
 
   // A dialog of this window's own too, except the palette, whose two chords switch or close it.
   it('offers nothing but the palette chords while a dialog is up', () => {
-    const adding = { ...WORKING, dialog: { kind: 'add-project' } as const }
+    const adding = { ...WORKING, dialog: { kind: 'clone-project' } as const }
     for (const command of EVERY_COMMAND) expect(isCommandAvailable(command, adding), command).toBe(false)
 
     const palette = { ...WORKING, dialog: { kind: 'palette' } as const }
@@ -327,7 +328,9 @@ describe('running a command', () => {
       ['go-to-file', 'openDialog', [{ kind: 'palette', mode: 'files' }]],
       ['find-in-pane', 'openPaneSearch', []],
       ['open-dashboard', 'toggleDashboard', []],
-      ['open-appearance', 'openSettings', ['appearance']],
+      ['open-appearance', 'showAppearance', [true]],
+      ['add-project', 'chooseProjectFolder', []],
+      ['clone-repository', 'openDialog', [{ kind: 'clone-project' }]],
       ['open-settings', 'toggleSettings', []],
       ['open-help', 'toggleHelp', []]
     ]
@@ -403,6 +406,8 @@ describe('running a command', () => {
           'open-appearance',
           'open-settings',
           'open-help',
+          'add-project',
+          'clone-repository',
           'bigger-text',
           'smaller-text'
         ].includes(command)

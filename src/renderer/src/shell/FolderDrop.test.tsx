@@ -96,14 +96,14 @@ describe('dropping on the window', () => {
     expect(openDialog).not.toHaveBeenCalled()
   })
 
-  it('opens Add project with the refusal when a folder is not a repository', async () => {
+  it('opens the refusal when a folder is not a repository', async () => {
     addProject.mockResolvedValueOnce('not-a-repository')
     render(<FolderDrop />)
     await act(async () => {
       drop([{ path: '/Users/ada/notes', directory: true }])
     })
     expect(openDialog).toHaveBeenCalledWith({
-      kind: 'add-project',
+      kind: 'project-refused',
       folder: '/Users/ada/notes',
       refusal: 'not-a-repository'
     })

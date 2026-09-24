@@ -1,5 +1,5 @@
 // Folders dropped from the file manager anywhere on the window are added as
-// projects; one that cannot be opens Add project with the refusal.
+// projects; one that cannot be opens its refusal.
 
 import { useEffect, useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -99,7 +99,7 @@ async function addFolders(folders: string[]): Promise<void> {
   for (const folder of folders) {
     const refusal = await addProject(folder)
     if (refusal) {
-      openDialog({ kind: 'add-project', folder, refusal })
+      openDialog({ kind: 'project-refused', folder, refusal })
       return
     }
   }

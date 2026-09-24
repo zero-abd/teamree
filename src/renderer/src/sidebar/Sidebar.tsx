@@ -11,6 +11,7 @@ import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { evidenceLine } from '@shared/outputEvidence'
 import { Brand, SidebarGlyph } from '../shell/Brand'
+import { AddProjectButton } from './AddProjectButton'
 import { useOpenIn } from './openIn'
 import { ProjectHead } from './ProjectHead'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
@@ -57,7 +58,8 @@ export function Sidebar({
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen)
   const helpOpen = useWorkspaceStore((state) => state.helpOpen)
   const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
-  const openSettings = useWorkspaceStore((state) => state.openSettings)
+  const appearanceOpen = useWorkspaceStore((state) => state.appearanceOpen)
+  const showAppearance = useWorkspaceStore((state) => state.showAppearance)
   const toggleHelp = useWorkspaceStore((state) => state.toggleHelp)
   const toggleDashboard = useWorkspaceStore((state) => state.toggleDashboard)
   const teamworkProjectId = useWorkspaceStore((state) => state.teamworkProjectId)
@@ -196,14 +198,13 @@ export function Sidebar({
             </button>
           </li>
           <li>
-            {/* Settings, opened at its Appearance section: a preference nobody
-                can find is a preference nobody has. Reached from here, from the
-                View menu and from the palette. */}
+            {/* The theme sheet, beside the panes it colours; also in the View menu and the palette. */}
             <button
               type="button"
-              className="rail__link"
+              className={`rail__link${appearanceOpen ? ' rail__link--current' : ''}`}
+              aria-pressed={appearanceOpen}
               title="Themes and colours"
-              onClick={() => openSettings('appearance')}
+              onClick={() => showAppearance(!appearanceOpen)}
             >
               <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
                 <path d="M7 1.6a5.4 5.4 0 1 0 0 10.8c.9 0 1.3-.6 1.3-1.2 0-.8-.7-1.1-.7-1.8 0-.5.4-.9 1-.9h1.1a2.7 2.7 0 0 0 2.7-2.8c0-2.6-2.4-4.1-5.4-4.1Z" />
@@ -259,17 +260,7 @@ export function Sidebar({
       <nav className="sidebar__projects" aria-label="Projects and worktrees">
         <div className="sidebar__head">
           <h2 className="sidebar__head-title">Projects</h2>
-          <button
-            type="button"
-            className="button button--ghost button--icon"
-            title="Add project"
-            aria-label="Add project"
-            onClick={() => openDialog({ kind: 'add-project' })}
-          >
-            <svg viewBox="0 0 14 14" aria-hidden="true">
-              <path d="M7 2.5 L7 11.5 M2.5 7 L11.5 7" />
-            </svg>
-          </button>
+          <AddProjectButton />
         </div>
 
         {/* One Tab stop; the arrows walk the rows. The other controls in it are the mouse's, each

@@ -52,6 +52,8 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
   'focus-previous-region': 'around',
   'open-appearance': 'app',
   'open-settings': 'app',
+  'add-project': 'app',
+  'clone-repository': 'app',
   'open-help': 'app',
   'bigger-text': 'app',
   'smaller-text': 'app',

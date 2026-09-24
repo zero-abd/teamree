@@ -222,7 +222,7 @@ describe('when it stays out of the way', () => {
   })
 
   it('says nothing behind a dialog, which would be talking over it', () => {
-    useWorkspaceStore.setState({ dialog: { kind: 'add-project' } })
+    useWorkspaceStore.setState({ dialog: { kind: 'clone-project' } })
     const { container } = render(<UpdateAvailableCard />)
     expect(container.querySelector('.update-card')).toBeNull()
   })

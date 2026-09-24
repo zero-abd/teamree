@@ -12,7 +12,7 @@ import { worktreeOrder } from '../sidebar/worktreeOrder'
 import { focusedRegion, regionAfter, requestRegionFocus } from '../shell/regions'
 import { numberedTab, tabAfter } from '../workspace/paneTabs'
 import { TERMINAL_FONT_DEFAULT_PX, TERMINAL_FONT_MAX_PX, TERMINAL_FONT_MIN_PX } from '../state/preferences'
-import type { DialogState, SettingsSection } from '../state/workspaceStore'
+import type { DialogState } from '../state/workspaceStore'
 import type { WorkspaceCommand } from './workspaceShortcuts'
 
 /** As much of the store as availability reads, structural so a test can state only its three fields. */
@@ -63,7 +63,8 @@ export type CommandActions = {
   openDialog: (dialog: NonNullable<DialogState>) => void
   closeDialog: () => void
   toggleSettings: () => void
-  openSettings: (section: SettingsSection) => void
+  showAppearance: (open: boolean) => void
+  chooseProjectFolder: () => Promise<void>
   showRightPanelTab: (tab: RightPanelTab) => void
   pushActiveWorktree: () => Promise<void>
   setTerminalFontSize: (size: number) => void
@@ -233,6 +234,8 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
     case 'open-palette':
     case 'open-appearance':
     case 'open-settings':
+    case 'add-project':
+    case 'clone-repository':
     case 'open-help':
     case 'focus-sidebar':
     case 'focus-panes':
@@ -348,7 +351,13 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       store.toggleDashboard()
       break
     case 'open-appearance':
-      store.openSettings('appearance')
+      store.showAppearance(true)
+      break
+    case 'add-project':
+      void store.chooseProjectFolder()
+      break
+    case 'clone-repository':
+      store.openDialog({ kind: 'clone-project' })
       break
     case 'open-settings':
       store.toggleSettings()

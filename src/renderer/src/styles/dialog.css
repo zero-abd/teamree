@@ -115,30 +115,19 @@
   box-shadow: var(--ring);
 }
 
-select.field__input {
-  appearance: none;
-  padding-right: var(--s5);
-  background-image: linear-gradient(45deg, transparent 50%, var(--fg-muted) 50%),
-    linear-gradient(135deg, var(--fg-muted) 50%, transparent 50%);
-  background-position: right 15px center, right 10px center;
-  background-size: 5px 5px;
-  background-repeat: no-repeat;
-}
-
-/* Project and Start from: one control, one chevron. */
+/* Start from: a field with the select's chevron. */
 .picker {
   display: block;
   position: relative;
 }
 
 .picker__input {
-  height: 30px;
+  height: var(--control-h);
   font-size: var(--text-base);
 }
 
 .picker > .field__input {
   padding-right: 30px;
-  background-image: none;
 }
 
 .picker__input--ref {
@@ -262,18 +251,6 @@ button.picker__chevron:hover {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: var(--s4);
-}
-
-.field__refusal {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-}
-
-.add-project__choices {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: var(--s2);
 }
 
 /* git's own last line, as it redraws its meter. */

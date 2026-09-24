@@ -8,7 +8,8 @@ import { harnessName } from '../agents/harnesses'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { branchNameFromTask } from './branchNameFromTask'
 import { Modal } from './Modal'
-import { Chevron, StartPointPicker, type StartPointValue } from './StartPointPicker'
+import { Select } from './Select'
+import { StartPointPicker, type StartPointValue } from './StartPointPicker'
 import {
   agentCount,
   defaultAgentCounts,
@@ -153,27 +154,21 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
         <div className="form__row">
           <label className="field">
             <span className="field__label">Project</span>
-            <span className="picker">
-              <select
-                className="field__input picker__input"
-                value={projectId}
-                onChange={(event) => {
-                  setProjectId(event.target.value)
-                  // The old project's base ref has no meaning in the new one.
-                  setTouched(false)
-                  setStartPoint({ text: '', option: null })
-                }}
-              >
-                {projects.map((entry) => (
-                  <option value={entry.id} key={entry.id}>
-                    {entry.name}
-                  </option>
-                ))}
-              </select>
-              <span className="picker__chevron">
-                <Chevron />
-              </span>
-            </span>
+            <Select
+              value={projectId}
+              onChange={(event) => {
+                setProjectId(event.target.value)
+                // The old project's base ref has no meaning in the new one.
+                setTouched(false)
+                setStartPoint({ text: '', option: null })
+              }}
+            >
+              {projects.map((entry) => (
+                <option value={entry.id} key={entry.id}>
+                  {entry.name}
+                </option>
+              ))}
+            </Select>
           </label>
         </div>
 

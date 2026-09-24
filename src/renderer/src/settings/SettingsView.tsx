@@ -1,12 +1,13 @@
 // The settings page: machine-level facts (PATH, updates, text size, checkouts), so it takes the main
 // area rather than a drawer. Colours and relays are read here and set where they already live.
 
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { createContext, Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { agentLaunchCommand } from '@shared/agentLaunch'
 import type { InstalledAgent, Project } from '@shared/entities'
 import { AgentGlyph } from '../agents/glyphs'
 import { harnessName } from '../agents/harnesses'
 import { cliOutcome } from '../dialogs/cliInstallModel'
+import { Select } from '../dialogs/Select'
 import {
   NO_DEFAULT_AGENT,
   TERMINAL_FONT_MAX_PX,
@@ -21,20 +22,31 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { InstallerButton } from '../updates/InstallerButton'
 import { installerStep } from '../updates/updateNotice'
 import { PageFrame } from '../workspace/PageFrame'
-import { AppearanceSettings } from './AppearanceSettings'
-import { cliLine, relayPanel, updatePanel } from './settingsModel'
+import { activeChoice, themeById } from '@shared/theme'
+import { APPEARANCE_MODE_LABEL } from './AppearanceSettings'
+import {
+  cliLine,
+  labelMatches,
+  relayPanel,
+  SETTINGS_SECTIONS,
+  updatePanel,
+  type SettingsRowLabel,
+  type SettingsSectionId as SectionId
+} from './settingsModel'
 
-const SECTIONS = [
-  { id: 'cli', label: 'CLI' },
-  { id: 'updates', label: 'Updates' },
-  { id: 'notices', label: 'Notifications' },
-  { id: 'panes', label: 'Panes' },
-  { id: 'agents', label: 'Agents' },
-  { id: 'appearance', label: 'Appearance' },
-  { id: 'projects', label: 'Projects' }
-] as const
+/** Which rows the filter keeps: all of them under a section (or project) whose own name matched. */
+type Shown = { whole: boolean; row: (label: SettingsRowLabel) => boolean; query: string }
 
-type SectionId = (typeof SECTIONS)[number]['id']
+const ShownContext = createContext<Shown>({ whole: true, row: () => true, query: '' })
+
+function useShown(): Shown {
+  return useContext(ShownContext)
+}
+
+function shownUnder(title: string, query: string): Shown {
+  const whole = labelMatches(title, query)
+  return { whole, row: (label) => whole || labelMatches(label, query), query }
+}
 
 /** A heading this close to the top of the scrolling body counts as the section in view. */
 const IN_VIEW_PX = 48
@@ -44,8 +56,20 @@ export function SettingsView(): React.JSX.Element {
   const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
   const loadCli = useWorkspaceStore((state) => state.loadCli)
   const loadUpdate = useWorkspaceStore((state) => state.loadUpdate)
-  const hasAgents = useWorkspaceStore((state) => state.agents.length > 0)
-  const sections = SECTIONS.filter((entry) => entry.id !== 'agents' || hasAgents)
+  const agents = useWorkspaceStore((state) => state.agents)
+  const [query, setQuery] = useState('')
+  // Names that are labels too: an agent's row, and a project's block.
+  const named: Partial<Record<SectionId, readonly string[]>> = {
+    agents: agents.map((agent) => harnessName(agent.kind)),
+    projects: projects.map((project) => project.name)
+  }
+  const sections = SETTINGS_SECTIONS.filter((entry) => entry.id !== 'agents' || agents.length > 0).filter(
+    (entry) =>
+      labelMatches(entry.label, query) ||
+      (entry.id === 'projects' && projects.length === 0 ? [] : [...entry.rows, ...(named[entry.id] ?? [])]).some(
+        (label) => labelMatches(label, query)
+      )
+  )
 
   // Read again on open: both are facts about the world outside this window that may have moved.
   useEffect(() => {
@@ -54,7 +78,8 @@ export function SettingsView(): React.JSX.Element {
   }, [loadCli, loadUpdate])
 
   const body = useRef<HTMLDivElement>(null)
-  const [active, setActive] = useState<SectionId>('cli')
+  const [current, setActive] = useState<SectionId | null>(null)
+  const active = sections.some((entry) => entry.id === current) ? current : (sections[0]?.id ?? null)
   // A section picked near the end cannot scroll to the top, so it stays current at the bottom.
   const picked = useRef<SectionId | null>(null)
 
@@ -92,19 +117,53 @@ export function SettingsView(): React.JSX.Element {
   return (
     <PageFrame label="Settings" title="Settings" onClose={toggleSettings} bodyRef={body} bodyTestId="settings-body">
       <div className="settings__layout">
-        <SectionList sections={sections} active={active} goTo={goTo} />
+        <div className="settings__side">
+          <input
+            type="search"
+            className="settings-filter"
+            aria-label="Filter settings"
+            placeholder="Filter"
+            value={query}
+            autoComplete="off"
+            spellCheck={false}
+            data-own-escape={query === '' ? undefined : true}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setQuery('')
+            }}
+          />
+          <SectionList sections={sections} active={active} goTo={goTo} />
+        </div>
         <div className="settings__content">
-          <CliSection />
-          <UpdatesSection />
-          <NoticesSection />
-          <PanesSection />
-          <AgentsSection />
-          <AppearanceSection />
-          <ProjectsSection projects={projects} />
+          {sections.length === 0 ? <p className="settings-note">No matches</p> : null}
+          {sections.map((entry) => (
+            <ShownContext.Provider key={entry.id} value={shownUnder(entry.label, query)}>
+              <SectionBody id={entry.id} projects={projects} />
+            </ShownContext.Provider>
+          ))}
         </div>
       </div>
     </PageFrame>
   )
+}
+
+function SectionBody({ id, projects }: { id: SectionId; projects: readonly Project[] }): React.JSX.Element | null {
+  switch (id) {
+    case 'agents':
+      return <AgentsSection />
+    case 'projects':
+      return <ProjectsSection projects={projects} />
+    case 'panes':
+      return <PanesSection />
+    case 'notices':
+      return <NoticesSection />
+    case 'appearance':
+      return <AppearanceSection />
+    case 'updates':
+      return <UpdatesSection />
+    case 'cli':
+      return <CliSection />
+  }
 }
 
 function atBottom(scroller: HTMLElement): boolean {
@@ -120,9 +179,9 @@ function sectionInView(scroller: HTMLElement, order: readonly SectionId[], picke
   }
   if (atBottom(scroller)) {
     const at = picked === null ? null : offset(picked)
-    return picked !== null && at !== null && at >= 0 ? picked : (order.at(-1) ?? 'cli')
+    return picked !== null && at !== null && at >= 0 ? picked : (order.at(-1) ?? 'agents')
   }
-  let current: SectionId = order[0] ?? 'cli'
+  let current: SectionId = order[0] ?? 'agents'
   for (const id of order) {
     const at = offset(id)
     if (at !== null && at <= IN_VIEW_PX) current = id
@@ -136,7 +195,7 @@ function SectionList({
   goTo
 }: {
   sections: readonly { id: SectionId; label: string }[]
-  active: SectionId
+  active: SectionId | null
   goTo: (id: SectionId) => void
 }): React.JSX.Element {
   const onKeyDown = (event: React.KeyboardEvent<HTMLUListElement>): void => {
@@ -234,6 +293,7 @@ function UpdatesSection(): React.JSX.Element {
   const now = useNow()
   const panel = updatePanel(update, now)
   const step = installerStep(update)
+  const shown = useShown()
 
   return (
     <section className="settings-section" aria-labelledby="settings-updates">
@@ -241,32 +301,34 @@ function UpdatesSection(): React.JSX.Element {
         Updates
       </h2>
       <div className="settings-group">
-        <div className="settings-row">
-          <p className="settings-fact">{panel.headline}</p>
-          {panel.offersCheck ? (
-            <div className="settings-actions">
-              {panel.lastChecked ? <span className="settings-aside">{panel.lastChecked}</span> : null}
-              <button
-                type="button"
-                className="button button--small"
-                disabled={update?.checking ?? false}
-                onClick={() => void checkForUpdates()}
-              >
-                {update?.checking ? 'Checking…' : 'Check for updates'}
-              </button>
-            </div>
-          ) : null}
-        </div>
+        {shown.whole ? (
+          <div className="settings-row">
+            <p className="settings-fact">{panel.headline}</p>
+            {panel.offersCheck ? (
+              <div className="settings-actions">
+                {panel.lastChecked ? <span className="settings-aside">{panel.lastChecked}</span> : null}
+                <button
+                  type="button"
+                  className="button button--small"
+                  disabled={update?.checking ?? false}
+                  onClick={() => void checkForUpdates()}
+                >
+                  {update?.checking ? 'Checking…' : 'Check for updates'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
-        {step !== null && update?.available ? (
+        {shown.whole && step !== null && update?.available ? (
           <div className="settings-row">
             <p className="settings-fact">teamree {update.available.version} available</p>
             <InstallerButton step={step} className="button button--small" />
           </div>
         ) : null}
-        {step?.problem ? <p className="settings-error">{step.problem}</p> : null}
+        {shown.whole && step?.problem ? <p className="settings-error">{step.problem}</p> : null}
 
-        {panel.offersCheck ? (
+        {panel.offersCheck && shown.row('Check automatically') ? (
           <label className="settings-check">
             <input
               type="checkbox"
@@ -279,7 +341,7 @@ function UpdatesSection(): React.JSX.Element {
         ) : null}
 
         {/* Kept beside the button that tried rather than raised as a notice. */}
-        {panel.problem ? <p className="settings-warning">{panel.problem}</p> : null}
+        {shown.whole && panel.problem ? <p className="settings-warning">{panel.problem}</p> : null}
       </div>
     </section>
   )
@@ -300,16 +362,15 @@ function NoticesSection(): React.JSX.Element {
           <label className="settings-field__label" htmlFor="settings-agent-notices">
             When an agent stops
           </label>
-          <select
+          <Select
             id="settings-agent-notices"
-            className="settings-select"
             value={agentNotices}
             onChange={(event) => setAgentNotices(event.target.value as AgentNoticePreference)}
           >
             <option value="off">Nothing</option>
             <option value="notify">Notify</option>
             <option value="sound">Notify with sound</option>
-          </select>
+          </Select>
         </div>
       </div>
     </section>
@@ -327,6 +388,7 @@ function PanesSection(): React.JSX.Element {
     const lines = Number.parseInt(value, 10)
     if (Number.isFinite(lines)) setOptions({ scrollback: lines })
   })
+  const shown = useShown()
 
   return (
     <section className="settings-section" aria-labelledby="settings-panes">
@@ -334,109 +396,120 @@ function PanesSection(): React.JSX.Element {
         Panes
       </h2>
       <div className="settings-group">
-        <div className="settings-field">
-          <label className="settings-field__label" htmlFor="settings-font-size">
-            Terminal text size
-          </label>
-          <div className="settings-size">
-            <input
-              id="settings-font-size"
-              className="settings-size__range"
-              type="range"
-              min={TERMINAL_FONT_MIN_PX}
-              max={TERMINAL_FONT_MAX_PX}
-              step={1}
-              value={terminalFontSize}
-              onChange={(event) => setTerminalFontSize(Number(event.target.value))}
-            />
-            {/* A slider with no scale cannot say how big it is now. */}
-            <output className="settings-size__value" htmlFor="settings-font-size">
-              {terminalFontSize}px
-            </output>
-          </div>
-        </div>
-
-        <div className="settings-field">
-          <label className="settings-field__label" htmlFor="settings-font">
-            Font
-          </label>
-          <input id="settings-font" className="settings-field__input" type="text" {...font} />
-          {/* The draft, not the stored value: the point is to see a face before keeping it. */}
-          <div
-            className="settings-font-preview"
-            data-testid="settings-font-preview"
-            style={{ fontFamily: font.value, fontSize: terminalFontSize }}
-          >
-            ~/repo $ git status 0O 1lI {'{}'} =&gt; !=
-          </div>
-        </div>
-
-        <div className="settings-field">
-          <label className="settings-field__label" htmlFor="settings-cursor">
-            Cursor
-          </label>
-          <div className="settings-field__row">
-            <select
-              id="settings-cursor"
-              className="settings-select"
-              value={options.cursorStyle}
-              onChange={(event) => setOptions({ cursorStyle: event.target.value as TerminalCursorStyle })}
-            >
-              <option value="bar">Bar</option>
-              <option value="block">Block</option>
-              <option value="underline">Underline</option>
-            </select>
-            <label className="settings-check">
-              <input
-                type="checkbox"
-                checked={options.cursorBlink}
-                onChange={(event) => setOptions({ cursorBlink: event.target.checked })}
-              />
-              <span>Blink</span>
+        {shown.row('Terminal text size') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-font-size">
+              Terminal text size
             </label>
+            <div className="settings-size">
+              <input
+                id="settings-font-size"
+                className="settings-size__range"
+                type="range"
+                min={TERMINAL_FONT_MIN_PX}
+                max={TERMINAL_FONT_MAX_PX}
+                step={1}
+                value={terminalFontSize}
+                onChange={(event) => setTerminalFontSize(Number(event.target.value))}
+              />
+              {/* A slider with no scale cannot say how big it is now. */}
+              <output className="settings-size__value" htmlFor="settings-font-size">
+                {terminalFontSize}px
+              </output>
+            </div>
           </div>
-        </div>
+        ) : null}
 
-        <div className="settings-field">
-          <label className="settings-field__label" htmlFor="settings-option-meta">
-            Option as Meta
-          </label>
-          <input
-            id="settings-option-meta"
-            className="settings-field__check"
-            type="checkbox"
-            checked={options.optionIsMeta}
-            onChange={(event) => setOptions({ optionIsMeta: event.target.checked })}
-          />
-        </div>
+        {shown.row('Font') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-font">
+              Font
+            </label>
+            <input id="settings-font" className="settings-field__input" type="text" {...font} />
+            {/* The draft, not the stored value: the point is to see a face before keeping it. */}
+            <div
+              className="settings-font-preview"
+              data-testid="settings-font-preview"
+              style={{ fontFamily: font.value, fontSize: terminalFontSize }}
+            >
+              ~/repo $ git status 0O 1lI {'{}'} =&gt; !=
+            </div>
+          </div>
+        ) : null}
 
-        <div className="settings-field">
-          <label className="settings-field__label" htmlFor="settings-copy-on-select">
-            Copy on select
-          </label>
-          <input
-            id="settings-copy-on-select"
-            className="settings-field__check"
-            type="checkbox"
-            checked={options.copyOnSelect}
-            onChange={(event) => setOptions({ copyOnSelect: event.target.checked })}
-          />
-        </div>
+        {shown.row('Cursor') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-cursor">
+              Cursor
+            </label>
+            <div className="settings-field__row">
+              <Select
+                id="settings-cursor"
+                value={options.cursorStyle}
+                onChange={(event) => setOptions({ cursorStyle: event.target.value as TerminalCursorStyle })}
+              >
+                <option value="bar">Bar</option>
+                <option value="block">Block</option>
+                <option value="underline">Underline</option>
+              </Select>
+              <label className="settings-check">
+                <input
+                  type="checkbox"
+                  checked={options.cursorBlink}
+                  onChange={(event) => setOptions({ cursorBlink: event.target.checked })}
+                />
+                <span>Blink</span>
+              </label>
+            </div>
+          </div>
+        ) : null}
 
-        <div className="settings-field">
-          <label className="settings-field__label" htmlFor="settings-scrollback">
-            Scrollback lines
-          </label>
-          <input
-            id="settings-scrollback"
-            className="settings-field__input settings-field__input--number"
-            type="number"
-            min={TERMINAL_SCROLLBACK_MIN}
-            max={TERMINAL_SCROLLBACK_MAX}
-            step={1000}
-            {...scrollback}
-          />
-        </div>
+        {shown.row('Option as Meta') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-option-meta">
+              Option as Meta
+            </label>
+            <input
+              id="settings-option-meta"
+              className="settings-field__check"
+              type="checkbox"
+              checked={options.optionIsMeta}
+              onChange={(event) => setOptions({ optionIsMeta: event.target.checked })}
+            />
+          </div>
+        ) : null}
+
+        {shown.row('Copy on select') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-copy-on-select">
+              Copy on select
+            </label>
+            <input
+              id="settings-copy-on-select"
+              className="settings-field__check"
+              type="checkbox"
+              checked={options.copyOnSelect}
+              onChange={(event) => setOptions({ copyOnSelect: event.target.checked })}
+            />
+          </div>
+        ) : null}
+
+        {shown.row('Scrollback lines') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-scrollback">
+              Scrollback lines
+            </label>
+            <input
+              id="settings-scrollback"
+              className="settings-field__input settings-field__input--number"
+              type="number"
+              min={TERMINAL_SCROLLBACK_MIN}
+              max={TERMINAL_SCROLLBACK_MAX}
+              step={1000}
+              {...scrollback}
+            />
+          </div>
+        ) : null}
       </div>
     </section>
   )
@@ -484,6 +557,7 @@ function AgentsSection(): React.JSX.Element | null {
   const agents = useWorkspaceStore((state) => state.agents)
   const defaultAgent = useWorkspaceStore((state) => state.defaultAgent)
   const setDefaultAgent = useWorkspaceStore((state) => state.setDefaultAgent)
+  const shown = useShown()
 
   if (agents.length === 0) return null
 
@@ -493,29 +567,32 @@ function AgentsSection(): React.JSX.Element | null {
         Agents
       </h2>
       <div className="settings-group">
-        <div className="settings-field">
-          <label className="settings-field__label" htmlFor="settings-default-agent">
-            Default agent
-          </label>
-          <select
-            id="settings-default-agent"
-            className="settings-select"
-            value={defaultAgent}
-            onChange={(event) => setDefaultAgent(event.target.value)}
-          >
-            {/* No preference is the rule that predates the preference, named after what it does. */}
-            <option value={NO_DEFAULT_AGENT}>First found</option>
-            {agents.map((agent) => (
-              <option key={agent.kind} value={agent.kind}>
-                {harnessName(agent.kind)}
-              </option>
-            ))}
-          </select>
-        </div>
+        {shown.row('Default agent') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-default-agent">
+              Default agent
+            </label>
+            <Select
+              id="settings-default-agent"
+              value={defaultAgent}
+              onChange={(event) => setDefaultAgent(event.target.value)}
+            >
+              {/* No preference is the rule that predates the preference, named after what it does. */}
+              <option value={NO_DEFAULT_AGENT}>First found</option>
+              {agents.map((agent) => (
+                <option key={agent.kind} value={agent.kind}>
+                  {harnessName(agent.kind)}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : null}
 
-        {agents.map((agent) => (
-          <AgentArguments key={agent.kind} agent={agent} />
-        ))}
+        {agents
+          .filter((agent) => shown.whole || labelMatches(harnessName(agent.kind), shown.query))
+          .map((agent) => (
+            <AgentArguments key={agent.kind} agent={agent} />
+          ))}
       </div>
     </section>
   )
@@ -554,7 +631,8 @@ function AgentArguments({ agent }: { agent: InstalledAgent }): React.JSX.Element
         className="settings-field__input"
         type="text"
         value={draft}
-        placeholder="Extra arguments"
+        placeholder="None"
+        title="Extra arguments"
         autoComplete="off"
         spellCheck={false}
         onChange={(event) => setDraft(event.target.value)}
@@ -571,20 +649,38 @@ function AgentArguments({ agent }: { agent: InstalledAgent }): React.JSX.Element
   )
 }
 
+/** The theme in effect; changing it happens in the sheet beside the panes, where it can be seen. */
 function AppearanceSection(): React.JSX.Element {
+  const appearance = useWorkspaceStore((state) => state.appearance)
+  const systemTone = useWorkspaceStore((state) => state.systemTone)
+  const showAppearance = useWorkspaceStore((state) => state.showAppearance)
+  const theme = themeById(activeChoice(appearance, systemTone).themeId).name
+  const mode = APPEARANCE_MODE_LABEL[appearance.mode ?? 'dark']
+
   return (
     <section className="settings-section" aria-labelledby="settings-appearance">
       <h2 className="settings-section__title" id="settings-appearance" tabIndex={-1}>
         Appearance
       </h2>
       <div className="settings-group">
-        <AppearanceSettings />
+        <div className="settings-field">
+          <span className="settings-field__label">Theme</span>
+          <div className="settings-field__row">
+            <p className="settings-value">{`${theme} · ${mode}`}</p>
+            <button type="button" className="button button--small" onClick={() => showAppearance(true)}>
+              Change…
+            </button>
+          </div>
+        </div>
       </div>
     </section>
   )
 }
 
 function ProjectsSection({ projects }: { projects: readonly Project[] }): React.JSX.Element {
+  const shown = useShown()
+  const named = (project: Project): Shown => (shown.whole ? shown : shownUnder(project.name, shown.query))
+  const rows = SETTINGS_SECTIONS.find((entry) => entry.id === 'projects')?.rows ?? []
   return (
     <section className="settings-section" aria-labelledby="settings-projects">
       <h2 className="settings-section__title" id="settings-projects" tabIndex={-1}>
@@ -595,7 +691,13 @@ function ProjectsSection({ projects }: { projects: readonly Project[] }): React.
           <p className="settings-note">No repositories yet</p>
         </div>
       ) : (
-        projects.map((project) => <ProjectBlock key={project.id} project={project} />)
+        projects
+          .filter((project) => named(project).whole || rows.some((label) => shown.row(label)))
+          .map((project) => (
+            <ShownContext.Provider key={project.id} value={named(project)}>
+              <ProjectBlock project={project} />
+            </ShownContext.Provider>
+          ))
       )}
     </section>
   )
@@ -603,6 +705,7 @@ function ProjectsSection({ projects }: { projects: readonly Project[] }): React.
 
 function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
   const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
+  const shown = useShown()
 
   return (
     <article className="settings-group settings-project">
@@ -622,65 +725,80 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
         </button>
       </div>
 
-      <StartPoint project={project} />
+      {shown.row('Start new worktrees from') ? <StartPoint project={project} /> : null}
       <CarriedPaths project={project} />
-      <EditorCommand project={project} />
-      <RelayBlock project={project} />
+      {shown.row('Open checkouts in') ? <EditorCommand project={project} /> : null}
+      {shown.row('Relay') ? <RelayBlock project={project} /> : null}
     </article>
   )
 }
 
-/** Which ref the New task dialog offers first; a draft written on blur, since half a ref resolves to nothing. */
+/** Which ref the New task dialog offers first: the ref in effect as text, a field only after Change. */
 function StartPoint({ project }: { project: Project }): React.JSX.Element {
   const stored = useWorkspaceStore((state) => state.startPointDefaults[project.id] ?? '')
   const setStartPointDefault = useWorkspaceStore((state) => state.setStartPointDefault)
-  const [draft, setDraft] = useState(stored)
+  const [draft, setDraft] = useState<string | null>(null)
 
-  // The stored value moving puts the trimmed spelling back, including when changed from elsewhere.
-  useEffect(() => {
-    setDraft(stored)
-  }, [stored])
-
+  // On blur or Enter, since half a ref resolves to nothing.
   const commit = (): void => {
+    if (draft === null) return
     const next = draft.trim()
-    if (next === stored) return
+    setDraft(null)
     // Null, not '': `withStartPoint` removes the entry on null, the only spelling of "use the base ref".
-    setStartPointDefault(project.id, next.length === 0 ? null : next)
+    if (next !== stored) setStartPointDefault(project.id, next.length === 0 ? null : next)
   }
 
   const id = `settings-start-point-${project.id}`
 
   return (
     <div className="settings-field">
-      <label className="settings-field__label" htmlFor={id}>
-        Start new worktrees from
-      </label>
+      {draft === null ? (
+        <span className="settings-field__label">Start new worktrees from</span>
+      ) : (
+        <label className="settings-field__label" htmlFor={id}>
+          Start new worktrees from
+        </label>
+      )}
       <div className="settings-field__row">
-        <input
-          id={id}
-          className="settings-field__input"
-          type="text"
-          value={draft}
-          placeholder={project.baseRef}
-          autoComplete="off"
-          spellCheck={false}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault()
-              commit()
-            }
-          }}
-        />
-        <button
-          type="button"
-          className="button button--small"
-          disabled={stored.length === 0}
-          onClick={() => setStartPointDefault(project.id, null)}
-        >
-          Use {project.baseRef}
-        </button>
+        {draft === null ? (
+          <>
+            <code className="settings-value settings-value--mono">{stored || project.baseRef}</code>
+            <button type="button" className="button button--small" onClick={() => setDraft(stored || project.baseRef)}>
+              Change
+            </button>
+            {stored.length === 0 ? null : (
+              <button
+                type="button"
+                className="button button--small"
+                onClick={() => setStartPointDefault(project.id, null)}
+              >
+                Use {project.baseRef}
+              </button>
+            )}
+          </>
+        ) : (
+          <input
+            id={id}
+            className="settings-field__input"
+            type="text"
+            value={draft}
+            autoComplete="off"
+            spellCheck={false}
+            autoFocus
+            data-own-escape
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                commit()
+              } else if (event.key === 'Escape') {
+                event.preventDefault()
+                setDraft(null)
+              }
+            }}
+          />
+        )}
       </div>
     </div>
   )
@@ -689,26 +807,31 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
 /** What a new worktree of this project gets that the branch does not carry, and its setup command. */
 function CarriedPaths({ project }: { project: Project }): React.JSX.Element {
   const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
+  const shown = useShown()
 
   return (
     <>
-      <PathList
-        project={project}
-        id="linked"
-        label="Symlink into every new worktree"
-        placeholder={'node_modules\n.venv'}
-        paths={project.linkedPaths}
-        save={(linkedPaths) => void setProjectPaths(project.id, { linkedPaths })}
-      />
-      <PathList
-        project={project}
-        id="copied"
-        label="Copy into every new worktree"
-        placeholder={'.env\n.env.local'}
-        paths={project.copiedPaths}
-        save={(copiedPaths) => void setProjectPaths(project.id, { copiedPaths })}
-      />
-      <SetupCommand project={project} />
+      {shown.row('Symlink into every new worktree') ? (
+        <PathList
+          project={project}
+          id="linked"
+          label="Symlink into every new worktree"
+          examples="node_modules, .venv"
+          paths={project.linkedPaths}
+          save={(linkedPaths) => void setProjectPaths(project.id, { linkedPaths })}
+        />
+      ) : null}
+      {shown.row('Copy into every new worktree') ? (
+        <PathList
+          project={project}
+          id="copied"
+          label="Copy into every new worktree"
+          examples=".env, .env.local"
+          paths={project.copiedPaths}
+          save={(copiedPaths) => void setProjectPaths(project.id, { copiedPaths })}
+        />
+      ) : null}
+      {shown.row('Setup command') ? <SetupCommand project={project} /> : null}
     </>
   )
 }
@@ -741,7 +864,8 @@ function SetupCommand({ project }: { project: Project }): React.JSX.Element {
         className="settings-field__input"
         type="text"
         value={draft}
-        placeholder="npm ci"
+        placeholder="None"
+        title="e.g. npm ci"
         autoComplete="off"
         spellCheck={false}
         onChange={(event) => setDraft(event.target.value)}
@@ -762,14 +886,15 @@ function PathList({
   project,
   id,
   label,
-  placeholder,
+  examples,
   paths,
   save
 }: {
   project: Project
   id: string
   label: string
-  placeholder: string
+  /** Shown on hover, never in the field, where an example reads as a value. */
+  examples: string
   paths: readonly string[] | undefined
   save: (paths: string[]) => void
 }): React.JSX.Element {
@@ -801,7 +926,8 @@ function PathList({
         className="settings-field__input settings-field__input--lines"
         rows={3}
         value={draft}
-        placeholder={placeholder}
+        placeholder="None"
+        title={`One per line, e.g. ${examples}`}
         autoComplete="off"
         spellCheck={false}
         onChange={(event) => setDraft(event.target.value)}
@@ -847,9 +973,8 @@ function EditorCommand({ project }: { project: Project }): React.JSX.Element {
         Open checkouts in
       </label>
       <div className="settings-field__row">
-        <select
+        <Select
           id={id}
-          className="settings-select"
           value={other ? OTHER_EDITOR : stored}
           onChange={(event) => {
             const value = event.target.value
@@ -865,7 +990,7 @@ function EditorCommand({ project }: { project: Project }): React.JSX.Element {
             </option>
           ))}
           <option value={OTHER_EDITOR}>Other…</option>
-        </select>
+        </Select>
         {other ? (
           <input
             className="settings-field__input"

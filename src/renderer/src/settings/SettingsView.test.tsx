@@ -112,6 +112,7 @@ const openInstaller = vi.fn()
 const openTeamwork = vi.fn()
 const openDialog = vi.fn()
 const installCli = vi.fn()
+const showAppearance = vi.fn()
 
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
@@ -141,6 +142,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
       openTeamwork,
       openDialog,
       installCli,
+      showAppearance,
       ...overrides
     },
     true
@@ -175,7 +177,8 @@ beforeEach(() => {
     openInstaller,
     openTeamwork,
     openDialog,
-    installCli
+    installCli,
+    showAppearance
   ]) {
     mock.mockReset()
   }
@@ -223,7 +226,7 @@ describe('the page itself', () => {
 
   // A dialog is on top; one press must not close both.
   it('stands aside from Escape while a dialog is on top of it', () => {
-    seed({ dialog: { kind: 'add-project' } })
+    seed({ dialog: { kind: 'clone-project' } })
     render(<SettingsView />)
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(toggleSettings).not.toHaveBeenCalled()
@@ -261,6 +264,7 @@ describe('the section list', () => {
     }
   }
 
+  // What shapes every task first; what is set once, last.
   it('lists every section in page order, and leaves out Agents when there are none', () => {
     seed({ agents: [claude] })
     const { unmount } = render(<SettingsView />)
@@ -268,7 +272,7 @@ describe('the section list', () => {
       within(nav())
         .getAllByRole('button')
         .map((button) => button.textContent)
-    ).toEqual(['CLI', 'Updates', 'Notifications', 'Panes', 'Agents', 'Appearance', 'Projects'])
+    ).toEqual(['Agents', 'Projects', 'Panes', 'Notifications', 'Appearance', 'Updates', 'CLI'])
     unmount()
 
     seed({ agents: [] })
@@ -289,25 +293,25 @@ describe('the section list', () => {
 
   it('moves between sections with the arrow keys', () => {
     render(<SettingsView />)
-    item('Updates').focus()
-    fireEvent.keyDown(item('Updates'), { key: 'ArrowDown' })
+    item('Panes').focus()
+    fireEvent.keyDown(item('Panes'), { key: 'ArrowDown' })
     expect(document.activeElement).toBe(item('Notifications'))
     fireEvent.keyDown(item('Notifications'), { key: 'ArrowUp' })
-    fireEvent.keyDown(item('Updates'), { key: 'ArrowUp' })
-    expect(document.activeElement).toBe(item('CLI'))
-    fireEvent.keyDown(item('CLI'), { key: 'End' })
+    fireEvent.keyDown(item('Panes'), { key: 'ArrowUp' })
     expect(document.activeElement).toBe(item('Projects'))
+    fireEvent.keyDown(item('Projects'), { key: 'End' })
+    expect(document.activeElement).toBe(item('CLI'))
   })
 
   it('highlights the section scrolled into view', () => {
     render(<SettingsView />)
     const body = screen.getByTestId('settings-body')
-    layOut({ cli: -400, updates: -200, notices: 10, panes: 300, appearance: 600, projects: 900 })
+    layOut({ projects: -400, panes: -200, notices: 10, appearance: 300, updates: 600, cli: 900 })
     fireEvent.scroll(body)
     expect(current()).toEqual(['Notifications'])
-    layOut({ cli: -900, updates: -700, notices: -500, panes: -300, appearance: -100, projects: 200 })
+    layOut({ projects: -900, panes: -700, notices: -500, appearance: -300, updates: -100, cli: 200 })
     fireEvent.scroll(body)
-    expect(current()).toEqual(['Appearance'])
+    expect(current()).toEqual(['Updates'])
   })
 
   // The last sections cannot scroll to the top, so at the bottom the one picked wins, else the last.
@@ -320,16 +324,16 @@ describe('the section list', () => {
       clientHeight: { configurable: true, value: 400 },
       scrollHeight: { configurable: true, value: 900 }
     })
-    layOut({ cli: -900, updates: -700, notices: -500, panes: -300, appearance: 100, projects: 200 })
-    fireEvent.click(item('Appearance'))
+    layOut({ projects: -900, panes: -700, notices: -500, appearance: -300, updates: 100, cli: 200 })
+    fireEvent.click(item('Updates'))
     fireEvent.scroll(body)
-    expect(current()).toEqual(['Appearance'])
+    expect(current()).toEqual(['Updates'])
 
     Object.defineProperty(body, 'scrollTop', { configurable: true, value: 300 })
     fireEvent.scroll(body)
     Object.defineProperty(body, 'scrollTop', { configurable: true, value: 500 })
     fireEvent.scroll(body)
-    expect(current()).toEqual(['Projects'])
+    expect(current()).toEqual(['CLI'])
   })
 
   it('marks the section it was opened at current', () => {
@@ -517,23 +521,98 @@ describe('panes', () => {
 })
 
 describe('appearance', () => {
-  // The controls themselves, not a button to a dialog holding them.
-  it('holds the mode, theme and accent controls directly', () => {
+  // The controls live in the sheet beside the panes; a page that hides them is no place to judge a theme.
+  it('names the theme in effect, and opens the sheet to change it', () => {
+    seed({ appearance: { ...INITIAL.appearance, mode: 'dark' }, systemTone: 'dark' })
     render(<SettingsView />)
     const section = screen.getByRole('region', { name: 'Appearance' })
-    expect(within(section).getByRole('radiogroup', { name: 'Mode' })).toBeTruthy()
-    expect(within(section).getByRole('radiogroup', { name: 'Theme' })).toBeTruthy()
-    expect(within(section).getByRole('button', { name: 'Violet' })).toBeTruthy()
-    expect(within(section).queryByRole('button', { name: 'Appearance…' })).toBeNull()
-    expect(openDialog).not.toHaveBeenCalled()
+    expect(within(section).queryByRole('radiogroup')).toBeNull()
+    expect(within(section).getByText('Absolute Black · Dark')).toBeTruthy()
+    fireEvent.click(within(section).getByRole('button', { name: 'Change…' }))
+    expect(showAppearance).toHaveBeenCalledExactlyOnceWith(true)
+  })
+})
+
+describe('the filter', () => {
+  const filter = (): HTMLInputElement => screen.getByRole('searchbox', { name: 'Filter settings' }) as HTMLInputElement
+  const type = (text: string): void => {
+    fireEvent.change(filter(), { target: { value: text } })
+  }
+  const nav = (): string[] =>
+    within(screen.getByRole('navigation', { name: 'Sections' }))
+      .getAllByRole('button')
+      .map((button) => button.textContent ?? '')
+
+  it('sits above the section list', () => {
+    render(<SettingsView />)
+    const list = screen.getByRole('navigation', { name: 'Sections' })
+    expect(filter().compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(filter().placeholder).toBe('Filter')
   })
 
-  it('scrolls to Appearance when opened there', () => {
-    const scrollIntoView = vi.fn()
-    Element.prototype.scrollIntoView = scrollIntoView
-    seed({ settingsSection: 'appearance' })
+  it('hides every row whose label does not match, and the sections left empty', () => {
     render(<SettingsView />)
-    expect(scrollIntoView.mock.instances[0]).toBe(document.getElementById('settings-appearance'))
+    type('cursor')
+    expect(screen.getByLabelText('Cursor')).toBeTruthy()
+    expect(screen.queryByLabelText('Font')).toBeNull()
+    expect(screen.queryByLabelText('Setup command')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'CLI' })).toBeNull()
+    expect(nav()).toEqual(['Panes'])
+  })
+
+  // Label text only: the words in a row's value or behind it do not count.
+  it('reads labels, not values', () => {
+    seed({ projects: [{ ...project, setupCommand: 'npm ci' }] })
+    render(<SettingsView />)
+    type('npm')
+    expect(screen.queryByLabelText('Setup command')).toBeNull()
+    expect(screen.getByText('No matches')).toBeTruthy()
+  })
+
+  it('keeps a whole section whose title matches', () => {
+    render(<SettingsView />)
+    type('updates')
+    expect(screen.getByRole('heading', { name: 'Updates' })).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: 'Check automatically' })).toBeTruthy()
+    expect(nav()).toEqual(['Updates'])
+  })
+
+  it('finds a project row under its project, and every row by the project’s name', () => {
+    render(<SettingsView />)
+    type('symlink')
+    expect(screen.getByRole('heading', { name: 'pager' })).toBeTruthy()
+    expect(screen.getByLabelText('Symlink into every new worktree')).toBeTruthy()
+    expect(screen.queryByLabelText('Setup command')).toBeNull()
+
+    type('pager')
+    expect(screen.getByLabelText('Setup command')).toBeTruthy()
+  })
+
+  it('finds an agent by its name', () => {
+    seed({ agents: [claude, codex] })
+    render(<SettingsView />)
+    type('codex')
+    expect(screen.getByLabelText('Codex')).toBeTruthy()
+    expect(screen.queryByLabelText('Claude Code')).toBeNull()
+    expect(screen.queryByLabelText('Default agent')).toBeNull()
+  })
+
+  it('shows everything again once cleared', () => {
+    render(<SettingsView />)
+    type('cursor')
+    type('')
+    expect(nav()).toEqual(['Projects', 'Panes', 'Notifications', 'Appearance', 'Updates', 'CLI'])
+  })
+
+  // Escape empties a filter before it closes the page.
+  it('clears on Escape, and only then lets Escape close the page', () => {
+    render(<SettingsView />)
+    type('cursor')
+    fireEvent.keyDown(filter(), { key: 'Escape' })
+    expect(filter().value).toBe('')
+    expect(toggleSettings).not.toHaveBeenCalled()
+    fireEvent.keyDown(filter(), { key: 'Escape' })
+    expect(toggleSettings).toHaveBeenCalledOnce()
   })
 })
 
@@ -551,9 +630,20 @@ describe('projects', () => {
     expect(revealInFinder).toHaveBeenCalledWith('/repos/pager', 'the pager repository')
   })
 
-  it('shows the project’s base ref as the placeholder, so the box says what happens if it is left empty', () => {
+  // An example in the field reads as a value: a fresh project would look set to run `npm ci`.
+  it('shows None in an empty list or command field, with the examples in its tooltip', () => {
+    seed({ agents: [claude] })
     render(<SettingsView />)
-    expect(screen.getByLabelText('Start new worktrees from').getAttribute('placeholder')).toBe('origin/main')
+    for (const [label, example] of [
+      ['Symlink into every new worktree', 'node_modules'],
+      ['Copy into every new worktree', '.env'],
+      ['Setup command', 'npm ci']
+    ] as const) {
+      const field = screen.getByLabelText(label)
+      expect(field.getAttribute('placeholder'), label).toBe('None')
+      expect(field.getAttribute('title'), label).toContain(example)
+    }
+    expect(screen.getByLabelText('Claude Code').getAttribute('placeholder')).toBe('None')
   })
 })
 
@@ -594,7 +684,6 @@ describe('what a new worktree carries over from the primary checkout', () => {
   it('saves the setup command through the same method, trimmed, when the field is left', () => {
     render(<SettingsView />)
     const field = screen.getByLabelText('Setup command')
-    expect(field.getAttribute('placeholder')).toBe('npm ci')
     fireEvent.change(field, { target: { value: '  npm ci  ' } })
     expect(setProjectPaths).not.toHaveBeenCalled()
     fireEvent.blur(field)
@@ -617,27 +706,56 @@ describe('what a new worktree carries over from the primary checkout', () => {
 })
 
 describe('the start point a new task is offered first', () => {
+  const change = (): void => {
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }))
+  }
+
+  // The value in effect as text, not a field that looks filled in.
+  it('shows the ref in effect as text, with Change beside it', () => {
+    render(<SettingsView />)
+    const row = screen.getByText('Start new worktrees from').closest('.settings-field') as HTMLElement
+    expect(within(row).getByText('origin/main')).toBeTruthy()
+    expect(within(row).queryByRole('textbox')).toBeNull()
+    expect(within(row).queryByRole('button', { name: 'Use origin/main' })).toBeNull()
+  })
+
   it('commits what was typed when the field is left', () => {
     render(<SettingsView />)
+    change()
     const field = screen.getByLabelText('Start new worktrees from')
+    expect(document.activeElement).toBe(field)
     fireEvent.change(field, { target: { value: 'develop' } })
     expect(setStartPointDefault).not.toHaveBeenCalled()
     fireEvent.blur(field)
     expect(setStartPointDefault).toHaveBeenCalledWith('p1', 'develop')
+    expect(screen.queryByLabelText('Start new worktrees from')).toBeNull()
   })
 
   it('commits on Enter too, for the reader who never leaves the keyboard', () => {
     render(<SettingsView />)
+    change()
     const field = screen.getByLabelText('Start new worktrees from')
     fireEvent.change(field, { target: { value: 'release/2026' } })
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(setStartPointDefault).toHaveBeenCalledWith('p1', 'release/2026')
   })
 
-  // Null, not '': `withStartPoint` removes the entry for null.
-  it('passes null when the preference is cleared', () => {
+  it('puts the field away on Escape and keeps nothing', () => {
+    render(<SettingsView />)
+    change()
+    const field = screen.getByLabelText('Start new worktrees from')
+    fireEvent.change(field, { target: { value: 'develop' } })
+    fireEvent.keyDown(field, { key: 'Escape' })
+    expect(screen.queryByLabelText('Start new worktrees from')).toBeNull()
+    expect(setStartPointDefault).not.toHaveBeenCalled()
+    expect(toggleSettings).not.toHaveBeenCalled()
+  })
+
+  it('shows a ref set here, and offers the base ref back', () => {
     seed({ startPointDefaults: { p1: 'develop' } })
     render(<SettingsView />)
+    expect(screen.getByText('develop')).toBeTruthy()
+    // Null, not '': `withStartPoint` removes the entry for null.
     fireEvent.click(screen.getByRole('button', { name: 'Use origin/main' }))
     expect(setStartPointDefault).toHaveBeenCalledWith('p1', null)
   })
@@ -645,15 +763,11 @@ describe('the start point a new task is offered first', () => {
   it('passes null when the field is emptied and left, the same as the button', () => {
     seed({ startPointDefaults: { p1: 'develop' } })
     render(<SettingsView />)
+    change()
     const field = screen.getByLabelText('Start new worktrees from')
     fireEvent.change(field, { target: { value: '  ' } })
     fireEvent.blur(field)
     expect(setStartPointDefault).toHaveBeenCalledWith('p1', null)
-  })
-
-  it('offers nothing to clear when there is nothing set', () => {
-    render(<SettingsView />)
-    expect(screen.getByRole('button', { name: 'Use origin/main' }).hasAttribute('disabled')).toBe(true)
   })
 
   // The buttons name the ref they would use; no paragraph under them.
@@ -809,7 +923,8 @@ describe('the agent you always use', () => {
     render(<SettingsView />)
     for (const name of ['Claude Code', 'Codex']) {
       const field = screen.getByLabelText(name) as HTMLInputElement
-      expect(field.placeholder).toBe('Extra arguments')
+      expect(field.placeholder).toBe('None')
+      expect(field.title).toBe('Extra arguments')
       const label = document.querySelector(`label[for="${field.id}"]`)
       expect(label?.querySelector('.agent-glyph')).not.toBeNull()
     }
@@ -838,12 +953,15 @@ describe('the agent you always use', () => {
     expect(setAgentArgs).toHaveBeenCalledWith('claude', null)
   })
 
-  it('gives its select the same style as every other select on the page', () => {
+  it('gives its select the same style as every other select in the app', () => {
     seed({ agents: [claude] })
     render(<SettingsView />)
-    expect(screen.getByLabelText('Default agent').className).toBe(
-      screen.getByLabelText('When an agent stops').className
-    )
+    for (const select of document.querySelectorAll('select')) {
+      expect(select.className).toBe('select__input')
+      expect(select.parentElement?.className).toBe('select')
+      expect(select.parentElement?.querySelector('.select__chevron svg')).not.toBeNull()
+    }
+    expect(document.querySelectorAll('select').length).toBeGreaterThanOrEqual(3)
   })
 
   // Every control in the section is about an agent this machine has.

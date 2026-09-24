@@ -70,6 +70,24 @@ describe('picking a theme', () => {
   })
 })
 
+describe('the theme cards', () => {
+  const preview = (name: RegExp): HTMLElement =>
+    screen.getByRole('radio', { name }).querySelector('.appearance__preview') as HTMLElement
+
+  // Four near-black grounds read as four identical tiles; the sidebar, pane and their hairline tell them apart.
+  it('draws each dark preset in its own sidebar, pane and accent, so no two look alike', () => {
+    render(<AppearanceSettings />)
+    const drawn = [/Absolute Black/, /high contrast/, /Midnight/, /Graphite/].map((name) => {
+      const tile = preview(name)
+      for (const part of ['sidebar', 'pane', 'accent']) {
+        expect(tile.querySelector(`.appearance__preview-${part}`), `${String(name)} ${part}`).not.toBeNull()
+      }
+      return [tile, ...tile.querySelectorAll('*')].map((element) => element.getAttribute('style') ?? '').join('|')
+    })
+    expect(new Set(drawn).size).toBe(4)
+  })
+})
+
 describe('the two choices worth making without opening anything', () => {
   it('sets an accent from the row of them', () => {
     render(<AppearanceSettings />)

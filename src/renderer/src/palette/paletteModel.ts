@@ -22,7 +22,6 @@ export type PaletteAction =
   | WorkspaceCommand
   | 'toggle-changes'
   | 'show-files'
-  | 'add-project'
   | 'install-cli'
   | 'check-for-updates'
   | 'toggle-automatic-updates'
@@ -310,6 +309,8 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'open-settings': 'settings preferences options config cli path relay start point font size updates editor',
   // Both spellings; not "settings", which is the other page.
   'open-appearance': 'appearance theme colour color dark black contrast accent ground swatch',
+  'add-project': 'add open project repository repo folder directory',
+  'clone-repository': 'clone project repository repo git url remote github',
   'commit-changes': 'commit changes diff git stage staged message files review',
   'push-worktree': 'push send remote origin upload publish branch ahead',
   'open-help': 'help shortcuts keys keyboard worktree cli docs how what',
@@ -322,7 +323,6 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
 const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[] = [
   { id: 'toggle-changes', label: 'Show Changes', keywords: 'diff git status files review changes' },
   { id: 'show-files', label: 'Show Files', keywords: 'tree folder directory explorer browse open panel' },
-  { id: 'add-project', label: 'Add Project', keywords: 'add project repository repo folder clone' },
   {
     id: 'install-cli',
     // Replaced by `cliActionLabel` when the link is the problem rather than its absence.
