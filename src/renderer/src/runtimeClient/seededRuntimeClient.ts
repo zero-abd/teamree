@@ -818,6 +818,9 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'worktree.unstageHunk': () => {
       throw new Error('the seeded runtime has no index to unstage from')
     },
+    'worktree.unstagePath': () => {
+      throw new Error('the seeded runtime has no index to unstage from')
+    },
     'worktree.discardPath': () => {
       throw new Error('the seeded runtime has no files to discard')
     },

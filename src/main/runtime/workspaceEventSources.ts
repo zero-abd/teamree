@@ -52,6 +52,12 @@ export function publishGitWrites(registry: MethodRegistry, git: GitService, bus:
     return result
   })
 
+  registry.register('worktree.unstagePath', Params.worktreeUnstagePath, async (params) => {
+    const result = await git.worktreeUnstagePath(params)
+    bus.emit({ type: 'worktrees' })
+    return result
+  })
+
   // Discarding writes the working tree; announced for the same reason staging is.
   registry.register('worktree.discardPath', Params.worktreeDiscardPath, async (params) => {
     const result = await git.worktreeDiscardPath(params)

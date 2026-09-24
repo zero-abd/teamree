@@ -42,7 +42,8 @@ import type {
   WorktreeLog,
   WorktreeMergePreview,
   WorktreePush,
-  WorktreeStatus
+  WorktreeStatus,
+  WorktreeUnstage
 } from './entities'
 import { MAX_AGENT_ARGS_CHARS } from './agentLaunch'
 import { MAX_FILE_PANE_BYTES } from './filePane'
@@ -299,6 +300,11 @@ export const Params = {
     worktreeId: z.string().min(1),
     path: z.string().min(1).max(4096),
     hunk: Hunk
+  }),
+  /** Takes a whole path out of the index (both sides of a rename); the working tree is never written. */
+  worktreeUnstagePath: z.object({
+    worktreeId: z.string().min(1),
+    path: z.string().min(1).max(4096)
   }),
 
   /**
@@ -655,6 +661,7 @@ export type MethodContract = {
   'worktree.commit': { params: z.infer<typeof Params.worktreeCommit>; result: WorktreeCommit }
   'worktree.stageHunk': { params: z.infer<typeof Params.worktreeStageHunk>; result: WorktreeHunkStage }
   'worktree.unstageHunk': { params: z.infer<typeof Params.worktreeUnstageHunk>; result: WorktreeHunkStage }
+  'worktree.unstagePath': { params: z.infer<typeof Params.worktreeUnstagePath>; result: WorktreeUnstage }
   'worktree.discardPath': { params: z.infer<typeof Params.worktreeDiscardPath>; result: WorktreeDiscard }
   'worktree.discardHunk': { params: z.infer<typeof Params.worktreeDiscardHunk>; result: WorktreeDiscard }
   'worktree.push': { params: z.infer<typeof Params.worktreePush>; result: WorktreePush }

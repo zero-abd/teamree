@@ -1,8 +1,8 @@
-// Staging one hunk: takes a piece of a patch back and asks git to make it true
-// of the index, and only the index (`--cached`: the working tree is under an open
-// editor). Built like `worktreeCommit`, to refuse rather than guess.
+// Staging one hunk, or unstaging a whole path: writes the index and only the index
+// (`--cached`: the working tree is under an open editor). Built like `worktreeCommit`,
+// to refuse rather than guess.
 
-import type { WorktreeHunkStage } from '../../shared/entities'
+import type { WorktreeHunkStage, WorktreeUnstage } from '../../shared/entities'
 import type { HunkInput } from '../../shared/methods'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
@@ -68,6 +68,29 @@ export async function applyHunk(runner: GitRunner, options: HunkStageOptions): P
     removed: hunk.lines.filter((line) => line.kind === 'removed').length,
     appliedAt: (options.now ?? Date.now)()
   }
+}
+
+export type PathUnstageOptions = Omit<HunkStageOptions, 'hunk' | 'staged'>
+
+/** `git restore --staged` for one path, and a rename's origin with it so no half stays staged. */
+export async function unstagePath(runner: GitRunner, options: PathUnstageOptions): Promise<WorktreeUnstage> {
+  const common = { cwd: options.worktreePath, ...(options.signal ? { signal: options.signal } : {}) }
+  // No pathspec: limited to the new path, status cannot pair a rename with its origin.
+  const { stdout } = await runner.run({
+    args: ['status', '--porcelain=v2', '-z', '--untracked-files=no'],
+    readOnly: true,
+    timeoutMs: 30_000,
+    ...common
+  })
+  const change = parseChangeRecords(stdout).find((entry) => entry.path === options.path && entry.staged)
+  if (change === undefined) throw new GitServiceError(ErrorCode.Conflict, `nothing staged in ${options.path}.`)
+  const paths = change.kind === 'renamed' && change.from !== undefined ? [change.path, change.from] : [change.path]
+
+  // `restore` needs a HEAD; before the first commit the entry is dropped (`--force`: only the index check).
+  const born = await runner.tryRun({ args: ['rev-parse', '--verify', '--quiet', 'HEAD'], readOnly: true, ...common })
+  const args = born.exitCode === 0 ? ['restore', '--staged'] : ['rm', '--cached', '--force', '--quiet']
+  await runner.run({ args: ['--literal-pathspecs', ...args, '--', ...paths], timeoutMs: APPLY_TIMEOUT_MS, ...common })
+  return { worktreeId: options.worktreeId, path: options.path, unstagedAt: (options.now ?? Date.now)() }
 }
 
 /**

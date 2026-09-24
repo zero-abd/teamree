@@ -41,6 +41,7 @@ const EXPECTED = [
   'worktree commit',
   'worktree stage-hunk',
   'worktree unstage-hunk',
+  'worktree unstage',
   'worktree discard',
   'worktree push',
   'worktree wait',

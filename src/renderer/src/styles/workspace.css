@@ -815,10 +815,6 @@
   accent-color: var(--accent);
 }
 
-.change__tick[aria-disabled='true'] {
-  cursor: default;
-}
-
 .changes__item .change {
   padding-left: 0;
 }

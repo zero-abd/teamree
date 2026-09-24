@@ -412,6 +412,28 @@ export const worktreeCommands: readonly CommandSpec[] = [
     run: async (context) => applyHunkCommand(context, false)
   },
   {
+    path: ['worktree', 'unstage'],
+    summary: 'Take a whole file out of the index.',
+    details: 'Only the index is written; the file on disk is never touched. A staged rename is unstaged on both sides.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    flags: [
+      {
+        name: 'path',
+        kind: 'string',
+        placeholder: '<path>',
+        description: 'The file to unstage.',
+        required: true
+      }
+    ],
+    examples: ['teamree worktree unstage fix-login --path src/app.ts'],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const patchPath = requireString(context.flags, 'path')
+      const result = await context.client.call('worktree.unstagePath', { worktreeId: worktree.id, path: patchPath })
+      return { data: result, text: formatFields([['unstaged', patchPath]]) }
+    }
+  },
+  {
     path: ['worktree', 'discard'],
     summary: "Throw away a file's unstaged change, or one hunk of it.",
     details:
