@@ -3,7 +3,15 @@
 // entry per child and they sum to 1. The file column is exempt from the first two.
 
 import type { PaneNode } from '../../shared/entities'
-import { commitLeaf, compareLeaf, fileLeaf, isFileColumn, isFileLeaf, withTabs } from '../../shared/filePane'
+import {
+  commitLeaf,
+  compareLeaf,
+  fileLeaf,
+  reviewLeaf,
+  isFileColumn,
+  isFileLeaf,
+  withTabs
+} from '../../shared/filePane'
 
 export type SplitDirection = 'row' | 'column'
 
@@ -155,7 +163,7 @@ function parseNode(value: unknown, depth: number): PaneNode | null {
 
   if (node.kind === 'leaf') {
     if (typeof node.terminalId !== 'string' || node.terminalId.length === 0) return null
-    // A file leaf keeps its path, commit and compare; every other `pane` value is a terminal.
+    // A file leaf keeps its path, commit, compare and review; every other `pane` value is a terminal.
     if (node.pane === 'file') {
       if (typeof node.path !== 'string' || node.path.length === 0) return null
       if (typeof node.commit === 'string' && node.commit.length > 0) {
@@ -164,6 +172,7 @@ function parseNode(value: unknown, depth: number): PaneNode | null {
       if (typeof node.compare === 'string' && node.compare.length > 0) {
         return compareLeaf(node.terminalId, node.compare, node.path)
       }
+      if (node.review === true) return reviewLeaf(node.terminalId, node.path)
       return fileLeaf(node.terminalId, node.path)
     }
     return leafPane(node.terminalId)

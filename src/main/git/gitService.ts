@@ -536,6 +536,7 @@ export class GitService {
       worktreePath: worktree.path,
       ...(params.path === undefined ? {} : { path: params.path }),
       ...(params.staged === undefined ? {} : { staged: params.staged }),
+      ...(params.head === true && params.staged !== true ? { against: 'HEAD' } : {}),
       ...(params.contextLines === undefined ? {} : { contextLines: params.contextLines }),
       ...(params.maxBytes === undefined ? {} : { maxBytes: params.maxBytes }),
       prepared: this.#preparedPaths(worktree.projectId),

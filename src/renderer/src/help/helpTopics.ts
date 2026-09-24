@@ -58,6 +58,7 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
   'bigger-text': 'app',
   'smaller-text': 'app',
   'actual-size': 'app',
+  'review-changes': 'around',
   'commit-changes': 'around',
   'push-worktree': 'around'
 }

@@ -5,6 +5,8 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import type { FileContent } from '@shared/entities'
 import { filePaneName } from '@shared/filePane'
 import type { FilePaneProps } from '../panes/FilePane'
+import { CommentComposer } from '../review/CommentComposer'
+import type { QuotedLine } from '../review/reviewComments'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { CodeEditorHandle } from './CodeEditor'
@@ -44,6 +46,7 @@ export function FileView({
   const [draft] = useState<FileDraft | undefined>(() => draftFor(paneId, worktreeId, path))
   const [error, setError] = useState<string | null>(null)
   const [conflict, setConflict] = useState(false)
+  const [comment, setComment] = useState<QuotedLine[] | null>(null)
   const diff = useFileDiff(paneId, worktreeId, path)
   const showDiff = diff.shown
   const editor = useRef<CodeEditorHandle | null>(null)
@@ -234,6 +237,7 @@ export function FileView({
                 focused={focused && !showDiff}
                 onDirtyChange={onDirtyChange}
                 onEdit={onEdit}
+                onComment={(from, lines) => setComment(quotedCode(from, lines))}
               />
             </Suspense>
           ) : view.kind === 'image' ? (
@@ -267,6 +271,16 @@ export function FileView({
           )}
         </div>
       </div>
+      {comment === null || showDiff ? null : (
+        <div className="file__comment">
+          <CommentComposer worktreeId={worktreeId} path={path} lines={comment} onClose={() => setComment(null)} />
+        </div>
+      )}
     </section>
   )
+}
+
+/** Lines of the file as it is, numbered from `from`. */
+function quotedCode(from: number, lines: readonly string[]): QuotedLine[] {
+  return lines.map((text, index) => ({ kind: 'context', text, oldNumber: null, newNumber: from + index }))
 }

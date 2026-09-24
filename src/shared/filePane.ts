@@ -50,14 +50,25 @@ export function isCompareLeaf(node: PaneNode | null | undefined): node is Compar
   return isFileLeaf(node) && typeof node.compare === 'string' && node.compare.length > 0
 }
 
-/** A leaf showing a file of the worktree, not a commit or a compare. */
-export function isWorktreeFileLeaf(node: PaneNode | null | undefined): boolean {
-  return isFileLeaf(node) && !isCommitLeaf(node) && !isCompareLeaf(node)
+/** A file-column tab showing every change of its worktree; `path` is the tab's title. */
+export type ReviewLeaf = FileLeaf & { review: true }
+
+export function reviewLeaf(id: string, title: string): ReviewLeaf {
+  return { ...fileLeaf(id, title), review: true }
 }
 
-/** What a file-column tab reads: a commit's or compare's title whole, a file by its name. */
+export function isReviewLeaf(node: PaneNode | null | undefined): node is ReviewLeaf {
+  return isFileLeaf(node) && node.review === true
+}
+
+/** A leaf showing a file of the worktree, not a commit, a compare or a review. */
+export function isWorktreeFileLeaf(node: PaneNode | null | undefined): boolean {
+  return isFileLeaf(node) && !isCommitLeaf(node) && !isCompareLeaf(node) && !isReviewLeaf(node)
+}
+
+/** What a file-column tab reads: a commit's, compare's or review's title whole, a file by its name. */
 export function fileTabName(leaf: FileLeaf): string {
-  return isCommitLeaf(leaf) || isCompareLeaf(leaf) ? leaf.path : filePaneName(leaf.path)
+  return isCommitLeaf(leaf) || isCompareLeaf(leaf) || isReviewLeaf(leaf) ? leaf.path : filePaneName(leaf.path)
 }
 
 /** A fresh pane id; `random` is injected so a test can choose it. */

@@ -2,8 +2,15 @@
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WorktreeChange, WorktreeLanding, WorktreeLog, WorktreePush, WorktreeStatus } from '@shared/entities'
-import { fileLeavesIn, isCommitLeaf } from '@shared/filePane'
+import type {
+  Terminal,
+  WorktreeChange,
+  WorktreeLanding,
+  WorktreeLog,
+  WorktreePush,
+  WorktreeStatus
+} from '@shared/entities'
+import { fileColumnIn, fileLeavesIn, isCommitLeaf, isReviewLeaf } from '@shared/filePane'
 
 const call = vi.fn()
 const openInBrowser = vi.fn()
@@ -25,6 +32,7 @@ const { useWorkspaceStore } = await import('../../state/workspaceStore')
 const { ChangesTab, canDiscard } = await import('./ChangesTab')
 const { ConfirmDiscardDialog } = await import('../../dialogs/ConfirmDiscardDialog')
 const { FilePane } = await import('../../panes/FilePane')
+const { useReviewStore } = await import('../../review/reviewStore')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -103,6 +111,7 @@ beforeEach(() => {
   call.mockReset()
   call.mockImplementation(() => new Promise(() => {}))
   openInBrowser.mockReset()
+  useReviewStore.setState({ viewed: {}, batch: {}, queued: {} })
   seed()
 })
 
@@ -712,6 +721,124 @@ describe('picking a changed file', () => {
     fireEvent.click(row)
     expect(row.getAttribute('aria-current')).toBe('true')
     expect(fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root)).toHaveLength(1)
+  })
+})
+
+// Stepping through an agent's change should not leave a tab per file behind.
+describe('one preview tab for the change on screen', () => {
+  function withThreeChanges(): void {
+    seed()
+    useWorkspaceStore.setState({
+      layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } },
+      changes: {
+        w1: {
+          worktreeId: 'w1',
+          changes: [
+            { path: 'src/rank.ts', kind: 'modified', staged: false, unstaged: true },
+            { path: 'README.md', kind: 'modified', staged: false, unstaged: true },
+            { path: 'docs/NOTES.md', kind: 'untracked', staged: false, unstaged: true }
+          ],
+          total: 3,
+          limit: 500,
+          truncated: false,
+          readAt: 0
+        }
+      }
+    })
+  }
+  const leaves = () => fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root)
+  const column = () => fileColumnIn(useWorkspaceStore.getState().layouts.w1!.root)
+
+  it('leaves one file tab after ↓ through three files, in Diff, as the preview', () => {
+    withThreeChanges()
+    render(<ChangesTab />)
+    const first = screen.getByTitle('src/rank.ts')
+    fireEvent.click(first)
+    fireEvent.keyDown(first, { key: 'ArrowDown' })
+    fireEvent.keyDown(screen.getByTitle('README.md'), { key: 'ArrowDown' })
+    expect(leaves().map((leaf) => leaf.path)).toEqual(['docs/NOTES.md'])
+    expect(column()?.preview).toBe(leaves()[0]!.terminalId)
+    expect(useWorkspaceStore.getState().diffPanes[leaves()[0]!.terminalId]).toBe(true)
+  })
+
+  it('keeps the tab on a double-click or ⌘Return, so the next file opens beside it', () => {
+    withThreeChanges()
+    render(<ChangesTab />)
+    const first = screen.getByTitle('src/rank.ts')
+    fireEvent.click(first)
+    fireEvent.doubleClick(first)
+    expect(column()?.preview).toBeUndefined()
+    fireEvent.keyDown(first, { key: 'ArrowDown' })
+    expect(leaves().map((leaf) => leaf.path)).toEqual(['src/rank.ts', 'README.md'])
+    fireEvent.keyDown(screen.getByTitle('README.md'), { key: 'Enter', metaKey: true })
+    expect(column()?.preview).toBeUndefined()
+    expect(leaves()).toHaveLength(2)
+  })
+
+  it('opens every change as one Review tab from Review All, and focuses it again rather than opening another', () => {
+    withThreeChanges()
+    render(<ChangesTab />)
+    fireEvent.click(screen.getByRole('button', { name: 'Review All' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Review All' }))
+    const reviews = leaves().filter(isReviewLeaf)
+    expect(reviews.map((leaf) => leaf.path)).toEqual(['Review'])
+    expect(useWorkspaceStore.getState().expandedTerminalId).toBe(reviews[0]!.terminalId)
+  })
+
+  it('ticks a row whose file was marked viewed, until its counts change', () => {
+    withThreeChanges()
+    const row = { path: 'src/rank.ts', kind: 'modified' as const, staged: false, unstaged: true, added: 2, removed: 1 }
+    useWorkspaceStore.setState({
+      changes: { w1: { worktreeId: 'w1', changes: [row], total: 1, limit: 500, truncated: false, readAt: 0 } }
+    })
+    useReviewStore.getState().markViewed('w1', 'src/rank.ts', { fingerprint: 'f', added: 2, removed: 1 })
+    render(<ChangesTab />)
+    expect(screen.getByLabelText('Viewed')).toBeTruthy()
+    act(() =>
+      useWorkspaceStore.setState({
+        changes: {
+          w1: { worktreeId: 'w1', changes: [{ ...row, added: 3 }], total: 1, limit: 500, truncated: false, readAt: 1 }
+        }
+      })
+    )
+    expect(screen.queryByLabelText('Viewed')).toBeNull()
+  })
+})
+
+describe('comments kept for a batch', () => {
+  const agent = {
+    id: 'claude',
+    worktreeId: 'w1',
+    title: 'claude',
+    shell: '/bin/zsh',
+    running: true,
+    busy: false,
+    lastOutputAt: 0,
+    agent: 'claude'
+  } as Terminal
+  const comment = (note: string) => ({
+    path: 'src/rank.ts',
+    lines: [{ kind: 'added' as const, text: 'x', oldNumber: null, newNumber: 3 }],
+    note
+  })
+
+  it('sends them from the panel as one message, and says Queued while the agent works', () => {
+    useWorkspaceStore.setState({ terminals: { claude: agent } })
+    useReviewStore.getState().addToBatch('w1', comment('One.'))
+    useReviewStore.getState().addToBatch('w1', comment('Two.'))
+    render(<ChangesTab />)
+    fireEvent.click(screen.getByRole('button', { name: 'Send 2 Comments' }))
+    const written = call.mock.calls.filter(([method]) => method === 'terminal.write')
+    expect(written).toHaveLength(1)
+    expect((written[0]![1] as { data: string }).data).toContain('One.\n\nsrc/rank.ts:3')
+
+    act(() => {
+      useWorkspaceStore.setState({ terminals: { claude: { ...agent, busy: true } } })
+      useReviewStore.setState({ queued: { claude: true } })
+    })
+    expect(screen.getByText('Queued')).toBeTruthy()
+    act(() => useWorkspaceStore.setState({ terminals: { claude: agent } }))
+    expect(screen.getByRole('button', { name: 'Send Queued' })).toBeTruthy()
   })
 })
 

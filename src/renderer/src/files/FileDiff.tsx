@@ -9,7 +9,7 @@ import type { DiffLayout } from '../state/preferences'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, type PaneSearchState } from '../terminal/paneSearchModel'
 import { TerminalSearchBar } from '../terminal/TerminalSearchBar'
-import { fitLayout, PatchView, type PatchPlace } from '../workspace/PatchView'
+import { fitLayout, PatchView, type PatchPlace, type PatchViewProps } from '../workspace/PatchView'
 import { Segments } from './FileBar'
 import { DIFF_MATCH_LIMIT, findInPatches, stepMatch, type DiffMatch } from './diffFind'
 
@@ -160,7 +160,10 @@ export function ReadOnlyDiffBody({
   error,
   layout,
   searchToken = 0,
-  onCloseSearch
+  onCloseSearch,
+  lead = null,
+  patchProps = {},
+  onKeyDown
 }: {
   patch: string | null
   truncated: boolean
@@ -168,6 +171,10 @@ export function ReadOnlyDiffBody({
   layout: DiffLayout
   searchToken?: number
   onCloseSearch?: (() => void) | undefined
+  /** Drawn above the patch, scrolling with it. */
+  lead?: React.ReactNode
+  patchProps?: PatchViewProps
+  onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void
 }): React.JSX.Element {
   const scroller = useRef<HTMLDivElement | null>(null)
   const find = useDiffFind(scroller, null, patch === '' ? null : patch, searchToken)
@@ -183,8 +190,9 @@ export function ReadOnlyDiffBody({
   return (
     <div className="file__diffs">
       {bar}
-      <div className="file__diff" ref={scroller} tabIndex={-1}>
-        <PatchView patch={patch} truncated={truncated} layout={layout} reveal={find.reveal(0)} />
+      <div className="file__diff" ref={scroller} tabIndex={-1} onKeyDown={onKeyDown}>
+        {lead}
+        <PatchView patch={patch} truncated={truncated} layout={layout} reveal={find.reveal(0)} {...patchProps} />
       </div>
     </div>
   )
@@ -258,6 +266,7 @@ export function DiffBody({
               truncated={staged.truncated}
               layout={layout}
               named
+              commentsIn={worktreeId}
               action="Unstage Hunk"
               busy={busy}
               reveal={find.reveal(0)}
@@ -273,6 +282,7 @@ export function DiffBody({
               truncated={working.truncated}
               layout={layout}
               named
+              commentsIn={worktreeId}
               action="Stage Hunk"
               busy={busy}
               reveal={find.reveal(staged === null ? 0 : 1)}

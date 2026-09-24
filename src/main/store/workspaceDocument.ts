@@ -49,7 +49,8 @@ const PaneNodeSchema: z.ZodType<PaneNode> = z.lazy(() =>
       pane: z.enum(['terminal', 'file']).optional(),
       path: z.string().min(1).optional(),
       commit: z.string().min(1).optional(),
-      compare: z.string().min(1).optional()
+      compare: z.string().min(1).optional(),
+      review: z.literal(true).optional()
     }),
     z.object({
       kind: z.literal('split'),
