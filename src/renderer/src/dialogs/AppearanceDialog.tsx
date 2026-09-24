@@ -63,7 +63,7 @@ export function AppearanceDialog(): React.JSX.Element {
               className={`appearance__mode${option === mode ? ' appearance__mode--current' : ''}`}
               onClick={() => void setAppearance({ ...appearance, mode: option })}
             >
-              {MODE_LABEL[option]}
+              {APPEARANCE_MODE_LABEL[option]}
             </button>
           ))}
         </div>
@@ -233,7 +233,11 @@ export function AppearanceDialog(): React.JSX.Element {
   )
 }
 
-const MODE_LABEL: Record<AppearanceMode, string> = { system: 'Match System', light: 'Light', dark: 'Dark' }
+export const APPEARANCE_MODE_LABEL: Record<AppearanceMode, string> = {
+  system: 'Match System',
+  light: 'Light',
+  dark: 'Dark'
+}
 
 /** A colour, as the platform's own picker (it has an eyedropper); the input is the swatch. */
 function ColourWell({
