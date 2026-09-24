@@ -112,6 +112,7 @@ function WorkspaceView({
   const teamworkProjectId = useWorkspaceStore((state) => state.teamworkProjectId)
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen)
   const helpOpen = useWorkspaceStore((state) => state.helpOpen)
+  const restoring = useWorkspaceStore((state) => state.restoring)
 
   const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
   const fontFamily = useWorkspaceStore((state) => state.terminalOptions.fontFamily)
@@ -158,6 +159,9 @@ function WorkspaceView({
         </main>
       )
     }
+
+    // The last window's front tab is on its way; a welcome now would flash past.
+    if (restoring) return <main className="workspace workspace--empty" />
 
     // Nothing open: one card, the button that cannot answer disabled.
     return (

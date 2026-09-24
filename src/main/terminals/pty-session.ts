@@ -338,7 +338,7 @@ export class PtySession {
     if (tailBytes === undefined) return `${framed}${live}`
 
     // The live output is the newer half; the record only supplies what is left over.
-    const remaining = tailBytes - Buffer.byteLength(live, 'utf8')
+    const remaining = tailBytes - this.scrollback.byteLength
     if (remaining <= 0) return live
     return `${tailFromLineBoundary(framed, remaining)}${live}`
   }
@@ -349,7 +349,7 @@ export class PtySession {
    */
   recordedOutput(capBytes?: number): string {
     const live = this.scrollback.tail(capBytes)
-    if (this.record === undefined) return live
+    if (this.record === undefined || this.scrollback.byteLength >= (capBytes ?? Infinity)) return live
     // A record that ended mid-line must not have this session's first line run on from it.
     const joined = this.record.text.endsWith('\n') ? this.record.text : `${this.record.text}\r\n`
     const combined = `${joined}${live}`

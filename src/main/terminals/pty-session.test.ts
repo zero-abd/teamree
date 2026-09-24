@@ -378,6 +378,21 @@ describePty('PtySession', () => {
   const earlier = { text: 'what this pane printed last time\r\n', recordedAt: Date.parse('2026-03-04T09:05:00Z') }
 
   it(
+    'does not put the record under a tail that only starts later to skip a cut sequence',
+    async () => {
+      const session = start({ command: "printf 'ab\\033[38;2;138;138;138;49m%0120d\\n' 7", restoredRecord: earlier })
+      await waitUntil(() => !session.isRunning && session.retainedBytes > 0, 'the line and the exit')
+
+      // Cut inside the colour: the live tail skips ahead, and is still the newer half.
+      const tailBytes = session.retainedBytes - 'ab\x1b[38'.length
+      expect(session.read(tailBytes)).not.toContain('end of record')
+      expect(session.read(tailBytes)).not.toContain('138;')
+      expect(session.recordedOutput(tailBytes)).not.toContain('what this pane printed last time')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'holds back the record of a pane that is resuming, without letting go of it',
     async () => {
       const session = start({ command: 'cat', restored: 'agent', restoredRecord: earlier })
