@@ -53,6 +53,7 @@ import {
   MAX_CACHED_TEXT,
   MAX_CACHED_WORKTREES,
   PaneLabelOnRead,
+  PaneOrdinalOnRead,
   TeammateCacheStore,
   TEAMMATE_CACHE_FILE,
   type TeammateCache
@@ -1902,6 +1903,7 @@ const PanePayload = z.object({
   title: z.string(),
   shell: z.string(),
   label: PaneLabelOnRead,
+  ordinal: PaneOrdinalOnRead,
   agent: AgentKindOnRead,
   running: z.boolean(),
   exitCode: z.number().optional(),

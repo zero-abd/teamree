@@ -325,6 +325,11 @@ export function Sidebar({
                     {rows.map((worktree) => {
                       const display = worktreeDisplay(worktree, kindOf)
                       const label = worktreeLabel(display)
+                      const siblings = siblingRuns(worktree, worktrees)
+                      const kind = display.agent?.kind
+                      const twinRun =
+                        kind !== undefined &&
+                        siblings.some((other) => worktreeDisplay(other, kindOf).agent?.kind === kind)
                       return (
                         <WorktreeRow
                           key={worktree.id}
@@ -349,7 +354,8 @@ export function Sidebar({
                           onCopyPath={() => void copyToClipboard(worktree.path, `the path to ${label}`)}
                           onCopyBranch={() => void copyToClipboard(worktree.branch, `the branch ${worktree.branch}`)}
                           openIn={openIn(project.id, worktree.path, `the ${label} checkout`, false)}
-                          compareWith={siblingRuns(worktree, worktrees).map((other) => ({
+                          twinRun={twinRun}
+                          compareWith={siblings.map((other) => ({
                             label: runName(other, kindOf),
                             onChoose: () =>
                               void openCompare(worktree.id, other.id, compareTitle(worktree, other, kindOf))

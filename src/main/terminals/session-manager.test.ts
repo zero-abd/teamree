@@ -98,6 +98,24 @@ describePty('terminal handlers', () => {
   )
 
   it(
+    'numbers a worktree’s panes of one program from 1, never giving a closed pane’s number out again',
+    async () => {
+      const service = newService()
+      const first = await newTerminal(service)
+      const second = await newTerminal(service)
+      await service.handlers['terminal.close']({ terminalId: first.id })
+      const { terminal: third } = await service.handlers['terminal.split']({ terminalId: second.id, direction: 'row' })
+      const elsewhere = await service.handlers['terminal.create']({ worktreeId: 'wt_other', cwd: process.cwd() })
+
+      expect([first.ordinal, second.ordinal, third.ordinal]).toEqual([1, 2, 3])
+      expect(elsewhere.ordinal).toBe(1)
+      const listed = await service.handlers['terminal.list']({ worktreeId: WORKTREE })
+      expect(listed.map((terminal) => terminal.ordinal)).toEqual([2, 3])
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'scopes the list to one worktree',
     async () => {
       const service = newService()
@@ -538,6 +556,7 @@ describePty('running an exited pane again', () => {
 
       const again = await service.handlers['terminal.relaunch']({ terminalId: terminal.id })
       expect(again.id).toBe(terminal.id)
+      expect(again.ordinal).toBe(terminal.ordinal)
       expect(again.agent).toBeUndefined()
       // The same refusal `restoreLaunch` makes: nobody asked for it twice.
       expect(records.get(terminal.id)?.command).toBeUndefined()

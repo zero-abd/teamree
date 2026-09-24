@@ -93,6 +93,7 @@ function mount(
     unread?: Iterable<string>
     active?: boolean
     openIn?: { label: string; onChoose: () => void }[]
+    twinRun?: boolean
   } = {}
 ): void {
   render(
@@ -107,6 +108,7 @@ function mount(
         unread={new Set(overrides.unread ?? [])}
         now={NOW}
         active={overrides.active ?? false}
+        {...(overrides.twinRun === undefined ? {} : { twinRun: overrides.twinRun })}
         openIn={
           overrides.openIn ?? [
             { label: 'Zed', onChoose: openInZed },
@@ -265,8 +267,9 @@ describe('a worktree that is ready', () => {
     const head = document.querySelector('.worktree__title') as HTMLElement
     const chips = head.querySelector('.gitchips') as HTMLElement
     expect(chips).not.toBeNull()
-    expect(chips.closest('.worktree__facts')?.nextElementSibling).toBe(head.lastElementChild)
-    expect(head.lastElementChild?.classList.contains('activity')).toBe(true)
+    const end = head.lastElementChild as HTMLElement
+    expect(chips.closest('.worktree__facts')?.nextElementSibling).toBe(end.lastElementChild)
+    expect(end.lastElementChild?.classList.contains('activity')).toBe(true)
   })
 
   it('keeps its chips beside the branch when the branch says more', () => {
@@ -400,6 +403,27 @@ describe('one of several runs of a task', () => {
         .getByRole('img')
         .getAttribute('aria-label')
     ).toBe('git status: 1 uncommitted')
+  })
+
+  // The pane row under it starts with the same glyph; the word only costs the title width.
+  it('draws the glyph alone while one agent pane runs in it', () => {
+    mount({ worktree: codexRun(), terminals: [terminal({ id: 't1', agent: 'codex' }), terminal({ id: 't2' })] })
+    const slot = document.querySelector('.worktree__agent') as HTMLElement
+    expect(slot.querySelector('[data-agent="codex"]')).not.toBeNull()
+    expect(slot.textContent).toBe('')
+    expect(screen.getByRole('treeitem', { name: `codex, ${TASK}` })).toBeTruthy()
+  })
+
+  it('keeps the word beside two agent panes, or a sibling run of the same agent', () => {
+    mount({
+      worktree: codexRun(),
+      terminals: [terminal({ id: 't1', agent: 'codex' }), terminal({ id: 't2', agent: 'codex' })]
+    })
+    mount({ worktree: codexRun(), terminals: [terminal({ id: 't1', agent: 'codex' })], twinRun: true })
+    expect([...document.querySelectorAll('.worktree__agent')].map((slot) => slot.textContent)).toEqual([
+      'codex',
+      'codex'
+    ])
   })
 
   // The task pane is named after the worktree; saying it again under the row is noise.

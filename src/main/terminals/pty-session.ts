@@ -115,6 +115,8 @@ export type PtySessionInit = {
   onRestart?: (session: PtySession) => void
   /** What the pane is called, when somebody has said; see `Terminal.label`. */
   label?: string
+  /** See `Terminal.ordinal`. */
+  ordinal?: number
   /** Called when the pane starts or stops producing output. */
   onActivityChange?: (session: PtySession) => void
   /** Called when the bottom of an agent pane's screen starts or stops showing a question. */
@@ -133,6 +135,7 @@ export class PtySession {
   readonly shell: string
   readonly command: string | undefined
   readonly agent: AgentKind | undefined
+  readonly ordinal: number | undefined
 
   /** Not a field: a restarted agent has a different child, and `close()` kills by pid. */
   get pid(): number {
@@ -206,6 +209,7 @@ export class PtySession {
     this.shell = init.shell
     this.command = init.command
     this.agent = init.agent
+    this.ordinal = init.ordinal
     this.cols = init.cols
     this.rows = init.rows
     this.widest = init.cols
@@ -261,6 +265,7 @@ export class PtySession {
       ...(this.agent === undefined ? {} : { agent: this.agent }),
       ...(foregroundAgent === undefined ? {} : { foregroundAgent }),
       ...(this.label === undefined ? {} : { label: this.label }),
+      ...(this.ordinal === undefined ? {} : { ordinal: this.ordinal }),
       busy: this.busy,
       // Derived, not stored, so it cannot drift from the title.
       ...(titleSays === null ? {} : { titleSays }),

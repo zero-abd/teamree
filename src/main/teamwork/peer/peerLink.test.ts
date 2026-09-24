@@ -1046,6 +1046,31 @@ describe('a snapshot from a teammate is somebody else’s bytes', () => {
     ])
   })
 
+  it('carries the number a teammate’s pane was started with, and reads a bad one as none', () => {
+    const projectKey = 'k'.repeat(64)
+    const pane = { title: 'zsh', shell: '/bin/zsh', running: true, busy: false, quietForMs: 0 }
+    const worktrees = [
+      {
+        id: 'wt_1',
+        name: 'one',
+        branch: 'main',
+        state: 'ready',
+        panes: [
+          { ...pane, id: 't_second', ordinal: 2 },
+          { ...pane, id: 't_older' },
+          { ...pane, id: 't_odd', ordinal: -1 }
+        ]
+      }
+    ]
+    const panes = parsePeerPresence({ revision: 1, handle: 'bob', projects: [{ projectKey, worktrees }] }, projectKey)
+      ?.projects[0]?.worktrees[0]?.panes
+    expect(panes?.map((one) => [one.id, one.ordinal])).toEqual([
+      ['t_second', 2],
+      ['t_older', undefined],
+      ['t_odd', undefined]
+    ])
+  })
+
   it('reads a snapshot carrying fields this build has never heard of', () => {
     // What an older build does with the pane's name: drops it and keeps the pane.
     const projectKey = 'k'.repeat(64)

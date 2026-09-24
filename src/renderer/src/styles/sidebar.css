@@ -347,16 +347,18 @@
   border-radius: var(--r2);
 }
 
-/* Room for the ⋯ only while it shows, so a resting row gives its title the width. */
-.worktree:is(:hover, :focus-within, :has(.worktree__action[aria-expanded='true'])) .worktree__row:has(> .worktree__action) {
-  padding-right: calc(18px + var(--s2) * 2);
+/* `--row-tint` is the row's fill again, for what is drawn over the title on the rail's opaque ground. */
+.worktree__row {
+  --row-tint: transparent;
 }
 
 .worktree:hover .worktree__row {
+  --row-tint: var(--bg-hover);
   background: var(--bg-hover);
 }
 
 .worktree--active .worktree__row {
+  --row-tint: var(--accent-soft);
   background: var(--accent-soft);
 }
 
@@ -374,10 +376,12 @@
 
 /* Under a page the rail entry is what is selected; the worktree keeps a faint tick to come back to. */
 .sidebar--page .worktree--active .worktree__row {
+  --row-tint: transparent;
   background: none;
 }
 
 .sidebar--page .worktree--active:hover .worktree__row {
+  --row-tint: var(--bg-hover);
   background: var(--bg-hover);
 }
 
@@ -469,24 +473,52 @@
   height: 12px;
 }
 
-/* Pushed to the row's right edge rather than sitting against the name, so the
-   dots line up into a column that can be read down. */
-.worktree__title .activity {
-  margin-left: auto;
-}
-
-/* The branch's facts, on the title line when there is no branch line: at the
-   right edge, and just left of the dot when there is one. */
-.worktree__facts {
+/* The facts, when there is no branch line, then the dot: at the row's right edge, so the dots line up
+   into a column that can be read down. */
+.worktree__end {
+  position: relative;
   display: inline-flex;
   flex: none;
+  align-self: stretch;
   align-items: center;
   gap: var(--s2);
   margin-left: auto;
 }
 
-.worktree__facts + .activity {
-  margin-left: 0;
+/* Hovered or focused, the ⋯ takes the right end and the end slides left over the title's tail, on
+   a ground that fades in, instead of the title giving way: the title's cut stays where it was. */
+.worktree:is(:hover, :has(.worktree__open:focus-visible, .worktree__action:focus-visible, .worktree__action[aria-expanded='true'])) .worktree__end {
+  translate: calc(-18px - var(--s2)) 0;
+  background: linear-gradient(var(--row-tint), var(--row-tint)), var(--bg-rail);
+}
+
+/* The ground under the ⋯, over what the end slid off. */
+.worktree:is(:hover, :has(.worktree__open:focus-visible, .worktree__action:focus-visible, .worktree__action[aria-expanded='true'])) .worktree__end::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: calc(18px + var(--s2));
+  background: linear-gradient(var(--row-tint), var(--row-tint)), var(--bg-rail);
+}
+
+.worktree:is(:hover, :has(.worktree__open:focus-visible, .worktree__action:focus-visible, .worktree__action[aria-expanded='true'])) .worktree__end::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 100%;
+  bottom: 0;
+  width: 16px;
+  background:
+    linear-gradient(to right, transparent, var(--row-tint)), linear-gradient(to right, transparent, var(--bg-rail));
+}
+
+.worktree__facts {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s2);
 }
 
 .worktree__git {
@@ -497,9 +529,24 @@
   min-width: 0;
 }
 
-/* The open worktree's status bar and Changes badge already say this. */
+/* The open worktree's status bar and Changes badge already say this; hovered, it lies over the title. */
 .worktree--active:not(:hover, :focus-within) .worktree__git {
   display: none;
+}
+
+.worktree--active .worktree__end .worktree__git {
+  position: absolute;
+  top: 0;
+  right: 100%;
+  bottom: 0;
+  padding: 0 var(--s2) 0 16px;
+  background:
+    linear-gradient(to right, transparent, var(--row-tint) 16px), linear-gradient(to right, transparent, var(--bg-rail) 16px);
+}
+
+/* The branch gives way to the ⋯ instead: only the title line keeps its cut. */
+.worktree:is(:hover, :has(.worktree__open:focus-visible, .worktree__action:focus-visible, .worktree__action[aria-expanded='true'])) .worktree__meta {
+  padding-right: calc(18px + var(--s2));
 }
 
 .worktree--creating .worktree__name,
@@ -561,9 +608,7 @@
   stroke: none;
 }
 
-.worktree:hover .worktree__action,
-.worktree__action:focus-visible,
-.worktree__action[aria-expanded='true'] {
+.worktree:is(:hover, :has(.worktree__open:focus-visible, .worktree__action:focus-visible, .worktree__action[aria-expanded='true'])) .worktree__action {
   opacity: 1;
 }
 

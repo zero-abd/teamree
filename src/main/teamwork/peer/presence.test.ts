@@ -75,4 +75,22 @@ describe('presenceFor', () => {
     expect(panes.map((pane) => pane.label)).toEqual(['api server', undefined])
     expect('label' in (panes[1] ?? {})).toBe(false)
   })
+
+  // The reader names the pane; the number it was started with is a fact only the owner has.
+  it('sends the number a pane was started with', () => {
+    const presence = presenceFor(
+      {
+        source: {
+          projects: () => [{ projectId: 'p1', projectKey: 'key', rosterKeys: ['peer'] }],
+          worktrees: () => [worktree],
+          terminals: () => [{ ...terminal('t1'), ordinal: 2 }, terminal('t2')]
+        }
+      },
+      'peer',
+      'me',
+      1
+    )
+    const panes = presence.projects[0]?.worktrees[0]?.panes ?? []
+    expect(panes.map((pane) => pane.ordinal)).toEqual([2, undefined])
+  })
 })

@@ -42,7 +42,7 @@ type MenuBarItem = {
  * What the window tells the main process about notifications, and what comes
  * back. `preference` is a plain string: the main process parses it against its own list.
  */
-type NoticeSettings = { preference: string; focusedPaneId: string | null }
+type NoticeSettings = { preference: string; focusedPaneId: string | null; names: Record<string, string> }
 type PaneAddress = { worktreeId: string; terminalId: string }
 
 /** What the window says about sleep. `mode` is a plain string, parsed by the main process. */

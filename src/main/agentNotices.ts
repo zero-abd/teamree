@@ -17,6 +17,8 @@ export const AGENT_NOTICE_PREFERENCES: readonly AgentNoticePreference[] = ['off'
 export type NoticeSettings = {
   preference: AgentNoticePreference
   focusedPaneId: string | null
+  /** What the window calls each of its panes, by terminal id. */
+  names?: Readonly<Record<string, string>>
 }
 
 /** Until the window says otherwise, which it does on its first render. */
@@ -36,7 +38,15 @@ export function readNoticeSettings(value: unknown): NoticeSettings | null {
   if (!isPreference(settings.preference)) return null
   const focused = settings.focusedPaneId
   if (focused !== null && typeof focused !== 'string') return null
-  return { preference: settings.preference, focusedPaneId: focused }
+  const names = readNames(settings.names)
+  return { preference: settings.preference, focusedPaneId: focused, ...(names === undefined ? {} : { names }) }
+}
+
+function readNames(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const names: Record<string, string> = Object.create(null)
+  for (const [id, name] of Object.entries(value)) if (typeof name === 'string') names[id] = name
+  return names
 }
 
 /** Why a pane is being reported: it stopped printing, or it ended. */
@@ -103,7 +113,7 @@ export type AgentNoticeHost = {
   /** True when the window is the one the person is looking at. */
   windowFocused: () => boolean
   /** Raises one OS notification. `onActivate` runs if it is clicked. */
-  show: (spec: { title: string; body: string; silent: boolean; onActivate: () => void }) => void
+  show: (spec: { title: string; subtitle?: string; body: string; silent: boolean; onActivate: () => void }) => void
   /** The dock badge. macOS only; on the other platforms this does nothing. */
   setBadge: (count: number) => void
   /** Brings the window forward, which is half of what clicking one asks for. */
@@ -151,8 +161,10 @@ export function installAgentNotices(ipc: IpcMain, host: AgentNoticeHost): AgentN
       const windowFocused = host.windowFocused()
       badge({ kind: 'settled', terminalId: notice.terminalId, windowFocused })
       if (!shouldNotify({ settings, windowFocused, terminalId: notice.terminalId })) return
+      const pane = settings.names?.[notice.terminalId]
       host.show({
         title: notice.worktree,
+        ...(pane === undefined ? {} : { subtitle: pane }),
         body: noticeBody(notice),
         silent: noticeIsSilent(settings.preference),
         onActivate: () => {

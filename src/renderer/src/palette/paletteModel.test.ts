@@ -154,7 +154,7 @@ describe('buildPaletteItems', () => {
 
     const agents = items.filter((item) => item.kind === 'agent')
     expect(agents.map((item) => item.id)).toEqual(['claude', 'codex'])
-    expect(agents.map((item) => item.label)).toEqual(['Start Claude Here', 'Start Codex Here'])
+    expect(agents.map((item) => item.label)).toEqual(['Start Claude Code Here', 'Start Codex Here'])
   })
 
   // A row that promises a pane in a directory that is not there is the same
@@ -423,7 +423,7 @@ describe('what the palette returns for what was typed', () => {
   it.each([
     ['push', ['Push']],
     ['commit', ['Commit…']],
-    ['clau', ['Start Claude Here']]
+    ['clau', ['Start Claude Code Here']]
   ] as ReadonlyArray<readonly [string, string[]]>)('answers %s with only the rows that carry it', (query, expected) => {
     expect(labels(query)).toEqual(expected)
   })
@@ -680,7 +680,7 @@ describe('the first screen, before anything is typed', () => {
     expect(groups.map((group) => group.title)).toEqual(['Worktrees', 'login fix', 'Commands'])
     expect(groups[0]?.items.map((item) => item.id)).toEqual(['w2', 'w1'])
     expect(groups[1]?.items.map((item) => item.label)).toEqual([
-      'Start Claude Here',
+      'Start Claude Code Here',
       'Rename Worktree…',
       'Reveal in Finder',
       'Copy Path',

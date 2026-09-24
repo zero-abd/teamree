@@ -45,11 +45,15 @@ export type TeammateCache = {
 /** A pane's name another build sent or wrote: anything but a string reads as unnamed, not as a bad record. */
 export const PaneLabelOnRead = z.string().optional().catch(undefined)
 
+/** A pane's number, read the same way: anything but a positive integer reads as none. */
+export const PaneOrdinalOnRead = z.number().int().positive().optional().catch(undefined)
+
 const PaneSchema = z.object({
   id: z.string().min(1),
   title: z.string(),
   shell: z.string(),
   label: PaneLabelOnRead,
+  ordinal: PaneOrdinalOnRead,
   agent: AgentKindOnRead,
   running: z.boolean(),
   exitCode: z.number().optional(),

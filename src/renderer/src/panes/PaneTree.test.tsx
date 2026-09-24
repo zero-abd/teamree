@@ -227,7 +227,7 @@ describe('one pane', () => {
       terminal('t2', { agent: 'claude' })
     ])
     expect(screen.getAllByRole('button', { name: 'Run claude again' })).toHaveLength(1)
-    // Two claude panes nobody named: called `claude 1` and `claude 2`, as the strip does.
+    // Two claude panes nobody named: `Claude Code` and `Claude Code 2`, as the strip calls them.
     const alive = screen.getByRole('region', { name: 'Claude Code 2' })
     expect(within(alive).queryByRole('button', { name: /again|New shell/ })).toBeNull()
   })
@@ -263,15 +263,28 @@ describe('what a pane is called', () => {
     expect(screen.getByRole('button', { name: 'Close pane zsh' })).toBeTruthy()
   })
 
-  // Two panes of the same agent are told apart along the top as `Claude Code 1`
-  // and `Claude Code 2`; the bar under each tab says the same thing.
   it('numbers unnamed twins the way the strip does', () => {
     mount(row(leaf('t1'), leaf('t2')), [
       terminal('t1', { agent: 'claude', title: 'node' }),
       terminal('t2', { agent: 'claude', title: 'node' })
     ])
-    expect(screen.getByRole('button', { name: 'Close pane Claude Code 1' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close pane Claude Code' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Close pane Claude Code 2' })).toBeTruthy()
+  })
+
+  // The shell split off last sits above the older one; each keeps the number it started with.
+  it('names a pane by the number it was given, not by where it sits', () => {
+    mount(row(leaf('newer'), leaf('older')), [
+      terminal('older', { title: '', ordinal: 1 }),
+      terminal('newer', { title: '', ordinal: 2 })
+    ])
+    expect(screen.getAllByText(/^zsh/).map((title) => title.textContent)).toEqual(['zsh 2', 'zsh'])
+  })
+
+  // Records arrive in the order the panes were opened; the sidebar numbers by that order too.
+  it('numbers twins by the order they were opened, not by the tree', () => {
+    mount(row(leaf('newer'), leaf('older')), [terminal('older', { title: '' }), terminal('newer', { title: '' })])
+    expect(screen.getAllByText(/^zsh/).map((title) => title.textContent)).toEqual(['zsh 2', 'zsh'])
   })
 })
 

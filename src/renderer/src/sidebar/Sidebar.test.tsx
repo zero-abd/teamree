@@ -6,7 +6,14 @@
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Project, TeammatePresence, TeammatePresenceRead, TeamworkStatus, Worktree } from '@shared/entities'
+import type {
+  Project,
+  TeammatePresence,
+  TeammatePresenceRead,
+  TeamworkStatus,
+  Terminal,
+  Worktree
+} from '@shared/entities'
 
 const call = vi.fn<(method: string, params: unknown) => Promise<unknown>>()
 const watchPane = vi.fn()
@@ -782,6 +789,42 @@ describe('several runs of one task', () => {
     expect(screen.getByRole('treeitem', { name: `claude, ${task}` })).toBeTruthy()
     // The branch line said the name again, slugified.
     expect(screen.queryByText('add-a-subtract-function-to-claude')).toBeNull()
+  })
+
+  // The glyph tells claude from codex; only a second claude run needs its word to be told apart.
+  it('drops the agent word where the glyph alone tells the runs apart', () => {
+    const task = 'Add a subtract function to src/math.ts'
+    const run = (id: string, name: string): Worktree =>
+      worktree({ id, name, branch: name.toLowerCase().replaceAll(' ', '-'), task })
+    const agentPane = (id: string, worktreeId: string, agent: 'claude' | 'codex'): Terminal => ({
+      id,
+      worktreeId,
+      title: 'node',
+      cwd: '/repos/pager-wt',
+      shell: '/bin/zsh',
+      cols: 80,
+      rows: 24,
+      running: true,
+      busy: false,
+      lastOutputAt: 0,
+      agent,
+      ordinal: 1
+    })
+    seed({
+      worktrees: [
+        run('w1', 'Add a subtract function to claude'),
+        run('w2', 'Add a subtract function to claude 2'),
+        run('w3', 'Add a subtract function to codex')
+      ],
+      terminals: {
+        a: agentPane('a', 'w1', 'claude'),
+        b: agentPane('b', 'w2', 'claude'),
+        c: agentPane('c', 'w3', 'codex')
+      }
+    })
+    mount()
+    const words = [...document.querySelectorAll('.worktree__agent')].map((slot) => slot.textContent)
+    expect(words).toEqual(['claude', 'claude 2', ''])
   })
 })
 

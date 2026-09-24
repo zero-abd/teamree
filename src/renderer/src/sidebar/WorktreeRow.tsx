@@ -54,6 +54,8 @@ type WorktreeRowProps = {
   openIn: readonly { label: string; onChoose: () => void }[]
   /** The Compare with submenu: the task's other runs. None leaves the item out. */
   compareWith?: readonly { label: string; onChoose: () => void }[]
+  /** Another run of the task runs the same agent, so the glyph alone would not tell the rows apart. */
+  twinRun?: boolean
 }
 
 export function WorktreeRow({
@@ -78,7 +80,8 @@ export function WorktreeRow({
   renameAsked = false,
   onRenameShown,
   openIn,
-  compareWith = []
+  compareWith = [],
+  twinRun = false
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
   const failed = worktree.state === 'failed'
@@ -143,6 +146,9 @@ export function WorktreeRow({
   const rows = ready ? agentRows(terminals, worktree, now, evidence) : []
   const tone = worktreeTone(rows)
   const label = worktreeLabel(display)
+  // One agent pane: the pane row under this one starts with the same glyph.
+  const agentWord =
+    display.agent?.kind === undefined || twinRun || rows.filter((row) => row.agent !== undefined).length !== 1
   const branchSaysMore = display.branch !== undefined
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
@@ -199,7 +205,7 @@ export function WorktreeRow({
             {display.agent ? (
               <span className="worktree__agent">
                 {display.agent.kind === undefined ? null : <AgentGlyph kind={display.agent.kind} decorative />}
-                {display.agent.text}
+                {agentWord ? display.agent.text : null}
               </span>
             ) : null}
             <span
@@ -211,22 +217,25 @@ export function WorktreeRow({
             </span>
           </>
         )}
-        {branchSaysMore ? null : (
-          <span className="worktree__facts" id={factsId}>
-            {facts}
-          </span>
-        )}
-        {tone ? (
-          <span
-            id={stateId}
-            className={dotClass(tone)}
-            role="img"
-            title={`${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${TONE_LABEL[tone]}${
-              unreadHere ? ' · unread' : ''
-            }`}
-            aria-label={TONE_LABEL[tone]}
-          />
-        ) : null}
+        {/* Slides over the title's tail when the ⋯ shows, so the title never reflows under the pointer. */}
+        <span className="worktree__end">
+          {branchSaysMore ? null : (
+            <span className="worktree__facts" id={factsId}>
+              {facts}
+            </span>
+          )}
+          {tone ? (
+            <span
+              id={stateId}
+              className={dotClass(tone)}
+              role="img"
+              title={`${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${TONE_LABEL[tone]}${
+                unreadHere ? ' · unread' : ''
+              }`}
+              aria-label={TONE_LABEL[tone]}
+            />
+          ) : null}
+        </span>
       </span>
       {branchSaysMore ? (
         <span className="worktree__meta" id={factsId}>

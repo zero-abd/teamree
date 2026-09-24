@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { PaneNode, Terminal } from '@shared/entities'
+import type { PaneNode, Terminal, Worktree } from '@shared/entities'
+import { dashboardRows } from '../dashboard/dashboardRows'
 import { leaf } from '../panes/paneLayout'
-import { TONE_LABEL } from '../sidebar/agentRows'
+import { agentRows, TONE_LABEL } from '../sidebar/agentRows'
 import { paneTabs, paneTabTitle } from './paneTabs'
 
 function terminal(overrides: Partial<Terminal> & { id: string }): Terminal {
@@ -17,6 +18,17 @@ function terminal(overrides: Partial<Terminal> & { id: string }): Terminal {
     lastOutputAt: 0,
     ...overrides
   }
+}
+
+const worktree: Worktree = {
+  id: 'wt1',
+  projectId: 'p1',
+  name: 'pantry',
+  branch: 'pantry',
+  path: '/checkouts/wt1',
+  startedFrom: 'main',
+  state: 'ready',
+  createdAt: 0
 }
 
 /** The records as the store holds them: by id, in whatever order they arrived. */
@@ -107,7 +119,7 @@ describe('paneTabs', () => {
       )
     )
 
-    expect(tabs.map((tab) => tab.label)).toEqual(['Claude Code 1', 'Claude Code 2', 'auth refactor'])
+    expect(tabs.map((tab) => tab.label)).toEqual(['Claude Code', 'Claude Code 2', 'auth refactor'])
   })
 
   // The glyph names the agent, so the text beside it carries only what the glyph cannot.
@@ -123,11 +135,36 @@ describe('paneTabs', () => {
     )
 
     expect(tabs.map((tab) => [tab.agent, tab.text])).toEqual([
-      ['codex', '1'],
+      ['codex', ''],
       ['codex', '2'],
       ['claude', 'auth refactor'],
       ['grok', '']
     ])
+  })
+
+  // Split right on the agent with an older shell below: the new shell comes first in the tree.
+  it('names each pane as the sidebar and the board do, whatever order the tree puts them in', () => {
+    const root: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [
+        { kind: 'split', direction: 'column', sizes: [0.5, 0.5], children: [leaf('agent'), leaf('older')] },
+        leaf('newer')
+      ]
+    }
+    const opened = [
+      terminal({ id: 'agent', agent: 'claude', ordinal: 1 }),
+      terminal({ id: 'older', title: '', shell: '/bin/zsh', ordinal: 1 }),
+      terminal({ id: 'newer', title: '', shell: '/bin/zsh', ordinal: 2 })
+    ]
+    const byTab = Object.fromEntries(paneTabs(root, byId(...opened)).map((tab) => [tab.terminalId, tab.label]))
+    const bySidebar = Object.fromEntries(agentRows(opened, 'wt1', 0).map((entry) => [entry.terminalId, entry.label]))
+    const board = dashboardRows({ terminals: opened, worktrees: [worktree], projects: [], now: 0 })
+
+    expect(byTab).toEqual({ agent: 'Claude Code', older: 'zsh', newer: 'zsh 2' })
+    expect(bySidebar).toEqual(byTab)
+    expect(Object.fromEntries(board.map((entry) => [entry.terminalId, entry.label]))).toEqual(byTab)
   })
 
   it('has nothing to show for a worktree with no panes in it', () => {

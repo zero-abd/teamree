@@ -13,6 +13,7 @@
 
 import { render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Terminal } from '@shared/entities'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
@@ -29,7 +30,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { useAgentNotices } = await import('./useAgentNotices')
 
-type Settings = { preference: string; focusedPaneId: string | null }
+type Settings = { preference: string; focusedPaneId: string | null; names?: Record<string, string> }
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -105,7 +106,29 @@ describe('what the window tells the main process', () => {
     render(<Harness />)
 
     expect(publish).toHaveBeenCalledTimes(1)
-    expect(latest()).toEqual({ preference: 'notify', focusedPaneId: 't1' })
+    expect(latest()).toEqual({ preference: 'notify', focusedPaneId: 't1', names: {} })
+  })
+
+  // What a notification calls a pane is what the board calls it.
+  it('says what each of its own panes is called', () => {
+    const pane = (id: string, ordinal: number): Terminal => ({
+      id,
+      worktreeId: 'w1',
+      title: 'node',
+      cwd: '/w1',
+      shell: '/bin/zsh',
+      cols: 80,
+      rows: 24,
+      running: true,
+      busy: false,
+      lastOutputAt: 0,
+      agent: 'claude',
+      ordinal
+    })
+    seed({ terminals: { t2: pane('t2', 2), t1: pane('t1', 1) } })
+    render(<Harness />)
+
+    expect(latest()?.names).toEqual({ t1: 'Claude Code', t2: 'Claude Code 2' })
   })
 
   // A teammate's pane is somebody else's session. No notification raised here
