@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PaneNode } from '@shared/entities'
 import { fileColumn, fileLeaf, type FileColumn } from '@shared/filePane'
+import { paneRects } from '@shared/paneRoom'
 import {
   addTab,
   appendPane,
@@ -13,6 +14,7 @@ import {
   neighbourTerminalId,
   normalizeSizes,
   pinTab,
+  placeFileColumn,
   setSizesAt,
   showTab,
   shownRoot,
@@ -339,5 +341,77 @@ describe('the file column', () => {
       children: [column, file('s')]
     })
     expect(appendPane(column, leaf('n'), 'column')).toMatchObject({ children: [column, leaf('n')] })
+  })
+})
+
+describe('where a new file column goes', () => {
+  const box = { width: 1100, height: 800 }
+  const min = { width: 305, height: 160 }
+  const column = fileColumn(fileLeaf('f', 'src/math.ts'))
+  const agents = new Set(['claude'])
+  const isAgent = (id: string): boolean => agents.has(id)
+  const rectOf = (root: PaneNode | null, id: string) => paneRects(root, box).find((rect) => rect.id === id)!
+  const split = (direction: 'row' | 'column', sizes: number[], ...children: PaneNode[]): PaneNode => ({
+    kind: 'split',
+    direction,
+    sizes,
+    children
+  })
+
+  it('goes beside a lone pane and takes half the centre', () => {
+    const placed = placeFileColumn(leaf('claude'), column, box, min, isAgent)
+    expect(rectOf(placed, 'f').width).toBeGreaterThanOrEqual((box.width - 5) / 2)
+    expect(rectOf(placed, 'f').height).toBe(box.height)
+  })
+
+  it('goes beside the largest pane, not the first', () => {
+    const root = split('row', [0.3, 0.7], leaf('zsh'), leaf('claude'))
+    const placed = placeFileColumn(root, column, { width: 1600, height: 800 }, min, isAgent)
+    const at = paneRects(placed, { width: 1600, height: 800 })
+    const file = at.find((rect) => rect.id === 'f')!
+    const claude = at.find((rect) => rect.id === 'claude')!
+    expect(file.x).toBeGreaterThan(claude.x)
+    expect(file.height).toBe(800)
+    expect(file.width).toBeGreaterThanOrEqual(1600 / 2 - 5)
+  })
+
+  it('never goes under an agent pane; under a shell when nothing beside has room', () => {
+    const root = split('row', [0.5, 0.5], leaf('claude'), split('column', [0.5, 0.5], leaf('zsh1'), leaf('zsh2')))
+    const centre = { width: 786, height: 818 }
+    const at = paneRects(placeFileColumn(root, column, centre, min, isAgent), centre)
+    const was = paneRects(root, centre)
+    const find = (rects: typeof at, id: string) => rects.find((rect) => rect.id === id)!
+    expect(find(at, 'claude')).toEqual(find(was, 'claude'))
+    expect(find(at, 'f').x).toBe(find(was, 'zsh1').x)
+    expect(find(at, 'f').y).toBeGreaterThan(find(at, 'zsh1').y)
+  })
+
+  it('is refused when no pane can give it room', () => {
+    const tiny = { width: 400, height: 200 }
+    expect(placeFileColumn(leaf('claude'), column, tiny, min, isAgent)).toBeNull()
+  })
+
+  it('is the whole centre in an empty worktree', () => {
+    expect(placeFileColumn(null, column, box, min, isAgent)).toBe(column)
+  })
+})
+
+describe('zooming into the file column', () => {
+  const column = fileColumn(fileLeaf('a', 'a.ts'))
+  const tree: PaneNode = { kind: 'split', direction: 'row', sizes: [0.5, 0.5], children: [leaf('t'), column] }
+
+  it('fills the centre with the whole column, its tabs with it, for a tab in it', () => {
+    const withTwo = addTab(tree, fileLeaf('b', 'b.ts'))
+    const shown = shownRoot(withTwo, 'a')
+    expect(shown?.kind === 'split' && shown.children.map((child) => child.kind === 'leaf' && child.terminalId)).toEqual(
+      ['a', 'b']
+    )
+  })
+
+  it('leaves the tree itself untouched, so restoring is the tree as it was', () => {
+    const before = structuredClone(tree)
+    shownRoot(tree, 'a')
+    expect(tree).toEqual(before)
+    expect(shownRoot(tree, null)).toBe(tree)
   })
 })

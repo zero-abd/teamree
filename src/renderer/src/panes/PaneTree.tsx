@@ -104,13 +104,23 @@ function FileLeaf({
 function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColumn }): React.JSX.Element {
   const unsaved = useWorkspaceStore((state) => state.unsavedFiles)
   const pin = useWorkspaceStore((state) => state.pinFilePane)
+  const expanded = useWorkspaceStore((state) => state.expandedTerminalId)
+  const diffs = useWorkspaceStore((state) => state.diffPanes)
+  const restore = useWorkspaceStore((state) => state.toggleExpandedPane)
   const startDrag = useTabDrag()
   const dragged = usePaneDrag((state) => state.drag?.source.id)
   const shown = shownTabId(node)
   const tabs = node.children.filter(isFileLeaf)
   const focused = tabs.some((tab) => tab.terminalId === callbacks.focusedTerminalId)
+  // Out of a zoomed diff; an editor keeps its Escape.
+  const onKeyDown = (event: React.KeyboardEvent): void => {
+    if (event.key !== 'Escape' || event.defaultPrevented || shown === undefined || diffs[shown] !== true) return
+    if (!tabs.some((tab) => tab.terminalId === expanded)) return
+    event.preventDefault()
+    restore()
+  }
   return (
-    <div className={`column${focused ? ' column--focused' : ''}`}>
+    <div className={`column${focused ? ' column--focused' : ''}`} onKeyDown={onKeyDown}>
       <div className="column__tabs" role="tablist" aria-label="Open files">
         {tabs.map((tab) => {
           const name = fileTabName(tab)

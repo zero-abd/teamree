@@ -44,6 +44,7 @@ vi.mock('../files/FileView', () => ({
 
 const { PaneTree } = await import('./PaneTree')
 const { shownRoot } = await import('./paneLayout')
+const useStore = await import('../state/workspaceStore')
 
 const terminal = (id: string, overrides: Partial<Terminal> = {}): Terminal => ({
   id,
@@ -471,5 +472,19 @@ describe('the file column', () => {
     expect(onFocus).toHaveBeenCalledWith('file:1')
     fireEvent.click(screen.getByRole('button', { name: 'Close NOTES.md' }))
     expect(onClose).toHaveBeenCalledWith('file:1')
+  })
+
+  it('gives the layout back on Escape in a zoomed diff, and keeps Escape for an editor', () => {
+    const { useWorkspaceStore } = useStore
+    useWorkspaceStore.setState({ expandedTerminalId: 'file:2', diffPanes: { 'file:2': true } })
+    mount(shownRoot(row(leaf('t1'), column), 'file:2')!, [terminal('t1')], 'file:2')
+    expect(screen.queryByTestId('surface-t1')).toBeNull()
+    fireEvent.keyDown(screen.getByTestId('viewer-file:2'), { key: 'Escape' })
+    expect(useWorkspaceStore.getState().expandedTerminalId).toBeNull()
+
+    useWorkspaceStore.setState({ expandedTerminalId: 'file:2', diffPanes: {} })
+    fireEvent.keyDown(screen.getByTestId('viewer-file:2'), { key: 'Escape' })
+    expect(useWorkspaceStore.getState().expandedTerminalId).toBe('file:2')
+    useWorkspaceStore.setState({ expandedTerminalId: null })
   })
 })

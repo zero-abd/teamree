@@ -592,6 +592,66 @@ describe('picking a changed file', () => {
   })
 })
 
+// The diff is what the user came to read, so it gets the centre; the layout under it is left as it was.
+describe('reviewing a change zoomed', () => {
+  function withTwoChanges(): void {
+    seed()
+    useWorkspaceStore.setState({
+      layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } },
+      changes: {
+        w1: {
+          worktreeId: 'w1',
+          changes: [
+            { path: 'src/rank.ts', kind: 'modified', staged: false, unstaged: true },
+            { path: 'README.md', kind: 'modified', staged: false, unstaged: true }
+          ],
+          total: 2,
+          limit: 500,
+          truncated: false,
+          readAt: 0
+        }
+      }
+    })
+  }
+  const shownPath = (): string | undefined => {
+    const state = useWorkspaceStore.getState()
+    return fileLeavesIn(state.layouts.w1!.root).find((leaf) => leaf.terminalId === state.expandedTerminalId)?.path
+  }
+
+  it('fills the centre with the diff it opens', () => {
+    withTwoChanges()
+    render(<ChangesTab />)
+    fireEvent.click(screen.getByTitle('src/rank.ts'))
+    expect(shownPath()).toBe('src/rank.ts')
+  })
+
+  it('steps to the next and previous file on the arrows, still zoomed, with the keyboard on the row', () => {
+    withTwoChanges()
+    render(<ChangesTab />)
+    const first = screen.getByTitle('src/rank.ts')
+    fireEvent.click(first)
+    first.focus()
+    fireEvent.keyDown(first, { key: 'ArrowDown' })
+    expect(shownPath()).toBe('README.md')
+    expect(useWorkspaceStore.getState().selectedChangePath).toBe('README.md')
+    expect(document.activeElement).toBe(screen.getByTitle('README.md'))
+    fireEvent.keyDown(screen.getByTitle('README.md'), { key: 'ArrowUp' })
+    expect(shownPath()).toBe('src/rank.ts')
+  })
+
+  it('gives the layout back on Escape, as it was', () => {
+    withTwoChanges()
+    render(<ChangesTab />)
+    const row = screen.getByTitle('src/rank.ts')
+    fireEvent.click(row)
+    const root = useWorkspaceStore.getState().layouts.w1!.root
+    expect(shownPath()).toBe('src/rank.ts')
+    fireEvent.keyDown(row, { key: 'Escape' })
+    expect(useWorkspaceStore.getState().expandedTerminalId).toBeNull()
+    expect(useWorkspaceStore.getState().layouts.w1!.root).toBe(root)
+  })
+})
+
 describe('discarding a file', () => {
   const rows = [
     { path: 'README.md', kind: 'modified' as const, staged: false, unstaged: true },

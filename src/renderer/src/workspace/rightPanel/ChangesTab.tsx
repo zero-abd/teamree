@@ -15,6 +15,8 @@ export function ChangesTab(): React.JSX.Element | null {
   const selectedPath = useWorkspaceStore((state) => state.selectedChangePath)
   const hunkPending = useWorkspaceStore((state) => state.hunkPending)
   const selectChange = useWorkspaceStore((state) => state.selectChange)
+  const zoomed = useWorkspaceStore((state) => state.expandedTerminalId !== null)
+  const toggleExpandedPane = useWorkspaceStore((state) => state.toggleExpandedPane)
   const stagedPaths = useWorkspaceStore((state) => state.stagedPaths)
   const toggleStaged = useWorkspaceStore((state) => state.toggleStaged)
   const unstagePath = useWorkspaceStore((state) => state.unstagePath)
@@ -102,7 +104,7 @@ export function ChangesTab(): React.JSX.Element | null {
         <p className="changes__empty">{emptyChangesLabel(log)}</p>
       ) : (
         <ul className="changes__list">
-          {rows.map((change) => (
+          {rows.map((change, index) => (
             <li
               className={`changes__item${change.path === selectedPath ? ' changes__item--selected' : ''}`}
               key={change.path}
@@ -127,6 +129,21 @@ export function ChangesTab(): React.JSX.Element | null {
                 aria-current={change.path === selectedPath ? 'true' : undefined}
                 title={change.from === undefined ? change.path : `${change.from} → ${change.path}`}
                 onClick={() => selectChange(change.path)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape' && zoomed) {
+                    event.preventDefault()
+                    toggleExpandedPane()
+                    return
+                  }
+                  const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0
+                  const next = rows[index + step]
+                  if (step === 0 || next === undefined) return
+                  event.preventDefault()
+                  selectChange(next.path)
+                  const item = event.currentTarget.closest('li')
+                  const sibling = step === 1 ? item?.nextElementSibling : item?.previousElementSibling
+                  sibling?.querySelector<HTMLElement>('.change')?.focus()
+                }}
                 onContextMenu={(event) => {
                   if (!canDiscard(change)) return
                   event.preventDefault()

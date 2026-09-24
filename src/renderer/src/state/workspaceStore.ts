@@ -42,6 +42,7 @@ import {
   fileLeavesIn,
   type FileLeaf,
   isCommitLeaf,
+  isFileColumn,
   isFilePaneId,
   isMarkdownPath,
   newFilePaneId,
@@ -58,6 +59,7 @@ import {
   hasTerminal,
   neighbourTerminalId,
   pinTab,
+  placeFileColumn,
   setSizesAt,
   showTab,
   splitPane,
@@ -1149,13 +1151,20 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     } else {
       const focused = layout.focusedTerminalId
       const inTree = focused !== null && collectTerminalIds(layout.root).includes(focused) ? focused : null
-      // The column is made once, beside the focused pane; a split is a file of its own there.
+      // A split is a file of its own beside the focused pane; the column is made once, where there is most room.
       const placed = mode === 'split' ? added : fileColumn(added, mode === 'preview')
-      root = withRoom(
-        layout.root,
-        inTree !== null ? splitPaneWith(layout.root, inTree, 'row', placed) : appendPane(layout.root, placed),
-        (grid) => placePaneWithin(layout.root, placed, grid.area, grid.minPane)
-      )
+      const beside =
+        inTree !== null ? splitPaneWith(layout.root, inTree, 'row', placed) : appendPane(layout.root, placed)
+      const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+      if (isFileColumn(placed) && grid !== undefined) {
+        const isAgent = (id: string): boolean => get().terminals[id]?.agent !== undefined
+        const place = (area: Box, minPane: Box): PaneNode | null =>
+          placeFileColumn(layout.root, placed, area, minPane, isAgent)
+        root = place(grid.area, grid.minPane)
+        if (root === null) refuseForRoom(({ minPane }, area) => place(area, minPane) !== null)
+      } else {
+        root = withRoom(layout.root, beside, (room) => placePaneWithin(layout.root, placed, room.area, room.minPane))
+      }
     }
     if (root === null) return
     set({ namingMarkdown: null })
@@ -2547,7 +2556,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     selectChange(path) {
       const worktreeId = get().activeWorktreeId
       set({ selectedChangePath: path })
-      if (path !== null && worktreeId) get().openFilePane(worktreeId, path, 'diff')
+      if (path === null || !worktreeId) return
+      get().openFilePane(worktreeId, path, 'diff')
+      // Zoomed: the diff is what was asked for. A view only, so restoring gives the layout back as it was.
+      const opened = fileLeavesIn(get().layouts[worktreeId]?.root ?? null).find(
+        (leaf) => leaf.path === path && !isCommitLeaf(leaf)
+      )
+      if (opened) set({ expandedTerminalId: opened.terminalId })
     },
 
     async decideConsent(requestId, decision, through) {
