@@ -706,11 +706,13 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--warning);
+  background: currentColor;
 }
 
+/* Uncommitted work is the normal state of a task, so it is counted in ink,
+   not amber: amber is kept for an agent that is asking. */
 .gitchip--dirty {
-  color: var(--warning);
+  color: var(--fg-secondary);
 }
 
 .gitchip--conflict {
@@ -770,7 +772,7 @@
 
 
 /* What each pane in this worktree is doing; the words are `TONE_LABEL`'s.
-   Only an agent is ever amber; a shell at rest is grey. */
+   Amber is only an agent asking, so it stands out wherever it is. */
 .activity {
   width: 7px;
   height: 7px;
@@ -792,8 +794,10 @@
   animation: activity-pulse 1.6s ease-in-out infinite;
 }
 
+/* A stopped agent is hollow: it is not asking, so it must not look like it is. */
 .activity--quiet {
-  background: var(--warning);
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--fg-secondary);
 }
 
 .activity--idle {
@@ -821,12 +825,21 @@
   }
 }
 
-/* Printed since this person last looked: a ring on the one dot, and the name
-   in weight. Never a count and never a second dot. `outline` leaves the working
-   halo's box-shadow alone. */
+/* Printed since this person last looked: a thin ring on the one dot, and the
+   name in weight. Never a count and never a second dot. `outline` leaves the
+   working halo's box-shadow alone. */
 .activity--unread {
-  outline: 1.5px solid var(--accent-bright);
-  outline-offset: 1.5px;
+  outline: 1px solid var(--accent-bright);
+  outline-offset: 1px;
+}
+
+/* A stopped or idle pane with something unread fills in instead: a ring round
+   a hollow dot reads as a target. */
+.activity--quiet.activity--unread,
+.activity--idle.activity--unread {
+  outline: none;
+  background: var(--accent-bright);
+  box-shadow: none;
 }
 
 .worktree__name--unread,

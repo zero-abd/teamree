@@ -75,7 +75,7 @@ describe('PaneRows', () => {
     expect(row?.title).toContain('zsh · idle')
   })
 
-  it('keeps a quiet agent amber', () => {
+  it('marks a quiet agent as stopped', () => {
     const [row] = mount(terminal({ id: 't1', agent: 'claude' }))
     expect(row?.querySelector('.activity')?.className).toBe('activity activity--quiet')
   })
