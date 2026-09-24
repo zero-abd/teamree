@@ -593,6 +593,21 @@ describe('selectors and flags reach the runtime', () => {
     })
   })
 
+  it('unstages a whole path, reading no patch', async () => {
+    const cli = await harness((method, params) => {
+      if (method === 'worktree.unstagePath') return { worktreeId: 'wt_1', path: 'src/app.ts', unstagedAt: 1 }
+      return defaultHandler(method, params, { id: '', emit: () => {}, respond: () => {} })
+    })
+
+    const result = await cli.run(['worktree', 'unstage', 'fix-login', '--path', 'src/app.ts'])
+    expect(result.code).toBe(ExitCode.Success)
+    expect(cli.stub.received.some((call) => call.method === 'worktree.diff')).toBe(false)
+    expect(cli.stub.received.at(-1)).toMatchObject({
+      method: 'worktree.unstagePath',
+      params: { worktreeId: 'wt_1', path: 'src/app.ts' }
+    })
+  })
+
   it('needs a path to stage a hunk of', async () => {
     const cli = await harness()
     const result = await cli.run(['worktree', 'stage-hunk', 'fix-login', '--hunk', '1'])
@@ -1015,7 +1030,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(60)
+    expect(data.commands.length).toBe(61)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })

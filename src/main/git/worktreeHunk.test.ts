@@ -7,7 +7,7 @@ import path from 'node:path'
 import { parsePatch, type PatchHunk } from '../../shared/patch'
 import { GitServiceError } from './errors'
 import { createTempRepo, type TempRepo } from './testRepository'
-import { applyHunk, hunkPatch } from './worktreeHunk'
+import { applyHunk, hunkPatch, unstagePath } from './worktreeHunk'
 
 /** Sixteen lines, so two edits at opposite ends fall into two hunks. */
 const LINES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p']
@@ -244,5 +244,89 @@ describe('staging one hunk', () => {
     })
     expect(patch).toContain('@@ -11,6 +11,6 @@')
     expect(patch.startsWith('diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n')).toBe(true)
+  })
+})
+
+describe('unstaging a whole path', () => {
+  const repos: TempRepo[] = []
+  afterEach(async () => {
+    await Promise.all(repos.splice(0).map((repo) => repo.cleanup()))
+  })
+
+  const repository = async (): Promise<TempRepo> => {
+    const repo = await createTempRepo()
+    repos.push(repo)
+    return repo
+  }
+
+  const unstage = (repo: TempRepo, file: string): ReturnType<typeof unstagePath> =>
+    unstagePath(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath, path: file, now: () => 7 })
+
+  const bytes = (repo: TempRepo, file: string): Promise<Buffer> => readFile(path.join(repo.repoPath, file))
+
+  it('empties the index of a partly staged file and leaves the file on disk byte-identical', async () => {
+    const repo = await repository()
+    await repo.write('f.txt', `${LINES.join('\n')}\n`)
+    await repo.commit('add f')
+    const edited = `${LINES.map((line) => (line === 'b' ? 'B' : line === 'n' ? 'N' : line)).join('\n')}\n`
+    await writeFile(path.join(repo.repoPath, 'f.txt'), `${edited.trimEnd()}`)
+    const top = (await repo.git(['diff', '-U0', '--', 'f.txt'])).split('\n@@ -14')[0]!
+    await repo.runner.run({ args: ['apply', '--cached', '--unidiff-zero', '-'], cwd: repo.repoPath, stdin: `${top}\n` })
+    const before = await bytes(repo, 'f.txt')
+
+    expect(await unstage(repo, 'f.txt')).toEqual({ worktreeId: 'wt', path: 'f.txt', unstagedAt: 7 })
+
+    expect(await repo.git(['diff', '--cached', '--name-only'])).toBe('')
+    expect((await bytes(repo, 'f.txt')).equals(before)).toBe(true)
+    expect(await repo.git(['status', '--porcelain'])).toBe('M f.txt')
+  })
+
+  it('turns a staged new file back into an untracked one', async () => {
+    const repo = await repository()
+    await repo.write('f.txt', 'f\n')
+    await repo.commit('add f')
+    await repo.write('new.txt', 'new\n')
+    await repo.git(['add', 'new.txt'])
+
+    await unstage(repo, 'new.txt')
+
+    expect(await repo.git(['status', '--porcelain'])).toBe('?? new.txt')
+    expect((await bytes(repo, 'new.txt')).toString()).toBe('new\n')
+  })
+
+  it('unstages both halves of a staged rename', async () => {
+    const repo = await repository()
+    await repo.write('old.txt', `${LINES.join('\n')}\n`)
+    await repo.commit('add old')
+    await repo.git(['mv', 'old.txt', 'new.txt'])
+
+    await unstage(repo, 'new.txt')
+
+    expect(await repo.git(['diff', '--cached', '--name-only'])).toBe('')
+    expect(await repo.git(['ls-files', 'old.txt', 'new.txt'])).toBe('old.txt')
+    expect(await repo.git(['ls-files', '--others'])).toBe('new.txt')
+  })
+
+  it('unstages in a repository with no commit yet', async () => {
+    const repo = await repository()
+    await repo.git(['update-ref', '-d', 'HEAD'])
+    await repo.write('first.txt', 'one\n')
+    await repo.git(['add', 'first.txt'])
+    await repo.write('first.txt', 'one\ntwo\n')
+
+    await unstage(repo, 'first.txt')
+
+    expect(await repo.git(['status', '--porcelain', '--', 'first.txt'])).toBe('?? first.txt')
+    expect((await bytes(repo, 'first.txt')).toString()).toBe('one\ntwo\n')
+  })
+
+  it('refuses a path with nothing staged, and a path outside the worktree', async () => {
+    const repo = await repository()
+    await repo.write('f.txt', 'f\n')
+    await repo.commit('add f')
+    await repo.write('f.txt', 'F\n')
+
+    await expect(unstage(repo, 'f.txt')).rejects.toMatchObject({ code: 'conflict' })
+    await expect(unstage(repo, '../f.txt')).rejects.toBeInstanceOf(GitServiceError)
   })
 })

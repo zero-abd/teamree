@@ -311,10 +311,6 @@ describe('what git has staged', () => {
     withChanges([whole, loose])
     render(<ChangesTab />)
     expect(box('src/done.ts').checked).toBe(true)
-    expect(box('src/done.ts').getAttribute('aria-disabled')).toBe('true')
-    fireEvent.click(box('src/done.ts'))
-    expect(box('src/done.ts').checked).toBe(true)
-    expect(useWorkspaceStore.getState().stagedPaths).toEqual([])
     expect(screen.getByText('1/2')).toBeTruthy()
     const all = screen.getByRole('checkbox', { name: 'All' }) as HTMLInputElement
     expect(all.indeterminate).toBe(true)
@@ -325,6 +321,47 @@ describe('what git has staged', () => {
     fireEvent.click(all)
     expect(box('src/done.ts').checked).toBe(true)
     expect(box('README.md').checked).toBe(false)
+  })
+
+  const commitButton = (): HTMLElement => screen.getByRole('button', { name: /^Commit/ })
+
+  it('unstages a wholly staged row when it is unticked, and the button follows', () => {
+    withChanges([whole, loose])
+    render(<ChangesTab />)
+    expect(commitButton().textContent).toBe('Commit Staged')
+
+    fireEvent.click(box('src/done.ts'))
+    expect(call).toHaveBeenCalledWith('worktree.unstagePath', { worktreeId: 'w1', path: 'src/done.ts' })
+    expect(useWorkspaceStore.getState().stagedPaths).toEqual([])
+
+    act(() => withChanges([{ ...whole, staged: false, unstaged: true }, loose]))
+    expect(box('src/done.ts').checked).toBe(false)
+    expect(commitButton().textContent).toBe('Commit All')
+  })
+
+  it('unstages the whole of a partly staged row when it is ticked and then unticked', () => {
+    withChanges([partly, loose])
+    render(<ChangesTab />)
+    fireEvent.click(box('src/rank.ts'))
+    expect(commitButton().textContent).toBe('Commit')
+    expect(call).not.toHaveBeenCalledWith('worktree.unstagePath', expect.anything())
+
+    fireEvent.click(box('src/rank.ts'))
+    expect(call).toHaveBeenCalledWith('worktree.unstagePath', { worktreeId: 'w1', path: 'src/rank.ts' })
+    expect(useWorkspaceStore.getState().stagedPaths).toEqual([])
+
+    act(() => withChanges([{ ...partly, staged: false }, loose]))
+    expect(box('src/rank.ts').checked).toBe(false)
+    expect(box('src/rank.ts').indeterminate).toBe(false)
+    expect(commitButton().textContent).toBe('Commit All')
+  })
+
+  it('leaves an unstaged row to the tick alone', () => {
+    withChanges([loose])
+    render(<ChangesTab />)
+    fireEvent.click(box('README.md'))
+    fireEvent.click(box('README.md'))
+    expect(call).not.toHaveBeenCalledWith('worktree.unstagePath', expect.anything())
   })
 
   it('leaves All nothing to do when git already holds every change', () => {

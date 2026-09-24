@@ -17,6 +17,7 @@ import type {
   WorktreeFileMatches,
   WorktreeFiles,
   WorktreeHunkStage,
+  WorktreeUnstage,
   WorktreeLog,
   WorktreeMergePreview,
   WorktreePush,
@@ -38,7 +39,7 @@ import { allocateBranchName, allocateCheckoutPath, branchCollides } from './work
 import { readMergePreview } from './mergePreview'
 import { readWorktreeLog } from './worktreeLog'
 import { commitWorktree } from './worktreeCommit'
-import { applyHunk } from './worktreeHunk'
+import { applyHunk, unstagePath } from './worktreeHunk'
 import { discardHunk, discardPath, type Trash } from './worktreeDiscard'
 import { pushWorktree } from './worktreePush'
 import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
@@ -545,6 +546,17 @@ export class GitService {
   /** The same in reverse: takes one hunk of the staged patch back out. */
   async worktreeUnstageHunk(params: ParamsOf<'worktree.unstageHunk'>): Promise<WorktreeHunkStage> {
     return this.#applyHunk(params, false)
+  }
+
+  /** Takes a whole path out of the index; the working tree is never written. */
+  async worktreeUnstagePath(params: ParamsOf<'worktree.unstagePath'>): Promise<WorktreeUnstage> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'unstaging')
+    return unstagePath(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      path: params.path,
+      now: this.#now
+    })
   }
 
   async #applyHunk(params: ParamsOf<'worktree.stageHunk'>, staged: boolean): Promise<WorktreeHunkStage> {

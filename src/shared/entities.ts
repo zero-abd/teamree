@@ -217,6 +217,13 @@ export type WorktreeHunkStage = {
   appliedAt: number
 }
 
+/** What taking a whole path out of the index did. A receipt; the working tree is never written. */
+export type WorktreeUnstage = {
+  worktreeId: string
+  path: string
+  unstagedAt: number
+}
+
 /** What discarding a path or one hunk did. A receipt; the caller re-reads through the usual invalidation. */
 export type WorktreeDiscard = {
   worktreeId: string

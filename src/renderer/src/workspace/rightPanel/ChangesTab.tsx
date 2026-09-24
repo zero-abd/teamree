@@ -16,6 +16,7 @@ export function ChangesTab(): React.JSX.Element | null {
   const selectChange = useWorkspaceStore((state) => state.selectChange)
   const stagedPaths = useWorkspaceStore((state) => state.stagedPaths)
   const toggleStaged = useWorkspaceStore((state) => state.toggleStaged)
+  const unstagePath = useWorkspaceStore((state) => state.unstagePath)
   const setAllStaged = useWorkspaceStore((state) => state.setAllStaged)
   const commitStaged = useWorkspaceStore((state) => state.commitStaged)
   const committing = useWorkspaceStore((state) => state.committing)
@@ -108,11 +109,11 @@ export function ChangesTab(): React.JSX.Element | null {
                 ref={(box) => {
                   if (box) box.indeterminate = tick(change) === 'mixed'
                 }}
-                // Not `disabled`: that greys a tick out, and this one is as checked as any.
-                aria-disabled={tick(change) === 'index' || undefined}
                 aria-label={`Include ${change.path} in the next commit`}
                 onChange={() => {
-                  if (tick(change) !== 'index') toggleStaged(change.path)
+                  // Unticking anything git holds takes the whole path out of the index.
+                  if (checked(change) && change.staged) void unstagePath(worktreeId, change.path)
+                  else toggleStaged(change.path)
                 }}
               />
               <button
@@ -238,7 +239,7 @@ export function ChangesTab(): React.JSX.Element | null {
 
 const COMMIT_LABEL = { ticked: 'Commit', staged: 'Commit Staged', all: 'Commit All' } as const
 
-/** `index`: git already holds the whole change, so the tick is not the app's to take back. */
+/** `index`: git already holds the whole change; unticking it unstages the path. */
 type Tick = 'on' | 'off' | 'mixed' | 'index'
 
 function tickOf(change: WorktreeChange, ticked: boolean): Tick {

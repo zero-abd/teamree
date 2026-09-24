@@ -223,7 +223,8 @@ describe('dispatcher', () => {
       'worktree.stageHunk',
       'worktree.startPoints',
       'worktree.status',
-      'worktree.unstageHunk'
+      'worktree.unstageHunk',
+      'worktree.unstagePath'
     ])
   })
 })

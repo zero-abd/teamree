@@ -508,6 +508,8 @@ type WorkspaceState = {
   commitStaged: (message: string) => Promise<boolean>
   /** Puts one hunk into the index, or takes it out. The hunk is exactly what was on screen; the runtime refuses it if the file moved on. */
   applyHunk: (worktreeId: string, path: string, hunk: PatchHunk, staged: boolean) => Promise<void>
+  /** Takes a whole path out of the index and unticks it. The working tree is never touched. */
+  unstagePath: (worktreeId: string, path: string) => Promise<void>
   /** Throws away a path's unstaged change, or one unstaged hunk. The index is never touched. */
   discardChange: (worktreeId: string, path: string, hunk?: PatchHunk) => Promise<void>
   /** Sends the active worktree's branch to its remote. Never forces. */
@@ -2028,6 +2030,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // ride, so this one must not get ahead of them.
       } catch (error) {
         failed(staged ? 'Could not stage that hunk' : 'Could not unstage that hunk')(error)
+      } finally {
+        set({ hunkPending: false })
+      }
+    },
+
+    async unstagePath(worktreeId, path) {
+      if (get().hunkPending) return
+      set((state) => ({ hunkPending: true, stagedPaths: state.stagedPaths.filter((entry) => entry !== path) }))
+      try {
+        await runtimeClient.call('worktree.unstagePath', { worktreeId, path })
+      } catch (error) {
+        failed(`Could not unstage ${path}`)(error)
       } finally {
         set({ hunkPending: false })
       }
