@@ -101,6 +101,10 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
     'agent.list': async () => findInstalledAgents(),
     'terminal.create': async (params) => manager.create(params),
     'terminal.write': async (params) => {
+      if (params.answering !== undefined) {
+        await manager.answer(params.terminalId, params.data, params.answering)
+        return { written: true }
+      }
       // Absent means a person: only the pane view can see the difference.
       manager.write(params.terminalId, params.data, params.byHand !== false)
       return { written: true }

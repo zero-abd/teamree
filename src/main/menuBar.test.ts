@@ -57,6 +57,9 @@ describe('reading a published menu', () => {
       // And the file column's tabs, paged.
       'Control+PageDown',
       'Control+PageUp',
+      // Going to what needs you: ⌃⌘ on the up and down arrows, which no text field reads.
+      'CommandOrControl+Control+Down',
+      'CommandOrControl+Control+Up',
       // The region walk, on F6 alone.
       'F6',
       'Shift+F6',
@@ -82,6 +85,8 @@ describe('reading a published menu', () => {
       'Control+Q',
       'Control+Alt+Tab',
       'Control+Shift+PageDown',
+      'CommandOrControl+Control+D',
+      'CommandOrControl+Control+Left',
       // F6 is the one bare key, and takes only shift.
       'F5',
       'Alt+F6',

@@ -62,7 +62,14 @@ export type AgentNotice = {
   worktree: string
   reason: AgentNoticeReason
   line: string | null
+  /** The answers its menu offers that need no typing; `choose` rejects once the screen no longer offers it. */
+  answers?: readonly NoticeAnswer[]
 }
+
+export type NoticeAnswer = { label: string; choose: () => Promise<void> }
+
+/** How many answers a notification carries: what fits under the banner's own button. */
+export const NOTICE_ACTIONS = 2
 
 /**
  * Whether this pane stopping is worth interrupting somebody for. Not when they
@@ -113,7 +120,15 @@ export type AgentNoticeHost = {
   /** True when the window is the one the person is looking at. */
   windowFocused: () => boolean
   /** Raises one OS notification. `onActivate` runs if it is clicked. */
-  show: (spec: { title: string; subtitle?: string; body: string; silent: boolean; onActivate: () => void }) => void
+  show: (spec: {
+    title: string
+    subtitle?: string
+    body: string
+    silent: boolean
+    onActivate: () => void
+    /** Buttons on the notification; macOS shows them on an alert-style one. */
+    actions?: { label: string; run: () => void }[]
+  }) => void
   /** The dock badge. macOS only; on the other platforms this does nothing. */
   setBadge: (count: number) => void
   /** Brings the window forward, which is half of what clicking one asks for. */
@@ -162,17 +177,24 @@ export function installAgentNotices(ipc: IpcMain, host: AgentNoticeHost): AgentN
       badge({ kind: 'settled', terminalId: notice.terminalId, windowFocused })
       if (!shouldNotify({ settings, windowFocused, terminalId: notice.terminalId })) return
       const pane = settings.names?.[notice.terminalId]
+      const reveal = (): void => {
+        host.focusWindow()
+        const sender = published
+        if (!sender || sender.isDestroyed()) return
+        sender.send(NOTICE_REVEAL_CHANNEL, { worktreeId: notice.worktreeId, terminalId: notice.terminalId })
+      }
+      const actions = (notice.answers ?? []).slice(0, NOTICE_ACTIONS).map((answer) => ({
+        label: answer.label,
+        // A stale answer is sent nowhere; the pane is put in front to answer by hand.
+        run: () => void answer.choose().catch(reveal)
+      }))
       host.show({
         title: notice.worktree,
         ...(pane === undefined ? {} : { subtitle: pane }),
         body: noticeBody(notice),
         silent: noticeIsSilent(settings.preference),
-        onActivate: () => {
-          host.focusWindow()
-          const sender = published
-          if (!sender || sender.isDestroyed()) return
-          sender.send(NOTICE_REVEAL_CHANNEL, { worktreeId: notice.worktreeId, terminalId: notice.terminalId })
-        }
+        onActivate: reveal,
+        ...(actions.length === 0 ? {} : { actions })
       })
     },
     noteWindowFocus() {

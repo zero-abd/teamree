@@ -46,6 +46,9 @@ export type CodeEditorProps = {
   onEdit: () => void
   /** A comment asked for on `lines`, the first being line `from` (from 1): the gutter's `+`, or ⌘⇧A. */
   onComment?: (from: number, lines: string[]) => void
+  /** A line to put the cursor on and bring into view, once per `token`; 1-based. */
+  goTo?: { line: number; column: number; token: number }
+  onWent?: (token: number) => void
 }
 
 class PlusMarker extends GutterMarker {
@@ -68,7 +71,9 @@ export function CodeEditor({
   focused,
   onDirtyChange,
   onEdit,
-  onComment
+  onComment,
+  goTo,
+  onWent
 }: CodeEditorProps): React.JSX.Element {
   const host = useRef<HTMLDivElement | null>(null)
   const view = useRef<EditorView | null>(null)
@@ -182,6 +187,17 @@ export function CodeEditor({
   useEffect(() => {
     if (focused && view.current !== null && !view.current.hasFocus) view.current.focus()
   }, [focused])
+
+  const token = goTo?.token
+  useEffect(() => {
+    const editor = view.current
+    if (editor === null || goTo === undefined) return
+    const doc = editor.state.doc
+    const line = doc.line(Math.min(Math.max(1, goTo.line), doc.lines))
+    const at = line.from + Math.min(Math.max(0, goTo.column - 1), line.length)
+    editor.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: 'center' }) })
+    onWent?.(goTo.token)
+  }, [token])
 
   return <div className="code" ref={host} />
 }

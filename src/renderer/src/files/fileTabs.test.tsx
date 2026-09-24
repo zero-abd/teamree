@@ -252,6 +252,28 @@ describe('the file viewer', () => {
     expect(onDisk).toMatchObject({ content: 'const a = 2\n' })
   })
 
+  // `src/app.ts:3:5` ⌘-clicked in a pane: the code, at that line and column, once.
+  it('puts the cursor where a printed path pointed', async () => {
+    call.mockImplementation(async (method: string) => (method === 'file.read' ? text('a\nb\n  const c\n') : undefined))
+    await useWorkspaceStore.getState().openFileAt('w1', 'src/app.ts', 3, 5)
+    expect(fileLeavesIn(layout().root).map((leaf) => leaf.path)).toEqual(['src/app.ts'])
+    mount()
+    const view = await editorView()
+    await waitFor(() => expect(view.state.selection.main.head).toBe(8))
+    expect(useWorkspaceStore.getState().goToLine).toBeNull()
+  })
+
+  it('opens a printed path with changes as its diff, asking git rather than a list not on screen', async () => {
+    call.mockImplementation(async (method: string, params: { root?: unknown }) => {
+      if (method === 'worktree.changes') return { worktreeId: 'w1', changes: [{ path: 'src/app.ts' }] }
+      return method === 'layout.set' ? params : undefined
+    })
+    await useWorkspaceStore.getState().openFileAt('w1', 'src/app.ts', 3)
+    const [leaf] = fileLeavesIn(layout().root)
+    expect(useWorkspaceStore.getState().diffPanes[leaf!.terminalId]).toBe(true)
+    expect(useWorkspaceStore.getState().goToLine).toBeNull()
+  })
+
   it('offers Reload and Overwrite when the file changed under the edit', async () => {
     call.mockImplementation(async (method: string) => {
       if (method === 'file.read') return text('x\n')

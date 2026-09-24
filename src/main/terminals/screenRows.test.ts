@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { screenOpinion, screenQuestion } from '../../shared/screenOpinion'
+import { screenMenu, screenOpinion, screenQuestion } from '../../shared/screenOpinion'
 import { screenRows } from './screenRows'
 
 const fixture = (name: string): string => readFileSync(path.join(import.meta.dirname, 'fixtures', name), 'utf8')
@@ -15,12 +15,20 @@ describe('reading a recorded screen', () => {
     expect(rows).toContain(' ❯ No, exit')
     expect(screenOpinion('claude', rows)).toBe('waiting')
     expect(screenQuestion('claude', rows)).toBe('Trust this folder?')
+    expect(screenMenu('claude', rows)?.choices).toEqual([
+      { label: 'Trust', keys: ['\u001b[B', '\r'] },
+      { label: 'Exit', keys: ['\r'] }
+    ])
   })
 
   it('reads codex asking to trust a new repository', async () => {
     const rows = await screenRows(fixture('codex-trust.txt'), 100, 30)
     expect(screenOpinion('codex', rows)).toBe('waiting')
     expect(screenQuestion('codex', rows)).toBe('Trust this directory?')
+    expect(screenMenu('codex', rows)?.choices).toEqual([
+      { label: 'Trust', keys: ['\r'] },
+      { label: 'Exit', keys: ['2'] }
+    ])
   })
 
   it('reads claude asking permission for a tool call', async () => {
@@ -28,6 +36,16 @@ describe('reading a recorded screen', () => {
     expect(rows.some((row) => row.includes('Do you want to proceed?'))).toBe(true)
     expect(screenOpinion('claude', rows)).toBe('waiting')
     expect(screenQuestion('claude', rows)).toBe('Allow command: mkdir -p out && touch out/hello.txt?')
+    expect(screenMenu('claude', rows)?.choices).toEqual([
+      { label: 'Yes', keys: ['\r'] },
+      { label: 'Yes, Always', keys: ['2'] },
+      { label: 'No…', keys: null }
+    ])
+  })
+
+  it('offers no answers to a shell showing a recorded menu', async () => {
+    const rows = await screenRows(fixture('claude-permission.txt'), 100, 30)
+    expect(screenMenu(undefined, rows)).toBeNull()
   })
 
   it('has no opinion once the same words have scrolled up the screen', async () => {

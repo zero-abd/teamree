@@ -27,6 +27,7 @@ import type { TerminalOptions } from '../state/preferences'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere } from './handsHere'
+import { paneFileLinks, type FileLinkHost } from './paneFileLinks'
 import { frameWrites, paneWebgl, syncScrollbarPerFrame } from './paneFrames'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOptions } from './paneSearchModel'
 import { TerminalSearchBar } from './TerminalSearchBar'
@@ -391,6 +392,7 @@ function openEmulator(
   // Bare URLs in the output are inert until this addon; it matches only
   // `http:` and `https:`, the set the main process hands the OS.
   term.loadAddon(paneLinkAddon())
+  const fileLinks = paneFileLinks(term, fileLinkHost(terminalId, modifier))
 
   // The limit is shared with the counter, so "1000+" means where the addon stopped looking.
   const search = new SearchAddon({ highlightLimit: SEARCH_HIGHLIGHT_LIMIT })
@@ -412,6 +414,7 @@ function openEmulator(
       alive = false
       subscription?.close()
       hands.stop()
+      fileLinks.dispose()
       output.dispose()
       scrollbar.dispose()
       gpu.dispose()
@@ -639,6 +642,42 @@ export const openPaneLink = openInBrowser
 /** A click on an OSC 8 hyperlink does what a click on a bare URL does; xterm only offers `http:`/`https:` ones. */
 export const PANE_LINK_HANDLER: ILinkHandler = {
   activate: (_event, text) => openPaneLink(text)
+}
+
+/** A pane's paths are read from its own directory and must be a file git lists in its worktree. */
+function fileLinkHost(terminalId: string, modifier: PlatformModifier): FileLinkHost {
+  return {
+    place: () => {
+      const state = useWorkspaceStore.getState()
+      const terminal = state.terminals[terminalId]
+      const worktree = state.worktrees.find((entry) => entry.id === terminal?.worktreeId)
+      if (terminal === undefined || worktree === undefined) return null
+      return { worktreeId: worktree.id, root: worktree.path, cwd: terminal.cwd }
+    },
+    exists: fileListed,
+    open: (worktreeId, path, line, column) =>
+      void useWorkspaceStore.getState().openFileAt(worktreeId, path, line, column),
+    holds: (event) => holdsModifier(event, modifier)
+  }
+}
+
+/** How long one answer about a path stands: a hover asks for every row the pointer crosses. */
+const LISTED_FOR_MS = 10_000
+const listed = new Map<string, { at: number; answer: Promise<boolean> }>()
+
+function fileListed(worktreeId: string, path: string): Promise<boolean> {
+  const key = `${worktreeId}\u0000${path}`
+  const known = listed.get(key)
+  if (known !== undefined && Date.now() - known.at < LISTED_FOR_MS) return known.answer
+  if (listed.size > 500) listed.clear()
+  const answer = runtimeClient
+    .call('worktree.findFiles', { worktreeId, query: path.split('/').pop() ?? path, limit: 1000 })
+    .then(
+      (found) => found.paths.includes(path),
+      () => false
+    )
+  listed.set(key, { at: Date.now(), answer })
+  return answer
 }
 
 /** The addon that turns a bare URL in the scrollback into something clickable. */

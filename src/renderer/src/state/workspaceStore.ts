@@ -115,6 +115,7 @@ import { newPaneRoom, paneGrid, roomForNewPane, type Box, type NewPane } from '.
 import { leavesRoom, paneCellsIn, placePaneWithin } from '@shared/paneRoom'
 import { shownText } from '../terminal/shownPanes'
 import { replayLines } from '@shared/outputEvidence'
+import type { ScreenChoice } from '@shared/screenOpinion'
 import {
   clampSidebarWidth,
   readStoredSidebarWidth,
@@ -506,6 +507,8 @@ type WorkspaceState = {
   closeWorktreeTab: (worktreeId: string) => void
   /** Opens the worktree a pane lives in and puts the focus on that pane. */
   revealPane: (worktreeId: string, terminalId: string) => Promise<void>
+  /** Chooses an answer an asking pane's menu offers; one that wants typing, or a menu gone since, goes to the pane. */
+  answerPane: (terminalId: string, choice: ScreenChoice) => Promise<void>
 
   /** Puts the focus on one pane, whether it is yours or a teammate's. */
   focusPane: (paneId: string) => void
@@ -541,6 +544,12 @@ type WorkspaceState = {
    * `split` puts it to the right of the focused pane instead, `preview` replaces the preview tab, `diff-preview` both.
    */
   openFilePane: (worktreeId: string, path: string, mode?: FileOpenMode) => void
+  /** Opens a path a pane printed: its diff when it has changes, else its code at `line`. */
+  openFileAt: (worktreeId: string, path: string, line?: number, column?: number) => Promise<void>
+  /** Where the next code pane on this path puts its cursor, until it has; `token` tells two requests apart. */
+  goToLine: { worktreeId: string; path: string; line: number; column: number; token: number } | null
+  /** Forgets the request once a code pane has gone to it. */
+  wentToLine: (token: number) => void
   /** Opens a commit read-only as a tab of the file column, or focuses the tab already on it. */
   openCommit: (worktreeId: string, commit: WorktreeCommitSummary) => void
   /** Opens `worktreeId` with a read-only compare against `otherId` as a tab of its file column, or focuses that tab. */
@@ -764,6 +773,7 @@ type WorkspaceState = {
 }
 
 let noticeSeq = 0
+let goToSeq = 0
 
 /** The status-bar notice for a pane refused for want of room. */
 const NO_ROOM = 'No room for another pane'
@@ -1398,6 +1408,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     rightPanelTab: lastPanel.tab,
     rightPanelWidth: readStoredRightPanelWidth(storage),
     changes: {},
+    goToLine: null,
     logs: {},
     selectedChangePath: null,
     stagedPaths: [],
@@ -1787,6 +1798,24 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       get().focusPane(terminalId)
     },
 
+    async answerPane(terminalId, choice) {
+      const terminal = get().terminals[terminalId]
+      if (terminal === undefined) return
+      const goThere = async (): Promise<void> => {
+        await get().revealPane(terminal.worktreeId, terminalId)
+        requestRegionFocus('panes')
+      }
+      const prompt = terminal.screenMenu?.prompt
+      if (choice.keys === null || prompt === undefined) return goThere()
+      try {
+        // The runtime reads the screen again and refuses unless it still shows this prompt.
+        await runtimeClient.call('terminal.write', { terminalId, data: choice.keys.join(''), answering: prompt })
+      } catch {
+        notify('No longer asking that', 'info')
+        await goThere()
+      }
+    },
+
     recordTerminal(terminal) {
       set((state) =>
         state.terminals[terminal.id] ? { terminals: { ...state.terminals, [terminal.id]: terminal } } : {}
@@ -2079,6 +2108,20 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         return
       }
       placeFileLeaf(layout, fileLeaf(newFilePaneId(), path), mode)
+    },
+
+    async openFileAt(worktreeId, path, line, column) {
+      // Asked now: the Changes list is only read while it is on screen.
+      const asked = await runtimeClient.call('worktree.changes', { worktreeId, path }).catch(() => null)
+      const changed = (asked ?? get().changes[worktreeId])?.changes.some((change) => change.path === path) === true
+      if (line !== undefined && !changed) {
+        set({ goToLine: { worktreeId, path, line, column: column ?? 1, token: ++goToSeq } })
+      }
+      get().openFilePane(worktreeId, path, changed ? 'diff' : undefined)
+    },
+
+    wentToLine(token) {
+      if (get().goToLine?.token === token) set({ goToLine: null })
     },
 
     openCommit(worktreeId, commit) {

@@ -20,29 +20,65 @@ export type ScreenRule = {
   matches: RegExp
   /** What is asked, read off the written rows above the hint; null falls back to the nearest row ending in `?`. */
   asks?: (above: readonly string[]) => string | null
+  /** What a menu option is offered as, by its text; null leaves it to the pane. */
+  answers?: (option: string) => OptionAnswer | null
 }
+
+/** A button for one option: `order` places it among the others, `types` means it wants typing and only focuses the pane. */
+export type OptionAnswer = { label: string; order: number; types?: true }
 
 export const SCREEN_RULES: readonly ScreenRule[] = [
   {
     agent: 'claude',
     matches: /^Enter to confirm · Esc to cancel/u,
-    asks: (above) => (above.some((row) => row.trim() === 'Accessing workspace:') ? 'Trust this folder?' : null)
+    asks: (above) => (above.some((row) => row.trim() === 'Accessing workspace:') ? 'Trust this folder?' : null),
+    answers: trustAnswers
   },
-  { agent: 'claude', matches: /^Esc to cancel · Tab to amend/u, asks: (above) => commandUnder(above, 'Bash command') },
+  {
+    agent: 'claude',
+    matches: /^Esc to cancel · Tab to amend/u,
+    asks: (above) => commandUnder(above, 'Bash command'),
+    answers: (option) =>
+      option === 'Yes'
+        ? { label: 'Yes', order: 0 }
+        : option.startsWith('Yes, allow all edits')
+          ? { label: 'Yes, All Edits', order: 1 }
+          : option.startsWith("Yes, and don't ask again")
+            ? { label: 'Yes, Always', order: 1 }
+            : /^No\b/u.test(option)
+              ? { label: 'No…', order: 2, types: true }
+              : null
+  },
   {
     agent: 'codex',
     matches: /^Press enter to continue/u,
     asks: (above) =>
       above.some((row) => row.trim().startsWith('Do you trust the contents of this directory?'))
         ? 'Trust this directory?'
-        : null
+        : null,
+    answers: trustAnswers
   },
   {
     agent: 'codex',
     matches: /^Press enter to confirm or esc to cancel/u,
-    asks: (above) => commandUnder(above, 'Would you like to run the following command?')
+    asks: (above) => commandUnder(above, 'Would you like to run the following command?'),
+    answers: (option) =>
+      option.startsWith('Yes, proceed')
+        ? { label: 'Run', order: 0 }
+        : option.startsWith("Yes, and don't ask again")
+          ? { label: 'Always Run', order: 1 }
+          : /^No\b/u.test(option)
+            ? { label: "Don't Run…", order: 2, types: true }
+            : null
   }
 ]
+
+/** Both harnesses' folder trust: Trust before Exit, whichever the screen lists first. */
+function trustAnswers(option: string): OptionAnswer | null {
+  if (/^Yes, (?:I trust|continue)/u.test(option)) return { label: 'Trust', order: 0 }
+  if (/^No, (?:exit|quit)/u.test(option)) return { label: 'Exit', order: 1 }
+  return null
+}
 
 /** How many written rows from the bottom a hint may sit: an idle agent's composer and footer fill at least this many. */
 export const SCREEN_ROWS_ASKED = 2
@@ -58,6 +94,93 @@ export function screenQuestion(agent: AgentKind | undefined, rows: readonly stri
   if (asked === null) return null
   const above = dialogAbove(asked.written, asked.index)
   return asked.rule.asks?.(above) ?? nearestQuestion(above)
+}
+
+/** One answer a pane's menu offers: the button's words, and the keypresses that choose it, or null when it wants typing. */
+export type ScreenChoice = { label: string; keys: readonly string[] | null }
+
+/** The menu an asking screen shows; `prompt` names this exact dialog, highlight included, so a stale click is told apart. */
+export type ScreenMenu = { prompt: string; choices: ScreenChoice[] }
+
+/** The answers an asking screen offers as buttons, or null when it offers none this file can read. */
+export function screenMenu(agent: AgentKind | undefined, rows: readonly string[]): ScreenMenu | null {
+  const asked = askedAt(agent, rows)
+  const answers = asked?.rule.answers
+  if (asked === null || answers === undefined) return null
+  const dialog = dialogAbove(asked.written, asked.index)
+  const options = menuOptions(dialog)
+  const highlighted = options.findIndex((option) => option.highlighted)
+  const choices = options
+    .map((option, index) => ({ option, index, answer: answers(option.text) }))
+    .filter((entry): entry is typeof entry & { answer: OptionAnswer } => entry.answer !== null)
+    .sort((one, other) => one.answer.order - other.answer.order)
+    .map(({ option, index, answer }) => ({
+      label: answer.label,
+      keys: answer.types ? null : optionKeys(option, index, highlighted)
+    }))
+  if (choices.length === 0) return null
+  return { prompt: fingerprint([...dialog, asked.written[asked.index] ?? ''].join('\n')), choices }
+}
+
+type MenuOption = { text: string; highlighted: boolean; digit?: string; shortcut?: string }
+
+const MARKER = /^[❯›>]\s*/u
+const NUMBERED = /^[❯›>]?\s*(\d)\.\s+(.*)$/u
+
+/**
+ * The options listed above a hint: numbered rows, or else the highlighted row and the rows
+ * beside it at its text's indent. A numbered option's wrapped tail is not an option.
+ */
+function menuOptions(dialog: readonly string[]): MenuOption[] {
+  const numbered = dialog.flatMap((row) => {
+    const match = NUMBERED.exec(row.trim())
+    if (match === null) return []
+    const text = (match[2] ?? '').trim()
+    const shortcut = /\((\w)\)$/u.exec(text)?.[1]
+    return [
+      {
+        text: text.replace(/\s*\((?:\w|esc|shift\+tab)\)$/u, ''),
+        highlighted: MARKER.test(row.trim()),
+        digit: match[1] ?? '',
+        ...(shortcut === undefined ? {} : { shortcut })
+      }
+    ]
+  })
+  if (numbered.length > 0) return numbered
+  const at = dialog.findLastIndex((row) => MARKER.test(row.trim()))
+  if (at === -1) return []
+  const marked = dialog[at] ?? ''
+  const indent = marked.length - marked.trimStart().replace(MARKER, '').length
+  const sibling = (row: string): boolean => row.trim() !== '' && row.search(/\S/u) === indent
+  let top = at
+  while (top > 0 && sibling(dialog[top - 1] ?? '')) top--
+  let bottom = at
+  while (bottom < dialog.length - 1 && sibling(dialog[bottom + 1] ?? '')) bottom++
+  return dialog
+    .slice(top, bottom + 1)
+    .map((row, index) => ({ text: row.trim().replace(MARKER, ''), highlighted: top + index === at }))
+}
+
+const DOWN = '\u001b[B'
+const UP = '\u001b[A'
+
+/** Enter on the highlighted option, else its own key shown in brackets, else its digit, else arrows to it and Enter. */
+function optionKeys(option: MenuOption, index: number, highlighted: number): string[] {
+  if (option.highlighted) return ['\r']
+  if (option.shortcut !== undefined) return [option.shortcut]
+  if (option.digit !== undefined) return [option.digit]
+  const steps = index - highlighted
+  return [...Array.from({ length: Math.abs(steps) }, () => (steps > 0 ? DOWN : UP)), '\r']
+}
+
+/** FNV-1a over the text, as hex: short enough to cross the wire with every pane. */
+function fingerprint(text: string): string {
+  let hash = 0x811c9dc5
+  for (let index = 0; index < text.length; index++) {
+    hash ^= text.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
 function askedAt(

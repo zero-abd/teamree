@@ -179,7 +179,14 @@ describe('what the window publishes', () => {
 // keystrokes ran in another worktree's agent. The only road from "an agent
 // stopped" to "open that pane" has one gate, the click on the notification.
 describe('what a stopped agent is allowed to do to the window', () => {
-  type Shown = { title: string; subtitle?: string; body: string; silent: boolean; onActivate: () => void }
+  type Shown = {
+    title: string
+    subtitle?: string
+    body: string
+    silent: boolean
+    onActivate: () => void
+    actions?: { label: string; run: () => void }[]
+  }
 
   function install(windowFocused = true) {
     const listeners = new Map<string, (event: IpcMainEvent, payload: unknown) => void>()
@@ -262,6 +269,40 @@ describe('what a stopped agent is allowed to do to the window', () => {
 
     expect(host.focusWindow).toHaveBeenCalledOnce()
     expect(sent).toEqual([[NOTICE_REVEAL_CHANNEL, { worktreeId: 'wt_theirs', terminalId: 'term_theirs' }]])
+  })
+
+  // Answering from the notification is a click on an answer, re-checked against the screen by `choose`.
+  it('offers the first two answers as actions, and reveals the pane when one no longer applies', async () => {
+    const { channel, publish, sent, shown, host } = install(false)
+    publish({ preference: 'notify', focusedPaneId: null })
+    const chosen: string[] = []
+    const choose = (label: string) => async (): Promise<void> => {
+      chosen.push(label)
+      if (label === 'Exit') throw new Error('no longer asks that')
+    }
+    channel.deliver({
+      ...stopped,
+      answers: [
+        { label: 'Trust', choose: choose('Trust') },
+        { label: 'Exit', choose: choose('Exit') },
+        { label: 'Later', choose: choose('Later') }
+      ]
+    })
+    channel.deliver(stopped)
+
+    expect(shown[0]?.actions?.map((action) => action.label)).toEqual(['Trust', 'Exit'])
+    expect(shown[1]?.actions).toBeUndefined()
+
+    shown[0]?.actions?.[0]?.run()
+    await vi.waitFor(() => expect(chosen).toEqual(['Trust']))
+    expect(sent).toEqual([])
+    expect(host.focusWindow).not.toHaveBeenCalled()
+
+    shown[0]?.actions?.[1]?.run()
+    await vi.waitFor(() =>
+      expect(sent).toEqual([[NOTICE_REVEAL_CHANNEL, { worktreeId: 'wt_theirs', terminalId: 'term_theirs' }]])
+    )
+    expect(host.focusWindow).toHaveBeenCalledOnce()
   })
 
   it('drops the click once the window that published is gone', () => {

@@ -228,6 +228,17 @@ kbd {
   font-size: var(--text-xs);
 }
 
+/* An asking pane's answers, wherever a row offers them. */
+.answers {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+}
+
+.answers__choice {
+  white-space: nowrap;
+}
+
 /* A chip: one or two words about a row, beside the thing they are about —
    `creating`, `exited 1`, `2 conflicts`, `resumed`, `shell`. One rule for the
    shape and the size, wherever the chip is, so the same kind of fact reads the

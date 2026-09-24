@@ -6,6 +6,7 @@ import { statSync } from 'node:fs'
 import { agentLaunchCommand } from '../../shared/agentLaunch'
 import type { RestoredAs } from '../../shared/paneRestore'
 import type { AgentEvent, ClosedPane, Layout, PaneNode, Terminal } from '../../shared/entities'
+import type { ScreenMenu } from '../../shared/screenOpinion'
 import { fileLeavesIn } from '../../shared/filePane'
 import { evidenceLine } from '../../shared/outputEvidence'
 import { paneCellsIn, placePane, placePaneWithin, type Box } from '../../shared/paneRoom'
@@ -144,10 +145,15 @@ export type AgentSettled = {
   reason: 'quiet' | 'exit'
   /** The pane's last line worth quoting, or null when there is not one. */
   line: string | null
+  /** The answers its asking screen offers, when it asks through a menu. */
+  menu?: ScreenMenu
 }
 
 /** Tail read for a line worth quoting: the sidebar's evidence budget. */
 const SETTLED_TAIL_BYTES = 4096
+
+/** Between the keypresses of one answer. */
+const KEYPRESS_GAP_MS = 40
 
 type AttachedStream = { channel: StreamChannel; detach: () => void }
 
@@ -363,6 +369,17 @@ export class TerminalSessionManager {
       before.agentEvent !== after.agentEvent
     ) {
       for (const listener of this.answeredListeners) listener(terminalId)
+    }
+  }
+
+  /** Chooses an answer the pane's menu offers: `data`'s keypresses, one at a time, only while the screen still shows `prompt`. */
+  async answer(terminalId: string, data: string, prompt: string): Promise<void> {
+    const keys = await this.require(terminalId).answerKeys(prompt, data)
+    if (keys === null) throw conflict(`terminal ${terminalId} no longer asks that`)
+    for (const [index, key] of keys.entries()) {
+      // An arrow and Enter in one chunk can read as one unknown key to the program.
+      if (index > 0) await new Promise((resolve) => setTimeout(resolve, KEYPRESS_GAP_MS))
+      this.write(terminalId, key)
     }
   }
 
@@ -882,13 +899,15 @@ export class TerminalSessionManager {
     if (settled === undefined || agent === undefined) return
     // The resume finishing is not work finishing; an exit still is.
     if (resuming && reason === 'quiet') return
+    const menu = session.snapshot().screenMenu
     settled({
       terminalId: session.id,
       worktreeId: session.worktreeId,
       agent,
       reason,
       // An asking pane is announced by its question, as its sidebar row and board row quote it.
-      line: session.question ?? evidenceLine(session.read(SETTLED_TAIL_BYTES))
+      line: session.question ?? evidenceLine(session.read(SETTLED_TAIL_BYTES)),
+      ...(menu === undefined ? {} : { menu })
     })
   }
 
