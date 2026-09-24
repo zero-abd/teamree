@@ -131,18 +131,25 @@ describe('starting an agent from the palette', () => {
   })
 })
 
-describe('the rows that are also commands', () => {
-  const labels = (): string[] => rows().map((row) => row.querySelector('.palette__label')?.textContent ?? '')
+const labels = (): string[] => rows().map((row) => row.querySelector('.palette__label')?.textContent ?? '')
+const row = (label: string): HTMLElement =>
+  rows().find((entry) => entry.querySelector('.palette__label')?.textContent === label) as HTMLElement
 
-  // The window has no pane in it, so the pane commands are not on offer — the
-  // same answer the menu bar gives, from the same predicate. A row in black
-  // letters that runs nothing is what this used to do.
-  it('offers no command the window would refuse', () => {
+describe('the rows that are also commands', () => {
+  // The window has no pane in it, so the pane commands would do nothing — the
+  // same answer the menu bar gives, from the same predicate. Dimmed with the
+  // reason, so a search for one does not read as "no such command".
+  it('dims a command the window would refuse, says why, and runs nothing', () => {
     mount()
-    expect(labels()).not.toContain('Split pane right')
-    expect(labels()).not.toContain('Split pane down')
+    expect(labels()).toContain('Split pane right — no pane focused')
+    expect(row('Split pane right — no pane focused').getAttribute('aria-disabled')).toBe('true')
     expect(labels()).toContain('New terminal')
     expect(labels()).toContain('New task')
+
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'save' } })
+    expect(labels()[0]).toBe('Save — nothing unsaved')
+    fireEvent.click(rows()[0] as HTMLElement)
+    expect(closeDialog).not.toHaveBeenCalled()
   })
 
   it('offers the pane commands once there is a pane', () => {
@@ -174,8 +181,6 @@ describe('the rows that are also commands', () => {
 // is the same function: a row for a command the window would refuse is left out
 // rather than drawn and ignored.
 describe('the git rows are offered exactly when they could do something', () => {
-  const labels = (): string[] => rows().map((row) => row.querySelector('.palette__label')?.textContent ?? '')
-
   const status = (overrides: Record<string, number> = {}): Record<string, unknown> => ({
     w1: {
       worktreeId: 'w1',
@@ -191,25 +196,25 @@ describe('the git rows are offered exactly when they could do something', () => 
     }
   })
 
-  it('offers neither on a worktree with nothing to send and nothing changed', () => {
+  it('dims both on a worktree with nothing to send and nothing changed', () => {
     seed({ statuses: status() })
     mount()
-    expect(labels()).not.toContain('Push')
-    expect(labels()).not.toContain('Commit…')
+    expect(labels()).toContain('Push — nothing to push')
+    expect(labels()).toContain('Commit… — no changes')
   })
 
   it('offers Push once there is a commit the remote has not', () => {
     seed({ statuses: status({ ahead: 1 }) })
     mount()
     expect(labels()).toContain('Push')
-    expect(labels()).not.toContain('Commit…')
+    expect(labels()).toContain('Commit… — no changes')
   })
 
   it('offers Commit… once a file has changed', () => {
     seed({ statuses: status({ unstaged: 2 }) })
     mount()
     expect(labels()).toContain('Commit…')
-    expect(labels()).not.toContain('Push')
+    expect(labels()).toContain('Push — nothing to push')
   })
 })
 
@@ -283,5 +288,131 @@ describe('going to a file', () => {
     type('zzz')
     expect(screen.queryByText(/Nothing matches/)).toBeNull()
     await waitFor(() => expect(screen.getByText(/Nothing matches/)).toBeTruthy())
+  })
+})
+
+describe('the worktree on screen, from the palette', () => {
+  const choose = (query: string): void => {
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: query } })
+    fireEvent.click(rows()[0] as HTMLElement)
+  }
+
+  it('reveals, copies and removes it through the sidebar row’s own actions', () => {
+    const revealInFinder = vi.fn(() => Promise.resolve())
+    const copyToClipboard = vi.fn(() => Promise.resolve())
+    const removeWorktree = vi.fn(() => Promise.resolve())
+    seed({ revealInFinder, copyToClipboard, removeWorktree })
+    mount()
+    choose('reveal')
+    expect(revealInFinder).toHaveBeenCalledExactlyOnceWith('/repos/pager-wt/rewrite', 'the Rewrite the pager checkout')
+    choose('copy branch')
+    expect(copyToClipboard).toHaveBeenCalledWith('rewrite-the-pager', 'the branch rewrite-the-pager')
+    choose('remove worktree')
+    expect(removeWorktree).toHaveBeenCalledExactlyOnceWith('w1')
+  })
+
+  it('asks the sidebar row for its name field', () => {
+    seed({ sidebarVisible: false })
+    mount()
+    choose('rename')
+    expect(useWorkspaceStore.getState()).toMatchObject({ editingWorktreeName: 'w1', sidebarVisible: true })
+  })
+
+  it('opens it in the project’s editor', () => {
+    const openInEditor = vi.fn(() => Promise.resolve())
+    seed({ openInEditor, editors: [{ label: 'Cursor', command: 'cursor', kind: 'editor' }] })
+    mount()
+    choose('open in cursor')
+    expect(openInEditor).toHaveBeenCalledExactlyOnceWith(
+      '/repos/pager-wt/rewrite',
+      'cursor',
+      'the Rewrite the pager checkout'
+    )
+  })
+
+  it('discards or unstages the focused file', () => {
+    const unstagePath = vi.fn(() => Promise.resolve())
+    seed({
+      unstagePath,
+      layouts: {
+        w1: {
+          worktreeId: 'w1',
+          root: { kind: 'leaf', terminalId: 'file:1', pane: 'file', path: 'src/a.ts' },
+          focusedTerminalId: 'file:1'
+        }
+      },
+      changes: {
+        w1: {
+          worktreeId: 'w1',
+          changes: [{ path: 'src/a.ts', kind: 'modified', staged: true, unstaged: true }],
+          total: 1,
+          limit: 100,
+          truncated: false,
+          readAt: 0
+        }
+      }
+    })
+    mount()
+    choose('discard')
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'confirm-discard', worktreeId: 'w1', path: 'src/a.ts' })
+    choose('unstage')
+    expect(unstagePath).toHaveBeenCalledExactlyOnceWith('w1', 'src/a.ts')
+  })
+})
+
+describe('the focused file while the Changes list is unread', () => {
+  it('asks the runtime about that one path', async () => {
+    call.mockImplementation((method: unknown) =>
+      Promise.resolve(
+        method === 'worktree.changes'
+          ? {
+              worktreeId: 'w1',
+              changes: [{ path: 'src/a.ts', kind: 'modified', staged: false, unstaged: true }],
+              total: 1,
+              limit: 1,
+              truncated: false,
+              readAt: 0
+            }
+          : null
+      )
+    )
+    seed({
+      layouts: {
+        w1: {
+          worktreeId: 'w1',
+          root: { kind: 'leaf', terminalId: 'file:1', pane: 'file', path: 'src/a.ts' },
+          focusedTerminalId: 'file:1'
+        }
+      }
+    })
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'discard' } })
+    await waitFor(() => expect(labels()[0]).toBe('Discard File Changes…'))
+    expect(call).toHaveBeenCalledWith('worktree.changes', { worktreeId: 'w1', path: 'src/a.ts', limit: 1 })
+  })
+})
+
+describe('appearance from the palette', () => {
+  const setAppearance = vi.fn(() => Promise.resolve())
+
+  beforeEach(() => {
+    setAppearance.mockReset()
+    seed({ setAppearance, systemTone: 'dark', appearance: { ...INITIAL.appearance, mode: 'dark' } })
+  })
+
+  it('switches the mode', () => {
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'appearance light' } })
+    fireEvent.click(rows()[0] as HTMLElement)
+    expect(setAppearance).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ mode: 'light' }))
+  })
+
+  it('shows a preset of the other tone by switching to it', () => {
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'theme paper' } })
+    fireEvent.click(rows()[0] as HTMLElement)
+    expect(setAppearance).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ mode: 'light', light: expect.objectContaining({ themeId: 'paper' }) })
+    )
   })
 })

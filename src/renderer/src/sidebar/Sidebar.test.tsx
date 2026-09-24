@@ -559,6 +559,15 @@ describe('the row menu acts on the worktree it was opened on', () => {
     expect(useWorkspaceStore.getState().worktrees).toEqual([])
   })
 
+  it('puts the name field up when the palette asks, and takes the request back', () => {
+    seed({ worktrees: [worktree(), worktree({ id: 'w2', name: 'other' })] })
+    mount()
+    act(() => useWorkspaceStore.getState().editWorktreeName('w2'))
+
+    expect((screen.getByRole('textbox', { name: 'Worktree name' }) as HTMLInputElement).value).toBe('other')
+    expect(useWorkspaceStore.getState().editingWorktreeName).toBeNull()
+  })
+
   it('renames the worktree it was opened on, and the row says the new name', async () => {
     call.mockImplementation(async (method, params) =>
       method === 'worktree.rename' ? worktree({ name: (params as { name: string }).name }) : undefined

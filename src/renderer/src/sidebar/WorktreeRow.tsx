@@ -47,6 +47,9 @@ type WorktreeRowProps = {
   onCopyPath: () => void
   onCopyBranch: () => void
   onRename: (name: string) => void
+  /** Set when the name field is asked for from elsewhere; `onRenameShown` takes the request back. */
+  renameAsked?: boolean
+  onRenameShown?: () => void
   /** The Open in submenu, the project's editor first. */
   openIn: readonly { label: string; onChoose: () => void }[]
 }
@@ -70,6 +73,8 @@ export function WorktreeRow({
   onCopyPath,
   onCopyBranch,
   onRename,
+  renameAsked = false,
+  onRenameShown,
   openIn
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
@@ -85,6 +90,11 @@ export function WorktreeRow({
   const openControl = useRef<HTMLButtonElement | null>(null)
   const opener = useRef<HTMLElement | null>(null)
   const [renaming, setRenaming] = useState(false)
+  useEffect(() => {
+    if (!renameAsked) return
+    setRenaming(true)
+    onRenameShown?.()
+  }, [renameAsked, onRenameShown])
   const [panesShown, setPanesShown] = useState(true)
   const wasRenaming = useRef(false)
   const describedBy = useId()

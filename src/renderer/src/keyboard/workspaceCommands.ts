@@ -132,92 +132,110 @@ function fontSize(state: CommandState): number {
 
 /** Whether choosing this command now would do anything; each answer is the condition the action itself checks. */
 export function isCommandAvailable(command: WorkspaceCommand, state: CommandState): boolean {
+  return whyUnavailable(command, state) === null
+}
+
+/** Why the command would do nothing now, in a few words, or null when it would do something. */
+export function whyUnavailable(command: WorkspaceCommand, state: CommandState): string | null {
   // A remote-keystrokes question owns the window outright, the palette included.
-  if (firstQuestion(state.consent) !== null) return false
+  if (firstQuestion(state.consent) !== null) return 'question open'
 
   // A dialog of this window's own too, except the palette, whose two chords switch or close it.
   if (state.dialog) {
-    if (state.dialog.kind !== 'palette' || (command !== 'open-palette' && command !== 'go-to-file')) return false
+    if (state.dialog.kind !== 'palette' || (command !== 'open-palette' && command !== 'go-to-file')) {
+      return 'dialog open'
+    }
   }
 
+  const unless = (available: boolean, reason: string): string | null => (available ? null : reason)
   switch (command) {
     case 'split-right':
     case 'split-down':
-      return ownFocusedPane(state) !== null
+      return unless(ownFocusedPane(state) !== null, 'no pane focused')
     case 'find-in-pane': {
       // A file pane's own text has its editor's find, which takes the chord while this item is greyed.
       const focused = ownFocusedPane(state)
-      return focused !== null && (!isFilePaneId(focused) || state.diffPanes?.[focused] !== undefined)
+      if (focused === null) return 'no pane focused'
+      return unless(!isFilePaneId(focused) || state.diffPanes?.[focused] !== undefined, 'editor has its own')
     }
     case 'close-pane':
       // Either kind: closing a teammate's pane is how a watch stops.
-      return state.focusedWatchId !== null || activeLayout(state)?.focusedTerminalId != null
+      return unless(state.focusedWatchId !== null || activeLayout(state)?.focusedTerminalId != null, 'no pane focused')
     case 'save-file':
-      return editedFocus(state) !== null
+      return unless(editedFocus(state) !== null, 'nothing unsaved')
     case 'save-all':
-      return Object.keys(state.editedFiles ?? {}).length > 0
+      return unless(Object.keys(state.editedFiles ?? {}).length > 0, 'nothing unsaved')
     case 'new-terminal':
     case 'new-markdown':
       // A worktree whose checkout has gone from disk would fail with a path.
-      return (
-        state.activeWorktreeId !== null &&
-        !state.worktrees.some((worktree) => worktree.id === state.activeWorktreeId && worktree.missing === true)
+      if (state.activeWorktreeId === null) return 'no worktree open'
+      return unless(
+        !state.worktrees.some((worktree) => worktree.id === state.activeWorktreeId && worktree.missing === true),
+        'checkout missing'
       )
     case 'go-to-file':
-      return state.worktrees.some(
-        (worktree) => worktree.id === state.activeWorktreeId && worktree.state === 'ready' && worktree.missing !== true
+      if (state.activeWorktreeId === null) return 'no worktree open'
+      return unless(
+        state.worktrees.some(
+          (worktree) =>
+            worktree.id === state.activeWorktreeId && worktree.state === 'ready' && worktree.missing !== true
+        ),
+        'checkout not ready'
       )
     case 'toggle-right-panel':
     case 'focus-right-panel':
       // The panel shows one worktree's files, changes and panes; with none
       // open it has nothing to show and the item says so.
-      return state.activeWorktreeId !== null
+      return unless(state.activeWorktreeId !== null, 'no worktree open')
     case 'new-worktree':
-      return projectForNewTask(state) !== undefined
+      return unless(projectForNewTask(state) !== undefined, 'no project')
     case 'focus-next-pane':
     case 'focus-previous-pane':
       // Two or more, counting watched panes as the walk does; with one, `focusPane` returns early.
-      return collectTerminalIds(activeLayout(state)?.root ?? null).length + state.watches.length >= 2
+      return unless(
+        collectTerminalIds(activeLayout(state)?.root ?? null).length + state.watches.length >= 2,
+        'one pane'
+      )
     case 'select-next-pane':
     case 'select-previous-pane':
-      return stripTabs(state).length >= 2
+      return unless(stripTabs(state).length >= 2, 'one tab')
     case 'next-file-tab':
     case 'previous-file-tab':
-      return focusedColumnTabs(state).length >= 2
+      return unless(focusedColumnTabs(state).length >= 2, 'no other file tab')
     case 'expand-pane':
       // A pane of your own, as `splitFocusedPane` requires; a lone pane can still be maximised.
-      return ownFocusedPane(state) !== null
+      return unless(ownFocusedPane(state) !== null, 'no pane focused')
     case 'previous-worktree':
     case 'next-worktree':
       // Two rows in sidebar order; with one the walk lands where it started.
-      return worktreeOrder(state.projects, state.worktrees).length >= 2
+      return unless(worktreeOrder(state.projects, state.worktrees).length >= 2, 'one worktree')
     case 'commit-changes':
       // The same count as the header's Changes chip.
-      return changedCount(activeStatus(state)) > 0
+      return unless(changedCount(activeStatus(state)) > 0, 'no changes')
     case 'push-worktree':
       // Nothing already in flight: `pushActiveWorktree` returns early while one is.
-      return !state.pushing && (activeStatus(state)?.ahead ?? 0) > 0
+      if (state.pushing) return 'pushing'
+      return unless((activeStatus(state)?.ahead ?? 0) > 0, 'nothing to push')
     case 'toggle-sidebar':
     case 'open-dashboard':
       // Greyed while the editor types: on macOS only a disabled item lets ⌘B and ⌘E reach the page.
-      return state.editingMarkdown !== true
+      return unless(state.editingMarkdown !== true, 'editing markdown')
     case 'bigger-text':
-      return fontSize(state) < TERMINAL_FONT_MAX_PX
+      return unless(fontSize(state) < TERMINAL_FONT_MAX_PX, 'largest size')
     case 'smaller-text':
-      return fontSize(state) > TERMINAL_FONT_MIN_PX
+      return unless(fontSize(state) > TERMINAL_FONT_MIN_PX, 'smallest size')
     case 'actual-size':
-      return fontSize(state) !== TERMINAL_FONT_DEFAULT_PX
+      return unless(fontSize(state) !== TERMINAL_FONT_DEFAULT_PX, 'already actual size')
     case 'open-palette':
     case 'open-appearance':
     case 'open-settings':
     case 'open-help':
-      // Four views, none of which needs anything to be open.
-      return true
     case 'focus-sidebar':
     case 'focus-panes':
     case 'focus-next-region':
     case 'focus-previous-region':
-      return true
+      // Views and focus moves, none of which needs anything to be open.
+      return null
   }
 }
 

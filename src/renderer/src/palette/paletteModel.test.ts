@@ -86,7 +86,8 @@ describe('buildPaletteItems', () => {
     expect(rows[0]?.search).toContain('add-a-subtract-function-to-claude')
   })
 
-  it('offers every worktree but the one already open', () => {
+  // A search for the open worktree's task used to find only its sibling.
+  it('offers the worktree already open too, after the others and marked current', () => {
     const items = buildPaletteItems(
       context({
         worktrees: [worktree({ id: 'here' }), worktree({ id: 'elsewhere' })],
@@ -94,8 +95,11 @@ describe('buildPaletteItems', () => {
       })
     )
 
-    const ids = items.filter((item) => item.kind === 'worktree').map((item) => item.id)
-    expect(ids).toEqual(['elsewhere'])
+    const rows = items.filter((item) => item.kind === 'worktree')
+    expect(rows.map((item) => [item.id, item.detail])).toEqual([
+      ['elsewhere', 'atlas'],
+      ['here', 'atlas · current']
+    ])
   })
 
   it('makes a worktree findable by its branch and its project, not just its name', () => {
@@ -519,5 +523,104 @@ describe('the files ⌘P lists', () => {
       hint: 'src/lib'
     })
     expect(fileItem('README.md')).toMatchObject({ label: 'README.md', hint: '' })
+  })
+})
+
+describe('what the palette offers for the worktree on screen', () => {
+  const labels = (overrides: Partial<Parameters<typeof buildPaletteItems>[0]> = {}): string[] =>
+    buildPaletteItems(context({ worktrees: [worktree({ id: 'w1' })], activeWorktreeId: 'w1', ...overrides }))
+      .filter((item) => item.kind === 'action')
+      .map((item) => item.label)
+
+  it('offers the sidebar row’s menu, every Open in target included', () => {
+    expect(labels({ openIn: ['Cursor', 'Finder'] })).toEqual(
+      expect.arrayContaining([
+        'Rename Worktree…',
+        'Reveal in Finder',
+        'Copy Path',
+        'Copy Branch',
+        'Open in Cursor',
+        'Open in Finder',
+        'Remove Worktree…'
+      ])
+    )
+  })
+
+  it('offers only removal for a checkout gone from disk, and nothing with no worktree open', () => {
+    const missing = labels({ worktrees: [worktree({ id: 'w1', missing: true })] })
+    expect(missing).toContain('Remove Worktree…')
+    expect(missing).not.toContain('Rename Worktree…')
+    expect(labels({ activeWorktreeId: null })).not.toContain('Remove Worktree…')
+  })
+
+  it('offers discard and unstage only for a focused file that has them', () => {
+    expect(labels()).not.toContain('Discard File Changes…')
+    const both = labels({ focusedChange: { path: 'src/a.ts', discardable: true, staged: true } })
+    expect(both).toEqual(expect.arrayContaining(['Discard File Changes…', 'Unstage File']))
+    const staged = labels({ focusedChange: { path: 'src/a.ts', discardable: false, staged: true } })
+    expect(staged).not.toContain('Discard File Changes…')
+  })
+
+  it('offers the three modes and every preset, the ones on screen dimmed as current', () => {
+    const items = buildPaletteItems(context({ appearance: { mode: 'dark', themeId: 'black' } }))
+    const reason = (label: string): string | undefined => {
+      const item = items.find((entry) => entry.label === label)
+      return item?.kind === 'action' ? (item.unavailable ?? 'none') : undefined
+    }
+    expect(reason('Appearance: Light')).toBe('none')
+    expect(reason('Appearance: Match System')).toBe('none')
+    expect(reason('Appearance: Dark')).toBe('current')
+    expect(reason('Theme: Paper')).toBe('none')
+    expect(reason('Theme: Absolute Black')).toBe('current')
+  })
+
+  it.each([
+    ['rename', 'Rename Worktree…'],
+    ['reveal', 'Reveal in Finder'],
+    ['discard', 'Discard File Changes…'],
+    ['open in', 'Open in Cursor'],
+    ['appearance light', 'Appearance: Light'],
+    ['dark', 'Appearance: Dark'],
+    ['copy path', 'Copy Path']
+  ])('answers %s with %s first', (query, label) => {
+    const items = buildPaletteItems(
+      context({
+        worktrees: [worktree({ id: 'w1' })],
+        activeWorktreeId: 'w1',
+        openIn: ['Cursor'],
+        focusedChange: { path: 'src/a.ts', discardable: true, staged: false }
+      })
+    )
+    expect(filterPalette(items, query)[0]?.label).toBe(label)
+  })
+})
+
+describe('a command that would do nothing now', () => {
+  const items = (reasons: Partial<Record<string, string>> = {}): PaletteItem[] =>
+    buildPaletteItems(
+      context({
+        worktrees: [worktree({ id: 'w1' })],
+        activeWorktreeId: 'w1',
+        whyUnavailable: (action) => reasons[action] ?? null
+      })
+    )
+
+  it('stays in the list with its reason instead of vanishing', () => {
+    const found = filterPalette(items({ 'save-file': 'nothing unsaved', 'save-all': 'nothing unsaved' }), 'save')
+    expect(found[0]).toMatchObject({ label: 'Save', unavailable: 'nothing unsaved' })
+    expect(found[1]).toMatchObject({ label: 'Save All', unavailable: 'nothing unsaved' })
+  })
+
+  it('goes below the rows that would run, with nothing typed', () => {
+    const all = filterPalette(items({ 'new-worktree': 'no project' }), '')
+    expect(all.at(-1)).toMatchObject({ id: 'new-worktree' })
+  })
+
+  // `Commit…` came first through the "message" in its hidden keywords.
+  it('ranks a label match over a keyword match: sa finds Save first', () => {
+    expect(filterPalette(items(), 'sa')[0]?.label).toBe('Save')
+    expect(
+      filterPalette(items({ 'save-file': 'nothing unsaved', 'save-all': 'nothing unsaved' }), 'sa')[0]?.label
+    ).toBe('Save')
   })
 })

@@ -282,6 +282,8 @@ type WorkspaceState = {
   recentFiles: Record<string, readonly string[]>
   /** The pane whose tab shows the name field, or null. */
   editingPaneName: string | null
+  /** The worktree whose sidebar row shows the name field, or null. */
+  editingWorktreeName: string | null
   /** Bumped when the runtime says a worktree's files moved; a file pane re-reads on it. */
   worktreeFilesEpoch: number
 
@@ -443,6 +445,8 @@ type WorkspaceState = {
   renamePane: (terminalId: string, label: string) => Promise<void>
   /** Opens the tab's name field on a pane, or shuts it with null. */
   editPaneName: (terminalId: string | null) => void
+  /** Puts the sidebar row's name field up, showing the sidebar and the project first. */
+  editWorktreeName: (worktreeId: string | null) => void
   /** Closes panes in order, stopping at each that `closeTerminal` would ask about; either answer moves on. */
   closePanes: (terminalIds: readonly string[]) => Promise<void>
   /** Every pane of the open worktree but this one, which takes the focus. */
@@ -1142,6 +1146,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     namingMarkdown: null,
     recentFiles: {},
     editingPaneName: null,
+    editingWorktreeName: null,
     worktreeFilesEpoch: 0,
 
     mergePreviews: {},
@@ -1680,6 +1685,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     editPaneName(terminalId) {
       set({ editingPaneName: terminalId })
+    },
+
+    editWorktreeName(worktreeId) {
+      const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
+      if (worktree !== undefined) {
+        if (!get().sidebarVisible) get().toggleSidebar()
+        if (get().collapsedProjects[worktree.projectId]) get().toggleProject(worktree.projectId)
+      }
+      set({ editingWorktreeName: worktree === undefined ? null : worktree.id })
     },
 
     openFilePane(worktreeId, path, mode) {

@@ -9,6 +9,8 @@ import {
   type Worktree
 } from '@shared/entities'
 import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
+import { APPEARANCE_MODES, BUILT_IN_THEMES, type AppearanceMode } from '@shared/theme'
+import { APPEARANCE_MODE_LABEL } from '../dialogs/AppearanceDialog'
 import { cliActionLabel } from '../dialogs/cliInstallModel'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { MENU_ORDER, menuLabel } from '../menu/menuBar'
@@ -24,12 +26,36 @@ export type PaletteAction =
   | 'install-cli'
   | 'check-for-updates'
   | 'toggle-automatic-updates'
+  | WorktreeAction
+  | 'discard-file'
+  | 'unstage-file'
+  | `appearance:${AppearanceMode}`
+  /** A built-in theme by id. */
+  | `theme:${string}`
+  /** An Open in target by its label. */
+  | `open-in:${string}`
+
+/** What the sidebar row's menu does to the worktree on screen. */
+type WorktreeAction =
+  | 'rename-worktree'
+  | 'reveal-worktree'
+  | 'copy-worktree-path'
+  | 'copy-worktree-branch'
+  | 'remove-worktree'
 
 export type PaletteItem =
   /** Jump to a worktree. */
   | { kind: 'worktree'; id: string; label: string; hint: string; detail: string; search: string }
-  /** Run something. */
-  | { kind: 'action'; id: PaletteAction; label: string; hint: string; detail: string; search: string }
+  /** Run something; `unavailable` says why it would do nothing now, and the row is drawn dimmed. */
+  | {
+      kind: 'action'
+      id: PaletteAction
+      label: string
+      hint: string
+      detail: string
+      search: string
+      unavailable?: string
+    }
   /** Start a coding agent in the worktree on screen; `id` is the command to run. */
   | { kind: 'agent'; id: string; label: string; hint: string; detail: string; search: string }
   /** Open a file of the worktree on screen; `id` is its path. */
@@ -54,46 +80,142 @@ export type PaletteContext = {
   hintFor: (action: PaletteAction) => string
   /** How this machine's CLI link stands, which names one action. Null until first read. */
   cli: CliStatus | null
+  /** Why a command would do nothing now, or null; absent reads as always available. */
+  whyUnavailable?: (action: PaletteAction) => string | null
+  /** The Open in targets for the worktree on screen, its project's editor first. */
+  openIn?: readonly string[]
+  /** The mode and preset on screen, which mark their own rows as current. */
+  appearance?: { mode: AppearanceMode; themeId: string }
+  /** The focused file pane's entry in the Changes list, if it has one. */
+  focusedChange?: { path: string; discardable: boolean; staged: boolean } | null
 }
 
 /**
- * Worktrees first (jumping is what the palette is for), then agents (they act on the worktree in
- * front), then actions; a typed action name still sorts to the top.
+ * Worktrees first (jumping is what the palette is for), the open one last among them, then what acts
+ * on the worktree in front, then actions; a typed action name still sorts to the top.
  */
 export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
   const projectName = new Map(context.projects.map((project) => [project.id, project.name]))
+  const open = (worktree: Worktree): boolean => worktree.id === context.activeWorktreeId
 
-  const worktrees: PaletteItem[] = context.worktrees
-    .filter((worktree) => worktree.id !== context.activeWorktreeId)
-    .map((worktree) => {
-      const project = projectName.get(worktree.projectId) ?? ''
-      const display = worktreeDisplay(worktree)
-      const label = worktreeLabel(display)
-      return {
-        kind: 'worktree',
-        id: worktree.id,
-        label,
-        hint: display.branch ?? '',
-        detail: hasCheckout(worktree) ? project : `${project} · ${worktree.missing ? 'missing' : worktree.state}`,
-        // A branch name is often the only part a person remembers.
-        search: `${label} ${worktree.branch} ${project}`
-      }
-    })
+  const worktrees: PaletteItem[] = [
+    ...context.worktrees.filter((worktree) => !open(worktree)),
+    ...context.worktrees.filter(open)
+  ].map((worktree) => {
+    const project = projectName.get(worktree.projectId) ?? ''
+    const display = worktreeDisplay(worktree)
+    const label = worktreeLabel(display)
+    return {
+      kind: 'worktree',
+      id: worktree.id,
+      label,
+      hint: display.branch ?? '',
+      detail: [
+        project,
+        hasCheckout(worktree) ? '' : worktree.missing ? 'missing' : worktree.state,
+        open(worktree) ? 'current' : ''
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      // A branch name is often the only part a person remembers.
+      search: `${label} ${worktree.branch} ${project}`
+    }
+  })
 
-  const actions: PaletteItem[] = [...commandActions(), ...ACTIONS, ...updateActions(context)].map((action) => {
+  const rows: ActionRow[] = [...commandActions(), ...ACTIONS, ...updateActions(context), ...appearanceActions(context)]
+  const actions: PaletteItem[] = rows.map((action) => {
     // Named after the link's state; the keywords stay fixed so a search does not move with the label.
     const label = action.id === 'install-cli' ? cliActionLabel(context.cli) : action.label
+    const unavailable = action.unavailable ?? context.whyUnavailable?.(action.id) ?? null
     return {
       kind: 'action',
       id: action.id,
       label,
       hint: context.hintFor(action.id),
       detail: '',
-      search: `${label} ${action.keywords}`
+      search: `${label} ${action.keywords}`,
+      ...(unavailable === null ? {} : { unavailable })
     }
   })
 
-  return [...worktrees, ...agentItems(context), ...actions]
+  return [...worktrees, ...agentItems(context), ...worktreeActions(context), ...actions]
+}
+
+type ActionRow = { id: PaletteAction; label: string; keywords: string; hint?: string; unavailable?: string }
+
+/** The sidebar row's menu for the worktree on screen, and the focused file's discard and unstage. */
+function worktreeActions(context: PaletteContext): PaletteItem[] {
+  const active = context.worktrees.find((worktree) => worktree.id === context.activeWorktreeId)
+  if (active === undefined) return []
+  const remove: ActionRow = {
+    id: 'remove-worktree',
+    label: 'Remove Worktree…',
+    keywords: 'remove delete worktree checkout trash'
+  }
+  const change = context.focusedChange
+  // As the row's menu: a checkout gone from disk has nothing to reveal, open or copy.
+  const rows: ActionRow[] = active.missing
+    ? [remove]
+    : [
+        { id: 'rename-worktree', label: 'Rename Worktree…', keywords: 'rename name title worktree' },
+        { id: 'reveal-worktree', label: 'Reveal in Finder', keywords: 'reveal finder show folder directory checkout' },
+        { id: 'copy-worktree-path', label: 'Copy Path', keywords: 'copy path clipboard worktree checkout directory' },
+        { id: 'copy-worktree-branch', label: 'Copy Branch', keywords: 'copy branch name clipboard git' },
+        ...(context.openIn ?? []).map((target) => ({
+          id: `open-in:${target}` as const,
+          label: `Open in ${target}`,
+          keywords: 'open in editor ide terminal finder external app'
+        })),
+        remove,
+        ...(change?.discardable === true
+          ? [
+              {
+                id: 'discard-file' as const,
+                label: 'Discard File Changes…',
+                keywords: 'discard revert restore undo throw away changes git',
+                hint: change.path
+              }
+            ]
+          : []),
+        ...(change?.staged === true
+          ? [
+              {
+                id: 'unstage-file' as const,
+                label: 'Unstage File',
+                keywords: 'unstage index staged git',
+                hint: change.path
+              }
+            ]
+          : [])
+      ]
+  const name = worktreeLabel(worktreeDisplay(active))
+  return rows.map((row) => ({
+    kind: 'action',
+    id: row.id,
+    label: row.label,
+    hint: row.hint ?? name,
+    detail: '',
+    search: `${row.label} ${row.keywords}`
+  }))
+}
+
+/** The three modes and every preset; the ones on screen say so. */
+function appearanceActions(context: PaletteContext): ActionRow[] {
+  const current = (on: boolean): { unavailable?: string } => (on ? { unavailable: 'current' } : {})
+  return [
+    ...APPEARANCE_MODES.map((mode) => ({
+      id: `appearance:${mode}` as const,
+      label: `Appearance: ${APPEARANCE_MODE_LABEL[mode]}`,
+      keywords: 'mode theme tone os',
+      ...current(context.appearance?.mode === mode)
+    })),
+    ...BUILT_IN_THEMES.map((theme) => ({
+      id: `theme:${theme.id}` as const,
+      label: `Theme: ${theme.name}`,
+      keywords: 'appearance preset colour color',
+      ...current(context.appearance?.themeId === theme.id)
+    }))
+  ]
 }
 
 /**
@@ -270,17 +392,28 @@ function isWordStart(text: string, index: number): boolean {
   return before === ' ' || before === '/' || before === '-' || before === '_' || before === '.'
 }
 
-/** The list narrowed by the query; ties keep build order so the list does not reshuffle under the cursor. */
+/**
+ * The list narrowed by the query: what a row says before its hidden keywords, and what would run before
+ * what is dimmed. Ties keep build order so the list does not reshuffle under the cursor.
+ */
 export function filterPalette(items: readonly PaletteItem[], query: string): PaletteItem[] {
   const trimmed = query.trim()
-  if (trimmed === '') return [...items]
+  const dimmed = (item: PaletteItem): number => (item.kind === 'action' && item.unavailable !== undefined ? 1 : 0)
+  if (trimmed === '') return [...items].sort((left, right) => dimmed(left) - dimmed(right))
 
   return items
-    .map((item, index) => ({ item, index, points: score(item.search, trimmed) }))
-    .filter((row): row is { item: PaletteItem; index: number; points: number } => row.points !== null)
+    .map((item, index) => {
+      const shown = score(item.kind === 'worktree' ? `${item.label} ${item.hint}` : item.label, trimmed)
+      return { item, index, shown: shown === null ? 0 : 1, points: shown ?? score(item.search, trimmed) }
+    })
+    .filter((row): row is { item: PaletteItem; index: number; shown: number; points: number } => row.points !== null)
     .sort(
       (left, right) =>
-        right.points - left.points || left.item.label.length - right.item.label.length || left.index - right.index
+        right.shown - left.shown ||
+        dimmed(left.item) - dimmed(right.item) ||
+        right.points - left.points ||
+        left.item.label.length - right.item.label.length ||
+        left.index - right.index
     )
     .map((row) => row.item)
 }

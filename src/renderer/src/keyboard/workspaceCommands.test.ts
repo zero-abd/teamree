@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { PaneNode, ConsentRequest } from '@shared/entities'
 import type { CommandActions, CommandState, Workspace } from './workspaceCommands'
-import { isCommandAvailable, paneNumberTarget, runWorkspaceCommand } from './workspaceCommands'
+import { isCommandAvailable, paneNumberTarget, runWorkspaceCommand, whyUnavailable } from './workspaceCommands'
 import { WORKSPACE_SHORTCUTS, type WorkspaceCommand } from './workspaceShortcuts'
 import { onRegionRequest, type Region } from '../shell/regions'
 
@@ -236,6 +236,23 @@ describe('what a window can be asked to do', () => {
         }),
         command
       ).toBe(false)
+    }
+  })
+})
+
+describe('why a command is unavailable', () => {
+  it('names the reason in a few words, and nothing when it would run', () => {
+    expect(whyUnavailable('save-file', WORKING)).toBe('nothing unsaved')
+    expect(whyUnavailable('split-right', EMPTY)).toBe('no pane focused')
+    expect(whyUnavailable('push-worktree', { ...WORKING, pushing: true })).toBe('pushing')
+    expect(whyUnavailable('split-right', WORKING)).toBeNull()
+  })
+
+  it('agrees with the predicate for every command', () => {
+    for (const { command } of WORKSPACE_SHORTCUTS) {
+      for (const state of [EMPTY, WORKING]) {
+        expect(whyUnavailable(command, state) === null).toBe(isCommandAvailable(command, state))
+      }
     }
   })
 })
