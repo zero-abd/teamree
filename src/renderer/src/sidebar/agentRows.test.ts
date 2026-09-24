@@ -160,6 +160,25 @@ describe('worktreeTone', () => {
   })
 })
 
+describe('activityOf, when the screen shows a question', () => {
+  // A trust prompt comes before any hook loads, rings no bell and leaves the title alone.
+  it('is waiting while output arrives and after it stops', () => {
+    expect(activityOf(terminal({ id: 't', agent: 'claude', busy: false, screenSays: 'waiting' }))).toBe('waiting')
+    expect(activityOf(terminal({ id: 't', agent: 'codex', busy: true, screenSays: 'waiting' }))).toBe('waiting')
+  })
+
+  it('ranks below what the agent said about itself', () => {
+    const said = { event: 'UserPromptSubmit' as const, at: 1_000 }
+    expect(
+      activityOf(terminal({ id: 't', agent: 'claude', busy: false, screenSays: 'waiting', agentEvent: said }))
+    ).toBe('working')
+  })
+
+  it('never reads a shell as asking', () => {
+    expect(activityOf(terminal({ id: 't', busy: false, screenSays: 'waiting' }))).toBe('quiet')
+  })
+})
+
 describe('activityOf, when the agent has said something', () => {
   // Claude Code writes no bell and no telling title while it sits on a
   // permission prompt; a hook reporting the prompt is the agent saying so.

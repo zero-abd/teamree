@@ -98,7 +98,7 @@ export type TerminalSessionManagerOptions = {
   scrollbackCapBytes?: number
   /** Overridable so tests can assert on readable ids. */
   createId?: () => string
-  /** Called when a pane starts or stops producing output; the manager stays unaware of the workspace stream. */
+  /** Called when a pane starts or stops producing output or asking; the manager stays unaware of the workspace stream. */
   onActivityChange?: (terminalId: string) => void
   /**
    * Called when an agent pane goes quiet or exits — the half of an edge worth
@@ -320,6 +320,7 @@ export class TerminalSessionManager {
     if (
       before.restored !== after.restored ||
       before.lastBellAt !== after.lastBellAt ||
+      before.screenSays !== after.screenSays ||
       before.agentEvent !== after.agentEvent
     ) {
       for (const listener of this.answeredListeners) listener(terminalId)
@@ -642,6 +643,9 @@ export class TerminalSessionManager {
               if (!session.isBusy && session.isRunning) this.reportSettled(session, 'quiet')
             }
           }),
+      ...(this.options.onActivityChange === undefined
+        ? {}
+        : { onScreenChange: (session: PtySession) => this.options.onActivityChange?.(session.id) }),
       ...(this.options.scrollbackCapBytes === undefined ? {} : { scrollbackCapBytes: this.options.scrollbackCapBytes })
     })
 

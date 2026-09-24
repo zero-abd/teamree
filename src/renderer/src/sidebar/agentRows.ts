@@ -3,6 +3,7 @@
 // ended, the title, the bell, and — outranking all of them — what the agent's hooks report.
 
 import type { AgentEvent, AgentKind, PaneWatcher, Terminal } from '@shared/entities'
+import type { ScreenOpinion } from '@shared/screenOpinion'
 import type { TitleOpinion } from '@shared/titleOpinion'
 import { harnessName } from '../agents/harnesses'
 import { paneInWorktree, type WorktreeNameSource } from './worktreeDisplay'
@@ -94,6 +95,8 @@ export type PaneActivitySource = {
   busy: boolean
   /** What the pane's own title says, when it says anything. */
   titleSays?: TitleOpinion
+  /** What the bottom of its screen says. */
+  screenSays?: ScreenOpinion
   /** When the bell last rang, if it rang in the burst of output that just ended. */
   lastBellAt?: number
   /** What the agent last reported about itself, when it reports at all. */
@@ -133,8 +136,8 @@ export function agentSays(event: AgentEvent | undefined): AgentActivity | null {
 }
 
 /**
- * The order is the argument: exit, then the agent's own word, then a title
- * saying waiting (an agent can print its question and sit on it), then the bell,
+ * The order is the argument: exit, then the agent's own word, then a title or
+ * screen saying waiting (an agent can print its question and sit on it), then the bell,
  * then the readings of silence. A stale "working" title ranks below the bell on purpose.
  */
 export function activityOf(terminal: PaneActivitySource): AgentActivity {
@@ -143,7 +146,7 @@ export function activityOf(terminal: PaneActivitySource): AgentActivity {
   if (said !== null) return said
   // A shell rings for a failed tab completion: only an agent can be asking.
   const agent = terminal.agent ?? terminal.foregroundAgent
-  if (agent !== undefined && terminal.titleSays === 'waiting') return 'waiting'
+  if (agent !== undefined && (terminal.titleSays === 'waiting' || terminal.screenSays === 'waiting')) return 'waiting'
   if (terminal.busy) return 'working'
   if (agent !== undefined && terminal.lastBellAt !== undefined) return 'waiting'
   return terminal.titleSays === 'working' ? 'working' : 'quiet'

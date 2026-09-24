@@ -30,6 +30,8 @@ import { ErrorCode } from '../../shared/protocol'
 import { agentForProcess, type AgentKind } from './agent-command'
 import { TitleSequenceScanner } from './title-sequence'
 import { titleOpinion, type TitleOpinion } from '../../shared/titleOpinion'
+import { screenOpinion, type ScreenOpinion } from '../../shared/screenOpinion'
+import { screenRows } from './screenRows'
 import type { Tone } from '../../shared/theme'
 
 /** How long close() waits for the tree to die before giving up on the exit event. */
@@ -51,6 +53,12 @@ const EXIT_DRAIN_MAX_MS = 500
  * tool calls; short enough that a finished agent stops looking busy.
  */
 export const QUIET_AFTER_MS = 4_000
+
+/** How long after output an agent pane's screen is read for a question; one read waits at a time. */
+const SCREEN_READ_AFTER_MS = 1_000
+
+/** How much of the tail that read rebuilds the screen from: enough for a full-screen agent's last redraw. */
+const SCREEN_TAIL_BYTES = 64 * 1024
 
 /** How long after a resize output counts as the child repainting for the new size, not as new output. */
 export const REDRAW_AFTER_RESIZE_MS = 300
@@ -109,6 +117,8 @@ export type PtySessionInit = {
   label?: string
   /** Called when the pane starts or stops producing output. */
   onActivityChange?: (session: PtySession) => void
+  /** Called when the bottom of an agent pane's screen starts or stops showing a question. */
+  onScreenChange?: (session: PtySession) => void
   now?: () => number
   /** Timer seam, so a test need not wait out the quiet window. */
   schedule?: (run: () => void, delayMs: number) => () => void
@@ -155,6 +165,10 @@ export class PtySession {
   private lastBellAt: number | undefined
   /** What the agent last said about itself; see `Terminal.agentEvent`. */
   private agentEvent: AgentEvent | undefined
+  private screenSays: ScreenOpinion | undefined
+  private cancelScreenRead: (() => void) | undefined
+  /** Bumped by every read and every keystroke, so a read that was overtaken lands nowhere. */
+  private screenReads = 0
   private lastOutputAt: number
   private resizedAt = Number.NEGATIVE_INFINITY
   private readonly startedAt: number
@@ -242,6 +256,7 @@ export class PtySession {
       busy: this.busy,
       // Derived, not stored, so it cannot drift from the title.
       ...(titleSays === null ? {} : { titleSays }),
+      ...(this.screenSays === undefined ? {} : { screenSays: this.screenSays }),
       ...(this.lastBellAt === undefined ? {} : { lastBellAt: this.lastBellAt }),
       ...(this.agentEvent === undefined ? {} : { agentEvent: this.agentEvent }),
       lastOutputAt: this.lastOutputAt
@@ -307,6 +322,11 @@ export class PtySession {
       this.typedInto = true
       // A bell is a question; this is somebody answering it.
       this.lastBellAt = undefined
+      // So is this; the screen is read again once the answer has redrawn it.
+      this.screenSays = undefined
+      this.screenReads++
+      this.cancelScreenRead?.()
+      this.cancelScreenRead = undefined
       // A request answered or a running turn interrupted: the bytes are the
       // better reading until the agent speaks again. A turn that ended stays ended.
       if (overtakenByTyping(this.agentEvent)) this.agentEvent = undefined
@@ -384,6 +404,8 @@ export class PtySession {
 
     this.cancelQuietWatch?.()
     this.cancelQuietWatch = undefined
+    this.cancelScreenRead?.()
+    this.cancelScreenRead = undefined
     for (const subscription of this.subscriptions) subscription.dispose()
     this.subscriptions.length = 0
     this.listeners.clear()
@@ -409,6 +431,10 @@ export class PtySession {
     if (this.clock() - this.resizedAt >= REDRAW_AFTER_RESIZE_MS) this.noteActivity()
     this.scrollback.append(chunk)
     this.emit({ type: 'data', data: chunk })
+    this.cancelScreenRead ??= this.scheduler(() => {
+      this.cancelScreenRead = undefined
+      void this.readScreen()
+    }, SCREEN_READ_AFTER_MS)
     const { titles, bells } = this.titles.scan(chunk)
     // Reported from here because `outputEvidence.ts` strips the bell downstream.
     if (bells > 0) {
@@ -444,6 +470,18 @@ export class PtySession {
       this.init.onActivityChange?.(this)
     }, QUIET_AFTER_MS)
     this.cancelQuietWatch = cancel
+  }
+
+  /** Rebuilds the screen from the tail and reads its bottom rows for a question; a shell's are never read. */
+  private async readScreen(): Promise<void> {
+    const read = ++this.screenReads
+    const agent = this.agent ?? this.foregroundAgent()
+    const rows = agent === undefined ? [] : await screenRows(this.read(SCREEN_TAIL_BYTES), this.cols, this.rows)
+    if (read !== this.screenReads || !this.running) return
+    const says = screenOpinion(agent, rows) ?? undefined
+    if (says === this.screenSays) return
+    this.screenSays = says
+    this.init.onScreenChange?.(this)
   }
 
   private get clock(): () => number {
