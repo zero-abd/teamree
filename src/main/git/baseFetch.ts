@@ -1,11 +1,14 @@
 // Keeps each project's base ref current, so `behind` and the merge preview are about
 // the remote as it is now: one branch fetched on a timer and on window focus.
 
+import type { Project, Worktree } from '../../shared/entities'
+import { GitCommandError } from './errors'
 import type { GitRunner } from './gitProcess'
 import { assertRefShape } from './repository'
 import { pushFailureKind } from './worktreePush'
 
-export type BaseFetchOutcome = 'moved' | 'unchanged' | 'skipped' | 'offline' | 'auth' | 'failed'
+/** `timeout`: git was killed at the limit, most likely a credential helper waiting on a dialog. */
+export type BaseFetchOutcome = 'moved' | 'unchanged' | 'skipped' | 'offline' | 'auth' | 'timeout' | 'failed'
 
 export type BaseFetchProject = { id: string; path: string; baseRef: string }
 
@@ -44,14 +47,20 @@ export async function fetchBase(
   if (remotes.exitCode !== 0 || !remotes.stdout.split('\n').includes(remote)) return 'skipped'
 
   const before = await revParse(runner, repoPath, baseRef, signal)
-  const fetched = await runner.tryRun({
-    args: ['fetch', '--no-tags', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`],
-    cwd: repoPath,
-    timeoutMs: FETCH_TIMEOUT_MS,
-    // The runner already disables the terminal prompt; an inherited askpass would still open a window.
-    env: { GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '' },
-    signal
-  })
+  let fetched
+  try {
+    fetched = await runner.tryRun({
+      args: ['fetch', '--no-tags', remote, `+refs/heads/${branch}:refs/remotes/${remote}/${branch}`],
+      cwd: repoPath,
+      timeoutMs: FETCH_TIMEOUT_MS,
+      // The runner already disables the terminal prompt; an inherited askpass would still open a window.
+      env: { GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '' },
+      signal
+    })
+  } catch (error) {
+    if (error instanceof GitCommandError && error.timedOut) return 'timeout'
+    throw error
+  }
   if (fetched.exitCode !== 0) return classifyFetchFailure(fetched.stderr)
   return (await revParse(runner, repoPath, baseRef, signal)) === before ? 'unchanged' : 'moved'
 }
@@ -73,6 +82,17 @@ async function revParse(runner: GitRunner, cwd: string, ref: string, signal?: Ab
     signal
   })
   return result.exitCode === 0 ? result.stdout.trim() : ''
+}
+
+/** Projects with a ready worktree to be behind, less those with background fetching turned off. */
+export function backgroundFetchProjects(snapshot: {
+  projects: readonly Project[]
+  worktrees: readonly Pick<Worktree, 'projectId' | 'state'>[]
+}): BaseFetchProject[] {
+  const working = new Set(snapshot.worktrees.filter((w) => w.state === 'ready').map((w) => w.projectId))
+  return snapshot.projects
+    .filter((project) => working.has(project.id) && project.fetchInBackground !== false)
+    .map((project) => ({ id: project.id, path: project.path, baseRef: project.baseRef }))
 }
 
 export type BaseFetcherOptions = {
@@ -169,7 +189,7 @@ export class BaseFetcher {
         baseRef: project.baseRef,
         signal: this.#controller.signal
       }).catch(() => 'failed' as const)
-      if (outcome === 'auth') {
+      if (outcome === 'auth' || outcome === 'timeout') {
         state.authBackoffMs = Math.min(
           state.authBackoffMs === 0 ? AUTH_BACKOFF_FROM_MS : state.authBackoffMs * 2,
           AUTH_BACKOFF_UNTIL_MS

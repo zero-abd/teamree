@@ -8,7 +8,7 @@ import { CliService, createAdministratorRunner, findShippedCli, registerCliHandl
 import { createEditorActions, registerEditorHandlers } from '../../editor'
 import { registerFileHandlers } from '../../files'
 import { createGitRunner, GitService, registerGitHandlers } from '../../git'
-import { BaseFetcher } from '../../git/baseFetch'
+import { backgroundFetchProjects, BaseFetcher } from '../../git/baseFetch'
 import { startSetupCommand } from '../../git/worktreeSetup'
 import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
 import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
@@ -187,13 +187,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   // A teammate's push moves the base ref only once fetched; the watch above never sees `refs/remotes`.
   const bases = new BaseFetcher({
     runner: createGitRunner(),
-    projects: () => {
-      const { projects, worktrees } = git.snapshot()
-      const working = new Set(worktrees.filter((worktree) => worktree.state === 'ready').map((w) => w.projectId))
-      return projects
-        .filter((project) => working.has(project.id))
-        .map((project) => ({ id: project.id, path: project.path, baseRef: project.baseRef }))
-    },
+    projects: () => backgroundFetchProjects(git.snapshot()),
     onMoved: () => workspaceEvents.emit({ type: 'worktrees' }),
     ...(options.online === undefined ? {} : { online: options.online })
   })

@@ -679,7 +679,7 @@ type WorkspaceState = {
    */
   setProjectPaths: (
     projectId: string,
-    settings: { linkedPaths?: string[]; copiedPaths?: string[]; setupCommand?: string }
+    settings: { linkedPaths?: string[]; copiedPaths?: string[]; setupCommand?: string; fetchInBackground?: boolean }
   ) => Promise<void>
   /** Sets one project's editor command, or clears it when given null. */
   setEditorCommand: (projectId: string, command: string | null) => void
@@ -2949,7 +2949,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // Taken from the answer: the runtime trims, de-duplicates and drops an empty list.
         set((state) => ({ projects: state.projects.map((row) => (row.id === project.id ? project : row)) }))
       } catch (error) {
-        failed('Could not save what new worktrees carry over')(error)
+        failed('Could not save the project setting')(error)
       }
     },
 

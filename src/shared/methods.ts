@@ -201,7 +201,9 @@ export const Params = {
      * the stored one alone; empty string clears it. Not judged at all: it runs
      * in the developer's own shell.
      */
-    setupCommand: z.string().max(MAX_SETUP_COMMAND_CHARS).optional()
+    setupCommand: z.string().max(MAX_SETUP_COMMAND_CHARS).optional(),
+    /** Omitted leaves it alone; true is stored as absent. */
+    fetchInBackground: z.boolean().optional()
   }),
 
   worktreeList: z.object({ projectId: z.string().min(1).optional() }),

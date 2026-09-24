@@ -30,6 +30,8 @@ export type Project = {
    * parsed or sanitised; runs on create only, never on restore or relaunch.
    */
   setupCommand?: string
+  /** False stops the timed and on-focus fetch of the base ref; absent is on. */
+  fetchInBackground?: boolean
 }
 
 /** A `project.clone` while it runs. */

@@ -522,7 +522,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
     'project.cloneProgress': () => null,
     'project.cancelClone': () => ({ cancelled: false }),
-    'project.setPaths': ({ projectId, linkedPaths, copiedPaths, setupCommand }) => {
+    'project.setPaths': ({ projectId, linkedPaths, copiedPaths, setupCommand, fetchInBackground }) => {
       const project = required(projects.get(projectId), 'project')
       const next: Project = { ...project }
       if (linkedPaths !== undefined) {
@@ -538,6 +538,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
         if (trimmed.length === 0) delete next.setupCommand
         else next.setupCommand = trimmed
       }
+      if (fetchInBackground === true) delete next.fetchInBackground
+      else if (fetchInBackground === false) next.fetchInBackground = false
       projects.set(next.id, next)
       announce({ type: 'projects' })
       return next

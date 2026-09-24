@@ -279,6 +279,8 @@ export class GitService {
       if (command === undefined) delete next.setupCommand
       else next.setupCommand = command
     }
+    if (params.fetchInBackground === true) delete next.fetchInBackground
+    else if (params.fetchInBackground === false) next.fetchInBackground = false
     this.#store.putProject(next)
     this.events.emit({ type: 'project.updated', project: next })
     return next

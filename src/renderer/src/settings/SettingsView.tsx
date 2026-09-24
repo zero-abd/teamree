@@ -133,6 +133,7 @@ function useProjectRows(): (project: Project) => SettingsRow[] {
     const typed = editors.some((option) => option.command === editor) ? '' : editor
     return [
       { label: 'Start new worktrees from', words: [startPoints[project.id] || project.baseRef] },
+      { label: 'Fetch in Background', words: [] },
       { label: 'Symlink into every new worktree', words: project.linkedPaths ?? [] },
       { label: 'Copy into every new worktree', words: project.copiedPaths ?? [] },
       { label: 'Setup command', words: [project.setupCommand ?? ''] },
@@ -897,10 +898,31 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
       </div>
 
       {shown.row('Start new worktrees from') ? <StartPoint project={project} /> : null}
+      {shown.row('Fetch in Background') ? <FetchInBackground project={project} /> : null}
       <CarriedPaths project={project} />
       {shown.row('Open checkouts in') ? <EditorCommand project={project} /> : null}
       {shown.row('Relay') ? <RelayBlock project={project} /> : null}
     </article>
+  )
+}
+
+/** Whether this project's base ref is fetched on a timer and on window focus. */
+function FetchInBackground({ project }: { project: Project }): React.JSX.Element {
+  const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
+  const id = `settings-fetch-${project.id}`
+  return (
+    <div className="settings-field">
+      <label className="settings-field__label" htmlFor={id}>
+        <Marked text="Fetch in Background" />
+      </label>
+      <input
+        id={id}
+        className="settings-field__check"
+        type="checkbox"
+        checked={project.fetchInBackground !== false}
+        onChange={(event) => void setProjectPaths(project.id, { fetchInBackground: event.target.checked })}
+      />
+    </div>
   )
 }
 

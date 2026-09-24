@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { BaseFetcher, classifyFetchFailure, type BaseFetchProject } from './baseFetch'
+import { BaseFetcher, backgroundFetchProjects, classifyFetchFailure, type BaseFetchProject } from './baseFetch'
+import { GitCommandError } from './errors'
 import type { GitOutput, GitRun, GitRunner } from './gitProcess'
 
-/** Answers `git remote` and `rev-parse`, and hands every fetch to `onFetch`. */
+/** Answers `git remote` and `rev-parse`, and hands every fetch to `onFetch`, which may throw. */
 function fakeRunner(onFetch: (run: GitRun) => GitOutput): { runner: GitRunner; fetches: GitRun[] } {
   const fetches: GitRun[] = []
   let sha = 1
@@ -87,6 +88,21 @@ describe('BaseFetcher', () => {
     expect(fetches).toHaveLength(2)
   })
 
+  // A credential helper waiting on a dialog nobody answers holds git open; the runner kills it at the limit.
+  it('gives every fetch a hard limit, and backs off after one that hit it as after a refused sign-in', async () => {
+    const time = clock()
+    const { runner, fetches } = fakeRunner((run) => {
+      throw new GitCommandError({ args: run.args, cwd: run.cwd, exitCode: null, stderr: '', timedOut: true })
+    })
+    const fetcher = new BaseFetcher({ runner, projects: () => [project], onMoved: () => {}, now: time.now })
+
+    await fetcher.fetchNow()
+    expect(fetches[0]?.timeoutMs).toBe(60_000)
+    time.advance(10 * 60_000)
+    await fetcher.fetchNow()
+    expect(fetches).toHaveLength(1)
+  })
+
   it('fetches nothing while offline', async () => {
     const { runner, fetches } = fakeRunner(() => ok)
     const fetcher = new BaseFetcher({ runner, projects: () => [project], onMoved: () => {}, online: () => false })
@@ -126,6 +142,22 @@ describe('BaseFetcher', () => {
     fetcher.stop()
     await fetcher.fetchNow()
     expect(fetches).toHaveLength(1)
+  })
+})
+
+describe('backgroundFetchProjects', () => {
+  it('takes projects with a ready worktree, leaving out any with background fetching turned off', () => {
+    const worktree = (id: string, projectId: string, state: 'ready' | 'creating') =>
+      ({ id, projectId, state }) as Parameters<typeof backgroundFetchProjects>[0]['worktrees'][number]
+    const picked = backgroundFetchProjects({
+      projects: [
+        { id: 'a', name: 'a', path: '/a', baseRef: 'origin/main' },
+        { id: 'b', name: 'b', path: '/b', baseRef: 'origin/main', fetchInBackground: false },
+        { id: 'c', name: 'c', path: '/c', baseRef: 'origin/main' }
+      ],
+      worktrees: [worktree('w1', 'a', 'ready'), worktree('w2', 'b', 'ready'), worktree('w3', 'c', 'creating')]
+    })
+    expect(picked).toEqual([{ id: 'a', path: '/a', baseRef: 'origin/main' }])
   })
 })
 
