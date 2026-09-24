@@ -560,13 +560,51 @@ describe('the filter', () => {
     expect(nav()).toEqual(['Panes'])
   })
 
-  // Label text only: the words in a row's value or behind it do not count.
-  it('reads labels, not values', () => {
+  // What is on screen counts; an example in a tooltip does not.
+  it('reads a row’s value, not the examples behind it', () => {
+    const view = render(<SettingsView />)
+    type('npm')
+    expect(screen.getByText('No matches')).toBeTruthy()
+
+    view.unmount()
     seed({ projects: [{ ...project, setupCommand: 'npm ci' }] })
     render(<SettingsView />)
     type('npm')
-    expect(screen.queryByLabelText('Setup command')).toBeNull()
-    expect(screen.getByText('No matches')).toBeTruthy()
+    expect(screen.getByLabelText('Setup command').hasAttribute('data-match')).toBe(true)
+    expect(screen.queryByLabelText('Copy into every new worktree')).toBeNull()
+  })
+
+  it('finds a row by the options it offers', () => {
+    seed({ editors: [{ command: 'cursor', label: 'Cursor', kind: 'editor' }] })
+    render(<SettingsView />)
+    type('sound')
+    expect(nav()).toEqual(['Notifications'])
+    expect(screen.getByLabelText('When an agent stops').hasAttribute('data-match')).toBe(true)
+
+    type('cursor')
+    expect(nav()).toEqual(['Projects', 'Panes'])
+    expect(screen.getByLabelText('Open checkouts in').hasAttribute('data-match')).toBe(true)
+    expect(screen.getByLabelText('Cursor').hasAttribute('data-match')).toBe(false)
+  })
+
+  it('finds the theme row by any theme or mode', () => {
+    seed({ appearance: { ...INITIAL.appearance, mode: 'dark' } })
+    render(<SettingsView />)
+    type('midnight')
+    expect(nav()).toEqual(['Appearance'])
+    expect(screen.getByRole('button', { name: 'Change…' }).hasAttribute('data-match')).toBe(true)
+
+    type('dark')
+    expect(nav()).toEqual(['Appearance'])
+    expect(screen.getByText('Dark', { selector: 'mark' })).toBeTruthy()
+  })
+
+  it('marks the words it matched in a label', () => {
+    render(<SettingsView />)
+    type('on sel')
+    const label = document.querySelector('label[for="settings-copy-on-select"]') as HTMLElement
+    expect(label.querySelector('mark')?.textContent).toBe('on sel')
+    expect(label.textContent).toBe('Copy on select')
   })
 
   it('keeps a whole section whose title matches', () => {
@@ -594,7 +632,8 @@ describe('the filter', () => {
     type('codex')
     expect(screen.getByLabelText('Codex')).toBeTruthy()
     expect(screen.queryByLabelText('Claude Code')).toBeNull()
-    expect(screen.queryByLabelText('Default agent')).toBeNull()
+    // It offers Codex.
+    expect(screen.getByLabelText('Default agent').hasAttribute('data-match')).toBe(true)
   })
 
   it('shows everything again once cleared', () => {
@@ -643,7 +682,6 @@ describe('projects', () => {
       expect(field.getAttribute('placeholder'), label).toBe('None')
       expect(field.getAttribute('title'), label).toContain(example)
     }
-    expect(screen.getByLabelText('Claude Code').getAttribute('placeholder')).toBe('None')
   })
 })
 
@@ -905,16 +943,39 @@ describe('the agent you always use', () => {
     expect(setDefaultAgent).toHaveBeenCalledWith('codex')
   })
 
-  it('shows the full command each agent will be launched with, verbatim', () => {
+  it('shows the full command under an agent given arguments, verbatim', () => {
     seed({ agents: [claude, codex], agentArgs: { claude: '--model opus' } })
     render(<SettingsView />)
 
     const section = screen.getByRole('heading', { name: 'Agents' }).parentElement as HTMLElement
-    // One line per field in field order; an untouched agent shows the command as it stands.
-    expect([...section.querySelectorAll('code')].map((node) => node.textContent)).toEqual([
-      'claude --model opus',
-      'codex'
-    ])
+    expect([...section.querySelectorAll('code')].map((node) => node.textContent)).toEqual(['claude --model opus'])
+  })
+
+  // `None` read as "no command" beside the command New task runs.
+  it('shows the command an untouched agent runs in its empty field, and nothing under it', () => {
+    seed({ agents: [claude, { ...codex, command: 'codex-cli' }] })
+    render(<SettingsView />)
+    expect((screen.getByLabelText('Claude Code') as HTMLInputElement).placeholder).toBe('claude')
+    expect((screen.getByLabelText('Codex') as HTMLInputElement).placeholder).toBe('codex-cli')
+    expect(screen.queryByText('None')).toBeNull()
+    const section = screen.getByRole('heading', { name: 'Agents' }).parentElement as HTMLElement
+    expect(section.querySelectorAll('code')).toHaveLength(0)
+  })
+
+  it('says Not found under an agent it has arguments for that is no longer on PATH', () => {
+    seed({ agents: [claude], agentsProbed: true, agentArgs: { codex: '--full-auto' } })
+    const view = render(<SettingsView />)
+    const field = screen.getByLabelText('Codex') as HTMLInputElement
+    expect(field.value).toBe('--full-auto')
+    const caption = screen.getByText('Not found')
+    expect(caption.className).toContain('settings-launch--missing')
+    expect(screen.queryByText('codex --full-auto')).toBeNull()
+
+    // Before the probe answers, nothing is known to be missing.
+    view.unmount()
+    seed({ agents: [claude], agentsProbed: false, agentArgs: { codex: '--full-auto' } })
+    render(<SettingsView />)
+    expect(screen.queryByLabelText('Codex')).toBeNull()
   })
 
   // The names New task uses, with the mark; the field says what it takes.
@@ -923,7 +984,6 @@ describe('the agent you always use', () => {
     render(<SettingsView />)
     for (const name of ['Claude Code', 'Codex']) {
       const field = screen.getByLabelText(name) as HTMLInputElement
-      expect(field.placeholder).toBe('None')
       expect(field.title).toBe('Extra arguments')
       const label = document.querySelector(`label[for="${field.id}"]`)
       expect(label?.querySelector('.agent-glyph')).not.toBeNull()

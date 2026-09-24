@@ -3,7 +3,7 @@
 
 import { createContext, Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { agentLaunchCommand } from '@shared/agentLaunch'
-import type { InstalledAgent, Project } from '@shared/entities'
+import type { Project } from '@shared/entities'
 import { AgentGlyph } from '../agents/glyphs'
 import { harnessName } from '../agents/harnesses'
 import { cliOutcome } from '../dialogs/cliInstallModel'
@@ -22,30 +22,157 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { InstallerButton } from '../updates/InstallerButton'
 import { installerStep } from '../updates/updateNotice'
 import { PageFrame } from '../workspace/PageFrame'
-import { activeChoice, themeById } from '@shared/theme'
+import { activeChoice, BUILT_IN_THEMES, themeById } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from './AppearanceSettings'
 import {
+  agentRows,
   cliLine,
   labelMatches,
   relayPanel,
+  rowMatches,
   SETTINGS_SECTIONS,
   updatePanel,
-  type SettingsRowLabel,
+  type AgentRow,
+  type SettingsRow,
   type SettingsSectionId as SectionId
 } from './settingsModel'
 
 /** Which rows the filter keeps: all of them under a section (or project) whose own name matched. */
-type Shown = { whole: boolean; row: (label: SettingsRowLabel) => boolean; query: string }
+type Shown = {
+  whole: boolean
+  query: string
+  row: (label: string) => boolean
+  /** True when the filter is in one of these values or options, so the control holding them is marked. */
+  hit: (words: readonly string[]) => boolean
+}
 
-const ShownContext = createContext<Shown>({ whole: true, row: () => true, query: '' })
+const ShownContext = createContext<Shown>({ whole: true, query: '', row: () => true, hit: () => false })
 
 function useShown(): Shown {
   return useContext(ShownContext)
 }
 
-function shownUnder(title: string, query: string): Shown {
+function shownUnder(title: string, query: string, rows: readonly SettingsRow[]): Shown {
   const whole = labelMatches(title, query)
-  return { whole, row: (label) => whole || labelMatches(label, query), query }
+  return {
+    whole,
+    query,
+    row: (label) => whole || rows.some((row) => row.label === label && rowMatches(row, query)),
+    hit: (words) => query.trim() !== '' && words.some((word) => word !== '' && labelMatches(word, query))
+  }
+}
+
+/** The text, with the filter's words marked where they occur. */
+function Marked({ text }: { text: string }): React.JSX.Element {
+  const wanted = useShown().query.trim().toLowerCase()
+  const at = wanted === '' ? -1 : text.toLowerCase().indexOf(wanted)
+  if (at < 0) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark className="settings-match">{text.slice(at, at + wanted.length)}</mark>
+      {text.slice(at + wanted.length)}
+    </>
+  )
+}
+
+/** For a control: the attribute that marks it when the filter matched one of its values. */
+function hitMark(shown: Shown, words: readonly string[]): { 'data-match'?: true } {
+  return shown.hit(words) ? { 'data-match': true } : {}
+}
+
+const CURSOR_STYLES: readonly { value: TerminalCursorStyle; label: string }[] = [
+  { value: 'bar', label: 'Bar' },
+  { value: 'block', label: 'Block' },
+  { value: 'underline', label: 'Underline' }
+]
+
+const NOTICE_CHOICES: readonly { value: AgentNoticePreference; label: string }[] = [
+  { value: 'off', label: 'Nothing' },
+  { value: 'notify', label: 'Notify' },
+  { value: 'sound', label: 'Notify with sound' }
+]
+
+/** Every theme and mode by name: the options behind the Theme row's Change… button. */
+const THEME_WORDS = [...BUILT_IN_THEMES.map((theme) => theme.name), ...Object.values(APPEARANCE_MODE_LABEL)]
+
+function useAgentRows(): AgentRow[] {
+  const agents = useWorkspaceStore((state) => state.agents)
+  const agentArgs = useWorkspaceStore((state) => state.agentArgs)
+  const defaultAgent = useWorkspaceStore((state) => state.defaultAgent)
+  const probed = useWorkspaceStore((state) => state.agentsProbed)
+  return agentRows(agents, agentArgs, defaultAgent, probed)
+}
+
+function useThemeValue(): string {
+  const appearance = useWorkspaceStore((state) => state.appearance)
+  const systemTone = useWorkspaceStore((state) => state.systemTone)
+  const theme = themeById(activeChoice(appearance, systemTone).themeId).name
+  return `${theme} · ${APPEARANCE_MODE_LABEL[appearance.mode ?? 'dark']}`
+}
+
+/** The editors the picker offers, and its first option's label. */
+function editorChoices(found: readonly { command: string; label: string; kind?: string }[] | null): {
+  editors: readonly { command: string; label: string }[]
+  firstFound: string
+} {
+  const editors = (found ?? []).filter((editor) => (editor.kind ?? 'editor') === 'editor')
+  return { editors, firstFound: editors[0] === undefined ? 'First found' : `First found (${editors[0].label})` }
+}
+
+/** A project's rows as the filter reads them, from the same values its controls show. */
+function useProjectRows(): (project: Project) => SettingsRow[] {
+  const startPoints = useWorkspaceStore((state) => state.startPointDefaults)
+  const editorCommands = useWorkspaceStore((state) => state.editorCommands)
+  const found = useWorkspaceStore((state) => state.editors)
+  const relays = useWorkspaceStore((state) => state.relays)
+  const { editors, firstFound } = editorChoices(found)
+  return (project) => {
+    const editor = editorCommands[project.id] ?? ''
+    // A program typed in under Other… is on screen; a picked editor's command is not.
+    const typed = editors.some((option) => option.command === editor) ? '' : editor
+    return [
+      { label: 'Start new worktrees from', words: [startPoints[project.id] || project.baseRef] },
+      { label: 'Symlink into every new worktree', words: project.linkedPaths ?? [] },
+      { label: 'Copy into every new worktree', words: project.copiedPaths ?? [] },
+      { label: 'Setup command', words: [project.setupCommand ?? ''] },
+      {
+        label: 'Open checkouts in',
+        words: [firstFound, ...editors.map((option) => option.label), 'Other…', typed]
+      },
+      { label: 'Relay', words: [relayPanel(relays[project.id]).headline] }
+    ]
+  }
+}
+
+/** Every row outside a project as the filter reads it: label, option labels and current value. */
+function useSectionRows(): Record<Exclude<SectionId, 'projects'>, SettingsRow[]> {
+  const agentArgs = useWorkspaceStore((state) => state.agentArgs)
+  const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
+  const options = useWorkspaceStore((state) => state.terminalOptions)
+  const agents = useAgentRows()
+  const themeValue = useThemeValue()
+  return {
+    agents: [
+      {
+        label: 'Default agent',
+        words: ['First found', ...agents.filter((row) => row.command !== null).map((row) => harnessName(row.kind))]
+      },
+      ...agents.map((row) => ({ label: harnessName(row.kind), words: [agentArgs[row.kind] ?? ''] }))
+    ],
+    panes: [
+      { label: 'Terminal text size', words: [`${fontSize}px`] },
+      { label: 'Font', words: [options.fontFamily] },
+      { label: 'Cursor', words: [...CURSOR_STYLES.map((style) => style.label), 'Blink'] },
+      { label: 'Option as Meta', words: [] },
+      { label: 'Copy on select', words: [] },
+      { label: 'Scrollback lines', words: [String(options.scrollback)] }
+    ],
+    notices: [{ label: 'When an agent stops', words: NOTICE_CHOICES.map((choice) => choice.label) }],
+    appearance: [{ label: 'Theme', words: [themeValue, ...THEME_WORDS] }],
+    updates: [{ label: 'Check automatically', words: [] }],
+    cli: []
+  }
 }
 
 /** A heading this close to the top of the scrolling body counts as the section in view. */
@@ -56,19 +183,16 @@ export function SettingsView(): React.JSX.Element {
   const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
   const loadCli = useWorkspaceStore((state) => state.loadCli)
   const loadUpdate = useWorkspaceStore((state) => state.loadUpdate)
-  const agents = useWorkspaceStore((state) => state.agents)
+  const agents = useAgentRows()
   const [query, setQuery] = useState('')
-  // Names that are labels too: an agent's row, and a project's block.
-  const named: Partial<Record<SectionId, readonly string[]>> = {
-    agents: agents.map((agent) => harnessName(agent.kind)),
-    projects: projects.map((project) => project.name)
-  }
+  const sectionRows = useSectionRows()
+  const projectRows = useProjectRows()
+  const rowsOf = (id: SectionId): SettingsRow[] =>
+    id === 'projects'
+      ? projects.flatMap((project) => [{ label: project.name, words: [] }, ...projectRows(project)])
+      : sectionRows[id]
   const sections = SETTINGS_SECTIONS.filter((entry) => entry.id !== 'agents' || agents.length > 0).filter(
-    (entry) =>
-      labelMatches(entry.label, query) ||
-      (entry.id === 'projects' && projects.length === 0 ? [] : [...entry.rows, ...(named[entry.id] ?? [])]).some(
-        (label) => labelMatches(label, query)
-      )
+    (entry) => labelMatches(entry.label, query) || rowsOf(entry.id).some((row) => rowMatches(row, query))
   )
 
   // Read again on open: both are facts about the world outside this window that may have moved.
@@ -137,7 +261,7 @@ export function SettingsView(): React.JSX.Element {
         <div className="settings__content">
           {sections.length === 0 ? <p className="settings-note">No matches</p> : null}
           {sections.map((entry) => (
-            <ShownContext.Provider key={entry.id} value={shownUnder(entry.label, query)}>
+            <ShownContext.Provider key={entry.id} value={shownUnder(entry.label, query, rowsOf(entry.id))}>
               <SectionBody id={entry.id} projects={projects} />
             </ShownContext.Provider>
           ))}
@@ -249,7 +373,7 @@ function CliSection(): React.JSX.Element {
   return (
     <section className="settings-section" aria-labelledby="settings-cli">
       <h2 className="settings-section__title" id="settings-cli" tabIndex={-1}>
-        CLI
+        <Marked text="CLI" />
       </h2>
       <div className="settings-group">
         <div className="settings-row">
@@ -298,7 +422,7 @@ function UpdatesSection(): React.JSX.Element {
   return (
     <section className="settings-section" aria-labelledby="settings-updates">
       <h2 className="settings-section__title" id="settings-updates" tabIndex={-1}>
-        Updates
+        <Marked text="Updates" />
       </h2>
       <div className="settings-group">
         {shown.whole ? (
@@ -336,7 +460,9 @@ function UpdatesSection(): React.JSX.Element {
               onChange={(event) => void setAutomaticUpdates(event.target.checked)}
             />
             {/* Half a minute after startup, then every six hours; a label is not the place for a schedule. */}
-            <span>Check automatically</span>
+            <span>
+              <Marked text="Check automatically" />
+            </span>
           </label>
         ) : null}
 
@@ -351,25 +477,32 @@ function UpdatesSection(): React.JSX.Element {
 function NoticesSection(): React.JSX.Element {
   const agentNotices = useWorkspaceStore((state) => state.agentNotices)
   const setAgentNotices = useWorkspaceStore((state) => state.setAgentNotices)
+  const shown = useShown()
 
   return (
     <section className="settings-section" aria-labelledby="settings-notices">
       <h2 className="settings-section__title" id="settings-notices" tabIndex={-1}>
-        Notifications
+        <Marked text="Notifications" />
       </h2>
       <div className="settings-group">
         <div className="settings-field">
           <label className="settings-field__label" htmlFor="settings-agent-notices">
-            When an agent stops
+            <Marked text="When an agent stops" />
           </label>
           <Select
             id="settings-agent-notices"
             value={agentNotices}
             onChange={(event) => setAgentNotices(event.target.value as AgentNoticePreference)}
+            {...hitMark(
+              shown,
+              NOTICE_CHOICES.map((choice) => choice.label)
+            )}
           >
-            <option value="off">Nothing</option>
-            <option value="notify">Notify</option>
-            <option value="sound">Notify with sound</option>
+            {NOTICE_CHOICES.map((choice) => (
+              <option key={choice.value} value={choice.value}>
+                {choice.label}
+              </option>
+            ))}
           </Select>
         </div>
       </div>
@@ -393,13 +526,13 @@ function PanesSection(): React.JSX.Element {
   return (
     <section className="settings-section" aria-labelledby="settings-panes">
       <h2 className="settings-section__title" id="settings-panes" tabIndex={-1}>
-        Panes
+        <Marked text="Panes" />
       </h2>
       <div className="settings-group">
         {shown.row('Terminal text size') ? (
           <div className="settings-field">
             <label className="settings-field__label" htmlFor="settings-font-size">
-              Terminal text size
+              <Marked text="Terminal text size" />
             </label>
             <div className="settings-size">
               <input
@@ -414,7 +547,7 @@ function PanesSection(): React.JSX.Element {
               />
               {/* A slider with no scale cannot say how big it is now. */}
               <output className="settings-size__value" htmlFor="settings-font-size">
-                {terminalFontSize}px
+                <Marked text={`${terminalFontSize}px`} />
               </output>
             </div>
           </div>
@@ -423,9 +556,15 @@ function PanesSection(): React.JSX.Element {
         {shown.row('Font') ? (
           <div className="settings-field">
             <label className="settings-field__label" htmlFor="settings-font">
-              Font
+              <Marked text="Font" />
             </label>
-            <input id="settings-font" className="settings-field__input" type="text" {...font} />
+            <input
+              id="settings-font"
+              className="settings-field__input"
+              type="text"
+              {...font}
+              {...hitMark(shown, [options.fontFamily])}
+            />
             {/* The draft, not the stored value: the point is to see a face before keeping it. */}
             <div
               className="settings-font-preview"
@@ -440,17 +579,23 @@ function PanesSection(): React.JSX.Element {
         {shown.row('Cursor') ? (
           <div className="settings-field">
             <label className="settings-field__label" htmlFor="settings-cursor">
-              Cursor
+              <Marked text="Cursor" />
             </label>
             <div className="settings-field__row">
               <Select
                 id="settings-cursor"
                 value={options.cursorStyle}
                 onChange={(event) => setOptions({ cursorStyle: event.target.value as TerminalCursorStyle })}
+                {...hitMark(
+                  shown,
+                  CURSOR_STYLES.map((style) => style.label)
+                )}
               >
-                <option value="bar">Bar</option>
-                <option value="block">Block</option>
-                <option value="underline">Underline</option>
+                {CURSOR_STYLES.map((style) => (
+                  <option key={style.value} value={style.value}>
+                    {style.label}
+                  </option>
+                ))}
               </Select>
               <label className="settings-check">
                 <input
@@ -458,7 +603,9 @@ function PanesSection(): React.JSX.Element {
                   checked={options.cursorBlink}
                   onChange={(event) => setOptions({ cursorBlink: event.target.checked })}
                 />
-                <span>Blink</span>
+                <span>
+                  <Marked text="Blink" />
+                </span>
               </label>
             </div>
           </div>
@@ -467,7 +614,7 @@ function PanesSection(): React.JSX.Element {
         {shown.row('Option as Meta') ? (
           <div className="settings-field">
             <label className="settings-field__label" htmlFor="settings-option-meta">
-              Option as Meta
+              <Marked text="Option as Meta" />
             </label>
             <input
               id="settings-option-meta"
@@ -482,7 +629,7 @@ function PanesSection(): React.JSX.Element {
         {shown.row('Copy on select') ? (
           <div className="settings-field">
             <label className="settings-field__label" htmlFor="settings-copy-on-select">
-              Copy on select
+              <Marked text="Copy on select" />
             </label>
             <input
               id="settings-copy-on-select"
@@ -497,7 +644,7 @@ function PanesSection(): React.JSX.Element {
         {shown.row('Scrollback lines') ? (
           <div className="settings-field">
             <label className="settings-field__label" htmlFor="settings-scrollback">
-              Scrollback lines
+              <Marked text="Scrollback lines" />
             </label>
             <input
               id="settings-scrollback"
@@ -507,6 +654,7 @@ function PanesSection(): React.JSX.Element {
               max={TERMINAL_SCROLLBACK_MAX}
               step={1000}
               {...scrollback}
+              {...hitMark(shown, [String(options.scrollback)])}
             />
           </div>
         ) : null}
@@ -550,32 +698,35 @@ function useDraft(
 }
 
 /**
- * Which agent you always use and what you pass it; per machine, shown only when the probe found one.
+ * Which agent you always use and what you pass it; per machine, shown once the probe found one.
  * Nothing is seeded: no autonomy flag is pre-applied by default.
  */
 function AgentsSection(): React.JSX.Element | null {
-  const agents = useWorkspaceStore((state) => state.agents)
+  const rows = useAgentRows()
+  const agents = rows.filter((row) => row.command !== null)
   const defaultAgent = useWorkspaceStore((state) => state.defaultAgent)
   const setDefaultAgent = useWorkspaceStore((state) => state.setDefaultAgent)
   const shown = useShown()
 
-  if (agents.length === 0) return null
+  if (rows.length === 0) return null
+  const choices = ['First found', ...agents.map((agent) => harnessName(agent.kind))]
 
   return (
     <section className="settings-section" aria-labelledby="settings-agents">
       <h2 className="settings-section__title" id="settings-agents" tabIndex={-1}>
-        Agents
+        <Marked text="Agents" />
       </h2>
       <div className="settings-group">
         {shown.row('Default agent') ? (
           <div className="settings-field">
             <label className="settings-field__label" htmlFor="settings-default-agent">
-              Default agent
+              <Marked text="Default agent" />
             </label>
             <Select
               id="settings-default-agent"
               value={defaultAgent}
               onChange={(event) => setDefaultAgent(event.target.value)}
+              {...hitMark(shown, choices)}
             >
               {/* No preference is the rule that predates the preference, named after what it does. */}
               <option value={NO_DEFAULT_AGENT}>First found</option>
@@ -588,10 +739,10 @@ function AgentsSection(): React.JSX.Element | null {
           </div>
         ) : null}
 
-        {agents
-          .filter((agent) => shown.whole || labelMatches(harnessName(agent.kind), shown.query))
-          .map((agent) => (
-            <AgentArguments key={agent.kind} agent={agent} />
+        {rows
+          .filter((row) => shown.row(harnessName(row.kind)))
+          .map((row) => (
+            <AgentArguments key={row.kind} agent={row} />
           ))}
       </div>
     </section>
@@ -599,10 +750,11 @@ function AgentsSection(): React.JSX.Element | null {
 }
 
 /**
- * One agent's launch arguments, with the command `@shared/agentLaunch` builds from them shown underneath.
- * The runtime's session selector is left out: it is not what this field controls.
+ * One agent's launch arguments: empty, the field shows the bare command; given some, the line
+ * `@shared/agentLaunch` builds sits underneath. The runtime's session selector is left out.
  */
-function AgentArguments({ agent }: { agent: InstalledAgent }): React.JSX.Element {
+function AgentArguments({ agent }: { agent: AgentRow }): React.JSX.Element {
+  const shown = useShown()
   const stored = useWorkspaceStore((state) => state.agentArgs[agent.kind] ?? '')
   const setAgentArgs = useWorkspaceStore((state) => state.setAgentArgs)
   const [draft, setDraft] = useState(stored)
@@ -624,14 +776,14 @@ function AgentArguments({ agent }: { agent: InstalledAgent }): React.JSX.Element
     <div className="settings-field">
       <label className="settings-field__label settings-agent" htmlFor={id}>
         <AgentGlyph kind={agent.kind} decorative />
-        {harnessName(agent.kind)}
+        <Marked text={harnessName(agent.kind)} />
       </label>
       <input
         id={id}
-        className="settings-field__input"
+        className="settings-field__input settings-field__input--command"
         type="text"
         value={draft}
-        placeholder="None"
+        placeholder={agent.command ?? ''}
         title="Extra arguments"
         autoComplete="off"
         spellCheck={false}
@@ -643,31 +795,45 @@ function AgentArguments({ agent }: { agent: InstalledAgent }): React.JSX.Element
             commit()
           }
         }}
+        {...hitMark(shown, [stored])}
       />
-      <code className="settings-launch">{agentLaunchCommand(agent.command, draft)}</code>
+      {agent.command === null ? (
+        <p className="settings-launch settings-launch--missing">Not found</p>
+      ) : draft.trim() === '' ? null : (
+        <code className="settings-launch">
+          <Marked text={agentLaunchCommand(agent.command, draft)} />
+        </code>
+      )}
     </div>
   )
 }
 
 /** The theme in effect; changing it happens in the sheet beside the panes, where it can be seen. */
 function AppearanceSection(): React.JSX.Element {
-  const appearance = useWorkspaceStore((state) => state.appearance)
-  const systemTone = useWorkspaceStore((state) => state.systemTone)
   const showAppearance = useWorkspaceStore((state) => state.showAppearance)
-  const theme = themeById(activeChoice(appearance, systemTone).themeId).name
-  const mode = APPEARANCE_MODE_LABEL[appearance.mode ?? 'dark']
+  const value = useThemeValue()
+  const shown = useShown()
 
   return (
     <section className="settings-section" aria-labelledby="settings-appearance">
       <h2 className="settings-section__title" id="settings-appearance" tabIndex={-1}>
-        Appearance
+        <Marked text="Appearance" />
       </h2>
       <div className="settings-group">
         <div className="settings-field">
-          <span className="settings-field__label">Theme</span>
+          <span className="settings-field__label">
+            <Marked text="Theme" />
+          </span>
           <div className="settings-field__row">
-            <p className="settings-value">{`${theme} · ${mode}`}</p>
-            <button type="button" className="button button--small" onClick={() => showAppearance(true)}>
+            <p className="settings-value">
+              <Marked text={value} />
+            </p>
+            <button
+              type="button"
+              className="button button--small"
+              onClick={() => showAppearance(true)}
+              {...hitMark(shown, THEME_WORDS)}
+            >
               Change…
             </button>
           </div>
@@ -679,12 +845,15 @@ function AppearanceSection(): React.JSX.Element {
 
 function ProjectsSection({ projects }: { projects: readonly Project[] }): React.JSX.Element {
   const shown = useShown()
-  const named = (project: Project): Shown => (shown.whole ? shown : shownUnder(project.name, shown.query))
-  const rows = SETTINGS_SECTIONS.find((entry) => entry.id === 'projects')?.rows ?? []
+  const projectRows = useProjectRows()
+  const named = (project: Project): Shown => {
+    const own = shownUnder(project.name, shown.query, projectRows(project))
+    return shown.whole ? { ...own, whole: true, row: () => true } : own
+  }
   return (
     <section className="settings-section" aria-labelledby="settings-projects">
       <h2 className="settings-section__title" id="settings-projects" tabIndex={-1}>
-        Projects
+        <Marked text="Projects" />
       </h2>
       {projects.length === 0 ? (
         <div className="settings-group">
@@ -692,7 +861,7 @@ function ProjectsSection({ projects }: { projects: readonly Project[] }): React.
         </div>
       ) : (
         projects
-          .filter((project) => named(project).whole || rows.some((label) => shown.row(label)))
+          .filter((project) => named(project).whole || projectRows(project).some((row) => rowMatches(row, shown.query)))
           .map((project) => (
             <ShownContext.Provider key={project.id} value={named(project)}>
               <ProjectBlock project={project} />
@@ -711,7 +880,9 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
     <article className="settings-group settings-project">
       <div className="settings-row">
         <div className="settings-project__identity">
-          <h3 className="settings-project__name">{project.name}</h3>
+          <h3 className="settings-project__name">
+            <Marked text={project.name} />
+          </h3>
           <p className="settings-project__path">
             <BreakAtSlashes text={project.path} />
           </p>
@@ -753,7 +924,9 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
   return (
     <div className="settings-field">
       {draft === null ? (
-        <span className="settings-field__label">Start new worktrees from</span>
+        <span className="settings-field__label">
+          <Marked text="Start new worktrees from" />
+        </span>
       ) : (
         <label className="settings-field__label" htmlFor={id}>
           Start new worktrees from
@@ -762,7 +935,9 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
       <div className="settings-field__row">
         {draft === null ? (
           <>
-            <code className="settings-value settings-value--mono">{stored || project.baseRef}</code>
+            <code className="settings-value settings-value--mono">
+              <Marked text={stored || project.baseRef} />
+            </code>
             <button type="button" className="button button--small" onClick={() => setDraft(stored || project.baseRef)}>
               Change
             </button>
@@ -839,6 +1014,7 @@ function CarriedPaths({ project }: { project: Project }): React.JSX.Element {
 /** The one setup command a new worktree runs, stored and typed into the pane verbatim. */
 function SetupCommand({ project }: { project: Project }): React.JSX.Element {
   const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
+  const shown = useShown()
   const stored = project.setupCommand ?? ''
   const [draft, setDraft] = useState(stored)
 
@@ -857,7 +1033,7 @@ function SetupCommand({ project }: { project: Project }): React.JSX.Element {
   return (
     <div className="settings-field">
       <label className="settings-field__label" htmlFor={id}>
-        Setup command
+        <Marked text="Setup command" />
       </label>
       <input
         id={id}
@@ -866,6 +1042,7 @@ function SetupCommand({ project }: { project: Project }): React.JSX.Element {
         value={draft}
         placeholder="None"
         title="e.g. npm ci"
+        {...hitMark(shown, [stored])}
         autoComplete="off"
         spellCheck={false}
         onChange={(event) => setDraft(event.target.value)}
@@ -900,6 +1077,7 @@ function PathList({
 }): React.JSX.Element {
   const stored = (paths ?? []).join('\n')
   const [draft, setDraft] = useState(stored)
+  const shown = useShown()
 
   useEffect(() => {
     setDraft(stored)
@@ -919,7 +1097,7 @@ function PathList({
   return (
     <div className="settings-field">
       <label className="settings-field__label" htmlFor={fieldId}>
-        {label}
+        <Marked text={label} />
       </label>
       <textarea
         id={fieldId}
@@ -928,6 +1106,7 @@ function PathList({
         value={draft}
         placeholder="None"
         title={`One per line, e.g. ${examples}`}
+        {...hitMark(shown, paths ?? [])}
         autoComplete="off"
         spellCheck={false}
         onChange={(event) => setDraft(event.target.value)}
@@ -950,12 +1129,13 @@ function EditorCommand({ project }: { project: Project }): React.JSX.Element {
   const setEditorCommand = useWorkspaceStore((state) => state.setEditorCommand)
   const [draft, setDraft] = useState(stored)
   const [typing, setTyping] = useState(false)
+  const shown = useShown()
 
   useEffect(() => {
     setDraft(stored)
   }, [stored])
 
-  const editors = (found ?? []).filter((editor) => (editor.kind ?? 'editor') === 'editor')
+  const { editors, firstFound } = editorChoices(found)
   const named = stored.length > 0 && !editors.some((editor) => editor.command === stored)
   const other = typing || named
 
@@ -970,7 +1150,7 @@ function EditorCommand({ project }: { project: Project }): React.JSX.Element {
   return (
     <div className="settings-field">
       <label className="settings-field__label" htmlFor={id}>
-        Open checkouts in
+        <Marked text="Open checkouts in" />
       </label>
       <div className="settings-field__row">
         <Select
@@ -982,8 +1162,9 @@ function EditorCommand({ project }: { project: Project }): React.JSX.Element {
             if (value === OTHER_EDITOR) setDraft(named ? stored : '')
             else setEditorCommand(project.id, value.length === 0 ? null : value)
           }}
+          {...hitMark(shown, [firstFound, ...editors.map((editor) => editor.label), 'Other…'])}
         >
-          <option value="">{editors[0] === undefined ? 'First found' : `First found (${editors[0].label})`}</option>
+          <option value="">{firstFound}</option>
           {editors.map((editor) => (
             <option key={editor.command} value={editor.command}>
               {editor.label}
@@ -998,6 +1179,7 @@ function EditorCommand({ project }: { project: Project }): React.JSX.Element {
             aria-label="Editor command"
             value={draft}
             placeholder="subl"
+            {...hitMark(shown, [stored])}
             autoComplete="off"
             spellCheck={false}
             onChange={(event) => setDraft(event.target.value)}
@@ -1032,8 +1214,12 @@ function RelayBlock({ project }: { project: Project }): React.JSX.Element {
 
   return (
     <div className="settings-field settings-relay">
-      <h4 className="settings-field__label">Relay</h4>
-      <p className="settings-fact">{panel.headline}</p>
+      <h4 className="settings-field__label">
+        <Marked text="Relay" />
+      </h4>
+      <p className="settings-fact">
+        <Marked text={panel.headline} />
+      </p>
       {panel.detail ? <p className="settings-note">{panel.detail}</p> : null}
       {panel.override ? <p className="settings-warning">{panel.override}</p> : null}
       <div className="settings-actions">

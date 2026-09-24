@@ -91,8 +91,8 @@ describe('the theme cards', () => {
 describe('the two choices worth making without opening anything', () => {
   it('sets an accent from the row of them', () => {
     render(<AppearanceSettings />)
-    fireEvent.click(screen.getByRole('button', { name: 'Amber' }))
-    expect(lastChange().accent).toBe('#e0a13e')
+    fireEvent.click(screen.getByRole('button', { name: 'Pink' }))
+    expect(lastChange().accent).toBe('#e070c0')
   })
 
   it('names the brand accent Violet, and marks it chosen on a new installation', () => {
@@ -101,19 +101,25 @@ describe('the two choices worth making without opening anything', () => {
     expect(screen.queryByRole('button', { name: 'Indigo' })).toBeNull()
   })
 
+  // Amber is an agent asking, green done, red failed.
+  it('offers no accent in a state colour', () => {
+    render(<AppearanceSettings />)
+    for (const name of ['Amber', 'Lime', 'Rose']) expect(screen.queryByRole('button', { name })).toBeNull()
+  })
+
   // Drawn in the current accent it looked like a second Violet.
   it('draws the custom well as a + until a custom accent is set', () => {
     const custom = (): HTMLElement => screen.getByLabelText('Custom accent').parentElement as HTMLElement
     const view = render(<AppearanceSettings />)
     expect(custom().textContent).toBe('+')
-    fireEvent.change(screen.getByLabelText('Custom accent'), { target: { value: '#12ab34' } })
-    expect(lastChange().accent).toBe('#12ab34')
+    fireEvent.change(screen.getByLabelText('Custom accent'), { target: { value: '#12a0ff' } })
+    expect(lastChange().accent).toBe('#12a0ff')
 
     view.unmount()
-    seed({ ...DEFAULT_APPEARANCE, accent: '#12ab34' })
+    seed({ ...DEFAULT_APPEARANCE, accent: '#12a0ff' })
     render(<AppearanceSettings />)
     expect(custom().textContent).toBe('')
-    expect((screen.getByLabelText('Custom accent') as HTMLInputElement).value).toBe('#12ab34')
+    expect((screen.getByLabelText('Custom accent') as HTMLInputElement).value).toBe('#12a0ff')
   })
 
   it('sets a ground, which is what every surface above it is rebuilt from', () => {
@@ -197,8 +203,8 @@ describe('light, dark, or whatever the Mac is', () => {
   it('edits the light slot while light, and leaves the dark one alone', () => {
     seed({ ...DEFAULT_APPEARANCE, mode: 'light', themeId: 'graphite' })
     render(<AppearanceSettings />)
-    fireEvent.click(screen.getByRole('button', { name: 'Amber' }))
-    expect(lastChange()).toMatchObject({ themeId: 'graphite', accent: null, light: { accent: '#e0a13e' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Pink' }))
+    expect(lastChange()).toMatchObject({ themeId: 'graphite', accent: null, light: { accent: '#e070c0' } })
   })
 })
 

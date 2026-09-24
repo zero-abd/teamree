@@ -72,7 +72,9 @@
   border: 0;
 }
 
+/* A rendered legend sits outside the fieldset's flex box, so the section's gap never reaches it. */
 .appearance__legend {
+  margin-bottom: var(--s2);
   padding: 0;
   color: var(--fg-muted);
   font-size: var(--text-xs);
@@ -213,6 +215,11 @@
   display: flex;
   align-items: center;
   gap: var(--s2);
+}
+
+/* Room for the selection ring (4px) above and below the swatches. */
+.appearance__accents {
+  padding-block: 4px;
 }
 
 .appearance__swatch {
