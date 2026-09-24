@@ -365,6 +365,7 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'open-appearance': 'appearance theme colour color dark black contrast accent ground swatch',
   'add-project': 'add open project repository repo folder directory',
   'clone-repository': 'clone project repository repo git url remote github',
+  'review-changes': 'review all changes diff viewed comment agent files',
   'commit-changes': 'commit changes diff git stage staged message files review',
   'push-worktree': 'push send remote origin upload publish branch ahead',
   'open-help': 'help shortcuts keys keyboard worktree cli docs how what',

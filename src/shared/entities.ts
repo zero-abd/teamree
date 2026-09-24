@@ -542,6 +542,8 @@ export type PaneNode =
       commit?: string
       /** A file leaf comparing its worktree with this sibling worktree, read-only; `path` holds the tab's title. */
       compare?: string
+      /** A file leaf showing every change of its worktree as one patch, read-only; `path` holds the tab's title. */
+      review?: true
     }
   | {
       kind: 'split'

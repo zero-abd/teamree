@@ -3,6 +3,9 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { harnessName } from '../../agents/harnesses'
+import { ReviewBar } from '../../review/ReviewBar'
+import { isViewedRow } from '../../review/reviewModel'
+import { useReviewStore } from '../../review/reviewStore'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { openInBrowser } from '../../shell/openInBrowser'
 import { commitScope, useWorkspaceStore, type PushState } from '../../state/workspaceStore'
@@ -50,6 +53,7 @@ export function ChangesTab(): React.JSX.Element | null {
   const shownCommit = useWorkspaceStore((state) =>
     worktreeId ? shownCommitIn(state.layouts[worktreeId]?.root ?? null) : null
   )
+  const viewed = useReviewStore((state) => (worktreeId ? state.viewed[worktreeId] : undefined))
   const [menu, setMenu] = useState<{ path: string; at: RowMenuAnchor } | null>(null)
   // Per worktree: the panel is not remounted on tab change, and a message could land on the wrong diff.
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -210,6 +214,7 @@ export function ChangesTab(): React.JSX.Element | null {
       {push?.phase === 'failed' ? (
         <PushFailed error={push.error} detail={push.detail} retry={() => void pushActiveWorktree()} busy={pushing} />
       ) : null}
+      <ReviewBar worktreeId={worktreeId} changed={rows.length > 0} />
       {changes === undefined ? (
         <p className="changes__empty">Reading…</p>
       ) : rows.length === 0 ? (
@@ -243,7 +248,13 @@ export function ChangesTab(): React.JSX.Element | null {
                 aria-current={change.path === selectedPath ? 'true' : undefined}
                 title={change.from === undefined ? change.path : `${change.from} → ${change.path}`}
                 onClick={() => selectChange(change.path)}
+                onDoubleClick={() => selectChange(change.path, true)}
                 onKeyDown={(event) => {
+                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                    event.preventDefault()
+                    selectChange(change.path, true)
+                    return
+                  }
                   if (event.key === 'Escape' && zoomed) {
                     event.preventDefault()
                     toggleExpandedPane()
@@ -271,6 +282,11 @@ export function ChangesTab(): React.JSX.Element | null {
                   <span className="change__dir">{directoryOf(change.path)}</span>
                   <span className="change__name">{fileNameOf(change.path)}</span>
                 </span>
+                {isViewedRow(viewed?.[change.path], change) ? (
+                  <span className="change__viewed" role="img" aria-label="Viewed" title="Viewed">
+                    ✓
+                  </span>
+                ) : null}
                 {change.staged ? (
                   <span className="change__where" title={change.unstaged ? 'Staged, and edited since' : 'Staged'}>
                     {change.unstaged ? 'both' : 'staged'}

@@ -3,6 +3,8 @@ import type { PaneNode } from './entities'
 import {
   commitLeaf,
   compareLeaf,
+  reviewLeaf,
+  isReviewLeaf,
   fileLeaf,
   fileLeavesIn,
   filePaneName,
@@ -67,6 +69,15 @@ describe('file leaves', () => {
     expect(isCommitLeaf(compare)).toBe(false)
     expect([compare, commit, file].map(isWorktreeFileLeaf)).toEqual([false, false, true])
     expect(fileTabName(compare)).toBe('claude vs codex/2')
+  })
+
+  it('keeps a review as a file-column tab named by its title, apart from files', () => {
+    const review = reviewLeaf('file:r', 'Review')
+    expect(isFileLeaf(review)).toBe(true)
+    expect(isReviewLeaf(review)).toBe(true)
+    expect(isReviewLeaf(fileLeaf('file:f', 'src/math.ts'))).toBe(false)
+    expect(isWorktreeFileLeaf(review)).toBe(false)
+    expect(fileTabName(review)).toBe('Review')
   })
 
   it('prefixes the id and names the pane after the file', () => {

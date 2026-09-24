@@ -362,6 +362,20 @@ describe('what teamree put in a checkout is not what the developer did there', (
     expect(diff.patch).not.toContain('node_modules')
     expect(diff.patch).not.toContain('.env')
   })
+
+  it('reads staged and unstaged work as one patch against HEAD when asked for head', async () => {
+    const { repo, service, worktree } = await prepared()
+    await repo.write('src/index.ts', 'export const answer = 43\n', worktree.path)
+    await repo.git(['add', 'src/index.ts'], worktree.path)
+    await repo.write('notes.md', '# scratch\n', worktree.path)
+
+    const working = await service.worktreeDiff({ worktreeId: worktree.id })
+    const head = await service.worktreeDiff({ worktreeId: worktree.id, head: true })
+
+    expect(working.patch).not.toContain('+export const answer = 43')
+    expect(head.patch).toContain('+export const answer = 43')
+    expect(head.patch).toContain('+# scratch')
+  })
 })
 
 describe('isPreparedPath', () => {

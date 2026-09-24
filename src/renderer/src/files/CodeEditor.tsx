@@ -10,6 +10,8 @@ import {
   drawSelection,
   dropCursor,
   EditorView,
+  gutter,
+  GutterMarker,
   highlightActiveLine,
   highlightActiveLineGutter,
   highlightSpecialChars,
@@ -42,7 +44,20 @@ export type CodeEditorProps = {
   onDirtyChange: (dirty: boolean) => void
   /** Every change to the document. */
   onEdit: () => void
+  /** A comment asked for on `lines`, the first being line `from` (from 1): the gutter's `+`, or ⌘⇧A. */
+  onComment?: (from: number, lines: string[]) => void
 }
+
+class PlusMarker extends GutterMarker {
+  override toDOM(): Node {
+    const plus = document.createElement('span')
+    plus.textContent = '+'
+    plus.setAttribute('aria-hidden', 'true')
+    return plus
+  }
+}
+
+const PLUS = new PlusMarker()
 
 export function CodeEditor({
   ref,
@@ -52,14 +67,29 @@ export function CodeEditor({
   lineEnding,
   focused,
   onDirtyChange,
-  onEdit
+  onEdit,
+  onComment
 }: CodeEditorProps): React.JSX.Element {
   const host = useRef<HTMLDivElement | null>(null)
   const view = useRef<EditorView | null>(null)
   const saved = useRef<Text | null>(null)
   const dirty = useRef(false)
-  const callbacks = useRef({ onDirtyChange, onEdit })
-  callbacks.current = { onDirtyChange, onEdit }
+  const callbacks = useRef({ onDirtyChange, onEdit, onComment })
+  callbacks.current = { onDirtyChange, onEdit, onComment }
+  const comment = (editor: EditorView, at?: number): boolean => {
+    const ask = callbacks.current.onComment
+    if (ask === undefined) return false
+    const { doc, selection } = editor.state
+    const picked = selection.main
+    // The selection's lines when the `+` is inside them, else the one line it is on.
+    const within = at === undefined || (at >= doc.lineAt(picked.from).from && at <= picked.to)
+    const first = doc.lineAt(within ? picked.from : (at ?? 0)).number
+    const last = doc.lineAt(within ? picked.to : (at ?? 0)).number
+    const lines: string[] = []
+    for (let number = first; number <= last; number += 1) lines.push(doc.line(number).text)
+    ask(first, lines)
+    return true
+  }
 
   const report = (state: EditorState): void => {
     const next = saved.current !== null && !state.doc.eq(saved.current)
@@ -72,10 +102,18 @@ export function CodeEditor({
   useEffect(() => {
     if (host.current === null) return
     const language = new Compartment()
+    const commentable = callbacks.current.onComment !== undefined
+    const commentGutter = gutter({
+      class: 'cm-commentGutter',
+      lineMarker: () => PLUS,
+      initialSpacer: () => PLUS,
+      domEventHandlers: { mousedown: (editor, line) => comment(editor, line.from) }
+    })
     const state = EditorState.create({
       doc: draftText ?? savedText,
       extensions: [
         EditorState.lineSeparator.of(lineEnding),
+        commentable ? commentGutter : [],
         lineNumbers(),
         highlightActiveLineGutter(),
         foldGutter(),
@@ -93,6 +131,7 @@ export function CodeEditor({
         search({ top: true }),
         language.of([]),
         codeTheme,
+        commentable ? keymap.of([{ key: 'Mod-Shift-a', run: (editor) => comment(editor) }]) : [],
         keymap.of([...searchKeymap, ...historyKeymap, ...foldKeymap, ...defaultKeymap, indentWithTab]),
         EditorView.updateListener.of((update) => {
           if (!update.docChanged) return

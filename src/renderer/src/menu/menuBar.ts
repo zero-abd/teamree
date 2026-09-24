@@ -86,6 +86,7 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   // now the two things the menu bar could not reach at all. Under File rather
   // than in a menu of their own: File is already where this app keeps the
   // commands that act on the checkout in front of you.
+  'review-changes': { section: 'file' },
   'commit-changes': { section: 'file' },
   'push-worktree': { section: 'file' },
 

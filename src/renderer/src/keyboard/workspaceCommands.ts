@@ -67,6 +67,7 @@ export type CommandActions = {
   chooseProjectFolder: () => Promise<void>
   showRightPanelTab: (tab: RightPanelTab) => void
   pushActiveWorktree: () => Promise<void>
+  openReview: (worktreeId: string) => void
   setTerminalFontSize: (size: number) => void
 }
 
@@ -214,6 +215,7 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
     case 'next-worktree':
       // Two rows in sidebar order; with one the walk lands where it started.
       return unless(worktreeOrder(state.projects, state.worktrees).length >= 2, 'one worktree')
+    case 'review-changes':
     case 'commit-changes':
       // The same count as the header's Changes chip.
       return unless(changedCount(activeStatus(state)) > 0, 'no changes')
@@ -361,6 +363,9 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       break
     case 'open-settings':
       store.toggleSettings()
+      break
+    case 'review-changes':
+      if (store.activeWorktreeId !== null) store.openReview(store.activeWorktreeId)
       break
     case 'commit-changes':
       // Shows rather than toggles: somebody asking to commit meant to commit.

@@ -1,0 +1,231 @@
+/* Review All, the viewed boxes, and the comment written under picked lines. */
+
+/* In a review every file's header sticks, and each hunk's sticks under it. */
+.patch--review .patch__fileHead {
+  top: 0;
+  z-index: 2;
+  box-sizing: border-box;
+  height: 30px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+}
+
+.patch--review .patch__hunkHead {
+  top: 30px;
+}
+
+.patch__viewed {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  margin-inline-start: auto;
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.patch__file:not([open]) .patch__fileName {
+  color: var(--fg-secondary);
+}
+
+.review__head {
+  position: sticky;
+  left: 0;
+  width: 100cqi;
+  box-sizing: border-box;
+  padding: var(--s4) var(--s4) var(--s3);
+  font-family: var(--font-ui);
+}
+
+.review__task {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--fg);
+  font-size: var(--text-base);
+  white-space: pre-wrap;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.review__said {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: var(--s2) 0 0;
+  overflow: hidden;
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.review__said > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The gutter's `+`, on the row under the pointer; the column is the line numbers' own. */
+.patch__row {
+  position: relative;
+}
+
+.patch__plus {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  z-index: 1;
+  width: 16px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: var(--accent);
+  color: var(--bg-window);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.patch__row:hover .patch__plus,
+.patch__plus:focus-visible {
+  opacity: 1;
+}
+
+.patch__row--picked {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.patch__row--picked .patch__num {
+  color: var(--fg);
+}
+
+.comment {
+  position: sticky;
+  left: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  width: 100cqi;
+  box-sizing: border-box;
+  padding: var(--s2) var(--s4);
+  border-block: 1px solid var(--line);
+  background: var(--bg-raised);
+  font-family: var(--font-ui);
+  white-space: normal;
+}
+
+.comment > .button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.comment__ref {
+  flex: none;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.comment__field {
+  flex: 1 1 180px;
+  height: 24px;
+  padding: 0 var(--s2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.comment__field:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.comment__failed {
+  color: var(--danger);
+  font-size: var(--text-xs);
+}
+
+.comment__agent {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+}
+
+.comment__agent select {
+  height: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-xs);
+}
+
+.comment > .agent-glyph {
+  color: var(--fg-secondary);
+}
+
+/* The Changes panel's review line, under its header. */
+.changes__review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s4);
+}
+
+.changes__clear {
+  padding: 0 var(--s1);
+  border: 0;
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.changes__clear:hover {
+  color: var(--fg);
+}
+
+.changes__queued {
+  padding: 0 var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+}
+
+.change__viewed {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* Under a file's code: the composer for the lines its gutter's `+` or ⌘⇧A picked. */
+.file__comment {
+  flex: none;
+}
+
+.file__comment .comment {
+  position: static;
+  width: auto;
+  border-bottom: 0;
+}
+
+.cm-commentGutter .cm-gutterElement {
+  padding: 0 2px;
+  color: var(--accent-bright);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.cm-commentGutter .cm-gutterElement:hover {
+  opacity: 1;
+}

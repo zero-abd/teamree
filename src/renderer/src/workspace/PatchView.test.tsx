@@ -175,7 +175,9 @@ describe('the patch in a file pane', () => {
     await mountDiff()
 
     const header = document.querySelector('.patch__hunkAt')
-    expect(header?.textContent).toBe('@@ -210,6 +210,7 @@ export function rank(rows: Row[]): Row[] {')
+    // The function it is in reads; git's own line is the hover.
+    expect(header?.textContent).toBe('export function rank(…)')
+    expect(header?.getAttribute('title')).toBe('@@ -210,6 +210,7 @@ export function rank(rows: Row[]): Row[] {')
     expect(header?.querySelector('.patch__num')).toBeNull()
   })
 
@@ -372,7 +374,7 @@ describe('a big patch', () => {
     render(<PatchView patch={addedFile('src/big.ts', 14278)} truncated={false} layout="inline" />)
 
     expect(document.querySelectorAll('.patch__row')).toHaveLength(0)
-    expect(document.querySelector('.patch__hunkAt')?.textContent).toBe('@@ -0,0 +1,14278 @@')
+    expect(document.querySelector('.patch__hunkAt')?.textContent).toBe('Lines 1–14278')
     const { default: userEvent } = await import('@testing-library/user-event')
     await userEvent.click(screen.getByRole('button', { name: 'Show 14,278 lines' }))
 

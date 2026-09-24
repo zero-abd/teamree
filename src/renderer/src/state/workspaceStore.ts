@@ -50,7 +50,9 @@ import {
   isFilePaneId,
   isWorktreeFileLeaf,
   isMarkdownPath,
+  isReviewLeaf,
   newFilePaneId,
+  reviewLeaf,
   shownTabId
 } from '@shared/filePane'
 import { closePaneWarning } from '../dialogs/closePaneModel'
@@ -212,6 +214,9 @@ export type PushState =
 
 /** The find bar belongs to the focused pane. `token` changes on every press, which is how a repeat press re-takes an open field. */
 export type PaneSearch = { terminalId: string; token: number }
+
+/** How `openFilePane` places a file; see there. */
+export type FileOpenMode = 'diff' | 'split' | 'preview' | 'diff-preview'
 
 /** Which of the teamwork panel's three reads last failed, and what each said. */
 export type TeamworkReadErrors = { list?: string; relay?: string; status?: string }
@@ -502,13 +507,15 @@ type WorkspaceState = {
   createTerminal: (worktreeId: string) => Promise<void>
   /**
    * Opens `path` as a tab of the file column, or focuses the tab already on it; `diff` shows its diff,
-   * `split` puts it to the right of the focused pane instead, `preview` replaces the preview tab.
+   * `split` puts it to the right of the focused pane instead, `preview` replaces the preview tab, `diff-preview` both.
    */
-  openFilePane: (worktreeId: string, path: string, mode?: 'diff' | 'split' | 'preview') => void
+  openFilePane: (worktreeId: string, path: string, mode?: FileOpenMode) => void
   /** Opens a commit read-only as a tab of the file column, or focuses the tab already on it. */
   openCommit: (worktreeId: string, commit: WorktreeCommitSummary) => void
   /** Opens `worktreeId` with a read-only compare against `otherId` as a tab of its file column, or focuses that tab. */
   openCompare: (worktreeId: string, otherId: string, title: string) => Promise<void>
+  /** Opens every change of the worktree as one read-only tab of its file column, zoomed, or focuses that tab. */
+  openReview: (worktreeId: string) => void
   /** Keeps a preview tab open when the next preview comes. */
   pinFilePane: (paneId: string) => void
   /** Shows a file pane's diff, or its text again. */
@@ -556,8 +563,8 @@ type WorkspaceState = {
   /** Hides the sides `hide` names for the panes' room and shows again those it hid; a hand toggle takes a side back. */
   makeRoom: (hide: Sides) => void
   setRightPanelWidth: (width: number) => void
-  /** Selects one changed path and opens its diff in the centre, or clears the selection when given null. */
-  selectChange: (path: string | null) => void
+  /** Selects one changed path and opens its diff in the centre as the preview tab, kept when `pin`; null clears. */
+  selectChange: (path: string | null, pin?: boolean) => void
   /** Adds or removes one path from what the next commit will capture. */
   toggleStaged: (path: string) => void
   /** Every changed path, or none. */
@@ -1210,14 +1217,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   }
 
   /** Puts a new file leaf in the column as a tab, or beside the focused pane; see `openFilePane`. */
-  const placeFileLeaf = (layout: Layout, added: FileLeaf, mode?: 'diff' | 'split' | 'preview'): void => {
+  const placeFileLeaf = (layout: Layout, added: FileLeaf, mode?: FileOpenMode): void => {
     const column = fileColumnIn(layout.root)
+    const asPreview = mode === 'preview' || mode === 'diff-preview'
     let root: PaneNode | null
     if (mode !== 'split' && column !== null && layout.root !== null) {
       // A tab takes no room from anyone, so it needs no room check.
       const preview = column.preview
-      const replace = mode === 'preview' && preview !== undefined && !get().unsavedFiles[preview] ? preview : undefined
-      root = addTab(layout.root, added, { preview: mode === 'preview', replace })
+      const replace = asPreview && preview !== undefined && !get().unsavedFiles[preview] ? preview : undefined
+      root = addTab(layout.root, added, { preview: asPreview, replace })
       if (replace !== undefined) {
         forgetEdits([replace])
         get().setPaneDiff(replace, false)
@@ -1226,7 +1234,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const focused = layout.focusedTerminalId
       const inTree = focused !== null && collectTerminalIds(layout.root).includes(focused) ? focused : null
       // A split is a file of its own beside the focused pane; the column is made once, where there is most room.
-      const placed = mode === 'split' ? added : fileColumn(added, mode === 'preview')
+      const placed = mode === 'split' ? added : fileColumn(added, asPreview)
       const beside =
         inTree !== null ? splitPaneWith(layout.root, inTree, 'row', placed) : appendPane(layout.root, placed)
       const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
@@ -1242,7 +1250,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }
     if (root === null) return
     set({ namingMarkdown: null })
-    if (mode === 'diff') get().setPaneDiff(added.terminalId, true)
+    if (mode === 'diff' || mode === 'diff-preview') get().setPaneDiff(added.terminalId, true)
     persistLayout({ worktreeId: layout.worktreeId, root, focusedTerminalId: added.terminalId })
   }
 
@@ -1931,8 +1939,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
       const open = fileLeavesIn(layout.root).find((leaf) => leaf.path === path && isWorktreeFileLeaf(leaf))
       if (open) {
-        if (mode === 'diff') get().setPaneDiff(open.terminalId, true)
-        if (mode !== 'preview') get().pinFilePane(open.terminalId)
+        if (mode === 'diff' || mode === 'diff-preview') get().setPaneDiff(open.terminalId, true)
+        if (mode !== 'preview' && mode !== 'diff-preview') get().pinFilePane(open.terminalId)
         get().focusPane(open.terminalId)
         return
       }
@@ -1961,6 +1969,17 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         return
       }
       placeFileLeaf(layout, compareLeaf(newFilePaneId(), otherId, title))
+    },
+
+    openReview(worktreeId) {
+      const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
+      const open = fileLeavesIn(layout.root).find(isReviewLeaf)
+      if (open) {
+        get().pinFilePane(open.terminalId)
+        get().focusPane(open.terminalId)
+      } else placeFileLeaf(layout, reviewLeaf(newFilePaneId(), 'Review'))
+      const shown = fileLeavesIn(get().layouts[worktreeId]?.root ?? null).find(isReviewLeaf)
+      if (shown) set({ expandedTerminalId: shown.terminalId })
     },
 
     pinFilePane(paneId) {
@@ -2866,11 +2885,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (hid.sidebar && !before.sidebarVisible) readOnScreen()
     },
 
-    selectChange(path) {
+    selectChange(path, pin = false) {
       const worktreeId = get().activeWorktreeId
       set({ selectedChangePath: path })
       if (path === null || !worktreeId) return
-      get().openFilePane(worktreeId, path, 'diff')
+      get().openFilePane(worktreeId, path, pin ? 'diff' : 'diff-preview')
       // Zoomed: the diff is what was asked for. A view only, so restoring gives the layout back as it was.
       const opened = fileLeavesIn(get().layouts[worktreeId]?.root ?? null).find(
         (leaf) => leaf.path === path && !isCommitLeaf(leaf)

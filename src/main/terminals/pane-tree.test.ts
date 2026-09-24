@@ -343,6 +343,17 @@ describe('file leaves', () => {
     })
   })
 
+  it('keeps a review leaf, and drops a review flag that is not true', () => {
+    const review: PaneNode = { kind: 'leaf', terminalId: 'file:4', pane: 'file', path: 'Review', review: true }
+    expect(parsePaneNode(review)).toEqual(review)
+    expect(parsePaneNode({ ...review, review: 'yes' })).toStrictEqual({
+      kind: 'leaf',
+      terminalId: 'file:4',
+      pane: 'file',
+      path: 'Review'
+    })
+  })
+
   it('drops the file fields a leaf cannot honour, and refuses a file leaf with no path', () => {
     expect(parsePaneNode({ kind: 'leaf', terminalId: 'a', pane: 'terminal' })).toEqual(leafPane('a'))
     expect(parsePaneNode({ kind: 'leaf', terminalId: 'a', pane: 'video', path: 'x' })).toEqual(leafPane('a'))

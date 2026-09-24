@@ -882,12 +882,13 @@ export function createSeededRuntimeClient(): RuntimeClient {
         readAt: Date.now()
       }
     },
-    'worktree.diff': ({ worktreeId, path, staged }) => {
+    'worktree.diff': ({ worktreeId, path, staged, head }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const status = statuses.get(worktreeId)
       const changes = status ? seededChanges(status) : []
       const wanted = changes.filter(
-        (change) => change.staged === (staged ?? false) && (path === undefined || change.path === path)
+        (change) =>
+          (head === true || change.staged === (staged ?? false)) && (path === undefined || change.path === path)
       )
       return {
         worktreeId: worktree.id,

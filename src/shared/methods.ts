@@ -299,6 +299,8 @@ export const Params = {
     path: z.string().min(1).optional(),
     /** Diff the index against HEAD instead of the working tree. */
     staged: z.boolean().optional(),
+    /** Diff the working tree against HEAD, staged and unstaged together. */
+    head: z.boolean().optional(),
     contextLines: z.number().int().min(0).max(100).optional(),
     /** Ceiling on the patch returned, so one huge file cannot flood a caller. */
     maxBytes: z.number().int().positive().optional()

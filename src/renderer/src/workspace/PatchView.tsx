@@ -2,9 +2,11 @@
 // sticks while you read its hunk. The patch stays the source of truth; colour comes from the small
 // tokenizer in `src/shared/syntax.ts`, not an editor with its own model of the file.
 
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { parsePatch, type PatchFile, type PatchHunk, type PatchLine } from '@shared/patch'
 import { syntaxLanguage, tokenizeLine, type SyntaxLanguage } from '@shared/syntax'
+import { CommentComposer } from '../review/CommentComposer'
+import { hunkLabel } from '../review/reviewModel'
 import type { DiffLayout } from '../state/preferences'
 
 /** What a file's header says happened to it, when it is worth saying. */
@@ -39,6 +41,21 @@ export type HunkAction = 'Stage Hunk' | 'Unstage Hunk'
 /** A line by its place in the parsed patch. */
 export type PatchPlace = { file: number; hunk: number; line: number }
 
+/** Viewed boxes on each file's header; a viewed file is drawn folded. */
+export type PatchViewing = {
+  viewed: (file: PatchFile) => boolean
+  onViewed: (file: PatchFile, viewed: boolean) => void
+}
+
+/** Lines of one hunk a comment is being written on: the hunk by `file:hunk`, its lines by index, `from` <= `to`. */
+type Draft = { place: string; from: number; to: number }
+
+export type PatchViewProps = {
+  /** The worktree a `+` on a line writes a comment for its agent in; absent offers none. */
+  commentsIn?: string
+  viewing?: PatchViewing
+}
+
 export function PatchView({
   patch,
   truncated,
@@ -48,8 +65,10 @@ export function PatchView({
   reveal = null,
   named = false,
   onHunk,
-  onDiscard
-}: {
+  onDiscard,
+  commentsIn,
+  viewing
+}: PatchViewProps & {
   patch: string
   truncated: boolean
   layout: DiffLayout
@@ -69,12 +88,29 @@ export function PatchView({
   const files = useMemo(() => parsePatch(patch), [patch])
   const folded = useMemo(() => foldOnOpen(files), [files])
   const headless = named && files.length === 1
+  const [draft, setDraft] = useState<Draft | null>(null)
+  const root = useRef<HTMLDivElement | null>(null)
+  // Stable, so a hunk's memoised rows redraw only when the draft is theirs.
+  const pick = useCallback(
+    (place: string, line: number, extend: boolean): void =>
+      setDraft((current) =>
+        extend && current?.place === place
+          ? { place, from: Math.min(current.from, line), to: Math.max(current.to, line) }
+          : { place, from: line, to: line }
+      ),
+    []
+  )
+  useCommentKeys(root, commentsIn !== undefined, setDraft)
 
   return (
-    <div className={`patch patch--${layout}`}>
+    <div className={`patch patch--${layout}${viewing ? ' patch--review' : ''}`} ref={root}>
       {files.map((file, index) => (
         // The index: a rename of A to B plus an edit to A is two entries called A.
-        <details className="patch__file" key={`${file.path}-${index}`} open>
+        <details
+          className="patch__file"
+          key={`${file.path}-${index}`}
+          open={viewing === undefined || !viewing.viewed(file)}
+        >
           <summary className="patch__fileHead" hidden={headless}>
             {/* Split here rather than through the panel's own helpers, which
                 would make this module and that one import each other for two
@@ -87,6 +123,16 @@ export function PatchView({
             {file.from === null ? null : <span className="patch__fileNote">from {file.from}</span>}
             {STATUS_NOTE[file.status] === '' ? null : (
               <span className="patch__fileNote">{STATUS_NOTE[file.status]}</span>
+            )}
+            {viewing === undefined ? null : (
+              <label className="patch__viewed" onClick={(event) => event.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={viewing.viewed(file)}
+                  onChange={(event) => viewing.onViewed(file, event.target.checked)}
+                />
+                Viewed
+              </label>
             )}
           </summary>
           {file.binary ? (
@@ -105,6 +151,24 @@ export function PatchView({
                 startFolded={folded[index]?.[at] ?? false}
                 revealLine={reveal?.file === index && reveal.hunk === at ? reveal.line : null}
                 busy={busy}
+                {...(commentsIn === undefined
+                  ? {}
+                  : {
+                      onPick: pick,
+                      ...(draft?.place === `${index}:${at}`
+                        ? {
+                            draft,
+                            composer: (
+                              <CommentComposer
+                                worktreeId={commentsIn}
+                                path={file.path}
+                                lines={hunk.lines.slice(draft.from, draft.to + 1)}
+                                onClose={() => setDraft(null)}
+                              />
+                            )
+                          }
+                        : {})
+                    })}
                 {...(action === undefined || onHunk === undefined
                   ? {}
                   : // A binary file has no hunks to reach this, and an added
@@ -122,6 +186,44 @@ export function PatchView({
       {truncated ? <p className="patch__cut">… cut short</p> : null}
     </div>
   )
+}
+
+/** `c`, or ⌘⇧A, with lines of this patch selected opens a comment on them. */
+function useCommentKeys(root: React.RefObject<HTMLElement | null>, on: boolean, open: (draft: Draft) => void): void {
+  const latest = useRef(open)
+  latest.current = open
+  useEffect(() => {
+    if (!on) return
+    const onKey = (event: KeyboardEvent): void => {
+      const bare = event.key === 'c' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
+      const chord = event.key.toLowerCase() === 'a' && (event.metaKey || event.ctrlKey) && event.shiftKey
+      if (!bare && !chord) return
+      if ((event.target as Element | null)?.closest?.('input, textarea, [contenteditable="true"], .xterm')) return
+      const draft = selectedDraft(root.current, window.getSelection())
+      if (draft === null) return
+      event.preventDefault()
+      latest.current(draft)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [root, on])
+}
+
+/** The lines a selection inside `root` covers, when it stays within one hunk. */
+function selectedDraft(root: HTMLElement | null, selection: Selection | null): Draft | null {
+  if (root === null || selection === null || selection.isCollapsed) return null
+  const lineAt = (node: Node | null): { hunk: string; line: number } | null => {
+    const element = node instanceof Element ? node : (node?.parentElement ?? null)
+    const row = element?.closest('.patch__row')
+    const hunk = row?.closest<HTMLElement>('[data-hunk]')
+    if (!row || !hunk || !root.contains(hunk)) return null
+    const lines = [...row.querySelectorAll<HTMLElement>('[data-line]')].map((line) => Number(line.dataset.line))
+    return lines.length === 0 ? null : { hunk: hunk.dataset.hunk ?? '', line: Math.max(...lines) }
+  }
+  const anchor = lineAt(selection.anchorNode)
+  const focus = lineAt(selection.focusNode)
+  if (anchor === null || focus === null || anchor.hunk !== focus.hunk) return null
+  return { place: anchor.hunk, from: Math.min(anchor.line, focus.line), to: Math.max(anchor.line, focus.line) }
 }
 
 /** Which hunks open folded: generated files, heavy hunks, and whatever is past the patch's budget. */
@@ -155,8 +257,11 @@ function HunkView({
   action,
   busy,
   onHunk,
-  onDiscard
-}: {
+  onDiscard,
+  draft = null,
+  onPick,
+  composer = null
+}: LineComments & {
   hunk: PatchHunk
   /** `file:hunk`, which find paints by. */
   place: string
@@ -181,7 +286,9 @@ function HunkView({
       <summary className="patch__hunkHead" ref={head}>
         {/* The header in a span of its own, so the control beside it is not
             part of the line somebody reads the position off. */}
-        <span className="patch__hunkAt">{hunk.header}</span>
+        <span className="patch__hunkAt" title={hunk.header}>
+          {hunkLabel(hunk)}
+        </span>
         {onDiscard === undefined ? null : (
           <HunkButton label="Discard" busy={busy} onClick={onDiscard} className="patch__stage patch__discard" />
         )}
@@ -203,7 +310,17 @@ function HunkView({
         </button>
       ) : (
         // Keyed by layout, so a switch redraws from the top rather than all at once.
-        <HunkLines key={layout} hunk={hunk} language={language} layout={layout} revealLine={revealLine} />
+        <HunkLines
+          key={layout}
+          hunk={hunk}
+          language={language}
+          layout={layout}
+          revealLine={revealLine}
+          place={place}
+          draft={draft}
+          {...(onPick === undefined ? {} : { onPick })}
+          composer={composer}
+        />
       )}
     </details>
   )
@@ -217,13 +334,22 @@ const HunkLines = memo(function HunkLines({
   hunk,
   language,
   layout,
-  revealLine
-}: {
+  revealLine,
+  place,
+  draft = null,
+  onPick,
+  composer = null
+}: LineComments & {
   hunk: PatchHunk
   language: SyntaxLanguage | null
   layout: DiffLayout
   revealLine: number | null
+  place: string
 }): React.JSX.Element {
+  const onPlus = useMemo(
+    () => (onPick === undefined ? undefined : (line: number, extend: boolean) => onPick(place, line, extend)),
+    [onPick, place]
+  )
   const rows = useMemo(() => (layout === 'split' ? pairLines(hunk.lines) : null), [hunk, layout])
   // Each line's index, which find paints by; a split row does not keep it.
   const lineIndex = useMemo(
@@ -245,9 +371,26 @@ const HunkLines = memo(function HunkLines({
     <div className="patch__lines">
       {slices.map((from) =>
         rows === null || lineIndex === null ? (
-          <InlineRows key={from} lines={hunk.lines} from={from} language={language} />
+          <InlineRows
+            key={from}
+            lines={hunk.lines}
+            from={from}
+            language={language}
+            draft={draft}
+            {...(onPlus === undefined ? {} : { onPlus })}
+            composer={composer}
+          />
         ) : (
-          <SplitRows key={from} rows={rows} lineIndex={lineIndex} from={from} language={language} />
+          <SplitRows
+            key={from}
+            rows={rows}
+            lineIndex={lineIndex}
+            from={from}
+            language={language}
+            draft={draft}
+            {...(onPlus === undefined ? {} : { onPlus })}
+            composer={composer}
+          />
         )
       )}
     </div>
@@ -265,32 +408,81 @@ function rowOf(hunk: PatchHunk, rows: readonly PatchRow[] | null, line: number |
 const InlineRows = memo(function InlineRows({
   lines,
   from,
-  language
-}: {
+  language,
+  draft = null,
+  onPlus,
+  composer = null
+}: LineComments & {
   lines: readonly PatchLine[]
   from: number
   language: SyntaxLanguage | null
 }): React.JSX.Element {
   return (
     <>
-      {lines.slice(from, from + ROWS_PER_TASK).map((line, index) => (
-        // Two lines can be byte-identical and still be different lines.
-        <div className={`patch__row patch__row--${line.kind}`} key={index}>
-          <span className="patch__num">{line.oldNumber ?? ''}</span>
-          <span className="patch__num">{line.newNumber ?? ''}</span>
-          <Text line={line} index={from + index} language={language} />
-        </div>
-      ))}
+      {lines.slice(from, from + ROWS_PER_TASK).map((line, offset) => {
+        const index = from + offset
+        return (
+          // Two lines can be byte-identical and still be different lines.
+          <Fragment key={offset}>
+            <div className={`patch__row patch__row--${line.kind}${rowPicked(draft, index)}`}>
+              <Plus line={line} index={index} onPlus={onPlus} />
+              <span className="patch__num">{line.oldNumber ?? ''}</span>
+              <span className="patch__num">{line.newNumber ?? ''}</span>
+              <Text line={line} index={index} language={language} />
+            </div>
+            {draft?.to === index ? composer : null}
+          </Fragment>
+        )
+      })}
     </>
   )
 })
+
+/** What a hunk's rows need to offer a comment: the lines picked, the `+`, and the composer under them. */
+type LineComments = {
+  draft?: Draft | null
+  onPlus?: (line: number, extend: boolean) => void
+  onPick?: (place: string, line: number, extend: boolean) => void
+  composer?: React.ReactNode
+}
+
+function rowPicked(draft: Draft | null, index: number): string {
+  return draft !== null && index >= draft.from && index <= draft.to ? ' patch__row--picked' : ''
+}
+
+/** The gutter's `+`: a comment on this line, or with shift down to it from the line picked before. */
+function Plus({
+  line,
+  index,
+  onPlus
+}: {
+  line: PatchLine | null
+  index: number
+  onPlus: LineComments['onPlus']
+}): React.JSX.Element | null {
+  if (onPlus === undefined || line === null || index < 0) return null
+  const number = line.newNumber ?? line.oldNumber
+  return (
+    <button
+      type="button"
+      className="patch__plus"
+      aria-label={`Comment on line ${number ?? ''}`.trim()}
+      onClick={(event) => onPlus(index, event.shiftKey)}
+    >
+      +
+    </button>
+  )
+}
 
 const SplitRows = memo(function SplitRows({
   rows,
   lineIndex,
   from,
-  language
-}: {
+  language,
+  draft = null,
+  onPlus,
+  composer = null
+}: LineComments & {
   rows: readonly PatchRow[]
   lineIndex: ReadonlyMap<PatchLine, number>
   from: number
@@ -298,22 +490,23 @@ const SplitRows = memo(function SplitRows({
 }): React.JSX.Element {
   return (
     <>
-      {rows.slice(from, from + ROWS_PER_TASK).map((row, index) => (
-        <div className="patch__row patch__row--split" key={index}>
-          <Side
-            line={row.old}
-            index={row.old === null ? -1 : (lineIndex.get(row.old) ?? -1)}
-            side="old"
-            language={language}
-          />
-          <Side
-            line={row.new}
-            index={row.new === null ? -1 : (lineIndex.get(row.new) ?? -1)}
-            side="new"
-            language={language}
-          />
-        </div>
-      ))}
+      {rows.slice(from, from + ROWS_PER_TASK).map((row, offset) => {
+        const oldIndex = row.old === null ? -1 : (lineIndex.get(row.old) ?? -1)
+        const newIndex = row.new === null ? -1 : (lineIndex.get(row.new) ?? -1)
+        // The later of the two, so a comment on a changed pair takes both and the composer lands under it.
+        const index = Math.max(oldIndex, newIndex)
+        const last = draft !== null && (draft.to === oldIndex || draft.to === newIndex)
+        return (
+          <Fragment key={offset}>
+            <div className={`patch__row patch__row--split${rowPicked(draft, index) || rowPicked(draft, oldIndex)}`}>
+              <Plus line={row.new ?? row.old} index={index} onPlus={onPlus} />
+              <Side line={row.old} index={oldIndex} side="old" language={language} />
+              <Side line={row.new} index={newIndex} side="new" language={language} />
+            </div>
+            {last ? composer : null}
+          </Fragment>
+        )
+      })}
     </>
   )
 })
