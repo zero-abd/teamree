@@ -54,6 +54,28 @@
       "bytes": 1677170,
       "title": "Quit, relaunch, carry on",
       "caption": "Recorded shell output stays above a fresh shell; the file tabs return and Codex resumes its conversation."
+    },
+    {
+      "id": "cli",
+      "file": "demos/cli.mp4",
+      "poster": "demos/cli.jpg",
+      "width": 1728,
+      "height": 1080,
+      "seconds": 15.0,
+      "bytes": 936137,
+      "title": "The CLI, from a pane",
+      "caption": "teamree status, worktree list, then worktree create with --agent claude; the new worktree lands in the sidebar."
+    },
+    {
+      "id": "teamwork",
+      "file": "demos/teamwork.mp4",
+      "poster": "demos/teamwork.jpg",
+      "width": 1728,
+      "height": 1080,
+      "seconds": 12.7,
+      "bytes": 1049394,
+      "title": "A teammate in the sidebar",
+      "caption": "Teamwork connected over a relay; a teammate's worktree shows in the sidebar and their dev server opens beside your shell."
     }
   ]
 }

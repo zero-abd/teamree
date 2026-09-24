@@ -42,23 +42,26 @@ sh site/og/render.sh        # needs Google Chrome; CHROME=/path/to/chrome to ove
 
 ## The feature clips
 
-Five short screen captures of the real application: `new-task` in the hero,
+Seven short screen captures of the real application: `new-task` in the hero,
 `open-anything` and `review-and-ship` under "A worktree per task", `every-pane`
-and `pick-it-back-up` under "A state per pane". They were shot from a `main`
+and `pick-it-back-up` under "A state per pane", `cli` under the CLI section and
+`teamwork` under "Teammates in the window". They were shot from a `main`
 build in a hidden window on a throwaway profile, against a small demo repository
 with a local bare remote, driven over CDP and recorded with
 `Page.startScreencast`. Their agent panes run the real `claude` and `codex`; the
-other panes are plain shells playing scripted output. Each ships as `<id>.mp4`
+other panes are plain shells playing scripted output. `teamwork` adds a second,
+headless runtime (`scripts/acceptance-host.mjs`) as the teammate, linked to the
+window through a local relay. Each ships as `<id>.mp4`
 (H.264, 1728x1080, no audio, 13-15 s, under 2 MB) and an `<id>.jpg` poster,
 listed in `public/demos/manifest.json` with a width, a height, a title and a
 caption.
 `sync-demos.mjs` finds each by the `data-demo` id on its frame, un-parks its
 `<video>`, and writes the size and the caption from the manifest; a frame whose
-id is not in the manifest — `cli`, and `teamwork`, which needs two machines to
-shoot — stays parked in its comment and fires no 404s.
+id is not in the manifest stays parked in its comment and fires no 404s.
 
-The still `public/screenshot.png` is the hero's `<img>` fallback: the same
-window at 1440x900, one project, five worktrees, two panes open.
+The still `public/screenshot.png` is the hero's `<img>` fallback and the
+placeholder under every feature frame: the same window at 1440x900 @2x, the
+demo project with three worktrees and a teammate's, two panes open.
 
 The page hard-codes each clip's dimensions and caption, because a `<video>`
 without `width`/`height` shifts the layout while it loads, and the page's own
@@ -70,11 +73,13 @@ node site/tools/sync-demos.mjs          # rewrite the page from the manifest
 node site/tools/sync-demos.mjs --check  # exit 1 if the page is out of date
 ```
 
-**Until the clips exist the four `<video>` elements ship parked inside an HTML
-comment**, so a visitor fires no 404s at a page whose clips have not landed.
-`sync-demos.mjs` un-parks them the first time it runs against a real manifest.
-The frames reserve their space either way, so dropping the clips in changes
-nothing structural — the placeholder underneath is simply covered.
+Either way it fails when the page (outside comments) or the manifest names a
+file that `public/` does not have, since that is a 404 on the live site.
+
+A clip that has not been shot ships its `<video>` parked inside an HTML
+comment, so a visitor fires no 404s; `sync-demos.mjs` un-parks it once its id is
+in the manifest. The frame reserves its space either way, so dropping a clip in
+changes nothing structural — the placeholder underneath is simply covered.
 
 A clip that will not play is a real outcome, not an impossibility, and is handled
 as one. The host does not answer byte-range requests — it returns the whole file
@@ -176,8 +181,8 @@ one direction a security claim must never be wrong in. All four now say the same
 thing, and say the same thing `docs/teamwork.md` does about the limit: the prompt
 is a guard against accident and inattention, not against a teammate who means
 harm, who can be allowed once and then type anything. If the consent model
-changes again, those are the four places, plus the `aria-label` on the parked
-`teamwork` clip.
+changes again, those are the four places, plus the `teamwork` clip, which shows a
+teammate's pane opened beside yours.
 
 What on the install path has actually been observed, as opposed to read off a
 string table, is stated on the page itself in the caption under the System
