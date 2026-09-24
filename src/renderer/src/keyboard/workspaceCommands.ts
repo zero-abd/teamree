@@ -7,6 +7,7 @@ import type { RightPanelTab } from '../workspace/rightPanel/rightPanelState'
 import { fileColumnIn, fileLeavesIn, isFilePaneId } from '@shared/filePane'
 import { firstQuestion } from '../dialogs/modalLayer'
 import { collectTerminalIds, paneStops } from '../panes/paneLayout'
+import { focusedTreeProject } from '../sidebar/treeKeys'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
 import { focusedRegion, regionAfter, requestRegionFocus } from '../shell/regions'
 import { numberedTab, tabAfter } from '../workspace/paneTabs'
@@ -85,8 +86,10 @@ function activeLayout(state: CommandState): Layout | undefined {
   return state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
 }
 
-/** The project a new task would be made in, the way the chord picks one. */
+/** The project a new task would be made in: the focused sidebar row's, else the open worktree's, else the first. */
 function projectForNewTask(state: CommandState): string | undefined {
+  const focused = focusedTreeProject()
+  if (focused !== null && state.projects.some((project) => project.id === focused)) return focused
   const active = state.worktrees.find((worktree) => worktree.id === state.activeWorktreeId)
   return active?.projectId ?? state.projects[0]?.id
 }
