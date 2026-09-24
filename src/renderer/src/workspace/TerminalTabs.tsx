@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { hasCheckout } from '@shared/entities'
 import { FileGlyph, UnsavedDot } from '../files/FileBar'
 import { usePaneDrag, useTabDrag } from '../panes/paneDrag'
+import { hasTerminal } from '../panes/paneLayout'
 import { usePaneMenu } from './paneMenu'
 import { paneTabs, paneTabTitle } from './paneTabs'
 import { useStartMenuItems } from './startMenu'
@@ -68,7 +69,14 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
 
   const tabs = panesShown ? paneTabs(layout?.root ?? null, terminals, worktree) : []
 
-  const focusedTerminalId = focusedWatchId === null ? layout?.focusedTerminalId : null
+  // A zoomed pane is the selected tab, whatever else holds the focus.
+  const expanded = useWorkspaceStore((state) => state.expandedTerminalId)
+  const focusedTerminalId =
+    focusedWatchId !== null
+      ? null
+      : expanded !== null && hasTerminal(layout?.root ?? null, expanded)
+        ? expanded
+        : layout?.focusedTerminalId
 
   // The list scrolls under a fixed end; the tab being worked in is never the one scrolled away.
   const list = useRef<HTMLDivElement | null>(null)
@@ -112,10 +120,10 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
           }}
         >
           {tabs.map((tab) => {
-            const active = tab.terminalId === focusedTerminalId
             const isUnread = unread.has(tab.terminalId)
             const isFile = tab.kind === 'file'
             const files = tab.files ?? [tab.terminalId]
+            const active = files.includes(focusedTerminalId ?? '')
             const unsaved = isFile && files.some((id) => unsavedFiles[id] === true)
             return (
               <div

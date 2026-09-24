@@ -22,7 +22,7 @@ import { usePaneMenu } from '../workspace/paneMenu'
 import { UnsavedDot } from '../files/FileBar'
 import { FilePane } from './FilePane'
 import { usePaneDrag, useTabDrag } from './paneDrag'
-import { collectLeaves } from './paneLayout'
+import { collectLeaves, normalizeSizes } from './paneLayout'
 import { SplitFrame } from './SplitFrame'
 
 export type PaneCallbacks = {
@@ -48,6 +48,8 @@ export type PaneCallbacks = {
   onCloseSearch: () => void
   /** The least a pane may be dragged to, chrome included; unmeasured, a small fraction stands. */
   minPane?: Box
+  /** The file column is folded to its tab in the strip: drawn nowhere, its share lent to its siblings. */
+  foldedColumn?: boolean
 }
 
 export function PaneTree({
@@ -107,23 +109,13 @@ function FileLeaf({
 function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColumn }): React.JSX.Element {
   const unsaved = useWorkspaceStore((state) => state.unsavedFiles)
   const pin = useWorkspaceStore((state) => state.pinFilePane)
-  const expanded = useWorkspaceStore((state) => state.expandedTerminalId)
-  const diffs = useWorkspaceStore((state) => state.diffPanes)
-  const restore = useWorkspaceStore((state) => state.toggleExpandedPane)
   const startDrag = useTabDrag()
   const dragged = usePaneDrag((state) => state.drag?.source.id)
   const shown = shownTabId(node)
   const tabs = node.children.filter(isFileLeaf)
   const focused = tabs.some((tab) => tab.terminalId === callbacks.focusedTerminalId)
-  // Out of a zoomed diff; an editor keeps its Escape.
-  const onKeyDown = (event: React.KeyboardEvent): void => {
-    if (event.key !== 'Escape' || event.defaultPrevented || shown === undefined || diffs[shown] !== true) return
-    if (!tabs.some((tab) => tab.terminalId === expanded)) return
-    event.preventDefault()
-    restore()
-  }
   return (
-    <div className={`column${focused ? ' column--focused' : ''}`} onKeyDown={onKeyDown}>
+    <div className={`column${focused ? ' column--focused' : ''}`}>
       {/* One file is named, dotted and closed by its tab in the window's strip. */}
       <div className="column__tabs" role="tablist" aria-label="Open files" hidden={tabs.length < 2}>
         {tabs.map((tab) => {
@@ -312,14 +304,22 @@ function PaneSplit({
   onResize,
   ...callbacks
 }: PaneCallbacks & { node: Extract<PaneNode, { kind: 'split' }>; path: number[] }): React.JSX.Element {
-  const { minPane } = callbacks
+  const { minPane, foldedColumn = false } = callbacks
+  // Indices into the whole split, so a resize addresses the tree the runtime holds.
+  const drawn = node.children.flatMap((child, index) => (foldedColumn && isFileColumn(child) ? [] : [{ child, index }]))
+  const sizes = normalizeSizes(node.sizes, node.children.length)
+  const lent = 1 - drawn.reduce((sum, { index }) => sum + (sizes[index] ?? 0), 0)
   return (
     <SplitFrame
       direction={node.direction}
-      sizes={node.sizes}
-      onResize={(sizes) => onResize(path, sizes)}
-      minPx={minPane && node.children.map((child) => minExtent(child, node.direction, minPane))}
-      cells={node.children.map((child, index) => ({
+      sizes={drawn.map(({ index }) => sizes[index] ?? 0)}
+      onResize={(next) => {
+        const whole = [...sizes]
+        drawn.forEach(({ index }, at) => (whole[index] = (next[at] ?? 0) * (1 - lent)))
+        onResize(path, whole)
+      }}
+      minPx={minPane && drawn.map(({ child }) => minExtent(child, node.direction, minPane))}
+      cells={drawn.map(({ child, index }) => ({
         key: paneKey(child, index),
         node: <PaneTree node={child} path={[...path, index]} onResize={onResize} {...callbacks} />
       }))}

@@ -12,7 +12,7 @@ import {
   type FileColumn,
   type FileLeaf
 } from '@shared/filePane'
-import { leavesRoom, PANE_GUTTER_PX, paneRects, type Box } from '@shared/paneRoom'
+import { leavesRoom, minExtent, PANE_GUTTER_PX, paneRects, type Box } from '@shared/paneRoom'
 
 /** Smallest slice of a split a pane may shrink to, as a fraction of the axis. */
 export const MIN_PANE_FRACTION = 0.08
@@ -431,6 +431,92 @@ export function shownRoot(root: PaneNode | null, expandedTerminalId: string | nu
   const column = fileColumnIn(root)
   if (column && hasTerminal(column, expandedTerminalId)) return column
   return collectLeaves(root).find((node) => node.terminalId === expandedTerminalId) ?? root
+}
+
+/** `root` without its file column, the column's share handed back to its siblings. */
+export function withoutColumn(root: PaneNode | null): PaneNode | null {
+  const column = fileColumnIn(root)
+  return column === null ? root : collectTerminalIds(column).reduce(closePane, root)
+}
+
+/** True when no sizing of `root` gives every pane `min` in `box` and the tree without its file column, as sized, does. */
+export function foldsColumn(root: PaneNode | null, box: Box, min: Box): boolean {
+  const rest = withoutColumn(root)
+  if (rest === root || rest === null || root === null) return false
+  const resizable = minExtent(root, 'row', min) <= box.width && minExtent(root, 'column', min) <= box.height
+  return !resizable && fitsAsSized(rest, box, min)
+}
+
+/** `root` for a column coming back from its tab: as it is when every pane has `min`, else with the column narrowed. */
+export function unfoldedRoot(root: PaneNode | null, box: Box, min: Box): PaneNode | null {
+  return fitsAsSized(root, box, min) ? root : narrowColumn(root, box, min)
+}
+
+function fitsAsSized(root: PaneNode | null, box: Box, min: Box): boolean {
+  return paneRects(root, box).every((rect) => rect.width >= min.width - 1e-6 && rect.height >= min.height - 1e-6)
+}
+
+/** `root` with its file column cut to `min` along its parent split, its siblings taking the rest; else `root`. */
+export function narrowColumn(root: PaneNode | null, box: Box, min: Box): PaneNode | null {
+  const column = fileColumnIn(root)
+  const path = root && column && pathTo(root, column)
+  const parentPath = path?.slice(0, -1) ?? []
+  const parent = root && path && path.length > 0 ? nodeAt(root, parentPath) : null
+  const rect = paneRects(root, box).find((each) => hasTerminal(column, each.id))
+  if (!root || !path || parent?.kind !== 'split' || !rect) return root
+  const row = parent.direction === 'row'
+  const extent = row ? rect.width : rect.height
+  const floor = row ? min.width : min.height
+  const index = path.at(-1) ?? 0
+  const sizes = normalizeSizes(parent.sizes, parent.children.length)
+  const share = sizes[index] ?? 0
+  if (extent <= floor || share >= 1) return root
+  const narrowed = (share * floor) / extent
+  const scale = (1 - narrowed) / (1 - share)
+  return setSizesAt(
+    root,
+    parentPath,
+    sizes.map((size, at) => (at === index ? narrowed : size * scale))
+  )
+}
+
+export type SplitPlan = { before: PaneNode | null; after: PaneNode; folded: boolean }
+
+/**
+ * Where a split of `targetId` goes: as asked, else with the file column narrowed to its floor, else with
+ * the column folded to its tab. Null when the terminals alone cannot give every pane `min`.
+ */
+export function planSplit(
+  root: PaneNode | null,
+  targetId: string,
+  direction: 'row' | 'column',
+  addedId: string,
+  box: Box,
+  min: Box
+): SplitPlan | null {
+  const plain = splitPane(root, targetId, direction, addedId)
+  if (leavesRoom(root, plain, box, min)) return { before: root, after: plain, folded: false }
+  const narrowed = narrowColumn(root, box, min)
+  const beside = splitPane(narrowed, targetId, direction, addedId)
+  if (narrowed !== root && leavesRoom(root, beside, box, min)) return { before: narrowed, after: beside, folded: false }
+  return foldsColumn(plain, box, min) ? { before: root, after: plain, folded: true } : null
+}
+
+function pathTo(node: PaneNode, target: PaneNode): number[] | null {
+  if (node === target) return []
+  if (node.kind === 'leaf') return null
+  for (const [index, child] of node.children.entries()) {
+    const rest = pathTo(child, target)
+    if (rest) return [index, ...rest]
+  }
+  return null
+}
+
+function nodeAt(root: PaneNode, path: readonly number[]): PaneNode | null {
+  return path.reduce<PaneNode | null>(
+    (node, index) => (node?.kind === 'split' ? (node.children[index] ?? null) : null),
+    root
+  )
 }
 
 /**

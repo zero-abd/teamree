@@ -1,7 +1,9 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { PaneNode } from '@shared/entities'
 import { minExtent, type Box } from '@shared/paneRoom'
+import { foldsColumn } from '../panes/paneLayout'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { contentBox } from '../terminal/paneMetrics'
 import { panelCost, sidebarCost, toHide, type Sides } from './roomForPanes'
 
 /**
@@ -46,4 +48,32 @@ export function useRoomForPanes(grid: HTMLElement | null, root: PaneNode | null,
     observer.observe(grid)
     return () => observer.disconnect()
   }, [grid, root, minPane, panelOpen, sidebarVisible, panelWidth, sidebarWidth])
+}
+
+/** Whether the file column a split folded stays folded in `grid`; once the layout fits again it is drawn again. */
+export function useFoldedColumn(grid: HTMLElement | null, root: PaneNode | null, minPane: Box | undefined): boolean {
+  const worktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
+  const marked = useWorkspaceStore((state) => worktreeId !== null && state.foldedColumns[worktreeId] === true)
+  const [folded, setFolded] = useState(false)
+
+  useLayoutEffect(() => {
+    if (!grid || !marked || !minPane || worktreeId === null) {
+      setFolded(false)
+      return
+    }
+    const check = (): void => {
+      const box = contentBox(grid)
+      if (!box) return
+      const folds = foldsColumn(root, box, minPane)
+      setFolded(folds)
+      if (!folds) useWorkspaceStore.getState().unfoldColumn(worktreeId)
+    }
+    check()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(check)
+    observer.observe(grid)
+    return () => observer.disconnect()
+  }, [grid, root, minPane, marked, worktreeId])
+
+  return marked && folded
 }

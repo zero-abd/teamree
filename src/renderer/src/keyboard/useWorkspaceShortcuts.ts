@@ -51,7 +51,26 @@ export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: Keybo
     return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [modifier])
 
+  // Bubbling, so a menu, a dialog or a field that takes Escape has it first.
+  useEffect(() => {
+    const onEscape = (event: KeyboardEvent): void => {
+      const store = useWorkspaceStore.getState()
+      if (event.key !== 'Escape' || event.defaultPrevented || store.expandedTerminalId === null) return
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || typedIn(event.target)) return
+      event.preventDefault()
+      store.toggleExpandedPane()
+    }
+    window.addEventListener('keydown', onEscape)
+    return () => window.removeEventListener('keydown', onEscape)
+  }, [])
+
   return isAppChord
+}
+
+/** A terminal, an editor or a field: somewhere Escape means something to what is typed. */
+function typedIn(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false
+  return target.closest('input, textarea, select, .xterm, [contenteditable]:not([contenteditable="false"])') !== null
 }
 
 function toModifierState(event: KeyboardEvent): ModifierState & { key: string } {
