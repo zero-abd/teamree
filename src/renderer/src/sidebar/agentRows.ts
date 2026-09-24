@@ -34,7 +34,7 @@ export type AgentRow = {
   evidence: string | null
 }
 
-/** What a dot is coloured: `idle` is a quiet pane with no agent, so only an agent is ever amber. */
+/** What a dot is coloured: `idle` is a quiet pane with no agent, drawn grey; a stopped agent is hollow. */
 export type DotTone = AgentActivity | 'idle'
 
 /** The one word for each tone, wherever a dot is explained: rows, hovers, tabs and the board's legend. */
