@@ -321,7 +321,7 @@ async function checkMenuBar(ask) {
 
   // `click()` on the item is what the platform does: main to window to dispatcher to view.
   const showsDashboard = () =>
-    ask('[...document.querySelectorAll("h1")].some((node) => node.textContent?.trim() === "All panes")')
+    ask('[...document.querySelectorAll("h1")].some((node) => node.textContent?.trim() === "All Panes")')
 
   named('All Panes')?.click()
   const reached = await waitFor(showsDashboard, 'choosing a menu item did not reach the window')
