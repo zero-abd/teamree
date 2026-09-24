@@ -15,8 +15,8 @@
 // manifest with no frame on the page — is reported and otherwise left alone.
 //
 //   node site/tools/sync-demos.mjs           # rewrite
-//   node site/tools/sync-demos.mjs --check   # exit 1 if the page is out of date
-import { readFileSync, writeFileSync } from 'node:fs'
+//   node site/tools/sync-demos.mjs --check   # exit 1 if the page is out of date or names a missing file
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -85,6 +85,15 @@ if (ratios.length === 0) fail('no listed clip sits in a feature frame.')
 const tallest = ratios.reduce((worst, item) => (item.ratio > worst.ratio ? item : worst), ratios[0])
 const padding = (tallest.ratio * 100).toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
 page = page.replace(/(\.demo-frame::before\{ content:""; display:block; padding-top:)[\d.]+%/, `$1${padding}%`)
+
+// A file the page or the manifest names that public/ lacks is a 404 on the live site. Commented-out markup fetches nothing.
+const referenced = [...page.replace(/<!--[\s\S]*?-->/g, '').matchAll(/\s(?:src|href|poster)="(\/(?!\/)[^"#?]*)/g)]
+  .map((match) => match[1])
+  .concat(clips.flatMap((clip) => [clip.file, clip.poster].filter(Boolean).map((path) => `/${path}`)))
+const missing = [...new Set(referenced)].filter(
+  (path) => !existsSync(join(siteDir, 'public', path.endsWith('/') ? `${path}index.html` : path))
+)
+if (missing.length) fail(`public/ has no ${missing.join(', ')}; the page or the manifest references it.`)
 
 if (unplaced.length) console.log(`sync-demos: no frame on the page for ${unplaced.join(', ')}; left as listed.`)
 if (page === before) {
