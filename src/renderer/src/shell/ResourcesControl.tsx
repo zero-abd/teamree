@@ -1,5 +1,5 @@
-// What everything this app spawned costs: resident memory on the rail, per-pane CPU and memory in the
-// panel, with a Kill per row (the app's own row has none). Sampled slowly while closed, every 2s open.
+// What everything this app spawned costs: an icon on the rail, with the memory beside it past 2 GB or while
+// open, and per-pane CPU and memory in the panel with a Kill per row. Sampled slowly while closed, every 2s open.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ResourceProcess, SystemResources } from '@shared/entities'
@@ -18,6 +18,8 @@ import { StatusPopover } from './StatusPopover'
 
 export const OPEN_INTERVAL_MS = 2_000
 export const CLOSED_INTERVAL_MS = 10_000
+/** Below this the rail shows the icon alone: a number that is always there stops being read. */
+const RAIL_MEMORY_BYTES = 2 * 1024 * 1024 * 1024
 /** How long a `Kill` stays armed before it goes back to being a `Kill`. */
 const CONFIRM_MS = 4_000
 
@@ -117,6 +119,7 @@ export function ResourcesControl(): React.JSX.Element {
   )
 
   const groups = sample ? groupByWorktree(sample, worktrees, terminals) : []
+  const railMemory = sample !== null && (open || sample.rss >= RAIL_MEMORY_BYTES) ? formatBytes(sample.rss) : null
 
   return (
     <>
@@ -130,7 +133,10 @@ export function ResourcesControl(): React.JSX.Element {
         title="Resources"
         onClick={() => (open ? close() : setOpen(true))}
       >
-        {sample ? formatBytes(sample.rss) : '…'}
+        <svg className="statusbar__icon" viewBox="0 0 14 14" aria-hidden="true">
+          <path d="M3.5 3.5 H10.5 V10.5 H3.5 Z M5.5 1 V3.5 M8.5 1 V3.5 M5.5 10.5 V13 M8.5 10.5 V13 M1 5.5 H3.5 M1 8.5 H3.5 M10.5 5.5 H13 M10.5 8.5 H13" />
+        </svg>
+        {railMemory}
       </button>
       {open ? (
         <StatusPopover label="Resources" anchor={button.current} onClose={close}>

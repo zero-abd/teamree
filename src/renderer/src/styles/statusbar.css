@@ -1,6 +1,5 @@
-/* The bottom rail. One line, tabular figures, and three things clickable: the
-   git line opens the changes panel, and the two utilities beside the runtime
-   open small panels upward. */
+/* The bottom rail. One line, tabular figures; the git line opens the changes
+   panel, the two icons open small panels upward, the attention count goes to a pane. */
 
 .statusbar {
   display: flex;
@@ -55,15 +54,6 @@
   box-shadow: var(--ring);
 }
 
-/* Monospace and quiet, not accented. The accent in this window means one
-   thing — where you are and what is selected — and a branch name in the status
-   bar is neither: it is a caption on the tab that is already marked. Spending
-   the accent here is part of what stopped it pointing anywhere. */
-.statusbar__branch {
-  color: var(--fg-secondary);
-  font-family: var(--font-mono);
-}
-
 .statusbar__spacer {
   flex: 1;
 }
@@ -73,11 +63,6 @@
   height: 6px;
   border-radius: 50%;
   background: var(--fg-muted);
-}
-
-.statusbar__connection--ready .statusbar__dot {
-  background: var(--success);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 18%, transparent);
 }
 
 .statusbar__connection--connecting .statusbar__dot,
@@ -111,17 +96,33 @@
   }
 }
 
-/* The keep-awake dot: lit while the mode holds the machine, quiet in `off`. */
-.statusbar__dot--awake-on {
-  background: var(--warning);
+/* Keep-awake and resources: monochrome, keep-awake's filled while it holds the machine awake. */
+.statusbar__icon {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.statusbar__dot--awake-agent {
-  background: var(--info);
+.statusbar__icon--on .statusbar__icon-fill {
+  fill: currentcolor;
 }
 
-.statusbar__dot--awake-off {
-  background: var(--fg-muted);
+/* Panes anywhere that need you, in the sidebar's tones. */
+.statusbar__attention {
+  font-weight: 600;
+}
+
+.statusbar__asking {
+  color: var(--warning);
+}
+
+.statusbar__failed {
+  color: var(--danger);
 }
 
 /* A panel above the rail. Fixed to the viewport, because the rail clips its
