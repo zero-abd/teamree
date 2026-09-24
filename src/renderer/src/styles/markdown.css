@@ -1,4 +1,4 @@
-/* Markdown pane: the frame and bar every pane wears, prose held to a reading width. */
+/* Markdown pane: a page at a reading width, a handle beside each block, and the menus that float over it. */
 
 .pane--markdown {
   background: var(--bg-window);
@@ -10,35 +10,39 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  container-type: inline-size;
+  font-family: var(--font-ui);
 }
 
 .md-content {
   min-height: 100%;
 }
 
+/* The page. The side padding is the handle's gutter. */
 .md-editor {
-  max-width: 72ch;
+  --page-gutter: clamp(52px, 9cqi, 96px);
+  max-width: calc(720px + 2 * var(--page-gutter));
   min-height: 100%;
   margin: 0 auto;
-  padding: var(--s6) var(--s5) 40vh;
+  padding: 56px var(--page-gutter) 40vh;
   outline: none;
   color: var(--fg);
-  font-family: var(--font-ui);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 15px;
+  line-height: 1.65;
   caret-color: var(--accent-bright);
+  -webkit-font-smoothing: antialiased;
 }
 
-.md-editor > * + * {
-  margin-top: var(--s2);
+.md-editor ::selection {
+  background: var(--term-selection);
 }
 
-.md-editor p.is-editor-empty:first-child::before {
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
-  color: var(--fg-muted);
-  pointer-events: none;
+.md-editor > :first-child {
+  margin-top: 0;
+}
+
+.md-editor p {
+  margin: 0.3em 0;
 }
 
 .md-editor h1,
@@ -47,48 +51,83 @@
 .md-editor h4,
 .md-editor h5,
 .md-editor h6 {
-  margin: var(--s5) 0 var(--s2);
-  font-weight: 600;
-  line-height: 1.25;
+  color: var(--fg);
+  font-weight: 650;
+  line-height: 1.3;
   letter-spacing: -0.01em;
 }
 
 .md-editor h1 {
-  font-size: 26px;
+  margin: 1.4em 0 0.3em;
+  font-size: 1.875em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .md-editor h2 {
-  font-size: 20px;
+  margin: 1.25em 0 0.25em;
+  font-size: 1.5em;
 }
 
 .md-editor h3 {
-  font-size: 16px;
+  margin: 1em 0 0.2em;
+  font-size: 1.25em;
 }
 
 .md-editor h4,
 .md-editor h5,
 .md-editor h6 {
-  font-size: 14px;
+  margin: 1em 0 0.2em;
+  font-size: 1.05em;
 }
 
-.md-editor h1:first-child {
-  margin-top: 0;
+/* A page that opens on a heading wears it as its title. */
+.md-editor > h1:first-child {
+  margin-bottom: 0.45em;
+  font-size: 2.5em;
+  font-weight: 750;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
 }
 
-.md-editor p {
-  margin: 0;
+/* The caret's empty line says what it can become; an empty page says so without the caret. */
+.md-editor .is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--fg-muted);
+  pointer-events: none;
+}
+
+.md-editor:not(.ProseMirror-focused) .is-empty:not(.is-editor-empty)::before {
+  content: none;
 }
 
 .md-editor a {
   color: var(--accent-bright);
   text-decoration: underline;
   text-decoration-color: var(--accent-line);
+  text-underline-offset: 2px;
   cursor: pointer;
 }
 
+.md-editor strong {
+  font-weight: 650;
+}
+
+.md-editor code {
+  padding: 0.12em 0.36em;
+  border-radius: var(--r1);
+  background: var(--bg-raised);
+  color: var(--term-bright-red);
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+}
+
+/* Lists. */
 .md-editor ul,
 .md-editor ol {
-  margin: 0;
+  margin: 0.3em 0;
   padding-left: 1.6em;
   list-style: disc;
 }
@@ -97,16 +136,31 @@
   list-style: decimal;
 }
 
-.md-editor li + li {
-  margin-top: 2px;
+.md-editor ul ul {
+  list-style: circle;
 }
 
-.md-editor li p {
+.md-editor ul ul ul {
+  list-style: square;
+}
+
+.md-editor li {
+  margin: 0.12em 0;
+  padding-left: 0.15em;
+}
+
+.md-editor li::marker {
+  color: var(--fg-secondary);
+}
+
+.md-editor li p,
+.md-editor li > ul,
+.md-editor li > ol {
   margin: 0;
 }
 
 .md-editor ul[data-type='taskList'] {
-  padding-left: 0.2em;
+  padding-left: 0.1em;
   list-style: none;
 }
 
@@ -114,13 +168,16 @@
 .md-editor li[data-checked] {
   display: flex;
   align-items: flex-start;
-  gap: var(--s2);
+  gap: 0.55em;
+  padding-left: 0;
   list-style: none;
 }
 
 .md-editor li[data-checked] > label {
+  display: flex;
   flex: none;
-  margin-top: 0.3em;
+  align-items: center;
+  height: 1.65em;
 }
 
 .md-editor li[data-checked] > div {
@@ -128,98 +185,244 @@
   min-width: 0;
 }
 
-.md-editor li[data-checked='true'] > div {
+.md-editor li[data-checked='true'] > div > p {
   color: var(--fg-muted);
   text-decoration: line-through;
+  text-decoration-color: var(--fg-muted);
 }
 
 .md-editor input[type='checkbox'] {
-  width: 13px;
-  height: 13px;
+  display: grid;
+  place-content: center;
+  width: 16px;
+  height: 16px;
   margin: 0;
-  accent-color: var(--accent);
+  border: 1.5px solid var(--fg-muted);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  transition:
+    background var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease);
 }
 
+.md-editor input[type='checkbox']:hover {
+  border-color: var(--fg-secondary);
+}
+
+.md-editor input[type='checkbox']:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.md-editor input[type='checkbox']:checked::after {
+  content: '';
+  width: 8px;
+  height: 4px;
+  margin-top: -2px;
+  border: 2px solid var(--on-accent);
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-45deg);
+}
+
+/* Quotes and callouts. */
 .md-editor blockquote {
-  margin: 0;
-  padding: var(--s1) var(--s4);
-  border-left: 3px solid var(--line-strong);
-  color: var(--fg-secondary);
+  margin: 0.5em 0;
+  padding: 0.1em 0 0.1em 0.95em;
+  border-left: 3px solid var(--fg-secondary);
+  color: var(--fg);
 }
 
-.md-editor code {
-  padding: 1px 4px;
-  border-radius: var(--r1);
-  background: var(--bg-raised);
-  font-family: var(--font-mono);
-  font-size: 0.92em;
+.md-callout {
+  --callout: var(--info);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  margin: 0.65em 0;
+  padding: 0.7em 1em 0.75em;
+  border: 1px solid color-mix(in srgb, var(--callout) 26%, transparent);
+  border-radius: var(--r2);
+  background: color-mix(in srgb, var(--callout) 9%, transparent);
 }
 
+.md-callout[data-callout='tip'] {
+  --callout: var(--success);
+}
+
+.md-callout[data-callout='important'] {
+  --callout: var(--accent-bright);
+}
+
+.md-callout[data-callout='warning'] {
+  --callout: var(--warning);
+}
+
+.md-callout[data-callout='caution'] {
+  --callout: var(--danger);
+}
+
+.md-callout__kind {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--callout);
+  font: inherit;
+  font-size: 0.85em;
+  font-weight: 650;
+  cursor: pointer;
+  user-select: none;
+}
+
+.md-callout__kind::before {
+  content: '';
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.md-callout__kind:hover {
+  text-decoration: underline;
+}
+
+.md-callout__body > :first-child {
+  margin-top: 0;
+}
+
+.md-callout__body > :last-child {
+  margin-bottom: 0;
+}
+
+/* Code, in the code editor's colours. */
 .md-code {
-  /* The patch's syntax palette, the terminal's bright half. */
-  --syntax-keyword: var(--term-bright-magenta);
-  --syntax-string: var(--term-bright-green);
-  --syntax-number: var(--term-bright-yellow);
-  --syntax-comment: var(--fg-muted);
   position: relative;
-  margin: var(--s2) 0;
+  margin: 0.75em 0;
 }
 
 .md-code pre {
   margin: 0;
-  padding: var(--s3) var(--s4);
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: var(--r2);
   background: var(--bg-panel);
+  color: var(--term-fg);
   overflow-x: auto;
   font-family: var(--font-mono);
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: 13px;
+  line-height: 1.55;
+  tab-size: 2;
 }
 
 .md-code pre code {
   padding: 0;
+  border-radius: 0;
   background: transparent;
+  color: inherit;
   font-size: inherit;
 }
 
 .md-code .hljs-keyword,
-.md-code .hljs-built_in,
-.md-code .hljs-selector-tag,
-.md-code .hljs-literal,
-.md-code .hljs-type {
-  color: var(--syntax-keyword);
+.md-code .hljs-meta .hljs-keyword {
+  color: var(--term-bright-magenta);
 }
 
 .md-code .hljs-string,
-.md-code .hljs-regexp,
-.md-code .hljs-addition,
-.md-code .hljs-attr,
-.md-code .hljs-symbol {
-  color: var(--syntax-string);
+.md-code .hljs-regexp {
+  color: var(--term-bright-green);
 }
 
 .md-code .hljs-number,
-.md-code .hljs-title,
-.md-code .hljs-variable,
-.md-code .hljs-template-variable,
-.md-code .hljs-selector-class {
-  color: var(--syntax-number);
+.md-code .hljs-literal {
+  color: var(--term-bright-yellow);
 }
 
 .md-code .hljs-comment,
-.md-code .hljs-quote,
-.md-code .hljs-meta,
+.md-code .hljs-quote {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+.md-code .hljs-title.function_,
+.md-code .hljs-section {
+  color: var(--term-bright-blue);
+}
+
+.md-code .hljs-section {
+  font-weight: 600;
+}
+
+.md-code .hljs-type,
+.md-code .hljs-title.class_,
+.md-code .hljs-title {
+  color: var(--term-bright-cyan);
+}
+
+.md-code .hljs-attr,
+.md-code .hljs-attribute,
+.md-code .hljs-property,
+.md-code .hljs-selector-class,
+.md-code .hljs-selector-id {
+  color: var(--term-yellow);
+}
+
+.md-code .hljs-tag,
+.md-code .hljs-name,
+.md-code .hljs-selector-tag {
+  color: var(--term-bright-red);
+}
+
+.md-code .hljs-meta {
+  color: var(--term-magenta);
+}
+
+.md-code .hljs-built_in,
+.md-code .hljs-variable.language_,
+.md-code .hljs-symbol,
+.md-code .hljs-char.escape_,
+.md-code .hljs-template-variable {
+  color: var(--term-cyan);
+}
+
+.md-code .hljs-operator,
+.md-code .hljs-punctuation {
+  color: var(--fg-secondary);
+}
+
+.md-code .hljs-link {
+  color: var(--term-cyan);
+  text-decoration: underline;
+}
+
+.md-code .hljs-emphasis {
+  font-style: italic;
+}
+
+.md-code .hljs-strong {
+  font-weight: 600;
+}
+
+.md-code .hljs-addition {
+  color: var(--success);
+}
+
 .md-code .hljs-deletion {
-  color: var(--syntax-comment);
+  color: var(--danger);
 }
 
 .md-code__language {
   position: absolute;
-  top: var(--s1);
-  right: var(--s1);
-  width: 8ch;
-  padding: 1px var(--s2);
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  max-width: 14ch;
+  height: 22px;
+  padding: 0 var(--s2);
   border: 1px solid transparent;
   border-radius: var(--r1);
   background: transparent;
@@ -227,42 +430,51 @@
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   text-align: right;
+  cursor: pointer;
+  appearance: none;
 }
 
-.md-code__language:hover,
+.md-code:hover .md-code__language,
 .md-code__language:focus {
   border-color: var(--line-strong);
   background: var(--bg-raised);
-  color: var(--fg);
+  color: var(--fg-secondary);
   outline: none;
 }
 
+/* Rules, tables, images. */
 .md-editor hr {
-  margin: var(--s4) 0;
+  margin: 1.1em 0;
   border: 0;
   border-top: 1px solid var(--line-strong);
 }
 
 .md-editor table {
-  border-collapse: collapse;
-  margin: var(--s2) 0;
   width: 100%;
+  margin: 0.75em 0;
+  border-collapse: collapse;
   table-layout: fixed;
+  font-size: 0.93em;
 }
 
 .md-editor th,
 .md-editor td {
   position: relative;
   min-width: 4ch;
-  padding: var(--s1) var(--s2);
+  padding: 6px 10px;
   border: 1px solid var(--line-strong);
   vertical-align: top;
   text-align: left;
 }
 
 .md-editor th {
-  background: var(--bg-raised);
+  background: var(--bg-panel);
   font-weight: 600;
+}
+
+.md-editor th p,
+.md-editor td p {
+  margin: 0;
 }
 
 .md-editor .selectedCell::after {
@@ -276,12 +488,12 @@
 .md-image {
   display: block;
   max-width: 100%;
-  margin: var(--s2) 0;
+  margin: 0.5em 0;
   border-radius: var(--r2);
 }
 
 .md-html {
-  margin: var(--s2) 0;
+  margin: 0.5em 0;
   padding: var(--s2) var(--s3);
   border: 1px dashed var(--line-strong);
   border-radius: var(--r2);
@@ -300,7 +512,7 @@
   display: flex;
   align-items: center;
   gap: var(--s3);
-  margin: var(--s2) 0;
+  margin: 0.5em 0;
   padding: var(--s2) var(--s3);
   border: 1px solid var(--line-strong);
   border-radius: var(--r2);
@@ -333,32 +545,190 @@
   white-space: nowrap;
 }
 
-.ProseMirror-selectednode.md-artifact,
+/* A block chosen whole: by its handle, or a click on a card or image. */
 .md-editor .ProseMirror-selectednode {
+  border-radius: var(--r1);
+  background: var(--accent-soft);
   outline: 2px solid var(--accent-line);
-  outline-offset: 1px;
+  outline-offset: 2px;
 }
 
-/* The `/` menu, at the caret. */
-.md-menu {
+.md-editor .ProseMirror-selectednode::selection,
+.md-editor .ProseMirror-selectednode ::selection {
+  background: transparent;
+}
+
+/* The glyphs the menus draw. */
+.md-glyph {
+  display: block;
+  flex: none;
+}
+
+.md-glyph--letters::before {
+  content: attr(data-letters);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+/* The handle beside the block under the pointer. */
+.md-handle {
+  display: flex;
   position: absolute;
-  z-index: 4;
-  width: 240px;
-  max-height: 280px;
-  margin: 0;
-  padding: var(--s1);
+  z-index: 3;
+  align-items: center;
+  height: 24px;
+  animation: md-appear var(--motion-fast) var(--ease);
+}
+
+.md-handle__button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.md-handle__button:hover,
+.md-handle__button[aria-expanded='true'] {
+  background: var(--bg-hover);
+  color: var(--fg-secondary);
+}
+
+.md-handle__grip {
+  cursor: grab;
+}
+
+.md-handle__grip:active {
+  cursor: grabbing;
+}
+
+@keyframes md-appear {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Menus: the block's, and the bar's turn-into. */
+.md-popover {
+  display: flex;
+  position: absolute;
+  z-index: 5;
+  flex-direction: column;
+  min-width: 210px;
+  max-height: min(480px, 70vh);
+  padding: 4px;
   overflow-y: auto;
   border: 1px solid var(--line-strong);
   border-radius: var(--r2);
   background: var(--bg-raised);
   box-shadow: var(--shadow-pop);
-  list-style: none;
+  font-size: var(--text-base);
+  line-height: 1.3;
+}
+
+.md-popover__title {
+  padding: 6px 8px 4px;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.md-popover__row {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px 0 4px;
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.md-popover__row:hover {
+  background: var(--bg-hover);
+}
+
+.md-popover__row--current {
+  color: var(--accent-bright);
+}
+
+.md-popover__row--danger:hover {
+  color: var(--danger);
+}
+
+.md-popover__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: var(--bg-window);
+  color: var(--fg-secondary);
+}
+
+.md-popover__icon .md-glyph {
+  width: 14px;
+  height: 14px;
+}
+
+.md-popover__icon .md-glyph--letters {
+  width: auto;
+  height: auto;
+}
+
+.md-popover__icon .md-glyph--letters::before {
+  font-size: 9.5px;
+}
+
+.md-popover__rule {
+  flex: none;
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--line-strong);
+}
+
+/* The `/` menu, at the caret. */
+.md-menu {
+  position: absolute;
+  z-index: 5;
+  width: 280px;
+  max-height: 340px;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--text-base);
+}
+
+.md-menu__group {
+  padding: 8px 8px 4px;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
 }
 
 .md-menu__row {
   display: flex;
-  flex-direction: column;
-  padding: var(--s1) var(--s2);
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 8px 4px 4px;
   border-radius: var(--r1);
   cursor: pointer;
 }
@@ -367,69 +737,116 @@
   background: var(--bg-press);
 }
 
-.md-menu__label {
+.md-menu__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-window);
   color: var(--fg);
-  font-size: var(--text-base);
+}
+
+.md-menu__icon .md-glyph--letters::before {
+  font-size: 12.5px;
+}
+
+.md-menu__label {
+  flex: 1;
+  min-width: 0;
+  color: var(--fg);
+  font-size: 13px;
 }
 
 .md-menu__detail {
+  max-width: 45%;
   overflow: hidden;
   color: var(--fg-muted);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* The toolbar over a selection. */
-.md-toolbar {
+/* The bar over a selection. */
+.md-bar {
   display: flex;
   position: absolute;
-  z-index: 4;
+  z-index: 5;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
+  gap: 1px;
+  padding: 3px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r2);
   background: var(--bg-raised);
   box-shadow: var(--shadow-pop);
+  font-size: var(--text-base);
 }
 
-.md-toolbar__button {
-  min-width: 24px;
-  height: 22px;
-  padding: 0 var(--s2);
+.md-bar__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
   border: 0;
   border-radius: var(--r1);
   background: transparent;
   color: var(--fg-secondary);
   font: inherit;
-  font-size: var(--text-sm);
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 650;
   cursor: pointer;
 }
 
-.md-toolbar__button:hover {
+.md-bar__button:hover {
   background: var(--bg-hover);
   color: var(--fg);
 }
 
-.md-toolbar__button--on {
-  background: var(--accent-soft);
+.md-bar__button--on {
   color: var(--accent-bright);
 }
 
-.md-toolbar__turn,
-.md-toolbar__href {
-  height: 22px;
-  border: 1px solid var(--line);
+.md-bar__turn {
+  padding: 0 4px 0 8px;
+  color: var(--fg);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.md-bar__mark--italic {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+}
+
+.md-bar__mark--strike {
+  text-decoration: line-through;
+}
+
+.md-bar__rule {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--line-strong);
+}
+
+.md-bar__href {
+  width: 220px;
+  height: 26px;
+  padding: 0 var(--s2);
+  border: 1px solid var(--line-strong);
   border-radius: var(--r1);
   background: var(--bg-input);
   color: var(--fg);
   font: inherit;
-  font-size: var(--text-sm);
 }
 
-.md-toolbar__href {
-  width: 200px;
-  padding: 0 var(--s2);
+.md-bar__kinds {
+  top: calc(100% + 6px);
+  left: 0;
 }

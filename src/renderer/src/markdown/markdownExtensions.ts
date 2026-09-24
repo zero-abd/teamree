@@ -8,6 +8,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { lowlight } from './codeLanguages'
 import {
   ArtifactCard,
+  Callout,
   CodeBlockWithLanguage,
   HtmlBlock,
   HtmlInline,
@@ -27,6 +28,7 @@ export function markdownExtensions(options: MarkdownExtensionOptions = {}): AnyE
       // Markdown has no underline, so the editor offers none.
       underline: false,
       link: { openOnClick: false, autolink: true, linkOnPaste: true },
+      dropcursor: { color: 'var(--accent)', width: 2 },
       codeBlock: false,
       bulletList: false,
       orderedList: false
@@ -43,6 +45,7 @@ export function markdownExtensions(options: MarkdownExtensionOptions = {}): AnyE
     BulletList.extend({ content: '(listItem | taskItem)+' }),
     OrderedList.extend({ content: '(listItem | taskItem)+' }),
     ImageByPath.configure({ inline: true, allowBase64: false, resolve: options.resolveImage ?? (() => null) }),
+    Callout,
     HtmlBlock,
     HtmlInline,
     ArtifactCard.configure({ onOpen: options.onOpenUrl ?? (() => {}) })

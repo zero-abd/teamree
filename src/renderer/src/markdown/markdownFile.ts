@@ -287,7 +287,12 @@ class Writer {
       const first = out.length === 0 && next === -1
       if (here && here.span >= next) {
         const neighbour = anchored !== null ? here.span === anchored + 1 : first && here.span === 0
-        append(gaps(next, here.span, box.loose && !neighbour && !first))
+        // Blocks gone from the top take the blank lines after them along.
+        const lead =
+          first && here.span > 0
+            ? `${gap(-1)}${gaps(0, here.span, false).replace(/^(?:[ \t]*(?:\r\n|\r|\n))+/, '')}`
+            : gaps(next, here.span, box.loose && !neighbour && !first)
+        append(lead)
         const span = spans[here.span]
         if (span !== undefined) append(here.exact ? this.slice(span.from, span.to) : box.changed(node, span, first))
         next = here.span

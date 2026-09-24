@@ -1,9 +1,10 @@
 // The nodes the schema has beyond markdown's own — raw HTML kept verbatim, an
-// artifact link card — and the code block and image drawn our way.
+// artifact link card, a GitHub alert — and the code block and image drawn our way.
 
 import { mergeAttributes, Node } from '@tiptap/core'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { Image, type ImageOptions } from '@tiptap/extension-image'
+import { CODE_LANGUAGES } from './codeLanguages'
 
 /** A block of raw HTML, drawn as it was written and saved back the same way. */
 export const HtmlBlock = Node.create({
@@ -103,31 +104,97 @@ export const ArtifactCard = Node.create<ArtifactCardOptions>({
   }
 })
 
-/** A highlighted code block, with a field for the language in its corner. */
+/** The kinds of GitHub alert a callout can be, in the order a click cycles them. */
+export const CALLOUT_KINDS = ['note', 'tip', 'important', 'warning', 'caution'] as const
+export type CalloutKind = (typeof CALLOUT_KINDS)[number]
+
+const calloutLabel = (kind: string): string => `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`
+
+/** A GitHub alert (`> [!NOTE]`): a quote with a kind, drawn as a callout whose label cycles the kind. */
+export const Callout = Node.create({
+  name: 'callout',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+  addAttributes() {
+    return { kind: { default: 'note' } }
+  },
+  parseHTML() {
+    return [
+      { tag: 'div[data-callout]', getAttrs: (element) => ({ kind: element.getAttribute('data-callout') ?? 'note' }) }
+    ]
+  },
+  renderHTML({ node }) {
+    return ['div', { 'data-callout': String(node.attrs.kind), class: 'md-callout' }, 0]
+  },
+  addNodeView() {
+    return ({ node, getPos, editor }) => {
+      let current = node
+      const dom = document.createElement('div')
+      dom.className = 'md-callout'
+      const label = document.createElement('button')
+      label.type = 'button'
+      label.className = 'md-callout__kind'
+      label.contentEditable = 'false'
+      const body = document.createElement('div')
+      body.className = 'md-callout__body'
+      const draw = (): void => {
+        const kind = String(current.attrs.kind)
+        dom.dataset.callout = kind
+        label.textContent = calloutLabel(kind)
+      }
+      draw()
+      label.addEventListener('mousedown', (event) => event.preventDefault())
+      label.addEventListener('click', () => {
+        const pos = getPos()
+        if (pos === undefined || !editor.isEditable) return
+        const at = CALLOUT_KINDS.indexOf(String(current.attrs.kind) as CalloutKind)
+        const kind = CALLOUT_KINDS[(at + 1) % CALLOUT_KINDS.length]
+        editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, kind }))
+      })
+      dom.append(label, body)
+      return {
+        dom,
+        contentDOM: body,
+        stopEvent: (event) => event.target === label,
+        ignoreMutation: (mutation) => mutation.target === label || label.contains(mutation.target),
+        update: (updated) => {
+          if (updated.type !== current.type) return false
+          current = updated
+          draw()
+          return true
+        }
+      }
+    }
+  }
+})
+
+/** A highlighted code block, with a picker for the language in its corner. */
 export const CodeBlockWithLanguage = CodeBlockLowlight.extend({
   addNodeView() {
     return ({ node, getPos, editor }) => {
+      let current = node
       const dom = document.createElement('div')
       dom.className = 'md-code'
-      const language = document.createElement('input')
+      const language = document.createElement('select')
       language.className = 'md-code__language'
-      language.placeholder = 'language'
-      language.spellcheck = false
+      language.contentEditable = 'false'
       language.setAttribute('aria-label', 'Code language')
-      language.value = String(node.attrs.language ?? '')
+      const fill = (): void => {
+        const value = String(current.attrs.language ?? '')
+        const known = CODE_LANGUAGES.some((entry) => entry.id === value)
+        const options = [...CODE_LANGUAGES, ...(known || value === '' ? [] : [{ id: value, label: value }])]
+        language.replaceChildren(new Option('Plain', ''), ...options.map((entry) => new Option(entry.label, entry.id)))
+        language.value = value
+      }
+      fill()
       language.addEventListener('change', () => {
         const pos = getPos()
         if (pos === undefined) return
         editor.view.dispatch(
-          editor.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, language: language.value.trim() || null })
+          editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, language: language.value || null })
         )
-      })
-      language.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === 'Escape') {
-          event.preventDefault()
-          language.blur()
-          editor.commands.focus()
-        }
+        editor.commands.focus()
       })
       const pre = document.createElement('pre')
       pre.spellcheck = false
@@ -140,9 +207,10 @@ export const CodeBlockWithLanguage = CodeBlockLowlight.extend({
         stopEvent: (event) => event.target === language,
         ignoreMutation: (mutation) => mutation.target === language || language.contains(mutation.target),
         update: (updated) => {
-          if (updated.type !== node.type) return false
-          const next = String(updated.attrs.language ?? '')
-          if (document.activeElement !== language && language.value !== next) language.value = next
+          if (updated.type !== current.type) return false
+          const changed = updated.attrs.language !== current.attrs.language
+          current = updated
+          if (changed) fill()
           return true
         }
       }
