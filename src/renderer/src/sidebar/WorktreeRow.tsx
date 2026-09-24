@@ -52,6 +52,8 @@ type WorktreeRowProps = {
   onRenameShown?: () => void
   /** The Open in submenu, the project's editor first. */
   openIn: readonly { label: string; onChoose: () => void }[]
+  /** The Compare with submenu: the task's other runs. None leaves the item out. */
+  compareWith?: readonly { label: string; onChoose: () => void }[]
 }
 
 export function WorktreeRow({
@@ -75,7 +77,8 @@ export function WorktreeRow({
   onRename,
   renameAsked = false,
   onRenameShown,
-  openIn
+  openIn,
+  compareWith = []
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
   const failed = worktree.state === 'failed'
@@ -134,6 +137,7 @@ export function WorktreeRow({
         { label: 'Copy Path', onChoose: onCopyPath },
         { label: 'Copy Branch', onChoose: onCopyBranch },
         { label: 'Open in', onChoose: () => {}, items: openIn },
+        ...(compareWith.length === 0 ? [] : [{ label: 'Compare with', onChoose: () => {}, items: compareWith }]),
         remove
       ]
   const rows = ready ? agentRows(terminals, worktree, now, evidence) : []

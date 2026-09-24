@@ -33,6 +33,7 @@ export const GIT_METHODS = [
   'worktree.discardHunk',
   'worktree.log',
   'worktree.showCommit',
+  'worktree.compare',
   'worktree.mergePreview',
   'worktree.push',
   'worktree.startPoints'
@@ -71,6 +72,7 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.discardHunk': (params) => service.worktreeDiscardHunk(params),
     'worktree.log': (params) => service.worktreeLog(params),
     'worktree.showCommit': (params) => service.worktreeShowCommit(params),
+    'worktree.compare': (params) => service.worktreeCompare(params),
     'worktree.mergePreview': (params) => service.worktreeMergePreview(params),
     'worktree.push': (params) => service.worktreePush(params),
     'worktree.startPoints': (params) =>
@@ -105,6 +107,7 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.discardHunk', Params.worktreeDiscardHunk, handlers['worktree.discardHunk'])
   registry.register('worktree.log', Params.worktreeLog, handlers['worktree.log'])
   registry.register('worktree.showCommit', Params.worktreeShowCommit, handlers['worktree.showCommit'])
+  registry.register('worktree.compare', Params.worktreeCompare, handlers['worktree.compare'])
   registry.register('worktree.mergePreview', Params.worktreeMergePreview, handlers['worktree.mergePreview'])
   registry.register('worktree.push', Params.worktreePush, handlers['worktree.push'])
   registry.register('worktree.startPoints', Params.worktreeStartPoints, handlers['worktree.startPoints'])

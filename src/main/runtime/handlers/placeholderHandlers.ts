@@ -31,6 +31,7 @@ export function registerPlaceholderHandlers(registry: MethodRegistry): void {
   placeholder(registry, 'worktree.discardHunk', Params.worktreeDiscardHunk)
   placeholder(registry, 'worktree.log', Params.worktreeLog)
   placeholder(registry, 'worktree.showCommit', Params.worktreeShowCommit)
+  placeholder(registry, 'worktree.compare', Params.worktreeCompare)
   placeholder(registry, 'worktree.mergePreview', Params.worktreeMergePreview)
   placeholder(registry, 'worktree.push', Params.worktreePush)
 

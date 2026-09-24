@@ -3,12 +3,13 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { hasCheckout } from '@shared/entities'
-import { fileLeavesIn, isCommitLeaf, isFilePaneId } from '@shared/filePane'
+import { fileLeavesIn, isFilePaneId, isWorktreeFileLeaf } from '@shared/filePane'
 import { activeChoice, resolveTone, themeTone, withChoice, type AppearanceMode } from '@shared/theme'
 import { Modal } from '../dialogs/Modal'
 import { holdsModifier, type PlatformModifier } from '../keyboard/platformModifier'
 import { runWorkspaceCommand, whyUnavailable } from '../keyboard/workspaceCommands'
 import { commandNamed, shortcutHint } from '../keyboard/workspaceShortcuts'
+import { compareTitle } from '../compare/siblingRuns'
 import { useOpenIn } from '../sidebar/openIn'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -100,8 +101,9 @@ export function CommandPalette({
   const focusedPane = focusedWatchId === null ? (activeLayout?.focusedTerminalId ?? null) : null
   const focusedPath =
     focusedPane !== null && isFilePaneId(focusedPane)
-      ? fileLeavesIn(activeLayout?.root ?? null).find((leaf) => leaf.terminalId === focusedPane && !isCommitLeaf(leaf))
-          ?.path
+      ? fileLeavesIn(activeLayout?.root ?? null).find(
+          (leaf) => leaf.terminalId === focusedPane && isWorktreeFileLeaf(leaf)
+        )?.path
       : undefined
   const change = useFocusedChange(activeWorktreeId, focusedPath)
 
@@ -184,7 +186,7 @@ export function CommandPalette({
       ...new Set([
         ...opened,
         ...fileLeavesIn(openRoot)
-          .filter((leaf) => !isCommitLeaf(leaf))
+          .filter(isWorktreeFileLeaf)
           .map((leaf) => leaf.path)
       ])
     ],
@@ -250,6 +252,11 @@ export function CommandPalette({
       return
     }
 
+    if (item.id.startsWith('compare:')) {
+      const other = worktrees.find((worktree) => `compare:${worktree.id}` === item.id)
+      if (active && other) void store.openCompare(active.id, other.id, compareTitle(active, other))
+      return
+    }
     if (item.id.startsWith('open-in:')) {
       targets.find((target) => `open-in:${target.label}` === item.id)?.onChoose()
       return

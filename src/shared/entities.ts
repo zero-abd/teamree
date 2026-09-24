@@ -311,6 +311,22 @@ export type WorktreeCommitPatch = WorktreeCommitSummary & {
   readAt: number
 }
 
+/** One run of a task as `worktree.compare` reads it: its working tree against the shared start commit. */
+export type WorktreeCompareSide = {
+  worktreeId: string
+  head: string
+  patch: string
+  truncated: boolean
+}
+
+/** Two runs of one task, each as its patch against `base`, the commit both started from. */
+export type WorktreeCompare = {
+  base: string
+  left: WorktreeCompareSide
+  right: WorktreeCompareSide
+  readAt: number
+}
+
 /** What a worktree has done that its base has not, newest first. Scoped to `base..branch`. */
 export type WorktreeLog = {
   worktreeId: string
@@ -453,6 +469,8 @@ export type PaneNode =
       path?: string
       /** A file leaf showing this commit read-only instead of a file; `path` then holds the tab's title. */
       commit?: string
+      /** A file leaf comparing its worktree with this sibling worktree, read-only; `path` holds the tab's title. */
+      compare?: string
     }
   | {
       kind: 'split'

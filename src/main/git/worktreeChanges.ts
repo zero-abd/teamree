@@ -175,6 +175,8 @@ export type DiffReadOptions = {
   worktreePath: string
   path?: string
   staged?: boolean
+  /** A commit to diff against instead of the index, or HEAD when staged. */
+  against?: string
   contextLines?: number
   maxBytes?: number
   /** Untracked files the whole-worktree patch will show. */
@@ -203,6 +205,7 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
     '--no-color',
     `--unified=${context}`,
     ...(staged ? ['--cached'] : []),
+    ...(options.against === undefined ? [] : [options.against]),
     ...pathspec(options.path)
   ]
 

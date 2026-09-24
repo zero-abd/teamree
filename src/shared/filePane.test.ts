@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest'
 import type { PaneNode } from './entities'
 import {
   commitLeaf,
+  compareLeaf,
   fileLeaf,
   fileLeavesIn,
   filePaneName,
   fileTabName,
   isCommitLeaf,
+  isCompareLeaf,
+  isWorktreeFileLeaf,
   fileViewerFor,
   isFileLeaf,
   isFilePaneId,
@@ -52,6 +55,18 @@ describe('file leaves', () => {
     expect(isCommitLeaf(file)).toBe(false)
     expect(fileTabName(commit)).toBe('5bb16ed Fix src/math.ts')
     expect(fileTabName(file)).toBe('math.ts')
+  })
+
+  it('keeps a compare as a file-column tab named by its whole title, apart from files and commits', () => {
+    const compare = compareLeaf('file:x', 'wt-codex', 'claude vs codex/2')
+    const commit = commitLeaf('file:c', 'a'.repeat(40), 'aaaaaaa Add sub')
+    const file = fileLeaf('file:f', 'src/math.ts')
+    expect(isFileLeaf(compare)).toBe(true)
+    expect(isCompareLeaf(compare)).toBe(true)
+    expect(isCompareLeaf(commit)).toBe(false)
+    expect(isCommitLeaf(compare)).toBe(false)
+    expect([compare, commit, file].map(isWorktreeFileLeaf)).toEqual([false, false, true])
+    expect(fileTabName(compare)).toBe('claude vs codex/2')
   })
 
   it('prefixes the id and names the pane after the file', () => {

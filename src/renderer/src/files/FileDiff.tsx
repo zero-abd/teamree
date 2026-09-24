@@ -110,15 +110,18 @@ export function DiffTools({ diff, view = 'Code' }: { diff: FileDiff; view?: stri
   )
 }
 
-/** Inline and Side by side as icons; the second is off where two columns would not fit. */
+/** Inline and Side by side as icons; the second is off where two columns would not fit. `onChoose` defaults to the preference. */
 export function LayoutTools({
   layout,
-  bodyWidth
+  bodyWidth,
+  onChoose
 }: {
   layout: DiffLayout
   bodyWidth: number | null
+  onChoose?: (layout: DiffLayout) => void
 }): React.JSX.Element {
-  const setDiffLayout = useWorkspaceStore((state) => state.setDiffLayout)
+  const setPreference = useWorkspaceStore((state) => state.setDiffLayout)
+  const setDiffLayout = onChoose ?? setPreference
   return (
     <Segments label="Layout">
       <button
