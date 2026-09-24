@@ -219,6 +219,7 @@ export const ACCELERATOR_KEY_NAMES: Readonly<Record<string, string>> = {
  */
 export function acceleratorForChord(chord: Chord): string {
   const parts = chord.bare ? [] : [chord.ctrl ? 'Control' : 'CommandOrControl']
+  if (chord.control) parts.push('Control')
   if (chord.alt) parts.push('Alt')
   if (chord.shift) parts.push('Shift')
   parts.push(ACCELERATOR_KEY_NAMES[chord.key] ?? (chord.key.length === 1 ? chord.key.toUpperCase() : chord.key))

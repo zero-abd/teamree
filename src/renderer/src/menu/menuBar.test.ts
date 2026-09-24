@@ -82,6 +82,8 @@ describe('the menu bar is built from the table the keyboard reads', () => {
     // Control itself, not ⌘, on a Mac.
     expect(acceleratorForChord({ key: 'Tab', ctrl: true })).toBe('Control+Tab')
     expect(acceleratorForChord({ key: 'Tab', ctrl: true, shift: true })).toBe('Control+Shift+Tab')
+    // Control as well as ⌘.
+    expect(acceleratorForChord({ key: 'ArrowDown', control: true })).toBe('CommandOrControl+Control+Down')
     // No modifier at all.
     expect(acceleratorForChord({ key: 'F6', bare: true })).toBe('F6')
     expect(acceleratorForChord({ key: 'F6', bare: true, shift: true })).toBe('Shift+F6')

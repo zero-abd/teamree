@@ -71,6 +71,8 @@ export type Chord = {
   alt?: boolean
   /** Held as Control in place of the app modifier, which on a Mac is a different key. */
   ctrl?: boolean
+  /** Control held as well as the app modifier: ⌃⌘ on a Mac, where no text field reads it; Ctrl alone elsewhere. */
+  control?: boolean
   /** Pressed with no modifier but shift: a function key. */
   bare?: boolean
 }
@@ -84,7 +86,9 @@ export function matchesChord(
     ? !event.ctrlKey && !event.metaKey
     : chord.ctrl
       ? event.ctrlKey && !event.metaKey
-      : holdsModifier(event, modifier)
+      : chord.control
+        ? event.ctrlKey && (modifier.eventFlag !== 'metaKey' || event.metaKey)
+        : holdsModifier(event, modifier)
   if (!held) return false
   if (event.shiftKey !== Boolean(chord.shift)) return false
   if (event.altKey !== Boolean(chord.alt)) return false
@@ -94,6 +98,7 @@ export function matchesChord(
 /** Renders a chord the way this platform's users expect to read it. */
 export function formatChord(chord: Chord, modifier: PlatformModifier): string {
   const parts = chord.bare ? [] : [chord.ctrl ? modifier.controlLabel : modifier.label]
+  if (chord.control && modifier.controlLabel !== modifier.label) parts.unshift(modifier.controlLabel)
   if (chord.alt) parts.push(modifier.altLabel)
   if (chord.shift) parts.push(modifier.shiftLabel)
   parts.push(formatKeyName(chord.key))

@@ -90,9 +90,9 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // With alt: bare ⌘↑/⌘↓ are document keys inside a pane.
   { command: 'previous-worktree', chord: { key: 'ArrowUp', alt: true }, title: 'Previous Worktree' },
   { command: 'next-worktree', chord: { key: 'ArrowDown', alt: true }, title: 'Next Worktree' },
-  // Across every worktree, in the board's order of attention; see `needingYou.ts`.
-  { command: 'next-needing', chord: { key: 'ArrowDown', shift: true }, title: 'Go to Next Needing You' },
-  { command: 'previous-needing', chord: { key: 'ArrowUp', shift: true }, title: 'Go to Previous Needing You' },
+  // ⌃⌘, not ⌘⇧: that selects to the end or start in every text field and editor; see `needingYou.ts`.
+  { command: 'next-needing', chord: { key: 'ArrowDown', control: true }, title: 'Go to Next Needing You' },
+  { command: 'previous-needing', chord: { key: 'ArrowUp', control: true }, title: 'Go to Previous Needing You' },
   { command: 'open-palette', chord: { key: 'k' }, title: 'Go to Worktree or Command' },
   // ⌘P as in every editor; this window has nothing to print.
   { command: 'go-to-file', chord: { key: 'p' }, title: 'Go to File…' },

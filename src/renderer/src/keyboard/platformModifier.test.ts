@@ -72,6 +72,18 @@ describe('holdsModifier', () => {
   })
 })
 
+describe('a chord with Control as well as the app modifier', () => {
+  const down = { key: 'ArrowDown', control: true }
+
+  it('is ⌃⌘ on a Mac, and neither key alone nor with shift', () => {
+    expect(matchesChord(event({ key: 'ArrowDown', metaKey: true, ctrlKey: true }), down, mac)).toBe(true)
+    expect(matchesChord(event({ key: 'ArrowDown', metaKey: true }), down, mac)).toBe(false)
+    expect(matchesChord(event({ key: 'ArrowDown', ctrlKey: true }), down, mac)).toBe(false)
+    expect(matchesChord(event({ key: 'ArrowDown', metaKey: true, shiftKey: true }), down, mac)).toBe(false)
+    expect(formatChord(down, mac)).toBe('⌃⌘↓')
+  })
+})
+
 describe('matchesChord', () => {
   it('ignores the case of the typed key', () => {
     expect(matchesChord(event({ key: 'D', metaKey: true }), { key: 'd' }, mac)).toBe(true)
