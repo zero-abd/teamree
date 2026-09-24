@@ -38,6 +38,8 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   const [agentCounts, setAgentCounts] = useState<AgentCounts | null>(null)
   const [startPoint, setStartPoint] = useState<StartPointValue>({ text: '', option: null })
   const [touched, setTouched] = useState(false)
+  // A branch renamed by hand, kept while the task is edited; null is the task's own.
+  const [branchEdit, setBranchEdit] = useState<string | null>(null)
 
   const project = projects.find((entry) => entry.id === projectId)
   const { state: startPoints, reload } = useStartPoints(projectId)
@@ -67,7 +69,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   const selection = fanOut(agents, counts)
 
   // Empty until there is text: the fallback slug "worktree" would promise an unrelated branch name.
-  const branchName = task.trim() ? branchNameFromTask(taskName(task)) : ''
+  const branchName = branchEdit ?? (task.trim() ? branchNameFromTask(taskName(task)) : '')
   const startedFrom = startPoint.text.trim()
   // Bounded by the agent's command line; a paste past it is refused, not cut.
   const tooLong = task.trim().length > MAX_AGENT_ARGS_CHARS
@@ -75,7 +77,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
 
   const submit = (): void => {
     if (!canSubmit) return
-    startTask({ projectId, startedFrom, creates: taskCreates(task, selection) })
+    startTask({ projectId, startedFrom, creates: taskCreates(task, selection, branchEdit ?? '') })
   }
 
   return (
@@ -100,7 +102,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
               submit()
             }}
             rows={3}
-            placeholder="Rewrite the pager so it streams instead of buffering"
+            placeholder="Task"
             autoComplete="off"
             spellCheck={true}
           />
@@ -181,6 +183,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
             setStartPoint(value)
           }}
           branchName={branchName}
+          onBranchName={(name) => setBranchEdit(name === '' ? null : name)}
         />
 
         <footer className="modal__actions">

@@ -90,15 +90,15 @@ afterEach(() => {
 
 describe('opening a compare', () => {
   it('adds a tab to the file column titled by both runs, focused, and goes back to it the second time', async () => {
-    await useWorkspaceStore.getState().openCompare('w-claude', 'w-codex', 'claude vs codex')
+    await useWorkspaceStore.getState().openCompare('w-claude', 'w-codex', 'Claude Code vs Codex')
     const leaves = fileLeavesIn(useWorkspaceStore.getState().layouts['w-claude']!.root)
     expect(leaves).toHaveLength(1)
     const leaf = leaves[0]!
     expect(isCompareLeaf(leaf) && leaf.compare).toBe('w-codex')
-    expect(leaf.path).toBe('claude vs codex')
+    expect(leaf.path).toBe('Claude Code vs Codex')
     expect(useWorkspaceStore.getState().layouts['w-claude']!.focusedTerminalId).toBe(leaf.terminalId)
 
-    await useWorkspaceStore.getState().openCompare('w-claude', 'w-codex', 'claude vs codex')
+    await useWorkspaceStore.getState().openCompare('w-claude', 'w-codex', 'Claude Code vs Codex')
     expect(fileLeavesIn(useWorkspaceStore.getState().layouts['w-claude']!.root)).toHaveLength(1)
   })
 })
@@ -109,7 +109,7 @@ describe('the compare pane', () => {
       <FilePane
         paneId="file:x"
         worktreeId="w-claude"
-        path="claude vs codex"
+        path="Claude Code vs Codex"
         compare="w-codex"
         focused
         onFocus={() => {}}
@@ -129,6 +129,8 @@ describe('the compare pane', () => {
     const codex = screen.getByRole('group', { name: `${TASK} (Codex)` })
     expect(within(claude).getByText('2 files')).toBeTruthy()
     expect(within(codex).getByText('1 file')).toBeTruthy()
+    expect(claude.querySelector('.compare__agent')?.textContent).toBe('Claude Code')
+    expect(codex.querySelector('.compare__agent')?.textContent).toBe('Codex')
 
     fireEvent.click(within(codex).getByRole('button', { name: 'Open' }))
     expect(openWorktree).toHaveBeenCalledWith('w-codex')
@@ -143,7 +145,7 @@ describe('the compare pane', () => {
       <FilePane
         paneId="file:x"
         worktreeId="w-claude"
-        path="claude vs codex"
+        path="Claude Code vs Codex"
         compare="w-codex"
         focused
         onFocus={() => {}}
@@ -168,7 +170,7 @@ describe('the compare pane', () => {
     expect(math.querySelectorAll('.patch__row--added')).toHaveLength(2)
 
     const test = screen.getByRole('region', { name: 'src/math.test.ts' })
-    expect(within(test).getByText('only claude')).toBeTruthy()
+    expect(within(test).getByText('only Claude Code')).toBeTruthy()
     expect(within(test).getByText('Untouched')).toBeTruthy()
     expect(test.querySelectorAll('.patch__row--added')).toHaveLength(1)
 
@@ -204,7 +206,7 @@ describe('keeping one run', () => {
       <FilePane
         paneId={paneId}
         worktreeId="w-claude"
-        path="claude vs codex"
+        path="Claude Code vs Codex"
         compare="w-codex"
         focused
         onFocus={() => {}}
@@ -264,9 +266,9 @@ describe('keeping one run', () => {
     })
     render(<ConfirmKeepDialog worktreeId="w-codex" />)
 
-    expect(screen.getByRole('dialog', { name: 'Keep codex run, remove 1 other?' })).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: 'Keep Codex run, remove 1 other?' })).toBeTruthy()
     expect(await screen.findByText('docs/NOTES.md')).toBeTruthy()
-    expect(screen.getByText('claude')).toBeTruthy()
+    expect(screen.getByText('Claude Code')).toBeTruthy()
 
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Keep and Remove' })))
 
@@ -303,7 +305,7 @@ describe('keeping one run', () => {
   it('folds the sidebar and panel away while on screen, and brings back what it folded', async () => {
     call.mockResolvedValue(compared)
     useWorkspaceStore.setState({ sidebarVisible: true, rightPanelOpen: true })
-    await useWorkspaceStore.getState().openCompare('w-claude', 'w-codex', 'claude vs codex')
+    await useWorkspaceStore.getState().openCompare('w-claude', 'w-codex', 'Claude Code vs Codex')
     const leaf = fileLeavesIn(useWorkspaceStore.getState().layouts['w-claude']!.root)[0]!
 
     const { unmount } = renderCompare(leaf.terminalId)

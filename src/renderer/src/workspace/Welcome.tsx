@@ -1,5 +1,5 @@
 // The front door, with no worktree open: the mark, then the two ways to a project, or New Task once there
-// is one (the sidebar's + adds more), and the chords. No agent buttons and no headline.
+// is one (the sidebar's + adds more; its chord is on its tooltip), and the chords. No agent buttons and no headline.
 
 import type { Project } from '@shared/entities'
 import type { PlatformModifier } from '../keyboard/platformModifier'
@@ -52,6 +52,7 @@ export function Welcome({
           <button
             type="button"
             className="button button--primary button--lead"
+            title={`New Task · ${shortcutHint('new-worktree', modifier)}`}
             onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
           >
             New Task
@@ -60,16 +61,14 @@ export function Welcome({
       </div>
 
       <dl className="welcome__shortcuts">
-        {(project === undefined ? SHORTCUT_COMMANDS : ['new-worktree' as const, ...SHORTCUT_COMMANDS]).map(
-          (command) => (
-            <div key={command} data-command={command}>
-              <dt>{menuLabel(command, { sidebarVisible, rightPanelOpen })}</dt>
-              <dd>
-                <kbd>{shortcutHint(command, modifier)}</kbd>
-              </dd>
-            </div>
-          )
-        )}
+        {SHORTCUT_COMMANDS.map((command) => (
+          <div key={command} data-command={command}>
+            <dt>{menuLabel(command, { sidebarVisible, rightPanelOpen })}</dt>
+            <dd>
+              <kbd>{shortcutHint(command, modifier)}</kbd>
+            </dd>
+          </div>
+        ))}
       </dl>
     </div>
   )

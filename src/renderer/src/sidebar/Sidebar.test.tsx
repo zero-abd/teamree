@@ -423,7 +423,7 @@ describe('the rail above the tree', () => {
     seed({ teamworkProjectId: 'p1' })
     mount()
     expect(screen.getByRole('button', { name: 'Teamwork' }).getAttribute('aria-current')).toBe('page')
-    expect(screen.getByRole('button', { name: 'All panes' }).getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('button', { name: 'All Panes' }).getAttribute('aria-current')).toBeNull()
   })
 
   it('comes back from a destination you are already in', () => {
@@ -436,7 +436,7 @@ describe('the rail above the tree', () => {
 
   it('goes to every pane in every worktree', () => {
     mount()
-    screen.getByRole('button', { name: 'All panes' }).click()
+    screen.getByRole('button', { name: 'All Panes' }).click()
     expect(toggleDashboard).toHaveBeenCalledOnce()
   })
 
@@ -679,9 +679,9 @@ describe('the row menu acts on the worktree it was opened on', () => {
       within(runs)
         .getAllByRole('menuitem')
         .map((item) => item.textContent)
-    ).toEqual(['claude'])
-    fireEvent.click(within(runs).getByRole('menuitem', { name: 'claude' }))
-    expect(openCompare).toHaveBeenCalledWith('w-codex', 'w-claude', 'codex vs claude')
+    ).toEqual(['Claude Code'])
+    fireEvent.click(within(runs).getByRole('menuitem', { name: 'Claude Code' }))
+    expect(openCompare).toHaveBeenCalledWith('w-codex', 'w-claude', 'Codex vs Claude Code')
   })
 
   const INSTALLED = [

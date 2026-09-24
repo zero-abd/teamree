@@ -4,7 +4,7 @@
 // state reaches a reader as words, and that what a key grants is above the button that
 // grants it. Markup is read after the clicks a test names: a step opened, More, Paste URL….
 
-import { cleanup, fireEvent, render as mount } from '@testing-library/react'
+import { cleanup, fireEvent, render as mount, within } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type {
   MemberList,
@@ -176,21 +176,62 @@ const text = (markup: string): string =>
     .replaceAll('&gt;', '>')
 
 describe('what a key grants, and where it is said', () => {
-  // `docs/teamwork.md`: survivable because it cannot be done invisibly, not because it is small.
-  it('is on screen before the button that adds one', () => {
-    const markup = render()
-    const warned = markup.indexOf('type into any pane here')
-    const button = markup.indexOf(JOIN_BUTTON)
-    expect(warned).toBeGreaterThan(-1)
-    expect(button).toBeGreaterThan(-1)
-    expect(warned).toBeLessThan(button)
+  const props = (onJoin: (handle?: string) => void): TeamworkStepsProps => ({
+    projectPath: PROJECT_PATH,
+    list: roster(),
+    relay: noRelay(),
+    status: status(),
+    membersPending: false,
+    membersError: null,
+    relayPending: false,
+    relayError: null,
+    readErrors: {},
+    onJoin,
+    onClearMembersError: () => {},
+    onSetRelay: () => {},
+    onRetry: () => {},
+    origin: { pending: false, error: null },
+    onSetOrigin: () => {},
+    pane: undefined,
+    onStartRelayPane: () => {},
+    onClosePane: () => {},
+    renderRelayPane: () => null,
+    publish: { plan: undefined, pending: false, error: null, result: undefined, progress: undefined },
+    onPublish: () => {},
+    onCancelPublish: () => {},
+    path: 'start',
+    onChoosePath: () => {},
+    projectName: 'pager',
+    onCopy: () => {}
   })
 
-  it('says what it is in one line, with nothing arguing around it', () => {
-    const shown = text(render())
-    expect(shown).toContain(KEY_GRANT_WARNING)
-    expect(shown).not.toMatch(/None of it can be done invisibly/)
-    expect(shown).not.toMatch(/unlocked laptop/)
+  // The step is the handle and the button; the sentence is the confirm's body, read at the moment it counts.
+  it('is the body of the question Add My Key asks, and nothing is written until it is answered', () => {
+    const joined: (string | undefined)[] = []
+    const view = mount(<TeamworkSteps {...props((handle) => joined.push(handle))} />)
+    expect(view.container.textContent).not.toContain(KEY_GRANT_WARNING)
+    expect(view.container.querySelector('.grant')).toBeNull()
+
+    fireEvent.change(view.getByRole('textbox', { name: /^Handle/ }), { target: { value: 'ana' } })
+    fireEvent.click(view.getByRole('button', { name: ADD_KEY_BUTTON }))
+    const dialog = view.getByRole('dialog', { name: 'Add your key as ana?' })
+    expect(dialog.querySelector('.confirm__body')?.textContent).toBe(KEY_GRANT_WARNING)
+    expect(joined).toEqual([])
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(view.queryByRole('dialog')).toBeNull()
+    expect(joined).toEqual([])
+
+    fireEvent.click(view.getByRole('button', { name: ADD_KEY_BUTTON }))
+    fireEvent.click(within(view.getByRole('dialog')).getByRole('button', { name: ADD_KEY_BUTTON }))
+    expect(joined).toEqual(['ana'])
+    expect(view.queryByRole('dialog')).toBeNull()
+  })
+
+  it('names the handle the key will be filed under when none is typed', () => {
+    const view = mount(<TeamworkSteps {...props(() => {})} />)
+    fireEvent.click(view.getByRole('button', { name: ADD_KEY_BUTTON }))
+    expect(view.getByRole('dialog', { name: 'Add your key as ada?' })).toBeTruthy()
   })
 
   it('is gone once the key is in the repository, because there is no button left to warn about', () => {

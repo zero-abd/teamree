@@ -189,11 +189,13 @@ describe('when there is nothing open', () => {
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p2' })
   })
 
-  it('names the chords, New Task’s first once there is a project for it', () => {
+  // The button right above says New Task; its chord is on its tooltip, not a row repeating it.
+  it('names the chords, New Task’s on its button rather than in the list', () => {
     seed({ projects: [project] })
     mount()
     const keys = [...document.querySelectorAll('.welcome kbd')].map((node) => node.textContent)
-    expect(keys).toEqual(['⌘N', '⌘K', '⌘B'])
+    expect(keys).toEqual(['⌘K', '⌘B'])
+    expect(screen.getByRole('button', { name: 'New Task' }).title).toBe('New Task · ⌘N')
     cleanup()
     seed({ projects: [] })
     mount()
@@ -489,11 +491,7 @@ describe('the welcome’s shortcut list and the menu bar use one set of words', 
 
     const menu = new Map(menuBarSpec(useWorkspaceStore.getState()).map((item) => [item.command, item.label]))
     const rows = [...document.querySelectorAll('.welcome__shortcuts > div')]
-    expect(rows.map((row) => row.getAttribute('data-command'))).toEqual([
-      'new-worktree',
-      'open-palette',
-      'toggle-sidebar'
-    ])
+    expect(rows.map((row) => row.getAttribute('data-command'))).toEqual(['open-palette', 'toggle-sidebar'])
     for (const row of rows) {
       const command = commandNamed(row.getAttribute('data-command') ?? '')
       expect(command, row.textContent ?? '').not.toBeNull()

@@ -12,7 +12,7 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fileColumnIn, fileLeaf, fileLeavesIn } from '@shared/filePane'
+import { fileColumnIn, fileLeavesIn } from '@shared/filePane'
 import type {
   Layout,
   Project,
@@ -175,37 +175,26 @@ describe('the rail', () => {
     mount()
 
     expect(screen.queryByRole('tabpanel')).toBeNull()
-    for (const name of ['Files', 'Changes, 2', 'Panes, 1']) {
+    for (const name of ['Files', 'Changes, 2']) {
       expect(screen.getByRole('tab', { name })).toHaveProperty('ariaSelected', 'false')
     }
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Panes, 1' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Changes, 2' }))
 
     expect(useWorkspaceStore.getState().rightPanelOpen).toBe(true)
-    expect(useWorkspaceStore.getState().rightPanelTab).toBe('panes')
-    expect(screen.getByRole('tab', { name: 'Panes, 1' })).toHaveProperty('ariaSelected', 'true')
-    expect(screen.getByRole('region', { name: 'Panes in this worktree' })).toBeTruthy()
+    expect(useWorkspaceStore.getState().rightPanelTab).toBe('changes')
+    expect(screen.getByRole('tab', { name: 'Changes, 2' })).toHaveProperty('ariaSelected', 'true')
+    expect(screen.getByRole('region', { name: 'Changes in this worktree' })).toBeTruthy()
   })
 
-  // The badge said 4 over a tab listing 1 pane: it counted file panes the tab does not list.
-  it('counts on the Panes badge exactly what the Panes tab lists', () => {
-    const withFiles: Layout = {
-      worktreeId: 'w1',
-      root: {
-        kind: 'split',
-        direction: 'row',
-        sizes: [1, 1, 1],
-        children: [{ kind: 'leaf', terminalId: 't-w1' }, fileLeaf('file:a', 'README.md'), fileLeaf('file:b', 'app.ts')]
-      },
-      focusedTerminalId: 't-w1'
-    }
-    seed({ rightPanelOpen: true, rightPanelTab: 'panes', layouts: { w1: withFiles, w2: layout('w2') } })
+  // The sidebar and All Panes list the panes; a tab of the same rows was a third copy.
+  it('has no Panes tab', () => {
+    seed({ rightPanelOpen: true })
     mount()
-    expect(screen.getByRole('tab', { name: 'Panes, 1' })).toBeTruthy()
-    expect(screen.getByRole('region', { name: 'Panes in this worktree' }).textContent).toContain('1 pane')
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Files', 'Changes2'])
   })
 
-  it('switches between the three tabs, one at a time', async () => {
+  it('switches between the two tabs, one at a time', async () => {
     seed({ rightPanelOpen: true, rightPanelTab: 'files' })
     mount()
 
@@ -215,8 +204,8 @@ describe('the rail', () => {
     expect(screen.getByRole('region', { name: 'Changes in this worktree' })).toBeTruthy()
     expect(screen.queryByRole('region', { name: 'Files in this worktree' })).toBeNull()
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Panes, 1' }))
-    expect(screen.getByRole('region', { name: 'Panes in this worktree' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Files' }))
+    expect(await screen.findByRole('region', { name: 'Files in this worktree' })).toBeTruthy()
     expect(screen.queryByRole('region', { name: 'Changes in this worktree' })).toBeNull()
   })
 
@@ -258,15 +247,15 @@ describe('the rail', () => {
   // arrangement is a habit of this machine, like the sidebar's width.
   it('remembers the tab and whether it is open on this machine', () => {
     mount()
-    fireEvent.click(screen.getByRole('tab', { name: 'Panes, 1' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Changes, 2' }))
     expect(JSON.parse(window.localStorage.getItem('teamree.shell.rightPanel') ?? '{}')).toEqual({
       open: true,
-      tab: 'panes'
+      tab: 'changes'
     })
     fireEvent.click(screen.getByRole('button', { name: 'Hide panel' }))
     expect(JSON.parse(window.localStorage.getItem('teamree.shell.rightPanel') ?? '{}')).toEqual({
       open: false,
-      tab: 'panes'
+      tab: 'changes'
     })
   })
 
@@ -284,8 +273,7 @@ describe('the rail', () => {
 
     for (const [name, label, count] of [
       ['Files', 'Files', null],
-      ['Changes, 2', 'Changes', '2'],
-      ['Panes, 1', 'Panes', '1']
+      ['Changes, 2', 'Changes', '2']
     ] as const) {
       const tab = screen.getByRole('tab', { name })
       expect(tab.querySelector('.panel__tabLabel')?.textContent).toBe(label)

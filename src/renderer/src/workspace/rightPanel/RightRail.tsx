@@ -16,8 +16,6 @@ type RightRailProps = {
   tab: RightPanelTab
   /** Whatever the status chips count, for the badge on Changes. */
   status: { staged: number; unstaged: number; untracked: number; conflicted: number } | undefined
-  /** How many panes the worktree on screen has, for the badge on Panes. */
-  panes: number
   onPick: (tab: RightPanelTab) => void
   onToggle: () => void
 }
@@ -40,20 +38,11 @@ const TABS: readonly { id: RightPanelTab; label: string; icon: React.JSX.Element
         <path d="M4 1.5 H8.5 L11 4 V12.5 H4 Z M5.5 6.5 H9.5 M5.5 9 H9.5" />
       </svg>
     )
-  },
-  {
-    id: 'panes',
-    label: 'Panes',
-    icon: (
-      <svg viewBox="0 0 14 14" aria-hidden="true">
-        <path d="M1.5 2.5 H12.5 V11.5 H1.5 Z M7 2.5 V11.5" />
-      </svg>
-    )
   }
 ]
 
-export function RightRail({ open, tab, status, panes, onPick, onToggle }: RightRailProps): React.JSX.Element {
-  const counts: Record<RightPanelTab, number> = { files: 0, changes: changedCount(status), panes }
+export function RightRail({ open, tab, status, onPick, onToggle }: RightRailProps): React.JSX.Element {
+  const counts: Record<RightPanelTab, number> = { files: 0, changes: changedCount(status) }
   return (
     <div className={`panel__rail${open ? '' : ' panel__rail--edge'}`}>
       <div

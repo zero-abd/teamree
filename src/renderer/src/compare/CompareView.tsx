@@ -11,12 +11,12 @@ import type { FilePaneProps } from '../panes/FilePane'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import type { DiffLayout } from '../state/preferences'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { agentWords, worktreeDisplay, worktreeLabel, type WorktreeDisplay } from '../sidebar/worktreeDisplay'
+import { agentName, agentWords, worktreeDisplay, worktreeLabel, type WorktreeDisplay } from '../sidebar/worktreeDisplay'
 import { fitLayout, PatchView } from '../workspace/PatchView'
 
 type Run = { id: string; display: WorktreeDisplay; name: string }
 
-/** `path` is the tab's title, `claude vs codex`; `other` is the sibling on the right. */
+/** `path` is the tab's title, `Claude Code vs Codex`; `other` is the sibling on the right. */
 export function CompareView({
   paneId,
   worktreeId,
@@ -139,7 +139,7 @@ export function CompareView({
 function runOf(id: string, worktree: Worktree | undefined, kindOf: ReturnType<typeof agentWords>): Run {
   if (worktree === undefined) return { id, display: { title: id }, name: id }
   const display = worktreeDisplay(worktree, kindOf)
-  return { id, display, name: display.agent?.text ?? worktree.name }
+  return { id, display, name: display.agent === undefined ? worktree.name : agentName(display.agent) }
 }
 
 function RunHead({
@@ -162,7 +162,7 @@ function RunHead({
       {agent === undefined ? null : (
         <span className="compare__agent">
           {agent.kind === undefined ? null : <AgentGlyph kind={agent.kind} decorative />}
-          {agent.text}
+          {agentName(agent)}
         </span>
       )}
       <span className="compare__title" title={title}>

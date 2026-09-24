@@ -48,6 +48,7 @@ const { ConfirmClosePaneDialog } = await import('./ConfirmClosePaneDialog')
 const { Welcome } = await import('../workspace/Welcome')
 const { HelpView } = await import('../help/HelpView')
 const { SettingsView } = await import('../settings/SettingsView')
+const { Dashboard } = await import('../dashboard/Dashboard')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -734,6 +735,51 @@ describe('buttons and titles', () => {
     })
     render(<SettingsView />)
     expect(casingFaults(document.body)).toEqual([])
+  })
+
+  it('are Title Case on All Panes, its title the one the sidebar names', () => {
+    render(<Dashboard />)
+    expect(document.querySelector('.page__title')?.textContent).toBe('All Panes')
+    expect(casingFaults(document.body)).toEqual([])
+  })
+
+  it('are Title Case in the Add My Key question, its body the one line of what a key grants', () => {
+    const view = render(
+      <TeamworkSteps
+        projectPath="/repos/pager"
+        list={roster(false)}
+        relay={noRelay()}
+        status={status({ enrolled: false })}
+        membersPending={false}
+        membersError={null}
+        relayPending={false}
+        relayError={null}
+        readErrors={{}}
+        onJoin={() => {}}
+        onClearMembersError={() => {}}
+        onSetRelay={() => {}}
+        onRetry={() => {}}
+        origin={{ pending: false, error: null }}
+        onSetOrigin={() => {}}
+        pane={undefined}
+        onStartRelayPane={() => {}}
+        onClosePane={() => {}}
+        renderRelayPane={() => null}
+        publish={{ plan: undefined, pending: false, error: null, result: undefined, progress: undefined }}
+        onPublish={() => {}}
+        onCancelPublish={() => {}}
+        path="start"
+        onChoosePath={() => {}}
+        projectName="pager"
+        onCopy={() => {}}
+      />
+    )
+    expect(document.querySelector('.grant')).toBeNull()
+    fireEvent.change(view.getByRole('textbox', { name: /^Handle/ }), { target: { value: 'ada' } })
+    fireEvent.click(view.getByRole('button', { name: 'Add My Key' }))
+    const dialog = view.getByRole('dialog')
+    expect(casingFaults(dialog)).toEqual([])
+    expect(sentenceStops(dialog)).toEqual([])
   })
 
   it('are Title Case on the teamwork page, every step opened', () => {

@@ -348,14 +348,6 @@
   line-height: 1.55;
 }
 
-/* What a key grants, in one line, above the button that grants it. */
-.grant {
-  color: var(--fg);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  line-height: 1.5;
-}
-
 /* Deploy a Relay, Paste URL… and More, on one row. */
 .relay-actions {
   display: flex;

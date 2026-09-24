@@ -162,6 +162,18 @@ describe('the git segment', () => {
     expect(screen.getByRole('button', { name: 'Changes, clean, in sync' })).toBeTruthy()
   })
 
+  // A page covers the worktree; its git line was about something no longer on screen.
+  it.each([
+    ['All Panes', { dashboardOpen: true }],
+    ['Settings', { settingsOpen: true }],
+    ['Help', { helpOpen: true }],
+    ['Teamwork', { teamworkProjectId: 'p1' }]
+  ])('is not offered while %s is open', (_page, open) => {
+    seed({ statuses: { w1: status() }, ...open })
+    mount()
+    expect(screen.queryByRole('button', { name: /Changes/ })).toBeNull()
+  })
+
   it('is not offered before the status has been read, because there is nothing to open on', () => {
     mount()
     expect(screen.queryByRole('button', { name: /Changes/ })).toBeNull()

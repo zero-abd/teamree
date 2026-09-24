@@ -573,10 +573,10 @@ describe('what the palette offers for the worktree on screen', () => {
     const items = buildPaletteItems(context({ worktrees: [...runs, worktree({ id: 'w1' })], activeWorktreeId: 'r0' }))
     const compares = items.filter((item) => item.kind === 'action' && item.id.startsWith('compare:'))
     expect(compares.map((item) => [item.id, item.label])).toEqual([
-      ['compare:r1', 'Compare with codex'],
-      ['compare:r2', 'Compare with claude 2']
+      ['compare:r1', 'Compare with Codex'],
+      ['compare:r2', 'Compare with Claude Code 2']
     ])
-    expect(filterPalette(items, 'compare')[0]?.label).toBe('Compare with codex')
+    expect(filterPalette(items, 'compare')[0]?.label).toBe('Compare with Codex')
     expect(labels().some((label) => label.startsWith('Compare with'))).toBe(false)
   })
 

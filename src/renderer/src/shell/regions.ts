@@ -12,7 +12,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input, select, textarea, [ta
 const LANDING: Record<Region, readonly string[]> = {
   sidebar: ['[role="treeitem"][tabindex="0"]', '[role="treeitem"][aria-current="true"]', '[role="treeitem"]'],
   strip: ['[role="tab"][aria-selected="true"]'],
-  // Terminal, then an editor, then a page such as All panes, which takes the focus itself.
+  // Terminal, then an editor, then a page such as All Panes, which takes the focus itself.
   panes: ['.pane--focused .xterm-helper-textarea', '.pane--focused [contenteditable="true"]', '.page'],
   panel: ['[role="tab"][aria-selected="true"]']
 }

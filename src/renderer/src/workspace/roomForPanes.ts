@@ -4,6 +4,9 @@
 /** The closed panel's rail. */
 export const RAIL_PX = 30
 
+/** Where `rightPanel.css` lays the open panel over the panes instead of beside them. */
+export const PANEL_OVERLAY_QUERY = '(width < 1200px)'
+
 /** The sidebar's cap, as a share of the window. */
 const SIDEBAR_MAX_SHARE = 0.45
 

@@ -40,10 +40,10 @@ describe('a task’s other runs', () => {
     expect(siblingRuns(claude, [claude, creating, missing])).toEqual([])
   })
 
-  it('go by their agent, and a compare by both', () => {
-    expect(runName(codex)).toBe('codex')
-    expect(runName(claude2)).toBe('claude 2')
+  it('go by their agent’s name, and a compare by both', () => {
+    expect(runName(codex)).toBe('Codex')
+    expect(runName(claude2)).toBe('Claude Code 2')
     expect(runName(worktree('w-x', 'perf', { task: 'Speed up' }))).toBe('perf')
-    expect(compareTitle(claude, codex)).toBe('claude vs codex')
+    expect(compareTitle(claude, codex)).toBe('Claude Code vs Codex')
   })
 })

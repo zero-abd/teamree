@@ -1603,6 +1603,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             projectId,
             name,
             ...(startedFrom ? { startedFrom } : {}),
+            ...(create.branch ? { branch: create.branch } : {}),
             ...(task ? { task } : {})
           })
           set((state) => ({

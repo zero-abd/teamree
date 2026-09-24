@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import postcss from 'postcss'
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_APPEARANCE, resolvePalette, THEME_TOKENS } from '@shared/theme'
+import { PANEL_OVERLAY_QUERY } from '../workspace/roomForPanes'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const sheets = readdirSync(here)
@@ -132,7 +133,7 @@ describe('stylesheets', () => {
     })
   })
 
-  // Settings, Help, Teamwork and All panes share one head and one column, so their edges line up.
+  // Settings, Help, Teamwork and All Panes share one head and one column, so their edges line up.
   describe('one page frame', () => {
     it('measures the head and the body with one column', () => {
       const column = ruleFor('page.css', '.page__column')
@@ -524,6 +525,27 @@ describe('stylesheets', () => {
       expect(colours.filter((name) => !themeable.has(name))).toEqual([])
       expect([...themeable].filter((name) => !declared.has(name))).toEqual([])
     })
+  })
+  // A ring round the inner button left the checkbox and the counts outside it, inside the selected fill.
+  it('rings a focused changed file as the whole row, not its inner button', () => {
+    expect(declarationOf(ruleFor('workspace.css', '.changes__item .change:focus-visible'), 'outline')).toBe('none')
+    const row = ruleFor('workspace.css', '.changes__item:has(.change:focus-visible)')
+    expect(declarationOf(row, 'box-shadow')).toContain('inset')
+  })
+
+  // At 1024 px a 340 px column left the agent 38 columns; a narrow window lays the panel over the panes.
+  it('lays the open right panel over the panes in a narrow window, like the Appearance sheet', () => {
+    const narrow = (selector: string): postcss.Rule => {
+      const rule = ruleFor('rightPanel.css', selector)
+      expect((rule.parent as postcss.AtRule | undefined)?.params, selector).toBe(PANEL_OVERLAY_QUERY)
+      return rule
+    }
+    const panel = narrow('.panel:not(.panel--closed)')
+    expect(declarationOf(panel, 'position')).toBe('absolute')
+    expect(declarationOf(panel, 'right')).toBe('0')
+    expect(declarationOf(panel, 'box-shadow')).toBe('var(--shadow-pop)')
+    expect(declarationOf(narrow('.panel__resizer'), 'display')).toBe('none')
+    expect(declarationOf(narrow('.workspace__body'), 'position')).toBe('relative')
   })
 })
 

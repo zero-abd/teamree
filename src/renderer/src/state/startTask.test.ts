@@ -126,6 +126,24 @@ it('reports why a task that could not be created failed, and starts no agent', {
   }
 })
 
+it('asks for the branch the composer was given', { timeout: 20_000 }, async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const call = vi.spyOn(runtimeClient, 'call')
+  try {
+    const projectId = useWorkspaceStore.getState().projects[0]!.id
+    store.startTask({ projectId, creates: [{ name: 'Named by hand', task: 'Named by hand', branch: 'ada/by-hand' }] })
+    await until(
+      () => useWorkspaceStore.getState().worktrees.some((one) => one.name === 'Named by hand'),
+      'the worktree to be created'
+    )
+    const create = call.mock.calls.find(([method]) => method === 'worktree.create')
+    expect(create?.[1]).toEqual(expect.objectContaining({ name: 'Named by hand', branch: 'ada/by-hand' }))
+  } finally {
+    call.mockRestore()
+  }
+})
+
 // One description, several attempts at it, each in its own checkout with its own agent.
 it('creates one worktree per selected agent, each running its own', { timeout: 30_000 }, async () => {
   const store = useWorkspaceStore.getState()

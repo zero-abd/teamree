@@ -4,7 +4,7 @@ import { minExtent, type Box } from '@shared/paneRoom'
 import { foldsColumn } from '../panes/paneLayout'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { contentBox } from '../terminal/paneMetrics'
-import { panelCost, sidebarCost, toHide, type Sides } from './roomForPanes'
+import { PANEL_OVERLAY_QUERY, panelCost, sidebarCost, toHide, type Sides } from './roomForPanes'
 
 /**
  * Folds the panel, then the sidebar, while `root` in `grid` cannot give every pane `minPane`, and shows
@@ -26,10 +26,12 @@ export function useRoomForPanes(grid: HTMLElement | null, root: PaneNode | null,
       const state = useWorkspaceStore.getState()
       const style = getComputedStyle(grid)
       const width = grid.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight)
-      // An open panel is measured: `rightPanel.css` caps it below the width it was dragged to.
+      // An open panel is measured: `rightPanel.css` caps it below the width it was dragged to, and in a
+      // narrow window lays it over the panes, where it costs them nothing.
       const panel = grid.ownerDocument.querySelector<HTMLElement>('.panel:not(.panel--closed)')
+      const overlaid = typeof matchMedia === 'function' && matchMedia(PANEL_OVERLAY_QUERY).matches
       const costs = {
-        panel: panel ? panelCost(panel.getBoundingClientRect().width) : panelCost(state.rightPanelWidth),
+        panel: overlaid ? 0 : panel ? panelCost(panel.getBoundingClientRect().width) : panelCost(state.rightPanelWidth),
         sidebar: sidebarCost(state.sidebarWidth, window.innerWidth)
       }
       const free = width + (state.rightPanelOpen ? costs.panel : 0) + (state.sidebarVisible ? costs.sidebar : 0)

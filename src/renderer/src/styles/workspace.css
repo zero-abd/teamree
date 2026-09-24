@@ -836,6 +836,21 @@
   background: none;
 }
 
+/* Focus rings the whole row, checkbox and counts included, inside its fill. */
+.changes__item .change:focus-visible {
+  outline: none;
+}
+
+.changes__item:has(.change:focus-visible) {
+  box-shadow: inset 0 0 0 1px var(--accent-bright);
+}
+
+.changes__item--selected:has(.change:focus-visible) {
+  box-shadow:
+    inset 2px 0 var(--accent),
+    inset 0 0 0 1px var(--accent-bright);
+}
+
 .change__tick {
   flex: none;
   margin: 0;

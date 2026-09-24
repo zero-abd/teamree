@@ -60,6 +60,20 @@ describe('the plan the dialog submits', () => {
     ])
   })
 
+  it('asks for the branch named by hand, one per run when there are several', () => {
+    expect(taskCreates('Rewrite the pager', [claude], 'ada/pager')).toEqual([
+      { name: 'Rewrite the pager', agentCommand: 'claude', task: 'Rewrite the pager', branch: 'ada/pager' }
+    ])
+    expect(taskCreates('Rewrite the pager', [claude, codex, claude], 'pager').map((create) => create.branch)).toEqual([
+      'pager-claude',
+      'pager-codex',
+      'pager-claude-2'
+    ])
+    expect(taskCreates('Rewrite the pager', [], 'pager')).toEqual([
+      { name: 'Rewrite the pager', task: 'Rewrite the pager', branch: 'pager' }
+    ])
+  })
+
   // A row, a tab and the status bar have room for a few words, and a sentence
   // there pushed the branch and the shortcuts off the end of the window.
   it.each([

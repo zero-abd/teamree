@@ -33,6 +33,10 @@ export function StatusBar(): React.JSX.Element {
   // Pressed while the changes tab is showing, the one state the click closes.
   const changesOpen = useWorkspaceStore((state) => state.rightPanelOpen && state.rightPanelTab === 'changes')
   const toggleChanges = useWorkspaceStore((state) => state.toggleChanges)
+  // A page covers the worktree, so its git line would describe something off screen.
+  const pageOpen = useWorkspaceStore(
+    (state) => state.dashboardOpen || state.settingsOpen || state.helpOpen || state.teamworkProjectId !== null
+  )
   const revealPane = useWorkspaceStore((state) => state.revealPane)
 
   // The rail is always mounted, so it keeps main told which way sleep should go.
@@ -63,7 +67,7 @@ export function StatusBar(): React.JSX.Element {
       <KeepAwakeControl />
       <ResourcesControl />
 
-      {summary && status ? (
+      {summary && status && !pageOpen ? (
         // The count is in the accessible name too; offered on a clean tree for reading the last commits.
         <button
           type="button"

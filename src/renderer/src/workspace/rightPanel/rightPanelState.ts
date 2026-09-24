@@ -1,7 +1,7 @@
 // The right panel's tab, open state and width, remembered per machine (a habit, not a worktree fact).
 // Read like the sidebar width: anything that is not what was written is the default.
 
-export const RIGHT_PANEL_TABS = ['files', 'changes', 'panes'] as const
+export const RIGHT_PANEL_TABS = ['files', 'changes'] as const
 
 export type RightPanelTab = (typeof RIGHT_PANEL_TABS)[number]
 
@@ -70,7 +70,7 @@ export function writeStoredRightPanel(storage: Pick<Storage, 'setItem'> | undefi
   }
 }
 
-/** Whether anything on screen draws the changes (the changes tab, or the files tab's letters); gates `git status`. */
-export function changesOnScreen(state: { rightPanelOpen: boolean; rightPanelTab: RightPanelTab }): boolean {
-  return state.rightPanelOpen && (state.rightPanelTab === 'changes' || state.rightPanelTab === 'files')
+/** Whether anything on screen draws the changes (either tab: the list, or the files tab's letters); gates `git status`. */
+export function changesOnScreen(state: { rightPanelOpen: boolean }): boolean {
+  return state.rightPanelOpen
 }
