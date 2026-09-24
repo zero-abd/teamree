@@ -104,6 +104,9 @@
   --r2: 6px;
   --r3: 10px;
 
+  /* One height for a select and the fields beside it, in Settings and in dialogs. */
+  --control-h: 28px;
+
   /* Two rings, not one: a gap of the surface the control sits on, then the
      accent. A single accent ring drawn tight against a control's own border is
      legible on a grey window and almost invisible on this one, because the

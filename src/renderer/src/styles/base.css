@@ -82,6 +82,62 @@ kbd {
 
 /* Buttons ---------------------------------------------------------------- */
 
+/* The app's one select (`dialogs/Select.tsx`): sized to its longest option, so it never reads as a text field. */
+.select {
+  display: inline-grid;
+  position: relative;
+  justify-self: start;
+  align-self: start;
+  max-width: 100%;
+}
+
+.select__input {
+  height: var(--control-h);
+  max-width: 100%;
+  padding: 0 26px 0 var(--s2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-input);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  appearance: none;
+  cursor: pointer;
+}
+
+/* An open list is drawn by the platform on a ground this page never painted. */
+.select__input option {
+  background-color: var(--bg-input);
+  color: var(--fg);
+}
+
+.select__input:focus-visible {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: var(--ring);
+}
+
+.select__chevron {
+  display: grid;
+  position: absolute;
+  top: 50%;
+  right: var(--s2);
+  place-items: center;
+  color: var(--fg-muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.select__chevron svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .button {
   display: inline-flex;
   align-items: center;

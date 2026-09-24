@@ -140,19 +140,30 @@ describe('when there is nothing open', () => {
   it('prefers the dead runtime to the welcome when both are true', () => {
     seed({ projects: [], connection: { phase: 'offline' } })
     mount()
-    expect(screen.queryByRole('button', { name: 'Add project' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open Folder…' })).toBeNull()
   })
 
-  // First run: the task button waits for a project.
-  it('welcomes a first run with the mark and the one action that can work', () => {
-    seed({ projects: [] })
+  // First run: the two ways to a project, side by side; no task button until there is one.
+  it('welcomes a first run with the mark and the two ways to add a project', () => {
+    const chooseProjectFolder = vi.fn(() => Promise.resolve())
+    seed({ projects: [], chooseProjectFolder })
     mount()
     expect(document.querySelector('.welcome .brand__mark')).toBeTruthy()
     expect(screen.getByText('teamree')).toBeTruthy()
     expect(screen.queryByRole('heading')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Add project' }))
-    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'add-project' })
-    expect((screen.getByRole('button', { name: 'New task' }) as HTMLButtonElement).disabled).toBe(true)
+    const actions = document.querySelector('.welcome__actions') as HTMLElement
+    expect([...actions.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
+      'Open Folder…',
+      'Clone…'
+    ])
+    const open = screen.getByRole('button', { name: 'Open Folder…' })
+    expect(open.className).toContain('button--primary')
+    fireEvent.click(open)
+    expect(chooseProjectFolder).toHaveBeenCalledOnce()
+    expect(openDialog).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Clone…' }))
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'clone-project' })
+    expect(screen.queryByRole('button', { name: 'New task' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'New terminal' })).toBeNull()
   })
 
@@ -160,6 +171,8 @@ describe('when there is nothing open', () => {
   it('offers a new task in the project once there is one, and no agent by name', () => {
     seed({ projects: [project], agents: [{ kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }] })
     mount()
+    expect(screen.getByRole('button', { name: 'New task' }).className).toContain('button--primary')
+    expect(screen.getByRole('button', { name: 'Open Folder…' }).className).not.toContain('button--primary')
     fireEvent.click(screen.getByRole('button', { name: 'New task' }))
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p1' })
     expect(screen.queryByRole('button', { name: /^Start / })).toBeNull()
@@ -197,14 +210,14 @@ describe('when there is nothing open', () => {
     seed({ projects: [project], teamworkProjectId: 'p1' })
     mount()
     expect(screen.getByRole('main', { name: 'Set up teamwork in pager' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Add project' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open Folder…' })).toBeNull()
   })
 
   it('shows the dashboard instead of any of that when it is open', () => {
     seed({ projects: [], dashboardOpen: true })
     mount()
     expect(screen.getByTestId('dashboard')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Add project' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open Folder…' })).toBeNull()
   })
 })
 
@@ -230,7 +243,7 @@ describe('a worktree with no panes in it', () => {
     cleanup()
     openEmpty({ branch: 'feature/pager' })
     expect(screen.getByText('feature/pager')).toBeTruthy()
-    for (const name of ['Add project', 'New task', 'Star on GitHub']) {
+    for (const name of ['Open Folder…', 'New task', 'Star on GitHub']) {
       expect(screen.queryByRole('button', { name })).toBeNull()
     }
     expect(document.querySelector('.brand__mark')).toBeNull()
@@ -267,7 +280,7 @@ describe('a worktree with no panes in it', () => {
     openEmpty({ state: 'creating' })
     expect(screen.getByRole('heading', { name: 'Rewrite the pager' })).toBeTruthy()
     expect(startButtons()).toEqual([])
-    expect(screen.queryByRole('button', { name: 'Add project' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open Folder…' })).toBeNull()
   })
 
   // Ready on paper, gone from disk: anything started here would fail with a path.
@@ -312,7 +325,7 @@ describe('settings and help', () => {
     seed({ projects: [project], settingsOpen: true })
     mount()
     expect(screen.getByTestId('settings')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Add project' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open Folder…' })).toBeNull()
   })
 
   it('gives the area to help on the same terms', () => {
@@ -407,7 +420,7 @@ describe('a teammate’s pane beside your own', () => {
   it('stays where it is with no worktree open at all', () => {
     seed({ projects: [project], watches: [watch('priya', 'priya:t7')] })
     mount()
-    expect(screen.getByRole('button', { name: 'Add project' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open Folder…' })).toBeTruthy()
     expect(screen.getByTestId('watched-priya-priya:t7')).toBeTruthy()
   })
 })

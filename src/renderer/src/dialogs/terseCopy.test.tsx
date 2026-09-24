@@ -21,7 +21,8 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
-const { AddProjectDialog } = await import('./AddProjectDialog')
+const { CloneProjectDialog } = await import('./CloneProjectDialog')
+const { ProjectRefusedDialog } = await import('./ProjectRefusedDialog')
 const { AppearanceSettings } = await import('../settings/AppearanceSettings')
 const { TaskComposerDialog } = await import('./TaskComposerDialog')
 const { RemoteKeystrokesDialog } = await import('./RemoteKeystrokesDialog')
@@ -207,7 +208,11 @@ afterEach(() => cleanup())
 
 describe('dialogs', () => {
   it('have a title and no subtitle', () => {
-    for (const dialog of [<AddProjectDialog key="a" />, <TaskComposerDialog key="c" projectId="p1" />]) {
+    for (const dialog of [
+      <CloneProjectDialog key="a" />,
+      <ProjectRefusedDialog key="b" folder="/tmp/x" refusal="not-a-repository" />,
+      <TaskComposerDialog key="c" projectId="p1" />
+    ]) {
       const { container, unmount } = render(dialog)
       expect(container.ownerDocument.querySelector('.modal__head p')).toBeNull()
       unmount()
@@ -215,17 +220,12 @@ describe('dialogs', () => {
   })
 
   it('add project: no sentence in any state', async () => {
-    const selectProjectFolder = vi.fn(() => Promise.reject(new Error('no picker')))
-    ;(window as unknown as { teamree: unknown }).teamree = { selectProjectFolder }
     seed({ cloneProject: vi.fn(async () => 'Repository not found') })
-    const view = render(<AddProjectDialog folder="/tmp/x" refusal="not-a-repository" />)
-    await act(async () => {
-      fireEvent.click(view.getByRole('button', { name: 'Choose Folder…' }))
-    })
-    await vi.waitFor(() => expect(view.getAllByRole('alert').length).toBe(2))
+    const refused = render(<ProjectRefusedDialog folder="/tmp/x" refusal="not-a-repository" />)
     expect(sentenceStops(document.body)).toEqual([])
+    refused.unmount()
 
-    fireEvent.click(view.getByRole('button', { name: 'Clone…' }))
+    const view = render(<CloneProjectDialog />)
     fireEvent.change(view.getByRole('textbox', { name: 'Repository URL' }), { target: { value: '/srv/x.git' } })
     await act(async () => {
       fireEvent.click(view.getByRole('button', { name: 'Clone' }))

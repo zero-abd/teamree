@@ -16,10 +16,35 @@
 
 /* Section list ------------------------------------------------------------ */
 
-.settings-nav {
+.settings__side {
+  display: flex;
   position: sticky;
   top: 0;
+  flex-direction: column;
+  gap: var(--s3);
   align-self: start;
+}
+
+.settings-filter {
+  width: 100%;
+  height: var(--control-h);
+  padding: 0 var(--s2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.settings-filter::placeholder {
+  color: var(--fg-muted);
+}
+
+.settings-filter:focus-visible {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: var(--ring);
 }
 
 .settings-nav__list {
@@ -202,7 +227,7 @@
   grid-column: 1;
   align-self: start;
   margin: 0;
-  padding-top: 5px;
+  padding-top: 6px;
   color: var(--fg);
   font-size: var(--text-sm);
   font-weight: 400;
@@ -225,59 +250,46 @@
   flex: 1 1 160px;
 }
 
-.settings-field__input,
-.settings-select {
-  height: 26px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r2);
-  background-color: var(--bg-input);
-  color: var(--fg);
-  font-size: var(--text-sm);
-  line-height: 16px;
-}
-
 /* Monospace because what goes in it is a ref, a path or a command. */
 .settings-field__input {
   width: 100%;
   min-width: 0;
+  height: var(--control-h);
   padding: 0 var(--s2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background-color: var(--bg-input);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 16px;
+}
+
+/* A value in effect, shown as text beside the button that changes it. */
+.settings-value {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.settings-value--mono {
   font-family: var(--font-mono);
 }
 
 .settings-field__input--lines {
   height: auto;
-  min-height: 26px;
+  min-height: var(--control-h);
   padding: 4px var(--s2);
   resize: vertical;
 }
 
+/* `None`, in the sans: an empty field must not look like one holding a value. */
 .settings-field__input::placeholder {
-  color: var(--fg-muted);
-}
-
-/* Sized to its longest option: a select stretched across the column reads as a text field. */
-.settings-select {
-  justify-self: start;
-  width: auto;
-  max-width: 100%;
-  padding: 0 24px 0 var(--s2);
+  color: var(--fg-secondary);
   font-family: var(--font-ui);
-  appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, var(--fg-muted) 50%),
-    linear-gradient(135deg, var(--fg-muted) 50%, transparent 50%);
-  background-position: right 12px center, right 7px center;
-  background-size: 5px 5px;
-  background-repeat: no-repeat;
 }
 
-/* An open list is drawn by the platform on a ground this page never painted. */
-.settings-select option {
-  background-color: var(--bg-input);
-  color: var(--fg);
-}
-
-.settings-field__input:focus-visible,
-.settings-select:focus-visible {
+.settings-field__input:focus-visible {
   outline: none;
   border-color: var(--accent-line);
   box-shadow: var(--ring);
@@ -327,7 +339,7 @@
   display: flex;
   align-items: center;
   gap: var(--s3);
-  min-height: 26px;
+  min-height: var(--control-h);
   max-width: 320px;
 }
 
@@ -381,7 +393,7 @@
     gap: var(--s4);
   }
 
-  .settings-nav {
+  .settings__side {
     position: static;
   }
 

@@ -297,9 +297,6 @@ export function CommandPalette({
       case 'show-files':
         store.showRightPanelTab('files')
         break
-      case 'add-project':
-        store.openDialog({ kind: 'add-project' })
-        break
       case 'install-cli':
         store.openDialog({ kind: 'install-cli' })
         break

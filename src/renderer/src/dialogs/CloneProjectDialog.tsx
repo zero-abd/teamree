@@ -5,11 +5,13 @@ import { useEffect, useRef, useState } from 'react'
 import { DEFAULT_CLONE_PARENT, repositoryNameFromUrl } from '@shared/cloneDestination'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { Modal } from './Modal'
 
 const PROGRESS_POLL_MS = 300
 
-export function CloneProjectForm({ onBack }: { onBack: () => void }): React.JSX.Element {
+export function CloneProjectDialog(): React.JSX.Element {
   const cloneProject = useWorkspaceStore((state) => state.cloneProject)
+  const closeDialog = useWorkspaceStore((state) => state.closeDialog)
 
   const [url, setUrl] = useState('')
   // Null until edited: until then it follows the URL.
@@ -71,58 +73,60 @@ export function CloneProjectForm({ onBack }: { onBack: () => void }): React.JSX.
   }
 
   return (
-    <form className="form" onSubmit={(event) => void submit(event)}>
-      <label className="field">
-        <span className="field__label">Repository URL</span>
-        <input
-          className="field__input field__input--mono"
-          value={url}
-          onChange={(event) => {
-            setUrl(event.target.value)
-            setError('')
-          }}
-          placeholder="git@github.com:you/repo.git"
-          autoComplete="off"
-          spellCheck={false}
-          autoFocus
-          disabled={running !== null}
-        />
-      </label>
-      <label className="field">
-        <span className="field__label">Destination</span>
-        <input
-          className="field__input field__input--mono"
-          value={destination}
-          onChange={(event) => {
-            setEditedDestination(event.target.value)
-            setError('')
-          }}
-          placeholder={`${DEFAULT_CLONE_PARENT}/repo`}
-          autoComplete="off"
-          spellCheck={false}
-          disabled={running !== null}
-        />
-      </label>
-      {running !== null ? <pre className="clone__progress">{line || 'Cloning…'}</pre> : null}
-      {error ? (
-        <span className="field__error" role="alert">
-          {error}
-        </span>
-      ) : null}
-      <footer className="modal__actions">
-        {running !== null ? (
-          <button type="button" className="button button--ghost" onClick={cancel}>
-            Cancel
+    <Modal title="Clone repository" onClose={closeDialog}>
+      <form className="form" onSubmit={(event) => void submit(event)}>
+        <label className="field">
+          <span className="field__label">Repository URL</span>
+          <input
+            className="field__input field__input--mono"
+            value={url}
+            onChange={(event) => {
+              setUrl(event.target.value)
+              setError('')
+            }}
+            placeholder="git@github.com:you/repo.git"
+            autoComplete="off"
+            spellCheck={false}
+            autoFocus
+            disabled={running !== null}
+          />
+        </label>
+        <label className="field">
+          <span className="field__label">Destination</span>
+          <input
+            className="field__input field__input--mono"
+            value={destination}
+            onChange={(event) => {
+              setEditedDestination(event.target.value)
+              setError('')
+            }}
+            placeholder={`${DEFAULT_CLONE_PARENT}/repo`}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={running !== null}
+          />
+        </label>
+        {running !== null ? <pre className="clone__progress">{line || 'Cloning…'}</pre> : null}
+        {error ? (
+          <span className="field__error" role="alert">
+            {error}
+          </span>
+        ) : null}
+        <footer className="modal__actions">
+          {running !== null ? (
+            <button type="button" className="button button--ghost" onClick={cancel}>
+              Cancel
+            </button>
+          ) : (
+            <button type="button" className="button button--ghost" onClick={closeDialog}>
+              Cancel
+            </button>
+          )}
+          <button type="submit" className="button button--primary" disabled={!canSubmit}>
+            {running !== null ? 'Cloning…' : 'Clone'}
           </button>
-        ) : (
-          <button type="button" className="button button--ghost" onClick={onBack}>
-            Back
-          </button>
-        )}
-        <button type="submit" className="button button--primary" disabled={!canSubmit}>
-          {running !== null ? 'Cloning…' : 'Clone'}
-        </button>
-      </footer>
-    </form>
+        </footer>
+      </form>
+    </Modal>
   )
 }

@@ -4,7 +4,7 @@
 import { useEffect, useLayoutEffect, useMemo } from 'react'
 import { resolvePalette } from '@shared/theme'
 import { MAC_CONTENT_INSET_PX, TITLEBAR_HEIGHT_PX } from '@shared/windowChrome'
-import { AddProjectDialog } from './dialogs/AddProjectDialog'
+import { CloneProjectDialog } from './dialogs/CloneProjectDialog'
 import { TaskComposerDialog } from './dialogs/TaskComposerDialog'
 import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModifier'
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
@@ -19,6 +19,8 @@ import { ConfirmClosePaneDialog } from './dialogs/ConfirmClosePaneDialog'
 import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
 import { FirstRunCliOffer } from './dialogs/FirstRunCliOffer'
 import { InstallCliDialog } from './dialogs/InstallCliDialog'
+import { ProjectRefusedDialog } from './dialogs/ProjectRefusedDialog'
+import { AppearanceSheet } from './settings/AppearanceSheet'
 import { firstQuestion } from './dialogs/modalLayer'
 import { RemoteKeystrokesDialog } from './dialogs/RemoteKeystrokesDialog'
 import { CommandPalette } from './palette/CommandPalette'
@@ -68,6 +70,7 @@ export function App(): React.JSX.Element {
     dismissNotice(notice.id)
   }
   const appearance = useWorkspaceStore((state) => state.appearance)
+  const appearanceOpen = useWorkspaceStore((state) => state.appearanceOpen)
   const systemTone = useWorkspaceStore((state) => state.systemTone)
 
   // The one place a colour is applied. A layout effect because xterm reads the palette off this element
@@ -105,6 +108,7 @@ export function App(): React.JSX.Element {
       ) : null}
 
       <WorkspaceArea modifier={modifier} isAppChord={isAppChord} />
+      {appearanceOpen ? <AppearanceSheet /> : null}
       <RegionFocus />
 
       <StatusBar />
@@ -158,12 +162,10 @@ export function App(): React.JSX.Element {
           {...(dialog.hunk ? { hunk: dialog.hunk } : {})}
         />
       ) : null}
-      {dialog?.kind === 'add-project' ? (
-        <AddProjectDialog
-          {...(dialog.folder === undefined ? {} : { folder: dialog.folder })}
-          {...(dialog.refusal === undefined ? {} : { refusal: dialog.refusal })}
-        />
+      {dialog?.kind === 'project-refused' ? (
+        <ProjectRefusedDialog folder={dialog.folder} refusal={dialog.refusal} />
       ) : null}
+      {dialog?.kind === 'clone-project' ? <CloneProjectDialog /> : null}
       {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
       {dialog?.kind === 'new-task' ? <TaskComposerDialog projectId={dialog.projectId} /> : null}
 

@@ -77,6 +77,80 @@ describe('which page has the main area', () => {
   })
 })
 
+describe('the appearance sheet', () => {
+  // A sheet beside the panes, so the pages that replace them step aside.
+  it('opens over the panes, taking the area back from settings, help and teamwork', () => {
+    useWorkspaceStore.setState({ settingsOpen: true, helpOpen: true, teamworkProjectId: 'p1', dashboardOpen: true })
+    store().showAppearance(true)
+    expect(store().appearanceOpen).toBe(true)
+    expect(store().settingsOpen).toBe(false)
+    expect(store().helpOpen).toBe(false)
+    expect(store().teamworkProjectId).toBeNull()
+    expect(store().dashboardOpen).toBe(true)
+  })
+
+  it('closes when a page that replaces the panes is asked for', () => {
+    for (const open of [() => store().toggleSettings(), () => store().toggleHelp(), () => store().openTeamwork('p1')]) {
+      useWorkspaceStore.setState({ ...INITIAL, appearanceOpen: true }, true)
+      open()
+      expect(store().appearanceOpen).toBe(false)
+    }
+  })
+})
+
+describe('adding a project from the folder picker', () => {
+  const selectProjectFolder = vi.fn<() => Promise<string | null>>()
+  const addProject = vi.fn<(path: string) => Promise<'not-a-repository' | 'no-commits' | null>>()
+
+  beforeEach(() => {
+    selectProjectFolder.mockReset()
+    selectProjectFolder.mockResolvedValue('/Users/ada/code/atlas')
+    addProject.mockReset()
+    addProject.mockResolvedValue(null)
+    Object.assign(window, { teamree: { selectProjectFolder } })
+    useWorkspaceStore.setState({ addProject })
+  })
+
+  it('adds the pick at once, under the folder name', async () => {
+    await store().chooseProjectFolder()
+    expect(addProject).toHaveBeenCalledExactlyOnceWith('/Users/ada/code/atlas')
+    expect(store().dialog).toBeNull()
+  })
+
+  it('adds nothing when the picker is dismissed', async () => {
+    selectProjectFolder.mockResolvedValueOnce(null)
+    await store().chooseProjectFolder()
+    expect(addProject).not.toHaveBeenCalled()
+  })
+
+  it('opens the refusal for a folder that cannot be a project', async () => {
+    addProject.mockResolvedValueOnce('not-a-repository')
+    await store().chooseProjectFolder()
+    expect(store().dialog).toEqual({
+      kind: 'project-refused',
+      folder: '/Users/ada/code/atlas',
+      refusal: 'not-a-repository'
+    })
+  })
+
+  it('opens one picker however often it is asked for', async () => {
+    let answer: (path: string | null) => void = () => {}
+    selectProjectFolder.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+    const first = store().chooseProjectFolder()
+    await store().chooseProjectFolder()
+    expect(selectProjectFolder).toHaveBeenCalledOnce()
+    answer(null)
+    await first
+  })
+
+  it('says so when the picker cannot open', async () => {
+    selectProjectFolder.mockRejectedValueOnce(new Error('no picker'))
+    await store().chooseProjectFolder()
+    expect(store().notices.map((notice) => notice.text)).toEqual(['Could not open the folder picker'])
+    expect(addProject).not.toHaveBeenCalled()
+  })
+})
+
 describe('the size of the text in a pane', () => {
   it('starts at what the emulator was hard-coded to before it was settable', () => {
     expect(store().terminalFontSize).toBe(TERMINAL_FONT_DEFAULT_PX)

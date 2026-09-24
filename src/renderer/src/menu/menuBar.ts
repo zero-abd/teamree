@@ -76,6 +76,8 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'new-worktree': { section: 'file' },
   'new-terminal': { section: 'file' },
   'new-markdown': { section: 'file' },
+  'add-project': { section: 'file' },
+  'clone-repository': { section: 'file' },
   'go-to-file': { section: 'file' },
   'close-pane': { section: 'file' },
   'save-file': { section: 'file' },

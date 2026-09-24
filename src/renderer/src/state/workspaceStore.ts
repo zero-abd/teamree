@@ -144,8 +144,9 @@ import {
 import { panelCost, sidebarCost, type Sides } from '../workspace/roomForPanes'
 
 export type DialogState =
-  /** `folder` and `refusal`: a folder dropped on the window that could not be added as it was. */
-  | { kind: 'add-project'; folder?: string; refusal?: ProjectAddRefusal }
+  /** A picked or dropped folder the runtime would not add as it was. */
+  | { kind: 'project-refused'; folder: string; refusal: ProjectAddRefusal }
+  | { kind: 'clone-project' }
   | { kind: 'install-cli' }
   | { kind: 'new-task'; projectId: string }
   /** `files`: ⌘P, only the worktree's files. */
@@ -258,7 +259,7 @@ export function reconcileRelayPanes(
 }
 
 /** A section of the settings page that can be asked for by name. */
-export type SettingsSection = 'agents' | 'appearance'
+export type SettingsSection = 'agents'
 
 type WorkspaceState = {
   connection: ConnectionState
@@ -387,6 +388,8 @@ type WorkspaceState = {
   /** The section the settings page opens scrolled to, until it has. */
   settingsSection: SettingsSection | null
   helpOpen: boolean
+  /** The theme sheet at the workspace's right edge; the panes stay visible under it. */
+  appearanceOpen: boolean
 
   sidebarWidth: number
   sidebarVisible: boolean
@@ -424,6 +427,8 @@ type WorkspaceState = {
 
   /** Answers the refusal when the folder cannot be a project, for the dialog to show; null otherwise. */
   addProject: (path: string, name?: string, init?: boolean) => Promise<ProjectAddRefusal | null>
+  /** The OS folder picker, then `addProject`; a refusal opens its dialog. */
+  chooseProjectFolder: () => Promise<void>
   /** Clones and adds; answers the one line to show when it did not happen, null when it did. */
   cloneProject: (url: string, path: string) => Promise<string | null>
   /** Creates the worktree, waits for it, then starts the agent in it. */
@@ -619,6 +624,7 @@ type WorkspaceState = {
   openSettings: (section: SettingsSection) => void
   /** The same for help. */
   toggleHelp: () => void
+  showAppearance: (open: boolean) => void
   /**
    * Asks the OS file manager to show a path. The one thing in the renderer that touches the filesystem,
    * so it goes over the preload bridge (see `src/main/reveal`). `what` names the thing for the refusal notice.
@@ -701,6 +707,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   const failed = (what: string) => (error: unknown) => {
     notify(`${what}: ${error instanceof Error ? error.message : String(error)}`)
   }
+
+  // One OS sheet at a time: a second press while it is up would queue another.
+  let picking = false
 
   // The main process waits on this answer, so it is always settled: answered, replaced or dismissed.
   let leaving: ((proceed: boolean) => void) | null = null
@@ -1280,6 +1289,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     settingsOpen: false,
     settingsSection: null,
     helpOpen: false,
+    appearanceOpen: false,
 
     sidebarWidth: readStoredSidebarWidth(storage) || SIDEBAR_DEFAULT_PX,
     sidebarVisible: lastSession.sidebarVisible,
@@ -1392,6 +1402,22 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         failed('Could not add the project')(error)
       }
       return null
+    },
+
+    async chooseProjectFolder() {
+      if (picking) return
+      picking = true
+      let folder: string | null = null
+      try {
+        folder = await window.teamree.selectProjectFolder()
+      } catch {
+        notify('Could not open the folder picker')
+      } finally {
+        picking = false
+      }
+      if (!folder) return
+      const refusal = await get().addProject(folder)
+      if (refusal) set({ dialog: { kind: 'project-refused', folder, refusal } })
     },
 
     async cloneProject(url, path) {
@@ -2663,6 +2689,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set((state) => ({
         settingsOpen: !state.settingsOpen,
         settingsSection: null,
+        appearanceOpen: false,
         helpOpen: false,
         dashboardOpen: false,
         teamworkProjectId: null
@@ -2673,15 +2700,26 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set({
         settingsOpen: true,
         settingsSection: section,
+        appearanceOpen: false,
         helpOpen: false,
         dashboardOpen: false,
         teamworkProjectId: null
       })
     },
 
+    showAppearance(open) {
+      // The pages that replace the panes step aside, so the change is seen on them.
+      set(
+        open
+          ? { appearanceOpen: true, settingsOpen: false, helpOpen: false, teamworkProjectId: null }
+          : { appearanceOpen: false }
+      )
+    },
+
     toggleHelp() {
       set((state) => ({
         helpOpen: !state.helpOpen,
+        appearanceOpen: false,
         settingsOpen: false,
         dashboardOpen: false,
         teamworkProjectId: null
@@ -2861,7 +2899,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     openTeamwork(projectId) {
-      set({ teamworkProjectId: projectId, dashboardOpen: false, settingsOpen: false, helpOpen: false })
+      set({
+        teamworkProjectId: projectId,
+        dashboardOpen: false,
+        settingsOpen: false,
+        helpOpen: false,
+        appearanceOpen: false
+      })
     },
 
     closeTeamwork() {

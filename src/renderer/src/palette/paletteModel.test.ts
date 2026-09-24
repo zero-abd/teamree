@@ -492,7 +492,9 @@ describe('every command the menu has is a row in the palette', () => {
     const labels = buildPaletteItems(context())
       .filter((item) => item.kind === 'action')
       .map((item) => item.label)
-    expect(labels).toEqual(expect.arrayContaining(['Show Changes', 'Show Files', 'Add Project', 'Check for Updates']))
+    expect(labels).toEqual(
+      expect.arrayContaining(['Show Changes', 'Show Files', 'Add Project…', 'Clone Repository…', 'Check for Updates'])
+    )
   })
 
   it('is findable by the words of that label', () => {

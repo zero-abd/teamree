@@ -1,5 +1,54 @@
-/* Settings › Appearance: mode, presets, an accent, a ground, and every colour
-   under a disclosure. The window around it is the preview. */
+/* Appearance: mode, presets, an accent, a ground, and every colour under a
+   disclosure. The window around it is the preview. */
+
+/* A sheet in the workspace's grid cell, over the panes' right edge; no scrim,
+   so what it changes stays in view. Under menus and dialogs. */
+.appearance-sheet {
+  grid-area: workspace;
+  justify-self: end;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: min(380px, 100%);
+  min-height: 0;
+  border-left: 1px solid var(--line-strong);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-pop);
+}
+
+.appearance-sheet:focus {
+  outline: none;
+}
+
+/* The strip's height, and a drag region like the strip it covers. */
+.appearance-sheet__head {
+  -webkit-app-region: drag;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--titlebar-h, 38px);
+  padding: 0 var(--s3) 0 var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+
+.appearance-sheet__head button {
+  -webkit-app-region: no-drag;
+}
+
+.appearance-sheet__title {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.appearance-sheet__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s4);
+}
 
 .appearance {
   display: flex;
@@ -67,14 +116,14 @@
 
 .appearance__themes {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: var(--s2);
 }
 
 .appearance__theme {
   display: grid;
   grid-template-areas: 'preview name';
-  grid-template-columns: 46px minmax(0, 1fr);
+  grid-template-columns: 52px minmax(0, 1fr);
   gap: 0 var(--s3);
   align-items: center;
   padding: var(--s3);
@@ -99,28 +148,34 @@
   background: var(--accent-soft);
 }
 
-/* A preset drawn in its own colours, which says more about it than its name
-   does: the ground, a panel above the ground, the two weights of text that will
-   sit on it, and the accent. */
+/* A preset as the window in miniature: sidebar, selected row, pane, hairline. */
 .appearance__preview {
   grid-area: preview;
-  position: relative;
-  display: block;
-  width: 46px;
-  height: 34px;
+  display: grid;
+  grid-template-columns: 40% 1fr;
+  width: 52px;
+  height: 36px;
   overflow: hidden;
-  border: 1px solid var(--line-strong);
+  border: 1px solid;
   border-radius: var(--r1);
 }
 
-.appearance__preview-panel {
-  position: absolute;
-  inset: 7px 5px 5px 5px;
+.appearance__preview-sidebar,
+.appearance__preview-pane {
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 3px;
-  padding: 0 4px;
+  padding: 6px 4px;
+}
+
+.appearance__preview-sidebar {
+  border-right: 1px solid;
+}
+
+.appearance__preview-accent {
+  display: block;
+  width: 100%;
+  height: 3px;
   border-radius: 2px;
 }
 
@@ -136,15 +191,6 @@
 
 .appearance__preview-line:last-child {
   width: 55%;
-}
-
-.appearance__preview-dot {
-  position: absolute;
-  top: 3px;
-  left: 4px;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
 }
 
 .appearance__theme-name {

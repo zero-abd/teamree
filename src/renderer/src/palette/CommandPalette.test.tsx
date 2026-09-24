@@ -9,7 +9,7 @@
 // worktree that already has panes. A row that looks right and runs nothing is
 // the failure this guards against.
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InstalledAgent, Project, Worktree } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
@@ -178,6 +178,24 @@ describe('the rows that are also commands', () => {
     fireEvent.click(rows()[0] as HTMLElement)
     expect(splitFocusedPane).toHaveBeenCalledExactlyOnceWith('row')
     expect(closeDialog).toHaveBeenCalledOnce()
+  })
+
+  // Straight to the OS picker; cloning is its own row.
+  it('adds a project from the picker, and clones from a row of its own', () => {
+    const chooseProjectFolder = vi.fn(() => Promise.resolve())
+    seed({ chooseProjectFolder })
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'add project' } })
+    fireEvent.click(rows()[0] as HTMLElement)
+    expect(chooseProjectFolder).toHaveBeenCalledOnce()
+    expect(openDialog).not.toHaveBeenCalled()
+    cleanup()
+
+    seed({ chooseProjectFolder })
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'clone repository' } })
+    fireEvent.click(rows()[0] as HTMLElement)
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'clone-project' })
   })
 })
 

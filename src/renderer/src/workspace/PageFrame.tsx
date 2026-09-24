@@ -39,6 +39,8 @@ export function PageFrame({
       // `modalOnScreen`, not `dialog`: a remote-keystrokes question is not in `dialog` and would
       // otherwise have the page close under its scrim.
       if (modalOnScreen(useWorkspaceStore.getState())) return
+      // A field with something of its own to cancel takes Escape first.
+      if (event.target instanceof Element && event.target.closest('[data-own-escape]')) return
       event.preventDefault()
       onClose()
     }

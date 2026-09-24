@@ -13,7 +13,7 @@
 // Everything below the shell is replaced by a marker. Each has its own file,
 // and none of them decides what the shell decides.
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./runtimeClient/currentRuntimeClient', () => ({
@@ -36,7 +36,8 @@ vi.mock('./shell/StatusBar', () => ({ StatusBar: marker('statusbar') }))
 vi.mock('./shell/SidebarResizer', () => ({ SidebarResizer: marker('resizer') }))
 vi.mock('./dialogs/FirstRunCliOffer', () => ({ FirstRunCliOffer: () => null }))
 vi.mock('./palette/CommandPalette', () => ({ CommandPalette: marker('palette') }))
-vi.mock('./dialogs/AddProjectDialog', () => ({ AddProjectDialog: marker('add-project') }))
+vi.mock('./dialogs/CloneProjectDialog', () => ({ CloneProjectDialog: marker('clone-project') }))
+vi.mock('./settings/AppearanceSheet', () => ({ AppearanceSheet: marker('appearance-sheet') }))
 vi.mock('./dialogs/InstallCliDialog', () => ({ InstallCliDialog: marker('install-cli') }))
 vi.mock('./dialogs/TaskComposerDialog', () => ({
   TaskComposerDialog: ({ projectId }: { projectId: string }) => <div data-testid="new-task">{projectId}</div>
@@ -136,7 +137,7 @@ describe('the notice layer', () => {
 describe('which dialog is on screen', () => {
   it('shows none of them by default', () => {
     render(<App />)
-    for (const kind of ['palette', 'add-project', 'install-cli', 'new-task', 'confirm-remove']) {
+    for (const kind of ['palette', 'clone-project', 'install-cli', 'new-task', 'confirm-remove']) {
       expect(screen.queryByTestId(kind)).toBeNull()
     }
   })
@@ -145,7 +146,7 @@ describe('which dialog is on screen', () => {
     seed({ dialog: { kind: 'new-task', projectId: 'p1' } })
     render(<App />)
     expect(screen.getByTestId('new-task').textContent).toBe('p1')
-    expect(screen.queryByTestId('add-project')).toBeNull()
+    expect(screen.queryByTestId('clone-project')).toBeNull()
   })
 
   it('hands the removal question its worktree', () => {
@@ -199,6 +200,20 @@ describe('a question that arrives while something else is open', () => {
     expect(layers.at(-1)?.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe(
       'priya wants to type in t_7'
     )
+  })
+})
+
+describe('the appearance sheet', () => {
+  // Beside the workspace, not instead of it: the panes it colours stay on screen.
+  it('is drawn over the workspace while open, which stays mounted', () => {
+    render(<App />)
+    expect(screen.queryByTestId('appearance-sheet')).toBeNull()
+    cleanup()
+
+    seed({ appearanceOpen: true })
+    render(<App />)
+    expect(screen.getByTestId('appearance-sheet')).toBeTruthy()
+    expect(screen.getByTestId('workspace')).toBeTruthy()
   })
 })
 

@@ -90,15 +90,24 @@ export function AppearanceSettings(): React.JSX.Element {
                 className={`appearance__theme${current ? ' appearance__theme--current' : ''}`}
                 onClick={() => choose(theme.id)}
               >
-                {/* The preset drawn in its own colours, which says more about
-                    it than its name does: ground, a panel above the ground,
-                    the text that will sit on both, and the accent. */}
-                <span className="appearance__preview" style={{ background: swatches['bg-window'] }} aria-hidden="true">
-                  <span className="appearance__preview-panel" style={{ background: swatches['bg-panel'] }}>
-                    <span className="appearance__preview-line" style={{ background: swatches.fg }} />
+                {/* The window in miniature, in the preset's own colours: sidebar and its
+                    selected row, the pane and its text, and the hairline between them. */}
+                <span
+                  className="appearance__preview"
+                  style={{ background: swatches['term-bg'], borderColor: swatches['line-strong'] }}
+                  aria-hidden="true"
+                >
+                  <span
+                    className="appearance__preview-sidebar"
+                    style={{ background: swatches['bg-rail'], borderColor: swatches['line-strong'] }}
+                  >
+                    <span className="appearance__preview-accent" style={{ background: swatches.accent }} />
                     <span className="appearance__preview-line" style={{ background: swatches['fg-muted'] }} />
                   </span>
-                  <span className="appearance__preview-dot" style={{ background: swatches.accent }} />
+                  <span className="appearance__preview-pane">
+                    <span className="appearance__preview-line" style={{ background: swatches['term-fg'] }} />
+                    <span className="appearance__preview-line" style={{ background: swatches['fg-muted'] }} />
+                  </span>
                 </span>
                 <span className="appearance__theme-name">{theme.name}</span>
               </button>

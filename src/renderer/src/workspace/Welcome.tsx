@@ -1,5 +1,5 @@
-// The front door, with no worktree open: the mark, New task and Add project, and three chords. No agent
-// buttons and no headline; the buttons carry the meaning.
+// The front door, with no worktree open: the mark, the two ways to a project, New task once there is one,
+// and three chords. No agent buttons and no headline; the buttons carry the meaning.
 
 import type { Project } from '@shared/entities'
 import type { PlatformModifier } from '../keyboard/platformModifier'
@@ -23,6 +23,7 @@ export function Welcome({
   project: Project | undefined
 }): React.JSX.Element {
   const openDialog = useWorkspaceStore((state) => state.openDialog)
+  const chooseProjectFolder = useWorkspaceStore((state) => state.chooseProjectFolder)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
   const rightPanelOpen = useWorkspaceStore((state) => state.rightPanelOpen)
 
@@ -40,23 +41,23 @@ export function Welcome({
         <button
           type="button"
           className={project === undefined ? 'button button--primary button--lead' : 'button button--lead'}
-          onClick={() => openDialog({ kind: 'add-project' })}
+          onClick={() => void chooseProjectFolder()}
         >
-          Add project
+          Open Folder…
         </button>
-        {/* Live from the first project on: the composer needs somewhere to
-            make the worktree, and a button that opened nothing would be a
-            promise about a key that does not answer either. */}
-        <button
-          type="button"
-          className={project === undefined ? 'button button--lead' : 'button button--primary button--lead'}
-          disabled={project === undefined}
-          onClick={() => {
-            if (project) openDialog({ kind: 'new-task', projectId: project.id })
-          }}
-        >
-          New task
+        <button type="button" className="button button--lead" onClick={() => openDialog({ kind: 'clone-project' })}>
+          Clone…
         </button>
+        {/* Only once there is a project for the composer to make the worktree in. */}
+        {project === undefined ? null : (
+          <button
+            type="button"
+            className="button button--primary button--lead"
+            onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
+          >
+            New task
+          </button>
+        )}
       </div>
 
       <dl className="welcome__shortcuts">

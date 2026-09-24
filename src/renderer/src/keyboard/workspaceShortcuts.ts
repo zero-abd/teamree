@@ -35,6 +35,8 @@ export type WorkspaceCommand =
   | 'open-dashboard'
   | 'open-appearance'
   | 'open-settings'
+  | 'add-project'
+  | 'clone-repository'
   | 'commit-changes'
   | 'push-worktree'
   | 'open-help'
@@ -93,6 +95,9 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'open-settings', chord: { key: ',' }, title: 'Settings' },
   // No chord: shift+comma yields `<`, so ⌘⇧, cannot be bound. Menu, palette and rail reach it.
   { command: 'open-appearance', title: 'Appearance' },
+  // The picker straight away; cloning is the other way in.
+  { command: 'add-project', title: 'Add Project…' },
+  { command: 'clone-repository', title: 'Clone Repository…' },
   // No chords: ⌘⇧P is a palette everywhere else. Commit opens the panel with the message box,
   // hence the ellipsis.
   { command: 'commit-changes', title: 'Commit…' },
