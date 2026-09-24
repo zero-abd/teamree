@@ -655,7 +655,8 @@ function fileLinkHost(terminalId: string, modifier: PlatformModifier): FileLinkH
       return { worktreeId: worktree.id, root: worktree.path, cwd: terminal.cwd }
     },
     exists: fileListed,
-    open: (worktreeId, path, line, column) => useWorkspaceStore.getState().openFileAt(worktreeId, path, line, column),
+    open: (worktreeId, path, line, column) =>
+      void useWorkspaceStore.getState().openFileAt(worktreeId, path, line, column),
     holds: (event) => holdsModifier(event, modifier)
   }
 }

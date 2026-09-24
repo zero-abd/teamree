@@ -958,6 +958,11 @@
     linear-gradient(to right, transparent, var(--bg-rail) var(--s4));
 }
 
+/* A row's height, not a toolbar's. */
+.pane-item__answers .answers__choice {
+  padding-block: 0;
+}
+
 .pane-item:hover .pane-item__answers,
 .pane-item:focus-within .pane-item__answers {
   visibility: visible;

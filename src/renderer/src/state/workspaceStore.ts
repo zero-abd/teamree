@@ -545,7 +545,7 @@ type WorkspaceState = {
    */
   openFilePane: (worktreeId: string, path: string, mode?: FileOpenMode) => void
   /** Opens a path a pane printed: its diff when it has changes, else its code at `line`. */
-  openFileAt: (worktreeId: string, path: string, line?: number, column?: number) => void
+  openFileAt: (worktreeId: string, path: string, line?: number, column?: number) => Promise<void>
   /** Where the next code pane on this path puts its cursor, until it has; `token` tells two requests apart. */
   goToLine: { worktreeId: string; path: string; line: number; column: number; token: number } | null
   /** Forgets the request once a code pane has gone to it. */
@@ -2110,8 +2110,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       placeFileLeaf(layout, fileLeaf(newFilePaneId(), path), mode)
     },
 
-    openFileAt(worktreeId, path, line, column) {
-      const changed = get().changes[worktreeId]?.changes.some((change) => change.path === path) === true
+    async openFileAt(worktreeId, path, line, column) {
+      // Asked now: the Changes list is only read while it is on screen.
+      const asked = await runtimeClient.call('worktree.changes', { worktreeId, path }).catch(() => null)
+      const changed = (asked ?? get().changes[worktreeId])?.changes.some((change) => change.path === path) === true
       if (line !== undefined && !changed) {
         set({ goToLine: { worktreeId, path, line, column: column ?? 1, token: ++goToSeq } })
       }

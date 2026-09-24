@@ -255,7 +255,7 @@ describe('the file viewer', () => {
   // `src/app.ts:3:5` ⌘-clicked in a pane: the code, at that line and column, once.
   it('puts the cursor where a printed path pointed', async () => {
     call.mockImplementation(async (method: string) => (method === 'file.read' ? text('a\nb\n  const c\n') : undefined))
-    useWorkspaceStore.getState().openFileAt('w1', 'src/app.ts', 3, 5)
+    await useWorkspaceStore.getState().openFileAt('w1', 'src/app.ts', 3, 5)
     expect(fileLeavesIn(layout().root).map((leaf) => leaf.path)).toEqual(['src/app.ts'])
     mount()
     const view = await editorView()
@@ -263,19 +263,12 @@ describe('the file viewer', () => {
     expect(useWorkspaceStore.getState().goToLine).toBeNull()
   })
 
-  it('opens a printed path with changes as its diff', () => {
-    useWorkspaceStore.setState({
-      changes: {
-        w1: {
-          worktreeId: 'w1',
-          changes: [{ path: 'src/app.ts' } as never],
-          total: 1,
-          limit: 100,
-          truncated: false
-        } as never
-      }
+  it('opens a printed path with changes as its diff, asking git rather than a list not on screen', async () => {
+    call.mockImplementation(async (method: string, params: { root?: unknown }) => {
+      if (method === 'worktree.changes') return { worktreeId: 'w1', changes: [{ path: 'src/app.ts' }] }
+      return method === 'layout.set' ? params : undefined
     })
-    useWorkspaceStore.getState().openFileAt('w1', 'src/app.ts', 3)
+    await useWorkspaceStore.getState().openFileAt('w1', 'src/app.ts', 3)
     const [leaf] = fileLeavesIn(layout().root)
     expect(useWorkspaceStore.getState().diffPanes[leaf!.terminalId]).toBe(true)
     expect(useWorkspaceStore.getState().goToLine).toBeNull()
