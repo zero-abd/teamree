@@ -143,6 +143,12 @@ extraResources:
   - from: relay/src/node
     to: relay/src/node
 
+# `teamree://join?…` invitation links (src/main/invitationLinks.ts). Registered by
+# the installed app only; a development run never claims the scheme.
+protocols:
+  - name: teamree invitation
+    schemes: [teamree]
+
 asar: true
 # node-pty loads a .node binary and then execs a sibling `spawn-helper`
 # executable. Neither can be read out of an asar archive, so the whole package

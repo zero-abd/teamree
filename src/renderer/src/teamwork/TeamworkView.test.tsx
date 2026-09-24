@@ -665,7 +665,47 @@ describe('the message to send a teammate', () => {
 
     expect(writeText).toHaveBeenCalledOnce()
     const sent = writeText.mock.calls[0]?.[0] as string
-    expect(sent).toContain('git clone https://example.com/ada/pager.git')
-    expect(sent).toContain('wss://relay.example/v1/relay')
+    expect(sent).toMatch(
+      /^Join .* on teamree: teamree:\/\/join\?v=1&origin=https%3A%2F%2Fexample.com%2Fada%2Fpager.git&/
+    )
+    expect(sent).not.toContain('relay=')
+  })
+})
+
+describe('joining from an invitation', () => {
+  it('opens the Join sheet from a pasted link or the older text, and says why not for anything else', () => {
+    seed()
+    mount('join')
+    fireEvent.click(screen.getByRole('button', { name: 'Paste Invitation…' }))
+    const field = screen.getByRole('textbox', { name: 'Invitation' })
+
+    fireEvent.change(field, { target: { value: 'see you tomorrow' } })
+    expect(screen.getByRole('alert').textContent).toMatch(/^Not an invitation/)
+
+    fireEvent.change(field, {
+      target: { value: 'I (ana) have set up teamwork on pantry in teamree.\n1. git clone /srv/pantry.git' }
+    })
+    expect(useWorkspaceStore.getState().dialog).toEqual({
+      kind: 'join-team',
+      invitation: { origin: '/srv/pantry.git', project: 'pantry', from: 'ana' }
+    })
+  })
+
+  it('lands on the joiner’s three steps, waiting for whoever sent the link', () => {
+    seed({
+      members: { p1: enrolledRoster() },
+      relays: { p1: relayOnDisk() },
+      teamwork: { p1: working() },
+      joinedFrom: { p1: 'ana' }
+    })
+    open()
+    expect(screen.getByText('Join a Team')).toBeTruthy()
+    expect([...document.querySelectorAll('[data-step]')].map((entry) => entry.getAttribute('data-step'))).toEqual([
+      'key',
+      'push',
+      'connected'
+    ])
+    fireEvent.click(step('connected').querySelector('.step__toggle') as HTMLElement)
+    expect(within(step('connected')).getByText('Waiting for ana')).toBeTruthy()
   })
 })

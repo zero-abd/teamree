@@ -16,9 +16,9 @@ import {
   type TeamworkStatus
 } from '@shared/entities'
 import { sanitiseHandle } from '@shared/handle'
+import { formatInvitation, withoutCredentials } from '@shared/invitation'
 import { checkOrigin, type OriginKind } from '@shared/origin'
 import { parseRelayUrl } from '@shared/relayUrl'
-import { TEAMWORK_BUTTON_LABEL } from '../sidebar/teamworkSummary'
 
 export type StepId = 'identity' | 'key' | 'relay' | 'push' | 'connected'
 
@@ -80,6 +80,8 @@ export type StartTeamworkInput = {
   path?: TeamworkPath | null | undefined
   /** What the last push from this panel did; the only way the push step is ever done. */
   publish?: TeamworkPublish | undefined
+  /** Whose invitation this checkout was joined from, until somebody is connected. */
+  waitingFor?: string | undefined
 }
 
 /** Named here because the sidebar's "Your key is not here" tooltip tells people which button to press. */
@@ -135,6 +137,9 @@ export const RELAY_CHECK = {
 
 /** The button that opens the relay field. */
 export const PASTE_RELAY_BUTTON = 'Paste URL…'
+
+/** The joiner's way in from a message: the link, or the older invitation text. */
+export const PASTE_INVITATION_BUTTON = 'Paste Invitation…'
 
 /** The one disclosure holding every other way to a relay. */
 export const MORE_RELAYS_BUTTON = 'More'
@@ -530,41 +535,21 @@ export const ORIGIN_DETAIL = 'Scheme, port and trailing .git ignored · a path o
 export const COPY_INVITE_BUTTON = 'Copy Invitation'
 
 /**
- * The message to send a teammate. Push access is membership, so the protocol
- * has no invitation — which is why this is needed. Null with no origin to clone;
- * a path origin carries the mount condition the protocol cannot check.
+ * The message to send a teammate: one line and a link that opens the Join sheet.
+ * Null with no origin to clone. The relay stays out: the clone brings `.teamree/relay`.
  */
 export function inviteText(input: {
   originUrl: string | null
-  relayUrl: string | null
   projectName: string
   handle: string | null
 }): string | null {
   if (input.originUrl === null) return null
-  const origin = checkOrigin(input.originUrl)
-  const mount = origin.ok && origin.kind === 'path' ? ['', `Mount the repository at exactly ${origin.remote}.`] : []
-  const who = input.handle === null ? 'I' : `I (${input.handle})`
-  const relay =
-    input.relayUrl === null
-      ? 'The relay is not in the repository yet — I will push it, and you will get it by pulling.'
-      : `The relay is in the repository at .teamree/relay (${input.relayUrl}).`
-  return [
-    `${who} have set up teamwork on ${input.projectName} in teamree. Push access is membership — nothing to accept.`,
-    '',
-    // Quoted only when it has to be, which for a URL is never and for a volume
-    // called "Team Share" is the difference between a command and two commands.
-    `1. Clone it if you have not: git clone ${shellPath(input.originUrl)}`,
-    // Whose word the URL is on: read off `origin`, and nothing here has tried to clone it.
-    '   (That is this checkout’s origin as git has it; teamree has not checked that it clones.)',
-    '2. Open teamree on your Mac and add that checkout as a project.',
-    `3. Open ${TEAMWORK_BUTTON_LABEL} in the sidebar, choose “${TEAMWORK_PATHS[1].button}”, and press ${ADD_KEY_BUTTON}.`,
-    `4. Press ${PUBLISH_BUTTON}. That is what puts you on the team.`,
-    ...mount,
-    '',
-    relay,
-    '',
-    'Anyone on the roster can type into any pane on your machine, as you.'
-  ].join('\n')
+  const link = formatInvitation({
+    origin: withoutCredentials(input.originUrl).origin,
+    project: input.projectName,
+    from: input.handle ?? 'a teammate'
+  })
+  return `Join ${input.projectName} on teamree: ${link}`
 }
 
 /** The two jobs: `title` once chosen, `button` on the choice itself. */
@@ -605,7 +590,11 @@ export function suggestedPath(
 type StepCore = StartTeamworkStep
 
 export function startTeamworkFlow(input: StartTeamworkInput): StartTeamworkFlow {
-  const steps = [identityStep(input), keyStep(input), relayStep(input), pushStep(input), connectedStep(input)]
+  // A joiner gets the relay with the clone and the identity with the app: three steps are theirs.
+  const steps =
+    input.path === 'join'
+      ? [keyStep(input), pushStep(input), connectedStep(input)]
+      : [identityStep(input), keyStep(input), relayStep(input), pushStep(input), connectedStep(input)]
   // `unchecked` is not settled: the push leads until this panel has pushed or a teammate is connected.
   const connected = steps[steps.length - 1]?.mark === 'done'
   const current = connected ? undefined : steps.find((step) => step.mark !== 'done' && step.mark !== 'this-run')
@@ -775,8 +764,21 @@ function connectedStep(input: StartTeamworkInput): StepCore {
   // Ahead of every phase about somebody else's machine: a key not on this roster
   // leaves the links at `waiting` and every phrase below blames the wrong machine.
   // Not ahead of `connected`, because a link that is up outranks any roster.
+  // Not reached yet rather than failed: the key step above is the one to do.
   if (!status.enrolled) {
-    return { id: 'connected', title, mark: 'blocked', summary: 'Your key is not in .teamree/members' }
+    return { id: 'connected', title, mark: 'todo', summary: 'Your key is not in .teamree/members' }
+  }
+  // A joiner who finds no relay is ahead of whoever invited them; standing a second one up is the wrong answer.
+  if (
+    input.path === 'join' &&
+    input.relay !== undefined &&
+    input.relay.url === null &&
+    input.relay.onDisk.url === null
+  ) {
+    return { id: 'connected', title, mark: 'todo', summary: `${input.relay.file} not pushed yet · pull again soon` }
+  }
+  if (input.waitingFor !== undefined && status.links.every((link) => link.phase !== 'refused')) {
+    return { id: 'connected', title, mark: 'todo', summary: `Waiting for ${input.waitingFor}` }
   }
   if (status.links.length === 0) {
     // The roster is read from disk on demand; the links are replaced at the end

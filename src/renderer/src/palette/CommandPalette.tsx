@@ -350,6 +350,19 @@ export function CommandPalette({
       case 'show-files':
         store.showRightPanelTab('files')
         break
+      case 'open-branch':
+      case 'open-pull-request': {
+        // The project on screen, else the first: the sheet names the project it lists.
+        const projectId = active?.projectId ?? store.projects[0]?.id
+        if (projectId !== undefined) {
+          store.openDialog({
+            kind: 'open-branch',
+            projectId,
+            ...(item.id === 'open-pull-request' ? { pullRequests: true as const } : {})
+          })
+        }
+        break
+      }
       case 'install-cli':
         store.openDialog({ kind: 'install-cli' })
         break

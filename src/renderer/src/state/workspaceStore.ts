@@ -153,6 +153,8 @@ import {
 import { forgetClosedPanes, markSeen, readPaneSeen, writePaneSeen, type PaneSeen } from './paneSeen'
 import type { PatchHunk } from '@shared/patch'
 import type { ProjectAddRefusal, ResultOf } from '@shared/methods'
+import { parsePastedInvitation, type Invitation } from '@shared/invitation'
+import { joinTeam, type JoinStage, type JoinTarget } from '../teamwork/joinTeam'
 import type { DiffLayout } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
@@ -192,6 +194,10 @@ export type DialogState =
   | { kind: 'confirm-merge'; worktreeId: string }
   /** Keeping one run of a task and removing the others; `refused` once the runtime has refused one unforced. */
   | { kind: 'confirm-keep'; worktreeId: string; refused?: true }
+  /** An invitation link, opened or pasted, asking where to join from. */
+  | { kind: 'join-team'; invitation: Invitation }
+  /** A worktree on an existing branch; `pullRequests` lists open pull requests instead of branches. */
+  | { kind: 'open-branch'; projectId: string; pullRequests?: true }
   | null
 
 /** A code pane with edits not on disk, and where its file is. */
@@ -207,6 +213,9 @@ export type RemoveIntent = 'remove' | 'retry'
 export type TaskDraft = {
   projectId: string
   startedFrom?: string
+  /** An existing branch to open instead of making one (`worktree.create`'s `checkout`), and what it is compared against. */
+  checkout?: string
+  base?: string
   /** One worktree per entry, in creation order, each already named by `taskCreates`. */
   creates: readonly TaskCreate[]
 }
@@ -439,6 +448,10 @@ type WorkspaceState = {
   dashboardOpen: boolean
   /** Which project's teamwork setup has the main area, or null. About a project, so not bound to a tab. */
   teamworkProjectId: string | null
+  /** Whose invitation each project was joined from this run, so its Teamwork page says who it waits for. */
+  joinedFrom: Record<string, string>
+  /** The Join sheet's press: which stage it is at, or why it stopped. */
+  joining: { stage: JoinStage; error: string | null } | null
   /** Whether settings has the main area, and whether help does; neither belongs in a tab. */
   settingsOpen: boolean
   /** The section the settings page opens scrolled to, until it has. */
@@ -684,6 +697,12 @@ type WorkspaceState = {
   cancelPublish: (projectId: string) => Promise<void>
   /** Writes this installation's key into the project. Neither commits nor pushes, and the dialog says so. */
   joinProject: (projectId: string, handle?: string) => Promise<void>
+  /** Opens the Join sheet for an invitation link or the older invitation text; answers why not (a notice too when `announce`), or null. */
+  openInvitation: (raw: string, announce?: boolean) => string | null
+  /** The Join sheet's button: clone or reuse, key, push, then the team page. See `joinTeam.ts`. */
+  joinTeam: (invitation: Invitation, target: JoinTarget) => Promise<void>
+  /** Writes the project's setup as it applies here to `.teamree/project.json`, uncommitted. */
+  saveProjectSettings: (projectId: string) => Promise<void>
   /**
    * Stops or restarts teammates' keystrokes reaching a pane. Applied here, not waited for from the
    * stream: a mute that took a round trip to look pressed would be pressed twice.
@@ -1437,6 +1456,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     restoring: true,
     dashboardOpen: false,
     teamworkProjectId: null,
+    joinedFrom: {},
+    joining: null,
     // Neither is restored: both are places you go to answer a question.
     settingsOpen: false,
     settingsSection: null,
@@ -1591,7 +1612,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
      * Creates are requested in order, because names were handed out in order and the runtime allocates
      * branches on arrival; what follows each create is not. Only the first is opened.
      */
-    startTask({ projectId, startedFrom, creates }) {
+    startTask({ projectId, startedFrom, checkout, base, creates }) {
       set({ dialog: null })
 
       void (async () => {
@@ -1603,8 +1624,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             projectId,
             name,
             ...(startedFrom ? { startedFrom } : {}),
-            ...(create.branch ? { branch: create.branch } : {}),
-            ...(task ? { task } : {})
+            ...(create.branch && !checkout ? { branch: create.branch } : {}),
+            ...(task ? { task } : {}),
+            ...(checkout ? { checkout } : {}),
+            ...(checkout && base ? { base } : {})
           })
           set((state) => ({
             worktrees: [...state.worktrees.filter((entry) => entry.id !== created.id), created],
@@ -2733,6 +2756,63 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         set({ relayError: error instanceof Error ? error.message : String(error) })
       } finally {
         set({ relayPending: false })
+      }
+    },
+
+    openInvitation(raw, announce = false) {
+      const parsed = parsePastedInvitation(raw)
+      if (!parsed.ok) {
+        const refused = `Not an invitation: ${parsed.reason}`
+        if (announce) notify(refused)
+        return refused
+      }
+      set({ dialog: { kind: 'join-team', invitation: parsed.invitation }, joining: null })
+      return null
+    },
+
+    async joinTeam(invitation, target) {
+      if (get().joining?.error === null) return
+      set({ joining: { stage: 'clone', error: null } })
+      const outcome = await joinTeam(
+        (method, params) => runtimeClient.call(method, params),
+        invitation,
+        target,
+        (stage) => set({ joining: { stage, error: null } })
+      )
+      const project = outcome.project
+      if (project !== undefined) {
+        set((state) => ({
+          projects: state.projects.some((entry) => entry.id === project.id)
+            ? state.projects
+            : [...state.projects, project],
+          joinedFrom: { ...state.joinedFrom, [project.id]: invitation.from },
+          ...(outcome.publish === undefined
+            ? {}
+            : { publishResults: { ...state.publishResults, [project.id]: outcome.publish } })
+        }))
+      }
+      // Anything short of a project stays in the sheet; after that the team page is where the rest is fixed.
+      if (!outcome.ok && project === undefined) {
+        set({ joining: { stage: outcome.stage, error: outcome.error } })
+        return
+      }
+      set({ dialog: null, joining: null })
+      if (project === undefined) return
+      get().openTeamwork(project.id)
+      if (!outcome.ok) notify(outcome.error)
+    },
+
+    async saveProjectSettings(projectId) {
+      try {
+        const stored = get().startPointDefaults[projectId]
+        const { file, project } = await runtimeClient.call('project.saveSettings', {
+          projectId,
+          ...(stored ? { startFrom: stored } : {})
+        })
+        set((state) => ({ projects: state.projects.map((entry) => (entry.id === project.id ? project : entry)) }))
+        notify(`Wrote ${file} · commit it`, 'info')
+      } catch (error) {
+        failed('Could not write the project’s setup')(error)
       }
     },
 

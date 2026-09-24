@@ -7,9 +7,11 @@ import { mkdir, rm, rmdir, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type {
+  BranchList,
   CloneProgress,
   Project,
   RemovedWorktree,
+  PullRequestList,
   Worktree,
   WorktreeChanges,
   WorktreeCommit,
@@ -35,6 +37,8 @@ import type {
 import type { ParamsOf, ResultOf } from '../../shared/methods'
 import { checkTransport } from '../../shared/origin'
 import { siblingRuns } from '../../shared/runCompare'
+import { effectiveProjectSettings } from '../../shared/projectSettings'
+import { readProjectFile, writeProjectFile, type ProjectFileRead } from '../teamwork/projectFile'
 import { ErrorCode } from '../../shared/protocol'
 import { cloneDestination, cloneFailureCode, cloneFailureLine, runClone } from './clone'
 import { describeError, GitCommandError, GitServiceError, isTransient } from './errors'
@@ -45,6 +49,7 @@ import { createMemoryRecordStore, type GitRecordStore } from './recordStore'
 import { detectBaseRef, initializeRepository, inspectRepository, listBranchNames } from './repository'
 import { listStartPoints, resolveStartPoint, type ResolvedStartPoint, type StartPointList } from './startPoint'
 import { readWorktreeInventory } from './worktreeInventory'
+import { branchForCheckout, listOpenableBranches, listPullRequests } from './openBranch'
 import { allocateBranchName, allocateCheckoutPath, branchCollides } from './worktreeNaming'
 import { readMergePreview } from './mergePreview'
 import { readWorktreeLog } from './worktreeLog'
@@ -154,6 +159,11 @@ export class GitService {
   readonly #startSetup: GitServiceOptions['startSetup']
   readonly #trash: Trash | undefined
   readonly #gh: GhProbe | undefined
+  readonly #locateGh: (() => string | null) | undefined
+  // What each project's `.teamree/project.json` said when last read; never persisted.
+  readonly #projectFiles = new Map<string, ProjectFileRead>()
+  // `checkout` of a create in flight, for the build that has only the record.
+  readonly #checkouts = new Map<string, string>()
   readonly #ensureVersion: (cwd: string) => Promise<unknown>
 
   readonly #store: GitRecordStore
@@ -180,6 +190,7 @@ export class GitService {
     this.#startSetup = options.startSetup
     this.#trash = options.trash
     this.#gh = options.ghBinary === undefined ? undefined : createGhProbe(options.ghBinary, this.#now)
+    this.#locateGh = options.ghBinary
     this.#ensureVersion = createVersionProbe(this.#runner)
   }
 
@@ -190,7 +201,47 @@ export class GitService {
   // ----------------------------------------------------------------- projects
 
   listProjects(): Project[] {
-    return this.#store.listProjects()
+    return this.#store.listProjects().map((project) => this.#present(project))
+  }
+
+  /** Re-reads every project's `.teamree/project.json`, announcing the ones that changed. */
+  async refreshProjectFiles(): Promise<void> {
+    await Promise.all(this.#store.listProjects().map((project) => this.#refreshProjectFile(project.id)))
+  }
+
+  /**
+   * Writes the setup as it applies here into `.teamree/project.json`, as an
+   * uncommitted change in the primary checkout.
+   */
+  async saveProjectSettings(params: ParamsOf<'project.saveSettings'>): Promise<{ file: string; project: Project }> {
+    const project = this.#present(this.#requireProject(params.projectId))
+    const startFrom = params.startFrom ?? project.repository?.startFrom
+    const file = await writeProjectFile(project.path, {
+      ...effectiveProjectSettings(project),
+      ...(startFrom === undefined ? {} : { startFrom })
+    })
+    await this.#refreshProjectFile(project.id)
+    return { file, project: this.#present(this.#requireProject(project.id)) }
+  }
+
+  /** The stored project with what its repository file says beside it. */
+  #present(project: Project): Project {
+    const read = this.#projectFiles.get(project.id)
+    return {
+      ...project,
+      ...(read?.settings === undefined ? {} : { repository: read.settings }),
+      ...(read?.problem === undefined ? {} : { repositoryProblem: read.problem })
+    }
+  }
+
+  async #refreshProjectFile(projectId: string): Promise<void> {
+    const project = this.#store.getProject(projectId)
+    if (!project) return
+    const read = await readProjectFile(project.path)
+    const before = JSON.stringify(this.#projectFiles.get(projectId) ?? {})
+    this.#projectFiles.set(projectId, read)
+    if (JSON.stringify(read) === before || !this.#store.getProject(projectId)) return
+    this.events.emit({ type: 'project.updated', project: this.#present(project) })
   }
 
   async addProject(params: ParamsOf<'project.add'>): Promise<Project> {
@@ -212,8 +263,11 @@ export class GitService {
       baseRef: await detectBaseRef(this.#runner, info.root)
     }
     this.#store.putProject(project)
-    this.events.emit({ type: 'project.added', project })
-    return project
+    // Before the announcement, so a project arrives with its repository's setup already applied.
+    this.#projectFiles.set(project.id, await readProjectFile(project.path))
+    const presented = this.#present(project)
+    this.events.emit({ type: 'project.added', project: presented })
+    return presented
   }
 
   /** Clones, then adds the checkout. Failures are one line each; see `cloneFailureLine`. */
@@ -276,6 +330,7 @@ export class GitService {
       this.events.emit({ type: 'worktree.removed', worktreeId: worktree.id, projectId: project.id })
     }
     this.#store.removeProject(project.id)
+    this.#projectFiles.delete(project.id)
     this.events.emit({ type: 'project.removed', projectId: project.id })
     return { removed: true }
   }
@@ -304,8 +359,9 @@ export class GitService {
     if (params.fetchInBackground === true) delete next.fetchInBackground
     else if (params.fetchInBackground === false) next.fetchInBackground = false
     this.#store.putProject(next)
-    this.events.emit({ type: 'project.updated', project: next })
-    return next
+    const presented = this.#present(next)
+    this.events.emit({ type: 'project.updated', project: presented })
+    return presented
   }
 
   // ---------------------------------------------------------------- worktrees
@@ -365,7 +421,11 @@ export class GitService {
 
   /** Claims a branch name and a checkout path, and starts building into them. */
   async #openWorktreeRecord(project: Project, name: string, params: ParamsOf<'worktree.create'>): Promise<Worktree> {
-    const branch = await this.#chooseBranch(project, name, params.branch)
+    const checkout = params.checkout?.trim()
+    const branch =
+      checkout === undefined || checkout === ''
+        ? await this.#chooseBranch(project, name, params.branch)
+        : await this.#claimCheckout(project, checkout)
     const checkoutPath = await allocateCheckoutPath(
       this.#worktreesRoot,
       project.name,
@@ -380,12 +440,14 @@ export class GitService {
       name,
       branch,
       path: checkoutPath,
-      startedFrom: params.startedFrom?.trim() || project.baseRef,
+      startedFrom: params.base?.trim() || params.startedFrom?.trim() || project.baseRef,
       state: 'creating',
       createdAt: this.#now(),
-      ...(told ? { task: told } : {})
+      ...(told ? { task: told } : {}),
+      ...(checkout && params.base?.trim() ? { baseRef: params.base.trim() } : {})
     }
     this.#store.putWorktree(worktree)
+    if (checkout) this.#checkouts.set(worktree.id, checkout)
     this.events.emit({ type: 'worktree.created', worktree })
 
     const controller = new AbortController()
@@ -624,7 +686,7 @@ export class GitService {
       worktreeId: worktree.id,
       worktreePath: worktree.path,
       fallbackBranch: worktree.branch,
-      baseRef: project?.baseRef,
+      baseRef: worktree.baseRef ?? project?.baseRef,
       prepared: this.#preparedPaths(worktree.projectId),
       now: this.#now
     })
@@ -633,9 +695,10 @@ export class GitService {
   /** What this project puts in every worktree. Read fresh: the lists are editable. */
   #preparedPaths(projectId: string): PreparedPaths {
     const project = this.#store.getProject(projectId)
+    const settings = project === undefined ? {} : effectiveProjectSettings(this.#present(project))
     return {
-      ...(project?.linkedPaths === undefined ? {} : { linkedPaths: project.linkedPaths }),
-      ...(project?.copiedPaths === undefined ? {} : { copiedPaths: project.copiedPaths })
+      ...(settings.linkedPaths === undefined ? {} : { linkedPaths: settings.linkedPaths }),
+      ...(settings.copiedPaths === undefined ? {} : { copiedPaths: settings.copiedPaths })
     }
   }
 
@@ -783,7 +846,7 @@ export class GitService {
     return readWorktreeLog(this.#runner, {
       worktreeId: worktree.id,
       worktreePath: worktree.path,
-      baseRef: project?.baseRef ?? 'HEAD',
+      baseRef: worktree.baseRef ?? project?.baseRef ?? 'HEAD',
       branch: worktree.branch,
       ...(params.limit === undefined ? {} : { limit: params.limit }),
       now: this.#now
@@ -830,7 +893,7 @@ export class GitService {
       worktreeId: worktree.id,
       worktreePath: worktree.path,
       branch: worktree.branch,
-      ...(project === undefined ? {} : { baseRef: project.baseRef }),
+      ...(project === undefined ? {} : { baseRef: worktree.baseRef ?? project.baseRef }),
       ...(params.remote === undefined ? {} : { remote: params.remote }),
       now: this.#now
     })
@@ -849,7 +912,7 @@ export class GitService {
     return readMergePreview(this.#runner, {
       worktreeId: worktree.id,
       repoPath: project.path,
-      baseRef: project.baseRef,
+      baseRef: worktree.baseRef ?? project.baseRef,
       branch: worktree.branch,
       now: this.#now
     })
@@ -975,6 +1038,28 @@ export class GitService {
     })
   }
 
+  /** Branches a worktree can be opened on as they are. */
+  async listBranches(params: ParamsOf<'worktree.branches'>): Promise<BranchList> {
+    const project = this.#requireProject(params.projectId)
+    const branches = await listOpenableBranches(this.#runner, project.path)
+    // In-flight creates hold branch names git has not checked out yet.
+    const claimed = new Set(this.#store.listWorktrees(project.id).map((worktree) => worktree.branch))
+    return {
+      projectId: project.id,
+      branches: branches.filter((branch) => !claimed.has(branch.name)),
+      readAt: this.#now()
+    }
+  }
+
+  async listPullRequests(params: ParamsOf<'worktree.pullRequests'>): Promise<PullRequestList> {
+    const project = this.#requireProject(params.projectId)
+    return {
+      projectId: project.id,
+      ...(await listPullRequests(this.#locateGh?.() ?? null, project.path)),
+      readAt: this.#now()
+    }
+  }
+
   /** How a worktree's start point was read. Present only for worktrees this process created. */
   startPointFor(worktreeId: string): ResolvedStartPoint | undefined {
     return this.#startPoints.get(worktreeId)
@@ -1000,6 +1085,7 @@ export class GitService {
     for (const project of snapshot.projects) this.#store.putProject(project)
     for (const worktree of snapshot.worktrees) this.#store.putWorktree(worktree)
     this.reviveRestoredRecords()
+    void this.refreshProjectFiles().catch(() => undefined)
   }
 
   /** Call once at startup: whatever was mid-flight then has no owner now. */
@@ -1057,6 +1143,20 @@ export class GitService {
     this.events.emit({ type: 'worktree.removed', worktreeId: worktree.id, projectId: worktree.projectId })
   }
 
+  /** The branch an existing-branch checkout will be on, refused when anything already has it checked out. */
+  async #claimCheckout(project: Project, checkout: string): Promise<string> {
+    const branch = branchForCheckout(checkout)
+    if (!branch || BRANCH_FORBIDDEN.test(branch) || hasControlCharacter(branch) || checkout.startsWith('-')) {
+      throw new GitServiceError(ErrorCode.InvalidParams, `"${checkout}" is not a branch to check out`)
+    }
+    const inventory = await readWorktreeInventory(this.#runner, project.path)
+    const recorded = this.#store.listWorktrees(project.id).map((worktree) => worktree.branch)
+    if (inventory.some((entry) => entry.branch === branch) || recorded.includes(branch)) {
+      throw new GitServiceError(ErrorCode.Conflict, `branch "${branch}" is already checked out`)
+    }
+    return branch
+  }
+
   async #chooseBranch(project: Project, taskName: string, requested?: string): Promise<string> {
     // In-flight creates own branch names git has not heard of yet.
     const recorded = this.#store.listWorktrees(project.id).map((worktree) => worktree.branch)
@@ -1084,34 +1184,44 @@ export class GitService {
     // Same for the path: false until `worktree add` was asked for, since the path
     // may already be somebody else's checkout.
     let ourCheckout = false
+    const checkout = this.#checkouts.get(worktreeId)
     try {
-      const start = await resolveStartPoint(this.#runner, {
-        root: project.path,
-        requested: worktree.startedFrom,
-        signal
-      })
-      // Asked again: the #chooseBranch listing is as old as the start point took
-      // to resolve, and a pane or a CLI can claim a name inside that.
-      if (await this.#branchTip(project, worktree.branch)) {
-        throw new GitServiceError(ErrorCode.Conflict, `branch "${worktree.branch}" already exists`)
+      let startedFrom: string
+      let start: ResolvedStartPoint | undefined
+      if (checkout === undefined) {
+        start = await resolveStartPoint(this.#runner, {
+          root: project.path,
+          requested: worktree.startedFrom,
+          signal
+        })
+        // Asked again: the #chooseBranch listing is as old as the start point took
+        // to resolve, and a pane or a CLI can claim a name inside that.
+        if (await this.#branchTip(project, worktree.branch)) {
+          throw new GitServiceError(ErrorCode.Conflict, `branch "${worktree.branch}" already exists`)
+        }
+        ourBranch = { branch: worktree.branch, sha: start.sha }
+        await mkdir(path.dirname(worktree.path), { recursive: true })
+        ourCheckout = true
+        // The resolved sha, never the name: git's DWIM must not get a second vote.
+        // `--no-track`: a branch cut from origin/main that inherits it as upstream
+        // reports a commit still to push after the push that sent it. Explicit
+        // because `branch.autoSetupMerge=always` sets tracking from a local branch too.
+        await this.#runner.run({
+          args: ['worktree', 'add', '--no-track', '-b', worktree.branch, worktree.path, start.sha],
+          cwd: project.path,
+          signal,
+          timeoutMs: this.#createTimeoutMs
+        })
+        startedFrom = start.sha
+      } else {
+        ourBranch = await this.#checkOutExisting(project, worktree, checkout, signal, () => (ourCheckout = true))
+        startedFrom = await this.#forkPoint(project, worktree)
       }
-      ourBranch = { branch: worktree.branch, sha: start.sha }
-      await mkdir(path.dirname(worktree.path), { recursive: true })
-      ourCheckout = true
-      // The resolved sha, never the name: git's DWIM must not get a second vote.
-      // `--no-track`: a branch cut from origin/main that inherits it as upstream
-      // reports a commit still to push after the push that sent it. Explicit
-      // because `branch.autoSetupMerge=always` sets tracking from a local branch too.
-      await this.#runner.run({
-        args: ['worktree', 'add', '--no-track', '-b', worktree.branch, worktree.path, start.sha],
-        cwd: project.path,
-        signal,
-        timeoutMs: this.#createTimeoutMs
-      })
       // Before 'ready', deliberately: a pane opens on the transition, and `npm test`
       // in a checkout still being linked fails for a reason that stops being true.
       // Read from the store: the lists may have changed during a long add.
-      const settings = this.#store.getProject(project.id) ?? project
+      await this.#refreshProjectFile(project.id)
+      const settings = effectiveProjectSettings(this.#present(this.#store.getProject(project.id) ?? project))
       await prepareWorktree(this.#runner, {
         repoPath: project.path,
         worktreePath: worktree.path,
@@ -1119,15 +1229,19 @@ export class GitService {
         ...(settings.copiedPaths === undefined ? {} : { copiedPaths: settings.copiedPaths }),
         signal
       })
-      this.#startPoints.set(worktreeId, start)
+      if (start !== undefined) this.#startPoints.set(worktreeId, start)
       // In the same breath as the flip to 'ready': one write, one event, nothing
       // in between for a client to read a half-answer out of.
-      const setupTerminalId = this.#runSetup(worktree, settings)
+      const setupTerminalId = this.#runSetup(
+        worktree,
+        this.#store.getProject(project.id) ?? project,
+        settings.setupCommand
+      )
       // What it branched from is now a fact: the name could move, the sha cannot.
       return (
         this.#patch(worktreeId, {
           state: 'ready',
-          startedFrom: start.sha,
+          startedFrom,
           clearError: true,
           ...(setupTerminalId === undefined ? {} : { setupTerminalId })
         }) ?? worktree
@@ -1145,15 +1259,53 @@ export class GitService {
     } finally {
       this.#creating.delete(worktreeId)
       this.#settling.delete(worktreeId)
+      this.#checkouts.delete(worktreeId)
     }
+  }
+
+  /**
+   * `git worktree add` on a branch that exists, locally or on origin. Answers
+   * with the branch when this call made it, the only one cleanup may delete.
+   */
+  async #checkOutExisting(
+    project: Project,
+    worktree: Worktree,
+    checkout: string,
+    signal: AbortSignal,
+    claimed: () => void
+  ): Promise<{ branch: string; sha: string } | null> {
+    const run = (args: string[]): Promise<unknown> =>
+      this.#runner.run({ args, cwd: project.path, signal, timeoutMs: this.#createTimeoutMs })
+    const branch = worktree.branch
+    let made: { branch: string; sha: string } | null = null
+    if ((await this.#branchTip(project, branch)) === null) {
+      const source = checkout.startsWith('pull/') ? `refs/${checkout}` : `refs/remotes/${checkout}`
+      if (checkout.startsWith('pull/')) await run(['fetch', '--no-tags', 'origin', `${source}:refs/heads/${branch}`])
+      else await run(['branch', '--track', branch, source])
+      made = { branch, sha: (await this.#branchTip(project, branch)) ?? '' }
+    }
+    await mkdir(path.dirname(worktree.path), { recursive: true })
+    claimed()
+    await run(['worktree', 'add', worktree.path, branch])
+    return made
+  }
+
+  /** Where the branch left its base, so Changes shows its own commits and no one else's. */
+  async #forkPoint(project: Project, worktree: Worktree): Promise<string> {
+    const base = await this.#runner.tryRun({
+      args: ['merge-base', worktree.startedFrom, worktree.branch],
+      cwd: project.path,
+      readOnly: true
+    })
+    if (base.exitCode === 0 && base.stdout.trim() !== '') return base.stdout.trim()
+    return (await this.#branchTip(project, worktree.branch)) ?? worktree.startedFrom
   }
 
   /**
    * Starts the project's setup command in the finished checkout, if any. Never a
    * reason to fail a create: throwing here would discard a correct checkout.
    */
-  #runSetup(worktree: Worktree, project: Project): string | undefined {
-    const command = project.setupCommand
+  #runSetup(worktree: Worktree, project: Project, command: string | undefined): string | undefined {
     if (command === undefined || this.#startSetup === undefined) return undefined
     try {
       return this.#startSetup({ worktree, project, command })

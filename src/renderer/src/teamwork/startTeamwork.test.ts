@@ -11,9 +11,8 @@ import type {
   TeamworkPublishProgress,
   TeamworkRead
 } from '@shared/entities'
-import { TEAMWORK_BUTTON_LABEL } from '../sidebar/teamworkSummary'
+import { parseInvitation } from '@shared/invitation'
 import {
-  ADD_KEY_BUTTON,
   brokenRelayOverride,
   checkOriginDraft,
   checkRelayDraft,
@@ -22,7 +21,6 @@ import {
   memberFilePreview,
   MORE_RELAYS_LEAD,
   ORIGIN_DETAIL,
-  PUBLISH_BUTTON,
   PUBLISH_QUIET_MS,
   publishActivity,
   pushPlan,
@@ -805,9 +803,10 @@ describe('every step, in every state', () => {
 describe('step 5 when this machine’s own key is not on the roster', () => {
   // Every phase below is a sentence about somebody else's machine, so a
   // missing key here must not read as the teammate being absent.
-  it('blames this checkout rather than the teammate, and names the two steps that fix it', () => {
+  // A step not reached yet keeps the neutral glyph: red is for something that failed.
+  it('blames this checkout rather than the teammate, as a step not reached yet', () => {
     const mine = step({ ...written, status: status({ enrolled: false, links: [link()] }) }, 'connected')
-    expect(mine.mark).toBe('blocked')
+    expect(mine.mark).toBe('todo')
     expect(mine.summary).toBe('Your key is not in .teamree/members')
     expect(mine.summary).not.toMatch(/no teammate’s machine is on it yet/)
   })
@@ -968,7 +967,36 @@ describe('what a step carries', () => {
   it('says the same thing whichever of the two jobs this is', () => {
     const starting = startTeamworkFlow({ ...fresh, path: 'start' }).steps
     const joining = startTeamworkFlow({ ...fresh, path: 'join' }).steps
-    expect(starting).toEqual(joining)
+    const facts = (steps: typeof starting) => steps.filter((entry) => entry.id === 'key' || entry.id === 'push')
+    expect(facts(joining)).toEqual(facts(starting))
+  })
+
+  // The relay comes with the clone; a joiner only adds a key, pushes it and waits.
+  it('shows a joiner only the steps a joiner does', () => {
+    expect(startTeamworkFlow({ ...fresh, path: 'join' }).steps.map((entry) => entry.id)).toEqual([
+      'key',
+      'push',
+      'connected'
+    ])
+    expect(startTeamworkFlow({ ...fresh, path: 'start' }).steps.map((entry) => entry.id)).toEqual([
+      'identity',
+      'key',
+      'relay',
+      'push',
+      'connected'
+    ])
+  })
+
+  it('marks nothing red on either path before anything has been tried', () => {
+    for (const path of ['start', 'join'] as const) {
+      const marks = startTeamworkFlow({ ...fresh, path }).steps.map((entry) => entry.mark)
+      expect(marks, path).not.toContain('blocked')
+    }
+  })
+
+  it('says whose machine a joiner is waiting for', () => {
+    const waiting = startTeamworkFlow({ ...written, path: 'join', waitingFor: 'ana', status: status({ links: [] }) })
+    expect(waiting.steps.find((entry) => entry.id === 'connected')?.summary).toBe('Waiting for ana')
   })
 })
 
@@ -1099,67 +1127,33 @@ describe('the message to send a teammate', () => {
     inviteText(
       overrides ?? {
         originUrl: 'https://example.com/ada/pager.git',
-        relayUrl: 'wss://relay.example/v1/relay',
         projectName: 'pager',
         handle: 'ada'
       }
     )
 
-  // There is no invitation in this protocol, so the person has to write one
-  // for somebody who is expecting one.
-  it('names the repository, every step, and the one that people forget', () => {
+  it('is one line and a link that opens the Join sheet', () => {
     const text = invite() ?? ''
-    expect(text).toContain('git clone https://example.com/ada/pager.git')
-    // Every control as the app names it, so the invited person can find it: the sidebar's entry first.
-    expect(text).toContain(`Open ${TEAMWORK_BUTTON_LABEL} in the sidebar`)
-    expect(text).toContain(`choose “${TEAMWORK_PATHS[1].button}”`)
-    expect(text).toContain(`press ${ADD_KEY_BUTTON}`)
-    expect(text).toContain(`Press ${PUBLISH_BUTTON}`)
-    expect(text).not.toMatch(/project header/)
-    expect(text).toMatch(/That is what puts you on the team/)
-    expect(text).toContain('wss://relay.example/v1/relay')
+    expect(text.split('\n')).toHaveLength(1)
+    expect(text).toMatch(/^Join pager on teamree: teamree:\/\/join\?v=1&/)
+    const parsed = parseInvitation(text)
+    expect(parsed.ok && parsed.invitation).toEqual({
+      origin: 'https://example.com/ada/pager.git',
+      project: 'pager',
+      from: 'ada'
+    })
   })
 
-  // The person invited is the one taking on the grant, so the invitation is where they find out.
-  it('says what a key in the roster grants, in one sentence', () => {
-    const text = invite() ?? ''
-    expect(text).toMatch(/Anyone on the roster can type into any pane on your machine, as you\./)
-    expect(text).not.toMatch(/attributed live/)
-  })
-
-  it('says the relay is still coming when it is not in the repository yet', () => {
+  // Nothing the repository does not already say: the relay is read from `.teamree/relay` after cloning.
+  it('carries no relay and no credential', () => {
     const text =
-      invite({ originUrl: 'https://example.com/ada/pager.git', relayUrl: null, projectName: 'pager', handle: null }) ??
+      invite({ originUrl: 'https://ada:ghp_secret@example.com/ada/pager.git', projectName: 'pager', handle: 'ada' }) ??
       ''
-    expect(text).toMatch(/not in the repository yet/)
+    expect(text).not.toContain('relay=')
+    expect(text).not.toContain('ghp_secret')
   })
 
   it('is nothing when there is no repository URL to send', () => {
-    expect(invite({ originUrl: null, relayUrl: null, projectName: 'pager', handle: 'ada' })).toBeNull()
-  })
-
-  // The only condition a teammate can fail while doing everything else right.
-  it('tells a teammate where to mount a repository that is shared over a path', () => {
-    const text =
-      invite({
-        originUrl: '/Volumes/team/pager.git',
-        relayUrl: 'wss://relay.example/v1/relay',
-        projectName: 'pager',
-        handle: 'ada'
-      }) ?? ''
-    expect(text).toContain('git clone /Volumes/team/pager.git')
-    expect(text).toMatch(/Mount the repository at exactly \/Volumes\/team\/pager\.git\./)
-  })
-
-  it('says nothing about mounting anything when the origin is a URL', () => {
-    expect(invite() ?? '').not.toMatch(/mount/)
-  })
-
-  // Nothing here has checked that `origin` clones, so the invitation says
-  // whose word the URL is on instead of asserting it.
-  it('attributes the clone URL to the checkout rather than vouching for it', () => {
-    const text = invite() ?? ''
-    expect(text).toMatch(/origin as git has it/)
-    expect(text).toMatch(/not checked/)
+    expect(invite({ originUrl: null, projectName: 'pager', handle: 'ada' })).toBeNull()
   })
 })

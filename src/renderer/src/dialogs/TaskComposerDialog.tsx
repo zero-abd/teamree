@@ -3,23 +3,19 @@
 
 import { useEffect, useState } from 'react'
 import { MAX_AGENT_ARGS_CHARS } from '@shared/agentLaunch'
-import { AgentGlyph } from '../agents/glyphs'
-import { harnessName } from '../agents/harnesses'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { AgentSteppers } from './AgentSteppers'
 import { branchNameFromTask } from './branchNameFromTask'
 import { Modal } from './Modal'
 import { Select } from './Select'
 import { StartPointPicker, type StartPointValue } from './StartPointPicker'
 import {
-  agentCount,
   defaultAgentCounts,
   fanOut,
-  MAX_PER_AGENT,
   submitLabel,
   taskCreates,
   taskName,
   taskPlanNote,
-  withAgentCount,
   type AgentCounts
 } from './taskPlan'
 import { useStartPoints } from './useStartPoints'
@@ -113,45 +109,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
           ) : null}
         </label>
 
-        {agents.length > 0 ? (
-          <fieldset className="field agents">
-            <legend className="field__label">Agents</legend>
-            {agents.map((entry) => {
-              const count = agentCount(counts, entry.kind)
-              const step = (to: number): void => setAgentCounts(withAgentCount(counts, entry.kind, to))
-              return (
-                <div className="agents__row" key={entry.kind}>
-                  <span className="agents__name">
-                    {/* The name beside it says it once; the mark's own label would say it twice. */}
-                    <span aria-hidden="true" className="agents__mark">
-                      <AgentGlyph kind={entry.kind} />
-                    </span>
-                    {harnessName(entry.kind)}
-                  </span>
-                  <button
-                    type="button"
-                    className="agents__step"
-                    aria-label={`One fewer ${harnessName(entry.kind)}`}
-                    disabled={count === 0}
-                    onClick={() => step(count - 1)}
-                  >
-                    −
-                  </button>
-                  <output className="agents__count">{count}</output>
-                  <button
-                    type="button"
-                    className="agents__step"
-                    aria-label={`One more ${harnessName(entry.kind)}`}
-                    disabled={count === MAX_PER_AGENT}
-                    onClick={() => step(count + 1)}
-                  >
-                    +
-                  </button>
-                </div>
-              )
-            })}
-          </fieldset>
-        ) : null}
+        <AgentSteppers agents={agents} counts={counts} onChange={setAgentCounts} />
 
         <div className="form__row">
           <label className="field">

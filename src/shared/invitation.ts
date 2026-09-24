@@ -1,8 +1,9 @@
-// The invitation link: a message, not a key. It carries four public facts
-// (repository, relay, project name, sender) and grants nothing; being on a team
-// is being able to push a key. One token with no whitespace so it survives
-// chat, commit bodies and prompts; readable rather than packed so it cannot be
-// mistaken for a bearer token; version first so an older build can say so.
+// The invitation link: a message, not a key. It carries public facts (repository,
+// project name, sender, and the relay when the sender names one) and grants
+// nothing; being on a team is being able to push a key. One token with no
+// whitespace so it survives chat; version first so an older build can say so.
+
+import { repositoryNameFromUrl } from './cloneDestination'
 
 /** What `teamree team invite` writes and `teamree team accept` reads. */
 export type Invitation = {
@@ -12,8 +13,8 @@ export type Invitation = {
    * normalised origins match, so a link without it names nothing.
    */
   origin: string
-  /** The relay both machines dial out to. Without one, neither ever meets the other. */
-  relay: string
+  /** The relay both machines dial out to. Absent, it is read from the repository's `.teamree/relay` after cloning. */
+  relay?: string
   /** What the sender's workspace calls the project. A label, and nothing depends on it. */
   project: string
   /** The sender's roster handle, so the receiver can see whose invitation this is. */
@@ -48,7 +49,7 @@ export function formatInvitation(invitation: Invitation): string {
   const query = new URLSearchParams({
     v: INVITATION_VERSION,
     origin: invitation.origin,
-    relay: invitation.relay,
+    ...(invitation.relay === undefined ? {} : { relay: invitation.relay }),
     project: invitation.project,
     from: invitation.from
   })
@@ -129,9 +130,9 @@ export function parseInvitation(raw: string): InvitationParse {
     }
   }
 
-  const required = ['origin', 'relay', 'project', 'from'] as const
+  const fields = ['origin', 'relay', 'project', 'from'] as const
   const values: Record<string, string> = {}
-  for (const field of required) {
+  for (const field of fields) {
     const value = url.searchParams.get(field)?.trim()
     // The format carries percent-encoded control characters fine, and every
     // field is printed, the origin into a `.git/config`: a link that moves the
@@ -143,6 +144,7 @@ export function parseInvitation(raw: string): InvitationParse {
         hint: 'Ask whoever sent it to run `teamree team invite <project>` again and send what that printed.'
       }
     }
+    if ((value === undefined || value === '') && field === 'relay') continue
     if (value === undefined || value === '') {
       return {
         ok: false,
@@ -157,7 +159,7 @@ export function parseInvitation(raw: string): InvitationParse {
     ok: true,
     invitation: {
       origin: values['origin'] as string,
-      relay: values['relay'] as string,
+      ...(values['relay'] === undefined ? {} : { relay: values['relay'] }),
       project: values['project'] as string,
       from: values['from'] as string
     }
@@ -176,4 +178,22 @@ function findInvitation(raw: string): string | undefined {
   if (at === -1) return undefined
   const token = (raw.slice(at).split(/\s/)[0] as string).replace(TRAILING, '')
   return token.length > PREFIX.length ? token : undefined
+}
+
+/**
+ * The link, or failing that the older invitation text (`git clone <url>` in a
+ * paragraph). Only the link's refusal is reported: the text has no grammar to explain.
+ */
+export function parsePastedInvitation(raw: string): InvitationParse {
+  const link = parseInvitation(raw)
+  if (link.ok || findInvitation(raw) !== undefined) return link
+  const clone = /git clone\s+('(?:[^']|'\\'')*'|\S+)/.exec(raw)?.[1]
+  if (clone === undefined) return link
+  const origin = clone.startsWith("'") ? clone.slice(1, -1).replaceAll("'\\''", "'") : clone
+  const project = /teamwork on (.+?) in teamree/.exec(raw)?.[1]?.trim()
+  const from = /\bI \(([^)]+)\)/.exec(raw)?.[1]?.trim()
+  return {
+    ok: true,
+    invitation: { origin, project: project || repositoryNameFromUrl(origin), from: from || 'a teammate' }
+  }
 }

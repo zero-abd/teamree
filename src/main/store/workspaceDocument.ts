@@ -38,7 +38,8 @@ const WorktreeSchema = z.object({
   // Which pane the setup command was started in; kept so the record still says setup ran.
   setupTerminalId: z.string().min(1).optional(),
   // Never an empty string, for the reason `setupCommand` gives above.
-  task: z.string().min(1).optional()
+  task: z.string().min(1).optional(),
+  baseRef: z.string().min(1).optional()
 })
 
 const PaneNodeSchema: z.ZodType<PaneNode> = z.lazy(() =>

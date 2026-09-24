@@ -26,6 +26,8 @@ const { CloneProjectDialog } = await import('./CloneProjectDialog')
 const { ProjectRefusedDialog } = await import('./ProjectRefusedDialog')
 const { AppearanceSettings } = await import('../settings/AppearanceSettings')
 const { TaskComposerDialog } = await import('./TaskComposerDialog')
+const { JoinTeamDialog } = await import('./JoinTeamDialog')
+const { OpenBranchDialog } = await import('./OpenBranchDialog')
 const { RemoteKeystrokesDialog } = await import('./RemoteKeystrokesDialog')
 const { InstallCliDialog } = await import('./InstallCliDialog')
 const { FirstRunCliOffer } = await import('./FirstRunCliOffer')
@@ -663,7 +665,9 @@ describe('buttons and titles', () => {
       <ConfirmDiscardDialog key="discard" worktreeId="w1" path="src/app.ts" />,
       <ConfirmCloseFileDialog key="file" terminalId="file:1" />,
       <ConfirmUnsavedDialog key="unsaved" paneIds={['file:1']} />,
-      <ConfirmClosePaneDialog key="pane" terminalId="t2" />
+      <ConfirmClosePaneDialog key="pane" terminalId="t2" />,
+      <OpenBranchDialog key="branch" projectId="p1" pullRequests={false} />,
+      <OpenBranchDialog key="pulls" projectId="p1" pullRequests={true} />
     ]
     for (const dialog of dialogs) {
       const view = render(dialog)
@@ -688,6 +692,12 @@ describe('buttons and titles', () => {
     )
     expect(labels.length).toBeGreaterThan(0)
     expect(labels.filter((label) => label !== '' && !titleCased(label))).toEqual([])
+  })
+
+  it('are Title Case in the Join sheet, the title naming the project and who sent it', () => {
+    render(<JoinTeamDialog invitation={{ origin: 'git@github.com:acme/pager.git', project: 'pager', from: 'ana' }} />)
+    expect(casingFaults(document.body)).toEqual(['Join pager (from ana)'])
+    expect(sentenceStops(document.body)).toEqual([])
   })
 
   it('are Title Case where somebody else’s keystrokes are asked about, the title naming who', () => {

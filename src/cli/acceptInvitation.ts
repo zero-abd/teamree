@@ -12,7 +12,7 @@ import { readString } from './argv.js'
 import { checkCloneable, cloneRepository } from './clone.js'
 import type { CommandContext } from './command-spec.js'
 import { asCliError, CliError, ExitCode, RuntimeCallError } from './exit.js'
-import { parseInvitation, type Invitation } from './invitation.js'
+import { parseInvitation, type Invitation } from '../shared/invitation.js'
 import type { CommandOutput } from './output.js'
 import { pathComparisonKey } from './selectors.js'
 
@@ -76,8 +76,8 @@ async function accept(context: CommandContext, journey: Journey): Promise<Comman
     })
   }
 
-  const relay = parseRelayUrl(invitation.relay)
-  if (!relay.ok) {
+  const relay = invitation.relay === undefined ? null : parseRelayUrl(invitation.relay)
+  if (relay !== null && !relay.ok) {
     throw journey.refusal({
       code: 'bad_invitation_relay',
       message: `The invitation names a relay teamree cannot dial: ${relay.reason}.`,
@@ -88,8 +88,8 @@ async function accept(context: CommandContext, journey: Journey): Promise<Comman
 
   journey.note(
     'link',
-    `${invitation.from} invites you to ${invitation.project}: the repository at ${origin.remote}, ` +
-      `meeting on ${relay.url}.`
+    `${invitation.from} invites you to ${invitation.project}: the repository at ${origin.remote}` +
+      (relay === null ? '.' : `, meeting on ${relay.url}.`)
   )
 
   const found = await findOrFetch(context, journey, invitation, origin)
@@ -136,7 +136,8 @@ async function accept(context: CommandContext, journey: Journey): Promise<Comman
     })
   }
 
-  await settleRelay(context, journey, project, relay.url)
+  if (relay === null) await readRelay(context, journey, project, invitation.from)
+  else await settleRelay(context, journey, project, relay.url)
   await joinRoster(context, journey, project)
   const published = await publish(context, journey, project, origin)
 
@@ -347,6 +348,17 @@ async function settleRelay(context: CommandContext, journey: Journey, project: P
       (written.source === 'environment'
         ? ` Note that ${written.override.name} is set in this app’s environment, so this machine keeps dialling ${written.url ?? 'nothing'} until it is unset.`
         : '')
+  )
+}
+
+/** The relay as the repository names it, for a link that leaves it to the repository. */
+async function readRelay(context: CommandContext, journey: Journey, project: Project, from: string): Promise<void> {
+  const current = await context.client.call('teamwork.relay', { projectId: project.id })
+  journey.note(
+    'relay',
+    current.onDisk.url === null
+      ? `No relay in ${current.file} yet; you get it when ${from} pushes one.`
+      : `${current.file} names ${current.onDisk.url}.`
   )
 }
 

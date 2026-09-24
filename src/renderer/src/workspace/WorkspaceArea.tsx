@@ -149,7 +149,7 @@ function WorkspaceView({
   if (dashboardOpen) return <Dashboard />
 
   // Teamwork setup is about a repository, so it takes the area.
-  if (teamworkProjectId !== null) return <TeamworkView projectId={teamworkProjectId} />
+  if (teamworkProjectId !== null) return <TeamworkView key={teamworkProjectId} projectId={teamworkProjectId} />
 
   // Settings and help too, ahead of the empty state: a window with nothing open is where people look.
   if (settingsOpen) return <SettingsView />

@@ -4,6 +4,7 @@
 import { createContext, Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { agentLaunchCommand } from '@shared/agentLaunch'
 import type { Project } from '@shared/entities'
+import { effectiveProjectSettings, settingSource, startPointOf } from '@shared/projectSettings'
 import { AgentGlyph } from '../agents/glyphs'
 import { harnessName } from '../agents/harnesses'
 import { cliOutcome } from '../dialogs/cliInstallModel'
@@ -131,12 +132,13 @@ function useProjectRows(): (project: Project) => SettingsRow[] {
     const editor = editorCommands[project.id] ?? ''
     // A program typed in under Other… is on screen; a picked editor's command is not.
     const typed = editors.some((option) => option.command === editor) ? '' : editor
+    const applied = effectiveProjectSettings(project)
     return [
-      { label: 'Start new worktrees from', words: [startPoints[project.id] || project.baseRef] },
+      { label: 'Start new worktrees from', words: [startPointOf(project, startPoints[project.id])] },
       { label: 'Fetch in Background', words: [] },
-      { label: 'Symlink into every new worktree', words: project.linkedPaths ?? [] },
-      { label: 'Copy into every new worktree', words: project.copiedPaths ?? [] },
-      { label: 'Setup command', words: [project.setupCommand ?? ''] },
+      { label: 'Symlink into every new worktree', words: applied.linkedPaths ?? [] },
+      { label: 'Copy into every new worktree', words: applied.copiedPaths ?? [] },
+      { label: 'Setup command', words: [applied.setupCommand ?? ''] },
       {
         label: 'Open checkouts in',
         words: [firstFound, ...editors.map((option) => option.label), 'Other…', typed]
@@ -875,6 +877,7 @@ function ProjectsSection({ projects }: { projects: readonly Project[] }): React.
 
 function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
   const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
+  const saveProjectSettings = useWorkspaceStore((state) => state.saveProjectSettings)
   const shown = useShown()
 
   return (
@@ -888,14 +891,20 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
             <BreakAtSlashes text={project.path} />
           </p>
         </div>
-        <button
-          type="button"
-          className="button button--small"
-          onClick={() => void revealInFinder(project.path, `the ${project.name} repository`)}
-        >
-          Reveal in Finder
-        </button>
+        <div className="settings-actions">
+          <button type="button" className="button button--small" onClick={() => void saveProjectSettings(project.id)}>
+            Save to Repository
+          </button>
+          <button
+            type="button"
+            className="button button--small"
+            onClick={() => void revealInFinder(project.path, `the ${project.name} repository`)}
+          >
+            Reveal in Finder
+          </button>
+        </div>
       </div>
+      {project.repositoryProblem === undefined ? null : <p className="settings-warning">{project.repositoryProblem}</p>}
 
       {shown.row('Start new worktrees from') ? <StartPoint project={project} /> : null}
       {shown.row('Fetch in Background') ? <FetchInBackground project={project} /> : null}
@@ -931,6 +940,8 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
   const stored = useWorkspaceStore((state) => state.startPointDefaults[project.id] ?? '')
   const setStartPointDefault = useWorkspaceStore((state) => state.setStartPointDefault)
   const [draft, setDraft] = useState<string | null>(null)
+  const applied = startPointOf(project, stored)
+  const shared = project.repository?.startFrom
 
   // On blur or Enter, since half a ref resolves to nothing.
   const commit = (): void => {
@@ -958,12 +969,12 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
         {draft === null ? (
           <>
             <code className="settings-value settings-value--mono">
-              <Marked text={stored || project.baseRef} />
+              <Marked text={applied} />
             </code>
-            <button type="button" className="button button--small" onClick={() => setDraft(stored || project.baseRef)}>
+            <button type="button" className="button button--small" onClick={() => setDraft(applied)}>
               Change
             </button>
-            {stored.length === 0 ? null : (
+            {stored.length === 0 || shared !== undefined ? null : (
               <button
                 type="button"
                 className="button button--small"
@@ -997,6 +1008,40 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
           />
         )}
       </div>
+      <SettingSource
+        local={stored || undefined}
+        repository={shared}
+        onReset={() => setStartPointDefault(project.id, null)}
+      />
+    </div>
+  )
+}
+
+/**
+ * Where a value comes from when the repository carries one: `Repository`, or `This Mac` with Reset,
+ * which hands the field back to `.teamree/project.json`. Nothing for a value the file does not carry.
+ */
+function SettingSource({
+  local,
+  repository,
+  onReset
+}: {
+  local: string | readonly string[] | undefined
+  repository: string | readonly string[] | undefined
+  onReset: () => void
+}): React.JSX.Element | null {
+  const source = settingSource(local, repository)
+  if (source === null) return null
+  return (
+    <div className="settings-source">
+      <span className={`settings-chip${source === 'local' ? ' settings-chip--local' : ''}`}>
+        {source === 'local' ? 'This Mac' : 'Repository'}
+      </span>
+      {source === 'local' ? (
+        <button type="button" className="button button--small" onClick={onReset}>
+          Reset
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -1015,6 +1060,7 @@ function CarriedPaths({ project }: { project: Project }): React.JSX.Element {
           label="Symlink into every new worktree"
           examples="node_modules, .venv"
           paths={project.linkedPaths}
+          repository={project.repository?.linkedPaths}
           save={(linkedPaths) => void setProjectPaths(project.id, { linkedPaths })}
         />
       ) : null}
@@ -1025,6 +1071,7 @@ function CarriedPaths({ project }: { project: Project }): React.JSX.Element {
           label="Copy into every new worktree"
           examples=".env, .env.local"
           paths={project.copiedPaths}
+          repository={project.repository?.copiedPaths}
           save={(copiedPaths) => void setProjectPaths(project.id, { copiedPaths })}
         />
       ) : null}
@@ -1037,7 +1084,8 @@ function CarriedPaths({ project }: { project: Project }): React.JSX.Element {
 function SetupCommand({ project }: { project: Project }): React.JSX.Element {
   const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
   const shown = useShown()
-  const stored = project.setupCommand ?? ''
+  const shared = project.repository?.setupCommand
+  const stored = project.setupCommand ?? shared ?? ''
   const [draft, setDraft] = useState(stored)
 
   useEffect(() => {
@@ -1076,6 +1124,11 @@ function SetupCommand({ project }: { project: Project }): React.JSX.Element {
           }
         }}
       />
+      <SettingSource
+        local={project.setupCommand}
+        repository={shared}
+        onReset={() => void setProjectPaths(project.id, { setupCommand: '' })}
+      />
     </div>
   )
 }
@@ -1087,6 +1140,7 @@ function PathList({
   label,
   examples,
   paths,
+  repository,
   save
 }: {
   project: Project
@@ -1094,10 +1148,12 @@ function PathList({
   label: string
   /** Shown on hover, never in the field, where an example reads as a value. */
   examples: string
+  /** This Mac's list; `repository` is `.teamree/project.json`'s, shown when there is none here. */
   paths: readonly string[] | undefined
+  repository: readonly string[] | undefined
   save: (paths: string[]) => void
 }): React.JSX.Element {
-  const stored = (paths ?? []).join('\n')
+  const stored = (paths ?? repository ?? []).join('\n')
   const [draft, setDraft] = useState(stored)
   const shown = useShown()
 
@@ -1128,12 +1184,13 @@ function PathList({
         value={draft}
         placeholder="None"
         title={`One per line, e.g. ${examples}`}
-        {...hitMark(shown, paths ?? [])}
+        {...hitMark(shown, paths ?? repository ?? [])}
         autoComplete="off"
         spellCheck={false}
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}
       />
+      <SettingSource local={paths} repository={repository} onReset={() => save([])} />
     </div>
   )
 }

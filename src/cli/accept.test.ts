@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ExitCode } from './exit.js'
-import { formatInvitation } from './invitation.js'
+import { formatInvitation } from '../shared/invitation.js'
 import type { Streams } from './output.js'
 import { runCli } from './run.js'
 import { StubError, startStubRuntime, type StubHandler, type StubRuntime } from './stub-runtime.js'
@@ -222,6 +222,25 @@ function failureDocument(err: string): {
 }
 
 describe('team accept, on a checkout that is already here', () => {
+  // The app's link leaves the relay out: the repository's `.teamree/relay` is the one that counts.
+  it('takes a link with no relay in it and leaves the relay file as the repository has it', async () => {
+    const cli = await harness(acceptHandler(world()))
+    const link = formatInvitation({ origin: ORIGIN, project: 'api', from: 'ana' })
+    const result = await cli.run(['team', 'accept', link])
+    expect(result.code, result.err).toBe(ExitCode.Success)
+    expect(result.out).toContain('.teamree/relay names wss://relay.example/v1/relay.')
+    expect(methodsCalled(cli.stub)).not.toContain('teamwork.setRelay')
+  })
+
+  it('says there is no relay yet when neither the link nor the repository names one', async () => {
+    const cli = await harness(acceptHandler(world({ relayOnDisk: null })))
+    const link = formatInvitation({ origin: ORIGIN, project: 'api', from: 'ana' })
+    const result = await cli.run(['team', 'accept', link])
+    expect(result.code, result.err).toBe(ExitCode.Success)
+    expect(result.out).toContain('No relay in .teamree/relay yet; you get it when ana pushes one.')
+    expect(methodsCalled(cli.stub)).not.toContain('teamwork.setRelay')
+  })
+
   it('finds the project by its origin rather than by its name, and clones nothing', async () => {
     const cli = await harness(acceptHandler(world()))
     const result = await cli.run(['team', 'accept', LINK])

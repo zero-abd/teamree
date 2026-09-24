@@ -6,6 +6,7 @@ import { z } from 'zod'
 import type {
   ClosedPane,
   RemovedWorktree,
+  BranchList,
   CliInstall,
   CloneProgress,
   CliStatus,
@@ -20,6 +21,7 @@ import type {
   PeerPresence,
   ProcessKill,
   Project,
+  PullRequestList,
   RelaySetting,
   RemoteWriteLog,
   RuntimeStatus,
@@ -224,7 +226,14 @@ export const Params = {
      * What the worktree is for, as typed; see `Worktree.task`. Bounded like
      * `agentArgs`: it goes on the agent's command line.
      */
-    task: z.string().min(1).max(MAX_AGENT_ARGS_CHARS).optional()
+    task: z.string().min(1).max(MAX_AGENT_ARGS_CHARS).optional(),
+    /**
+     * An existing branch to check out instead of making one: a local name,
+     * `origin/<name>` (a local branch tracking it is made), or `pull/<n>/head`.
+     */
+    checkout: z.string().min(1).max(256).optional(),
+    /** What the worktree is compared against instead of the project's base ref. With `checkout` only. */
+    base: z.string().min(1).max(256).optional()
   }),
   worktreeRemove: z.object({
     worktreeId: z.string().min(1),
@@ -325,6 +334,15 @@ export const Params = {
     /** Match the query's characters in order rather than as one run, best match first (`fuzzyPath.ts`). */
     fuzzy: z.boolean().optional()
   }),
+  /** Branches nobody has checked out, local and on origin, for Open Branch. */
+  worktreeBranches: z.object({ projectId: z.string().min(1) }),
+  /** Open pull requests through `gh`, for Open Pull Request. */
+  worktreePullRequests: z.object({ projectId: z.string().min(1) }),
+  /**
+   * Writes the project's setup as it applies here to `.teamree/project.json` in
+   * the primary checkout. Commits nothing. `startFrom` is the window's own setting.
+   */
+  projectSaveSettings: z.object({ projectId: z.string().min(1), startFrom: z.string().min(1).max(256).optional() }),
   /** Everything a new worktree could branch from, for the create dialog. */
   worktreeStartPoints: z.object({
     projectId: z.string().min(1),
@@ -721,6 +739,10 @@ export type MethodContract = {
   'project.cancelClone': { params: z.infer<typeof Params.projectCancelClone>; result: { cancelled: boolean } }
   /** Answers with the project as stored, so a caller sees what was kept. */
   'project.setPaths': { params: z.infer<typeof Params.projectSetPaths>; result: Project }
+  'project.saveSettings': {
+    params: z.infer<typeof Params.projectSaveSettings>
+    result: { file: string; project: Project }
+  }
 
   'worktree.list': { params: z.infer<typeof Params.worktreeList>; result: Worktree[] }
   'worktree.get': { params: z.infer<typeof Params.worktreeGet>; result: Worktree }
@@ -734,6 +756,8 @@ export type MethodContract = {
   }
   'worktree.status': { params: z.infer<typeof Params.worktreeStatus>; result: WorktreeStatus }
   'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }
+  'worktree.branches': { params: z.infer<typeof Params.worktreeBranches>; result: BranchList }
+  'worktree.pullRequests': { params: z.infer<typeof Params.worktreePullRequests>; result: PullRequestList }
   'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }
   'worktree.diff': { params: z.infer<typeof Params.worktreeDiff>; result: WorktreeDiff }
   'worktree.files': { params: z.infer<typeof Params.worktreeFiles>; result: WorktreeFiles }

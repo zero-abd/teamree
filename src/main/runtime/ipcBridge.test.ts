@@ -60,7 +60,9 @@ describe('the renderer transport names one set of channels', () => {
       // Keep-awake's one, outward only.
       ...(await channelsNamedIn('src/main/keepAwake.ts')),
       // Unsaved files: the list out, the question in, its answer out.
-      ...(await channelsNamedIn('src/main/unsavedFiles.ts'))
+      ...(await channelsNamedIn('src/main/unsavedFiles.ts')),
+      // Invitation links: the one that launched the app, taken; each after, sent.
+      ...(await channelsNamedIn('src/main/invitationLinks.ts'))
     ])
 
     expect([...preload].filter((channel) => !served.has(channel))).toEqual([])

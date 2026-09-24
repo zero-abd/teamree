@@ -59,6 +59,8 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   const publishProgress = useWorkspaceStore((state) => state.publishProgress[projectId])
   const loadPublishProgress = useWorkspaceStore((state) => state.loadPublishProgress)
   const cancelPublish = useWorkspaceStore((state) => state.cancelPublish)
+  const joinedFrom = useWorkspaceStore((state) => state.joinedFrom[projectId])
+  const openInvitation = useWorkspaceStore((state) => state.openInvitation)
   const paneRunning = useWorkspaceStore((state) =>
     pane === undefined ? false : (state.terminals[pane.terminalId]?.running ?? false)
   )
@@ -149,7 +151,7 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
 
   // Which of the two jobs this is, kept here and not in the store: it is about
   // this visit, and a project that remembered "I am joining" would say it to whoever opened it next.
-  const [path, setPath] = useState<TeamworkPath | null>(null)
+  const [path, setPath] = useState<TeamworkPath | null>(joinedFrom === undefined ? null : 'join')
 
   return (
     <PageFrame label={`Set up teamwork in ${name}`} title="Teamwork" onClose={closeTeamwork} focusKey={projectId}>
@@ -191,6 +193,8 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
         onChoosePath={setPath}
         projectName={name}
         onCopy={copyText}
+        waitingFor={joinedFrom}
+        onPasteInvitation={(raw) => openInvitation(raw)}
       />
     </PageFrame>
   )

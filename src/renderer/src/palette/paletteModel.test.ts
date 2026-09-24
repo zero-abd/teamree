@@ -795,3 +795,20 @@ describe('the one column after a label', () => {
     expect(trailing(fileItem('src/lib/math.ts'))).toBe('src/lib')
   })
 })
+
+describe('opening a branch as it is', () => {
+  it('offers Open Branch… and Open Pull Request…, reached by the words people use', () => {
+    const items = buildPaletteItems(context())
+    const branch = items.find((item) => item.id === 'open-branch')
+    const pull = items.find((item) => item.id === 'open-pull-request')
+    expect(branch?.label).toBe('Open Branch…')
+    expect(pull?.label).toBe('Open Pull Request…')
+    expect(branch?.search).toMatch(/checkout/)
+    expect(pull?.search).toMatch(/review pr/)
+  })
+
+  it('says there is no project to open one in', () => {
+    const items = buildPaletteItems(context({ projects: [] }))
+    expect(items.find((item) => item.id === 'open-branch')).toMatchObject({ unavailable: 'no project' })
+  })
+})
