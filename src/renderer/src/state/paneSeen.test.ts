@@ -16,6 +16,7 @@ import {
   markSeen,
   paneInFront,
   panesOnScreen,
+  panesInView,
   readPaneSeen,
   unreadPaneIds,
   writePaneSeen,
@@ -89,7 +90,7 @@ const front = (over: Partial<FrontOfWindow> = {}): FrontOfWindow => ({
 describe('what makes a pane unread', () => {
   it('is output that arrived after this person last had it in front of them', () => {
     const panes = { t1: terminal('t1', NOW), t2: terminal('t2', NOW - 60_000) }
-    const unread = unreadPaneIds(panes, { t1: NOW - 30_000, t2: NOW - 30_000 }, null)
+    const unread = unreadPaneIds(panes, { t1: NOW - 30_000, t2: NOW - 30_000 }, [])
 
     expect(unread.has('t1')).toBe(true)
     expect(unread.has('t2')).toBe(false)
@@ -101,7 +102,7 @@ describe('what makes a pane unread', () => {
     const watched = terminal('t1', NOW)
     expect(isPaneUnread(watched, NOW - 30_000, true)).toBe(false)
     expect(isPaneUnread(watched, NOW - 30_000, false)).toBe(true)
-    expect(unreadPaneIds({ t1: watched }, { t1: NOW - 30_000 }, 't1').size).toBe(0)
+    expect(unreadPaneIds({ t1: watched }, { t1: NOW - 30_000 }, ['t1']).size).toBe(0)
   })
 
   it('has nothing to say about a pane with no record, other than that nobody has read it', () => {
@@ -129,6 +130,26 @@ describe('what is on screen', () => {
     expect(paneInFront(front({ dashboardOpen: true }))).toBeNull()
     // Focused in the layout, but not one of the panes actually drawn.
     expect(paneInFront(front({ expandedTerminalId: 't2' }))).toBeNull()
+  })
+})
+
+describe('what is in view', () => {
+  it('is every pane on screen while the window has focus, not only the focused one', () => {
+    const panes = { t1: terminal('t1', NOW), t2: terminal('t2', NOW) }
+    const inView = panesInView(front(), true)
+
+    expect(inView).toEqual(['t1', 't2'])
+    expect(unreadPaneIds(panes, { t1: NOW - 30_000, t2: NOW - 30_000 }, inView).size).toBe(0)
+  })
+
+  it('is the focused pane alone while the window does not have focus', () => {
+    expect(panesInView(front(), false)).toEqual(['t1'])
+    expect(panesInView(front({ focusedWatchId: 'watch_1' }), false)).toEqual([])
+  })
+
+  it('leaves out what a maximised pane covers and what another surface hides', () => {
+    expect(panesInView(front({ expandedTerminalId: 't2' }), true)).toEqual(['t2'])
+    expect(panesInView(front({ dashboardOpen: true }), true)).toEqual([])
   })
 })
 
@@ -182,13 +203,13 @@ describe('the window', () => {
       paneSeenAt: { t1: NOW - 60_000, t2: NOW - 60_000 }
     })
 
-    expect(unreadPaneIds(panes, useWorkspaceStore.getState().paneSeenAt, 't1').has('t2')).toBe(true)
+    expect(unreadPaneIds(panes, useWorkspaceStore.getState().paneSeenAt, ['t1']).has('t2')).toBe(true)
 
     useWorkspaceStore.getState().focusPane('t2')
 
     const seen = useWorkspaceStore.getState().paneSeenAt
     expect(seen.t2).toBeGreaterThan(NOW - 60_000)
-    expect(unreadPaneIds(panes, seen, 't2').size).toBe(0)
+    expect(unreadPaneIds(panes, seen, ['t2']).size).toBe(0)
     // What was on screen up to this moment has been seen up to this moment.
     expect(seen.t1).toBeGreaterThan(NOW - 60_000)
   })

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { TerminalEvent } from '../../shared/methods'
 import { ErrorCode } from '../../shared/protocol'
 import { isProcessAlive } from './process-tree'
-import { EXITED_RETENTION_BYTES, PtySession, RESUME_WINDOW_MS } from './pty-session'
+import { EXITED_RETENTION_BYTES, PtySession, REDRAW_AFTER_RESIZE_MS, RESUME_WINDOW_MS } from './pty-session'
 import type { PtySessionInit } from './pty-session'
 import { canSpawnPty, waitUntil } from './pty-test-support'
 import { isTerminalServiceError } from './service-error'
@@ -352,6 +352,35 @@ describePty('PtySession', () => {
         { busy: false, running: false }
       ])
       expect(session.snapshot()).toMatchObject({ busy: false, running: false, exitCode: 5 })
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'does not count a repaint for a new size as output, and counts what follows it',
+    async () => {
+      const edges: boolean[] = []
+      const session = start({
+        command: `trap 'printf redrawn' WINCH; echo ready; while :; do sleep 0.05; done`,
+        schedule: (run, _delayMs) => {
+          const timer = setTimeout(run, 10)
+          return () => clearTimeout(timer)
+        },
+        onActivityChange: (each) => edges.push(each.isBusy)
+      })
+      const events = collect(session)
+      await waitUntil(() => outputOf(events).includes('ready') && !session.isBusy, 'the first burst to go quiet')
+      const quietAt = session.snapshot().lastOutputAt
+      const edgesBefore = edges.length
+
+      session.resize(100, 30)
+      await waitUntil(() => outputOf(events).includes('redrawn'), 'the repaint')
+      expect(session.snapshot()).toMatchObject({ busy: false, lastOutputAt: quietAt })
+      expect(edges).toHaveLength(edgesBefore)
+
+      await new Promise((resolve) => setTimeout(resolve, REDRAW_AFTER_RESIZE_MS + 50))
+      session.write('typed\n')
+      await waitUntil(() => session.snapshot().lastOutputAt > quietAt, 'the echo to count as output')
     },
     TEST_TIMEOUT_MS
   )
