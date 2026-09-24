@@ -2,7 +2,8 @@
 // handle is on the row and the row is a `<div>`, not a disabled button: it will
 // not act. Panes can be watched; an away teammate's row stays put and says how old it is.
 
-import { dotClass, dotTone, sinceLabel, TONE_LABEL, truncateName } from './agentRows'
+import { dotClass, dotTone, TONE_LABEL, truncateName } from './agentRows'
+import { PaneSince } from './PaneRows'
 import { teammateTitle, type TeammatePaneRow, type TeammateWorktreeRowModel } from './teammateRows'
 import { PaneGlyph } from '../agents/glyphs'
 
@@ -75,10 +76,9 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
                   onClick={() => onWatch(pane)}
                 >
                   <span className="pane-row__head">
-                    <span className={dotClass(dotTone(pane.activity, pane.agent))} aria-hidden="true" />
                     <PaneGlyph agent={pane.agent} />
                     <span className="pane-row__label">{truncateName(pane.text)}</span>
-                    <span className="pane-row__since">{sinceLabel(pane.quietFor)}</span>
+                    <PaneSince tone={dotTone(pane.activity, pane.agent)} quietFor={pane.quietFor} />
                   </span>
                   {/* Only ever a line the pane actually printed while somebody had
                     it open, which is why it is absent on every other row. */}

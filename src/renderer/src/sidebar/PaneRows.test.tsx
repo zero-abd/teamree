@@ -62,29 +62,51 @@ describe('PaneRows', () => {
     expect(row?.querySelector('.pane-row__label')?.textContent).toBe('npm test')
   })
 
-  it('keeps the status dot apart from the glyph', () => {
+  // The worktree row carries the one dot; a dot on every pane repeated it.
+  it('draws no dot: the glyph leads the row', () => {
     const [row] = mount(terminal({ id: 't1', agent: 'claude', busy: true }))
     const head = row?.querySelector('.pane-row__head')
-    expect(head?.children[0]?.className).toBe('activity activity--working')
-    expect(head?.children[1]?.getAttribute('class')).toContain('agent-glyph')
+    expect(row?.querySelector('.activity')).toBeNull()
+    expect(head?.children[0]?.getAttribute('class')).toContain('agent-glyph')
+    expect(row?.title).toContain('Claude Code · working')
   })
 
-  it('draws a shell at its prompt as an idle grey dot, not amber', () => {
-    const [row] = mount(terminal({ id: 't1', lastBellAt: 1 }))
-    expect(row?.querySelector('.activity')?.className).toBe('activity activity--idle')
-    expect(row?.title).toContain('zsh · idle')
+  it('reads the age in the time slot while nothing needs you', () => {
+    const [working, idle, stopped] = mount(
+      terminal({ id: 't1', agent: 'claude', busy: true }),
+      terminal({ id: 't2', lastBellAt: 1 }),
+      terminal({ id: 't3', agent: 'codex' })
+    )
+    for (const row of [working, idle, stopped]) {
+      expect(row?.querySelector('.pane-row__since')?.className).toBe('pane-row__since')
+      expect(row?.querySelector('.pane-row__since')?.textContent).toBe('now')
+    }
+    expect(idle?.title).toContain('zsh · idle')
+    expect(stopped?.title).toContain('Codex · stopped')
   })
 
-  it('marks a quiet agent as stopped', () => {
-    const [row] = mount(terminal({ id: 't1', agent: 'claude' }))
-    expect(row?.querySelector('.activity')?.className).toBe('activity activity--quiet')
+  it('reads asking in the time slot, in its tone', () => {
+    const [row] = mount(
+      terminal({ id: 't1', agent: 'claude', agentEvent: { event: 'Notification', at: 0, detail: 'permission_prompt' } })
+    )
+    const since = row?.querySelector('.pane-row__since')
+    expect(since?.textContent).toBe('asking')
+    expect(since?.className).toBe('pane-row__since pane-row__since--waiting')
+    expect(row?.title).toContain('asking')
   })
 
-  // Unread is a ring on the one dot; a second dot beside it read as a second status.
-  it('draws one dot per row, ringed when unread', () => {
-    const [row] = mountUnread(['t1'], terminal({ id: 't1', agent: 'claude' }))
-    expect(row?.querySelectorAll('.activity, .pip')).toHaveLength(1)
-    expect(row?.querySelector('.activity')?.classList.contains('activity--unread')).toBe(true)
+  it('reads failed in the time slot, in its tone', () => {
+    const [row] = mount(terminal({ id: 't1', title: 'npm test', running: false, exitCode: 1 }))
+    const since = row?.querySelector('.pane-row__since')
+    expect(since?.textContent).toBe('failed')
+    expect(since?.className).toBe('pane-row__since pane-row__since--failed')
+  })
+
+  it('marks an unread pane by weight alone', () => {
+    const [row] = mountUnread(['t1'], terminal({ id: 't1', title: 'npm test' }))
+    expect(row?.className).toContain('pane-row--unread')
+    expect(row?.querySelector('.activity, .pip')).toBeNull()
+    expect(row?.title).toContain('unread')
   })
 })
 

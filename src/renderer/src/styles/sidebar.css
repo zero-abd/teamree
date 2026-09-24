@@ -771,7 +771,7 @@
 }
 
 
-/* What each pane in this worktree is doing; the words are `TONE_LABEL`'s.
+/* What a worktree, tab or board row is doing; the words are `TONE_LABEL`'s.
    Amber is only an agent asking, so it stands out wherever it is. */
 .activity {
   width: 7px;
@@ -848,9 +848,10 @@
   font-weight: 600;
 }
 
+/* The glyph starts under the worktree name: 28px, less the row's own padding. */
 .panes {
   margin: 0;
-  padding: 0 0 var(--s1) 28px;
+  padding: 0 0 var(--s1) 22px;
   list-style: none;
 }
 
@@ -905,9 +906,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A pane row has no dot; the slot names what needs you, in the dot's colour. */
+.pane-row__since--waiting {
+  color: var(--warning);
+}
+
+.pane-row__since--failed {
+  color: var(--danger);
+}
+
 /* The last line the pane printed, in the terminal's own typeface: it is a
-   quotation, not a status this app worked out. Indented under the label so the
-   activity dot keeps its own column.
+   quotation, not a status this app worked out. Indented under the label, clear
+   of the glyph.
 
    One line, ended on a word. `text-overflow: ellipsis` cuts wherever the box
    ends — "MCP startup incomplete (fai…" — and there is no telling it to stop
@@ -916,7 +926,7 @@
 .pane-row__evidence {
   display: -webkit-box;
   overflow: hidden;
-  padding-left: 15px;
+  padding-left: 20px;
   /* A step brighter than the label above it: the quoted line is what the row
      exists to show, and the pane's name is only there to say whose it is. */
   color: var(--fg-secondary);
@@ -985,6 +995,7 @@
 
 .panes--teammate {
   margin-left: var(--s4);
+  padding-left: calc(var(--s4) - var(--s2));
   border-left: 2px solid var(--teammate-line);
 }
 
