@@ -361,14 +361,14 @@ describe('workspace store', () => {
 
     it('is still there after the app is closed and opened again', async () => {
       const store = await WorkspaceStore.open(filePath)
-      store.setAppearance({ themeId: 'graphite', ground: '#101820', accent: '#3fbfa6', overrides: { line: '#445566' } })
+      store.setAppearance({ themeId: 'graphite', ground: '#101820', accent: '#3bb8c4', overrides: { line: '#445566' } })
       await store.flush()
 
       const reopened = await WorkspaceStore.open(filePath)
       expect(reopened.getAppearance()).toEqual({
         themeId: 'graphite',
         ground: '#101820',
-        accent: '#3fbfa6',
+        accent: '#3bb8c4',
         overrides: { line: '#445566' }
       })
     })
@@ -383,7 +383,7 @@ describe('workspace store', () => {
           appearance: {
             themeId: 'a theme that was removed',
             ground: 'rebeccapurple',
-            accent: '#3fbfa6',
+            accent: '#3bb8c4',
             overrides: { line: 'not a colour', 'bg-panel': '#123456', invented: '#123456' }
           }
         }),
@@ -394,7 +394,7 @@ describe('workspace store', () => {
       expect(store.getAppearance()).toEqual({
         themeId: 'black',
         ground: null,
-        accent: '#3fbfa6',
+        accent: '#3bb8c4',
         overrides: { 'bg-panel': '#123456' }
       })
     })

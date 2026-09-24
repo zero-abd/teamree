@@ -15,6 +15,7 @@
 import { describe, expect, it } from 'vitest'
 import { contrastRatio, ensureContrast, opaqueHex, parseColor, toHex, type Rgb } from './color'
 import {
+  ACCENT_PRESETS,
   BUILT_IN_THEMES,
   DEFAULT_ACCENT,
   DEFAULT_APPEARANCE,
@@ -179,12 +180,12 @@ describe('light and dark', () => {
     const edited = withChoice({ ...DEFAULT_APPEARANCE, themeId: 'midnight' }, 'light', {
       themeId: 'paper',
       ground: null,
-      accent: '#e0a13e',
+      accent: '#5aa9e6',
       overrides: {}
     })
     expect(edited.themeId).toBe('midnight')
     expect(edited.accent).toBeNull()
-    expect(resolvePalette(edited, 'light').accent).toBe('#e0a13e')
+    expect(resolvePalette(edited, 'light').accent).toBe('#5aa9e6')
     expect(resolvePalette(edited, 'dark').accent).toBe(DEFAULT_ACCENT)
   })
 
@@ -222,8 +223,8 @@ describe('a theme somebody has edited', () => {
   })
 
   it('takes a new accent, and relabels the button that is filled with it', () => {
-    const palette = resolvePalette({ ...DEFAULT_APPEARANCE, accent: '#e0a13e' })
-    expect(palette.accent).toBe('#e0a13e')
+    const palette = resolvePalette({ ...DEFAULT_APPEARANCE, accent: '#e070c0' })
+    expect(palette.accent).toBe('#e070c0')
     expect(ratio(palette, 'on-accent', 'accent')).toBeGreaterThanOrEqual(4.5)
     expect(ratio(palette, 'accent-bright', 'bg-raised')).toBeGreaterThanOrEqual(4.5)
   })
@@ -294,6 +295,55 @@ describe('reading a stored appearance', () => {
     expect(sanitizeAppearance('nonsense')).toEqual(DEFAULT_APPEARANCE)
     expect(sanitizeAppearance(null)).toEqual(DEFAULT_APPEARANCE)
     expect(sanitizeAppearance({ overrides: 'not an object' }).overrides).toEqual({})
+  })
+})
+
+// Amber is an agent asking, green done, red failed: an accent in one of them makes every
+// selected row and focus ring read as that state.
+describe('accents', () => {
+  const STATES = { asking: '#d6a24a', done: '#57c38a', failed: '#e8615a' }
+  const hue = (hex: string): number => {
+    const { r, g, b } = parseColor(hex) as Rgb
+    const max = Math.max(r, g, b)
+    const d = max - Math.min(r, g, b)
+    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+    return (h * 60 + 360) % 360
+  }
+  const apart = (a: number, b: number): number => Math.min(Math.abs(a - b), 360 - Math.abs(a - b))
+  const offered = ACCENT_PRESETS.map((option) => option.value)
+
+  it('offers none within 20° of a state colour', () => {
+    for (const { name, value } of ACCENT_PRESETS) {
+      const { r, g, b } = parseColor(value) as Rgb
+      if (Math.max(r, g, b) - Math.min(r, g, b) < 40) continue
+      for (const [state, tone] of Object.entries(STATES)) {
+        expect(apart(hue(value), hue(tone)), `${name} vs ${state}`).toBeGreaterThan(20)
+      }
+    }
+    expect(ACCENT_PRESETS.map((option) => option.name)).toEqual(['Violet', 'Sky', 'Teal', 'Orchid', 'Pink', 'Graphite'])
+  })
+
+  it('reads a stored amber, lime or rose accent as the nearest one offered', () => {
+    const read = (accent: string): string | null => sanitizeAppearance({ ...DEFAULT_APPEARANCE, accent }).accent
+    expect(read('#e0a13e')).toBe('#e070c0')
+    expect(read('#ef6b87')).toBe('#e070c0')
+    expect(read('#8fc65a')).toBe('#3bb8c4')
+    expect(read('#3fbfa6')).toBe('#3bb8c4')
+    expect(sanitizeAppearance({ light: { themeId: 'light', accent: '#e0a13e' } }).light?.accent).toBe('#e070c0')
+  })
+
+  it('moves a custom accent off the asking, done and failed hues', () => {
+    for (const tone of [...Object.values(STATES), '#f0b030', '#40c060', '#ff2020']) {
+      const accent = sanitizeAppearance({ ...DEFAULT_APPEARANCE, accent: tone }).accent
+      expect(offered, tone).toContain(accent)
+      expect(resolvePalette({ ...DEFAULT_APPEARANCE, accent: tone }).accent, tone).toBe(accent)
+    }
+  })
+
+  it('keeps a custom accent clear of them, and a grey whatever its tint', () => {
+    for (const tone of ['#ff00ff', '#12a0ff', '#8a8078', '#000000']) {
+      expect(sanitizeAppearance({ ...DEFAULT_APPEARANCE, accent: tone }).accent).toBe(tone)
+    }
   })
 })
 

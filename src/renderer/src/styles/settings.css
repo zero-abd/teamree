@@ -289,6 +289,11 @@
   font-family: var(--font-ui);
 }
 
+/* The command an agent runs bare: a command, so in the mono it runs in. */
+.settings-field__input--command::placeholder {
+  font-family: var(--font-mono);
+}
+
 .settings-field__input:focus-visible {
   outline: none;
   border-color: var(--accent-line);
@@ -333,6 +338,24 @@
   font-size: var(--text-xs);
   overflow-wrap: anywhere;
   user-select: text;
+}
+
+.settings-launch--missing {
+  margin: 0;
+  color: var(--fg-secondary);
+  font-family: var(--font-ui);
+}
+
+/* What the filter matched: the words where they are text, the control where they are inside one. */
+.settings-match {
+  border-radius: 2px;
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
+.settings-section [data-match]:not(:focus-visible) {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
 .settings-size {

@@ -103,15 +103,56 @@ const HUES: Hues = {
 /** The accent every preset starts from, and the wordmark's dot. */
 export const DEFAULT_ACCENT = '#8b8cf7'
 
-/** The accents offered as one press in the editor; each lands on a measured palette. */
+/** The accents offered as one press in the editor, each clear of the asking, done and failed hues. */
 export const ACCENT_PRESETS: readonly { name: string; value: string }[] = [
   { name: 'Violet', value: DEFAULT_ACCENT },
   { name: 'Sky', value: '#5aa9e6' },
-  { name: 'Teal', value: '#3fbfa6' },
-  { name: 'Lime', value: '#8fc65a' },
-  { name: 'Amber', value: '#e0a13e' },
-  { name: 'Rose', value: '#ef6b87' }
+  { name: 'Teal', value: '#3bb8c4' },
+  { name: 'Orchid', value: '#b584f5' },
+  { name: 'Pink', value: '#e070c0' },
+  { name: 'Graphite', value: '#9aa1ad' }
 ]
+
+// Lime, Amber and Rose were offered once; Lime is too far from green for the hue test to catch.
+const RETIRED_ACCENTS: readonly string[] = ['#8fc65a', '#e0a13e', '#ef6b87']
+const STATE_HUES = [HUES.yellow, HUES.green, HUES.red].map((tone) => hueOf(parseColor(tone) as Rgb) as number)
+const STATE_HUE_BAND = 20
+
+/** The accent as stored, unless it would read as asking, done or failed: then the nearest preset by hue. */
+export function allowedAccent(value: string): string {
+  const parsed = parseColor(value)
+  if (parsed === null) return value
+  const hex = toHex(parsed)
+  const hue = hueOf(parsed)
+  if (hue === null) return hex
+  if (!RETIRED_ACCENTS.includes(hex) && STATE_HUES.every((state) => hueApart(hue, state) > STATE_HUE_BAND)) return hex
+  let nearest = DEFAULT_ACCENT
+  let best = Infinity
+  for (const { value: preset } of ACCENT_PRESETS) {
+    const presetHue = hueOf(parseColor(preset) as Rgb)
+    if (presetHue === null || hueApart(hue, presetHue) >= best) continue
+    best = hueApart(hue, presetHue)
+    nearest = preset
+  }
+  return nearest
+}
+
+/** Degrees round the colour wheel, or null for a grey, whose hue nobody reads. */
+function hueOf({ r, g, b }: Rgb): number | null {
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const lightness = (max + min) / 510
+  const saturation = max === min ? 0 : (max - min) / 255 / (1 - Math.abs(2 * lightness - 1))
+  if (saturation < 0.25) return null
+  const d = max - min
+  const sector = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+  return (sector * 60 + 360) % 360
+}
+
+function hueApart(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360
+  return Math.min(d, 360 - d)
+}
 
 export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
   {
@@ -316,7 +357,13 @@ function sanitizeChoice(record: Record<string, unknown>, fallbackThemeId: string
     }
   }
 
-  return { themeId, ground: hexOrNull(record.ground), accent: hexOrNull(record.accent), overrides }
+  const accent = hexOrNull(record.accent)
+  return {
+    themeId,
+    ground: hexOrNull(record.ground),
+    accent: accent === null ? null : allowedAccent(accent),
+    overrides
+  }
 }
 
 export function isThemeToken(name: string): name is ThemeToken {

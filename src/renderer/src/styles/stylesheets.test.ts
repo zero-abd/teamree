@@ -289,6 +289,12 @@ describe('stylesheets', () => {
     })
   })
 
+  // The chosen swatch's ring is 4px wide; with no room above it, it cut into the Accent label.
+  it('leaves the accent swatches room for their selection ring', () => {
+    expect(declarationOf(ruleFor('appearance.css', '.appearance__legend'), 'margin-bottom')).toBe('var(--s2)')
+    expect(declarationOf(ruleFor('appearance.css', '.appearance__accents'), 'padding-block')).toBe('4px')
+  })
+
   // Amber means an agent is asking, so nothing else may be drawn in it.
   describe('colour means state', () => {
     it('uses the asking tone only for an agent that is asking', () => {

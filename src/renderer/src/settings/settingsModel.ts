@@ -1,7 +1,8 @@
-// The settings page's two non-trivial lines: whether this build can check for updates, and
-// where a project's relay comes from (an env var beating the file is the case nobody works out).
+// The settings page's judgements: whether this build can check for updates, where a project's relay
+// comes from (an env var beating the file is the case nobody works out), and what the filter reads.
 
-import type { CliStatus, RelaySetting, UpdateState } from '@shared/entities'
+import type { AgentKind, CliStatus, InstalledAgent, RelaySetting, UpdateState } from '@shared/entities'
+import { HARNESSES } from '../agents/harnesses'
 import { cliPanel } from '../dialogs/cliInstallModel'
 import { sinceLabel } from '../sidebar/agentRows'
 
@@ -131,37 +132,46 @@ export function cliLine(status: CliStatus | null): CliLine {
   }
 }
 
-/** The page's sections in order, with the labels of their rows: the only text the filter reads besides titles. */
+/** The page's sections in order. */
 export const SETTINGS_SECTIONS = [
-  { id: 'agents', label: 'Agents', rows: ['Default agent'] },
-  {
-    id: 'projects',
-    label: 'Projects',
-    rows: [
-      'Start new worktrees from',
-      'Symlink into every new worktree',
-      'Copy into every new worktree',
-      'Setup command',
-      'Open checkouts in',
-      'Relay'
-    ]
-  },
-  {
-    id: 'panes',
-    label: 'Panes',
-    rows: ['Terminal text size', 'Font', 'Cursor', 'Option as Meta', 'Copy on select', 'Scrollback lines']
-  },
-  { id: 'notices', label: 'Notifications', rows: ['When an agent stops'] },
-  { id: 'appearance', label: 'Appearance', rows: ['Theme'] },
-  { id: 'updates', label: 'Updates', rows: ['Check automatically'] },
-  { id: 'cli', label: 'CLI', rows: [] }
+  { id: 'agents', label: 'Agents' },
+  { id: 'projects', label: 'Projects' },
+  { id: 'panes', label: 'Panes' },
+  { id: 'notices', label: 'Notifications' },
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'updates', label: 'Updates' },
+  { id: 'cli', label: 'CLI' }
 ] as const
 
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id']
-export type SettingsRowLabel = (typeof SETTINGS_SECTIONS)[number]['rows'][number]
 
 /** Case-insensitive, anywhere in the label; an empty filter keeps everything. */
 export function labelMatches(label: string, query: string): boolean {
   const wanted = query.trim().toLowerCase()
   return wanted === '' || label.toLowerCase().includes(wanted)
+}
+
+/** What the filter reads in one row: its label, the option labels it offers and the value it holds. */
+export type SettingsRow = { label: string; words: readonly string[] }
+
+export function rowMatches(row: SettingsRow, query: string): boolean {
+  return labelMatches(row.label, query) || row.words.some((word) => word !== '' && labelMatches(word, query))
+}
+
+/** An agent's row: `command` is null for one given arguments or chosen as default that the probe did not find. */
+export type AgentRow = { kind: AgentKind; command: string | null }
+
+export function agentRows(
+  found: readonly InstalledAgent[],
+  agentArgs: Readonly<Record<string, string>>,
+  defaultAgent: string,
+  probed: boolean
+): AgentRow[] {
+  const rows: AgentRow[] = found.map((agent) => ({ kind: agent.kind, command: agent.command }))
+  if (!probed) return rows
+  for (const kind of Object.keys(HARNESSES) as AgentKind[]) {
+    const wanted = (agentArgs[kind] ?? '') !== '' || defaultAgent === kind
+    if (wanted && !rows.some((row) => row.kind === kind)) rows.push({ kind, command: null })
+  }
+  return rows
 }
