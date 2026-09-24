@@ -925,11 +925,12 @@
 .commits__title {
   margin: 0;
   padding: var(--s3) var(--s4) var(--s2);
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  font-weight: 500;
 }
 
 .commits__list {
@@ -938,12 +939,30 @@
   list-style: none;
 }
 
-.commit {
+.commit__open {
+  width: 100%;
   padding: var(--s1) var(--s4);
   display: flex;
   align-items: baseline;
   gap: var(--s2);
+  border: 0;
+  background: none;
   font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.commit__open:hover {
+  background: var(--bg-hover);
+}
+
+.commit--selected {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 var(--accent);
+}
+
+.commit--selected .commit__open:hover {
+  background: none;
 }
 
 .commit__sha {

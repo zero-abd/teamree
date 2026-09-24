@@ -34,6 +34,7 @@ import type {
   Worktree,
   WorktreeChanges,
   WorktreeCommit,
+  WorktreeCommitPatch,
   WorktreeDiff,
   WorktreeDiscard,
   WorktreeFileMatches,
@@ -243,6 +244,13 @@ export const Params = {
   worktreeLog: z.object({
     worktreeId: z.string().min(1),
     limit: z.number().int().positive().optional()
+  }),
+  /** One commit's patch against its first parent, read-only. */
+  worktreeShowCommit: z.object({
+    worktreeId: z.string().min(1),
+    sha: z.string().regex(/^[0-9a-f]{4,64}$/i),
+    contextLines: z.number().int().min(0).max(100).optional(),
+    maxBytes: z.number().int().positive().optional()
   }),
   /** Whether this worktree would merge into its base, without merging it. */
   worktreeMergePreview: z.object({ worktreeId: z.string().min(1) }),
@@ -666,6 +674,7 @@ export type MethodContract = {
   'worktree.discardHunk': { params: z.infer<typeof Params.worktreeDiscardHunk>; result: WorktreeDiscard }
   'worktree.push': { params: z.infer<typeof Params.worktreePush>; result: WorktreePush }
   'worktree.log': { params: z.infer<typeof Params.worktreeLog>; result: WorktreeLog }
+  'worktree.showCommit': { params: z.infer<typeof Params.worktreeShowCommit>; result: WorktreeCommitPatch }
   'worktree.mergePreview': {
     params: z.infer<typeof Params.worktreeMergePreview>
     result: WorktreeMergePreview

@@ -727,6 +727,20 @@ export function createSeededRuntimeClient(): RuntimeClient {
         readAt: Date.now()
       }
     },
+    'worktree.showCommit': ({ worktreeId, sha }) => {
+      required(worktrees.get(worktreeId), 'worktree')
+      return {
+        worktreeId,
+        sha,
+        shortSha: sha.slice(0, 7),
+        author: 'you',
+        committedAt: new Date().toISOString(),
+        subject: 'rank results by recency, not just score',
+        patch: seededPatch('src/search/rankResults.ts'),
+        truncated: false,
+        readAt: Date.now()
+      }
+    },
     'worktree.mergePreview': ({ worktreeId }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const project = projects.get(worktree.projectId)

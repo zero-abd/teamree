@@ -1,6 +1,7 @@
-// A file leaf of the tree, drawn by the viewer its extension picks.
+// A file leaf of the tree, drawn by the viewer its extension picks, or a commit read-only.
 
 import { fileViewerFor } from '@shared/filePane'
+import { CommitView } from '../files/CommitView'
 import { FileView } from '../files/FileView'
 import { MarkdownPane } from '../markdown/MarkdownPane'
 
@@ -20,6 +21,8 @@ export type FilePaneProps = {
   onCloseSearch?: () => void
 }
 
-export function FilePane(props: FilePaneProps): React.JSX.Element {
-  return fileViewerFor(props.path) === 'markdown' ? <MarkdownPane {...props} /> : <FileView {...props} />
+export function FilePane(props: FilePaneProps & { commit?: string }): React.JSX.Element {
+  const { commit, ...file } = props
+  if (commit !== undefined) return <CommitView {...file} sha={commit} />
+  return fileViewerFor(file.path) === 'markdown' ? <MarkdownPane {...file} /> : <FileView {...file} />
 }
