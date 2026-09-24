@@ -29,6 +29,7 @@ import { openInBrowser } from './shell/openInBrowser'
 import { RegionFocus } from './shell/RegionFocus'
 import { shellClassName } from './shell/shellClass'
 import { FolderDrop } from './shell/FolderDrop'
+import { watchLayoutMotion } from './shell/layoutMotion'
 import { SidebarResizer } from './shell/SidebarResizer'
 import { StatusBar } from './shell/StatusBar'
 import { useWorkspaceStore, type Notice } from './state/workspaceStore'
@@ -80,6 +81,7 @@ export function App(): React.JSX.Element {
   }, [appearance, systemTone])
 
   useEffect(() => watchSystemTone(useWorkspaceStore.getState().setSystemTone), [])
+  useEffect(() => watchLayoutMotion(document), [])
 
   // One subscription for the window, started before the first read so no bootstrap-time event is missed.
   useEffect(() => {

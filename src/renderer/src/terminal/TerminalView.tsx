@@ -31,6 +31,7 @@ import { frameWrites, paneWebgl, syncScrollbarPerFrame } from './paneFrames'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOptions } from './paneSearchModel'
 import { TerminalSearchBar } from './TerminalSearchBar'
 import { showPane } from './shownPanes'
+import { deferWhileLayoutMoves, forgetDeferred } from '../shell/layoutMotion'
 import { TERMINAL_LINE_HEIGHT } from './paneMetrics'
 import { readSearchDecorations, readTerminalColors } from './terminalTheme'
 
@@ -138,13 +139,14 @@ export function TerminalView({
         })
     }
 
-    // Fitting mid-layout-thrash is wasted work, so coalesce to one per frame.
+    // Fitting mid-layout-thrash is wasted work, so coalesce to one per frame, and to one per slide.
     let frame = 0
     const scheduleFit = (): void => {
-      if (frame) return
+      if (frame || deferWhileLayoutMoves(scheduleFit)) return
       frame = requestAnimationFrame(() => {
         frame = 0
-        if (!hasBox()) return
+        // A slide's start event arrives a frame after the resize that began it.
+        if (!hasBox() || deferWhileLayoutMoves(scheduleFit)) return
         gpu.retry()
         fitToBox()
       })
@@ -186,6 +188,7 @@ export function TerminalView({
     return () => {
       mounted = false
       if (frame) cancelAnimationFrame(frame)
+      forgetDeferred(scheduleFit)
       observer.disconnect()
       document.removeEventListener('visibilitychange', onVisible)
       termRef.current = null

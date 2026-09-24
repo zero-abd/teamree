@@ -315,7 +315,8 @@ describe('stylesheets', () => {
       const dotRules: string[] = []
       for (const name of sheets) {
         postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkRules((rule) => {
-          if (/unread/.test(rule.selector) && /\.activity\b/.test(rule.selector)) dotRules.push(`${name}: ${rule.selector}`)
+          if (/unread/.test(rule.selector) && /\.activity\b/.test(rule.selector))
+            dotRules.push(`${name}: ${rule.selector}`)
         })
       }
       expect(dotRules).toEqual([])
@@ -370,6 +371,50 @@ describe('stylesheets', () => {
       const tab = px(declarationOf(ruleFor('rightPanel.css', '.panel__rail--edge .panel__tab'), 'width'))
       const right = px(declarationOf(ruleFor('rightPanel.css', '.panel__rail--edge .panel__count'), 'right'))
       expect((inner - tab) / 2 + right).toBeGreaterThanOrEqual(2)
+    })
+  })
+
+  // Sheets and side panels move in about a sixth of a second; ambient motion is the asking dot alone.
+  describe('motion', () => {
+    it('slides the Appearance sheet in from the right', () => {
+      const animation = declarationOf(ruleFor('appearance.css', '.appearance-sheet'), 'animation') ?? ''
+      expect(animation).toContain('var(--motion-base)')
+      const from = keyframeFrom('appearance.css', animation.split(' ')[0] ?? '')
+      expect(declarationOf(from, 'transform')).toBe('translateX(100%)')
+    })
+
+    // A width with the same number of tracks either side interpolates; `1fr` alone against three does not.
+    it('animates the sidebar’s column and the right panel’s width', () => {
+      expect(declarationOf(ruleFor('shell.css', '.shell'), 'transition')).toBe(
+        'grid-template-columns var(--motion-base) var(--ease)'
+      )
+      const tracks = (selector: string): number =>
+        (declarationOf(ruleFor('shell.css', selector), 'grid-template-columns') ?? '').split(/ (?![^(]*\))/).length
+      expect(tracks('.shell--collapsed')).toBe(tracks('.shell'))
+      expect(declarationOf(ruleFor('rightPanel.css', '.panel'), 'transition')).toBe(
+        'width var(--motion-base) var(--ease)'
+      )
+    })
+
+    it('follows a dragged edge without easing behind it', () => {
+      const rule = ruleListing('base.css', 'body.is-resizing .shell')
+      expect(rule?.selectors).toContain('body.is-resizing .panel')
+      expect(rule && declarationOf(rule, 'transition')).toBe('none')
+    })
+
+    // A page is a `.workspace` too, so one fade covers opening a page and coming back from it.
+    it('fades a page, the panes, and a zoom in or out, quickly', () => {
+      for (const [sheet, selector] of [
+        ['workspace.css', '.workspace'],
+        ['workspace.css', '.workspace__panes'],
+        ['workspace.css', '.workspace__panes--zoomed']
+      ] as const) {
+        expect(declarationOf(ruleFor(sheet, selector), 'animation'), selector).toMatch(/ var\(--motion-fast\) /)
+      }
+      // A zoom restarts the fade only if the name changes with it.
+      const name = (selector: string): string | undefined =>
+        declarationOf(ruleFor('workspace.css', selector), 'animation')?.split(' ')[0]
+      expect(name('.workspace__panes--zoomed')).not.toBe(name('.workspace__panes'))
     })
   })
 
@@ -450,6 +495,19 @@ function customProperties(name: string, media?: string): Map<string, string> {
     })
   })
   return found
+}
+
+/** The `from` step of a named `@keyframes` in one stylesheet. */
+function keyframeFrom(sheet: string, name: string): postcss.Rule {
+  let found: postcss.Rule | undefined
+  postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkAtRules('keyframes', (rule) => {
+    if (rule.params !== name) return
+    rule.walkRules('from', (step) => {
+      found = step
+    })
+  })
+  expect(found, `${sheet} should have @keyframes ${name} with a from step`).toBeTruthy()
+  return found as postcss.Rule
 }
 
 /** The `z-index` one selector is given, across every stylesheet. */

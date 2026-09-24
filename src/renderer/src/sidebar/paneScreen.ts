@@ -26,7 +26,10 @@ export async function replayScreen(output: string, cols: number, rows: number): 
  * The line to quote from a pane's screen: the question, while an agent asks one. An agent's full-screen
  * transcript is read like any output; a shell's pager or editor is not, since one row of it means nothing.
  */
-export function screenEvidence(screen: PaneScreen, terminal: Pick<Terminal, 'agent' | 'foregroundAgent'>): string | null {
+export function screenEvidence(
+  screen: PaneScreen,
+  terminal: Pick<Terminal, 'agent' | 'foregroundAgent'>
+): string | null {
   const question = screenQuestion(terminal.agent ?? terminal.foregroundAgent, screen.rows)
   if (question !== null) return question
   if (screen.alternate && terminal.agent === undefined) return null

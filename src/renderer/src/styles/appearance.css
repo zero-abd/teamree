@@ -14,6 +14,13 @@
   border-left: 1px solid var(--line-strong);
   background: var(--bg-panel);
   box-shadow: var(--shadow-pop);
+  animation: sheet-in var(--motion-base) var(--ease);
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateX(100%);
+  }
 }
 
 .appearance-sheet:focus {

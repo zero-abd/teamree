@@ -178,7 +178,12 @@ function WorkspaceView({
   return (
     <main className="workspace">
       <div className="workspace__body">
-        <div className="workspace__panes" ref={setGrid}>
+        <div
+          className={`workspace__panes${
+            paneRoot !== null && paneRoot !== layout?.root ? ' workspace__panes--zoomed' : ''
+          }`}
+          ref={setGrid}
+        >
           {paneRoot ? (
             <PaneTree
               key={activeWorktreeId}

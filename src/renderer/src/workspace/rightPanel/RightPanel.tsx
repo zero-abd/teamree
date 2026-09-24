@@ -48,32 +48,35 @@ export function RightPanel(): React.JSX.Element | null {
     />
   )
 
-  if (!open)
-    return (
-      <aside className="panel panel--closed" data-region="panel">
-        {rail}
-      </aside>
-    )
-
+  // One aside open and closed, so its width slides between the rail's and the dragged one.
   return (
     <>
-      <EdgeResizer
-        className="panel__resizer"
-        label="Resize right panel"
-        width={width}
-        min={RIGHT_PANEL_MIN_PX}
-        max={RIGHT_PANEL_MAX_PX}
-        onWidth={setRightPanelWidth}
-        grows="leftward"
-        resetTo={RIGHT_PANEL_DEFAULT_PX}
-      />
-      <aside className="panel" style={{ width: `${width}px` }} aria-label="Right panel" data-region="panel">
+      {open ? (
+        <EdgeResizer
+          className="panel__resizer"
+          label="Resize right panel"
+          width={width}
+          min={RIGHT_PANEL_MIN_PX}
+          max={RIGHT_PANEL_MAX_PX}
+          onWidth={setRightPanelWidth}
+          grows="leftward"
+          resetTo={RIGHT_PANEL_DEFAULT_PX}
+        />
+      ) : null}
+      <aside
+        className={open ? 'panel' : 'panel panel--closed'}
+        style={open ? { width: `${width}px` } : undefined}
+        aria-label={open ? 'Right panel' : undefined}
+        data-region="panel"
+      >
         {rail}
-        <div className="panel__body" role="tabpanel">
-          {tab === 'files' ? <FilesTab key={worktree.id} worktree={worktree} /> : null}
-          {tab === 'changes' ? <ChangesTab /> : null}
-          {tab === 'panes' ? <PanesTab key={worktree.id} worktree={worktree} /> : null}
-        </div>
+        {open ? (
+          <div className="panel__body" role="tabpanel">
+            {tab === 'files' ? <FilesTab key={worktree.id} worktree={worktree} /> : null}
+            {tab === 'changes' ? <ChangesTab /> : null}
+            {tab === 'panes' ? <PanesTab key={worktree.id} worktree={worktree} /> : null}
+          </div>
+        ) : null}
       </aside>
     </>
   )
