@@ -9,6 +9,16 @@ export function userDataOverride(env: NodeJS.ProcessEnv, cwd: string): string | 
   return dir ? resolve(cwd, dir) : undefined
 }
 
+/**
+ * Chromium switches a throwaway profile needs to keep off the macOS keychain; also drops
+ * NODE_USE_SYSTEM_CA from `env` so the shells and agents it spawns never read the keychain either.
+ */
+export function leaveKeychainAlone(env: NodeJS.ProcessEnv): string[] {
+  if (!env['TEAMREE_USER_DATA_DIR']) return []
+  delete env['NODE_USE_SYSTEM_CA']
+  return ['use-mock-keychain']
+}
+
 /** A background launch never shows or fronts a window. */
 export function isBackgroundLaunch(env: NodeJS.ProcessEnv): boolean {
   return env['TEAMREE_BACKGROUND_LAUNCH'] === '1'

@@ -17,7 +17,13 @@ import { installAgentNotices, type AgentNoticeChannel } from './agentNotices'
 import { aboutPanelOptions, applicationMenuTemplate, offersDevTools, type ApplicationMenuOptions } from './appMenu'
 import { FILE_SCHEME, FILE_SCHEME_PRIVILEGES, fileGrants, serveGrantedFile } from './files/fileProtocol'
 import { installKeepAwake } from './keepAwake'
-import { frontsExistingWindow, isBackgroundLaunch, launchData, userDataOverride } from './launchProfile'
+import {
+  frontsExistingWindow,
+  isBackgroundLaunch,
+  launchData,
+  leaveKeychainAlone,
+  userDataOverride
+} from './launchProfile'
 import { bringForward, revealLaunchWindow, watchActivation } from './launchReveal'
 import { installMenuBar } from './menuBar'
 import { DEFAULT_APPEARANCE, type Appearance } from '../shared/theme'
@@ -146,6 +152,7 @@ function setDockBadge(count: number): void {
 // throwaway profile runs beside the installed app instead of knocking on it.
 const profile = userDataOverride(process.env, process.cwd())
 if (profile) app.setPath('userData', profile)
+for (const name of leaveKeychainAlone(process.env)) app.commandLine.appendSwitch(name)
 
 // At module load: AppKit consults it when the launch event arrives, before `ready`.
 optOutOfStateRestoration(process.platform, systemPreferences)

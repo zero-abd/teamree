@@ -6,6 +6,8 @@ import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_pr
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+// @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
+import { withoutSystemCa } from '../scripts/child-env.mjs'
 import type {
   Project,
   Terminal,
@@ -46,7 +48,7 @@ beforeAll(async () => {
   repoPath = join(root, 'demo-repo')
   userDataDir = join(root, 'userdata')
   mkdirSync(userDataDir, { recursive: true })
-  env = { ...process.env, TEAMREE_USER_DATA_DIR: userDataDir }
+  env = { ...withoutSystemCa(process.env), TEAMREE_USER_DATA_DIR: userDataDir }
 
   execFileSync('git', ['init', '-b', 'main', repoPath])
   // On the repository itself: the app commits through its own CLI with the machine's identity, which a

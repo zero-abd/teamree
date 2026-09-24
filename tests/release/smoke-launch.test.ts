@@ -15,6 +15,8 @@ import { describe, expect, it } from 'vitest'
 // @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
 import { PEER_BUNDLE_FLAG, USER_DATA_FLAG, namedArg, readNamedArg } from '../../scripts/smoke-args.mjs'
 // @ts-expect-error -- see above.
+import { SMOKE_SWITCHES, smokeEnv } from '../../scripts/smoke-args.mjs'
+// @ts-expect-error -- see above.
 import { displayPlan } from '../../scripts/virtual-display.mjs'
 
 const BUNDLE = '/tmp/teamree-peer-Xf3k1z'
@@ -51,6 +53,22 @@ describe('what the launcher tells the Electron process', () => {
   it('does not confuse one flag for another that starts the same way', () => {
     const args = [namedArg('--peer-bundle-dir', '/not/this/one'), namedArg(PEER_BUNDLE_FLAG, BUNDLE)]
     expect(readNamedArg(PEER_BUNDLE_FLAG, args)).toBe(BUNDLE)
+  })
+})
+
+describe('what the launcher leaves the keychain', () => {
+  it("keeps Chromium's cookie key out of the login keychain", () => {
+    expect(SMOKE_SWITCHES).toContain('--use-mock-keychain')
+  })
+
+  it('hands Electron no NODE_USE_SYSTEM_CA', () => {
+    const env = smokeEnv({ PATH: '/usr/bin', NODE_USE_SYSTEM_CA: '1' }, '/tmp/smoke/worktrees')
+    expect(env).not.toHaveProperty('NODE_USE_SYSTEM_CA')
+    expect(env).toMatchObject({ PATH: '/usr/bin', TEAMREE_WORKTREES_ROOT: '/tmp/smoke/worktrees' })
+  })
+
+  it('reaches no test or child the suite spawns', () => {
+    expect(process.env).not.toHaveProperty('NODE_USE_SYSTEM_CA')
   })
 })
 
