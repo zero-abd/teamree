@@ -6,7 +6,8 @@ import { useCallback, useMemo, useState } from 'react'
 import { Dashboard } from '../dashboard/Dashboard'
 import { HelpView } from '../help/HelpView'
 import type { PlatformModifier } from '../keyboard/platformModifier'
-import { shownRoot } from '../panes/paneLayout'
+import { isFileColumn } from '@shared/filePane'
+import { shownRoot, withoutColumn } from '../panes/paneLayout'
 import { PaneDragLayer } from '../panes/PaneDragLayer'
 import { PaneTree } from '../panes/PaneTree'
 import { SplitFrame } from '../panes/SplitFrame'
@@ -18,7 +19,7 @@ import { RightPanel } from './rightPanel/RightPanel'
 import { useMarkPanesSeen } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { TerminalTabs } from './TerminalTabs'
-import { useRoomForPanes } from './useRoomForPanes'
+import { useFoldedColumn, useRoomForPanes } from './useRoomForPanes'
 import { Welcome } from './Welcome'
 import { WorktreeStart } from './WorktreeStart'
 
@@ -128,7 +129,12 @@ function WorkspaceView({
     [layout?.root, expandedTerminalId]
   )
   const [grid, setGrid] = useState<HTMLDivElement | null>(null)
-  useRoomForPanes(grid, paneRoot, minPane)
+  const foldedColumn = useFoldedColumn(grid, layout?.root ?? null, minPane)
+  const drawnRoot = useMemo(
+    () => (foldedColumn && !isFileColumn(paneRoot) ? withoutColumn(paneRoot) : paneRoot),
+    [foldedColumn, paneRoot]
+  )
+  useRoomForPanes(grid, drawnRoot, minPane)
 
   const onResize = useCallback(
     (path: number[], sizes: number[]) => {
@@ -203,6 +209,7 @@ function WorkspaceView({
               searchToken={paneSearch?.token ?? 0}
               onCloseSearch={closePaneSearch}
               minPane={minPane}
+              foldedColumn={foldedColumn}
             />
           ) : (
             <WorktreeStart worktree={worktree} modifier={modifier} />

@@ -44,7 +44,6 @@ vi.mock('../files/FileView', () => ({
 
 const { PaneTree } = await import('./PaneTree')
 const { shownRoot } = await import('./paneLayout')
-const useStore = await import('../state/workspaceStore')
 
 const terminal = (id: string, overrides: Partial<Terminal> = {}): Terminal => ({
   id,
@@ -65,7 +64,12 @@ const onClose = vi.fn()
 const onRelaunch = vi.fn()
 const onResize = vi.fn()
 
-function mount(node: PaneNode, terminals: Terminal[], focusedTerminalId: string | null = null): void {
+function mount(
+  node: PaneNode,
+  terminals: Terminal[],
+  focusedTerminalId: string | null = null,
+  foldedColumn = false
+): void {
   render(
     <PaneTree
       node={node}
@@ -82,6 +86,7 @@ function mount(node: PaneNode, terminals: Terminal[], focusedTerminalId: string 
       searchTerminalId={null}
       searchToken={0}
       onCloseSearch={() => {}}
+      foldedColumn={foldedColumn}
     />
   )
 }
@@ -481,17 +486,24 @@ describe('the file column', () => {
     expect(onClose).toHaveBeenCalledWith('file:1')
   })
 
-  it('gives the layout back on Escape in a zoomed diff, and keeps Escape for an editor', () => {
-    const { useWorkspaceStore } = useStore
-    useWorkspaceStore.setState({ expandedTerminalId: 'file:2', diffPanes: { 'file:2': true } })
-    mount(shownRoot(row(leaf('t1'), column), 'file:2')!, [terminal('t1')], 'file:2')
-    expect(screen.queryByTestId('surface-t1')).toBeNull()
-    fireEvent.keyDown(screen.getByTestId('viewer-file:2'), { key: 'Escape' })
-    expect(useWorkspaceStore.getState().expandedTerminalId).toBeNull()
+  it('folded, is left out and its share goes to its siblings, a drag still addressing the whole split', () => {
+    mount(row(leaf('t1'), leaf('t2'), column), [terminal('t1'), terminal('t2')], 't1', true)
+    expect(screen.queryByRole('tablist', { name: 'Open files' })).toBeNull()
+    expect(screen.queryByTestId('viewer-file:2')).toBeNull()
+    expect(screen.getAllByRole('separator')).toHaveLength(1)
+    giveSplitsWidth()
+    fireEvent.keyDown(screen.getByRole('separator'), { key: 'ArrowRight' })
+    const [path, sizes] = onResize.mock.calls[0] as [number[], number[]]
+    expect(path).toEqual([])
+    expect(sizes).toHaveLength(3)
+    expect(sizes[2]).toBeCloseTo(1 / 3)
+    expect(sizes[0]!).toBeGreaterThan(sizes[1]!)
+    expect(sizes.reduce((total, size) => total + size, 0)).toBeCloseTo(1)
+  })
 
-    useWorkspaceStore.setState({ expandedTerminalId: 'file:2', diffPanes: {} })
-    fireEvent.keyDown(screen.getByTestId('viewer-file:2'), { key: 'Escape' })
-    expect(useWorkspaceStore.getState().expandedTerminalId).toBe('file:2')
-    useWorkspaceStore.setState({ expandedTerminalId: null })
+  it('folded beside one pane, leaves that pane the whole split', () => {
+    mount(row(leaf('t1'), column), [terminal('t1')], 't1', true)
+    expect(screen.getByTestId('surface-t1')).toBeTruthy()
+    expect(screen.queryAllByRole('separator')).toHaveLength(0)
   })
 })

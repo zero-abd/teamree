@@ -97,14 +97,20 @@ export function paneGrid(
   doc: Document | undefined = globalThis.document
 ): { area: Box; minPane: Box; cell: Box } | undefined {
   const grid = doc?.querySelector<HTMLElement>(PANE_GRID_SELECTOR)
-  const view = doc?.defaultView
   const cell = measureCell(fontSize, fontFamily, doc)
-  if (!grid || !view || !cell) return undefined
-  const style = view.getComputedStyle(grid)
+  const area = grid && contentBox(grid)
+  return area && cell ? { area, minPane: minPaneBox(cell), cell } : undefined
+}
+
+/** An element's box inside its padding; nothing before it is laid out. */
+export function contentBox(element: HTMLElement): Box | undefined {
+  const view = element.ownerDocument.defaultView
+  if (!view) return undefined
+  const style = view.getComputedStyle(element)
   const px = (value: string): number => Number.parseFloat(value) || 0
-  const width = grid.clientWidth - px(style.paddingLeft) - px(style.paddingRight)
-  const height = grid.clientHeight - px(style.paddingTop) - px(style.paddingBottom)
-  return width > 0 && height > 0 ? { area: { width, height }, minPane: minPaneBox(cell), cell } : undefined
+  const width = element.clientWidth - px(style.paddingLeft) - px(style.paddingRight)
+  const height = element.clientHeight - px(style.paddingTop) - px(style.paddingBottom)
+  return width > 0 && height > 0 ? { width, height } : undefined
 }
 
 /** `roomForNewPane` on the window's grid, or nothing when the window cannot answer; the runtime's default stands. */

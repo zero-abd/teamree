@@ -9,17 +9,20 @@ import {
   splitPaneWith,
   closePane,
   collectTerminalIds,
+  foldsColumn,
   leaf,
   MIN_PANE_FRACTION,
   neighbourTerminalId,
   normalizeSizes,
   pinTab,
   placeFileColumn,
+  planSplit,
   setSizesAt,
   showTab,
   shownRoot,
   splitChildBases,
-  splitPane
+  splitPane,
+  withoutColumn
 } from './paneLayout'
 
 const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0)
@@ -413,5 +416,67 @@ describe('zooming into the file column', () => {
     shownRoot(tree, 'a')
     expect(tree).toEqual(before)
     expect(shownRoot(tree, null)).toBe(tree)
+  })
+})
+
+describe('a split beside the file column', () => {
+  // The centre at 1400x900 with the sidebar and the panel open, and a 40x8 pane at 13px.
+  const box = { width: 768, height: 818 }
+  const min = { width: 329, height: 167 }
+  const diff = fileColumn(fileLeaf('file:d', 'src/math.ts'))
+  // Agent over a shell, and the diff opened from Changes beside them at half the centre.
+  const reviewing: PaneNode = {
+    kind: 'split',
+    direction: 'row',
+    sizes: [0.5, 0.5],
+    children: [{ kind: 'split', direction: 'column', sizes: [0.5, 0.5], children: [leaf('claude'), leaf('zsh')] }, diff]
+  }
+  const width = (root: PaneNode | null, id: string, at = box): number =>
+    paneRects(root, at).find((rect) => rect.id === id)?.width ?? 0
+
+  it('goes where it was asked when there is room', () => {
+    const plan = planSplit(reviewing, 'claude', 'column', 'new', box, min)
+    expect(plan).toMatchObject({ before: reviewing, folded: false })
+    expect(plan?.after).toEqual(splitPane(reviewing, 'claude', 'column', 'new'))
+  })
+
+  it('narrows the column to its floor first, when that is room enough', () => {
+    const wide = { width: 1100, height: 818 }
+    const plan = planSplit(reviewing, 'claude', 'row', 'new', wide, min)!
+    expect(plan.folded).toBe(false)
+    expect(width(plan.before, 'file:d', wide)).toBeCloseTo(min.width)
+    expect(width(plan.after, 'new', wide)).toBeGreaterThanOrEqual(min.width)
+    expect(width(plan.after, 'claude', wide)).toBeGreaterThanOrEqual(min.width)
+  })
+
+  it('folds the column out of the drawn tree when narrowing is not enough: four panes, the diff kept', () => {
+    const plan = planSplit(reviewing, 'claude', 'row', 'new', box, min)!
+    expect(plan.folded).toBe(true)
+    expect(collectTerminalIds(plan.after).sort()).toEqual(['claude', 'file:d', 'new', 'zsh'])
+    expect(foldsColumn(plan.after, box, min)).toBe(true)
+    const drawn = withoutColumn(plan.after)
+    expect(collectTerminalIds(drawn).sort()).toEqual(['claude', 'new', 'zsh'])
+    for (const rect of paneRects(drawn, box)) expect(rect.width).toBeGreaterThanOrEqual(min.width)
+  })
+
+  it('is refused only when the terminals alone cannot fit', () => {
+    const three: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.25, 0.25, 0.5],
+      children: [leaf('claude'), leaf('zsh'), diff]
+    }
+    expect(planSplit(three, 'claude', 'row', 'new', box, min)).toBeNull()
+  })
+
+  it('does not fold a tree that fits, nor one with no column', () => {
+    expect(foldsColumn(reviewing, box, min)).toBe(false)
+    const crowded: PaneNode = { kind: 'split', direction: 'row', sizes: [0.5, 0.5], children: [leaf('a'), leaf('b')] }
+    expect(foldsColumn(crowded, { width: 400, height: 818 }, min)).toBe(false)
+  })
+
+  it('takes the column out whole, its share going back to its siblings', () => {
+    expect(withoutColumn(reviewing)).toEqual(reviewing.kind === 'split' ? reviewing.children[0] : null)
+    expect(withoutColumn(leaf('claude'))).toEqual(leaf('claude'))
   })
 })

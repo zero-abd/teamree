@@ -2,6 +2,7 @@
 // unsaved dot and `×` unless it is a tab of the file column, whose tab carries those.
 
 import { PaneCloseButton } from '../panes/PaneCloseButton'
+import { useWorkspaceStore } from '../state/workspaceStore'
 
 type FileBarProps = {
   name: string
@@ -28,6 +29,8 @@ export function FileBar({
   onClose,
   children
 }: FileBarProps): React.JSX.Element {
+  const zoomed = useWorkspaceStore((state) => state.expandedTerminalId !== null)
+  const restore = useWorkspaceStore((state) => state.toggleExpandedPane)
   return (
     <header className="pane__bar file__bar" onContextMenu={onHeaderMenu}>
       {label === null ? null : (
@@ -48,6 +51,18 @@ export function FileBar({
         ⋯
       </button>
       {tabbed ? null : <PaneCloseButton name={name} onClose={onClose} />}
+      {/* Only a zoomed file pane's bar is on screen while anything is zoomed. */}
+      {zoomed ? (
+        <button
+          type="button"
+          className="file__tool"
+          aria-label="Restore layout"
+          title="Restore layout"
+          onClick={restore}
+        >
+          ⤡
+        </button>
+      ) : null}
     </header>
   )
 }

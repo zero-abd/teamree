@@ -208,3 +208,69 @@ describe('a question waiting on the owner', () => {
     expect(closeTerminal).toHaveBeenCalledExactlyOnceWith('t1')
   })
 })
+
+describe('Escape out of a zoomed pane', () => {
+  const zoomed = (): void =>
+    seed({
+      expandedTerminalId: 't1',
+      layouts: {
+        w1: {
+          worktreeId: 'w1',
+          root: {
+            kind: 'split',
+            direction: 'row',
+            sizes: [0.5, 0.5],
+            children: [
+              { kind: 'leaf', terminalId: 't1' },
+              { kind: 'leaf', terminalId: 't2' }
+            ]
+          },
+          focusedTerminalId: 't1'
+        }
+      }
+    })
+
+  function press(target: HTMLElement): boolean {
+    if (!target.isConnected) document.body.append(target)
+    return fireEvent.keyDown(target, { key: 'Escape' })
+  }
+
+  it('gives the layout back from the strip, a pane or a list: anything that is not typed in', () => {
+    zoomed()
+    const tab = document.createElement('button')
+    expect(press(tab)).toBe(false)
+    expect(useWorkspaceStore.getState().expandedTerminalId).toBeNull()
+    tab.remove()
+  })
+
+  it('leaves Escape to a terminal, an editor or a field', () => {
+    zoomed()
+    const terminal = document.createElement('div')
+    terminal.className = 'xterm'
+    const textarea = document.createElement('textarea')
+    terminal.append(textarea)
+    const editor = document.createElement('div')
+    editor.setAttribute('contenteditable', 'true')
+    const field = document.createElement('input')
+    document.body.append(terminal)
+    for (const target of [textarea, editor, field]) {
+      press(target)
+      expect(useWorkspaceStore.getState().expandedTerminalId).toBe('t1')
+    }
+    for (const target of [terminal, editor, field]) target.remove()
+  })
+
+  it('leaves Escape alone when something else took it first, or nothing is zoomed', () => {
+    zoomed()
+    const menu = document.createElement('div')
+    menu.addEventListener('keydown', (event) => event.preventDefault())
+    press(menu)
+    expect(useWorkspaceStore.getState().expandedTerminalId).toBe('t1')
+    menu.remove()
+
+    useWorkspaceStore.setState({ expandedTerminalId: null })
+    const plain = document.createElement('button')
+    expect(press(plain)).toBe(true)
+    plain.remove()
+  })
+})

@@ -222,6 +222,17 @@ describe('which tab is the selected one', () => {
     // The panes are still listed; it is only the selection that moved away.
     expect(tabNames()).toEqual(['npm test', 'Claude Code'])
   })
+  // Zoomed, the pane filling the centre is the selected tab, whatever the focus says.
+  it('selects the zoomed pane and no other while one fills the centre', () => {
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout('w1', row('t1', 't2'), 't2') },
+      terminals: byId(terminal({ id: 't1', title: 'npm test' }), terminal({ id: 't2', agent: 'claude' })),
+      expandedTerminalId: 't1'
+    })
+    mount()
+    expect(selectedNames()).toEqual(['npm test'])
+  })
 })
 
 describe('a strip with more tabs than fit', () => {

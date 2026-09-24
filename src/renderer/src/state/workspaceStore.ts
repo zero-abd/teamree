@@ -65,8 +65,12 @@ import {
   placeFileColumn,
   setSizesAt,
   showTab,
+  foldsColumn,
+  planSplit,
+  shownRoot,
   splitPane,
-  splitPaneWith
+  splitPaneWith,
+  withoutColumn
 } from '../panes/paneLayout'
 import { worktreeAfter, worktreeOrder } from '../sidebar/worktreeOrder'
 import {
@@ -277,6 +281,10 @@ type WorkspaceState = {
   layouts: Record<string, Layout>
   /** The pane filling the workspace, or null. Not in a `Layout`: maximising is a way of looking, not an arrangement. */
   expandedTerminalId: string | null
+  /** Worktrees whose file column a split folded to its tab; drawn folded only while `foldsColumn` holds. */
+  foldedColumns: Record<string, true>
+  /** Draws the worktree's file column in the layout again. */
+  unfoldColumn: (worktreeId: string) => void
 
   /** File panes with edits not yet on disk, by pane id; each tab draws a dot. */
   unsavedFiles: Record<string, true>
@@ -1205,6 +1213,27 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     return closePaneWarning(get().terminals[paneId]) === null ? null : 'confirm-close-pane'
   }
 
+  /** True when `paneId` is in the open worktree's file column and that column is folded to its tab. */
+  const inFoldedColumn = (paneId: string): boolean => {
+    const { activeWorktreeId, foldedColumns } = get()
+    const root = activeLayout()?.root ?? null
+    if (!activeWorktreeId || !foldedColumns[activeWorktreeId] || !hasTerminal(fileColumnIn(root), paneId)) return false
+    const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+    return grid !== undefined && foldsColumn(root, grid.area, grid.minPane)
+  }
+  // The pane a folded tab was zoomed from, for the keyboard to go back to when the zoom ends.
+  let zoomedFrom: string | null = null
+  /** Ends the zoom; focus leaves a tab that is folded again. */
+  const restoreZoom = (): void => {
+    set({ expandedTerminalId: null })
+    const layout = activeLayout()
+    const focused = layout?.focusedTerminalId
+    if (!layout || !focused || !inFoldedColumn(focused)) return
+    const drawn = collectTerminalIds(withoutColumn(layout.root))
+    const back = zoomedFrom !== null && drawn.includes(zoomedFrom) ? zoomedFrom : drawn[0]
+    if (back !== undefined) get().focusPane(back)
+  }
+
   /**
    * Moves the focus `step` places around the pane cycle, wrapping. One walk for both directions, so
    * the two chords undo each other; teammates' panes are in the cycle as they are in the tree.
@@ -1227,6 +1256,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     terminals: {},
     layouts: {},
     expandedTerminalId: null,
+    foldedColumns: {},
     unsavedFiles: Object.fromEntries(lastDrafts.map(([paneId]) => [paneId, true as const])),
     editedFiles: Object.fromEntries(
       lastDrafts.map(([paneId, draft]) => [paneId, { worktreeId: draft.worktreeId, path: draft.path }])
@@ -1630,6 +1660,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // one taken is being looked at — even when it already had the focus.
       get().markPanesSeen([paneId, ...(layout?.focusedTerminalId ? [layout.focusedTerminalId] : [])])
       if (!layout) return
+      // Going to a pane the zoom hides ends it; a folded tab is shown by zooming it.
+      const expanded = get().expandedTerminalId
+      if (expanded !== null && !hasTerminal(shownRoot(layout.root, expanded), paneId)) set({ expandedTerminalId: null })
+      if (get().expandedTerminalId === null && inFoldedColumn(paneId)) {
+        zoomedFrom = layout.focusedTerminalId
+        set({ expandedTerminalId: paneId })
+      }
       const root = layout.root && showTab(layout.root, paneId)
       if (layout.focusedTerminalId === paneId && root === layout.root) return
       persistLayout({ ...layout, root, focusedTerminalId: paneId })
@@ -1648,15 +1685,37 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // Splitting somebody else's pane cannot be asked for: the tree is on their machine. Refused in
       // silence, because the button splits whatever pane has the focus.
       if (get().focusedWatchId !== null) return
+      if (get().expandedTerminalId !== null) restoreZoom()
       const layout = activeLayout()
       const terminalId = layout?.focusedTerminalId
       if (!layout || !terminalId) return
-      const split = splitPane(layout.root, terminalId, direction, SPLIT_PROBE_ID)
-      // Where the person put it or nowhere.
-      if (withRoom(layout.root, split) === null) return
-      // Born at the half's size: a shell that first draws wider than its pane leaves a `%` line.
       const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
-      const size = grid && paneCellsIn(split, SPLIT_PROBE_ID, grid.area, grid.cell)
+      const plan = (area: Box, min: Box) => planSplit(layout.root, terminalId, direction, SPLIT_PROBE_ID, area, min)
+      // Where the person put it, beside a narrower or folded file column, or nowhere.
+      const planned = grid
+        ? plan(grid.area, grid.minPane)
+        : { before: layout.root, after: splitPane(layout.root, terminalId, direction, SPLIT_PROBE_ID), folded: false }
+      if (planned === null) {
+        refuseForRoom(({ minPane }, area) => plan(area, minPane) !== null)
+        return
+      }
+      if (planned.before !== layout.root) {
+        // The runtime splits the tree it holds, so the narrowed column reaches it first.
+        showLayout({ ...layout, root: planned.before })
+        try {
+          await runtimeClient.call('layout.set', {
+            worktreeId: layout.worktreeId,
+            root: planned.before,
+            focusedTerminalId: terminalId
+          })
+        } catch (error) {
+          failed('Could not save the layout')(error)
+          return
+        }
+      }
+      // Born at the size it is drawn at: a shell that first draws wider than its pane leaves a `%` line.
+      const drawn = planned.folded ? withoutColumn(planned.after) : planned.after
+      const size = grid && paneCellsIn(drawn, SPLIT_PROBE_ID, grid.area, grid.cell)
       const measured = grid && size ? { ...size, area: grid.area, cell: grid.cell } : {}
       try {
         const { terminal, layout: next } = await runtimeClient.call('terminal.split', {
@@ -1666,7 +1725,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         })
         set((state) => ({
           terminals: { ...state.terminals, [terminal.id]: terminal },
-          layouts: { ...state.layouts, [next.worktreeId]: next }
+          layouts: { ...state.layouts, [next.worktreeId]: next },
+          ...(planned.folded ? { foldedColumns: { ...state.foldedColumns, [next.worktreeId]: true as const } } : {})
         }))
       } catch (error) {
         failed('Could not split the pane')(error)
@@ -1977,6 +2037,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async createTerminal(worktreeId) {
+      if (get().expandedTerminalId !== null) restoreZoom()
       const room = roomOrRefuse(worktreeId)
       if (!room) return
       try {
@@ -1999,6 +2060,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       stepFocus(-1)
     },
 
+    unfoldColumn(worktreeId) {
+      if (!get().foldedColumns[worktreeId]) return
+      set((state) => {
+        const foldedColumns = { ...state.foldedColumns }
+        delete foldedColumns[worktreeId]
+        return { foldedColumns }
+      })
+    },
+
     showPane(paneId) {
       if (get().expandedTerminalId !== null) set({ expandedTerminalId: null })
       get().focusPane(paneId)
@@ -2011,7 +2081,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
      */
     toggleExpandedPane() {
       if (get().expandedTerminalId !== null) {
-        set({ expandedTerminalId: null })
+        restoreZoom()
         return
       }
       if (get().focusedWatchId !== null) return
@@ -2021,7 +2091,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     expandPane(terminalId) {
       if (get().expandedTerminalId === terminalId) {
-        set({ expandedTerminalId: null })
+        restoreZoom()
         return
       }
       get().focusPane(terminalId)

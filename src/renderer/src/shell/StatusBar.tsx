@@ -86,7 +86,9 @@ export function StatusBar(): React.JSX.Element {
           activeWorktreeId ? `${panes.here} in this worktree · ` : ''
         }${panes.total} across ${panes.worktrees} worktree${panes.worktrees === 1 ? '' : 's'}`}
       >
-        {`${panes.total} pane${panes.total === 1 ? '' : 's'}`}
+        {`${panes.total} pane${panes.total === 1 ? '' : 's'}${
+          panes.worktrees > 1 ? ` · ${panes.worktrees} worktrees` : ''
+        }`}
       </span>
 
       {first === null ? null : (
