@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { evidenceLine } from '../../shared/outputEvidence'
 import { SCROLLBACK_CAP_BYTES, ScrollbackBuffer } from './scrollback'
 
 describe('ScrollbackBuffer', () => {
@@ -42,6 +43,26 @@ describe('ScrollbackBuffer', () => {
     buffer.append('。。。。')
     expect(buffer.tail()).toBe('。。。')
     expect(buffer.tail()).not.toContain('�')
+  })
+
+  it('does not start a tail inside an escape sequence the cut split', () => {
+    const buffer = new ScrollbackBuffer(1024)
+    const colour = '\x1b[38;2;138;138;138;49m'
+    buffer.append(`older\r\n${colour}• Ran the tests\x1b[0m\r\n\x1b[1mdone\x1b[0m`)
+    const whole = Buffer.byteLength(buffer.tail(), 'utf8')
+    const intoColour = Buffer.byteLength(`older\r\n\x1b[38;2;1`, 'utf8')
+
+    const tail = buffer.tail(whole - intoColour)
+    expect(tail).not.toContain('38;')
+    expect(tail.startsWith('\x1b[')).toBe(true)
+    expect(evidenceLine(tail)).toBe('done')
+  })
+
+  it('does not start a whole read inside an escape sequence eviction split', () => {
+    const buffer = new ScrollbackBuffer(24)
+    buffer.append('\x1b[38;2;138;138;138;49m•\x1b[0m\r\nlast')
+    expect(buffer.tail()).not.toContain(';49m')
+    expect(buffer.tail().endsWith('last')).toBe(true)
   })
 
   it('clears', () => {

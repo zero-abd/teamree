@@ -98,6 +98,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
       closeTeamwork,
       toggleDashboard,
       toggleSidebar,
+      restoring: false,
       ...overrides
     },
     true
@@ -154,6 +155,12 @@ describe('having nothing to show', () => {
     seed({ projects: [] })
     mount()
     expect(screen.getByText('No projects yet')).toBeTruthy()
+  })
+
+  it('says nothing about projects before the runtime has listed them', () => {
+    seed({ projects: [], restoring: true })
+    mount()
+    expect(screen.queryByText('No projects yet')).toBeNull()
   })
 
   it('offers to start one when a project has no worktrees', () => {

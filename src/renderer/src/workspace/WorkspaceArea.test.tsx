@@ -97,6 +97,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
       openWorktree,
       openTeamwork,
       revealInFinder,
+      restoring: false,
       ...overrides
     },
     true
@@ -170,6 +171,19 @@ describe('when there is nothing open', () => {
     mount()
     const keys = [...document.querySelectorAll('.welcome kbd')].map((node) => node.textContent)
     expect(keys).toEqual(['⌘N', '⌘K', '⌘B'])
+  })
+
+  // The last window's front tab is on its way: a welcome in the meantime is a screen that flashes past.
+  it('shows nothing while the last window is being brought back', () => {
+    seed({ projects: [project], restoring: true })
+    mount()
+    expect(screen.getByRole('main').textContent).toBe('')
+  })
+
+  it('still says the runtime is not running while it would be bringing a window back', () => {
+    seed({ restoring: true, connection: { phase: 'offline' } })
+    mount()
+    expect(screen.getByRole('heading', { name: 'The runtime is not running' })).toBeTruthy()
   })
 
   it('shows the teamwork setup instead of any of that when it has the area', () => {

@@ -61,6 +61,7 @@ export function Sidebar({
   const closeTeamwork = useWorkspaceStore((state) => state.closeTeamwork)
   const toggleSidebar = useWorkspaceStore((state) => state.toggleSidebar)
   const agents = useWorkspaceStore((state) => state.agents)
+  const restoring = useWorkspaceStore((state) => state.restoring)
   const kindOf = useMemo(() => agentWords(agents), [agents])
   const tree = useRef<HTMLDivElement | null>(null)
   const treeKeys = useTreeKeys(tree)
@@ -287,7 +288,7 @@ export function Sidebar({
           {/* The instruction that used to follow this — "Add a repository." —
               named the button directly above it, which is the plus in this
               section's own header, labelled "Add project". */}
-          {projects.length === 0 ? <p className="sidebar__empty">No projects yet</p> : null}
+          {projects.length === 0 && !restoring ? <p className="sidebar__empty">No projects yet</p> : null}
 
           {/* Grouped by the same function the next-worktree chord walks, so
               the chord moves down this list rather than through whatever order

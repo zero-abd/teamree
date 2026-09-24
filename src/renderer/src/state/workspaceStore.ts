@@ -368,6 +368,8 @@ type WorkspaceState = {
   collapsedProjects: Record<string, boolean>
   openWorktreeIds: string[]
   activeWorktreeId: string | null
+  /** True until `bootstrap` has put the last window's tabs back, or found none to put back. */
+  restoring: boolean
   /** Whether the pane dashboard has the main area, replacing the panes rather than sharing with them. */
   dashboardOpen: boolean
   /** Which project's teamwork setup has the main area, or null. About a project, so not bound to a tab. */
@@ -1190,6 +1192,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     collapsedProjects: lastSession.collapsedProjects,
     openWorktreeIds: [],
     activeWorktreeId: null,
+    restoring: true,
     dashboardOpen: false,
     teamworkProjectId: null,
     // Neither is restored: both are places you go to answer a question.
@@ -1260,18 +1263,26 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
               .map((worktree) => worktree.id)
           )
           const reopening = lastSession.openWorktreeIds.filter((worktreeId) => live.has(worktreeId))
-          for (const worktreeId of reopening) await get().openWorktree(worktreeId)
           const wasActive = lastSession.activeWorktreeId
-          if (wasActive !== null && live.has(wasActive)) await get().openWorktree(wasActive)
-
           // Nothing remembered: the first ready worktree beats an empty window.
-          if (reopening.length === 0) {
-            const first = get().worktrees.find(hasCheckout)
-            if (first) await get().openWorktree(first.id)
+          const front =
+            wasActive !== null && live.has(wasActive)
+              ? wasActive
+              : (reopening[reopening.length - 1] ?? get().worktrees.find(hasCheckout)?.id)
+          if (front !== undefined) {
+            const tabs = reopening.includes(front) ? reopening : [...reopening, front]
+            // Every tab laid out before one is in front: opened one by one, the window flicks through each.
+            set({ openWorktreeIds: tabs })
+            refresher.request(refreshTargets({ layouts: tabs, statuses: tabs }))
+            await refresher.flush()
+            set({ activeWorktreeId: front, restoring: false })
+            if (changesOnScreen(get())) readChangesNow(front)
           }
         }
       } catch (error) {
         failed('Could not reach the runtime')(error)
+      } finally {
+        if (get().restoring) set({ restoring: false })
       }
     },
 

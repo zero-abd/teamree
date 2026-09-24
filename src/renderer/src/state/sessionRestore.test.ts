@@ -61,6 +61,24 @@ it('opens the tabs the last window had, with the same one in front', async () =>
   expect(store.getState().activeWorktreeId).toBe(ready[1])
 })
 
+it('brings the front tab back without showing any other first, its panes already laid out', async () => {
+  const ready = await readyWorktreeIds()
+  const store = await windowWith({
+    [SESSION_KEY]: JSON.stringify({ openWorktreeIds: ready, activeWorktreeId: ready[1] })
+  })
+  expect(store.getState().restoring).toBe(true)
+
+  const shown: Array<{ active: string | null; laidOut: boolean; restoring: boolean }> = []
+  store.subscribe((state, previous) => {
+    if (state.activeWorktreeId === previous.activeWorktreeId && state.restoring === previous.restoring) return
+    const active = state.activeWorktreeId
+    shown.push({ active, laidOut: active !== null && active in state.layouts, restoring: state.restoring })
+  })
+  await store.getState().bootstrap()
+
+  expect(shown).toEqual([{ active: ready[1], laidOut: true, restoring: false }])
+})
+
 it('drops a remembered worktree that is no longer there', async () => {
   const ready = await readyWorktreeIds()
   const kept = ready[ready.length - 1]!
