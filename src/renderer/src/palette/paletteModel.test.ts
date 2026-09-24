@@ -154,7 +154,7 @@ describe('buildPaletteItems', () => {
 
     const agents = items.filter((item) => item.kind === 'agent')
     expect(agents.map((item) => item.id)).toEqual(['claude', 'codex'])
-    expect(agents.map((item) => item.label)).toEqual(['Start claude in this worktree', 'Start codex in this worktree'])
+    expect(agents.map((item) => item.label)).toEqual(['Start Claude Here', 'Start Codex Here'])
   })
 
   // A row that promises a pane in a directory that is not there is the same
@@ -358,12 +358,7 @@ describe('moveSelection', () => {
   })
 })
 
-// "Put teamree on my PATH" is the right offer to somebody who has no teamree on
-// their PATH, and the wrong one to everybody else this row is shown to. The
-// state that matters is a link that exists and leads to a deleted build: the
-// shell finds it, follows it, and says the command does not exist, and the app
-// knew that and offered to do what had already been done.
-describe('the CLI row is named after what is actually wrong', () => {
+describe('the CLI row', () => {
   const status = (overrides: Partial<CliStatus> = {}): CliStatus =>
     ({
       installable: true,
@@ -383,29 +378,24 @@ describe('the CLI row is named after what is actually wrong', () => {
       ...overrides
     }) as CliStatus
 
-  const labelOf = (cli: CliStatus | null): string | undefined =>
-    buildPaletteItems(context({ cli })).find((item) => item.id === 'install-cli')?.label
+  const rowOf = (cli: CliStatus | null): PaletteItem | undefined =>
+    buildPaletteItems(context({ cli })).find((item) => item.id === 'install-cli')
 
-  it('offers to make the link when there is none', () => {
-    expect(labelOf(status())).toBe('Put teamree on my PATH')
+  it.each([
+    ['absent', status()],
+    ['broken', status({ state: 'elsewhere', dangling: true, resolved: '/gone/teamree' })],
+    ['another copy', status({ state: 'elsewhere', dangling: false, resolved: '/other/teamree' })]
+  ])('is Install Command Line Tool when the link is %s', (_, cli) => {
+    expect(rowOf(cli)).toMatchObject({ label: 'Install Command Line Tool' })
+    expect(rowOf(cli)).not.toHaveProperty('unavailable')
   })
 
-  it('offers to repair it when the link is there and leads nowhere', () => {
-    expect(labelOf(status({ state: 'elsewhere', dangling: true, resolved: '/gone/teamree' }))).toBe(
-      'Fix the broken teamree command'
-    )
+  it('is left out once the link works', () => {
+    expect(rowOf(status({ state: 'linked' }))).toHaveProperty('unavailable')
   })
 
-  it('says which copy when the link works and drives another one', () => {
-    expect(labelOf(status({ state: 'elsewhere', dangling: false, resolved: '/other/teamree' }))).toBe(
-      'Point teamree at this app'
-    )
-  })
-
-  // The label moves; what somebody types to find it must not.
-  it('is still reachable by the words somebody would type', () => {
-    const broken = buildPaletteItems(context({ cli: status({ state: 'elsewhere', dangling: true }) }))
-    const row = broken.find((item) => item.id === 'install-cli')
+  it('is reachable by the words somebody would type', () => {
+    const row = rowOf(status())
     expect(row?.search).toContain('path')
     expect(row?.search).toContain('symlink')
   })
@@ -433,7 +423,7 @@ describe('what the palette returns for what was typed', () => {
   it.each([
     ['push', ['Push']],
     ['commit', ['Commit…']],
-    ['clau', ['Start claude in this worktree']]
+    ['clau', ['Start Claude Here']]
   ] as ReadonlyArray<readonly [string, string[]]>)('answers %s with only the rows that carry it', (query, expected) => {
     expect(labels(query)).toEqual(expected)
   })
@@ -557,18 +547,19 @@ describe('what the palette offers for the worktree on screen', () => {
       .filter((item) => item.kind === 'action')
       .map((item) => item.label)
 
-  it('offers the sidebar row’s menu, every Open in target included', () => {
-    expect(labels({ openIn: ['Cursor', 'Finder'] })).toEqual(
+  it('offers the sidebar row’s menu, every Open in target but Finder, which Reveal covers', () => {
+    const offered = labels({ openIn: ['Cursor', 'Finder'] })
+    expect(offered).toEqual(
       expect.arrayContaining([
         'Rename Worktree…',
         'Reveal in Finder',
         'Copy Path',
         'Copy Branch',
         'Open in Cursor',
-        'Open in Finder',
         'Remove Worktree…'
       ])
     )
+    expect(offered).not.toContain('Open in Finder')
   })
 
   it('offers a compare with each of the task’s other runs, and none for a lone worktree', () => {
@@ -601,7 +592,7 @@ describe('what the palette offers for the worktree on screen', () => {
     expect(staged).not.toContain('Discard File Changes…')
   })
 
-  it('offers the three modes and every preset, the ones on screen dimmed as current', () => {
+  it('offers the three modes and every preset, leaving out the ones on screen', () => {
     const items = buildPaletteItems(context({ appearance: { mode: 'dark', themeId: 'black' } }))
     const reason = (label: string): string | undefined => {
       const item = items.find((entry) => entry.label === label)
@@ -612,6 +603,10 @@ describe('what the palette offers for the worktree on screen', () => {
     expect(reason('Appearance: Dark')).toBe('current')
     expect(reason('Theme: Paper')).toBe('none')
     expect(reason('Theme: Absolute Black')).toBe('current')
+    const listed = filterPalette(items, '').map((item) => item.label)
+    expect(listed).toContain('Appearance: Light')
+    expect(listed).not.toContain('Appearance: Dark')
+    expect(listed).not.toContain('Theme: Absolute Black')
   })
 
   it.each([
@@ -645,23 +640,27 @@ describe('a command that would do nothing now', () => {
       })
     )
 
-  it('stays in the list with its reason instead of vanishing', () => {
-    const found = filterPalette(items({ 'save-file': 'nothing unsaved', 'save-all': 'nothing unsaved' }), 'save')
-    expect(found[0]).toMatchObject({ label: 'Save', unavailable: 'nothing unsaved' })
-    expect(found[1]).toMatchObject({ label: 'Save All', unavailable: 'nothing unsaved' })
+  it('is left out before anything is typed', () => {
+    const all = filterPalette(items({ 'new-worktree': 'no project' }), '')
+    expect(all.some((item) => item.id === 'new-worktree')).toBe(false)
+    expect(all.some((item) => item.id === 'new-terminal')).toBe(true)
   })
 
-  it('goes below the rows that would run, with nothing typed', () => {
-    const all = filterPalette(items({ 'new-worktree': 'no project' }), '')
-    expect(all.at(-1)).toMatchObject({ id: 'new-worktree' })
+  it('is left out of a query that finds something that would run', () => {
+    const found = filterPalette(items({ 'save-file': 'nothing unsaved' }), 'save')
+    expect(found.map((item) => item.label)).toEqual(['Save All'])
+  })
+
+  it('shows, dimmed and with nothing after it, when it is all a query finds', () => {
+    const found = filterPalette(items({ 'save-file': 'nothing unsaved', 'save-all': 'nothing unsaved' }), 'save')
+    expect(found.map((item) => item.label)).toEqual(['Save', 'Save All'])
+    expect(found.every((item) => item.kind === 'action' && item.unavailable !== undefined)).toBe(true)
+    expect(found.map(trailing)).toEqual(['', ''])
   })
 
   // `Commit…` came first through the "message" in its hidden keywords.
   it('ranks a label match over a keyword match: sa finds Save first', () => {
     expect(filterPalette(items(), 'sa')[0]?.label).toBe('Save')
-    expect(
-      filterPalette(items({ 'save-file': 'nothing unsaved', 'save-all': 'nothing unsaved' }), 'sa')[0]?.label
-    ).toBe('Save')
   })
 })
 
@@ -681,7 +680,7 @@ describe('the first screen, before anything is typed', () => {
     expect(groups.map((group) => group.title)).toEqual(['Worktrees', 'login fix', 'Commands'])
     expect(groups[0]?.items.map((item) => item.id)).toEqual(['w2', 'w1'])
     expect(groups[1]?.items.map((item) => item.label)).toEqual([
-      'Start claude in this worktree',
+      'Start Claude Here',
       'Rename Worktree…',
       'Reveal in Finder',
       'Copy Path',
@@ -702,13 +701,11 @@ describe('the first screen, before anything is typed', () => {
     expect(rest).not.toContain('agent:claude')
   })
 
-  it('puts what would do nothing at the end of its group', () => {
-    const commands = paletteGroups(items(), [], 'login fix').at(-1)?.items ?? []
-    const firstDimmed = commands.findIndex((item) => item.kind === 'action' && item.unavailable !== undefined)
-    expect(commands.slice(firstDimmed).map((item) => item.label)).toContain('Save')
-    expect(commands.slice(firstDimmed).every((item) => item.kind === 'action' && item.unavailable !== undefined)).toBe(
-      true
-    )
+  it('leaves out what would do nothing, recent or not', () => {
+    const groups = paletteGroups(items(), ['action:save-file'], 'login fix')
+    const listed = groups.flatMap((group) => group.items.map((item) => item.label))
+    expect(listed).not.toContain('Save')
+    expect(groups[0]?.title).toBe('Worktrees')
   })
 
   it('has no group for the worktree on screen when none is', () => {
@@ -754,8 +751,8 @@ describe('the one column after a label', () => {
     expect(trailing(find('new-terminal'))).toBe('⌘T')
   })
 
-  it('is why a dimmed command would do nothing', () => {
-    expect(trailing(find('save-file'))).toBe('nothing unsaved')
+  it('is empty for a dimmed command', () => {
+    expect(trailing(find('save-file'))).toBe('')
   })
 
   it('is the project and state for a worktree', () => {

@@ -12,7 +12,6 @@ import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
 import { APPEARANCE_MODES, BUILT_IN_THEMES, type AppearanceMode } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from '../settings/AppearanceSettings'
 import { runName, siblingRuns } from '../compare/siblingRuns'
-import { cliActionLabel } from '../dialogs/cliInstallModel'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { MENU_ORDER, menuLabel } from '../menu/menuBar'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
@@ -48,7 +47,7 @@ type WorktreeAction =
 export type PaletteItem =
   /** Jump to a worktree. */
   | { kind: 'worktree'; id: string; label: string; hint: string; detail: string; search: string }
-  /** Run something; `unavailable` says why it would do nothing now (drawn dimmed); `here` acts on the worktree on screen. */
+  /** Run something; `unavailable` says why it would do nothing now (hidden unless it is all a query finds); `here` acts on the worktree on screen. */
   | {
       kind: 'action'
       id: PaletteAction
@@ -135,16 +134,18 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     ...appearanceActions(context)
   ]
   const actions: PaletteItem[] = rows.map((action) => {
-    // Named after the link's state; the keywords stay fixed so a search does not move with the label.
-    const label = action.id === 'install-cli' ? cliActionLabel(context.cli) : action.label
-    const unavailable = action.unavailable ?? context.whyUnavailable?.(action.id) ?? null
+    const unavailable =
+      action.unavailable ??
+      (action.id === 'install-cli' && context.cli?.state === 'linked' ? 'installed' : null) ??
+      context.whyUnavailable?.(action.id) ??
+      null
     return {
       kind: 'action',
       id: action.id,
-      label,
+      label: action.label,
       hint: context.hintFor(action.id),
       detail: '',
-      search: `${label} ${action.keywords}`,
+      search: `${action.label} ${action.keywords}`,
       ...(unavailable === null ? {} : { unavailable })
     }
   })
@@ -172,11 +173,14 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
         { id: 'reveal-worktree', label: 'Reveal in Finder', keywords: 'reveal finder show folder directory checkout' },
         { id: 'copy-worktree-path', label: 'Copy Path', keywords: 'copy path clipboard worktree checkout directory' },
         { id: 'copy-worktree-branch', label: 'Copy Branch', keywords: 'copy branch name clipboard git' },
-        ...(context.openIn ?? []).map((target) => ({
-          id: `open-in:${target}` as const,
-          label: `Open in ${target}`,
-          keywords: 'open in editor ide terminal finder external app'
-        })),
+        // Reveal in Finder already is that row.
+        ...(context.openIn ?? [])
+          .filter((target) => target !== 'Finder')
+          .map((target) => ({
+            id: `open-in:${target}` as const,
+            label: `Open in ${target}`,
+            keywords: 'open in editor ide terminal finder external app'
+          })),
         ...siblingRuns(active, context.worktrees).map((other) => ({
           id: `compare:${other.id}` as const,
           label: `Compare with ${runName(other)}`,
@@ -215,7 +219,7 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
   }))
 }
 
-/** The three modes and every preset; the ones on screen say so. */
+/** The three modes and every preset; the ones on screen cannot run. */
 function appearanceActions(context: PaletteContext): ActionRow[] {
   const current = (on: boolean): { unavailable?: string } => (on ? { unavailable: 'current' } : {})
   return [
@@ -249,7 +253,7 @@ function agentItems(context: PaletteContext): PaletteItem[] {
   return [...preferred, ...rest].map((agent) => ({
     kind: 'agent',
     id: agent.command,
-    label: `Start ${agent.command} in this worktree`,
+    label: `Start ${agent.command.charAt(0).toUpperCase()}${agent.command.slice(1)} Here`,
     hint: '',
     detail: '',
     // No "agent": the matcher takes the first word-start it can, and "this" before "here" once sent
@@ -333,8 +337,7 @@ const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[]
   { id: 'show-files', label: 'Show Files', keywords: 'tree folder directory explorer browse open panel' },
   {
     id: 'install-cli',
-    // Replaced by `cliActionLabel` when the link is the problem rather than its absence.
-    label: 'Put teamree on my PATH',
+    label: 'Install Command Line Tool',
     keywords: 'cli command line terminal install link symlink usr local bin path agent broken fix dangling'
   }
 ]
@@ -409,16 +412,17 @@ function isWordStart(text: string, index: number): boolean {
   return before === ' ' || before === '/' || before === '-' || before === '_' || before === '.'
 }
 
+const isDimmed = (item: PaletteItem): boolean => item.kind === 'action' && item.unavailable !== undefined
+
 /**
- * The list narrowed by the query: what a row says before its hidden keywords, and what would run before
- * what is dimmed. Ties keep build order so the list does not reshuffle under the cursor.
+ * The list narrowed by the query, what a row says before its hidden keywords; ties keep build order so
+ * the list does not reshuffle under the cursor. What cannot run is left out unless it is all there is.
  */
 export function filterPalette(items: readonly PaletteItem[], query: string): PaletteItem[] {
   const trimmed = query.trim()
-  const dimmed = (item: PaletteItem): number => (item.kind === 'action' && item.unavailable !== undefined ? 1 : 0)
-  if (trimmed === '') return [...items].sort((left, right) => dimmed(left) - dimmed(right))
+  if (trimmed === '') return items.filter((item) => !isDimmed(item))
 
-  return items
+  const found = items
     .map((item, index) => {
       const shown = score(item.kind === 'worktree' ? `${item.label} ${item.hint}` : item.label, trimmed)
       return { item, index, shown: shown === null ? 0 : 1, points: shown ?? score(item.search, trimmed) }
@@ -427,20 +431,20 @@ export function filterPalette(items: readonly PaletteItem[], query: string): Pal
     .sort(
       (left, right) =>
         right.shown - left.shown ||
-        dimmed(left.item) - dimmed(right.item) ||
         right.points - left.points ||
         left.item.label.length - right.item.label.length ||
         left.index - right.index
     )
     .map((row) => row.item)
+  return found.every(isDimmed) ? found : found.filter((item) => !isDimmed(item))
 }
 
 /** What identifies a row across openings, for the Recent group. */
 export const paletteKey = (item: PaletteItem): string => `${item.kind}:${item.id}`
 
-/** The one column after a label: why a dimmed row would do nothing, a worktree's project and state, else the hint. */
+/** The one column after a label: nothing for a dimmed row, a worktree's project and state, else the hint. */
 export function trailing(item: PaletteItem): string {
-  if (item.kind === 'action' && item.unavailable !== undefined) return item.unavailable
+  if (isDimmed(item)) return ''
   return item.kind === 'worktree' ? item.detail : item.hint
 }
 
@@ -449,11 +453,13 @@ export type PaletteGroup = { title: string | null; items: PaletteItem[] }
 
 /**
  * The list before anything is typed: Recent, Worktrees, the worktree on screen under `here`, then
- * Commands, each row once, rows that would do nothing last in their group; empty groups left out.
+ * Commands, each row once, none that would do nothing; empty groups left out.
  */
 export function paletteGroups(items: readonly PaletteItem[], recent: readonly string[], here: string): PaletteGroup[] {
   const byKey = new Map(items.map((item) => [paletteKey(item), item]))
-  const first = recent.map((key) => byKey.get(key)).filter((item): item is PaletteItem => item !== undefined)
+  const first = recent
+    .map((key) => byKey.get(key))
+    .filter((item): item is PaletteItem => item !== undefined && !isDimmed(item))
   const rest = filterPalette(
     items.filter((item) => !first.includes(item)),
     ''

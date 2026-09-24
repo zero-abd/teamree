@@ -40,7 +40,7 @@ const { relayPanel } = await import('../settings/settingsModel')
 const { TeamworkSteps } = await import('../teamwork/TeamworkSteps')
 const { checkOriginDraft, checkRelayDraft } = await import('../teamwork/startTeamwork')
 const { muteTitle } = await import('../terminal/TerminalView')
-const { ChangesTab } = await import('../workspace/rightPanel/ChangesTab')
+const { ChangesTab, pushFailedText } = await import('../workspace/rightPanel/ChangesTab')
 const { runtimeClient } = await import('../runtimeClient/currentRuntimeClient')
 const { pushFailureLabel } = await import('../../../main/git/worktreePush')
 
@@ -407,15 +407,15 @@ describe('pushing from the Changes tab', () => {
 
       seed({ statuses: { w1: pushStatus() }, pushes: { w1: { phase: 'failed', error: label, detail: stderr } } })
       const { unmount } = render(<ChangesTab />)
-      expect(document.querySelector('[role=alert]')?.textContent).toBe(label)
+      expect(document.querySelector('[role=alert]')?.textContent).toBe(pushFailedText(label))
       expect(sentenceStops(document.body)).toEqual([])
       unmount()
     }
   })
 
-  it('toasts one word when the push lands', async () => {
+  it('toasts one word when the push lands out of sight', async () => {
     for (const alreadyUpToDate of [false, true]) {
-      seed({ statuses: { w1: pushStatus() } })
+      seed({ statuses: { w1: pushStatus() }, rightPanelOpen: false })
       const call = vi.spyOn(runtimeClient, 'call').mockResolvedValueOnce({
         worktreeId: 'w1',
         remote: 'origin',

@@ -146,7 +146,7 @@ describe('the compare pane', () => {
     expect(within(test).getByText('Untouched')).toBeTruthy()
     expect(test.querySelectorAll('.patch__row--added')).toHaveLength(1)
 
-    expect(screen.queryByRole('button', { name: 'Stage' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Stage Hunk' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Side by side' })).toBeTruthy()
   })

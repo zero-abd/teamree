@@ -39,6 +39,16 @@ describe('stylesheets', () => {
     expect(zIndexOf('.corner-stack')).toBeGreaterThan(zIndexOf('.modal-layer'))
   })
 
+  // Red is for the confirm; a row's Discard is one pointer move from the row being read.
+  it('draws a changed file’s Discard and line counts in the secondary colour', () => {
+    expect(declarationOf(ruleFor('workspace.css', '.change__discard'), 'color')).toBe('var(--fg-secondary)')
+    expect(declarationOf(ruleFor('workspace.css', '.change__stat'), 'color')).toBe('var(--fg-secondary)')
+  })
+
+  it('dims behind a dialog without blurring the window', () => {
+    expect(declarationOf(ruleFor('dialog.css', '.modal-layer'), 'backdrop-filter')).toBeUndefined()
+  })
+
   // One stack in the bottom-right corner, so the update card and a notice never overlap.
   it('puts the update card in the notices’ stack rather than a corner of its own', () => {
     const stack = ruleFor('shell.css', '.corner-stack')
@@ -284,8 +294,9 @@ describe('stylesheets', () => {
       const head = ruleFor('rightPanel.css', '.changes__head')
       expect(declarationOf(head, 'height')).toBe('38px')
       expect(declarationOf(head, 'flex-wrap')).toBeUndefined()
-      expect(findRule('rightPanel.css', '.changes__pushError')).toBeDefined()
-      expect(declarationOf(ruleFor('rightPanel.css', '.changes__pushError'), 'flex-basis')).toBeUndefined()
+      // A failed push is a line of its own under the header, not squeezed into it.
+      expect(findRule('rightPanel.css', '.changes__pushError')).toBeUndefined()
+      expect(declarationOf(ruleFor('rightPanel.css', '.changes__pushFailed'), 'flex')).toBe('none')
     })
   })
 

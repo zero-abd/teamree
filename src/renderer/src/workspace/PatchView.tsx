@@ -34,7 +34,7 @@ export function fitLayout(chosen: DiffLayout, width: number | null): DiffLayout 
 }
 
 /** The verb on a hunk header's control; which one follows from the half of the patch the hunk is in. */
-export type HunkAction = 'Stage' | 'Unstage'
+export type HunkAction = 'Stage Hunk' | 'Unstage Hunk'
 
 /** A line by its place in the parsed patch. */
 export type PatchPlace = { file: number; hunk: number; line: number }

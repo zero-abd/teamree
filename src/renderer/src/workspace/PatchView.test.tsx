@@ -239,7 +239,7 @@ describe('staging one hunk from the patch', () => {
   it('stages the hunk that was clicked, and not the one above it', async () => {
     await mountDiff({ working: { ...diff, patch: TWO_HUNKS } })
 
-    const stage = screen.getAllByRole('button', { name: 'Stage' })
+    const stage = screen.getAllByRole('button', { name: 'Stage Hunk' })
     expect(stage).toHaveLength(2)
 
     const { default: userEvent } = await import('@testing-library/user-event')
@@ -267,7 +267,7 @@ describe('staging one hunk from the patch', () => {
     expect(hunk.open).toBe(true)
 
     const { default: userEvent } = await import('@testing-library/user-event')
-    await userEvent.click(screen.getByRole('button', { name: 'Stage' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Stage Hunk' }))
 
     expect(hunk.open).toBe(true)
   })
@@ -275,8 +275,8 @@ describe('staging one hunk from the patch', () => {
   it('offers Unstage on the staged half and Stage on the working one', async () => {
     await mountDiff({ staged: stagedDiff })
 
-    expect(screen.getByRole('button', { name: 'Unstage' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Stage' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Unstage Hunk' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Stage Hunk' })).toBeTruthy()
     // Both halves are named once there are two of them.
     expect([...document.querySelectorAll('.patch__half')].map((node) => node.textContent)).toEqual([
       'Staged',
@@ -284,7 +284,7 @@ describe('staging one hunk from the patch', () => {
     ])
 
     const { default: userEvent } = await import('@testing-library/user-event')
-    await userEvent.click(screen.getByRole('button', { name: 'Unstage' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Unstage Hunk' }))
     expect(call).toHaveBeenCalledWith('worktree.unstageHunk', expect.objectContaining({ path: 'src/rank.ts' }))
   })
 
@@ -296,7 +296,7 @@ describe('staging one hunk from the patch', () => {
   it('stops a second click while the first is still in flight', async () => {
     await mountDiff()
     const { default: userEvent } = await import('@testing-library/user-event')
-    const button = screen.getByRole('button', { name: 'Stage' })
+    const button = screen.getByRole('button', { name: 'Stage Hunk' })
 
     await userEvent.click(button)
     await userEvent.click(button)
@@ -309,7 +309,7 @@ describe('discarding one hunk from the patch', () => {
   it('offers Discard beside Stage on the working half only', async () => {
     await mountDiff({ staged: stagedDiff })
 
-    const stage = screen.getByRole('button', { name: 'Stage' })
+    const stage = screen.getByRole('button', { name: 'Stage Hunk' })
     const discard = screen.getByRole('button', { name: 'Discard' })
     expect(discard.parentElement).toBe(stage.parentElement)
     expect(screen.getAllByRole('button', { name: 'Discard' })).toHaveLength(1)
@@ -440,13 +440,13 @@ describe('a big patch', () => {
         patch={editedFile('package-lock.json', 2, 2)}
         truncated={false}
         layout="inline"
-        action="Stage"
+        action="Stage Hunk"
         onHunk={onHunk}
         onDiscard={onDiscard}
       />
     )
     const { default: userEvent } = await import('@testing-library/user-event')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Stage' })[1] as HTMLElement)
+    await userEvent.click(screen.getAllByRole('button', { name: 'Stage Hunk' })[1] as HTMLElement)
     await userEvent.click(screen.getAllByRole('button', { name: 'Discard' })[1] as HTMLElement)
 
     expect(onHunk).toHaveBeenCalledWith(

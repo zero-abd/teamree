@@ -96,7 +96,7 @@ describe('starting an agent from the palette', () => {
     const labels = rows()
       .map((row) => row.querySelector('.palette__label')?.textContent ?? '')
       .filter((label) => label.startsWith('Start '))
-    expect(labels).toEqual(['Start claude in this worktree', 'Start codex in this worktree'])
+    expect(labels).toEqual(['Start Claude Here', 'Start Codex Here'])
   })
 
   it('offers none when nothing is installed', () => {
@@ -136,23 +136,31 @@ const labels = (): string[] => rows().map((row) => row.querySelector('.palette__
 const row = (label: string): HTMLElement =>
   rows().find((entry) => entry.querySelector('.palette__label')?.textContent === label) as HTMLElement
 const trailingOf = (label: string): string => row(label).querySelector('.palette__trailing')?.textContent ?? ''
-/** Why the row is dimmed, or null when it would run. */
-const reason = (label: string): string | null =>
-  row(label).getAttribute('aria-disabled') === 'true' ? trailingOf(label) : null
+/** Why the row is dimmed, or null when it would run; typed, since what cannot run is listed only when searched. */
+const reason = (label: string): string | null => {
+  const input = screen.getByRole('textbox')
+  fireEvent.change(input, { target: { value: label } })
+  const found = row(label)
+  const why = found.getAttribute('aria-disabled') === 'true' ? found.title : null
+  fireEvent.change(input, { target: { value: '' } })
+  return why
+}
 
 describe('the rows that are also commands', () => {
   // The window has no pane in it, so the pane commands would do nothing — the
-  // same answer the menu bar gives, from the same predicate. Dimmed with the
-  // reason, so a search for one does not read as "no such command".
-  it('dims a command the window would refuse, says why, and runs nothing', () => {
+  // same answer the menu bar gives, from the same predicate. Left out, and
+  // dimmed only when a search finds nothing else.
+  it('leaves out a command the window would refuse, dims it when searched, and runs nothing', () => {
     mount()
+    expect(labels()).not.toContain('Split Pane Right')
+    expect(labels()).toContain('New Terminal')
     expect(reason('Split Pane Right')).toBe('no pane focused')
-    expect(reason('New Terminal')).toBeNull()
     expect(reason('New Task')).toBeNull()
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'save' } })
-    expect(labels()[0]).toBe('Save')
-    expect(reason('Save')).toBe('nothing unsaved')
+    expect(labels()).toEqual(['Save', 'Save All'])
+    expect(trailingOf('Save')).toBe('')
+    expect(row('Save').getAttribute('aria-disabled')).toBe('true')
     fireEvent.click(rows()[0] as HTMLElement)
     expect(closeDialog).not.toHaveBeenCalled()
   })

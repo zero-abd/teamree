@@ -526,6 +526,13 @@
   font-size: var(--text-xs);
 }
 
+.change__stat {
+  flex: none;
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
 /* A patch scrolls sideways rather than wrapping, and deliberately: its meaning
    is in the columns. A wrapped line turns one change into several rows and
    pushes the gutters out of line, which is the one edge a diff is read down.
@@ -840,7 +847,7 @@
   border: 1px solid transparent;
   border-radius: var(--r1);
   background: none;
-  color: var(--danger);
+  color: var(--fg-secondary);
   font-family: var(--font-ui);
   font-size: var(--text-xs);
   cursor: pointer;
@@ -853,7 +860,8 @@
 }
 
 .change__discard:hover {
-  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  border-color: var(--line-strong);
+  color: var(--fg);
 }
 
 .changes__item:hover .change__discard:disabled {

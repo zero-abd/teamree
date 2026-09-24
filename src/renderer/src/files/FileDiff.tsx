@@ -258,7 +258,7 @@ export function DiffBody({
               truncated={staged.truncated}
               layout={layout}
               named
-              action="Unstage"
+              action="Unstage Hunk"
               busy={busy}
               reveal={find.reveal(0)}
               onHunk={(file, hunk) => void applyHunk(worktreeId, file.path, hunk, false)}
@@ -273,7 +273,7 @@ export function DiffBody({
               truncated={working.truncated}
               layout={layout}
               named
-              action="Stage"
+              action="Stage Hunk"
               busy={busy}
               reveal={find.reveal(staged === null ? 0 : 1)}
               onHunk={(file, hunk) => void applyHunk(worktreeId, file.path, hunk, true)}

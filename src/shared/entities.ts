@@ -143,6 +143,9 @@ export type WorktreeChange = {
   unstaged: boolean
   /** Where a rename or copy came from. Absent otherwise. */
   from?: string
+  /** Lines added and removed against HEAD, a new file's lines as added; absent when git cannot count them. */
+  added?: number
+  removed?: number
 }
 
 /** Every changed path in a worktree, as of one read. */

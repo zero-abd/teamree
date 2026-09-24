@@ -121,25 +121,28 @@ describe('pushing from the changes tab', () => {
     expect(screen.queryByRole('button', { name: 'Push' })).toBeNull()
   })
 
-  it('says why a push failed once, in one clause beside the button, with git’s words behind it', async () => {
+  it('says a failed push in one line under the header, with git’s words behind Details and a Retry', async () => {
     const push = pendingPush()
     render(<ChangesTab />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
     const said = "fatal: '/tmp/missing.git' does not appear to be a git repository"
-    await act(async () => push.reject(refusal('Remote not found', said)))
+    await act(async () => push.reject(refusal('origin not found', said)))
 
-    const alert = screen.getByRole('alert')
-    expect(alert.textContent).toBe('Remote not found')
-    expect(alert.parentElement?.lastElementChild?.textContent).toBe('Push')
-    const error = screen.getByRole('button', { name: 'Remote not found' })
-    expect(error.title).toBe(said)
+    expect(screen.getByRole('alert').textContent).toBe('Push failed: origin not found')
+    const head = screen.getByRole('button', { name: 'Push' }).parentElement as HTMLElement
+    expect(head.contains(screen.getByRole('alert'))).toBe(false)
     expect(useWorkspaceStore.getState().notices).toEqual([])
 
-    const copyToClipboard = vi.fn(async () => {})
-    act(() => useWorkspaceStore.setState({ copyToClipboard }))
-    fireEvent.click(error)
-    expect(copyToClipboard).toHaveBeenCalledWith(said, 'the error')
+    expect(screen.queryByText(said)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
+    expect(screen.getByRole('dialog', { name: 'git output' }).textContent).toBe(said)
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'git output' }), { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    call.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(call).toHaveBeenCalledWith('worktree.push', { worktreeId: 'w1' })
   })
 
   it('offers neither force nor a pull that does not exist when the remote is ahead', async () => {
@@ -147,14 +150,14 @@ describe('pushing from the changes tab', () => {
     render(<ChangesTab />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
-    await act(async () => push.reject(refusal('Rejected: remote is ahead', 'rejected (fetch first)')))
+    await act(async () => push.reject(refusal('remote is ahead', 'rejected (fetch first)')))
 
-    expect(screen.getByRole('alert').textContent).toBe('Rejected: remote is ahead')
+    expect(screen.getByRole('alert').textContent).toBe('Push failed: remote is ahead')
     expect(screen.getByRole('button', { name: 'Push' })).toHaveProperty('disabled', false)
     expect(screen.queryByRole('button', { name: /force|pull/i })).toBeNull()
   })
 
-  it('says a failure git never explained as one clause too', async () => {
+  it('says a failure git never explained in two words, the message behind Details', async () => {
     const push = pendingPush()
     render(<ChangesTab />)
 
@@ -162,7 +165,8 @@ describe('pushing from the changes tab', () => {
     await act(async () => push.reject(new Error('worktree w1 is not ready for pushing')))
 
     expect(screen.getByRole('alert').textContent).toBe('Push failed')
-    expect(screen.getByRole('button', { name: 'Push failed' }).title).toBe('worktree w1 is not ready for pushing')
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
+    expect(screen.getByRole('dialog', { name: 'git output' }).textContent).toBe('worktree w1 is not ready for pushing')
   })
 
   it('brings the Changes tab up when a push from elsewhere fails', async () => {
@@ -179,12 +183,27 @@ describe('pushing from the changes tab', () => {
     expect(useWorkspaceStore.getState().notices).toEqual([])
   })
 
-  it('toasts Pushed, and nothing more, when it lands', async () => {
+  it('toasts nothing when it lands where the tab shows it', async () => {
     const push = pendingPush()
+    useWorkspaceStore.setState({ rightPanelOpen: true, rightPanelTab: 'changes' })
     render(<ChangesTab />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
     await act(async () => push.resolve({ ...pushed, setUpstream: true, uncommitted: 2 }))
+
+    expect(screen.getByRole('button', { name: 'Open review' })).toBeTruthy()
+    expect(useWorkspaceStore.getState().notices).toEqual([])
+  })
+
+  it('toasts Pushed, with the review, when the tab is not on screen', async () => {
+    const push = pendingPush()
+    useWorkspaceStore.setState({ rightPanelOpen: false })
+
+    const pushing = useWorkspaceStore.getState().pushActiveWorktree()
+    await act(async () => {
+      push.resolve(pushed)
+      await pushing
+    })
 
     const [notice] = useWorkspaceStore.getState().notices
     expect(notice).toMatchObject({
@@ -224,8 +243,17 @@ describe('which button is the next step', () => {
     expect(primary('Push')).toBe(true)
   })
 
-  it('is Commit, with Publish quiet, on a new branch that has only edits', () => {
+  // Publishing a branch with no commits sends one identical to its base.
+  it('is Commit, with no Publish, on a new branch that has only edits', () => {
     seed({ upstream: null, ahead: 0 })
+    withChanges(rows)
+    render(<ChangesTab />)
+    expect(primary('Commit All')).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Publish branch' })).toBeNull()
+  })
+
+  it('offers Publish, quiet, beside Commit once the new branch has a commit', () => {
+    seed({ upstream: null, ahead: 1 })
     withChanges(rows)
     render(<ChangesTab />)
     expect(primary('Commit All')).toBe(true)
@@ -501,7 +529,7 @@ describe('the commits list', () => {
     await screen.findByText('recency()', { exact: false })
     expect(screen.getByRole('region', { name: 'aaaaaaa Rank by recency' })).toBeTruthy()
     expect(document.querySelector('.patch__row--added')).not.toBeNull()
-    expect(screen.queryByRole('button', { name: 'Stage' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Stage Hunk' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Diff' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Inline' })).toBeTruthy()
@@ -706,12 +734,14 @@ describe('discarding a file', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('offers the same from the row’s right-click menu', () => {
+  it('offers the same from the row’s right-click menu, in the menu’s ordinary colour', () => {
     withRows()
     render(<Tab />)
 
     fireEvent.contextMenu(screen.getByTitle('README.md'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Discard…' }))
+    const item = screen.getByRole('menuitem', { name: 'Discard…' })
+    expect(item.className).not.toContain('danger')
+    fireEvent.click(item)
 
     expect(screen.getByRole('dialog', { name: 'Discard changes to README.md?' })).toBeTruthy()
   })
@@ -741,5 +771,21 @@ describe('what can be discarded', () => {
     expect(canDiscard({ path: 'a', kind: 'conflicted', staged: false, unstaged: true })).toBe(false)
     // Intent-to-add: the runtime refuses it, so it is not offered.
     expect(canDiscard({ path: 'a', kind: 'added', staged: false, unstaged: true })).toBe(false)
+  })
+})
+
+describe('how much each file changed', () => {
+  it('shows lines added and removed after the name, and nothing when git could not count them', () => {
+    withChanges([
+      { path: 'src/math.ts', kind: 'modified', staged: false, unstaged: true, added: 3, removed: 0 },
+      { path: 'docs/NOTES.md', kind: 'untracked', staged: false, unstaged: true, added: 12, removed: 0 },
+      { path: 'logo.png', kind: 'modified', staged: false, unstaged: true }
+    ])
+    render(<ChangesTab />)
+    const stat = (path: string): string | null | undefined =>
+      screen.getByTitle(path).querySelector('.change__stat')?.textContent
+    expect(stat('src/math.ts')).toBe('+3 −0')
+    expect(stat('docs/NOTES.md')).toBe('+12 −0')
+    expect(stat('logo.png')).toBeUndefined()
   })
 })

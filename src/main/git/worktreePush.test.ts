@@ -112,22 +112,21 @@ describe('pushFailureLabel', () => {
   it('names the failure in one clause from what git said', () => {
     const missing =
       "fatal: '/private/tmp/x/missing.git' does not appear to be a git repository\nfatal: Could not read from remote repository."
-    expect(pushFailureLabel(missing)).toBe('Remote not found')
-    expect(pushFailureLabel('remote: Repository not found.\nfatal: repository not found')).toBe('Remote not found')
-    expect(pushFailureLabel('fatal: Authentication failed for https://example.invalid/x.git')).toBe('Sign-in failed')
-    expect(pushFailureLabel('git@example.invalid: Permission denied (publickey).')).toBe('Sign-in failed')
-    expect(pushFailureLabel(' ! [rejected]   main -> main (fetch first)')).toBe('Rejected: remote is ahead')
-    expect(pushFailureLabel('Fehler', { flag: '!', summary: '[rejected] (non-fast-forward)' })).toBe(
-      'Rejected: remote is ahead'
-    )
-    expect(pushFailureLabel(' ! [remote rejected] main -> main (pre-receive hook declined)')).toBe('Rejected by remote')
-    expect(pushFailureLabel("fatal: unable to access 'https://x/': Could not resolve host: x")).toBe('Offline')
+    expect(pushFailureLabel(missing, null, 'origin')).toBe('origin not found')
+    expect(pushFailureLabel(missing)).toBe('remote not found')
+    expect(pushFailureLabel('remote: Repository not found.\nfatal: repository not found')).toBe('remote not found')
+    expect(pushFailureLabel('fatal: Authentication failed for https://example.invalid/x.git')).toBe('sign-in failed')
+    expect(pushFailureLabel('git@example.invalid: Permission denied (publickey).')).toBe('sign-in failed')
+    expect(pushFailureLabel(' ! [rejected]   main -> main (fetch first)')).toBe('remote is ahead')
+    expect(pushFailureLabel('Fehler', { flag: '!', summary: '[rejected] (non-fast-forward)' })).toBe('remote is ahead')
+    expect(pushFailureLabel(' ! [remote rejected] main -> main (pre-receive hook declined)')).toBe('rejected by remote')
+    expect(pushFailureLabel("fatal: unable to access 'https://x/': Could not resolve host: x")).toBe('offline')
     expect(
       pushFailureLabel(
         'ssh: connect to host x port 22: Network is unreachable\nfatal: Could not read from remote repository.'
       )
-    ).toBe('Offline')
-    expect(pushFailureLabel('Host key verification failed.')).toBe('Unknown host key')
+    ).toBe('offline')
+    expect(pushFailureLabel('Host key verification failed.')).toBe('unknown host key')
     expect(pushFailureLabel('fatal: the remote end hung up unexpectedly')).toBe('Push failed')
   })
 })
@@ -253,7 +252,7 @@ describe('pushing to a real remote', () => {
     const failure = await push(repo, 'feature').catch((error: unknown) => error)
 
     expect(failure).toBeInstanceOf(GitServiceError)
-    expect((failure as GitServiceError).message).toBe('Rejected: remote is ahead')
+    expect((failure as GitServiceError).message).toBe('remote is ahead')
     expect(detailOf(failure)).toContain('[rejected]')
   })
 
@@ -264,7 +263,7 @@ describe('pushing to a real remote', () => {
 
     const failure = await push(repo, 'feature').catch((error: unknown) => error)
 
-    expect((failure as GitServiceError).message).toBe('Remote not found')
+    expect((failure as GitServiceError).message).toBe('origin not found')
     expect(detailOf(failure)).toContain('does not appear to be a git repository')
   })
 
@@ -330,7 +329,7 @@ describe('pushing to a real remote', () => {
 
     const failure = await push(repo, 'feature', 'upstream').catch((error: unknown) => error)
 
-    expect((failure as GitServiceError).message).toBe('Remote not found')
+    expect((failure as GitServiceError).message).toBe('upstream not found')
     expect(detailOf(failure)).toContain('no remote called "upstream"')
     expect(detailOf(failure)).toContain('origin')
   })
@@ -341,7 +340,7 @@ describe('pushing to a real remote', () => {
 
     const failure = await push(repo, 'feature').catch((error: unknown) => error)
 
-    expect((failure as GitServiceError).message).toBe('No remote')
+    expect((failure as GitServiceError).message).toBe('no remote')
     expect(detailOf(failure)).toContain('no remotes')
   })
 
