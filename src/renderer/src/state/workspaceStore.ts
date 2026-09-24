@@ -140,7 +140,6 @@ import { panelCost, sidebarCost, type Sides } from '../workspace/roomForPanes'
 export type DialogState =
   /** `folder` and `refusal`: a folder dropped on the window that could not be added as it was. */
   | { kind: 'add-project'; folder?: string; refusal?: ProjectAddRefusal }
-  | { kind: 'appearance' }
   | { kind: 'install-cli' }
   | { kind: 'new-task'; projectId: string }
   /** `files`: ⌘P, only the worktree's files. */
@@ -253,7 +252,7 @@ export function reconcileRelayPanes(
 }
 
 /** A section of the settings page that can be asked for by name. */
-export type SettingsSection = 'agents'
+export type SettingsSection = 'agents' | 'appearance'
 
 type WorkspaceState = {
   connection: ConnectionState

@@ -77,7 +77,10 @@ export function CloneProjectForm({ onBack }: { onBack: () => void }): React.JSX.
         <input
           className="field__input field__input--mono"
           value={url}
-          onChange={(event) => setUrl(event.target.value)}
+          onChange={(event) => {
+            setUrl(event.target.value)
+            setError('')
+          }}
           placeholder="git@github.com:you/repo.git"
           autoComplete="off"
           spellCheck={false}
@@ -90,7 +93,10 @@ export function CloneProjectForm({ onBack }: { onBack: () => void }): React.JSX.
         <input
           className="field__input field__input--mono"
           value={destination}
-          onChange={(event) => setEditedDestination(event.target.value)}
+          onChange={(event) => {
+            setEditedDestination(event.target.value)
+            setError('')
+          }}
           placeholder={`${DEFAULT_CLONE_PARENT}/repo`}
           autoComplete="off"
           spellCheck={false}

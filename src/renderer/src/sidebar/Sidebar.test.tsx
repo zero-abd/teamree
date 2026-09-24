@@ -460,6 +460,14 @@ describe('the rail reaches the window-level surfaces', () => {
     expect(toggleSettings).toHaveBeenCalled()
   })
 
+  it('opens settings at Appearance from the rail', () => {
+    const openSettings = vi.fn()
+    seed({ openSettings })
+    mount()
+    act(() => screen.getByRole('button', { name: /Appearance/ }).click())
+    expect(openSettings).toHaveBeenCalledExactlyOnceWith('appearance')
+  })
+
   it('marks settings as the page you are on while it has the area', () => {
     seed({ settingsOpen: true, toggleSettings })
     mount()

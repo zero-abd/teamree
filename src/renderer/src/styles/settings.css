@@ -105,7 +105,7 @@
 .settings-fact--mono {
   font-family: var(--font-mono);
   font-weight: 500;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 
 .settings-note {
@@ -308,6 +308,13 @@
 }
 
 /* The line a pane will run, under the field that changes it: output, so dimmed and unboxed. */
+/* An agent's mark and name, as New task draws them. */
+.settings-agent {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
 .settings-launch {
   color: var(--fg-muted);
   font-family: var(--font-mono);

@@ -1,11 +1,11 @@
 /** @vitest-environment jsdom */
 
-// The dialog that has no Save button.
+// Settings › Appearance has no Save button.
 //
 // Everything below is about that being a deliberate design rather than a gap:
 // a press on a preset is the choice made, an edit to one colour is that colour
 // changed, and the only way back is the Reset that says what it puts back. If
-// any of these stopped writing through, the dialog would look identical and do
+// any of these stopped writing through, the section would look identical and do
 // nothing — which is the failure this file exists to catch.
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
@@ -25,18 +25,14 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
-const { AppearanceDialog } = await import('./AppearanceDialog')
+const { AppearanceSettings } = await import('./AppearanceSettings')
 
 const INITIAL = useWorkspaceStore.getState()
 
-const closeDialog = vi.fn()
 const setAppearance = vi.fn()
 
 function seed(appearance: Appearance = DEFAULT_APPEARANCE, systemTone: Tone = 'dark'): void {
-  useWorkspaceStore.setState(
-    { ...INITIAL, dialog: { kind: 'appearance' }, appearance, systemTone, closeDialog, setAppearance },
-    true
-  )
+  useWorkspaceStore.setState({ ...INITIAL, appearance, systemTone, setAppearance }, true)
 }
 
 /** The appearance the last press asked for. */
@@ -47,20 +43,19 @@ function lastChange(): Appearance {
 }
 
 beforeEach(() => {
-  closeDialog.mockReset()
   setAppearance.mockReset()
   seed()
 })
 
 describe('picking a theme', () => {
   it('offers the built-ins with absolute black already chosen', () => {
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     expect(screen.getByRole('radio', { name: /Absolute Black/ }).getAttribute('aria-checked')).toBe('true')
     expect(screen.getByRole('radio', { name: /Midnight/ }).getAttribute('aria-checked')).toBe('false')
   })
 
   it('writes the choice through on the press, with no save to forget', () => {
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     fireEvent.click(screen.getByRole('radio', { name: /Midnight/ }))
     expect(lastChange().themeId).toBe('midnight')
   })
@@ -69,7 +64,7 @@ describe('picking a theme', () => {
   // switch would hand somebody a theme that is neither of the two they picked.
   it('drops the edits made against the theme being left', () => {
     seed({ themeId: 'black', ground: '#101010', accent: '#ff00ff', overrides: { line: '#333333' } })
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     fireEvent.click(screen.getByRole('radio', { name: /Graphite/ }))
     expect(lastChange()).toEqual({ themeId: 'graphite', ground: null, accent: null, overrides: {} })
   })
@@ -77,20 +72,41 @@ describe('picking a theme', () => {
 
 describe('the two choices worth making without opening anything', () => {
   it('sets an accent from the row of them', () => {
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     fireEvent.click(screen.getByRole('button', { name: 'Amber' }))
     expect(lastChange().accent).toBe('#e0a13e')
   })
 
+  it('names the brand accent Violet, and marks it chosen on a new installation', () => {
+    render(<AppearanceSettings />)
+    expect(screen.getByRole('button', { name: 'Violet' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByRole('button', { name: 'Indigo' })).toBeNull()
+  })
+
+  // Drawn in the current accent it looked like a second Violet.
+  it('draws the custom well as a + until a custom accent is set', () => {
+    const custom = (): HTMLElement => screen.getByLabelText('Custom accent').parentElement as HTMLElement
+    const view = render(<AppearanceSettings />)
+    expect(custom().textContent).toBe('+')
+    fireEvent.change(screen.getByLabelText('Custom accent'), { target: { value: '#12ab34' } })
+    expect(lastChange().accent).toBe('#12ab34')
+
+    view.unmount()
+    seed({ ...DEFAULT_APPEARANCE, accent: '#12ab34' })
+    render(<AppearanceSettings />)
+    expect(custom().textContent).toBe('')
+    expect((screen.getByLabelText('Custom accent') as HTMLInputElement).value).toBe('#12ab34')
+  })
+
   it('sets a ground, which is what every surface above it is rebuilt from', () => {
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     fireEvent.change(screen.getByLabelText('Ground'), { target: { value: '#101820' } })
     expect(lastChange().ground).toBe('#101820')
   })
 
   it('offers a way back to the preset’s ground once one has been chosen', () => {
     seed({ ...DEFAULT_APPEARANCE, ground: '#101820' })
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     fireEvent.click(screen.getByRole('button', { name: /Back to Absolute Black/ }))
     expect(lastChange().ground).toBeNull()
   })
@@ -98,14 +114,14 @@ describe('the two choices worth making without opening anything', () => {
 
 describe('editing a colour directly', () => {
   it('keeps the list shut until it is asked for', () => {
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     expect(screen.queryByLabelText('Hairline')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Every colour/ }))
     expect(screen.getByLabelText('Hairline')).toBeTruthy()
   })
 
   it('records one token without touching the others', () => {
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     fireEvent.click(screen.getByRole('button', { name: /Every colour/ }))
     fireEvent.change(screen.getByLabelText('Hairline'), { target: { value: '#445566' } })
     expect(lastChange().overrides).toEqual({ line: '#445566' })
@@ -113,7 +129,7 @@ describe('editing a colour directly', () => {
 
   it('takes one back out again, rather than writing the preset’s value over it', () => {
     seed({ ...DEFAULT_APPEARANCE, overrides: { line: '#445566', fg: '#ffffff' } })
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     fireEvent.click(screen.getByRole('button', { name: /1 changed|2 changed|Every colour/ }))
     // Two rows carry an Undo, and the first in document order is the text one:
     // the groups are listed surfaces, lines, text, so `--line` comes first.
@@ -124,13 +140,13 @@ describe('editing a colour directly', () => {
 
 describe('getting back', () => {
   it('offers no reset when there is nothing to reset', () => {
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     expect(screen.getByRole('button', { name: 'Reset' }).hasAttribute('disabled')).toBe(true)
   })
 
   it('puts the whole preset back in one press', () => {
     seed({ themeId: 'midnight', ground: '#101820', accent: '#ff00ff', overrides: { line: '#333333' } })
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     fireEvent.click(screen.getByRole('button', { name: 'Reset' }))
     expect(lastChange()).toEqual({ themeId: 'midnight', ground: null, accent: null, overrides: {} })
   })
@@ -138,7 +154,7 @@ describe('getting back', () => {
 
 describe('light, dark, or whatever the Mac is', () => {
   it('offers the three, with Match System chosen on a new installation', () => {
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     expect(mode('Match System').getAttribute('aria-checked')).toBe('true')
     expect(mode('Light').getAttribute('aria-checked')).toBe('false')
     expect(mode('Dark').getAttribute('aria-checked')).toBe('false')
@@ -146,14 +162,14 @@ describe('light, dark, or whatever the Mac is', () => {
 
   it('writes the mode through and keeps both slots', () => {
     seed({ ...DEFAULT_APPEARANCE, themeId: 'midnight' })
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     fireEvent.click(mode('Light'))
     expect(lastChange()).toMatchObject({ mode: 'light', themeId: 'midnight' })
   })
 
   it('offers the light presets while the window is light', () => {
     seed(DEFAULT_APPEARANCE, 'light')
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     expect(preset('Light').getAttribute('aria-checked')).toBe('true')
     expect(screen.queryByRole('radio', { name: /Absolute Black/ })).toBeNull()
     fireEvent.click(preset('Paper'))
@@ -162,7 +178,7 @@ describe('light, dark, or whatever the Mac is', () => {
 
   it('edits the light slot while light, and leaves the dark one alone', () => {
     seed({ ...DEFAULT_APPEARANCE, mode: 'light', themeId: 'graphite' })
-    render(<AppearanceDialog />)
+    render(<AppearanceSettings />)
     fireEvent.click(screen.getByRole('button', { name: 'Amber' }))
     expect(lastChange()).toMatchObject({ themeId: 'graphite', accent: null, light: { accent: '#e0a13e' } })
   })

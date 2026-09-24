@@ -21,12 +21,10 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
-const { resolvePlatformModifier } = await import('../keyboard/platformModifier')
 const { SettingsView } = await import('./SettingsView')
 const { TERMINAL_OPTIONS_DEFAULT } = await import('../state/preferences')
 
 const INITIAL = useWorkspaceStore.getState()
-const modifier = resolvePlatformModifier('darwin')
 
 const project: Project = { id: 'p1', name: 'pager', path: '/repos/pager', baseRef: 'origin/main' }
 /** A teammate's held keystrokes; not in `dialog` and not dismissable (`dialogs/modalLayer.ts`). */
@@ -186,14 +184,14 @@ beforeEach(() => {
 
 describe('the page itself', () => {
   it('is a landmark with a name, and reads both machine facts on arrival', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.getByRole('main', { name: 'Settings' })).toBeTruthy()
     expect(loadCli).toHaveBeenCalled()
     expect(loadUpdate).toHaveBeenCalled()
   })
 
   it('sits in the shared page frame, sections inside its column', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const main = screen.getByRole('main', { name: 'Settings' })
     expect(main.querySelector('.page__head h1')?.textContent).toBe('Settings')
     expect(main.querySelector('.page__body .page__column .settings__layout')).not.toBeNull()
@@ -204,7 +202,7 @@ describe('the page itself', () => {
     const scrollIntoView = vi.fn()
     Element.prototype.scrollIntoView = scrollIntoView
     seed({ agents: [claude, codex], settingsSection: 'agents' })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(scrollIntoView).toHaveBeenCalledOnce()
     expect(scrollIntoView.mock.instances[0]).toBe(document.getElementById('settings-agents'))
     expect(useWorkspaceStore.getState().settingsSection).toBeNull()
@@ -213,20 +211,20 @@ describe('the page itself', () => {
   it('scrolls nowhere when opened plainly', () => {
     const scrollIntoView = vi.fn()
     Element.prototype.scrollIntoView = scrollIntoView
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(scrollIntoView).not.toHaveBeenCalled()
   })
 
   it('closes on Escape, which is what a reader tries first', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(toggleSettings).toHaveBeenCalledTimes(1)
   })
 
-  // The appearance editor is a modal; one press must not close both.
+  // A dialog is on top; one press must not close both.
   it('stands aside from Escape while a dialog is on top of it', () => {
-    seed({ dialog: { kind: 'appearance' } })
-    render(<SettingsView modifier={modifier} />)
+    seed({ dialog: { kind: 'add-project' } })
+    render(<SettingsView />)
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(toggleSettings).not.toHaveBeenCalled()
   })
@@ -234,13 +232,13 @@ describe('the page itself', () => {
   // A remote question outside `dialog`: the page must not close under its scrim.
   it('stands aside from Escape for a question nobody in this window opened', () => {
     seed({ consent: { p1: asking } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(toggleSettings).not.toHaveBeenCalled()
   })
 
   it('has a close button as well, for the reader who never learned the key', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     fireEvent.click(screen.getByRole('button', { name: 'Back to the panes' }))
     expect(toggleSettings).toHaveBeenCalledTimes(1)
   })
@@ -265,7 +263,7 @@ describe('the section list', () => {
 
   it('lists every section in page order, and leaves out Agents when there are none', () => {
     seed({ agents: [claude] })
-    const { unmount } = render(<SettingsView modifier={modifier} />)
+    const { unmount } = render(<SettingsView />)
     expect(
       within(nav())
         .getAllByRole('button')
@@ -274,14 +272,14 @@ describe('the section list', () => {
     unmount()
 
     seed({ agents: [] })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(within(nav()).queryByRole('button', { name: 'Agents' })).toBeNull()
   })
 
   it('scrolls to a section, focuses it and marks it current', () => {
     const scrollIntoView = vi.fn()
     Element.prototype.scrollIntoView = scrollIntoView
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     fireEvent.click(item('Panes'))
     const heading = document.getElementById('settings-panes')
     expect(scrollIntoView.mock.instances).toEqual([heading])
@@ -290,7 +288,7 @@ describe('the section list', () => {
   })
 
   it('moves between sections with the arrow keys', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     item('Updates').focus()
     fireEvent.keyDown(item('Updates'), { key: 'ArrowDown' })
     expect(document.activeElement).toBe(item('Notifications'))
@@ -302,7 +300,7 @@ describe('the section list', () => {
   })
 
   it('highlights the section scrolled into view', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const body = screen.getByTestId('settings-body')
     layOut({ cli: -400, updates: -200, notices: 10, panes: 300, appearance: 600, projects: 900 })
     fireEvent.scroll(body)
@@ -315,7 +313,7 @@ describe('the section list', () => {
   // The last sections cannot scroll to the top, so at the bottom the one picked wins, else the last.
   it('keeps a section picked near the end current once the page hits bottom', () => {
     Element.prototype.scrollIntoView = vi.fn()
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const body = screen.getByTestId('settings-body')
     Object.defineProperties(body, {
       scrollTop: { configurable: true, value: 500 },
@@ -336,7 +334,7 @@ describe('the section list', () => {
 
   it('marks the section it was opened at current', () => {
     seed({ agents: [claude], settingsSection: 'agents' })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(current()).toEqual(['Agents'])
   })
 })
@@ -346,7 +344,7 @@ describe('the CLI', () => {
   const cliSection = (): HTMLElement => screen.getByRole('region', { name: 'CLI' })
 
   it('says where the link leads, in one line, with nothing to press', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(
       screen.getByText('/usr/local/bin/teamree → /Applications/teamree.app/Contents/Resources/cli/teamree')
     ).toBeTruthy()
@@ -356,16 +354,25 @@ describe('the CLI', () => {
 
   it('says it is not installed, and offers Install', () => {
     seed({ cli: { ...linkedCli(), state: 'absent', resolved: null, needsAdministrator: false } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.getByText('Not installed')).toBeTruthy()
     expect(within(cliSection()).getAllByRole('button')).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: 'Install' }))
     expect(installCli).toHaveBeenCalled()
   })
 
+  // A path wraps at its slashes, and the words after it do not wrap mid-word.
+  it('lets the path break after each slash', () => {
+    seed({ cli: { ...linkedCli(), state: 'elsewhere', resolved: '/Volumes/old/teamree', dangling: false } })
+    render(<SettingsView />)
+    const line = screen.getByText(/another copy/)
+    expect(line.querySelectorAll('wbr').length).toBe('/usr/local/bin/teamree/Volumes/old/teamree'.split('/').length - 1)
+    expect(line.textContent).toBe('/usr/local/bin/teamree → /Volumes/old/teamree (another copy)')
+  })
+
   it('says where a wrong link leads, and offers Repair', () => {
     seed({ cli: { ...linkedCli(), state: 'elsewhere', resolved: '/Volumes/old/teamree', dangling: true } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.getByText('/usr/local/bin/teamree → /Volumes/old/teamree (missing)')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Repair' }))
     expect(installCli).toHaveBeenCalled()
@@ -375,7 +382,7 @@ describe('the CLI', () => {
 describe('updates', () => {
   it('says this build has nothing to compare against, instead of offering a check', () => {
     seed({ update: { ...release(), current: '0.0.0-dev', checkable: false } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.getByText('teamree 0.0.0-dev (not a release)')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Check for updates' })).toBeNull()
     expect(screen.queryByRole('checkbox', { name: 'Check automatically' })).toBeNull()
@@ -383,7 +390,7 @@ describe('updates', () => {
 
   it('checks on request, and says when the last one was', () => {
     seed({ update: { ...release(), checkedAt: Date.now() - 4 * 60_000 } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.getByText('Checked 4m ago')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }))
     expect(checkForUpdates).toHaveBeenCalled()
@@ -391,12 +398,12 @@ describe('updates', () => {
 
   it('will not offer a second check while one is in flight', () => {
     seed({ update: { ...release(), checking: true } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.getByRole('button', { name: 'Checking…' }).hasAttribute('disabled')).toBe(true)
   })
 
   it('turns the automatic check off through the store', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const check = screen.getByLabelText('Check automatically')
     expect((check as HTMLInputElement).checked).toBe(true)
     fireEvent.click(check)
@@ -416,7 +423,7 @@ describe('updates', () => {
 
     it('downloads it from the page', () => {
       seed({ update: { ...release(), available } })
-      render(<SettingsView modifier={modifier} />)
+      render(<SettingsView />)
       expect(screen.getByText('teamree 1.5.0 available')).toBeTruthy()
       fireEvent.click(screen.getByRole('button', { name: 'Download' }))
       expect(fetchInstaller).toHaveBeenCalled()
@@ -425,13 +432,13 @@ describe('updates', () => {
     it('shows progress, then opens the installer', () => {
       const downloading = { state: 'downloading' as const, version: '1.5.0', received: 30, total: 100 }
       seed({ update: { ...release(), available, download: downloading } })
-      const { unmount } = render(<SettingsView modifier={modifier} />)
+      const { unmount } = render(<SettingsView />)
       expect(screen.getByRole('button', { name: 'Downloading 30%' }).hasAttribute('disabled')).toBe(true)
       unmount()
 
       const ready = { state: 'ready' as const, version: '1.5.0', path: '/Users/me/Downloads/teamree-1.5.0.dmg' }
       seed({ update: { ...release(), available, download: ready } })
-      render(<SettingsView modifier={modifier} />)
+      render(<SettingsView />)
       fireEvent.click(screen.getByRole('button', { name: 'Open Installer' }))
       expect(openInstaller).toHaveBeenCalled()
     })
@@ -439,7 +446,7 @@ describe('updates', () => {
     it('says in one line why a download failed', () => {
       const failed = { state: 'failed' as const, version: '1.5.0', problem: 'Checksum mismatch; the file was deleted.' }
       seed({ update: { ...release(), available, download: failed } })
-      render(<SettingsView modifier={modifier} />)
+      render(<SettingsView />)
       expect(screen.getByText('Checksum mismatch; the file was deleted.')).toBeTruthy()
       expect(screen.getByRole('button', { name: 'Download' })).toBeTruthy()
     })
@@ -447,14 +454,14 @@ describe('updates', () => {
 
   it('shows why the last check answered nothing, rather than swallowing it', () => {
     seed({ update: { ...release(), problem: 'github.com could not be reached' } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.getByText('github.com could not be reached')).toBeTruthy()
   })
 })
 
 describe('panes', () => {
   it('writes a new terminal text size through, under a label and no caption', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     fireEvent.change(screen.getByLabelText('Terminal text size'), { target: { value: '17' } })
     expect(setTerminalFontSize).toHaveBeenCalledWith(17)
     // Every preference on this page is per-machine and none of them says so.
@@ -463,12 +470,12 @@ describe('panes', () => {
 
   it('shows the size it is at, which a slider alone cannot say', () => {
     seed({ terminalFontSize: 15 })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.getByText('15px')).toBeTruthy()
   })
 
   it('previews a font as it is typed and keeps it once the field is left', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const field = screen.getByLabelText('Font') as HTMLInputElement
     expect(field.value).toBe(TERMINAL_OPTIONS_DEFAULT.fontFamily)
 
@@ -481,7 +488,7 @@ describe('panes', () => {
   })
 
   it('sets the cursor shape and whether it blinks', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     fireEvent.change(screen.getByLabelText('Cursor'), { target: { value: 'underline' } })
     expect(setTerminalOptions).toHaveBeenCalledWith({ cursorStyle: 'underline' })
     const blink = screen.getByLabelText('Blink') as HTMLInputElement
@@ -491,7 +498,7 @@ describe('panes', () => {
   })
 
   it('turns Option as Meta and copy on select on', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     fireEvent.click(screen.getByLabelText('Option as Meta'))
     expect(setTerminalOptions).toHaveBeenCalledWith({ optionIsMeta: true })
     fireEvent.click(screen.getByLabelText('Copy on select'))
@@ -500,7 +507,7 @@ describe('panes', () => {
 
   it('takes a scrollback length on Enter, and leaves the bounds to the store', () => {
     seed({ terminalOptions: { ...TERMINAL_OPTIONS_DEFAULT, scrollback: 10_000 } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const field = screen.getByLabelText('Scrollback lines') as HTMLInputElement
     expect(field.value).toBe('10000')
     fireEvent.change(field, { target: { value: '25000' } })
@@ -510,44 +517,49 @@ describe('panes', () => {
 })
 
 describe('appearance', () => {
-  // One row that leads to the editor, no second set of swatches.
-  it('sends the reader to the editor that already exists, and edits nothing itself', () => {
-    render(<SettingsView modifier={modifier} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Appearance…' }))
-    expect(openDialog).toHaveBeenCalledWith({ kind: 'appearance' })
+  // The controls themselves, not a button to a dialog holding them.
+  it('holds the mode, theme and accent controls directly', () => {
+    render(<SettingsView />)
+    const section = screen.getByRole('region', { name: 'Appearance' })
+    expect(within(section).getByRole('radiogroup', { name: 'Mode' })).toBeTruthy()
+    expect(within(section).getByRole('radiogroup', { name: 'Theme' })).toBeTruthy()
+    expect(within(section).getByRole('button', { name: 'Violet' })).toBeTruthy()
+    expect(within(section).queryByRole('button', { name: 'Appearance…' })).toBeNull()
+    expect(openDialog).not.toHaveBeenCalled()
+  })
 
-    const section = screen.getByRole('heading', { name: 'Appearance' }).parentElement as HTMLElement
-    // No chord (⌘, is this page) and no empty tooltip.
-    expect(screen.getByRole('button', { name: 'Appearance…' }).getAttribute('title')).toBeNull()
-    expect(section.textContent).not.toContain('There is no second copy')
-    // No swatch, no colour field, nothing that writes an appearance from here.
-    expect(section.querySelectorAll('input')).toHaveLength(0)
+  it('scrolls to Appearance when opened there', () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    seed({ settingsSection: 'appearance' })
+    render(<SettingsView />)
+    expect(scrollIntoView.mock.instances[0]).toBe(document.getElementById('settings-appearance'))
   })
 })
 
 describe('projects', () => {
   it('says so in a sentence when there are none, rather than showing an empty list', () => {
     seed({ projects: [], relays: {} })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.getByText(/No repositories yet/)).toBeTruthy()
     expect(screen.queryByRole('heading', { name: 'Relay' })).toBeNull()
   })
 
   it('reveals the repository at its own path, named so the notice can say what failed', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     fireEvent.click(screen.getByRole('button', { name: 'Reveal in Finder' }))
     expect(revealInFinder).toHaveBeenCalledWith('/repos/pager', 'the pager repository')
   })
 
   it('shows the project’s base ref as the placeholder, so the box says what happens if it is left empty', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.getByLabelText('Start new worktrees from').getAttribute('placeholder')).toBe('origin/main')
   })
 })
 
 describe('what a new worktree carries over from the primary checkout', () => {
   it('writes one list per line, dropping blanks, when the field is left', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const field = screen.getByLabelText('Symlink into every new worktree')
     fireEvent.change(field, { target: { value: 'node_modules\n\n  .venv  \n' } })
     expect(setProjectPaths).not.toHaveBeenCalled()
@@ -557,7 +569,7 @@ describe('what a new worktree carries over from the primary checkout', () => {
 
   it('keeps the two lists apart', () => {
     seed({ projects: [{ ...project, linkedPaths: ['node_modules'], copiedPaths: ['.env'] }] })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect((screen.getByLabelText('Symlink into every new worktree') as HTMLTextAreaElement).value).toBe('node_modules')
 
     const copied = screen.getByLabelText('Copy into every new worktree')
@@ -570,7 +582,7 @@ describe('what a new worktree carries over from the primary checkout', () => {
   // An empty field clears the list (the store drops the field); untouched fields write nothing.
   it('writes an empty list when the field is emptied, and nothing when it is not', () => {
     seed({ projects: [{ ...project, linkedPaths: ['node_modules'] }] })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const field = screen.getByLabelText('Symlink into every new worktree')
     fireEvent.blur(field)
     expect(setProjectPaths).not.toHaveBeenCalled()
@@ -580,7 +592,7 @@ describe('what a new worktree carries over from the primary checkout', () => {
   })
 
   it('saves the setup command through the same method, trimmed, when the field is left', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const field = screen.getByLabelText('Setup command')
     expect(field.getAttribute('placeholder')).toBe('npm ci')
     fireEvent.change(field, { target: { value: '  npm ci  ' } })
@@ -591,7 +603,7 @@ describe('what a new worktree carries over from the primary checkout', () => {
 
   it('shows the stored command, and writes an empty one when it is emptied', () => {
     seed({ projects: [{ ...project, setupCommand: 'npm ci' }] })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const field = screen.getByLabelText('Setup command') as HTMLInputElement
     expect(field.value).toBe('npm ci')
 
@@ -606,7 +618,7 @@ describe('what a new worktree carries over from the primary checkout', () => {
 
 describe('the start point a new task is offered first', () => {
   it('commits what was typed when the field is left', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const field = screen.getByLabelText('Start new worktrees from')
     fireEvent.change(field, { target: { value: 'develop' } })
     expect(setStartPointDefault).not.toHaveBeenCalled()
@@ -615,7 +627,7 @@ describe('the start point a new task is offered first', () => {
   })
 
   it('commits on Enter too, for the reader who never leaves the keyboard', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const field = screen.getByLabelText('Start new worktrees from')
     fireEvent.change(field, { target: { value: 'release/2026' } })
     fireEvent.keyDown(field, { key: 'Enter' })
@@ -625,14 +637,14 @@ describe('the start point a new task is offered first', () => {
   // Null, not '': `withStartPoint` removes the entry for null.
   it('passes null when the preference is cleared', () => {
     seed({ startPointDefaults: { p1: 'develop' } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     fireEvent.click(screen.getByRole('button', { name: 'Use origin/main' }))
     expect(setStartPointDefault).toHaveBeenCalledWith('p1', null)
   })
 
   it('passes null when the field is emptied and left, the same as the button', () => {
     seed({ startPointDefaults: { p1: 'develop' } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const field = screen.getByLabelText('Start new worktrees from')
     fireEvent.change(field, { target: { value: '  ' } })
     fireEvent.blur(field)
@@ -640,13 +652,13 @@ describe('the start point a new task is offered first', () => {
   })
 
   it('offers nothing to clear when there is nothing set', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.getByRole('button', { name: 'Use origin/main' }).hasAttribute('disabled')).toBe(true)
   })
 
   // The buttons name the ref they would use; no paragraph under them.
   it('captions the start point with nothing at all', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.queryByText(/What the New task dialog offers first/)).toBeNull()
   })
 })
@@ -662,7 +674,7 @@ describe('the app a project opens in', () => {
 
   it('offers the editors found, and saves the one picked', () => {
     seed({ editors: INSTALLED })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
 
     expect([...picker().options].map((option) => option.text)).toEqual([
       'First found (VS Code)',
@@ -676,7 +688,7 @@ describe('the app a project opens in', () => {
 
   it('clears the pick with First found', () => {
     seed({ editors: INSTALLED, editorCommands: { p1: 'dev.zed.Zed' } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
 
     expect(picker().value).toBe('dev.zed.Zed')
     fireEvent.change(picker(), { target: { value: '' } })
@@ -685,7 +697,7 @@ describe('the app a project opens in', () => {
 
   it('takes any program by name under Other', () => {
     seed({ editors: INSTALLED })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
 
     expect(screen.queryByLabelText('Editor command')).toBeNull()
     fireEvent.change(picker(), { target: { value: 'other' } })
@@ -697,7 +709,7 @@ describe('the app a project opens in', () => {
 
   it('shows a program this project names in the field', () => {
     seed({ editors: INSTALLED, editorCommands: { p1: 'mate' } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
 
     expect(picker().value).toBe('other')
     expect((screen.getByLabelText('Editor command') as HTMLInputElement).value).toBe('mate')
@@ -705,7 +717,7 @@ describe('the app a project opens in', () => {
 
   it('says nothing about PATH', () => {
     seed({ editors: [] })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
 
     expect([...picker().options].map((option) => option.text)).toEqual(['First found', 'Other…'])
     expect(screen.queryByText(/PATH/)).toBeNull()
@@ -714,7 +726,7 @@ describe('the app a project opens in', () => {
 
 describe('the relay a project meets on', () => {
   it('reads it, and names where the URL in effect came from', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(loadRelay).toHaveBeenCalledWith('p1')
     expect(screen.getByText('wss://relay.example/v1/relay')).toBeTruthy()
     expect(screen.getByText('From .teamree/relay')).toBeTruthy()
@@ -731,7 +743,7 @@ describe('the relay a project meets on', () => {
         }
       }
     })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const block = within(relayBlock())
     expect(
       block.getByText(/TEAMREE_RELAY_URL=wss:\/\/tunnel\.example\/v1\/relay overrides \.teamree\/relay/)
@@ -739,7 +751,7 @@ describe('the relay a project meets on', () => {
   })
 
   it('offers no field to edit the relay, and sends the reader where one is set', () => {
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const block = relayBlock()
     expect(block.querySelectorAll('input')).toHaveLength(0)
     expect(block.querySelectorAll('textarea')).toHaveLength(0)
@@ -759,7 +771,7 @@ describe('the relay a project meets on', () => {
         }
       }
     })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     const block = within(relayBlock())
     expect(block.getByText('No .teamree/relay')).toBeTruthy()
   })
@@ -769,10 +781,11 @@ describe('the relay a project meets on', () => {
 describe('the agent you always use', () => {
   it('offers the installed agents, and first-found as the way to mean no preference', () => {
     seed({ agents: [claude, codex] })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
 
     const select = screen.getByLabelText('Default agent') as HTMLSelectElement
     expect([...select.options].map((option) => option.value)).toEqual(['', 'claude', 'codex'])
+    expect([...select.options].map((option) => option.textContent)).toEqual(['First found', 'Claude Code', 'Codex'])
 
     fireEvent.change(select, { target: { value: 'codex' } })
     expect(setDefaultAgent).toHaveBeenCalledWith('codex')
@@ -780,7 +793,7 @@ describe('the agent you always use', () => {
 
   it('shows the full command each agent will be launched with, verbatim', () => {
     seed({ agents: [claude, codex], agentArgs: { claude: '--model opus' } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
 
     const section = screen.getByRole('heading', { name: 'Agents' }).parentElement as HTMLElement
     // One line per field in field order; an untouched agent shows the command as it stands.
@@ -790,24 +803,36 @@ describe('the agent you always use', () => {
     ])
   })
 
+  // The names New task uses, with the mark; the field says what it takes.
+  it('names each agent the way New task does, beside a field for extra arguments', () => {
+    seed({ agents: [claude, codex] })
+    render(<SettingsView />)
+    for (const name of ['Claude Code', 'Codex']) {
+      const field = screen.getByLabelText(name) as HTMLInputElement
+      expect(field.placeholder).toBe('Extra arguments')
+      const label = document.querySelector(`label[for="${field.id}"]`)
+      expect(label?.querySelector('.agent-glyph')).not.toBeNull()
+    }
+  })
+
   it('shows the command changing as it is typed, before anything is committed', () => {
     seed({ agents: [claude] })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
 
-    fireEvent.change(screen.getByLabelText('claude'), { target: { value: '--permission-mode plan' } })
+    fireEvent.change(screen.getByLabelText('Claude Code'), { target: { value: '--permission-mode plan' } })
     expect(screen.getByText('claude --permission-mode plan')).toBeTruthy()
     expect(setAgentArgs).not.toHaveBeenCalled()
 
-    fireEvent.blur(screen.getByLabelText('claude'))
+    fireEvent.blur(screen.getByLabelText('Claude Code'))
     expect(setAgentArgs).toHaveBeenCalledWith('claude', '--permission-mode plan')
   })
 
   // Null, as with the start point above.
   it('clears an agent’s arguments rather than storing an empty string', () => {
     seed({ agents: [claude], agentArgs: { claude: '--model opus' } })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
 
-    const field = screen.getByLabelText('claude')
+    const field = screen.getByLabelText('Claude Code')
     fireEvent.change(field, { target: { value: '  ' } })
     fireEvent.blur(field)
     expect(setAgentArgs).toHaveBeenCalledWith('claude', null)
@@ -815,7 +840,7 @@ describe('the agent you always use', () => {
 
   it('gives its select the same style as every other select on the page', () => {
     seed({ agents: [claude] })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.getByLabelText('Default agent').className).toBe(
       screen.getByLabelText('When an agent stops').className
     )
@@ -824,7 +849,7 @@ describe('the agent you always use', () => {
   // Every control in the section is about an agent this machine has.
   it('is not on the page at all when the machine has no agent', () => {
     seed({ agents: [] })
-    render(<SettingsView modifier={modifier} />)
+    render(<SettingsView />)
     expect(screen.queryByRole('heading', { name: 'Agents' })).toBeNull()
   })
 })

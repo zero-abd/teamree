@@ -105,7 +105,7 @@ export const DEFAULT_ACCENT = '#8b8cf7'
 
 /** The accents offered as one press in the editor; each lands on a measured palette. */
 export const ACCENT_PRESETS: readonly { name: string; value: string }[] = [
-  { name: 'Indigo', value: DEFAULT_ACCENT },
+  { name: 'Violet', value: DEFAULT_ACCENT },
   { name: 'Sky', value: '#5aa9e6' },
   { name: 'Teal', value: '#3fbfa6' },
   { name: 'Lime', value: '#8fc65a' },

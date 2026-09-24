@@ -11,11 +11,19 @@ function run(name: string, task: string = TASK): { name: string; branch: string;
 }
 
 describe('worktreeDisplay', () => {
-  // The stored name is cut to "Add a subtract function to", which left a dangling "to".
+  // The stored name is cut to "Add a subtract function".
   it('names each run of a task by its agent and the whole task line', () => {
     const [claude, codex] = taskNamesForAgents(taskName(TASK), ['claude', 'codex']).map((name) => run(name))
     expect(worktreeDisplay(claude!)).toEqual({ agent: { text: 'claude', kind: 'claude' }, title: TASK })
     expect(worktreeDisplay(codex!)).toEqual({ agent: { text: 'codex', kind: 'codex' }, title: TASK })
+  })
+
+  it('still knows runs named before small words were dropped from a cut name', () => {
+    expect(worktreeDisplay(run('Add a subtract function to claude'))).toEqual({
+      agent: { text: 'claude', kind: 'claude' },
+      title: TASK
+    })
+    expect(worktreeDisplay(run('Add a subtract function to'))).toEqual({ title: TASK })
   })
 
   it('keeps the counter with the agent and knows installed commands only for the glyph', () => {

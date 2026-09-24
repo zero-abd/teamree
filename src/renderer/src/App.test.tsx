@@ -180,20 +180,20 @@ describe('a question that arrives while something else is open', () => {
   const asking = { consent: { p1: { projectId: 'p1', requests: [question], standing: [], readAt: 1 } } }
 
   it('is on screen even with a dialog of this window’s own open', () => {
-    seed({ ...asking, dialog: { kind: 'appearance' } })
+    seed({ ...asking, dialog: { kind: 'confirm-discard', worktreeId: 'w1', path: 'a.ts' } })
     render(<App />)
     expect(screen.getByRole('dialog', { name: 'priya wants to type in t_7' })).toBeTruthy()
-    // And the colour editor is still open underneath, unanswered rather than
+    // And the confirm is still open underneath, unanswered rather than
     // closed: it is this person's own half-finished work, and they did not
     // abandon it.
-    expect(screen.getByRole('dialog', { name: 'Appearance' })).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: 'Discard changes to a.ts?' })).toBeTruthy()
   })
 
   // Both layers carry the same z-index, so which is in front is decided by the
   // order they are written in and by nothing else. A question about bytes that
   // are about to run as this user outranks anything this user has half-finished.
   it('is painted over it, rather than under it', () => {
-    seed({ ...asking, dialog: { kind: 'appearance' } })
+    seed({ ...asking, dialog: { kind: 'confirm-discard', worktreeId: 'w1', path: 'a.ts' } })
     const { container } = render(<App />)
     const layers = [...container.querySelectorAll('.modal-layer')]
     expect(layers).toHaveLength(2)

@@ -59,7 +59,7 @@ describe('whether anything is holding the window', () => {
   })
 
   it('counts a dialog this window opened', () => {
-    expect(modalOnScreen({ dialog: { kind: 'appearance' }, consent: {} })).toBe(true)
+    expect(modalOnScreen({ dialog: { kind: 'add-project' }, consent: {} })).toBe(true)
   })
 
   // The half that was missing everywhere. A keystroke question is a modal that

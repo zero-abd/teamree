@@ -14,7 +14,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   RUNTIME_IS_SEEDED: false
 }))
 
-const { useFolderDrop } = await import('./useFolderDrop')
+const { FolderDrop } = await import('./FolderDrop')
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 
 const addProject = vi.fn<(path: string, name?: string, init?: boolean) => Promise<ProjectAddRefusal | null>>()
@@ -32,6 +32,8 @@ function transfer(items: Dragged[]): DataTransfer {
       paths.set(file, item.path)
       return {
         kind: 'file',
+        // What the renderer can read before the drop: a folder has no type.
+        type: item.directory ? '' : 'text/plain',
         getAsFile: () => file,
         webkitGetAsEntry: () => ({ isDirectory: item.directory })
       }
@@ -48,10 +50,17 @@ function drop(items: Dragged[]): Event {
   return event
 }
 
-function Host(): null {
-  useFolderDrop()
-  return null
+/** A drag event on the window carrying these items. */
+function drag(type: string, items: Dragged[]): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'dataTransfer', { value: transfer(items) })
+  act(() => {
+    window.dispatchEvent(event)
+  })
+  return event
 }
+
+const overlay = (): Element | null => document.querySelector('.folder-drop')
 
 beforeEach(() => {
   addProject.mockReset()
@@ -67,7 +76,7 @@ afterEach(() => {
 
 describe('dropping on the window', () => {
   it('lets a file drag land, so the drop is not the browser navigating to it', () => {
-    render(<Host />)
+    render(<FolderDrop />)
     const over = new Event('dragover', { bubbles: true, cancelable: true })
     Object.defineProperty(over, 'dataTransfer', { value: transfer([]) })
     window.dispatchEvent(over)
@@ -75,7 +84,7 @@ describe('dropping on the window', () => {
   })
 
   it('adds each dropped folder as a project and ignores files', async () => {
-    render(<Host />)
+    render(<FolderDrop />)
     await act(async () => {
       drop([
         { path: '/Users/ada/code/atlas', directory: true },
@@ -89,7 +98,7 @@ describe('dropping on the window', () => {
 
   it('opens Add project with the refusal when a folder is not a repository', async () => {
     addProject.mockResolvedValueOnce('not-a-repository')
-    render(<Host />)
+    render(<FolderDrop />)
     await act(async () => {
       drop([{ path: '/Users/ada/notes', directory: true }])
     })
@@ -100,8 +109,54 @@ describe('dropping on the window', () => {
     })
   })
 
+  it('says Add project over the whole window while a folder is dragged over it', () => {
+    render(<FolderDrop />)
+    expect(overlay()).toBeNull()
+    drag('dragenter', [{ path: '/Users/ada/code/atlas', directory: true }])
+    expect(overlay()?.textContent).toBe('Add project')
+    // Crossing from one element to the next is an enter and a leave; the overlay stays. A leave is
+    // not read for what it carries.
+    drag('dragenter', [{ path: '/Users/ada/code/atlas', directory: true }])
+    drag('dragleave', [])
+    expect(overlay()).not.toBeNull()
+    drag('dragleave', [])
+    expect(overlay()).toBeNull()
+  })
+
+  it('takes the overlay down on the drop', async () => {
+    render(<FolderDrop />)
+    drag('dragenter', [{ path: '/Users/ada/code/atlas', directory: true }])
+    await act(async () => {
+      drop([{ path: '/Users/ada/code/atlas', directory: true }])
+    })
+    expect(overlay()).toBeNull()
+  })
+
+  // A drag cancelled outside the window can end with no leave at all; the drag's steady overs stop.
+  it('takes the overlay down once the drag goes quiet', () => {
+    vi.useFakeTimers()
+    try {
+      render(<FolderDrop />)
+      drag('dragenter', [{ path: '/Users/ada/code/atlas', directory: true }])
+      act(() => vi.advanceTimersByTime(1000))
+      drag('dragover', [{ path: '/Users/ada/code/atlas', directory: true }])
+      act(() => vi.advanceTimersByTime(1000))
+      expect(overlay()).not.toBeNull()
+      act(() => vi.advanceTimersByTime(1000))
+      expect(overlay()).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('shows nothing for a drag of files alone', () => {
+    render(<FolderDrop />)
+    drag('dragenter', [{ path: '/Users/ada/notes.txt', directory: false }])
+    expect(overlay()).toBeNull()
+  })
+
   it('stops listening once unmounted', async () => {
-    const view = render(<Host />)
+    const view = render(<FolderDrop />)
     view.unmount()
     await act(async () => {
       drop([{ path: '/Users/ada/code/atlas', directory: true }])

@@ -12,7 +12,7 @@ import { worktreeOrder } from '../sidebar/worktreeOrder'
 import { focusedRegion, regionAfter, requestRegionFocus } from '../shell/regions'
 import { numberedTab, tabAfter } from '../workspace/paneTabs'
 import { TERMINAL_FONT_DEFAULT_PX, TERMINAL_FONT_MAX_PX, TERMINAL_FONT_MIN_PX } from '../state/preferences'
-import type { DialogState } from '../state/workspaceStore'
+import type { DialogState, SettingsSection } from '../state/workspaceStore'
 import type { WorkspaceCommand } from './workspaceShortcuts'
 
 /** As much of the store as availability reads, structural so a test can state only its three fields. */
@@ -63,6 +63,7 @@ export type CommandActions = {
   openDialog: (dialog: NonNullable<DialogState>) => void
   closeDialog: () => void
   toggleSettings: () => void
+  openSettings: (section: SettingsSection) => void
   showRightPanelTab: (tab: RightPanelTab) => void
   pushActiveWorktree: () => Promise<void>
   setTerminalFontSize: (size: number) => void
@@ -86,12 +87,12 @@ function activeLayout(state: CommandState): Layout | undefined {
   return state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
 }
 
-/** The project a new task would be made in: the focused sidebar row's, else the open worktree's, else the first. */
+/** The project a new task would be made in: the focused sidebar row's, else the open worktree's, else the last added. */
 function projectForNewTask(state: CommandState): string | undefined {
   const focused = focusedTreeProject()
   if (focused !== null && state.projects.some((project) => project.id === focused)) return focused
   const active = state.worktrees.find((worktree) => worktree.id === state.activeWorktreeId)
-  return active?.projectId ?? state.projects[0]?.id
+  return active?.projectId ?? state.projects.at(-1)?.id
 }
 
 /** A focused pane of your own, or null; split and find refuse a watched pane. */
@@ -347,7 +348,7 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       store.toggleDashboard()
       break
     case 'open-appearance':
-      store.openDialog({ kind: 'appearance' })
+      store.openSettings('appearance')
       break
     case 'open-settings':
       store.toggleSettings()

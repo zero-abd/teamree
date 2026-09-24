@@ -129,13 +129,13 @@ catch: the first means something is waiting on a prompt nobody can answer, and
 the second means the keychain is being reached by a route the refusal text does
 not describe.
 
-**4. Open the appearance dialog with ⌘, and switch theme with panes open.**
+**4. Switch theme from the palette with panes open.**
 Expect every terminal background to change in the same frame as the sidebar.
 xterm cannot read CSS, so the panes re-read the custom properties off the root
 element in an effect of their own, and `App` now writes them in a
 `useLayoutEffect` so that its write lands before any child's read. If the panes
 change only on the *next* switch — showing you the theme before last — the layout
-effect is not taking. Confirm that ⌘, opens the dialog at all while you are
+effect is not taking. Confirm that ⌘, opens Settings at all while you are
 there: every other item in the app menu is an Electron role, and whether a role
 claims that chord is the one thing here that was settled by reading Electron's
 table rather than by pressing the key.

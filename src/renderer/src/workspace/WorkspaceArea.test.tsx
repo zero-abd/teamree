@@ -166,6 +166,13 @@ describe('when there is nothing open', () => {
     expect(screen.queryByRole('button', { name: 'New terminal' })).toBeNull()
   })
 
+  it('starts the new task in the project added last', () => {
+    seed({ projects: [project, { ...project, id: 'p2', name: 'ledger', path: '/repos/ledger' }] })
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'New task' }))
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p2' })
+  })
+
   it('names the chords once there is a project for them to act on', () => {
     seed({ projects: [project] })
     mount()
