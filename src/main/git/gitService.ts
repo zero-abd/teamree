@@ -162,8 +162,6 @@ export class GitService {
   readonly #locateGh: (() => string | null) | undefined
   // What each project's `.teamree/project.json` said when last read; never persisted.
   readonly #projectFiles = new Map<string, ProjectFileRead>()
-  // `checkout` of a create in flight, for the build that has only the record.
-  readonly #checkouts = new Map<string, string>()
   readonly #ensureVersion: (cwd: string) => Promise<unknown>
 
   readonly #store: GitRecordStore
@@ -444,10 +442,10 @@ export class GitService {
       state: 'creating',
       createdAt: this.#now(),
       ...(told ? { task: told } : {}),
+      ...(checkout ? { checkout } : {}),
       ...(checkout && params.base?.trim() ? { baseRef: params.base.trim() } : {})
     }
     this.#store.putWorktree(worktree)
-    if (checkout) this.#checkouts.set(worktree.id, checkout)
     this.events.emit({ type: 'worktree.created', worktree })
 
     const controller = new AbortController()
@@ -1053,11 +1051,15 @@ export class GitService {
 
   async listPullRequests(params: ParamsOf<'worktree.pullRequests'>): Promise<PullRequestList> {
     const project = this.#requireProject(params.projectId)
-    return {
-      projectId: project.id,
-      ...(await listPullRequests(this.#locateGh?.() ?? null, project.path)),
-      readAt: this.#now()
-    }
+    const read = await listPullRequests(this.#locateGh?.() ?? null, project.path)
+    // As Open Branch: a head already checked out cannot be checked out twice.
+    const inventory = await readWorktreeInventory(this.#runner, project.path)
+    const taken = new Set([
+      ...inventory.flatMap((entry) => (entry.branch === undefined ? [] : [entry.branch])),
+      ...this.#store.listWorktrees(project.id).map((worktree) => worktree.branch)
+    ])
+    const pullRequests = read.pullRequests.filter((pull) => !taken.has(pull.branch))
+    return { projectId: project.id, ...read, pullRequests, readAt: this.#now() }
   }
 
   /** How a worktree's start point was read. Present only for worktrees this process created. */
@@ -1184,7 +1186,7 @@ export class GitService {
     // Same for the path: false until `worktree add` was asked for, since the path
     // may already be somebody else's checkout.
     let ourCheckout = false
-    const checkout = this.#checkouts.get(worktreeId)
+    const checkout = worktree.checkout
     try {
       let startedFrom: string
       let start: ResolvedStartPoint | undefined
@@ -1259,7 +1261,6 @@ export class GitService {
     } finally {
       this.#creating.delete(worktreeId)
       this.#settling.delete(worktreeId)
-      this.#checkouts.delete(worktreeId)
     }
   }
 

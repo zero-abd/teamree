@@ -76,7 +76,11 @@ export async function listPullRequests(gh: string | null, root: string): Promise
       execFile(
         gh,
         ['pr', 'list', '--state', 'open', '--limit', '50', '--json', fields],
-        { cwd: root, timeout: 20_000, env: { ...process.env, GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_COLOR: '1' } },
+        {
+          cwd: root,
+          timeout: 20_000,
+          env: { ...process.env, GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_COLOR: '1' }
+        },
         (error, out, err) => (error ? reject(new Error(String(err || error.message))) : resolve(out))
       )
     })

@@ -904,6 +904,7 @@ describe('opening a branch as it is', () => {
 
     expect(worktree.state).toBe('ready')
     expect(worktree.branch).toBe('pr-7')
+    expect(worktree.checkout).toBe('pull/7/head')
     expect(worktree.baseRef).toBe('origin/main')
     expect(existsSync(path.join(worktree.path, 'fork.txt'))).toBe(true)
   })
@@ -917,7 +918,7 @@ describe('open pull requests, when gh is there', () => {
     return script
   }
 
-  it('lists them with the ref each is checked out from', async () => {
+  it('lists them with the ref each is checked out from, leaving out a head already checked out', async () => {
     const repo = await newRepo({ withRemote: true })
     const ghBinary = await fakeGh(
       repo,
@@ -939,6 +940,14 @@ describe('open pull requests, when gh is there', () => {
           baseRefName: 'main',
           isCrossRepository: true,
           updatedAt: '2026-09-02T00:00:00Z'
+        },
+        {
+          number: 14,
+          title: 'Already here',
+          author: { login: 'me' },
+          headRefName: 'main',
+          baseRefName: 'main',
+          isCrossRepository: false
         }
       ])
     )

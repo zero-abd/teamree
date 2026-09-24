@@ -1274,7 +1274,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const created = await runtimeClient.call('worktree.create', {
       projectId: worktree.projectId,
       name: worktree.name,
-      startedFrom: worktree.startedFrom
+      startedFrom: worktree.startedFrom,
+      // An opened branch is opened again, never cut anew under the same name.
+      ...(worktree.checkout === undefined ? {} : { checkout: worktree.checkout }),
+      ...(worktree.checkout === undefined || worktree.baseRef === undefined ? {} : { base: worktree.baseRef })
     })
     set((state) => ({ worktrees: [...state.worktrees.filter((entry) => entry.id !== worktree.id), created] }))
   }

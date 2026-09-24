@@ -104,6 +104,8 @@ export type Worktree = {
   missing?: true
   /** What its commits are compared against when not the project's base ref: an opened pull request's base. */
   baseRef?: string
+  /** The existing branch it was opened on, as `worktree.create`'s `checkout` took it; absent for a new branch. */
+  checkout?: string
 }
 
 /** A branch a worktree could be opened on as it is: not checked out anywhere yet. */
