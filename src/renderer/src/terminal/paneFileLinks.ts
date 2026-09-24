@@ -84,6 +84,8 @@ export function paneFileLinks(term: Pick<XTerm, 'registerLinkProvider' | 'buffer
         const path = worktreePath(printed.path, place.cwd, place.root)
         return path === null ? [] : [{ printed, path }]
       })
+      // Answered at once when there is nothing to look up: xterm waits for every provider before it shows any link.
+      if (candidates.length === 0) return callback(undefined)
       void Promise.all(candidates.map(({ path }) => host.exists(place.worktreeId, path).catch(() => false))).then(
         (exists) => {
           shown = candidates

@@ -170,6 +170,27 @@ describe('a path printed in a pane', () => {
     }
   }
 
+  // xterm shows a row's links once every provider has answered; a URL must not wait on a lookup that has nothing to find.
+  it('answers at once for a row with no path in it', () => {
+    const term = new XTerm({ allowProposedApi: true, cols: 80, rows: 24 })
+    let provider: ILinkProvider | undefined
+    term.registerLinkProvider = (registered) => {
+      provider = registered
+      return { dispose: () => {} }
+    }
+    paneFileLinks(term, {
+      place: () => ({ worktreeId: 'w1', root: '/w', cwd: '/w' }),
+      exists: async () => true,
+      open: () => {},
+      holds: () => false
+    })
+    let answered = false
+    provider?.provideLinks(1, () => {
+      answered = true
+    })
+    expect(answered).toBe(true)
+  })
+
   it('links a path that is in the worktree, and opens it at its line on a ⌘-click only', async () => {
     const view = filePane()
     await view.write('Added sub to src/math.ts:7 and a/b, see https://example.com/x\r\n')
