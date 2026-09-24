@@ -537,7 +537,9 @@ export const Params = {
     /** The pane grid as the window draws it, in CSS pixels, so the pane lands where there is room. */
     area: z.object({ width: z.number().positive(), height: z.number().positive() }).optional(),
     /** The least a pane may be given in `area`, chrome included (`MIN_PANE_CELLS`). */
-    minPane: z.object({ width: z.number().positive(), height: z.number().positive() }).optional()
+    minPane: z.object({ width: z.number().positive(), height: z.number().positive() }).optional(),
+    /** One terminal cell in CSS pixels, so a later pane with no size can be sized on `area`. */
+    cell: z.object({ width: z.number().positive(), height: z.number().positive() }).optional()
   }),
   terminalWrite: z.object({
     terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
@@ -588,7 +590,12 @@ export const Params = {
     /** Pane to divide. The new terminal takes half of it. */
     terminalId: z.string().min(1),
     direction: z.enum(['row', 'column']),
-    command: z.string().min(1).optional()
+    command: z.string().min(1).optional(),
+    /** The half as the window will draw it; without it the runtime works it out. */
+    cols: z.number().int().positive().optional(),
+    rows: z.number().int().positive().optional(),
+    area: z.object({ width: z.number().positive(), height: z.number().positive() }).optional(),
+    cell: z.object({ width: z.number().positive(), height: z.number().positive() }).optional()
   }),
 
   appearanceGet: z.object({}),
@@ -757,7 +764,14 @@ export type MethodContract = {
   'terminal.resize': { params: z.infer<typeof Params.terminalResize>; result: Terminal }
   'terminal.close': { params: z.infer<typeof Params.terminalClose>; result: { closed: true } }
   'terminal.rename': { params: z.infer<typeof Params.terminalRename>; result: Terminal }
-  'terminal.read': { params: z.infer<typeof Params.terminalRead>; result: { data: string } }
+  /**
+   * `end` places the snapshot in the stream, so a subscriber can drop the chunks it already holds;
+   * `widest` is the widest the pane has been, so a replay is never drawn narrower than it was written.
+   */
+  'terminal.read': {
+    params: z.infer<typeof Params.terminalRead>
+    result: { data: string; end?: number; widest?: number }
+  }
   'terminal.subscribe': { params: z.infer<typeof Params.terminalSubscribe>; result: { subscription: string } }
   'terminal.split': { params: z.infer<typeof Params.terminalSplit>; result: { terminal: Terminal; layout: Layout } }
   /** The same pane running its program again: same id, leaf, directory; agent started over, not resumed. */
@@ -813,7 +827,8 @@ export type WorkspaceEvent =
 
 /** Events pushed on a terminal.subscribe subscription. */
 export type TerminalEvent =
-  | { type: 'data'; data: string }
+  /** `end`: where the pane's output stands after this chunk, as `terminal.read` reports it. */
+  | { type: 'data'; data: string; end?: number }
   | { type: 'exit'; exitCode: number }
   | { type: 'title'; title: string }
   /**

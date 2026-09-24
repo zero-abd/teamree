@@ -107,7 +107,7 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
       return { closed: true }
     },
     'terminal.rename': async (params) => manager.rename(params.terminalId, params.label),
-    'terminal.read': async (params) => ({ data: manager.read(params.terminalId, params.tailBytes) }),
+    'terminal.read': async (params) => manager.readPlaced(params.terminalId, params.tailBytes),
     'terminal.subscribe': async (params, call) => {
       if (!hub) return { subscription: manager.subscribe(params.terminalId) }
       if (!call) {

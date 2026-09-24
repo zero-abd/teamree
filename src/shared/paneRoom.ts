@@ -14,6 +14,18 @@ export const MIN_PANE_CELLS = { cols: 40, rows: 8 } as const
 /** The draggable gap between sibling panes, in CSS pixels. */
 export const PANE_GUTTER_PX = 5
 
+/** A split pane's 22px bar and its hairline, as `panes.css` draws them; a lone pane has none. */
+export const PANE_BAR_PX = 22 + 1
+
+/**
+ * Pixels between a split pane's edge and its first cell, mirroring `panes.css` (borders, bar,
+ * padding). Stated because a pane not yet made has nothing on screen to measure.
+ */
+export const PANE_CHROME: Box = { width: 1 + 1 + 9 + 6, height: 1 + PANE_BAR_PX + 1 + 6 + 6 }
+
+/** xterm refuses to go below this, and so does the fit addon. */
+const MIN_CELLS = 2
+
 const EPSILON = 1e-6
 
 /** Each leaf's box when `root` fills `box`, in reading order; `gutter` comes off between siblings first. */
@@ -41,6 +53,33 @@ export function paneRects(root: PaneNode | null, box: Box, gutter = PANE_GUTTER_
   }
   if (root) walk(root, 0, 0, box.width, box.height)
   return rects
+}
+
+/** Cells that fit in a share of a box as the fit addon counts them: floor, never below two. */
+export function paneSizeFrom(
+  box: Box,
+  cell: Box,
+  share: Box = { width: 1, height: 1 }
+): { cols: number; rows: number } | undefined {
+  if (box.width <= 0 || box.height <= 0 || cell.width <= 0 || cell.height <= 0) return undefined
+  return {
+    cols: Math.max(MIN_CELLS, Math.floor((box.width * share.width) / cell.width)),
+    rows: Math.max(MIN_CELLS, Math.floor((box.height * share.height) / cell.height))
+  }
+}
+
+/** The cells pane `id` is drawn with when `root` fills `box`; undefined when it is not in the tree. */
+export function paneCellsIn(
+  root: PaneNode | null,
+  id: string,
+  box: Box,
+  cell: Box
+): { cols: number; rows: number } | undefined {
+  const rect = paneRects(root, box).find((each) => each.id === id)
+  if (!rect) return undefined
+  // A lone pane draws no bar: its tab names it.
+  const chrome = root?.kind === 'leaf' ? PANE_CHROME.height - PANE_BAR_PX : PANE_CHROME.height
+  return paneSizeFrom({ width: rect.width - PANE_CHROME.width, height: rect.height - chrome }, cell)
 }
 
 /** The least room `node` can be given along `direction` with every pane in it at least `min`. */

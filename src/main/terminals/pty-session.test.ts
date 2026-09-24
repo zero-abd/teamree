@@ -77,6 +77,22 @@ describePty('PtySession', () => {
     TEST_TIMEOUT_MS
   )
 
+  // A view reads the snapshot after subscribing; the mark is how it drops chunks the snapshot already holds.
+  it(
+    'marks each chunk with where the output stands after it, and says where it stands now',
+    async () => {
+      const session = start({ command: 'echo one; sleep 0.2; echo two' })
+      const events = collect(session)
+
+      await waitUntil(() => outputOf(events).includes('two'), 'both lines')
+      const chunks = events.filter((event): event is Extract<TerminalEvent, { type: 'data' }> => event.type === 'data')
+      let end = 0
+      expect(chunks.map((chunk) => chunk.end)).toEqual(chunks.map((chunk) => (end += chunk.data.length)))
+      expect(session.outputEnd).toBe(end)
+    },
+    TEST_TIMEOUT_MS
+  )
+
   it(
     'writes to the child and reads the response back out of scrollback',
     async () => {
@@ -98,6 +114,18 @@ describePty('PtySession', () => {
       const snapshot = session.snapshot()
       expect(snapshot.cols).toBe(120)
       expect(snapshot.rows).toBe(40)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'remembers the widest the pane has been, which its output was written for no wider than',
+    async () => {
+      const session = start({ command: 'cat', cols: 80, rows: 24 })
+      session.resize(134, 40)
+      session.resize(48, 40)
+
+      expect(session.widestCols).toBe(134)
     },
     TEST_TIMEOUT_MS
   )

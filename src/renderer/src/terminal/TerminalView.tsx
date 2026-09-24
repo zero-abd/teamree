@@ -1,6 +1,6 @@
-// One xterm instance, owned for exactly as long as the pane is mounted. React
-// remounts panes on split changes and StrictMode doubles effects, so `alive`
-// discards async results after teardown or a remount would attach two streams.
+// One xterm instance per pane, kept for as long as the pane is on screen. React
+// remounts panes on split changes and StrictMode doubles effects; the emulator
+// moves to the new mount rather than being rebuilt (`parkedEmulators`).
 
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
 import { FitAddon } from '@xterm/addon-fit'
@@ -94,127 +94,49 @@ export function TerminalView({
     const host = hostRef.current
     if (!host) return
 
-    let alive = true
-    const term = new XTerm({
-      allowProposedApi: true,
-      convertEol: false,
-      cursorInactiveStyle: 'none',
-      // From the refs: this effect is keyed on the terminal id alone, and a
-      // preference change must not rebuild the emulator.
-      fontSize: fontSizeRef.current,
-      lineHeight: TERMINAL_LINE_HEIGHT,
-      letterSpacing: 0,
-      ...emulatorOptions(optionsRef.current),
-      ...readTerminalColors(document.documentElement),
-      // OSC 8 hyperlinks (`gh`, `npm`) come from xterm's own provider. Without
-      // this xterm asks in a `confirm()` and calls `window.open()` with no URL,
-      // which the main process denies. See PANE_LINK_HANDLER.
-      linkHandler: PANE_LINK_HANDLER
-    })
-    termRef.current = term
-
-    const fit = new FitAddon()
-    term.loadAddon(fit)
-    fitRef.current = fit
-
-    // Bare URLs in the output are inert until this addon; it matches only
-    // `http:` and `https:`, the set the main process hands the OS.
-    term.loadAddon(paneLinkAddon())
-
-    // The limit is shared with the counter, so "1000+" means where the addon stopped looking.
-    decorationsRef.current = readSearchDecorations(document.documentElement)
-    const searchAddon = new SearchAddon({ highlightLimit: SEARCH_HIGHLIGHT_LIMIT })
-    term.loadAddon(searchAddon)
-    searchRef.current = searchAddon
-    searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
-      if (alive) dispatch({ type: 'results', resultIndex, resultCount })
-    })
-
-    term.open(host)
-    const unshow = showPane(terminalId, term)
-    copyOnSelect(term, () => optionsRef.current.copyOnSelect, copyText)
-
-    const gpu = paneWebgl(term)
-    const scrollbar = syncScrollbarPerFrame(term)
-    const output = frameWrites((data) => term.write(data))
-
-    // Said once: an exited pane does not un-exit, and a line per keystroke
-    // would bury the scrollback.
-    let saidExited = false
-
-    /**
-     * Bytes on their way to the pty. `byHand` travels with them because only
-     * this window can tell a device-query reply from typing. See `handsHere.ts`.
-     */
-    const send = (data: string, byHand = true): void => {
-      void runtimeClient.call('terminal.write', { terminalId, data, byHand }).catch((error: unknown) => {
-        const notice = refusedWriteNotice(error)
-        if (notice === null || saidExited || !alive) return
-        saidExited = true
-        output.flush()
-        term.write(notice)
-      })
+    const adopted = adoptEmulator(terminalId)
+    const emulator =
+      adopted ?? openEmulator(terminalId, host, modifierRef.current, fontSizeRef.current, optionsRef.current)
+    emulator.view = {
+      isAppChord: (event) => chordRef.current(event),
+      copyOnSelect: () => optionsRef.current.copyOnSelect,
+      onResults: (results) => dispatch({ type: 'results', ...results })
     }
+    const { term, fit, gpu } = emulator
+    // A pane that moved in the tree gets its emulator back, which reflows to the new width.
+    if (term.element && term.element.parentElement !== host) host.appendChild(term.element)
+    termRef.current = term
+    searchRef.current = emulator.search
+    fitRef.current = fit
+    decorationsRef.current = readSearchDecorations(document.documentElement)
 
-    const hands = handsHere(term.element)
-
-    term.attachCustomKeyEventHandler(
-      paneKeyHandler({
-        isAppChord: (event) => chordRef.current(event),
-        term,
-        modifier: modifierRef.current,
-        send,
-        // The clipboard read a paste chord waits on outlives the keypress, so
-        // the person behind it has to be vouched for rather than observed.
-        byHand: hands.mark
-      })
-    )
-
-    term.onData((data) => send(data, hands.acting()))
-    term.onResize(({ cols, rows }) => {
-      void runtimeClient
-        .call('terminal.resize', { terminalId, cols, rows })
-        // The pane header reports the size the runtime actually applied.
-        .then((record) => useWorkspaceStore.getState().recordTerminal(record))
-        .catch(() => {})
-    })
-
-    // Subscribe before reading the snapshot so no byte is lost in between;
-    // bytes arriving while it is in flight are replayed in order.
-    const pending: string[] = []
-    let replaying = true
-    let subscription: { close(): void } | null = null
-
-    const onEvent = (event: TerminalEvent): void => {
-      if (!alive) return
-      if (event.type === 'data') {
-        if (replaying) pending.push(event.data)
-        else output.push(event.data)
-      } else if (event.type === 'exit') {
-        output.flush()
-        term.write(`\r\n\u001b[38;5;244m[process exited with code ${event.exitCode}]\u001b[0m\r\n`)
+    let mounted = true
+    const hasBox = (): boolean => mounted && host.clientWidth > 0 && host.clientHeight > 0
+    const fitNow = (): void => {
+      try {
+        fit.fit()
+      } catch {
+        // A pane detached mid-frame has no dimensions to fit to.
       }
     }
 
-    void runtimeClient
-      .subscribeTerminal(terminalId, onEvent)
-      .then((handle) => {
-        if (!alive) {
-          handle.close()
-          return
-        }
-        subscription = handle
-        return runtimeClient.call('terminal.read', { terminalId })
-      })
-      .then((snapshot) => {
-        if (!alive || !snapshot) return
-        term.write(snapshot.data)
-        replaying = false
-        for (const chunk of pending.splice(0)) output.push(chunk)
-      })
-      .catch(() => {
-        replaying = false
-      })
+    /**
+     * Fits to the box, narrowing only once the pty has the new width: output already on its way
+     * was written for the old one, and zsh's line fill drawn narrower wraps into a `%` line.
+     */
+    const fitToBox = (): void => {
+      const next = fit.proposeDimensions()
+      if (next === undefined || !(next.cols < term.cols)) {
+        fitNow()
+        return
+      }
+      void runtimeClient
+        .call('terminal.resize', { terminalId, cols: next.cols, rows: next.rows })
+        .catch(() => {})
+        .finally(() => {
+          if (hasBox()) fitNow()
+        })
+    }
 
     // Fitting mid-layout-thrash is wasted work, so coalesce to one per frame.
     let frame = 0
@@ -222,13 +144,9 @@ export function TerminalView({
       if (frame) return
       frame = requestAnimationFrame(() => {
         frame = 0
-        if (!alive || host.clientWidth === 0 || host.clientHeight === 0) return
+        if (!hasBox()) return
         gpu.retry()
-        try {
-          fit.fit()
-        } catch {
-          // A pane detached mid-frame has no dimensions to fit to.
-        }
+        fitToBox()
       })
     }
 
@@ -238,7 +156,12 @@ export function TerminalView({
      * nothing, because xterm raises `onResize` only on a change.
      */
     const fitOnMount = (): void => {
-      if (!alive || host.clientWidth === 0 || host.clientHeight === 0) return
+      if (!hasBox()) return
+      // An emulator that moved holds output; a new one holds nothing yet and can take any width.
+      if (adopted) {
+        fitToBox()
+        return
+      }
       const before = `${term.cols}x${term.rows}`
       try {
         fit.fit()
@@ -261,20 +184,14 @@ export function TerminalView({
     document.addEventListener('visibilitychange', onVisible)
 
     return () => {
-      alive = false
+      mounted = false
       if (frame) cancelAnimationFrame(frame)
       observer.disconnect()
       document.removeEventListener('visibilitychange', onVisible)
-      subscription?.close()
-      hands.stop()
-      output.dispose()
-      scrollbar.dispose()
-      gpu.dispose()
-      unshow()
-      term.dispose()
       termRef.current = null
       searchRef.current = null
       fitRef.current = null
+      parkEmulator(terminalId, emulator)
     }
   }, [terminalId])
 
@@ -394,6 +311,225 @@ export function TerminalView({
       <div className="terminal-surface" ref={hostRef} onFocus={onFocus} onMouseDown={onFocus} />
     </div>
   )
+}
+
+/** What the mounted view lends its emulator; replaced on every mount, since a remount brings new refs. */
+type EmulatorView = {
+  isAppChord: (event: KeyboardEvent) => boolean
+  copyOnSelect: () => boolean
+  onResults: (results: { resultIndex: number; resultCount: number }) => void
+}
+
+/** One pane's emulator and its stream, which outlive a remount of the view that shows them. */
+type PaneEmulator = {
+  term: XTerm
+  fit: FitAddon
+  search: SearchAddon
+  gpu: { retry: () => void }
+  view: EmulatorView
+  dispose: () => void
+}
+
+/**
+ * Emulators whose view unmounted this turn. A pane that moved in the tree takes its own back:
+ * replayed into a new one at the new width, zsh's line fill from the old width wraps into a `%`.
+ */
+const parkedEmulators = new Map<string, { emulator: PaneEmulator; timer: ReturnType<typeof setTimeout> }>()
+
+function parkEmulator(terminalId: string, emulator: PaneEmulator): void {
+  const earlier = parkedEmulators.get(terminalId)
+  if (earlier) {
+    clearTimeout(earlier.timer)
+    earlier.emulator.dispose()
+  }
+  // React runs the new mount in the same flush as this cleanup, so a turn is long enough.
+  const timer = setTimeout(() => {
+    parkedEmulators.delete(terminalId)
+    emulator.dispose()
+  }, 0)
+  parkedEmulators.set(terminalId, { emulator, timer })
+}
+
+function adoptEmulator(terminalId: string): PaneEmulator | undefined {
+  const parked = parkedEmulators.get(terminalId)
+  if (!parked) return undefined
+  parkedEmulators.delete(terminalId)
+  clearTimeout(parked.timer)
+  return parked.emulator
+}
+
+/** Builds a pane's emulator in `host` and attaches it to the pane's stream. */
+function openEmulator(
+  terminalId: string,
+  host: HTMLElement,
+  modifier: PlatformModifier,
+  fontSize: number,
+  options: TerminalOptions
+): PaneEmulator {
+  let alive = true
+  const term = new XTerm({
+    allowProposedApi: true,
+    convertEol: false,
+    cursorInactiveStyle: 'none',
+    fontSize,
+    lineHeight: TERMINAL_LINE_HEIGHT,
+    letterSpacing: 0,
+    ...emulatorOptions(options),
+    ...readTerminalColors(document.documentElement),
+    // OSC 8 hyperlinks (`gh`, `npm`) come from xterm's own provider. Without
+    // this xterm asks in a `confirm()` and calls `window.open()` with no URL,
+    // which the main process denies. See PANE_LINK_HANDLER.
+    linkHandler: PANE_LINK_HANDLER
+  })
+
+  const fit = new FitAddon()
+  term.loadAddon(fit)
+
+  // Bare URLs in the output are inert until this addon; it matches only
+  // `http:` and `https:`, the set the main process hands the OS.
+  term.loadAddon(paneLinkAddon())
+
+  // The limit is shared with the counter, so "1000+" means where the addon stopped looking.
+  const search = new SearchAddon({ highlightLimit: SEARCH_HIGHLIGHT_LIMIT })
+  term.loadAddon(search)
+
+  term.open(host)
+  const unshow = showPane(terminalId, term)
+  const gpu = paneWebgl(term)
+  const scrollbar = syncScrollbarPerFrame(term)
+  const output = frameWrites((data) => term.write(data))
+
+  const emulator: PaneEmulator = {
+    term,
+    fit,
+    search,
+    gpu,
+    view: { isAppChord: () => false, copyOnSelect: () => false, onResults: () => {} },
+    dispose: () => {
+      alive = false
+      subscription?.close()
+      hands.stop()
+      output.dispose()
+      scrollbar.dispose()
+      gpu.dispose()
+      unshow()
+      term.dispose()
+    }
+  }
+  search.onDidChangeResults((results) => {
+    if (alive) emulator.view.onResults(results)
+  })
+  copyOnSelect(term, () => emulator.view.copyOnSelect(), copyText)
+
+  // Said once: an exited pane does not un-exit, and a line per keystroke
+  // would bury the scrollback.
+  let saidExited = false
+
+  /**
+   * Bytes on their way to the pty. `byHand` travels with them because only
+   * this window can tell a device-query reply from typing. See `handsHere.ts`.
+   */
+  const send = (data: string, byHand = true): void => {
+    void runtimeClient.call('terminal.write', { terminalId, data, byHand }).catch((error: unknown) => {
+      const notice = refusedWriteNotice(error)
+      if (notice === null || saidExited || !alive) return
+      saidExited = true
+      output.flush()
+      term.write(notice)
+    })
+  }
+
+  const hands = handsHere(term.element)
+
+  term.attachCustomKeyEventHandler(
+    paneKeyHandler({
+      isAppChord: (event) => emulator.view.isAppChord(event),
+      term,
+      modifier,
+      send,
+      // The clipboard read a paste chord waits on outlives the keypress, so
+      // the person behind it has to be vouched for rather than observed.
+      byHand: hands.mark
+    })
+  )
+
+  term.onData((data) => send(data, hands.acting()))
+  // A resize for the replay alone; the pty keeps the size it has.
+  let quiet = false
+  const resizeQuietly = (cols: number, rows: number): void => {
+    quiet = true
+    try {
+      term.resize(cols, rows)
+    } finally {
+      quiet = false
+    }
+  }
+  term.onResize(({ cols, rows }) => {
+    if (quiet) return
+    void runtimeClient
+      .call('terminal.resize', { terminalId, cols, rows })
+      // The pane header reports the size the runtime actually applied.
+      .then((record) => useWorkspaceStore.getState().recordTerminal(record))
+      .catch(() => {})
+  })
+
+  // Subscribe before reading the snapshot so no byte is lost in between; bytes
+  // arriving while it is in flight go after it, less what it already held.
+  const pending: Extract<TerminalEvent, { type: 'data' }>[] = []
+  let replaying = true
+  let subscription: { close(): void } | null = null
+
+  const onEvent = (event: TerminalEvent): void => {
+    if (!alive) return
+    if (event.type === 'data') {
+      if (replaying) pending.push(event)
+      else output.push(event.data)
+    } else if (event.type === 'exit') {
+      output.flush()
+      term.write(`\r\n\u001b[38;5;244m[process exited with code ${event.exitCode}]\u001b[0m\r\n`)
+    }
+  }
+
+  void runtimeClient
+    .subscribeTerminal(terminalId, onEvent)
+    .then((handle) => {
+      if (!alive) {
+        handle.close()
+        return
+      }
+      subscription = handle
+      return runtimeClient.call('terminal.read', { terminalId })
+    })
+    .then((snapshot) => {
+      if (!alive || !snapshot) return
+      // Replayed at the widest the pane has been, then narrowed: drawn narrower than it was
+      // written, zsh's line fill wraps into a `%` line, where a reflow leaves it whole.
+      const drawn = { cols: term.cols, rows: term.rows }
+      const widen = snapshot.widest !== undefined && snapshot.widest > drawn.cols
+      if (widen) resizeQuietly(snapshot.widest!, drawn.rows)
+      term.write(snapshot.data)
+      replaying = false
+      for (const chunk of pending.splice(0)) {
+        const unseen = afterSnapshot(chunk, snapshot.end)
+        if (unseen !== '') output.push(unseen)
+      }
+      if (!widen) return
+      output.flush()
+      term.write('', () => {
+        if (alive) resizeQuietly(drawn.cols, drawn.rows)
+      })
+    })
+    .catch(() => {
+      replaying = false
+    })
+
+  return emulator
+}
+
+/** The part of a chunk a snapshot read at `snapshotEnd` does not hold; all of it when either is unplaced. */
+function afterSnapshot(chunk: { data: string; end?: number }, snapshotEnd: number | undefined): string {
+  if (chunk.end === undefined || snapshotEnd === undefined) return chunk.data
+  return chunk.data.slice(Math.max(0, chunk.data.length - (chunk.end - snapshotEnd)))
 }
 
 /** While somebody is typing the clock has to keep up with them. */
