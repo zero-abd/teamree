@@ -80,7 +80,7 @@ import {
 } from '../teamwork/startTeamwork'
 import type { ConnectionState } from '../runtimeClient/RuntimeClientContract'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
-import { newPaneRoom, paneGrid, type Box, type NewPane } from '../terminal/paneMetrics'
+import { newPaneRoom, paneGrid, roomForNewPane, type Box, type NewPane } from '../terminal/paneMetrics'
 import { leavesRoom, placePaneWithin } from '@shared/paneRoom'
 import { shownText } from '../terminal/shownPanes'
 import { replayLines } from '@shared/outputEvidence'
@@ -135,6 +135,7 @@ import {
   writeStoredRightPanelWidth,
   type RightPanelTab
 } from '../workspace/rightPanel/rightPanelState'
+import { panelCost, sidebarCost, type Sides } from '../workspace/roomForPanes'
 
 export type DialogState =
   /** `folder` and `refusal`: a folder dropped on the window that could not be added as it was. */
@@ -177,8 +178,8 @@ export type Notice = {
   id: number
   text: string
   tone: 'error' | 'info'
-  /** One thing to do about the notice, e.g. a review page a push made. A URL, not a callback: see `shell/openInBrowser.ts`. */
-  action?: { label: string; url: string }
+  /** One thing to do about the notice: a page to open (`shell/openInBrowser.ts`), or a side to hide for room. */
+  action?: { label: string; url: string } | { label: string; hide: keyof Sides }
 }
 
 /** The last push of one worktree, as the Changes tab shows it. A failure is one clause, and git's words. */
@@ -384,6 +385,8 @@ type WorkspaceState = {
 
   sidebarWidth: number
   sidebarVisible: boolean
+  /** Sides hidden for the panes' room, not by hand: the habit on disk still shows them. */
+  roomHid: Sides
   paneSearch: PaneSearch | null
   dialog: DialogState
   notices: Notice[]
@@ -503,6 +506,10 @@ type WorkspaceState = {
   toggleRightPanel: () => void
   /** Opens the right panel on one tab. */
   showRightPanelTab: (tab: RightPanelTab) => void
+  /** Hides the panel or the sidebar if it is showing, and keeps hidden what `makeRoom` hid. */
+  hideRegion: (region: keyof Sides) => void
+  /** Hides the sides `hide` names for the panes' room and shows again those it hid; a hand toggle takes a side back. */
+  makeRoom: (hide: Sides) => void
   setRightPanelWidth: (width: number) => void
   /** Selects one changed path and opens its diff in the centre, or clears the selection when given null. */
   selectChange: (path: string | null) => void
@@ -801,8 +808,28 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   const roomOrRefuse = (worktreeId: string): Partial<NewPane> | null => {
     const room = paneRoomFor(worktreeId)
     if (room !== 'full') return room ?? {}
-    notify(NO_ROOM, 'info')
+    const root = get().layouts[worktreeId]?.root ?? null
+    refuseForRoom((grid, area) => roomForNewPane(root, grid.cell, area) !== 'full')
     return null
+  }
+  /** Says `NO_ROOM`, replacing the last one, with the side to hide when hiding it `fits` the pane. */
+  const refuseForRoom = (fits: (grid: { minPane: Box; cell: Box }, area: Box) => boolean): void => {
+    set((state) => ({ notices: state.notices.filter((notice) => notice.text !== NO_ROOM) }))
+    const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+    const { rightPanelOpen, rightPanelWidth, sidebarVisible, sidebarWidth } = get()
+    const widened = (by: number): boolean =>
+      grid !== undefined && fits(grid, { width: grid.area.width + by, height: grid.area.height })
+    if (rightPanelOpen && widened(panelCost(rightPanelWidth))) {
+      notify(NO_ROOM, 'info', { label: 'Hide panel', hide: 'panel' })
+    } else if (
+      !rightPanelOpen &&
+      sidebarVisible &&
+      widened(sidebarCost(sidebarWidth, globalThis.window?.innerWidth ?? 0))
+    ) {
+      notify(NO_ROOM, 'info', { label: 'Hide sidebar', hide: 'sidebar' })
+    } else {
+      notify(NO_ROOM, 'info')
+    }
   }
   /** `after` if it leaves every pane its floor, else `fallback`'s answer; null, said, when neither does. */
   const withRoom = (
@@ -813,7 +840,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
     if (!grid || leavesRoom(before, after, grid.area, grid.minPane)) return after
     const placed = fallback(grid)
-    if (placed === null) notify(NO_ROOM, 'info')
+    if (placed === null) {
+      refuseForRoom(
+        ({ minPane }, area) => leavesRoom(before, after, area, minPane) || fallback({ area, minPane }) !== null
+      )
+    }
     return placed
   }
 
@@ -1207,6 +1238,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     sidebarWidth: readStoredSidebarWidth(storage) || SIDEBAR_DEFAULT_PX,
     sidebarVisible: lastSession.sidebarVisible,
+    roomHid: { panel: false, sidebar: false },
     paneSearch: null,
     dialog: null,
     notices: [],
@@ -1966,7 +1998,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     toggleRightPanel() {
       const opening = !get().rightPanelOpen
-      set({ rightPanelOpen: opening })
+      set((state) => ({ rightPanelOpen: opening, roomHid: { ...state.roomHid, panel: false } }))
       writeStoredRightPanel(storage, { open: opening, tab: get().rightPanelTab })
       if (!opening) return
       // Read on the way open: until the panel is shown, nothing depends on it.
@@ -1976,11 +2008,34 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     showRightPanelTab(tab) {
       const wasShowing = changesOnScreen(get())
-      set({ rightPanelOpen: true, rightPanelTab: tab })
+      set((state) => ({ rightPanelOpen: true, rightPanelTab: tab, roomHid: { ...state.roomHid, panel: false } }))
       writeStoredRightPanel(storage, { open: true, tab })
       const worktreeId = get().activeWorktreeId
       // A tab that draws changes reads them on arrival, unless the replaced tab was already drawing them.
       if (worktreeId && changesOnScreen(get()) && !wasShowing) readChangesNow(worktreeId)
+    },
+
+    hideRegion(region) {
+      if (region === 'panel' && get().rightPanelOpen) get().toggleRightPanel()
+      if (region === 'sidebar' && get().sidebarVisible) get().toggleSidebar()
+      // Room asked for by hand is kept: a side folded for room stays folded when this frees some.
+      set({ roomHid: { panel: false, sidebar: false } })
+    },
+
+    makeRoom(hide) {
+      const before = get()
+      const wantsPanel = before.rightPanelOpen || before.roomHid.panel
+      const wantsSidebar = before.sidebarVisible || before.roomHid.sidebar
+      set({
+        rightPanelOpen: wantsPanel && !hide.panel,
+        sidebarVisible: wantsSidebar && !hide.sidebar,
+        roomHid: { panel: wantsPanel && hide.panel, sidebar: wantsSidebar && hide.sidebar }
+      })
+      const worktreeId = get().activeWorktreeId
+      if (!before.rightPanelOpen && get().rightPanelOpen && worktreeId && changesOnScreen(get())) {
+        readChangesNow(worktreeId)
+      }
+      if (!before.sidebarVisible && get().sidebarVisible) readOnScreen()
     },
 
     setRightPanelWidth(width) {
@@ -2744,7 +2799,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     toggleSidebar() {
-      set((state) => ({ sidebarVisible: !state.sidebarVisible }))
+      set((state) => ({ sidebarVisible: !state.sidebarVisible, roomHid: { ...state.roomHid, sidebar: false } }))
       // Bringing the sidebar back brings every expanded row with it.
       if (get().sidebarVisible) readOnScreen()
     },
@@ -2799,7 +2854,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
  */
 useWorkspaceStore.subscribe((state, previous) => {
   if (!sessionChanged(state, previous)) return
-  writeStoredSession(storage, state)
+  writeStoredSession(storage, { ...state, sidebarVisible: state.sidebarVisible || state.roomHid.sidebar })
 })
 
 /** And one writer for what has been read, on the same terms. */
