@@ -138,6 +138,20 @@ describe('a pane of theirs', () => {
     expect(screen.getByText('running tests')).toBeTruthy()
   })
 
+  it('leaves the one dot to the worktree row', () => {
+    mount()
+    expect(document.querySelectorAll('.activity')).toHaveLength(1)
+    expect(watchButton().querySelector('.activity')).toBeNull()
+    expect(watchButton().querySelector('.pane-row__head')?.children[0]?.getAttribute('class')).toContain('agent-glyph')
+  })
+
+  it('reads failed in the time slot instead of the age', () => {
+    mount(theirs({ panes: [pane({ running: false, busy: false, exitCode: 1 })] }))
+    const since = watchButton().querySelector('.pane-row__since')
+    expect(since?.textContent).toBe('failed')
+    expect(since?.className).toBe('pane-row__since pane-row__since--failed')
+  })
+
   it('shows no pane list at all for a worktree with no panes open', () => {
     mount(theirs({ panes: [] }))
     expect(document.querySelector('button')).toBeNull()

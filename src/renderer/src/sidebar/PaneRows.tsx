@@ -6,14 +6,14 @@ import { PaneGlyph } from '../agents/glyphs'
 import { NO_ATTENTION, typingNow, type PaneAttention } from '../state/paneAttention'
 import {
   agoLabel,
-  dotClass,
   dotTone,
   sinceLabel,
   TONE_LABEL,
   truncateName,
   typedBy,
   watchedBy,
-  type AgentRow
+  type AgentRow,
+  type DotTone
 } from './agentRows'
 
 type PaneRowsProps = {
@@ -62,7 +62,6 @@ export function PaneRows({
               onClick={() => onFocusTerminal(row.terminalId)}
             >
               <span className="pane-row__head">
-                <span className={dotClass(dotTone(row.activity, row.agent), isUnread)} aria-hidden="true" />
                 {/* Shortened for the row only: the hover text carries the whole of it. */}
                 <PaneGlyph agent={row.agent} />
                 {named ? <span className="pane-row__label">{truncateName(row.text)}</span> : null}
@@ -82,7 +81,7 @@ export function PaneRows({
                     muted
                   </span>
                 ) : null}
-                <span className="pane-row__since">{sinceLabel(row.quietFor)}</span>
+                <PaneSince tone={dotTone(row.activity, row.agent)} quietFor={row.quietFor} />
               </span>
               {/* Nothing when there is nothing worth quoting: an empty line would read as an answer. */}
               {named && row.evidence ? <span className="pane-row__evidence">{row.evidence}</span> : null}
@@ -91,6 +90,16 @@ export function PaneRows({
         )
       })}
     </ul>
+  )
+}
+
+/** The row's time slot, which stands in for a dot: the state word in its tone when the pane needs you, else the age. */
+export function PaneSince({ tone, quietFor }: { tone: DotTone; quietFor: number }): React.JSX.Element {
+  const needsYou = tone === 'waiting' || tone === 'failed'
+  return (
+    <span className={needsYou ? `pane-row__since pane-row__since--${tone}` : 'pane-row__since'}>
+      {needsYou ? TONE_LABEL[tone] : sinceLabel(quietFor)}
+    </span>
   )
 }
 

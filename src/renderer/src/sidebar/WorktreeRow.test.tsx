@@ -754,11 +754,12 @@ describe('panes that have printed since they were read', () => {
     expect(pane.className).toContain('pane-row--unread')
     expect(pane.title).toContain('unread')
     expect(screen.getByText('Rewrite the pager').className).toContain('worktree__name--unread')
-    // One dot on each row, ringed, and no second mark beside it.
+    // One dot, the worktree's, ringed; the pane row says it by weight.
     expect(document.querySelectorAll('.pip')).toHaveLength(0)
     const dots = document.querySelectorAll('.activity')
-    expect(dots).toHaveLength(2)
-    for (const dot of dots) expect(dot.classList.contains('activity--unread')).toBe(true)
+    expect(dots).toHaveLength(1)
+    expect(dots[0]?.classList.contains('activity--unread')).toBe(true)
+    expect(pane.querySelector('.activity')).toBeNull()
   })
 
   it('says nothing about a pane nothing has arrived in since', () => {
