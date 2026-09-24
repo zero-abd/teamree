@@ -9,6 +9,7 @@ import '@xterm/xterm/css/xterm.css'
 import { teammatesHeard, type TeammatePresence } from '@shared/entities'
 import type { WatchedPaneEvent } from '@shared/methods'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
+import { paneNames } from '../sidebar/agentRows'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere, type HandsHere } from './handsHere'
 import { readTerminalColors } from './terminalTheme'
@@ -32,7 +33,7 @@ type WatchedPaneViewProps = {
   projectId: string
   /** The namespaced id `teamwork.presence` hands out, not the owner's own. */
   paneId: string
-  /** What to call the pane in the header, as the sidebar already names it. */
+  /** What to call the pane until their presence names it. */
   label: string
   handle: string
   /** Whether this is the pane the next keystroke goes to, as any pane is. */
@@ -84,6 +85,8 @@ export function WatchedPaneView({
   const appearance = useWorkspaceStore((store) => store.appearance)
   const systemTone = useWorkspaceStore((store) => store.systemTone)
   const size = useMemo(() => watchedPaneSize(presence, paneId), [presence, paneId])
+  // Live, so a rename on their machine reaches a pane already open here.
+  const name = useMemo(() => watchedPaneName(presence, paneId) ?? label, [presence, paneId, label])
   const sizeRef = useRef(size)
   sizeRef.current = size
   // The reader's own setting: cell size on *this* screen, not the owner's columns and rows.
@@ -379,13 +382,13 @@ export function WatchedPaneView({
     <section
       className={`pane pane--watched${focused ? ' pane--focused' : ''}`}
       data-region="panes"
-      aria-label={`${handle}’s pane ${label}, which you can type into`}
+      aria-label={`${handle}’s pane ${name}, which you can type into`}
       onFocus={onFocus}
       onMouseDown={onFocus}
     >
       <header className="pane__bar pane__bar--watched" title={promise}>
         <span className="watch__owner">{handle}</span>
-        <span className="pane__title">{label}</span>
+        <span className="pane__title">{name}</span>
         {/* Said in words, at all times: nothing here may be ambiguous to the typist. */}
         <span
           className={`watch__typing${refused ? ' watch__typing--refused' : ''}${holding ? ' watch__typing--held' : ''}`}
@@ -404,8 +407,8 @@ export function WatchedPaneView({
         <button
           type="button"
           className="pane__close"
-          title={`Stop watching ${handle}’s ${label}`}
-          aria-label={`Stop watching ${handle}’s pane ${label}`}
+          title={`Stop watching ${handle}’s ${name}`}
+          aria-label={`Stop watching ${handle}’s pane ${name}`}
           onClick={onClose}
         >
           <svg viewBox="0 0 12 12" aria-hidden="true">
@@ -437,6 +440,15 @@ export function watchedPaneSize(presence: TeammatePresence | undefined, paneId: 
       if (pane.cols === undefined || pane.rows === undefined) return null
       return { cols: pane.cols, rows: pane.rows, heardAt: worktree.heardAt }
     }
+  }
+  return null
+}
+
+/** What the sidebar calls one of a teammate's panes, by their last presence; null when it is not in it. */
+export function watchedPaneName(presence: TeammatePresence | undefined, paneId: string): string | null {
+  for (const worktree of teammatesHeard(presence)?.worktrees ?? []) {
+    const index = worktree.panes.findIndex((pane) => pane.id === paneId)
+    if (index !== -1) return paneNames(worktree.panes, worktree)[index] ?? null
   }
   return null
 }

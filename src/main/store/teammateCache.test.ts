@@ -157,6 +157,25 @@ describe('a file written by another build', () => {
     ])
   })
 
+  it('keeps the name a teammate gave a pane, and reads a file from before names crossed', () => {
+    const pane = { title: 'zsh', shell: '/bin/zsh', running: true, busy: false, quietForMs: 0 }
+    const panes = [
+      { ...pane, id: 't_named', label: 'api server' },
+      { ...pane, id: 't_older' },
+      { ...pane, id: 't_long', label: 'l'.repeat(1_000) }
+    ]
+    const read = parseTeammateCache({
+      version: 1,
+      teammates: [{ ...entry(), worktrees: [{ ...theirWorktree(), panes }] }]
+    })
+    expect(read.teammates[0]?.worktrees[0]?.panes.map((one) => one.label?.slice(0, 10) ?? null)).toEqual([
+      'api server',
+      null,
+      'llllllllll'
+    ])
+    expect(read.teammates[0]?.worktrees[0]?.panes[2]?.label?.length).toBe(MAX_CACHED_TEXT)
+  })
+
   it('reads a document that is not one as an empty cache rather than as a failure', () => {
     expect(parseTeammateCache('nonsense').teammates).toEqual([])
     expect(parseTeammateCache(null).teammates).toEqual([])

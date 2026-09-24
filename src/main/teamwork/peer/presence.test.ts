@@ -57,4 +57,22 @@ describe('presenceFor', () => {
     const panes = presence.projects[0]?.worktrees[0]?.panes ?? []
     expect(panes.map((pane) => pane.id)).toEqual(['t1'])
   })
+
+  it('sends the name a pane was given, and nothing for one never named', () => {
+    const presence = presenceFor(
+      {
+        source: {
+          projects: () => [{ projectId: 'p1', projectKey: 'key', rosterKeys: ['peer'] }],
+          worktrees: () => [worktree],
+          terminals: () => [{ ...terminal('t1'), label: 'api server' }, terminal('t2')]
+        }
+      },
+      'peer',
+      'me',
+      1
+    )
+    const panes = presence.projects[0]?.worktrees[0]?.panes ?? []
+    expect(panes.map((pane) => pane.label)).toEqual(['api server', undefined])
+    expect('label' in (panes[1] ?? {})).toBe(false)
+  })
 })

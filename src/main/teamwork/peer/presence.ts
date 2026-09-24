@@ -77,6 +77,7 @@ function describePane(terminal: Terminal, at: number): PeerPane {
     // A duration rather than an instant: the receiver's clock is the only one it can trust.
     quietForMs: Math.max(0, at - terminal.lastOutputAt)
   }
+  if (terminal.label !== undefined) pane.label = terminal.label
   if (terminal.agent !== undefined) pane.agent = terminal.agent
   if (terminal.exitCode !== undefined) pane.exitCode = terminal.exitCode
   return pane

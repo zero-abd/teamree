@@ -6,6 +6,7 @@
 
 import { act, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { PeerPane, TeammatePresence } from '@shared/entities'
 import type { WatchedPaneEvent } from '@shared/methods'
 import { DEFAULT_APPEARANCE, resolvePalette } from '@shared/theme'
 
@@ -248,6 +249,62 @@ describe('whose pane this is', () => {
     expect(screen.getByText(promise)).toBeTruthy()
     await watch.resolve()
     expect(screen.getByText(promise)).toBeTruthy()
+  })
+})
+
+describe('the name is the owner’s', () => {
+  const named = (label?: string): TeammatePresence => {
+    const pane: PeerPane = {
+      id: 'priya:t7',
+      title: 'zsh',
+      shell: '/bin/zsh',
+      running: true,
+      busy: false,
+      quietForMs: 0
+    }
+    if (label !== undefined) pane.label = label
+    return {
+      state: 'read',
+      projectId: 'p1',
+      worktrees: [
+        {
+          id: 'priya:wt1',
+          name: 'the work',
+          branch: 'feature',
+          state: 'ready',
+          panes: [pane],
+          handle: 'priya',
+          publicKey: 'k',
+          heardAt: 1,
+          live: true
+        }
+      ],
+      teammates: [],
+      readAt: 1
+    }
+  }
+
+  afterEach(() => {
+    act(() => useWorkspaceStore.setState({ teammates: {} }))
+  })
+
+  it('follows a rename on their machine while the pane is open', () => {
+    armWatch()
+    act(() => useWorkspaceStore.setState({ teammates: { p1: named('api server') } }))
+    mount()
+    expect(screen.getByRole('region', { name: 'priya’s pane api server, which you can type into' })).toBeTruthy()
+
+    act(() => useWorkspaceStore.setState({ teammates: { p1: named('migrations') } }))
+    expect(screen.getByRole('region', { name: 'priya’s pane migrations, which you can type into' })).toBeTruthy()
+
+    act(() => useWorkspaceStore.setState({ teammates: { p1: named() } }))
+    expect(screen.getByRole('region', { name: 'priya’s pane zsh, which you can type into' })).toBeTruthy()
+  })
+
+  it('keeps the name it opened with while their presence has no word of the pane', () => {
+    armWatch()
+    mount()
+    expect(screen.getByRole('region', { name: 'priya’s pane agent, which you can type into' })).toBeTruthy()
   })
 })
 

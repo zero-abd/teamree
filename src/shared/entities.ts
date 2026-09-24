@@ -775,6 +775,8 @@ export type PeerPane = {
    */
   title: string
   shell: string
+  /** What the owner called it, when somebody did. Absent from a peer built before names crossed. */
+  label?: string
   agent?: AgentKind
   running: boolean
   exitCode?: number

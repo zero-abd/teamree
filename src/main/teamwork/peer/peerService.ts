@@ -52,6 +52,7 @@ import {
   MAX_CACHED_PANES,
   MAX_CACHED_TEXT,
   MAX_CACHED_WORKTREES,
+  PaneLabelOnRead,
   TeammateCacheStore,
   TEAMMATE_CACHE_FILE,
   type TeammateCache
@@ -1900,6 +1901,7 @@ const PanePayload = z.object({
   id: z.string().min(1),
   title: z.string(),
   shell: z.string(),
+  label: PaneLabelOnRead,
   agent: AgentKindOnRead,
   running: z.boolean(),
   exitCode: z.number().optional(),
@@ -1966,7 +1968,9 @@ function boundWorktree(worktree: PeerWorktree): PeerWorktree {
 }
 
 function boundPane(pane: PeerPane): PeerPane {
-  return { ...pane, id: clip(pane.id), title: clip(pane.title), shell: clip(pane.shell) }
+  const bounded = { ...pane, id: clip(pane.id), title: clip(pane.title), shell: clip(pane.shell) }
+  if (pane.label !== undefined) bounded.label = clip(pane.label)
+  return bounded
 }
 
 function clip(text: string): string {

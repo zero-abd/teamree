@@ -271,6 +271,18 @@ describe.skipIf(!RELAY_BUILT)('act II — across the relay', () => {
     expect((await anasBooks()).panes).toEqual([])
   })
 
+  it('2d. a name ana gives her pane is the name bo sees', async () => {
+    const bosPane = async (): Promise<{ label?: string } | undefined> =>
+      (await anasRow())?.panes.find((pane) => pane.id === bosPaneId)
+    expect((await bosPane())?.label).toBeUndefined()
+
+    await peers.leader.call('terminal.rename', { terminalId: anasPane.id, label: 'task picker' })
+    await until(async () => (await bosPane())?.label === 'task picker', 'the name to reach bo', 10_000)
+
+    await peers.leader.call('terminal.rename', { terminalId: anasPane.id, label: null })
+    await until(async () => (await bosPane())?.label === undefined, 'the cleared name to reach bo', 10_000)
+  }, 30_000)
+
   it('3. the joiner opens the pane and sees the agent’s question', async () => {
     const before = await peers.leader.call('terminal.list', { worktreeId: worktree.id })
     const size = before.find((pane: Terminal) => pane.id === anasPane.id)

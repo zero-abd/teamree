@@ -3,7 +3,7 @@
 // owner's duration and the receiver adds what has elapsed since, trusting nobody's clock.
 
 import { teammatesHeard, type PeerPane, type TeammatePresence, type TeammateWorktree } from '@shared/entities'
-import { activityOf, paneName, paneText, worktreeTone, type AgentRow, type DotTone } from './agentRows'
+import { activityOf, paneNames, paneText, worktreeTone, type AgentRow, type DotTone } from './agentRows'
 import { teammateStaleness, type TeammateStaleness } from './teammateStaleness'
 import { worktreeDisplay } from './worktreeDisplay'
 
@@ -47,7 +47,11 @@ export function teammateRows(
   return worktrees.map((worktree) => {
     const display = worktreeDisplay(worktree)
     const heardAgoMs = Math.max(0, now - worktree.heardAt)
-    const panes = worktree.panes.map((pane) => paneRow(pane, worktree.handle, heardAgoMs, evidence[pane.id] ?? null))
+    // Named together, as the owner's own sidebar names them: twins are told apart by each other.
+    const names = paneNames(worktree.panes, worktree)
+    const panes = worktree.panes.map((pane, index) =>
+      paneRow(pane, names[index] ?? pane.title, worktree.handle, heardAgoMs, evidence[pane.id] ?? null)
+    )
     return {
       id: worktree.id,
       handle: worktree.handle,
@@ -63,8 +67,13 @@ export function teammateRows(
   })
 }
 
-function paneRow(pane: PeerPane, handle: string, heardAgoMs: number, evidence: string | null): TeammatePaneRow {
-  const label = paneName(pane)
+function paneRow(
+  pane: PeerPane,
+  label: string,
+  handle: string,
+  heardAgoMs: number,
+  evidence: string | null
+): TeammatePaneRow {
   return {
     terminalId: pane.id,
     agent: pane.agent,
