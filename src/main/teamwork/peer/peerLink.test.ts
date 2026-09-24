@@ -1021,6 +1021,40 @@ describe('a snapshot from a teammate is somebody else’s bytes', () => {
     ])
   })
 
+  it('carries the name a teammate gave a pane, and reads a peer that sends none', () => {
+    const projectKey = 'k'.repeat(64)
+    const pane = { title: 'zsh', shell: '/bin/zsh', running: true, busy: false, quietForMs: 0 }
+    const worktrees = [
+      {
+        id: 'wt_1',
+        name: 'one',
+        branch: 'main',
+        state: 'ready',
+        panes: [
+          { ...pane, id: 't_named', label: 'l'.repeat(1_000) },
+          { ...pane, id: 't_older' },
+          { ...pane, id: 't_odd', label: 42 }
+        ]
+      }
+    ]
+    const panes = parsePeerPresence({ revision: 1, handle: 'bob', projects: [{ projectKey, worktrees }] }, projectKey)
+      ?.projects[0]?.worktrees[0]?.panes
+    expect(panes?.map((one) => [one.id, one.label?.length])).toEqual([
+      ['t_named', MAX_CACHED_TEXT],
+      ['t_older', undefined],
+      ['t_odd', undefined]
+    ])
+  })
+
+  it('reads a snapshot carrying fields this build has never heard of', () => {
+    // What an older build does with the pane's name: drops it and keeps the pane.
+    const projectKey = 'k'.repeat(64)
+    const pane = { id: 't_1', title: 'zsh', shell: '/bin/zsh', running: true, busy: false, quietForMs: 0 }
+    const worktrees = [{ id: 'wt_1', name: 'one', branch: 'main', state: 'ready', panes: [{ ...pane, later: 'x' }] }]
+    const read = parsePeerPresence({ revision: 1, handle: 'bob', projects: [{ projectKey, worktrees }] }, projectKey)
+    expect(read?.projects[0]?.worktrees[0]?.panes.map((one) => one.id)).toEqual(['t_1'])
+  })
+
   it('keeps only the repository the session is for, however many a snapshot names', () => {
     const ours = 'a'.repeat(64)
     const theirs = 'b'.repeat(64)

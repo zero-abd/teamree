@@ -51,7 +51,7 @@ describe('a teammate’s rows', () => {
     expect(TONE_LABEL[row!.tone!]).toBe('failed')
   })
 
-  it('names a pane from its title and shell, not from a label the owner chose', () => {
+  it('names an unnamed pane from its title and shell', () => {
     const [row] = teammateRows(
       [
         theirWorktree({
@@ -67,6 +67,38 @@ describe('a teammate’s rows', () => {
       NOW
     )
     expect(row?.panes.map((entry) => entry.label)).toEqual(['Claude Code', 'zsh', 'pytest'])
+  })
+
+  it('names a pane what its owner called it, as their own sidebar does', () => {
+    const [row] = teammateRows(
+      [
+        theirWorktree({
+          panes: [
+            pane({ id: 'p1', label: 'api server' }),
+            pane({ id: 'p2', agent: 'claude', label: 'review' }),
+            pane({ id: 'p3', title: 'zsh' }),
+            pane({ id: 'p4', title: 'zsh' }),
+            // A task's agent is labelled with its worktree's name.
+            pane({ id: 'p5', agent: 'codex', label: 'index compaction' })
+          ]
+        })
+      ],
+      NOW
+    )
+    expect(row?.panes.map((entry) => entry.label)).toEqual([
+      'api server',
+      'review',
+      'zsh 1',
+      'zsh 2',
+      'index compaction'
+    ])
+    expect(row?.panes.map((entry) => entry.text)).toEqual([
+      'api server',
+      'review',
+      'zsh 1',
+      'zsh 2',
+      'index compaction'
+    ])
   })
 
   it('adds the time since the snapshot arrived to the silence its owner measured', () => {
