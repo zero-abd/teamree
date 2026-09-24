@@ -221,7 +221,7 @@
 
 .cm-commentGutter .cm-gutterElement {
   padding: 0 2px;
-  color: var(--accent);
+  color: var(--accent-bright);
   cursor: pointer;
   opacity: 0;
 }
