@@ -454,3 +454,29 @@ describe('the first screen', () => {
     expect(screen.queryByRole('button', { name: 'Star on GitHub' })).toBeNull()
   })
 })
+
+// The zoom cross-fades: the class changing is what restarts the fade.
+describe('a zoomed pane', () => {
+  const split: Layout = {
+    worktreeId: 'w1',
+    root: {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [
+        { kind: 'leaf', terminalId: 't1' },
+        { kind: 'leaf', terminalId: 't2' }
+      ]
+    },
+    focusedTerminalId: 't2'
+  }
+  const panes = (): Element | null => document.querySelector('.workspace__panes')
+
+  it('marks the panes zoomed while one fills them, and only then', () => {
+    seed({ projects: [project], worktrees: [worktree()], activeWorktreeId: 'w1', layouts: { w1: split } })
+    mount()
+    expect(panes()?.className).toBe('workspace__panes')
+    act(() => useWorkspaceStore.setState({ expandedTerminalId: 't2' }))
+    expect(panes()?.className).toBe('workspace__panes workspace__panes--zoomed')
+  })
+})

@@ -219,7 +219,7 @@ export function WorktreeRow({
         {tone ? (
           <span
             id={stateId}
-            className={dotClass(tone, unreadHere)}
+            className={dotClass(tone)}
             role="img"
             title={`${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${TONE_LABEL[tone]}${
               unreadHere ? ' · unread' : ''

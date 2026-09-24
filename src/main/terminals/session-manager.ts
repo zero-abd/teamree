@@ -747,7 +747,8 @@ export class TerminalSessionManager {
       worktreeId: session.worktreeId,
       agent,
       reason,
-      line: evidenceLine(session.read(SETTLED_TAIL_BYTES))
+      // An asking pane is announced by its question, as its sidebar row and board row quote it.
+      line: session.question ?? evidenceLine(session.read(SETTLED_TAIL_BYTES))
     })
   }
 

@@ -19,14 +19,12 @@
     'status status status';
   height: 100%;
   background: var(--bg-window);
+  transition: grid-template-columns var(--motion-base) var(--ease);
 }
 
-/* Hiding the sidebar drops its column and its seam. */
+/* Hiding the sidebar closes its column and its seam. Three tracks either way, or the width cannot slide. */
 .shell--collapsed {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    'workspace'
-    'status';
+  grid-template-columns: 0px 0px minmax(0, 1fr);
 }
 
 /* The sidebar's header: the lockup, and the control that puts the sidebar

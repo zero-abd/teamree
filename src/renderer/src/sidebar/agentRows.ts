@@ -55,9 +55,9 @@ export function dotTone(activity: AgentActivity, agent: AgentKind | undefined): 
   return activity === 'quiet' && agent === undefined ? 'idle' : activity
 }
 
-/** The one dot's classes; unread is a ring on it, never a second dot. */
-export function dotClass(tone: DotTone | null, unread: boolean = false): string {
-  return `activity${tone === null ? '' : ` activity--${tone}`}${unread ? ' activity--unread' : ''}`
+/** The one dot's classes: the tone alone. Unread is the name's weight, never the dot. */
+export function dotClass(tone: DotTone | null): string {
+  return `activity${tone === null ? '' : ` activity--${tone}`}`
 }
 
 /** Whose eyes are on a pane, by name: "2 watching" leaves out the half that matters. */

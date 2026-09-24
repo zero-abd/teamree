@@ -133,15 +133,13 @@ describe('dotTone', () => {
 })
 
 describe('dotClass', () => {
-  // One dot per row: unread is a ring on it, never a second mark beside it.
-  it('rings the dot when unread', () => {
+  it('names the tone and nothing else', () => {
     expect(dotClass('idle')).toBe('activity activity--idle')
-    expect(dotClass('working', true)).toBe('activity activity--working activity--unread')
+    expect(dotClass('working')).toBe('activity activity--working')
   })
 
   it('draws a bare dot when the state is not known yet', () => {
     expect(dotClass(null)).toBe('activity')
-    expect(dotClass(null, true)).toBe('activity activity--unread')
   })
 })
 

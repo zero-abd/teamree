@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { screenOpinion } from '../../shared/screenOpinion'
+import { screenOpinion, screenQuestion } from '../../shared/screenOpinion'
 import { screenRows } from './screenRows'
 
 const fixture = (name: string): string => readFileSync(path.join(import.meta.dirname, 'fixtures', name), 'utf8')
@@ -14,17 +14,20 @@ describe('reading a recorded screen', () => {
     const rows = await screenRows(fixture('claude-trust.txt'), 100, 30)
     expect(rows).toContain(' ❯ No, exit')
     expect(screenOpinion('claude', rows)).toBe('waiting')
+    expect(screenQuestion('claude', rows)).toBe('Trust this folder?')
   })
 
   it('reads codex asking to trust a new repository', async () => {
     const rows = await screenRows(fixture('codex-trust.txt'), 100, 30)
     expect(screenOpinion('codex', rows)).toBe('waiting')
+    expect(screenQuestion('codex', rows)).toBe('Trust this directory?')
   })
 
   it('reads claude asking permission for a tool call', async () => {
     const rows = await screenRows(fixture('claude-permission.txt'), 100, 30)
     expect(rows.some((row) => row.includes('Do you want to proceed?'))).toBe(true)
     expect(screenOpinion('claude', rows)).toBe('waiting')
+    expect(screenQuestion('claude', rows)).toBe('Allow command: mkdir -p out && touch out/hello.txt?')
   })
 
   it('has no opinion once the same words have scrolled up the screen', async () => {

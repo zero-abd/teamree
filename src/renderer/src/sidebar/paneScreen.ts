@@ -4,6 +4,7 @@
 import { Terminal as Emulator } from '@xterm/xterm'
 import type { Terminal } from '@shared/entities'
 import { evidenceInRows } from '@shared/outputEvidence'
+import { screenQuestion } from '@shared/screenOpinion'
 import { bufferRows, type PaneScreen } from '../terminal/shownPanes'
 
 /** Rows handed to the line picker; it looks no further back than this anyway. */
@@ -22,10 +23,15 @@ export async function replayScreen(output: string, cols: number, rows: number): 
 }
 
 /**
- * The line to quote from a pane's screen. An agent's full-screen transcript is read like any
- * output; a shell's pager or editor is not, since one row of it means nothing.
+ * The line to quote from a pane's screen: the question, while an agent asks one. An agent's full-screen
+ * transcript is read like any output; a shell's pager or editor is not, since one row of it means nothing.
  */
-export function screenEvidence(screen: PaneScreen, terminal: Pick<Terminal, 'agent'>): string | null {
+export function screenEvidence(
+  screen: PaneScreen,
+  terminal: Pick<Terminal, 'agent' | 'foregroundAgent'>
+): string | null {
+  const question = screenQuestion(terminal.agent ?? terminal.foregroundAgent, screen.rows)
+  if (question !== null) return question
   if (screen.alternate && terminal.agent === undefined) return null
   return evidenceInRows(screen.rows)
 }

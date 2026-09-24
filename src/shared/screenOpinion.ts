@@ -18,13 +18,30 @@ export type ScreenRule = {
   agent: AgentKind
   /** Tested against one row, trimmed; anchored at the start so a wrapped hint still matches. */
   matches: RegExp
+  /** What is asked, read off the written rows above the hint; null falls back to the nearest row ending in `?`. */
+  asks?: (above: readonly string[]) => string | null
 }
 
 export const SCREEN_RULES: readonly ScreenRule[] = [
-  { agent: 'claude', matches: /^Enter to confirm · Esc to cancel/u },
-  { agent: 'claude', matches: /^Esc to cancel · Tab to amend/u },
-  { agent: 'codex', matches: /^Press enter to continue/u },
-  { agent: 'codex', matches: /^Press enter to confirm or esc to cancel/u }
+  {
+    agent: 'claude',
+    matches: /^Enter to confirm · Esc to cancel/u,
+    asks: (above) => (above.some((row) => row.trim() === 'Accessing workspace:') ? 'Trust this folder?' : null)
+  },
+  { agent: 'claude', matches: /^Esc to cancel · Tab to amend/u, asks: (above) => commandUnder(above, 'Bash command') },
+  {
+    agent: 'codex',
+    matches: /^Press enter to continue/u,
+    asks: (above) =>
+      above.some((row) => row.trim().startsWith('Do you trust the contents of this directory?'))
+        ? 'Trust this directory?'
+        : null
+  },
+  {
+    agent: 'codex',
+    matches: /^Press enter to confirm or esc to cancel/u,
+    asks: (above) => commandUnder(above, 'Would you like to run the following command?')
+  }
 ]
 
 /** How many written rows from the bottom a hint may sit: an idle agent's composer and footer fill at least this many. */
@@ -32,9 +49,52 @@ export const SCREEN_ROWS_ASKED = 2
 
 /** What the last rows of this pane's screen say, or null when they say nothing this file can read. */
 export function screenOpinion(agent: AgentKind | undefined, rows: readonly string[]): ScreenOpinion | null {
+  return askedAt(agent, rows) === null ? null : 'waiting'
+}
+
+/** The question a screen that reads as asking is asking, or null; never one of its answers or its key hint. */
+export function screenQuestion(agent: AgentKind | undefined, rows: readonly string[]): string | null {
+  const asked = askedAt(agent, rows)
+  if (asked === null) return null
+  const above = dialogAbove(asked.written, asked.index)
+  return asked.rule.asks?.(above) ?? nearestQuestion(above)
+}
+
+function askedAt(
+  agent: AgentKind | undefined,
+  rows: readonly string[]
+): { rule: ScreenRule; written: string[]; index: number } | null {
   if (agent === undefined) return null
-  const written = rows.map((row) => row.trim()).filter((row) => row.length > 0)
-  const bottom = written.slice(-SCREEN_ROWS_ASKED)
-  const rules = SCREEN_RULES.filter((rule) => rule.agent === agent)
-  return bottom.some((row) => rules.some((rule) => rule.matches.test(row))) ? 'waiting' : null
+  const written = rows.filter((row) => row.trim().length > 0)
+  for (let index = written.length - 1; index >= Math.max(0, written.length - SCREEN_ROWS_ASKED); index--) {
+    const row = (written[index] ?? '').trim()
+    const rule = SCREEN_RULES.find((candidate) => candidate.agent === agent && candidate.matches.test(row))
+    if (rule !== undefined) return { rule, written, index }
+  }
+  return null
+}
+
+/** How far above its hint a dialog can start, when no rule across the screen marks its top. */
+const DIALOG_ROWS = 40
+
+function dialogAbove(written: readonly string[], hint: number): string[] {
+  const above = written.slice(Math.max(0, hint - DIALOG_ROWS), hint)
+  const top = above.findLastIndex((row) => /^\s*─{8,}\s*$/u.test(row))
+  return above.slice(top + 1)
+}
+
+const MENU_OPTION = /^[❯›>]?\s*\d+\.\s/u
+
+function nearestQuestion(above: readonly string[]): string | null {
+  const row = above.findLast((candidate) => !MENU_OPTION.test(candidate.trim()) && candidate.trim().endsWith('?'))
+  return row === undefined ? null : row.trim()
+}
+
+/** `Allow command: <cmd>?`, the command being the first row under `heading` indented past it, `$ ` dropped. */
+function commandUnder(above: readonly string[], heading: string): string | null {
+  const at = above.findIndex((row) => row.trim() === heading)
+  if (at === -1) return null
+  const indent = (above[at] ?? '').search(/\S/u)
+  const command = above.slice(at + 1).find((row) => row.search(/\S/u) > indent || row.trim().startsWith('$ '))
+  return command === undefined ? null : `Allow command: ${command.trim().replace(/^\$ /u, '')}?`
 }

@@ -250,6 +250,19 @@ describePty('PtySession', () => {
   )
 
   it(
+    'reads what the question is, for the notification, until somebody answers',
+    async () => {
+      const edit = `printf '\\n Do you want to make this edit to math.ts?\\n 1. Yes\\n\\n Esc to cancel \\302\\267 Tab to amend'`
+      const session = start({ agent: 'claude', command: `${edit} && sleep 5`, schedule: soon })
+
+      await waitUntil(() => session.question === 'Do you want to make this edit to math.ts?', 'the question read')
+      session.write('\r')
+      expect(session.question).toBeUndefined()
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'stops reading a question once the screen no longer shows it',
     async () => {
       const session = start({

@@ -808,10 +808,10 @@
   background: var(--fg-muted);
 }
 
+/* Steady: the halo is enough, and the one dot that moves is the one asking. */
 .activity--working {
   background: var(--accent-bright);
   box-shadow: 0 0 0 3px var(--accent-soft);
-  animation: activity-pulse 1.6s ease-in-out infinite;
 }
 
 /* The agent has said it wants something; pulsing because this is the one the
@@ -846,29 +846,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .activity--working,
   .activity--waiting {
     animation: none;
   }
 }
 
-/* Printed since this person last looked: a thin ring on the one dot, and the
-   name in weight. Never a count and never a second dot. `outline` leaves the
-   working halo's box-shadow alone. */
-.activity--unread {
-  outline: 1px solid var(--accent-bright);
-  outline-offset: 1px;
-}
-
-/* A stopped or idle pane with something unread fills in instead: a ring round
-   a hollow dot reads as a target. */
-.activity--quiet.activity--unread,
-.activity--idle.activity--unread {
-  outline: none;
-  background: var(--accent-bright);
-  box-shadow: none;
-}
-
+/* Printed since this person last looked: the name in weight. Never the dot, a count or a second dot. */
 .worktree__name--unread,
 .pane-row--unread .pane-row__label {
   color: var(--fg);

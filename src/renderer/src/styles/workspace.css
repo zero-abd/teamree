@@ -10,6 +10,21 @@
   min-width: 0;
   min-height: 0;
   background: var(--bg-panel);
+  /* A page is a `.workspace` too: opening one, and coming back to the panes, fades. */
+  animation: fade-in var(--motion-fast) var(--ease);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The same fade under a second name, so a zoom in or out restarts it. */
+@keyframes fade-in-again {
+  from {
+    opacity: 0;
+  }
 }
 
 .workspace--empty {
@@ -180,7 +195,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The same mark the sidebar draws, on the same pane: see `.activity--unread` in sidebar.css. */
+/* The same mark the sidebar draws, on the same pane: see `.worktree__name--unread` in sidebar.css. */
 .tab--unread .tab__name {
   color: var(--fg);
   font-weight: 600;
@@ -248,6 +263,11 @@
   min-height: 0;
   overflow: hidden;
   padding: var(--s3);
+  animation: fade-in var(--motion-fast) var(--ease);
+}
+
+.workspace__panes--zoomed {
+  animation: fade-in-again var(--motion-fast) var(--ease);
 }
 
 /* Empty states ------------------------------------------------------------ */

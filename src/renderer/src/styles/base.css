@@ -34,6 +34,12 @@ body.is-resizing * {
   user-select: none !important;
 }
 
+/* A dragged edge follows the pointer; the slide is for opening and closing. */
+body.is-resizing .shell,
+body.is-resizing .panel {
+  transition: none;
+}
+
 h1,
 h2,
 h3,

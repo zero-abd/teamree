@@ -666,7 +666,8 @@ describe('panes that have printed since they were read', () => {
     )
     const spoke = tabs.find((tab) => tab.textContent?.includes('claude'))
     expect(spoke?.querySelectorAll('.activity, .pip')).toHaveLength(1)
-    expect(spoke?.querySelector('.activity')?.classList.contains('activity--unread')).toBe(true)
+    // Unread is the name's weight; the dot says the state alone.
+    expect(spoke?.querySelector('.activity')?.className).not.toContain('unread')
   })
 
   it('leaves a pane alone when nothing has arrived since it was read', () => {

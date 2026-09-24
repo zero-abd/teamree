@@ -23,7 +23,41 @@ describe('replayScreen', () => {
   })
 })
 
+const recorded = (name: string): string =>
+  readFileSync(path.join(import.meta.dirname, '../../../main/terminals/fixtures', name), 'utf8')
+
 describe('screenEvidence', () => {
+  // The rows once quoted `3. No, and tell Claude…` and `policies to load.`
+  it.each([
+    ['claude-trust.txt', 'claude', 'Trust this folder?'],
+    ['codex-trust.txt', 'codex', 'Trust this directory?'],
+    ['claude-permission.txt', 'claude', 'Allow command: mkdir -p out && touch out/hello.txt?']
+  ] as const)('quotes the question %s asks', async (name, agent, question) => {
+    const screen = await replayScreen(recorded(name), 100, 30)
+    expect(screenEvidence(screen, { agent })).toBe(question)
+  })
+
+  it('reads the question of an agent run from a shell', async () => {
+    const screen = await replayScreen(recorded('codex-trust.txt'), 100, 30)
+    expect(screenEvidence(screen, { foregroundAgent: 'codex' })).toBe('Trust this directory?')
+  })
+
+  // Composed from the approval layout codex draws; not recorded.
+  it('quotes the command a codex approval is for', async () => {
+    const approval = [
+      '  Would you like to run the following command?',
+      '',
+      '  $ git push origin main',
+      '',
+      '› 1. Yes, proceed (y)',
+      '  3. No, and tell Codex what to do differently (esc)',
+      '',
+      '  Press enter to confirm or esc to cancel'
+    ].join('\r\n')
+    const screen = await replayScreen(`\x1b[?1049h\x1b[H${approval}`, 100, 30)
+    expect(screenEvidence(screen, { agent: 'codex' })).toBe('Allow command: git push origin main?')
+  })
+
   it('quotes what a resumed Claude last said, where the stream replay found nothing', async () => {
     expect(evidenceLine(resumedClaude)).toBeNull()
     const screen = await replayScreen(resumedClaude, 43, 39)

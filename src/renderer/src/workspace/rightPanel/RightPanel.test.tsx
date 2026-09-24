@@ -244,6 +244,16 @@ describe('the rail', () => {
     expect(screen.queryByRole('tabpanel')).toBeNull()
   })
 
+  // One element open and closed, so its width slides between the two rather than snapping.
+  it('keeps the same panel element as it opens and closes', () => {
+    mount()
+    const closed = document.querySelector('[data-region="panel"]')
+    act(() => useWorkspaceStore.getState().toggleRightPanel())
+    expect(document.querySelector('[data-region="panel"]')).toBe(closed)
+    act(() => useWorkspaceStore.getState().toggleRightPanel())
+    expect(document.querySelector('[data-region="panel"]')).toBe(closed)
+  })
+
   // What a fresh launch reads back is what the last click wrote: the panel's
   // arrangement is a habit of this machine, like the sidebar's width.
   it('remembers the tab and whether it is open on this machine', () => {
