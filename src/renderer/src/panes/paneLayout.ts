@@ -12,7 +12,7 @@ import {
   type FileColumn,
   type FileLeaf
 } from '@shared/filePane'
-import { leavesRoom, PANE_GUTTER_PX, paneRects, type Box } from '@shared/paneRoom'
+import { leavesRoom, minExtent, PANE_GUTTER_PX, paneRects, type Box } from '@shared/paneRoom'
 
 /** Smallest slice of a split a pane may shrink to, as a fraction of the axis. */
 export const MIN_PANE_FRACTION = 0.08
@@ -439,10 +439,17 @@ export function withoutColumn(root: PaneNode | null): PaneNode | null {
   return column === null ? root : collectTerminalIds(column).reduce(closePane, root)
 }
 
-/** True when `root` as sized leaves a pane under `min` in `box` and the tree without its file column does not. */
+/** True when no sizing of `root` gives every pane `min` in `box` and the tree without its file column, as sized, does. */
 export function foldsColumn(root: PaneNode | null, box: Box, min: Box): boolean {
   const rest = withoutColumn(root)
-  return rest !== root && rest !== null && !fitsAsSized(root, box, min) && fitsAsSized(rest, box, min)
+  if (rest === root || rest === null || root === null) return false
+  const resizable = minExtent(root, 'row', min) <= box.width && minExtent(root, 'column', min) <= box.height
+  return !resizable && fitsAsSized(rest, box, min)
+}
+
+/** `root` for a column coming back from its tab: as it is when every pane has `min`, else with the column narrowed. */
+export function unfoldedRoot(root: PaneNode | null, box: Box, min: Box): PaneNode | null {
+  return fitsAsSized(root, box, min) ? root : narrowColumn(root, box, min)
 }
 
 function fitsAsSized(root: PaneNode | null, box: Box, min: Box): boolean {

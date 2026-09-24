@@ -70,6 +70,7 @@ import {
   shownRoot,
   splitPane,
   splitPaneWith,
+  unfoldedRoot,
   withoutColumn
 } from '../panes/paneLayout'
 import { worktreeAfter, worktreeOrder } from '../sidebar/worktreeOrder'
@@ -283,7 +284,7 @@ type WorkspaceState = {
   expandedTerminalId: string | null
   /** Worktrees whose file column a split folded to its tab; drawn folded only while `foldsColumn` holds. */
   foldedColumns: Record<string, true>
-  /** Draws the worktree's file column in the layout again. */
+  /** Draws the worktree's file column in the layout again, narrowed if its old share no longer fits. */
   unfoldColumn: (worktreeId: string) => void
 
   /** File panes with edits not yet on disk, by pane id; each tab draws a dot. */
@@ -2067,6 +2068,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         delete foldedColumns[worktreeId]
         return { foldedColumns }
       })
+      // Its old share would starve the panes that fit beside it now.
+      const layout = get().layouts[worktreeId]
+      const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+      const root = layout && grid ? unfoldedRoot(layout.root, grid.area, grid.minPane) : undefined
+      if (layout && root !== undefined && root !== layout.root) persistLayout({ ...layout, root })
     },
 
     showPane(paneId) {

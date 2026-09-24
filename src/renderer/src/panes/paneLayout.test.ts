@@ -22,6 +22,7 @@ import {
   shownRoot,
   splitChildBases,
   splitPane,
+  unfoldedRoot,
   withoutColumn
 } from './paneLayout'
 
@@ -473,6 +474,30 @@ describe('a split beside the file column', () => {
     expect(foldsColumn(reviewing, box, min)).toBe(false)
     const crowded: PaneNode = { kind: 'split', direction: 'row', sizes: [0.5, 0.5], children: [leaf('a'), leaf('b')] }
     expect(foldsColumn(crowded, { width: 400, height: 818 }, min)).toBe(false)
+  })
+
+  it('comes back once the panes fit beside it, narrowed to its floor when its old share would starve them', () => {
+    const agentAndDiff: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [1 / 3, 2 / 3],
+      children: [leaf('claude'), diff]
+    }
+    expect(foldsColumn(agentAndDiff, box, min)).toBe(false)
+    const back = unfoldedRoot(agentAndDiff, box, min)
+    expect(width(back, 'claude')).toBeGreaterThanOrEqual(min.width)
+    expect(width(back, 'file:d')).toBeCloseTo(min.width)
+    expect(unfoldedRoot(reviewing, box, min)).toBe(reviewing)
+  })
+
+  it('stays folded while three panes abreast cannot fit beside it', () => {
+    const three: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.25, 0.25, 0.5],
+      children: [leaf('claude'), leaf('zsh'), diff]
+    }
+    expect(foldsColumn(three, box, min)).toBe(true)
   })
 
   it('takes the column out whole, its share going back to its siblings', () => {

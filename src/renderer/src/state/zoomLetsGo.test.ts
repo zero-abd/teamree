@@ -145,4 +145,23 @@ describe('a split with the diff open', () => {
     expect(store().foldedColumns.w1).toBeUndefined()
     expect(store().notices).toEqual([])
   })
+
+  it('brings the column back narrowed once the panes fit beside it, and tells the runtime', () => {
+    measurement.grid = { area: { width: 768, height: 818 }, minPane: min, cell }
+    const agentAndDiff: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [1 / 3, 2 / 3],
+      children: [leaf('claude'), diff]
+    }
+    open(agentAndDiff, 'claude')
+    useWorkspaceStore.setState({ foldedColumns: { w1: true } })
+    call.mockImplementation(async () => undefined)
+    store().unfoldColumn('w1')
+
+    expect(store().foldedColumns).toEqual({})
+    const root = store().layouts.w1?.root
+    expect(root?.kind === 'split' && root.sizes[1]).toBeLessThan(0.5)
+    expect(call.mock.calls.some(([method]) => method === 'layout.set')).toBe(true)
+  })
 })
