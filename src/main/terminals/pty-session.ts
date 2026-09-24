@@ -335,6 +335,8 @@ export class PtySession {
       // Typing into a restored pane is the user taking it over.
       this.restored = undefined
       this.typedInto = true
+      // What answers these bytes is output, not the last resize's repaint.
+      this.resizedAt = Number.NEGATIVE_INFINITY
       // A bell is a question; this is somebody answering it.
       this.lastBellAt = undefined
       // So is this; the screen is read again once the answer has redrawn it.

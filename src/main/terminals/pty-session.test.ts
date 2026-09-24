@@ -496,6 +496,22 @@ describePty('PtySession', () => {
   )
 
   it(
+    'counts what answers a write straight after a resize as output',
+    async () => {
+      const session = start({ command: 'cat' })
+      const events = collect(session)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      const before = session.snapshot().lastOutputAt
+
+      session.resize(100, 30)
+      session.write('typed\n')
+      await waitUntil(() => outputOf(events).includes('typed'), 'the echo')
+      expect(session.snapshot().lastOutputAt).toBeGreaterThan(before)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'stops notifying a listener that unsubscribed',
     async () => {
       const session = start({ command: 'cat' })
