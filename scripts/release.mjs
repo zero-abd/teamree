@@ -15,7 +15,7 @@ import {
 } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
 import { withoutSystemCa } from './child-env.mjs'
@@ -176,6 +176,29 @@ function short(sha) {
  */
 export const STABLE_DMG_NAME = 'teamree-mac-universal.dmg'
 
+/** Read by the app (src/main/updates/releaseManifest.ts) to find, size and hash the zip it installs from. */
+export const MANIFEST_NAME = 'teamree-mac.json'
+
+/** The manifest's text: the tag's version, and the zip's name, size and SHA-256. */
+export function releaseManifest({ tag, file, size, sha256 }) {
+  return `${JSON.stringify({ version: tag.replace(/^v/, ''), file, size, sha256 }, null, 2)}\n`
+}
+
+/** Why the unpacked zip is not what the app will accept, or null. `entries` is what `ditto -x -k` produced. */
+export function zipRefusal({ entries, version, verifies }, expected) {
+  if (entries.length !== 1 || entries[0] !== 'teamree.app')
+    return `the zip should hold one app, teamree.app; it holds ${entries.join(', ') || 'nothing'}`
+  if (version !== expected) return `the app in the zip says ${version}, not ${expected}`
+  if (!verifies)
+    return 'the app in the zip fails `codesign --verify --deep --strict`: its signature did not survive zipping'
+  return null
+}
+
+/** Every file the release carries, in upload order. */
+export function releaseAssets({ dmg, stableDmg, zip, manifest, sums }) {
+  return [dmg, stableDmg, zip, manifest, sums]
+}
+
 /** `shasum -a 256` output, byte for byte, so a reader can compare it as printed. */
 export function checksumLine(hash, name) {
   return `${hash}  ${name}`
@@ -251,7 +274,7 @@ export function releaseNotes({ tag, repo, checksums, kind, highlights = null }) 
 }
 
 /** What is about to happen, said in full before anything irreversible starts. */
-export function planLines({ tag, repo, head, branch, dmg, size, hash, kind, dryRun }) {
+export function planLines({ tag, repo, head, branch, dmg, size, hash, kind, dryRun, zip }) {
   return [
     '',
     '================================================================',
@@ -264,7 +287,7 @@ export function planLines({ tag, repo, head, branch, dmg, size, hash, kind, dryR
     `  sha256       ${hash}`,
     `  signature    ${kind}${isDistributable(kind) ? '' : ' — a Mac that downloads this will refuse it until'}`,
     ...(isDistributable(kind) ? [] : ['               the quarantine attribute is cleared by hand.']),
-    '  also         SHA256SUMS.txt',
+    `  also         ${zip}, ${MANIFEST_NAME}, SHA256SUMS.txt`,
     '================================================================',
     ''
   ]
@@ -325,6 +348,31 @@ function runGate(gate) {
   }
   console.error(`release: ${gate.name} FAILED after ${seconds}s (exit ${result.status ?? result.signal})`)
   return false
+}
+
+/** Unpacks the zip the way the app will and checks what comes out: one app, this version, a signature that verifies. */
+function verifyZip(zip, version) {
+  heading('--- the zip, unpacked as the app will ---')
+  const into = realpathSync(mkdtempSync(join(tmpdir(), 'teamree-zip-')))
+  try {
+    if (spawnSync('ditto', ['-x', '-k', zip, into], { stdio: 'inherit' }).status !== 0) {
+      console.error(`release: ditto could not unpack ${zip}.`)
+      return false
+    }
+    const entries = readdirSync(into).filter((name) => name !== '__MACOSX')
+    const plist = join(into, 'teamree.app', 'Contents', 'Info.plist')
+    const found = spawnSync('plutil', ['-extract', 'CFBundleShortVersionString', 'raw', '-o', '-', plist], {
+      encoding: 'utf8'
+    })
+    const verifies =
+      spawnSync('codesign', ['--verify', '--deep', '--strict', join(into, 'teamree.app')], { stdio: 'inherit' })
+        .status === 0
+    const refusal = zipRefusal({ entries, version: (found.stdout ?? '').trim(), verifies }, version)
+    if (refusal !== null) console.error(`release: ${refusal}`)
+    return refusal === null
+  } finally {
+    rmSync(into, { recursive: true, force: true })
+  }
 }
 
 /** The packaged-app check again, against the copy inside the mounted image that actually ships. */
@@ -470,15 +518,38 @@ async function main(argv) {
 
   const kind = readSignatureKind(findPackagedApp())
 
+  // The same rule as the .dmg: dist/ is not cleaned between builds.
+  const zips = readdirSync(dist).filter((name) => name.endsWith('.zip'))
+  if (zips.length !== 1) {
+    fail(
+      zips.length === 0
+        ? 'the packaging produced no .zip, which the app updates itself from.'
+        : `dist/ holds ${zips.length} .zip files (${zips.join(', ')}); delete the ones that are not this build.`
+    )
+    return
+  }
+  const zip = join(dist, zips[0])
+  if (!verifyZip(zip, pkg.version)) {
+    fail('the app inside the .zip did not verify. Nothing was published.')
+    return
+  }
+  console.log('release: the zip unpacks to a teamree.app that verifies')
+
   const hash = await sha256(dmg)
+  const zipHash = await sha256(zip)
 
   // Copied, not symlinked: upload reads the path.
   const stableDmg = join(dist, STABLE_DMG_NAME)
   copyFileSync(dmg, stableDmg)
 
-  const checksums = `${checksumLine(hash, dmgs[0])}\n${checksumLine(hash, STABLE_DMG_NAME)}\n`
+  const manifestPath = join(dist, MANIFEST_NAME)
+  writeFileSync(manifestPath, releaseManifest({ tag, file: zips[0], size: statSync(zip).size, sha256: zipHash }))
+
+  const checksums =
+    `${checksumLine(hash, dmgs[0])}\n${checksumLine(hash, STABLE_DMG_NAME)}\n` + `${checksumLine(zipHash, zips[0])}\n`
   const sumsPath = join(dist, 'SHA256SUMS.txt')
   writeFileSync(sumsPath, checksums)
+  const assets = releaseAssets({ dmg, stableDmg, zip, manifest: manifestPath, sums: sumsPath })
 
   const notes = releaseNotes({ tag, repo: repoName, checksums, kind, highlights: state.highlights })
   const notesPath = join(dist, 'RELEASE_NOTES.md')
@@ -493,7 +564,8 @@ async function main(argv) {
     size: statSync(dmg).size,
     hash,
     kind,
-    dryRun: parsed.dryRun
+    dryRun: parsed.dryRun,
+    zip: zips[0]
   })) {
     console.log(line)
   }
@@ -502,7 +574,7 @@ async function main(argv) {
   console.log('----------------------------------------------------------------')
   console.log(notes)
   console.log('----------------------------------------------------------------')
-  console.log(`Written to ${sumsPath} and ${notesPath}; both are inside gitignored dist/.`)
+  console.log(`Written to ${sumsPath}, ${manifestPath} and ${notesPath}; all inside gitignored dist/.`)
 
   if (parsed.dryRun) {
     console.log('')
@@ -510,7 +582,7 @@ async function main(argv) {
     console.log(`release: the real run is the same command without --dry-run. It would then`)
     console.log(`release:   git tag -a ${tag} -m "teamree ${tag}"`)
     console.log(`release:   git push origin ${tag}`)
-    console.log(`release:   gh release create ${tag} <the two files above>`)
+    console.log(`release:   gh release create ${tag} ${assets.map((path) => basename(path)).join(' ')}`)
     return
   }
 
@@ -549,9 +621,7 @@ async function main(argv) {
       'release',
       'create',
       tag,
-      dmg,
-      stableDmg,
-      sumsPath,
+      ...assets,
       '--repo',
       repoName,
       '--title',

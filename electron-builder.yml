@@ -183,6 +183,10 @@ mac:
   target:
     - target: dmg
       arch: [universal]
+    # What the app fetches to replace itself (src/main/updates/selfInstaller.ts), named by the
+    # release's teamree-mac.json; the .dmg stays the first install.
+    - target: zip
+      arch: [universal]
   # node-pty's prebuilt binaries are the one thing in this app that is
   # deliberately *not* merged into a fat binary, and this names them so the
   # merge lets them through.

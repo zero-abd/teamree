@@ -1,8 +1,8 @@
-// Knowing that a newer teamree exists, and fetching its `.dmg`. Never installs: the app
-// ships unsigned and Squirrel.Mac refuses an unsigned replacement. Nothing waits on
-// the network, a failure is a log line, and the API is asked rarely with the clock on disk.
+// Knowing that a newer teamree exists, fetching it, and replacing this copy after a quit
+// (selfInstaller.ts; Squirrel.Mac refuses an ad-hoc signature). Where this copy cannot replace
+// itself the verified `.dmg` is the way. Nothing waits on the network; a failure is a log line.
 
-import type { UpdateDownload, UpdateRelease, UpdateState } from '../../shared/entities'
+import type { UpdateDownload, UpdateInstall, UpdateRelease, UpdateState } from '../../shared/entities'
 import { DEV_VERSION } from '../appVersion'
 import { conflict, internal } from '../runtime/runtimeError'
 import { ChecksumMismatch, downloadDiskImage, releaseHostPolicy, type HostPolicy } from './downloadInstaller'
@@ -15,9 +15,10 @@ import {
   type LatestRelease,
   type ReleaseChannel
 } from './latestRelease'
+import type { SelfInstall } from './selfInstaller'
 import { isNewerRelease, isPrereleaseVersion, parseVersion } from './semver'
 
-/** How long an automatic check is good for: a rounding error against sixty unauthenticated requests an hour. */
+/** How long an automatic check is good for, and how often one runs: a rounding error against GitHub's rate limit. */
 export const AUTOMATIC_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 
 /** How long after startup the first automatic check is made; late, so it shares no moment with the restore. */
@@ -57,8 +58,12 @@ export type UpdateServiceOptions = {
   downloadsDirectory?: string
   /** Opens a file with its default app, answering an error or ''; `shell.openPath` in the app. */
   openPath?: (path: string) => Promise<string>
-  /** Which hosts a download may touch. Tests only; the app keeps the release hosts. */
+  /** Which hosts a download may touch. Refused outside the test runner; the app keeps the release hosts. */
   allowDownload?: HostPolicy
+  /** Replaces this copy in place; absent where it cannot (not packaged, not macOS). */
+  selfInstall?: SelfInstall
+  /** Quits the way Quit does, questions included; `app.quit` in the app. */
+  restart?: () => void
   /** Told after anything that changes what `state()` answers. */
   onChange?: () => void
   /** Where a failed check goes. Never a dialog; see the note at the top. */
@@ -77,6 +82,8 @@ export class UpdateService {
   readonly #downloadsDirectory: string | undefined
   readonly #openPath: ((path: string) => Promise<string>) | undefined
   readonly #allowDownload: HostPolicy
+  readonly #selfInstall: SelfInstall | undefined
+  readonly #restart: (() => void) | undefined
   readonly #onChange: () => void
   readonly #onProblem: (message: string, error: unknown) => void
   readonly #now: () => number
@@ -90,6 +97,12 @@ export class UpdateService {
   #cancelScheduled: (() => void) | undefined
   #download: UpdateDownload | null = null
   #abortDownload: AbortController | undefined
+  #install: UpdateInstall | null = null
+  #abortInstall: AbortController | undefined
+  #askedAt: number | null = null
+  /** Set once the staged copies left by an earlier run have been looked at. */
+  #recovered: Promise<void> | undefined
+  #started = false
 
   constructor(options: UpdateServiceOptions) {
     this.#version = options.version
@@ -101,29 +114,60 @@ export class UpdateService {
     this.#openExternal = options.openExternal
     this.#downloadsDirectory = options.downloadsDirectory
     this.#openPath = options.openPath
+    if (options.allowDownload !== undefined && process.env['VITEST'] === undefined) {
+      throw new Error('allowDownload is for tests; the app downloads only from the release hosts')
+    }
     this.#allowDownload = options.allowDownload ?? releaseHostPolicy(this.#repository)
+    this.#selfInstall = options.selfInstall
+    this.#restart = options.restart
     this.#onChange = options.onChange ?? (() => {})
     this.#onProblem = options.onProblem ?? ((message) => console.warn(`[updates] ${message}`))
     this.#now = options.now ?? Date.now
     this.#schedule = options.schedule ?? scheduleWithTimeout
   }
 
-  /** Arms the automatic check. The preference is read when the timer fires, not now. */
+  /** Arms the automatic check, then again every interval. The preference is read when the timer fires, not now. */
   start(): void {
     if (!this.#checkable()) return
+    this.#started = true
+    this.#arm(STARTUP_CHECK_DELAY_MS)
+  }
+
+  #arm(delayMs: number): void {
     this.#cancelScheduled?.()
     this.#cancelScheduled = this.#schedule(() => {
       this.#cancelScheduled = undefined
+      this.#arm(AUTOMATIC_CHECK_INTERVAL_MS)
       if (!this.#settings.read().automatic) return
-      void this.check()
-    }, STARTUP_CHECK_DELAY_MS)
+      void this.#automaticCheck()
+    }, delayMs)
   }
 
-  /** Drops the pending check and any download. A quit must not be waiting on either. */
+  async #automaticCheck(): Promise<void> {
+    await this.#recover()
+    // A release seen earlier but not yet fetched is worth one request past the rate limit.
+    const seen = parseVersion(this.#settings.read().lastSeenVersion ?? '')
+    const current = parseVersion(this.#version)
+    const pending =
+      this.#selfInstall !== undefined &&
+      this.#install === null &&
+      seen !== null &&
+      current !== null &&
+      isNewerRelease(seen, current)
+    await this.check({ force: pending })
+  }
+
+  /** Drops the pending check and any download, then starts the install a restart asked for. */
   stop(): void {
+    this.#halt()
+    this.#selfInstall?.launch()
+  }
+
+  #halt(): void {
     this.#cancelScheduled?.()
     this.#cancelScheduled = undefined
     this.#abortDownload?.abort()
+    this.#abortInstall?.abort()
   }
 
   state(): UpdateState {
@@ -136,12 +180,14 @@ export class UpdateService {
       checking: this.#inFlight !== undefined,
       checkedAt: stored.lastCheckedAt,
       problem: this.#problem,
-      download: this.#download
+      download: this.#download,
+      install: this.#install,
+      askedAt: this.#askedAt
     }
   }
 
   /** Asks GitHub, unless asked recently enough; `force` is a person asking, whom the rate limit does not refuse. */
-  async check(options: { force?: boolean } = {}): Promise<UpdateState> {
+  async check(options: { force?: boolean; person?: boolean } = {}): Promise<UpdateState> {
     // A second caller joins the check already running.
     if (this.#inFlight) return this.#inFlight
 
@@ -156,6 +202,7 @@ export class UpdateService {
     if (options.force !== true && last !== null && now - last < AUTOMATIC_CHECK_INTERVAL_MS) {
       return this.state()
     }
+    if (options.person === true) this.#askedAt = now
 
     this.#inFlight = this.#run(now)
     // Before the await so a button can go quiet immediately.
@@ -173,6 +220,7 @@ export class UpdateService {
       this.#latest = release
       this.#problem = null
       this.#settings.rememberLatest(release?.version ?? null)
+      if (release !== null && this.state().available !== null) this.#prepare(release)
     } catch (error) {
       this.#problem = describe(error)
       this.#onProblem(`could not read the latest release: ${this.#problem}`, error)
@@ -187,7 +235,8 @@ export class UpdateService {
   /** The preference, which is the one thing here the user decides. */
   setAutomatic(automatic: boolean): UpdateState {
     this.#settings.setAutomatic(automatic)
-    if (!automatic) this.stop()
+    if (!automatic) this.#halt()
+    else if (this.#started && this.#cancelScheduled === undefined) this.#arm(STARTUP_CHECK_DELAY_MS)
     this.#onChange()
     return this.state()
   }
@@ -260,6 +309,97 @@ export class UpdateService {
       this.#abortDownload = undefined
       this.#onChange()
     }
+  }
+
+  /** Fetches and stages `release` in the background, unless it already is; a refusal leaves the `.dmg` path. */
+  #prepare(release: LatestRelease): void {
+    const installer = this.#selfInstall
+    if (installer === undefined) return
+    const { version } = release
+    if (this.#install?.version === version && this.#install.state !== 'failed') return
+
+    this.#abortInstall?.abort()
+    const abort = new AbortController()
+    this.#abortInstall = abort
+    // Set before any await, so the window never shows the `.dmg` card for a moment first.
+    this.#install = { state: 'downloading', version, received: 0, total: 0 }
+    void (async () => {
+      try {
+        await this.#recover()
+        const refused = await installer.refusal()
+        if (refused !== null) {
+          this.#install = null
+          this.#onProblem(`this copy cannot replace itself: ${refused}`, new Error(refused))
+          return
+        }
+        let percent = 0
+        let total = 0
+        await installer.prepare(release, {
+          allowed: this.#allowDownload,
+          signal: abort.signal,
+          onSize: (size) => {
+            total = size
+          },
+          onProgress: (received) => {
+            this.#install = { state: 'downloading', version, received, total }
+            const now = Math.floor((received * 100) / Math.max(total, 1))
+            if (now > percent) {
+              percent = now
+              this.#onChange()
+            }
+          }
+        })
+        this.#install = { state: 'ready', version }
+      } catch (error) {
+        if (abort.signal.aborted) {
+          this.#install = null
+          return
+        }
+        this.#install = { state: 'failed', version, problem: `Update failed: ${describe(error)}` }
+        this.#onProblem(`could not stage ${version}: ${describe(error)}`, error)
+      } finally {
+        if (this.#abortInstall === abort) this.#abortInstall = undefined
+        this.#onChange()
+      }
+    })()
+  }
+
+  /** Picks up a copy an earlier run fetched but did not install, once per run. */
+  #recover(): Promise<void> {
+    const installer = this.#selfInstall
+    if (installer === undefined) return Promise.resolve()
+    this.#recovered ??= (async () => {
+      const current = parseVersion(this.#version)
+      try {
+        const found = await installer.recover((candidate) => {
+          const version = parseVersion(candidate)
+          return version !== null && current !== null && isNewerRelease(version, current)
+        })
+        if (found !== null && this.#install === null) {
+          this.#install = { state: 'ready', version: found }
+          this.#onChange()
+        }
+      } catch (error) {
+        this.#onProblem(`could not read the staged update: ${describe(error)}`, error)
+      }
+    })()
+    return this.#recovered
+  }
+
+  /** Quits through the app's own quit, whose questions still apply; the swap starts once it is past them. */
+  async restartToUpdate(): Promise<{ restarting: string }> {
+    const install = this.#install
+    if (install?.state !== 'ready') throw conflict('there is no update ready to install')
+    if (this.#selfInstall === undefined || this.#restart === undefined)
+      throw internal('this copy cannot restart itself')
+    await this.#selfInstall.arm(install.version, true)
+    this.#restart()
+    return { restarting: install.version }
+  }
+
+  /** The quit was declined (Cancel on a Save question): the next ordinary quit installs nothing. */
+  quitDeclined(): void {
+    this.#selfInstall?.disarm()
   }
 
   /** Opens the verified `.dmg`, which mounts it. Nothing else can be named. */

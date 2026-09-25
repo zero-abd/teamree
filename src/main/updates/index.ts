@@ -22,6 +22,8 @@ export {
   type UpdateMethodName
 } from './handlers'
 export { ChecksumMismatch, downloadDiskImage, releaseHostPolicy, type HostPolicy } from './downloadInstaller'
+export { bundleOf } from './bundleCheck'
+export { SelfInstaller, type SelfInstall } from './selfInstaller'
 export { compareVersions, isNewerRelease, isPrereleaseVersion, parseVersion, type Version } from './semver'
 export {
   AUTOMATIC_CHECK_INTERVAL_MS,

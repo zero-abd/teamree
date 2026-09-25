@@ -668,6 +668,8 @@ type WorkspaceState = {
   fetchInstaller: () => Promise<void>
   /** Opens the fetched `.dmg`, which mounts it. */
   openInstaller: () => Promise<void>
+  /** Quits as Quit does, then the fetched copy replaces this one and opens. */
+  restartToUpdate: () => Promise<void>
   /** Turns the automatic check on or off. Remembered between runs. */
   setAutomaticUpdates: (automatic: boolean) => Promise<void>
   loadAgentTrust: () => Promise<void>
@@ -2699,6 +2701,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       } catch (error) {
         void get().loadUpdate()
         failed('Could not open the installer')(error)
+      }
+    },
+
+    async restartToUpdate() {
+      try {
+        await runtimeClient.call('update.restart', {})
+      } catch (error) {
+        void get().loadUpdate()
+        failed('Could not restart to update')(error)
       }
     },
 

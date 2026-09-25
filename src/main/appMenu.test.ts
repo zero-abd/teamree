@@ -251,6 +251,21 @@ describe('the Help menu', () => {
     expect(template.find((item) => item.label === 'Help')?.role).toBe('help')
   })
 
+  it('offers Check for Updates… between Shortcuts and the links, and runs the check', () => {
+    const checkForUpdates = vi.fn()
+    const template = applicationMenuTemplate({
+      platform: 'darwin',
+      commands: published(),
+      checkForUpdates,
+      links: { version: '1.2.3', systemVersion: '15.2.0', open: () => {} }
+    })
+    expect(labelsOf(template, 'Help').slice(0, 4)).toEqual([shipped('open-help'), '—', 'Check for Updates…', '—'])
+    submenuOf(template, 'Help')
+      .find((item) => item.label === 'Check for Updates…')
+      ?.click?.(undefined as never, undefined, undefined as never)
+    expect(checkForUpdates).toHaveBeenCalledTimes(1)
+  })
+
   it('opens each one in the browser', () => {
     expect(opened()).toEqual([
       'https://teamree.us',

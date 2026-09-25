@@ -48,6 +48,8 @@ export type LatestRelease = {
   installer: DiskImage | null
   /** The release's own page, built from the tag rather than taken from the API. */
   releaseUrl: string
+  /** Every asset in this repository's releases under a plain file name; absent where a test built the release by hand. */
+  assets?: readonly ReleaseAsset[]
   /** Epoch milliseconds, or null when the date was missing or unreadable. */
   publishedAt: number | null
 }
@@ -61,6 +63,9 @@ export type DiskImage = {
   /** Lowercase hex. */
   sha256: string
 }
+
+/** A release asset whose link and name have been checked; `sha256` is GitHub's digest when it gives one. */
+export type ReleaseAsset = { name: string; url: string; size: number; sha256: string | null }
 
 /**
  * Exactly the fields that are used, every one optional: demanding the whole
@@ -169,6 +174,7 @@ function usable(raw: RawRelease, repository: string, channel: ReleaseChannel): L
     notes: plainText(raw.body ?? ''),
     downloadUrl: diskImage(raw, repository),
     installer: verifiableImage(raw, repository),
+    assets: checkedAssets(raw, repository),
     // Built from a checked tag rather than read from `html_url`.
     releaseUrl: `https://${RELEASE_HOST}/${repository}/releases/tag/${tag}`,
     publishedAt: epoch(raw.published_at)
@@ -210,6 +216,16 @@ function verifiableImage(raw: RawRelease, repository: string): DiskImage | null 
   return null
 }
 
+function checkedAssets(raw: RawRelease, repository: string): ReleaseAsset[] {
+  return (raw.assets ?? []).flatMap(({ name, browser_download_url: url, size, digest }) => {
+    if (name === undefined || url === undefined || !/^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(name)) return []
+    if (!isReleaseDownload(url, repository)) return []
+    if (size === undefined || !Number.isSafeInteger(size) || size <= 0) return []
+    const sha256 = /^sha256:([0-9a-f]{64})$/i.exec(digest ?? '')?.[1]?.toLowerCase() ?? null
+    return [{ name, url, size, sha256 }]
+  })
+}
+
 /**
  * Whether a URL is an address in this repository's releases, served over TLS.
  * Parsed, not prefix-matched: `https://github.com.example.invalid/` passes a string compare.
@@ -230,7 +246,7 @@ export function isReleaseDownload(candidate: string, repository: string = UPDATE
  * The response body, up to the budget, abandoned past it. Streamed, because
  * `response.text()` has buffered the whole thing before its length can be checked.
  */
-async function readBounded(response: Response): Promise<string> {
+export async function readBounded(response: Response, limit: number = MAX_RESPONSE_BYTES): Promise<string> {
   const body = response.body
   if (body === null) return ''
 
@@ -243,9 +259,7 @@ async function readBounded(response: Response): Promise<string> {
       const chunk = await reader.read()
       if (chunk.done) break
       bytes += chunk.value.byteLength
-      if (bytes > MAX_RESPONSE_BYTES) {
-        throw new Error(`the release list was larger than ${MAX_RESPONSE_BYTES} bytes`)
-      }
+      if (bytes > limit) throw new Error(`the response was larger than ${limit} bytes`)
       text += decoder.decode(chunk.value, { stream: true })
     }
   } finally {

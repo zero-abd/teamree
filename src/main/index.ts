@@ -37,6 +37,7 @@ import { installUnsavedFiles, type UnsavedFiles } from './unsavedFiles'
 import { registerOpenPathHandler } from './reveal/openPath'
 import { registerRevealHandler } from './reveal/revealPath'
 import { startRuntime, type Runtime } from './runtime/startRuntime'
+import { bundleOf, SelfInstaller } from './updates'
 import { optOutOfStateRestoration } from './stateRestoration'
 import { mayOpenExternally, navigationVerdict, windowOpenAnswer } from './windowNavigation'
 import {
@@ -118,6 +119,15 @@ function createWindow(): BrowserWindow {
   else void window.loadFile(join(import.meta.dirname, '../renderer/index.html'))
 
   return window
+}
+
+/** A packaged Mac app replaces itself in place; anything else offers the `.dmg`. */
+function selfInstall(): { selfInstall?: SelfInstaller } {
+  const bundle = process.platform === 'darwin' && app.isPackaged ? bundleOf(app.getPath('exe')) : null
+  if (bundle === null) return {}
+  return {
+    selfInstall: new SelfInstaller({ bundlePath: bundle, stagingRoot: join(app.getPath('userData'), 'updates') })
+  }
 }
 
 function currentAppearance(): Appearance {
@@ -334,6 +344,7 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
         openExternal: (url) => shell.openExternal(url),
         downloadsDirectory: app.getPath('downloads'),
         openPath: (path) => shell.openPath(path),
+        ...selfInstall(),
         trashItem: (path) => shell.trashItem(path),
         onAgentNotice: (notice) => notices?.deliver(notice),
         // `teamree quit`: only `app.quit` runs `before-quit`. See quitSequence.ts.
@@ -366,7 +377,11 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
   // being undefined does not mean no ptys were spawned. See `quitSequence.ts`.
   const onBeforeQuit = createQuitSequence({
     whenStarted: () => launched,
-    mayQuit: () => (forced || unsaved === undefined ? Promise.resolve(true) : unsaved.ask('quit')),
+    mayQuit: async () => {
+      const proceed = forced || unsaved === undefined || (await unsaved.ask('quit'))
+      if (!proceed) runtime?.quitDeclined()
+      return proceed
+    },
     stop: () => {
       leaving = true
       return runtime?.stop() ?? Promise.resolve()

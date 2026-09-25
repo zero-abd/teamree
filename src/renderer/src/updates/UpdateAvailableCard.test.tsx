@@ -28,6 +28,7 @@ const INITIAL = useWorkspaceStore.getState()
 const downloadUpdate = vi.fn()
 const fetchInstaller = vi.fn()
 const openInstaller = vi.fn()
+const restartToUpdate = vi.fn()
 const setAutomaticUpdates = vi.fn()
 
 function update(overrides: Partial<UpdateState> = {}): UpdateState {
@@ -75,6 +76,7 @@ beforeEach(() => {
   downloadUpdate.mockClear()
   fetchInstaller.mockClear()
   openInstaller.mockClear()
+  restartToUpdate.mockClear()
   setAutomaticUpdates.mockClear()
   localStorage.clear()
   useWorkspaceStore.setState({
@@ -85,6 +87,7 @@ beforeEach(() => {
     downloadUpdate,
     fetchInstaller,
     openInstaller,
+    restartToUpdate,
     setAutomaticUpdates
   })
 })
@@ -211,6 +214,38 @@ describe('the update card', () => {
     rerender(<UpdateAvailableCard />)
 
     expect(screen.getByText(/teamree 0\.3\.0 is available/)).toBeTruthy()
+  })
+})
+
+describe('an update fetched in the background', () => {
+  const ready = { state: 'ready' as const, version: '0.2.0' }
+
+  it('says it is ready and restarts into it', () => {
+    useWorkspaceStore.setState({ update: update({ install: ready }) })
+    render(<UpdateAvailableCard />)
+
+    expect(screen.getByText('teamree 0.2.0 is ready')).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Install steps' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Restart to Update' }))
+    expect(restartToUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  it('says nothing while it is still being fetched', () => {
+    const install = { state: 'downloading' as const, version: '0.2.0', received: 5, total: 100 }
+    useWorkspaceStore.setState({ update: update({ install }) })
+    const { container } = render(<UpdateAvailableCard />)
+    expect(container.querySelector('.update-card')).toBeNull()
+  })
+
+  it('comes back after Later once a person checks again', () => {
+    useWorkspaceStore.setState({ update: update({ install: ready, askedAt: null }) })
+    const { rerender } = render(<UpdateAvailableCard />)
+    fireEvent.click(screen.getByRole('button', { name: 'Later' }))
+    expect(screen.queryByText('teamree 0.2.0 is ready')).toBeNull()
+
+    useWorkspaceStore.setState({ update: update({ install: ready, askedAt: Date.now() + 1_000 }) })
+    rerender(<UpdateAvailableCard />)
+    expect(screen.getByText('teamree 0.2.0 is ready')).toBeTruthy()
   })
 })
 

@@ -1,9 +1,5 @@
-// The wording, and the one thing it must never imply.
-//
-// A card that says "Update available" beside a button reads as an installer,
-// and this one is not: the build is unsigned, so nothing can replace it in
-// place. Everything below is about the card saying that before somebody presses
-// anything, and about it staying quiet the rest of the time.
+// The wording: a copy fetched in place says it is ready and restarts into it; otherwise the card
+// says the disk image is installed by hand, before somebody presses anything, and stays quiet otherwise.
 
 import { describe, expect, it } from 'vitest'
 import type { UpdateState } from '@shared/entities'
@@ -120,5 +116,35 @@ describe('the installer button', () => {
   it('ignores a download that was for an older release', () => {
     const ready = { state: 'ready' as const, version: '0.1.5', path: '/Users/me/Downloads/teamree-0.1.5.dmg' }
     expect(installerStep(verifiable({ download: ready }))).toMatchObject({ kind: 'fetch' })
+  })
+})
+
+describe('an update fetched in place', () => {
+  const ready = { state: 'ready' as const, version: '0.2.0' }
+
+  it('says it is ready and restarts into it, with no install steps to read', () => {
+    const notice = updateNotice(state({ install: ready }))
+    expect(notice?.headline).toBe('teamree 0.2.0 is ready')
+    expect(notice?.ready).toBe(true)
+    expect(installerStep(state({ install: ready }))).toMatchObject({ kind: 'restart', label: 'Restart to Update' })
+  })
+
+  it('shows progress while it is fetched', () => {
+    const downloading = { state: 'downloading' as const, version: '0.2.0', received: 420, total: 1000 }
+    expect(installerStep(state({ install: downloading }))).toMatchObject({ kind: 'progress', label: 'Downloading 42%' })
+  })
+
+  it('falls back to the disk image, with the reason, when fetching it failed', () => {
+    const failed = { state: 'failed' as const, version: '0.2.0', problem: 'Update failed: checksum mismatch' }
+    const available = { ...state().available!, installer: { name: 'teamree-0.2.0.dmg', size: 1000 } }
+    expect(updateNotice(state({ available, install: failed }))?.ready).toBe(false)
+    expect(installerStep(state({ available, install: failed }))).toMatchObject({
+      kind: 'fetch',
+      problem: 'Update failed: checksum mismatch'
+    })
+  })
+
+  it('ignores a copy fetched for another release', () => {
+    expect(installerStep(state({ install: { state: 'ready', version: '0.1.5' } }))).toMatchObject({ kind: 'browser' })
   })
 })

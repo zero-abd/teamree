@@ -11,7 +11,13 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { WorkspaceStore } from '../store/workspaceStore'
 import type { HostPolicy } from './downloadInstaller'
 import type { LatestRelease } from './latestRelease'
-import { AUTOMATIC_CHECK_INTERVAL_MS, UpdateService, type UpdateSettingsRecord } from './updateService'
+import type { SelfInstall } from './selfInstaller'
+import {
+  AUTOMATIC_CHECK_INTERVAL_MS,
+  STARTUP_CHECK_DELAY_MS,
+  UpdateService,
+  type UpdateSettingsRecord
+} from './updateService'
 
 const NOW = 1_700_000_000_000
 const REPOSITORY = 'owner/project'
@@ -480,5 +486,171 @@ describe('fetching the installer', () => {
     const { update } = service({ downloadsDirectory: '/nowhere' })
     await update.check({ force: true })
     await expect(update.fetchInstaller()).rejects.toThrow(/no installer/)
+  })
+})
+
+describe('replacing this copy in place', () => {
+  function installer(overrides: Partial<SelfInstall> = {}) {
+    const calls = { prepared: [] as string[], armed: [] as [string, boolean][], launched: 0, disarmed: 0 }
+    const self: SelfInstall = {
+      refusal: async () => null,
+      prepare: async (release, options) => {
+        calls.prepared.push(release.version)
+        options.onSize?.(100)
+        options.onProgress?.(50)
+        options.onProgress?.(100)
+      },
+      recover: async () => null,
+      arm: async (version, foreground) => {
+        calls.armed.push([version, foreground])
+      },
+      launch: () => {
+        calls.launched += 1
+      },
+      disarm: () => {
+        calls.disarmed += 1
+      },
+      ...overrides
+    }
+    return { self, calls }
+  }
+
+  function installing(
+    options: { self?: SelfInstall; version?: string; readRelease?: () => Promise<LatestRelease | null> } = {}
+  ) {
+    const restarts: number[] = []
+    const problems: string[] = []
+    const delays: number[] = []
+    let fire: (() => void) | undefined
+    const update = new UpdateService({
+      version: options.version ?? '0.1.0',
+      repository: REPOSITORY,
+      settings: settings().record,
+      readRelease: options.readRelease ?? (async () => found()),
+      selfInstall: options.self ?? installer().self,
+      restart: () => restarts.push(1),
+      now: () => NOW,
+      onProblem: (message) => problems.push(message),
+      schedule: (run, delay) => {
+        delays.push(delay)
+        fire = run
+        return () => {}
+      }
+    })
+    return { update, restarts, problems, delays, tick: () => fire?.() }
+  }
+
+  it('fetches a newer release in the background and says when it is ready', async () => {
+    const { self, calls } = installer()
+    const { update } = installing({ self })
+    const checked = await update.check({ force: true })
+
+    expect(checked.install).toMatchObject({ state: 'downloading', version: '0.2.0' })
+    await vi.waitFor(() => expect(update.state().install).toEqual({ state: 'ready', version: '0.2.0' }))
+    expect(calls.prepared).toEqual(['0.2.0'])
+
+    await update.check({ force: true })
+    expect(calls.prepared).toEqual(['0.2.0'])
+  })
+
+  it('never fetches the same, an older, or a candidate release on the stable channel', async () => {
+    for (const [version, release] of [
+      ['0.2.0', found()],
+      ['0.3.0', found()],
+      ['0.1.0', found({ version: '0.3.0-rc.1', tag: 'v0.3.0-rc.1', prerelease: true })]
+    ] as const) {
+      const { self, calls } = installer()
+      const { update } = installing({ self, version, readRelease: async () => release })
+      await update.check({ force: true })
+      expect(update.state().install ?? null, version).toBeNull()
+      expect(calls.prepared).toEqual([])
+    }
+  })
+
+  it('leaves the disk image as the way when this copy cannot replace itself', async () => {
+    const { self, calls } = installer({ refusal: async () => 'it is running translocated' })
+    const { update, problems } = installing({ self })
+    await update.check({ force: true })
+
+    await vi.waitFor(() => expect(update.state().install).toBeNull())
+    expect(calls.prepared).toEqual([])
+    expect(problems.join('\n')).toContain('translocated')
+  })
+
+  it('says why a fetch failed, and tries again at the next check', async () => {
+    let attempts = 0
+    const { self } = installer({
+      prepare: async () => {
+        attempts += 1
+        if (attempts === 1) throw new Error('teamree-mac.json does not match the release')
+      }
+    })
+    const { update } = installing({ self })
+    await update.check({ force: true })
+    await vi.waitFor(() => expect(update.state().install?.state).toBe('failed'))
+    expect(update.state().install).toMatchObject({ problem: expect.stringContaining('does not match') })
+
+    await update.check({ force: true })
+    await vi.waitFor(() => expect(update.state().install?.state).toBe('ready'))
+  })
+
+  it('restarts only once ready, through the app’s own quit, and swaps only once the quit is past its questions', async () => {
+    const { self, calls } = installer()
+    const { update, restarts } = installing({ self })
+    await expect(update.restartToUpdate()).rejects.toThrow(/no update ready/)
+
+    await update.check({ force: true })
+    await vi.waitFor(() => expect(update.state().install?.state).toBe('ready'))
+    await expect(update.restartToUpdate()).resolves.toEqual({ restarting: '0.2.0' })
+    expect(calls.armed).toEqual([['0.2.0', true]])
+    expect(restarts).toHaveLength(1)
+    expect(calls.launched).toBe(0)
+
+    update.stop()
+    expect(calls.launched).toBe(1)
+  })
+
+  it('installs nothing on a later quit when this one was declined', () => {
+    const { self, calls } = installer()
+    const { update } = installing({ self })
+    update.quitDeclined()
+    expect(calls.disarmed).toBe(1)
+  })
+
+  it('offers a copy an earlier run fetched, without fetching it again', async () => {
+    const { self, calls } = installer({ recover: async (wanted) => (wanted('0.2.0') ? '0.2.0' : null) })
+    const { update, tick } = installing({ self })
+    update.start()
+    tick()
+    await vi.waitFor(() => expect(update.state().install).toEqual({ state: 'ready', version: '0.2.0' }))
+    expect(calls.prepared).toEqual([])
+  })
+
+  it('checks on launch and again every interval', async () => {
+    const { update, delays, tick } = installing()
+    update.start()
+    tick()
+    tick()
+    expect(delays).toEqual([STARTUP_CHECK_DELAY_MS, AUTOMATIC_CHECK_INTERVAL_MS, AUTOMATIC_CHECK_INTERVAL_MS])
+  })
+
+  it('remembers when a person asked, so a card put off with Later comes back', async () => {
+    const { update } = installing()
+    await update.check({ force: true })
+    expect(update.state().askedAt).toBeNull()
+    await update.check({ force: true, person: true })
+    expect(update.state().askedAt).toBe(NOW)
+  })
+
+  it('takes a download host other than the release’s only inside the test runner', () => {
+    const vitest = process.env['VITEST']
+    delete process.env['VITEST']
+    try {
+      expect(
+        () => new UpdateService({ version: '0.1.0', settings: settings().record, allowDownload: () => true })
+      ).toThrow(/tests/)
+    } finally {
+      process.env['VITEST'] = vitest
+    }
   })
 })

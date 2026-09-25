@@ -39,7 +39,6 @@ export function updatePanel(update: UpdateState | null, now: number): UpdatePane
     }
   }
 
-  // A check asks GitHub for the newest release and opens the disk image; teamree installs nothing itself.
   return {
     headline: `teamree ${update.current}`,
     offersCheck: true,

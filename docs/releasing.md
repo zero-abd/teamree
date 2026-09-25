@@ -112,7 +112,9 @@ In this order, stopping at the first failure:
 `typecheck` · `format:check` · `oxlint` · `build:cli` · the relay build · the
 full suite · `build` · `smoke` · `package:mac` · `package:verify` ·
 `package:verify` again against the copy inside the mounted `.dmg` ·
-`verify-signing`
+`verify-signing` · the `.zip` unpacked with `ditto -x -k`, which must hold one
+`teamree.app` at the package version whose `codesign --verify --deep --strict`
+passes
 
 `build:cli` and the relay build are there because the suite needs both and says
 so by failing: the acceptance pass drives `out/cli/index.js` as a real
@@ -173,11 +175,40 @@ Publishing is three steps, in this order, and each is announced:
 ```
 git tag -a v0.1.0 -m "teamree v0.1.0"
 git push origin v0.1.0
-gh release create v0.1.0 dist/teamree-0.1.0.dmg dist/SHA256SUMS.txt ...
+gh release create v0.1.0 teamree-0.1.0.dmg teamree-mac-universal.dmg \
+  teamree-0.1.0.zip teamree-mac.json SHA256SUMS.txt ...
 ```
+
+A dry run prints that line with the real file names.
 
 If `gh release create` fails after the tag is pushed, re-running the command
 uses the existing tag rather than making another.
+
+### How the app updates itself from it
+
+`package:mac` builds a universal `.zip` of the app beside the `.dmg`, and the
+release carries both plus `teamree-mac.json`:
+
+```json
+{ "version": "0.1.0", "file": "teamree-0.1.0.zip", "size": 201761957, "sha256": "…" }
+```
+
+A running teamree checks `releases/latest` on launch and every six hours. When
+it is older, it fetches the manifest, then the zip, and refuses unless the size
+and SHA-256 match the manifest (and GitHub's own digest, when it gives one). It
+unpacks into `~/Library/Application Support/teamree/updates` and refuses unless
+the app there has teamree's identifier, the manifest's version and a signature
+that verifies — from the same Team ID when the running copy has a Developer ID.
+Restart to Update quits through the normal quit, and a script left in that
+folder waits for the process to exit, moves the old bundle aside, moves the new
+one into its place, clears quarantine, opens it, and only then deletes the old
+one; if the new one will not open, the old one goes back and is opened.
+`update.log` in the same folder records each attempt.
+
+It never installs an older version or, on a stable build, a pre-release. A
+candidate (`v0.2.0-rc.1`) is not installed in place either: its manifest names
+the tag's version and the app inside says `0.2.0`. A copy running from the
+disk image, translocated, or from a folder it cannot write gets the `.dmg`.
 
 ### One check that is deliberately not a gate
 
@@ -195,8 +226,9 @@ that anybody new will follow.
 
 ### What a dry run leaves behind
 
-`dist/SHA256SUMS.txt` and `dist/RELEASE_NOTES.md`, both inside gitignored
-`dist/`, plus whatever the packaging step built. Nothing else, anywhere.
+`dist/SHA256SUMS.txt`, `dist/teamree-mac.json` and `dist/RELEASE_NOTES.md`,
+all inside gitignored `dist/`, plus whatever the packaging step built. Nothing
+else, anywhere.
 
 ---
 
@@ -398,6 +430,22 @@ build:
 - every "on a signed, notarized build" cell in the table above. Those are what
   the commands are documented to return, not observations.
 - that a downloaded, quarantined copy of a signed build opens without a warning.
+- that a signed build's in-place update keeps the Team ID check honest against a
+  real Developer ID bundle, and that the swapped app opens without a Gatekeeper
+  prompt.
+
+**Not verified until a release carries the zip and manifest** — the flow is
+tested end to end against a small ad-hoc-signed app, a local server and a
+temporary Applications folder, but not against:
+
+- electron-builder's own `.zip` of the 190 MB universal app surviving
+  `ditto -x -k` with a verifying signature on another Mac (the release script
+  checks it on the building Mac).
+- GitHub's asset URLs and redirects to its storage for the zip and the
+  manifest, and the `digest` it reports for them.
+- the real swap of `/Applications/teamree.app` and the relaunch through
+  `/usr/bin/open`, with sessions restored, from one published version to the
+  next.
 
 The first signed build is therefore also the first test of all of that. Cut it
 as a pre-release (`npm run release -- v0.2.0-rc.1`), download it on another Mac
