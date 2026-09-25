@@ -180,14 +180,17 @@ describe.runIf(process.platform === 'darwin')('updating in place', () => {
     expect(versionOf(join(applications, 'teamree.app'))).toBe('0.2.0')
 
     app?.kill()
-    await vi.waitFor(() => expect(existsSync(join(root, 'launched'))).toBe(true), { timeout: 30_000 })
+    // The helper logs `installed` last, after removing the previous copy; `launched` comes before that.
+    const log = join(root, 'userData', 'updates', 'update.log')
+    await vi.waitFor(() => expect(existsSync(log) && readFileSync(log, 'utf8')).toMatch(/installed 0\.3\.0/), {
+      timeout: 30_000
+    })
     expect(readFileSync(join(root, 'launched'), 'utf8')).toBe('0.3.0\n')
     expect(readdirSync(applications)).toEqual(['teamree.app'])
     expect(versionOf(join(applications, 'teamree.app'))).toBe('0.3.0')
     expect(
       spawnSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', join(applications, 'teamree.app')]).status
     ).toBe(0)
-    expect(readFileSync(join(root, 'userData', 'updates', 'update.log'), 'utf8')).toMatch(/installed 0\.3\.0/)
     const flagged = spawnSync('/usr/bin/xattr', ['-r', join(applications, 'teamree.app')], { encoding: 'utf8' })
     expect(flagged.stdout).not.toContain('com.apple.quarantine')
     expect(existsSync(join(root, 'userData', 'updates', '0.3.0'))).toBe(false)
