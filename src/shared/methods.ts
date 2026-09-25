@@ -682,6 +682,9 @@ export const Params = {
     cell: z.object({ width: z.number().positive(), height: z.number().positive() }).optional()
   }),
 
+  agentsTrust: z.object({}),
+  agentsSetTrust: z.object({ trustNewWorktrees: z.boolean() }),
+
   appearanceGet: z.object({}),
   /**
    * The whole appearance, replaced (the editor moves all of it together). Only
@@ -886,6 +889,10 @@ export type MethodContract = {
   'terminal.relaunch': { params: z.infer<typeof Params.terminalRelaunch>; result: Terminal }
   /** Answers with the pane, now carrying what its agent just said. */
   'terminal.agentEvent': { params: z.infer<typeof Params.terminalAgentEvent>; result: Terminal }
+
+  /** Whether a new worktree gets the agent CLIs' trust of its main checkout. Per machine. */
+  'agents.trust': { params: z.infer<typeof Params.agentsTrust>; result: { trustNewWorktrees: boolean } }
+  'agents.setTrust': { params: z.infer<typeof Params.agentsSetTrust>; result: { trustNewWorktrees: boolean } }
 
   /** How this installation is painted. Per machine, not per project. */
   'appearance.get': { params: z.infer<typeof Params.appearanceGet>; result: Appearance }

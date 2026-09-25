@@ -482,6 +482,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
   })
 
   let appearance: Appearance = DEFAULT_APPEARANCE
+  let trustNewWorktrees = true
   const updateState = (): UpdateState => ({
     current: '0.0.1-demo',
     // Nothing to compare a demo build against, which is also what a checkout says about itself.
@@ -1388,6 +1389,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
 
     // Held for the life of the page: the seeded runtime has no disk.
+    'agents.trust': () => ({ trustNewWorktrees }),
+    'agents.setTrust': (params) => {
+      trustNewWorktrees = params.trustNewWorktrees
+      return { trustNewWorktrees }
+    },
     'appearance.get': () => appearance,
     'appearance.set': (next) => {
       appearance = sanitizeAppearance(next)

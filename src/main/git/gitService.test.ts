@@ -701,6 +701,36 @@ describe('the command a project runs in every new worktree', () => {
   })
 })
 
+describe('agent folder trust for a new worktree', () => {
+  it('is asked for with the main checkout and the new checkout before the worktree is ready', async () => {
+    const repo = await newRepo()
+    const asked: Array<{ projectPath: string; worktreePath: string; existed: boolean }> = []
+    const service = newService(repo, {
+      trustCheckout: async ({ projectPath, worktreePath }) => {
+        asked.push({ projectPath, worktreePath, existed: existsSync(path.join(worktreePath, '.git')) })
+      }
+    })
+    const project = await service.addProject({ path: repo.repoPath })
+    const seen: string[] = []
+    service.events.on((event) => {
+      if (event.type === 'worktree.updated' && event.worktree.state === 'ready') seen.push(`ready:${asked.length}`)
+    })
+
+    const worktree = await readyWorktree(service, project.id, 'trusted')
+
+    expect(asked).toEqual([{ projectPath: project.path, worktreePath: worktree.path, existed: true }])
+    expect(seen).toEqual(['ready:1'])
+  })
+
+  it('keeps the worktree when recording trust fails', async () => {
+    const repo = await newRepo()
+    const service = newService(repo, { trustCheckout: () => Promise.reject(new Error('config unreadable')) })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    expect((await readyWorktree(service, project.id, 'still made')).state).toBe('ready')
+  })
+})
+
 describe('setup shared in .teamree/project.json', () => {
   /** A `startSetup` that only records the command it was handed. */
   function commands(): { startSetup: GitServiceOptions['startSetup']; ran: string[] } {

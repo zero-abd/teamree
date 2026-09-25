@@ -106,6 +106,8 @@ const setTerminalOptions = vi.fn()
 const setDefaultAgent = vi.fn()
 const setAgentArgs = vi.fn()
 const setAutomaticUpdates = vi.fn()
+const loadAgentTrust = vi.fn()
+const setTrustNewWorktrees = vi.fn()
 const checkForUpdates = vi.fn()
 const fetchInstaller = vi.fn()
 const openInstaller = vi.fn()
@@ -137,6 +139,8 @@ function seed(overrides: Record<string, unknown> = {}): void {
       setDefaultAgent,
       setAgentArgs,
       setAutomaticUpdates,
+      loadAgentTrust,
+      setTrustNewWorktrees,
       checkForUpdates,
       fetchInstaller,
       openInstaller,
@@ -174,6 +178,8 @@ beforeEach(() => {
     setDefaultAgent,
     setAgentArgs,
     setAutomaticUpdates,
+    loadAgentTrust,
+    setTrustNewWorktrees,
     checkForUpdates,
     fetchInstaller,
     openInstaller,
@@ -964,6 +970,26 @@ describe('the agent you always use', () => {
 
     fireEvent.change(select, { target: { value: 'codex' } })
     expect(setDefaultAgent).toHaveBeenCalledWith('codex')
+  })
+
+  it('trusts new worktrees unless unticked, with nothing but the label', () => {
+    seed({ agents: [claude, codex] })
+    render(<SettingsView />)
+
+    expect(loadAgentTrust).toHaveBeenCalled()
+    const check = screen.getByRole('checkbox', { name: 'Trust New Worktrees' }) as HTMLInputElement
+    expect(check.checked).toBe(true)
+    fireEvent.click(check)
+    expect(setTrustNewWorktrees).toHaveBeenCalledWith(false)
+    expect(check.closest('.settings-field')?.textContent).toBe('Trust New Worktrees')
+  })
+
+  it('keeps the trust row under a filter for it', () => {
+    seed({ agents: [claude, codex], trustNewWorktrees: false })
+    render(<SettingsView />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'trust' } })
+    expect((screen.getByRole('checkbox', { name: 'Trust New Worktrees' }) as HTMLInputElement).checked).toBe(false)
+    expect(screen.queryByLabelText('Default agent')).toBeNull()
   })
 
   it('shows the full command under an agent given arguments, verbatim', () => {

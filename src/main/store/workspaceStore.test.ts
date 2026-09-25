@@ -636,6 +636,25 @@ describe('workspace store', () => {
     })
   })
 
+  describe('trusting new worktrees in the agent CLIs', () => {
+    it('is on until turned off, and the choice survives a reopen', async () => {
+      const path = join(directory, 'workspace.json')
+      const store = await WorkspaceStore.open(path)
+      expect(store.trustNewWorktrees()).toBe(true)
+
+      store.setTrustNewWorktrees(false)
+      await store.flush()
+      expect(JSON.parse(await readFile(path, 'utf8')).agents).toEqual({ trustNewWorktrees: false })
+      expect((await WorkspaceStore.open(path)).trustNewWorktrees()).toBe(false)
+    })
+
+    it('reads a mangled value as on', async () => {
+      const path = join(directory, 'workspace.json')
+      await writeFile(path, JSON.stringify({ version: 1, agents: { trustNewWorktrees: 'nope' } }), 'utf8')
+      expect((await WorkspaceStore.open(path)).trustNewWorktrees()).toBe(true)
+    })
+  })
+
   /** Each field is salvaged on its own terms: a mangled one costs that field and nothing else. */
   describe('three fields that arrived separately, in one file', () => {
     const ANA = 'Lx9TqvJ2mR0aUf7cHbN4sKwEdY1gZp6VtQiOnA3XjBM='

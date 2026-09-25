@@ -1,12 +1,19 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { claudeProjectSlug, claudeTranscriptPath, conversationOnDisk } from './agent-conversations'
 
 const created: string[] = []
 
+// These read the stores under a stand-in home, which the suite's own CLAUDE_CONFIG_DIR and CODEX_HOME would override.
+beforeEach(() => {
+  vi.stubEnv('CLAUDE_CONFIG_DIR', '')
+  vi.stubEnv('CODEX_HOME', '')
+})
+
 afterEach(async () => {
+  vi.unstubAllEnvs()
   await Promise.all(created.splice(0).map((directory) => rm(directory, { recursive: true, force: true })))
 })
 
