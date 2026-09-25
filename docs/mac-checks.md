@@ -29,11 +29,11 @@ was rejected, the window put up "Could not reach the runtime", and the gate
 called that a pass. `v0.1.0`, `v0.1.1` and `v0.1.2` were each released through
 it, on a Mac, with that step vacuous. It now boots `out/main/index.js` — the file
 the packaged app starts — and asserts that a call placed by the renderer over the
-real bridge is answered. 0.2.0 is the first release where that step will have
+real bridge is answered. 0.3.0 is the first release where that step will have
 meant anything, which is a reason to treat the rest of this list as the coverage
 rather than as a formality.
 
-## Before you cut 0.2.0
+## Before you cut 0.3.0
 
 These four stop the release, and three of them are cheap.
 
@@ -76,10 +76,10 @@ The command itself, from a clean tree on `main`:
 ```sh
 rm -rf dist
 npm run release:dry-run      # every gate, nothing created
-npm run release              # the same, and then tags v0.2.0 and publishes
+npm run release              # the same, and then tags v0.3.0 and publishes
 ```
 
-Both default to the tag matching `package.json`, which is `v0.2.0`. The run
+Both default to the tag matching `package.json`, which is `v0.3.0`. The run
 prints the notes it is about to carry before it asks you to type the tag.
 
 One thing that is not a failure, so that it is not a surprise: the packaged app
@@ -260,7 +260,7 @@ document it checks inside out.
 
 What follows is the remainder — the gates whose failing path cannot be reached
 from Linux at all, and the one thing to do to each of them on a Mac. None of it
-blocks 0.2.0. It is worth an hour the next time you package, because a gate
+blocks 0.3.0. It is worth an hour the next time you package, because a gate
 nobody has watched fail is a gate nobody knows works.
 
 - **`package:mac` and the signing guard.** Point `CSC_NAME` at an identity that
