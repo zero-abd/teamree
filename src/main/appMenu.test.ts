@@ -452,7 +452,7 @@ describe('the window’s own commands in the menu bar', () => {
 })
 
 /** Words macOS title case keeps lowercase between the first and the last. */
-const MINOR_WORDS = new Set('a an and as at but by for in nor of on or the to'.split(' '))
+const MINOR_WORDS = new Set('a an and as at but by for from in nor of on or the to'.split(' '))
 /** Names spelt as their owners spell them. */
 const PROPER_NAMES = new Set(['teamree'])
 
