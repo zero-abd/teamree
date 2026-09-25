@@ -14,6 +14,7 @@ import {
   parseWorkspaceDocument,
   type AskedQuestion,
   type AskedQuestions,
+  type AgentsRecord,
   type StandingConsentRecord,
   type UpdateRecord,
   type WorkspaceDocument
@@ -86,6 +87,7 @@ export class WorkspaceStore {
   private asked: AskedQuestions = {}
   private appearance: Appearance = DEFAULT_APPEARANCE
   private updates: UpdateRecord = {}
+  private agents: AgentsRecord = {}
 
   private queue: Promise<void> = Promise.resolve()
   private queued = false
@@ -117,6 +119,7 @@ export class WorkspaceStore {
     this.asked = document.asked
     this.appearance = document.appearance
     this.updates = document.updates
+    this.agents = document.agents
   }
 
   /**
@@ -313,6 +316,17 @@ export class WorkspaceStore {
     this.persist()
   }
 
+  /** Whether a new worktree gets the agent CLIs' trust of its main checkout. On unless turned off. */
+  trustNewWorktrees(): boolean {
+    return this.agents.trustNewWorktrees ?? true
+  }
+
+  setTrustNewWorktrees(on: boolean): void {
+    if (this.trustNewWorktrees() === on) return
+    this.agents = { ...this.agents, trustNewWorktrees: on }
+    this.persist()
+  }
+
   /** The rate limit's clock, on disk so an hour of restarts is one check. */
   recordUpdateCheck(at: number): void {
     this.updates = { ...this.updates, lastCheckedAt: at }
@@ -395,7 +409,8 @@ export class WorkspaceStore {
       standingConsent: this.listStandingConsent(),
       asked: this.asked,
       appearance: this.appearance,
-      updates: this.updates
+      updates: this.updates,
+      agents: this.agents
     }
   }
 }

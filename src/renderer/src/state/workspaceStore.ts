@@ -427,6 +427,8 @@ type WorkspaceState = {
   cliError: string | null
   /** Whether a newer teamree exists. Null means nobody has asked yet. */
   update: UpdateState | null
+  /** Settings › Agents › Trust New Worktrees, as the runtime last said. */
+  trustNewWorktrees: boolean
   /** Coding agents this machine can run, probed once at startup. */
   agents: InstalledAgent[]
   /** True once the probe has answered; until then an empty `agents` means "not asked yet". */
@@ -668,6 +670,8 @@ type WorkspaceState = {
   openInstaller: () => Promise<void>
   /** Turns the automatic check on or off. Remembered between runs. */
   setAutomaticUpdates: (automatic: boolean) => Promise<void>
+  loadAgentTrust: () => Promise<void>
+  setTrustNewWorktrees: (on: boolean) => Promise<void>
 
   /** Reads one project's roster. */
   loadMembers: (projectId: string) => Promise<void>
@@ -1446,6 +1450,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     cliInstall: null,
     cliError: null,
     update: null,
+    trustNewWorktrees: true,
     agents: [],
     agentsProbed: false,
     hunkPending: false,
@@ -2705,6 +2710,27 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       } catch (error) {
         set({ update: before })
         failed('Could not change whether teamree checks for updates')(error)
+      }
+    },
+
+    async loadAgentTrust() {
+      try {
+        set({ trustNewWorktrees: (await runtimeClient.call('agents.trust', {})).trustNewWorktrees })
+      } catch {
+        // The checkbox keeps showing the default; the runtime acts on its own record either way.
+      }
+    },
+
+    async setTrustNewWorktrees(on) {
+      const before = get().trustNewWorktrees
+      set({ trustNewWorktrees: on })
+      try {
+        set({
+          trustNewWorktrees: (await runtimeClient.call('agents.setTrust', { trustNewWorktrees: on })).trustNewWorktrees
+        })
+      } catch (error) {
+        set({ trustNewWorktrees: before })
+        failed('Could not change Trust New Worktrees')(error)
       }
     },
 

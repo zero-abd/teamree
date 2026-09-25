@@ -130,6 +130,11 @@ const UpdatesSchema = z.object({
 
 export type UpdateRecord = z.infer<typeof UpdatesSchema>
 
+/** Agent choices the runtime acts on. `trustNewWorktrees` is absent until somebody turns it off. */
+const AgentsSchema = z.object({ trustNewWorktrees: z.boolean().optional() })
+
+export type AgentsRecord = z.infer<typeof AgentsSchema>
+
 export type WorkspaceDocument = {
   version: number
   projects: Project[]
@@ -157,6 +162,7 @@ export type WorkspaceDocument = {
   appearance: Appearance
   /** The update check's preference and clock. See `UpdatesSchema`. */
   updates: UpdateRecord
+  agents: AgentsRecord
 }
 
 /** One pane, one teammate, and when the owner said so. */
@@ -180,7 +186,8 @@ export function emptyWorkspaceDocument(): WorkspaceDocument {
     standingConsent: [],
     asked: {},
     appearance: sanitizeAppearance(undefined),
-    updates: {}
+    updates: {},
+    agents: {}
   }
 }
 
@@ -205,7 +212,8 @@ export function parseWorkspaceDocument(raw: unknown): WorkspaceDocument {
     asked: AskedSchema.safeParse(record.asked).data ?? {},
     // Salvaged one colour at a time: a single bad hex costs that colour, not the theme.
     appearance: sanitizeAppearance(record.appearance),
-    updates: UpdatesSchema.safeParse(record.updates).data ?? {}
+    updates: UpdatesSchema.safeParse(record.updates).data ?? {},
+    agents: AgentsSchema.safeParse(record.agents).data ?? {}
   }
 }
 

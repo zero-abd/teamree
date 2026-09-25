@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config'
-import { resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import SkipAllowlist from './scripts/vitest-skip-allowlist.mjs'
 
 // The relay is a second npm package with its own config, and its 84 tests — the
@@ -17,6 +18,9 @@ const skipRelay = process.env.TEAMREE_SKIP_RELAY_TESTS === '1'
 
 // Before the workers fork, so no test or child it spawns reads the macOS keychain.
 delete process.env.NODE_USE_SYSTEM_CA
+// Nor the owner's claude and codex configs: a worktree a test makes looks for trust in these, which never exist.
+process.env.CLAUDE_CONFIG_DIR = join(tmpdir(), 'teamree-tests-have-no-agent-config', 'claude')
+process.env.CODEX_HOME = join(tmpdir(), 'teamree-tests-have-no-agent-config', 'codex')
 
 export default defineConfig({
   test: {

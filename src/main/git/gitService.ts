@@ -128,6 +128,8 @@ export type GitServiceOptions = {
    * pane id. Handed in because opening a pane needs the terminal service.
    */
   startSetup?: (input: { worktree: Worktree; project: Project; command: string }) => string | undefined
+  /** Gives a checkout just made the agent CLIs' trust its main checkout has; a failure never fails the create. */
+  trustCheckout?: (input: { projectPath: string; worktreePath: string }) => Promise<unknown>
   /** `shell.trashItem`. Absent, discarding an untracked file is refused. */
   trash?: Trash
   /** Where `gh` is, asked lazily; absent, pull requests open on the host's page instead. */
@@ -157,6 +159,7 @@ export class GitService {
   readonly #now: () => number
   readonly #createId: () => string
   readonly #startSetup: GitServiceOptions['startSetup']
+  readonly #trustCheckout: GitServiceOptions['trustCheckout']
   readonly #trash: Trash | undefined
   readonly #gh: GhProbe | undefined
   readonly #locateGh: (() => string | null) | undefined
@@ -186,6 +189,7 @@ export class GitService {
     this.#now = options.now ?? Date.now
     this.#createId = options.createId ?? randomUUID
     this.#startSetup = options.startSetup
+    this.#trustCheckout = options.trustCheckout
     this.#trash = options.trash
     this.#gh = options.ghBinary === undefined ? undefined : createGhProbe(options.ghBinary, this.#now)
     this.#locateGh = options.ghBinary
@@ -1256,6 +1260,12 @@ export class GitService {
         ...(settings.copiedPaths === undefined ? {} : { copiedPaths: settings.copiedPaths }),
         signal
       })
+      // Also before 'ready': the agent pane that opens on it reads its trust as it starts.
+      await this.#trustCheckout?.({ projectPath: project.path, worktreePath: worktree.path }).catch(
+        (error: unknown) => {
+          console.error(`[git] could not record agent trust for worktree ${worktree.id}`, error)
+        }
+      )
       if (start !== undefined) this.#startPoints.set(worktreeId, start)
       // In the same breath as the flip to 'ready': one write, one event, nothing
       // in between for a client to read a half-answer out of.

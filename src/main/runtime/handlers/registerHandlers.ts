@@ -21,6 +21,7 @@ import type { ScrollbackRepository } from '../../terminals/session-manager'
 import type { AgentNotice, NoticeAnswer } from '../../agentNotices'
 import type { ScreenMenu } from '../../../shared/screenOpinion'
 import { paletteTone, resolvePalette, type Appearance, type Tone } from '../../../shared/theme'
+import { registerAgentTrustHandlers, trustCheckoutFor } from './agentTrustHandlers'
 import { registerAppearanceHandlers } from './appearanceHandlers'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerQuitHandler } from './quitHandler'
@@ -93,6 +94,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   registerUnsubscribeHandler(registry)
   registerWorkspaceSubscribeHandler(registry)
   registerAppearanceHandlers(registry, options.onAppearance)
+  registerAgentTrustHandlers(registry)
   // One file of a worktree at a time, for a file pane.
   registerFileHandlers(registry)
   const workspaceEvents = registry.context.workspaceEvents
@@ -156,6 +158,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     ...(options.worktreesRoot === undefined ? {} : { worktreesRoot: options.worktreesRoot }),
     ...(options.trashItem === undefined ? {} : { trash: options.trashItem }),
     ghBinary: () => findProgram('gh', [process.env.PATH]) ?? findProgram('gh', [loginShellPath()]),
+    trustCheckout: trustCheckoutFor(registry.context.store),
     // The one seam between "a checkout is ready" and "a pane is open in it",
     // for a GUI create and a CLI create alike.
     startSetup: ({ worktree, command }) => {

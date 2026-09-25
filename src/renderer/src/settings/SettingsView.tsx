@@ -161,7 +161,8 @@ function useSectionRows(): Record<Exclude<SectionId, 'projects'>, SettingsRow[]>
         label: 'Default agent',
         words: ['First found', ...agents.filter((row) => row.command !== null).map((row) => harnessName(row.kind))]
       },
-      ...agents.map((row) => ({ label: harnessName(row.kind), words: [agentArgs[row.kind] ?? ''] }))
+      ...agents.map((row) => ({ label: harnessName(row.kind), words: [agentArgs[row.kind] ?? ''] })),
+      { label: 'Trust New Worktrees', words: [] }
     ],
     panes: [
       { label: 'Terminal text size', words: [`${fontSize}px`] },
@@ -186,6 +187,7 @@ export function SettingsView(): React.JSX.Element {
   const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
   const loadCli = useWorkspaceStore((state) => state.loadCli)
   const loadUpdate = useWorkspaceStore((state) => state.loadUpdate)
+  const loadAgentTrust = useWorkspaceStore((state) => state.loadAgentTrust)
   const agents = useAgentRows()
   const [query, setQuery] = useState('')
   const sectionRows = useSectionRows()
@@ -202,7 +204,8 @@ export function SettingsView(): React.JSX.Element {
   useEffect(() => {
     void loadCli()
     void loadUpdate()
-  }, [loadCli, loadUpdate])
+    void loadAgentTrust()
+  }, [loadCli, loadUpdate, loadAgentTrust])
 
   const body = useRef<HTMLDivElement>(null)
   const [current, setActive] = useState<SectionId | null>(null)
@@ -701,14 +704,16 @@ function useDraft(
 }
 
 /**
- * Which agent you always use and what you pass it; per machine, shown once the probe found one.
- * Nothing is seeded: no autonomy flag is pre-applied by default.
+ * Which agent you always use, what you pass it, and whether new worktrees get the main checkout's
+ * folder trust; per machine, shown once the probe found one. No autonomy flag is pre-applied.
  */
 function AgentsSection(): React.JSX.Element | null {
   const rows = useAgentRows()
   const agents = rows.filter((row) => row.command !== null)
   const defaultAgent = useWorkspaceStore((state) => state.defaultAgent)
   const setDefaultAgent = useWorkspaceStore((state) => state.setDefaultAgent)
+  const trustNewWorktrees = useWorkspaceStore((state) => state.trustNewWorktrees)
+  const setTrustNewWorktrees = useWorkspaceStore((state) => state.setTrustNewWorktrees)
   const shown = useShown()
 
   if (rows.length === 0) return null
@@ -747,6 +752,21 @@ function AgentsSection(): React.JSX.Element | null {
           .map((row) => (
             <AgentArguments key={row.kind} agent={row} />
           ))}
+
+        {shown.row('Trust New Worktrees') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-trust-worktrees">
+              <Marked text="Trust New Worktrees" />
+            </label>
+            <input
+              id="settings-trust-worktrees"
+              className="settings-field__check"
+              type="checkbox"
+              checked={trustNewWorktrees}
+              onChange={(event) => void setTrustNewWorktrees(event.target.checked)}
+            />
+          </div>
+        ) : null}
       </div>
     </section>
   )

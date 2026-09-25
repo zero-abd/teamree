@@ -70,6 +70,13 @@ describe('what the launcher leaves the keychain', () => {
   it('reaches no test or child the suite spawns', () => {
     expect(process.env).not.toHaveProperty('NODE_USE_SYSTEM_CA')
   })
+
+  it('points the smoke app and the suite at claude and codex configs that are not the owner’s', () => {
+    const env = smokeEnv({ PATH: '/usr/bin', CLAUDE_CONFIG_DIR: '/Users/me' }, '/tmp/smoke/worktrees')
+    expect(env).toMatchObject({ CLAUDE_CONFIG_DIR: '/tmp/smoke/claude', CODEX_HOME: '/tmp/smoke/codex' })
+    expect(process.env.CLAUDE_CONFIG_DIR).toContain('teamree-tests-have-no-agent-config')
+    expect(process.env.CODEX_HOME).toContain('teamree-tests-have-no-agent-config')
+  })
 })
 
 describe('whether Electron is given a display first', () => {
