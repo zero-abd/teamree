@@ -122,6 +122,9 @@ describe('dispatcher', () => {
     // Named rather than counted, so the diff says which method arrived or went.
     expect([...registry.methods()].sort()).toEqual([
       'agent.list',
+      // Local: what this machine's agent CLIs trust.
+      'agents.setTrust',
+      'agents.trust',
       // Local: a teammate does not get to close the machine.
       'app.quit',
       // Local: a theme is a fact about one person's screen.
