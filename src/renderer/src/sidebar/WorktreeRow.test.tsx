@@ -462,6 +462,14 @@ describe('one of several runs of a task', () => {
 })
 
 describe('what the panes under it are doing', () => {
+  // The sidebar draws the worktree as one box; the box is this element.
+  it('holds its row and its panes in one box', () => {
+    mount({ terminals: [terminal({ id: 't1', agent: 'claude' }), terminal({ id: 't2' })] })
+    const box = row()
+    expect(box.querySelector(':scope > .worktree__row')).toBeTruthy()
+    expect(box.querySelectorAll(':scope > .panes .pane-row')).toHaveLength(2)
+  })
+
   it('lists each pane with what it last printed, and focuses it on a press', () => {
     mount({
       terminals: [terminal({ id: 't1', agent: 'claude', lastOutputAt: NOW - 90_000 })],
