@@ -14,10 +14,13 @@ import type { LatestRelease } from './latestRelease'
 import type { SelfInstall } from './selfInstaller'
 import {
   AUTOMATIC_CHECK_INTERVAL_MS,
+  AUTOMATIC_CHECK_THROTTLE_MS,
+  FOCUS_RECHECK_AFTER_MS,
   STARTUP_CHECK_DELAY_MS,
   UpdateService,
   type UpdateSettingsRecord
 } from './updateService'
+import type { WakeWatch } from './wakeWatch'
 
 const NOW = 1_700_000_000_000
 const REPOSITORY = 'owner/project'
@@ -68,6 +71,13 @@ type ServiceOptions = {
   downloadsDirectory?: string
   openPath?: (path: string) => Promise<string>
   allowDownload?: HostPolicy
+  watchWake?: WakeWatch
+}
+
+/** A clock a test can move by hand, for the checks a real timer would not fire in a unit test. */
+function movableClock(start: number): { now: () => number; advance: (byMs: number) => void } {
+  let at = start
+  return { now: () => at, advance: (byMs) => (at += byMs) }
 }
 
 function service(options: ServiceOptions = {}) {
@@ -83,6 +93,7 @@ function service(options: ServiceOptions = {}) {
     downloadsDirectory: options.downloadsDirectory,
     openPath: options.openPath,
     allowDownload: options.allowDownload,
+    watchWake: options.watchWake,
     now: options.now ?? (() => NOW),
     onChange: () => changes.push(changes.length),
     onProblem: (message) => problems.push(message)
@@ -231,7 +242,7 @@ describe('a check that could not be made', () => {
 })
 
 describe('how often GitHub is asked', () => {
-  it('does not ask again inside the interval, unless a person asked', async () => {
+  it('does not ask again inside the throttle, unless a person asked', async () => {
     let asks = 0
     const { record } = settings({ lastCheckedAt: NOW - 60_000 })
     const { update } = service({
@@ -250,9 +261,9 @@ describe('how often GitHub is asked', () => {
     expect(asks).toBe(1)
   })
 
-  it('asks again once the interval has passed', async () => {
+  it('asks again once the throttle has passed', async () => {
     let asks = 0
-    const { record } = settings({ lastCheckedAt: NOW - AUTOMATIC_CHECK_INTERVAL_MS - 1 })
+    const { record } = settings({ lastCheckedAt: NOW - AUTOMATIC_CHECK_THROTTLE_MS - 1 })
     const { update } = service({
       record,
       readRelease: async () => {
@@ -262,6 +273,14 @@ describe('how often GitHub is asked', () => {
     })
     await update.check()
     expect(asks).toBe(1)
+  })
+
+  // Named, so a change to any of these is a deliberate one.
+  it('is 10 seconds after launch, every hour, throttled to once per 10 minutes', () => {
+    expect(STARTUP_CHECK_DELAY_MS).toBe(10_000)
+    expect(AUTOMATIC_CHECK_INTERVAL_MS).toBe(60 * 60 * 1000)
+    expect(AUTOMATIC_CHECK_THROTTLE_MS).toBe(10 * 60 * 1000)
+    expect(FOCUS_RECHECK_AFTER_MS).toBe(30 * 60 * 1000)
   })
 
   // The case in-memory state cannot see.
@@ -301,7 +320,7 @@ describe('how often GitHub is asked', () => {
     expect(state.available).toMatchObject({ version: '0.2.0', downloadUrl: null })
 
     const third = await open()
-    await from(third, NOW + AUTOMATIC_CHECK_INTERVAL_MS + 1).check()
+    await from(third, NOW + AUTOMATIC_CHECK_THROTTLE_MS + 1).check()
     expect(asks).toBe(2)
   })
 
@@ -316,6 +335,162 @@ describe('how often GitHub is asked', () => {
     const [a, b] = await Promise.all([update.check({ force: true }), update.check({ force: true })])
     expect(asks).toBe(1)
     expect(a.available?.version).toBe(b.available?.version)
+  })
+})
+
+describe('waking from sleep', () => {
+  it('checks once the machine wakes, through the same throttle as the clock', async () => {
+    let asks = 0
+    let onWake: (() => void) | undefined
+    const watchWake: WakeWatch = async (onWakeCallback) => {
+      onWake = onWakeCallback
+      return () => {}
+    }
+    const { record } = settings({ lastCheckedAt: NOW - AUTOMATIC_CHECK_THROTTLE_MS - 1 })
+    const { update } = service({
+      record,
+      watchWake,
+      readRelease: async () => {
+        asks += 1
+        return found()
+      }
+    })
+
+    update.start()
+    await vi.waitFor(() => expect(onWake).toBeDefined())
+    onWake?.()
+    await vi.waitFor(() => expect(asks).toBe(1))
+  })
+
+  it('says nothing when a wake lands inside the throttle', async () => {
+    let asks = 0
+    let onWake: (() => void) | undefined
+    const watchWake: WakeWatch = async (onWakeCallback) => {
+      onWake = onWakeCallback
+      return () => {}
+    }
+    const { record } = settings({ lastCheckedAt: NOW - 60_000 })
+    const { update } = service({
+      record,
+      watchWake,
+      readRelease: async () => {
+        asks += 1
+        return found()
+      }
+    })
+
+    update.start()
+    await vi.waitFor(() => expect(onWake).toBeDefined())
+    onWake?.()
+    expect(asks).toBe(0)
+  })
+
+  it('says nothing when the preference is off', async () => {
+    let asks = 0
+    let onWake: (() => void) | undefined
+    const watchWake: WakeWatch = async (onWakeCallback) => {
+      onWake = onWakeCallback
+      return () => {}
+    }
+    const { record } = settings({ automatic: false, lastCheckedAt: NOW - AUTOMATIC_CHECK_THROTTLE_MS - 1 })
+    const { update } = service({
+      record,
+      watchWake,
+      readRelease: async () => {
+        asks += 1
+        return found()
+      }
+    })
+
+    update.start()
+    await vi.waitFor(() => expect(onWake).toBeDefined())
+    onWake?.()
+    expect(asks).toBe(0)
+  })
+
+  it('unsubscribes when the service stops', async () => {
+    let unwatched = 0
+    const watchWake: WakeWatch = async () => () => {
+      unwatched += 1
+    }
+    const { update } = service({ watchWake })
+
+    update.start()
+    await vi.waitFor(() => expect(unwatched).toBe(0))
+    update.stop()
+    await vi.waitFor(() => expect(unwatched).toBe(1))
+  })
+})
+
+describe('the window’s return', () => {
+  it('checks when focus comes back after 30 or more minutes away', async () => {
+    let asks = 0
+    const clock = movableClock(NOW - AUTOMATIC_CHECK_THROTTLE_MS - 1)
+    const { record } = settings({ lastCheckedAt: clock.now() })
+    const { update } = service({
+      record,
+      now: clock.now,
+      readRelease: async () => {
+        asks += 1
+        return found()
+      }
+    })
+
+    update.noteWindowBlur()
+    clock.advance(FOCUS_RECHECK_AFTER_MS)
+    update.noteWindowFocus()
+    await vi.waitFor(() => expect(asks).toBe(1))
+  })
+
+  it('says nothing about a short absence', async () => {
+    let asks = 0
+    const clock = movableClock(NOW)
+    const { update } = service({
+      now: clock.now,
+      readRelease: async () => {
+        asks += 1
+        return found()
+      }
+    })
+
+    update.noteWindowBlur()
+    clock.advance(FOCUS_RECHECK_AFTER_MS - 1)
+    update.noteWindowFocus()
+    expect(asks).toBe(0)
+  })
+
+  it('says nothing about a focus with no blur before it', async () => {
+    let asks = 0
+    const { update } = service({
+      readRelease: async () => {
+        asks += 1
+        return found()
+      }
+    })
+
+    update.noteWindowFocus()
+    expect(asks).toBe(0)
+  })
+
+  it('does not check twice for the same absence', async () => {
+    let asks = 0
+    const clock = movableClock(NOW - AUTOMATIC_CHECK_THROTTLE_MS - 1)
+    const { record } = settings({ lastCheckedAt: clock.now() })
+    const { update } = service({
+      record,
+      now: clock.now,
+      readRelease: async () => {
+        asks += 1
+        return found()
+      }
+    })
+
+    update.noteWindowBlur()
+    clock.advance(FOCUS_RECHECK_AFTER_MS)
+    update.noteWindowFocus()
+    await vi.waitFor(() => expect(asks).toBe(1))
+    update.noteWindowFocus()
+    expect(asks).toBe(1)
   })
 })
 

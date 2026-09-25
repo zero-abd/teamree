@@ -279,6 +279,7 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
       notices?.noteWindowFocus()
       runtime?.noteWindowFocus()
     })
+    app.on('browser-window-blur', () => runtime?.noteWindowBlur())
 
     // The window's own menus, rebuilt whenever its answer changes; see src/main/menuBar.ts.
     installMenuBar(ipcMain, {

@@ -17,12 +17,19 @@ import {
 } from './latestRelease'
 import type { SelfInstall } from './selfInstaller'
 import { isNewerRelease, isPrereleaseVersion, parseVersion } from './semver'
+import { watchForWake, type WakeWatch } from './wakeWatch'
 
-/** How long an automatic check is good for, and how often one runs: a rounding error against GitHub's rate limit. */
-export const AUTOMATIC_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
+/** How often the automatic check re-arms itself: launch, then this clock, a wake, or a stale focus besides. */
+export const AUTOMATIC_CHECK_INTERVAL_MS = 60 * 60 * 1000
 
-/** How long after startup the first automatic check is made; late, so it shares no moment with the restore. */
-export const STARTUP_CHECK_DELAY_MS = 30_000
+/** The floor between two automatic checks, so a wake and a focus and this clock cannot stack past GitHub's limit. */
+export const AUTOMATIC_CHECK_THROTTLE_MS = 10 * 60 * 1000
+
+/** How long after startup the first automatic check is made; still late enough to share no moment with the restore. */
+export const STARTUP_CHECK_DELAY_MS = 10_000
+
+/** A window away this long is worth a fresh look on its return, throttle allowing. */
+export const FOCUS_RECHECK_AFTER_MS = 30 * 60 * 1000
 
 /** The preference and the clock, as kept between runs; `WorkspaceStore` behind it, a seam for tests. */
 export type UpdateSettingsRecord = {
@@ -62,6 +69,8 @@ export type UpdateServiceOptions = {
   allowDownload?: HostPolicy
   /** Replaces this copy in place; absent where it cannot (not packaged, not macOS). */
   selfInstall?: SelfInstall
+  /** How this machine hears that it woke from sleep. Defaults to Electron's `powerMonitor`. */
+  watchWake?: WakeWatch
   /** Quits the way Quit does, questions included; `app.quit` in the app. */
   restart?: () => void
   /** Told after anything that changes what `state()` answers. */
@@ -83,6 +92,7 @@ export class UpdateService {
   readonly #openPath: ((path: string) => Promise<string>) | undefined
   readonly #allowDownload: HostPolicy
   readonly #selfInstall: SelfInstall | undefined
+  readonly #watchWake: WakeWatch
   readonly #restart: (() => void) | undefined
   readonly #onChange: () => void
   readonly #onProblem: (message: string, error: unknown) => void
@@ -103,6 +113,9 @@ export class UpdateService {
   /** Set once the staged copies left by an earlier run have been looked at. */
   #recovered: Promise<void> | undefined
   #started = false
+  #unwatchWake: (() => void) | undefined
+  /** When the window last lost focus; null once consumed by a return worth checking over. */
+  #blurredAt: number | null = null
 
   constructor(options: UpdateServiceOptions) {
     this.#version = options.version
@@ -119,6 +132,7 @@ export class UpdateService {
     }
     this.#allowDownload = options.allowDownload ?? releaseHostPolicy(this.#repository)
     this.#selfInstall = options.selfInstall
+    this.#watchWake = options.watchWake ?? watchForWake
     this.#restart = options.restart
     this.#onChange = options.onChange ?? (() => {})
     this.#onProblem = options.onProblem ?? ((message) => console.warn(`[updates] ${message}`))
@@ -126,11 +140,33 @@ export class UpdateService {
     this.#schedule = options.schedule ?? scheduleWithTimeout
   }
 
-  /** Arms the automatic check, then again every interval. The preference is read when the timer fires, not now. */
+  /** Arms the automatic check, then again every interval, and starts listening for a wake. */
   start(): void {
     if (!this.#checkable()) return
     this.#started = true
     this.#arm(STARTUP_CHECK_DELAY_MS)
+    void this.#armWake()
+  }
+
+  async #armWake(): Promise<void> {
+    this.#unwatchWake = await this.#watchWake(() => {
+      if (!this.#settings.read().automatic) return
+      void this.#automaticCheck()
+    })
+  }
+
+  /** The window lost focus: the moment its return is measured against. */
+  noteWindowBlur(): void {
+    this.#blurredAt = this.#now()
+  }
+
+  /** The window came back from 30 or more minutes away: worth a look, same as a wake. */
+  noteWindowFocus(): void {
+    const blurredAt = this.#blurredAt
+    this.#blurredAt = null
+    if (blurredAt === null || this.#now() - blurredAt < FOCUS_RECHECK_AFTER_MS) return
+    if (!this.#settings.read().automatic) return
+    void this.#automaticCheck()
   }
 
   #arm(delayMs: number): void {
@@ -160,6 +196,8 @@ export class UpdateService {
   /** Drops the pending check and any download, then starts the install a restart asked for. */
   stop(): void {
     this.#halt()
+    this.#unwatchWake?.()
+    this.#unwatchWake = undefined
     this.#selfInstall?.launch()
   }
 
@@ -199,7 +237,7 @@ export class UpdateService {
 
     const now = this.#now()
     const last = this.#settings.read().lastCheckedAt
-    if (options.force !== true && last !== null && now - last < AUTOMATIC_CHECK_INTERVAL_MS) {
+    if (options.force !== true && last !== null && now - last < AUTOMATIC_CHECK_THROTTLE_MS) {
       return this.state()
     }
     if (options.person === true) this.#askedAt = now

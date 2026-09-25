@@ -27,9 +27,12 @@ export { SelfInstaller, type SelfInstall } from './selfInstaller'
 export { compareVersions, isNewerRelease, isPrereleaseVersion, parseVersion, type Version } from './semver'
 export {
   AUTOMATIC_CHECK_INTERVAL_MS,
+  AUTOMATIC_CHECK_THROTTLE_MS,
+  FOCUS_RECHECK_AFTER_MS,
   STARTUP_CHECK_DELAY_MS,
   UpdateService,
   type StoredUpdateSettings,
   type UpdateServiceOptions,
   type UpdateSettingsRecord
 } from './updateService'
+export { watchForWake, type WakeWatch } from './wakeWatch'
