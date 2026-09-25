@@ -19,6 +19,8 @@ import { ConfirmUnsavedDialog } from './dialogs/ConfirmUnsavedDialog'
 import { ConfirmDiscardDialog } from './dialogs/ConfirmDiscardDialog'
 import { ConfirmClosePaneDialog } from './dialogs/ConfirmClosePaneDialog'
 import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
+import { ConfirmForgetDialog } from './dialogs/ConfirmForgetDialog'
+import { ConfirmTrashProjectDialog } from './dialogs/ConfirmTrashProjectDialog'
 import { ConfirmMergeDialog } from './dialogs/ConfirmMergeDialog'
 import { ConfirmKeepDialog } from './dialogs/ConfirmKeepDialog'
 import { FirstRunCliOffer } from './dialogs/FirstRunCliOffer'
@@ -171,6 +173,8 @@ export function App(): React.JSX.Element {
         <CommandPalette key={dialog.mode ?? 'all'} modifier={modifier} mode={dialog.mode ?? 'all'} />
       ) : null}
       {dialog?.kind === 'confirm-remove' ? <ConfirmRemoveDialog worktreeId={dialog.worktreeId} /> : null}
+      {dialog?.kind === 'confirm-forget' ? <ConfirmForgetDialog target={dialog.target} /> : null}
+      {dialog?.kind === 'confirm-trash-project' ? <ConfirmTrashProjectDialog projectId={dialog.projectId} /> : null}
       {dialog?.kind === 'confirm-merge' ? <ConfirmMergeDialog worktreeId={dialog.worktreeId} /> : null}
       {dialog?.kind === 'confirm-keep' ? <ConfirmKeepDialog worktreeId={dialog.worktreeId} /> : null}
       {dialog?.kind === 'confirm-close-pane' ? <ConfirmClosePaneDialog terminalId={dialog.terminalId} /> : null}

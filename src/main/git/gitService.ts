@@ -3,7 +3,7 @@
 // a background task; records are a cache, so every list/get reconciles against git.
 
 import { randomUUID } from 'node:crypto'
-import { mkdir, rm, rmdir, stat } from 'node:fs/promises'
+import { mkdir, realpath, rm, rmdir, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type {
@@ -337,6 +337,38 @@ export class GitService {
     return { removed: true }
   }
 
+  /** Counts what moving the project's folder to the Trash would lose. */
+  async trashPreview(params: ParamsOf<'project.trashPreview'>): Promise<ResultOf<'project.trashPreview'>> {
+    const project = this.#requireProject(params.projectId)
+    const read = async (args: string[]): Promise<string> =>
+      (await this.#runner.tryRun({ args, cwd: project.path, readOnly: true, timeoutMs: 60_000 })).stdout
+    const [status, unpushed] = await Promise.all([
+      read(['status', '--porcelain', '--untracked-files=all']),
+      read(['rev-list', '--count', '--branches', '--not', '--remotes'])
+    ])
+    return {
+      uncommitted: status.split('\n').filter((line) => line.trim() !== '').length,
+      unpushed: Number.parseInt(unpushed.trim(), 10) || 0,
+      worktrees: this.#store.listWorktrees(project.id).length
+    }
+  }
+
+  /** Removes its worktrees (each copy kept in the repository), moves its folder to the Trash, then forgets it. */
+  async trashProject(params: ParamsOf<'project.trash'>): Promise<ResultOf<'project.trash'>> {
+    const project = this.#requireProject(params.projectId)
+    await refuseToTrash(project.path)
+    const trash = this.#trash
+    if (trash === undefined) throw new GitServiceError(ErrorCode.Conflict, `no Trash here for ${project.path}`)
+    for (const worktree of this.#store.listWorktrees(project.id)) {
+      // Only what this app made; a checkout adopted from elsewhere is the owner's own.
+      if (!isInside(this.#worktreesRoot, worktree.path)) this.#forget(worktree)
+      else await this.removeWorktree({ worktreeId: worktree.id, force: true })
+    }
+    await trash(project.path)
+    await this.removeProject(params)
+    return { trashed: true }
+  }
+
   /**
    * Sets what a new worktree carries over from the primary checkout and the command
    * it runs once it has. Paths are only shape-checked; `prepareWorktree` asks the repo.
@@ -448,16 +480,19 @@ export class GitService {
   /** Claims a branch name and a checkout path, and starts building into them. */
   async #openWorktreeRecord(project: Project, name: string, params: ParamsOf<'worktree.create'>): Promise<Worktree> {
     const checkout = params.checkout?.trim()
-    const branch =
+    const claim =
       checkout === undefined || checkout === ''
-        ? await this.#chooseBranch(project, name, params.branch)
+        ? { branch: await this.#chooseBranch(project, name, params.branch) }
         : await this.#claimCheckout(project, checkout)
-    const checkoutPath = await allocateCheckoutPath(
-      this.#worktreesRoot,
-      project.name,
-      branch,
-      new Set(this.#store.listWorktrees().map((worktree) => pathKey(worktree.path)))
-    )
+    const branch = claim.branch
+    const checkoutPath =
+      claim.adopt ??
+      (await allocateCheckoutPath(
+        this.#worktreesRoot,
+        project.name,
+        branch,
+        new Set(this.#store.listWorktrees().map((worktree) => pathKey(worktree.path)))
+      ))
 
     const told = params.task?.trim()
     const worktree: Worktree = {
@@ -472,6 +507,14 @@ export class GitService {
       ...(told ? { task: told } : {}),
       ...(checkout ? { checkout } : {}),
       ...(checkout && params.base?.trim() ? { baseRef: params.base.trim() } : {})
+    }
+    if (claim.adopt !== undefined) {
+      // Already built and set up: taken back as it is, nothing run in it.
+      const adopted: Worktree = { ...worktree, state: 'ready' }
+      adopted.startedFrom = await this.#forkPoint(project, adopted)
+      this.#store.putWorktree(adopted)
+      this.events.emit({ type: 'worktree.created', worktree: adopted })
+      return adopted
     }
     this.#store.putWorktree(worktree)
     this.events.emit({ type: 'worktree.created', worktree })
@@ -548,6 +591,15 @@ export class GitService {
       await this.#deleteBranch(project, worktree.branch, branchVerdict !== 'unjudged')
     }
     return { removed: true, ...detached, ...kept }
+  }
+
+  /** Forgets the record; the checkout and its branch stay, and Open Branch offers the branch again. */
+  async forgetWorktree(params: ParamsOf<'worktree.forget'>): Promise<ResultOf<'worktree.forget'>> {
+    const initial = this.#requireWorktree(params.worktreeId)
+    if (initial.state === 'creating') await this.cancelWorktreeCreate(initial.id)
+    const worktree = this.#store.getWorktree(params.worktreeId)
+    if (worktree) this.#forget(worktree)
+    return { forgotten: true, ...(await this.#surviving(worktree ?? initial)) }
   }
 
   /** Removed worktrees that can still be restored, newest first; ten unless asked. */
@@ -1174,18 +1226,28 @@ export class GitService {
     this.events.emit({ type: 'worktree.removed', worktreeId: worktree.id, projectId: worktree.projectId })
   }
 
-  /** The branch an existing-branch checkout will be on, refused when anything already has it checked out. */
-  async #claimCheckout(project: Project, checkout: string): Promise<string> {
+  /**
+   * The branch an existing-branch checkout will be on. A linked checkout no record names is
+   * `adopt`ed as it is; the primary checkout or one a record holds is refused.
+   */
+  async #claimCheckout(project: Project, checkout: string): Promise<{ branch: string; adopt?: string }> {
     const branch = branchForCheckout(checkout)
     if (!branch || BRANCH_FORBIDDEN.test(branch) || hasControlCharacter(branch) || checkout.startsWith('-')) {
       throw new GitServiceError(ErrorCode.InvalidParams, `"${checkout}" is not a branch to check out`)
     }
     const inventory = await readWorktreeInventory(this.#runner, project.path)
-    const recorded = this.#store.listWorktrees(project.id).map((worktree) => worktree.branch)
-    if (inventory.some((entry) => entry.branch === branch) || recorded.includes(branch)) {
+    const recorded = this.#store.listWorktrees(project.id)
+    const holder = inventory.find((entry) => entry.branch === branch)
+    const adoptable =
+      holder !== undefined &&
+      holder !== inventory[0] &&
+      !samePath(holder.path, project.path) &&
+      !this.#store.listWorktrees().some((worktree) => samePath(worktree.path, holder.path)) &&
+      (await isDirectory(holder.path))
+    if ((holder !== undefined && !adoptable) || recorded.some((worktree) => worktree.branch === branch)) {
       throw new GitServiceError(ErrorCode.Conflict, `branch "${branch}" is already checked out`)
     }
-    return branch
+    return holder === undefined ? { branch } : { branch, adopt: holder.path }
   }
 
   async #chooseBranch(project: Project, taskName: string, requested?: string): Promise<string> {
@@ -1584,4 +1646,15 @@ async function isDirectory(target: string): Promise<boolean> {
 
 function isProject(project: Project | undefined): project is Project {
   return project !== undefined
+}
+
+/** Refuses the home folder, anything above it, a filesystem root, and anything not a directory. */
+async function refuseToTrash(folder: string): Promise<void> {
+  const refuse = (why: string): GitServiceError =>
+    new GitServiceError(ErrorCode.InvalidParams, `will not move ${folder} to the Trash: ${why}`)
+  const resolved = await realpath(folder).catch(() => null)
+  if (resolved === null || !(await isDirectory(resolved))) throw refuse('not a folder')
+  const home = await realpath(os.homedir()).catch(() => os.homedir())
+  if (path.parse(resolved).root === resolved) throw refuse('a disk root')
+  if (samePath(resolved, home) || isInside(resolved, home)) throw refuse('holds the home folder')
 }

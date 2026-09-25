@@ -139,7 +139,7 @@ export function ChangesTab(): React.JSX.Element | null {
             <>
               <span className="chip changes__merged">Merged</span>
               <button type="button" className="button button--small" onClick={() => void removeWorktree(worktreeId)}>
-                Remove Worktree…
+                Delete Worktree…
               </button>
             </>
           ) : land ? (

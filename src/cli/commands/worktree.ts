@@ -260,7 +260,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
   },
   {
     path: ['worktree', 'remove'],
-    summary: 'Remove a worktree checkout.',
+    summary: 'Move a worktree to the trash: delete its checkout, keeping a copy restore can bring back.',
     args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
     flags: [
       { name: 'force', kind: 'boolean', description: 'Remove even with uncommitted changes or unmerged commits.' },
@@ -275,6 +275,21 @@ export const worktreeCommands: readonly CommandSpec[] = [
         deleteBranch: readBoolean(context.flags, 'delete-branch')
       })
       return { data: { removed: true, worktree }, text: `removed worktree ${worktree.name} (${worktree.id})` }
+    }
+  },
+  {
+    path: ['worktree', 'forget'],
+    summary: 'Remove a worktree from teamree; its checkout and branch stay on disk.',
+    details: 'Open Branch in the app, or worktree create --checkout <branch>, takes the checkout back as it is.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+    examples: ['teamree worktree forget fix-login'],
+    run: async (context) => {
+      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const result = await context.client.call('worktree.forget', { worktreeId: worktree.id })
+      return {
+        data: { ...result, worktree },
+        text: `removed worktree ${worktree.name} from teamree; its checkout is at ${worktree.path}`
+      }
     }
   },
   {

@@ -80,6 +80,8 @@ const defaultHandler: StubHandler = (method) => {
       return WORKTREES[0]
     case 'worktree.remove':
       return { removed: true }
+    case 'worktree.forget':
+      return { forgotten: true }
     case 'worktree.status':
       return {
         worktreeId: 'wt_1',
@@ -317,6 +319,7 @@ describe('--json output', () => {
       ['worktree list', ['worktree', 'list']],
       ['worktree create', ['worktree', 'create', '--project', 'api', '--name', 'fix']],
       ['worktree remove', ['worktree', 'remove', 'fix-login']],
+      ['worktree forget', ['worktree', 'forget', 'fix-login']],
       ['worktree status', ['worktree', 'status', 'fix-login']],
       ['terminal list', ['terminal', 'list']],
       ['terminal create', ['terminal', 'create', '--worktree', 'fix-login']],
@@ -1119,7 +1122,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(65)
+    expect(data.commands.length).toBe(66)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })

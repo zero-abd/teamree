@@ -79,6 +79,7 @@ const handlers = {
   onOpen: vi.fn(),
   onRetry: vi.fn(),
   onRemove: vi.fn(),
+  onForget: vi.fn(),
   onFocusTerminal: vi.fn(),
   onReveal: vi.fn(),
   onCopyPath: vi.fn(),
@@ -164,8 +165,8 @@ describe('a worktree whose directory is gone', () => {
   it('offers only removal', () => {
     mount({ worktree: worktree({ missing: true }) })
     fireEvent.click(screen.getByRole('button', { name: 'More for Rewrite the pager' }))
-    expect(labels()).toEqual(['Remove Worktree…'])
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove Worktree…' }))
+    expect(labels()).toEqual(['Remove from teamree', 'Delete Worktree…'])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Worktree…' }))
     expect(handlers.onRemove).toHaveBeenCalledOnce()
   })
 })
@@ -193,7 +194,7 @@ describe('a worktree still being made', () => {
   it('can always be removed, whatever state it is in', () => {
     mount({ worktree: worktree({ state: 'creating' }) })
     fireEvent.contextMenu(row())
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove Worktree…' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Worktree…' }))
     expect(handlers.onRemove).toHaveBeenCalledOnce()
   })
 })
@@ -612,7 +613,24 @@ describe('the row menu', () => {
     fireEvent.contextMenu(row())
 
     expect(screen.getByRole('menu', { name: 'Actions for Rewrite the pager' })).toBeTruthy()
-    expect(labels()).toEqual(['Rename…', 'Reveal in Finder', 'Copy Path', 'Copy Branch', 'Open in', 'Remove Worktree…'])
+    expect(labels()).toEqual([
+      'Rename…',
+      'Reveal in Finder',
+      'Copy Path',
+      'Copy Branch',
+      'Open in',
+      'Remove from teamree',
+      'Delete Worktree…'
+    ])
+  })
+
+  it('forgets on Remove from teamree, apart from Delete Worktree…', () => {
+    mount()
+    fireEvent.contextMenu(row())
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove from teamree' }))
+    expect(handlers.onForget).toHaveBeenCalledOnce()
+    expect(handlers.onRemove).not.toHaveBeenCalled()
   })
 
   // A one-pixel miss on the row must not open the question that destroys a checkout.
@@ -692,8 +710,8 @@ describe('the row menu from the keyboard', () => {
     fireEvent.keyDown(row(), { key: 'ContextMenu' })
 
     const menu = screen.getByRole('menu')
-    for (let press = 0; press < 5; press += 1) fireEvent.keyDown(menu, { key: 'ArrowDown' })
-    expect(document.activeElement?.textContent).toBe('Remove Worktree…')
+    for (let press = 0; press < 6; press += 1) fireEvent.keyDown(menu, { key: 'ArrowDown' })
+    expect(document.activeElement?.textContent).toBe('Delete Worktree…')
 
     fireEvent.keyDown(menu, { key: 'Enter' })
     expect(handlers.onRemove).toHaveBeenCalledOnce()
@@ -729,7 +747,7 @@ describe('the row menu from the keyboard', () => {
     fireEvent.keyDown(row(), { key: 'ContextMenu' })
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowUp' })
 
-    expect(document.activeElement?.textContent).toBe('Remove Worktree…')
+    expect(document.activeElement?.textContent).toBe('Delete Worktree…')
   })
 
   it('closes on Escape and gives the row back the focus', () => {
@@ -960,13 +978,13 @@ describe('a worktree whose work has landed', () => {
     expect(screen.queryByRole('img', { name: /merge cleanly/ })).toBeNull()
   })
 
-  it('leads its menu with Remove Worktree…', () => {
+  it('leads its menu with Delete Worktree…', () => {
     mount({ status: status(), landing: landing() })
     fireEvent.contextMenu(row())
 
-    expect(labels()[0]).toBe('Remove Worktree…')
-    expect(labels().filter((label) => label === 'Remove Worktree…')).toHaveLength(1)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove Worktree…' }))
+    expect(labels().slice(0, 2)).toEqual(['Delete Worktree…', 'Remove from teamree'])
+    expect(labels().filter((label) => label === 'Delete Worktree…')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Worktree…' }))
     expect(handlers.onRemove).toHaveBeenCalled()
   })
 
@@ -983,7 +1001,7 @@ describe('a worktree whose work has landed', () => {
     expect(screen.queryByText('Merged')).toBeNull()
     expect(screen.getByText('Rewrite the pager').getAttribute('title')).toBe('Rewrite the pager · Pull Request #12')
     fireEvent.contextMenu(row())
-    expect(labels().at(-1)).toBe('Remove Worktree…')
+    expect(labels().at(-1)).toBe('Delete Worktree…')
   })
 
   it('offers Keep This Run… when the task has other runs', () => {

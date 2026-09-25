@@ -361,7 +361,7 @@ describe('landing the work', () => {
 
     expect(screen.getByText('Merged')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Create Pull Request' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Remove Worktree…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Worktree…' }))
     expect(useWorkspaceStore.getState().dialog).toMatchObject({ kind: 'confirm-remove', worktreeId: 'w1' })
   })
 })

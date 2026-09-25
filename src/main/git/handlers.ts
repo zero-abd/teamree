@@ -14,12 +14,15 @@ export const GIT_METHODS = [
   'project.cloneProgress',
   'project.cancelClone',
   'project.remove',
+  'project.trashPreview',
+  'project.trash',
   'project.setPaths',
   'project.saveSettings',
   'worktree.list',
   'worktree.get',
   'worktree.create',
   'worktree.remove',
+  'worktree.forget',
   'worktree.rename',
   'worktree.status',
   'worktree.changes',
@@ -70,12 +73,15 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'project.cloneProgress': async (params) => service.cloneProgress(params),
     'project.cancelClone': async (params) => service.cancelClone(params),
     'project.remove': (params) => service.removeProject(params),
+    'project.trashPreview': (params) => service.trashPreview(params),
+    'project.trash': (params) => service.trashProject(params),
     'project.setPaths': (params) => service.setProjectPaths(params),
     'project.saveSettings': (params) => service.saveProjectSettings(params),
     'worktree.list': (params) => service.listWorktrees(params),
     'worktree.get': (params) => service.getWorktree(params),
     'worktree.create': (params) => service.createWorktree(params),
     'worktree.remove': (params) => service.removeWorktree(params),
+    'worktree.forget': (params) => service.forgetWorktree(params),
     'worktree.rename': (params) => service.renameWorktree(params),
     'worktree.status': (params) => service.worktreeStatus(params),
     'worktree.changes': (params) => service.worktreeChanges(params),
@@ -118,12 +124,15 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('project.cloneProgress', Params.projectCloneProgress, handlers['project.cloneProgress'])
   registry.register('project.cancelClone', Params.projectCancelClone, handlers['project.cancelClone'])
   registry.register('project.remove', Params.projectRemove, handlers['project.remove'])
+  registry.register('project.trashPreview', Params.projectTrashPreview, handlers['project.trashPreview'])
+  registry.register('project.trash', Params.projectTrash, handlers['project.trash'])
   registry.register('project.setPaths', Params.projectSetPaths, handlers['project.setPaths'])
   registry.register('project.saveSettings', Params.projectSaveSettings, handlers['project.saveSettings'])
   registry.register('worktree.list', Params.worktreeList, handlers['worktree.list'])
   registry.register('worktree.get', Params.worktreeGet, handlers['worktree.get'])
   registry.register('worktree.create', Params.worktreeCreate, handlers['worktree.create'])
   registry.register('worktree.remove', Params.worktreeRemove, handlers['worktree.remove'])
+  registry.register('worktree.forget', Params.worktreeForget, handlers['worktree.forget'])
   registry.register('worktree.rename', Params.worktreeRename, handlers['worktree.rename'])
   registry.register('worktree.status', Params.worktreeStatus, handlers['worktree.status'])
   registry.register('worktree.changes', Params.worktreeChanges, handlers['worktree.changes'])

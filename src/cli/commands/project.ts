@@ -166,7 +166,7 @@ export const projectCommands: readonly CommandSpec[] = [
   },
   {
     path: ['project', 'remove'],
-    summary: 'Stop tracking a repository.',
+    summary: 'Remove a project from teamree; its folder and worktrees stay on disk.',
     args: [{ name: 'project', description: 'Project id, name, or path.', required: true }],
     run: async (context) => {
       const project = await resolveProject(context.client, context.args[0] as string)

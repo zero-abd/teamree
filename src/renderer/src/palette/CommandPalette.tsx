@@ -326,6 +326,9 @@ export function CommandPalette({
       case 'remove-worktree':
         if (active) void store.removeWorktree(active.id)
         break
+      case 'forget-worktree':
+        if (active) void store.removeFromTeamree({ worktreeId: active.id })
+        break
       case 'update-worktree':
         if (active) void store.updateWorktree(active.id)
         break
