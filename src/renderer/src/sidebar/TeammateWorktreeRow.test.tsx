@@ -56,6 +56,13 @@ beforeEach(() => {
 })
 
 describe('whose worktree this is', () => {
+  it('holds its row and its panes in one box, as your own', () => {
+    mount()
+    const box = document.querySelector('.worktree') as HTMLElement
+    expect(box.querySelector(':scope > .worktree__row')).toBeTruthy()
+    expect(box.querySelectorAll(':scope > .panes .pane-row')).toHaveLength(1)
+  })
+
   it('carries the handle on the row itself, not only on hover', () => {
     mount()
     const item = document.querySelector('.worktree') as HTMLElement

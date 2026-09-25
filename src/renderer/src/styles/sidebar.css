@@ -319,7 +319,7 @@
 .project__worktrees {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--s1);
 }
 
 .project__none {
@@ -333,8 +333,11 @@
 
 /* Worktree row ------------------------------------------------------------ */
 
+/* One box per worktree, its panes inside it. */
 .worktree {
   position: relative;
+  padding: var(--s1);
+  border: 1px solid var(--line);
   border-radius: var(--r2);
 }
 

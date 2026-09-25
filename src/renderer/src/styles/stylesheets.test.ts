@@ -182,6 +182,15 @@ describe('stylesheets', () => {
     expect(Number(declarationOf(tick, 'opacity'))).toBeLessThan(0.5)
   })
 
+  // One card per worktree, its panes inside: a line and a corner from the tokens, a gap between cards.
+  it('draws each worktree as a box of its own', () => {
+    const box = ruleFor('sidebar.css', '.worktree')
+    expect(declarationOf(box, 'border')).toBe('1px solid var(--line)')
+    expect(declarationOf(box, 'border-radius')).toBe('var(--r2)')
+    expect(declarationOf(box, 'padding')).toMatch(/^var\(--s\d\)$/)
+    expect(declarationOf(ruleFor('sidebar.css', '.project__worktrees'), 'gap')).toMatch(/^var\(--s\d\)$/)
+  })
+
   // Drawn outside, the ring of a 23px row covers the rows above and below it.
   it('draws the focus ring of a sidebar row inside the row', () => {
     for (const selector of [
