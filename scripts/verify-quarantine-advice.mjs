@@ -1,13 +1,16 @@
 // Proves the quarantine-clearing command docs/install.md gives actually works on a packaged bundle.
 // The command is read out of the document, so editing the doc runs the edit. macOS only.
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { findPackagedApp } from './packaged-app.mjs'
 import { releaseNotes } from './release.mjs'
 
 // Overridable so the test can hand it a document it should refuse.
 const DOC = process.argv[2] ?? 'docs/install.md'
-// Where the doc says to install; asserted below, since the command is run against it verbatim.
+// Where the doc says to install; asserted below. The command runs against a scratch copy with
+// this path swapped for the copy's, so the owner's installed app is never touched.
 const INSTALLED_PATH = '/Applications/teamree.app'
 
 function fail(message, detail) {
@@ -138,20 +141,23 @@ const SHAPES = [
   { name: 'an unpacked copy, marked file by file', recursive: true }
 ]
 
-/** Installs the packaged app at the documented path, so the command runs verbatim. */
+const scratch = mkdtempSync(join(tmpdir(), 'teamree-quarantine-'))
+const COPY = join(scratch, 'teamree.app')
+// The documented command, aimed at the copy: the doc's path was checked above, and nothing here may write it.
+const commandOnCopy = command.replace(INSTALLED_PATH, COPY)
+if (commandOnCopy.includes('/Applications')) fail('refusing to run the advice against /Applications.', commandOnCopy)
+
+/** A fresh copy of the packaged app in the scratch folder. */
 function install() {
-  if (existsSync(INSTALLED_PATH)) {
-    const removed = run('rm', ['-rf', INSTALLED_PATH])
-    if (removed.status !== 0) fail(`could not clear ${INSTALLED_PATH} before installing.`, removed.stderr)
-  }
-  const copied = run('cp', ['-R', built, INSTALLED_PATH])
-  if (copied.status !== 0) fail(`could not install ${built} to ${INSTALLED_PATH}.`, copied.stderr)
+  rmSync(COPY, { recursive: true, force: true })
+  const copied = run('cp', ['-R', built, COPY])
+  if (copied.status !== 0) fail(`could not copy ${built} to ${COPY}.`, copied.stderr)
 }
 
 /** Files under the bundle still carrying the attribute. */
 function stillQuarantined() {
   // `xattr -r -p` exits uselessly and prints per file, so stdout is counted; `find -exec \;` would need an escape.
-  const listed = run('xattr', ['-r', '-p', QUARANTINE, INSTALLED_PATH])
+  const listed = run('xattr', ['-r', '-p', QUARANTINE, COPY])
   return (listed.stdout ?? '').split('\n').filter((line) => line.trim().length > 0).length
 }
 
@@ -160,14 +166,14 @@ for (const shape of SHAPES) {
 
   const applied = run(
     'xattr',
-    shape.recursive ? ['-w', '-r', QUARANTINE, FLAGS, INSTALLED_PATH] : ['-w', QUARANTINE, FLAGS, INSTALLED_PATH]
+    shape.recursive ? ['-w', '-r', QUARANTINE, FLAGS, COPY] : ['-w', QUARANTINE, FLAGS, COPY]
   )
   if (applied.status !== 0) fail(`could not quarantine the installed app as ${shape.name}.`, applied.stderr)
-  if (run('xattr', ['-p', QUARANTINE, INSTALLED_PATH]).status !== 0) {
+  if (run('xattr', ['-p', QUARANTINE, COPY]).status !== 0) {
     fail(`the app is not quarantined as ${shape.name}, so this would prove nothing.`)
   }
 
-  const cleared = run('/bin/sh', ['-c', command])
+  const cleared = run('/bin/sh', ['-c', commandOnCopy])
   // Exit status too: a command that prints an error is a broken instruction even if it worked.
   if (cleared.status !== 0) {
     fail(
@@ -187,7 +193,7 @@ for (const shape of SHAPES) {
   ok(`${shape.name}: cleared cleanly, nothing left quarantined`)
 }
 
-run('rm', ['-rf', INSTALLED_PATH])
+rmSync(scratch, { recursive: true, force: true })
 // Narrowly: the command removes a hand-written quarantine from a real bundle both ways. The first-launch
 // dialog is a person looking at a screen, recorded in docs/mac-checks.md.
 console.log(

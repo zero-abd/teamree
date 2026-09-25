@@ -70,6 +70,14 @@ describe('the check on the one command every first user is given', () => {
   const SCRIPT = join(REPO_ROOT, 'scripts', 'verify-quarantine-advice.mjs')
   const RIGHT = 'xattr -dr com.apple.quarantine /Applications/teamree.app'
 
+  // It once cleared and reinstalled /Applications/teamree.app, deleting the owner's installed app on every run.
+  it('never writes the installed app: every filesystem call goes to its scratch copy', () => {
+    const source = readFileSync(SCRIPT, 'utf8')
+    const calls = source.split('\n').filter((line) => /run\(|rmSync\(|cpSync\(|writeFileSync\(/.test(line))
+    expect(calls.filter((line) => line.includes('INSTALLED_PATH') || line.includes('/Applications'))).toEqual([])
+    expect(source).toContain("run('/bin/sh', ['-c', commandOnCopy])")
+  })
+
   /** Runs the check against a fixture, never the real `docs/install.md`. */
   function check(markdown: string) {
     const doc = fixture(`install-${Math.random().toString(36).slice(2, 8)}.md`, markdown)
