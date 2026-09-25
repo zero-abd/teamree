@@ -560,7 +560,7 @@ describe('what the palette offers for the worktree on screen', () => {
         'Copy Branch',
         'Open in Cursor',
         'Remove Worktree from teamree',
-        'Move Worktree to Trash…'
+        'Delete Worktree…'
       ])
     )
     expect(offered).not.toContain('Open in Finder')
@@ -603,9 +603,9 @@ describe('what the palette offers for the worktree on screen', () => {
 
   it('offers only removal for a checkout gone from disk, and nothing with no worktree open', () => {
     const missing = labels({ worktrees: [worktree({ id: 'w1', missing: true })] })
-    expect(missing).toEqual(expect.arrayContaining(['Remove Worktree from teamree', 'Move Worktree to Trash…']))
+    expect(missing).toEqual(expect.arrayContaining(['Remove Worktree from teamree', 'Delete Worktree…']))
     expect(missing).not.toContain('Rename Worktree…')
-    expect(labels({ activeWorktreeId: null })).not.toContain('Move Worktree to Trash…')
+    expect(labels({ activeWorktreeId: null })).not.toContain('Delete Worktree…')
   })
 
   it('offers Update from the base only when the worktree is behind it', () => {
@@ -720,7 +720,7 @@ describe('the first screen, before anything is typed', () => {
       'Copy Path',
       'Copy Branch',
       'Remove Worktree from teamree',
-      'Move Worktree to Trash…'
+      'Delete Worktree…'
     ])
     // The header names the worktree once; its rows do not repeat it.
     expect(groups[1]?.items.map(trailing)).toEqual(['', '', '', '', '', '', ''])

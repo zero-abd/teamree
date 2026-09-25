@@ -187,7 +187,7 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
   if (active === undefined) return []
   const remove: ActionRow[] = [
     { id: 'forget-worktree', label: 'Remove Worktree from teamree', keywords: 'remove forget hide worktree sidebar' },
-    { id: 'remove-worktree', label: 'Move Worktree to Trash…', keywords: 'remove delete worktree checkout trash' }
+    { id: 'remove-worktree', label: 'Delete Worktree…', keywords: 'remove delete worktree checkout trash' }
   ]
   const change = context.focusedChange
   const land = context.land ?? null

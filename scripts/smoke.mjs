@@ -433,10 +433,10 @@ async function checkWorktreeSurfaces(ask) {
       )
     )
     // Last: the destructive item is where nobody arrives by momentum.
-    if (items.at(-1) !== 'Move to Trash…')
-      failures.push(`the row menu does not end with Move to Trash…: ${JSON.stringify(items)}`)
+    if (items.at(-1) !== 'Delete Worktree…')
+      failures.push(`the row menu does not end with Delete Worktree…: ${JSON.stringify(items)}`)
     if (items.at(-2) !== 'Remove from teamree')
-      failures.push(`the row menu has no Remove from teamree before Move to Trash…: ${JSON.stringify(items)}`)
+      failures.push(`the row menu has no Remove from teamree before Delete Worktree…: ${JSON.stringify(items)}`)
     if (items[0] !== 'Rename…') failures.push(`the row menu does not start with Rename…: ${JSON.stringify(items)}`)
     if (items.length !== 7) failures.push(`the row menu has ${items.length} items rather than seven`)
   }

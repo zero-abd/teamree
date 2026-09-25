@@ -328,7 +328,7 @@ describe('the worktree on screen, from the palette', () => {
     fireEvent.click(rows()[0] as HTMLElement)
   }
 
-  it('reveals, copies, forgets and trashes it through the sidebar row’s own actions', () => {
+  it('reveals, copies, forgets and deletes it through the sidebar row’s own actions', () => {
     const revealInFinder = vi.fn(() => Promise.resolve())
     const copyToClipboard = vi.fn(() => Promise.resolve())
     const removeWorktree = vi.fn(() => Promise.resolve())
@@ -339,7 +339,7 @@ describe('the worktree on screen, from the palette', () => {
     expect(revealInFinder).toHaveBeenCalledExactlyOnceWith('/repos/pager-wt/rewrite', 'the Rewrite the pager checkout')
     choose('copy branch')
     expect(copyToClipboard).toHaveBeenCalledWith('rewrite-the-pager', 'the branch rewrite-the-pager')
-    choose('move worktree to trash')
+    choose('delete worktree')
     expect(removeWorktree).toHaveBeenCalledExactlyOnceWith('w1')
     choose('remove worktree from teamree')
     expect(removeFromTeamree).toHaveBeenCalledExactlyOnceWith({ worktreeId: 'w1' })

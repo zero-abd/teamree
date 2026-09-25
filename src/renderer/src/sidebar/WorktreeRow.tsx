@@ -45,7 +45,7 @@ type WorktreeRowProps = {
   active: boolean
   onOpen: () => void
   onRetry: () => void
-  /** Move to Trash…: deletes the checkout, a copy kept for Undo. */
+  /** Delete Worktree…: deletes the checkout, a copy kept for Undo. */
   onRemove: () => void
   /** Remove from teamree: forgets the row; the checkout stays. */
   onForget: () => void
@@ -145,7 +145,7 @@ export function WorktreeRow({
   // Last, behind a rule; both ask before anything goes. First once the work has landed: done is what is left.
   const remove: RowMenuItem[] = [
     { label: 'Remove from teamree', onChoose: onForget, separated: !merged },
-    { label: 'Move to Trash…', onChoose: onRemove, danger: true }
+    { label: 'Delete Worktree…', onChoose: onRemove, danger: true }
   ]
   if (merged) remove.reverse()
   const rest: RowMenuItem[] = [

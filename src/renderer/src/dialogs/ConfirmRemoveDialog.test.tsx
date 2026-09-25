@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-// Moving a worktree to the Trash: the question names it, lists what would go, and never shows the runtime's own words.
+// Deleting a worktree: the question names it, lists what would go, and never shows the runtime's own words.
 
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -107,7 +107,7 @@ beforeEach(() => {
 describe('what it asks', () => {
   it('names the worktree as the sidebar does, with the path only in the title’s tooltip', async () => {
     await mount()
-    const dialog = screen.getByRole('dialog', { name: 'Move "Rewrite the pager" to Trash?' })
+    const dialog = screen.getByRole('dialog', { name: 'Delete "Rewrite the pager"?' })
     expect(screen.getByRole('heading').getAttribute('title')).toBe('/repos/pager-wt/rewrite-the-pager')
     expect(dialog.textContent).not.toContain('/repos/pager-wt')
   })
@@ -116,7 +116,7 @@ describe('what it asks', () => {
     const run = { ...worktree, name: 'Rewrite the pager to stream codex', branch: 'rewrite-the-pager-to-stream-codex' }
     seed({ worktrees: [{ ...run, task: 'Rewrite the pager to stream' }] })
     await mount()
-    expect(screen.getByRole('dialog', { name: 'Move "Rewrite the pager to stream" (Codex) to Trash?' })).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: 'Delete "Rewrite the pager to stream" (Codex)?' })).toBeTruthy()
     expect(document.body.textContent).not.toMatch(/codex ·|claude ·/u)
   })
 
@@ -163,36 +163,36 @@ describe('what it asks', () => {
   it('still asks when the worktree itself has already gone', async () => {
     seed({ worktrees: [] })
     await mount()
-    expect(screen.getByRole('dialog', { name: 'Move this worktree to Trash?' })).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: 'Delete this worktree?' })).toBeTruthy()
   })
 })
 
 describe('the answers', () => {
-  it('offers Cancel, focused, and Move to Trash in red', async () => {
+  it('offers Cancel, focused, and Delete in red', async () => {
     await mount()
     const buttons = [...document.querySelectorAll('.modal__actions .button')]
-    expect(buttons.map((button) => button.textContent)).toEqual(['Cancel', 'Move to Trash'])
+    expect(buttons.map((button) => button.textContent)).toEqual(['Cancel', 'Delete'])
     expect(document.activeElement?.textContent).toBe('Cancel')
     expect(buttons[1]?.classList.contains('button--danger')).toBe(true)
   })
 
   it('removes a clean worktree without force, so the runtime still gets to refuse', async () => {
     await mount()
-    fireEvent.click(screen.getByRole('button', { name: 'Move to Trash' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     expect(confirmRemoveWorktree).toHaveBeenCalledExactlyOnceWith('w1', false)
   })
 
   it('forces only once it has shown what would be lost', async () => {
     runtimeHas({ status: status({ unstaged: 1 }), changes: [modified('a.ts')] })
     await mount()
-    fireEvent.click(screen.getByRole('button', { name: 'Move to Trash' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     expect(confirmRemoveWorktree).toHaveBeenCalledExactlyOnceWith('w1', true)
   })
 
   it('forces after a refusal, whatever it could read', async () => {
     seed({ dialog: { kind: 'confirm-remove', worktreeId: 'w1', intent: 'remove', refused: true } })
     await mount()
-    fireEvent.click(screen.getByRole('button', { name: 'Move to Trash' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     expect(confirmRemoveWorktree).toHaveBeenCalledExactlyOnceWith('w1', true)
   })
 

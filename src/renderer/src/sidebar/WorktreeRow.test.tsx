@@ -165,8 +165,8 @@ describe('a worktree whose directory is gone', () => {
   it('offers only removal', () => {
     mount({ worktree: worktree({ missing: true }) })
     fireEvent.click(screen.getByRole('button', { name: 'More for Rewrite the pager' }))
-    expect(labels()).toEqual(['Remove from teamree', 'Move to Trash…'])
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Trash…' }))
+    expect(labels()).toEqual(['Remove from teamree', 'Delete Worktree…'])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Worktree…' }))
     expect(handlers.onRemove).toHaveBeenCalledOnce()
   })
 })
@@ -194,7 +194,7 @@ describe('a worktree still being made', () => {
   it('can always be removed, whatever state it is in', () => {
     mount({ worktree: worktree({ state: 'creating' }) })
     fireEvent.contextMenu(row())
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Trash…' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Worktree…' }))
     expect(handlers.onRemove).toHaveBeenCalledOnce()
   })
 })
@@ -620,11 +620,11 @@ describe('the row menu', () => {
       'Copy Branch',
       'Open in',
       'Remove from teamree',
-      'Move to Trash…'
+      'Delete Worktree…'
     ])
   })
 
-  it('forgets on Remove from teamree, apart from Move to Trash…', () => {
+  it('forgets on Remove from teamree, apart from Delete Worktree…', () => {
     mount()
     fireEvent.contextMenu(row())
 
@@ -711,7 +711,7 @@ describe('the row menu from the keyboard', () => {
 
     const menu = screen.getByRole('menu')
     for (let press = 0; press < 6; press += 1) fireEvent.keyDown(menu, { key: 'ArrowDown' })
-    expect(document.activeElement?.textContent).toBe('Move to Trash…')
+    expect(document.activeElement?.textContent).toBe('Delete Worktree…')
 
     fireEvent.keyDown(menu, { key: 'Enter' })
     expect(handlers.onRemove).toHaveBeenCalledOnce()
@@ -747,7 +747,7 @@ describe('the row menu from the keyboard', () => {
     fireEvent.keyDown(row(), { key: 'ContextMenu' })
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowUp' })
 
-    expect(document.activeElement?.textContent).toBe('Move to Trash…')
+    expect(document.activeElement?.textContent).toBe('Delete Worktree…')
   })
 
   it('closes on Escape and gives the row back the focus', () => {
@@ -978,13 +978,13 @@ describe('a worktree whose work has landed', () => {
     expect(screen.queryByRole('img', { name: /merge cleanly/ })).toBeNull()
   })
 
-  it('leads its menu with Move to Trash…', () => {
+  it('leads its menu with Delete Worktree…', () => {
     mount({ status: status(), landing: landing() })
     fireEvent.contextMenu(row())
 
-    expect(labels().slice(0, 2)).toEqual(['Move to Trash…', 'Remove from teamree'])
-    expect(labels().filter((label) => label === 'Move to Trash…')).toHaveLength(1)
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Trash…' }))
+    expect(labels().slice(0, 2)).toEqual(['Delete Worktree…', 'Remove from teamree'])
+    expect(labels().filter((label) => label === 'Delete Worktree…')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Worktree…' }))
     expect(handlers.onRemove).toHaveBeenCalled()
   })
 
@@ -1001,7 +1001,7 @@ describe('a worktree whose work has landed', () => {
     expect(screen.queryByText('Merged')).toBeNull()
     expect(screen.getByText('Rewrite the pager').getAttribute('title')).toBe('Rewrite the pager · Pull Request #12')
     fireEvent.contextMenu(row())
-    expect(labels().at(-1)).toBe('Move to Trash…')
+    expect(labels().at(-1)).toBe('Delete Worktree…')
   })
 
   it('offers Keep This Run… when the task has other runs', () => {

@@ -1817,7 +1817,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         if (retrying && worktree) await recreateWorktree(worktree)
         else if (worktree && removed.trashId !== undefined) {
           const undo: UndoTarget = { kind: 'remove', projectId: worktree.projectId, removedId: removed.trashId }
-          notify(`Moved "${shortened(worktreeLabel(worktreeDisplay(worktree)))}" to Trash`, 'info', {
+          notify(`Deleted "${shortened(worktreeLabel(worktreeDisplay(worktree)))}"`, 'info', {
             label: 'Undo',
             undo
           })

@@ -37,7 +37,7 @@ it('offers Undo after a removal, and Undo checks the worktree out again and open
   await store.confirmRemoveWorktree(worktree.id, true)
 
   const notice = useWorkspaceStore.getState().notices.at(-1)!
-  expect(notice.text).toMatch(/^Moved ".*" to Trash$/)
+  expect(notice.text).toMatch(/^Deleted ".*"$/)
   expect(notice.action).toEqual({
     label: 'Undo',
     undo: { kind: 'remove', projectId: worktree.projectId, removedId: `${worktree.id}/1` }

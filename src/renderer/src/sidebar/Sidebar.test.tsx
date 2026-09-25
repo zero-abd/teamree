@@ -616,13 +616,13 @@ describe('the row menu acts on the worktree it was opened on', () => {
 
   // Reported as doing nothing, through a driver that sends press and release with no click count,
   // which never makes a click event; a mouse does, and the press lands inside the menu.
-  it('asks about trashing the worktree when Move to Trash… is clicked with a mouse', async () => {
+  it('asks about deleting the worktree when Delete Worktree… is clicked with a mouse', async () => {
     seed({ worktrees: [worktree()] })
     mount()
     mouseClick(screen.getByRole('button', { name: 'More for Rewrite the pager' }))
     expect(screen.getByRole('menu', { name: 'Actions for Rewrite the pager' })).toBeTruthy()
 
-    mouseClick(screen.getByRole('menuitem', { name: 'Move to Trash…' }))
+    mouseClick(screen.getByRole('menuitem', { name: 'Delete Worktree…' }))
     await act(async () => undefined)
 
     expect(screen.queryByRole('menu')).toBeNull()
