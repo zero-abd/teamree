@@ -27,9 +27,15 @@ afterEach(() => {
   rmSync(root, { recursive: true, force: true })
 })
 
-/** A bundle whose only content is a marker naming which copy it is. */
+/** A whole bundle (Info.plist naming an executable that is there) plus a marker naming which copy it is. */
 function bundle(path: string, marker: string): void {
-  mkdirSync(join(path, 'Contents'), { recursive: true })
+  mkdirSync(join(path, 'Contents', 'MacOS'), { recursive: true })
+  writeFileSync(
+    join(path, 'Contents', 'Info.plist'),
+    '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>CFBundleExecutable</key><string>fake</string></dict></plist>\n'
+  )
+  writeFileSync(join(path, 'Contents', 'MacOS', 'fake'), '#!/bin/sh\n')
+  chmodSync(join(path, 'Contents', 'MacOS', 'fake'), 0o755)
   writeFileSync(join(path, 'Contents', 'marker'), marker)
 }
 
@@ -74,10 +80,36 @@ function setup(options: Partial<HelperOptions> = {}): HelperOptions {
   }
 }
 
-function run(options: HelperOptions): number | null {
+/**
+ * Runs the helper; `fail` names sources the helper's `mv` refuses to move, a trailing `*` matching a prefix.
+ * `half` does, once, what an interrupted cross-volume move leaves: part of the source copied, part of it deleted.
+ */
+function run(options: HelperOptions, faults: { fail?: string[]; half?: string } = {}): number | null {
   const script = join(root, 'install.sh')
-  writeFileSync(script, helperScript(options))
+  let text = helperScript(options)
+  if (faults.fail !== undefined || faults.half !== undefined) {
+    const bin = join(root, 'bin')
+    mkdirSync(bin, { recursive: true })
+    const cases = (faults.fail ?? []).map(
+      (from) => `  ${from.endsWith('*') ? `${shellQuote(from.slice(0, -1))}*` : shellQuote(from)}) exit 1 ;;`
+    )
+    if (faults.half !== undefined) {
+      const once = shellQuote(join(root, 'half-done'))
+      cases.push(
+        `  ${shellQuote(faults.half)}) [ -e ${once} ] || { : > ${once}; mkdir -p "$2/Contents"; rm -rf "$1/Contents/MacOS"; exit 1; } ;;`
+      )
+    }
+    writeFileSync(join(bin, 'mv'), ['#!/bin/sh', 'case "$1" in', ...cases, 'esac', 'exec /bin/mv "$@"', ''].join('\n'))
+    chmodSync(join(bin, 'mv'), 0o755)
+    text = text.replace('PATH=/usr/bin:', `PATH=${shellQuote(bin)}:/usr/bin:`)
+  }
+  writeFileSync(script, text)
   return spawnSync('/bin/sh', [script], { encoding: 'utf8', timeout: 20_000 }).status
+}
+
+/** What the Applications folder holds once the helper is done. */
+function applications(): string[] {
+  return readdirSync(join(root, 'Applications'))
 }
 
 describe('the install helper', () => {
@@ -124,6 +156,78 @@ describe('the install helper', () => {
     expect(run(options)).toBe(1)
     expect(marker(options.target)).toBe('old')
     expect(open.calls()).toEqual([options.target])
+  })
+
+  it('keeps the old copy, reopens it and keeps the update staged when the old copy will not move', () => {
+    const open = opener()
+    const options = setup({ opener: open.path })
+    expect(run(options, { fail: [options.target] })).toBe(1)
+
+    expect(marker(options.target)).toBe('old')
+    expect(marker(options.staged)).toBe('new')
+    expect(applications()).toEqual(['teamree.app'])
+    expect(open.calls()).toEqual([options.target])
+    expect(readFileSync(options.log, 'utf8')).toMatch(/could not move .* aside/)
+  })
+
+  it('installs the new copy when the old one is already gone, instead of losing both', () => {
+    const open = opener()
+    const options = setup({ opener: open.path })
+    rmSync(options.target, { recursive: true })
+    expect(run(options)).toBe(0)
+
+    expect(marker(options.target)).toBe('new')
+    expect(applications()).toEqual(['teamree.app'])
+    expect(open.calls()).toEqual([options.target])
+    expect(readFileSync(options.log, 'utf8')).toMatch(/missing[\s\S]*installed 0\.3\.0/)
+  })
+
+  it('installs the new copy when moving the old one aside stopped halfway', () => {
+    const open = opener()
+    const options = setup({ opener: open.path })
+    expect(run(options, { half: options.target })).toBe(1)
+
+    expect(marker(options.target)).toBe('new')
+    expect(existsSync(join(options.target, 'Contents', 'MacOS', 'fake'))).toBe(true)
+    expect(applications()).toEqual(['teamree.app'])
+    expect(open.calls()).toEqual([options.target])
+  })
+
+  it('puts the old copy back when the new one will not move into place', () => {
+    const open = opener()
+    const options = setup({ opener: open.path })
+    expect(run(options, { fail: [join(root, 'Applications', '.teamree-update-*')] })).toBe(1)
+
+    expect(marker(options.target)).toBe('old')
+    expect(applications()).toEqual(['teamree.app'])
+    expect(open.calls()).toEqual([options.target])
+  })
+
+  it('keeps the new copy in place when it will not open and the old one cannot come back', () => {
+    const open = opener('new')
+    const options = setup({ opener: open.path })
+    expect(run(options, { fail: [join(root, 'Applications', '.teamree-previous-*')] })).toBe(1)
+
+    expect(marker(options.target)).not.toBeNull()
+    expect(applications()).toContain('teamree.app')
+  })
+
+  it('refuses a staged copy that is not a whole bundle, and leaves the old one where it is', () => {
+    const open = opener()
+    const options = setup({ opener: open.path })
+    rmSync(join(options.staged, 'Contents', 'MacOS'), { recursive: true })
+    expect(run(options)).toBe(1)
+
+    expect(marker(options.target)).toBe('old')
+    expect(applications()).toEqual(['teamree.app'])
+    expect(open.calls()).toEqual([options.target])
+  })
+
+  it('relaunches with the profile it was started with', () => {
+    const open = opener()
+    const options = setup({ opener: open.path, foreground: false, env: { TEAMREE_USER_DATA_DIR: "/tmp/it's here" } })
+    expect(run(options)).toBe(0)
+    expect(open.calls()).toEqual([`-g --env TEAMREE_USER_DATA_DIR=/tmp/it's here ${options.target}`])
   })
 
   it('clears the quarantine attribute on what it installs', () => {

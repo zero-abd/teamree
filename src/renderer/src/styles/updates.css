@@ -16,6 +16,14 @@
   animation: notice-in var(--motion-base) var(--ease);
 }
 
+.update-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  margin: -2px -6px 0 0;
+}
+
 .update-card__headline {
   color: var(--fg);
   font-size: var(--text-base);
@@ -28,11 +36,9 @@
   line-height: 1.55;
 }
 
-/* Height-capped: release notes are as long as they are, and this is a corner card. */
+/* Three lines at most; Release Notes has the rest. */
 .update-card__notes {
-  max-height: 168px;
-  padding: var(--s3);
-  overflow-y: auto;
+  padding: var(--s2) var(--s3);
   border-radius: var(--r2);
   background: var(--bg-panel);
   color: var(--fg-secondary);
@@ -75,16 +81,45 @@
   color: var(--accent-bright);
 }
 
+.update-card__notes--clipped {
+  box-sizing: border-box;
+  max-height: calc(3 * 1.55em + 2 * var(--s2));
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 55%, transparent);
+}
+
+/* Every block one line box tall, so the cut falls between lines; headings read as running text. */
+.update-card__notes--clipped * {
+  margin: 0 !important;
+  font-size: inherit;
+  line-height: 1.55;
+}
+
 .update-card__problem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
   color: var(--danger);
   font-size: var(--text-xs);
 }
 
+.update-card__problem .button {
+  flex: none;
+  white-space: nowrap;
+}
+
 /* Left of the buttons, pushing them right. */
-.update-card__link {
+.update-card__links {
+  display: flex;
+  gap: var(--s3);
   margin-right: auto;
+}
+
+.update-card__link {
   color: var(--accent-bright);
   font-size: var(--text-xs);
+  white-space: nowrap;
 }
 
 .update-card__actions {
@@ -93,4 +128,78 @@
   justify-content: flex-end;
   gap: var(--s2);
   padding-top: var(--s1);
+}
+
+/* Restart to Update: the card's one primary action, a size up from a toolbar button. */
+.update-card .installer-button--restart {
+  min-height: 28px;
+  padding: 5px 12px 5px 10px;
+  white-space: nowrap;
+}
+
+.installer-button__icon {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.installer-button--restart[aria-busy='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  opacity: 0.85;
+  cursor: progress;
+}
+
+.installer-button--restart[aria-busy='true'] .installer-button__icon {
+  animation: installer-spin 0.9s linear infinite;
+}
+
+@keyframes installer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .installer-button--restart[aria-busy='true'] .installer-button__icon {
+    animation: none;
+  }
+}
+
+/* Minimized: the version and the one button, where the card was. */
+.update-card--pill {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--s2);
+  width: auto;
+  padding: 4px 4px 4px var(--s3);
+  border-left: 1px solid var(--line-strong);
+  border-radius: 999px;
+}
+
+.update-card--pill .installer-button--restart {
+  min-height: 26px;
+  border-radius: 999px;
+}
+
+.update-card__expand {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 560;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.update-card__expand:hover {
+  color: var(--accent-bright);
 }

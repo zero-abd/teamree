@@ -4,6 +4,8 @@
 // pane's links come through `window.open` so there is one decision, not two.
 // `location.reload()` raises `will-navigate` with the current URL and must stay allowed.
 
+import { APP_MANAGEMENT_SETTINGS } from '../shared/entities'
+
 /** `allow` is a reload; `external` is a web address for the browser; `block` is everything else, `file:` included. */
 export type NavigationVerdict = 'allow' | 'external' | 'block'
 
@@ -18,6 +20,7 @@ export function navigationVerdict(from: string, to: string): NavigationVerdict {
 
 /** The one gate in front of `shell.openExternal`, which macOS will open far more than web pages through. */
 export function mayOpenExternally(url: string): boolean {
+  if (url === APP_MANAGEMENT_SETTINGS) return true
   const parsed = parse(url)
   return parsed !== null && (parsed.protocol === 'https:' || parsed.protocol === 'http:')
 }

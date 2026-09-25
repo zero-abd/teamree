@@ -158,6 +158,10 @@ and cuts it at four thousand characters, so the top of this file is what a
 person still running the old build actually reads, and the Gatekeeper paragraph
 is in every release and in [`install.md`](install.md) besides.
 
+Keep it small: at most about eight bullets, one line each, no sections, the
+headline change first. The card shows three lines and links the release for
+the rest, so anything longer is read by nobody.
+
 Two things ask for it, deliberately at different distances. `npm test` fails
 when the version in `package.json` has no notes, which is what keeps the bump
 and the notes in the same change; `npm run release` refuses for the same reason,
@@ -206,7 +210,16 @@ Restart to Update quits through the normal quit, and a script left in that
 folder waits for the process to exit, moves the old bundle aside, moves the new
 one into its place, clears quarantine, opens it, and only then deletes the old
 one; if the new one will not open, the old one goes back and is opened.
-`update.log` in the same folder records each attempt.
+Every way out of the script ends by checking that a whole app (an Info.plist
+naming an executable that is there) sits at the old path, putting back the
+old copy, the new one or the staged one when it does not; a copy found missing
+is replaced by the new one. `update.log` in the same folder records each step.
+
+Before quitting, Restart to Update makes and renames a folder beside the app
+and writes a file inside it, undoing both; if macOS refuses (App Management
+answers `EPERM`), nothing quits and the card offers Open Settings. An ad-hoc
+copy launched through LaunchServices replaced itself on macOS 26 with no prompt: App
+Management never evaluated it (no `kTCCServiceSystemPolicyAppBundles` request).
 
 It never installs an older version or, on a stable build, a pre-release. A
 candidate (`v0.2.0-rc.1`) is not installed in place either: its manifest names

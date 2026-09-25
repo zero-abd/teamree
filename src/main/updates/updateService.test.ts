@@ -685,6 +685,7 @@ describe('replacing this copy in place', () => {
       disarm: () => {
         calls.disarmed += 1
       },
+      preflight: async () => null,
       ...overrides
     }
     return { self, calls }
@@ -783,6 +784,25 @@ describe('replacing this copy in place', () => {
 
     update.stop()
     expect(calls.launched).toBe(1)
+  })
+
+  it('does not quit when the swap would be refused, says why on the card, and quits once it would not', async () => {
+    const blocked = { problem: 'macOS won’t let teamree replace itself', settings: true }
+    let answer: typeof blocked | null = blocked
+    const { self, calls } = installer({ preflight: async () => answer })
+    const { update, restarts } = installing({ self })
+    await update.check({ force: true })
+    await vi.waitFor(() => expect(update.state().install?.state).toBe('ready'))
+
+    await expect(update.restartToUpdate()).resolves.toEqual({ blocked: blocked.problem })
+    expect(update.state().install).toEqual({ state: 'ready', version: '0.2.0', blocked })
+    expect(calls.armed).toEqual([])
+    expect(restarts).toHaveLength(0)
+
+    answer = null
+    await expect(update.restartToUpdate()).resolves.toEqual({ restarting: '0.2.0' })
+    expect(update.state().install).toEqual({ state: 'ready', version: '0.2.0' })
+    expect(restarts).toHaveLength(1)
   })
 
   it('installs nothing on a later quit when this one was declined', () => {

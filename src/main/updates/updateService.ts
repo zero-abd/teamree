@@ -424,15 +424,25 @@ export class UpdateService {
     return this.#recovered
   }
 
-  /** Quits through the app's own quit, whose questions still apply; the swap starts once it is past them. */
-  async restartToUpdate(): Promise<{ restarting: string }> {
+  /**
+   * Quits through the app's own quit, whose questions still apply; the swap starts once it is past them.
+   * A swap macOS would refuse is found first, and then nothing quits: the card says why.
+   */
+  async restartToUpdate(): Promise<{ restarting: string } | { blocked: string }> {
     const install = this.#install
     if (install?.state !== 'ready') throw conflict('there is no update ready to install')
     if (this.#selfInstall === undefined || this.#restart === undefined)
       throw internal('this copy cannot restart itself')
-    await this.#selfInstall.arm(install.version, true)
+    const { version } = install
+    const blocked = await this.#selfInstall.preflight()
+    this.#install = blocked === null ? { state: 'ready', version } : { state: 'ready', version, blocked }
+    if (blocked !== null) {
+      this.#onChange()
+      return { blocked: blocked.problem }
+    }
+    await this.#selfInstall.arm(version, true)
     this.#restart()
-    return { restarting: install.version }
+    return { restarting: version }
   }
 
   /** The quit was declined (Cancel on a Save question): the next ordinary quit installs nothing. */
