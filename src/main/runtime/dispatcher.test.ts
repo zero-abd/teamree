@@ -158,6 +158,9 @@ describe('dispatcher', () => {
       'project.saveSettings',
       // Local: what this machine's checkouts carry over is nobody else's setting.
       'project.setPaths',
+      // Local: moves this machine's folder to its Trash.
+      'project.trash',
+      'project.trashPreview',
       'status.get',
       // Local: this machine's processes are its own to read and signal. The kill is
       // guarded by a fresh sample too, so it reaches nothing but what a pane started.
@@ -227,6 +230,7 @@ describe('dispatcher', () => {
       // Local: a directory listing of this machine's checkout is its own to show.
       'worktree.files',
       'worktree.findFiles',
+      'worktree.forget',
       'worktree.get',
       'worktree.keep',
       'worktree.landing',

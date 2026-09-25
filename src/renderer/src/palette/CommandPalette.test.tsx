@@ -328,18 +328,21 @@ describe('the worktree on screen, from the palette', () => {
     fireEvent.click(rows()[0] as HTMLElement)
   }
 
-  it('reveals, copies and removes it through the sidebar row’s own actions', () => {
+  it('reveals, copies, forgets and trashes it through the sidebar row’s own actions', () => {
     const revealInFinder = vi.fn(() => Promise.resolve())
     const copyToClipboard = vi.fn(() => Promise.resolve())
     const removeWorktree = vi.fn(() => Promise.resolve())
-    seed({ revealInFinder, copyToClipboard, removeWorktree })
+    const removeFromTeamree = vi.fn(() => Promise.resolve())
+    seed({ revealInFinder, copyToClipboard, removeWorktree, removeFromTeamree })
     mount()
     choose('reveal')
     expect(revealInFinder).toHaveBeenCalledExactlyOnceWith('/repos/pager-wt/rewrite', 'the Rewrite the pager checkout')
     choose('copy branch')
     expect(copyToClipboard).toHaveBeenCalledWith('rewrite-the-pager', 'the branch rewrite-the-pager')
-    choose('remove worktree')
+    choose('move worktree to trash')
     expect(removeWorktree).toHaveBeenCalledExactlyOnceWith('w1')
+    choose('remove worktree from teamree')
+    expect(removeFromTeamree).toHaveBeenCalledExactlyOnceWith({ worktreeId: 'w1' })
   })
 
   it('asks the sidebar row for its name field', () => {

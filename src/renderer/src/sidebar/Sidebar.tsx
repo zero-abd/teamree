@@ -45,6 +45,8 @@ export function Sidebar({
   const openWorktree = useWorkspaceStore((state) => state.openWorktree)
   const retryWorktree = useWorkspaceStore((state) => state.retryWorktree)
   const removeWorktree = useWorkspaceStore((state) => state.removeWorktree)
+  const removeFromTeamree = useWorkspaceStore((state) => state.removeFromTeamree)
+  const trashProject = useWorkspaceStore((state) => state.trashProject)
   const renameWorktree = useWorkspaceStore((state) => state.renameWorktree)
   const editingWorktreeName = useWorkspaceStore((state) => state.editingWorktreeName)
   const editWorktreeName = useWorkspaceStore((state) => state.editWorktreeName)
@@ -309,6 +311,8 @@ export function Sidebar({
                       ...(pullRequests ? { pullRequests } : {})
                     })
                   }
+                  onForget={() => void removeFromTeamree({ projectId: project.id })}
+                  onTrash={() => void trashProject(project.id)}
                 />
                 <div className="project__meta">
                   <p className="project__base">{project.baseRef}</p>
@@ -356,6 +360,7 @@ export function Sidebar({
                           onOpen={() => void openWorktree(worktree.id)}
                           onRetry={() => retryWorktree(worktree.id)}
                           onRemove={() => void removeWorktree(worktree.id)}
+                          onForget={() => void removeFromTeamree({ worktreeId: worktree.id })}
                           onRename={(name) => void renameWorktree(worktree.id, name)}
                           renameAsked={editingWorktreeName === worktree.id}
                           onRenameShown={() => editWorktreeName(null)}

@@ -58,10 +58,10 @@ export function ConfirmRemoveDialog({ worktreeId }: { worktreeId: string }): Rea
 
   return (
     <Confirm
-      title={named === null ? 'Remove this worktree?' : `Remove ${named}?`}
+      title={retrying ? `Remove ${named ?? 'this worktree'}?` : `Move ${named ?? 'this worktree'} to Trash?`}
       titleHint={worktree?.path}
       cancel="Cancel"
-      confirm={retrying ? 'Remove and Retry' : 'Remove'}
+      confirm={retrying ? 'Remove and Retry' : 'Move to Trash'}
       deleteConfirms
       onCancel={closeDialog}
       onConfirm={() => void confirmRemoveWorktree(worktreeId, force)}

@@ -17,6 +17,10 @@ type ProjectHeadProps = {
   onNewTask: () => void
   /** Opens a branch as it is: `true` lists open pull requests instead. */
   onOpenBranch: (pullRequests: boolean) => void
+  /** Remove from teamree: forgets it; the folder stays. */
+  onForget: () => void
+  /** Move to Trash…: the folder goes to the macOS Trash. */
+  onTrash: () => void
 }
 
 export function ProjectHead({
@@ -26,7 +30,9 @@ export function ProjectHead({
   theirs,
   onToggle,
   onNewTask,
-  onOpenBranch
+  onOpenBranch,
+  onForget,
+  onTrash
 }: ProjectHeadProps): React.JSX.Element {
   const row = useRef<HTMLButtonElement | null>(null)
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
@@ -48,7 +54,9 @@ export function ProjectHead({
     { label: 'New Task…', onChoose: onNewTask },
     { label: 'Open Branch…', onChoose: () => onOpenBranch(false) },
     { label: 'Check Out Pull Request…', onChoose: () => onOpenBranch(true) },
-    ...(removed.length === 0 ? [] : [{ label: 'Recently Removed', items: removed, onChoose: () => {} }])
+    ...(removed.length === 0 ? [] : [{ label: 'Recently Removed', items: removed, onChoose: () => {} }]),
+    { label: 'Remove from teamree', onChoose: onForget, separated: true },
+    { label: 'Move to Trash…', onChoose: onTrash, danger: true }
   ]
 
   /** Under the row, for a menu nobody pointed at. */

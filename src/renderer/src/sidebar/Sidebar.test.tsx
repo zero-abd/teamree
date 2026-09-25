@@ -616,13 +616,13 @@ describe('the row menu acts on the worktree it was opened on', () => {
 
   // Reported as doing nothing, through a driver that sends press and release with no click count,
   // which never makes a click event; a mouse does, and the press lands inside the menu.
-  it('asks about removing the worktree when Remove Worktree… is clicked with a mouse', async () => {
+  it('asks about trashing the worktree when Move to Trash… is clicked with a mouse', async () => {
     seed({ worktrees: [worktree()] })
     mount()
     mouseClick(screen.getByRole('button', { name: 'More for Rewrite the pager' }))
     expect(screen.getByRole('menu', { name: 'Actions for Rewrite the pager' })).toBeTruthy()
 
-    mouseClick(screen.getByRole('menuitem', { name: 'Remove Worktree…' }))
+    mouseClick(screen.getByRole('menuitem', { name: 'Move to Trash…' }))
     await act(async () => undefined)
 
     expect(screen.queryByRole('menu')).toBeNull()
@@ -945,6 +945,22 @@ describe('starting a task in any project from the keyboard', () => {
       .getByRole('menuitem', { name: 'New Task…' })
       .click()
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p2' })
+  })
+
+  it('ends its menu with Remove from teamree and Move to Trash…, each asking first', () => {
+    fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
+    const menu = screen.getByRole('menu', { name: 'Actions for ledger' })
+    const labels = within(menu)
+      .getAllByRole('menuitem')
+      .map((item) => item.textContent)
+    expect(labels.slice(-2)).toEqual(['Remove from teamree', 'Move to Trash…'])
+
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Remove from teamree' }))
+    expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-forget', target: { projectId: 'p2' } })
+
+    fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Trash…' }))
+    expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-trash-project', projectId: 'p2' })
   })
 
   it("lists the project's recently removed worktrees in its menu, and restores the one chosen", () => {

@@ -1,6 +1,6 @@
 // Branches a worktree can be opened on as they are, rather than branched from:
-// a teammate's, or a pull request's head. The listing leaves out anything
-// already checked out, since git refuses a second checkout of one branch.
+// a teammate's, or a pull request's head. The primary checkout's branch is left
+// out; one in a linked checkout no record names is offered to be taken back.
 
 import { execFile } from 'node:child_process'
 import type { BranchEntry, PullRequestEntry } from '../../shared/entities'
@@ -10,10 +10,11 @@ import { readWorktreeInventory } from './worktreeInventory'
 const REMOTE_PREFIX = 'refs/remotes/origin/'
 const LOCAL_PREFIX = 'refs/heads/'
 
-/** Local and origin branches, newest first, one entry per name, none already checked out. */
+/** Local and origin branches, newest first, one entry per name, not the primary checkout's. */
 export async function listOpenableBranches(runner: GitRunner, root: string): Promise<BranchEntry[]> {
-  const inventory = await readWorktreeInventory(runner, root)
-  const checkedOut = new Set(inventory.flatMap((entry) => (entry.branch === undefined ? [] : [entry.branch])))
+  // Only the primary checkout's: a linked checkout nothing records can be taken back as it is.
+  const primary = (await readWorktreeInventory(runner, root))[0]?.branch
+  const checkedOut = new Set(primary === undefined ? [] : [primary])
   const { stdout } = await runner.run({
     args: [
       'for-each-ref',

@@ -45,7 +45,10 @@ type WorktreeRowProps = {
   active: boolean
   onOpen: () => void
   onRetry: () => void
+  /** Move to Trash…: deletes the checkout, a copy kept for Undo. */
   onRemove: () => void
+  /** Remove from teamree: forgets the row; the checkout stays. */
+  onForget: () => void
   onReveal: () => void
   onCopyPath: () => void
   onCopyBranch: () => void
@@ -79,6 +82,7 @@ export function WorktreeRow({
   onOpen,
   onRetry,
   onRemove,
+  onForget,
   onReveal,
   onCopyPath,
   onCopyBranch,
@@ -138,8 +142,12 @@ export function WorktreeRow({
     return rect === undefined ? { x: 0, y: 0 } : { x: rect.left + 12, y: rect.bottom }
   }
 
-  // Last, behind a rule; it asks before anything goes. First once the work has landed: done is what is left.
-  const remove: RowMenuItem = { label: 'Remove Worktree…', onChoose: onRemove, separated: !merged, danger: true }
+  // Last, behind a rule; both ask before anything goes. First once the work has landed: done is what is left.
+  const remove: RowMenuItem[] = [
+    { label: 'Remove from teamree', onChoose: onForget, separated: !merged },
+    { label: 'Move to Trash…', onChoose: onRemove, danger: true }
+  ]
+  if (merged) remove.reverse()
   const rest: RowMenuItem[] = [
     ...(failed && worktree.retryable ? [{ label: 'Retry', onChoose: onRetry }] : []),
     { label: 'Rename…', onChoose: () => setRenaming(true), separated: merged },
@@ -151,7 +159,7 @@ export function WorktreeRow({
     ...(onKeep === undefined ? [] : [{ label: 'Keep This Run…', onChoose: onKeep }])
   ]
   // A directory that is not there has nothing to reveal, open or copy; removal is what is left.
-  const items: RowMenuItem[] = missing ? [remove] : merged ? [remove, ...rest] : [...rest, remove]
+  const items: RowMenuItem[] = missing ? remove : merged ? [...remove, ...rest] : [...rest, ...remove]
   const rows = ready ? agentRows(terminals, worktree, now, evidence) : []
   const tone = worktreeTone(rows)
   const label = worktreeLabel(display)

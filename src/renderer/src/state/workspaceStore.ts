@@ -186,8 +186,13 @@ export type DialogState =
   | { kind: 'confirm-close-pane'; terminalId: string; rest?: readonly string[] }
   /** A file pane with edits not on disk. `rest` is what Close Others closes after Save or Don't Save. */
   | { kind: 'confirm-close-file'; terminalId: string; rest?: readonly string[] }
-  /** Edited files asked about before the app quits, the window closes, or their worktree is removed. */
-  | { kind: 'confirm-unsaved'; paneIds: readonly string[]; after: 'quit' | 'close' | { remove: string } }
+  /** Edited files asked about before the app quits, the window closes, their worktree is removed, or `ask` is asked. */
+  | {
+      kind: 'confirm-unsaved'
+      paneIds: readonly string[]
+      after: 'quit' | 'close' | { remove: string } | { ask: ConfirmAfterUnsaved }
+    }
+  | ConfirmAfterUnsaved
   /** Throwing away a path's unstaged change, or one hunk of it. */
   | { kind: 'confirm-discard'; worktreeId: string; path: string; hunk?: PatchHunk }
   /** Merging a worktree's branch into the base branch in the project's own checkout. */
@@ -199,6 +204,14 @@ export type DialogState =
   /** A worktree on an existing branch; `pullRequests` lists open pull requests instead of branches. */
   | { kind: 'open-branch'; projectId: string; pullRequests?: true }
   | null
+
+/** Forgetting a project or a worktree, or moving a project's folder to the Trash. */
+export type ConfirmAfterUnsaved =
+  | { kind: 'confirm-forget'; target: RemoveTarget }
+  | { kind: 'confirm-trash-project'; projectId: string }
+
+/** What Remove from teamree forgets. */
+export type RemoveTarget = { projectId: string } | { worktreeId: string }
 
 /** A code pane with edits not on disk, and where its file is. */
 export type EditedFile = { worktreeId: string; path: string }
@@ -511,6 +524,13 @@ type WorkspaceState = {
   removeWorktree: (worktreeId: string) => Promise<void>
   /** The answer to that question; unforced, a refusal asks again. */
   confirmRemoveWorktree: (worktreeId: string, force: boolean) => Promise<void>
+  /** Asks first, after any unsaved files; nothing is forgotten until `confirmForget`. */
+  removeFromTeamree: (target: RemoveTarget) => Promise<void>
+  /** Forgets it in the runtime, then here; the disk is left alone. */
+  confirmForget: (target: RemoveTarget) => Promise<void>
+  /** Asks first, after any unsaved files; nothing moves until `confirmTrashProject`. */
+  trashProject: (projectId: string) => Promise<void>
+  confirmTrashProject: (projectId: string) => Promise<void>
   /** Shown at once; a refusal puts the old name back. A blank name is ignored. */
   renameWorktree: (worktreeId: string, name: string) => Promise<void>
   loadRemovedWorktrees: () => Promise<void>
@@ -1341,6 +1361,24 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     set((state) => ({ worktrees: state.worktrees.filter((entry) => entry.id !== worktreeId) }))
   }
 
+  const forgetProject = (projectId: string): void => {
+    for (const worktree of get().worktrees) if (worktree.projectId === projectId) forgetWorktree(worktree.id)
+    set((state) => ({ projects: state.projects.filter((entry) => entry.id !== projectId) }))
+  }
+
+  const worktreeIdsOf = (target: RemoveTarget): string[] =>
+    'worktreeId' in target
+      ? [target.worktreeId]
+      : get()
+          .worktrees.filter((entry) => entry.projectId === target.projectId)
+          .map((entry) => entry.id)
+
+  /** Opens `ask`, after the Save question when any of these worktrees has edited files. */
+  const askAfterUnsaved = (worktreeIds: readonly string[], ask: ConfirmAfterUnsaved): void => {
+    const edited = worktreeIds.flatMap(editedIn)
+    set({ dialog: edited.length > 0 ? { kind: 'confirm-unsaved', paneIds: edited, after: { ask } } : ask })
+  }
+
   const activeLayout = (): Layout | null => {
     const { activeWorktreeId, layouts } = get()
     return activeWorktreeId ? (layouts[activeWorktreeId] ?? null) : null
@@ -1712,6 +1750,40 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set({ dialog: { kind: 'confirm-remove', worktreeId, intent: 'remove' } })
     },
 
+    async removeFromTeamree(target) {
+      askAfterUnsaved(worktreeIdsOf(target), { kind: 'confirm-forget', target })
+    },
+
+    async confirmForget(target) {
+      set({ dialog: null })
+      try {
+        if ('worktreeId' in target) await runtimeClient.call('worktree.forget', { worktreeId: target.worktreeId })
+        else await runtimeClient.call('project.remove', { projectId: target.projectId })
+      } catch (error) {
+        failed('Could not remove from teamree')(error)
+        return
+      }
+      if ('projectId' in target) forgetProject(target.projectId)
+      else forgetWorktree(target.worktreeId)
+    },
+
+    async trashProject(projectId) {
+      askAfterUnsaved(worktreeIdsOf({ projectId }), { kind: 'confirm-trash-project', projectId })
+    },
+
+    async confirmTrashProject(projectId) {
+      const project = get().projects.find((entry) => entry.id === projectId)
+      set({ dialog: null })
+      try {
+        await runtimeClient.call('project.trash', { projectId })
+      } catch (error) {
+        failed('Could not move to Trash')(error)
+        return
+      }
+      forgetProject(projectId)
+      if (project) notify(`Moved "${shortened(project.name)}" to Trash`, 'info')
+    },
+
     async renameWorktree(worktreeId, name) {
       const named = name.trim()
       const previous = get().worktrees.find((entry) => entry.id === worktreeId)
@@ -1745,7 +1817,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         if (retrying && worktree) await recreateWorktree(worktree)
         else if (worktree && removed.trashId !== undefined) {
           const undo: UndoTarget = { kind: 'remove', projectId: worktree.projectId, removedId: removed.trashId }
-          notify(`Removed "${shortened(worktreeLabel(worktreeDisplay(worktree)))}"`, 'info', { label: 'Undo', undo })
+          notify(`Moved "${shortened(worktreeLabel(worktreeDisplay(worktree)))}" to Trash`, 'info', {
+            label: 'Undo',
+            undo
+          })
         }
       } catch (error) {
         // Something appeared since the dialog read the checkout: ask again, and it reads again.
@@ -2317,7 +2392,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (answer === 'save') proceed = await get().saveFiles(dialog.paneIds)
       else if (answer === 'discard') forgetEdits(dialog.paneIds)
       if (typeof dialog.after === 'object') {
-        if (proceed) await get().removeWorktree(dialog.after.remove)
+        if (!proceed) return
+        if ('ask' in dialog.after) set({ dialog: dialog.after.ask })
+        else await get().removeWorktree(dialog.after.remove)
       } else {
         settleLeaving(proceed)
       }

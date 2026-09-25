@@ -581,6 +581,19 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'projects' }, { type: 'worktrees' })
       return { removed: true }
     },
+    'project.trashPreview': ({ projectId }) => ({
+      uncommitted: 0,
+      unpushed: 0,
+      worktrees: [...worktrees.values()].filter((worktree) => worktree.projectId === projectId).length
+    }),
+    'project.trash': () => {
+      throw Object.assign(new Error('no Trash in a seeded window'), { code: 'conflict' })
+    },
+    'worktree.forget': ({ worktreeId }) => {
+      worktrees.delete(worktreeId)
+      announce({ type: 'worktrees' })
+      return { forgotten: true }
+    },
 
     'worktree.list': ({ projectId }) =>
       [...worktrees.values()].filter((worktree) => !projectId || worktree.projectId === projectId),

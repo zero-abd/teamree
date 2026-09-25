@@ -53,6 +53,7 @@ type WorktreeAction =
   | 'copy-worktree-branch'
   | 'update-worktree'
   | 'remove-worktree'
+  | 'forget-worktree'
   | 'create-pull-request'
   | 'merge-into-base'
   | 'keep-run'
@@ -184,17 +185,16 @@ type ActionRow = { id: PaletteAction; label: string; keywords: string; hint?: st
 function worktreeActions(context: PaletteContext): PaletteItem[] {
   const active = context.worktrees.find((worktree) => worktree.id === context.activeWorktreeId)
   if (active === undefined) return []
-  const remove: ActionRow = {
-    id: 'remove-worktree',
-    label: 'Remove Worktree…',
-    keywords: 'remove delete worktree checkout trash'
-  }
+  const remove: ActionRow[] = [
+    { id: 'forget-worktree', label: 'Remove Worktree from teamree', keywords: 'remove forget hide worktree sidebar' },
+    { id: 'remove-worktree', label: 'Move Worktree to Trash…', keywords: 'remove delete worktree checkout trash' }
+  ]
   const change = context.focusedChange
   const land = context.land ?? null
   const siblings = siblingRuns(active, context.worktrees)
   // As the row's menu: a checkout gone from disk has nothing to reveal, open or copy.
   const rows: ActionRow[] = active.missing
-    ? [remove]
+    ? remove
     : [
         { id: 'rename-worktree', label: 'Rename Worktree…', keywords: 'rename name title worktree' },
         { id: 'reveal-worktree', label: 'Reveal in Finder', keywords: 'reveal finder show folder directory checkout' },
@@ -240,7 +240,7 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
                 keywords: 'keep winner pick choose run remove others'
               }
             ]),
-        remove,
+        ...remove,
         ...(change?.discardable === true
           ? [
               {

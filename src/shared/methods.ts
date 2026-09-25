@@ -181,6 +181,10 @@ export const Params = {
   /** `init`: a folder that is not a repository gets `git init` and an empty first commit before it is added. */
   projectAdd: z.object({ path: z.string().min(1), name: z.string().min(1).optional(), init: z.boolean().optional() }),
   projectRemove: z.object({ projectId: z.string().min(1) }),
+  /** What moving the project's folder to the Trash would lose, for the question before it. */
+  projectTrashPreview: z.object({ projectId: z.string().min(1) }),
+  /** Removes its worktrees (each copy kept), moves its folder to the Trash, and forgets it. */
+  projectTrash: z.object({ projectId: z.string().min(1) }),
   /**
    * `git clone` and then `project.add`. `path` is absolute or starts with `~`;
    * omitted, it is `~/code/<repo>`. Credentials come from git's own helper, never from here.
@@ -242,6 +246,8 @@ export const Params = {
     /** Delete the branch alongside the checkout. */
     deleteBranch: z.boolean().optional()
   }),
+  /** Forgets the record; checkout and branch stay, and Open Branch offers the branch again. */
+  worktreeForget: z.object({ worktreeId: z.string().min(1) }),
   worktreeStatus: z.object({ worktreeId: z.string().min(1) }),
   /** Every changed path, for a review pass before committing. */
   worktreeChanges: z.object({
@@ -740,6 +746,11 @@ export type MethodContract = {
   'project.list': { params: z.infer<typeof Params.projectList>; result: Project[] }
   'project.add': { params: z.infer<typeof Params.projectAdd>; result: Project }
   'project.remove': { params: z.infer<typeof Params.projectRemove>; result: { removed: true } }
+  'project.trashPreview': {
+    params: z.infer<typeof Params.projectTrashPreview>
+    result: { uncommitted: number; unpushed: number; worktrees: number }
+  }
+  'project.trash': { params: z.infer<typeof Params.projectTrash>; result: { trashed: true } }
   'project.clone': { params: z.infer<typeof Params.projectClone>; result: Project }
   /** Null when no clone of that URL is running. */
   'project.cloneProgress': { params: z.infer<typeof Params.projectCloneProgress>; result: CloneProgress | null }
@@ -760,6 +771,10 @@ export type MethodContract = {
   'worktree.remove': {
     params: z.infer<typeof Params.worktreeRemove>
     result: { removed: true; checkoutLeftAt?: string; trashId?: string }
+  }
+  'worktree.forget': {
+    params: z.infer<typeof Params.worktreeForget>
+    result: { forgotten: true; checkoutLeftAt?: string }
   }
   'worktree.status': { params: z.infer<typeof Params.worktreeStatus>; result: WorktreeStatus }
   'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }

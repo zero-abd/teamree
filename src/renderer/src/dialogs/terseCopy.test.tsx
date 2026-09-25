@@ -90,6 +90,7 @@ const MINOR_WORDS = new Set([
   'or',
   'nor',
   'for',
+  'from',
   'as',
   'at',
   'by',
