@@ -193,8 +193,11 @@ release carries both plus `teamree-mac.json`:
 { "version": "0.1.0", "file": "teamree-0.1.0.zip", "size": 201761957, "sha256": "…" }
 ```
 
-A running teamree checks `releases/latest` on launch and every six hours. When
-it is older, it fetches the manifest, then the zip, and refuses unless the size
+A running teamree checks `releases/latest` on launch, every hour, on waking
+from sleep, and when the window regains focus after 30 or more minutes away —
+no two automatic checks inside 10 minutes, so GitHub's unauthenticated rate
+limit (60 requests/hour per IP) is never in reach. When it is older, it
+fetches the manifest, then the zip, and refuses unless the size
 and SHA-256 match the manifest (and GitHub's own digest, when it gives one). It
 unpacks into `~/Library/Application Support/teamree/updates` and refuses unless
 the app there has teamree's identifier, the manifest's version and a signature

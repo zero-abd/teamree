@@ -78,8 +78,10 @@ export type Runtime = {
   checkForUpdates: () => Promise<void>
   /** A quit was declined at its questions, so a Restart to Update that started it installs nothing. */
   quitDeclined: () => void
-  /** The window came to the front: a moment to see whether the base refs moved. */
+  /** The window came to the front: a moment to see whether the base refs moved, or a long absence to check updates over. */
   noteWindowFocus: () => void
+  /** The window left the front: the moment a long absence away is measured from. */
+  noteWindowBlur: () => void
   stop: () => Promise<void>
 }
 
@@ -228,7 +230,9 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     quitDeclined: () => areas.updates.quitDeclined(),
     noteWindowFocus: () => {
       if (fetchBases) void areas.bases.nudge()
+      areas.updates.noteWindowFocus()
     },
+    noteWindowBlur: () => areas.updates.noteWindowBlur(),
     stop
   }
 }
