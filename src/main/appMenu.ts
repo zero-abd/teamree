@@ -164,8 +164,13 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
 
   // The `help` role is what attaches the system's own Help search on macOS.
   const links = options.links ? helpLinks(options.links, mac, platform) : []
+  const updates: MenuItemConstructorOptions[] = options.checkForUpdates
+    ? [{ label: 'Check for Updates…', click: options.checkForUpdates }]
+    : []
   const shortcuts = inSection('help')
-  const help = shortcuts.length > 0 ? [...shortcuts, ...after(links)] : links
+  const help = [shortcuts, updates, links]
+    .filter((group) => group.length > 0)
+    .flatMap((group, index) => (index === 0 ? group : [{ type: 'separator' } as const, ...group]))
   if (help.length > 0) template.push({ label: top('Help'), role: 'help', submenu: help })
 
   return template

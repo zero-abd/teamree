@@ -452,7 +452,9 @@ function UpdatesSection(): React.JSX.Element {
 
         {shown.whole && step !== null && update?.available ? (
           <div className="settings-row">
-            <p className="settings-fact">teamree {update.available.version} available</p>
+            <p className="settings-fact">
+              teamree {update.available.version} {step.kind === 'restart' ? 'is ready' : 'available'}
+            </p>
             <InstallerButton step={step} className="button button--small" />
           </div>
         ) : null}

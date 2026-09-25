@@ -1522,4 +1522,14 @@ export type UpdateState = {
   problem: string | null
   /** The installer being fetched, fetched, or refused; absent or null before one was asked for. */
   download?: UpdateDownload | null
+  /** The newer bundle fetched in the background to replace this one; absent or null when this copy cannot. */
+  install?: UpdateInstall | null
+  /** When a person last asked for a check, so a card put off with Later can come back. */
+  askedAt?: number | null
 }
+
+/** Replacing this copy in place: fetched and verified beside the profile, swapped in after a quit. */
+export type UpdateInstall =
+  | { state: 'downloading'; version: string; received: number; total: number }
+  | { state: 'ready'; version: string }
+  | { state: 'failed'; version: string; problem: string }

@@ -268,6 +268,7 @@ describe('what a teammate can reach', () => {
     expect(PEER_METHODS).not.toHaveProperty('update.download')
     expect(PEER_METHODS).not.toHaveProperty('update.fetchInstaller')
     expect(PEER_METHODS).not.toHaveProperty('update.openInstaller')
+    expect(PEER_METHODS).not.toHaveProperty('update.restart')
     expect(PEER_METHODS).not.toHaveProperty('update.setAutomatic')
     expect(PEER_METHODS).not.toHaveProperty('update.state')
   })

@@ -62,18 +62,7 @@ export async function downloadDiskImage(options: DownloadOptions): Promise<strin
   const target = join(directory, image.name)
   const partial = `${target}.download`
   try {
-    let url = image.url
-    let response: Response
-    for (let hop = 0; ; hop++) {
-      if (!allowed(url, hop > 0)) throw new Error(`refused ${hostOf(url)}`)
-      // Manual, so each hop passes the policy before it is requested.
-      response = await fetchImpl(url, { redirect: 'manual', signal })
-      const location = response.headers.get('location')
-      if (response.status < 300 || response.status >= 400 || location === null) break
-      await response.body?.cancel()
-      if (hop >= MAX_REDIRECTS) throw new Error('too many redirects')
-      url = new URL(location, url).href
-    }
+    const response = await fetchAllowed(image.url, allowed, fetchImpl, signal)
     if (!response.ok || response.body === null) throw new Error(`the download answered ${response.status}`)
 
     const hash = createHash('sha256')
@@ -104,6 +93,25 @@ export async function downloadDiskImage(options: DownloadOptions): Promise<strin
     throw stall.signal.aborted ? stall.signal.reason : error
   } finally {
     clearTimeout(stallTimer)
+  }
+}
+
+/** Requests `url`, following redirects by hand so each hop passes `allowed` before it is asked. */
+export async function fetchAllowed(
+  first: string,
+  allowed: HostPolicy,
+  fetchImpl: typeof fetch = fetch,
+  signal?: AbortSignal
+): Promise<Response> {
+  let url = first
+  for (let hop = 0; ; hop++) {
+    if (!allowed(url, hop > 0)) throw new Error(`refused ${hostOf(url)}`)
+    const response = await fetchImpl(url, { redirect: 'manual', ...(signal === undefined ? {} : { signal }) })
+    const location = response.headers.get('location')
+    if (response.status < 300 || response.status >= 400 || location === null) return response
+    await response.body?.cancel()
+    if (hop >= MAX_REDIRECTS) throw new Error('too many redirects')
+    url = new URL(location, url).href
   }
 }
 

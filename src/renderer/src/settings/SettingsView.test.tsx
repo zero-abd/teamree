@@ -111,6 +111,7 @@ const setTrustNewWorktrees = vi.fn()
 const checkForUpdates = vi.fn()
 const fetchInstaller = vi.fn()
 const openInstaller = vi.fn()
+const restartToUpdate = vi.fn()
 const openTeamwork = vi.fn()
 const openDialog = vi.fn()
 const installCli = vi.fn()
@@ -144,6 +145,7 @@ function seed(overrides: Record<string, unknown> = {}): void {
       checkForUpdates,
       fetchInstaller,
       openInstaller,
+      restartToUpdate,
       openTeamwork,
       openDialog,
       installCli,
@@ -183,6 +185,7 @@ beforeEach(() => {
     checkForUpdates,
     fetchInstaller,
     openInstaller,
+    restartToUpdate,
     openTeamwork,
     openDialog,
     installCli,
@@ -454,6 +457,14 @@ describe('updates', () => {
       render(<SettingsView />)
       fireEvent.click(screen.getByRole('button', { name: 'Open Installer' }))
       expect(openInstaller).toHaveBeenCalled()
+    })
+
+    it('restarts into a copy fetched in the background', () => {
+      seed({ update: { ...release(), available, install: { state: 'ready', version: '1.5.0' } } })
+      render(<SettingsView />)
+      expect(screen.getByText('teamree 1.5.0 is ready')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Restart to Update' }))
+      expect(restartToUpdate).toHaveBeenCalled()
     })
 
     it('says in one line why a download failed', () => {

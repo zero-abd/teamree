@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import type { AgentNotice } from '../agentNotices'
 import type { Appearance, Tone } from '../../shared/theme'
 import { ScrollbackArchive, SCROLLBACK_DIR_NAME } from '../store/scrollbackArchive'
+import type { SelfInstall } from '../updates'
 import { WorkspaceStore } from '../store/workspaceStore'
 import { createDispatcher, type Dispatcher } from './dispatcher'
 import { discoveryFilePath, removeDiscoveryFile, writeDiscoveryFile } from './discoveryFile'
@@ -48,6 +49,8 @@ export type RuntimeOptions = {
   downloadsDirectory?: string
   /** Opens the fetched `.dmg`; `shell.openPath` in the app. */
   openPath?: (path: string) => Promise<string>
+  /** Replaces the packaged app in place after a quit; see updates/selfInstaller.ts. */
+  selfInstall?: SelfInstall
   /** Moves a discarded untracked file to the Trash; `shell.trashItem` in the app. */
   trashItem?: (path: string) => Promise<void>
   /** Announces an agent pane that has stopped. Passed in for the same reason `openExternal` is. */
@@ -73,6 +76,8 @@ export type Runtime = {
    * caller, the macOS app menu, is not a method call from a window.
    */
   checkForUpdates: () => Promise<void>
+  /** A quit was declined at its questions, so a Restart to Update that started it installs nothing. */
+  quitDeclined: () => void
   /** The window came to the front: a moment to see whether the base refs moved. */
   noteWindowFocus: () => void
   stop: () => Promise<void>
@@ -92,6 +97,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     openExternal,
     downloadsDirectory,
     openPath,
+    selfInstall,
     trashItem,
     onAgentNotice,
     requestQuit,
@@ -117,6 +123,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     openExternal,
     downloadsDirectory,
     openPath,
+    ...(selfInstall === undefined ? {} : { selfInstall }),
     ...(trashItem === undefined ? {} : { trashItem }),
     onAgentNotice,
     scrollback,
@@ -216,8 +223,9 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
       return context.endpoint
     },
     checkForUpdates: async () => {
-      await areas.updates.check({ force: true })
+      await areas.updates.check({ force: true, person: true })
     },
+    quitDeclined: () => areas.updates.quitDeclined(),
     noteWindowFocus: () => {
       if (fetchBases) void areas.bases.nudge()
     },

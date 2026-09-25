@@ -15,7 +15,7 @@ import { loginShellPath } from '../../terminals/shell-environment'
 import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
 import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
-import { UpdateService, registerUpdateHandlers } from '../../updates'
+import { UpdateService, registerUpdateHandlers, type SelfInstall } from '../../updates'
 import type { TerminalService } from '../../terminals/method-handlers'
 import type { ScrollbackRepository } from '../../terminals/session-manager'
 import type { AgentNotice, NoticeAnswer } from '../../agentNotices'
@@ -82,6 +82,8 @@ export type RegisterHandlersOptions = {
   systemTone?: () => Tone
   /** `net.isOnline`: false skips a background fetch. Absent, the fetch is tried. */
   online?: () => boolean
+  /** Replaces the packaged app in place after a quit. Absent, an update is a `.dmg` to open. */
+  selfInstall?: SelfInstall
 }
 
 export function registerHandlers(registry: MethodRegistry, options: RegisterHandlersOptions = {}): RegisteredAreas {
@@ -259,6 +261,10 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
       openExternal: options.openExternal,
       downloadsDirectory: options.downloadsDirectory,
       openPath: options.openPath,
+      selfInstall: options.selfInstall,
+      // Past the reply, as `app.quit` is: the quit's own questions still come first.
+      restart:
+        options.requestQuit === undefined ? undefined : () => void setTimeout(() => options.requestQuit?.(false), 0),
       // A window hears about a check it did not start the way it hears about a
       // worktree the CLI made.
       onChange: () => workspaceEvents.emit({ type: 'updates' })

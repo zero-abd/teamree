@@ -208,6 +208,7 @@ describe('dispatcher', () => {
       'update.download',
       'update.fetchInstaller',
       'update.openInstaller',
+      'update.restart',
       'update.setAutomatic',
       'update.state',
       'workspace.subscribe',

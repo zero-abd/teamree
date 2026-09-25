@@ -440,6 +440,8 @@ export const Params = {
   updateFetchInstaller: z.object({}),
   /** Opens the fetched `.dmg`, which mounts it. Takes no path: only the verified file can be opened. */
   updateOpenInstaller: z.object({}),
+  /** Quits as Quit does, then swaps in the fetched bundle and opens it. Refused unless `install` is ready. */
+  updateRestart: z.object({}),
 
   /** Everyone whose public key is committed to the project, and who this installation is. */
   membersList: z.object({ projectId: z.string().min(1) }),
@@ -821,6 +823,7 @@ export type MethodContract = {
   'update.download': { params: z.infer<typeof Params.updateDownload>; result: { opened: string } }
   'update.fetchInstaller': { params: z.infer<typeof Params.updateFetchInstaller>; result: UpdateState }
   'update.openInstaller': { params: z.infer<typeof Params.updateOpenInstaller>; result: { opened: string } }
+  'update.restart': { params: z.infer<typeof Params.updateRestart>; result: { restarting: string } }
 
   'members.list': { params: z.infer<typeof Params.membersList>; result: MemberList }
   'members.join': { params: z.infer<typeof Params.membersJoin>; result: MemberList }

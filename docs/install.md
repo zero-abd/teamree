@@ -460,27 +460,27 @@ the whole story, including what the relay can and cannot see.
 
 ## Keeping it up to date
 
-teamree tells you when there is a newer release. It asks GitHub for the latest
-published one a little after it starts, at most once every few hours, and if
-there is something newer it says so in a card in the corner of the window —
-the version, the release notes, and a button that opens the `.dmg` in your
-browser. A check that cannot be made says nothing at all; the app does not
-complain at you about a network it cannot reach.
+teamree checks GitHub for a newer release a little after it starts and every
+six hours after that. When there is one it downloads it in the background, and
+a card in the corner says **teamree 0.3.0 is ready**, with **Restart to Update**
+and **Later**. Restart to Update quits the way ⌘Q does (edited files are asked
+about first), puts the new copy where the old one was, and opens it with your
+panes restored. A check that cannot be made says nothing at all.
 
-**It is a notice, never an install.** Nothing about this replaces the app while
-you are not looking, and that is not caution — it is not possible. The macOS
-updater every app of this kind uses checks the code signature of the
-replacement before swapping it in, and refuses one that is unsigned, which this
-build is and will stay. So the download is a new `.dmg`, installed exactly the
-way this copy was: drag it to Applications over the old one, and if you had to
-clear the quarantine flag before, do it again for the new copy.
+What it installs is checked first: the release's `teamree-mac.json` names the
+zip and its SHA-256, and the unpacked app has to carry teamree's identifier, the
+promised version and a signature that verifies (the same Developer ID team, once
+builds are signed). Anything else is refused.
 
-You can ask at any time: **teamree → Check for Updates…** in the menu bar, or
-"Check for updates" in the command palette. **Later** on the card
-hides it until a newer release than that one comes out. And you can tell it to
-stop looking — **Settings › Updates › Check automatically**, or "Stop checking
-for updates automatically" in the palette. That answer is remembered between launches, and
-the menu item still works when you want it.
+It cannot replace itself when it runs from the disk image, from a folder you
+cannot write to, or translocated — a quarantined copy macOS runs from a
+temporary path until it is moved. Then the card offers the `.dmg` instead,
+installed the way this copy was.
+
+**Help › Check for Updates…** (also in the app menu and the command palette)
+asks at any time and brings back a card put off with Later. **Settings ›
+Updates › Check automatically** turns the checks and the background download
+off; the menu item still works.
 
 ## Uninstalling
 

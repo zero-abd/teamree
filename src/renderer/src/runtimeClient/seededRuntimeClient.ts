@@ -1229,6 +1229,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'update.download': () => ({ opened: 'https://github.com/zero-abd/teamree/releases/latest' }),
     'update.fetchInstaller': () => updateState(),
     'update.openInstaller': () => ({ opened: '/Users/demo/Downloads/teamree.dmg' }),
+    'update.restart': () => ({ restarting: '0.0.2-demo' }),
     // No machine under it: nothing is installed. The row menu keeps its Open in
     // item and says this when chosen, which is what the real refusal looks like.
     'editor.list': () => ({ editors: [] }),

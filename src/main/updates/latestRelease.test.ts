@@ -137,6 +137,30 @@ describe('what it refuses to believe', () => {
     }
   })
 
+  it('lists the assets a self-install may use: plain names, this repository, a size', async () => {
+    const base = `https://github.com/${REPOSITORY}/releases/download/v0.2.0`
+    const { found } = await read(
+      release({
+        assets: [
+          { name: 'teamree-mac.json', browser_download_url: `${base}/teamree-mac.json`, size: 120 },
+          {
+            name: 'teamree-0.2.0.zip',
+            browser_download_url: `${base}/teamree-0.2.0.zip`,
+            size: 9,
+            digest: `sha256:${'CD'.repeat(32)}`
+          },
+          { name: '../x.zip', browser_download_url: `${base}/x.zip`, size: 9 },
+          { name: 'y.zip', browser_download_url: 'https://example.invalid/y.zip', size: 9 },
+          { name: 'z.zip', browser_download_url: `${base}/z.zip` }
+        ]
+      })
+    )
+    expect(found?.assets).toEqual([
+      { name: 'teamree-mac.json', url: `${base}/teamree-mac.json`, size: 120, sha256: null },
+      { name: 'teamree-0.2.0.zip', url: `${base}/teamree-0.2.0.zip`, size: 9, sha256: 'cd'.repeat(32) }
+    ])
+  })
+
   it('survives a body that is not the shape the API documents', async () => {
     expect((await read({ nothing: 'useful' })).found).toBeNull()
     expect((await read([{ tag_name: 42 }], 'prerelease')).found).toBeNull()
