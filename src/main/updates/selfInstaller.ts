@@ -4,8 +4,9 @@
 
 import { execFile } from 'node:child_process'
 import { accessSync, constants } from 'node:fs'
-import { mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, readdir, rename, rm, rmdir, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import type { UpdateBlock } from '../../shared/entities'
 import { macBundleProbe, locationRefusal, stagingRefusal, type BundleFacts, type BundleProbe } from './bundleCheck'
 import { downloadDiskImage, type HostPolicy } from './downloadInstaller'
 import { helperScript, launchHelper } from './installHelper'
@@ -40,7 +41,10 @@ export type PrepareOptions = {
 }
 
 /** What `SelfInstaller` does for `UpdateService`; a seam so the service's tests need no bundle. */
-export type SelfInstall = Pick<SelfInstaller, 'refusal' | 'prepare' | 'recover' | 'arm' | 'launch' | 'disarm'>
+export type SelfInstall = Pick<
+  SelfInstaller,
+  'refusal' | 'prepare' | 'recover' | 'arm' | 'launch' | 'disarm' | 'preflight'
+>
 
 export class SelfInstaller {
   readonly #bundle: string
@@ -139,6 +143,11 @@ export class SelfInstaller {
     return found
   }
 
+  /** What would stop the swap after the quit, tried now while quitting can still be called off. */
+  preflight(): Promise<UpdateBlock | null> {
+    return swapBlock(this.#bundle)
+  }
+
   /** Writes the helper for `version`, to be started by `launch` once the quit is past its questions. */
   async arm(version: string, foreground: boolean): Promise<void> {
     const staged = join(this.#root, version)
@@ -151,8 +160,8 @@ export class SelfInstaller {
         staged: join(staged, await onlyApp(staged)),
         log: join(this.#root, UPDATE_LOG_NAME),
         version,
-        foreground,
-        opener: this.#opener
+        opener: this.#opener,
+        ...relaunchOptions(process.env, foreground)
       }),
       { mode: 0o700 }
     )
@@ -187,6 +196,53 @@ export class SelfInstaller {
     const refused = stagingRefusal({ staged, running, version })
     if (refused !== null) throw new Error(refused)
   }
+}
+
+/** The variables a throwaway profile was started with, so the relaunch lands on it and stays behind if it was. */
+export function relaunchOptions(
+  env: NodeJS.ProcessEnv,
+  clicked: boolean
+): { foreground: boolean; env: Record<string, string> } {
+  const kept: Record<string, string> = {}
+  for (const name of ['TEAMREE_USER_DATA_DIR', 'TEAMREE_WORKTREES_ROOT', 'TEAMREE_BACKGROUND_LAUNCH']) {
+    const value = env[name]
+    if (value) kept[name] = value
+  }
+  return { foreground: clicked && env['TEAMREE_BACKGROUND_LAUNCH'] !== '1', env: kept }
+}
+
+/**
+ * The swap's two kinds of step, each tried and undone: a folder made and renamed beside `bundle`, and a
+ * file written inside it, which App Management refuses. A missing bundle blocks nothing; the helper installs there.
+ */
+export async function swapBlock(bundle: string): Promise<UpdateBlock | null> {
+  const folder = dirname(bundle)
+  const probe = join(folder, `.teamree-check-${process.pid}`)
+  try {
+    await mkdir(probe)
+    await rename(probe, `${probe}-moved`)
+    await rmdir(`${probe}-moved`)
+  } catch (error) {
+    await rm(probe, { recursive: true, force: true }).catch(() => undefined)
+    await rm(`${probe}-moved`, { recursive: true, force: true }).catch(() => undefined)
+    return { problem: `Can't write to ${folder}: ${code(error)}`, settings: false }
+  }
+  const inside = join(bundle, 'Contents', `.teamree-check-${process.pid}`)
+  try {
+    await writeFile(inside, '')
+    await rm(inside, { force: true })
+  } catch (error) {
+    if (code(error) === 'ENOENT') return null
+    await rm(inside, { force: true }).catch(() => undefined)
+    return code(error) === 'EPERM'
+      ? { problem: 'macOS blocked the update', settings: true }
+      : { problem: `Can't write to ${bundle}: ${code(error)}`, settings: false }
+  }
+  return null
+}
+
+function code(error: unknown): string {
+  return (error as NodeJS.ErrnoException | undefined)?.code ?? String(error)
 }
 
 /** The one `.app` in `folder`; an archive holding anything else is not one this project made. */

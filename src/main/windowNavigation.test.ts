@@ -3,6 +3,7 @@
 // comparison — and every `file:` URL matches, their origin being `"null"`.
 
 import { describe, expect, it } from 'vitest'
+import { APP_MANAGEMENT_SETTINGS } from '../shared/entities'
 import { mayOpenExternally, navigationVerdict, windowOpenAnswer } from './windowNavigation'
 
 const PACKAGED = 'file:///Applications/teamree.app/Contents/Resources/app.asar/out/renderer/index.html'
@@ -47,6 +48,13 @@ describe('what may be handed to macOS', () => {
     for (const url of ['about:blank', 'file:///etc/hosts', 'javascript:alert(1)', 'x-apple-script://run', '']) {
       expect(mayOpenExternally(url), url).toBe(false)
     }
+  })
+
+  // The update card's button when macOS refused the swap; that exact page, no other Settings URL.
+  it('opens the one Settings page the update card asks for, and no other', () => {
+    expect(mayOpenExternally(APP_MANAGEMENT_SETTINGS)).toBe(true)
+    expect(mayOpenExternally('x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension')).toBe(false)
+    expect(mayOpenExternally(`${APP_MANAGEMENT_SETTINGS}&x`)).toBe(false)
   })
 })
 

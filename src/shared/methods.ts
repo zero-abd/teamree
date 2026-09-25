@@ -838,7 +838,10 @@ export type MethodContract = {
   'update.download': { params: z.infer<typeof Params.updateDownload>; result: { opened: string } }
   'update.fetchInstaller': { params: z.infer<typeof Params.updateFetchInstaller>; result: UpdateState }
   'update.openInstaller': { params: z.infer<typeof Params.updateOpenInstaller>; result: { opened: string } }
-  'update.restart': { params: z.infer<typeof Params.updateRestart>; result: { restarting: string } }
+  'update.restart': {
+    params: z.infer<typeof Params.updateRestart>
+    result: { restarting: string } | { blocked: string }
+  }
 
   'members.list': { params: z.infer<typeof Params.membersList>; result: MemberList }
   'members.join': { params: z.infer<typeof Params.membersJoin>; result: MemberList }

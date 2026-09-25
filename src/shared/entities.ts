@@ -1528,8 +1528,15 @@ export type UpdateState = {
   askedAt?: number | null
 }
 
+/** System Settings › Privacy & Security › App Management, the one non-web page the window may open. */
+export const APP_MANAGEMENT_SETTINGS =
+  'x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AppBundles'
+
+/** Why the last Restart to Update did not quit: the swap was tried in part and refused. `settings`: App Management may allow it. */
+export type UpdateBlock = { problem: string; settings: boolean }
+
 /** Replacing this copy in place: fetched and verified beside the profile, swapped in after a quit. */
 export type UpdateInstall =
   | { state: 'downloading'; version: string; received: number; total: number }
-  | { state: 'ready'; version: string }
+  | { state: 'ready'; version: string; blocked?: UpdateBlock | null }
   | { state: 'failed'; version: string; problem: string }

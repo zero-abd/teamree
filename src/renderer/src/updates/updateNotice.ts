@@ -46,25 +46,38 @@ export function automaticUpdatesLabel(state: UpdateState | null): string {
 export type InstallerStep = {
   kind: 'browser' | 'fetch' | 'progress' | 'open' | 'restart'
   label: string
-  /** Why the last download failed, in one line. */
+  /** Why the last download failed, or why macOS refused the swap, in one line. */
   problem: string | null
+  /** System Settings › App Management may lift the refusal. */
+  settings: boolean
 }
 
 export function installerStep(state: UpdateState | null): InstallerStep | null {
   const release = state?.available ?? null
   if (state === null || release === null) return null
   const install = state.install?.version === release.version ? state.install : null
-  if (install?.state === 'ready') return { kind: 'restart', label: 'Restart to Update', problem: null }
+  if (install?.state === 'ready') {
+    const blocked = install.blocked ?? null
+    return {
+      kind: 'restart',
+      label: 'Restart to Update',
+      problem: blocked?.problem ?? null,
+      settings: blocked?.settings ?? false
+    }
+  }
   if (install?.state === 'downloading') return progress(install)
   const failed = install?.state === 'failed' ? install.problem : null
-  if (!release.installer) return { kind: 'browser', label: updateNotice(state)?.action ?? '', problem: failed }
+  if (!release.installer)
+    return { kind: 'browser', label: updateNotice(state)?.action ?? '', problem: failed, settings: false }
 
   const download = state.download?.version === release.version ? state.download : null
   if (download?.state === 'downloading') return progress(download)
-  if (download?.state === 'ready') return { kind: 'open', label: 'Open Installer', problem: null }
-  return { kind: 'fetch', label: 'Download', problem: download?.state === 'failed' ? download.problem : failed }
+  if (download?.state === 'ready') return { kind: 'open', label: 'Open Installer', problem: null, settings: false }
+  const problem = download?.state === 'failed' ? download.problem : failed
+  return { kind: 'fetch', label: 'Download', problem, settings: false }
 }
 
 function progress({ received, total }: { received: number; total: number }): InstallerStep {
-  return { kind: 'progress', label: `Downloading ${Math.floor((received * 100) / Math.max(total, 1))}%`, problem: null }
+  const percent = Math.floor((received * 100) / Math.max(total, 1))
+  return { kind: 'progress', label: `Downloading ${percent}%`, problem: null, settings: false }
 }

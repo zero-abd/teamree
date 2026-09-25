@@ -144,6 +144,21 @@ describe('an update fetched in place', () => {
     })
   })
 
+  it('keeps Restart to Update beside the one line macOS refused with, and says whether Settings can help', () => {
+    const blocked = {
+      state: 'ready' as const,
+      version: '0.2.0',
+      blocked: { problem: 'macOS blocked it', settings: true }
+    }
+    expect(installerStep(state({ install: blocked }))).toEqual({
+      kind: 'restart',
+      label: 'Restart to Update',
+      problem: 'macOS blocked it',
+      settings: true
+    })
+    expect(installerStep(state({ install: { state: 'ready', version: '0.2.0' } }))?.settings).toBe(false)
+  })
+
   it('ignores a copy fetched for another release', () => {
     expect(installerStep(state({ install: { state: 'ready', version: '0.1.5' } }))).toMatchObject({ kind: 'browser' })
   })

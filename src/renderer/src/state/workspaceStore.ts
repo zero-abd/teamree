@@ -689,7 +689,8 @@ type WorkspaceState = {
   /** Opens the fetched `.dmg`, which mounts it. */
   openInstaller: () => Promise<void>
   /** Quits as Quit does, then the fetched copy replaces this one and opens. */
-  restartToUpdate: () => Promise<void>
+  /** True once the app is quitting; false when it stays, the card saying why. */
+  restartToUpdate: () => Promise<boolean>
   /** Turns the automatic check on or off. Remembered between runs. */
   setAutomaticUpdates: (automatic: boolean) => Promise<void>
   loadAgentTrust: () => Promise<void>
@@ -2783,11 +2784,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     async restartToUpdate() {
       try {
-        await runtimeClient.call('update.restart', {})
+        const answer = await runtimeClient.call('update.restart', {})
+        if ('restarting' in answer) return true
+        void get().loadUpdate()
       } catch (error) {
         void get().loadUpdate()
         failed('Could not restart to update')(error)
       }
+      return false
     },
 
     async setAutomaticUpdates(automatic) {

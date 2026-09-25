@@ -22,6 +22,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { UpdateAvailableCard } = await import('./UpdateAvailableCard')
 const { INSTALL_DOCUMENT } = await import('./updateNotice')
+const { APP_MANAGEMENT_SETTINGS } = await import('@shared/entities')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -237,6 +238,46 @@ describe('an update fetched in the background', () => {
     expect(container.querySelector('.update-card')).toBeNull()
   })
 
+  it('shows the restart under way until the app quits', async () => {
+    let quit: (restarting: boolean) => void = () => {}
+    restartToUpdate.mockImplementation(() => new Promise<boolean>((resolve) => (quit = resolve)))
+    useWorkspaceStore.setState({ update: update({ install: ready }) })
+    render(<UpdateAvailableCard />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restart to Update' }))
+    const busy = screen.getByRole('button', { name: 'Restarting…' })
+    expect(busy.hasAttribute('disabled')).toBe(true)
+    quit(true)
+    await Promise.resolve()
+    expect(screen.getByRole('button', { name: 'Restarting…' })).toBeTruthy()
+  })
+
+  it('says in one line when macOS refused the swap, offers Settings, and retries on Restart', async () => {
+    const opened = vi.fn()
+    vi.stubGlobal('open', opened)
+    restartToUpdate.mockResolvedValue(false)
+    const blocked = { ...ready, blocked: { problem: 'macOS blocked the update', settings: true } }
+    useWorkspaceStore.setState({ update: update({ install: blocked }) })
+    render(<UpdateAvailableCard />)
+
+    expect(screen.getByText('macOS blocked the update')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Open Settings' }))
+    expect(opened).toHaveBeenCalledWith(APP_MANAGEMENT_SETTINGS, '_blank', 'noopener')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restart to Update' }))
+    expect(restartToUpdate).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Restart to Update' })).toBeTruthy())
+    vi.unstubAllGlobals()
+  })
+
+  it('offers no Settings when Settings cannot help', () => {
+    const blocked = { ...ready, blocked: { problem: "Can't write to /Applications: EACCES", settings: false } }
+    useWorkspaceStore.setState({ update: update({ install: blocked }) })
+    render(<UpdateAvailableCard />)
+    expect(screen.getByText("Can't write to /Applications: EACCES")).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Open Settings' })).toBeNull()
+  })
+
   it('comes back after Later once a person checks again', () => {
     useWorkspaceStore.setState({ update: update({ install: ready, askedAt: null }) })
     const { rerender } = render(<UpdateAvailableCard />)
@@ -246,6 +287,38 @@ describe('an update fetched in the background', () => {
     useWorkspaceStore.setState({ update: update({ install: ready, askedAt: Date.now() + 1_000 }) })
     rerender(<UpdateAvailableCard />)
     expect(screen.getByText('teamree 0.2.0 is ready')).toBeTruthy()
+  })
+})
+
+describe('a smaller card', () => {
+  const ready = { state: 'ready' as const, version: '0.2.0' }
+
+  it('minimizes to a pill that keeps Restart to Update, and stays that way until clicked', () => {
+    useWorkspaceStore.setState({ update: update({ install: ready }) })
+    const { container, unmount } = render(<UpdateAvailableCard />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Minimize' }))
+    expect(container.querySelector('.update-card__notes')).toBeNull()
+    expect(screen.getByRole('button', { name: '0.2.0 ready' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Restart to Update' }))
+    expect(restartToUpdate).toHaveBeenCalledTimes(1)
+    unmount()
+
+    render(<UpdateAvailableCard />)
+    fireEvent.click(screen.getByRole('button', { name: '0.2.0 ready' }))
+    expect(screen.getByText('teamree 0.2.0 is ready')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Later' })).toBeTruthy()
+  })
+
+  it('shows a few lines of the notes and links the whole release', () => {
+    const opened = vi.fn()
+    vi.stubGlobal('open', opened)
+    const { container } = render(<UpdateAvailableCard />)
+
+    expect(container.querySelector('.update-card__notes--clipped')).toBeTruthy()
+    fireEvent.click(screen.getByRole('link', { name: 'Release Notes' }))
+    expect(opened).toHaveBeenCalledWith('https://github.com/zero-abd/teamree/releases/tag/v0.2.0', '_blank', 'noopener')
+    vi.unstubAllGlobals()
   })
 })
 
