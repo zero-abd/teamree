@@ -5,7 +5,7 @@ install it, [`install.md`](install.md) is the one to read.
 
 Everything here is what the release command does. What it cannot do is in
 [`mac-checks.md`](mac-checks.md): the four things that have to be true before
-0.2.0 can be cut at all, the checks to run in the app afterwards, and the gates
+0.3.0 can be cut at all, the checks to run in the app afterwards, and the gates
 whose failing path only exists on a Mac. Read that one first — some of its
 prerequisites are refusals that arrive fifteen minutes into a packaging run.
 
@@ -65,7 +65,7 @@ npm run release:dry-run      # everything except the tag and the release
 npm run release              # the same, and then publishes
 ```
 
-Both default to the tag that matches `package.json` — `v0.2.0` today. To cut a
+Both default to the tag that matches `package.json` — `v0.3.0` today. To cut a
 candidate, or any other tag, name it:
 
 ```sh
