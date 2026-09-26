@@ -99,6 +99,9 @@ async function open(projectId = 'p1'): Promise<void> {
 // "Task" plus that hint rather than "Task" alone; see the note in the report.
 const task = (): HTMLTextAreaElement => screen.getByRole('textbox', { name: /^Task/ })
 const startPoint = (): HTMLInputElement => screen.getByRole('combobox', { name: 'Start from' })
+const branch = (): HTMLInputElement => screen.getByRole('textbox', { name: 'Branch' })
+const branchHint = (): string =>
+  document.getElementById(branch().getAttribute('aria-describedby') ?? '')?.textContent ?? ''
 const submit = (): HTMLButtonElement => screen.getByRole('button', { name: /Start Task|Create Worktree/ })
 const more = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `One more ${command}` })
 const fewer = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `One fewer ${command}` })
@@ -162,12 +165,13 @@ describe('how it reads', () => {
     expect(pickers[1]?.classList.contains('picker__input--ref')).toBe(true)
   })
 
-  it('previews the branch as the branch, an arrow, and where it starts', async () => {
+  it('labels the branch it will make, following the task until typed over', async () => {
     await open()
+    expect(branch().value).toBe('')
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
-    const preview = document.getElementById(startPoint().getAttribute('aria-describedby') ?? '')
-    expect(preview?.textContent).toBe('rewrite-the-pager ← origin/main originm')
-    expect(preview?.querySelector('code')).toBeNull()
+    expect(branch().value).toBe('rewrite-the-pager')
+    expect(branch().classList.contains('field__input--mono')).toBe(true)
+    expect(screen.getByText('auto')).toBeTruthy()
   })
 
   // An example task in the box read as a task already typed.
@@ -178,19 +182,13 @@ describe('how it reads', () => {
 })
 
 describe('the branch it will make', () => {
-  const branchButton = (): HTMLButtonElement => screen.getByRole('button', { name: 'rewrite-the-pager' })
-
-  it('is renamed in place, and the name typed is the branch asked for', async () => {
+  it('is typed over in place, spaces made hyphens, and the name typed is the branch asked for', async () => {
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
-    fireEvent.click(branchButton())
-    const field = screen.getByRole('textbox', { name: 'Branch' })
-    expect(document.activeElement).toBe(field)
-    fireEvent.change(field, { target: { value: 'ada/pager streams' } })
-    expect(fireEvent.keyDown(field, { key: 'Enter' })).toBe(false)
-    expect(startTask).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'ada/pager-streams' })).toBeTruthy()
+    fireEvent.change(branch(), { target: { value: 'ada/pager streams' } })
+    expect(branch().value).toBe('ada/pager-streams')
     fireEvent.change(task(), { target: { value: 'Rewrite the pager fully' } })
+    expect(branch().value).toBe('ada/pager-streams')
     submit().click()
     expect(startTask).toHaveBeenCalledWith({
       projectId: 'p1',
@@ -206,15 +204,15 @@ describe('the branch it will make', () => {
     })
   })
 
-  it('gives each run its own branch from the name typed', async () => {
+  it('gives each run its own branch from the name typed, and lists them', async () => {
     seed({ agents: bothAgents })
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     fireEvent.click(more('Codex'))
-    fireEvent.click(branchButton())
-    const field = screen.getByRole('textbox', { name: 'Branch' })
-    fireEvent.change(field, { target: { value: 'pager' } })
-    fireEvent.blur(field)
+    expect(branch().value).toBe('rewrite-the-pager')
+    expect(branchHint()).toBe('rewrite-the-pager-claude · rewrite-the-pager-codex')
+    fireEvent.change(branch(), { target: { value: 'pager' } })
+    expect(branchHint()).toBe('pager-claude · pager-codex')
     submit().click()
     expect(startTask.mock.calls[0]?.[0].creates.map((create: { branch?: string }) => create.branch)).toEqual([
       'pager-claude',
@@ -222,20 +220,38 @@ describe('the branch it will make', () => {
     ])
   })
 
-  it('goes back to the task’s own on Escape or when cleared, and keeps the dialog', async () => {
+  it('goes back to the task’s own from Auto, or when cleared', async () => {
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
-    fireEvent.click(branchButton())
-    fireEvent.change(screen.getByRole('textbox', { name: 'Branch' }), { target: { value: 'other' } })
-    act(() => {
-      fireEvent.keyDown(window, { key: 'Escape' })
-    })
-    expect(closeDialog).not.toHaveBeenCalled()
-    fireEvent.click(branchButton())
-    fireEvent.change(screen.getByRole('textbox', { name: 'Branch' }), { target: { value: ' ' } })
-    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Branch' }), { key: 'Enter' })
+    fireEvent.change(branch(), { target: { value: 'other' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Auto' }))
+    expect(branch().value).toBe('rewrite-the-pager')
+    fireEvent.change(branch(), { target: { value: '' } })
+    expect(branch().placeholder).toBe('rewrite-the-pager')
     submit().click()
     expect(startTask.mock.calls[0]?.[0].creates[0]).not.toHaveProperty('branch')
+  })
+
+  it('previews the suffix the runtime will add when the task’s own name is taken', async () => {
+    seed({ worktrees: [{ id: 'w1', projectId: 'p1', branch: 'rewrite-the-pager' }] })
+    await open()
+    fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
+    expect(branch().value).toBe('rewrite-the-pager-2')
+    expect(submit().disabled).toBe(false)
+  })
+
+  it('refuses a typed name git would reject, or one already taken', async () => {
+    await open()
+    fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
+    fireEvent.change(branch(), { target: { value: 'pager..next' } })
+    expect(branchHint()).toBe('Not a valid branch name')
+    expect(branch().getAttribute('aria-invalid')).toBe('true')
+    expect(submit().disabled).toBe(true)
+    fireEvent.change(branch(), { target: { value: 'Feature/Pager' } })
+    expect(branchHint()).toBe('Branch exists')
+    expect(submit().disabled).toBe(true)
+    fireEvent.change(branch(), { target: { value: 'feature/pager-2' } })
+    expect(submit().disabled).toBe(false)
   })
 })
 
@@ -397,16 +413,6 @@ describe('what it submits', () => {
     submit().click()
     expect(startTask.mock.calls[0]?.[0].creates).toEqual([{ name: 'Rewrite the pager', task: 'Rewrite the pager' }])
   })
-
-  it('shows the branch the task will get, and only once there is a task', async () => {
-    await open()
-    expect(screen.queryByText(/^branch/)).toBeNull()
-    fireEvent.change(task(), { target: { value: 'Rewrite the pager so it streams' } })
-    // Once, in the line that says what will be branched from where.
-    const name = screen.getByText('rewrite-the-pager-so-it-streams')
-    expect(name.closest('.field--task')).toBeNull()
-    expect(document.getElementById(startPoint().getAttribute('aria-describedby') ?? '')?.contains(name)).toBe(true)
-  })
 })
 
 describe('finishing from the keyboard', () => {
@@ -415,6 +421,15 @@ describe('finishing from the keyboard', () => {
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     fireEvent.keyDown(task(), { key: 'Enter' })
     expect(startTask).toHaveBeenCalledOnce()
+  })
+
+  it('submits on Cmd or Ctrl+Enter from any field, once', async () => {
+    await open()
+    fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
+    fireEvent.keyDown(branch(), { key: 'Enter', metaKey: true })
+    expect(startTask).toHaveBeenCalledOnce()
+    fireEvent.keyDown(task(), { key: 'Enter', ctrlKey: true })
+    expect(startTask).toHaveBeenCalledTimes(2)
   })
 
   it('leaves Shift+Enter to write a second paragraph', async () => {

@@ -49,13 +49,11 @@ function Harness({
   state = ready(),
   initial = { text: '', option: null },
   onReload = () => {},
-  branchName = 'rewrite-the-pager',
   onChange
 }: {
   state?: StartPointsState
   initial?: StartPointValue
   onReload?: () => void
-  branchName?: string
   onChange?: (value: StartPointValue) => void
 }): React.JSX.Element {
   const [value, setValue] = useState<StartPointValue>(initial)
@@ -68,7 +66,6 @@ function Harness({
         setValue(next)
         onChange?.(next)
       }}
-      branchName={branchName}
     />
   )
 }
@@ -115,11 +112,14 @@ describe('the combobox contract', () => {
     expect(selected).toEqual([row])
   })
 
-  it('describes the box with the line that says what will be branched', () => {
+  it('describes the box with the commit it starts from, naming the ref only for the row browsed', () => {
     render(<Harness initial={{ text: 'origin/main', option: LIST.options[0] ?? null }} />)
-    const description = document.getElementById(box().getAttribute('aria-describedby') ?? '')
-    expect(description?.textContent).toContain('rewrite-the-pager')
-    expect(description?.textContent).toContain('origin/main')
+    const description = (): string =>
+      document.getElementById(box().getAttribute('aria-describedby') ?? '')?.textContent ?? ''
+    expect(description()).toBe(LIST.options[0]?.shortSha)
+    fireEvent.keyDown(box(), { key: 'ArrowDown' })
+    fireEvent.keyDown(box(), { key: 'ArrowDown' })
+    expect(description()).toBe(`feature/pager ${LIST.options[1]?.shortSha}`)
   })
 
   it('groups the rows under headings a reader can use', () => {
@@ -205,7 +205,7 @@ describe('a ref the listing never mentioned', () => {
   it('says git will resolve it, rather than inventing a sha for it', () => {
     render(<Harness initial={{ text: '4f9a1c2', option: null }} />)
     const description = document.getElementById(box().getAttribute('aria-describedby') ?? '')
-    expect(description?.textContent).toContain('(resolved on create)')
+    expect(description?.textContent).toBe('resolved on create')
   })
 
   // Typing a listed ref in full is the same choice as picking it, so it has to

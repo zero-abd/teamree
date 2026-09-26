@@ -680,6 +680,11 @@ export const Params = {
   terminalSubscribe: z.object({ terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS) }),
   /** Starts an exited pane's program over in the same pane. Refused while still running. */
   terminalRelaunch: z.object({ terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS) }),
+  /** `[Image #N]` in a Claude Code pane, as the file pasted; see docs/plans/pasted-image-preview.md. */
+  terminalPastedImage: z.object({
+    terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
+    index: z.number().int().positive().max(1_000_000)
+  }),
   /**
    * The agent in a pane reporting its own state through a hook this app
    * configured (`src/main/terminals/agent-hooks.ts`), via `teamree agent
@@ -962,6 +967,11 @@ export type MethodContract = TaskMethodContract & {
   'terminal.split': { params: z.infer<typeof Params.terminalSplit>; result: { terminal: Terminal; layout: Layout } }
   /** The same pane running its program again: same id, leaf, directory; agent started over, not resumed. */
   'terminal.relaunch': { params: z.infer<typeof Params.terminalRelaunch>; result: Terminal }
+  /** A grant URL to draw and the path to reveal; null when the file is not there. */
+  'terminal.pastedImage': {
+    params: z.infer<typeof Params.terminalPastedImage>
+    result: { url: string; path: string } | null
+  }
   /** Answers with the pane, now carrying what its agent just said. */
   'terminal.agentEvent': { params: z.infer<typeof Params.terminalAgentEvent>; result: Terminal }
   /** Answers with the pane, carrying the subagent the event was about. */
