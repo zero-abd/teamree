@@ -12,6 +12,7 @@ import {
   type WorktreeStatus
 } from '@shared/entities'
 import { AgentGlyph } from '../agents/glyphs'
+import { openInBrowser } from '../shell/openInBrowser'
 import type { PaneAttention } from '../state/paneAttention'
 import { agentRows, dotClass, TONE_LABEL, worktreeTone, type DotTone } from './agentRows'
 import { PaneRows } from './PaneRows'
@@ -135,6 +136,7 @@ export function WorktreeRow({
   const merged = ready && landing?.merged === true
   const badge = ready && !merged ? mergeBadge(mergePreview) : null
   const pullRequest = landing?.pullRequest?.state === 'open' ? landing.pullRequest : undefined
+  const issue = worktree.issue
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
   const openControl = useRef<HTMLButtonElement | null>(null)
   const opener = useRef<HTMLElement | null>(null)
@@ -192,6 +194,9 @@ export function WorktreeRow({
     { label: 'Copy Branch', onChoose: onCopyBranch },
     { label: 'Open in', onChoose: () => {}, items: openIn },
     ...(compareWith.length === 0 ? [] : [{ label: 'Compare with', onChoose: () => {}, items: compareWith }]),
+    ...(issue === undefined
+      ? []
+      : [{ label: `Open Issue #${issue.number}`, onChoose: () => openInBrowser(issue.url) }]),
     ...(onKeep === undefined ? [] : [{ label: 'Keep This Run…', onChoose: onKeep }])
   ]
   // A directory that is not there has nothing to reveal, open or copy; removal is what is left.
@@ -256,6 +261,20 @@ export function WorktreeRow({
           </span>
         ) : null}
       </span>
+      {issue === undefined ? null : (
+        // Inside the row's button, so a span: a nested link would open the row as well.
+        <span
+          className="chip worktree__issue"
+          role="link"
+          title={issue.url}
+          onClick={(event) => {
+            event.stopPropagation()
+            openInBrowser(issue.url)
+          }}
+        >
+          {`#${issue.number}`}
+        </span>
+      )}
       {task === undefined ? null : (
         <span className="chip worktree__tally" title={task.children.join('\n')}>
           {`${task.tally.done}/${task.tally.total} done`}

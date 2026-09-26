@@ -401,6 +401,7 @@ export function Sidebar({
                   theirs={theirs.length}
                   onToggle={() => toggleProject(project.id)}
                   onNewTask={() => openDialog({ kind: 'new-task', projectId: project.id })}
+                  onNewTaskFromIssue={() => openDialog({ kind: 'new-task', projectId: project.id, fromIssue: true })}
                   onOpenBranch={(pullRequests) =>
                     openDialog({
                       kind: 'open-branch',

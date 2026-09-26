@@ -1064,3 +1064,27 @@ describe('a worktree whose work has landed', () => {
     expect(onResume).toHaveBeenCalled()
   })
 })
+
+describe('a worktree started from an issue', () => {
+  const linked = (): Worktree => worktree({ issue: { number: 123, url: 'https://github.com/acme/pager/issues/123' } })
+
+  it('shows #123, which opens the issue and not the row', () => {
+    const opened = vi.spyOn(window, 'open').mockImplementation(() => null)
+    mount({ worktree: linked() })
+    fireEvent.click(within(openButton()).getByRole('link', { name: '#123' }))
+    expect(opened).toHaveBeenCalledWith('https://github.com/acme/pager/issues/123', '_blank', 'noopener')
+    expect(handlers.onOpen).not.toHaveBeenCalled()
+    opened.mockRestore()
+  })
+
+  it('offers the issue in its menu', () => {
+    mount({ worktree: linked() })
+    fireEvent.contextMenu(row())
+    expect(labels()).toContain('Open Issue #123')
+  })
+
+  it('shows no issue when it has none', () => {
+    mount()
+    expect(within(openButton()).queryByRole('link')).toBeNull()
+  })
+})

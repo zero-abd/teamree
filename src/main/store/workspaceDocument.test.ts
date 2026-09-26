@@ -36,6 +36,13 @@ describe('workspace document: task-tree fields and settings', () => {
     expect(parseWorkspaceDocument({ worktrees: [mangled] }).worktrees).toEqual([worktree])
   })
 
+  it('keeps the issue a worktree was started from, and drops a mangled one', () => {
+    const linked = { ...worktree, issue: { number: 12, url: 'https://github.com/acme/pager/issues/12' } }
+    expect(parseWorkspaceDocument({ worktrees: [linked] }).worktrees).toEqual([linked])
+    const mangled = { ...worktree, issue: { number: 'twelve' } }
+    expect(parseWorkspaceDocument({ worktrees: [mangled] }).worktrees).toEqual([worktree])
+  })
+
   it('reads settings one switch at a time', () => {
     const document = parseWorkspaceDocument({
       settings: { shareTaskDetails: false, showCost: 'yes', jacMemoryAddon: true }

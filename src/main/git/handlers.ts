@@ -54,6 +54,7 @@ export const GIT_METHODS = [
   'worktree.startPoints',
   'worktree.branches',
   'worktree.pullRequests',
+  'worktree.issues',
   'worktree.setup',
   'worktree.setupCheck',
   'worktree.runSetup'
@@ -123,6 +124,7 @@ export function createGitHandlers(service: GitService): GitHandlers {
       service.listStartPoints(params.projectId, params.limit === undefined ? {} : { limit: params.limit }),
     'worktree.branches': (params) => service.listBranches(params),
     'worktree.pullRequests': (params) => service.listPullRequests(params),
+    'worktree.issues': (params) => service.listIssues(params),
     'worktree.setup': (params) => service.answerSetup(params),
     'worktree.setupCheck': (params) => service.checkSetup(params),
     'worktree.runSetup': (params) => service.runSetup(params)
@@ -181,6 +183,7 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.startPoints', Params.worktreeStartPoints, handlers['worktree.startPoints'])
   registry.register('worktree.branches', Params.worktreeBranches, handlers['worktree.branches'])
   registry.register('worktree.pullRequests', Params.worktreePullRequests, handlers['worktree.pullRequests'])
+  registry.register('worktree.issues', Params.worktreeIssues, handlers['worktree.issues'])
   registry.register('worktree.setup', Params.worktreeSetup, handlers['worktree.setup'])
   registry.register('worktree.setupCheck', Params.worktreeSetupCheck, handlers['worktree.setupCheck'])
   registry.register('worktree.runSetup', Params.worktreeRunSetup, handlers['worktree.runSetup'])

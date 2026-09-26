@@ -32,6 +32,7 @@ import type {
   WorktreeChanges,
   WorktreeCleanup,
   WorktreeCommitSummary,
+  WorktreeIssue,
   WorktreeKeep,
   WorktreeLanding,
   WorktreeLog,
@@ -186,8 +187,8 @@ export type DialogState =
   | { kind: 'project-refused'; folder: string; refusal: ProjectAddRefusal }
   | { kind: 'clone-project' }
   | { kind: 'install-cli' }
-  /** `parentId`: a child task of that worktree. */
-  | { kind: 'new-task'; projectId: string; parentId?: string }
+  /** `parentId`: a child task of that worktree. `fromIssue`: opens on the issue picker. */
+  | { kind: 'new-task'; projectId: string; parentId?: string; fromIssue?: true }
   /** `files`: ⌘P, only the worktree's files. */
   | { kind: 'palette'; mode?: 'files' }
   /** Asked before every removal; `refused` once the runtime has refused one unforced. */
@@ -251,6 +252,8 @@ export type TaskDraft = {
   creates: readonly TaskCreate[]
   /** Makes each a child task of this worktree. */
   parentId?: string
+  /** The GitHub issue each is for. */
+  issue?: WorktreeIssue
 }
 
 export type Notice = {
@@ -1383,7 +1386,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       startedFrom: worktree.startedFrom,
       // An opened branch is opened again, never cut anew under the same name.
       ...(worktree.checkout === undefined ? {} : { checkout: worktree.checkout }),
-      ...(worktree.checkout === undefined || worktree.baseRef === undefined ? {} : { base: worktree.baseRef })
+      ...(worktree.checkout === undefined || worktree.baseRef === undefined ? {} : { base: worktree.baseRef }),
+      ...(worktree.issue === undefined ? {} : { issue: worktree.issue })
     })
     set((state) => ({ worktrees: [...state.worktrees.filter((entry) => entry.id !== worktree.id), created] }))
   }
@@ -1749,7 +1753,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
      * Creates are requested in order, because names were handed out in order and the runtime allocates
      * branches on arrival; what follows each create is not. Only the first is opened.
      */
-    startTask({ projectId, startedFrom, checkout, base, creates, parentId }) {
+    startTask({ projectId, startedFrom, checkout, base, creates, parentId, issue }) {
       set({ dialog: null })
 
       void (async () => {
@@ -1771,7 +1775,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             ...(task ? { task } : {}),
             ...(checkout ? { checkout } : {}),
             ...(checkout && base ? { base } : {}),
-            ...(parentId ? { parentId } : {})
+            ...(parentId ? { parentId } : {}),
+            ...(issue ? { issue } : {})
           })
           set((state) => ({
             worktrees: [...state.worktrees.filter((entry) => entry.id !== created.id), created],

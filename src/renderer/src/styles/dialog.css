@@ -230,6 +230,53 @@ button.picker__chevron:hover {
   font-family: inherit;
 }
 
+/* From Issue… and the linked issue sit on the Task label's line. */
+.task-field {
+  position: relative;
+}
+
+.task-source {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.task-source__issue {
+  gap: 2px;
+  padding-right: 1px;
+}
+
+.task-source__issue a {
+  color: var(--fg-secondary);
+  text-decoration: none;
+}
+
+.task-source__unlink {
+  padding: 0 3px;
+  border: 0;
+  background: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.issue-picker {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.issue-picker__list {
+  max-height: min(40vh, 320px);
+}
+
+.issue-picker__unavailable {
+  opacity: 0.6;
+}
+
 /* One row per installed agent, each with a count: the table is the whole
    choice, so it reads as a list rather than as a control. */
 .agents {

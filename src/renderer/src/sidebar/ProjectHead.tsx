@@ -17,6 +17,7 @@ type ProjectHeadProps = {
   theirs: number
   onToggle: () => void
   onNewTask: () => void
+  onNewTaskFromIssue: () => void
   /** Opens a branch as it is: `true` lists open pull requests instead. */
   onOpenBranch: (pullRequests: boolean) => void
   /** Remove from teamree: forgets it; the folder stays. */
@@ -32,6 +33,7 @@ export function ProjectHead({
   theirs,
   onToggle,
   onNewTask,
+  onNewTaskFromIssue,
   onOpenBranch,
   onForget,
   onTrash
@@ -62,6 +64,7 @@ export function ProjectHead({
     }))
   const items: RowMenuItem[] = [
     { label: 'New Task…', onChoose: onNewTask },
+    { label: 'New Task from Issue…', onChoose: onNewTaskFromIssue },
     { label: 'Open Branch…', onChoose: () => onOpenBranch(false) },
     { label: 'Check Out Pull Request…', onChoose: () => onOpenBranch(true) },
     ...(removed.length === 0 ? [] : [{ label: 'Recently Removed', items: removed, onChoose: () => {} }]),

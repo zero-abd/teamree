@@ -36,6 +36,11 @@ export function WorktreeStart({
         {display.title}
       </h1>
       {display.branch === undefined ? null : <span className="worktree-start__branch">{display.branch}</span>}
+      {worktree.issue === undefined ? null : (
+        <a className="worktree-start__issue" href={worktree.issue.url} target="_blank" rel="noreferrer">
+          {`#${worktree.issue.number}`}
+        </a>
+      )}
       {items.length === 0 ? null : (
         <div className="worktree-start__actions">
           {resume === null || resume.agent === undefined ? null : (

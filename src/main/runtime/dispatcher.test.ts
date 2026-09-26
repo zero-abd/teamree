@@ -271,6 +271,8 @@ describe('dispatcher', () => {
       'worktree.findFiles',
       'worktree.forget',
       'worktree.get',
+      // Local: runs this machine's gh, with its credentials.
+      'worktree.issues',
       'worktree.keep',
       'worktree.landing',
       'worktree.list',

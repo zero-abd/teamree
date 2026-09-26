@@ -898,3 +898,17 @@ describe('landing from the palette', () => {
     expect(found('push', { statuses: { w1: { upstream: 'origin/task/w1', ahead: 1 } } })[0]?.label).toBe('Push')
   })
 })
+
+describe('starting a task from an issue', () => {
+  it('offers New Task from Issue…, reached by the words people use', () => {
+    const item = buildPaletteItems(context()).find((entry) => entry.id === 'new-task-from-issue')
+    expect(item?.label).toBe('New Task from Issue…')
+    expect(item?.search).toMatch(/github/)
+    expect(item).not.toHaveProperty('unavailable')
+  })
+
+  it('says there is no project to start one in', () => {
+    const items = buildPaletteItems(context({ projects: [] }))
+    expect(items.find((item) => item.id === 'new-task-from-issue')).toMatchObject({ unavailable: 'no project' })
+  })
+})
