@@ -10,7 +10,6 @@ import type {
   WorktreeMerge,
   WorktreePullRequest
 } from '../../shared/entities'
-import { closesIssue } from '../../shared/issueClosing'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
@@ -20,6 +19,7 @@ import { assertRefShape } from './repository'
 import { readMergePreview } from './mergePreview'
 import { bareRef, remoteForge, reviewUrl } from './reviewUrl'
 import { parseChangeRecords } from './worktreeChanges'
+import { commitOf, pullRequestDraft, type DraftCommit } from './pullRequestDraft'
 
 const REMOTE = 'origin'
 const GH_ENV = { GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_COLOR: '1' }
@@ -145,6 +145,9 @@ export type LandingOptions = {
   name?: string
   /** The issue its pull request closes. */
   issue?: WorktreeIssue
+  /** What the worktree was opened to do, and its agent's succeeded report: a pull request's draft. */
+  task?: string
+  report?: string
   gh?: GhProbe
   now?: () => number
 }
@@ -202,8 +205,14 @@ export async function readLanding(runner: GitRunner, options: LandingOptions): P
   }
 }
 
-/** Opens a pull request with `gh` when it is signed in; otherwise answers with the page that opens one. */
-export async function createPullRequest(runner: GitRunner, options: LandingOptions): Promise<WorktreePullRequest> {
+export type PullRequestRequest = { title?: string; body?: string; draft?: boolean; dryRun?: boolean; pending?: string }
+
+/** Opens a pull request with `gh` when it is signed in, else answers the page that opens one; a dry run answers the draft. */
+export async function createPullRequest(
+  runner: GitRunner,
+  options: LandingOptions,
+  request: PullRequestRequest = {}
+): Promise<WorktreePullRequest> {
   const landing = await readLanding(runner, options)
   const answer = (url: string, created: boolean, number?: number): WorktreePullRequest => ({
     worktreeId: options.worktreeId,
@@ -217,6 +226,20 @@ export async function createPullRequest(runner: GitRunner, options: LandingOptio
   if (landing.host === null || landing.compareUrl === undefined) {
     throw new GitServiceError(ErrorCode.Conflict, `${REMOTE} is not on GitHub, GitLab or Bitbucket`)
   }
+  const draft = async (): Promise<{ title: string; body: string }> => {
+    const drafted = pullRequestDraft({
+      ...(options.report === undefined ? {} : { report: options.report }),
+      ...(options.task === undefined ? {} : { task: options.task }),
+      name: options.name ?? options.branch,
+      ...(options.issue === undefined ? {} : { issue: options.issue.number }),
+      commits: [
+        ...(await branchCommits(runner, options)),
+        ...(request.pending === undefined || request.pending.trim() === '' ? [] : [commitOf(request.pending)])
+      ]
+    })
+    return { title: request.title ?? drafted.title, body: request.body ?? drafted.body }
+  }
+  if (request.dryRun === true) return { ...answer(landing.compareUrl, false), ...(await draft()) }
   if (!landing.published) {
     throw new GitServiceError(ErrorCode.Conflict, `${options.branch} is not on ${REMOTE}; publish it first`)
   }
@@ -225,12 +248,21 @@ export async function createPullRequest(runner: GitRunner, options: LandingOptio
   const gh = landing.host === 'github' ? await options.gh?.signedIn(options.worktreePath) : null
   if (gh === null || gh === undefined) return answer(landing.compareUrl, false)
 
-  const fill =
-    options.issue === undefined
-      ? ['--fill']
-      : await closingTitleAndBody(runner, options, `${REMOTE}/${landing.base}`, options.issue.number)
+  const { title, body } = await draft()
   const made = await gh.tryRun({
-    args: ['pr', 'create', ...fill, '--head', options.branch, '--base', landing.base],
+    args: [
+      'pr',
+      'create',
+      '--title',
+      title,
+      '--body',
+      body,
+      ...(request.draft === true ? ['--draft'] : []),
+      '--head',
+      options.branch,
+      '--base',
+      landing.base
+    ],
     cwd: options.worktreePath,
     env: GH_ENV,
     timeoutMs: 120_000
@@ -247,23 +279,15 @@ export async function createPullRequest(runner: GitRunner, options: LandingOptio
   return answer(url, true, number === undefined ? undefined : Number(number))
 }
 
-/**
- * What `--fill` would say, plus `Closes #N`: one commit is its subject and body, several are listed.
- * `--fill` with `--body` is not relied on, so both are given.
- */
-async function closingTitleAndBody(
-  runner: GitRunner,
-  options: LandingOptions,
-  base: string,
-  issue: number
-): Promise<string[]> {
+/** The branch's commits the base lacks, oldest first. */
+async function branchCommits(runner: GitRunner, options: LandingOptions): Promise<DraftCommit[]> {
   const log = await runner.tryRun({
-    args: ['log', '--reverse', '--format=%s%x1f%b%x1e', `${base}..${options.branch}`],
+    args: ['log', '--reverse', '--format=%s%x1f%b%x1e', `${options.baseRef}..${options.branch}`],
     cwd: options.worktreePath,
     readOnly: true,
     timeoutMs: 30_000
   })
-  const commits = (log.exitCode === 0 ? log.stdout : '')
+  return (log.exitCode === 0 ? log.stdout : '')
     .split('\x1e')
     .map((record) => record.trim())
     .filter(Boolean)
@@ -271,12 +295,6 @@ async function closingTitleAndBody(
       const [subject = '', body = ''] = record.split('\x1f')
       return { subject: subject.trim(), body: body.trim() }
     })
-  const only = commits.length === 1 ? commits[0] : undefined
-  const title = only?.subject || options.name || options.branch
-  const summary = only === undefined ? commits.map((commit) => `- ${commit.subject}`).join('\n') : only.body
-  const closes = `Closes #${issue}`
-  const body = summary === '' ? closes : closesIssue(summary, issue) ? summary : `${summary}\n\n${closes}`
-  return ['--title', title, '--body', body]
 }
 
 export type MergeOptions = {

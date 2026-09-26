@@ -1,11 +1,11 @@
-// The step after Publish: a pull request on the host, or a merge into the base (a child's parent) here, then Done.
+// Where a branch lands: a pull request on the host, which commits and pushes first, or a merge into the base (a child's parent) here.
 
 import type { WorktreeLanding, WorktreeStatus } from '@shared/entities'
 import type { PushState } from '../../state/workspaceStore'
 
-/** `blocked` says why it cannot run yet (`2 uncommitted`); `uncommitted` is what the merge dialog commits first. */
+/** `blocked` says why it cannot run yet (`1 conflicted`); `uncommitted` is what the dialog commits first. */
 export type LandOffer =
-  | { kind: 'create-pr'; blocked?: string }
+  | { kind: 'create-pr'; uncommitted?: number; blocked?: string }
   | { kind: 'open-pr'; number: number; url: string }
   | { kind: 'merge'; into: string; uncommitted?: number; blocked?: string }
   | { kind: 'merged' }
@@ -24,10 +24,9 @@ export function landOffer(landing: WorktreeLanding | undefined, status: Worktree
   if (landing.pullRequest?.state === 'open') {
     return { kind: 'open-pr', number: landing.pullRequest.number, url: landing.pullRequest.url }
   }
-  if (uncommitted > 0) return { kind: 'create-pr', blocked: `${uncommitted} uncommitted` }
-  if (landing.unmerged === 0) return null
-  if (!landing.published) return { kind: 'create-pr', blocked: 'unpublished' }
-  return status.ahead > 0 ? { kind: 'create-pr', blocked: `${status.ahead} unpushed` } : { kind: 'create-pr' }
+  if (status.conflicted > 0) return { kind: 'create-pr', blocked: `${status.conflicted} conflicted` }
+  if (uncommitted > 0) return { kind: 'create-pr', uncommitted }
+  return landing.unmerged > 0 ? { kind: 'create-pr' } : null
 }
 
 /** The land a worktree with nothing to land would make, blocked, so the palette still names it. */
@@ -41,7 +40,7 @@ export function idleLand(landing: WorktreeLanding | undefined): LandOffer | null
 export function landLabel(offer: Exclude<LandOffer, { kind: 'merged' }>): string {
   switch (offer.kind) {
     case 'create-pr':
-      return 'Create Pull Request'
+      return offer.uncommitted === undefined ? 'Create Pull Request…' : 'Commit & Create PR…'
     case 'open-pr':
       return `Open Pull Request #${offer.number}`
     case 'merge':
@@ -52,7 +51,7 @@ export function landLabel(offer: Exclude<LandOffer, { kind: 'merged' }>): string
 /** Why the offer cannot run, or what running it commits first. */
 export function landNote(offer: Exclude<LandOffer, { kind: 'merged' }>): string | undefined {
   if (offer.kind === 'open-pr') return undefined
-  if (offer.kind === 'merge' && offer.uncommitted !== undefined) return `${offer.uncommitted} uncommitted`
+  if (offer.uncommitted !== undefined) return `${offer.uncommitted} uncommitted`
   return offer.blocked
 }
 
@@ -88,8 +87,8 @@ export function headerActions(input: {
   const land = input.land === null || input.land.kind === 'merged' ? null : input.land
   // A pull request button is the review page, and more.
   const push = input.push?.kind === 'review' && land !== null ? null : input.push
-  // Commit what is uncommitted first, then send it, then land it.
-  const pushNext = push !== null && !input.uncommitted && input.ahead > 0 && land?.kind !== 'merge'
+  // Commit what is uncommitted first, then send it, then land it; a merge or a new pull request sends it itself.
+  const pushNext = push !== null && !input.uncommitted && input.ahead > 0 && (land === null || land.kind === 'open-pr')
   const pushed: HeaderAction[] = push === null ? [] : [{ kind: 'push', offer: push }]
   const actions: HeaderAction[] = [
     ...(pushNext ? pushed : []),

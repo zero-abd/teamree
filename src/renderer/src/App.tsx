@@ -25,6 +25,7 @@ import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
 import { ConfirmForgetDialog } from './dialogs/ConfirmForgetDialog'
 import { ConfirmTrashProjectDialog } from './dialogs/ConfirmTrashProjectDialog'
 import { ConfirmMergeDialog } from './dialogs/ConfirmMergeDialog'
+import { CreatePullRequestDialog } from './dialogs/CreatePullRequestDialog'
 import { PushBaseDialog } from './dialogs/PushBaseDialog'
 import { ConfirmCleanUpDialog } from './dialogs/ConfirmCleanUpDialog'
 import { ConfirmKeepDialog } from './dialogs/ConfirmKeepDialog'
@@ -195,6 +196,7 @@ export function App(): React.JSX.Element {
       {dialog?.kind === 'confirm-forget' ? <ConfirmForgetDialog target={dialog.target} /> : null}
       {dialog?.kind === 'confirm-trash-project' ? <ConfirmTrashProjectDialog projectId={dialog.projectId} /> : null}
       {dialog?.kind === 'confirm-merge' ? <ConfirmMergeDialog worktreeId={dialog.worktreeId} /> : null}
+      {dialog?.kind === 'create-pr' ? <CreatePullRequestDialog worktreeId={dialog.worktreeId} /> : null}
       {dialog?.kind === 'push-base' ? (
         <PushBaseDialog
           key={dialog.projectId}

@@ -5,6 +5,7 @@ import type { Worktree } from '../../shared/entities'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import { GitService } from './gitService'
+import { createMemoryRecordStore, type GitRecordStore } from './recordStore'
 import { remoteForge } from './reviewUrl'
 import { createTempRepo, type TempRepo } from './testRepository'
 
@@ -16,16 +17,17 @@ afterEach(async () => {
   await Promise.all(repos.splice(0).map((repo) => repo.cleanup()))
 })
 
-type Setup = { repo: TempRepo; service: GitService; projectId: string }
+type Setup = { repo: TempRepo; service: GitService; projectId: string; store: GitRecordStore }
 
 async function setup(options: { gh?: 'signed-in' | 'signed-out' } = {}): Promise<Setup> {
   const repo = await createTempRepo({ withRemote: true })
   repos.push(repo)
   const gh = options.gh === undefined ? null : await standInGh(repo, options.gh === 'signed-in')
-  const service = new GitService({ worktreesRoot: repo.worktreesRoot, ghBinary: () => gh })
+  const store = createMemoryRecordStore()
+  const service = new GitService({ worktreesRoot: repo.worktreesRoot, ghBinary: () => gh, store })
   services.push(service)
   const project = await service.addProject({ path: repo.repoPath })
-  return { repo, service, projectId: project.id }
+  return { repo, service, projectId: project.id, store }
 }
 
 /** A script named gh that answers the calls the landing and a failing check make, and logs every call. */
@@ -255,12 +257,61 @@ describe('pull requests', () => {
       number: 12,
       created: true
     })
-    expect(await ghCalls(context.repo)).toContain(`pr create --fill --head ${worktree.branch} --base main`)
+    expect(await ghCalls(context.repo)).toContain(
+      `pr create --title Add sub --body  --head ${worktree.branch} --base main`
+    )
     expect((await context.service.worktreeLanding({ worktreeId: worktree.id })).pullRequest).toEqual({
       number: 12,
       url: 'https://github.com/acme/pantry/pull/12',
       state: 'open'
     })
+  })
+
+  it('makes it with the title, body and draft the dialog was given', async () => {
+    const context = await setup({ gh: 'signed-in' })
+    await lookLikeGitHub(context.repo)
+    const worktree = await worktreeWithCommit(context)
+    await context.service.worktreePush({ worktreeId: worktree.id })
+
+    await context.service.worktreeCreatePullRequest({
+      worktreeId: worktree.id,
+      title: 'Typed title',
+      body: 'Typed body',
+      draft: true
+    })
+
+    expect(await ghCalls(context.repo)).toContain(
+      `pr create --title Typed title --body Typed body --draft --head ${worktree.branch} --base main`
+    )
+  })
+
+  it('answers the draft before the branch is published, counting the commit about to be made', async () => {
+    const context = await setup({ gh: 'signed-in' })
+    await lookLikeGitHub(context.repo)
+    const issue = { number: 5, url: 'https://github.com/acme/pantry/issues/5' }
+    const pending = await context.service.createWorktree({ projectId: context.projectId, name: 'Loop', issue })
+    const worktree = await context.service.whenSettled(pending.id)
+
+    const draft = await context.service.worktreeCreatePullRequest({
+      worktreeId: worktree.id,
+      dryRun: true,
+      pending: 'Stop the loop\n\nIt redirected.'
+    })
+
+    expect(draft).toMatchObject({ created: false, title: 'Stop the loop', body: 'It redirected.\n\nCloses #5' })
+    expect((await ghCalls(context.repo)).some((call) => call.startsWith('pr create'))).toBe(false)
+  })
+
+  it('drafts from the agent’s report when it succeeded', async () => {
+    const context = await setup({ gh: 'signed-in' })
+    await lookLikeGitHub(context.repo)
+    const worktree = await worktreeWithCommit(context)
+    const summary = 'Add the sub helper\n\nWith tests.'
+    context.store.putWorktree({ ...worktree, report: { outcome: 'succeeded', summary, paths: [], at: 1 } })
+
+    const draft = await context.service.worktreeCreatePullRequest({ worktreeId: worktree.id, dryRun: true })
+
+    expect(draft).toMatchObject({ title: 'Add the sub helper', body: 'With tests.' })
   })
 
   it('closes the issue a worktree was started from, keeping the commit as title and body', async () => {

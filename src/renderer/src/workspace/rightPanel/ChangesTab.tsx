@@ -138,9 +138,9 @@ export function ChangesTab(): React.JSX.Element | null {
       : action.kind === 'push'
         ? action.offer.kind !== 'review' && pushing
         : action.offer.kind === 'create-pr' && openingPullRequest
-  // A merge with uncommitted work runs: its dialog commits first. Anything else noted is blocked.
+  // A land with uncommitted work runs: its dialog commits first. Anything else noted is blocked.
   const blockedBy = (action: HeaderAction): string | undefined =>
-    action.kind === 'land' && !(action.offer.kind === 'merge' && action.offer.uncommitted !== undefined)
+    action.kind === 'land' && action.offer.kind !== 'open-pr' && action.offer.uncommitted === undefined
       ? landNote(action.offer)
       : undefined
   const act = (action: HeaderAction): void => {
