@@ -16,10 +16,12 @@ export const OPEN_PULL_REQUEST_TITLE = 'Check Out Pull Request'
 
 export function OpenBranchDialog({
   projectId,
-  pullRequests
+  pullRequests,
+  query: initialQuery = ''
 }: {
   projectId: string
   pullRequests: boolean
+  query?: string
 }): React.JSX.Element | null {
   const project = useWorkspaceStore((state) => state.projects.find((entry) => entry.id === projectId))
   const agents = useWorkspaceStore((state) => state.agents)
@@ -27,7 +29,7 @@ export function OpenBranchDialog({
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
 
   const [listing, setListing] = useState<Listing>({ phase: 'loading' })
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initialQuery)
   const [chosen, setChosen] = useState<string | null>(null)
   const [counts, setCounts] = useState<AgentCounts>({})
   const [prompt, setPrompt] = useState<string | null>(null)

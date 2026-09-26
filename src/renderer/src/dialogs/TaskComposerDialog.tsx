@@ -32,13 +32,15 @@ import { worktreeDisplay } from '../sidebar/worktreeDisplay'
 export function TaskComposerDialog({
   projectId: openedFor,
   parentId,
-  fromIssue = false
+  fromIssue = false,
+  task: initialTask = ''
 }: {
   projectId: string
   /** A child task of this worktree: it starts from its branch. */
   parentId?: string
   /** Opens on the issue picker. */
   fromIssue?: boolean
+  task?: string
 }): React.JSX.Element | null {
   const projects = useWorkspaceStore((state) => state.projects)
   const agents = useWorkspaceStore((state) => state.agents)
@@ -54,7 +56,7 @@ export function TaskComposerDialog({
   const parentStatus = useWorkspaceStore((state) => (parentId === undefined ? undefined : state.statuses[parentId]))
 
   const [projectId, setProjectId] = useState(openedFor)
-  const [task, setTask] = useState('')
+  const [task, setTask] = useState(initialTask)
   const [agentCounts, setAgentCounts] = useState<AgentCounts | null>(null)
   // Picked in this dialog; the rest follow what the project last started with.
   const [modeEdits, setModeEdits] = useState<AgentModes>({})

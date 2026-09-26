@@ -92,6 +92,14 @@ describe('Open Branch', () => {
     })
   })
 
+  it('starts narrowed to what the palette was given', async () => {
+    render(<OpenBranchDialog projectId="p1" pullRequests={false} query="try" />)
+    await screen.findByText('spike')
+    expect((screen.getByLabelText('Filter') as HTMLInputElement).value).toBe('try')
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+    expect(startTask).toHaveBeenCalledWith(expect.objectContaining({ checkout: 'spike' }))
+  })
+
   it('starts one reviewer agent with the prompt prefilled against the base', async () => {
     render(<OpenBranchDialog projectId="p1" pullRequests={false} />)
     await screen.findByText('add-a-sub-function')

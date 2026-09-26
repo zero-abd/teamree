@@ -108,7 +108,7 @@ function activeLayout(state: CommandState): Layout | undefined {
 }
 
 /** The project a new task would be made in: the focused sidebar row's, else the open worktree's, else the last added. */
-function projectForNewTask(state: CommandState): string | undefined {
+export function projectForNewTask(state: CommandState): string | undefined {
   const focused = focusedTreeProject()
   if (focused !== null && state.projects.some((project) => project.id === focused)) return focused
   const active = state.worktrees.find((worktree) => worktree.id === state.activeWorktreeId)

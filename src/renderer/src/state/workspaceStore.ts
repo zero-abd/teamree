@@ -190,8 +190,8 @@ export type DialogState =
   | { kind: 'project-refused'; folder: string; refusal: ProjectAddRefusal }
   | { kind: 'clone-project' }
   | { kind: 'install-cli' }
-  /** `parentId`: a child task of that worktree. `fromIssue`: opens on the issue picker. */
-  | { kind: 'new-task'; projectId: string; parentId?: string; fromIssue?: true }
+  /** `parentId`: a child task of that worktree; `fromIssue`: opens on the issue picker; `task`: its starting text. */
+  | { kind: 'new-task'; projectId: string; parentId?: string; fromIssue?: true; task?: string }
   /** `files`: ⌘P, only the worktree's files. */
   | { kind: 'palette'; mode?: 'files' }
   /** Asked before every removal; `refused` once the runtime has refused one unforced. */
@@ -217,8 +217,8 @@ export type DialogState =
   | { kind: 'clean-up'; projectId: string }
   /** An invitation link, opened or pasted, asking where to join from. */
   | { kind: 'join-team'; invitation: Invitation }
-  /** A worktree on an existing branch; `pullRequests` lists open pull requests instead of branches. */
-  | { kind: 'open-branch'; projectId: string; pullRequests?: true }
+  /** A worktree on an existing branch; `pullRequests` lists open pull requests instead; `query` starts the filter. */
+  | { kind: 'open-branch'; projectId: string; pullRequests?: true; query?: string }
   /** Move Under…: a picker of the tasks it can go under. */
   | { kind: 'move-under'; worktreeId: string }
   /** A move whose dry run needs its commits replayed onto the new parent. */
