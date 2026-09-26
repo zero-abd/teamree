@@ -2,7 +2,7 @@
 // no Electron in it (`docs/renderer-boundary.md`). Items are `div`s with
 // `role="menuitem"`, not buttons, which would activate on Enter and choose twice.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 export type RowMenuItem = {
   /** What the item says. A label, never a sentence — this is a menu. */
@@ -12,6 +12,8 @@ export type RowMenuItem = {
   separated?: boolean
   /** Painted as destructive. */
   danger?: boolean
+  /** Shown dimmed, still reachable by the keyboard, and does nothing. */
+  disabled?: boolean
   /** A chord at the row's end, for a row the keyboard already has a way to. */
   hint?: string
   /** A mark before the label. Every row of a menu has one, or none does. */
@@ -22,6 +24,14 @@ export type RowMenuItem = {
 
 /** Where the menu goes, in viewport coordinates; `right` hangs it off `x` leftwards. */
 export type RowMenuAnchor = { x: number; y: number; align?: 'left' | 'right' }
+
+/** About the widest row with its chord; nearer the window's right edge than this, the menu hangs leftwards. */
+const MENU_WIDTH_PX = 240
+
+/** A menu raised at the pointer. */
+export function anchorAtPointer(x: number, y: number): RowMenuAnchor {
+  return x + MENU_WIDTH_PX > window.innerWidth ? { x, y, align: 'right' } : { x, y }
+}
 
 type RowMenuProps = {
   /** Names the menu for anybody listening rather than looking. */
@@ -61,7 +71,15 @@ export function RowMenu({ label, items, anchor, onClose, opener }: RowMenuProps)
     return () => document.removeEventListener('pointerdown', dismiss, true)
   }, [onClose, opener])
 
+  // Raised near the window's foot, it moves up rather than running off it.
+  useLayoutEffect(() => {
+    const element = menu.current
+    const overflow = element === null ? 0 : element.getBoundingClientRect().bottom - window.innerHeight
+    if (element !== null && overflow > 0) element.style.top = `${Math.max(4, anchor.y - overflow - 4)}px`
+  }, [anchor.y])
+
   const choose = (item: RowMenuItem, index: number): void => {
+    if (item.disabled === true) return
     if (item.items !== undefined) {
       setActive(index)
       setSub({ index, at: 0 })
@@ -208,10 +226,11 @@ function MenuEntry({
     <div
       className={`row-menu__item${item.danger === true ? ' row-menu__item--danger' : ''}${
         item.separated === true ? ' row-menu__item--separated' : ''
-      }${expanded ? ' row-menu__item--open' : ''}`}
+      }${expanded ? ' row-menu__item--open' : ''}${item.disabled === true ? ' row-menu__item--disabled' : ''}`}
       role="menuitem"
       tabIndex={focusable ? 0 : -1}
       ref={ref}
+      {...(item.disabled === true ? { 'aria-disabled': true } : {})}
       {...(parent ? { 'aria-haspopup': 'menu' as const, 'aria-expanded': expanded } : {})}
       onClick={onChoose}
       onMouseEnter={onHover}

@@ -62,6 +62,8 @@ export type FileLinkHost = {
   open: (worktreeId: string, path: string, line?: number, column?: number) => void
   /** Whether this event holds the modifier that follows a link, ⌘ on a Mac. */
   holds: (event: MouseEvent | KeyboardEvent) => boolean
+  /** Hears the pointer on and off a linked path, for the right-click menu. */
+  point?: (target: { kind: 'path'; path: string; absolute: string } | null) => void
 }
 
 /** Registers the provider on `term`; its links are underlined only while the modifier is held. */
@@ -94,6 +96,8 @@ export function paneFileLinks(term: Pick<XTerm, 'registerLinkProvider' | 'buffer
               range: { start: { x: printed.start + 1, y }, end: { x: printed.end, y } },
               text: row.slice(printed.start, printed.end),
               decorations: { underline: held, pointerCursor: held },
+              hover: () => host.point?.({ kind: 'path', path, absolute: `${place.root}/${path}` }),
+              leave: () => host.point?.(null),
               activate: (event) => {
                 if (host.holds(event)) host.open(place.worktreeId, path, printed.line, printed.column)
               }

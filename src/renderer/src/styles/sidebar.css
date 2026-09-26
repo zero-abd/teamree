@@ -761,6 +761,16 @@
   color: var(--danger);
 }
 
+.row-menu__item--disabled,
+.row-menu__item--disabled .row-menu__hint {
+  color: var(--fg-muted);
+  cursor: default;
+}
+
+.row-menu__item--disabled:hover {
+  background: none;
+}
+
 .row-menu__item--danger:hover,
 .row-menu__item--danger:focus-visible {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
