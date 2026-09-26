@@ -129,7 +129,12 @@ describe('SubagentTracker', () => {
     const before = tracker()
     await follow(before)
     before.hook('term_1', { event: 'SubagentStart', at: Date.now(), sessionId: SESSION, agentId: 'rrr1' })
-    expect(before.list('term_1')?.map((agent) => agent.id).sort()).toEqual(['rrr1', 'rrr2'])
+    expect(
+      before
+        .list('term_1')
+        ?.map((agent) => agent.id)
+        .sort()
+    ).toEqual(['rrr1', 'rrr2'])
 
     transcript(main(), [notification('rrr1', 'completed')])
     // The pane's agent resumed a minute on: its files are older than it.
