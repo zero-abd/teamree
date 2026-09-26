@@ -51,6 +51,7 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
   'toggle-sidebar': 'around',
   'toggle-right-panel': 'around',
   'focus-sidebar': 'around',
+  'filter-sidebar': 'around',
   'focus-panes': 'around',
   'focus-right-panel': 'around',
   'focus-next-region': 'around',

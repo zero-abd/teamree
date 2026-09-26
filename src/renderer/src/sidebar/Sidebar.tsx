@@ -19,7 +19,7 @@ import { TeammateWorktreeRow } from './TeammateWorktreeRow'
 import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
 import { teamworkControlLabel, teamworkOn, teamworkSummary } from './teamworkSummary'
 import { usePaneEvidence, useWatchEvidence } from './usePaneEvidence'
-import { useTreeKeys } from './treeKeys'
+import { treeItems, treeStop, useTreeKeys } from './treeKeys'
 import { moveWorktree } from './nestDrag'
 import { worktreesByProject } from './worktreeOrder'
 import { WorktreeRow, type TaskFold } from './WorktreeRow'
@@ -33,6 +33,9 @@ import { openOverlap, overlapNamer } from './useOverlapChip'
 import { handoffLine, useHandoffs } from '../teamwork/handoffsStore'
 import { agentWords, worktreeDisplay, worktreeLabel } from './worktreeDisplay'
 import { unreadNotes, useSharedNotes } from '../teamwork/sharedNotesStore'
+import { useSidebarView } from '../state/sidebarViewStore'
+import { filterProject, keepFlat, narrows, type RowFacts } from './sidebarFilter'
+import { CompactToggle, SidebarFilter } from './SidebarView'
 
 export function Sidebar({
   searchHint
@@ -110,6 +113,15 @@ export function Sidebar({
   }
   const tree = useRef<HTMLDivElement | null>(null)
   const treeKeys = useTreeKeys(tree)
+  const filterField = useRef<HTMLInputElement | null>(null)
+  const query = useSidebarView((state) => state.query)
+  const quick = useSidebarView((state) => state.quick)
+  const compact = useSidebarView((state) => state.compact)
+  const openDone = useSidebarView((state) => state.openDone)
+  const view = useMemo(() => ({ query, quick, compact, openDone }), [query, quick, compact, openDone])
+  const toggleDone = useSidebarView((state) => state.toggleDone)
+  const revealSeq = useSidebarView((state) => state.revealSeq)
+  const narrowing = narrows(view)
 
   // Which editors are on this machine, asked once from the one thing always
   // mounted while a row exists.
@@ -117,23 +129,38 @@ export function Sidebar({
     void loadEditors()
   }, [loadEditors])
 
-  // No box sets this; kept as the one place the empty-state wording asks
-  // "is this filtered or simply empty".
-  const filter = ''
-
-  const matching = useMemo(() => {
-    const needle = filter.trim().toLowerCase()
-    if (!needle) return worktrees
-    return worktrees.filter(
-      (worktree) => worktree.name.toLowerCase().includes(needle) || worktree.branch.toLowerCase().includes(needle)
-    )
-  }, [filter, worktrees])
+  // Each project's rows as the field and chips leave them; the open row is never filtered out.
+  const groups = useMemo(() => {
+    const factsOf = (worktree: Worktree): RowFacts => {
+      const status = statuses[worktree.id]
+      const dirty = status !== undefined && status.staged + status.unstaged + status.untracked + status.conflicted > 0
+      return {
+        name: worktree.name,
+        title: worktreeDisplay(worktree, kindOf).title,
+        branch: worktree.branch,
+        ...(worktree.issue === undefined ? {} : { issue: worktree.issue.number }),
+        stage: stages[worktree.id],
+        changed: dirty || (mergePreviews[worktree.id]?.ahead ?? 0) > 0
+      }
+    }
+    return worktreesByProject(projects, worktrees).map(({ project, rows }) => {
+      const filtered = filterProject(rows, factsOf, view, {
+        keep: activeWorktreeId,
+        doneOpen: view.openDone.includes(project.id)
+      })
+      return { project, rows, shown: filtered.rows, context: filtered.context, folded: filtered.folded }
+    })
+  }, [projects, worktrees, statuses, mergePreviews, stages, kindOf, view, activeWorktreeId])
 
   // Only the panes of worktrees actually rendered are read; a collapsed project costs nothing.
   const onScreen = useMemo(() => {
-    const shown = new Set(matching.filter((worktree) => !collapsed[worktree.projectId]).map((worktree) => worktree.id))
+    const shown = new Set(
+      groups.flatMap((group) =>
+        collapsed[group.project.id] && !narrowing ? [] : group.shown.map((worktree) => worktree.id)
+      )
+    )
     return paneList.filter((terminal) => shown.has(terminal.worktreeId))
-  }, [collapsed, matching, paneList])
+  }, [collapsed, groups, narrowing, paneList])
 
   const evidence = usePaneEvidence(onScreen, terminals)
   // With more than one pane asking, only the open worktree's spell their answers out.
@@ -159,8 +186,36 @@ export function Sidebar({
   const notesUnread = useSharedNotes((state) => unreadNotes(state))
   const pageOpen = dashboardOpen || settingsOpen || helpOpen || teamworkProjectId !== null
 
+  // A new filter starts the list from its top; declared first, so on mount the open row still wins.
+  useEffect(() => {
+    if (tree.current !== null) tree.current.scrollTop = 0
+  }, [query, quick])
+
+  // Whoever picked it, the open row comes into view; `nearest` leaves a row already on screen alone.
+  useEffect(() => {
+    if (activeWorktreeId === null) return
+    const row = [...(tree.current?.querySelectorAll<HTMLElement>('[data-worktree-id]') ?? [])].find(
+      (entry) => entry.dataset.worktreeId === activeWorktreeId
+    )
+    row?.querySelector('.worktree__row')?.scrollIntoView?.({ block: 'nearest' })
+  }, [activeWorktreeId, revealSeq])
+
+  // Counted while the projects are drawn, for the one empty line a filter can leave.
+  let sectionsDrawn = 0
+  const leaveFilter = (): void => {
+    const items = tree.current === null ? [] : treeItems(tree.current)
+    ;(narrowing ? items[0] : treeStop(items, null))?.focus()
+  }
+  const openFirstShown = (): void => {
+    const first = groups.flatMap((group) => group.shown.filter((worktree) => !group.context.has(worktree.id)))[0]
+    if (first !== undefined) void openWorktree(first.id)
+  }
+
   return (
-    <div className={pageOpen ? 'sidebar sidebar--page' : 'sidebar'} data-region="sidebar">
+    <div
+      className={`sidebar${pageOpen ? ' sidebar--page' : ''}${compact ? ' sidebar--compact' : ''}`}
+      data-region="sidebar"
+    >
       {/* The top edge of the window, on this side of the seam: the lockup, and
           the one control that puts the sidebar away. On macOS the window
           buttons sit on this row too, and it is what the window is dragged by
@@ -303,11 +358,25 @@ export function Sidebar({
         </ul>
       </nav>
 
-      <nav className="sidebar__projects" aria-label="Projects and worktrees">
+      <nav
+        className="sidebar__projects"
+        aria-label="Projects and worktrees"
+        onKeyDown={(event) => {
+          // `/` from anywhere in the list but a field; ⌘⌥F is the menu's way in.
+          const typing = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement
+          if (event.key !== '/' || typing || event.metaKey || event.ctrlKey || event.altKey) return
+          event.preventDefault()
+          filterField.current?.focus()
+        }}
+      >
         <div className="sidebar__head">
           <h2 className="sidebar__head-title">Projects</h2>
-          <AddProjectButton />
+          <div className="sidebar__head-actions">
+            <CompactToggle />
+            <AddProjectButton />
+          </div>
         </div>
+        <SidebarFilter field={filterField} onLeave={leaveFilter} onSubmit={openFirstShown} />
 
         {/* One Tab stop; the arrows walk the rows. The other controls in it are the mouse's, each
             reachable by key elsewhere: the row menu, ⌘N, the rail. */}
@@ -327,11 +396,35 @@ export function Sidebar({
           {/* Grouped by the same function the next-worktree chord walks, so
               the chord moves down this list rather than through whatever order
               the runtime answered in. See `worktreeOrder.ts`. */}
-          {worktreesByProject(projects, matching).map(({ project, rows }) => {
-            const isCollapsed = Boolean(collapsed[project.id])
+          {groups.map(({ project, rows, shown, context, folded: foldedMine }) => {
+            // A filter shows its matches wherever they are.
+            const isCollapsed = Boolean(collapsed[project.id]) && !narrowing
             const summary = teamworkSummary(teamwork[project.id], now)
+            const doneOpen = openDone.includes(project.id)
             // Under the same project: the same repository, checked out elsewhere.
-            const theirs = teammateRows(teammatesHeard(teammates[project.id])?.worktrees ?? [], now, watchEvidence)
+            const heard = keepFlat(
+              teammateRows(teammatesHeard(teammates[project.id])?.worktrees ?? [], now, watchEvidence),
+              (row) => ({
+                name: row.name,
+                ...(row.branch === undefined ? {} : { branch: row.branch }),
+                stage: row.stage,
+                changed: (row.paths ?? 0) > 0 || (row.ahead ?? 0) > 0,
+                theirs: true
+              }),
+              view,
+              doneOpen
+            )
+            const theirs = heard.rows
+            const folded = foldedMine + heard.folded
+            if (narrowing && shown.length === 0 && theirs.length === 0 && folded === 0) return null
+            sectionsDrawn += 1
+            // The whole tree, for a task's tally and fold: the filter hides rows, not children.
+            const whole = new Map<string, TaskNode<Worktree>>()
+            const index = (node: TaskNode<Worktree>): void => {
+              whole.set(node.worktree.id, node)
+              node.children.forEach(index)
+            }
+            taskForest(rows).forEach(index)
             const reading = attentionByPane(watching[project.id])
             // Roster teammates never heard from: not away, and not without worktrees.
             const unheard = unheardTeammates(teammates[project.id])
@@ -340,6 +433,7 @@ export function Sidebar({
               teamworkOn(teamwork[project.id]) && (teammatesHeard(teammates[project.id])?.teammates.length ?? 0) > 0
             const drawRow = (node: TaskNode<Worktree>, depth: number): React.JSX.Element => {
               const { worktree } = node
+              const full = whole.get(worktree.id) ?? node
               const display = worktreeDisplay(worktree, kindOf)
               const label = worktreeLabel(display)
               const siblings = siblingRuns(worktree, worktrees)
@@ -359,7 +453,9 @@ export function Sidebar({
                   worktree={worktree}
                   display={display}
                   depth={depth}
-                  {...(node.children.length === 0 ? {} : { task: taskFold(node) })}
+                  {...(full.children.length === 0 ? {} : { task: taskFold(full) })}
+                  compact={compact}
+                  context={context.has(worktree.id)}
                   onNewChild={() => openDialog({ kind: 'new-task', projectId: project.id, parentId: worktree.id })}
                   onMoveUnder={() => openDialog({ kind: 'move-under', worktreeId: worktree.id })}
                   {...(worktree.parentId === undefined
@@ -418,7 +514,7 @@ export function Sidebar({
               const from =
                 rolled === null ? undefined : node.worktree.id === rolled.from ? undefined : titleOf(rolled.from)
               return {
-                collapsed: collapsedTasks[node.worktree.id] === true,
+                collapsed: !narrowing && collapsedTasks[node.worktree.id] === true,
                 onCollapse: (collapsed) => setTaskCollapsed(node.worktree.id, collapsed),
                 rolled: rolled === null ? null : { tone: rolled.tone, ...(from === undefined ? {} : { from }) },
                 tally: taskTally(node, (child) => isDoneStage(stages[child.id] ?? 'stopped')),
@@ -467,13 +563,15 @@ export function Sidebar({
 
                 {isCollapsed ? null : (
                   <ul className="project__worktrees" role="group">
-                    {taskForest(rows).map((node) => {
+                    {taskForest(shown).map((node) => {
                       if (node.children.length === 0) return drawRow(node, 0)
                       // A task and its child tasks share one box.
                       return (
                         <li className="task" role="none" key={`task-${node.worktree.id}`}>
                           <ul className="task__rows" role="none">
-                            {flattenTask(node, collapsedTasks).map((entry) => drawRow(entry.node, entry.depth))}
+                            {flattenTask(node, narrowing ? {} : collapsedTasks).map((entry) =>
+                              drawRow(entry.node, entry.depth)
+                            )}
                           </ul>
                         </li>
                       )
@@ -487,15 +585,36 @@ export function Sidebar({
                         onAnswer={(pane, choice) => void answerTeammatePane(project.id, pane, choice)}
                       />
                     ))}
-                    {unheard.length > 0 ? (
-                      <li className="project__unheard" role="none" title={unheardTitle(unheard)}>
-                        {`Nothing heard yet from ${unheard.join(', ')}`}
+                    {folded > 0 ? (
+                      <li className="project__fold" role="none">
+                        <button
+                          type="button"
+                          className="project__fold-toggle"
+                          role="treeitem"
+                          aria-level={2}
+                          aria-expanded={doneOpen}
+                          tabIndex={-1}
+                          onClick={() => toggleDone(project.id)}
+                          onKeyDown={(event) => {
+                            if (event.key !== (doneOpen ? 'ArrowLeft' : 'ArrowRight')) return
+                            event.preventDefault()
+                            toggleDone(project.id)
+                          }}
+                        >
+                          <svg
+                            className={`chevron${doneOpen ? ' chevron--open' : ''}`}
+                            viewBox="0 0 12 12"
+                            aria-hidden="true"
+                          >
+                            <path d="M4.5 2.5 L8.5 6 L4.5 9.5" />
+                          </svg>
+                          {`${folded} done`}
+                        </button>
                       </li>
                     ) : null}
-                    {/* An empty project says nothing: its row's New Task button is the way in. */}
-                    {rows.length === 0 && theirs.length === 0 && filter.trim().length > 0 ? (
-                      <li className="project__none" role="none">
-                        No matches
+                    {unheard.length > 0 && !narrowing && !quick.includes('mine') ? (
+                      <li className="project__unheard" role="none" title={unheardTitle(unheard)}>
+                        {`Nothing heard yet from ${unheard.join(', ')}`}
                       </li>
                     ) : null}
                   </ul>
@@ -503,6 +622,7 @@ export function Sidebar({
               </section>
             )
           })}
+          {narrowing && sectionsDrawn === 0 ? <p className="sidebar__empty">No matches</p> : null}
         </div>
       </nav>
     </div>
