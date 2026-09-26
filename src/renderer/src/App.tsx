@@ -41,6 +41,7 @@ import { StatusBar } from './shell/StatusBar'
 import { useWorkspaceStore, type Notice } from './state/workspaceStore'
 import { watchSystemTone } from './theme/systemTone'
 import { applyPalette } from './theme/applyPalette'
+import { SharedNotePopups } from './teamwork/SharedNotePopups'
 import { UpdateAvailableCard } from './updates/UpdateAvailableCard'
 import { WorkspaceArea } from './workspace/WorkspaceArea'
 
@@ -136,6 +137,7 @@ export function App(): React.JSX.Element {
 
       {/* Bottom right above the status bar: notices stack above the update card, never over it. */}
       <div className="corner-stack">
+        <SharedNotePopups />
         {notices.length > 0 ? (
           <div className="notices" role="status" aria-live="polite">
             {notices.map((notice) => (

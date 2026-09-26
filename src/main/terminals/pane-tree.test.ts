@@ -354,6 +354,17 @@ describe('file leaves', () => {
     })
   })
 
+  it('keeps a shared note leaf by its share id, and drops an empty one', () => {
+    const note: PaneNode = { kind: 'leaf', terminalId: 'file:5', pane: 'file', path: 'Plan', sharedNote: 'share-1' }
+    expect(parsePaneNode(note)).toEqual(note)
+    expect(parsePaneNode({ ...note, sharedNote: '' })).toStrictEqual({
+      kind: 'leaf',
+      terminalId: 'file:5',
+      pane: 'file',
+      path: 'Plan'
+    })
+  })
+
   it('drops the file fields a leaf cannot honour, and refuses a file leaf with no path', () => {
     expect(parsePaneNode({ kind: 'leaf', terminalId: 'a', pane: 'terminal' })).toEqual(leafPane('a'))
     expect(parsePaneNode({ kind: 'leaf', terminalId: 'a', pane: 'video', path: 'x' })).toEqual(leafPane('a'))

@@ -860,24 +860,14 @@ recorded so none of them is discovered by surprise later.
   deleted lines away from building again. The platform-specific code is all still
   present, so putting a platform back is adding to the packaging and the release
   sequence rather than a rewrite.
-- **CI ran, was green, and has been removed on cost grounds.** Recorded in that order,
-  because all three are true and the last is what matters today. The pipeline ran
-  typecheck, lint, format, the relay's own suite, the full suite, the build, the
-  headless smoke test, the package and the packaged-app check — the one that launches
-  the artifact and drives it — and macOS passed all of it and uploaded a build. It was
-  not removed for failing. It was removed because of what it cost: this repository is
-  on GitHub's free tier, every job ran on a `macos` runner — billed at ten times the
-  Linux rate against the same monthly allowance — and a full run packaged a 190 MB
-  Electron app. A handful of pushes spent the month, after which every pull request
-  carried a red cross that was about the allowance rather than about the code, which
-  teaches everybody to stop reading the checks. So the four workflows are gone and the
-  gate is `npm test` and `npm run release` on a maintainer's Mac, with
-  `scripts/release.mjs` as the single description of the sequence.
-
-  The cost of that decision is the honest half of this entry: nothing checks a branch
-  any more. A contributor who does not run `npm run typecheck`, `npm run lint`,
-  `npm run format:check` and `npm test` before opening a pull request has had nothing
-  checked at all, and there is no machine anywhere that will notice.
+- **CI runs the Linux half; the macOS half stays local.** `.github/workflows/ci.yml`
+  runs typecheck, lint, format, the relay build and the full suite (relay, ptys and
+  workerd included) on ubuntu for every pull request and every push to `main`. The
+  tests that need macOS — the install helper, the `chflags` refusal and the in-place
+  update — are skipped there by name in `scripts/vitest-skip-allowlist.mjs`. The smoke
+  test, packaging and the packaged-app check are not in CI: the earlier `macos`-runner
+  workflows ran them green but spent a free account's monthly minutes in a handful of
+  pushes, so they run on a maintainer's Mac through `npm run release`.
 
   The pipeline's first four runs all failed, each for a real reason a developer machine
   had been hiding: a stale CLI build, a configured git identity, LF line endings, and a
@@ -894,7 +884,7 @@ recorded so none of them is discovered by surprise later.
   indistinguishable at a glance from the same number having passed. That fix outlived
   the pipeline that prompted it. `scripts/require-test-environment.mjs` refuses to
   start the suite at all when `relay/dist` is missing or stale — on every machine, not
-  only where `CI` was set, because a local run is now the only run there is — and
+  only where `CI` is set — and
   `vitest.config.ts` names it as a `globalSetup` so `npx vitest run` cannot slip past
   it either. `npm run release` builds the relay as a gate of its own before the suite,
   for the same reason the pipeline had a step for it. Measured on macOS at this commit:

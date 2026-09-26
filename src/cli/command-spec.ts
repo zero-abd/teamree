@@ -20,6 +20,8 @@ export type CommandContext = {
   client: RuntimeClient
   json: boolean
   cwd: string
+  /** The caller's environment; a pane's identity (`PANE_IDENTITY_ENV`) is read from it. */
+  env: NodeJS.ProcessEnv
   /** Where the endpoint came from; `status` reports it. */
   endpointSource: string
   /** Everything on stdin, read once and bounded (`stdin.ts`); empty when nothing was piped. */

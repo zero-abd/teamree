@@ -5,6 +5,8 @@ import {
   compareLeaf,
   reviewLeaf,
   isReviewLeaf,
+  sharedNoteLeaf,
+  isSharedNoteLeaf,
   fileLeaf,
   fileLeavesIn,
   filePaneName,
@@ -78,6 +80,15 @@ describe('file leaves', () => {
     expect(isReviewLeaf(fileLeaf('file:f', 'src/math.ts'))).toBe(false)
     expect(isWorktreeFileLeaf(review)).toBe(false)
     expect(fileTabName(review)).toBe('Review')
+  })
+
+  it('keeps a shared note as a file-column tab named by its title, apart from files', () => {
+    const note = sharedNoteLeaf('file:n', 'share-1', 'Plan.md')
+    expect(isFileLeaf(note)).toBe(true)
+    expect(isSharedNoteLeaf(note)).toBe(true)
+    expect(isSharedNoteLeaf(fileLeaf('file:f', 'Plan.md'))).toBe(false)
+    expect(isWorktreeFileLeaf(note)).toBe(false)
+    expect(fileTabName(note)).toBe('Plan.md')
   })
 
   it('prefixes the id and names the pane after the file', () => {

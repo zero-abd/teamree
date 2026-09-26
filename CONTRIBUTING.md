@@ -26,15 +26,11 @@ npm run format:check
 npm test
 ```
 
-Run them yourself, because nothing else will. There is no CI here: no workflow
-runs on a push, on a pull request or on a tag, and no check will appear under
-your pull request to tell you that you forgot. This project had hosted CI and it
-worked, but every job ran on a `macos` runner — ten times the Linux rate against
-a free account's monthly minutes — and a full run packaged a 190 MB Electron
-app, so a handful of pushes spent the month.
-[`docs/releasing.md`](docs/releasing.md) has the whole of that reasoning.
-`npm run release:dry-run` is the longer version of the four commands above: it
-runs every gate a release runs, and creates nothing.
+CI runs the same four on Linux for every pull request, as the `check` job; a
+maintainer approves the first run from a fork. The macOS gate, the smoke test
+and packaging stay local and release-only
+([`docs/releasing.md`](docs/releasing.md) says why).
+`npm run release:dry-run` runs every gate a release runs, and creates nothing.
 
 `npm test` includes an acceptance pass that drives a real runtime over the real
 socket. It refuses to start in a checkout that cannot run all of it rather than
@@ -78,6 +74,8 @@ Describe what changed and why. If it changes behaviour somebody could see, say
 what they will see. Keep claims in documentation true of what is on disk —
 [`ROADMAP.md`](ROADMAP.md) records the known gaps, and adding to that list is a
 perfectly good contribution.
+
+Security issues go through [`SECURITY.md`](SECURITY.md), never a public issue.
 
 ## Further reading
 

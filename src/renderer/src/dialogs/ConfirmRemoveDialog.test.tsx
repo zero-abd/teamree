@@ -160,6 +160,22 @@ describe('what it asks', () => {
     expect(document.querySelector('.confirm__body')).toBeNull()
   })
 
+  it('names the child tasks it would take with it, and counts them in the title', async () => {
+    const child = {
+      ...worktree,
+      id: 'w2',
+      name: 'Stream pages',
+      branch: 'rewrite-the-pager--stream-pages',
+      parentId: 'w1'
+    }
+    const grandchild = { ...child, id: 'w3', name: 'Fixtures', branch: 'x--fixtures', parentId: 'w2' }
+    seed({ worktrees: [worktree, child, grandchild] })
+    runtimeHas({ changes: [modified('a.ts')] })
+    await mount()
+    expect(screen.getByRole('dialog', { name: 'Delete "Rewrite the pager" and 2 Children?' })).toBeTruthy()
+    expect(listed()).toEqual(['Stream pages', 'Fixtures', 'a.ts'])
+  })
+
   it('still asks when the worktree itself has already gone', async () => {
     seed({ worktrees: [] })
     await mount()

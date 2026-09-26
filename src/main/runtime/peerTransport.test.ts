@@ -246,6 +246,7 @@ describe('what a teammate can reach', () => {
     // never a side effect of registering a handler. Resize and close stay off it.
     expect(Object.keys(PEER_METHODS).sort()).toEqual([
       'peer.presence',
+      'peer.shareNote',
       'peer.subscribe',
       'terminal.read',
       'terminal.subscribe',
@@ -280,6 +281,8 @@ describe('what a teammate can reach', () => {
       // About this link; answer with what it is already entitled to.
       'peer.presence': 'link',
       'peer.subscribe': 'link',
+      // A note, filed only for a sender on that project's roster; nothing in it runs.
+      'peer.shareNote': 'link',
       unsubscribe: 'link',
       // Name a pane, and may only have it if the asker shares its project.
       'terminal.read': 'read-pane',

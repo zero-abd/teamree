@@ -74,3 +74,20 @@ describe('seeded start points', () => {
     expect(listing.options).toHaveLength(listing.limit)
   })
 })
+
+describe('seeded task, memory and add-on methods', () => {
+  it('answers reads with empty results and keeps settings', async () => {
+    const client = createSeededRuntimeClient()
+    const [worktree] = await client.call('worktree.list', {})
+    expect(await client.call('message.list', {})).toEqual([])
+    expect(await client.call('project.context', { worktreeId: worktree!.id })).toMatchObject({ siblings: [], text: '' })
+    expect(await client.call('memory.conflicts', { worktreeId: worktree!.id })).toEqual([])
+    expect(await client.call('worktree.usage', {})).toEqual([])
+    expect(await client.call('addons.status', {})).toEqual([{ id: 'jac-memory', state: 'off' }])
+    expect(await client.call('settings.set', { showCost: true })).toMatchObject({
+      shareTaskDetails: true,
+      showCost: true
+    })
+    expect(await client.call('settings.get', {})).toMatchObject({ showCost: true })
+  })
+})

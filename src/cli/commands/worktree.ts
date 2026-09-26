@@ -1,12 +1,15 @@
 import type { PaneNode, Worktree, WorktreeCompare } from '../../shared/entities.js'
 import { MAX_AGENT_ARGS_CHARS } from '../../shared/agentLaunch.js'
+import { MAX_TERMINAL_ID_CHARS } from '../../shared/methods.js'
+import { PANE_IDENTITY_ENV } from '../../shared/tasks.js'
+import { descendantsOf } from '../../shared/taskTree.js'
 import { parsePatch, type PatchHunk } from '../../shared/patch.js'
 import { compareRuns, type RunFile } from '../../shared/runCompare.js'
 import { taskNamesForAgents } from '../../main/git/worktreeNaming.js'
 import type { CommandContext, CommandSpec } from '../command-spec.js'
 import { readBoolean, readNumber, readString, readStrings, requireString } from '../argv.js'
 import { formatFields, formatTable } from '../output.js'
-import { resolveProject, resolveWorktree } from '../selectors.js'
+import { HERE, resolveProject, resolveWorktree, selectWorktree, type Caller } from '../selectors.js'
 import { DEFAULT_WAIT_TIMEOUT_MS, waitForState } from '../waiting.js'
 import { CliError, ExitCode } from '../exit.js'
 
@@ -44,6 +47,93 @@ async function readPrompt(context: CommandContext, agents: number): Promise<stri
  */
 export function shownState(worktree: Pick<Worktree, 'state' | 'missing'>): string {
   return worktree.missing ? 'missing' : worktree.state
+}
+
+/** Depth-first, each child under its parent; a row whose parent is not listed is a root. */
+export function treeRows(worktrees: readonly Worktree[]): Array<{ worktree: Worktree; depth: number }> {
+  const listed = new Set(worktrees.map((worktree) => worktree.id))
+  const rows: Array<{ worktree: Worktree; depth: number }> = []
+  const seen = new Set<string>()
+  const visit = (worktree: Worktree, depth: number): void => {
+    if (seen.has(worktree.id)) return
+    seen.add(worktree.id)
+    rows.push({ worktree, depth })
+    for (const child of worktrees) if (child.parentId === worktree.id) visit(child, depth + 1)
+  }
+  for (const worktree of worktrees) {
+    if (worktree.parentId === undefined || !listed.has(worktree.parentId)) visit(worktree, 0)
+  }
+  return rows
+}
+
+/** `worktree list` as text: flat with a PARENT column, or indented under each parent with `tree`. */
+export function listText(worktrees: readonly Worktree[], tree: boolean): string {
+  const empty = 'No worktrees. Create one with: teamree worktree create --project <id> --name <name>'
+  if (tree) {
+    return formatTable(
+      ['ID', 'NAME', 'BRANCH', 'STATE', 'PATH'],
+      treeRows(worktrees).map(({ worktree, depth }) => [
+        worktree.id,
+        `${'  '.repeat(depth)}${worktree.name}`,
+        worktree.branch,
+        shownState(worktree),
+        worktree.path
+      ]),
+      empty
+    )
+  }
+  return formatTable(
+    ['ID', 'NAME', 'BRANCH', 'STATE', 'PARENT', 'PATH'],
+    worktrees.map((worktree) => [
+      worktree.id,
+      worktree.name,
+      worktree.branch,
+      shownState(worktree),
+      worktree.parentId ?? '-',
+      worktree.path
+    ]),
+    empty
+  )
+}
+
+/** Where a create lands: under `--parent`, under the calling pane by default, or top-level. */
+async function chooseParent(
+  context: CommandContext,
+  caller: Caller
+): Promise<{ projectId: string; parent?: Worktree }> {
+  const token = readString(context.flags, 'parent')
+  const top = readBoolean(context.flags, 'top')
+  const projectToken = readString(context.flags, 'project')
+  if (token !== undefined && top) {
+    throw new CliError({ code: 'usage', message: '--parent and --top cannot both be given.', exitCode: ExitCode.Usage })
+  }
+  const project = projectToken === undefined ? undefined : await resolveProject(context.client, projectToken)
+  const inPane = Boolean(context.env[PANE_IDENTITY_ENV.worktreeId])
+  if (token === undefined && (top || !inPane)) {
+    if (project === undefined) {
+      throw new CliError({ code: 'usage', message: '--project or --parent is required.', exitCode: ExitCode.Usage })
+    }
+    return { projectId: project.id }
+  }
+  const worktrees = await context.client.call('worktree.list', {})
+  let parent: Worktree
+  try {
+    parent = selectWorktree(worktrees, token ?? HERE, caller)
+  } catch (error) {
+    // A pane of another app, or one whose worktree went: a named project still stands.
+    if (token === undefined && project !== undefined) return { projectId: project.id }
+    throw error
+  }
+  if (project !== undefined && project.id !== parent.projectId) {
+    // A pane's default gives way to a project named outright; an explicit --parent does not.
+    if (token === undefined) return { projectId: project.id }
+    throw new CliError({
+      code: 'usage',
+      message: `--parent ${parent.name} is not in project ${project.name}.`,
+      exitCode: ExitCode.Usage
+    })
+  }
+  return { projectId: parent.projectId, parent }
 }
 
 /** Both runs and their start, each file with what each run did to it, then the patches, one for a file both changed alike. */
@@ -86,27 +176,15 @@ export const worktreeCommands: readonly CommandSpec[] = [
         kind: 'string',
         placeholder: '<project>',
         description: 'Restrict to one project (id, name, or path).'
-      }
+      },
+      { name: 'tree', kind: 'boolean', description: 'Each child task indented under its parent.' }
     ],
-    examples: ['teamree worktree list --json', 'teamree worktree list --project api'],
+    examples: ['teamree worktree list --json', 'teamree worktree list --project api', 'teamree worktree list --tree'],
     run: async (context) => {
       const selector = readString(context.flags, 'project')
       const projectId = selector === undefined ? undefined : (await resolveProject(context.client, selector)).id
       const worktrees = await context.client.call('worktree.list', projectId === undefined ? {} : { projectId })
-      return {
-        data: worktrees,
-        text: formatTable(
-          ['ID', 'NAME', 'BRANCH', 'STATE', 'PATH'],
-          worktrees.map((worktree) => [
-            worktree.id,
-            worktree.name,
-            worktree.branch,
-            shownState(worktree),
-            worktree.path
-          ]),
-          'No worktrees. Create one with: teamree worktree create --project <id> --name <name>'
-        )
-      }
+      return { data: worktrees, text: listText(worktrees, readBoolean(context.flags, 'tree')) }
     }
   },
   {
@@ -120,15 +198,23 @@ export const worktreeCommands: readonly CommandSpec[] = [
       'from its second run.\n' +
       '--prompt is the task: written on each worktree record and given to each agent as its first prompt. ' +
       'Pass - to read it from stdin.\n' +
+      "With --parent, a child task: it branches from the parent's branch and is measured against it. " +
+      "Inside a teamree pane, create makes a child of the pane's worktree unless --top is given.\n" +
       'With --agent, --json carries every created record as a list; without it, the one record as before.',
     flags: [
       {
         name: 'project',
         kind: 'string',
         placeholder: '<project>',
-        description: 'Project id, name, or path.',
-        required: true
+        description: 'Project id, name, or path. Implied by --parent.'
       },
+      {
+        name: 'parent',
+        kind: 'string',
+        placeholder: '<worktree|here>',
+        description: "Make a child task of this worktree; here is the calling pane's."
+      },
+      { name: 'top', kind: 'boolean', description: 'A top-level task, even from inside a pane.' },
       {
         name: 'name',
         kind: 'string',
@@ -171,11 +257,23 @@ export const worktreeCommands: readonly CommandSpec[] = [
     examples: [
       'teamree worktree create --project api --name fix-login --from origin/main',
       'teamree worktree create --project api --name fix-login --agent claude --agent claude --agent codex',
-      'teamree worktree create --project api --name fix-login --agent claude --prompt "Fix the login form; it posts twice."'
+      'teamree worktree create --project api --name fix-login --agent claude --prompt "Fix the login form; it posts twice."',
+      'teamree worktree create --parent here --name "write the migration" --agent claude --prompt "Add the sessions table."'
     ],
     run: async (context) => {
-      const project = await resolveProject(context.client, requireString(context.flags, 'project'))
+      const caller: Caller = { env: context.env, cwd: context.cwd }
+      const { projectId, parent } = await chooseParent(context, caller)
       const startedFrom = readString(context.flags, 'from')
+      if (parent !== undefined && startedFrom !== undefined) {
+        throw new CliError({
+          code: 'usage',
+          message: '--from cannot be used with a parent; a child starts at its parent.',
+          exitCode: ExitCode.Usage
+        })
+      }
+      const fromTerminal = context.env[PANE_IDENTITY_ENV.terminalId]
+      const fromTerminalId =
+        fromTerminal && fromTerminal.length <= MAX_TERMINAL_ID_CHARS ? { fromTerminalId: fromTerminal } : {}
       const branch = readString(context.flags, 'branch')
       const agents = readStrings(context.flags, 'agent')
       const timeoutMs = readNumber(context.flags, 'timeout-ms') ?? DEFAULT_WAIT_TIMEOUT_MS
@@ -198,8 +296,10 @@ export const worktreeCommands: readonly CommandSpec[] = [
       for (const name of names) {
         created.push(
           await context.client.call('worktree.create', {
-            projectId: project.id,
+            projectId,
             name,
+            ...(parent === undefined ? {} : { parentId: parent.id }),
+            ...fromTerminalId,
             ...(startedFrom === undefined ? {} : { startedFrom }),
             ...(branch === undefined ? {} : { branch }),
             ...(task === undefined ? {} : { task })
@@ -234,6 +334,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
             ['id', one.id],
             ['name', one.name],
             ['branch', one.branch],
+            ...(parent === undefined ? [] : ([['parent', parent.name]] as Array<[string, string]>)),
             ['from', one.startedFrom],
             ['state', one.state],
             ['path', one.path]
@@ -264,17 +365,23 @@ export const worktreeCommands: readonly CommandSpec[] = [
     args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
     flags: [
       { name: 'force', kind: 'boolean', description: 'Remove even with uncommitted changes or unmerged commits.' },
-      { name: 'delete-branch', kind: 'boolean', description: 'Delete the branch alongside the checkout.' }
+      { name: 'delete-branch', kind: 'boolean', description: 'Delete the branch alongside the checkout.' },
+      { name: 'children', kind: 'boolean', description: 'Remove its child tasks too, deepest first.' }
     ],
-    examples: ['teamree worktree remove fix-login --force --delete-branch'],
+    examples: ['teamree worktree remove fix-login --force --delete-branch', 'teamree worktree remove here --children'],
     run: async (context) => {
-      const worktree = await resolveWorktree(context.client, context.args[0] as string)
+      const worktrees = await context.client.call('worktree.list', {})
+      const worktree = selectWorktree(worktrees, context.args[0] as string, { env: context.env, cwd: context.cwd })
+      const children = readBoolean(context.flags, 'children')
       await context.client.call('worktree.remove', {
         worktreeId: worktree.id,
         force: readBoolean(context.flags, 'force'),
-        deleteBranch: readBoolean(context.flags, 'delete-branch')
+        deleteBranch: readBoolean(context.flags, 'delete-branch'),
+        ...(children ? { children: true } : {})
       })
-      return { data: { removed: true, worktree }, text: `removed worktree ${worktree.name} (${worktree.id})` }
+      const count = descendantsOf(worktrees, worktree.id).length
+      const also = count === 0 ? '' : ` and ${count} ${count === 1 ? 'child' : 'children'}`
+      return { data: { removed: true, worktree }, text: `removed worktree ${worktree.name} (${worktree.id})${also}` }
     }
   },
   {

@@ -1,8 +1,9 @@
 // Asked before every removal: the worktree by name, and what would go with it, read fresh on open.
 // Force is sent only when the list showed something, or the runtime has already refused.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { WorktreeChanges, WorktreeStatus } from '@shared/entities'
+import { descendantsOf } from '@shared/taskTree'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { agentName, worktreeDisplay } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -13,7 +14,9 @@ const FILES_SHOWN = 5
 const count = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`
 
 export function ConfirmRemoveDialog({ worktreeId }: { worktreeId: string }): React.JSX.Element {
-  const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId))
+  const worktrees = useWorkspaceStore((state) => state.worktrees)
+  const worktree = worktrees.find((entry) => entry.id === worktreeId)
+  const children = useMemo(() => descendantsOf(worktrees, worktreeId), [worktrees, worktreeId])
   const cached = useWorkspaceStore((state) => state.statuses[worktreeId])
   const merged = useWorkspaceStore((state) => state.landings[worktreeId]?.merged === true)
   const dialog = useWorkspaceStore((state) => (state.dialog?.kind === 'confirm-remove' ? state.dialog : null))
@@ -46,6 +49,7 @@ export function ConfirmRemoveDialog({ worktreeId }: { worktreeId: string }): Rea
   const ignored = status?.ignored ?? 0
   const ahead = merged ? 0 : (status?.ahead ?? 0)
   const lines = [
+    ...children.map((child) => worktreeDisplay(child).title),
     ...files,
     ...(more > 0 ? [`+${more} more`] : []),
     ...(ignored > 0 ? [count(ignored, 'ignored file or folder', 'ignored files or folders')] : []),
@@ -55,10 +59,11 @@ export function ConfirmRemoveDialog({ worktreeId }: { worktreeId: string }): Rea
   const force = retrying || dialog?.refused === true || files.length > 0 || ignored > 0
   const display = worktree === undefined ? null : worktreeDisplay(worktree)
   const named = display === null ? null : `"${display.title}"${display.agent ? ` (${agentName(display.agent)})` : ''}`
+  const also = children.length === 0 ? '' : ` and ${count(children.length, 'Child', 'Children')}`
 
   return (
     <Confirm
-      title={retrying ? `Remove ${named ?? 'this worktree'}?` : `Delete ${named ?? 'this worktree'}?`}
+      title={retrying ? `Remove ${named ?? 'this worktree'}${also}?` : `Delete ${named ?? 'this worktree'}${also}?`}
       titleHint={worktree?.path}
       cancel="Cancel"
       confirm={retrying ? 'Remove and Retry' : 'Delete'}

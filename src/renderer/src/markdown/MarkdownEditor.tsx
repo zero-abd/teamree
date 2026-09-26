@@ -29,6 +29,8 @@ export type MarkdownEditorProps = {
   onFocusChange: (focused: boolean) => void
   onOpenUrl: (url: string) => void
   resolveImage: ImageResolver
+  /** Shown, never edited: no handle, bar or `/` menu, and nothing typed lands. */
+  readOnly?: boolean
 }
 
 type SlashMenuHooks = {
@@ -87,7 +89,7 @@ function placeholderFor({ editor, node, pos }: { editor: Editor; node: ProseNode
 }
 
 export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorProps>(function MarkdownEditor(
-  { initial, onChange, onFocusChange, onOpenUrl, resolveImage },
+  { initial, onChange, onFocusChange, onOpenUrl, resolveImage, readOnly = false },
   ref
 ): React.JSX.Element {
   const frame = useRef<HTMLDivElement | null>(null)
@@ -140,8 +142,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
   const editor = useEditor({
     extensions,
     content: firstFile.doc,
+    editable: !readOnly,
     editorProps: {
-      attributes: { class: 'md-editor', spellcheck: 'true' },
+      attributes: { class: 'md-editor', spellcheck: readOnly ? 'false' : 'true' },
       handleClick: (_view, _pos, event) => {
         const anchor = (event.target as HTMLElement | null)?.closest('a')
         if (!anchor || !anchor.href) return false
@@ -181,8 +184,8 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
   return (
     <div className="md-frame" ref={frame}>
       <EditorContent editor={editor} className="md-content" />
-      {editor ? <BlockHandle editor={editor} frame={frame} /> : null}
-      {editor ? <FormatBar editor={editor} frame={frame} /> : null}
+      {editor && !readOnly ? <BlockHandle editor={editor} frame={frame} /> : null}
+      {editor && !readOnly ? <FormatBar editor={editor} frame={frame} /> : null}
       {menu && menu.items.length > 0 ? (
         <SlashMenu menu={menu} frame={frame} onHover={(index) => showMenu({ ...menu, index })} />
       ) : null}

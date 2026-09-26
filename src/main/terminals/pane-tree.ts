@@ -8,6 +8,7 @@ import {
   compareLeaf,
   fileLeaf,
   reviewLeaf,
+  sharedNoteLeaf,
   isFileColumn,
   isFileLeaf,
   withTabs
@@ -232,6 +233,9 @@ function parseNode(value: unknown, depth: number): PaneNode | null {
         return compareLeaf(node.terminalId, node.compare, node.path)
       }
       if (node.review === true) return reviewLeaf(node.terminalId, node.path)
+      if (typeof node.sharedNote === 'string' && node.sharedNote.length > 0) {
+        return sharedNoteLeaf(node.terminalId, node.sharedNote, node.path)
+      }
       return fileLeaf(node.terminalId, node.path)
     }
     return leafPane(node.terminalId)

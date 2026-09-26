@@ -25,9 +25,12 @@ import type {
 } from '@shared/entities'
 import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
 import { DEFAULT_APPEARANCE, sanitizeAppearance, type Appearance } from '@shared/theme'
+import { emptyProjectContext } from '@shared/memory'
+import { DEFAULT_RUNTIME_SETTINGS, type RuntimeSettings } from '@shared/settings'
 import { leaf, splitPane } from '../panes/paneLayout'
 import { rankPaths } from '@shared/fuzzyPath'
 import { siblingRuns } from '@shared/runCompare'
+import { descendantsOf } from '@shared/taskTree'
 import { placePane, placePaneWithin } from '@shared/paneRoom'
 import type { ConnectionState, RuntimeClient, Subscription } from './RuntimeClientContract'
 
@@ -482,6 +485,10 @@ export function createSeededRuntimeClient(): RuntimeClient {
   })
 
   let appearance: Appearance = DEFAULT_APPEARANCE
+  let settings: RuntimeSettings = DEFAULT_RUNTIME_SETTINGS
+  const notInDemo = (method: string) => () => {
+    throw new Error(`${method} is not in the seeded runtime yet`)
+  }
   let trustNewWorktrees = true
   const updateState = (): UpdateState => ({
     current: '0.0.1-demo',
@@ -598,8 +605,9 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'worktree.list': ({ projectId }) =>
       [...worktrees.values()].filter((worktree) => !projectId || worktree.projectId === projectId),
     'worktree.get': ({ worktreeId }) => required(worktrees.get(worktreeId), 'worktree'),
-    'worktree.create': ({ projectId, name, startedFrom, branch, task }) => {
+    'worktree.create': ({ projectId, name, startedFrom, branch, task, parentId }) => {
       const project = required(projects.get(projectId), 'project')
+      const parent = parentId === undefined ? undefined : required(worktrees.get(parentId), 'worktree')
       const slug =
         name
           .toLowerCase()
@@ -609,12 +617,13 @@ export function createSeededRuntimeClient(): RuntimeClient {
         id: nextId('wt'),
         projectId,
         name,
-        branch: branch ?? `task/${slug}`,
+        branch: branch ?? (parent ? `${parent.branch}--${slug}` : `task/${slug}`),
         path: `${project.path}/.worktrees/${slug}`,
-        startedFrom: startedFrom ?? project.baseRef,
+        startedFrom: parent?.branch ?? startedFrom ?? project.baseRef,
         state: 'creating',
         createdAt: Date.now(),
-        ...(task === undefined ? {} : { task })
+        ...(task === undefined ? {} : { task }),
+        ...(parent === undefined ? {} : { parentId: parent.id, baseRef: parent.branch })
       }
       worktrees.set(worktree.id, worktree)
       announce({ type: 'worktrees' })
@@ -622,7 +631,13 @@ export function createSeededRuntimeClient(): RuntimeClient {
       finishCreation(worktree.id, /fail/i.test(name))
       return worktree
     },
-    'worktree.remove': ({ worktreeId, force }) => {
+    'worktree.remove': ({ worktreeId, force, children }) => {
+      const below = descendantsOf([...worktrees.values()], worktreeId)
+      if (below.length > 0 && children !== true) {
+        throw Object.assign(new Error(`worktree has ${below.length} children; remove with children`), {
+          code: 'conflict'
+        })
+      }
       const status = statuses.get(worktreeId)
       const pending = status ? status.staged + status.unstaged + status.untracked + status.conflicted : 0
       // The same refusal the real runtime makes, so the confirmation is demonstrable.
@@ -634,6 +649,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
           }
         )
       }
+      for (const child of below) worktrees.delete(child.id)
       worktrees.delete(worktreeId)
       statuses.delete(worktreeId)
       layouts.delete(worktreeId)
@@ -1212,6 +1228,19 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'peer.subscribe': () => {
       throw new Error('peer.subscribe is a teammate’s call, not a window’s')
     },
+    'peer.shareNote': () => {
+      throw new Error('peer.shareNote is a teammate’s call, not a window’s')
+    },
+    'teamwork.shareNote': ({ projectId }) => ({
+      projectId,
+      delivered: ['priya'],
+      missed: [{ handle: 'marcus', reason: 'offline' }]
+    }),
+    'teamwork.sharedNotes': () => [],
+    'teamwork.viewNote': () => {
+      throw new Error('that note is gone')
+    },
+    'teamwork.closeNote': () => ({ closed: false }),
 
     'agent.list': () => [
       { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' },
@@ -1427,6 +1456,32 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
 
     // The renderer watches through `watchWorkspace` below; this keeps the catalogue complete.
+    // Task, memory, handoff, template and add-on methods: empty until their branches seed them.
+    'message.send': notInDemo('message.send'),
+    'message.list': () => [],
+    'message.read': () => ({ read: 0 }),
+    'project.context': ({ worktreeId }) => emptyProjectContext(worktreeId),
+    'memory.note': notInDemo('memory.note'),
+    'memory.resolve': notInDemo('memory.resolve'),
+    'memory.forget': notInDemo('memory.forget'),
+    'memory.conflicts': () => [],
+    'worktree.overlaps': ({ projectId }) => ({ projectId, overlaps: [], readAt: Date.now() }),
+    'worktree.usage': () => [],
+    'teamwork.handOff': notInDemo('teamwork.handOff'),
+    'teamwork.handoffs': () => ({ incoming: [], outgoing: [] }),
+    'teamwork.take': notInDemo('teamwork.take'),
+    'teamwork.dismissHandoff': notInDemo('teamwork.dismissHandoff'),
+    'project.templates': ({ projectId }) => ({ projectId, templates: [], problems: [] }),
+    'project.saveTemplate': notInDemo('project.saveTemplate'),
+    'settings.get': () => settings,
+    'settings.set': (changes) => {
+      settings = { ...settings, ...Object.fromEntries(Object.entries(changes).filter(([, on]) => on !== undefined)) }
+      announce({ type: 'settings' })
+      return settings
+    },
+    'addons.status': () => [{ id: 'jac-memory', state: 'off' }],
+    'addons.install': notInDemo('addons.install'),
+
     'workspace.subscribe': () => ({ subscription: nextId('sub') }),
 
     unsubscribe: () => ({ unsubscribed: true })

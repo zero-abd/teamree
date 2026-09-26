@@ -464,6 +464,33 @@ it('discards the work only once that has been confirmed', async () => {
   call.mockRestore()
 })
 
+it('takes the child tasks the question listed, and forgets their rows', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const parent = useWorkspaceStore.getState().worktrees.find((entry) => {
+    const status = useWorkspaceStore.getState().statuses[entry.id]
+    return entry.state === 'ready' && (status === undefined || status.unstaged + status.staged === 0)
+  })!
+  const child = await runtimeClient.call('worktree.create', {
+    projectId: parent.projectId,
+    name: 'a child task',
+    parentId: parent.id
+  })
+  useWorkspaceStore.setState((state) => ({ worktrees: [...state.worktrees, child] }))
+  const call = vi.spyOn(runtimeClient, 'call')
+
+  await useWorkspaceStore.getState().confirmRemoveWorktree(parent.id, false)
+
+  expect(call.mock.calls.find(([method]) => method === 'worktree.remove')?.[1]).toEqual({
+    worktreeId: parent.id,
+    children: true
+  })
+  const left = useWorkspaceStore.getState().worktrees.map((entry) => entry.id)
+  expect(left).not.toContain(parent.id)
+  expect(left).not.toContain(child.id)
+  call.mockRestore()
+})
+
 it('removes a clean worktree once the question is answered', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()

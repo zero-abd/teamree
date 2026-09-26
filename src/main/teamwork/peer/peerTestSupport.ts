@@ -18,7 +18,7 @@ import { registerUnsubscribeHandler } from '../../runtime/handlers/unsubscribeHa
 import type { RemoteWriteDecision, RemoteWriteVerdict } from '../../runtime/peerTransport'
 import { registerPeerHandlers } from './handlers'
 import type { LinkScheduler } from './peerLink'
-import { PeerService, type ConsentStore, type MuteStore } from './peerService'
+import { PeerService, type ConsentStore, type MuteStore, type PeerServiceOptions } from './peerService'
 import type { RelayDialer, RelaySocketHandlers } from './relaySocket'
 import type { WakeWatch } from './wakeWatch'
 
@@ -326,6 +326,8 @@ export type PeerRuntimeOptions = {
   mutes?: MuteStore
   /** Lets a test wait on a condition instead of on the clock. */
   onChange?: () => void
+  /** Hears each note a teammate shares, as the app's notifications do. */
+  onNote?: PeerServiceOptions['onNote']
   /** Stands in for Electron's power monitor, which no test process has. */
   watchWake?: WakeWatch
   /** Registers the real terminal service, with real PTYs. Off by default: most peer tests have no use for a process. */
@@ -431,6 +433,7 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
       changes += 1
       options.onChange?.()
     },
+    ...(options.onNote ? { onNote: options.onNote } : {}),
     onError: (error) => errors.push(error)
   })
 

@@ -18,7 +18,12 @@ export const PEER_SERVICE_METHODS = [
   'teamwork.revoke',
   'teamwork.writeLog',
   'peer.presence',
-  'peer.subscribe'
+  'peer.subscribe',
+  'teamwork.shareNote',
+  'teamwork.sharedNotes',
+  'teamwork.viewNote',
+  'teamwork.closeNote',
+  'peer.shareNote'
 ] as const
 
 export function registerPeerHandlers(registry: MethodRegistry, service: PeerService): PeerService {
@@ -55,6 +60,14 @@ export function registerPeerHandlers(registry: MethodRegistry, service: PeerServ
       service.peerSubscribe(call.connectionId, channel)
     )
   }))
+
+  registry.register('teamwork.shareNote', Params.teamworkShareNote, (params) => service.shareNote(params))
+  registry.register('teamwork.sharedNotes', Params.teamworkSharedNotes, () => service.sharedNotes())
+  registry.register('teamwork.viewNote', Params.teamworkViewNote, (params) => service.viewNote(params))
+  registry.register('teamwork.closeNote', Params.teamworkCloseNote, (params) => service.closeNote(params))
+  registry.register('peer.shareNote', Params.peerShareNote, (params, call) =>
+    service.receiveNote(call.connectionId, params)
+  )
 
   return service
 }

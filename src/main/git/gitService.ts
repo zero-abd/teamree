@@ -41,6 +41,8 @@ import { siblingRuns } from '../../shared/runCompare'
 import { effectiveProjectSettings } from '../../shared/projectSettings'
 import { readProjectFile, writeProjectFile, type ProjectFileRead } from '../teamwork/projectFile'
 import { ErrorCode } from '../../shared/protocol'
+import { MAX_CHILD_DEPTH, MAX_OPEN_CHILDREN } from '../../shared/tasks'
+import { descendantsOf } from '../../shared/taskTree'
 import { cloneDestination, cloneFailureCode, cloneFailureLine, runClone } from './clone'
 import { describeError, GitCommandError, GitServiceError, isTransient } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
@@ -51,7 +53,13 @@ import { detectBaseRef, initializeRepository, inspectRepository, listBranchNames
 import { listStartPoints, resolveStartPoint, type ResolvedStartPoint, type StartPointList } from './startPoint'
 import { readWorktreeInventory } from './worktreeInventory'
 import { branchForCheckout, listOpenableBranches, listPullRequests } from './openBranch'
-import { allocateBranchName, allocateCheckoutPath, branchCollides } from './worktreeNaming'
+import {
+  allocateBranchName,
+  allocateCheckoutPath,
+  allocateChildBranchName,
+  branchCollides,
+  childCheckoutDirName
+} from './worktreeNaming'
 import { readMergePreview } from './mergePreview'
 import { readWorktreeLog } from './worktreeLog'
 import { readCommit } from './worktreeShowCommit'
@@ -148,7 +156,6 @@ type BranchVerdict = 'skip' | 'merged' | 'unjudged' | 'force'
 
 const DEFAULT_CREATE_TIMEOUT_MS = 10 * 60_000
 
-// git's own ref rules, minus the parts our slugs can never produce.
 export class GitService {
   readonly events = new GitEventEmitter()
 
@@ -358,10 +365,13 @@ export class GitService {
     await refuseToTrash(project.path)
     const trash = this.#trash
     if (trash === undefined) throw new GitServiceError(ErrorCode.Conflict, `no Trash here for ${project.path}`)
-    for (const worktree of this.#store.listWorktrees(project.id)) {
+    for (const listed of this.#store.listWorktrees(project.id)) {
+      // Gone already with the parent it was a child of.
+      const worktree = this.#store.getWorktree(listed.id)
+      if (worktree === undefined) continue
       // Only what this app made; a checkout adopted from elsewhere is the owner's own.
       if (!isInside(this.#worktreesRoot, worktree.path)) this.#forget(worktree)
-      else await this.removeWorktree({ worktreeId: worktree.id, force: true })
+      else await this.removeWorktree({ worktreeId: worktree.id, force: true, children: true })
     }
     await trash(project.path)
     await this.removeProject(params)
@@ -449,15 +459,69 @@ export class GitService {
    * Returns as soon as the record exists, in state 'creating'; `whenSettled` or an
    * `events` subscription tells you how it ended.
    */
-  async createWorktree(params: ParamsOf<'worktree.create'>): Promise<Worktree> {
+  async createWorktree(params: ParamsOf<'worktree.create'>, options: { limited?: boolean } = {}): Promise<Worktree> {
     const project = this.#requireProject(params.projectId)
     const name = params.name.trim()
     if (!name) throw new GitServiceError(ErrorCode.InvalidParams, 'worktree name must not be blank')
+    if (params.parentId !== undefined) this.#requireParent(project, params)
 
     // Serialised per project: choosing branch and path reads the store, and two
     // creates overlapping in that gap agree on one slug and two records name one
     // checkout path — the losing add then cleans up over the winner's checkout.
-    return this.#reserve(project.id, () => this.#openWorktreeRecord(project, name, params))
+    // The limits are read inside for the same reason: two agents must not both see a fifth child.
+    return this.#reserve(project.id, () => {
+      const parent = params.parentId === undefined ? undefined : this.#requireParent(project, params)
+      if (parent !== undefined && options.limited === true) this.#refuseOverLimit(parent)
+      return this.#openWorktreeRecord(project, name, params, parent)
+    })
+  }
+
+  /** The worktree a child task branches from: ready, in this project, and the only start point. */
+  #requireParent(project: Project, params: ParamsOf<'worktree.create'>): Worktree {
+    const parent = this.#store.getWorktree(params.parentId as string)
+    if (parent === undefined || parent.projectId !== project.id) {
+      throw new GitServiceError(ErrorCode.NotFound, `no worktree with id "${params.parentId}" in ${project.name}`)
+    }
+    if (params.checkout !== undefined || params.startedFrom !== undefined || params.base !== undefined) {
+      throw new GitServiceError(ErrorCode.InvalidParams, "a child task starts from its parent's branch")
+    }
+    if (parent.state !== 'ready') {
+      throw new GitServiceError(
+        ErrorCode.Conflict,
+        `worktree "${parent.name}" is ${parent.state}; a child needs it ready`
+      )
+    }
+    return parent
+  }
+
+  #refuseOverLimit(parent: Worktree): void {
+    const chain = this.#ancestry(parent)
+    // The top-level task is depth 0, so the new child sits `chain.length` deep.
+    if (chain.length > MAX_CHILD_DEPTH) {
+      const top = chain[chain.length - 1] as Worktree
+      throw new GitServiceError(ErrorCode.ChildLimit, `${MAX_CHILD_DEPTH} deep under ${top.name}`)
+    }
+    const open = this.#childrenOf(parent.id).length
+    if (open >= MAX_OPEN_CHILDREN) {
+      throw new GitServiceError(ErrorCode.ChildLimit, `${open} open children under ${parent.name}`)
+    }
+  }
+
+  /** The worktree and its parents, nearest first. A cycle in a hand-edited file ends the walk. */
+  #ancestry(worktree: Worktree): Worktree[] {
+    const chain = [worktree]
+    let at = worktree
+    while (at.parentId !== undefined) {
+      const up = this.#store.getWorktree(at.parentId)
+      if (up === undefined || chain.includes(up)) break
+      chain.push(up)
+      at = up
+    }
+    return chain
+  }
+
+  #childrenOf(worktreeId: string): Worktree[] {
+    return this.#store.listWorktrees().filter((worktree) => worktree.parentId === worktreeId)
   }
 
   /** Runs `reserve` after every earlier reservation for this project has finished. */
@@ -477,11 +541,16 @@ export class GitService {
   }
 
   /** Claims a branch name and a checkout path, and starts building into them. */
-  async #openWorktreeRecord(project: Project, name: string, params: ParamsOf<'worktree.create'>): Promise<Worktree> {
+  async #openWorktreeRecord(
+    project: Project,
+    name: string,
+    params: ParamsOf<'worktree.create'>,
+    parent?: Worktree
+  ): Promise<Worktree> {
     const checkout = params.checkout?.trim()
     const claim =
       checkout === undefined || checkout === ''
-        ? { branch: await this.#chooseBranch(project, name, params.branch) }
+        ? { branch: await this.#chooseBranch(project, name, params.branch, parent) }
         : await this.#claimCheckout(project, checkout)
     const branch = claim.branch
     const checkoutPath =
@@ -490,7 +559,8 @@ export class GitService {
         this.#worktreesRoot,
         project.name,
         branch,
-        new Set(this.#store.listWorktrees().map((worktree) => pathKey(worktree.path)))
+        new Set(this.#store.listWorktrees().map((worktree) => pathKey(worktree.path))),
+        parent === undefined ? undefined : childCheckoutDirName(parent.path, parent.branch, branch)
       ))
 
     const told = params.task?.trim()
@@ -500,10 +570,11 @@ export class GitService {
       name,
       branch,
       path: checkoutPath,
-      startedFrom: params.base?.trim() || params.startedFrom?.trim() || project.baseRef,
+      startedFrom: parent?.branch ?? (params.base?.trim() || params.startedFrom?.trim() || project.baseRef),
       state: 'creating',
       createdAt: this.#now(),
       ...(told ? { task: told } : {}),
+      ...(parent === undefined ? {} : { parentId: parent.id, baseRef: parent.branch }),
       ...(checkout ? { checkout } : {}),
       ...(checkout && params.base?.trim() ? { baseRef: params.base.trim() } : {})
     }
@@ -546,6 +617,20 @@ export class GitService {
 
   async removeWorktree(params: ParamsOf<'worktree.remove'>): Promise<ResultOf<'worktree.remove'>> {
     const initial = this.#requireWorktree(params.worktreeId)
+    const children = this.#childrenOf(initial.id)
+    if (children.length > 0) {
+      if (params.children !== true) {
+        const count = descendantsOf(this.#store.listWorktrees(), initial.id).length
+        throw new GitServiceError(
+          ErrorCode.Conflict,
+          `worktree "${initial.name}" has ${count} ${
+            count === 1 ? 'child' : 'children'
+          }; remove with children to take them too`
+        )
+      }
+      // Deepest first, each kept for restore as any removal is; a refusal stops before the parent.
+      for (const child of children) await this.removeWorktree({ ...params, worktreeId: child.id })
+    }
     if (initial.state === 'creating') await this.cancelWorktreeCreate(initial.id)
 
     const worktree = this.#requireWorktree(params.worktreeId)
@@ -561,7 +646,14 @@ export class GitService {
 
     // Judged before anything is destroyed: refusing after the checkout is gone is worse.
     let branchVerdict: BranchVerdict = 'skip'
-    if (params.deleteBranch) branchVerdict = await this.#judgeBranchDeletion(project, worktree.branch, force)
+    if (params.deleteBranch) {
+      branchVerdict = await this.#judgeBranchDeletion(
+        project,
+        worktree.branch,
+        worktree.baseRef ?? project.baseRef,
+        force
+      )
+    }
 
     const previousState = worktree.state
     // Before anything is destroyed, and a refusal if it cannot be kept.
@@ -597,7 +689,7 @@ export class GitService {
     const initial = this.#requireWorktree(params.worktreeId)
     if (initial.state === 'creating') await this.cancelWorktreeCreate(initial.id)
     const worktree = this.#store.getWorktree(params.worktreeId)
-    if (worktree) this.#forget(worktree)
+    if (worktree) await this.#forgetParent(worktree)
     return { forgotten: true, ...(await this.#surviving(worktree ?? initial)) }
   }
 
@@ -660,7 +752,16 @@ export class GitService {
       throw error
     }
 
-    const worktree: Worktree = { ...saved, projectId: project.id, state: 'ready' }
+    const { parentId, baseRef, ...rest } = saved
+    const parentBack = typeof parentId === 'string' && this.#store.getWorktree(parentId)?.projectId === project.id
+    const baseBack = typeof baseRef === 'string' && (parentBack || (await this.#refExists(project, baseRef)))
+    const worktree: Worktree = {
+      ...rest,
+      projectId: project.id,
+      state: 'ready',
+      ...(parentBack ? { parentId } : {}),
+      ...(baseBack ? { baseRef } : {})
+    }
     this.#store.putWorktree(worktree)
     this.events.emit({ type: 'worktree.created', worktree })
     await dropTrash(this.#runner, project.path, entry.id)
@@ -716,7 +817,9 @@ export class GitService {
           path: worktree.path,
           startedFrom: worktree.startedFrom,
           createdAt: worktree.createdAt,
-          ...(worktree.task === undefined ? {} : { task: worktree.task })
+          ...(worktree.task === undefined ? {} : { task: worktree.task }),
+          ...(worktree.parentId === undefined ? {} : { parentId: worktree.parentId }),
+          ...(worktree.baseRef === undefined ? {} : { baseRef: worktree.baseRef })
         },
         kind,
         ...(paths === undefined ? {} : { paths }),
@@ -1171,12 +1274,20 @@ export class GitService {
 
   /** Call once at startup: whatever was mid-flight then has no owner now. */
   reviveRestoredRecords(): void {
-    for (const worktree of this.#store.listWorktrees()) {
+    const ids = new Set(this.#store.listWorktrees().map((worktree) => worktree.id))
+    for (const listed of this.#store.listWorktrees()) {
+      let worktree = listed
       if (worktree.state === 'creating') {
-        this.#store.putWorktree({ ...worktree, state: 'failed', error: 'interrupted by a restart', retryable: true })
+        worktree = { ...worktree, state: 'failed', error: 'interrupted by a restart', retryable: true }
       } else if (worktree.state === 'removing') {
-        this.#store.putWorktree({ ...worktree, state: 'ready' })
+        worktree = { ...worktree, state: 'ready' }
       }
+      // A parent salvage could not read: the child stays, top-level, still measured against its branch.
+      if (worktree.parentId !== undefined && !ids.has(worktree.parentId)) {
+        const { parentId: _dropped, ...orphan } = worktree
+        worktree = orphan
+      }
+      if (worktree !== listed) this.#store.putWorktree(worktree)
     }
   }
 
@@ -1202,13 +1313,21 @@ export class GitService {
 
   #patch(
     worktreeId: string,
-    patch: Partial<Worktree> & { clearError?: boolean; clearMissing?: boolean; clearSetupAsk?: boolean }
+    patch: Partial<Worktree> & {
+      clearError?: boolean
+      clearMissing?: boolean
+      clearSetupAsk?: boolean
+      clearParent?: boolean
+      clearBaseRef?: boolean
+    }
   ): Worktree | null {
     const current = this.#store.getWorktree(worktreeId)
     if (!current) return null
-    const { clearError, clearMissing, clearSetupAsk, ...fields } = patch
+    const { clearError, clearMissing, clearSetupAsk, clearParent, clearBaseRef, ...fields } = patch
     const next: Worktree = { ...current, ...fields }
     if (clearSetupAsk) delete next.setupAsk
+    if (clearParent) delete next.parentId
+    if (clearBaseRef) delete next.baseRef
     if (clearError) {
       delete next.error
       delete next.retryable
@@ -1220,9 +1339,32 @@ export class GitService {
   }
 
   #forget(worktree: Worktree): void {
+    const children = this.#childrenOf(worktree.id)
     this.#store.removeWorktree(worktree.id)
     this.#startPoints.delete(worktree.id)
     this.events.emit({ type: 'worktree.removed', worktreeId: worktree.id, projectId: worktree.projectId })
+    for (const child of children) this.#patch(child.id, { clearParent: true })
+  }
+
+  /** Forgets it; its children go top-level and keep measuring against its branch while that exists. */
+  async #forgetParent(worktree: Worktree): Promise<void> {
+    const children = this.#childrenOf(worktree.id)
+    this.#forget(worktree)
+    const project = this.#store.getProject(worktree.projectId)
+    if (project === undefined) return
+    for (const child of children) {
+      if (child.baseRef !== worktree.branch || (await this.#refExists(project, worktree.branch))) continue
+      this.#patch(child.id, { clearBaseRef: true })
+    }
+  }
+
+  async #refExists(project: Project, ref: string): Promise<boolean> {
+    const read = await this.#runner.tryRun({
+      args: ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`],
+      cwd: project.path,
+      readOnly: true
+    })
+    return read.exitCode === 0
   }
 
   /**
@@ -1249,14 +1391,18 @@ export class GitService {
     return holder === undefined ? { branch } : { branch, adopt: holder.path }
   }
 
-  async #chooseBranch(project: Project, taskName: string, requested?: string): Promise<string> {
+  async #chooseBranch(project: Project, taskName: string, requested?: string, parent?: Worktree): Promise<string> {
     // In-flight creates own branch names git has not heard of yet.
     const recorded = this.#store.listWorktrees(project.id).map((worktree) => worktree.branch)
     // Deliberately not caught: an empty list says "free" about every name there is.
     const fromGit = await listBranchNames(this.#runner, project.path)
     const existing = [...fromGit, ...recorded]
 
-    if (requested === undefined) return allocateBranchName(taskName, existing)
+    if (requested === undefined) {
+      return parent === undefined
+        ? allocateBranchName(taskName, existing)
+        : allocateChildBranchName(parent.branch, taskName, existing)
+    }
 
     const branch = requested.trim()
     if (!isValidBranchName(branch)) {
@@ -1551,9 +1697,8 @@ export class GitService {
     )
   }
 
-  async #judgeBranchDeletion(project: Project, branch: string, force: boolean): Promise<BranchVerdict> {
+  async #judgeBranchDeletion(project: Project, branch: string, target: string, force: boolean): Promise<BranchVerdict> {
     if (force) return 'force'
-    const target = project.baseRef
     const merged = await this.#runner.tryRun({
       args: ['merge-base', '--is-ancestor', branch, target],
       cwd: project.path,
@@ -1599,7 +1744,7 @@ export class GitService {
       for (const worktree of this.#store.listWorktrees(project.id)) {
         if (worktree.state !== 'ready') continue
         if (!live.has(pathKey(worktree.path))) {
-          this.#forget(worktree)
+          await this.#forgetParent(worktree)
           continue
         }
         // Still in git's inventory, but an `rm -rf` leaves the metadata behind.

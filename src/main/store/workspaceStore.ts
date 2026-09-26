@@ -9,12 +9,15 @@ import type { ClosedTerminalRecord, TerminalRecord } from '../terminals/session-
 import { samePath } from '../git/pathIdentity'
 import { openJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
 import { DEFAULT_APPEARANCE, sanitizeAppearance, type Appearance } from '../../shared/theme'
+import type { RuntimeSettings } from '../../shared/settings'
 import {
   emptyWorkspaceDocument,
   parseWorkspaceDocument,
+  runtimeSettings,
   type AskedQuestion,
   type AskedQuestions,
   type AgentsRecord,
+  type SettingsRecord,
   type StandingConsentRecord,
   type UpdateRecord,
   type WorkspaceDocument
@@ -88,6 +91,7 @@ export class WorkspaceStore {
   private appearance: Appearance = DEFAULT_APPEARANCE
   private updates: UpdateRecord = {}
   private agents: AgentsRecord = {}
+  private settings: SettingsRecord = {}
 
   private queue: Promise<void> = Promise.resolve()
   private queued = false
@@ -120,6 +124,7 @@ export class WorkspaceStore {
     this.appearance = document.appearance
     this.updates = document.updates
     this.agents = document.agents
+    this.settings = document.settings
   }
 
   /**
@@ -327,6 +332,22 @@ export class WorkspaceStore {
     this.persist()
   }
 
+  runtimeSettings(): RuntimeSettings {
+    return runtimeSettings(this.settings)
+  }
+
+  /** Omitted keys stay as they are. False when nothing changed. */
+  setRuntimeSettings(changes: Partial<RuntimeSettings>): boolean {
+    const current = this.runtimeSettings()
+    const changed = Object.entries(changes).filter(
+      ([key, value]) => value !== undefined && current[key as keyof RuntimeSettings] !== value
+    )
+    if (changed.length === 0) return false
+    this.settings = { ...this.settings, ...Object.fromEntries(changed) }
+    this.persist()
+    return true
+  }
+
   /** The rate limit's clock, on disk so an hour of restarts is one check. */
   recordUpdateCheck(at: number): void {
     this.updates = { ...this.updates, lastCheckedAt: at }
@@ -410,7 +431,8 @@ export class WorkspaceStore {
       asked: this.asked,
       appearance: this.appearance,
       updates: this.updates,
-      agents: this.agents
+      agents: this.agents,
+      settings: this.settings
     }
   }
 }

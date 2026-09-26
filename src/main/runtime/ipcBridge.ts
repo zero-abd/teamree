@@ -6,6 +6,7 @@ import { ipcMain, type WebContents } from 'electron'
 import { ErrorCode, type ErrorResponse, type StreamEvent } from '../../shared/protocol'
 import type { Dispatcher } from './dispatcher'
 import { RPC_CALL_CHANNEL, RPC_RELEASE_CHANNEL, RPC_STREAM_CHANNEL } from './ipcChannels'
+import { WINDOW_CONNECTION_PREFIX } from './methodRegistry'
 import type { SubscriptionHub } from './subscriptionHub'
 
 export type IpcBridgeOptions = {
@@ -18,7 +19,7 @@ export function installIpcBridge(options: IpcBridgeOptions): () => void {
   // One connection per WebContents; a reload or close ends it and its subscriptions.
   const watched = new WeakSet<WebContents>()
 
-  const connectionIdFor = (sender: WebContents): string => `renderer_${sender.id}`
+  const connectionIdFor = (sender: WebContents): string => `${WINDOW_CONNECTION_PREFIX}${sender.id}`
 
   const ensureConnection = (sender: WebContents): string => {
     const connectionId = connectionIdFor(sender)

@@ -34,6 +34,7 @@ import {
   type Worktree
 } from '../../../shared/entities'
 import type { ParamsOf, ResultOf } from '../../../shared/methods'
+import type { NoteShareResult, SharedNote, SharedNotePayload, SharedNoteSummary } from '../../../shared/sharedNote'
 import { createGitRunner, type GitRunner } from '../../git/gitProcess'
 import type { Dispatcher } from '../../runtime/dispatcher'
 import { defaultMonotonicNow } from '../../runtime/elapsed'
@@ -64,6 +65,7 @@ import { createRemoteWriteLog, returnsIn, type RemoteWriteRecorder } from './wri
 import { previewOf } from './writePreview'
 import { loadIdentity, loadStaticPrivateKey } from '../identity'
 import { readRoster } from '../roster'
+import { createNoteInbox, type NoteInbox } from './noteInbox'
 import { watchPane } from './paneWatch'
 import { createPeerLink, type LinkScheduler, type PeerLink } from './peerLink'
 import { presenceFor, type PresenceProject, type PresenceSource } from './presence'
@@ -117,6 +119,8 @@ export type PeerServiceOptions = {
   consent?: ConsentStore
   /** Publishes `{ type: 'teammates' }` so the window re-reads. */
   onChange: () => void
+  /** A teammate's note was filed; the app raises a notification when the window is away. */
+  onNote?: (note: SharedNoteSummary) => void
   onError?: (error: unknown) => void
 }
 
@@ -244,6 +248,7 @@ export class PeerService {
   /** When the window was last told a request grew, so a burst is not a flood. */
   #requestsToldAt = 0
   readonly #log: RemoteWriteRecorder
+  readonly #notes: NoteInbox
 
   #cache: TeammateCache | undefined
   #dispatch: Dispatcher | undefined
@@ -270,6 +275,7 @@ export class PeerService {
       now: () => this.#scheduler.now(),
       ...(options.onError ? { onError: options.onError } : {})
     })
+    this.#notes = createNoteInbox({ now: () => this.#scheduler.now() })
   }
 
   /** The dispatcher is built after the handlers are registered; until it arrives no peer can be answered. */
@@ -353,6 +359,8 @@ export class PeerService {
     )
     this.#projects.clear()
     for (const fact of facts) this.#projects.set(fact.projectId, fact)
+    // A note stays only while its sender is still on its project's roster.
+    this.#notes.dropWhere((note) => !this.#projects.get(note.projectId)?.rosterKeys.includes(note.publicKey))
 
     // One link per (teammate, project) with a relay and a project key, each with
     // its own rendezvous and session.
@@ -970,6 +978,93 @@ export class PeerService {
     return () => {
       if (this.#subscribers.get(connectionId) === channel) this.#subscribers.delete(connectionId)
     }
+  }
+
+  /** Sends a note to every connected teammate on the project. Offline ones are named, not queued. */
+  async shareNote(params: ParamsOf<'teamwork.shareNote'>): Promise<NoteShareResult> {
+    const facts = this.#projects.get(params.projectId)
+    if (!facts) {
+      const known = this.#options.workspace.listProjects().some((project) => project.id === params.projectId)
+      throw notFound(
+        known ? `teamree has not read project ${params.projectId} yet` : `no project with id ${params.projectId}`
+      )
+    }
+    const projectKey = facts.disabledReason === null ? facts.projectKey : undefined
+    if (projectKey === undefined) throw new TeamworkError(ErrorCode.Conflict, 'teamwork is off for this project')
+    const teammates = facts.rosterKeys.filter((key) => key !== this.#identityKey)
+    if (teammates.length === 0) throw new TeamworkError(ErrorCode.Conflict, 'no teammates on this project')
+
+    const note: SharedNotePayload = {
+      noteId: params.noteId,
+      title: params.title,
+      markdown: params.markdown,
+      sentAt: this.#scheduler.now()
+    }
+    const outcomes = await Promise.all(
+      teammates.map(async (publicKey) => {
+        const handle = this.#handleIn(facts, publicKey)
+        const record = this.#links.get(linkIdFor(publicKey, projectKey))
+        if (record?.status.phase !== 'connected') return { handle, reason: 'offline' }
+        try {
+          await record.link.call('peer.shareNote', note)
+          return { handle }
+        } catch (error) {
+          return { handle, reason: reasonFor(error) }
+        }
+      })
+    )
+    outcomes.sort((a, b) => a.handle.localeCompare(b.handle))
+    return {
+      projectId: facts.projectId,
+      delivered: outcomes.filter((outcome) => outcome.reason === undefined).map((outcome) => outcome.handle),
+      missed: outcomes.flatMap((outcome) =>
+        outcome.reason === undefined ? [] : [{ handle: outcome.handle, reason: outcome.reason }]
+      )
+    }
+  }
+
+  /**
+   * PEER-ONLY. A teammate's note, filed only when the key the handshake authenticated
+   * is on the roster of a project here that the session is for.
+   */
+  receiveNote(connectionId: string, note: SharedNotePayload): { received: true } {
+    const peer = this.#peerByConnection.get(connectionId)
+    if (peer === undefined) throw notFound('this connection is not a peer link')
+    const facts = [...this.#projects.values()]
+      .sort((a, b) => a.projectId.localeCompare(b.projectId))
+      .find(
+        (fact) =>
+          fact.projectKey === peer.projectKey &&
+          fact.disabledReason === null &&
+          fact.rosterKeys.includes(peer.publicKey)
+      )
+    if (!facts || peer.publicKey === this.#identityKey) throw notFound('not a member of this project here')
+    const filed = this.#notes.add({
+      projectId: facts.projectId,
+      handle: this.#handleIn(facts, peer.publicKey),
+      publicKey: peer.publicKey,
+      noteId: note.noteId,
+      title: note.title,
+      markdown: note.markdown,
+      sentAt: note.sentAt
+    })
+    this.#options.onNote?.(filed)
+    this.#options.onChange()
+    return { received: true }
+  }
+
+  sharedNotes(): SharedNoteSummary[] {
+    return this.#notes.list()
+  }
+
+  viewNote(params: ParamsOf<'teamwork.viewNote'>): SharedNote {
+    const note = this.#notes.view(params.shareId)
+    if (!note) throw notFound('that note is gone')
+    return note
+  }
+
+  closeNote(params: ParamsOf<'teamwork.closeNote'>): { closed: boolean } {
+    return { closed: this.#notes.close(params.shareId) }
   }
 
   /** Something in the workspace moved: bump the revision and tell the peers once per burst. */

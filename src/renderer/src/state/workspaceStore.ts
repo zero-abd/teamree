@@ -53,6 +53,8 @@ import {
   isWorktreeFileLeaf,
   isMarkdownPath,
   isReviewLeaf,
+  isSharedNoteLeaf,
+  sharedNoteLeaf,
   newFilePaneId,
   reviewLeaf,
   shownTabId
@@ -60,6 +62,7 @@ import {
 import { closePaneWarning } from '../dialogs/closePaneModel'
 import { openInBrowser } from '../shell/openInBrowser'
 import { noticeLifetime } from '../notices/noticeLifetime'
+import { useSharedNotes } from '../teamwork/sharedNotesStore'
 import {
   nextToReopen,
   readClosedFiles,
@@ -154,6 +157,7 @@ import { forgetClosedPanes, markSeen, readPaneSeen, writePaneSeen, type PaneSeen
 import type { PatchHunk } from '@shared/patch'
 import type { ProjectAddRefusal, ResultOf } from '@shared/methods'
 import { parsePastedInvitation, type Invitation } from '@shared/invitation'
+import { descendantsOf } from '@shared/taskTree'
 import { joinTeam, type JoinStage, type JoinTarget } from '../teamwork/joinTeam'
 import type { DiffLayout } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
@@ -591,6 +595,10 @@ type WorkspaceState = {
   openCompare: (worktreeId: string, otherId: string, title: string) => Promise<void>
   /** Opens every change of the worktree as one read-only tab of its file column, zoomed, or focuses that tab. */
   openReview: (worktreeId: string) => void
+  /** Opens a note a teammate shared, read-only, as a tab in a worktree of its project; focuses the tab already on it. */
+  openSharedNote: (projectId: string, shareId: string, title: string) => Promise<void>
+  /** Says something in the corner; an `info` retires itself. */
+  showNotice: (text: string, tone?: Notice['tone']) => void
   /** Keeps a preview tab open when the next preview comes. */
   pinFilePane: (paneId: string) => void
   /** Shows a file pane's diff, or its text again. */
@@ -1227,6 +1235,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
    * having something to say. The reads are cheap, and one project failing must not cost the others theirs.
    */
   const refreshTeammates = async (): Promise<void> => {
+    void useSharedNotes.getState().refresh()
     const projectIds = get().projects.map((project) => project.id)
     if (projectIds.length === 0) return
     const answers = await Promise.all(
@@ -1808,12 +1817,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         dialog?.kind === 'confirm-remove' && dialog.worktreeId === worktreeId && dialog.intent === 'retry'
       // Read before the removal: forgetting the row takes the only copy of what the replacement is built from.
       const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
+      // The dialog listed them; the runtime refuses a parent without this.
+      const children = descendantsOf(get().worktrees, worktreeId)
       set({ dialog: null })
       try {
-        const removed = await runtimeClient.call(
-          'worktree.remove',
-          force ? { worktreeId, force: true } : { worktreeId }
-        )
+        const removed = await runtimeClient.call('worktree.remove', {
+          worktreeId,
+          ...(force ? { force: true } : {}),
+          ...(children.length > 0 ? { children: true } : {})
+        })
+        for (const child of children) forgetWorktree(child.id)
         forgetWorktree(worktreeId)
         if (retrying && worktree) await recreateWorktree(worktree)
         else if (worktree && removed.trashId !== undefined) {
@@ -2258,6 +2271,32 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         return
       }
       placeFileLeaf(layout, compareLeaf(newFilePaneId(), otherId, title))
+    },
+
+    async openSharedNote(projectId, shareId, title) {
+      const { activeWorktreeId, worktrees } = get()
+      const active = worktrees.find((worktree) => worktree.id === activeWorktreeId)
+      const target =
+        active?.projectId === projectId
+          ? active
+          : worktrees.find((worktree) => worktree.projectId === projectId && worktree.state === 'ready')
+      if (!target) {
+        notify('No worktree to open it in', 'info')
+        return
+      }
+      if (activeWorktreeId !== target.id) await get().openWorktree(target.id)
+      const layout = get().layouts[target.id] ?? { worktreeId: target.id, root: null, focusedTerminalId: null }
+      const open = fileLeavesIn(layout.root).find((leaf) => isSharedNoteLeaf(leaf) && leaf.sharedNote === shareId)
+      if (open) {
+        get().pinFilePane(open.terminalId)
+        get().focusPane(open.terminalId)
+        return
+      }
+      placeFileLeaf(layout, sharedNoteLeaf(newFilePaneId(), shareId, title))
+    },
+
+    showNotice(text, tone = 'info') {
+      notify(text, tone)
     },
 
     openReview(worktreeId) {
