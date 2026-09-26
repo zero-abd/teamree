@@ -1,7 +1,7 @@
 // What `run-smoke.mjs` tells the Electron process it launches. Named flags, not positions:
 // `--no-sandbox` prepended on root Linux once shifted argv[2] and faked a broken peer library.
 import { dirname, join } from 'node:path'
-import { withoutSystemCa } from './child-env.mjs'
+import { childEnv } from './child-env.mjs'
 
 /** On the command line: smoke.mjs loads the app after `ready`, too late for the app to append it. */
 export const SMOKE_SWITCHES = ['--use-mock-keychain']
@@ -10,7 +10,7 @@ export const SMOKE_SWITCHES = ['--use-mock-keychain']
 export function smokeEnv(env, worktreesRoot) {
   const root = dirname(worktreesRoot)
   return {
-    ...withoutSystemCa(env),
+    ...childEnv(env),
     TEAMREE_WORKTREES_ROOT: worktreesRoot,
     CLAUDE_CONFIG_DIR: join(root, 'claude'),
     CODEX_HOME: join(root, 'codex')
