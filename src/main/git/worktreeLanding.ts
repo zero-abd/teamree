@@ -3,12 +3,19 @@
 
 import { accessSync, constants, statSync } from 'node:fs'
 import path from 'node:path'
-import type { WorktreeIssue, WorktreeLanding, WorktreeMerge, WorktreePullRequest } from '../../shared/entities'
+import type {
+  CheckFailure,
+  WorktreeIssue,
+  WorktreeLanding,
+  WorktreeMerge,
+  WorktreePullRequest
+} from '../../shared/entities'
 import { closesIssue } from '../../shared/issueClosing'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
 import { tryPushProjectBase } from './projectBase'
+import { failureExcerpt, failureLogArgs, readChecks, readReview } from './pullRequestChecks'
 import { assertRefShape } from './repository'
 import { bareRef, remoteForge, reviewUrl } from './reviewUrl'
 import { parseChangeRecords } from './worktreeChanges'
@@ -18,6 +25,7 @@ const GH_ENV = { GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_COLOR: 
 const SIGN_IN_TTL_MS = 5 * 60_000
 const PULL_REQUEST_TTL_MS = 60_000
 const MERGE_COMMITS_SHOWN = 50
+const PULL_REQUEST_FIELDS = 'number,url,state,isDraft,reviewDecision,statusCheckRollup'
 
 type PullRequest = NonNullable<WorktreeLanding['pullRequest']>
 
@@ -46,7 +54,7 @@ export function createGhProbe(locate: () => string | null, now: () => number = D
       const cached = pulls.get(branch)
       if (cached !== undefined && now() - cached.at < PULL_REQUEST_TTL_MS) return cached.pull
       const read = await gh
-        .tryRun({ args: ['pr', 'view', branch, '--json', 'number,url,state'], cwd, env: GH_ENV, timeoutMs: 30_000 })
+        .tryRun({ args: ['pr', 'view', branch, '--json', PULL_REQUEST_FIELDS], cwd, env: GH_ENV, timeoutMs: 30_000 })
         .catch(() => null)
       const pull = read?.exitCode === 0 ? parsePullRequest(read.stdout) : undefined
       // A failed read is not "no pull request"; only an answer is kept.
@@ -59,16 +67,49 @@ export function createGhProbe(locate: () => string | null, now: () => number = D
   }
 }
 
-/** `gh pr view --json number,url,state`, or undefined for anything else. */
+/** `gh pr view --json` with `PULL_REQUEST_FIELDS`, or undefined for anything else. */
 export function parsePullRequest(stdout: string): PullRequest | undefined {
   try {
-    const value = JSON.parse(stdout) as { number?: unknown; url?: unknown; state?: unknown }
+    const value = JSON.parse(stdout) as Record<string, unknown>
     const state = typeof value.state === 'string' ? value.state.toLowerCase() : ''
     if (typeof value.number !== 'number' || typeof value.url !== 'string') return undefined
     if (state !== 'open' && state !== 'merged' && state !== 'closed') return undefined
-    return { number: value.number, url: value.url, state }
+    const review = readReview(value.reviewDecision)
+    const checks = readChecks(value.statusCheckRollup)
+    return {
+      number: value.number,
+      url: value.url,
+      state,
+      ...(value.isDraft === true ? { draft: true } : {}),
+      ...(review === undefined ? {} : { review }),
+      ...(checks === undefined ? {} : { checks })
+    }
   } catch {
     return undefined
+  }
+}
+
+/** A failing check on the branch's pull request, with the tail of its failed log; refused without gh or such a check. */
+export async function readCheckFailure(
+  runner: GitRunner,
+  options: LandingOptions,
+  name: string
+): Promise<CheckFailure> {
+  const landing = await readLanding(runner, options)
+  const gh = landing.pullRequest === undefined ? null : await options.gh?.signedIn(options.worktreePath)
+  if (gh === null || gh === undefined) throw new GitServiceError(ErrorCode.Conflict, 'No pull request read with gh')
+  const check = landing.pullRequest?.checks?.list.find((each) => each.name === name && each.state === 'fail')
+  if (check === undefined) throw new GitServiceError(ErrorCode.Conflict, `${name} is not failing`)
+  const args = failureLogArgs(check.url)
+  const read =
+    args === null
+      ? null
+      : await gh.tryRun({ args, cwd: options.worktreePath, env: GH_ENV, timeoutMs: 60_000 }).catch(() => null)
+  return {
+    worktreeId: options.worktreeId,
+    name,
+    ...(check.url === undefined ? {} : { url: check.url }),
+    excerpt: read?.exitCode === 0 ? failureExcerpt(read.stdout, name) : ''
   }
 }
 

@@ -8,6 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import type {
   BranchList,
+  CheckFailure,
   CloneProgress,
   IssueList,
   Project,
@@ -90,7 +91,14 @@ import {
 import { pushWorktree } from './worktreePush'
 import { pullProjectBase, pushProjectBase, readProjectBase, type ProjectBaseOptions } from './projectBase'
 import { abortWorktreeUpdate, updateWorktree } from './worktreeUpdate'
-import { createGhProbe, createPullRequest, mergeIntoBase, readLanding, type GhProbe } from './worktreeLanding'
+import {
+  createGhProbe,
+  createPullRequest,
+  mergeIntoBase,
+  readCheckFailure,
+  readLanding,
+  type GhProbe
+} from './worktreeLanding'
 import { listIssues } from './issues'
 import { keptName } from './worktreeKeep'
 import { landedInBase, planCleanup, type CleanupRead } from './worktreeCleanup'
@@ -1312,14 +1320,19 @@ export class GitService {
     // The base ref belongs to the project. A worktree whose project is gone still
     // pushes; only the review link cannot be named.
     const project = this.#store.getProject(worktree.projectId)
-    return pushWorktree(this.#runner, {
-      worktreeId: worktree.id,
-      worktreePath: worktree.path,
-      branch: worktree.branch,
-      ...(project === undefined ? {} : { baseRef: worktree.baseRef ?? project.baseRef }),
-      ...(params.remote === undefined ? {} : { remote: params.remote }),
-      now: this.#now
-    })
+    try {
+      return await pushWorktree(this.#runner, {
+        worktreeId: worktree.id,
+        worktreePath: worktree.path,
+        branch: worktree.branch,
+        ...(project === undefined ? {} : { baseRef: worktree.baseRef ?? project.baseRef }),
+        ...(params.remote === undefined ? {} : { remote: params.remote }),
+        now: this.#now
+      })
+    } finally {
+      // A new head has new checks.
+      this.#gh?.forget(worktree.branch)
+    }
   }
 
   /**
@@ -1360,7 +1373,14 @@ export class GitService {
 
   /** Where this worktree's branch can land, and whether it already has. */
   async worktreeLanding(params: ParamsOf<'worktree.landing'>): Promise<WorktreeLanding> {
-    return readLanding(this.#runner, this.#landingOptions(params.worktreeId, 'landing'))
+    const options = this.#landingOptions(params.worktreeId, 'landing')
+    if (params.fresh === true) this.#gh?.forget(options.branch)
+    return readLanding(this.#runner, options)
+  }
+
+  /** A failing check on the worktree's pull request, with the tail of its log. */
+  async worktreeCheckFailure(params: ParamsOf<'worktree.checkFailure'>): Promise<CheckFailure> {
+    return readCheckFailure(this.#runner, this.#landingOptions(params.worktreeId, 'a check'), params.name)
   }
 
   /** A pull request for the worktree's published branch, or the host's page for one. */

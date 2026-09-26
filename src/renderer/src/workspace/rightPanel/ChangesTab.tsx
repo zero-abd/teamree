@@ -15,6 +15,7 @@ import { KIND_LABEL, KIND_LETTER } from './changeKinds'
 import { CommitFrom } from './CommitFrom'
 import { useCommitMessage } from './commitMessage'
 import { headerActions, landLabel, landNote, landOffer, pushOffer, type HeaderAction } from './landOffer'
+import { PullRequestChecks } from './PullRequestChecks'
 import type { PaneNode, Terminal, Worktree, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 import { fileColumnIn, isCommitLeaf, shownTabId } from '@shared/filePane'
 import { TokensLine } from './TokensLine'
@@ -190,6 +191,9 @@ export function ChangesTab(): React.JSX.Element | null {
             </button>
           )}
         </div>
+      ) : null}
+      {status && !status.missing && landing?.pullRequest !== undefined && landing.pullRequest.state !== 'merged' ? (
+        <PullRequestChecks worktreeId={worktreeId} pull={landing.pullRequest} />
       ) : null}
       {worktreeId === null
         ? null

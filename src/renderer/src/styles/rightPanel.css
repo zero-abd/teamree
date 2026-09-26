@@ -491,6 +491,93 @@
   color: var(--danger);
 }
 
+/* The pull request under the header: state, checks and review on one line, a row per check below. */
+.changes__pr {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding: var(--s2) var(--s4);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-xs);
+}
+
+.changes__prLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s2);
+  color: var(--fg-secondary);
+}
+
+.changes__prLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.changes__prLink:hover {
+  color: var(--fg);
+  text-decoration: underline;
+}
+
+.changes__prState {
+  color: var(--fg);
+}
+
+.changes__checks {
+  display: flex;
+  flex-direction: column;
+  max-height: 132px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.changes__check {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+  line-height: 20px;
+}
+
+.changes__checkGlyph {
+  flex: none;
+  width: 10px;
+  text-align: center;
+}
+
+.changes__checkName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-secondary);
+}
+
+.changes__sendFailure {
+  align-self: flex-start;
+  margin-top: var(--s1);
+}
+
+/* Red and green for checks that ended; one still running is ink, since amber is an agent asking. */
+.prcheck--fail {
+  color: var(--danger);
+}
+
+.prcheck--pass {
+  color: var(--success);
+}
+
+.prcheck--pending {
+  color: var(--fg-secondary);
+}
+
 .changes__updateFailed {
   flex: none;
   margin: 0;

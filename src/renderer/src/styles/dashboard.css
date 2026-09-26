@@ -135,10 +135,17 @@
 }
 
 .board-row__worktree {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+  color: var(--fg-secondary);
+}
+
+.board-row__worktreeName {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--fg-secondary);
 }
 
 /* The pane's last printed line, in the terminal's typeface, one line. */

@@ -265,6 +265,8 @@ describe('dispatcher', () => {
       'worktree.abortUpdate',
       'worktree.branches',
       'worktree.changes',
+      // Local: runs this machine's gh, with its credentials.
+      'worktree.checkFailure',
       'worktree.cleanMerged',
       'worktree.commit',
       'worktree.compare',

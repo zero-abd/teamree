@@ -15,6 +15,7 @@ import {
   type DotTone
 } from '../sidebar/agentRows'
 import { AnswerButtons } from '../sidebar/AnswerButtons'
+import { PullRequestMark } from '../sidebar/PullRequestMark'
 import { usePaneEvidence, useWatchEvidence } from '../sidebar/usePaneEvidence'
 import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
@@ -222,7 +223,10 @@ export function Dashboard(): React.JSX.Element {
                     <PaneGlyph agent={row.agent} />
                     <span className="board-row__label">{truncateName(row.label)}</span>
                   </span>
-                  <span className="board-row__worktree">{row.worktreeName}</span>
+                  <span className="board-row__worktree">
+                    <span className="board-row__worktreeName">{row.worktreeName}</span>
+                    <PullRequestMark pull={landings[row.worktreeId]?.pullRequest} />
+                  </span>
                   <span className="board-row__evidence">{row.evidence ?? ''}</span>
                   <span className={needsYou ? `board-row__state board-row__state--${state}` : 'board-row__state'}>
                     {TONE_LABEL[state]}

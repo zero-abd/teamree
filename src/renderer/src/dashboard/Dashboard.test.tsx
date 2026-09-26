@@ -537,6 +537,35 @@ describe('the Tasks view', () => {
     expect(cells()[0]).toBe('1.2M tok · ≈$3.10Σ 3.4M tok · ≈$9.00')
   })
 
+  it('carries each task’s pull request chip, in both views', () => {
+    const pull = (number: number, failing: number) => ({
+      worktreeId: `w${number}`,
+      branch: 'b',
+      base: 'main',
+      host: 'github' as const,
+      published: true,
+      unmerged: 1,
+      merged: false,
+      readAt: 0,
+      pullRequest: {
+        number,
+        url: `https://github.com/a/b/pull/${number}`,
+        state: 'open' as const,
+        checks: { passing: 1, failing, pending: 0, list: [] }
+      }
+    })
+    useWorkspaceStore.setState({ landings: { w1: pull(1, 0), w2: pull(2, 2) } })
+    const chips = (): string[] =>
+      [...document.querySelectorAll('.board-row')].map((row) => row.querySelector('.prchip')?.textContent ?? '')
+
+    const { unmount } = render(<Dashboard />)
+    expect(chips().sort()).toEqual(['PR #1 ✓', 'PR #2 ✗ 2'])
+    unmount()
+    useTaskTreeStore.setState({ boardMode: 'tasks' })
+    render(<Dashboard />)
+    expect(chips()).toEqual(['PR #1 ✓', 'PR #2 ✗ 2', ''])
+  })
+
   it('opens the worktree from its row', () => {
     useTaskTreeStore.setState({ boardMode: 'tasks' })
     render(<Dashboard />)

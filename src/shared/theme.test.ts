@@ -110,6 +110,13 @@ describe.each(BUILT_IN_THEMES.map((theme) => [theme.id, theme.name] as const))('
     expect(contrastRatio(rgb(palette['accent-bright']), chip)).toBeGreaterThanOrEqual(4.5)
   })
 
+  // A pull request's checks are drawn straight on the sidebar, the Changes panel and the board; the press tint cost red AA.
+  it.each(['bg-rail', 'bg-panel', 'bg-window'] as const)('prints check marks readably on %s', (ground) => {
+    for (const ink of ['success', 'danger', 'fg-secondary'] as const) {
+      expect(ratio(palette, ink, ground), ink).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
   it('draws a hairline that can be seen, and a strong one that can be seen more', () => {
     const line = ratio(palette, 'line', 'bg-window')
     const strong = ratio(palette, 'line-strong', 'bg-window')
