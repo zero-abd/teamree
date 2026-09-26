@@ -5,10 +5,12 @@
 // ($TEAMREE_STAND_IN_CLI, else $TEAMREE_CLI), reporting Stop and UserPromptSubmit as hooks would.
 //
 // Script lines, `#` for comments:
-//   after 2s ask parent "Which store?" options redis,postgres
-//   after 1s done "Added limiter. Tests pass. Nothing left." [failed]
-//   after 0s child tests ./child.script "Write the limiter tests"
-//   after 0s supervise 2              wait on children: answer their asks, until 2 are done
+//   ask parent "Which store?" options redis,postgres     each step starts when the last one ends
+//   done "Added limiter. Tests pass. Nothing left." [failed]
+//   child tests ./child.script "Write the limiter tests"
+//   supervise 2                        wait on children: answer their asks, until 2 are done
+//   after 2s say "…"                  a step can wait first; the steps and the task are one turn
+//   exit                               leave once this turn ends
 //   on "[teamree] ask" reply "postgres"
 //   actions also: note <to> "<text>", say "<text>", write <file> "<text>", screen <file>, work 2s
 
@@ -154,6 +156,9 @@ async function act(action, trigger = '') {
     }
     case 'supervise':
       return supervise(Number.parseInt(rest[0] ?? '1', 10))
+    case 'exit':
+      leaving = true
+      return
     default:
       out(`⏺ unknown action: ${verb}`)
   }
@@ -194,6 +199,8 @@ async function follow(text) {
 // One job at a time, reported as a turn: UserPromptSubmit before, Stop once nothing is left.
 let queue = Promise.resolve()
 let pending = 0
+/** Set by `exit`: the process ends with the turn it was set in. */
+let leaving = false
 function job(run) {
   if (pending === 0) hook('UserPromptSubmit')
   pending += 1
@@ -204,16 +211,23 @@ function job(run) {
       pending -= 1
       if (pending === 0) {
         hook('Stop')
+        if (leaving) process.exit(0)
         process.stdout.write('> ')
       }
     })
 }
 
-function received(prompt) {
+/** A prompt as the agent shows it, or null for an empty one. */
+function shown(prompt) {
   const text = prompt.replace(/\x1b\[20[01]~/g, '').trim()
-  if (text === '') return
+  if (text === '') return null
   out(`> ${text}`)
-  job(() => follow(text))
+  return text
+}
+
+function received(prompt) {
+  const text = shown(prompt)
+  if (text !== null) job(() => follow(text))
 }
 
 const { timeline, rules } = readScript()
@@ -228,15 +242,20 @@ const firstPrompt = process.argv
     return before === undefined || !['--settings', '--session-id', '--resume', '-r'].includes(before)
   })
   .at(-1)
-if (firstPrompt) received(firstPrompt)
-
-let elapsed = Promise.resolve()
-for (const step of timeline) {
-  elapsed = elapsed
-    .then(() => sleep(step.delayMs))
-    .then(() => new Promise((next) => job(() => act(step.action).finally(next))))
+// The task and the script's steps are one turn, as a real agent's first turn is: no Stop between
+// steps, so nothing is pasted into a prompt this process is not reading.
+if (firstPrompt || timeline.length > 0) {
+  job(async () => {
+    const task = firstPrompt === undefined ? null : shown(firstPrompt)
+    if (task !== null) await follow(task)
+    for (const step of timeline) {
+      if (step.delayMs > 0) await sleep(step.delayMs)
+      await act(step.action)
+    }
+  })
+} else {
+  process.stdout.write('> ')
 }
-if (timeline.length === 0 && !firstPrompt) process.stdout.write('> ')
 
 // Raw, so a paste arrives whole with its markers and Return is ours to read.
 let typed = ''
