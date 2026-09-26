@@ -144,21 +144,25 @@ describe('when there is nothing open', () => {
   })
 
   // First run: the two ways to a project, side by side; no task button until there is one.
-  it('welcomes a first run with the mark and the two ways to add a project', () => {
+  it('welcomes a first run with the mark and the three ways to add a project', () => {
     const chooseProjectFolder = vi.fn(() => Promise.resolve())
-    seed({ projects: [], chooseProjectFolder })
+    const newProject = vi.fn(() => Promise.resolve())
+    seed({ projects: [], chooseProjectFolder, newProject })
     mount()
     expect(document.querySelector('.welcome .brand__mark')).toBeTruthy()
     expect(screen.getByText('teamree')).toBeTruthy()
     expect(screen.queryByRole('heading')).toBeNull()
     const actions = document.querySelector('.welcome__actions') as HTMLElement
     expect([...actions.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
+      'New Project…',
       'Open Folder…',
       'Clone…'
     ])
-    const open = screen.getByRole('button', { name: 'Open Folder…' })
-    expect(open.className).toContain('button--primary')
-    fireEvent.click(open)
+    const create = screen.getByRole('button', { name: 'New Project…' })
+    expect(create.className).toContain('button--primary')
+    fireEvent.click(create)
+    expect(newProject).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: 'Open Folder…' }))
     expect(chooseProjectFolder).toHaveBeenCalledOnce()
     expect(openDialog).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Clone…' }))

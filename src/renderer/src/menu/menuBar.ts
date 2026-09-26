@@ -140,7 +140,8 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'expand-pane': { section: 'window' },
 
   // And the Help menu, which every macOS app has and this one did not.
-  'open-help': { section: 'help' }
+  'open-help': { section: 'help' },
+  'open-setup': { section: 'help' }
 }
 
 /** Insertion order of the record above, which is the order inside each menu. */

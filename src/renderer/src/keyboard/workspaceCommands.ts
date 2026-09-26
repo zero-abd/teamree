@@ -283,6 +283,7 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
     case 'add-project':
     case 'clone-repository':
     case 'open-help':
+    case 'open-setup':
     case 'focus-sidebar':
     case 'focus-panes':
     case 'focus-next-region':
@@ -440,6 +441,9 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       break
     case 'open-help':
       store.toggleHelp()
+      break
+    case 'open-setup':
+      store.openDialog({ kind: 'setup' })
       break
     case 'bigger-text':
       store.setTerminalFontSize(fontSize(store) + 1)

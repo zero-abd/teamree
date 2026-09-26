@@ -397,7 +397,8 @@ describe('running a command', () => {
       ['add-project', 'chooseProjectFolder', []],
       ['clone-repository', 'openDialog', [{ kind: 'clone-project' }]],
       ['open-settings', 'toggleSettings', []],
-      ['open-help', 'toggleHelp', []]
+      ['open-help', 'toggleHelp', []],
+      ['open-setup', 'openDialog', [{ kind: 'setup' }]]
     ]
 
     for (const [command, method, args] of cases) {
@@ -473,6 +474,7 @@ describe('running a command', () => {
           'toggle-diff-whitespace',
           'open-settings',
           'open-help',
+          'open-setup',
           'add-project',
           'clone-repository',
           'bigger-text',

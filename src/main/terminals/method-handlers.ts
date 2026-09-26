@@ -7,7 +7,7 @@ import { Params } from '../../shared/methods'
 import type { ParamsOf, ResultOf, TerminalEvent } from '../../shared/methods'
 import { notFound, TerminalServiceError } from './service-error'
 import { ErrorCode } from '../../shared/protocol'
-import { findInstalledAgents } from './agent-discovery'
+import { findInstalledAgents, withVersions } from './agent-discovery'
 import { listConversations } from './conversation-list'
 import { TerminalSessionManager } from './session-manager'
 import type { StreamChannel, TerminalSessionManagerOptions } from './session-manager'
@@ -105,7 +105,7 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
   const handlers: TerminalHandlers = {
     'terminal.list': async (params) => manager.list(params.worktreeId),
     // Probed, not cached: an agent installed without a restart still appears.
-    'agent.list': async () => findInstalledAgents(),
+    'agent.list': async (params) => (params.versions ? withVersions(findInstalledAgents()) : findInstalledAgents()),
     'agent.conversations': async (params) => {
       const cwd = options.resolveWorktreeCwd?.(params.worktreeId)
       if (cwd === undefined) throw notFound(`no such worktree: ${params.worktreeId}`)

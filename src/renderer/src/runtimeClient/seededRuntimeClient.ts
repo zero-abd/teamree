@@ -1296,9 +1296,9 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
     'teamwork.closeNote': () => ({ closed: false }),
 
-    'agent.list': () => [
-      { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' },
-      { kind: 'codex', command: 'codex', binary: '/usr/local/bin/codex' }
+    'agent.list': ({ versions }) => [
+      { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude', ...(versions ? { version: '2.1.3' } : {}) },
+      { kind: 'codex', command: 'codex', binary: '/usr/local/bin/codex', ...(versions ? { version: '0.40.0' } : {}) }
     ],
     'agent.conversations': () => [],
 

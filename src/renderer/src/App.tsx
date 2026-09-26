@@ -28,6 +28,7 @@ import { ConfirmKeepDialog } from './dialogs/ConfirmKeepDialog'
 import { ConfirmRebaseDialog } from './dialogs/ConfirmRebaseDialog'
 import { MoveUnderDialog } from './dialogs/MoveUnderDialog'
 import { FirstRunCliOffer } from './dialogs/FirstRunCliOffer'
+import { SetupDialog } from './workspace/SetupDialog'
 import { InstallCliDialog } from './dialogs/InstallCliDialog'
 import { ProjectRefusedDialog } from './dialogs/ProjectRefusedDialog'
 import { AppearanceSheet } from './settings/AppearanceSheet'
@@ -203,6 +204,7 @@ export function App(): React.JSX.Element {
       ) : null}
       {dialog?.kind === 'clone-project' ? <CloneProjectDialog /> : null}
       {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
+      {dialog?.kind === 'setup' ? <SetupDialog /> : null}
       {dialog?.kind === 'new-task' ? (
         <TaskComposerDialog
           projectId={dialog.projectId}

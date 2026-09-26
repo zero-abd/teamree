@@ -1,6 +1,7 @@
 // Which coding agents this machine can actually run. A probe, not a setting:
 // a list the user fills in goes stale the first time they install something.
 
+import { execFile } from 'node:child_process'
 import { accessSync, constants, statSync } from 'node:fs'
 import path from 'node:path'
 import { AGENT_KINDS, agentExecutables, type AgentKind } from './agent-command'
@@ -12,6 +13,7 @@ export type InstalledAgent = {
   command: string
   /** Where it was found, for a tooltip and for telling two installs apart. */
   binary: string
+  version?: string
 }
 
 export type DiscoveryOptions = {
@@ -64,6 +66,41 @@ export function findInstalledAgents(options: DiscoveryOptions = {}): InstalledAg
     }
   }
   return found
+}
+
+/** What `<binary> --version` printed, stdout and stderr together; empty when it failed. */
+export type VersionRunner = (binary: string) => Promise<string>
+
+/** The agents with the version each reports; one that does not answer is left without. */
+export function withVersions(
+  agents: readonly InstalledAgent[],
+  run: VersionRunner = runVersion
+): Promise<InstalledAgent[]> {
+  return Promise.all(
+    agents.map(async (agent) => {
+      const version = await agentVersion(agent.binary, run)
+      return version === undefined ? agent : { ...agent, version }
+    })
+  )
+}
+
+export async function agentVersion(binary: string, run: VersionRunner = runVersion): Promise<string | undefined> {
+  return parseAgentVersion(await run(binary).catch(() => ''))
+}
+
+/** The first dotted number, e.g. `2.1.3` out of `2.1.3 (Claude Code)` or `codex-cli 0.40.0`. */
+export function parseAgentVersion(output: string): string | undefined {
+  return /\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?/.exec(output)?.[0]
+}
+
+function runVersion(binary: string): Promise<string> {
+  return new Promise((resolve) => {
+    // The login shell's PATH: a `#!/usr/bin/env node` CLI needs node, which a Dock launch does not have.
+    const env = { ...process.env, PATH: agentSearchPath() }
+    execFile(binary, ['--version'], { timeout: 5_000, env, windowsHide: true }, (error, stdout, stderr) => {
+      resolve(error ? '' : `${stdout}\n${stderr}`)
+    })
+  })
 }
 
 function locate(

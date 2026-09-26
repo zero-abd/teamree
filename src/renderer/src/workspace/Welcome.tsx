@@ -1,5 +1,5 @@
-// The front door, with no worktree open: the mark, then the two ways to a project, or New Task once there
-// is one (the sidebar's + adds more; its chord is on its tooltip), and the chords. No agent buttons and no headline.
+// The front door, with no worktree open: the mark, then the three ways to a project and what setup found, or
+// New Task once there is one (the sidebar's + adds more; its chord is on its tooltip), and the chords. No headline.
 
 import type { Project } from '@shared/entities'
 import type { PlatformModifier } from '../keyboard/platformModifier'
@@ -7,6 +7,7 @@ import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortc
 import { menuLabel } from '../menu/menuBar'
 import { BrandMark } from '../shell/Brand'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { SetupRows } from './SetupRows'
 
 /** The chords worth knowing first, as commands so label and key come from the menu's table. */
 const SHORTCUT_COMMANDS: readonly WorkspaceCommand[] = ['open-palette', 'toggle-sidebar']
@@ -21,6 +22,7 @@ export function Welcome({
 }): React.JSX.Element {
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const chooseProjectFolder = useWorkspaceStore((state) => state.chooseProjectFolder)
+  const newProject = useWorkspaceStore((state) => state.newProject)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
   const rightPanelOpen = useWorkspaceStore((state) => state.rightPanelOpen)
 
@@ -37,11 +39,10 @@ export function Welcome({
       <div className="welcome__actions">
         {project === undefined ? (
           <>
-            <button
-              type="button"
-              className="button button--primary button--lead"
-              onClick={() => void chooseProjectFolder()}
-            >
+            <button type="button" className="button button--primary button--lead" onClick={() => void newProject()}>
+              New Project…
+            </button>
+            <button type="button" className="button button--lead" onClick={() => void chooseProjectFolder()}>
               Open Folder…
             </button>
             <button type="button" className="button button--lead" onClick={() => openDialog({ kind: 'clone-project' })}>
@@ -59,6 +60,8 @@ export function Welcome({
           </button>
         )}
       </div>
+
+      {project === undefined ? <SetupRows omit="project" /> : null}
 
       <dl className="welcome__shortcuts">
         {SHORTCUT_COMMANDS.map((command) => (

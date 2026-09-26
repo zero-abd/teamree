@@ -479,6 +479,7 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'commit-changes': 'commit changes diff git stage staged message files review',
   'push-worktree': 'push send remote origin upload publish branch ahead',
   'open-help': 'help shortcuts keys keyboard worktree cli docs how what',
+  'open-setup': 'setup welcome first run onboarding agents default notifications test cli path',
   'bigger-text': 'bigger text font size zoom in larger increase terminal',
   'smaller-text': 'smaller text font size zoom out decrease terminal',
   'actual-size': 'actual size reset text font default zoom terminal'

@@ -330,6 +330,80 @@
   gap: var(--s2);
 }
 
+/* What setup found: a mark, the name, what is there, then the buttons. One grid, so the
+   columns line up down the list in the welcome and in the Setup sheet alike. */
+.setup {
+  display: grid;
+  grid-template-columns: 8px max-content minmax(0, 1fr) max-content;
+  gap: var(--s3) var(--s3);
+  align-items: center;
+  width: min(520px, 100%);
+  margin: var(--s4) 0 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.modal:has(.setup) {
+  width: min(560px, calc(100vw - 48px));
+}
+
+.modal .setup {
+  width: 100%;
+  margin: 0 0 var(--s4);
+}
+
+.setup__row {
+  display: contents;
+}
+
+.setup__mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.setup__mark--done {
+  background: var(--success);
+}
+
+.setup__mark--todo {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+.setup__mark--waiting {
+  background: var(--line-strong);
+}
+
+.setup__label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.setup__value {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1);
+  align-items: center;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.setup__picker {
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.setup__actions {
+  display: flex;
+  gap: var(--s1);
+  align-items: center;
+  justify-content: flex-end;
+}
+
 /* Label on the left, key on the right, the two columns as wide as their widest
    entry: a list read down, not a legend read across. The keycaps are the
    status bar's — quiet, and the same size as the ones already on screen. */

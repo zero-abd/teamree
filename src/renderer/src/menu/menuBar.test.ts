@@ -189,7 +189,7 @@ describe('the menu bar is built from the table the keyboard reads', () => {
     ])
     expect(sectionOrder('text')).toEqual(['actual-size', 'bigger-text', 'smaller-text'])
     expect(sectionOrder('edit')).toEqual(['find-in-pane'])
-    expect(sectionOrder('help')).toEqual(['open-help'])
+    expect(sectionOrder('help')).toEqual(['open-help', 'open-setup'])
   })
 
   // Every section name must be one main actually builds, or the item is never seen.
@@ -263,6 +263,7 @@ describe('what the menu bar says can be done', () => {
       'add-project': true,
       'clone-repository': true,
       'open-help': true,
+      'open-setup': true,
       'bigger-text': true,
       'smaller-text': true,
       'actual-size': false
