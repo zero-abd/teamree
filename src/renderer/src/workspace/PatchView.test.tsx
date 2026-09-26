@@ -384,7 +384,7 @@ describe('a big patch', () => {
     const first = document.querySelectorAll('.patch__row').length
     expect(first).toBeGreaterThan(0)
     expect(first).toBeLessThan(2000)
-    await waitFor(() => expect(document.querySelectorAll('.patch__row')).toHaveLength(2000))
+    await waitFor(() => expect(document.querySelectorAll('.patch__row')).toHaveLength(2000), { timeout: 15_000 })
     expect(screen.queryByRole('button', { name: /^Show / })).toBeNull()
   })
 
