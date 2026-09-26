@@ -443,8 +443,8 @@ export const Params = {
     dryRun: z.boolean().optional()
   }),
 
-  /** Coding agents found on PATH, so a pane can start one without being told. */
-  agentList: z.object({}),
+  /** Coding agents found on PATH, so a pane can start one untold; `versions` also runs each `--version`. */
+  agentList: z.object({ versions: z.boolean().optional() }),
   /** A worktree's past Claude Code and Codex conversations, newest first, at most 20. Local only. */
   agentConversations: z.object({ worktreeId: z.string().min(1) }),
 

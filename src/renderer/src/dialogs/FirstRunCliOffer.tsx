@@ -12,10 +12,12 @@ export function FirstRunCliOffer(): React.JSX.Element | null {
   const consent = useWorkspaceStore((state) => state.consent)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const dismissCliPrompt = useWorkspaceStore((state) => state.dismissCliPrompt)
+  // With no project the welcome's Command Line row is on screen and says the same.
+  const welcoming = useWorkspaceStore((state) => state.projects.length === 0)
 
   const offer = cliOffer(status)
   // Nothing to say, or something modal on top.
-  if (offer === null || modalOnScreen({ dialog, consent })) return null
+  if (offer === null || welcoming || modalOnScreen({ dialog, consent })) return null
 
   return (
     <aside className="cli-offer" aria-label="Put the teamree CLI on your PATH">

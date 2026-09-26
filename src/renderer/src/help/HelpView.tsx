@@ -25,6 +25,7 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
   const toggleHelp = useWorkspaceStore((state) => state.toggleHelp)
   const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
   const loadCli = useWorkspaceStore((state) => state.loadCli)
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
   const rightPanelOpen = useWorkspaceStore((state) => state.rightPanelOpen)
 
@@ -42,6 +43,11 @@ export function HelpView({ modifier }: { modifier: PlatformModifier }): React.JS
       title={HELP_TITLE}
       onClose={toggleHelp}
       closeTitle={`Back to the panes · ${shortcutHint('open-help', modifier)}`}
+      actions={
+        <button type="button" className="button button--small" onClick={() => openDialog({ kind: 'setup' })}>
+          {menuLabel('open-setup')}
+        </button>
+      }
     >
       <div className="help__body">
         {/* The chords, and every one of them comes from the table the key

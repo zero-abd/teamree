@@ -2,7 +2,7 @@ import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { findInstalledAgents } from './agent-discovery'
+import { agentVersion, findInstalledAgents, parseAgentVersion, withVersions } from './agent-discovery'
 import { resetLoginShellPathCache } from './shell-environment'
 
 /** A fake PATH where only the named files exist and are runnable. */
@@ -165,5 +165,47 @@ describe('findInstalledAgents without a PATH of its own', () => {
     expect(findInstalledAgents({ isExecutable: claudeInBoth })).toEqual([
       { kind: 'claude', command: 'claude', binary: INHERITED_CLAUDE }
     ])
+  })
+})
+
+describe('agent versions', () => {
+  it('reads the version out of what each CLI prints', () => {
+    expect(parseAgentVersion('2.1.3 (Claude Code)\n')).toBe('2.1.3')
+    expect(parseAgentVersion('codex-cli 0.40.0')).toBe('0.40.0')
+    expect(parseAgentVersion('v1.0.0-beta.2')).toBe('1.0.0-beta.2')
+    expect(parseAgentVersion('no version here')).toBeUndefined()
+    expect(parseAgentVersion('')).toBeUndefined()
+  })
+
+  it('adds a version to each agent that answers, and leaves the rest without one', async () => {
+    const asked: string[] = []
+    const found = await withVersions(
+      [
+        { kind: 'claude', command: 'claude', binary: '/bin/claude' },
+        { kind: 'codex', command: 'codex', binary: '/bin/codex' }
+      ],
+      async (binary) => {
+        asked.push(binary)
+        return binary === '/bin/claude' ? '2.1.3 (Claude Code)' : ''
+      }
+    )
+    expect(asked).toEqual(['/bin/claude', '/bin/codex'])
+    expect(found).toEqual([
+      { kind: 'claude', command: 'claude', binary: '/bin/claude', version: '2.1.3' },
+      { kind: 'codex', command: 'codex', binary: '/bin/codex' }
+    ])
+  })
+
+  it.skipIf(process.platform === 'win32')('runs the binary with --version', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'agent-version-'))
+    try {
+      const binary = path.join(directory, 'codex')
+      await writeFile(binary, '#!/bin/sh\n[ "$1" = "--version" ] && echo "codex-cli 0.40.0"\n')
+      await chmod(binary, 0o755)
+      expect(await agentVersion(binary)).toBe('0.40.0')
+      expect(await agentVersion(path.join(directory, 'missing'))).toBeUndefined()
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
   })
 })

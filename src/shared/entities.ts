@@ -866,6 +866,8 @@ export type InstalledAgent = {
   command: string
   /** Where it was found. */
   binary: string
+  /** What `--version` printed, when asked for and readable. */
+  version?: string
 }
 
 /**

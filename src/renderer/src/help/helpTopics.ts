@@ -61,6 +61,7 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
   'add-project': 'app',
   'clone-repository': 'app',
   'open-help': 'app',
+  'open-setup': 'app',
   'bigger-text': 'app',
   'smaller-text': 'app',
   'actual-size': 'app',

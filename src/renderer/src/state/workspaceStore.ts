@@ -191,6 +191,8 @@ export type DialogState =
   | { kind: 'project-refused'; folder: string; refusal: ProjectAddRefusal }
   | { kind: 'clone-project' }
   | { kind: 'install-cli' }
+  /** Help's Setup…: the welcome's rows, with a project already added. */
+  | { kind: 'setup' }
   /** `parentId`: a child task of that worktree; `fromIssue`: opens on the issue picker; `task`: its starting text. */
   | { kind: 'new-task'; projectId: string; parentId?: string; fromIssue?: true; task?: string }
   /** `files`: ⌘P, only the worktree's files. */
@@ -548,6 +550,8 @@ type WorkspaceState = {
   addProject: (path: string, name?: string, init?: boolean) => Promise<ProjectAddRefusal | null>
   /** The OS folder picker, then `addProject`; a refusal opens its dialog. */
   chooseProjectFolder: () => Promise<void>
+  /** A folder picked or made in the picker, `git init` in it, then added. */
+  newProject: () => Promise<void>
   /** Clones and adds; answers the one line to show when it did not happen, null when it did. */
   cloneProject: (url: string, path: string) => Promise<string | null>
   /** Creates the worktree, waits for it, then starts the agent in it. */
@@ -717,6 +721,8 @@ type WorkspaceState = {
 
   /** Reads where the CLI is and what is at its destination. */
   loadCli: () => Promise<void>
+  /** Probes the agents again, with each one's version. */
+  loadAgents: () => Promise<void>
   /** Links the CLI into /usr/local/bin, asking for an administrator password only when needed. */
   installCli: () => Promise<void>
   /** Records that this installation has been asked, so the first-run offer is made once. Declining and accepting both come here. */
@@ -903,6 +909,23 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
   // One OS sheet at a time: a second press while it is up would queue another.
   let picking = false
+
+  /** An OS folder picker, then `addProject`; a refusal opens its dialog. */
+  async function addPicked(pick: () => Promise<string | null>, init: boolean): Promise<void> {
+    if (picking) return
+    picking = true
+    let folder: string | null = null
+    try {
+      folder = await pick()
+    } catch {
+      notify('Could not open the folder picker')
+    } finally {
+      picking = false
+    }
+    if (!folder) return
+    const refusal = await (init ? get().addProject(folder, undefined, true) : get().addProject(folder))
+    if (refusal) set({ dialog: { kind: 'project-refused', folder, refusal } })
+  }
 
   // The main process waits on this answer, so it is always settled: answered, replaced or dismissed.
   let leaving: ((proceed: boolean) => void) | null = null
@@ -1736,21 +1759,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       return null
     },
 
-    async chooseProjectFolder() {
-      if (picking) return
-      picking = true
-      let folder: string | null = null
-      try {
-        folder = await window.teamree.selectProjectFolder()
-      } catch {
-        notify('Could not open the folder picker')
-      } finally {
-        picking = false
-      }
-      if (!folder) return
-      const refusal = await get().addProject(folder)
-      if (refusal) set({ dialog: { kind: 'project-refused', folder, refusal } })
-    },
+    chooseProjectFolder: () => addPicked(() => window.teamree.selectProjectFolder(), false),
+
+    // The picker that can make a folder, since a new project usually starts as one.
+    newProject: () => addPicked(() => window.teamree.chooseFolder(window.teamree.homeDir), true),
 
     async cloneProject(url, path) {
       try {
@@ -2885,6 +2897,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         set({ cliError: error instanceof Error ? error.message : String(error) })
       } finally {
         set({ cliPending: false })
+      }
+    },
+
+    async loadAgents() {
+      try {
+        set({ agents: await runtimeClient.call('agent.list', { versions: true }), agentsProbed: true })
+      } catch {
+        // Never fatal; the startup read stands.
       }
     },
 

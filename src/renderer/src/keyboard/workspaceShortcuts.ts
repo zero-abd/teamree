@@ -47,6 +47,7 @@ export type WorkspaceCommand =
   | 'commit-changes'
   | 'push-worktree'
   | 'open-help'
+  | 'open-setup'
   | 'bigger-text'
   | 'smaller-text'
   | 'actual-size'
@@ -119,6 +120,7 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'push-worktree', title: 'Push' },
   // Unshifted slash: shift+slash yields `?`, whose key name is not this one.
   { command: 'open-help', chord: { key: '/' }, title: 'Shortcuts' },
+  { command: 'open-setup', title: 'Setup…' },
   // Terminal text, not the window: `commandForEvent` also reads `+` as `=`.
   { command: 'bigger-text', chord: { key: '=' }, title: 'Bigger Text' },
   { command: 'smaller-text', chord: { key: '-' }, title: 'Smaller Text' },
