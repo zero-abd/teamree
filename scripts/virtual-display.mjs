@@ -1,5 +1,5 @@
 // Whether Electron needs a virtual display here (no X server kills it with SIGSEGV), and what to launch
-// it with. There is no CI, so the smoke gate must run in headless Linux containers; macOS never fires this.
+// it with, for a smoke run in a headless Linux container; macOS never fires this.
 import { existsSync } from 'node:fs'
 import { delimiter, join } from 'node:path'
 

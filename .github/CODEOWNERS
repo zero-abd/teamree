@@ -1,0 +1,8 @@
+* @zero-abd
+
+/.github/ @zero-abd
+/scripts/release* @zero-abd
+/scripts/*sign* @zero-abd
+/src/main/updates/ @zero-abd
+/package.json @zero-abd
+/package-lock.json @zero-abd

@@ -29,10 +29,13 @@ describe('whether the swap would go through', () => {
     expect(readdirSync(join(bundle, 'Contents'))).toEqual(['MacOS'])
   })
 
-  it('says macOS refused, with the way to Settings, when the bundle cannot be written', async () => {
-    expect(spawnSync('/usr/bin/chflags', ['uchg', join(bundle, 'Contents')]).status).toBe(0)
-    expect(await swapBlock(bundle)).toEqual({ problem: expect.stringMatching(/macOS/), settings: true })
-  })
+  it.runIf(process.platform === 'darwin')(
+    'says macOS refused, with the way to Settings, when the bundle cannot be written',
+    async () => {
+      expect(spawnSync('/usr/bin/chflags', ['uchg', join(bundle, 'Contents')]).status).toBe(0)
+      expect(await swapBlock(bundle)).toEqual({ problem: expect.stringMatching(/macOS/), settings: true })
+    }
+  )
 
   it('says the folder is read-only, with no Settings, when nothing can be moved in it', async () => {
     chmodSync(join(root, 'Applications'), 0o555)

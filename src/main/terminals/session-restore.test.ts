@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Layout } from '../../shared/entities'
 import type { TerminalEvent } from '../../shared/methods'
 import { MAX_RECORD_BYTES, ScrollbackArchive } from '../store/scrollbackArchive'
@@ -267,6 +267,7 @@ describePty('restoring terminals across a restart', () => {
   const managers: TerminalSessionManager[] = []
 
   afterEach(async () => {
+    vi.unstubAllEnvs()
     await Promise.all(managers.splice(0).map((manager) => manager.shutdown()))
     await Promise.all(created.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
   })
@@ -926,6 +927,8 @@ describePty('restoring terminals across a restart', () => {
     created.push(base)
     // An existing, empty store is what makes a missing file mean "absent" rather than "unknown".
     await mkdir(path.join(base, '.claude', 'projects'), { recursive: true })
+    // vitest.config.ts points the store elsewhere, and whatever earlier runs left there would answer instead.
+    vi.stubEnv('CLAUDE_CONFIG_DIR', path.join(base, '.claude'))
     return {
       evidence: (question) => conversationOnDisk(question, base),
       recordConversation: async (cwd, sessionId) => {
