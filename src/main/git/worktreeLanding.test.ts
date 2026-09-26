@@ -108,6 +108,18 @@ describe('worktree landing', () => {
     expect(landing).toMatchObject({ host: null, published: false, merged: false, unmerged: 0, base: 'main' })
   })
 
+  it('says whether there is a remote to publish to', async () => {
+    const { service, projectId } = await setup()
+    const worktree = await service.whenSettled((await service.createWorktree({ projectId, name: 'Hub' })).id)
+    expect((await service.worktreeLanding({ worktreeId: worktree.id })).remote).toBe(true)
+
+    const repo = await createTempRepo()
+    repos.push(repo)
+    const local = await service.addProject({ path: repo.repoPath })
+    const alone = await service.whenSettled((await service.createWorktree({ projectId: local.id, name: 'Alone' })).id)
+    expect(await service.worktreeLanding({ worktreeId: alone.id })).toMatchObject({ host: null, remote: false })
+  })
+
   it('counts the commits the base lacks, and sees the branch once it is published', async () => {
     const context = await setup()
     const worktree = await worktreeWithCommit(context)

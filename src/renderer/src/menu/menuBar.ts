@@ -152,7 +152,7 @@ export const MENU_ORDER = ORDER as readonly WorkspaceCommand[]
 
 /**
  * What this command is called in the menu, palette and Help: the table's title unless the menu has the
- * platform's word for it. With `panels`, a panel toggle says Show or Hide as the panel stands.
+ * platform's word for it. With `panels`, a panel toggle says Show or Hide, and Push says Publish Branch, as things stand.
  */
 export function menuLabel(command: WorkspaceCommand, panels?: PanelState): string {
   return (
@@ -163,13 +163,17 @@ export function menuLabel(command: WorkspaceCommand, panels?: PanelState): strin
   )
 }
 
-/** Whether each side panel is on screen; absent reads as shown. */
-export type PanelState = Pick<CommandState, 'sidebarVisible' | 'rightPanelOpen'>
+/** Whether each side panel is on screen, absent reading as shown, and what the worktree on screen tracks. */
+export type PanelState = Pick<CommandState, 'sidebarVisible' | 'rightPanelOpen'> &
+  Partial<Pick<CommandState, 'statuses' | 'activeWorktreeId'>>
 
-/** Finder's wording: a panel's toggle names what choosing it does now. Null for every other command. */
+/** Finder's wording: a toggle names what choosing it does now. Null for every other command. */
 function panelLabel(command: WorkspaceCommand, panels: PanelState): string | null {
   if (command === 'toggle-sidebar') return panels.sidebarVisible === false ? 'Show Sidebar' : 'Hide Sidebar'
   if (command === 'toggle-right-panel') return panels.rightPanelOpen === false ? 'Show Right Panel' : 'Hide Right Panel'
+  if (command === 'push-worktree' && panels.activeWorktreeId) {
+    return panels.statuses?.[panels.activeWorktreeId]?.upstream === null ? 'Publish Branch' : null
+  }
   return null
 }
 

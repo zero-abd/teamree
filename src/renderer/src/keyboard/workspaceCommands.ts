@@ -28,8 +28,10 @@ export type CommandState = {
   focusedWatchId: string | null
   /** What git last said about each worktree; only Commit and Push read it, from the header's counts. */
   statuses: Readonly<Record<string, Partial<WorktreeStatus>>>
-  /** A push already in flight, which is the one thing that makes Push inert. */
+  /** A push already in flight, which makes Push inert. */
   pushing: boolean
+  /** Whether each worktree's repository has a remote to push to; absent reads as yes. */
+  landings?: Readonly<Record<string, { remote?: boolean }>>
   /** Files differing from each worktree's base; absent reads as none. */
   branchChanges?: Readonly<Record<string, { total: number }>>
   /** A markdown editor holds the keyboard; ⌘B and ⌘E are bold and code there. */
@@ -253,6 +255,7 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
     case 'push-worktree':
       // Nothing already in flight: `pushActiveWorktree` returns early while one is.
       if (state.pushing) return 'pushing'
+      if (state.activeWorktreeId && state.landings?.[state.activeWorktreeId]?.remote === false) return 'no remote'
       return unless((activeStatus(state)?.ahead ?? 0) > 0, 'nothing to push')
     case 'toggle-sidebar':
     case 'open-dashboard':

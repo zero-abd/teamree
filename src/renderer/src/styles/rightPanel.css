@@ -410,6 +410,20 @@
   border-bottom: 1px solid var(--line);
 }
 
+.changes__more {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 6px;
+}
+
+.changes__more svg {
+  width: 12px;
+  height: 12px;
+  fill: currentcolor;
+}
+
 .changes__ref {
   display: flex;
   flex: 1;

@@ -8,9 +8,9 @@ import { isViewedRow } from '../../review/reviewModel'
 import { useReviewStore } from '../../review/reviewStore'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { openInBrowser } from '../../shell/openInBrowser'
-import { commitScope, useWorkspaceStore, type PushState } from '../../state/workspaceStore'
+import { commitScope, useWorkspaceStore } from '../../state/workspaceStore'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
-import { landLabel, landOffer, type LandOffer } from './landOffer'
+import { headerActions, landLabel, landNote, landOffer, pushOffer, type HeaderAction } from './landOffer'
 import type { PaneNode, Terminal, Worktree, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 import { fileColumnIn, isCommitLeaf, shownTabId } from '@shared/filePane'
 
@@ -59,6 +59,7 @@ export function ChangesTab(): React.JSX.Element | null {
   const viewed = useReviewStore((state) => (worktreeId ? state.viewed[worktreeId] : undefined))
   const reviewBranch = useReviewStore((state) => state.reviewBranch)
   const [menu, setMenu] = useState<{ path: string; at: RowMenuAnchor } | null>(null)
+  const [moreAt, setMoreAt] = useState<{ at: RowMenuAnchor; opener: HTMLElement } | null>(null)
   // Per worktree: the panel is not remounted on tab change, and a message could land on the wrong diff.
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const message = draftFor(drafts, worktreeId)
@@ -87,16 +88,41 @@ export function ChangesTab(): React.JSX.Element | null {
 
   const land = midway === undefined ? landOffer(landing, status) : null
   // Nothing is pushed from the middle of a rebase, nor once the branch has landed.
-  const pushed = midway === undefined && land?.kind !== 'merged' ? pushOffer(status, push) : null
-  // A pull request button is the review page, and more.
-  const offer = pushed?.kind === 'review' && land !== null ? null : pushed
-  const offersUpdate = updateFrom(status, base, child) !== null && conflictRows.length === 0
-  // One primary at a time: commit what is uncommitted first, then send it, then land it.
-  const pushIsNext = rows.length === 0 && (status?.ahead ?? 0) > 0 && land?.kind !== 'merge'
-  const landIsNext = rows.length === 0 && !pushIsNext
-  const landNow = (next: LandOffer): void => {
-    if (next.kind === 'merge') openDialog({ kind: 'confirm-merge', worktreeId })
-    else if (next.kind !== 'merged') void createPullRequest(worktreeId)
+  const pushed = midway === undefined && land?.kind !== 'merged' ? pushOffer(status, push, landing?.remote) : null
+  const header = headerActions({
+    land,
+    push: pushed,
+    updateFrom: conflictRows.length === 0 ? updateFrom(status, base, child) : null,
+    uncommitted: rows.length > 0,
+    ahead: status?.ahead ?? 0
+  })
+  const shown = header.shown
+  const labelOf = (action: HeaderAction): string => {
+    if (action.kind === 'update') return updating === worktreeId ? 'Updating…' : `Update from ${action.from}`
+    if (action.kind === 'land') {
+      return action.offer.kind === 'create-pr' && openingPullRequest ? 'Creating…' : landLabel(action.offer)
+    }
+    if (action.offer.kind === 'review') return 'Open review'
+    return PUSH_LABEL[action.offer.kind][push?.phase === 'pushing' ? 1 : 0]
+  }
+  const busy = (action: HeaderAction): boolean =>
+    action.kind === 'update'
+      ? updating !== null
+      : action.kind === 'push'
+        ? action.offer.kind !== 'review' && pushing
+        : action.offer.kind === 'create-pr' && openingPullRequest
+  // A merge with uncommitted work runs: its dialog commits first. Anything else noted is blocked.
+  const blockedBy = (action: HeaderAction): string | undefined =>
+    action.kind === 'land' && !(action.offer.kind === 'merge' && action.offer.uncommitted !== undefined)
+      ? landNote(action.offer)
+      : undefined
+  const act = (action: HeaderAction): void => {
+    if (action.kind === 'update') void updateWorktree(worktreeId)
+    else if (action.kind === 'push') {
+      if (action.offer.kind === 'review') openInBrowser(action.offer.url)
+      else void pushActiveWorktree()
+    } else if (action.offer.kind === 'merge') openDialog({ kind: 'confirm-merge', worktreeId })
+    else void createPullRequest(worktreeId)
   }
   const discard = (path: string): void => openDialog({ kind: 'confirm-discard', worktreeId, path })
 
@@ -116,30 +142,6 @@ export function ChangesTab(): React.JSX.Element | null {
             <span className="changes__branch">{status.branch}</span>
             {aheadBehind(status)}
           </span>
-          {offersUpdate ? (
-            <button
-              type="button"
-              className="button button--small"
-              disabled={updating !== null}
-              onClick={() => void updateWorktree(worktreeId)}
-            >
-              {updating === worktreeId ? 'Updating…' : `Update from ${updateFrom(status, base, child)}`}
-            </button>
-          ) : null}
-          {offer?.kind === 'review' ? (
-            <button type="button" className="button button--small" onClick={() => openInBrowser(offer.url)}>
-              Open review
-            </button>
-          ) : offer ? (
-            <button
-              type="button"
-              className={`button button--small${pushIsNext ? ' button--primary' : ''}`}
-              disabled={pushing}
-              onClick={() => void pushActiveWorktree()}
-            >
-              {PUSH_LABEL[offer.kind][push?.phase === 'pushing' ? 1 : 0]}
-            </button>
-          ) : null}
           {land?.kind === 'merged' ? (
             <>
               <span className="chip changes__merged">Merged</span>
@@ -147,16 +149,39 @@ export function ChangesTab(): React.JSX.Element | null {
                 Delete Worktree…
               </button>
             </>
-          ) : land ? (
+          ) : null}
+          {shown === null ? null : (
             <button
               type="button"
-              className={`button button--small${landIsNext ? ' button--primary' : ''}`}
-              disabled={land.kind === 'create-pr' && openingPullRequest}
-              onClick={() => landNow(land)}
+              className={`button button--small${header.primary ? ' button--primary' : ''}`}
+              disabled={busy(shown) || blockedBy(shown) !== undefined}
+              title={shown.kind === 'land' ? landNote(shown.offer) : undefined}
+              onClick={() => act(shown)}
             >
-              {land.kind === 'create-pr' && openingPullRequest ? 'Creating…' : landLabel(land)}
+              {labelOf(shown)}
             </button>
-          ) : null}
+          )}
+          {header.more.length === 0 ? null : (
+            <button
+              type="button"
+              className="button button--small changes__more"
+              title="More actions"
+              aria-label="More actions"
+              aria-haspopup="menu"
+              aria-expanded={moreAt !== null}
+              onClick={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect()
+                const at: RowMenuAnchor = { x: rect.right, y: rect.bottom + 4, align: 'right' }
+                setMoreAt(moreAt === null ? { at, opener: event.currentTarget } : null)
+              }}
+            >
+              <svg viewBox="0 0 12 12" aria-hidden="true">
+                <circle cx="2.5" cy="6" r="1" />
+                <circle cx="6" cy="6" r="1" />
+                <circle cx="9.5" cy="6" r="1" />
+              </svg>
+            </button>
+          )}
         </div>
       ) : null}
       {updateError === undefined ? null : (
@@ -323,6 +348,22 @@ export function ChangesTab(): React.JSX.Element | null {
             ))}
           </ul>
         </section>
+      )}
+      {moreAt === null || header.more.length === 0 ? null : (
+        <RowMenu
+          label="More actions"
+          anchor={moreAt.at}
+          opener={moreAt.opener}
+          onClose={() => setMoreAt(null)}
+          items={header.more.map((action) => {
+            const blocked = blockedBy(action)
+            return {
+              label: labelOf(action),
+              onChoose: () => act(action),
+              ...(blocked === undefined ? {} : { disabled: true, hint: blocked })
+            }
+          })}
+        />
       )}
       {menu === null ? null : (
         <RowMenu
@@ -580,18 +621,6 @@ function tickOf(change: WorktreeChange, ticked: boolean): Tick {
 }
 
 const PUSH_LABEL = { push: ['Push', 'Pushing…'], publish: ['Publish Branch', 'Publishing…'] } as const
-
-export type PushOffer = { kind: 'push' | 'publish' } | { kind: 'review'; url: string }
-
-/** The header's one button: send commits the remote lacks, else open the review the last push made. */
-export function pushOffer(status: WorktreeStatus | undefined, push: PushState | undefined): PushOffer | null {
-  if (!status || status.missing) return null
-  // Without a commit, a published branch would be its base under another name.
-  if (status.upstream === null) return status.ahead > 0 || push?.phase === 'pushing' ? { kind: 'publish' } : null
-  if (status.ahead > 0 || push?.phase === 'pushing') return { kind: 'push' }
-  if (push?.phase === 'pushed' && push.reviewUrl !== undefined) return { kind: 'review', url: push.reviewUrl }
-  return null
-}
 
 /** An unstaged change git can put back, or an untracked file the Trash can take. Intent-to-add is refused. */
 export function canDiscard(change: WorktreeChange): boolean {

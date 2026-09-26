@@ -113,6 +113,16 @@ describe('the menu bar is built from the table the keyboard reads', () => {
     expect(menuLabel('toggle-sidebar')).toBe('Show/Hide Sidebar')
   })
 
+  it('says Publish Branch for a branch that tracks nothing yet, and Push otherwise', () => {
+    const label = (upstream: string | null): string | undefined =>
+      menuBarSpec({ ...WORKING, statuses: { w1: { upstream, ahead: 1 } } }).find(
+        (item) => item.command === 'push-worktree'
+      )?.label
+    expect(label(null)).toBe('Publish Branch')
+    expect(label('origin/w1')).toBe('Push')
+    expect(menuLabel('push-worktree')).toBe('Push')
+  })
+
   // Menu order, not table order: "New Task, New Terminal, Close Pane".
   it('puts the items of a menu in the order they are read', () => {
     const sectionOrder = (section: string): string[] =>

@@ -848,3 +848,53 @@ describe('Clean Up Merged in the palette', () => {
     expect(filterPalette(items, 'clean up').map((item) => item.id)).toEqual(['clean-up:p2'])
   })
 })
+
+describe('landing from the palette', () => {
+  const found = (query: string, overrides: Partial<Parameters<typeof buildPaletteItems>[0]> = {}): PaletteItem[] =>
+    filterPalette(
+      buildPaletteItems(
+        context({ worktrees: [worktree({ id: 'w1' })], activeWorktreeId: 'w1', merged: new Set(), ...overrides })
+      ),
+      query
+    )
+  const reason = (item: PaletteItem | undefined): string | undefined =>
+    item?.kind === 'action' ? item.unavailable : undefined
+
+  it.each([
+    ['merge', { kind: 'merge', into: 'main' }, 'Merge into main…'],
+    ['merge', { kind: 'merge', into: 'Rework auth' }, 'Merge into Rework auth…'],
+    ['land', { kind: 'merge', into: 'main' }, 'Merge into main…'],
+    ['pull request', { kind: 'create-pr' }, 'Create Pull Request'],
+    ['merge', { kind: 'merge', into: 'main', uncommitted: 2 }, 'Commit & Merge into main…']
+  ] as const)('answers %s with the land on screen first', (query, land, label) => {
+    const [first] = found(query, { land })
+    expect(first?.label).toBe(label)
+    expect(reason(first)).toBeUndefined()
+  })
+
+  it('counts what Commit & Merge would commit after its name', () => {
+    const [first] = found('merge', { land: { kind: 'merge', into: 'main', uncommitted: 2 } })
+    expect(first?.hint).toBe('2 uncommitted')
+  })
+
+  it('puts the worktree’s own merge before a project’s Clean Up Merged on a tie', () => {
+    const rows = found('merge', { land: { kind: 'merge', into: 'main', uncommitted: 2 }, merged: new Set(['p1']) })
+    expect(rows.map((item) => item.label)).toEqual(['Commit & Merge into main…', 'Clean Up Merged…'])
+  })
+
+  it('shows a blocked land dimmed with its reason, even when a runnable row matches too', () => {
+    const merge = found('merge', { land: { kind: 'merge', into: 'main', blocked: '1 conflicted' }, updateFrom: 'main' })
+    expect(merge.map((item) => item.label)).toEqual(['Update from main', 'Merge into main…'])
+    expect(reason(merge[1])).toBe('1 conflicted')
+
+    const pr = found('pull request', { land: { kind: 'create-pr', blocked: '2 uncommitted' } })
+    expect(pr.map((item) => item.label)).toEqual(['Check Out Pull Request…', 'Create Pull Request'])
+    expect(reason(pr[1])).toBe('2 uncommitted')
+  })
+
+  it('names Push Publish Branch for a branch that tracks nothing yet, in the menu bar too', () => {
+    const statuses = { w1: { upstream: null, ahead: 1 } }
+    expect(found('publish', { statuses })[0]?.label).toBe('Publish Branch')
+    expect(found('push', { statuses: { w1: { upstream: 'origin/task/w1', ahead: 1 } } })[0]?.label).toBe('Push')
+  })
+})

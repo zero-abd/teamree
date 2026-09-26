@@ -15,7 +15,7 @@ import { useOpenIn } from '../sidebar/openIn'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { canDiscard, childOf, updateFrom } from '../workspace/rightPanel/ChangesTab'
-import { landOffer } from '../workspace/rightPanel/landOffer'
+import { idleLand, landOffer } from '../workspace/rightPanel/landOffer'
 import {
   buildPaletteItems,
   fileItem,
@@ -152,6 +152,7 @@ export function CommandPalette({
             focusedWatchId,
             statuses,
             pushing,
+            landings,
             diffPanes,
             editedFiles,
             editingMarkdown,
@@ -167,7 +168,12 @@ export function CommandPalette({
           worktrees.filter((worktree) => landings[worktree.id]?.merged).map((worktree) => worktree.projectId)
         ),
         openIn: targets.map((target) => target.label),
-        land: activeWorktreeId === null ? null : landOffer(landings[activeWorktreeId], statuses[activeWorktreeId]),
+        land:
+          activeWorktreeId === null
+            ? null
+            : (landOffer(landings[activeWorktreeId], statuses[activeWorktreeId]) ??
+              idleLand(landings[activeWorktreeId])),
+        statuses,
         appearance: { mode: appearance.mode ?? 'dark', themeId: activeChoice(appearance, systemTone).themeId },
         focusedChange:
           change === undefined ? null : { path: change.path, discardable: canDiscard(change), staged: change.staged },
