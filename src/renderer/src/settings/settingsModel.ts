@@ -136,6 +136,7 @@ export function cliLine(status: CliStatus | null): CliLine {
 
 /** The page's sections in order. */
 export const SETTINGS_SECTIONS = [
+  { id: 'general', label: 'General' },
   { id: 'agents', label: 'Agents' },
   { id: 'projects', label: 'Projects' },
   { id: 'panes', label: 'Panes' },

@@ -26,6 +26,10 @@ const UNSAVED_ANSWER_CHANNEL = 'teamree:unsaved:answer'
 // src/main/invitationLinks.ts; a link inward, pulled once and then pushed.
 const INVITATION_TAKE_CHANNEL = 'teamree:invitation:take'
 const INVITATION_OPEN_CHANNEL = 'teamree:invitation:open'
+// src/main/menuBarExtra/quickNoteWindow.ts
+const QUICK_NOTE_CONTEXT_CHANNEL = 'teamree:quick-note:context'
+const QUICK_NOTE_SAVE_CHANNEL = 'teamree:quick-note:save'
+const QUICK_NOTE_CLOSE_CHANNEL = 'teamree:quick-note:close'
 
 /** What the main process answers a reveal with, declared structurally (not imported from src/main). */
 type RevealResult = { revealed: true } | { revealed: false; reason: string }
@@ -46,8 +50,22 @@ type MenuBarItem = {
  * What the window tells the main process about notifications, and what comes
  * back. `preference` is a plain string: the main process parses it against its own list.
  */
-type NoticeSettings = { preference: string; focusedPaneId: string | null; names: Record<string, string> }
+type NoticeSettings = {
+  preference: string
+  focusedPaneId: string | null
+  names: Record<string, string>
+  activeWorktreeId: string | null
+}
 type PaneAddress = { worktreeId: string; terminalId: string }
+
+/** What the Quick Note panel is offered, and what it sends back; see src/main/menuBarExtra/quickNote.ts. */
+type QuickNoteContext = {
+  projects: { id: string; name: string }[]
+  projectId: string | null
+  worktree: { id: string; name: string; projectId: string } | null
+}
+type QuickNote = { projectId: string; worktreeId: string | null; text: string }
+type QuickNoteSaved = { saved: string } | { problem: string }
 
 /** What the window says about sleep. `mode` is a plain string, parsed by the main process. */
 type KeepAwakeState = { mode: string; agentBusy: boolean }
@@ -186,6 +204,19 @@ const invitations = {
   }
 } as const
 
+/** The Quick Note panel's end; the main process answers only that panel. */
+const quickNote = {
+  context(): Promise<QuickNoteContext> {
+    return ipcRenderer.invoke(QUICK_NOTE_CONTEXT_CHANNEL)
+  },
+  save(note: QuickNote): Promise<QuickNoteSaved> {
+    return ipcRenderer.invoke(QUICK_NOTE_SAVE_CHANNEL, note)
+  },
+  close(): void {
+    ipcRenderer.send(QUICK_NOTE_CLOSE_CHANNEL)
+  }
+} as const
+
 const api = {
   selectProjectFolder(): Promise<string | null> {
     return ipcRenderer.invoke('teamree:select-project-folder')
@@ -223,7 +254,8 @@ const api = {
   notices,
   keepAwake,
   unsaved,
-  invitations
+  invitations,
+  quickNote
 } as const
 
 export type TeamreeRuntimeBridge = typeof runtime

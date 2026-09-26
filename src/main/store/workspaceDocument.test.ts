@@ -44,7 +44,8 @@ describe('workspace document: task-tree fields and settings', () => {
     expect(runtimeSettings(document.settings)).toEqual({
       shareTaskDetails: false,
       showCost: false,
-      jacMemoryAddon: true
+      jacMemoryAddon: true,
+      showInMenuBar: true
     })
     expect(parseWorkspaceDocument({ settings: 'on' }).settings).toEqual({})
   })

@@ -1,5 +1,5 @@
 // Renders the app icon from brand/ (mark.svg, mark-small.svg, app-icon.svg) into build/icon.{png,icns,ico},
-// build/icons/<n>x<n>.png and site/public PNGs. Headless Chrome is the rasteriser and iconutil assembles
+// build/icons/<n>x<n>.png, site/public PNGs and the menu bar's template images in resources/menu-bar. Headless Chrome is the rasteriser and iconutil assembles
 // the icns; only `npm run icons` needs either, the outputs are committed. Rules, settled by looking:
 //   1. <=32px uses mark-small.svg: the full mark's window slant flattens and its frame bars drop under a pixel.
 //   2. Every size is its own render. A resampled icns is a *valid file* macOS draws blurry, silently;
@@ -20,6 +20,7 @@ const brandDir = join(root, 'brand')
 const buildDir = join(root, 'build')
 const iconsDir = join(buildDir, 'icons')
 const siteDir = join(root, 'site', 'public')
+const menuBarDir = join(root, 'resources', 'menu-bar')
 
 // ------------------------------------------------------------- the palette --
 
@@ -115,9 +116,13 @@ html,body{width:${size}px;height:${size}px;overflow:hidden;background:transparen
 .mark{width:${mark}px;height:${mark}px;color:${MARK_ON_TILE};display:block}
 .mark svg{width:100%;height:100%;display:block}
 </style>${body}`
+  return screenshot(html, size, `${size}-${tile}-${mark}`)
+}
 
-  const page = join(scratch, `page-${size}-${tile}-${mark}.html`)
-  const shot = join(scratch, `shot-${size}-${tile}-${mark}.png`)
+/** Chrome's screenshot of `html` in a `size` pixel square window. */
+function screenshot(html, size, name) {
+  const page = join(scratch, `page-${name}.html`)
+  const shot = join(scratch, `shot-${name}.png`)
   writeFileSync(page, html)
   execFileSync(
     chrome,
@@ -126,6 +131,7 @@ html,body{width:${size}px;height:${size}px;overflow:hidden;background:transparen
       '--disable-gpu',
       '--hide-scrollbars',
       '--force-device-scale-factor=1',
+      '--use-mock-keychain',
       '--default-background-color=00000000',
       `--window-size=${size},${size}`,
       `--screenshot=${shot}`,
@@ -133,7 +139,7 @@ html,body{width:${size}px;height:${size}px;overflow:hidden;background:transparen
     ],
     { stdio: 'ignore' }
   )
-  if (!existsSync(shot)) throw new Error(`make-icons: Chrome produced no screenshot for the ${size}px render.`)
+  if (!existsSync(shot)) throw new Error(`make-icons: Chrome produced no screenshot for the ${name} render.`)
   return readFileSync(shot)
 }
 
@@ -333,6 +339,43 @@ function writeIcns(pngBySize, outPath) {
 
 // ------------------------------------------------------------------- write --
 
+// ---------------------------------------------------------------- menu bar --
+
+// An 18pt canvas holding the reduced mark 18pt wide (15 tall, on whole pixels at 2x). Black on clear:
+// macOS tints a template image to the menu bar. Asking adds a dot with a clear ring cut around it.
+const MENU_BAR_PT = 18
+const MENU_BAR_DOT = { cx: 15.5, cy: 2.75, r: 2.25, ring: 1.25 }
+// `Template` at the end is what macOS reads as a template image.
+const MENU_BAR_IMAGES = [
+  ['teamreeTemplate', false],
+  ['teamreeAskingTemplate', true]
+]
+
+function menuBarSvg(asking) {
+  const path = /\sd="([^"]+)"/.exec(markSmall)?.[1]
+  if (!path) throw new Error('make-icons: brand/mark-small.svg has no path.')
+  const { cx, cy, r, ring } = MENU_BAR_DOT
+  const cut = asking
+    ? `<mask id="cut"><rect width="18" height="18" fill="#fff"/><circle cx="${cx}" cy="${cy}" r="${r + ring}" fill="#000"/></mask>`
+    : ''
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${MENU_BAR_PT} ${MENU_BAR_PT}" width="100%" height="100%">
+<defs>${cut}</defs>
+<g${
+    asking ? ' mask="url(#cut)"' : ''
+  }><path fill-rule="evenodd" fill="#000" transform="translate(0 1.5) scale(0.075) translate(-8 -28)" d="${path}"/></g>
+${asking ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#000"/>` : ''}
+</svg>`
+}
+
+/** The template at `size` device pixels, through the same browser and writer as the icons. */
+function menuBarPngAt(size, asking) {
+  const html = `<!doctype html><meta charset="utf-8"><style>*{margin:0;padding:0}html,body{width:${size}px;height:${size}px;overflow:hidden;background:transparent}svg{display:block}</style>${menuBarSvg(asking)}`
+  const { width, height, rgba } = decodePng(screenshot(html, size, `menu-bar-${asking ? 'asking' : 'idle'}-${size}`))
+  if (width !== size || height !== size)
+    throw new Error(`make-icons: asked Chrome for ${size}x${size} and got ${width}x${height}.`)
+  return encodePng(size, rgba)
+}
+
 /** Render at `size`, then re-encode through the writer above. */
 function pngAt(size, options) {
   const { width, height, rgba } = decodePng(rasterise(size, options))
@@ -379,6 +422,11 @@ try {
   )
   for (const size of LINUX_SIZES) writeFileSync(join(iconsDir, `${size}x${size}.png`), fullBleedPngs.get(size))
   for (const [name, size] of SITE_PNGS) writeFileSync(join(siteDir, name), fullBleedPngs.get(size))
+  mkdirSync(menuBarDir, { recursive: true })
+  for (const [name, asking] of MENU_BAR_IMAGES) {
+    writeFileSync(join(menuBarDir, `${name}.png`), menuBarPngAt(MENU_BAR_PT, asking))
+    writeFileSync(join(menuBarDir, `${name}@2x.png`), menuBarPngAt(MENU_BAR_PT * 2, asking))
+  }
 } finally {
   rmSync(scratch, { recursive: true, force: true })
 }
@@ -386,6 +434,6 @@ try {
 // site/public/favicon.svg is hand-authored and under a kilobyte on purpose; not written here.
 console.log(
   `make-icons: ${chrome.split('/').pop()} rendered build/icon.png, ${ICONSET_FILES.length} images in build/icon.icns, ` +
-    `${ICO_SIZES.length} sizes in build/icon.ico, ${LINUX_SIZES.length} files in build/icons ` +
-    `and ${SITE_PNGS.length} site PNGs — each its own render at its own size.`
+    `${ICO_SIZES.length} sizes in build/icon.ico, ${LINUX_SIZES.length} files in build/icons, ` +
+    `${SITE_PNGS.length} site PNGs and ${MENU_BAR_IMAGES.length * 2} menu bar templates — each its own render at its own size.`
 )

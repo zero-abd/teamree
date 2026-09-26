@@ -19,6 +19,8 @@ export type NoticeSettings = {
   focusedPaneId: string | null
   /** What the window calls each of its panes, by terminal id. */
   names?: Readonly<Record<string, string>>
+  /** The worktree in front, for a quick note attached to it. */
+  activeWorktreeId?: string | null
 }
 
 /** Until the window says otherwise, which it does on its first render. */
@@ -39,7 +41,13 @@ export function readNoticeSettings(value: unknown): NoticeSettings | null {
   const focused = settings.focusedPaneId
   if (focused !== null && typeof focused !== 'string') return null
   const names = readNames(settings.names)
-  return { preference: settings.preference, focusedPaneId: focused, ...(names === undefined ? {} : { names }) }
+  const active = settings.activeWorktreeId
+  return {
+    preference: settings.preference,
+    focusedPaneId: focused,
+    ...(names === undefined ? {} : { names }),
+    ...(typeof active === 'string' || active === null ? { activeWorktreeId: active } : {})
+  }
 }
 
 function readNames(value: unknown): Record<string, string> | undefined {
@@ -137,11 +145,17 @@ export type AgentNoticeHost = {
   fromMainFrame: (event: IpcMainEvent) => boolean
 }
 
+type PaneAddress = { worktreeId: string; terminalId: string }
+
 export type AgentNoticeChannel = {
   /** One agent pane has stopped. */
   deliver: (notice: AgentNotice) => void
   /** Something a teammate did, raised only while the window is away; a click brings it forward. */
   announce: (spec: { title: string; body: string }) => void
+  /** What the open window last said about its panes; null with no window. */
+  window: () => { names: Readonly<Record<string, string>>; activeWorktreeId: string | null } | null
+  /** Opens a pane in the window; held for a window still opening until it has named the pane. */
+  revealPane: (pane: PaneAddress) => void
   /** The window has the focus again. */
   noteWindowFocus: () => void
   stop: () => void
@@ -155,6 +169,14 @@ export function installAgentNotices(ipc: IpcMain, host: AgentNoticeHost): AgentN
   let settings = DEFAULT_NOTICE_SETTINGS
   let published: WebContents | null = null
   let quiet = NO_QUIET_PANES
+  let held: PaneAddress | null = null
+
+  const live = (): WebContents | null => (published === null || published.isDestroyed() ? null : published)
+  const reveal = (pane: PaneAddress): boolean => {
+    const sender = live()
+    sender?.send(NOTICE_REVEAL_CHANNEL, pane)
+    return sender !== null
+  }
 
   const onPublish = (event: IpcMainEvent, payload: unknown): void => {
     if (!host.fromMainFrame(event)) return
@@ -162,6 +184,8 @@ export function installAgentNotices(ipc: IpcMain, host: AgentNoticeHost): AgentN
     if (!next) return
     settings = next
     published = event.sender
+    // A new window publishes before its panes arrive, and drops a reveal of a pane it does not have yet.
+    if (held !== null && next.names?.[held.terminalId] !== undefined && reveal(held)) held = null
   }
 
   const badge = (event: BadgeEvent): void => {
@@ -179,29 +203,34 @@ export function installAgentNotices(ipc: IpcMain, host: AgentNoticeHost): AgentN
       badge({ kind: 'settled', terminalId: notice.terminalId, windowFocused })
       if (!shouldNotify({ settings, windowFocused, terminalId: notice.terminalId })) return
       const pane = settings.names?.[notice.terminalId]
-      const reveal = (): void => {
+      const activate = (): void => {
         host.focusWindow()
-        const sender = published
-        if (!sender || sender.isDestroyed()) return
-        sender.send(NOTICE_REVEAL_CHANNEL, { worktreeId: notice.worktreeId, terminalId: notice.terminalId })
+        reveal({ worktreeId: notice.worktreeId, terminalId: notice.terminalId })
       }
       const actions = (notice.answers ?? []).slice(0, NOTICE_ACTIONS).map((answer) => ({
         label: answer.label,
         // A stale answer is sent nowhere; the pane is put in front to answer by hand.
-        run: () => void answer.choose().catch(reveal)
+        run: () => void answer.choose().catch(activate)
       }))
       host.show({
         title: notice.worktree,
         ...(pane === undefined ? {} : { subtitle: pane }),
         body: noticeBody(notice),
         silent: noticeIsSilent(settings.preference),
-        onActivate: reveal,
+        onActivate: activate,
         ...(actions.length === 0 ? {} : { actions })
       })
     },
     announce(spec) {
       if (settings.preference === 'off' || host.windowFocused()) return
       host.show({ ...spec, silent: noticeIsSilent(settings.preference), onActivate: host.focusWindow })
+    },
+    window() {
+      if (live() === null) return null
+      return { names: settings.names ?? {}, activeWorktreeId: settings.activeWorktreeId ?? null }
+    },
+    revealPane(pane) {
+      held = reveal(pane) ? null : pane
     },
     noteWindowFocus() {
       badge({ kind: 'window-focused' })

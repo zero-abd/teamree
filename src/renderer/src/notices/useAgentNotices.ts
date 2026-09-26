@@ -58,7 +58,8 @@ export function useAgentNotices(): void {
       const settings = {
         preference: state.agentNotices,
         focusedPaneId: focusedOwnPaneId(state),
-        names: named.names
+        names: named.names,
+        activeWorktreeId: state.activeWorktreeId
       }
       const description = JSON.stringify(settings)
       if (description === published) return

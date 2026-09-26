@@ -18,6 +18,7 @@ import {
   type AskedQuestions,
   type AgentsRecord,
   type SettingsRecord,
+  type QuickNoteRecord,
   type StandingConsentRecord,
   type UpdateRecord,
   type WorkspaceDocument
@@ -92,6 +93,7 @@ export class WorkspaceStore {
   private updates: UpdateRecord = {}
   private agents: AgentsRecord = {}
   private settings: SettingsRecord = {}
+  private quickNote: QuickNoteRecord = {}
 
   private queue: Promise<void> = Promise.resolve()
   private queued = false
@@ -125,6 +127,7 @@ export class WorkspaceStore {
     this.updates = document.updates
     this.agents = document.agents
     this.settings = document.settings
+    this.quickNote = document.quickNote
   }
 
   /**
@@ -348,6 +351,17 @@ export class WorkspaceStore {
     return true
   }
 
+  /** The project the last Quick Note went to. */
+  quickNoteProject(): string | undefined {
+    return this.quickNote.projectId
+  }
+
+  setQuickNoteProject(projectId: string): void {
+    if (this.quickNote.projectId === projectId) return
+    this.quickNote = { projectId }
+    this.persist()
+  }
+
   /** The rate limit's clock, on disk so an hour of restarts is one check. */
   recordUpdateCheck(at: number): void {
     this.updates = { ...this.updates, lastCheckedAt: at }
@@ -432,7 +446,8 @@ export class WorkspaceStore {
       appearance: this.appearance,
       updates: this.updates,
       agents: this.agents,
-      settings: this.settings
+      settings: this.settings,
+      quickNote: this.quickNote
     }
   }
 }

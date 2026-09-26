@@ -7,6 +7,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CliStatus, InstalledAgent, PaneConsent, Project, RelaySetting, UpdateState } from '@shared/entities'
+import { DEFAULT_RUNTIME_SETTINGS } from '@shared/settings'
 
 const runtimeCall = vi.hoisted(() => ({
   answer: (_method: string, _params: unknown): Promise<unknown> => new Promise(() => {})
@@ -25,6 +26,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
+const { runtimeClient } = await import('../runtimeClient/currentRuntimeClient')
 const { SettingsView } = await import('./SettingsView')
 const { TERMINAL_OPTIONS_DEFAULT } = await import('../state/preferences')
 
@@ -1186,5 +1188,43 @@ describe('setup shared through .teamree/project.json', () => {
     seed({ projects: [{ ...project, repository: { startFrom: 'origin/dev' } }] })
     render(<SettingsView />)
     expect(screen.getByText('origin/dev')).toBeTruthy()
+  })
+})
+
+describe('general', () => {
+  const bridge = (platform: string) => {
+    ;(window as unknown as { teamree: unknown }).teamree = { platform }
+    let settings = { ...DEFAULT_RUNTIME_SETTINGS }
+    return vi.spyOn(runtimeClient, 'call').mockImplementation(async (method: string, params: unknown) => {
+      if (method === 'settings.set') settings = { ...settings, ...(params as object) }
+      return method.startsWith('settings.') ? settings : new Promise(() => {})
+    })
+  }
+
+  it('offers Show in Menu Bar on a Mac, on by default, and sets it from the checkbox', async () => {
+    const call = bridge('darwin')
+    try {
+      render(<SettingsView />)
+      const check = await screen.findByRole('checkbox', { name: 'Show in Menu Bar' })
+      await vi.waitFor(() => expect(check).toHaveProperty('checked', true))
+      fireEvent.click(check)
+      expect(call).toHaveBeenCalledWith('settings.set', { showInMenuBar: false })
+      await vi.waitFor(() => expect(check).toHaveProperty('checked', false))
+    } finally {
+      call.mockRestore()
+      delete (window as unknown as { teamree?: unknown }).teamree
+    }
+  })
+
+  it('has no General section where there is no menu bar to show in', () => {
+    const call = bridge('linux')
+    try {
+      render(<SettingsView />)
+      expect(screen.queryByRole('checkbox', { name: 'Show in Menu Bar' })).toBeNull()
+      expect(document.getElementById('settings-general')).toBeNull()
+    } finally {
+      call.mockRestore()
+      delete (window as unknown as { teamree?: unknown }).teamree
+    }
   })
 })

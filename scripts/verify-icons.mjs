@@ -450,6 +450,13 @@ checkIcns('build/icon.icns')
 // `linux.icon` takes the size from each filename, so name and pixels must agree.
 for (const size of LINUX_SIZES) checkPng(join('build/icons', `${size}x${size}.png`), size, size)
 
+// The status item loads each template by name and adds the @2x itself, so both must be what they say.
+const MENU_BAR_TEMPLATES = ['teamreeTemplate', 'teamreeAskingTemplate']
+for (const name of MENU_BAR_TEMPLATES) {
+  checkPng(`resources/menu-bar/${name}.png`, 18, 18)
+  checkPng(`resources/menu-bar/${name}@2x.png`, 36, 36)
+}
+
 for (const entry of SITE_PNGS) {
   if (!existsSync(join(root, entry.path))) {
     if (entry.required) fail(entry.path, 'does not exist, and the page links to it.')
@@ -469,5 +476,5 @@ for (const note of notes) console.log(`verify-icons: note — ${note}`)
 console.log(
   `verify-icons: PASS — icon.png, ${ICO_SIZES.length} sizes in icon.ico, ` +
     `${ICNS_PNG_TYPES.length + ICNS_ARGB_TYPES.length} OSTypes in icon.icns and no icp4/icp5, ` +
-    `${LINUX_SIZES.length} files in build/icons and ${SITE_PNGS.filter((entry) => existsSync(join(root, entry.path))).length} site images all carry the pixels they claim.`
+    `${LINUX_SIZES.length} files in build/icons, ${MENU_BAR_TEMPLATES.length * 2} menu bar templates and ${SITE_PNGS.filter((entry) => existsSync(join(root, entry.path))).length} site images all carry the pixels they claim.`
 )

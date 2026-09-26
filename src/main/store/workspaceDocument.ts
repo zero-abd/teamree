@@ -151,7 +151,8 @@ export type AgentsRecord = z.infer<typeof AgentsSchema>
 const SettingsSchema = z.object({
   shareTaskDetails: z.boolean().optional().catch(undefined),
   showCost: z.boolean().optional().catch(undefined),
-  jacMemoryAddon: z.boolean().optional().catch(undefined)
+  jacMemoryAddon: z.boolean().optional().catch(undefined),
+  showInMenuBar: z.boolean().optional().catch(undefined)
 })
 
 export type SettingsRecord = Partial<RuntimeSettings>
@@ -159,6 +160,11 @@ export type SettingsRecord = Partial<RuntimeSettings>
 export function runtimeSettings(record: SettingsRecord): RuntimeSettings {
   return { ...DEFAULT_RUNTIME_SETTINGS, ...record }
 }
+
+/** Where the last Quick Note went, so the next one starts there. */
+const QuickNoteSchema = z.object({ projectId: z.string().min(1).optional().catch(undefined) })
+
+export type QuickNoteRecord = z.infer<typeof QuickNoteSchema>
 
 export type WorkspaceDocument = {
   version: number
@@ -189,6 +195,7 @@ export type WorkspaceDocument = {
   updates: UpdateRecord
   agents: AgentsRecord
   settings: SettingsRecord
+  quickNote: QuickNoteRecord
 }
 
 /** One pane, one teammate, and when the owner said so. */
@@ -214,7 +221,8 @@ export function emptyWorkspaceDocument(): WorkspaceDocument {
     appearance: sanitizeAppearance(undefined),
     updates: {},
     agents: {},
-    settings: {}
+    settings: {},
+    quickNote: {}
   }
 }
 
@@ -241,7 +249,8 @@ export function parseWorkspaceDocument(raw: unknown): WorkspaceDocument {
     appearance: sanitizeAppearance(record.appearance),
     updates: UpdatesSchema.safeParse(record.updates).data ?? {},
     agents: AgentsSchema.safeParse(record.agents).data ?? {},
-    settings: stripUndefined(SettingsSchema.safeParse(record.settings).data ?? {})
+    settings: stripUndefined(SettingsSchema.safeParse(record.settings).data ?? {}),
+    quickNote: stripUndefined(QuickNoteSchema.safeParse(record.quickNote).data ?? {})
   }
 }
 
