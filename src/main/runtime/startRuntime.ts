@@ -174,6 +174,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     // A pending check firing during shutdown would be a request nobody reads.
     await step(() => areas.updates.stop())
     await step(() => areas.bases.stop())
+    await step(() => areas.context.close())
     // Before the PTYs: a teammate must not watch panes already being killed.
     await step(() => areas.peers.stop())
     // Before the PTYs, because a shell dying rewrites files.

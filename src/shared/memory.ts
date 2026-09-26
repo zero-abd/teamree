@@ -44,6 +44,9 @@ export const CONTEXT_SECTIONS: readonly ContextSection[] = [
 /** Token budget for `project.context`; tokens are estimated as ceil(chars / 4). */
 export const CONTEXT_BUDGET = { default: 1500, min: 200, max: 4000 } as const
 
+/** What the coordination ledger answers with when no budget is asked for: read at the moment of need, so small. */
+export const LEDGER_BUDGET_TOKENS = 500
+
 export function clampContextBudget(tokens: number | undefined): number {
   if (tokens === undefined || !Number.isFinite(tokens)) return CONTEXT_BUDGET.default
   return Math.min(CONTEXT_BUDGET.max, Math.max(CONTEXT_BUDGET.min, Math.round(tokens)))
@@ -59,6 +62,10 @@ export type ContextSibling = {
   /** Paths both touched: the conflict risk. */
   overlap: string[]
   decisions: MemoryNote[]
+  /** Paths `git merge-tree` says would conflict; a subset of `overlap`. */
+  conflicts?: string[]
+  /** Paths in `overlap` that one side changed inside the other's claims. */
+  claimed?: string[]
 }
 
 /** How one context source answered, so a slow or broken one is visible and never blocking. */
@@ -73,7 +80,7 @@ export type ProjectContext = {
   truncated: { section: string; dropped: number }[]
   /** Nearest first. */
   ancestors: { worktreeId: string; name: string; goal: string }[]
-  self: { goal: string; decisions: MemoryNote[]; questions: MemoryNote[] }
+  self: { goal: string; decisions: MemoryNote[]; questions: MemoryNote[]; claims?: string[] }
   siblings: ContextSibling[]
   files: { path: string; summary: string; touchedBy: string[] }[]
   /** The same bundle rendered as text under the budget. */
@@ -97,7 +104,14 @@ export function emptyProjectContext(worktreeId: string): ProjectContext {
 }
 
 /** Another worktree touching the same files. */
-export type MemoryConflict = { worktreeId: string; owner: 'me' | string; files: string[] }
+export type MemoryConflict = {
+  worktreeId: string
+  owner: 'me' | string
+  /** Ranked: real conflicts first, hot files (lockfiles, package.json) last. */
+  files: string[]
+  /** Files `git merge-tree` says would conflict. */
+  conflicts?: string[]
+}
 
 /** A worktree as a memory node. `goal` is the task's first line. */
 export type MemoryWorktree = {

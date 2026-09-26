@@ -5,6 +5,7 @@
 import { dirname, join } from 'node:path'
 import type { MethodRegistry } from '../methodRegistry'
 import { CliService, createAdministratorRunner, findShippedCli, registerCliHandlers } from '../../cli'
+import { registerContextHandlers, type ContextLedger } from '../../context'
 import { createEditorActions, registerEditorHandlers } from '../../editor'
 import { registerFileHandlers } from '../../files'
 import { createGitRunner, GitService, registerGitHandlers } from '../../git'
@@ -56,6 +57,8 @@ export type RegisteredAreas = {
   updates: UpdateService
   /** The background fetch of each project's base ref. Idle until started. */
   bases: BaseFetcher
+  /** The coordination ledger; its last write is flushed on quit. */
+  context: ContextLedger
 }
 
 export type RegisterHandlersOptions = {
@@ -230,6 +233,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   publishGitWrites(registry, git, workspaceEvents)
   // Git status has no call behind it; file changes are what keep it honest.
   const worktreeFiles = publishWorktreeFileEvents(git, workspaceEvents)
+  const context = registerContextHandlers(registry, git, dataDir)
 
   // A teammate's push moves the base ref only once fetched; the watch above never sees `refs/remotes`.
   const bases = new BaseFetcher({
@@ -350,7 +354,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     peers.notifyWorkspaceChanged()
   })
 
-  return { terminals, git, worktreeFiles, teamworkFiles: teamworkWatcher, peers, updates, bases }
+  return { terminals, git, worktreeFiles, teamworkFiles: teamworkWatcher, peers, updates, bases, context }
 }
 
 /**

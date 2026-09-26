@@ -147,10 +147,12 @@ describe('dispatcher', () => {
       'members.join',
       'members.list',
       // Local: project memory stays on this machine; teammates see team notes only in presence.
+      'memory.claim',
       'memory.conflicts',
       'memory.forget',
       'memory.note',
       'memory.resolve',
+      'memory.unclaim',
       // Local: agent mail never crosses to a teammate.
       'message.list',
       'message.read',
