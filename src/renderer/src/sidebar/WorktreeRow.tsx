@@ -264,8 +264,9 @@ export function WorktreeRow({
   const hoverUsage = useUsageStore((state) => state.hover)
   // The glyph names the agent; words only where it cannot tell two runs apart.
   const agentWord = display.agent?.kind === undefined || twinRun
-  // A task's tally and a handoff need the second line too, or their chips squeeze the name.
-  const twoLines = !compact && (display.branch !== undefined || task !== undefined || handoff !== null)
+  // A task's tally, a handoff and a pull request need the second line too, or their chips squeeze the name.
+  const pullShown = ready && !merged && landing?.pullRequest !== undefined
+  const twoLines = !compact && (display.branch !== undefined || task !== undefined || handoff !== null || pullShown)
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
   const stateId = `${describedBy}-state`
@@ -332,7 +333,7 @@ export function WorktreeRow({
           {`#${issue.number}`}
         </span>
       )}
-      {ready && !merged ? <PullRequestMark pull={landing?.pullRequest} /> : null}
+      {pullShown ? <PullRequestMark pull={landing?.pullRequest} /> : null}
       {ready ? <PortChipView terminals={terminals} worktreeId={worktree.id} /> : null}
       {overlap === undefined || !ready ? null : <OverlapMark chip={overlap.chip} onOpen={overlap.onOpen} />}
       {ready ? <RunChip terminals={terminals} worktreeId={worktree.id} /> : null}

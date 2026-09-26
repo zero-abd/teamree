@@ -1090,6 +1090,8 @@ describe('a worktree whose work has landed', () => {
 
     const chip = screen.getByRole('link', { name: /Pull Request #42/ })
     expect(chip.textContent).toBe('PR #42 ✗ 2')
+    // On the second line, beside a run's chip, so neither squeezes the name.
+    expect(chip.closest('.worktree__meta')).not.toBeNull()
     expect(chip.classList.contains('prchip--fail')).toBe(true)
     expect(chip.getAttribute('title')).toContain('2 failing: test, e2e')
   })
