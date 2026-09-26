@@ -1575,6 +1575,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'teamwork.handoffs': () => ({ incoming: [], outgoing: [] }),
     'teamwork.take': notInDemo('teamwork.take'),
     'teamwork.dismissHandoff': notInDemo('teamwork.dismissHandoff'),
+    'teamwork.handoffDraft': () => ({ note: '' }),
     'project.templates': ({ projectId }) => ({ projectId, templates: [], problems: [] }),
     'project.saveTemplate': notInDemo('project.saveTemplate'),
     'settings.get': () => settings,

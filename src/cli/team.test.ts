@@ -301,6 +301,18 @@ function teamHandler(overrides: Partial<Record<string, StubHandler>> = {}): Stub
         return PUBLISHED
       case 'teamwork.type':
         return { written: true }
+      case 'teamwork.handoffDraft':
+        return { note: 'Fix the login form' }
+      case 'teamwork.handOff':
+        return {
+          id: 'h1',
+          to: 'ana',
+          from: 'me',
+          worktreeName: 'fix-login',
+          branch: 'feature/fix-login',
+          note: '',
+          at: NOW
+        }
       case 'worktree.startPoints':
         return START_POINTS
       case 'layout.get':
@@ -399,6 +411,7 @@ describe('--json on every teamwork command', () => {
       ['team publish', ['team', 'publish', 'api']],
       ['team invite', ['team', 'invite', 'api']],
       ['team accept', ['team', 'accept', LINK]],
+      ['team handoff', ['team', 'handoff', 'fix-login', '--to', 'ana']],
       ['worktree start-points', ['worktree', 'start-points', 'api']],
       ['worktree layout', ['worktree', 'layout', 'fix-login']]
     ]
@@ -1203,5 +1216,52 @@ describe('exit codes and usage', () => {
     expect(result.code).toBe(ExitCode.Success)
     expect(result.out).toContain('--follow')
     expect(result.out).toContain('bounded snapshot')
+  })
+})
+
+describe('team handoff', () => {
+  it('names the worktree from here, the teammate and the note, and says the branch is pushed', async () => {
+    const calls: unknown[] = []
+    const cli = await harness(
+      teamHandler({
+        'teamwork.handOff': (_method, params) => {
+          calls.push(params)
+          return { id: 'h1', to: 'ana', worktreeName: 'fix-login', branch: 'feature/fix-login', note: 'x', at: NOW }
+        }
+      }),
+      { cwd: '/repos/api-fix-login/src' }
+    )
+    const result = await cli.run(['team', 'handoff', 'here', '--to', 'ana', '--note', 'Tests for expiry are red.'])
+    expect(result.code, result.err).toBe(ExitCode.Success)
+    expect(calls).toEqual([{ worktreeId: 'wt_1', to: 'ana', note: 'Tests for expiry are red.' }])
+    expect(result.out).toContain('Handed fix-login to ana. feature/fix-login is pushed.')
+  })
+
+  it('sends the runtime’s draft when no --note is given', async () => {
+    const calls: unknown[] = []
+    const cli = await harness(
+      teamHandler({
+        'teamwork.handOff': (_method, params) => {
+          calls.push(params)
+          return { id: 'h1', to: 'ana', worktreeName: 'fix-login', branch: 'feature/fix-login', note: '', at: NOW }
+        }
+      })
+    )
+    expect((await cli.run(['team', 'handoff', 'fix-login', '--to', 'ana'])).code).toBe(ExitCode.Success)
+    expect(calls).toEqual([{ worktreeId: 'wt_1', to: 'ana', note: 'Fix the login form' }])
+  })
+
+  it('requires --to, and passes the runtime’s refusal on in its own words', async () => {
+    const cli = await harness(
+      teamHandler({
+        'teamwork.handOff': () => {
+          throw new StubError('not_found', 'no remote')
+        }
+      })
+    )
+    expect((await cli.run(['team', 'handoff', 'fix-login'])).code).toBe(ExitCode.Usage)
+    const refused = await cli.run(['team', 'handoff', 'fix-login', '--to', 'ana'])
+    expect(refused.code).toBe(ExitCode.Failure)
+    expect(refused.err).toContain('no remote')
   })
 })

@@ -199,6 +199,7 @@ describe('dispatcher', () => {
       // Local: a handoff crosses in this machine's presence, never as a teammate's call.
       'teamwork.dismissHandoff',
       'teamwork.handOff',
+      'teamwork.handoffDraft',
       'teamwork.handoffs',
       'teamwork.mute',
       'teamwork.presence',

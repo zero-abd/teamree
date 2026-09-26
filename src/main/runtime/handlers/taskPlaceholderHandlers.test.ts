@@ -43,7 +43,6 @@ describe('task, memory and add-on methods before their branches land', () => {
 
   it('answers every read with an empty result', async () => {
     expect(await result('worktree.usage', {})).toEqual([])
-    expect(await result('teamwork.handoffs', { projectId: 'p' })).toEqual({ incoming: [], outgoing: [] })
     expect(await result('project.templates', { projectId: 'p' })).toEqual({
       projectId: 'p',
       templates: [],
@@ -54,9 +53,6 @@ describe('task, memory and add-on methods before their branches land', () => {
 
   it('refuses every write as not implemented yet', async () => {
     const writes: [string, unknown][] = [
-      ['teamwork.handOff', { worktreeId: 'w', to: 'ana', note: '' }],
-      ['teamwork.take', { projectId: 'p', id: 'h' }],
-      ['teamwork.dismissHandoff', { projectId: 'p', id: 'h' }],
       ['project.saveTemplate', { projectId: 'p', name: 'review', agents: {}, prompt: 'x' }],
       ['addons.install', { id: 'jac-memory' }]
     ]

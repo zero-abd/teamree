@@ -75,6 +75,10 @@ export type PeerHandoff = {
   branch: string
   note: string
   at: number
+  /** Outgoing only, never sent: the sender's own worktree. */
+  worktreeId?: string
+  /** Outgoing only: when `to` took it. */
+  takenAt?: number
 }
 
 export type TeamworkHandoffs = { incoming: PeerHandoff[]; outgoing: PeerHandoff[] }

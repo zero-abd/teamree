@@ -102,6 +102,10 @@ type WorktreeRowProps = {
   onMenuOpen?: () => void
   /** Files another task or a teammate changes too; the chip's click opens the first. */
   overlap?: { chip: OverlapChip; onOpen: (entry: OverlapEntry) => void }
+  /** Hand Off…; absent leaves the item out. */
+  onHandOff?: () => void
+  /** `Handed to ana` or `Taken by ana`, for its latest offer. */
+  handoff?: string | null
 }
 
 export function WorktreeRow({
@@ -139,7 +143,9 @@ export function WorktreeRow({
   onMoveToTop,
   onResume,
   onMenuOpen,
-  overlap
+  overlap,
+  onHandOff,
+  handoff = null
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
   const failed = worktree.state === 'failed'
@@ -212,6 +218,7 @@ export function WorktreeRow({
     ...(onMoveUnder !== undefined && ready ? [{ label: 'Move Under…', onChoose: onMoveUnder }] : []),
     ...(onMoveToTop !== undefined && ready ? [{ label: 'Move to Top Level', onChoose: onMoveToTop }] : []),
     ...(onResume !== undefined && ready ? [{ label: 'Resume Conversation…', onChoose: onResume }] : []),
+    ...(onHandOff !== undefined && ready ? [{ label: 'Hand Off…', onChoose: onHandOff }] : []),
     { label: 'Rename…', onChoose: () => setRenaming(true), separated: merged },
     { label: 'Reveal in Finder', onChoose: onReveal },
     { label: 'Copy Path', onChoose: onCopyPath },
@@ -242,8 +249,8 @@ export function WorktreeRow({
   const hoverUsage = useUsageStore((state) => state.hover)
   // The glyph names the agent; words only where it cannot tell two runs apart.
   const agentWord = display.agent?.kind === undefined || twinRun
-  // A task's tally needs the second line too, or its chips squeeze the name.
-  const twoLines = display.branch !== undefined || task !== undefined
+  // A task's tally and a handoff need the second line too, or their chips squeeze the name.
+  const twoLines = display.branch !== undefined || task !== undefined || handoff !== null
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
   const stateId = `${describedBy}-state`
@@ -308,6 +315,7 @@ export function WorktreeRow({
       )}
       {overlap === undefined || !ready ? null : <OverlapMark chip={overlap.chip} onOpen={overlap.onOpen} />}
       {ready ? <RunChip terminals={terminals} worktreeId={worktree.id} /> : null}
+      {handoff === null ? null : <span className="chip worktree__handoff">{handoff}</span>}
       {task === undefined ? null : (
         <span className="chip worktree__tally" title={task.children.join('\n')}>
           {`${task.tally.done}/${task.tally.total} done`}

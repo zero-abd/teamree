@@ -10,6 +10,7 @@ import type {
   TeamworkRead
 } from '../../shared/entities.js'
 import { MAX_REMOTE_WRITE_BYTES, type WatchedPaneEvent } from '../../shared/methods.js'
+import { MAX_HANDOFF_NOTE_CHARS } from '../../shared/presenceExtras.js'
 import { checkOrigin, pathIdentityNote } from '../../shared/origin.js'
 import { acceptInvitation } from '../acceptInvitation.js'
 import { checkCloneable } from '../clone.js'
@@ -18,7 +19,7 @@ import type { CommandContext, CommandSpec } from '../command-spec.js'
 import { CliError, ExitCode, UsageError } from '../exit.js'
 import { formatInvitation, withoutCredentials } from '../../shared/invitation.js'
 import { formatFields, formatTable } from '../output.js'
-import { resolveProject } from '../selectors.js'
+import { resolveProject, resolveWorktree, type Caller } from '../selectors.js'
 import type { RuntimeClient } from '../transport.js'
 
 /** Every team command names its project the same way, so say it once. */
@@ -1144,6 +1145,53 @@ export const teamCommands: readonly CommandSpec[] = [
         data: log,
         text: log.problem === null ? table : `${table}\n\nThe record may be incomplete: ${log.problem}`
       }
+    }
+  },
+  {
+    path: ['team', 'handoff'],
+    summary: 'Hand a worktree to a teammate: push its branch, then offer it to them.',
+    details:
+      'Pushes the branch first, publishing it if it tracks nothing, and refuses with no remote. The teammate ' +
+      'sees the offer once their machine is connected; Take checks the branch out there and starts their ' +
+      'agent with the note as its first prompt. The note defaults to the task, the ledger’s decisions and open ' +
+      'questions, and the last commits; - reads stdin.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, branch, or `here`.', required: true }],
+    flags: [
+      {
+        name: 'to',
+        kind: 'string',
+        placeholder: '<handle>',
+        description: 'Teammate handle on the roster.',
+        required: true
+      },
+      { name: 'note', kind: 'string', placeholder: '<text>', description: 'What they need to know. - reads stdin.' }
+    ],
+    examples: [
+      'teamree team handoff here --to ana',
+      'teamree team handoff fix-login --to ana --note "Tests for expiry are red."'
+    ],
+    run: async (context) => {
+      const caller: Caller = { env: context.env, cwd: context.cwd }
+      const worktree = await resolveWorktree(context.client, context.args[0] as string, caller)
+      const flag = readString(context.flags, 'note')
+      const note = (
+        flag === undefined
+          ? (await context.client.call('teamwork.handoffDraft', { worktreeId: worktree.id })).note
+          : flag === '-'
+            ? await context.stdin()
+            : flag
+      ).trim()
+      if (note.length > MAX_HANDOFF_NOTE_CHARS) {
+        throw new UsageError(
+          `--note is ${note.length} characters; the most a handoff carries is ${MAX_HANDOFF_NOTE_CHARS}.`
+        )
+      }
+      const handoff = await context.client.call('teamwork.handOff', {
+        worktreeId: worktree.id,
+        to: requireString(context.flags, 'to'),
+        note
+      })
+      return { data: handoff, text: `Handed ${worktree.name} to ${handoff.to}. ${handoff.branch} is pushed.` }
     }
   }
 ]

@@ -411,6 +411,10 @@
   cursor: pointer;
 }
 
+.worktree__handoff {
+  color: var(--fg-secondary);
+}
+
 .worktree__issue:hover {
   color: var(--accent-bright);
 }

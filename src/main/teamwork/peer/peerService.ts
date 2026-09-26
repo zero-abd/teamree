@@ -2,7 +2,7 @@
 // each peer sent (kept by revision), and the revision this runtime pushes to
 // subscribed peers. The roster is checked in both directions, per project.
 
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { z } from 'zod'
 import {
@@ -49,7 +49,8 @@ import {
 import type { SubscriptionChannel, SubscriptionHub } from '../../runtime/subscriptionHub'
 import { notFound } from '../../runtime/runtimeError'
 import { ErrorCode } from '../../../shared/protocol'
-import { PeerWorktreeExtrasOnRead } from '../../../shared/presenceExtras'
+import { PeerPresenceExtrasOnRead, PeerWorktreeExtrasOnRead } from '../../../shared/presenceExtras'
+import type { PeerHandoff, TeamworkHandoffs } from '../../../shared/tasks'
 import {
   MAX_CACHED_PANES,
   MAX_CACHED_TEXT,
@@ -63,6 +64,7 @@ import {
 } from '../../store/teammateCache'
 import { AgentKindOnRead } from '../../terminals/agent-command'
 import { badPaneId, TeamworkError } from '../errors'
+import { HandoffBook, HANDOFFS_FILE } from '../handoffs'
 import { createRemoteWriteLog, returnsIn, type RemoteWriteRecorder } from './writeLog'
 import { previewOf } from './writePreview'
 import { loadIdentity, loadStaticPrivateKey } from '../identity'
@@ -261,6 +263,8 @@ export class PeerService {
   #requestsToldAt = 0
   readonly #log: RemoteWriteRecorder
   readonly #notes: NoteInbox
+  readonly #handoffs: HandoffBook
+  #handoffsRead: Promise<void> | undefined
 
   #cache: TeammateCache | undefined
   #dispatch: Dispatcher | undefined
@@ -288,6 +292,7 @@ export class PeerService {
       ...(options.onError ? { onError: options.onError } : {})
     })
     this.#notes = createNoteInbox({ now: () => this.#scheduler.now() })
+    this.#handoffs = new HandoffBook(join(options.dataDir, HANDOFFS_FILE), options.onError)
   }
 
   /** The dispatcher is built after the handlers are registered; until it arrives no peer can be answered. */
@@ -315,6 +320,7 @@ export class PeerService {
       this.#options.cache ?? (await TeammateCacheStore.open(join(this.#options.dataDir, TEAMMATE_CACHE_FILE)))
     // Before the links, so a wake during startup finds them already listening.
     this.#unwatchWake ??= await (this.#options.watchWake ?? watchForWake)(() => this.#wake())
+    await (this.#handoffsRead ??= this.#handoffs.load())
     await this.reconcile()
   }
 
@@ -969,7 +975,7 @@ export class PeerService {
     const peer = this.#peerByConnection.get(connectionId)
     if (peer === undefined) throw notFound('this connection is not a peer link')
     // Narrowed to the one project this session is for, on top of the roster filter.
-    return presenceFor(
+    const presence = presenceFor(
       {
         source: this.#presenceSource(peer.projectKey),
         now: this.#scheduler.now,
@@ -979,6 +985,16 @@ export class PeerService {
       this.#ownHandleIn(peer.projectKey),
       this.#revision
     )
+    // Only offers made to this teammate's handle on this project's roster ever go to them.
+    const handoffs = this.#memberProjects(peer.projectKey, peer.publicKey).flatMap((fact) =>
+      this.#handoffs.sendTo([fact.projectId], this.#handleIn(fact, peer.publicKey))
+    )
+    const took = this.#handoffs.tookFrom(peer.publicKey)
+    return {
+      ...presence,
+      ...(handoffs.length === 0 ? {} : { handoffs }),
+      ...(took.length === 0 ? {} : { took })
+    }
   }
 
   /**
@@ -1087,6 +1103,68 @@ export class PeerService {
     return { closed: this.#notes.close(params.shareId) }
   }
 
+  /** Offers teammates made to this machine, and the ones it made, in one project. */
+  handoffs(params: ParamsOf<'teamwork.handoffs'>): TeamworkHandoffs {
+    return {
+      incoming: this.#incomingHandoffs(params.projectId).map((offer) => offer.handoff),
+      outgoing: this.#handoffs.outgoing(params.projectId)
+    }
+  }
+
+  /** The roster handle `to` names on a project with teamwork on; anyone else, this machine included, is refused. */
+  handoffTarget(projectId: string, to: string): string {
+    const facts = this.#projects.get(projectId)
+    if (!facts || facts.disabledReason !== null || facts.projectKey === undefined) {
+      throw new TeamworkError(ErrorCode.Conflict, 'teamwork is off for this project')
+    }
+    for (const [publicKey, handle] of facts.handles) {
+      if (handle === to && publicKey !== this.#identityKey) return handle
+    }
+    throw new TeamworkError(ErrorCode.NotFound, `${to} is not on this project’s roster`)
+  }
+
+  /** Puts an offer of `worktree` in the presence `to` reads; the branch is already pushed. */
+  offerHandoff(input: { worktree: Worktree; to: string; note: string }): PeerHandoff {
+    const { worktree } = input
+    const to = this.handoffTarget(worktree.projectId, input.to)
+    const from = this.#ownHandleIn(this.#projects.get(worktree.projectId)?.projectKey)
+    const handoff: PeerHandoff = {
+      id: randomUUID(),
+      to,
+      ...(from === null ? {} : { from }),
+      worktreeName: worktree.name,
+      branch: worktree.branch,
+      note: input.note,
+      at: this.#scheduler.now(),
+      worktreeId: worktree.id
+    }
+    this.#handoffs.offer({ ...handoff, projectId: worktree.projectId, worktreeId: worktree.id })
+    this.#pushPresence()
+    this.#options.onChange()
+    return handoff
+  }
+
+  /** An offer to this machine still waiting for an answer. */
+  incomingHandoff(projectId: string, id: string): PeerHandoff {
+    const offer = this.#incomingHandoffs(projectId).find((candidate) => candidate.handoff.id === id)
+    if (!offer) throw notFound('that handoff is gone')
+    return offer.handoff
+  }
+
+  /** Answers an offer. `took` goes back to the sender in presence; a dismissal stays here. */
+  settleHandoff(projectId: string, id: string, how: 'took' | 'dismissed'): void {
+    const offer = this.#incomingHandoffs(projectId).find((candidate) => candidate.handoff.id === id)
+    if (!offer) throw notFound('that handoff is gone')
+    this.#handoffs.settle(id, offer.publicKey, how)
+    if (how === 'took') this.#pushPresence()
+    this.#options.onChange()
+  }
+
+  /** Resolves once every handoff change so far is on disk. */
+  flushHandoffs(): Promise<void> {
+    return this.#handoffs.flush()
+  }
+
   /** Something in the workspace moved: bump the revision and tell the peers once per burst. */
   notifyWorkspaceChanged(): void {
     this.#requestTaskDetails()
@@ -1192,6 +1270,12 @@ export class PeerService {
     if (!isNewerPresence(held?.live === true ? held.presence : undefined, presence)) return
     const heardAt = this.#scheduler.now()
     this.#heard.set(linkId, { publicKey, presence, heardAt, live: true })
+    if (presence.took !== undefined && projectKey !== undefined) {
+      const taken = this.#memberProjects(projectKey, publicKey).map((fact) =>
+        this.#handoffs.markTaken([fact.projectId], this.#handleIn(fact, publicKey), presence.took ?? [], heardAt)
+      )
+      if (taken.includes(true)) this.#pushPresence()
+    }
     const [project] = presence.projects
     if (projectKey !== undefined && project) {
       this.#cache?.put({
@@ -1699,6 +1783,31 @@ export class PeerService {
     return facts?.handles.get(publicKey) ?? publicKey.slice(0, SHORT_KEY_LENGTH)
   }
 
+  /** This machine's projects a session is for, where the teammate is on the roster. */
+  #memberProjects(projectKey: string, publicKey: string): ProjectFacts[] {
+    return [...this.#projects.values()].filter(
+      (fact) => fact.projectKey === projectKey && fact.disabledReason === null && fact.rosterKeys.includes(publicKey)
+    )
+  }
+
+  /** Offers heard from roster teammates, made to this machine's handle and not yet answered here. */
+  #incomingHandoffs(projectId: string): { handoff: PeerHandoff; publicKey: string }[] {
+    const facts = this.#projects.get(projectId)
+    const projectKey = facts?.disabledReason === null ? facts.projectKey : undefined
+    const own = this.#ownHandleIn(projectKey)
+    if (!facts || projectKey === undefined || own === null) return []
+    const offers: { handoff: PeerHandoff; publicKey: string }[] = []
+    for (const publicKey of facts.rosterKeys) {
+      if (publicKey === this.#identityKey) continue
+      for (const handoff of this.#heard.get(linkIdFor(publicKey, projectKey))?.presence.handoffs ?? []) {
+        if (handoff.to !== own || this.#handoffs.isSettled(handoff.id, publicKey)) continue
+        // Named by this roster, never by what the sender called itself.
+        offers.push({ handoff: { ...handoff, from: this.#handleIn(facts, publicKey) }, publicKey })
+      }
+    }
+    return offers.sort((a, b) => a.handoff.at - b.handoff.at)
+  }
+
   /** `onlyProjectKey` narrows the source to the one repository a session is for. */
   #presenceSource(onlyProjectKey?: string): PresenceSource {
     return {
@@ -2065,13 +2174,15 @@ const ProjectPayload = z.object({
   worktrees: z.array(WorktreePayload)
 })
 
-const PresencePayload = z.object({
-  revision: z.number(),
-  // Nullish rather than nullable: a runtime older than the field sends nothing
-  // rather than null, and refusing that would blank a working teammate.
-  handle: z.string().nullish(),
-  projects: z.array(ProjectPayload)
-})
+const PresencePayload = z
+  .object({
+    revision: z.number(),
+    // Nullish rather than nullable: a runtime older than the field sends nothing
+    // rather than null, and refusing that would blank a working teammate.
+    handle: z.string().nullish(),
+    projects: z.array(ProjectPayload)
+  })
+  .extend(PeerPresenceExtrasOnRead)
 
 /**
  * Whether a snapshot is one at all, and how much of it is kept. Refusing: a
@@ -2084,10 +2195,13 @@ export function parsePeerPresence(value: unknown, onlyProjectKey: string | undef
   const parsed = PresencePayload.safeParse(value)
   if (!parsed.success) return undefined
   const project = parsed.data.projects.find((candidate) => candidate.projectKey === onlyProjectKey)
+  const { handoffs, took } = parsed.data
   return {
     revision: parsed.data.revision,
     handle: parsed.data.handle ?? null,
-    projects: project ? [boundProject(project)] : []
+    projects: project ? [boundProject(project)] : [],
+    ...(handoffs === undefined ? {} : { handoffs }),
+    ...(took === undefined ? {} : { took })
   }
 }
 

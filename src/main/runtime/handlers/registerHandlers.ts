@@ -28,12 +28,14 @@ import {
   WAITING_FETCH_MS
 } from '../../teamwork'
 import { PeerService, registerPeerHandlers, taskGitReader } from '../../teamwork/peer'
+import { registerHandoffHandlers } from '../../teamwork/handoffs'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
 import { UpdateService, registerUpdateHandlers, type SelfInstall } from '../../updates'
 import { registerUsageHandlers } from '../../usage'
 import type { TerminalService } from '../../terminals/method-handlers'
 import type { ScrollbackRepository } from '../../terminals/session-manager'
 import type { AgentNotice, NoticeAnswer } from '../../agentNotices'
+import type { Worktree } from '../../../shared/entities'
 import type { ScreenMenu } from '../../../shared/screenOpinion'
 import type { SharedNoteSummary } from '../../../shared/sharedNote'
 import type { Terminal } from '../../../shared/entities'
@@ -430,6 +432,25 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
       onError: (error) => console.error('[teamwork]', error)
     })
   )
+  registerHandoffHandlers(registry, {
+    peers,
+    worktree: (worktreeId) => registry.context.store.getWorktree(worktreeId),
+    project: (projectId) => registry.context.store.getProject(projectId),
+    push: (worktreeId) => git.worktreePush({ worktreeId }),
+    runner: createGitRunner(),
+    create: (params) => git.createWorktree(params),
+    settled: (worktreeId) => settledWorktree(git, worktreeId),
+    startAgent: (worktreeId, command, prompt) => {
+      terminals.manager.create({ worktreeId, command, ...(prompt === undefined ? {} : { prompt }) })
+      // Opened here rather than through `terminal.create`, so announced by hand as the setup pane is.
+      workspaceEvents.emit({ type: 'terminals' })
+      workspaceEvents.emit({ type: 'layout', worktreeId })
+    },
+    notes: async (worktree) => (await context.inspect(worktree.projectId)).notes,
+    commits: async (worktreeId) =>
+      (await git.worktreeLog({ worktreeId, limit: 5 })).commits.map((commit) => commit.subject),
+    onError: (error) => console.error('[teamwork]', error)
+  })
   // A teammate's view of this machine rides the same bus everything else does.
   workspaceEvents.on((event) => {
     // `teammates` is this service's own event; fed back in, a link changing
@@ -456,6 +477,26 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     teamFetches,
     context
   }
+}
+
+/** The worktree once its create has finished; a create reports only through events after it returns. */
+function settledWorktree(git: GitService, worktreeId: string): Promise<Worktree> {
+  return new Promise((resolve, reject) => {
+    const check = (worktree: Worktree | undefined): boolean => {
+      if (worktree === undefined || worktree.state === 'creating') return false
+      stop()
+      resolve(worktree)
+      return true
+    }
+    const stop = git.events.on((event) => {
+      if (event.type === 'worktree.updated' && event.worktree.id === worktreeId) check(event.worktree)
+      if (event.type === 'worktree.removed' && event.worktreeId === worktreeId) {
+        stop()
+        reject(new Error('the worktree was removed before it was ready'))
+      }
+    })
+    check(git.snapshot().worktrees.find((worktree) => worktree.id === worktreeId))
+  })
 }
 
 /**
