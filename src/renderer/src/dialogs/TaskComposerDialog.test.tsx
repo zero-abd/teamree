@@ -519,3 +519,61 @@ describe('the permission mode each agent starts in', () => {
     expect(mode('Claude Code', 'Auto').getAttribute('aria-checked')).toBe('true')
   })
 })
+
+// A child task starts from its parent's branch; the dialog says so in one line instead of a picker.
+describe('a child task', () => {
+  const parent = {
+    id: 'w1',
+    projectId: 'p1',
+    name: 'Rework auth session',
+    branch: 'rework-auth-session',
+    path: '/repos/pager-wt/rework',
+    startedFrom: 'origin/main',
+    state: 'ready' as const,
+    createdAt: 0
+  }
+  const openUnder = async (): Promise<void> => {
+    render(<TaskComposerDialog projectId="p1" parentId="w1" />)
+    await act(async () => {})
+  }
+
+  beforeEach(() => {
+    seed({
+      worktrees: [parent],
+      statuses: {
+        w1: {
+          worktreeId: 'w1',
+          branch: 'rework-auth-session',
+          ahead: 0,
+          behind: 0,
+          staged: 1,
+          unstaged: 1,
+          untracked: 1,
+          conflicted: 0,
+          readAt: 0
+        }
+      }
+    })
+  })
+
+  it('says what it is under and where it starts, and what it leaves behind', async () => {
+    await openUnder()
+    expect(screen.getByText('Under Rework auth session')).toBeTruthy()
+    expect(screen.getByText('from rework-auth-session')).toBeTruthy()
+    expect(screen.getByText('3 uncommitted not included')).toBeTruthy()
+    expect(screen.queryByRole('combobox', { name: 'Start from' })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'Project' })).toBeNull()
+  })
+
+  it('submits the parent with the task, starting from the parent’s branch', async () => {
+    await openUnder()
+    fireEvent.change(task(), { target: { value: 'Write the migration' } })
+    submit().click()
+    expect(startTask).toHaveBeenCalledWith({
+      projectId: 'p1',
+      startedFrom: 'rework-auth-session',
+      parentId: 'w1',
+      creates: [{ name: 'Write the migration', agentCommand: 'claude', task: 'Write the migration' }]
+    })
+  })
+})

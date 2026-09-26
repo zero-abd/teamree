@@ -87,4 +87,16 @@ describe('going to the next pane that needs you', () => {
     expect(stepNeedingYou(state, 1)).toBeNull()
     expect(stepNeedingYou({ ...state, terminals: {} }, -1)).toBeNull()
   })
+
+  it('walks in tree order: a child asking comes right after its parent', () => {
+    const state = window('a')
+    // D becomes a child of A, so it is drawn, and visited, before B.
+    state.worktrees = [
+      { id: 'wa', projectId: 'p1' },
+      { id: 'wb', projectId: 'p1' },
+      { id: 'wc', projectId: 'p1' },
+      { id: 'wd', projectId: 'p1', parentId: 'wa' }
+    ]
+    expect(panesNeedingYou(state).map((pane) => pane.terminalId)).toEqual(['d', 'b', 'c'])
+  })
 })

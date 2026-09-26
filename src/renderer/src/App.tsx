@@ -194,7 +194,12 @@ export function App(): React.JSX.Element {
       ) : null}
       {dialog?.kind === 'clone-project' ? <CloneProjectDialog /> : null}
       {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
-      {dialog?.kind === 'new-task' ? <TaskComposerDialog projectId={dialog.projectId} /> : null}
+      {dialog?.kind === 'new-task' ? (
+        <TaskComposerDialog
+          projectId={dialog.projectId}
+          {...(dialog.parentId === undefined ? {} : { parentId: dialog.parentId })}
+        />
+      ) : null}
       {dialog?.kind === 'join-team' ? <JoinTeamDialog invitation={dialog.invitation} /> : null}
       {dialog?.kind === 'open-branch' ? (
         <OpenBranchDialog projectId={dialog.projectId} pullRequests={dialog.pullRequests === true} />

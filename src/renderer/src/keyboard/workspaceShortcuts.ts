@@ -14,6 +14,7 @@ export type WorkspaceCommand =
   | 'new-terminal'
   | 'new-markdown'
   | 'new-worktree'
+  | 'new-child-task'
   | 'toggle-sidebar'
   | 'toggle-right-panel'
   | 'focus-sidebar'
@@ -66,6 +67,7 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // Shifted, because ⌘M is the platform's minimise.
   { command: 'new-markdown', chord: { key: 'm', shift: true }, title: 'New Markdown' },
   { command: 'new-worktree', chord: { key: 'n' }, title: 'New Task' },
+  { command: 'new-child-task', chord: { key: 'n', shift: true }, title: 'New Child Task…' },
   { command: 'toggle-sidebar', chord: { key: 'b' }, title: 'Show/Hide Sidebar' },
   // J: the side-panel key in the editors people run in these panes.
   { command: 'toggle-right-panel', chord: { key: 'j' }, title: 'Show/Hide Right Panel' },

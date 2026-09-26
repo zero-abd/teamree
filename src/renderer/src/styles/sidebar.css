@@ -341,6 +341,53 @@
   border-radius: var(--r2);
 }
 
+/* A task and its child tasks share one box; each level is one step in, with nothing drawn between. */
+.task {
+  padding: var(--s1);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+}
+
+.task__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.task__rows > .worktree {
+  padding: 0;
+  border: 0;
+}
+
+/* Folds the task's panes and children; the mouse's, ← and → are the keyboard's. */
+.worktree__fold {
+  position: absolute;
+  top: 7px;
+  left: calc(9px + var(--depth, 0) * 14px);
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  cursor: pointer;
+}
+
+.worktree__fold:hover {
+  background: var(--bg-press);
+}
+
+.worktree__fold:hover .chevron {
+  stroke: var(--fg);
+}
+
+.worktree__tally {
+  color: var(--fg-secondary);
+}
+
 .worktree__row {
   position: relative;
   display: flex;
@@ -407,7 +454,7 @@
   align-items: flex-start;
   gap: 0;
   min-width: 0;
-  padding: 3px var(--s2) 3px 28px;
+  padding: 3px var(--s2) 3px calc(28px + var(--depth, 0) * 14px);
   border: 0;
   border-radius: var(--r2);
   background: transparent;
@@ -913,7 +960,7 @@
 /* The glyph starts under the worktree name: 28px, less the row's own padding. */
 .panes {
   margin: 0;
-  padding: 0 0 var(--s1) 22px;
+  padding: 0 0 var(--s1) calc(22px + var(--depth, 0) * 14px);
   list-style: none;
 }
 

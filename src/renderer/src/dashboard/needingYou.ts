@@ -10,7 +10,7 @@ import { isPaneUnread, paneInFront, panesOnScreen, type FrontOfWindow, type Pane
 /** As much of the store as the walk reads; everything past the first three is absent in a test that has no panes. */
 export type NeedingState = {
   projects: readonly { id: string }[]
-  worktrees: readonly { id: string; projectId: string }[]
+  worktrees: readonly { id: string; projectId: string; parentId?: string }[]
   layouts: Readonly<Record<string, Layout>>
   activeWorktreeId: string | null
   focusedWatchId: string | null

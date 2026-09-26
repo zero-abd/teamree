@@ -355,6 +355,7 @@ function commandActions(context: PaletteContext): { id: PaletteAction; label: st
 /** What somebody types looking for each command. Total over the union, so a new command fails the build here. */
 const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'new-worktree': 'new task create worktree branch start agent checkout',
+  'new-child-task': 'new child task sub subtask under parent split fan out worktree',
   'new-terminal': 'new terminal shell pane open',
   'new-markdown': 'new markdown notes page document write md file',
   'close-pane': 'close pane kill stop shut terminal',

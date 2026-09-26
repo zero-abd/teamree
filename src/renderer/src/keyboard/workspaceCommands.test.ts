@@ -161,6 +161,11 @@ describe('what a window can be asked to do', () => {
     expect(isCommandAvailable('new-worktree', { ...EMPTY, projects: [{ id: 'p1' }] })).toBe(true)
   })
 
+  it('offers a child task only under an open worktree with a checkout', () => {
+    expect(isCommandAvailable('new-child-task', EMPTY)).toBe(false)
+    expect(isCommandAvailable('new-child-task', WORKING)).toBe(true)
+  })
+
   it('offers a new terminal only with a worktree open to open it in', () => {
     expect(isCommandAvailable('new-terminal', EMPTY)).toBe(false)
     expect(isCommandAvailable('new-terminal', WORKING)).toBe(true)
@@ -369,6 +374,7 @@ describe('running a command', () => {
       ['new-terminal', 'createTerminal', ['w1']],
       ['new-markdown', 'newMarkdown', ['w1']],
       ['new-worktree', 'openDialog', [{ kind: 'new-task', projectId: 'p1' }]],
+      ['new-child-task', 'openDialog', [{ kind: 'new-task', projectId: 'p1', parentId: 'w1' }]],
       ['toggle-sidebar', 'toggleSidebar', []],
       ['toggle-right-panel', 'toggleRightPanel', []],
       ['focus-next-pane', 'focusNextPane', []],

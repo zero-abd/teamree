@@ -30,6 +30,11 @@ describe('the order the sidebar lays worktrees out in', () => {
     const orphaned = [...WORKTREES, { id: 'w5', projectId: 'gone' }]
     expect(worktreeOrder(PROJECTS, orphaned).map((worktree) => worktree.id)).toEqual(['w1', 'w3', 'w2', 'w4'])
   })
+
+  it('puts a child task right under its parent', () => {
+    const withChild = [...WORKTREES, { id: 'w5', projectId: 'pager', parentId: 'w1' }]
+    expect(worktreeOrder(PROJECTS, withChild).map((worktree) => worktree.id)).toEqual(['w1', 'w5', 'w3', 'w2', 'w4'])
+  })
 })
 
 describe('walking that order', () => {

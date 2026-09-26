@@ -33,6 +33,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { Sidebar } = await import('./Sidebar')
 const { worktreeOrder } = await import('./worktreeOrder')
+const { useTaskTreeStore } = await import('../state/taskTreeStore')
 
 const INITIAL = useWorkspaceStore.getState()
 const NOW = Date.now()
@@ -1019,5 +1020,92 @@ describe('starting a task in any project from the keyboard', () => {
     act(() => screen.getByRole('button', { name: 'Add project' }).focus())
     runWorkspaceCommand('new-worktree', useWorkspaceStore.getState())
     expect(openDialog).toHaveBeenLastCalledWith({ kind: 'new-task', projectId: 'p1' })
+  })
+})
+
+// A task's child tasks sit in its box; the parent's dot, folded, speaks for everything under it.
+describe('task trees', () => {
+  const pane = (id: string, worktreeId: string, overrides: Partial<Terminal> = {}): Terminal => ({
+    id,
+    worktreeId,
+    title: 'claude',
+    cwd: `/repos/pager-wt/${worktreeId}`,
+    shell: '/bin/zsh',
+    cols: 80,
+    rows: 24,
+    running: true,
+    busy: false,
+    agent: 'claude',
+    lastOutputAt: NOW,
+    ...overrides
+  })
+  const rowNamed = (name: string): HTMLElement =>
+    screen.getAllByRole('treeitem').find((item) => item.getAttribute('aria-label') === name) as HTMLElement
+  const press = (key: string): void => {
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key })
+  }
+
+  beforeEach(() => {
+    useTaskTreeStore.setState({ collapsedTasks: {} })
+    seed({
+      worktrees: [
+        worktree({ id: 'auth', name: 'Rework auth', branch: 'rework-auth' }),
+        worktree({ id: 'mig', name: 'Write the migration', branch: 'rework-auth--mig', parentId: 'auth' }),
+        worktree({ id: 'fill', name: 'Backfill', branch: 'rework-auth--mig--fill', parentId: 'mig' }),
+        worktree({ id: 'solo', name: 'Solo', branch: 'solo' })
+      ],
+      terminals: {
+        a: pane('a', 'auth', { busy: true }),
+        f: pane('f', 'fill', { screenSays: 'waiting' })
+      }
+    })
+    mount()
+  })
+
+  it('draws child tasks inside the parent’s box, one level deeper each', () => {
+    const box = rowNamed('Rework auth').closest('.task') as HTMLElement
+    expect(box).toBeTruthy()
+    expect(within(box).getAllByRole('treeitem', { name: /Write the migration|Backfill/ })).toHaveLength(2)
+    expect(rowNamed('Write the migration').getAttribute('aria-level')).toBe('3')
+    expect(rowNamed('Backfill').getAttribute('aria-level')).toBe('4')
+    // A worktree with no children keeps a box of its own.
+    expect(rowNamed('Solo').closest('.task')).toBeNull()
+  })
+
+  it('tallies the children that are done on the parent', () => {
+    const tally = within(rowNamed('Rework auth')).getByText('0/1 done')
+    expect(tally.getAttribute('title')).toBe('Write the migration · stopped')
+    expect(within(rowNamed('Solo')).queryByText(/done$/)).toBeNull()
+  })
+
+  it('collapses on ← and expands on →, and remembers it', () => {
+    act(() => rowNamed('Rework auth').focus())
+    press('ArrowLeft')
+    expect(screen.queryByRole('treeitem', { name: 'Write the migration' })).toBeNull()
+    expect(useTaskTreeStore.getState().collapsedTasks).toEqual({ auth: true })
+    press('ArrowRight')
+    expect(rowNamed('Write the migration')).toBeTruthy()
+    expect(useTaskTreeStore.getState().collapsedTasks).toEqual({})
+  })
+
+  it('goes up from a child to its parent on ←', () => {
+    act(() => useTaskTreeStore.getState().setTaskCollapsed('mig', true))
+    act(() => rowNamed('Write the migration').focus())
+    press('ArrowLeft')
+    expect(document.activeElement).toBe(rowNamed('Rework auth'))
+  })
+
+  it('turns a collapsed parent amber when a grandchild asks', () => {
+    const dot = (name: string) => rowNamed(name).querySelector('.activity') as HTMLElement
+    expect(dot('Rework auth').className).toContain('activity--working')
+    act(() => useTaskTreeStore.getState().setTaskCollapsed('auth', true))
+    expect(dot('Rework auth').className).toContain('activity--waiting')
+    expect(dot('Rework auth').getAttribute('title')).toContain('Backfill')
+  })
+
+  it('offers New Child Task… in the row menu, under that worktree', () => {
+    fireEvent.contextMenu(rowNamed('Rework auth'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New Child Task…' }))
+    expect(openDialog).toHaveBeenCalledWith({ kind: 'new-task', projectId: 'p1', parentId: 'auth' })
   })
 })
