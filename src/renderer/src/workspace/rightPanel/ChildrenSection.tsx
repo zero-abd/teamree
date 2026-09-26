@@ -1,10 +1,11 @@
 // A parent's Children in its Changes panel: where each child stands against the parent, and landing
 // them from here. A conflict is resolved in that child's own merge, not here.
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import { firstSentence } from '../../state/messages'
 import { useOverlaps } from '../../state/overlapStore'
 import { useWorkspaceStore } from '../../state/workspaceStore'
+import { childRowSpeech } from '../../sidebar/rowSpeech'
 import { worktreeDisplay, worktreeLabel } from '../../sidebar/worktreeDisplay'
 import { childRows, mergeable, readyToMerge, type ChildRow } from './childrenModel'
 import { useChildren } from './childrenStore'
@@ -40,6 +41,7 @@ export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.J
   const reveal = useChildren((state) => state.reveal === worktreeId)
   const mergeChildren = useChildren((state) => state.mergeChildren)
   const section = useRef<HTMLElement | null>(null)
+  const speechId = useId()
   const shown = rows.length > 0
 
   useEffect(() => {
@@ -114,12 +116,19 @@ export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.J
               type="button"
               className="child__name"
               title={row.title}
+              aria-describedby={`${speechId}-${row.worktreeId}`}
               onClick={() => void openWorktree(row.worktreeId)}
             >
               {row.title}
             </button>
-            <span className={`child__stage child__stage--${row.stage}`}>{row.stage}</span>
-            <ChildFacts row={row} into={into} />
+            <span id={`${speechId}-${row.worktreeId}`} hidden>
+              {childRowSpeech(row, into)}
+            </span>
+            {/* Drawn only: the name's description says it in words. */}
+            <span className="child__facts" aria-hidden="true">
+              <span className={`child__stage child__stage--${row.stage}`}>{row.stage}</span>
+              <ChildFacts row={row} into={into} />
+            </span>
             {mergeable(row) ? (
               <button
                 type="button"
@@ -132,7 +141,7 @@ export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.J
               </button>
             ) : null}
             {row.report === undefined ? null : (
-              <span className="child__report" title={row.report}>
+              <span className="child__report" title={row.report} aria-hidden="true">
                 {`${row.stage === 'failed' ? '✗' : '✓'} ${firstSentence(row.report)}`}
               </span>
             )}
@@ -162,7 +171,7 @@ function ChildFacts({ row, into }: { row: ChildRow; into: string }): React.JSX.E
         </span>
       ) : null}
       {conflict !== '' ? (
-        <span className="child__conflict" role="img" aria-label={conflict} title={conflict}>
+        <span className="child__conflict" title={conflict}>
           ⚠
         </span>
       ) : null}

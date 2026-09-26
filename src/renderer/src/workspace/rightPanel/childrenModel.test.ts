@@ -130,6 +130,11 @@ describe('childRows', () => {
     expect(readyToMerge(rows).map((row) => row.worktreeId)).toEqual(['cart'])
   })
 
+  it('never offers a child whose checkout is missing', () => {
+    const rows = childRows('parent', input())
+    expect(mergeable({ ...rows[0]!, stage: 'missing' })).toBe(false)
+  })
+
   it('never offers a child whose agent is still at work', () => {
     const rows = childRows(
       'parent',

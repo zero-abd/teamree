@@ -1284,7 +1284,8 @@ describe('task trees', () => {
     const { useChildren } = await import('../workspace/rightPanel/childrenStore')
     const showChildren = vi.fn(async () => {})
     useChildren.setState({ showChildren })
-    fireEvent.click(within(rowNamed('Rework auth')).getByRole('link', { name: '0/1 done' }))
+    // A pointer shortcut: the row says the tally in words, and the chip is hidden from the tree.
+    fireEvent.click(within(rowNamed('Rework auth')).getByText('0/1 done'))
     expect(showChildren).toHaveBeenCalledWith('auth')
   })
 

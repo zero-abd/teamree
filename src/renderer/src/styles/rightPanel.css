@@ -1051,6 +1051,13 @@
   color: var(--accent-bright);
 }
 
+.child__facts {
+  display: flex;
+  flex: none;
+  align-items: baseline;
+  gap: var(--s2);
+}
+
 .child__stage,
 .child__arrows,
 .child__uncommitted {

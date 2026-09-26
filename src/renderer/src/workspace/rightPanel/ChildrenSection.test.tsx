@@ -120,8 +120,27 @@ describe('the Children section', () => {
     expect(within(cart).getByText('✓ Totals include tax.').getAttribute('title')).toBe(
       'Totals include tax. Tests pass.'
     )
-    expect(within(rowOf('Payment')).getByRole('img', { name: 'Conflicts with Checkout in money.js' })).toBeTruthy()
+    expect(within(rowOf('Payment')).getByTitle('Conflicts with Checkout in money.js')).toBeTruthy()
     expect(within(rowOf('Search page')).getByText('stopped')).toBeTruthy()
+  })
+
+  it('reads each row aloud in words', () => {
+    render(<ChildrenSection worktreeId="parent" />)
+    expect(
+      within(rowOf('Cart totals')).getByRole('button', {
+        name: 'Cart totals',
+        description: 'done, 2 ahead, 1 behind, reported: Totals include tax.'
+      })
+    ).toBeTruthy()
+    expect(
+      within(rowOf('Payment')).getByRole('button', {
+        name: 'Payment',
+        description: 'done, 1 ahead, would conflict with Checkout in money.js, reported: Card payments.'
+      })
+    ).toBeTruthy()
+    expect(
+      within(rowOf('Search page')).getByRole('button', { name: 'Search page', description: 'stopped, 2 uncommitted' })
+    ).toBeTruthy()
   })
 
   it('shows nothing on a task without children', () => {
@@ -172,6 +191,45 @@ describe('the Children section', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Resolve…' }))
 
     expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'pay' })
+  })
+
+  it('Resolve… lands in the conflict flow: Update from Parent, not Merge', async () => {
+    const { ConfirmMergeDialog } = await import('../../dialogs/ConfirmMergeDialog')
+    call.mockImplementation((method: string, params: { dryRun?: boolean; base?: boolean }) => {
+      if (method === 'worktree.mergeIntoBase' && params.dryRun === true) {
+        return Promise.resolve({
+          worktreeId: 'pay',
+          into: 'checkout',
+          checkout: '/wt/parent',
+          commits: [{ shortSha: 'bb47af2', subject: 'Card payments' }],
+          fastForward: false,
+          dirty: [],
+          merged: false,
+          conflicts: ['money.js']
+        })
+      }
+      return new Promise(() => {})
+    })
+    useChildren.setState({
+      stopped: {
+        parent: { worktreeId: 'pay', error: 'payment conflicts with checkout in money.js', conflicts: ['money.js'] }
+      }
+    })
+    const Shown = (): React.JSX.Element | null => {
+      const dialog = useWorkspaceStore((state) => state.dialog)
+      return dialog?.kind === 'confirm-merge' ? <ConfirmMergeDialog worktreeId={dialog.worktreeId} /> : null
+    }
+    render(
+      <>
+        <ChildrenSection worktreeId="parent" />
+        <Shown />
+      </>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve…' }))
+
+    expect(await screen.findByRole('button', { name: 'Update from Parent' })).toBeTruthy()
+    expect(within(screen.getByRole('dialog')).queryByRole('button', { name: 'Merge' })).toBeNull()
   })
 
   it('any other stop opens that child’s merge, where a message can be typed', () => {

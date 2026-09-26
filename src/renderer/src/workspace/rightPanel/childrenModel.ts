@@ -75,9 +75,9 @@ export function unmerged(row: ChildRow): boolean {
   return !row.landed && (row.ahead > 0 || row.uncommitted > 0)
 }
 
-/** Unmerged, with no agent at work in it. */
+/** Unmerged, with no agent at work in it and a checkout to merge from. */
 export function mergeable(row: ChildRow): boolean {
-  return unmerged(row) && row.stage !== 'working' && row.stage !== 'asking' && row.stage !== 'failed'
+  return unmerged(row) && !['working', 'asking', 'failed', 'missing'].includes(row.stage)
 }
 
 /** Mergeable, finished and conflict-free, counting the ones landed before it in this run: what Merge All Ready lands. */

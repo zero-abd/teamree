@@ -2,6 +2,7 @@
 
 import type { WorktreeLanding, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
 import type { RunState } from '@shared/runCommands'
+import { firstSentence } from '../state/messages'
 import { dotTone, TONE_LABEL, type AgentRow, type DotTone } from './agentRows'
 import type { OverlapChip } from './overlapChip'
 import { reviewWord } from './pullRequestChip'
@@ -121,6 +122,32 @@ export function taskRowSpeech(row: {
     row.ahead > 0 ? `${row.ahead} ahead` : null,
     row.tokens ?? null,
     `${row.age} old`
+  ]
+    .filter(Boolean)
+    .join(', ')
+}
+
+/** A child in its parent's Children: stage, distance, what a merge would stop on, and its report. */
+export function childRowSpeech(
+  row: {
+    stage: string
+    ahead: number
+    behind: number
+    uncommitted: number
+    conflicts: readonly string[]
+    siblingConflicts: readonly { title: string; paths: readonly string[] }[]
+    report?: string
+  },
+  into: string
+): string {
+  return [
+    row.stage,
+    row.ahead > 0 ? `${row.ahead} ahead` : null,
+    row.behind > 0 ? `${row.behind} behind` : null,
+    row.uncommitted > 0 ? `${row.uncommitted} uncommitted` : null,
+    row.conflicts.length > 0 ? `would conflict with ${into} in ${files(row.conflicts)}` : null,
+    ...row.siblingConflicts.map((other) => `would conflict with ${other.title} in ${files(other.paths)}`),
+    row.report === undefined ? null : reportWords(`${row.stage === 'failed' ? '✗' : '✓'} ${firstSentence(row.report)}`)
   ]
     .filter(Boolean)
     .join(', ')

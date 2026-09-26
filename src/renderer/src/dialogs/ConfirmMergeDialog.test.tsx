@@ -522,6 +522,7 @@ describe('a parent with children not merged', () => {
   })
 
   beforeEach(() => {
+    call.mockClear()
     call.mockImplementation((method: unknown, params: unknown) => {
       if (method === 'worktree.mergeIntoBase') return Promise.resolve(plan)
       if (method === 'worktree.changes' && (params as { base?: boolean }).base === true) return Promise.resolve(branch)

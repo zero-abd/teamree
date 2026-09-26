@@ -482,7 +482,7 @@ describe('the Tasks view', () => {
     useChildren.setState({ showChildren })
     useTaskTreeStore.setState({ boardMode: 'tasks' })
     render(<Dashboard />)
-    fireEvent.click(screen.getByRole('link', { name: '0/2 done' }))
+    fireEvent.click(screen.getByText('0/2 done'))
     expect(showChildren).toHaveBeenCalledWith('w1')
     expect(openWorktree).not.toHaveBeenCalled()
   })
