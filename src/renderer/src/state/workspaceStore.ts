@@ -292,12 +292,19 @@ export type TeamworkReadErrors = { list?: string; relay?: string; status?: strin
 /** A relay command running in a pane in this window, one pane per project. Rebuilt from the runtime's list, see `reconcileRelayPanes`. */
 export type { RelayPaneKind, RelayPaneState } from '../teamwork/startTeamwork'
 
-/** What Commit takes: the ticked paths plus the index, else the index alone, else every listed change. */
+/**
+ * What Commit takes: the ticked paths plus the index, else the index alone, else every change.
+ * Every row of a cut-off list ticked is All: the rows past the cap cannot be ticked.
+ */
 export function commitScope(
   ticked: readonly string[],
-  changes: readonly WorktreeChange[]
+  changes: readonly WorktreeChange[],
+  truncated = false
 ): 'ticked' | 'staged' | 'all' {
-  if (ticked.length > 0) return 'ticked'
+  if (ticked.length > 0) {
+    const tickable = changes.filter((change) => change.kind !== 'conflicted' && (change.unstaged || !change.staged))
+    return truncated && tickable.every((change) => ticked.includes(change.path)) ? 'all' : 'ticked'
+  }
   return changes.some((change) => change.staged) ? 'staged' : 'all'
 }
 
@@ -2768,16 +2775,22 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const worktreeId = get().activeWorktreeId
       if (!worktreeId) return false
       const ticked = get().stagedPaths
-      const rows = get().changes[worktreeId]?.changes ?? []
-      const scope = commitScope(ticked, rows)
+      const listed = get().changes[worktreeId]
+      const rows = listed?.changes ?? []
+      const scope = commitScope(ticked, rows, listed?.truncated)
       // 'staged' names no paths: a path would be added whole, and a hunk left out of the index with it.
-      // The list is `git status` without ignored files, so 'all' is `git add -A` for what is on screen.
-      const paths = scope === 'ticked' ? ticked : scope === 'all' ? rows.map((change) => change.path) : undefined
-      if (paths?.length === 0) return false
+      // 'all' names none either: the list stops at its cap, and git's own -A does not.
+      const paths = scope === 'ticked' ? ticked : undefined
+      if (scope === 'all' && rows.length === 0) return false
 
       set({ committing: true })
       try {
-        const result = await runtimeClient.call('worktree.commit', { worktreeId, message, ...(paths && { paths }) })
+        const result = await runtimeClient.call('worktree.commit', {
+          worktreeId,
+          message,
+          ...(paths && { paths }),
+          ...(scope === 'all' && { all: true })
+        })
         // The commit can capture more than was ticked (anything staged earlier in a terminal); saying
         // so is the difference between a notice and a surprise. Otherwise the Changes tab shows it.
         const extra = paths ? alsoCommitted(result.paths, paths) : 0

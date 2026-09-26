@@ -222,6 +222,12 @@ export function isPreparedPath(prepared: PreparedPaths | undefined, entryPath: s
   return untracked && covers(prepared.copiedPaths, entryPath)
 }
 
+/** Pathspecs that keep `git add -A` off everything preparation put in the checkout. */
+export function preparedExcludes(prepared: PreparedPaths | undefined): string[] {
+  const roots = [...(prepared?.linkedPaths ?? []), ...(prepared?.copiedPaths ?? [])].map(tidyPath)
+  return [...new Set(roots.filter((root) => root.length > 0))].map((root) => `:(exclude,literal)${root}`)
+}
+
 function covers(roots: readonly string[] | undefined, entryPath: string): boolean {
   if (!roots || roots.length === 0) return false
   const entry = tidyPath(entryPath)

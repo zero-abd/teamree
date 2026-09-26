@@ -1,3 +1,5 @@
+import { mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { GitServiceError } from './errors'
 import { createTempRepo, type TempRepo } from './testRepository'
@@ -17,13 +19,15 @@ describe('committing in a worktree', () => {
 
   const commit = async (
     repo: TempRepo,
-    options: { message?: string; paths?: string[] } = {}
+    options: { message?: string; paths?: string[]; all?: boolean; linkedPaths?: string[] } = {}
   ): ReturnType<typeof commitWorktree> =>
     commitWorktree(repo.runner, {
       worktreeId: 'wt',
       worktreePath: repo.repoPath,
       message: options.message ?? 'a message',
       ...(options.paths === undefined ? {} : { paths: options.paths }),
+      ...(options.all === undefined ? {} : { all: options.all }),
+      ...(options.linkedPaths === undefined ? {} : { prepared: { linkedPaths: options.linkedPaths } }),
       now: () => 4242
     })
 
@@ -141,5 +145,47 @@ describe('committing in a worktree', () => {
     await expect(commit(repo)).rejects.toThrow()
 
     expect(await repo.git(['rev-parse', 'HEAD'])).toBe(before)
+  })
+
+  // Past the Changes list's cap: every change goes in, not the rows on screen.
+  it('commits every change with all, new files and deletions included, however many', async () => {
+    const repo = await repository()
+    const dirs = Array.from({ length: 20 }, (_, index) => `pkg${index}`)
+    await Promise.all(dirs.map((dir) => mkdir(path.join(repo.repoPath, dir), { recursive: true })))
+    const tracked = Array.from({ length: 1000 }, (_, index) => `${dirs[index % 20]}/t${index}.ts`)
+    await Promise.all(tracked.map((file) => writeFile(path.join(repo.repoPath, file), 'a\n')))
+    await repo.commit('tracked')
+    await Promise.all(tracked.slice(0, 990).map((file) => writeFile(path.join(repo.repoPath, file), 'b\n')))
+    await rm(path.join(repo.repoPath, tracked[995]!))
+    await Promise.all(
+      Array.from({ length: 1000 }, (_, index) => writeFile(path.join(repo.repoPath, `fresh${index}.ts`), 'n\n'))
+    )
+    await repo.write('new-dir/deep/one.ts', 'n\n')
+
+    const result = await commit(repo, { message: 'all of it', all: true })
+
+    expect(await repo.git(['status', '--porcelain', '--untracked-files=all'])).toBe('')
+    expect(result.paths).toHaveLength(990 + 1 + 1000 + 1)
+    expect(await repo.git(['show', '--format=', '--name-only', 'HEAD'])).toContain('new-dir/deep/one.ts')
+  })
+
+  it('leaves what the project links into every worktree out of all', async () => {
+    const repo = await repository()
+    await repo.write('.gitignore', 'node_modules/\n')
+    await repo.commit('ignore')
+    await mkdir(path.join(repo.base, 'shared-modules'))
+    await symlink(path.join(repo.base, 'shared-modules'), path.join(repo.repoPath, 'node_modules'))
+    await repo.write('src/app.ts', 'x\n')
+
+    const result = await commit(repo, { all: true, linkedPaths: ['node_modules'] })
+
+    expect(result.paths).toEqual(['src/app.ts'])
+    expect(await repo.git(['status', '--porcelain'])).toBe('?? node_modules')
+  })
+
+  it('refuses all with paths named', async () => {
+    const repo = await repository()
+    await repo.write('a.ts', 'x\n')
+    await expect(commit(repo, { all: true, paths: ['a.ts'] })).rejects.toBeInstanceOf(GitServiceError)
   })
 })

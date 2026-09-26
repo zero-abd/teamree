@@ -187,7 +187,7 @@ it('toasts a commit only when the Changes tab is not showing it', async () => {
   expect(committedNotices()).toHaveLength(1)
 })
 
-it('commits every listed change when nothing is ticked, and nothing when there is none', async () => {
+it('commits every change when nothing is ticked, and nothing when there is none', async () => {
   const store = useWorkspaceStore.getState()
   await store.bootstrap()
   const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
@@ -199,7 +199,11 @@ it('commits every listed change when nothing is ticked, and nothing when there i
 
   const call = vi.spyOn(runtimeClient, 'call')
   expect(await useWorkspaceStore.getState().commitStaged('has a message')).toBe(true)
-  expect(call.mock.calls.find(([method]) => method === 'worktree.commit')?.[1]).toMatchObject({ paths: listed })
+  expect(call.mock.calls.find(([method]) => method === 'worktree.commit')?.[1]).toEqual({
+    worktreeId,
+    message: 'has a message',
+    all: true
+  })
 
   call.mockClear()
   useWorkspaceStore.setState((state) => ({
@@ -207,6 +211,29 @@ it('commits every listed change when nothing is ticked, and nothing when there i
   }))
   expect(await useWorkspaceStore.getState().commitStaged('has a message')).toBe(false)
   expect(call.mock.calls.filter(([method]) => method === 'worktree.commit')).toHaveLength(0)
+  call.mockRestore()
+})
+
+// A cut-off list is not the worktree: All ticked on 500 of 2,000 rows still means all 2,000.
+it('commits all when every listed row of a cut-off list is ticked', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const worktreeId = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!.id
+  await store.openWorktree(worktreeId)
+  if (!changesOnScreen(useWorkspaceStore.getState())) useWorkspaceStore.getState().toggleChanges()
+  await vi.waitFor(() => expect(useWorkspaceStore.getState().changes[worktreeId]).toBeDefined())
+  useWorkspaceStore.setState((state) => ({
+    changes: { ...state.changes, [worktreeId]: { ...state.changes[worktreeId]!, total: 2000, truncated: true } }
+  }))
+  useWorkspaceStore.getState().setAllStaged(true)
+
+  const call = vi.spyOn(runtimeClient, 'call')
+  expect(await useWorkspaceStore.getState().commitStaged('everything')).toBe(true)
+  expect(call.mock.calls.find(([method]) => method === 'worktree.commit')?.[1]).toEqual({
+    worktreeId,
+    message: 'everything',
+    all: true
+  })
   call.mockRestore()
 })
 

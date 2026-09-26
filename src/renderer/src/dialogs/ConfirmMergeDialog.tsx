@@ -53,16 +53,22 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   const commits = (plan?.commits ?? []).map((commit) => `${commit.shortSha} ${commit.subject}`)
   const uncommitted = pending?.changes.map((change) => change.path) ?? []
   const counted = status === undefined ? 0 : status.staged + status.unstaged + status.untracked + status.conflicted
-  const commitFirst = uncommitted.length > 0 || counted > 0
-  // An unread or cut-off list would commit only part of the work and merge without the rest.
-  const cannotCommit = commitFirst && (message.trim() === '' || uncommitted.length === 0 || pending?.truncated === true)
+  // The list stops at its cap; its total does not, and a file both staged and edited is one.
+  const total = pending?.total ?? counted
+  const commitFirst = total > 0 || counted > 0
+  const blocked =
+    dirty.length > 0
+      ? `${folderName(plan?.checkout ?? into)} has uncommitted changes`
+      : commitFirst && message.trim() === ''
+        ? 'Needs a commit message'
+        : undefined
 
   const merge = async (): Promise<void> => {
     setMerging(true)
     setError(null)
     if (commitFirst) {
       try {
-        await runtimeClient.call('worktree.commit', { worktreeId, message, paths: uncommitted })
+        await runtimeClient.call('worktree.commit', { worktreeId, message, all: true })
       } catch (failure) {
         setError(failure instanceof Error ? failure.message : String(failure))
         setMerging(false)
@@ -82,7 +88,8 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
       cancel="Cancel"
       confirm={merging ? 'Merging…' : commitFirst ? 'Commit & Merge' : 'Merge'}
       tone="primary"
-      confirmDisabled={merging || dirty.length > 0 || cannotCommit}
+      confirmDisabled={merging || blocked !== undefined}
+      {...(merging || blocked === undefined ? {} : { confirmHint: blocked })}
       onCancel={closeDialog}
       onConfirm={() => void merge()}
     >
@@ -104,8 +111,8 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
       {commits.length > 0 ? <Lines lines={commits} /> : null}
       {commitFirst ? (
         <>
-          <p className="confirm__body">{`${uncommitted.length || counted} uncommitted`}</p>
-          <Lines lines={uncommitted} />
+          <p className="confirm__body">{`${(total || counted).toLocaleString('en-US')} uncommitted`}</p>
+          <Lines lines={uncommitted} total={total} />
           <input
             className="field__input"
             type="text"
@@ -116,7 +123,7 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
             disabled={merging}
             onChange={(event) => setMessage(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key !== 'Enter' || merging || dirty.length > 0 || cannotCommit) return
+              if (event.key !== 'Enter' || merging || blocked !== undefined) return
               event.preventDefault()
               void merge()
             }}
@@ -155,11 +162,12 @@ function folderName(path: string): string {
   return path.split('/').filter(Boolean).pop() ?? path
 }
 
-function Lines({ lines }: { lines: readonly string[] }): React.JSX.Element {
-  const more = lines.length - SHOWN
+/** The first few lines, then `+N more` of `total` (the list's own length when it is whole). */
+function Lines({ lines, total = lines.length }: { lines: readonly string[]; total?: number }): React.JSX.Element {
+  const more = Math.max(total, lines.length) - Math.min(SHOWN, lines.length)
   return (
     <ul className="confirm__files">
-      {[...lines.slice(0, SHOWN), ...(more > 0 ? [`+${more} more`] : [])].map((line) => (
+      {[...lines.slice(0, SHOWN), ...(more > 0 ? [`+${more.toLocaleString('en-US')} more`] : [])].map((line) => (
         <li key={line} className="confirm__path">
           {line}
         </li>

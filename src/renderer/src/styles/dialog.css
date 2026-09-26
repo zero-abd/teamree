@@ -704,6 +704,13 @@ button.picker__chevron:hover {
   font-size: var(--text-base);
 }
 
+.confirm__hint {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  text-align: right;
+}
+
 .confirm__path {
   margin: 0;
   overflow-wrap: anywhere;

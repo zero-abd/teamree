@@ -498,11 +498,30 @@ describe('committing', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Include src/app.ts in the next commit' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Commit All' }))
-    expect(call).toHaveBeenCalledWith('worktree.commit', {
-      worktreeId: 'w1',
-      message: 'Rank',
-      paths: ['README.md', 'src/app.ts', 'src/gone.ts']
+    expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
+  })
+
+  // The list stops at 500 rows; the commit, the counts and the All box must not.
+  it('commits all 2,000 when only 500 are listed, and says how many are not', () => {
+    const listed = Array.from(
+      { length: 500 },
+      (_, index): WorktreeChange => ({ path: `src/f${index}.ts`, kind: 'modified', staged: false, unstaged: true })
+    )
+    useWorkspaceStore.setState({
+      changes: { w1: { worktreeId: 'w1', changes: listed, total: 2000, limit: 500, truncated: true, readAt: 0 } }
     })
+    render(<ChangesTab />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Rank' } })
+
+    const group = screen.getByRole('region', { name: 'Uncommitted' })
+    expect(within(group).getByText('2,000')).toBeTruthy()
+    expect(screen.getByText('+1,500 more')).toBeTruthy()
+    expect(screen.getByText('0/2,000')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'All' }))
+    expect(screen.getByText('2,000/2,000')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Commit All 2,000' }))
+    expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
   })
 
   it('switches to Commit once a file is ticked', () => {
@@ -521,7 +540,7 @@ describe('committing', () => {
     const commitAll = screen.getByRole('button', { name: 'Commit All' })
     expect(commitAll).toHaveProperty('disabled', false)
     fireEvent.click(commitAll)
-    expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', paths: ['src/app.ts'] })
+    expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
   })
 })
 
