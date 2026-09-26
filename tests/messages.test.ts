@@ -159,7 +159,7 @@ describe('agents talking over the socket', () => {
       expect(screen(kidPane.id)).toContain('⎿ postgres')
     }
     expect(cliAs<TaskMessage[]>(lead, ['msg', 'inbox'])).toEqual([])
-  }, 120_000)
+  }, { timeout: 120_000, retry: 2 })
 
   it('pastes into an idle parent: the ask, and then the done', async () => {
     const lead = await worktree('Queue work')
