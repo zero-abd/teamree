@@ -23,6 +23,7 @@ export function childPromptFor(store: TaskLookup, worktreeId: string): string | 
   const title = task.length > MAX_TASK_CHARS ? `${task.slice(0, MAX_TASK_CHARS - 1)}…` : task
   return [
     `[teamree] Child task of "${title}" (branch ${parent.branch}). It lands there${base ? `, not ${base}` : ''}.`,
-    'Me: teamree whoami   Commands: teamree guide'
+    'Me: teamree whoami   Commands: teamree guide',
+    'Finished: teamree msg done "<summary>" [--failed]   Stuck: teamree msg ask "<question>"'
   ].join('\n')
 }

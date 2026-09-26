@@ -183,6 +183,7 @@ import {
   type RightPanelTab
 } from '../workspace/rightPanel/rightPanelState'
 import { panelCost, sidebarCost, type Sides } from '../workspace/roomForPanes'
+import { useMessageStore } from './messages'
 
 export type DialogState =
   /** A picked or dropped folder the runtime would not add as it was. */
@@ -1701,7 +1702,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     /** The window's one subscription: everything the runtime changes arrives here as a collection to re-read, so nothing polls. */
     startWatching() {
-      const watch = runtimeClient.watchWorkspace((event) => refresher.push(event))
+      const watch = runtimeClient.watchWorkspace((event) => {
+        if (event.type === 'messages') void useMessageStore.getState().load()
+        refresher.push(event)
+      })
+      void useMessageStore.getState().load()
       return () => {
         watch.close()
         refresher.cancelPending()

@@ -42,8 +42,6 @@ describe('task, memory and add-on methods before their branches land', () => {
   }
 
   it('answers every read with an empty result', async () => {
-    expect(await result('message.list', {})).toEqual([])
-    expect(await result('message.read', { ids: [1] })).toEqual({ read: 0 })
     expect(await result('worktree.usage', {})).toEqual([])
     expect(await result('teamwork.handoffs', { projectId: 'p' })).toEqual({ incoming: [], outgoing: [] })
     expect(await result('project.templates', { projectId: 'p' })).toEqual({
@@ -56,7 +54,6 @@ describe('task, memory and add-on methods before their branches land', () => {
 
   it('refuses every write as not implemented yet', async () => {
     const writes: [string, unknown][] = [
-      ['message.send', { from: { you: true }, to: { worktreeId: 'w' }, kind: 'note', text: 'hi' }],
       ['teamwork.handOff', { worktreeId: 'w', to: 'ana', note: '' }],
       ['teamwork.take', { projectId: 'p', id: 'h' }],
       ['teamwork.dismissHandoff', { projectId: 'p', id: 'h' }],

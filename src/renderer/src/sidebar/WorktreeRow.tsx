@@ -13,8 +13,11 @@ import {
 } from '@shared/entities'
 import { AgentGlyph } from '../agents/glyphs'
 import { openInBrowser } from '../shell/openInBrowser'
+import { askForYou, childDone, firstSentence, useMessageStore } from '../state/messages'
+import { useWorkspaceStore } from '../state/workspaceStore'
 import type { PaneAttention } from '../state/paneAttention'
 import { agentRows, dotClass, TONE_LABEL, worktreeTone, type DotTone } from './agentRows'
+import { AskForYou } from './AskForYou'
 import { PaneRows } from './PaneRows'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
@@ -152,6 +155,11 @@ export function WorktreeRow({
   const drop = useNestDrop({ parentId: worktree.id }, true)
   const dragged = useNestDrag((state) => state.dragging === worktree.id)
   const draggable = ready && !renaming && onMoveUnder !== undefined
+  const ask = useMessageStore((state) => askForYou(state.messages, worktree.id))
+  const heard = useMessageStore((state) => childDone(state.messages, worktree.id))
+  const heardFrom = useWorkspaceStore((state) =>
+    heard === undefined ? undefined : state.worktrees.find((entry) => entry.id === heard.from.worktreeId)
+  )
 
   // A field removed while focused leaves the focus on `document.body`; after a blur it is already elsewhere.
   useEffect(() => {
@@ -207,7 +215,9 @@ export function WorktreeRow({
   const show = (next: boolean): void => (task === undefined ? setPanesShown(next) : task.onCollapse(!next))
   // Folded, a task's dot speaks for its whole tree.
   const rolled = task?.collapsed === true ? task.rolled : null
-  const tone = rolled?.tone ?? worktreeTone(rows)
+  // A question for you outranks whatever the panes say: the agent is only waiting on the answer.
+  const tone = rolled?.tone ?? (ask === undefined ? worktreeTone(rows) : 'waiting')
+  const report = ask === undefined ? reportLine(worktree) : null
   const label = worktreeLabel(display)
   // The glyph names the agent; words only where it cannot tell two runs apart.
   const agentWord = display.agent?.kind === undefined || twinRun
@@ -470,6 +480,14 @@ export function WorktreeRow({
         <DropHint text={drop.target.allowed ? drop.target.hint : drop.target.reason} refused={!drop.target.allowed} />
       )}
 
+      {ask === undefined ? null : <AskForYou ask={ask} />}
+      {report === null ? null : <p className="worktree__line worktree__report">{report}</p>}
+      {heard === undefined || heardFrom === undefined ? null : (
+        <p className="worktree__line worktree__report" title={heard.text}>
+          {`${heard.outcome === 'failed' ? '✗' : '✓'} ${heardFrom.name}: ${firstSentence(heard.text)}`}
+        </p>
+      )}
+
       {menuAt === null ? null : (
         <RowMenu label={`Actions for ${label}`} items={items} anchor={menuAt} onClose={closeMenu} />
       )}
@@ -516,6 +534,13 @@ export function WorktreeRow({
 export function DropHint({ text, refused }: { text: string | null; refused: boolean }): React.JSX.Element | null {
   if (text === null) return null
   return <span className={`drop-hint${refused ? ' drop-hint--refused' : ''}`}>{text}</span>
+}
+
+/** A finished task's own word on how it went: `msg done`'s first sentence. */
+function reportLine(worktree: Worktree): string | null {
+  const report = worktree.report
+  if (report === undefined) return null
+  return `${report.outcome === 'failed' ? '✗' : '✓'} ${firstSentence(report.summary)}`
 }
 
 const FAILURE_LINE_MAX = 60
