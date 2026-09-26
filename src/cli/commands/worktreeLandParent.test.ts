@@ -148,4 +148,21 @@ describe('worktree update', () => {
     expect(sent(stub, 'worktree.abortUpdate')).toEqual([{ worktreeId: 'w2' }])
     expect(aborted.out).toBe('Aborted the merge.\n')
   })
+
+  it('--continue finishes it once resolved, and says when git stopped again', async () => {
+    const { stub, run } = await cli({
+      'worktree.continueUpdate': () => update({ mode: 'merge' })
+    })
+    const done = await run(['worktree', 'update', 'here', '--continue'])
+    expect(done.code).toBe(0)
+    expect(sent(stub, 'worktree.continueUpdate')).toEqual([{ worktreeId: 'w2' }])
+    expect(done.out).toBe('Merged rework-auth into rework-auth--tests.\n')
+
+    const again = await cli({
+      'worktree.continueUpdate': () => update({ outcome: 'conflicts', conflicts: ['auth.ts'] })
+    })
+    const stopped = await again.run(['worktree', 'update', 'here', '--continue'])
+    expect(stopped.code).toBe(1)
+    expect(stopped.out).toContain('Conflicts in auth.ts')
+  })
 })

@@ -49,6 +49,8 @@ export const GIT_METHODS = [
   'worktree.push',
   'worktree.update',
   'worktree.abortUpdate',
+  'worktree.continueUpdate',
+  'worktree.resolve',
   'worktree.landing',
   'worktree.checkFailure',
   'worktree.createPullRequest',
@@ -124,6 +126,8 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.push': (params) => service.worktreePush(params),
     'worktree.update': (params) => service.worktreeUpdate(params),
     'worktree.abortUpdate': (params) => service.worktreeAbortUpdate(params),
+    'worktree.continueUpdate': (params) => service.worktreeContinueUpdate(params),
+    'worktree.resolve': (params) => service.worktreeResolve(params),
     'worktree.landing': (params) => service.worktreeLanding(params),
     'worktree.checkFailure': (params) => service.worktreeCheckFailure(params),
     'worktree.createPullRequest': (params) => service.worktreeCreatePullRequest(params),
@@ -188,6 +192,8 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.push', Params.worktreePush, handlers['worktree.push'])
   registry.register('worktree.update', Params.worktreeUpdate, handlers['worktree.update'])
   registry.register('worktree.abortUpdate', Params.worktreeAbortUpdate, handlers['worktree.abortUpdate'])
+  registry.register('worktree.continueUpdate', Params.worktreeContinueUpdate, handlers['worktree.continueUpdate'])
+  registry.register('worktree.resolve', Params.worktreeResolve, handlers['worktree.resolve'])
   registry.register('worktree.landing', Params.worktreeLanding, handlers['worktree.landing'])
   registry.register('worktree.checkFailure', Params.worktreeCheckFailure, handlers['worktree.checkFailure'])
   registry.register(

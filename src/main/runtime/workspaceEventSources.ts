@@ -113,6 +113,18 @@ export function publishGitWrites(registry: MethodRegistry, git: GitService, bus:
     return result
   })
 
+  registry.register('worktree.continueUpdate', Params.worktreeContinueUpdate, async (params) => {
+    const result = await git.worktreeContinueUpdate(params)
+    bus.emit({ type: 'worktrees', worktreeIds: withChildren(git, params.worktreeId) })
+    return result
+  })
+
+  registry.register('worktree.resolve', Params.worktreeResolve, async (params) => {
+    const result = await git.worktreeResolve(params)
+    bus.emit({ type: 'worktrees', worktreeIds: [params.worktreeId] })
+    return result
+  })
+
   // A merge moves the base every row of the project is measured against; a pull request is a landing of its own.
   registry.register('worktree.mergeIntoBase', Params.worktreeMergeIntoBase, async (params) => {
     const projectId = git.snapshot().worktrees.find((worktree) => worktree.id === params.worktreeId)?.projectId

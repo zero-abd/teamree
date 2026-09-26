@@ -17,6 +17,7 @@ import { createGitRunner, type GitRunner } from './gitProcess'
 import { tryPushProjectBase } from './projectBase'
 import { failureExcerpt, failureLogArgs, readChecks, readReview } from './pullRequestChecks'
 import { assertRefShape } from './repository'
+import { readMergePreview } from './mergePreview'
 import { bareRef, remoteForge, reviewUrl } from './reviewUrl'
 import { parseChangeRecords } from './worktreeChanges'
 
@@ -338,7 +339,16 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
     dirty,
     merged: false
   }
-  if (options.dryRun) return plan
+  if (options.dryRun) {
+    if (fastForward || commits.length === 0) return plan
+    const preview = await readMergePreview(runner, {
+      worktreeId: options.worktreeId,
+      repoPath: cwd,
+      baseRef: into,
+      branch: options.branch
+    })
+    return preview.state === 'conflicts' ? { ...plan, conflicts: preview.conflicts } : plan
+  }
 
   if (dirty.length > 0) {
     const refusal =
