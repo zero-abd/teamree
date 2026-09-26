@@ -63,6 +63,23 @@ so selection and copy are untouched. A link is offered only once the file is fou
 Inline image rendering was rejected: it needs an image addon, changes row heights
 under a full-screen program, and draws over text the agent owns.
 
+## Strip
+
+The images in the prompt still being written show as thumbnails in a row under the pane.
+
+- **Which.** The placeholders between the two rules of Claude Code's input box at the bottom
+  of the screen (`promptImages.ts`). A sent prompt moves into the transcript, and `/clear` or
+  a new session leaves the input empty, so the strip clears by itself. While a dialog covers
+  the input the strip keeps what it showed.
+- **Where.** A row, not an overlay, so it covers no text; the pty is refit when it comes and
+  goes, at a paste and a submit. It sits ahead of the surface in the DOM for Tab (xterm keeps
+  Tab) and is drawn below it, next to the input. Each pane has its own, in any split.
+- **−** folds it to a count, per pane. **×** takes a thumbnail off the strip, by file, so a
+  new session's image under the same number shows again.
+- **× does not edit the prompt.** Claude Code drops an image whose placeholder leaves the input,
+  but teamree sees only the screen: the input's cursor, wrapping and vim mode are Claude Code's,
+  and keystrokes would race the person typing and a queued prompt being sent.
+
 ## Surface
 
 - `terminal.pastedImage { terminalId, index } -> { url, path } | null`, a local
