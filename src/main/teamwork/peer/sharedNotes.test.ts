@@ -1,7 +1,7 @@
-// Sharing a note: the inbox's bounds, the roster check on arrival, and two runtimes over a relay
-// proving a note Alice shares is waiting for Bob, and Bob's window and notifications were told.
+// Sharing a note: the inbox's bounds and file, the roster check on arrival, and two runtimes over a relay
+// proving a note Alice shares is waiting for Bob, and still there after Bob restarts.
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -9,7 +9,14 @@ import { MAX_SHARED_NOTE_BYTES, type SharedNoteSummary } from '../../../shared/s
 import { ErrorCode } from '../../../shared/protocol'
 import { loadIdentity } from '../identity'
 import { MEMBER_FILE_SUFFIX, MEMBERS_DIR_SEGMENTS } from '../memberFile'
-import { createNoteInbox, MAX_HELD_NOTES, MAX_UNSEEN_PER_SENDER, type ArrivingNote } from './noteInbox'
+import {
+  createNoteInbox,
+  MAX_HELD_BYTES,
+  MAX_HELD_NOTES,
+  MAX_UNSEEN_PER_SENDER,
+  NOTES_DIR,
+  type ArrivingNote
+} from './noteInbox'
 import { linkIdFor } from './peerService'
 import {
   createFakeRelay,
@@ -33,15 +40,22 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0)) await cleanup()
 })
 
-const arriving = (publicKey: string, title = 'Plan'): ArrivingNote => ({
+const arriving = (publicKey: string, title = 'Plan', over: Partial<ArrivingNote> = {}): ArrivingNote => ({
   projectId: 'p_a',
   handle: publicKey,
   publicKey,
   noteId: 'NOTES.md',
   title,
   markdown: 'body',
-  sentAt: 1
+  sentAt: 1,
+  ...over
 })
+
+async function scratchDir(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'teamree-notes-'))
+  cleanups.push(() => rm(dir, { recursive: true, force: true }))
+  return dir
+}
 
 describe('the inbox', () => {
   it('keeps notes oldest first, without their bodies, until one is opened', () => {
@@ -81,6 +95,78 @@ describe('the inbox', () => {
     expect(titles).toHaveLength(MAX_HELD_NOTES)
     expect(titles).not.toContain('key3')
     expect(titles.at(-1)).toBe('late')
+  })
+
+  it('counts its bounds per project', () => {
+    const inbox = createNoteInbox({ now: () => 0 })
+    for (let index = 0; index < MAX_HELD_NOTES; index += 1) inbox.add(arriving(`key${index}`))
+    expect(() => inbox.add(arriving('late', 'late', { projectId: 'p_b' }))).not.toThrow()
+  })
+
+  it('makes room by bytes as well as by count', () => {
+    const inbox = createNoteInbox({ now: () => 0 })
+    const big = 'x'.repeat(200 * 1024)
+    const fits = Math.floor(MAX_HELD_BYTES / (200 * 1024))
+    const held = Array.from({ length: fits }, (_, index) =>
+      inbox.add(arriving(`key${index}`, `n${index}`, { markdown: big }))
+    )
+    expect(() => inbox.add(arriving('late', 'late', { markdown: big }))).toThrow(/too many unread/)
+
+    inbox.dismiss(held[0]?.shareId ?? '')
+    inbox.add(arriving('late', 'late', { markdown: big }))
+    expect(inbox.list().map((note) => note.title)).not.toContain('n0')
+  })
+
+  it('dismisses without forgetting: the popup retires and the note stays unread', () => {
+    const inbox = createNoteInbox({ now: () => 0 })
+    const note = inbox.add(arriving('ana'))
+    expect(inbox.dismiss(note.shareId)).toBe(true)
+    expect(inbox.list()).toMatchObject([{ shareId: note.shareId, seen: true }])
+    expect(inbox.list()[0]?.read).toBeFalsy()
+
+    inbox.view(note.shareId)
+    expect(inbox.list()[0]?.read).toBe(true)
+    expect(inbox.dismiss('nope')).toBe(false)
+  })
+
+  it('keeps what it holds in a file per project, and reads it back', async () => {
+    const dir = await scratchDir()
+    let clock = 100
+    const first = createNoteInbox({ now: () => clock++, dir })
+    const kept = first.add(arriving('ana', 'one'))
+    first.add(arriving('bo', 'two', { projectId: 'p_b' }))
+    const gone = first.add(arriving('cy', 'three'))
+    first.dismiss(kept.shareId)
+    first.close(gone.shareId)
+    await first.flush()
+    expect((await readdir(dir)).filter((name) => name.endsWith('.json'))).toHaveLength(2)
+
+    const second = createNoteInbox({ now: () => clock++, dir })
+    await second.load()
+    expect(second.list().map((note) => [note.projectId, note.title, note.seen])).toEqual([
+      ['p_a', 'one', true],
+      ['p_b', 'two', false]
+    ])
+    expect(second.view(kept.shareId)?.markdown).toBe('body')
+  })
+
+  it('removes a project’s file once its last note goes', async () => {
+    const dir = await scratchDir()
+    const inbox = createNoteInbox({ now: () => 0, dir })
+    const note = inbox.add(arriving('ana'))
+    await inbox.flush()
+    inbox.close(note.shareId)
+    await inbox.flush()
+    expect(await readdir(dir)).toEqual([])
+  })
+
+  it('sets an unreadable file aside and starts empty', async () => {
+    const dir = await scratchDir()
+    await writeFile(join(dir, 'bad.json'), '{ not json')
+    const inbox = createNoteInbox({ now: () => 0, dir })
+    await inbox.load()
+    expect(inbox.list()).toEqual([])
+    expect(await readdir(dir)).toEqual(['bad.json.unreadable'])
   })
 })
 
@@ -164,6 +250,28 @@ describe('a note arriving', () => {
     expect(runtime.service.sharedNotes()).toEqual([])
   })
 
+  it('stays when the roster cannot be read, rather than going with it', async () => {
+    const { runtime, dir, linkId } = await owner()
+    await arrive(runtime, linkId, { ...PLAN, sentAt: 5 })
+
+    await rm(join(dir, ...MEMBERS_DIR_SEGMENTS), { recursive: true })
+    await writeFile(join(dir, ...MEMBERS_DIR_SEGMENTS), 'not a folder')
+    await runtime.service.reconcile()
+
+    expect(runtime.service.sharedNotes()).toHaveLength(1)
+  })
+
+  it('is kept when dismissed, and forgotten only when closed', async () => {
+    const { runtime, linkId } = await owner()
+    await arrive(runtime, linkId, { ...PLAN, sentAt: 5 })
+    const [summary] = runtime.service.sharedNotes()
+    const shareId = summary?.shareId ?? ''
+
+    expect(runtime.service.dismissNote({ shareId })).toEqual({ dismissed: true })
+    expect(runtime.service.sharedNotes()).toMatchObject([{ shareId, seen: true }])
+    expect(runtime.service.viewNote({ shareId }).markdown).toBe(PLAN.markdown)
+  })
+
   it('is read whole once, then forgotten when closed', async () => {
     const { runtime, linkId } = await owner()
     await arrive(runtime, linkId, { ...PLAN, sentAt: 5 })
@@ -209,24 +317,27 @@ describe('two peers over a relay', () => {
         terminals: []
       }
     })
-    const bob = await createPeerRuntime({
-      ...shared,
-      dataDir: bobData,
-      onNote: (note) => bobNoted.push(note),
-      workspace: {
-        projects: [project('p_bob', await makeProjectDir(roster))],
-        worktrees: [worktree('wt_b', 'p_bob', 'b', 'main')],
-        terminals: []
-      }
-    })
+    const bobWorkspace = {
+      projects: [project('p_bob', await makeProjectDir(roster))],
+      worktrees: [worktree('wt_b', 'p_bob', 'b', 'main')],
+      terminals: []
+    }
+    const startBob = async (): Promise<PeerRuntime> => {
+      const bob = await createPeerRuntime({
+        ...shared,
+        dataDir: bobData,
+        onNote: (note) => bobNoted.push(note),
+        workspace: bobWorkspace
+      })
+      await bob.service.start()
+      cleanups.push(() => bob.service.stop())
+      return bob
+    }
     await alice.service.start()
-    await bob.service.start()
+    cleanups.push(() => alice.service.stop())
+    const bob = await startBob()
     await scheduler.advance(0)
-    cleanups.push(() => {
-      alice.service.stop()
-      bob.service.stop()
-    })
-    return { alice, bob, scheduler, bobNoted }
+    return { alice, bob, scheduler, bobNoted, startBob, bobData }
   }
 
   it('A shares a note and B has it waiting, with its window and its notifications told', async () => {
@@ -253,6 +364,24 @@ describe('two peers over a relay', () => {
     const [summary] = bob.service.sharedNotes()
     expect(bob.service.viewNote({ shareId: summary?.shareId ?? '' }).markdown).toBe(PLAN.markdown)
     expect(alice.service.sharedNotes()).toEqual([])
+  })
+
+  it('B still has the note after a restart, as B left it', async () => {
+    const { alice, bob, scheduler, startBob, bobData } = await pair()
+    const sending = alice.service.shareNote({ projectId: 'p_alice', ...PLAN })
+    await scheduler.advance(0)
+    expect(await sending).toMatchObject({ delivered: ['bob'] })
+    const [summary] = bob.service.sharedNotes()
+    bob.service.dismissNote({ shareId: summary?.shareId ?? '' })
+    await bob.service.stop()
+    expect(await readdir(join(bobData, NOTES_DIR))).toHaveLength(1)
+
+    const again = await startBob()
+    await scheduler.advance(0)
+    expect(again.service.sharedNotes()).toMatchObject([
+      { shareId: summary?.shareId, projectId: 'p_bob', handle: 'alice', title: 'Plan', seen: true }
+    ])
+    expect(again.service.viewNote({ shareId: summary?.shareId ?? '' }).markdown).toBe(PLAN.markdown)
   })
 
   it('refuses a note over the cap before anything leaves this machine', async () => {

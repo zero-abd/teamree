@@ -668,6 +668,8 @@ export const Params = {
   teamworkViewNote: z.object({ shareId: z.string().min(1) }),
   /** Forgets a received note. */
   teamworkCloseNote: z.object({ shareId: z.string().min(1) }),
+  /** Retires a received note's popup; the note stays. */
+  teamworkDismissNote: z.object({ shareId: z.string().min(1) }),
   /** PEER-ONLY. A teammate's note arriving; the sender is the link's key. */
   peerShareNote: SharedNotePayload,
 
@@ -1014,6 +1016,7 @@ export type MethodContract = TaskMethodContract &
     'teamwork.sharedNotes': { params: z.infer<typeof Params.teamworkSharedNotes>; result: SharedNoteSummary[] }
     'teamwork.viewNote': { params: z.infer<typeof Params.teamworkViewNote>; result: SharedNote }
     'teamwork.closeNote': { params: z.infer<typeof Params.teamworkCloseNote>; result: { closed: boolean } }
+    'teamwork.dismissNote': { params: z.infer<typeof Params.teamworkDismissNote>; result: { dismissed: boolean } }
     'peer.shareNote': { params: z.infer<typeof Params.peerShareNote>; result: { received: true } }
 
     'terminal.list': { params: z.infer<typeof Params.terminalList>; result: Terminal[] }

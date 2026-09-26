@@ -204,7 +204,7 @@ describe('the setup as a place in the window', () => {
   it('is a landmark that names the repository it is setting up', () => {
     mount()
     expect(screen.getByRole('main', { name: 'Set up teamwork in pager' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Teamwork' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Teamwork · pager' })).toBeTruthy()
   })
 
   // Reached from a button elsewhere, so the keyboard has to come with it.
@@ -224,7 +224,7 @@ describe('the setup as a place in the window', () => {
   it('sits in the shared page frame, closed by the same × as the other pages', () => {
     mount()
     const main = screen.getByRole('main', { name: 'Set up teamwork in pager' })
-    expect(main.querySelector('.page__head h1')?.textContent).toBe('Teamwork')
+    expect(main.querySelector('.page__head h1')?.textContent).toBe('Teamwork · pager')
     expect(within(main).queryByRole('button', { name: 'Close' })).toBeNull()
   })
 
@@ -279,6 +279,27 @@ describe('the setup as a place in the window', () => {
     seed({ projects: [] })
     mount()
     expect(screen.getByRole('main', { name: 'Set up teamwork in this repository' })).toBeTruthy()
+  })
+})
+
+describe('which project the page is for', () => {
+  const ledger: Project = { id: 'p2', name: 'ledger', path: '/repos/ledger', baseRef: 'origin/main' }
+
+  it('has no project select while there is one project', () => {
+    mount()
+    expect(screen.queryByRole('combobox', { name: 'Project' })).toBeNull()
+  })
+
+  // A project with no task in it is reached here, not by making a task first.
+  it('switches to any project, one with no worktree included', () => {
+    const openTeamwork = vi.fn()
+    seed({ projects: [project, ledger], worktrees: [], openTeamwork })
+    mount()
+    const select = screen.getByRole('combobox', { name: 'Project' }) as HTMLSelectElement
+    expect(select.value).toBe('p1')
+    expect([...select.options].map((option) => option.textContent)).toEqual(['pager', 'ledger'])
+    fireEvent.change(select, { target: { value: 'p2' } })
+    expect(openTeamwork).toHaveBeenCalledExactlyOnceWith('p2')
   })
 })
 

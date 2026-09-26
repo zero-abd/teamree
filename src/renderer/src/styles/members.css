@@ -878,3 +878,74 @@
   line-height: 1.6;
   white-space: pre-wrap;
 }
+
+/* ---------------------------------------------------------- shared notes */
+
+.shared-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  margin-bottom: var(--s5);
+}
+
+.shared-notes__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.shared-notes__unread {
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.shared-notes__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.shared-notes__row {
+  padding: var(--s2) var(--s3);
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+}
+
+.shared-notes__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.shared-notes__title {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shared-notes__row--unread .shared-notes__title {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.shared-notes__meta {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.shared-notes__text {
+  max-height: 28rem;
+  margin-top: var(--s2);
+  overflow: auto;
+  border-top: 1px solid var(--line);
+}

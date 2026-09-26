@@ -30,6 +30,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { CommandPalette } = await import('./CommandPalette')
+const { useSharedNotes } = await import('../teamwork/sharedNotesStore')
 
 const INITIAL = useWorkspaceStore.getState()
 const MAC = resolvePlatformModifier('darwin')
@@ -204,6 +205,47 @@ describe('the rows that are also commands', () => {
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'clone repository' } })
     fireEvent.click(rows()[0] as HTMLElement)
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'clone-project' })
+  })
+})
+
+describe('teamwork from the palette', () => {
+  it('opens the Teamwork page of the project chosen, one with no task included', () => {
+    const openTeamwork = vi.fn()
+    seed({ projects: [project, { ...project, id: 'p2', name: 'ledger' }], openTeamwork })
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'teamwork ledger' } })
+    fireEvent.click(rows()[0] as HTMLElement)
+    expect(openTeamwork).toHaveBeenCalledExactlyOnceWith('p2')
+  })
+
+  it('opens a shared note from its row', () => {
+    const openSharedNote = vi.fn(async () => {})
+    useSharedNotes.setState({
+      inbox: [
+        {
+          shareId: 's1',
+          projectId: 'p1',
+          handle: 'ana',
+          publicKey: 'k',
+          noteId: 'n',
+          title: 'Search API plan',
+          sentAt: 0,
+          receivedAt: Date.now(),
+          seen: true,
+          bytes: 1
+        }
+      ],
+      deleting: {}
+    })
+    seed({ openSharedNote })
+    try {
+      mount()
+      fireEvent.change(screen.getByRole('textbox'), { target: { value: 'search api plan' } })
+      fireEvent.click(rows()[0] as HTMLElement)
+      expect(openSharedNote).toHaveBeenCalledExactlyOnceWith('p1', 's1', 'Search API plan')
+    } finally {
+      useSharedNotes.setState({ inbox: [] })
+    }
   })
 })
 

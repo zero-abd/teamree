@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-// The popups a teammate's notes raise: queued oldest first, three at a time, View opens a tab, Close forgets.
+// The popups a teammate's notes raise: queued oldest first, three at a time, View opens a tab, Later only hides.
 
 import { fireEvent, render, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -47,9 +47,10 @@ beforeEach(() => {
   call.mockReset()
   call.mockImplementation(async (method: string, params: { shareId?: string }) => {
     if (method === 'teamwork.sharedNotes') return inbox
-    if (method === 'teamwork.closeNote') {
-      inbox = inbox.filter((note) => note.shareId !== params.shareId)
-      return { closed: true }
+    if (method === 'teamwork.dismissNote') {
+      const found = inbox.find((note) => note.shareId === params.shareId)
+      if (found) found.seen = true
+      return { dismissed: true }
     }
     if (method === 'teamwork.viewNote') {
       const found = inbox.find((note) => note.shareId === params.shareId)
@@ -59,7 +60,7 @@ beforeEach(() => {
     return undefined
   })
   useWorkspaceStore.setState({ ...INITIAL }, true)
-  useSharedNotes.setState({ inbox: [], bodies: {} })
+  useSharedNotes.setState({ inbox: [], bodies: {}, deleting: {}, expanded: null })
 })
 
 const lines = (view: ReturnType<typeof render>): string[] =>
@@ -76,15 +77,18 @@ describe('a teammate’s shared notes in the corner', () => {
     expect(lines(view)).toEqual(['bo shared Note 1', 'ana shared Note 2', 'bo shared Note 3'])
   })
 
-  it('Close forgets the note and lets the next one in', async () => {
+  it('Later hides the popup, keeps the note, and lets the next one in', async () => {
     await useSharedNotes.getState().refresh()
     const view = render(<SharedNotePopups />)
 
     const first = view.getByText('Note 1').closest('.notice') as HTMLElement
-    fireEvent.click(within(first).getByRole('button', { name: 'Close' }))
+    expect(within(first).queryByRole('button', { name: 'Close' })).toBeNull()
+    fireEvent.click(within(first).getByRole('button', { name: 'Later' }))
 
     await waitFor(() => expect(lines(view)).toEqual(['ana shared Note 2', 'bo shared Note 3', 'ana shared Note 4']))
-    expect(call).toHaveBeenCalledWith('teamwork.closeNote', { shareId: 's1' })
+    expect(call).toHaveBeenCalledWith('teamwork.dismissNote', { shareId: 's1' })
+    expect(call).not.toHaveBeenCalledWith('teamwork.closeNote', expect.anything())
+    expect(useSharedNotes.getState().inbox.map((note) => note.shareId)).toContain('s1')
   })
 
   it('View opens it in a tab and retires the popup without forgetting the note', async () => {
@@ -106,6 +110,12 @@ describe('a teammate’s shared notes in the corner', () => {
   it('shows nothing when nothing is waiting', () => {
     const view = render(<SharedNotePopups />)
     expect(view.queryByRole('status')).toBeNull()
+  })
+
+  it('reads a note on its project’s Teamwork page when the project has no worktree', async () => {
+    await useWorkspaceStore.getState().openSharedNote('p1', 's1', 'Note 1')
+    expect(useWorkspaceStore.getState().teamworkProjectId).toBe('p1')
+    expect(useSharedNotes.getState().expanded).toBe('s1')
   })
 
   it('opens a shared note as a read-only tab in a worktree of its project', async () => {

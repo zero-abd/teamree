@@ -279,11 +279,12 @@ export type Notice = {
   key?: string
 }
 
-/** What an Undo puts back: removed worktrees (`removedIds` parents first), or one discard's paths. */
+/** What an Undo puts back: removed worktrees (`removedIds` parents first), one discard's paths, or a deleted shared note. */
 export type UndoTarget =
   | { kind: 'remove'; projectId: string; removedId: string }
   | { kind: 'remove-many'; projectId: string; removedIds: string[] }
   | { kind: 'discard'; worktreeId: string; trashId: string }
+  | { kind: 'shared-note'; shareId: string }
 
 /** The last push of one worktree, as the Changes tab shows it. A failure is one clause, and git's words. */
 export type PushState =
@@ -661,6 +662,8 @@ type WorkspaceState = {
   openReview: (worktreeId: string) => void
   /** Opens a note a teammate shared, read-only, as a tab in a worktree of its project; focuses the tab already on it. */
   openSharedNote: (projectId: string, shareId: string, title: string) => Promise<void>
+  /** Hides a received note and offers Undo; see `useSharedNotes.remove`. */
+  deleteSharedNote: (shareId: string, title: string) => void
   /** Says something in the corner; an `info` retires itself. */
   showNotice: (text: string, tone?: Notice['tone']) => void
   /** Keeps a preview tab open when the next preview comes. */
@@ -2122,6 +2125,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async undo(target) {
+      if (target.kind === 'shared-note') {
+        useSharedNotes.getState().restore(target.shareId)
+        return
+      }
       if (target.kind === 'remove') {
         await get().restoreWorktree(target.projectId, target.removedId)
         return
@@ -2579,7 +2586,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           ? active
           : worktrees.find((worktree) => worktree.projectId === projectId && worktree.state === 'ready')
       if (!target) {
-        notify('No worktree to open it in', 'info')
+        useSharedNotes.setState({ expanded: shareId })
+        void useSharedNotes.getState().open(shareId)
+        get().openTeamwork(projectId)
         return
       }
       if (activeWorktreeId !== target.id) await get().openWorktree(target.id)
@@ -2591,6 +2600,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         return
       }
       placeFileLeaf(layout, sharedNoteLeaf(newFilePaneId(), shareId, title))
+    },
+
+    deleteSharedNote(shareId, title) {
+      useSharedNotes.getState().remove(shareId)
+      notify(`Deleted "${shortened(title)}"`, 'info', { label: 'Undo', undo: { kind: 'shared-note', shareId } })
     },
 
     showNotice(text, tone = 'info') {

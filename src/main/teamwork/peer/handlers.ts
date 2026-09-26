@@ -23,6 +23,7 @@ export const PEER_SERVICE_METHODS = [
   'teamwork.sharedNotes',
   'teamwork.viewNote',
   'teamwork.closeNote',
+  'teamwork.dismissNote',
   'peer.shareNote'
 ] as const
 
@@ -65,6 +66,7 @@ export function registerPeerHandlers(registry: MethodRegistry, service: PeerServ
   registry.register('teamwork.sharedNotes', Params.teamworkSharedNotes, () => service.sharedNotes())
   registry.register('teamwork.viewNote', Params.teamworkViewNote, (params) => service.viewNote(params))
   registry.register('teamwork.closeNote', Params.teamworkCloseNote, (params) => service.closeNote(params))
+  registry.register('teamwork.dismissNote', Params.teamworkDismissNote, (params) => service.dismissNote(params))
   registry.register('peer.shareNote', Params.peerShareNote, (params, call) =>
     service.receiveNote(call.connectionId, params)
   )

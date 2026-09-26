@@ -6,7 +6,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 export function SharedNotePopups(): React.JSX.Element | null {
   const inbox = useSharedNotes((state) => state.inbox)
   const openNote = useSharedNotes((state) => state.open)
-  const closeNote = useSharedNotes((state) => state.close)
+  const dismissNote = useSharedNotes((state) => state.dismiss)
   const popups = notePopups(inbox)
   if (popups.length === 0) return null
   return (
@@ -26,8 +26,8 @@ export function SharedNotePopups(): React.JSX.Element | null {
           >
             View
           </button>
-          <button type="button" className="notice__action" onClick={() => void closeNote(note.shareId)}>
-            Close
+          <button type="button" className="notice__action" onClick={() => void dismissNote(note.shareId)}>
+            Later
           </button>
         </div>
       ))}

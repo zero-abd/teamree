@@ -13,6 +13,7 @@ import {
   type Worktree
 } from '@shared/entities'
 import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
+import type { SharedNoteSummary } from '@shared/sharedNote'
 import { APPEARANCE_MODES, BUILT_IN_THEMES, type AppearanceMode } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from '../settings/AppearanceSettings'
 import { SETTINGS_CATALOG, SETTINGS_SECTIONS } from '../settings/settingsModel'
@@ -55,6 +56,10 @@ export type PaletteAction =
   | `restore:${string}`
   /** Clean Up Merged… for a project, by its id. */
   | `clean-up:${string}`
+  /** A project's Teamwork page, by its id. */
+  | `teamwork:${string}`
+  /** A note a teammate shared, by its share id. */
+  | `shared-note:${string}`
   /** A query that found nothing to run: New Task with it as the task, Open Branch narrowed to it. */
   | `new-task:${string}`
   | `open-branch:${string}`
@@ -155,6 +160,8 @@ export type PaletteContext = {
   resumable?: boolean
   /** The run commands of the worktree on screen, each with its pane. */
   runs?: readonly RunOffer[]
+  /** Received notes as the lists show them, deleted ones left out. */
+  sharedNotes?: readonly SharedNoteSummary[]
 }
 
 /**
@@ -200,6 +207,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     ...commandActions(context),
     ...restoreActions(context),
     ...cleanUpActions(context),
+    ...teamworkActions(context),
     ...panelActions(context),
     ...ACTIONS,
     ...updateActions(context),
@@ -414,6 +422,32 @@ function settingActions(): ActionRow[] {
 }
 
 const isSetting = (item: PaletteItem): boolean => item.kind === 'action' && item.id.startsWith('setting:')
+
+/** A Teamwork row per project, its unread notes as the hint, then each shared note newest first. */
+function teamworkActions(context: PaletteContext): ActionRow[] {
+  const now = Date.now()
+  const notes = [...(context.sharedNotes ?? [])].sort((a, b) => b.receivedAt - a.receivedAt)
+  const projectName = new Map(context.projects.map((project) => [project.id, project.name]))
+  return [
+    ...context.projects.map((project) => {
+      const unread = notes.filter((note) => note.projectId === project.id && note.read !== true).length
+      return {
+        id: `teamwork:${project.id}` as const,
+        label: `Teamwork: ${project.name}`,
+        keywords: 'team teammates relay invite join share notes',
+        hint: unread > 0 ? `${unread} unread` : ''
+      }
+    }),
+    ...notes.map((note) => ({
+      id: `shared-note:${note.shareId}` as const,
+      label: `Shared Note: ${note.title}`,
+      keywords: `teammate received ${note.handle} ${projectName.get(note.projectId) ?? ''}`,
+      hint: [note.handle, agoLabel(now - note.receivedAt), note.read === true ? '' : 'unread']
+        .filter(Boolean)
+        .join(' · ')
+    }))
+  ]
+}
 
 /** The three modes and every preset; the ones on screen cannot run. */
 function appearanceActions(context: PaletteContext): ActionRow[] {
