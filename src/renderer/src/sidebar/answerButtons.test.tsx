@@ -66,7 +66,7 @@ const regions = (): Region[] => {
 describe('answering a pane from its row', () => {
   it('sends the chosen keys, naming the prompt they answer', async () => {
     call.mockResolvedValue({ written: true })
-    fireEvent.click(screen.getByRole('button', { name: 'Yes, All Edits' }))
+    fireEvent.click(screen.getByRole('button', { name: 'All Edits' }))
     await vi.waitFor(() =>
       expect(call).toHaveBeenCalledWith('terminal.write', { terminalId: 't1', data: '2', answering: 'abcd1234' })
     )

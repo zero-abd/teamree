@@ -851,6 +851,56 @@ describe('several runs of one task', () => {
   })
 })
 
+// Every asking row answers at rest; with several asking, only the open worktree's spell theirs out.
+describe('asking rows', () => {
+  const asking = (id: string, worktreeId: string): Terminal => ({
+    id,
+    worktreeId,
+    title: 'claude',
+    cwd: '/repos/pager-wt/rewrite',
+    shell: '/bin/zsh',
+    cols: 80,
+    rows: 24,
+    running: true,
+    busy: false,
+    agent: 'claude',
+    screenSays: 'waiting',
+    screenMenu: {
+      prompt: 'p',
+      choices: [
+        { label: 'Yes', keys: ['\r'] },
+        { label: 'Yes, Always', keys: ['2'] },
+        { label: 'No…', keys: null }
+      ]
+    },
+    lastOutputAt: NOW
+  })
+  const second = worktree({ id: 'w2', name: 'Second', branch: 'second' })
+  const rowOf = (name: string): HTMLElement =>
+    [...document.querySelectorAll<HTMLElement>('.worktree')].find((row) =>
+      row.querySelector('.worktree__name')?.textContent?.includes(name)
+    ) as HTMLElement
+
+  it('draws the answers of the only asking row, open or not', () => {
+    seed({ worktrees: [worktree(), second], activeWorktreeId: 'w2', terminals: { a: asking('a', 'w1') } })
+    mount()
+    expect(within(rowOf('Rewrite the pager')).getByRole('group', { name: 'Answer' })).toBeTruthy()
+  })
+
+  it('folds the others to Answer… while the open worktree asks too', () => {
+    seed({
+      worktrees: [worktree(), second],
+      activeWorktreeId: 'w2',
+      terminals: { a: asking('a', 'w1'), b: asking('b', 'w2') }
+    })
+    mount()
+    expect(within(rowOf('Second')).getByRole('group', { name: 'Answer' })).toBeTruthy()
+    const other = rowOf('Rewrite the pager')
+    expect(within(other).queryByRole('group', { name: 'Answer' })).toBeNull()
+    expect(within(other).getByRole('button', { name: 'Answer…' })).toBeTruthy()
+  })
+})
+
 // One Tab stop however many rows, and the arrows between them, as a Finder list or a source list.
 describe('the tree from the keyboard', () => {
   const pane = { worktreeId: 'w1', cwd: '/repos/pager-wt/rewrite', shell: '/bin/zsh', cols: 80, rows: 24 }

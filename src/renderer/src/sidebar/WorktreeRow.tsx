@@ -61,6 +61,8 @@ type WorktreeRowProps = {
   now: number
   onFocusTerminal: (terminalId: string) => void | Promise<void>
   active: boolean
+  /** Its asking panes offer one `Answer…` instead of their answers; see `PaneRows`. */
+  answerChip?: boolean
   onOpen: () => void
   onRetry: () => void
   /** Delete Worktree…: deletes the checkout, a copy kept for Undo. */
@@ -109,6 +111,7 @@ export function WorktreeRow({
   unread,
   now,
   active,
+  answerChip = false,
   onFocusTerminal,
   onOpen,
   onRetry,
@@ -508,6 +511,7 @@ export function WorktreeRow({
           unread={unread}
           now={now}
           onFocusTerminal={onFocusTerminal}
+          answerChip={answerChip}
         />
       ) : null}
 

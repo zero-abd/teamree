@@ -3,6 +3,7 @@
 // A pane row shows its harness as a glyph and keeps its text for what the glyph cannot say.
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Terminal } from '@shared/entities'
 import { agentRows } from './agentRows'
@@ -37,27 +38,6 @@ const mountUnread = (unread: string[], ...panes: Terminal[]): HTMLElement[] => {
 }
 
 describe('PaneRows', () => {
-  it('carries an asking pane’s answers beside its row, and only while it asks', () => {
-    const menu = {
-      prompt: 'p',
-      choices: [
-        { label: 'Trust', keys: ['\r'] },
-        { label: 'Exit', keys: ['2'] }
-      ]
-    }
-    mount(
-      terminal({ id: 't1', agent: 'codex', screenSays: 'waiting', screenMenu: menu }),
-      terminal({ id: 't2', agent: 'codex', busy: true, screenMenu: menu })
-    )
-    const [group, ...others] = screen.getAllByRole('group', { name: 'Answer' })
-    expect(others).toHaveLength(0)
-    expect(
-      within(group as HTMLElement)
-        .getAllByRole('button')
-        .map((button) => button.textContent)
-    ).toEqual(['Trust', 'Exit'])
-  })
-
   it('draws an agent as its harness glyph, labelled with the harness name only', () => {
     const [row] = mount(terminal({ id: 't1', agent: 'claude' }))
     const glyph = within(row as HTMLElement).getByRole('img')
@@ -225,5 +205,78 @@ describe('the keyboard on a pane row', () => {
     await vi.waitFor(() => expect(document.activeElement).toBe(row))
     expect(asked).toEqual([])
     pane.remove()
+  })
+})
+
+// Answering is the fastest unblock there is: the answers are drawn at rest, on a line of their own under the question.
+describe('an asking pane row', () => {
+  const MENU = {
+    prompt: 'p',
+    choices: [
+      { label: 'Yes', keys: ['\r'] },
+      { label: 'Yes, Always', keys: ['2'] },
+      { label: 'No…', keys: null }
+    ]
+  }
+  const asking = (id: string): Terminal => terminal({ id, agent: 'claude', screenSays: 'waiting', screenMenu: MENU })
+
+  const mountAsking = (
+    props: { tree?: boolean; answerChip?: boolean; onFocusTerminal?: (id: string) => void } = {},
+    ...panes: Terminal[]
+  ): void => {
+    render(
+      <PaneRows
+        rows={agentRows(panes, 'w1', 0, { t1: 'Do you want to proceed?' })}
+        watchers={{}}
+        unread={new Set()}
+        now={0}
+        onFocusTerminal={props.onFocusTerminal ?? (() => {})}
+        {...(props.tree === undefined ? {} : { tree: props.tree })}
+        {...(props.answerChip === undefined ? {} : { answerChip: props.answerChip })}
+      />
+    )
+  }
+
+  it('draws its answers under the row, beside nothing, and only while it asks', () => {
+    mountAsking({}, asking('t1'), terminal({ id: 't2', agent: 'codex', busy: true, screenMenu: MENU }))
+    const [group, ...others] = screen.getAllByRole('group', { name: 'Answer' })
+    expect(others).toHaveLength(0)
+    const row = group?.closest('li')?.querySelector('.pane-row')
+    expect(row?.contains(group as HTMLElement)).toBe(false)
+    expect(row?.nextElementSibling).toBe(group)
+    expect(row?.querySelector('.pane-row__evidence')?.textContent).toBe('Do you want to proceed?')
+  })
+
+  it('names its answers in a word each, keeping the whole answer for the hover', () => {
+    mountAsking({}, asking('t1'))
+    const buttons = within(screen.getByRole('group', { name: 'Answer' })).getAllByRole('button')
+    expect(buttons.map((button) => button.textContent)).toEqual(['Yes', 'Always', 'No…'])
+    expect(buttons.map((button) => button.title)).toEqual(['Yes', 'Yes, Always', 'No…'])
+  })
+
+  // The tree is one Tab stop: the answers join it only while their row holds the focus.
+  it('reaches its answers with Tab from the row, and keeps them out of the tree’s Tab order otherwise', async () => {
+    const user = userEvent.setup()
+    mountAsking({ tree: true }, asking('t1'))
+    const yes = screen.getByRole('button', { name: 'Yes' })
+    expect(yes.tabIndex).toBe(-1)
+    const row = document.querySelector<HTMLElement>('.pane-row') as HTMLElement
+    row.focus()
+    await user.tab()
+    expect(document.activeElement).toBe(yes)
+    await user.tab()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Always' }))
+  })
+
+  it('folds to one Answer… that opens the pane when told to', async () => {
+    const { onRegionRequest } = await import('../shell/regions')
+    const asked: string[] = []
+    onRegionRequest((region) => asked.push(region))
+    const focus = vi.fn()
+    mountAsking({ answerChip: true, onFocusTerminal: focus }, asking('t1'))
+    expect(screen.queryByRole('group', { name: 'Answer' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Answer…' }))
+    expect(focus).toHaveBeenCalledExactlyOnceWith('t1')
+    await vi.waitFor(() => expect(asked).toEqual(['panes']))
   })
 })

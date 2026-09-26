@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { TaskMessage } from '@shared/messages'
 import { useMessageStore } from '../state/messages'
+import { AnswerChoices } from './AnswerButtons'
 
 export function AskForYou({ ask }: { ask: TaskMessage }): React.JSX.Element {
   const answer = useMessageStore((state) => state.answer)
@@ -49,22 +50,18 @@ export function AskForYou({ ask }: { ask: TaskMessage }): React.JSX.Element {
           />
         </form>
       ) : (
-        <span className="answers">
-          {(ask.options ?? []).map((option) => (
-            <button
-              key={option}
-              type="button"
-              className="button button--tiny answers__choice"
-              disabled={sending}
-              onClick={() => void send(option)}
-            >
-              {option}
-            </button>
-          ))}
+        <AnswerChoices
+          choices={(ask.options ?? []).map((label) => ({ label }))}
+          onChoose={(index) => {
+            const option = ask.options?.[index]
+            if (option !== undefined) void send(option)
+          }}
+          disabled={sending}
+        >
           <button type="button" className="button button--ghost button--tiny" onClick={() => setReplying(true)}>
             Reply…
           </button>
-        </span>
+        </AnswerChoices>
       )}
     </div>
   )
