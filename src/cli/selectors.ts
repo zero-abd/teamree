@@ -2,8 +2,9 @@
 // is tiered, and a tier that matches more than one thing is an error.
 
 import { realpathSync } from 'node:fs'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve, sep } from 'node:path'
 import type { Project, Worktree } from '../shared/entities.js'
+import { PANE_IDENTITY_ENV } from '../shared/tasks.js'
 import { CliError, ExitCode } from './exit.js'
 import type { RuntimeClient } from './transport.js'
 
@@ -94,8 +95,32 @@ export async function resolveProject(client: RuntimeClient, token: string): Prom
   return selectOne('project', token, projects)
 }
 
+/** Who is asking, for the `here` selector. */
+export type Caller = { env: NodeJS.ProcessEnv; cwd: string }
+
+export const HERE = 'here'
+
+/** The calling pane's worktree, else the checkout holding `cwd`, subdirectories included. */
+export function selectHere(worktrees: readonly Worktree[], caller: Caller): Worktree {
+  const fromPane = caller.env[PANE_IDENTITY_ENV.worktreeId]
+  const pane = fromPane ? worktrees.find((worktree) => worktree.id === fromPane) : undefined
+  if (pane !== undefined) return pane
+  const at = pathComparisonKey(caller.cwd)
+  const holding = worktrees
+    .map((worktree) => ({ worktree, key: pathComparisonKey(worktree.path) }))
+    .filter(({ key }) => at === key || at.startsWith(key.endsWith(sep) ? key : key + sep))
+    .sort((a, b) => b.key.length - a.key.length)[0]
+  if (holding !== undefined) return holding.worktree
+  throw new CliError({
+    code: 'not_found',
+    message: `No worktree here: ${caller.cwd} is in none.`,
+    exitCode: ExitCode.Failure
+  })
+}
+
 /** Picks one worktree out of a listing already in hand, so `terminal list` needs no second round trip. */
-export function selectWorktree(worktrees: readonly Worktree[], token: string): Worktree {
+export function selectWorktree(worktrees: readonly Worktree[], token: string, caller?: Caller): Worktree {
+  if (token === HERE && caller !== undefined) return selectHere(worktrees, caller)
   return selectOne(
     'worktree',
     token,
@@ -103,6 +128,6 @@ export function selectWorktree(worktrees: readonly Worktree[], token: string): W
   )
 }
 
-export async function resolveWorktree(client: RuntimeClient, token: string): Promise<Worktree> {
-  return selectWorktree(await client.call('worktree.list', {}), token)
+export async function resolveWorktree(client: RuntimeClient, token: string, caller?: Caller): Promise<Worktree> {
+  return selectWorktree(await client.call('worktree.list', {}), token, caller)
 }

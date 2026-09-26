@@ -30,6 +30,7 @@ import { DEFAULT_RUNTIME_SETTINGS, type RuntimeSettings } from '@shared/settings
 import { leaf, splitPane } from '../panes/paneLayout'
 import { rankPaths } from '@shared/fuzzyPath'
 import { siblingRuns } from '@shared/runCompare'
+import { descendantsOf } from '@shared/taskTree'
 import { placePane, placePaneWithin } from '@shared/paneRoom'
 import type { ConnectionState, RuntimeClient, Subscription } from './RuntimeClientContract'
 
@@ -604,8 +605,9 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'worktree.list': ({ projectId }) =>
       [...worktrees.values()].filter((worktree) => !projectId || worktree.projectId === projectId),
     'worktree.get': ({ worktreeId }) => required(worktrees.get(worktreeId), 'worktree'),
-    'worktree.create': ({ projectId, name, startedFrom, branch, task }) => {
+    'worktree.create': ({ projectId, name, startedFrom, branch, task, parentId }) => {
       const project = required(projects.get(projectId), 'project')
+      const parent = parentId === undefined ? undefined : required(worktrees.get(parentId), 'worktree')
       const slug =
         name
           .toLowerCase()
@@ -615,12 +617,13 @@ export function createSeededRuntimeClient(): RuntimeClient {
         id: nextId('wt'),
         projectId,
         name,
-        branch: branch ?? `task/${slug}`,
+        branch: branch ?? (parent ? `${parent.branch}--${slug}` : `task/${slug}`),
         path: `${project.path}/.worktrees/${slug}`,
-        startedFrom: startedFrom ?? project.baseRef,
+        startedFrom: parent?.branch ?? startedFrom ?? project.baseRef,
         state: 'creating',
         createdAt: Date.now(),
-        ...(task === undefined ? {} : { task })
+        ...(task === undefined ? {} : { task }),
+        ...(parent === undefined ? {} : { parentId: parent.id, baseRef: parent.branch })
       }
       worktrees.set(worktree.id, worktree)
       announce({ type: 'worktrees' })
@@ -628,7 +631,13 @@ export function createSeededRuntimeClient(): RuntimeClient {
       finishCreation(worktree.id, /fail/i.test(name))
       return worktree
     },
-    'worktree.remove': ({ worktreeId, force }) => {
+    'worktree.remove': ({ worktreeId, force, children }) => {
+      const below = descendantsOf([...worktrees.values()], worktreeId)
+      if (below.length > 0 && children !== true) {
+        throw Object.assign(new Error(`worktree has ${below.length} children; remove with children`), {
+          code: 'conflict'
+        })
+      }
       const status = statuses.get(worktreeId)
       const pending = status ? status.staged + status.unstaged + status.untracked + status.conflicted : 0
       // The same refusal the real runtime makes, so the confirmation is demonstrable.
@@ -640,6 +649,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
           }
         )
       }
+      for (const child of below) worktrees.delete(child.id)
       worktrees.delete(worktreeId)
       statuses.delete(worktreeId)
       layouts.delete(worktreeId)

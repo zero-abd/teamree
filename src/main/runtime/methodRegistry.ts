@@ -11,6 +11,14 @@ export type CallContext = {
   readonly connectionId: string
 }
 
+/** Starts every connection id the window's IPC bridge hands out. */
+export const WINDOW_CONNECTION_PREFIX = 'renderer_'
+
+/** A person in the window, as opposed to the CLI, an agent or a teammate over the socket. */
+export function fromWindow(call: CallContext): boolean {
+  return call.connectionId.startsWith(WINDOW_CONNECTION_PREFIX)
+}
+
 export type MethodHandler<M extends MethodName> = (
   params: ParamsOf<M>,
   call: CallContext

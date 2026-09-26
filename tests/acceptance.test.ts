@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 // @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
 import { withoutSystemCa } from '../scripts/child-env.mjs'
 import type {
@@ -19,6 +19,7 @@ import type {
   WorktreeMergePreview,
   WorktreeStatus
 } from '../src/shared/entities'
+import { PANE_IDENTITY_ENV } from '../src/shared/tasks'
 
 const CLI = join(process.cwd(), 'out/cli/index.js')
 const HOST = join(process.cwd(), 'scripts/acceptance-host.mjs')
@@ -49,6 +50,8 @@ beforeAll(async () => {
   userDataDir = join(root, 'userdata')
   mkdirSync(userDataDir, { recursive: true })
   env = { ...withoutSystemCa(process.env), TEAMREE_USER_DATA_DIR: userDataDir }
+  // Run from a teamree pane, the suite would otherwise make children of that pane's worktree.
+  for (const name of Object.values(PANE_IDENTITY_ENV)) delete env[name]
 
   execFileSync('git', ['init', '-b', 'main', repoPath])
   // On the repository itself: the app commits through its own CLI with the machine's identity, which a
@@ -250,6 +253,87 @@ describe('milestone 1 acceptance', () => {
     }
     expect(stranded).toEqual([])
   }, 30_000)
+})
+
+describe('child worktrees', () => {
+  let project: Project
+  let parent: Worktree
+  let child: Worktree
+  const deeper: Worktree[] = []
+
+  const settle = (created: Worktree): Worktree => cli<Worktree>(['worktree', 'wait', created.id])
+  const refusal = (args: string[], extra: NodeJS.ProcessEnv = {}): { code: string; message: string } => {
+    const failed = spawnSync('node', [CLI, ...args, '--json'], { encoding: 'utf8', env: { ...env, ...extra } })
+    expect(failed.status).not.toBe(0)
+    return (JSON.parse(failed.stderr || failed.stdout) as { error: { code: string; message: string } }).error
+  }
+
+  beforeAll(() => {
+    project = cli<Project[]>(['project', 'list']).find((row) => row.path === realpathSync(repoPath)) as Project
+  })
+
+  it("branches a child from its parent over the socket, and logs only the child's commits", () => {
+    parent = settle(cli<Worktree>(['worktree', 'create', '--project', project.id, '--name', 'rework auth']))
+    writeFileSync(join(parent.path, 'auth.txt'), 'parent\n')
+    git(['add', '.'], parent.path)
+    git(['commit', '-m', 'parent work'], parent.path)
+
+    const created = cli<Worktree>(['worktree', 'create', '--parent', parent.id, '--name', 'migration'])
+    expect(created).toMatchObject({ parentId: parent.id, branch: 'rework-auth--migration', baseRef: 'rework-auth' })
+    child = settle(created)
+    expect(child.path).toBe(join(dirname(parent.path), 'rework-auth--migration'))
+    writeFileSync(join(child.path, 'migration.sql'), 'create table\n')
+    git(['add', '.'], child.path)
+    git(['commit', '-m', 'child work'], child.path)
+
+    const log = cli<WorktreeLog>(['worktree', 'log', child.id])
+    expect(log.baseRef).toBe('rework-auth')
+    expect(log.commits.map((commit) => commit.subject)).toEqual(['child work'])
+  }, 60_000)
+
+  it('stops an agent three deep, with here read from the pane', () => {
+    const pane = (worktree: Worktree): NodeJS.ProcessEnv => ({
+      [PANE_IDENTITY_ENV.worktreeId]: worktree.id,
+      [PANE_IDENTITY_ENV.terminalId]: 'term_acceptance'
+    })
+    const inPane = (worktree: Worktree, name: string): Worktree => {
+      const stdout = execFileSync('node', [CLI, 'worktree', 'create', '--parent', 'here', '--name', name, '--json'], {
+        encoding: 'utf8',
+        env: { ...env, ...pane(worktree) }
+      })
+      return settle((JSON.parse(stdout) as { data: Worktree }).data)
+    }
+    const grandchild = inPane(child, 'seed')
+    expect(grandchild.parentId).toBe(child.id)
+    const third = inPane(grandchild, 'fixtures')
+    deeper.push(grandchild, third)
+
+    expect(refusal(['worktree', 'create', '--name', 'too deep'], pane(third))).toMatchObject({
+      code: 'child_limit',
+      message: '3 deep under rework auth'
+    })
+  }, 60_000)
+
+  it('lists the tree indented', () => {
+    const text = execFileSync('node', [CLI, 'worktree', 'list', '--tree', '--project', project.id], {
+      encoding: 'utf8',
+      env
+    })
+    const indent = (worktree: Worktree): number => {
+      const line = text.split('\n').find((row) => row.startsWith(worktree.id)) ?? ''
+      return /^ */.exec(line.slice(worktree.id.length + 2))?.[0].length ?? -1
+    }
+    expect([parent, child, ...deeper].map(indent)).toEqual([0, 2, 4, 6])
+  })
+
+  it('refuses to remove a parent alone, and with --children takes the whole tree', () => {
+    expect(refusal(['worktree', 'remove', parent.id, '--force']).code).toBe('conflict')
+    cli(['worktree', 'remove', parent.id, '--force', '--children'])
+    const left = cli<Worktree[]>(['worktree', 'list']).map((row) => row.name)
+    expect(left).not.toContain('rework auth')
+    expect(left).not.toContain('migration')
+    expect(left).not.toContain('fixtures')
+  }, 60_000)
 })
 
 describe('project clone', () => {

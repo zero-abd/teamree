@@ -109,6 +109,7 @@ export async function runCli(argv: readonly string[], options: CliOptions = {}):
           client,
           json: useJson,
           cwd,
+          env,
           endpointSource: discovered.source,
           streams,
           // A person piping `--prompt -` is read to the end; a hook's JSON is

@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { CliError } from './exit.js'
-import { canonicalPath, selectOne } from './selectors.js'
+import type { Worktree } from '../shared/entities.js'
+import { canonicalPath, selectOne, selectWorktree } from './selectors.js'
 
 const ITEMS = [
   { id: 'wt_1a2b3c', name: 'fix-login', path: '/repos/api-fix-login', aliases: ['feature/fix-login'] },
@@ -82,5 +83,39 @@ describe('selectOne', () => {
 describe('canonicalPath', () => {
   it('absolutises and normalises', () => {
     expect(canonicalPath('a/b/..')).toBe(join(process.cwd(), 'a'))
+  })
+})
+
+describe('here', () => {
+  const root = canonicalPath(mkdtempSync(join(tmpdir(), 'teamree-here-')))
+  const at = (id: string, dir: string): Worktree => {
+    mkdirSync(join(root, dir, 'src'), { recursive: true })
+    return {
+      id,
+      projectId: 'p',
+      name: dir,
+      branch: dir,
+      path: join(root, dir),
+      startedFrom: 'main',
+      state: 'ready',
+      createdAt: 1
+    }
+  }
+  const worktrees = [at('w1', 'auth'), at('w2', 'auth--tests')]
+
+  it('is the pane’s own worktree first', () => {
+    const caller = { env: { TEAMREE_WORKTREE_ID: 'w2' }, cwd: root }
+    expect(selectWorktree(worktrees, 'here', caller).id).toBe('w2')
+  })
+
+  it('is the checkout holding the cwd, from a subdirectory too, when the pane says nothing', () => {
+    expect(selectWorktree(worktrees, 'here', { env: {}, cwd: join(root, 'auth', 'src') }).id).toBe('w1')
+    expect(
+      selectWorktree(worktrees, 'here', { env: { TEAMREE_WORKTREE_ID: 'gone' }, cwd: join(root, 'auth--tests') }).id
+    ).toBe('w2')
+  })
+
+  it('is refused outside every checkout', () => {
+    expect(() => selectWorktree(worktrees, 'here', { env: {}, cwd: tmpdir() })).toThrow(CliError)
   })
 })
