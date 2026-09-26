@@ -921,8 +921,8 @@ describe('Teamwork and shared notes in the palette', () => {
     const items = buildPaletteItems(context({ sharedNotes: [note('s1'), note('s2', { read: true })] }))
     const rows = items.filter((item) => item.id.startsWith('teamwork:'))
     expect(rows.map((item) => [item.id, item.label, item.hint])).toEqual([
-      ['teamwork:p1', 'Teamwork: atlas', ''],
-      ['teamwork:p2', 'Teamwork: ledger', '1 unread']
+      ['teamwork:p1', 'Teamwork', 'atlas'],
+      ['teamwork:p2', 'Teamwork', 'ledger · 1 unread']
     ])
     expect(filterPalette(items, 'teamwork ledger')[0]?.id).toBe('teamwork:p2')
   })

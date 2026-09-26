@@ -423,7 +423,7 @@ function settingActions(): ActionRow[] {
 
 const isSetting = (item: PaletteItem): boolean => item.kind === 'action' && item.id.startsWith('setting:')
 
-/** A Teamwork row per project, its unread notes as the hint, then each shared note newest first. */
+/** A Teamwork row per project, named with its unread notes in the hint, then each shared note newest first. */
 function teamworkActions(context: PaletteContext): ActionRow[] {
   const now = Date.now()
   const notes = [...(context.sharedNotes ?? [])].sort((a, b) => b.receivedAt - a.receivedAt)
@@ -433,9 +433,9 @@ function teamworkActions(context: PaletteContext): ActionRow[] {
       const unread = notes.filter((note) => note.projectId === project.id && note.read !== true).length
       return {
         id: `teamwork:${project.id}` as const,
-        label: `Teamwork: ${project.name}`,
-        keywords: 'team teammates relay invite join share notes',
-        hint: unread > 0 ? `${unread} unread` : ''
+        label: 'Teamwork',
+        keywords: `${project.name} team teammates relay invite join share notes`,
+        hint: unread > 0 ? `${project.name} · ${unread} unread` : project.name
       }
     }),
     ...notes.map((note) => ({
