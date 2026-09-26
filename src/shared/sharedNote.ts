@@ -1,6 +1,5 @@
-// A markdown note one teammate sends the rest of the project: the wire shape, its caps, and what the receiver holds.
-
-import { z } from 'zod'
+// A markdown note one teammate sends the rest of the project: its caps and what the receiver holds.
+// No zod here: the window imports this, and zod's eval probe trips the renderer's content security policy.
 
 /** The most a shared note may weigh, title and body together, in UTF-8 bytes. */
 export const MAX_SHARED_NOTE_BYTES = 256 * 1024
@@ -22,29 +21,8 @@ export function sharedNoteBytes(title: string, markdown: string): number {
 /** The words for a note over the cap, said by both ends. */
 export const NOTE_TOO_LARGE = 'Note is over 256 KB'
 
-const NoteFields = z.object({
-  noteId: z.string().min(1).max(MAX_NOTE_ID_CHARS),
-  title: z.string().trim().min(1).max(MAX_NOTE_TITLE_CHARS),
-  markdown: z.string()
-})
-
-const withinCap = (note: { title: string; markdown: string }): boolean =>
-  sharedNoteBytes(note.title, note.markdown) <= MAX_SHARED_NOTE_BYTES
-
-/**
- * What crosses the wire as `peer.shareNote`. Who sent it is the key the handshake
- * authenticated, never a field: a handle in the payload would be a claim.
- */
-export const SharedNotePayload = NoteFields.extend({ sentAt: z.number().int().nonnegative() }).refine(withinCap, {
-  message: NOTE_TOO_LARGE
-})
-
-/** The same note as this machine's window asks for it to be sent. */
-export const ShareNoteRequest = NoteFields.extend({ projectId: z.string().min(1) }).refine(withinCap, {
-  message: NOTE_TOO_LARGE
-})
-
-export type SharedNotePayload = z.infer<typeof SharedNotePayload>
+/** What crosses the wire as `peer.shareNote`; `sharedNoteSchema.ts` checks it. The sender is the link's key. */
+export type SharedNotePayload = { noteId: string; title: string; markdown: string; sentAt: number }
 
 /** One received note as the window lists it: everything but the body. */
 export type SharedNoteSummary = {

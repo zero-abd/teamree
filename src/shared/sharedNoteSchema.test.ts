@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { MAX_NOTE_TITLE_CHARS, MAX_SHARED_NOTE_BYTES, NOTE_TOO_LARGE, SharedNotePayload } from './sharedNote'
+import { MAX_NOTE_TITLE_CHARS, MAX_SHARED_NOTE_BYTES, NOTE_TOO_LARGE } from './sharedNote'
+import { SharedNotePayload } from './sharedNoteSchema'
 
 const note = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
   noteId: 'NOTES.md',
@@ -48,5 +50,12 @@ describe('a shared note on the wire', () => {
     const markdown = '🙂'.repeat(MAX_SHARED_NOTE_BYTES / 4)
     expect(markdown.length).toBeLessThan(MAX_SHARED_NOTE_BYTES)
     expect(SharedNotePayload.safeParse(note({ markdown })).success).toBe(false)
+  })
+})
+
+describe('the module the window imports', () => {
+  it('loads no zod, whose eval probe the renderer’s content security policy reports as an error', () => {
+    const source = readFileSync(new URL('./sharedNote.ts', import.meta.url), 'utf8')
+    expect(source).not.toMatch(/from 'zod'/)
   })
 })

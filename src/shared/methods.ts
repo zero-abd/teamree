@@ -60,13 +60,8 @@ import type {
 import { MAX_AGENT_ARGS_CHARS } from './agentLaunch'
 import { MAX_FILE_PANE_BYTES } from './filePane'
 import { TaskParams, type TaskMethodContract, type TaskWorkspaceEvent } from './taskMethods'
-import {
-  SharedNotePayload,
-  ShareNoteRequest,
-  type NoteShareResult,
-  type SharedNote,
-  type SharedNoteSummary
-} from './sharedNote'
+import type { NoteShareResult, SharedNote, SharedNoteSummary } from './sharedNote'
+import { SharedNotePayload, ShareNoteRequest } from './sharedNoteSchema'
 import { APPEARANCE_MODES, THEME_TOKENS, type Appearance, type AppearanceMode } from './theme'
 
 /**
@@ -600,7 +595,7 @@ export const Params = {
   /** PEER-ONLY. Streams this runtime's presence: once now, and on every change. */
   peerSubscribe: z.object({}),
 
-  // Shared notes: see `sharedNote.ts`.
+  // Shared notes: see `sharedNote.ts` and `sharedNoteSchema.ts`.
   /** Sends a note to every connected teammate on the project; the answer names who got it. */
   teamworkShareNote: ShareNoteRequest,
   /** Notes teammates have shared with this machine, bodies left out, oldest first. */
