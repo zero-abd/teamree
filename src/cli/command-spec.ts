@@ -46,6 +46,8 @@ export type CommandSpec = {
    * hook. A usage error still fails: the line is generated, so it is a bug worth hearing.
    */
   silent?: boolean
+  /** Answers without the app: no runtime is looked for, and `client` refuses every call. */
+  offline?: boolean
   run: (context: CommandContext) => Promise<CommandOutput>
 }
 

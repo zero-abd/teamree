@@ -158,7 +158,49 @@ const ALLOWED = [
     why: 'not macOS: it signs, stages and swaps a real .app bundle.'
   },
 
+  {
+    file: 'src/main/terminals/shell-integration.test.ts',
+    suite: 'the startup files',
+    test: 'find the bundled CLI after every zsh startup file rebuilds PATH, reading the user’s files where their .zshenv moved them',
+    when: offMac,
+    why: 'not macOS: zsh is not on the Linux runner; the bash half of the same files runs there.'
+  },
+  {
+    file: 'src/main/terminals/shell-integration.test.ts',
+    suite: 'the startup files',
+    test: 'keeps the history where the user’s shell keeps it',
+    when: offMac,
+    why: 'not macOS: zsh is not on the Linux runner.'
+  },
+
   // POSIX-only; listed so a Windows run still reports exactly what it did not run.
+  {
+    file: 'src/main/terminals/shell-integration.test.ts',
+    suite: 'the startup files',
+    when: onWindows,
+    why: 'Windows: panes there get the CLI on PATH from the environment alone.'
+  },
+  {
+    file: 'src/main/terminals/session-manager.test.ts',
+    suite: 'terminal handlers',
+    test: 'finds this build’s CLI first on a pane’s PATH when run from a checkout',
+    when: onWindows,
+    why: 'Windows: the stand-in CLI is a POSIX script.'
+  },
+  {
+    file: 'src/main/terminals/session-manager.test.ts',
+    suite: 'terminal handlers',
+    test: 'finds this build’s CLI first on a pane’s PATH when run from a packaged app',
+    when: onWindows,
+    why: 'Windows: the stand-in CLI is a POSIX script.'
+  },
+  {
+    file: 'src/main/terminals/session-restore.test.ts',
+    suite: 'restoring terminals across a restart',
+    test: 'tells a restored pane the terminal id it had before',
+    when: onWindows,
+    why: 'Windows: the stand-in agent is a POSIX script.'
+  },
   {
     file: 'src/main/runtime/socketServer.test.ts',
     when: onWindows,

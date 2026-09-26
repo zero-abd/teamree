@@ -84,7 +84,9 @@ const EXPECTED = [
   'agent list',
   'agent event',
   'cli status',
-  'cli install'
+  'cli install',
+  'whoami',
+  'guide'
 ]
 
 describe('the command table', () => {

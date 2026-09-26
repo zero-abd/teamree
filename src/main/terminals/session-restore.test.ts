@@ -426,6 +426,34 @@ describePty('restoring terminals across a restart', () => {
     expect(resumedLine).not.toContain('--session-id')
   }, 20_000)
 
+  it.skipIf(process.platform === 'win32')(
+    'tells a restored pane the terminal id it had before',
+    async () => {
+      const base = await mkdtemp(path.join(os.tmpdir(), 'teamree-identity-'))
+      created.push(base)
+      const checkout = path.join(base, 'checkout')
+      await mkdir(checkout)
+      const agent = path.join(base, 'claude')
+      await writeFile(agent, '#!/bin/sh\necho "pane=$TEAMREE_TERMINAL_ID"\nsleep 30\n', 'utf8')
+      await chmod(agent, 0o755)
+      const repositories = createRepositories()
+      const said = (manager: TerminalSessionManager, id: string): string =>
+        /pane=(\S+)/.exec(manager.read(id))?.[1] ?? ''
+
+      const first = manager(repositories, checkout)
+      const opened = first.create({ worktreeId: 'wt_1', command: `"${agent}"` })
+      await waitUntil(() => said(first, opened.id) !== '', 'the pane to print its id')
+      first.write(opened.id, 'hello\r')
+      await first.shutdown()
+
+      const second = manager(repositories, checkout)
+      expect(second.restoreSessions().restored).toBe(1)
+      await waitUntil(() => said(second, opened.id) !== '', 'the restored pane to print its id')
+      expect(said(second, opened.id)).toBe(opened.id)
+    },
+    20_000
+  )
+
   // A pane talking to Claude Code all day came back saying "No conversation
   // found with session ID": the app, started from inside an agent session,
   // handed every pane the marker that makes the agent stop keeping a transcript.

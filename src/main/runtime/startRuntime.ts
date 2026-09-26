@@ -125,6 +125,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   const subscriptions = new SubscriptionHub()
   const context = createRuntimeContext({ version, store, subscriptions })
   const registry = new MethodRegistry(context)
+  const endpoint = serveCli ? resolveEndpoint(userDataDir) : undefined
   const areas = registerHandlers(registry, {
     openExternal,
     downloadsDirectory,
@@ -139,7 +140,8 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     ...(unsavedFiles === undefined ? {} : { unsavedFiles }),
     ...(onAppearance === undefined ? {} : { onAppearance }),
     ...(systemTone === undefined ? {} : { systemTone }),
-    ...(online === undefined ? {} : { online })
+    ...(online === undefined ? {} : { online }),
+    ...(endpoint === undefined ? {} : { paneEndpoint: endpoint })
   })
   const dispatch = createDispatcher(registry)
 
@@ -190,8 +192,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     if (checkForUpdates) areas.updates.start()
     if (fetchBases) areas.bases.start()
 
-    if (serveCli) {
-      const endpoint = resolveEndpoint(userDataDir)
+    if (endpoint !== undefined) {
       try {
         socketServer = await startSocketServer({ endpoint, dispatch, subscriptions, onError: report })
         context.endpoint = socketServer.endpoint

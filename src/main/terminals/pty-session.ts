@@ -21,11 +21,13 @@ import {
   buildTerminalEnv,
   loginShellPath,
   shellCannotRun,
+  type PaneIdentity,
   SHELL_UNRUNNABLE,
   TERMINAL_TYPE,
   shellName
 } from './shell-environment'
 import { terminalFailed, TerminalServiceError } from './service-error'
+import { integrateShell } from './shell-integration'
 import { ErrorCode } from '../../shared/protocol'
 import { agentForProcess, type AgentKind } from './agent-command'
 import { TitleSequenceScanner } from './title-sequence'
@@ -95,6 +97,9 @@ export type PtySessionInit = {
   env?: NodeJS.ProcessEnv
   /** The window's tone when the pane starts, told to the child as COLORFGBG. */
   tone?: Tone
+  identity?: PaneIdentity
+  /** Where `writeShellIntegration` put the startup files that keep the CLI first on PATH. */
+  shellIntegrationDir?: string
   platform?: NodeJS.Platform
   scrollbackCapBytes?: number
   /** Set when this session is a previous run's pane being brought back. */
@@ -700,9 +705,13 @@ export class PtySession {
  * `init` because a pane whose resume is refused restarts under a different one.
  */
 function startChild(init: PtySessionInit, command: string | undefined, platform: NodeJS.Platform): IPty {
-  const { file, args } = buildShellCommand(init.shell, command, platform)
+  const shellCommand = buildShellCommand(init.shell, command, platform)
   // The login shell's PATH, not the one launchd handed a desktop-launched app.
-  const env = buildTerminalEnv(init.env, platform, loginShellPath({ platform }), init.tone)
+  const built = buildTerminalEnv(init.env, platform, loginShellPath({ platform }), init.tone, init.identity)
+  const { file, args, env } =
+    init.shellIntegrationDir === undefined
+      ? { ...shellCommand, env: built }
+      : integrateShell(shellCommand, built, init.shellIntegrationDir, platform)
 
   // Windows refuses a missing shell in spawn(); POSIX forks fine and the helper's
   // execvp failure goes to the pty, so the pane appears and vanishes. Ask first.

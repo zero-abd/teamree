@@ -169,6 +169,52 @@ describe('buildTerminalEnv', () => {
       '0;15'
     )
   })
+
+  it('tells a pane who it is and puts this build’s CLI first on PATH', () => {
+    const env = buildTerminalEnv({ PATH: '/usr/local/bin:/usr/bin' }, 'darwin', undefined, undefined, {
+      terminalId: 'term_3',
+      worktreeId: 'wt_1',
+      projectId: 'p_api',
+      endpoint: '/tmp/teamree.sock',
+      cli: '/Applications/teamree.app/Contents/Resources/cli/teamree'
+    })
+    expect(env).toMatchObject({
+      TEAMREE_TERMINAL_ID: 'term_3',
+      TEAMREE_WORKTREE_ID: 'wt_1',
+      TEAMREE_PROJECT_ID: 'p_api',
+      TEAMREE_ENDPOINT: '/tmp/teamree.sock',
+      TEAMREE_CLI: '/Applications/teamree.app/Contents/Resources/cli/teamree',
+      PATH: '/Applications/teamree.app/Contents/Resources/cli:/usr/local/bin:/usr/bin'
+    })
+  })
+
+  it('never passes on the identity of the pane the app itself was started from', () => {
+    const inherited = {
+      PATH: '/other/cli:/usr/bin',
+      TEAMREE_TERMINAL_ID: 'term_9',
+      TEAMREE_WORKTREE_ID: 'wt_9',
+      TEAMREE_PROJECT_ID: 'p_9',
+      TEAMREE_ENDPOINT: '/tmp/other.sock',
+      TEAMREE_CLI: '/other/cli/teamree'
+    }
+    const env = buildTerminalEnv(inherited, 'darwin', undefined, undefined, {
+      terminalId: 'term_1',
+      worktreeId: 'wt_1'
+    })
+    expect(env.TEAMREE_TERMINAL_ID).toBe('term_1')
+    expect(env.TEAMREE_WORKTREE_ID).toBe('wt_1')
+    for (const name of ['TEAMREE_PROJECT_ID', 'TEAMREE_ENDPOINT', 'TEAMREE_CLI']) expect(env[name]).toBeUndefined()
+    expect(buildTerminalEnv(inherited, 'darwin').TEAMREE_ENDPOINT).toBeUndefined()
+  })
+
+  it('moves the CLI directory to the front rather than listing it twice', () => {
+    const env = buildTerminalEnv({ PATH: '/usr/bin:/x/cli:/bin' }, 'darwin', undefined, undefined, {
+      terminalId: 't',
+      worktreeId: 'w',
+      cli: '/x/cli/teamree'
+    })
+    expect(env.PATH).toBe('/x/cli:/usr/bin:/bin')
+  })
 })
 
 describe('loginShellPath', () => {

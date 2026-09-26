@@ -90,37 +90,63 @@ export function selectOne<T extends Selectable>(kind: string, token: string, ite
   })
 }
 
-export async function resolveProject(client: RuntimeClient, token: string): Promise<Project> {
-  const projects = await client.call('project.list', {})
-  return selectOne('project', token, projects)
-}
-
 /** Who is asking, for the `here` selector. */
 export type Caller = { env: NodeJS.ProcessEnv; cwd: string }
 
 export const HERE = 'here'
 
-/** The calling pane's worktree, else the checkout holding `cwd`, subdirectories included. */
-export function selectHere(worktrees: readonly Worktree[], caller: Caller): Worktree {
-  const fromPane = caller.env[PANE_IDENTITY_ENV.worktreeId]
-  const pane = fromPane ? worktrees.find((worktree) => worktree.id === fromPane) : undefined
-  if (pane !== undefined) return pane
-  const at = pathComparisonKey(caller.cwd)
-  const holding = worktrees
-    .map((worktree) => ({ worktree, key: pathComparisonKey(worktree.path) }))
-    .filter(({ key }) => at === key || at.startsWith(key.endsWith(sep) ? key : key + sep))
-    .sort((a, b) => b.key.length - a.key.length)[0]
-  if (holding !== undefined) return holding.worktree
-  throw new CliError({
+export async function resolveProject(client: RuntimeClient, token: string, caller?: Caller): Promise<Project> {
+  const projects = await client.call('project.list', {})
+  if (token !== HERE) return selectOne('project', token, projects)
+  const at = caller ?? processCaller()
+  const named = projects.find((project) => project.id === at.env[PANE_IDENTITY_ENV.projectId])
+  if (named !== undefined) return named
+  const worktree = enclosing(await client.call('worktree.list', {}), at.cwd)
+  const found = projects.find((project) => project.id === worktree?.projectId) ?? enclosing(projects, at.cwd)
+  if (found === undefined) throw notHere('project')
+  return found
+}
+
+function processCaller(): Caller {
+  return { env: process.env, cwd: process.cwd() }
+}
+
+function notHere(what: string): CliError {
+  return new CliError({
     code: 'not_found',
-    message: `No worktree here: ${caller.cwd} is in none.`,
+    message: `No ${what} here: not in a teamree pane or checkout.`,
     exitCode: ExitCode.Failure
   })
 }
 
+/** The deepest item whose path is `cwd` or a directory above it. */
+function enclosing<T extends { path: string }>(items: readonly T[], cwd: string): T | undefined {
+  const at = pathComparisonKey(cwd)
+  return items
+    .map((item) => ({ item, key: pathComparisonKey(item.path) }))
+    .filter(({ key }) => at === key || at.startsWith(key.endsWith(sep) ? key : key + sep))
+    .sort((a, b) => b.key.length - a.key.length)[0]?.item
+}
+
+/** The calling pane's worktree, else the checkout holding `cwd`, subdirectories included. */
+export function selectHere(worktrees: readonly Worktree[], caller: Caller): Worktree {
+  const fromPane = caller.env[PANE_IDENTITY_ENV.worktreeId]
+  const found = worktrees.find((worktree) => worktree.id === fromPane) ?? enclosing(worktrees, caller.cwd)
+  if (found === undefined) throw notHere('worktree')
+  return found
+}
+
+/** A terminal id as given, or the calling pane's for `here`. */
+export function terminalSelector(token: string, caller: Caller = processCaller()): string {
+  if (token !== HERE) return token
+  const id = caller.env[PANE_IDENTITY_ENV.terminalId]
+  if (!id) throw notHere('pane')
+  return id
+}
+
 /** Picks one worktree out of a listing already in hand, so `terminal list` needs no second round trip. */
 export function selectWorktree(worktrees: readonly Worktree[], token: string, caller?: Caller): Worktree {
-  if (token === HERE && caller !== undefined) return selectHere(worktrees, caller)
+  if (token === HERE) return selectHere(worktrees, caller ?? processCaller())
   return selectOne(
     'worktree',
     token,

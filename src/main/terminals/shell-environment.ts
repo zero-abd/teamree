@@ -4,7 +4,8 @@
 
 import { spawnSync } from 'node:child_process'
 import { accessSync, constants, statSync } from 'node:fs'
-import { basename, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
+import { PANE_IDENTITY_ENV } from '../../shared/tasks'
 import type { Tone } from '../../shared/theme'
 
 /** Advertised terminal type. xterm.js implements this set. */
@@ -320,6 +321,19 @@ export function encodeWindowsCommandLine(args: readonly string[]): string {
   return args.map(quoteWindowsArgument).join(' ')
 }
 
+/** Which pane this is and which app it belongs to; exported to it under `PANE_IDENTITY_ENV`. */
+export type PaneIdentity = {
+  terminalId: string
+  worktreeId: string
+  projectId?: string
+  endpoint?: string
+  /** This build's CLI; its directory goes first on PATH. */
+  cli?: string
+}
+
+// Inherited from a pane the app was started in, they would name that pane and that app.
+const IDENTITY_VARS = new Set<string>(Object.values(PANE_IDENTITY_ENV))
+
 /**
  * Environment for the child: inherited, pruned, then given a terminal identity.
  * `searchPath` (normally loginShellPath()) replaces the inherited PATH.
@@ -328,13 +342,14 @@ export function buildTerminalEnv(
   base: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
   searchPath?: string,
-  tone?: Tone
+  tone?: Tone,
+  identity?: PaneIdentity
 ): Record<string, string> {
   const env: Record<string, string> = {}
 
   for (const [key, value] of Object.entries(base)) {
     if (value === undefined) continue
-    if (STRIPPED_ENV_VARS.has(key)) continue
+    if (STRIPPED_ENV_VARS.has(key) || IDENTITY_VARS.has(key)) continue
     if (STRIPPED_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) continue
     env[key] = value
   }
@@ -355,7 +370,25 @@ export function buildTerminalEnv(
   // `fg;bg` as ANSI colour numbers, the rxvt convention TUIs read to pick colours for the ground.
   if (tone !== undefined) env.COLORFGBG = tone === 'light' ? '0;15' : '15;0'
 
+  if (identity !== undefined) {
+    env[PANE_IDENTITY_ENV.terminalId] = identity.terminalId
+    env[PANE_IDENTITY_ENV.worktreeId] = identity.worktreeId
+    if (identity.projectId) env[PANE_IDENTITY_ENV.projectId] = identity.projectId
+    if (identity.endpoint) env[PANE_IDENTITY_ENV.endpoint] = identity.endpoint
+    if (identity.cli) {
+      env[PANE_IDENTITY_ENV.cli] = identity.cli
+      const key = env.PATH === undefined && env.Path !== undefined ? 'Path' : 'PATH'
+      env[key] = prependPath(dirname(identity.cli), env[key] ?? '', platform === 'win32' ? ';' : ':')
+    }
+  }
+
   return env
+}
+
+/** `directory` first, and nowhere else in the list. */
+function prependPath(directory: string, list: string, separator: string): string {
+  const rest = list.split(separator).filter((entry) => entry.length > 0 && entry !== directory)
+  return [directory, ...rest].join(separator)
 }
 
 /** Lowercase shell name without directory or .exe, e.g. "zsh", "cmd", "pwsh". */

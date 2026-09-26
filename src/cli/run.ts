@@ -98,10 +98,14 @@ export async function runCli(argv: readonly string[], options: CliOptions = {}):
       profile === undefined ? base : { ...base, env: { ...base.env, TEAMREE_USER_DATA_DIR: profile } }
 
     try {
-      const discovered = override === undefined ? requireRuntime(host) : { endpoint: override, source: '--endpoint' }
+      const discovered = spec.offline
+        ? { endpoint: '', source: 'none' }
+        : override === undefined
+          ? requireRuntime(host)
+          : { endpoint: override, source: '--endpoint' }
 
       const connect = options.connect ?? connectRuntime
-      const client = await connect({ endpoint: discovered.endpoint, timeoutMs })
+      const client = spec.offline ? OFFLINE_CLIENT : await connect({ endpoint: discovered.endpoint, timeoutMs })
       try {
         const output = await spec.run({
           args: parsed.positionals,
@@ -131,6 +135,14 @@ export async function runCli(argv: readonly string[], options: CliOptions = {}):
     emitFailure(label, error, json, streams)
     return error.exitCode
   }
+}
+
+/** Handed to an `offline` command, which by its declaration never calls. */
+const OFFLINE_CLIENT: RuntimeClient = {
+  endpoint: '',
+  call: () => Promise.reject(new Error('offline command called the runtime')),
+  subscribe: () => Promise.reject(new Error('offline command called the runtime')),
+  close: () => {}
 }
 
 function readTimeoutFromEnv(env: NodeJS.ProcessEnv): number | undefined {

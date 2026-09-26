@@ -1,10 +1,11 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Layout, Terminal } from '../../shared/entities'
 import { ErrorCode } from '../../shared/protocol'
 import type { TerminalEvent } from '../../shared/methods'
+import { findShippedCli } from '../cli/shippedCli'
 import { createTerminalService, registerTerminalHandlers } from './method-handlers'
 import { TerminalSessionManager } from './session-manager'
 import type { MethodRegistry, StreamChannel, TerminalService } from './method-handlers'
@@ -12,6 +13,7 @@ import { isProcessAlive } from './process-tree'
 import { canSpawnPty, printThenExit, waitUntil, writeFakeAgent, writeProcessTreeProbe } from './pty-test-support'
 import type { TerminalRecord } from './session-restore'
 import { isTerminalServiceError } from './service-error'
+import { writeShellIntegration } from './shell-integration'
 
 // Driven through the handler surface the runtime will call, over real PTYs.
 const describePty = canSpawnPty() ? describe : describe.skip
@@ -93,6 +95,96 @@ describePty('terminal handlers', () => {
       expect(await printed((await newTerminal(service, command)).id)).toBe('0;15')
       tone = 'dark'
       expect(await printed((await newTerminal(service, command)).id)).toBe('15;0')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'tells each pane its own terminal, worktree and project, and the app it belongs to',
+    async () => {
+      const service = createTerminalService({
+        resolveWorktreeCwd: () => process.cwd(),
+        paneIdentity: { endpoint: '/tmp/this-app.sock', cli: '/app/cli/teamree', projectOf: () => 'p_api' }
+      })
+      services.push(service)
+      const scratch = await mkdtemp(path.join(os.tmpdir(), 'teamree-identity-'))
+      scratchDirs.push(scratch)
+      const script = path.join(scratch, 'identity.cjs')
+      const names = ['TERMINAL_ID', 'WORKTREE_ID', 'PROJECT_ID', 'ENDPOINT', 'CLI']
+      await writeFile(
+        script,
+        `console.log('id=' + ${JSON.stringify(names)}.map((n) => process.env['TEAMREE_' + n]).join(','))\n` +
+          'setInterval(() => {}, 1000)\n',
+        'utf8'
+      )
+      const pane = await newTerminal(service, `"${process.execPath}" "${script}"`)
+
+      let printed = ''
+      await waitUntil(async () => {
+        const { data } = await service.handlers['terminal.read']({ terminalId: pane.id })
+        printed = /id=(\S+)/.exec(data)?.[1] ?? ''
+        return printed !== ''
+      }, 'the pane to print who it is')
+      expect(printed).toBe(`${pane.id},${WORKTREE},p_api,/tmp/this-app.sock,/app/cli/teamree`)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it.runIf(process.platform !== 'win32').each([
+    ['a checkout', false],
+    ['a packaged app', true]
+  ])(
+    'finds this build’s CLI first on a pane’s PATH when run from %s',
+    async (_, packaged) => {
+      const scratch = await mkdtemp(path.join(os.tmpdir(), 'teamree-pane-cli-'))
+      scratchDirs.push(scratch)
+      const resources = path.join(scratch, 'Resources')
+      await mkdir(path.join(resources, 'cli'), { recursive: true })
+      await writeFile(path.join(resources, 'cli', 'teamree'), '#!/bin/sh\n', { mode: 0o755 })
+      const cli = findShippedCli(packaged ? { resourcesPath: resources } : {})
+      expect(cli?.packaged).toBe(packaged)
+      const integration = path.join(scratch, 'integration')
+      writeShellIntegration(integration)
+
+      const service = createTerminalService({
+        resolveWorktreeCwd: () => process.cwd(),
+        paneIdentity: { cli: cli?.path as string, shellIntegrationDir: integration }
+      })
+      services.push(service)
+      const pane = await newTerminal(service, `printf 'cli=%s\\n' "$(command -v teamree)"; sleep 5`)
+      let found = ''
+      await waitUntil(async () => {
+        const { data } = await service.handlers['terminal.read']({ terminalId: pane.id })
+        found = /cli=(\S+)/.exec(data)?.[1] ?? ''
+        return found !== ''
+      }, 'the pane to say where teamree is')
+      expect(found).toBe(cli?.path)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'puts a prefix before the first prompt of a worktree that has one, and only there',
+    async () => {
+      const scratch = await mkdtemp(path.join(os.tmpdir(), 'teamree-prefix-'))
+      scratchDirs.push(scratch)
+      const agent = await writeFakeAgent(scratch)
+      const service = createTerminalService({
+        resolveWorktreeCwd: () => process.cwd(),
+        promptPrefix: (worktreeId) => (worktreeId === 'wt_child' ? '[teamree] Child task' : undefined)
+      })
+      services.push(service)
+      const said = async (worktreeId: string): Promise<string> => {
+        const pane = await service.handlers['terminal.create']({ worktreeId, command: agent, prompt: 'Fix it' })
+        let data = ''
+        await waitUntil(async () => {
+          data = (await service.handlers['terminal.read']({ terminalId: pane.id })).data
+          return data.includes('Fix it')
+        }, 'the agent to print its prompt')
+        return data
+      }
+      expect(await said('wt_child')).toContain('[teamree] Child task')
+      expect(await said('wt_top')).not.toContain('[teamree]')
     },
     TEST_TIMEOUT_MS
   )

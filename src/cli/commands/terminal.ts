@@ -4,13 +4,13 @@ import { readBoolean, readNumber, readString, requireString, type ParsedFlags } 
 import { UsageError } from '../exit.js'
 import { formatFields, formatTable } from '../output.js'
 import { plainText } from '../plainText.js'
-import { resolveWorktree, selectWorktree } from '../selectors.js'
+import { resolveWorktree, selectWorktree, terminalSelector } from '../selectors.js'
 import { DEFAULT_QUIET_MS, DEFAULT_WAIT_TIMEOUT_MS, waitForTerminal } from '../waiting.js'
 
 /** Terminals are addressed by id only: ids come straight from `terminal list`. */
 const TERMINAL_ARG = {
   name: 'terminal',
-  description: 'Terminal id from `teamree terminal list`.',
+  description: 'Terminal id from `teamree terminal list`, or `here` for this pane.',
   required: true
 } as const
 
@@ -136,7 +136,7 @@ export const terminalCommands: readonly CommandSpec[] = [
     ],
     examples: ['teamree terminal read t_12 --tail-bytes 4000', 'teamree terminal read t_12 --plain'],
     run: async (context) => {
-      const terminalId = context.args[0] as string
+      const terminalId = terminalSelector(context.args[0] as string, context)
       const tailBytes = readNumber(context.flags, 'tail-bytes')
       const result = await context.client.call('terminal.read', {
         terminalId,
@@ -171,7 +171,7 @@ export const terminalCommands: readonly CommandSpec[] = [
     ],
     examples: ['teamree terminal send t_12 --text "npm test" --enter', 'teamree terminal send t_12 --enter'],
     run: async (context) => {
-      const terminalId = context.args[0] as string
+      const terminalId = terminalSelector(context.args[0] as string, context)
       const enter = readBoolean(context.flags, 'enter')
       const text = enter ? (readString(context.flags, 'text') ?? '') : requireString(context.flags, 'text')
       const data = text + (enter ? '\r' : '')
@@ -205,7 +205,7 @@ export const terminalCommands: readonly CommandSpec[] = [
     ],
     examples: ['teamree terminal split t_12 --direction column'],
     run: async (context) => {
-      const terminalId = context.args[0] as string
+      const terminalId = terminalSelector(context.args[0] as string, context)
       const direction = requireString(context.flags, 'direction') as 'row' | 'column'
       const command = readString(context.flags, 'command')
       const result = await context.client.call('terminal.split', {
@@ -238,7 +238,7 @@ export const terminalCommands: readonly CommandSpec[] = [
     args: [TERMINAL_ARG],
     examples: ['teamree terminal relaunch t_12'],
     run: async (context) => {
-      const terminalId = context.args[0] as string
+      const terminalId = terminalSelector(context.args[0] as string, context)
       const terminal = await context.client.call('terminal.relaunch', { terminalId })
       return {
         data: terminal,
@@ -262,7 +262,7 @@ export const terminalCommands: readonly CommandSpec[] = [
     flags: [{ name: 'name', kind: 'string', placeholder: '<name>', description: 'What to call the pane.' }],
     examples: ['teamree terminal rename t_12 --name "auth refactor"'],
     run: async (context) => {
-      const terminalId = context.args[0] as string
+      const terminalId = terminalSelector(context.args[0] as string, context)
       const name = readString(context.flags, 'name')
       const terminal = await context.client.call('terminal.rename', { terminalId, label: name ?? null })
       return {
@@ -280,7 +280,7 @@ export const terminalCommands: readonly CommandSpec[] = [
     summary: 'Close a terminal and its pane.',
     args: [TERMINAL_ARG],
     run: async (context) => {
-      const terminalId = context.args[0] as string
+      const terminalId = terminalSelector(context.args[0] as string, context)
       await context.client.call('terminal.close', { terminalId })
       return { data: { closed: true, terminalId }, text: `closed terminal ${terminalId}` }
     }
@@ -318,7 +318,7 @@ export const terminalCommands: readonly CommandSpec[] = [
     ],
     examples: ['teamree terminal send <id> --text "npm test" --enter && teamree terminal wait <id> --json'],
     run: async (context) => {
-      const terminalId = context.args[0] as string
+      const terminalId = terminalSelector(context.args[0] as string, context)
       const until = (readString(context.flags, 'for') ?? 'quiet') as 'quiet' | 'exit'
       const result = await waitForTerminal({
         client: context.client,
