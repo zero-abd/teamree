@@ -35,6 +35,9 @@ export function replayableRecord(record: RecordedScrollback, startsBelow?: strin
 /** What follows a record in the ordinary case: the command was not re-issued, a shell starts. */
 export const NEW_SHELL_BELOW = 'new shell below'
 
+/** What follows a restored Run pane's record: its command waits for Run Again. */
+export const NOT_RUN_AGAIN_BELOW = 'not run again'
+
 /** What follows it when a resume did not take; `pty-session.ts` withholds the record until then. */
 export const FAILED_RESUME_BELOW = 'resume attempt below'
 

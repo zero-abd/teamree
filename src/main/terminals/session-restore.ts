@@ -1,7 +1,8 @@
 // What is worth writing down about a terminal, and what to do with it on the
 // way back up. The rule is in `restoreLaunch`: a stored command is re-issued
-// only when it resumes something; anything else comes back as a plain shell.
+// only when it resumes something; anything else comes back as a plain shell, a Run pane as ended.
 
+import type { RunKind } from '../../shared/entities'
 import type { AgentKind } from './agent-command'
 import { carriesSelector, restartSessionCommand, resumeSessionCommand } from './agent-command'
 import { conversationOnDisk, type ConversationEvidence, type ConversationQuestion } from './agent-conversations'
@@ -33,6 +34,10 @@ export type TerminalRecord = {
    * and unknown tries the resume, since a failed resume writes `false` on its way out.
    */
   typed?: boolean
+  /** Which Run button started it; see `Terminal.run`. */
+  run?: RunKind
+  /** How that run ended, when it ended before the app quit. */
+  exitCode?: number
   cols: number
   rows: number
   createdAt: number
@@ -113,6 +118,14 @@ export function restoreLaunch(
   if (resume === null) return { resumed: false }
   const fallback = restartSessionCommand(record.command, record.agent)
   return { command: resume, resumed: true, ...(fallback === null ? {} : { fallback }) }
+}
+
+// The quit hangs up a run still going; see `killProcessTree`.
+const HUNG_UP = 129
+
+/** What a restored Run pane runs: nothing but ending the way its run did, so Run Again has its pane back. */
+export function endedRunCommand(record: TerminalRecord): string {
+  return `exit ${record.exitCode ?? HUNG_UP}`
 }
 
 /**
