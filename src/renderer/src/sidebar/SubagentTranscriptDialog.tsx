@@ -13,17 +13,18 @@ export const TRANSCRIPT_REFRESH_MS = 3_000
 type Props = {
   terminalId: string
   subagent: Subagent
+  /** Whether the pane still lists it. */
+  running: boolean
   now: number
   onClose: () => void
 }
 
 /** Drawn on the body, not inside the sidebar row that opened it. */
-export function SubagentTranscriptDialog({ terminalId, subagent, now, onClose }: Props): React.ReactPortal {
+export function SubagentTranscriptDialog({ terminalId, subagent, running, now, onClose }: Props): React.ReactPortal {
   const [read, setRead] = useState<SubagentTranscript | null>(null)
   const [error, setError] = useState<string | null>(null)
   const list = useRef<HTMLOListElement | null>(null)
   const pinned = useRef(true)
-  const running = subagent.status === 'running'
 
   useEffect(() => {
     let alive = true
@@ -53,7 +54,7 @@ export function SubagentTranscriptDialog({ terminalId, subagent, now, onClose }:
     if (node !== null && pinned.current) node.scrollTop = node.scrollHeight
   }, [read])
 
-  const facts = [subagent.agentType, subagent.status, elapsedLabel(subagentElapsed(subagent, now)), subagent.branch]
+  const facts = [subagent.agentType, running ? elapsedLabel(subagentElapsed(subagent, now)) : 'ended', subagent.branch]
   return createPortal(
     <Modal title={subagent.description} titleHint={subagent.worktreePath} onClose={onClose}>
       <div className="subagent-log">

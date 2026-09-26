@@ -1,15 +1,6 @@
-// A pane's subagents as sidebar rows: nested under whoever started them, timed from their start.
+// A pane's running subagents as sidebar rows: nested under whoever started them, timed from their start.
 
-import type { Subagent, SubagentStatus } from '@shared/entities'
-import type { DotTone } from './agentRows'
-
-/** The dot each status is drawn with; a stopped subagent is hollow, like a stopped agent. */
-export const SUBAGENT_TONE: Record<SubagentStatus, DotTone> = {
-  running: 'working',
-  done: 'done',
-  failed: 'failed',
-  stopped: 'quiet'
-}
+import type { Subagent } from '@shared/entities'
 
 /** Parents before their children, each with its depth; one whose parent is not listed is a root. */
 export function subagentTree(subagents: readonly Subagent[]): { subagent: Subagent; depth: number }[] {
@@ -33,9 +24,9 @@ export function subagentTree(subagents: readonly Subagent[]): { subagent: Subage
   return ordered
 }
 
-/** How long it has run, or ran. */
+/** How long it has run. */
 export function subagentElapsed(subagent: Subagent, now: number): number {
-  return Math.max(0, (subagent.endedAt ?? now) - subagent.startedAt)
+  return Math.max(0, now - subagent.startedAt)
 }
 
 /** A duration as the agent's own footer writes one: `45s`, `3m 20s`, `1h 5m`. */
@@ -49,7 +40,7 @@ export function elapsedLabel(milliseconds: number): string {
 
 /** The row's hover text. */
 export function subagentTitle(subagent: Subagent, now: number): string {
-  const facts = [subagent.agentType, subagent.status, elapsedLabel(subagentElapsed(subagent, now))]
+  const facts = [subagent.agentType, elapsedLabel(subagentElapsed(subagent, now))]
   const lines = [subagent.description, facts.filter((fact) => fact !== undefined).join(' · ')]
   if (subagent.branch !== undefined) lines.push(subagent.branch)
   return lines.join('\n')

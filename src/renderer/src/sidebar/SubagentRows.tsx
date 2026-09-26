@@ -1,8 +1,8 @@
-// The subagents of one pane's session, under its row; a click opens the transcript.
+// The running subagents of one pane's session, under its row; a click opens the transcript.
 
 import type { Subagent } from '@shared/entities'
 import { dotClass, truncateName } from './agentRows'
-import { elapsedLabel, SUBAGENT_TONE, subagentElapsed, subagentTitle, subagentTree } from './subagentTree'
+import { elapsedLabel, subagentElapsed, subagentTitle, subagentTree } from './subagentTree'
 
 type SubagentRowsProps = {
   subagents: readonly Subagent[]
@@ -19,13 +19,13 @@ export function SubagentRows({ subagents, now, onOpen, level }: SubagentRowsProp
         <li key={subagent.id} role={level === undefined ? undefined : 'none'}>
           <button
             type="button"
-            className={`subagent-row subagent-row--${subagent.status}`}
+            className="subagent-row"
             {...(level === undefined ? {} : { role: 'treeitem', 'aria-level': level + 1 + depth, tabIndex: -1 })}
             style={{ '--subagent-depth': depth } as React.CSSProperties}
             title={subagentTitle(subagent, now)}
             onClick={() => onOpen(subagent)}
           >
-            <span className={dotClass(SUBAGENT_TONE[subagent.status])} aria-label={subagent.status} />
+            <span className={dotClass('working')} aria-label="running" />
             <span className="subagent-row__label">{truncateName(subagent.description)}</span>
             <span className="subagent-row__since">{elapsedLabel(subagentElapsed(subagent, now))}</span>
           </button>

@@ -5,7 +5,7 @@
 
 import { open, readdir, readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
-import type { Subagent, SubagentLine, SubagentStatus, SubagentTranscript } from '../../shared/entities'
+import type { Subagent, SubagentLine, SubagentTranscript } from '../../shared/entities'
 import { claudeProjectDirectory } from './agent-conversations'
 
 /** What the agent writes beside each subagent's transcript, as far as it is read here. */
@@ -19,7 +19,8 @@ type Meta = {
   worktreeBranch?: string
 }
 
-type Ending = { status: Exclude<SubagentStatus, 'running'>; at: number }
+/** When a subagent ended, however it did. */
+type Ending = { at: number }
 
 /** Where a transcript has been read up to; a partial last line waits in `carry`. */
 type Scan = { offset: number; carry: Buffer }
@@ -60,10 +61,7 @@ export type SubagentTrackerOptions = {
   clock?: () => number
 }
 
-/** Finished subagents kept per pane beside every running one. */
-export const FINISHED_SHOWN = 5
-
-/** How close a disk ending must be to a hook's for the disk's more specific word to stand. */
+/** How long after its end a subagent's own writes still belong to that end, not to a restart. */
 const SAME_ENDING_MS = 5_000
 
 const POLL_MS = 2_000
@@ -108,7 +106,7 @@ export class SubagentTracker {
     if (this.#panes.size === 0) this.#stopPoll()
   }
 
-  /** What the pane shows; undefined for a pane not followed or with none. */
+  /** The pane's running subagents; undefined for a pane not followed or with none. */
   list(terminalId: string): Subagent[] | undefined {
     const shown = this.#panes.get(terminalId)?.shown
     return shown === undefined || shown.length === 0 ? undefined : shown
@@ -235,42 +233,43 @@ export class SubagentTracker {
   }
 }
 
-/** Every subagent the pane's sessions know of, running first, then the latest finished. */
+/** The pane's running subagents; one whose parent agent has ended is not running. */
 function composeSubagents(pane: Pane, now: number): Subagent[] {
   const live = pane.isRunning()
-  const all: Subagent[] = []
-  const seen = new Set<string>()
+  const all = new Map<string, { subagent: Subagent; running: boolean }>()
   for (const session of pane.sessions.values()) {
     for (const [id, entry] of session.metas) {
-      seen.add(id)
       const hooked = pane.hooked.get(id)
       const disk = diskEnding(session, id, entry.meta)
-      all.push(
-        subagentFrom(id, {
-          meta: entry.meta,
-          startedAt: hooked?.startedAt ?? entry.bornAt,
-          lastWriteAt: entry.lastWriteAt,
-          ...(hooked === undefined ? {} : { hooked }),
-          ...(disk === undefined ? {} : { disk }),
-          live,
-          since: pane.since,
-          now
-        })
-      )
+      const running = isRunning({
+        lastWriteAt: entry.lastWriteAt,
+        ...(hooked === undefined ? {} : { hooked }),
+        ...(disk === undefined ? {} : { disk }),
+        live,
+        since: pane.since
+      })
+      all.set(id, { subagent: subagentRow(id, entry.meta, hooked?.startedAt ?? entry.bornAt, hooked), running })
     }
   }
   // A hook ahead of its files: shown from what the hook said.
   for (const [id, hooked] of pane.hooked) {
-    if (seen.has(id)) continue
+    if (all.has(id)) continue
     const startedAt = hooked.startedAt ?? hooked.stoppedAt ?? now
-    all.push(subagentFrom(id, { meta: {}, startedAt, lastWriteAt: startedAt, hooked, live, since: pane.since, now }))
+    const running = isRunning({ lastWriteAt: startedAt, hooked, live, since: pane.since })
+    all.set(id, { subagent: subagentRow(id, {}, startedAt, hooked), running })
   }
-  const running = all.filter((agent) => agent.status === 'running')
-  const finished = all
-    .filter((agent) => agent.status !== 'running')
-    .sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0))
-    .slice(0, FINISHED_SHOWN)
-  return [...running, ...finished].sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id))
+  // A parent this pane never saw does not hold its child back.
+  const treeRunning = (id: string, seen: Set<string>): boolean => {
+    const entry = all.get(id)
+    if (entry === undefined) return true
+    if (!entry.running || seen.has(id)) return false
+    seen.add(id)
+    return entry.subagent.parentId === undefined || treeRunning(entry.subagent.parentId, seen)
+  }
+  return [...all.values()]
+    .filter(({ subagent }) => treeRunning(subagent.id, new Set()))
+    .map(({ subagent }) => subagent)
+    .sort((a, b) => a.startedAt - b.startedAt || a.id.localeCompare(b.id))
 }
 
 /** The end the session's files record for one subagent, if any. */
@@ -285,44 +284,30 @@ function diskEnding(session: Session, id: string, meta: Meta): Ending | undefine
 }
 
 type Evidence = {
-  meta: Meta
-  startedAt: number
   lastWriteAt: number
   hooked?: Hooked
   disk?: Ending
   live: boolean
   since: number
-  now: number
 }
 
-/** One subagent's row. The latest ending stands unless something started it again afterwards. */
-export function subagentFrom(id: string, evidence: Evidence): Subagent {
-  const { meta, hooked, disk } = evidence
-  const hookEnding: Ending | undefined =
-    hooked?.stoppedAt === undefined ? undefined : { status: 'done', at: hooked.stoppedAt }
-  let ending: Ending | undefined
-  if (disk === undefined) ending = hookEnding
-  else if (hookEnding === undefined) ending = disk
-  else ending = hookEnding.at > disk.at + SAME_ENDING_MS ? hookEnding : disk
+/** Running while the pane runs, unless it ended and nothing woke it, or it went silent before the pane started. */
+function isRunning({ hooked, disk, lastWriteAt, live, since }: Evidence): boolean {
+  if (!live) return false
+  const endedAt = Math.max(hooked?.stoppedAt ?? -Infinity, disk?.at ?? -Infinity)
   // SendMessage wakes a finished agent: a start, or writes, after its end.
-  const restarted =
-    ending !== undefined &&
-    evidence.live &&
-    ((hooked?.startedAt ?? 0) > ending.at || evidence.lastWriteAt > ending.at + SAME_ENDING_MS)
-  if (restarted) ending = undefined
-  if (ending === undefined) {
-    const active = evidence.live && (hooked?.startedAt !== undefined || evidence.lastWriteAt >= evidence.since)
-    if (!active) ending = { status: 'stopped', at: Math.max(evidence.lastWriteAt, evidence.startedAt) }
-  }
+  if (endedAt > -Infinity) return (hooked?.startedAt ?? 0) > endedAt || lastWriteAt > endedAt + SAME_ENDING_MS
+  return hooked?.startedAt !== undefined || lastWriteAt >= since
+}
+
+function subagentRow(id: string, meta: Meta, startedAt: number, hooked: Hooked | undefined): Subagent {
   const agentType = meta.agentType ?? hooked?.agentType
   return {
     id,
     description: meta.description?.trim() || agentType || 'agent',
     ...(agentType === undefined ? {} : { agentType }),
     ...(meta.parentAgentId === undefined ? {} : { parentId: meta.parentAgentId }),
-    status: ending?.status ?? 'running',
-    startedAt: evidence.startedAt,
-    ...(ending === undefined ? {} : { endedAt: ending.at }),
+    startedAt,
     ...(meta.worktreePath === undefined ? {} : { worktreePath: meta.worktreePath }),
     ...(meta.worktreeBranch === undefined ? {} : { branch: meta.worktreeBranch })
   }
@@ -443,25 +428,18 @@ export function readLine(session: Pick<Session, 'notified' | 'results'>, line: s
   if (notifies) {
     for (const chunk of line.split('<task-id>').slice(1)) {
       const id = /^([A-Za-z0-9_-]+)<\/task-id>/.exec(chunk)?.[1]
-      const status = /<status>([a-z_]+)<\/status>/.exec(chunk)?.[1]
-      if (id === undefined || status === undefined) continue
+      if (id === undefined || !/<status>[a-z_]+<\/status>/.test(chunk)) continue
       const known = session.notified.get(id)
-      if (known === undefined || known.at <= at) session.notified.set(id, { status: notifiedStatus(status), at })
+      if (known === undefined || known.at <= at) session.notified.set(id, { at })
     }
   }
   const content = entry.message?.content
   if (results && Array.isArray(content)) {
-    for (const block of content as Array<{ type?: unknown; tool_use_id?: unknown; is_error?: unknown }>) {
+    for (const block of content as Array<{ type?: unknown; tool_use_id?: unknown }>) {
       if (block?.type !== 'tool_result' || typeof block.tool_use_id !== 'string') continue
-      session.results.set(block.tool_use_id, { status: block.is_error === true ? 'failed' : 'done', at })
+      session.results.set(block.tool_use_id, { at })
     }
   }
-}
-
-function notifiedStatus(status: string): Ending['status'] {
-  if (status === 'completed') return 'done'
-  if (status === 'killed') return 'stopped'
-  return 'failed'
 }
 
 /** A file's text, only its last `TRANSCRIPT_MAX_BYTES` when longer, from a whole line on. */

@@ -1,7 +1,7 @@
 # Subagents in the sidebar
 
 A Claude Code session in a teamree pane that starts subagents (the `Agent`
-tool) shows each one as a child row under that pane: status, description,
+tool) shows each running one as a child row under that pane: description,
 elapsed time. Clicking a child opens its transcript, read-only.
 
 ## Scope
@@ -41,10 +41,10 @@ hooks writing their stdin to a file; the disk layout on a live session.
   - list `subagents/*.meta.json` for each known session;
   - read each transcript in the session (main and subagents) incrementally,
     appended bytes only, collecting task notifications and tool results;
-  - status: the latest end signal (notification, stop hook, tool result) wins,
-    unless a start or transcript write comes after it (a resumed agent);
-    no end signal reads as running while the pane runs and the agent wrote
-    since the pane started, otherwise stopped.
+  - running: no end signal (notification, stop hook, tool result), or a
+    start or transcript write after the latest one (a resumed agent); with
+    no end signal, only while the pane runs and the agent wrote since the
+    pane started.
 - **Reconcile.** On tracking a pane (every restored pane at startup) and on a
   2s poll while any Claude pane is open, so an agent created before the app
   started, or a hook that never arrived, is still found. A hook triggers an
@@ -53,9 +53,9 @@ hooks writing their stdin to a file; the disk layout on a live session.
   existing `terminals` workspace event. `terminal.subagentTranscript` returns
   a subagent's transcript as prompt, text and tool lines, capped.
 - **Sidebar.** Child rows under the pane row, nested by `parentAgentId`:
-  status glyph, description, elapsed. At most the five latest finished per
-  pane beside every running one. Click opens the transcript dialog, refreshed
-  while the agent runs.
+  running dot, description, elapsed. Only running subagents are listed; one
+  whose parent agent has ended is not running. Click opens the transcript
+  dialog, refreshed while the agent runs.
 
 ## Not guaranteed
 
@@ -64,15 +64,11 @@ hooks writing their stdin to a file; the disk layout on a live session.
 - **Sessions outside teamree.** Out of scope; ignored by construction.
 - **Format drift.** The meta file, notification text and transcript layout
   are Claude Code internals. Hooks keep start and stop working if they move;
-  descriptions and end states after a restart would degrade to agent type and
-  "stopped".
-- **Failure versus stop.** `SubagentStop` does not say how an agent ended; a
-  failure shows once the notification or tool result is on disk (the next
-  poll).
+  descriptions would degrade to agent type.
 - **Store location.** A pinned session is looked for under the store for the
   pane's directory (honouring `CLAUDE_CONFIG_DIR` as teamree sees it); once a
   hook fires, the transcript path it reports is used instead.
 - **A crash without a word.** A subagent that dies leaving no notification or
-  tool result reads as running until its pane's agent exits, then stopped.
+  tool result reads as running until its pane's agent exits.
 - **Claude typed into a shell pane.** Not launched by teamree with a session
   id or hooks, so not followed.
