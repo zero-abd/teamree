@@ -589,6 +589,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'worktrees' })
       return next
     },
+    'worktree.setupCheck': () => ({}),
+    'worktree.runSetup': ({ worktreeId }) => required(worktrees.get(worktreeId), 'worktree'),
     'worktree.branches': ({ projectId }) => ({ projectId, branches: [], readAt: Date.now() }),
     'worktree.pullRequests': ({ projectId }) => ({
       projectId,

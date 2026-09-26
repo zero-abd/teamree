@@ -43,7 +43,12 @@ export type Project = {
   repositoryProblem?: string
   /** The repository's setup command as this Mac last approved it; a different one asks before it runs. */
   approvedSetupCommand?: string
+  /** The command the primary checkout's lockfile suggests, while no setup command applies. Never run unasked. */
+  suggestedSetup?: string
 }
+
+/** What a checkout's lockfile suggests (`command`) and the directory it lacks for it (`missing`). */
+export type WorktreeSetupCheck = { command?: string; missing?: string }
 
 /** A project's shared setup, as `.teamree/project.json` carries it. Every field optional. */
 export type ProjectRepositorySettings = {

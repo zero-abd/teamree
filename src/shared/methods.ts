@@ -53,6 +53,7 @@ import type {
   WorktreeMergePreview,
   WorktreePullRequest,
   WorktreePush,
+  WorktreeSetupCheck,
   WorktreeStatus,
   WorktreeUnstage,
   WorktreeUpdate,
@@ -362,6 +363,9 @@ export const Params = {
   }),
   /** Answers a worktree's `setupAsk`: `run` approves the command for the project and runs it, false skips it. */
   worktreeSetup: z.object({ worktreeId: z.string().min(1), run: z.boolean() }),
+  worktreeSetupCheck: z.object({ worktreeId: z.string().min(1) }),
+  /** Runs `command` once in a `setup` pane of the worktree, as pressed; approves nothing for the project. */
+  worktreeRunSetup: z.object({ worktreeId: z.string().min(1), command: z.string().max(MAX_SETUP_COMMAND_CHARS) }),
   /** Branches nobody has checked out, local and on origin, for Open Branch. */
   worktreeBranches: z.object({ projectId: z.string().min(1) }),
   /** Open pull requests through `gh`, for Check Out Pull Request. */
@@ -838,6 +842,8 @@ export type MethodContract = TaskMethodContract & {
   'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }
   'worktree.branches': { params: z.infer<typeof Params.worktreeBranches>; result: BranchList }
   'worktree.setup': { params: z.infer<typeof Params.worktreeSetup>; result: Worktree }
+  'worktree.setupCheck': { params: z.infer<typeof Params.worktreeSetupCheck>; result: WorktreeSetupCheck }
+  'worktree.runSetup': { params: z.infer<typeof Params.worktreeRunSetup>; result: Worktree }
   'worktree.pullRequests': { params: z.infer<typeof Params.worktreePullRequests>; result: PullRequestList }
   'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }
   'worktree.diff': { params: z.infer<typeof Params.worktreeDiff>; result: WorktreeDiff }

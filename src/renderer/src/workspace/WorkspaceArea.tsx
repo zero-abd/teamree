@@ -17,6 +17,7 @@ import { measureCell, minPaneBox } from '../terminal/paneMetrics'
 import { WatchedPaneView } from '../terminal/WatchedPaneView'
 import { RightPanel } from './rightPanel/RightPanel'
 import { SetupAsk } from './SetupAsk'
+import { SetupOffer } from './SetupOffer'
 import { useMarkPanesSeen } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { TerminalTabs } from './TerminalTabs'
@@ -95,6 +96,7 @@ function WorkspaceView({
 }): React.JSX.Element {
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === state.activeWorktreeId))
+  const setupProject = useWorkspaceStore((state) => state.projects.find((entry) => entry.id === worktree?.projectId))
   const layout = useWorkspaceStore((state) =>
     state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
   )
@@ -188,6 +190,7 @@ function WorkspaceView({
       {worktree.setupAsk === undefined ? null : (
         <SetupAsk command={worktree.setupAsk} onAnswer={(run) => void answerSetup(worktree.id, run)} />
       )}
+      {setupProject === undefined ? null : <SetupOffer key={worktree.id} project={setupProject} worktree={worktree} />}
       <div className="workspace__body">
         <div
           className={`workspace__panes${
