@@ -139,6 +139,12 @@ describe('the git segment', () => {
     expect(toggleChanges).toHaveBeenCalledOnce()
   })
 
+  it('counts a child behind its parent', () => {
+    seed({ worktrees: [{ ...worktree, parentId: 'w0' }], statuses: { w1: status({ behind: 2 }) } })
+    mount()
+    expect(screen.getByRole('button', { name: 'Changes, 2 behind parent' })).toBeTruthy()
+  })
+
   it('says whether the panel is showing', () => {
     seed({ statuses: { w1: status({ unstaged: 1 }) }, rightPanelOpen: true, rightPanelTab: 'changes' })
     mount()

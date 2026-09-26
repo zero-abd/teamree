@@ -309,7 +309,7 @@ describe('a worktree that is ready', () => {
   it('says a child is behind its parent, not behind main', () => {
     mount({ worktree: worktree({ parentId: 'w0', baseRef: 'rework-auth' }), status: status({ behind: 2 }) })
     const chips = document.querySelector('.gitchips') as HTMLElement
-    expect(chips.textContent).toBe('2 behind parent')
+    expect(chips.textContent).toBe('↓2 parent')
     expect(chips.getAttribute('aria-label')).toBe('git status: 2 behind parent')
   })
 

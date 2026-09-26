@@ -39,14 +39,12 @@ export function GitStatusChips({
           {summary.ahead}
         </span>
       ) : null}
-      {summary.behind > 0 && child ? (
-        <span className="gitchip">{`${summary.behind} behind parent`}</span>
-      ) : summary.behind > 0 ? (
+      {summary.behind > 0 ? (
         <span className="gitchip">
           <span className="gitchip__glyph" aria-hidden="true">
             ↓
           </span>
-          {summary.behind}
+          {child ? `${summary.behind} parent` : summary.behind}
         </span>
       ) : null}
       {summary.tone !== 'quiet' ? (
