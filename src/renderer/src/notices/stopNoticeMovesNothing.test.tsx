@@ -79,7 +79,9 @@ function wire(windowFocused: boolean): { main: AgentNoticeChannel; shown: Shown[
   const ipc = {
     on: (channel: string, listener: (event: IpcMainEvent, payload: unknown) => void) =>
       listeners.set(channel, listener),
-    removeAllListeners: (channel: string) => listeners.delete(channel)
+    removeAllListeners: (channel: string) => listeners.delete(channel),
+    handle: () => {},
+    removeHandler: () => {}
   } as unknown as IpcMain
   const reveals = new Set<(pane: { worktreeId: string; terminalId: string }) => void>()
   const sender = {
@@ -96,7 +98,9 @@ function wire(windowFocused: boolean): { main: AgentNoticeChannel; shown: Shown[
     show: (spec) => shown.push(spec),
     setBadge: () => {},
     focusWindow: () => {},
-    fromMainFrame: () => true
+    fromMainFrame: () => true,
+    blocked: () => false,
+    openSettings: () => {}
   })
   ;(window as unknown as { teamree: unknown }).teamree = {
     notices: {

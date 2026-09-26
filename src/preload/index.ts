@@ -17,6 +17,8 @@ const MENU_COMMAND_CHANNEL = 'teamree:menu:command'
 // src/main/agentNotices.ts
 const NOTICE_PUBLISH_CHANNEL = 'teamree:notices:publish'
 const NOTICE_REVEAL_CHANNEL = 'teamree:notices:reveal'
+const NOTICE_TEST_CHANNEL = 'teamree:notices:test'
+const NOTICE_OPEN_SETTINGS_CHANNEL = 'teamree:notices:open-settings'
 // src/main/keepAwake.ts; outward only.
 const KEEP_AWAKE_PUBLISH_CHANNEL = 'teamree:keep-awake:publish'
 // src/main/unsavedFiles.ts
@@ -57,6 +59,8 @@ type NoticeSettings = {
   activeWorktreeId: string | null
 }
 type PaneAddress = { worktreeId: string; terminalId: string }
+
+type NoticeTestResult = 'sent' | 'off' | 'blocked'
 
 /** What the Quick Note panel is offered, and what it sends back; see src/main/menuBarExtra/quickNote.ts. */
 type QuickNoteContext = {
@@ -140,6 +144,16 @@ ipcRenderer.on(NOTICE_REVEAL_CHANNEL, (_event, pane: PaneAddress) => {
 const notices = {
   publish(settings: NoticeSettings): void {
     ipcRenderer.send(NOTICE_PUBLISH_CHANNEL, settings)
+  },
+
+  /** Raises a sample notification, or says why not. */
+  test(): Promise<NoticeTestResult | null> {
+    return ipcRenderer.invoke(NOTICE_TEST_CHANNEL)
+  },
+
+  /** Opens the OS page that allows or blocks this app's notifications. */
+  openSettings(): void {
+    ipcRenderer.send(NOTICE_OPEN_SETTINGS_CHANNEL)
   },
 
   onReveal(listener: (pane: PaneAddress) => void): () => void {

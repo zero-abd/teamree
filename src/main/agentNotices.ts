@@ -2,11 +2,24 @@
 // window. The focused pane and the preference come from the window over IPC,
 // and are rebuilt from checked fields as `menuBar.ts` does.
 
-import type { IpcMain, IpcMainEvent, WebContents } from 'electron'
+import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron'
 
 /** Keep both in step with `src/preload/index.ts`, which repeats the literals. */
 export const NOTICE_PUBLISH_CHANNEL = 'teamree:notices:publish'
 export const NOTICE_REVEAL_CHANNEL = 'teamree:notices:reveal'
+export const NOTICE_TEST_CHANNEL = 'teamree:notices:test'
+export const NOTICE_OPEN_SETTINGS_CHANNEL = 'teamree:notices:open-settings'
+
+/** What a test notification came to; `blocked` only where Electron can tell. */
+export type NoticeTestResult = 'sent' | 'off' | 'blocked'
+
+/** The OS page that allows or blocks this app's notifications, or null where there is none to open. */
+export function notificationSettingsUrl(platform: NodeJS.Platform, bundleId: string): string | null {
+  if (platform === 'darwin')
+    return `x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=${bundleId}`
+  if (platform === 'win32') return 'ms-settings:notifications'
+  return null
+}
 
 /** What the person asked for, per machine. Three values: "sound without a notification" is not a state. */
 export type AgentNoticePreference = 'off' | 'notify' | 'sound'
@@ -142,7 +155,11 @@ export type AgentNoticeHost = {
   /** Brings the window forward, which is half of what clicking one asks for. */
   focusWindow: () => void
   /** The window's main frame is the only thing allowed to speak for the window. */
-  fromMainFrame: (event: IpcMainEvent) => boolean
+  fromMainFrame: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean
+  /** True when the OS will not show one at all. */
+  blocked: () => boolean
+  /** Opens the OS page for this app's notifications. */
+  openSettings: () => void
 }
 
 type PaneAddress = { worktreeId: string; terminalId: string }
@@ -195,7 +212,25 @@ export function installAgentNotices(ipc: IpcMain, host: AgentNoticeHost): AgentN
     host.setBadge(badgeCount(quiet))
   }
 
+  // Always shown, focused or not: whoever pressed Send Test is looking at the window.
+  const test = (): NoticeTestResult => {
+    if (settings.preference === 'off') return 'off'
+    if (host.blocked()) return 'blocked'
+    host.show({
+      title: 'teamree',
+      body: 'Test notification',
+      silent: noticeIsSilent(settings.preference),
+      onActivate: host.focusWindow,
+      actions: [{ label: 'Open', run: host.focusWindow }]
+    })
+    return 'sent'
+  }
+
   ipc.on(NOTICE_PUBLISH_CHANNEL, onPublish)
+  ipc.handle(NOTICE_TEST_CHANNEL, (event) => (host.fromMainFrame(event) ? test() : null))
+  ipc.on(NOTICE_OPEN_SETTINGS_CHANNEL, (event) => {
+    if (host.fromMainFrame(event)) host.openSettings()
+  })
 
   return {
     deliver(notice) {
@@ -237,6 +272,8 @@ export function installAgentNotices(ipc: IpcMain, host: AgentNoticeHost): AgentN
     },
     stop() {
       ipc.removeAllListeners(NOTICE_PUBLISH_CHANNEL)
+      ipc.removeAllListeners(NOTICE_OPEN_SETTINGS_CHANNEL)
+      ipc.removeHandler(NOTICE_TEST_CHANNEL)
     }
   }
 }

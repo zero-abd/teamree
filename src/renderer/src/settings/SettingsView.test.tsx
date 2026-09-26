@@ -637,7 +637,7 @@ describe('the filter', () => {
     render(<SettingsView />)
     type('sound')
     expect(nav()).toEqual(['Notifications'])
-    expect(screen.getByLabelText('When an agent stops').hasAttribute('data-match')).toBe(true)
+    expect(screen.getByLabelText('When an agent stops or asks').hasAttribute('data-match')).toBe(true)
 
     type('cursor')
     expect(nav()).toEqual(['Projects', 'Panes'])

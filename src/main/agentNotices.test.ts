@@ -1,4 +1,4 @@
-import type { IpcMain, IpcMainEvent } from 'electron'
+import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent } from 'electron'
 import { describe, expect, it, vi } from 'vitest'
 import {
   badgeCount,
@@ -9,8 +9,11 @@ import {
   readNoticeSettings,
   shouldNotify,
   NO_QUIET_PANES,
+  notificationSettingsUrl,
+  NOTICE_OPEN_SETTINGS_CHANNEL,
   NOTICE_PUBLISH_CHANNEL,
   NOTICE_REVEAL_CHANNEL,
+  NOTICE_TEST_CHANNEL,
   type AgentNotice,
   type NoticeSettings
 } from './agentNotices'
@@ -205,6 +208,8 @@ describe('what a stopped agent is allowed to do to the window', () => {
     const ipc = {
       on: (channel: string, listener: (event: IpcMainEvent, payload: unknown) => void) =>
         listeners.set(channel, listener),
+      handle: () => {},
+      removeHandler: () => {},
       removeAllListeners: (channel: string) => listeners.delete(channel)
     } as unknown as IpcMain
     const sent: unknown[][] = []
@@ -215,7 +220,9 @@ describe('what a stopped agent is allowed to do to the window', () => {
       show: (spec: Shown) => shown.push(spec),
       setBadge: vi.fn(),
       focusWindow: vi.fn(),
-      fromMainFrame: () => true
+      fromMainFrame: () => true,
+      blocked: () => false,
+      openSettings: vi.fn()
     }
     const channel = installAgentNotices(ipc, host)
     const publish = (settings: NoticeSettings): void => {
@@ -344,6 +351,8 @@ describe('what a stopped agent is allowed to do to the window', () => {
     const ipc = {
       on: (channel: string, listener: (event: IpcMainEvent, payload: unknown) => void) =>
         listeners.set(channel, listener),
+      handle: () => {},
+      removeHandler: () => {},
       removeAllListeners: () => {}
     } as unknown as IpcMain
     const sent: unknown[][] = []
@@ -355,7 +364,9 @@ describe('what a stopped agent is allowed to do to the window', () => {
       show: (spec: Shown) => shown.push(spec),
       setBadge: () => {},
       focusWindow: () => {},
-      fromMainFrame: () => true
+      fromMainFrame: () => true,
+      blocked: () => false,
+      openSettings: () => {}
     })
     listeners.get(NOTICE_PUBLISH_CHANNEL)?.({ sender, senderFrame: sender.mainFrame } as unknown as IpcMainEvent, {
       preference: 'notify',
@@ -377,6 +388,8 @@ describe('what the menu bar extra asks of the window', () => {
     const ipc = {
       on: (channel: string, listener: (event: IpcMainEvent, payload: unknown) => void) =>
         listeners.set(channel, listener),
+      handle: () => {},
+      removeHandler: () => {},
       removeAllListeners: () => {}
     } as unknown as IpcMain
     const channel = installAgentNotices(ipc, {
@@ -384,7 +397,9 @@ describe('what the menu bar extra asks of the window', () => {
       show: () => {},
       setBadge: () => {},
       focusWindow: () => {},
-      fromMainFrame: () => true
+      fromMainFrame: () => true,
+      blocked: () => false,
+      openSettings: () => {}
     })
     const window = () => {
       const sent: unknown[][] = []
@@ -431,5 +446,96 @@ describe('what the menu bar extra asks of the window', () => {
     opening.publish({ preference: 'notify', focusedPaneId: null, names: { term_1: 'Codex' } })
     opening.publish({ preference: 'notify', focusedPaneId: null, names: { term_1: 'Codex' } })
     expect(opening.sent).toEqual([[NOTICE_REVEAL_CHANNEL, pane]])
+  })
+})
+
+describe('a test notification', () => {
+  type Shown = {
+    title: string
+    body: string
+    silent: boolean
+    onActivate: () => void
+    actions?: { label: string; run: () => void }[]
+  }
+
+  function install(blocked = false) {
+    const listeners = new Map<string, (event: IpcMainEvent, payload?: unknown) => void>()
+    const handlers = new Map<string, (event: IpcMainInvokeEvent) => unknown>()
+    const ipc = {
+      on: (channel: string, listener: (event: IpcMainEvent, payload?: unknown) => void) =>
+        listeners.set(channel, listener),
+      handle: (channel: string, handler: (event: IpcMainInvokeEvent) => unknown) => handlers.set(channel, handler),
+      removeAllListeners: () => {},
+      removeHandler: () => {}
+    } as unknown as IpcMain
+    const main = { isDestroyed: () => false, send: () => {}, mainFrame: {} }
+    const frame = (fromMain: boolean) =>
+      ({ sender: main, senderFrame: fromMain ? main.mainFrame : {} }) as unknown as IpcMainEvent & IpcMainInvokeEvent
+    const shown: Shown[] = []
+    const host = {
+      windowFocused: () => true,
+      show: (spec: Shown) => shown.push(spec),
+      setBadge: () => {},
+      focusWindow: vi.fn(),
+      fromMainFrame: (event: IpcMainEvent | IpcMainInvokeEvent) => event.senderFrame === event.sender.mainFrame,
+      blocked: () => blocked,
+      openSettings: vi.fn()
+    }
+    installAgentNotices(ipc, host)
+    const publish = (preference: NoticeSettings['preference']) =>
+      listeners.get(NOTICE_PUBLISH_CHANNEL)?.(frame(true), { preference, focusedPaneId: null })
+    const test = (fromMain = true) => handlers.get(NOTICE_TEST_CHANNEL)?.(frame(fromMain))
+    const openSettings = (fromMain = true) => listeners.get(NOTICE_OPEN_SETTINGS_CHANNEL)?.(frame(fromMain))
+    return { shown, host, publish, test, openSettings }
+  }
+
+  it('is sent through the same notification, with an answer, even with the window in front', () => {
+    const { shown, host, publish, test } = install()
+    publish('sound')
+    expect(test()).toBe('sent')
+    expect(shown).toHaveLength(1)
+    expect(shown[0]?.silent).toBe(false)
+    expect(shown[0]?.actions).toHaveLength(1)
+
+    shown[0]?.onActivate()
+    shown[0]?.actions?.[0]?.run()
+    expect(host.focusWindow).toHaveBeenCalledTimes(2)
+  })
+
+  it('says off, and shows nothing, when notifications are off', () => {
+    const { shown, publish, test } = install()
+    publish('off')
+    expect(test()).toBe('off')
+    expect(shown).toEqual([])
+  })
+
+  it('says blocked, and shows nothing, when the OS will not show one', () => {
+    const { shown, test } = install(true)
+    expect(test()).toBe('blocked')
+    expect(shown).toEqual([])
+  })
+
+  it('answers only the window’s main frame', () => {
+    const { shown, host, test, openSettings } = install()
+    expect(test(false)).toBeNull()
+    openSettings(false)
+    expect(shown).toEqual([])
+    expect(host.openSettings).not.toHaveBeenCalled()
+
+    openSettings()
+    expect(host.openSettings).toHaveBeenCalledOnce()
+  })
+})
+
+describe('notificationSettingsUrl', () => {
+  it('opens this app’s row in the Notifications pane on macOS', () => {
+    expect(notificationSettingsUrl('darwin', 'dev.teamree.app')).toBe(
+      'x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=dev.teamree.app'
+    )
+  })
+
+  it('opens the notifications page on Windows, and nothing elsewhere', () => {
+    expect(notificationSettingsUrl('win32', 'dev.teamree.app')).toBe('ms-settings:notifications')
+    expect(notificationSettingsUrl('linux', 'dev.teamree.app')).toBeNull()
   })
 })
