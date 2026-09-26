@@ -1,5 +1,5 @@
 // Committing the two teamwork files and pushing them, with consent: it says what
-// it will do (`readPublishPlan`), stages paths never the tree, never forces,
+// it will do (`readPublishPlan`), pulls first, stages paths never the tree, never forces,
 // reports the commit even when the push failed, and streams `--progress`.
 
 import type { PushFailureKind, TeamworkPublish, TeamworkPublishPlan } from '../../shared/entities'
@@ -9,6 +9,7 @@ import type { GitRunner } from '../git/gitProcess'
 import { requireCommitIdentity } from '../git/worktreeCommit'
 import { parsePushStatus, pushFailureKind, pushRefusal, type PushRefStatus } from '../git/worktreePush'
 import { TeamworkError } from './errors'
+import { catchUp, type CatchUp, type CatchUpScope } from './sync'
 
 /**
  * A push crosses a network, so far longer than a local command, but bounded:
@@ -21,8 +22,14 @@ const COMMIT_TIMEOUT_MS = 120_000
 /** git's own words, kept whole but never unbounded: a hook can print a novel. */
 const MAX_GIT_WORDS = 4_000
 
-/** Which of this call's three git commands is running. */
-export type PublishPhase = 'staging' | 'committing' | 'pushing'
+/** A remote that moves between every fetch and push is a script, not a teammate. */
+const MAX_PUSH_ATTEMPTS = 3
+
+/** Any new commits from the remote; only unpushed commits that touch `.teamree` alone are rebuilt. */
+const PUBLISH_SCOPE: CatchUpScope = { incoming: 'any', replay: 'teamree' }
+
+/** Which of this call's git commands is running. */
+export type PublishPhase = 'pulling' | 'staging' | 'committing' | 'pushing'
 
 export type PublishTarget = {
   projectId: string
@@ -100,6 +107,13 @@ export async function publish(runner: GitRunner, target: PublishTarget): Promise
 
   await requireCommitIdentity(runner, target.projectPath)
 
+  const env = { GIT_SSH_COMMAND: await sshCommand(runner, target.projectPath) }
+  const pull = (): Promise<CatchUp> =>
+    catchUp(runner, { cwd: target.projectPath, remote, branch, scope: PUBLISH_SCOPE, env, ...signal })
+  target.onPhase?.('pulling')
+  // Best effort: what it could not do shows up as a refused push, which is where it is reported.
+  await pull()
+
   target.onPhase?.('staging')
   // `--` first, so a path that looks like a flag or a ref is still a path.
   await runner.run({
@@ -131,26 +145,51 @@ export async function publish(runner: GitRunner, target: PublishTarget): Promise
     if (committed.exitCode !== 0) {
       throw new TeamworkError(ErrorCode.GitFailed, clip(committed.stderr) || 'git refused to make the commit')
     }
-    const { stdout } = await runner.run({
-      args: ['rev-parse', 'HEAD'],
-      cwd: target.projectPath,
-      readOnly: true,
-      timeoutMs: 30_000
-    })
-    const sha = stdout.trim()
-    commit = { sha, shortSha: sha.slice(0, 7), message: target.message }
+    commit = { ...(await headCommit(runner, target.projectPath)), message: target.message }
   }
 
   target.onPhase?.('pushing')
-  return {
-    projectId: target.projectId,
-    files: plan.files,
-    commit,
-    remote,
-    branch,
-    push: await pushOnce(runner, target, plan, branch, remote),
-    at: now()
+  let push = await pushOnce(runner, target, plan, branch, remote)
+  let pulled: CatchUp | null = null
+  for (let attempt = 1; attempt < MAX_PUSH_ATTEMPTS && !push.ok && push.kind === 'rejected'; attempt++) {
+    target.onPhase?.('pulling')
+    pulled = await pull().catch((error: unknown) => ({
+      ok: false as const,
+      why: 'fetch' as const,
+      paths: [],
+      detail: error instanceof Error ? error.message : String(error)
+    }))
+    if (!pulled.ok || !pulled.moved) break
+    // Rebuilt on top of theirs, so the commit being reported is a new one.
+    if (commit !== null) commit = { ...commit, ...(await headCommit(runner, target.projectPath)) }
+    target.onPhase?.('pushing')
+    push = await pushOnce(runner, target, plan, branch, remote)
   }
+  if (!push.ok && push.kind === 'rejected') {
+    const detail = pulled?.ok === false ? pulled.detail : ''
+    push = {
+      ...push,
+      advice: rejectedAdvice(pulled, remote),
+      error: clip([push.error, detail].filter(Boolean).join('\n'))
+    }
+  }
+  return { projectId: target.projectId, files: plan.files, commit, remote, branch, push, at: now() }
+}
+
+/** One line for a push the remote still turned away after pulling. */
+function rejectedAdvice(pulled: CatchUp | null, remote: string): string {
+  if (pulled?.ok === false && pulled.paths.length > 0) {
+    const named = pulled.paths.slice(0, 2).join(', ') + (pulled.paths.length > 2 ? ` +${pulled.paths.length - 2}` : '')
+    if (pulled.why === 'conflict') return `Push rejected: ${named} changed on ${remote} too`
+    if (pulled.why === 'local') return `Push rejected: local changes to ${named} are in the way`
+  }
+  return `Push rejected: ${remote} is ahead`
+}
+
+async function headCommit(runner: GitRunner, cwd: string): Promise<{ sha: string; shortSha: string }> {
+  const { stdout } = await runner.run({ args: ['rev-parse', 'HEAD'], cwd, readOnly: true, timeoutMs: 30_000 })
+  const sha = stdout.trim()
+  return { sha, shortSha: sha.slice(0, 7) }
 }
 
 /** The push itself, and every way it can end, as one verdict the caller reports. */

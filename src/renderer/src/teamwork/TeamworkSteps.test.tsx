@@ -105,7 +105,18 @@ type Presses = { open?: StepId; more?: boolean; paste?: boolean }
 afterEach(() => cleanup())
 
 function render(overrides: Partial<TeamworkStepsProps> = {}, presses: Presses = {}): string {
-  const props: TeamworkStepsProps = {
+  const props = fullProps(overrides)
+  cleanup()
+  const { container, queryByRole } = mount(<TeamworkSteps {...props} />)
+  const toggle = container.querySelector(`[data-step="${presses.open}"] .step__toggle`)
+  if (toggle !== null && toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle)
+  if (presses.more) fireEvent.click(queryByRole('button', { name: 'More' }) as HTMLElement)
+  if (presses.paste) fireEvent.click(queryByRole('button', { name: 'Paste URL…' }) as HTMLElement)
+  return container.innerHTML
+}
+
+function fullProps(overrides: Partial<TeamworkStepsProps> = {}): TeamworkStepsProps {
+  return {
     projectPath: PROJECT_PATH,
     list: roster(),
     relay: noRelay(),
@@ -135,13 +146,6 @@ function render(overrides: Partial<TeamworkStepsProps> = {}, presses: Presses = 
     onCopy: () => {},
     ...overrides
   }
-  cleanup()
-  const { container, queryByRole } = mount(<TeamworkSteps {...props} />)
-  const toggle = container.querySelector(`[data-step="${presses.open}"] .step__toggle`)
-  if (toggle !== null && toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle)
-  if (presses.more) fireEvent.click(queryByRole('button', { name: 'More' }) as HTMLElement)
-  if (presses.paste) fireEvent.click(queryByRole('button', { name: 'Paste URL…' }) as HTMLElement)
-  return container.innerHTML
 }
 
 /** The relay step opened, with whatever else the test presses. */
@@ -950,21 +954,45 @@ describe('a push that did not land', () => {
     }
   })
 
-  // Somebody pushed first is the ordinary outcome, fixed in two commands.
-  it('offers the push again, and says what to do before pressing it', () => {
-    const shown = text(
-      render(
-        refused({
-          ok: false,
-          kind: 'rejected',
-          error: '! [rejected] main -> main (fetch first)',
-          advice: 'origin has commits that main does not · pull or rebase onto origin/main'
-        })
-      )
+  // Somebody pushed first is the ordinary outcome, and one button answers it.
+  it('offers Pull and Retry in one line, with git’s words behind Details', () => {
+    const pulls: string[] = []
+    const shape = refused({
+      ok: false,
+      kind: 'rejected',
+      error: '! [rejected] main -> main (fetch first)\nhint: Updates were rejected',
+      advice: 'Push rejected: origin is ahead'
+    })
+    const plan = {
+      projectId: 'p1',
+      files: ['.teamree/members/ada.pub'],
+      message: 'Add my key to the team',
+      remote: 'origin',
+      branch: 'main',
+      upstream: 'origin/main',
+      committed: true,
+      blocker: null,
+      readAt: 0
+    }
+    const view = mount(
+      <TeamworkSteps
+        {...fullProps({
+          ...shape,
+          publish: { ...(shape.publish as TeamworkStepsProps['publish']), plan },
+          onPublish: () => pulls.push('push'),
+          onPullAndPublish: () => pulls.push('pull')
+        })}
+      />
     )
-    expect(shown).toContain('Retry Push')
-    expect(shown).toContain('git pull --rebase')
-    expect(shown).not.toMatch(/--force/)
+    const toggle = view.container.querySelector('[data-step="push"] .step__toggle') as HTMLElement
+    if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle)
+    const shown = view.container.textContent ?? ''
+    expect(shown).toContain('Push rejected: origin is ahead')
+    expect(shown).not.toMatch(/git pull|--force/)
+    expect(view.container.querySelector('details.push__details pre')?.textContent).toMatch(/hint:/)
+
+    fireEvent.click(view.getByRole('button', { name: 'Pull and Retry' }))
+    expect(pulls).toEqual(['pull'])
   })
 
   // This app runs git with no terminal to prompt on, so a push that would ask for a password refuses.
@@ -1063,5 +1091,27 @@ describe('the page as a whole', () => {
     expect(text(render({ status: noOrigin }))).not.toContain('Copy Invitation')
     expect(text(render({ path: 'join' }))).not.toContain('Copy Invitation')
     expect(text(render())).not.toContain('Copy Invitation')
+  })
+})
+
+describe('a teammate’s key on origin that this checkout has not pulled', () => {
+  it('names them under the roster with a Pull button', () => {
+    const pulls: number[] = []
+    const view = mount(
+      <TeamworkSteps
+        {...fullProps({
+          list: { ...enrolled(), incoming: ['sam'] },
+          relay: relayOnDisk(),
+          onPull: () => pulls.push(1)
+        })}
+      />
+    )
+    const toggle = view.container.querySelector('[data-step="connected"] .step__toggle') as HTMLElement
+    if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle)
+    expect(view.container.textContent).toContain('origin has 1 new member · Pull')
+    expect(view.container.querySelector('.members__incoming')?.textContent).toContain('sam')
+
+    fireEvent.click(view.getByRole('button', { name: 'Pull' }))
+    expect(pulls).toEqual([1])
   })
 })

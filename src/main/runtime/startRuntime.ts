@@ -176,6 +176,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
         // A pending check firing during shutdown would be a request nobody reads.
         { name: 'the update check', release: () => areas.updates.stop() },
         { name: 'the base fetches', release: () => areas.bases.stop() },
+        { name: 'the teamwork fetches', release: () => areas.teamFetches.stop() },
         // Before the PTYs: a teammate must not watch panes already being killed.
         { name: 'the relay', release: () => areas.peers.stop() },
         // Before the PTYs, because a shell dying rewrites files.
@@ -205,7 +206,10 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
 
     // Only sets a timer; startup must cost nothing for it.
     if (checkForUpdates) areas.updates.start()
-    if (fetchBases) areas.bases.start()
+    if (fetchBases) {
+      areas.bases.start()
+      areas.teamFetches.start()
+    }
 
     if (endpoint !== undefined) {
       try {
@@ -253,7 +257,10 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     terminals: () => areas.terminals.manager.list(),
     quitDeclined: () => areas.updates.quitDeclined(),
     noteWindowFocus: () => {
-      if (fetchBases) void areas.bases.nudge()
+      if (fetchBases) {
+        void areas.bases.nudge()
+        void areas.teamFetches.nudge()
+      }
       areas.updates.noteWindowFocus()
     },
     noteWindowBlur: () => areas.updates.noteWindowBlur(),

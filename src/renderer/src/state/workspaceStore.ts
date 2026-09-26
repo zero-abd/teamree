@@ -270,6 +270,8 @@ export type Notice = {
   tone: 'error' | 'info'
   /** One thing to do about the notice: a page to open (`shell/openInBrowser.ts`), a side to hide for room, or an undo. */
   action?: { label: string; url: string } | { label: string; hide: keyof Sides } | { label: string; undo: UndoTarget }
+  /** What the notice is about; a newer notice with the same key replaces it, and success clears it. */
+  key?: string
 }
 
 /** What an Undo puts back: removed worktrees (`removedIds` parents first), or one discard's paths. */
@@ -783,8 +785,10 @@ type WorkspaceState = {
   noteRelayPane: (projectId: string, output: string, running: boolean) => void
   /** Reads what the commit-and-push button would do. */
   loadPublishPlan: (projectId: string) => Promise<void>
-  /** Stages the two files, commits them, and pushes. Never more than those files. */
-  publishTeamwork: (projectId: string) => Promise<void>
+  /** Stages the two files, commits them, and pushes. Never more than those files. `pull` pulls from origin first. */
+  publishTeamwork: (projectId: string, options?: { pull?: boolean }) => Promise<void>
+  /** Brings the checkout up to origin, so keys pushed since arrive. Never touches uncommitted work. */
+  pullTeamwork: (projectId: string) => Promise<void>
   /** Reads what the running publish is doing, so the panel can say it. */
   loadPublishProgress: (projectId: string) => Promise<void>
   /** Stops the running publish. Whatever was committed stays committed. */
@@ -894,6 +898,10 @@ type WorkspaceState = {
 let noticeSeq = 0
 let goToSeq = 0
 
+/** The notice a failed teamwork push leaves, cleared by the next one that lands. */
+const pushNoticeKey = (projectId: string): string => `teamwork-push:${projectId}`
+const pullNoticeKey = (projectId: string): string => `teamwork-pull:${projectId}`
+
 /** The status-bar notice for a pane refused for want of room. */
 const NO_ROOM = 'No room for another pane'
 
@@ -912,12 +920,26 @@ const lastDrafts = [...keptDrafts()]
 const lastPanel = readStoredRightPanel(storage)
 
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
-  const notify = (text: string, tone: Notice['tone'] = 'error', action?: Notice['action']): void => {
-    const notice: Notice = { id: ++noticeSeq, text, tone, ...(action === undefined ? {} : { action }) }
-    set((state) => ({ notices: [...state.notices.slice(-2), notice] }))
+  const notify = (text: string, tone: Notice['tone'] = 'error', action?: Notice['action'], key?: string): void => {
+    const notice: Notice = {
+      id: ++noticeSeq,
+      text,
+      tone,
+      ...(action === undefined ? {} : { action }),
+      ...(key === undefined ? {} : { key })
+    }
+    const kept = (state: WorkspaceState): Notice[] =>
+      key === undefined ? state.notices : state.notices.filter((entry) => entry.key !== key)
+    set((state) => ({ notices: [...kept(state).slice(-2), notice] }))
     // Plain news retires itself; see `noticeLifetime` for which notices do not.
     const lifetime = noticeLifetime(notice)
     if (lifetime !== null) setTimeout(() => get().dismissNotice(notice.id), lifetime)
+  }
+
+  const clearNotices = (key: string): void => {
+    if (get().notices.some((notice) => notice.key === key)) {
+      set((state) => ({ notices: state.notices.filter((notice) => notice.key !== key) }))
+    }
   }
 
   const failed = (what: string) => (error: unknown) => {
@@ -3167,7 +3189,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set({ dialog: null, joining: null })
       if (project === undefined) return
       get().openTeamwork(project.id)
-      if (!outcome.ok) notify(outcome.error)
+      if (!outcome.ok) notify(outcome.error, 'error', undefined, pushNoticeKey(project.id))
     },
 
     async answerSetup(worktreeId, run) {
@@ -3313,7 +3335,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       await get().loadPublishProgress(projectId)
     },
 
-    async publishTeamwork(projectId) {
+    async publishTeamwork(projectId, options = {}) {
       if (get().publishPending) return
       // Otherwise the previous run's record reads as this one's until the first poll: a stopwatch
       // starting at the last push's duration.
@@ -3322,23 +3344,35 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         return { publishPending: true, publishError: null, publishProgress: rest }
       })
       try {
+        if (options.pull === true) {
+          const pulled = await runtimeClient.call('teamwork.pull', { projectId })
+          if (!pulled.ok) {
+            set({ publishError: pulled.problem ?? 'Pull failed' })
+            return
+          }
+        }
         const result = await runtimeClient.call('teamwork.publish', { projectId })
         set((state) => ({ publishResults: { ...state.publishResults, [projectId]: result } }))
+        if (result.push.ok) clearNotices(pushNoticeKey(projectId))
         // A notice too: the one act here that leaves the machine, and a reader may be elsewhere.
         notify(
           result.push.ok
             ? result.push.alreadyUpToDate
               ? `${result.remote} already had ${result.branch}`
               : `Pushed ${result.branch} to ${result.remote}`
-            : // "Refused" is the remote's verdict, wrong for a push somebody stopped or one that never finished.
-              `${result.commit === null ? 'Nothing to commit, and the' : 'Committed, but the'} push ${
-                result.push.kind === 'cancelled'
-                  ? 'was stopped'
-                  : result.push.kind === 'timeout'
-                    ? 'never finished'
-                    : 'was refused'
-              }: ${result.push.advice}`,
-          result.push.ok ? 'info' : 'error'
+            : result.push.kind === 'rejected'
+              ? result.push.advice
+              : // "Refused" is the remote's verdict, wrong for a push somebody stopped or one that never finished.
+                `${result.commit === null ? 'Nothing to commit, and the' : 'Committed, but the'} push ${
+                  result.push.kind === 'cancelled'
+                    ? 'was stopped'
+                    : result.push.kind === 'timeout'
+                      ? 'never finished'
+                      : 'was refused'
+                }: ${result.push.advice}`,
+          result.push.ok ? 'info' : 'error',
+          undefined,
+          result.push.ok ? undefined : pushNoticeKey(projectId)
         )
       } catch (error) {
         set({ publishError: error instanceof Error ? error.message : String(error) })
@@ -3347,6 +3381,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // One last read, so the panel can report how long it took.
         await get().loadPublishProgress(projectId)
         await get().loadPublishPlan(projectId)
+        await get().loadMembers(projectId)
+      }
+    },
+
+    async pullTeamwork(projectId) {
+      try {
+        const pulled = await runtimeClient.call('teamwork.pull', { projectId })
+        if (pulled.ok) clearNotices(pullNoticeKey(projectId))
+        else notify(pulled.problem ?? 'Pull failed', 'error', undefined, pullNoticeKey(projectId))
+      } catch (error) {
+        failed('Could not pull')(error)
+      } finally {
         await get().loadMembers(projectId)
       }
     },

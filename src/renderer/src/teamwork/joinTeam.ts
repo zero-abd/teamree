@@ -73,7 +73,8 @@ export async function joinTeam(
     const plan = await call('teamwork.publishPlan', { projectId: project.id })
     if (plan.blocker !== null) return fail(plan.blocker)
     const publish = await call('teamwork.publish', { projectId: project.id })
-    if (!publish.push.ok) return fail(publish.push.error, publish)
+    // The one line; git's words stay on the team page behind Details.
+    if (!publish.push.ok) return fail(publish.push.advice, publish)
     return { ok: true, project, publish }
   } catch (error) {
     return fail(error)

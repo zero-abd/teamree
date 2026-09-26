@@ -404,6 +404,7 @@ export type PublishActivity = {
 }
 
 const PHASE_WORDS: Record<TeamworkPublishProgress['phase'], string> = {
+  pulling: 'Pulling from the remote',
   staging: 'Staging the files',
   committing: 'Making the commit',
   pushing: 'Pushing to the remote',
@@ -444,14 +445,18 @@ export const CANCEL_PUBLISH_BUTTON = 'Stop'
 /** The label on the button that tries a refused push again. */
 export const RETRY_PUBLISH_BUTTON = 'Retry Push'
 
+/** The button for a push turned away because origin moved: pulls, then pushes. */
+export const PULL_AND_RETRY_BUTTON = 'Pull and Retry'
+
+/** The button that pulls keys pushed since into this checkout. */
+export const PULL_BUTTON = 'Pull'
+
 /**
- * Whether trying again could help. A rejection needs a pull first; an auth
+ * Whether trying again could help. A rejection has its own button; an auth
  * refusal gets the button so an `ssh-add` in Terminal can be tried from here.
  */
 export function retryHint(kind: PushFailureKind): string | null {
   switch (kind) {
-    case 'rejected':
-      return 'Pull first: git pull --rebase'
     case 'auth':
     case 'host-key':
       return 'Fix the credential outside teamree, then retry'
@@ -790,6 +795,15 @@ function connectedStep(input: StartTeamworkInput): StepCore {
         title,
         mark: 'todo',
         summary: `${namesOfMembers(others)} on the roster · no link yet${mountMismatchNote(status)}`
+      }
+    }
+    const incoming = input.list?.incoming ?? []
+    if (incoming.length > 0) {
+      return {
+        id: 'connected',
+        title,
+        mark: 'todo',
+        summary: `origin has ${incoming.length} new member${incoming.length === 1 ? '' : 's'} · ${PULL_BUTTON}`
       }
     }
     const ready = input.list?.enrolled === true && input.relay?.url != null

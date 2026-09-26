@@ -28,4 +28,4 @@ export {
   type TeamreeWatcherOptions,
   type WatchedProject
 } from './teamreeWatcher'
-export { TeamworkService, type ProjectSource, type TeamworkServiceOptions } from './teamworkService'
+export { TeamworkService, WAITING_FETCH_MS, type ProjectSource, type TeamworkServiceOptions } from './teamworkService'

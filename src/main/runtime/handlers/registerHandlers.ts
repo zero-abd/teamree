@@ -19,7 +19,13 @@ import { registerSearchHandler } from '../../git/searchHandler'
 import { loginShellPath } from '../../terminals/shell-environment'
 import { writeShellIntegration } from '../../terminals/shell-integration'
 import { childPromptFor } from '../../tasks/childPrompt'
-import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
+import {
+  degradedTeamreeWatchReport,
+  registerTeamworkHandlers,
+  TeamreeWatcher,
+  TeamworkService,
+  WAITING_FETCH_MS
+} from '../../teamwork'
 import { PeerService, registerPeerHandlers, taskGitReader } from '../../teamwork/peer'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
 import { UpdateService, registerUpdateHandlers, type SelfInstall } from '../../updates'
@@ -61,6 +67,8 @@ export type RegisteredAreas = {
   updates: UpdateService
   /** The background fetch of each project's base ref. Idle until started. */
   bases: BaseFetcher
+  /** The quicker fetch for a project whose roster has only you on it. Idle until started. */
+  teamFetches: BaseFetcher
   /** The coordination ledger; its last write is flushed on quit. */
   context: ContextLedger
 }
@@ -278,7 +286,10 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   const bases = new BaseFetcher({
     runner: createGitRunner(),
     projects: () => backgroundFetchProjects(git.snapshot()),
-    onMoved: () => workspaceEvents.emit({ type: 'worktrees' }),
+    onMoved: (projectId) => {
+      workspaceEvents.emit({ type: 'worktrees' })
+      void teamwork.refresh(projectId, { fetch: false }).catch(() => undefined)
+    },
     ...(options.online === undefined ? {} : { online: options.online })
   })
 
@@ -290,7 +301,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   })
   teamworkWatcher.sync(registry.context.store.listProjects())
 
-  registerTeamworkHandlers(
+  const teamwork = registerTeamworkHandlers(
     registry,
     new TeamworkService({
       store: registry.context.store,
@@ -298,9 +309,22 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
       // So a roster read can say whether it will stay true by itself.
       watching: (projectId) => teamworkWatcher.watches(projectId),
       // The watch above can be degraded, so the service's own `.teamree` writes say so themselves.
-      onRosterChange: () => workspaceEvents.emit({ type: 'members' })
+      onRosterChange: () => workspaceEvents.emit({ type: 'members' }),
+      // Only once started: a runtime with background fetching off must not reach the network from a read.
+      onAlone: () => {
+        if (teamFetches.armed) void teamFetches.nudge()
+      }
     })
   )
+  // Alone on a roster, origin is fetched often, so whoever joins shows up without a pull.
+  const teamFetches = new BaseFetcher({
+    runner: createGitRunner(),
+    projects: () => teamwork.waitingProjects(),
+    fetch: (project, signal) => teamwork.refresh(project.id, { signal }),
+    onMoved: () => undefined,
+    intervalMs: WAITING_FETCH_MS,
+    ...(options.online === undefined ? {} : { online: options.online })
+  })
 
   const separateProfile = userDataOverride(process.env, process.cwd()) !== undefined
   const cliDirectory = separateProfile ? process.env['TEAMREE_CLI_DIRECTORY'] : undefined
@@ -398,7 +422,17 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     peers.notifyWorkspaceChanged()
   })
 
-  return { terminals, git, worktreeFiles, teamworkFiles: teamworkWatcher, peers, updates, bases, context }
+  return {
+    terminals,
+    git,
+    worktreeFiles,
+    teamworkFiles: teamworkWatcher,
+    peers,
+    updates,
+    bases,
+    teamFetches,
+    context
+  }
 }
 
 /**

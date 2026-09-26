@@ -34,6 +34,7 @@ import type {
   TeamworkPublish,
   TeamworkPublishPlan,
   TeamworkPublishProgress,
+  TeamworkPull,
   TeamworkStatus,
   SubagentTranscript,
   Terminal,
@@ -543,6 +544,8 @@ export const Params = {
   teamworkPublishProgress: z.object({ projectId: z.string().min(1) }),
   /** Stops the running publish. Whatever was committed stays committed. */
   teamworkCancelPublish: z.object({ projectId: z.string().min(1) }),
+  /** Fetches origin and moves the checkout's branch onto it, rebuilding unpushed commits on top. */
+  teamworkPull: z.object({ projectId: z.string().min(1) }),
 
   /**
    * Whether teamwork is running for a project and how each link is going.
@@ -953,6 +956,7 @@ export type MethodContract = TaskMethodContract &
       /** False when there was nothing running to stop. */
       result: { cancelled: boolean }
     }
+    'teamwork.pull': { params: z.infer<typeof Params.teamworkPull>; result: TeamworkPull }
     'teamwork.status': { params: z.infer<typeof Params.teamworkStatus>; result: TeamworkStatus }
     'teamwork.presence': { params: z.infer<typeof Params.teamworkPresence>; result: TeammatePresence }
     'teamwork.watch': {

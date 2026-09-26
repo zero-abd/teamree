@@ -1063,6 +1063,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     // Null rather than a fabricated run: the demo has no push to be partway through.
     'teamwork.publishProgress': () => null,
     'teamwork.cancelPublish': () => ({ cancelled: false }),
+    'teamwork.pull': ({ projectId }) => ({ projectId, ok: true, moved: false, problem: null, detail: null }),
     'teamwork.setRelay': ({ projectId, url }) => {
       relays.set(projectId, url)
       announce({ type: 'members' })

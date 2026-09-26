@@ -59,6 +59,7 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   const publishProgress = useWorkspaceStore((state) => state.publishProgress[projectId])
   const loadPublishProgress = useWorkspaceStore((state) => state.loadPublishProgress)
   const cancelPublish = useWorkspaceStore((state) => state.cancelPublish)
+  const pullTeamwork = useWorkspaceStore((state) => state.pullTeamwork)
   const joinedFrom = useWorkspaceStore((state) => state.joinedFrom[projectId])
   const openInvitation = useWorkspaceStore((state) => state.openInvitation)
   const paneRunning = useWorkspaceStore((state) =>
@@ -187,6 +188,8 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
           progress: publishProgress
         }}
         onPublish={() => void publishTeamwork(projectId)}
+        onPullAndPublish={() => void publishTeamwork(projectId, { pull: true })}
+        onPull={() => void pullTeamwork(projectId)}
         onCancelPublish={() => void cancelPublish(projectId)}
         now={now}
         path={path}

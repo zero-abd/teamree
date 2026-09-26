@@ -43,6 +43,8 @@ import {
   RELAY_SERVE_STOPPED,
   relayLauncherCommand,
   relayPaneBusy,
+  PULL_AND_RETRY_BUTTON,
+  PULL_BUTTON,
   RETRY_PUBLISH_BUTTON,
   retryHint,
   shortKey,
@@ -103,6 +105,10 @@ export type TeamworkStepsProps = {
   /** What the commit-and-push button would do, is doing, and last did. */
   publish: PublishState
   onPublish: () => void
+  /** Pulls from origin, then pushes: the answer to a push origin turned away. */
+  onPullAndPublish?: () => void
+  /** Pulls keys pushed since into this checkout. */
+  onPull?: () => void
   /** Stops a push that is running. Always offered while one is. */
   onCancelPublish: () => void
 
@@ -346,6 +352,7 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
           projectPath={props.projectPath}
           publish={props.publish}
           onPublish={props.onPublish}
+          onPullAndPublish={props.onPullAndPublish ?? props.onPublish}
           onCancelPublish={props.onCancelPublish}
           now={props.now ?? Date.now()}
         />
@@ -354,7 +361,7 @@ function StepBody({ step, ...props }: TeamworkStepsProps & { step: StartTeamwork
       if (props.status === undefined && props.readErrors.status !== undefined) {
         return <ReadFailure onRetry={() => props.onRetry('status')} />
       }
-      return <ConnectedBody list={props.list} status={props.status} />
+      return <ConnectedBody list={props.list} status={props.status} onPull={props.onPull} />
   }
 }
 
@@ -920,6 +927,7 @@ function PushBody({
   projectPath,
   publish,
   onPublish,
+  onPullAndPublish,
   onCancelPublish,
   now
 }: {
@@ -928,6 +936,7 @@ function PushBody({
   projectPath: string | undefined
   publish: PublishState
   onPublish: () => void
+  onPullAndPublish: () => void
   onCancelPublish: () => void
   now: number
 }): React.JSX.Element | null {
@@ -939,6 +948,7 @@ function PushBody({
   if (files.length === 0) return null
   const activity = publishActivity(publish.progress, now)
   const failed = publish.result?.push.ok === false ? publish.result.push : null
+  const behind = failed?.kind === 'rejected'
 
   return (
     <div className="step__body">
@@ -953,9 +963,15 @@ function PushBody({
           type="button"
           className="button button--primary"
           disabled={publish.pending || plan === undefined || plan.blocker !== null}
-          onClick={onPublish}
+          onClick={behind ? onPullAndPublish : onPublish}
         >
-          {publish.pending ? 'Pushing…' : failed === null ? PUBLISH_BUTTON : RETRY_PUBLISH_BUTTON}
+          {publish.pending
+            ? 'Pushing…'
+            : failed === null
+              ? PUBLISH_BUTTON
+              : behind
+                ? PULL_AND_RETRY_BUTTON
+                : RETRY_PUBLISH_BUTTON}
         </button>
         {/* Beside the button: a push can wait ten minutes on something nobody can answer. */}
         {publish.pending ? (
@@ -1073,7 +1089,10 @@ function PublishResult({ result, took }: { result: TeamworkPublish; took: number
           {result.push.advice === firstLineOf(result.push.error) ? null : (
             <p className="push__error">{result.push.advice}</p>
           )}
-          <pre className="push__git">{result.push.error}</pre>
+          <details className="push__details">
+            <summary>Details</summary>
+            <pre className="push__git">{result.push.error}</pre>
+          </details>
         </>
       )}
     </div>
@@ -1124,10 +1143,12 @@ function Invite({ invite, onCopy }: { invite: string; onCopy: (text: string) => 
 /** Who is on the roster, which links are up, and what is checkable when one is not. */
 function ConnectedBody({
   list,
-  status
+  status,
+  onPull
 }: {
   list: MemberList | undefined
   status: TeamworkStatus | undefined
+  onPull: (() => void) | undefined
 }): React.JSX.Element | null {
   if (list === undefined && status === undefined) return null
   // No link rows until teamwork has read this project; the step's summary says so in words.
@@ -1137,6 +1158,14 @@ function ConnectedBody({
       {list === undefined ? null : (
         <>
           <MemberRoster list={list} />
+          {(list.incoming ?? []).length === 0 || onPull === undefined ? null : (
+            <p className="members__incoming">
+              <span>On origin: {(list.incoming ?? []).join(', ')}</span>
+              <button type="button" className="button button--small" onClick={onPull}>
+                {PULL_BUTTON}
+              </button>
+            </p>
+          )}
           <Problems list={list} />
           <Freshness list={list} />
         </>
