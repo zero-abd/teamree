@@ -51,7 +51,7 @@ import {
   tailFromLineBoundary,
   type RecordedScrollback
 } from './scrollbackRecord'
-import { EXITED_RETENTION_BYTES, PtySession } from './pty-session'
+import { EXITED_RETENTION_BYTES, PtySession, type PtySessionInit } from './pty-session'
 import { conflict, invalidParams, notFound } from './service-error'
 import { resolveLoginShell } from './shell-environment'
 import { SubagentTracker, type SubagentTrackerOptions } from './subagents'
@@ -135,6 +135,18 @@ export type TerminalSessionManagerOptions = {
   colorTone?: () => Tone
   /** Where a Claude pane's subagents are read from, and how often; tests point them at a tree they built. */
   subagents?: Pick<SubagentTrackerOptions, 'projectDirectory' | 'pollMs'>
+  /** What every pane is told beyond its own ids (`TEAMREE_*`); see `PaneIdentity`. */
+  paneIdentity?: PaneIdentityOptions
+  /** Lines put before a pane's first prompt, e.g. a child task's (`childPrompt.ts`). */
+  promptPrefix?: (worktreeId: string) => string | undefined
+}
+
+export type PaneIdentityOptions = {
+  endpoint?: string
+  cli?: string
+  projectOf?: (worktreeId: string) => string | undefined
+  /** Written by `writeShellIntegration`; keeps `cli` first on PATH through the user's startup files. */
+  shellIntegrationDir?: string
 }
 
 /**
@@ -825,7 +837,7 @@ export class TerminalSessionManager {
     // The prompt goes on the line that runs, never in the record.
     const spawned =
       launch.command !== undefined && agent !== undefined && params.prompt !== undefined
-        ? firstPromptCommand(launch.command, agent, params.prompt)
+        ? firstPromptCommand(launch.command, agent, this.prefixed(params.worktreeId, params.prompt))
         : launch.command
     const fallback = params.fallback
     // The record's name wins on a restore.
@@ -843,6 +855,7 @@ export class TerminalSessionManager {
       cols: params.cols ?? DEFAULT_COLS,
       rows: params.rows ?? DEFAULT_ROWS,
       ...(this.options.colorTone === undefined ? {} : { tone: this.options.colorTone() }),
+      ...this.identityOf(id, params.worktreeId),
       ...(restored === undefined ? {} : { restored }),
       ...(params.restoredRecord === undefined ? {} : { restoredRecord: params.restoredRecord }),
       ...(params.recordStartsBelow === undefined ? {} : { recordStartsBelow: params.recordStartsBelow }),
@@ -911,6 +924,27 @@ export class TerminalSessionManager {
       createdAt: restoring?.createdAt ?? Date.now()
     })
     return session
+  }
+
+  private identityOf(terminalId: string, worktreeId: string): Pick<PtySessionInit, 'identity' | 'shellIntegrationDir'> {
+    const { endpoint, cli, projectOf, shellIntegrationDir } = this.options.paneIdentity ?? {}
+    const projectId = projectOf?.(worktreeId)
+    return {
+      identity: {
+        terminalId,
+        worktreeId,
+        ...(projectId === undefined ? {} : { projectId }),
+        ...(endpoint === undefined ? {} : { endpoint }),
+        ...(cli === undefined ? {} : { cli })
+      },
+      // Only a CLI is worth standing in for the user's startup files.
+      ...(cli === undefined || shellIntegrationDir === undefined ? {} : { shellIntegrationDir })
+    }
+  }
+
+  private prefixed(worktreeId: string, prompt: string): string {
+    const prefix = this.options.promptPrefix?.(worktreeId)
+    return prefix === undefined ? prompt : `${prefix}\n\n${prompt}`
   }
 
   /** `{ prompt }` for a pane whose worktree has a task, else nothing. */

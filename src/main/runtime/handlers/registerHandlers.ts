@@ -2,7 +2,7 @@
 // A later registration replaces an earlier one, which is how a real handler
 // takes over from its placeholder; areas that mutate state also publish events.
 
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { MethodRegistry } from '../methodRegistry'
 import { CliService, createAdministratorRunner, findShippedCli, registerCliHandlers } from '../../cli'
 import { createEditorActions, registerEditorHandlers } from '../../editor'
@@ -12,6 +12,8 @@ import { backgroundFetchProjects, BaseFetcher } from '../../git/baseFetch'
 import { startSetupCommand } from '../../git/worktreeSetup'
 import { findProgram } from '../../git/worktreeLanding'
 import { loginShellPath } from '../../terminals/shell-environment'
+import { writeShellIntegration } from '../../terminals/shell-integration'
+import { childPromptFor } from '../../tasks/childPrompt'
 import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
 import { PeerService, registerPeerHandlers, taskGitReader } from '../../teamwork/peer'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
@@ -89,6 +91,8 @@ export type RegisterHandlersOptions = {
   online?: () => boolean
   /** Replaces the packaged app in place after a quit. Absent, an update is a `.dmg` to open. */
   selfInstall?: SelfInstall
+  /** The socket panes are told to reach (`TEAMREE_ENDPOINT`); known before it listens, as restored panes start first. */
+  paneEndpoint?: string
 }
 
 export function registerHandlers(registry: MethodRegistry, options: RegisterHandlersOptions = {}): RegisteredAreas {
@@ -111,6 +115,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   const dataDir = dirname(registry.context.store.filePath)
   // Found once: the installer links it onto PATH and every agent pane's hooks run it.
   const shippedCli = findShippedCli({ resourcesPath: process.resourcesPath })
+  const shellIntegrationDir = join(dataDir, 'shell-integration')
 
   const terminals = createTerminalService({
     subscriptions: registry.context.subscriptions,
@@ -125,6 +130,13 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     // Agent hooks report the agent's state through this app's CLI; without one
     // the pane is read off the pty alone.
     ...(shippedCli === null ? {} : { agentHooks: { userDataDir: dataDir, cli: shippedCli.path } }),
+    paneIdentity: {
+      ...(options.paneEndpoint === undefined ? {} : { endpoint: options.paneEndpoint }),
+      ...(shippedCli === null ? {} : { cli: shippedCli.path }),
+      projectOf: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.projectId,
+      ...(shippedCli !== null && writeShellIntegration(shellIntegrationDir) ? { shellIntegrationDir } : {})
+    },
+    promptPrefix: (worktreeId) => childPromptFor(registry.context.store, worktreeId),
     // Two events per burst of work, not one per chunk of output.
     onActivityChange: () => workspaceEvents.emit({ type: 'terminals' }),
     // The worktree's *name* is attached here because only the store knows it;

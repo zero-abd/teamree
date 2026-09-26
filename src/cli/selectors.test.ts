@@ -4,7 +4,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { CliError } from './exit.js'
 import type { Worktree } from '../shared/entities.js'
-import { canonicalPath, selectOne, selectWorktree } from './selectors.js'
+import { canonicalPath, resolveProject, selectOne, selectWorktree, terminalSelector } from './selectors.js'
+import type { RuntimeClient } from './transport.js'
 
 const ITEMS = [
   { id: 'wt_1a2b3c', name: 'fix-login', path: '/repos/api-fix-login', aliases: ['feature/fix-login'] },
@@ -117,5 +118,23 @@ describe('here', () => {
 
   it('is refused outside every checkout', () => {
     expect(() => selectWorktree(worktrees, 'here', { env: {}, cwd: tmpdir() })).toThrow(CliError)
+  })
+
+  it('names this pane as a terminal, and leaves any other id alone', () => {
+    expect(terminalSelector('here', { env: { TEAMREE_TERMINAL_ID: 'term_4' }, cwd: root })).toBe('term_4')
+    expect(terminalSelector('term_9', { env: {}, cwd: root })).toBe('term_9')
+    expect(() => terminalSelector('here', { env: {}, cwd: root })).toThrow(CliError)
+  })
+
+  it('is the project of the pane, or of the checkout holding the cwd', async () => {
+    const projects = [
+      { id: 'p', name: 'api', path: join(root, 'api'), baseRef: 'origin/main' },
+      { id: 'p_web', name: 'web', path: join(root, 'web'), baseRef: 'origin/main' }
+    ]
+    const client = {
+      call: async (method: string) => (method === 'project.list' ? projects : worktrees)
+    } as unknown as RuntimeClient
+    expect((await resolveProject(client, 'here', { env: { TEAMREE_PROJECT_ID: 'p_web' }, cwd: root })).id).toBe('p_web')
+    expect((await resolveProject(client, 'here', { env: {}, cwd: join(root, 'auth', 'src') })).id).toBe('p')
   })
 })
