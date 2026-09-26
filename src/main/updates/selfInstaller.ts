@@ -1,4 +1,4 @@
-// Replacing the running bundle with a release's: the zip named by the release's manifest is
+// Replacing the running bundle with a release's: the zip named by the release's signed manifest is
 // fetched and verified, unpacked beside the profile and checked, and after the app quits a
 // helper script swaps it in. Anything unexpected refuses, and the disk image remains the way.
 
@@ -11,7 +11,8 @@ import { macBundleProbe, locationRefusal, stagingRefusal, type BundleFacts, type
 import { downloadDiskImage, type HostPolicy } from './downloadInstaller'
 import { helperScript, launchHelper } from './installHelper'
 import type { LatestRelease } from './latestRelease'
-import { MANIFEST_NAME, promisedArchive, readManifest } from './releaseManifest'
+import { TRUSTED_RELEASE_KEYS } from './releaseKeys'
+import { MANIFEST_NAME, promisedArchive, trustedManifest } from './releaseManifest'
 import { compareVersions, parseVersion, type Version } from './semver'
 
 export const UPDATE_LOG_NAME = 'update.log'
@@ -29,6 +30,8 @@ export type SelfInstallerOptions = {
   opener?: string
   writable?: (path: string) => boolean
   launch?: (script: string) => void
+  /** The public keys a manifest may be signed with; only a test names others. */
+  trustedKeys?: readonly string[]
 }
 
 export type PrepareOptions = {
@@ -54,6 +57,7 @@ export class SelfInstaller {
   readonly #opener: string
   readonly #writable: (path: string) => boolean
   readonly #launch: (script: string) => void
+  readonly #keys: readonly string[]
   #running: Promise<BundleFacts | string> | undefined
   #armed: string | undefined
 
@@ -65,6 +69,10 @@ export class SelfInstaller {
     this.#opener = options.opener ?? '/usr/bin/open'
     this.#writable = options.writable ?? isWritable
     this.#launch = options.launch ?? launchHelper
+    if (options.trustedKeys !== undefined && process.env['VITEST'] === undefined) {
+      throw new Error('trustedKeys is for tests; the app trusts only the keys it ships with')
+    }
+    this.#keys = options.trustedKeys ?? TRUSTED_RELEASE_KEYS
   }
 
   /** Why this copy cannot replace itself, or null when it can. */
@@ -78,11 +86,9 @@ export class SelfInstaller {
     const running = await this.#facts()
     if (typeof running === 'string') throw new Error(running)
 
-    const listed = release.assets?.find((asset) => asset.name === MANIFEST_NAME)
-    if (listed === undefined) throw new Error(`the release has no ${MANIFEST_NAME}`)
     const { allowed, fetchImpl, signal } = options
-    const manifest = await readManifest({ url: listed.url, allowed, fetchImpl, signal })
-    if (manifest === null) throw new Error(`${MANIFEST_NAME} is not a manifest`)
+    const current = running.version
+    const manifest = await trustedManifest(release, { current, keys: this.#keys, allowed, fetchImpl, signal })
     const archive = promisedArchive(manifest, release)
     if (archive === null) throw new Error(`${MANIFEST_NAME} does not match the release`)
     options.onSize?.(archive.size)

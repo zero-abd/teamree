@@ -15,6 +15,7 @@ import {
   type LatestRelease,
   type ReleaseChannel
 } from './latestRelease'
+import { UntrustedRelease } from './releaseManifest'
 import type { SelfInstall } from './selfInstaller'
 import { isNewerRelease, isPrereleaseVersion, parseVersion } from './semver'
 import { watchForWake, type WakeWatch } from './wakeWatch'
@@ -110,6 +111,8 @@ export class UpdateService {
   #install: UpdateInstall | null = null
   #abortInstall: AbortController | undefined
   #askedAt: number | null = null
+  /** A version whose release failed its signature or version checks; never offered this run. */
+  #untrusted: string | null = null
   /** Set once the staged copies left by an earlier run have been looked at. */
   #recovered: Promise<void> | undefined
   #started = false
@@ -257,7 +260,8 @@ export class UpdateService {
       const release = await this.#readRelease(this.#channel())
       this.#latest = release
       this.#problem = null
-      this.#settings.rememberLatest(release?.version ?? null)
+      const version = release?.version ?? null
+      this.#settings.rememberLatest(version === this.#untrusted ? null : version)
       if (release !== null && this.state().available !== null) this.#prepare(release)
     } catch (error) {
       this.#problem = describe(error)
@@ -393,6 +397,13 @@ export class UpdateService {
           this.#install = null
           return
         }
+        if (error instanceof UntrustedRelease) {
+          this.#install = null
+          this.#untrusted = version
+          this.#settings.rememberLatest(null)
+          this.#onProblem(`ignoring ${version}: ${error.message}`, error)
+          return
+        }
         this.#install = { state: 'failed', version, problem: `Update failed: ${describe(error)}` }
         this.#onProblem(`could not stage ${version}: ${describe(error)}`, error)
       } finally {
@@ -482,6 +493,7 @@ export class UpdateService {
     if (current === null) return null
 
     if (this.#latest !== null) {
+      if (this.#latest.version === this.#untrusted) return null
       const found = parseVersion(this.#latest.version)
       if (found === null || !isNewerRelease(found, current)) return null
       const { version, tag, notes, downloadUrl, releaseUrl, publishedAt, installer } = this.#latest

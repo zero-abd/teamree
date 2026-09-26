@@ -11,6 +11,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { WorkspaceStore } from '../store/workspaceStore'
 import type { HostPolicy } from './downloadInstaller'
 import type { LatestRelease } from './latestRelease'
+import { UntrustedRelease } from './releaseManifest'
 import type { SelfInstall } from './selfInstaller'
 import {
   AUTOMATIC_CHECK_INTERVAL_MS,
@@ -698,10 +699,11 @@ describe('replacing this copy in place', () => {
     const problems: string[] = []
     const delays: number[] = []
     let fire: (() => void) | undefined
+    const stored = settings()
     const update = new UpdateService({
       version: options.version ?? '0.1.0',
       repository: REPOSITORY,
-      settings: settings().record,
+      settings: stored.record,
       readRelease: options.readRelease ?? (async () => found()),
       selfInstall: options.self ?? installer().self,
       restart: () => restarts.push(1),
@@ -713,7 +715,7 @@ describe('replacing this copy in place', () => {
         return () => {}
       }
     })
-    return { update, restarts, problems, delays, tick: () => fire?.() }
+    return { update, restarts, problems, delays, held: stored.held, tick: () => fire?.() }
   }
 
   it('fetches a newer release in the background and says when it is ready', async () => {
@@ -768,6 +770,26 @@ describe('replacing this copy in place', () => {
 
     await update.check({ force: true })
     await vi.waitFor(() => expect(update.state().install?.state).toBe('ready'))
+  })
+
+  it('ignores a release it cannot trust: logged, never offered, not remembered for the next launch', async () => {
+    const { self, calls } = installer({
+      prepare: async (release) => {
+        calls.prepared.push(release.version)
+        throw new UntrustedRelease('teamree-mac.json is not signed by a trusted key')
+      }
+    })
+    const { update, problems, held } = installing({ self })
+    await update.check({ force: true })
+    await vi.waitFor(() => expect(problems.join('\n')).toContain('not signed by a trusted key'))
+    expect(update.state().install ?? null).toBeNull()
+    expect(update.state().available).toBeNull()
+    expect(held.lastSeenVersion).toBeNull()
+
+    await update.check({ force: true })
+    expect(update.state().available).toBeNull()
+    expect(held.lastSeenVersion).toBeNull()
+    expect(calls.prepared).toEqual(['0.2.0'])
   })
 
   it('restarts only once ready, through the app’s own quit, and swaps only once the quit is past its questions', async () => {

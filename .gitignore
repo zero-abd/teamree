@@ -15,3 +15,4 @@ relay/dist/
 
 # Claude Code session state, not project content.
 .claude/scheduled_tasks.lock
+*.pem
