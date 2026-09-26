@@ -2,6 +2,8 @@
 // this window's `localStorage` behind a clamp, with every read and write wrapped
 // so storage being unavailable costs a default rather than a render.
 
+import { isPermissionMode, type PermissionMode } from '@shared/permissionMode'
+
 /** Below this the emulator's own glyphs stop being glyphs; above it a pane holds nothing. */
 export const TERMINAL_FONT_MIN_PX = 9
 export const TERMINAL_FONT_MAX_PX = 24
@@ -76,6 +78,7 @@ export function writeStoredKeepAwake(storage: Pick<Storage, 'setItem'> | undefin
 const EDITOR_COMMANDS_KEY = 'teamree.editor.commands'
 const DEFAULT_AGENT_KEY = 'teamree.agent.default'
 const AGENT_ARGS_KEY = 'teamree.agent.args'
+const PERMISSION_MODES_KEY = 'teamree.agent.permissionModes'
 
 /** The default-agent preference when none has been set: no agent is preferred. */
 export const NO_DEFAULT_AGENT = ''
@@ -356,4 +359,41 @@ export function withAgentArgs(
     return rest
   }
   return { ...args, [kind]: trimmed }
+}
+
+/** Each project's last permission mode per agent kind. Unknown modes are dropped, never guessed at. */
+export function readStoredPermissionModes(
+  storage: Pick<Storage, 'getItem'> | undefined
+): Record<string, Record<string, PermissionMode>> {
+  try {
+    const raw = storage?.getItem(PERMISSION_MODES_KEY)
+    if (raw === null || raw === undefined) return {}
+    const parsed: unknown = JSON.parse(raw)
+    if (!isRecord(parsed)) return {}
+    const projects: Record<string, Record<string, PermissionMode>> = {}
+    for (const [projectId, modes] of Object.entries(parsed)) {
+      if (!isRecord(modes)) continue
+      const kept: Record<string, PermissionMode> = {}
+      for (const [kind, mode] of Object.entries(modes)) if (isPermissionMode(mode)) kept[kind] = mode
+      projects[projectId] = kept
+    }
+    return projects
+  } catch {
+    return {}
+  }
+}
+
+export function writeStoredPermissionModes(
+  storage: Pick<Storage, 'setItem'> | undefined,
+  modes: Record<string, Record<string, PermissionMode>>
+): void {
+  try {
+    storage?.setItem(PERMISSION_MODES_KEY, JSON.stringify(modes))
+  } catch {
+    // As above: the choice holds for this window and is forgotten on the next.
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }

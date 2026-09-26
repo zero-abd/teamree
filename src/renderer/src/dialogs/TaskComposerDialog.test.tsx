@@ -477,3 +477,45 @@ describe('finishing from the keyboard', () => {
     expect(closeDialog).toHaveBeenCalledOnce()
   })
 })
+
+describe('the permission mode each agent starts in', () => {
+  const modes = (name: string): HTMLElement | null => screen.queryByRole('radiogroup', { name: `${name} permissions` })
+  const mode = (name: string, label: string): HTMLElement =>
+    within(modes(name) as HTMLElement).getByRole('radio', { name: label })
+
+  it('is asked only for the agents that will run, Default until chosen', async () => {
+    seed({ agents: bothAgents })
+    await open()
+    expect(mode('Claude Code', 'Default').getAttribute('aria-checked')).toBe('true')
+    expect(modes('Codex')).toBeNull()
+    act(() => more('Codex').click())
+    expect(modes('Codex')).not.toBeNull()
+    act(() => fewer('Claude Code').click())
+    expect(modes('Claude Code')).toBeNull()
+  })
+
+  it('starts with the flags chosen and remembers them for the project', async () => {
+    const rememberPermissionModes = vi.fn()
+    seed({ agents: bothAgents, rememberPermissionModes })
+    await open()
+    act(() => more('Codex').click())
+    act(() => mode('Claude Code', 'Bypass').click())
+    act(() => mode('Codex', 'Auto').click())
+    expect(mode('Claude Code', 'Bypass').classList.contains('agents__mode--bypass')).toBe(true)
+    fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
+    fireEvent.keyDown(mode('Codex', 'Auto'), { key: 'Enter', metaKey: true })
+    expect(startTask).toHaveBeenCalledOnce()
+    const { creates } = startTask.mock.calls[0]![0] as { creates: Array<{ permissionArgs?: string }> }
+    expect(creates.map((create) => create.permissionArgs)).toEqual([
+      '--dangerously-skip-permissions',
+      '--sandbox workspace-write --ask-for-approval on-request'
+    ])
+    expect(rememberPermissionModes).toHaveBeenCalledWith('p1', { claude: 'bypass', codex: 'auto' })
+  })
+
+  it('opens on what the project last started with', async () => {
+    seed({ permissionModes: { p1: { claude: 'auto' } } })
+    await open()
+    expect(mode('Claude Code', 'Auto').getAttribute('aria-checked')).toBe('true')
+  })
+})

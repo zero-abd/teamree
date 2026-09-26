@@ -289,6 +289,50 @@ button.picker__chevron:hover {
   box-shadow: var(--ring);
 }
 
+/* A selected agent's permission mode, left of its count so the steppers stay in a column. */
+.agents__modes {
+  display: flex;
+  gap: 2px;
+  margin-right: var(--s2);
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-input);
+}
+
+.agents__mode {
+  padding: 1px var(--s2);
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.agents__mode:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.agents__mode--current,
+.agents__mode--current:hover {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+.agents__mode--bypass.agents__mode--current,
+.agents__mode--bypass.agents__mode--current:hover {
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+  color: var(--danger);
+}
+
+.agents__mode:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
 /* A fixed width so the rows do not shuffle sideways as the counts change. */
 .agents__count {
   min-width: 14px;

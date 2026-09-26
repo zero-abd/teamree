@@ -72,7 +72,8 @@ import {
   type ClosedFile,
   type ClosedFiles
 } from './closedPanes'
-import type { TaskCreate } from '../dialogs/taskPlan'
+import type { AgentModes, TaskCreate } from '../dialogs/taskPlan'
+import { agentLaunchCommand } from '@shared/agentLaunch'
 import {
   addTab,
   appendPane,
@@ -133,6 +134,7 @@ import {
   readStoredDiffLayout,
   readStoredEditorCommands,
   readStoredKeepAwake,
+  readStoredPermissionModes,
   readStoredStartPoints,
   readStoredTerminalFontSize,
   readStoredTerminalOptions,
@@ -149,6 +151,7 @@ import {
   writeStoredDiffLayout,
   writeStoredEditorCommands,
   writeStoredKeepAwake,
+  writeStoredPermissionModes,
   writeStoredStartPoints,
   writeStoredTerminalFontSize,
   writeStoredTerminalOptions
@@ -505,6 +508,8 @@ type WorkspaceState = {
   /** The agent kind the composer offers first, and what each kind is launched with. See `preferences.ts`. */
   defaultAgent: string
   agentArgs: Record<string, string>
+  /** The permission mode each project last started each agent kind in. */
+  permissionModes: Record<string, AgentModes>
 
   /** How this window is painted. Held here so a colour edited in the dialog is live in the panes behind it. */
   appearance: Appearance
@@ -797,6 +802,8 @@ type WorkspaceState = {
   setDefaultAgent: (kind: string) => void
   /** Sets one agent's launch arguments, or clears them when given null. */
   setAgentArgs: (kind: string, args: string | null) => void
+  /** Records the modes a task just started with, as the project's next defaults. */
+  rememberPermissionModes: (projectId: string, modes: AgentModes) => void
   /**
    * Sets what a project's new worktrees carry over and the command they run. A given field replaces the
    * stored one, empty clears it. In the workspace, not local storage: a CLI-created worktree is prepared the same way.
@@ -1542,6 +1549,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     diffLayout: readStoredDiffLayout(storage),
     defaultAgent: readStoredDefaultAgent(storage),
     agentArgs: readStoredAgentArgs(storage),
+    permissionModes: readStoredPermissionModes(storage),
 
     // The palette `tokens.css` painted the first frame in, so the window does not change shade on the way to its theme.
     appearance: DEFAULT_APPEARANCE,
@@ -1676,7 +1684,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set({ dialog: null })
 
       void (async () => {
-        const started: Array<{ worktreeId: string; agentCommand?: string; label: string; task: string }> = []
+        const started: Array<{
+          worktreeId: string
+          agentCommand?: string
+          permissionArgs?: string
+          label: string
+          task: string
+        }> = []
         for (const create of creates) {
           const name = create.name.trim()
           const task = create.task.trim()
@@ -1700,14 +1714,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             worktreeId: created.id,
             label: name,
             task,
-            ...(create.agentCommand === undefined ? {} : { agentCommand: create.agentCommand })
+            ...(create.agentCommand === undefined ? {} : { agentCommand: create.agentCommand }),
+            ...(create.permissionArgs === undefined ? {} : { permissionArgs: create.permissionArgs })
           })
         }
         // The project may have been collapsed until now.
         readOnScreen()
 
         await Promise.all(
-          started.map(async ({ worktreeId, agentCommand, label, task }) => {
+          started.map(async ({ worktreeId, agentCommand, permissionArgs, label, task }) => {
             // The agent needs a checkout; a failure here is already on the row.
             const worktree = await awaitWorktreeReady({
               worktreeId,
@@ -1719,7 +1734,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
               const agentArgs = extraArgsFor(agentCommand)
               await runtimeClient.call('terminal.create', {
                 worktreeId: worktree.id,
-                command: agentCommand,
+                command: agentLaunchCommand(agentCommand, permissionArgs),
                 label,
                 ...paneSizeFor(worktree.id),
                 ...(agentArgs === undefined ? {} : { agentArgs }),
@@ -3534,6 +3549,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const defaultAgent = kind.trim()
       set({ defaultAgent })
       writeStoredDefaultAgent(storage, defaultAgent)
+    },
+
+    rememberPermissionModes(projectId, modes) {
+      const permissionModes = {
+        ...get().permissionModes,
+        [projectId]: { ...get().permissionModes[projectId], ...modes }
+      }
+      set({ permissionModes })
+      writeStoredPermissionModes(storage, permissionModes)
     },
 
     setAgentArgs(kind, args) {
