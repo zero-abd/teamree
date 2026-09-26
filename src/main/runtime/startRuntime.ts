@@ -177,6 +177,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
         { name: 'the update check', release: () => areas.updates.stop() },
         { name: 'the base fetches', release: () => areas.bases.stop() },
         { name: 'the teamwork fetches', release: () => areas.teamFetches.stop() },
+        { name: 'the port scan', release: () => areas.ports.close() },
         // Before the PTYs: a teammate must not watch panes already being killed.
         { name: 'the relay', release: () => areas.peers.stop() },
         // Before the PTYs, because a shell dying rewrites files.

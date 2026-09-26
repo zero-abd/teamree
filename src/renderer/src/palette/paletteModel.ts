@@ -39,6 +39,7 @@ export type PaletteAction =
   | 'open-pull-request'
   | 'new-task-from-issue'
   | 'install-cli'
+  | 'show-ports'
   | 'search-contents'
   | 'show-decisions'
   | 'check-for-updates'
@@ -592,7 +593,8 @@ const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[]
     id: 'install-cli',
     label: 'Install Command Line Tool',
     keywords: 'cli command line terminal install link symlink usr local bin path agent broken fix dangling'
-  }
+  },
+  { id: 'show-ports', label: 'Show Ports', keywords: 'ports listening server dev localhost browser url http stop' }
 ]
 
 /**

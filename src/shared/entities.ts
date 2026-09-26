@@ -549,6 +549,9 @@ export type WorktreeLog = {
   readAt: number
 }
 
+/** A TCP port a process in a pane's tree listens on. */
+export type ListeningPort = { port: number; pid: number; command: string }
+
 export type Terminal = {
   id: string
   worktreeId: string
@@ -578,6 +581,8 @@ export type Terminal = {
   label?: string
   /** Its number among the worktree's open panes started as the same agent or shell: one past the highest held. */
   ordinal?: number
+  /** Ports its process tree listens on, lowest first; absent when none. */
+  ports?: ListeningPort[]
   /**
    * True while output is still arriving. The only honest signal about whether
    * an agent is working: a quiet terminal is what "waiting for you" looks like from outside.

@@ -46,6 +46,7 @@ import { registerPastedImageHandler } from './pastedImageHandler'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerQuitHandler } from './quitHandler'
 import { registerResourcesHandlers } from './resourcesHandlers'
+import { PortWatcher } from '../../resources/ports'
 import { registerStatusHandler } from './statusHandler'
 import { registerSettingsHandlers } from './taskPlaceholderHandlers'
 import { registerUnsubscribeHandler } from './unsubscribeHandler'
@@ -75,6 +76,8 @@ export type RegisteredAreas = {
   teamFetches: BaseFetcher
   /** The coordination ledger; its last write is flushed on quit. */
   context: ContextLedger
+  /** The listening-port scan; a timer only while a pane runs. */
+  ports: PortWatcher
 }
 
 export type RegisterHandlersOptions = {
@@ -137,7 +140,10 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   const shippedCli = findShippedCli({ resourcesPath: process.resourcesPath })
   const shellIntegrationDir = join(dataDir, 'shell-integration')
 
+  // Bound late: the watcher reads the manager's panes, and the manager reads the watcher's ports.
+  let ports: PortWatcher | undefined
   const terminals = createTerminalService({
+    ports: (terminalId) => ports?.ports(terminalId),
     subscriptions: registry.context.subscriptions,
     resolveWorktreeCwd: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.path,
     resolveWorktreeTask: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.task,
@@ -197,6 +203,15 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   registerTerminalHandlers(registry, terminals)
   // Wraps the handlers just registered so every change reaches the workspace stream.
   publishTerminalEvents(registry, terminals, workspaceEvents)
+  const portWatcher = new PortWatcher({
+    panes: () => terminals.manager.paneProcesses(),
+    onChange: () => workspaceEvents.emit({ type: 'terminals' })
+  })
+  ports = portWatcher
+  workspaceEvents.on((event) => {
+    if (event.type === 'terminals') portWatcher.poke()
+  })
+  portWatcher.poke()
   // Not a terminal method: the app's own processes are on the answer too.
   registerResourcesHandlers(registry, { panes: () => terminals.manager.paneProcesses() })
   registerPastedImageHandler(registry, {
@@ -476,7 +491,8 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     updates,
     bases,
     teamFetches,
-    context
+    context,
+    ports: portWatcher
   }
 }
 

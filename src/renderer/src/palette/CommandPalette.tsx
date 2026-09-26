@@ -482,6 +482,9 @@ export function CommandPalette({
       case 'install-cli':
         store.openDialog({ kind: 'install-cli' })
         break
+      case 'show-ports':
+        store.openDialog({ kind: 'ports' })
+        break
       case 'check-for-updates':
         // The answer arrives as the card or a notice, never a dialog.
         void store.checkForUpdates()

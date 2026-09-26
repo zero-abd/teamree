@@ -9,6 +9,7 @@ import type {
   AgentEvent,
   ClosedPane,
   Layout,
+  ListeningPort,
   PaneNode,
   RunKind,
   SubagentTranscript,
@@ -158,6 +159,8 @@ export type TerminalSessionManagerOptions = {
   paneIdentity?: PaneIdentityOptions
   /** Lines put before a pane's first prompt, e.g. a child task's (`childPrompt.ts`). */
   promptPrefix?: (worktreeId: string) => string | undefined
+  /** What each pane's tree listens on (`resources/ports.ts`); absent, `list` carries no ports. */
+  ports?: (terminalId: string) => ListeningPort[] | undefined
 }
 
 export type PaneIdentityOptions = {
@@ -245,7 +248,7 @@ export class TerminalSessionManager {
   list(worktreeId?: string): Terminal[] {
     const all = [...this.sessions.values()]
     const scoped = worktreeId === undefined ? all : all.filter((session) => session.worktreeId === worktreeId)
-    return scoped.map((session) => this.withSubagents(session.snapshot()))
+    return scoped.map((session) => this.withPorts(this.withSubagents(session.snapshot())))
   }
 
   /** Reads every Claude pane's subagents off disk now, rather than on the next poll. */
@@ -1019,6 +1022,11 @@ export class TerminalSessionManager {
     })
     const never = evidence === 'absent' || (evidence === 'unknown' && record.typed === false)
     return never ? this.taskFor(record).prompt : undefined
+  }
+
+  private withPorts(terminal: Terminal): Terminal {
+    const ports = terminal.running ? this.options.ports?.(terminal.id) : undefined
+    return ports === undefined || ports.length === 0 ? terminal : { ...terminal, ports }
   }
 
   private withSubagents(terminal: Terminal): Terminal {
