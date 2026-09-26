@@ -1,6 +1,7 @@
-import type { PaneNode, Worktree, WorktreeCompare } from '../../shared/entities.js'
+import type { PaneNode, Worktree, WorktreeCompare, WorktreePullRequest } from '../../shared/entities.js'
 import { MAX_AGENT_ARGS_CHARS } from '../../shared/agentLaunch.js'
 import { MAX_TERMINAL_ID_CHARS } from '../../shared/methods.js'
+import { pullRequestSteps, runPullRequestSteps } from '../../shared/pullRequestSteps.js'
 import { PANE_IDENTITY_ENV } from '../../shared/tasks.js'
 import { descendantsOf } from '../../shared/taskTree.js'
 import type { WorktreeNest } from '../../shared/nesting.js'
@@ -834,6 +835,88 @@ export const worktreeCommands: readonly CommandSpec[] = [
         })
       }
       const made = await context.client.call('worktree.createPullRequest', { worktreeId: worktree.id })
+      const said = made.number === undefined ? 'Open a pull request at:' : `Pull request #${made.number}:`
+      return { data: made, text: `${said}\n${made.url}` }
+    }
+  },
+  {
+    path: ['worktree', 'pr'],
+    summary: "Commit, push and open a pull request for a worktree's branch in one step.",
+    details:
+      'Commits all uncommitted work with --message, publishes or pushes the branch, then runs gh pr create. ' +
+      "The title and body default to the agent's report, else the commits, closing the issue the task came from. " +
+      'A failed step is named; running it again resumes from there.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, branch, or here (default).', required: false }],
+    flags: [
+      { name: 'draft', kind: 'boolean', description: 'Open it as a draft.' },
+      { name: 'title', kind: 'string', placeholder: '<text>', description: 'The title instead of the drafted one.' },
+      { name: 'body', kind: 'string', placeholder: '<text>', description: 'The body instead of the drafted one.' },
+      {
+        name: 'message',
+        kind: 'string',
+        alias: 'm',
+        placeholder: '<text>',
+        description: 'Commit message, if uncommitted.'
+      }
+    ],
+    examples: [
+      'teamree worktree pr',
+      'teamree worktree pr here --draft',
+      'teamree worktree pr fix-login -m "Fix login"'
+    ],
+    run: async (context) => {
+      const selector = (context.args[0] as string | undefined) ?? HERE
+      const worktree = await resolveWorktree(context.client, selector, { env: context.env, cwd: context.cwd })
+      const [landing, status] = await Promise.all([
+        context.client.call('worktree.landing', { worktreeId: worktree.id }),
+        context.client.call('worktree.status', { worktreeId: worktree.id })
+      ])
+      if (landing.parent !== undefined || landing.host === null) {
+        const into = landing.parent?.name ?? landing.base
+        throw new CliError({
+          code: 'lands_by_merge',
+          message: `${landing.branch} merges into ${into}: teamree worktree land ${selector}`,
+          exitCode: ExitCode.Failure
+        })
+      }
+      const uncommitted = status.staged + status.unstaged + status.untracked + status.conflicted
+      const message = readString(context.flags, 'message')
+      if (status.conflicted > 0 || (uncommitted > 0 && message === undefined)) {
+        throw new CliError({
+          code: 'uncommitted',
+          message:
+            status.conflicted > 0 ? `${status.conflicted} conflicted` : `${uncommitted} uncommitted; pass --message`,
+          exitCode: ExitCode.Failure
+        })
+      }
+      const title = readString(context.flags, 'title')
+      const body = readString(context.flags, 'body')
+      const steps = pullRequestSteps({ uncommitted, published: landing.published, ahead: status.ahead })
+      const answer: { made?: WorktreePullRequest } = {}
+      const failure = await runPullRequestSteps(steps, async (step) => {
+        if (step === 'commit' && message !== undefined) {
+          await context.client.call('worktree.commit', { worktreeId: worktree.id, message, all: true })
+        } else if (step === 'push') await context.client.call('worktree.push', { worktreeId: worktree.id })
+        else if (step === 'create') {
+          answer.made = await context.client.call('worktree.createPullRequest', {
+            worktreeId: worktree.id,
+            ...(title === undefined ? {} : { title }),
+            ...(body === undefined ? {} : { body }),
+            ...(readBoolean(context.flags, 'draft') ? { draft: true } : {})
+          })
+        }
+      })
+      const made = answer.made
+      if (failure !== null || made === undefined) {
+        const step = failure?.step ?? 'create'
+        const label =
+          step === 'commit' ? 'Commit' : step === 'create' ? 'Create' : landing.published ? 'Push' : 'Publish'
+        throw new CliError({
+          code: `${step}_failed`,
+          message: `${label} failed: ${failure?.reason ?? 'no answer'}`,
+          exitCode: ExitCode.Failure
+        })
+      }
       const said = made.number === undefined ? 'Open a pull request at:' : `Pull request #${made.number}:`
       return { data: made, text: `${said}\n${made.url}` }
     }

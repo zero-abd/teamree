@@ -355,37 +355,25 @@ describe('landing the work', () => {
     useWorkspaceStore.setState({ landings: { w1: landing(overrides) } })
   }
 
-  it('is Create Pull Request once the branch is published, and opens the host’s page without gh', async () => {
+  it('is Create Pull Request… once there is something to land, and asks in the one-step dialog', () => {
     landed({})
-    call.mockImplementation((method: string) =>
-      method === 'worktree.createPullRequest'
-        ? Promise.resolve({ worktreeId: 'w1', url: landing().compareUrl, created: false })
-        : new Promise(() => {})
-    )
     render(<ChangesTab />)
 
-    expect(primary('Create Pull Request')).toBe(true)
+    expect(primary('Create Pull Request…')).toBe(true)
     expect(screen.queryByRole('button', { name: 'Open review' })).toBeNull()
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Create Pull Request' })))
+    fireEvent.click(screen.getByRole('button', { name: 'Create Pull Request…' }))
 
-    expect(call).toHaveBeenCalledWith('worktree.createPullRequest', { worktreeId: 'w1' })
-    expect(openInBrowser).toHaveBeenCalledWith(landing().compareUrl)
+    expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'create-pr', worktreeId: 'w1' })
+    expect(call).not.toHaveBeenCalledWith('worktree.createPullRequest', expect.anything())
   })
 
-  it('reads Open Pull Request with its number once gh made one', async () => {
-    landed({})
-    call.mockImplementation((method: string) =>
-      method === 'worktree.createPullRequest'
-        ? Promise.resolve({ worktreeId: 'w1', url: 'https://github.com/team/pager/pull/12', number: 12, created: true })
-        : new Promise(() => {})
-    )
+  it('reads Open Pull Request with its number once there is one, and opens it', () => {
+    landed({ pullRequest: { number: 12, url: 'https://github.com/team/pager/pull/12', state: 'open' } })
     render(<ChangesTab />)
 
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Create Pull Request' })))
-
-    expect(openInBrowser).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Open Pull Request #12' }))
     expect(openInBrowser).toHaveBeenCalledWith('https://github.com/team/pager/pull/12')
+    expect(useWorkspaceStore.getState().dialog).toBeNull()
   })
 
   it('is Merge into main… for an origin on no known host, and asks before merging', () => {
@@ -406,21 +394,23 @@ describe('landing the work', () => {
     render(<ChangesTab />)
 
     expect(primary('Merge into Rework auth…')).toBe(true)
-    expect(screen.queryByRole('button', { name: 'Create Pull Request' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Create Pull Request…' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Merge into Rework auth…' }))
     expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'w1' })
   })
 
-  it('waits for Push while the remote lacks commits, the pull request dimmed in the menu with why', () => {
+  it('creates the pull request while the remote lacks commits, with Push or Publish in the menu', () => {
     landed({}, { ahead: 1 })
+    const { unmount } = render(<ChangesTab />)
+    expect(primary('Create Pull Request…')).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Push' })).toBeNull()
+    expect(within(moreMenu()).getByRole('menuitem', { name: 'Push' })).toBeTruthy()
+    unmount()
+
+    landed({ published: false }, { upstream: null, ahead: 1 })
     render(<ChangesTab />)
-    expect(screen.queryByRole('button', { name: 'Create Pull Request' })).toBeNull()
-    expect(primary('Push')).toBe(true)
-    const pr = within(moreMenu()).getByRole('menuitem', { name: 'Create Pull Request' })
-    expect(pr.getAttribute('aria-disabled')).toBe('true')
-    expect(pr.textContent).toContain('1 unpushed')
-    fireEvent.click(pr)
-    expect(call).not.toHaveBeenCalledWith('worktree.createPullRequest', expect.anything())
+    expect(primary('Create Pull Request…')).toBe(true)
+    expect(within(moreMenu()).getByRole('menuitem', { name: 'Publish Branch' })).toBeTruthy()
   })
 
   it('keeps the merge on screen with uncommitted work, as Commit & Merge, and asks before committing', () => {
@@ -437,14 +427,17 @@ describe('landing the work', () => {
     expect(call).not.toHaveBeenCalledWith('worktree.commit', expect.anything())
   })
 
-  it('shows Create Pull Request disabled, saying what is needed, while there are changes', () => {
+  it('is Commit & Create PR… while there are changes, quiet beside Commit, and opens the dialog', () => {
     landed({}, { ahead: 0, unstaged: 1 })
     withChanges(rows.slice(0, 1))
     render(<ChangesTab />)
 
-    const button = screen.getByRole('button', { name: 'Create Pull Request' }) as HTMLButtonElement
-    expect(button.disabled).toBe(true)
+    const button = screen.getByRole('button', { name: 'Commit & Create PR…' }) as HTMLButtonElement
+    expect(button.disabled).toBe(false)
     expect(button.title).toBe('1 uncommitted')
+    expect(primary('Commit & Create PR…')).toBe(false)
+    fireEvent.click(button)
+    expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'create-pr', worktreeId: 'w1' })
   })
 
   it('offers no Publish in a repository with no remote', () => {
@@ -483,7 +476,7 @@ describe('landing the work', () => {
     render(<ChangesTab />)
 
     expect(screen.getByText('Merged')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Create Pull Request' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Create Pull Request…' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Delete Worktree…' }))
     expect(useWorkspaceStore.getState().dialog).toMatchObject({ kind: 'confirm-remove', worktreeId: 'w1' })
   })
@@ -1650,7 +1643,7 @@ describe('the pull request’s checks', () => {
     render(<ChangesTab />)
 
     expect(screen.queryByRole('region', { name: /Pull Request/ })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Create Pull Request' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Create Pull Request…' })).toBeTruthy()
   })
 
   it('sends the failure to an idle agent, and focuses it', async () => {

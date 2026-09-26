@@ -30,6 +30,7 @@ Your worktree
   teamree worktree commit here -m "<msg>" -- <paths>
   teamree worktree push here
   teamree worktree land here               open a pull request; a child merges into its parent
+  teamree worktree pr here -m "<msg>"      commit, push and open a pull request in one step
   teamree worktree update here             bring in the base, or a child's parent
 
 Other panes and worktrees

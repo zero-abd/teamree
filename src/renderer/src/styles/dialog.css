@@ -756,6 +756,40 @@ button.picker__chevron:hover {
   list-style: none;
 }
 
+/* Create Pull Request: the body grows with its text; the steps read left to right as they run. */
+.pullRequest__body {
+  min-height: 3lh;
+}
+
+.pullRequest__steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  margin: 0;
+  padding: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  list-style: none;
+}
+
+.pullRequest__step {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+}
+
+.pullRequest__step--running {
+  color: var(--fg);
+}
+
+.pullRequest__step--done .pullRequest__mark {
+  color: var(--success);
+}
+
+.pullRequest__step--failed {
+  color: var(--danger);
+}
+
 /* Keep: each other run by its agent, over what it holds. */
 .confirm__run {
   display: flex;

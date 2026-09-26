@@ -229,6 +229,8 @@ export type DialogState =
   | { kind: 'confirm-discard'; worktreeId: string; path: string; hunk?: PatchHunk }
   /** Merging a worktree's branch into the base branch in the project's own checkout. */
   | { kind: 'confirm-merge'; worktreeId: string }
+  /** Committing, pushing and opening a pull request in one step. */
+  | { kind: 'create-pr'; worktreeId: string }
   /** Pushing the project checkout's base to origin; `failure` is the push that just did not land. */
   | { kind: 'push-base'; projectId: string; failure?: PushBaseFailure }
   /** Keeping one run of a task and removing the others; `refused` once the runtime has refused one unforced. */
@@ -302,6 +304,9 @@ export type UndoTarget =
   | { kind: 'remove-many'; projectId: string; removedIds: string[] }
   | { kind: 'discard'; worktreeId: string; trashId: string }
   | { kind: 'shared-note'; shareId: string }
+
+/** The title, body and draft the create dialog sends; absent parts are drafted by the runtime. */
+export type PullRequestRequest = { title?: string; body?: string; draft?: boolean }
 
 /** The last push of one worktree, as the Changes tab shows it. A failure is one clause, and git's words. */
 export type PushState =
@@ -762,8 +767,8 @@ type WorkspaceState = {
   unstagePath: (worktreeId: string, path: string) => Promise<void>
   /** Throws away a path's unstaged change, or one unstaged hunk. The index is never touched. */
   discardChange: (worktreeId: string, path: string, hunk?: PatchHunk) => Promise<void>
-  /** Sends the active worktree's branch to its remote. Never forces. */
-  pushActiveWorktree: () => Promise<void>
+  /** Sends the active worktree's branch, or this one's, to its remote. Never forces. */
+  pushActiveWorktree: (worktreeId?: string) => Promise<void>
   /** Brings the base ref's new commits into a worktree, or with `landing` the branch it lands in: rebase if unpublished, merge if published. */
   updateWorktree: (worktreeId: string, landing?: boolean) => Promise<WorktreeUpdate | null>
   /** Undoes an update stopped on conflicts. */
@@ -774,8 +779,8 @@ type WorkspaceState = {
   resolveConflict: (worktreeId: string, path: string, take?: 'ours' | 'theirs') => Promise<void>
   /** Hands `paths` (the listed conflicts by default) to the worktree's running agent, or starts the default agent on them. */
   askToResolve: (worktreeId: string, paths?: readonly string[]) => Promise<void>
-  /** `gh pr create` for a published branch, else the host's page for one in the browser; an open one is opened. */
-  createPullRequest: (worktreeId: string) => Promise<void>
+  /** Opens an open pull request, else asks with the create dialog; with `request`, creates it and answers why not, or null. */
+  createPullRequest: (worktreeId: string, request?: PullRequestRequest) => Promise<string | null>
   /** Asks `gh` about these worktrees' pull requests again, past its cache. */
   refreshPullRequests: (worktreeIds: string[]) => Promise<void>
   /** Merges into the base branch in the project's checkout, then pushes it when `push`; answers with why not, or null once merged. */
@@ -3709,8 +3714,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (get().membersError !== null) set({ membersError: null })
     },
 
-    async pushActiveWorktree() {
-      const worktreeId = get().activeWorktreeId
+    async pushActiveWorktree(target) {
+      const worktreeId = target ?? get().activeWorktreeId
       if (!worktreeId || get().pushing) return
 
       const setPush = (push: PushState): void => set((state) => ({ pushes: { ...state.pushes, [worktreeId]: push } }))
@@ -3839,30 +3844,40 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       await launchAgent(worktreeId, command, undefined, text)
     },
 
-    async createPullRequest(worktreeId) {
+    async createPullRequest(worktreeId, request) {
       const open = get().landings[worktreeId]?.pullRequest
       if (open?.state === 'open') {
         openInBrowser(open.url)
-        return
+        return null
       }
-      if (get().openingPullRequest) return
+      if (request === undefined) {
+        set({ dialog: { kind: 'create-pr', worktreeId } })
+        return null
+      }
+      if (get().openingPullRequest) return 'Already creating one'
       set({ openingPullRequest: true })
       try {
-        const made = await runtimeClient.call('worktree.createPullRequest', { worktreeId })
+        const made = await runtimeClient.call('worktree.createPullRequest', { worktreeId, ...request })
         if (!made.created || made.number === undefined) {
           openInBrowser(made.url)
-          return
+          return null
         }
         const number = made.number
         // Said by the button at once; the next read confirms it.
         set((state) => {
           const landing = state.landings[worktreeId]
           if (!landing) return {}
-          const pullRequest = { number, url: made.url, state: 'open' as const }
+          const pullRequest = {
+            number,
+            url: made.url,
+            state: 'open' as const,
+            ...(request.draft ? { draft: true } : {})
+          }
           return { landings: { ...state.landings, [worktreeId]: { ...landing, pullRequest } } }
         })
+        return null
       } catch (error) {
-        failed('Could not create the pull request')(error)
+        return error instanceof Error ? error.message : String(error)
       } finally {
         set({ openingPullRequest: false })
       }

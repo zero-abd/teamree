@@ -628,7 +628,7 @@ describe('what the palette offers for the worktree on screen', () => {
   })
 
   it('offers the landing the Changes header offers, and nothing before there is one', () => {
-    expect(labels({ land: { kind: 'create-pr' } })).toContain('Create Pull Request')
+    expect(labels({ land: { kind: 'create-pr' } })).toContain('Create Pull Request…')
     expect(labels({ land: { kind: 'open-pr', number: 12, url: 'https://x/pull/12' } })).toContain(
       'Open Pull Request #12'
     )
@@ -1004,7 +1004,8 @@ describe('landing from the palette', () => {
     ['merge', { kind: 'merge', into: 'main' }, 'Merge into main…'],
     ['merge', { kind: 'merge', into: 'Rework auth' }, 'Merge into Rework auth…'],
     ['land', { kind: 'merge', into: 'main' }, 'Merge into main…'],
-    ['pull request', { kind: 'create-pr' }, 'Create Pull Request'],
+    ['pull request', { kind: 'create-pr' }, 'Create Pull Request…'],
+    ['create pr', { kind: 'create-pr', uncommitted: 2 }, 'Commit & Create PR…'],
     ['merge', { kind: 'merge', into: 'main', uncommitted: 2 }, 'Commit & Merge into main…']
   ] as const)('answers %s with the land on screen first', (query, land, label) => {
     const [first] = found(query, { land })
@@ -1027,9 +1028,9 @@ describe('landing from the palette', () => {
     expect(merge.map((item) => item.label)).toEqual(['Update from main', 'Merge into main…'])
     expect(reason(merge[1])).toBe('1 conflicted')
 
-    const pr = found('pull request', { land: { kind: 'create-pr', blocked: '2 uncommitted' } })
-    expect(pr.map((item) => item.label)).toEqual(['Check Out Pull Request…', 'Create Pull Request'])
-    expect(reason(pr[1])).toBe('2 uncommitted')
+    const pr = found('pull request', { land: { kind: 'create-pr', blocked: '1 conflicted' } })
+    expect(pr.map((item) => item.label)).toEqual(['Check Out Pull Request…', 'Create Pull Request…'])
+    expect(reason(pr[1])).toBe('1 conflicted')
   })
 
   it('names Push Publish Branch for a branch that tracks nothing yet, in the menu bar too', () => {

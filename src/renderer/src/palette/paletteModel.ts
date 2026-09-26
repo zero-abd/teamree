@@ -404,10 +404,10 @@ function runRows(runs: readonly RunOffer[]): ActionRow[] {
   })
 }
 
-/** The header's land: dimmed with why while blocked, and a merge that commits first counts what it commits. */
+/** The header's land: dimmed with why while blocked, and one that commits first counts what it commits. */
 function landRow(land: Exclude<LandOffer, { kind: 'merged' }>): ActionRow {
   const note = landNote(land)
-  const commitsFirst = land.kind === 'merge' && land.uncommitted !== undefined
+  const commitsFirst = land.kind !== 'open-pr' && land.uncommitted !== undefined
   return {
     id: land.kind === 'merge' ? 'merge-into-base' : 'create-pull-request',
     label: landLabel(land),

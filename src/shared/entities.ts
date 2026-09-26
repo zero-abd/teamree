@@ -439,7 +439,15 @@ export type PullRequestChecks = { passing: number; failing: number; pending: num
 export type CheckFailure = { worktreeId: string; name: string; url?: string; excerpt: string }
 
 /** A pull request made with `gh`, or, with `created` false and no number, the host's page to make one. */
-export type WorktreePullRequest = { worktreeId: string; url: string; number?: number; created: boolean }
+export type WorktreePullRequest = {
+  worktreeId: string
+  url: string
+  number?: number
+  created: boolean
+  /** The drafted title and body, answered to a dry run. */
+  title?: string
+  body?: string
+}
 
 /** A merge of a worktree's branch into the base branch checked out in the project's own folder. */
 export type WorktreeMerge = {

@@ -75,15 +75,22 @@ describe('the land offer in every state', () => {
     })
   })
 
-  it('offers a pull request on a known host, blocked with the step before it', () => {
+  it('offers one pull request from a dirty, an unpublished or a pushed branch, counting what it commits first', () => {
     expect(landOffer(hub, status)).toEqual({ kind: 'create-pr' })
-    expect(landOffer(hub, dirty)).toEqual({ kind: 'create-pr', blocked: '2 uncommitted' })
+    expect(landLabel({ kind: 'create-pr' })).toBe('Create Pull Request…')
+    const commitFirst = landOffer(hub, dirty)
+    expect(commitFirst).toEqual({ kind: 'create-pr', uncommitted: 2 })
+    expect(landLabel(commitFirst as { kind: 'create-pr' })).toBe('Commit & Create PR…')
+    expect(landOffer({ ...hub, unmerged: 0 }, dirty)).toEqual({ kind: 'create-pr', uncommitted: 2 })
     expect(landOffer({ ...hub, published: false }, { ...status, upstream: null, ahead: 1 })).toEqual({
-      kind: 'create-pr',
-      blocked: 'unpublished'
+      kind: 'create-pr'
     })
-    expect(landOffer(hub, { ...status, ahead: 2 })).toEqual({ kind: 'create-pr', blocked: '2 unpushed' })
+    expect(landOffer(hub, { ...status, ahead: 2 })).toEqual({ kind: 'create-pr' })
     expect(landOffer({ ...hub, unmerged: 0 }, status)).toBeNull()
+  })
+
+  it('blocks the pull request on conflicts', () => {
+    expect(landOffer(hub, { ...status, conflicted: 1 })).toEqual({ kind: 'create-pr', blocked: '1 conflicted' })
   })
 
   it('opens the pull request already made, dirty or not', () => {
@@ -137,16 +144,20 @@ describe('the changes header', () => {
     ])
   })
 
-  it('shows Push first while the host lacks commits, the blocked pull request in the menu', () => {
-    const header = headerActions({
-      ...input,
-      land: { kind: 'create-pr', blocked: '1 unpushed' },
-      push: { kind: 'push' },
-      ahead: 1
-    })
+  it('shows the pull request, which pushes first, with Push and Publish in the menu', () => {
+    for (const offer of [{ kind: 'push' as const }, { kind: 'publish' as const }]) {
+      const header = headerActions({ ...input, land: { kind: 'create-pr' }, push: offer, ahead: 1 })
+      expect(header.shown).toEqual({ kind: 'land', offer: { kind: 'create-pr' } })
+      expect(header.primary).toBe(true)
+      expect(header.more).toEqual([{ kind: 'push', offer }])
+    }
+  })
+
+  it('shows Push first when an open pull request lacks commits', () => {
+    const open = { kind: 'open-pr' as const, number: 7, url: 'https://example.invalid/7' }
+    const header = headerActions({ ...input, land: open, push: { kind: 'push' }, ahead: 1 })
     expect(header.shown).toEqual({ kind: 'push', offer: { kind: 'push' } })
-    expect(header.primary).toBe(true)
-    expect(header.more).toEqual([{ kind: 'land', offer: { kind: 'create-pr', blocked: '1 unpushed' } }])
+    expect(header.more).toEqual([{ kind: 'land', offer: open }])
   })
 
   it('keeps the land on screen but not primary while there is something to commit', () => {
@@ -155,12 +166,12 @@ describe('the changes header', () => {
     expect(merge.primary).toBe(false)
     const pr = headerActions({
       ...input,
-      land: { kind: 'create-pr', blocked: '1 uncommitted' },
+      land: { kind: 'create-pr', uncommitted: 1 },
       push: { kind: 'push' },
       uncommitted: true,
       ahead: 1
     })
-    expect(pr.shown).toEqual({ kind: 'land', offer: { kind: 'create-pr', blocked: '1 uncommitted' } })
+    expect(pr.shown).toEqual({ kind: 'land', offer: { kind: 'create-pr', uncommitted: 1 } })
     expect(pr.primary).toBe(false)
     expect(pr.more).toEqual([{ kind: 'push', offer: { kind: 'push' } }])
   })

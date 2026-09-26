@@ -362,7 +362,17 @@ export const Params = {
   /** A failing check's name and the tail of its log, read with `gh run view --log-failed`. */
   worktreeCheckFailure: z.object({ worktreeId: z.string().min(1), name: z.string().min(1).max(512) }),
   /** `gh pr create` when `gh` is signed in, else the host's page for one. The branch must be published. */
-  worktreeCreatePullRequest: z.object({ worktreeId: z.string().min(1) }),
+  worktreeCreatePullRequest: z.object({
+    worktreeId: z.string().min(1),
+    /** Replace the drafted title and body. */
+    title: z.string().trim().min(1).max(256).optional(),
+    body: z.string().max(65_536).optional(),
+    draft: z.boolean().optional(),
+    /** Answer the drafted title and body and create nothing; the branch need not be published. */
+    dryRun: z.boolean().optional(),
+    /** With `dryRun`: the message of the commit about to be made, drafted as the newest commit. */
+    pending: z.string().max(65_536).optional()
+  }),
   /** Merges the branch into the base branch in the project's own checkout; refused when that checkout is dirty. */
   worktreeMergeIntoBase: z.object({
     worktreeId: z.string().min(1),

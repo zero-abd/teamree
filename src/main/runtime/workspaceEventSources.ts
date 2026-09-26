@@ -153,7 +153,7 @@ export function publishGitWrites(registry: MethodRegistry, git: GitService, bus:
 
   registry.register('worktree.createPullRequest', Params.worktreeCreatePullRequest, async (params) => {
     const result = await git.worktreeCreatePullRequest(params)
-    bus.emit({ type: 'worktrees', worktreeIds: [params.worktreeId] })
+    if (params.dryRun !== true) bus.emit({ type: 'worktrees', worktreeIds: [params.worktreeId] })
     return result
   })
 }

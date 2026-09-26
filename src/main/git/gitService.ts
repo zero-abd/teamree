@@ -1543,7 +1543,8 @@ export class GitService {
 
   /** A pull request for the worktree's published branch, or the host's page for one. */
   async worktreeCreatePullRequest(params: ParamsOf<'worktree.createPullRequest'>): Promise<WorktreePullRequest> {
-    return createPullRequest(this.#runner, this.#landingOptions(params.worktreeId, 'a pull request'))
+    const { worktreeId: _id, ...request } = params
+    return createPullRequest(this.#runner, this.#landingOptions(params.worktreeId, 'a pull request'), request)
   }
 
   /** Merges the worktree's branch into the base branch in the project's own checkout, or a child's into its parent's. */
@@ -1695,6 +1696,8 @@ export class GitService {
       startedFrom: worktree.startedFrom,
       name: worktree.name,
       ...(worktree.issue === undefined ? {} : { issue: worktree.issue }),
+      ...(worktree.task === undefined ? {} : { task: worktree.task }),
+      ...(worktree.report?.outcome === 'succeeded' ? { report: worktree.report.summary } : {}),
       ...(parent === undefined ? {} : { parent: { worktreeId: parent.id, name: parent.name } }),
       ...(this.#gh === undefined ? {} : { gh: this.#gh }),
       now: this.#now
