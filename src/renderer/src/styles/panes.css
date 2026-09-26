@@ -465,3 +465,22 @@ body.is-dragging-pane * {
 .column__tab--dragged {
   opacity: 0.45;
 }
+
+/* The thumbnail on a hovered `[Image #N]`. Never takes the pointer: the link under it keeps it. */
+.image-peek {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  padding: var(--s1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+}
+
+.image-peek img {
+  display: block;
+  max-width: 240px;
+  max-height: 180px;
+  border-radius: var(--r1);
+}

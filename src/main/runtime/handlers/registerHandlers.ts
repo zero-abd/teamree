@@ -24,6 +24,7 @@ import type { SharedNoteSummary } from '../../../shared/sharedNote'
 import { paletteTone, resolvePalette, type Appearance, type Tone } from '../../../shared/theme'
 import { registerAgentTrustHandlers, trustCheckoutFor } from './agentTrustHandlers'
 import { registerAppearanceHandlers } from './appearanceHandlers'
+import { registerPastedImageHandler } from './pastedImageHandler'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerQuitHandler } from './quitHandler'
 import { registerResourcesHandlers } from './resourcesHandlers'
@@ -158,6 +159,19 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   publishTerminalEvents(registry, terminals, workspaceEvents)
   // Not a terminal method: the app's own processes are on the answer too.
   registerResourcesHandlers(registry, { panes: () => terminals.manager.paneProcesses() })
+  registerPastedImageHandler(registry, {
+    pane: (terminalId) => {
+      const record = registry.context.store.listTerminals().find((entry) => entry.id === terminalId)
+      if (record === undefined) return undefined
+      const pid = terminals.manager.paneProcesses().find((entry) => entry.terminalId === terminalId)?.pid
+      return {
+        ...(pid === undefined ? {} : { pid }),
+        ...(record.agent === 'claude' && record.agentSessionId !== undefined
+          ? { pinnedSessionId: record.agentSessionId }
+          : {})
+      }
+    }
+  })
 
   const git = new GitService({
     store: registry.context.store,

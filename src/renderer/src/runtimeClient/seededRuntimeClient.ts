@@ -1402,6 +1402,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
     // The seeded runtime keeps no closed panes.
     'terminal.closed': () => [],
+    // No agent wrote anything to disk here.
+    'terminal.pastedImage': () => null,
     'terminal.reopen': () => {
       throw new Error('the seeded runtime keeps no closed panes')
     },
