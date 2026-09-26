@@ -4,7 +4,7 @@
 
 import { Params } from '../../shared/methods'
 import type { ParamsOf, ResultOf } from '../../shared/methods'
-import type { MethodRegistry } from '../runtime/methodRegistry'
+import { fromWindow, type CallContext, type MethodRegistry } from '../runtime/methodRegistry'
 import type { GitService } from './gitService'
 
 export const GIT_METHODS = [
@@ -58,7 +58,7 @@ export const GIT_METHODS = [
 export type GitMethodName = (typeof GIT_METHODS)[number]
 
 export type GitHandlers = {
-  [M in GitMethodName]: (params: ParamsOf<M>) => Promise<ResultOf<M>>
+  [M in GitMethodName]: (params: ParamsOf<M>, call?: CallContext) => Promise<ResultOf<M>>
 }
 
 export function createGitHandlers(service: GitService): GitHandlers {
@@ -79,7 +79,11 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'project.saveSettings': (params) => service.saveProjectSettings(params),
     'worktree.list': (params) => service.listWorktrees(params),
     'worktree.get': (params) => service.getWorktree(params),
-    'worktree.create': (params) => service.createWorktree(params),
+    // Agents and scripts are held to the child limits; a person in the window is not.
+    'worktree.create': (params, call) =>
+      service.createWorktree(params, {
+        limited: params.fromTerminalId !== undefined || (call !== undefined && !fromWindow(call))
+      }),
     'worktree.remove': (params) => service.removeWorktree(params),
     'worktree.forget': (params) => service.forgetWorktree(params),
     'worktree.rename': (params) => service.renameWorktree(params),

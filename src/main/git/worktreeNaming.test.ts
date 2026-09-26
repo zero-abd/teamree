@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { allocateBranchName, branchCollides, checkoutDirName, slugify, taskNamesForAgents } from './worktreeNaming'
+import {
+  allocateBranchName,
+  allocateChildBranchName,
+  branchCollides,
+  checkoutDirName,
+  childCheckoutDirName,
+  slugify,
+  taskNamesForAgents
+} from './worktreeNaming'
 
 describe('slugify', () => {
   it('reduces a task title to a safe branch fragment', () => {
@@ -132,5 +140,20 @@ describe('taskNamesForAgents', () => {
       return branch
     })
     expect(names).toEqual(['task-claude-3', 'task-codex-2'])
+  })
+})
+
+describe('child names', () => {
+  it('hang the slug off the parent branch with --, and count up when taken', () => {
+    expect(allocateChildBranchName('rework-auth', 'Write migration', [])).toBe('rework-auth--write-migration')
+    expect(allocateChildBranchName('feat/auth', 'tests', ['feat/auth--tests'])).toBe('feat/auth--tests-2')
+  })
+
+  it('put the checkout beside the parent, named after its directory and the branch tail', () => {
+    expect(childCheckoutDirName('/wt/app/rework-auth-2', 'rework-auth', 'rework-auth--tests-2')).toBe(
+      'rework-auth-2--tests-2'
+    )
+    expect(childCheckoutDirName('/wt/app/feat-auth', 'feat/auth', 'feat/auth--x')).toBe('feat-auth--x')
+    expect(childCheckoutDirName('/wt/app/a', 'a', 'mine/own')).toBe('a--mine-own')
   })
 })

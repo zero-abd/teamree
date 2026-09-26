@@ -154,6 +154,7 @@ import { forgetClosedPanes, markSeen, readPaneSeen, writePaneSeen, type PaneSeen
 import type { PatchHunk } from '@shared/patch'
 import type { ProjectAddRefusal, ResultOf } from '@shared/methods'
 import { parsePastedInvitation, type Invitation } from '@shared/invitation'
+import { descendantsOf } from '@shared/taskTree'
 import { joinTeam, type JoinStage, type JoinTarget } from '../teamwork/joinTeam'
 import type { DiffLayout } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
@@ -1808,12 +1809,16 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         dialog?.kind === 'confirm-remove' && dialog.worktreeId === worktreeId && dialog.intent === 'retry'
       // Read before the removal: forgetting the row takes the only copy of what the replacement is built from.
       const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
+      // The dialog listed them; the runtime refuses a parent without this.
+      const children = descendantsOf(get().worktrees, worktreeId)
       set({ dialog: null })
       try {
-        const removed = await runtimeClient.call(
-          'worktree.remove',
-          force ? { worktreeId, force: true } : { worktreeId }
-        )
+        const removed = await runtimeClient.call('worktree.remove', {
+          worktreeId,
+          ...(force ? { force: true } : {}),
+          ...(children.length > 0 ? { children: true } : {})
+        })
+        for (const child of children) forgetWorktree(child.id)
         forgetWorktree(worktreeId)
         if (retrying && worktree) await recreateWorktree(worktree)
         else if (worktree && removed.trashId !== undefined) {

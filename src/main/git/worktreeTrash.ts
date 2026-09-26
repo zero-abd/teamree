@@ -27,7 +27,7 @@ const IDENTITY: NodeJS.ProcessEnv = {
 /** The worktree record as the copy carries it: enough to put the row back. */
 export type TrashedWorktree = Pick<
   Worktree,
-  'id' | 'projectId' | 'name' | 'branch' | 'path' | 'startedFrom' | 'createdAt' | 'task'
+  'id' | 'projectId' | 'name' | 'branch' | 'path' | 'startedFrom' | 'createdAt' | 'task' | 'parentId' | 'baseRef'
 >
 
 /** What the copy's message records. `index` is a commit whose tree is the index; `paths` limits a discard's copy. */
