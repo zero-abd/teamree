@@ -254,7 +254,16 @@ export function Dashboard(): React.JSX.Element {
   )
 }
 
-const STAGES_BY_ATTENTION: readonly TaskStage[] = ['failed', 'asking', 'working', 'ready', 'stopped', 'done', 'landed']
+const STAGES_BY_ATTENTION: readonly TaskStage[] = [
+  'failed',
+  'missing',
+  'asking',
+  'working',
+  'ready',
+  'stopped',
+  'done',
+  'landed'
+]
 
 function worktreeCount(rows: readonly { worktreeId: string }[]): number {
   return new Set(rows.map((row) => row.worktreeId)).size

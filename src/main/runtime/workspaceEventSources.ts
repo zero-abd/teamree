@@ -172,7 +172,11 @@ export function publishWorktreeFileEvents(
     onError: (error) => console.warn('[worktrees] a filesystem watch failed', error),
     onDegraded: (event) => console.warn(`[worktrees] ${degradedWatchReport(event)}`),
     ...options,
-    onChange: (change) => bus.emit({ type: 'worktrees', ...change })
+    onChange: (change) => {
+      bus.emit({ type: 'worktrees', ...change })
+      // A checkout deleted outside the app reports as a change inside it; only a look says it went.
+      if (change.worktreeIds !== undefined) void git.recheckCheckouts(change.worktreeIds).catch(() => undefined)
+    }
   })
 
   const resync = (): void => watcher.sync(git.snapshot().worktrees)

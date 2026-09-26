@@ -472,10 +472,10 @@ describe('a worktree whose directory has gone', () => {
     expect(updated.map((row) => [row.id, row.missing])).toEqual([[worktree.id, true]])
   })
 
-  it('stops being missing when the directory is back', async () => {
-    const { service, worktree } = await missingWorktree()
+  it('stops being missing when the checkout is back', async () => {
+    const { repo, service, worktree } = await missingWorktree()
     await service.listWorktrees({})
-    await mkdir(worktree.path, { recursive: true })
+    await repo.git(['worktree', 'add', '-f', worktree.path, worktree.branch])
     const [listed] = await service.listWorktrees({ projectId: worktree.projectId })
     expect(listed?.missing).toBeUndefined()
   })

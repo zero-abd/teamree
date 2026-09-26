@@ -496,6 +496,10 @@ export const Params = {
   }),
   /** Checks a removed worktree out again on its branch, with its uncommitted work put back. */
   worktreeRestore: z.object({ projectId: z.string().min(1), removedId: z.string().min(1).max(512) }),
+  /** Checks a missing checkout out again where it was, on its branch. */
+  worktreeRecreate: z.object({ worktreeId: z.string().min(1) }),
+  /** Points a missing checkout's record at the folder it was moved to. */
+  worktreeLocate: z.object({ worktreeId: z.string().min(1), path: z.string().min(1).max(4096) }),
   /**
    * Removes a project's worktrees whose branch has landed in its base (a child's base is its parent), each
    * kept for restore. Only `worktreeIds` when given; `dryRun` answers and removes nothing.
@@ -955,6 +959,8 @@ export type MethodContract = TaskMethodContract &
     'worktree.undoDiscard': { params: z.infer<typeof Params.worktreeUndoDiscard>; result: { restored: true } }
     'worktree.removed': { params: z.infer<typeof Params.worktreeRemoved>; result: RemovedWorktree[] }
     'worktree.restore': { params: z.infer<typeof Params.worktreeRestore>; result: Worktree }
+    'worktree.recreate': { params: z.infer<typeof Params.worktreeRecreate>; result: Worktree }
+    'worktree.locate': { params: z.infer<typeof Params.worktreeLocate>; result: Worktree }
     'worktree.cleanMerged': { params: z.infer<typeof Params.worktreeCleanMerged>; result: WorktreeCleanup }
     'worktree.push': { params: z.infer<typeof Params.worktreePush>; result: WorktreePush }
     'worktree.log': { params: z.infer<typeof Params.worktreeLog>; result: WorktreeLog }

@@ -53,10 +53,17 @@ import { MAX_CHILD_DEPTH, MAX_OPEN_CHILDREN } from '../../shared/tasks'
 import { descendantsOf } from '../../shared/taskTree'
 import { nestRefusal, type WorktreeNest } from '../../shared/nesting'
 import { cloneDestination, cloneFailureCode, cloneFailureLine, runClone } from './clone'
+import {
+  checkoutPresence,
+  commonGitDir,
+  dropRegistration,
+  linkedCheckout,
+  type CheckoutPresence
+} from './checkoutPresence'
 import { describeError, GitCommandError, GitServiceError, isTransient } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
 import { createVersionProbe } from './gitVersion'
-import { isInside, pathKey, samePath } from './pathIdentity'
+import { canonicalPath, isInside, pathKey, samePath } from './pathIdentity'
 import { createMemoryRecordStore, type GitRecordStore } from './recordStore'
 import { assertRefShape, detectBaseRef, initializeRepository, inspectRepository, listBranchNames } from './repository'
 import { listStartPoints, resolveStartPoint, type ResolvedStartPoint, type StartPointList } from './startPoint'
@@ -877,8 +884,10 @@ export class GitService {
     }
 
     const previousState = worktree.state
+    // Whatever is at a missing checkout's path is not its work: nothing there is copied, judged or deleted.
+    const present = previousState !== 'ready' || (await checkoutPresence(worktree.path)) === 'present'
     // Before anything is destroyed, and a refusal if it cannot be kept.
-    const trashId = previousState === 'ready' ? await this.#keepCopy(project, worktree, 'remove') : undefined
+    const trashId = previousState === 'ready' && present ? await this.#keepCopy(project, worktree, 'remove') : undefined
     const kept = trashId === undefined ? {} : { trashId }
     // Somebody else dropped the record while this was starting; nothing was destroyed.
     if (!this.#patch(worktree.id, { state: 'removing' })) {
@@ -888,7 +897,9 @@ export class GitService {
 
     let detached: { checkoutLeftAt?: string }
     try {
-      detached = await this.#detachCheckout(project, worktree, force)
+      detached = present
+        ? await this.#detachCheckout(project, worktree, force)
+        : await this.#dropMissingCheckout(project, worktree)
     } catch (error) {
       this.#patch(worktree.id, { state: previousState })
       if (trashId !== undefined) await dropTrash(this.#runner, project.path, trashId)
@@ -910,8 +921,21 @@ export class GitService {
     const initial = this.#requireWorktree(params.worktreeId)
     if (initial.state === 'creating') await this.cancelWorktreeCreate(initial.id)
     const worktree = this.#store.getWorktree(params.worktreeId)
+    const project = worktree && this.#store.getProject(worktree.projectId)
+    // A missing checkout's registration would hold its branch from every later checkout.
+    if (worktree?.state === 'ready' && project && (await checkoutPresence(worktree.path)) !== 'present') {
+      await this.#dropMissingCheckout(project, worktree)
+    }
     if (worktree) await this.#forgetParent(worktree)
     return { forgotten: true, ...(await this.#surviving(worktree ?? initial)) }
+  }
+
+  /** Drops git's registration of a checkout that is gone or foreign; the folder, if any, is left as it is. */
+  async #dropMissingCheckout(project: Project, worktree: Worktree): Promise<{ checkoutLeftAt?: string }> {
+    await dropRegistration(project.path, worktree.path).catch((error: unknown) => {
+      console.warn(`[git] could not drop the registration of ${worktree.path}: ${describeError(error)}`)
+    })
+    return this.#surviving(worktree)
   }
 
   /** Removed worktrees that can still be restored, newest first; ten unless asked. */
@@ -1095,31 +1119,106 @@ export class GitService {
         `worktree "${worktree.name}" is ${worktree.state}; status is only available once it is ready`
       )
     }
-    // Checked here too: a vanished cwd fails the spawn with ENOENT, which the
+    // Checked first: a vanished cwd fails the spawn with ENOENT, which the
     // runner can only report as "git executable not found".
-    if (!(await isDirectory(worktree.path))) {
-      return {
-        worktreeId: worktree.id,
-        branch: worktree.branch,
-        missing: true,
-        ahead: 0,
-        behind: 0,
-        staged: 0,
-        unstaged: 0,
-        untracked: 0,
-        conflicted: 0,
-        readAt: this.#now()
-      }
-    }
+    if ((await this.#notePresence(worktree)) !== 'present') return this.#missingStatus(worktree)
     const project = this.#store.getProject(worktree.projectId)
-    return readWorktreeStatus(this.#runner, {
-      worktreeId: worktree.id,
+    try {
+      return await readWorktreeStatus(this.#runner, {
+        worktreeId: worktree.id,
+        worktreePath: worktree.path,
+        fallbackBranch: worktree.branch,
+        baseRef: worktree.baseRef ?? project?.baseRef,
+        prepared: this.#preparedPaths(worktree.projectId),
+        now: this.#now
+      })
+    } catch (error) {
+      // Gone mid-read.
+      if ((await this.#notePresence(worktree)) !== 'present') return this.#missingStatus(worktree)
+      throw error
+    }
+  }
+
+  #missingStatus(worktree: Worktree): WorktreeStatus {
+    const zeros = { ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0 }
+    return { worktreeId: worktree.id, branch: worktree.branch, missing: true, ...zeros, readAt: this.#now() }
+  }
+
+  /** Reads whether a ready worktree's checkout is where its record says, and records the answer when it changed. */
+  async #notePresence(worktree: Worktree): Promise<CheckoutPresence> {
+    const presence = await checkoutPresence(worktree.path)
+    const missing = presence !== 'present'
+    const current = this.#store.getWorktree(worktree.id)
+    if (current === undefined || current.state !== 'ready') return presence
+    if (missing && current.missing !== true) this.#patch(worktree.id, { missing: true })
+    else if (!missing && current.missing === true) this.#patch(worktree.id, { clearMissing: true })
+    return presence
+  }
+
+  /** For a watcher's report: the named worktrees' checkouts, looked at again. */
+  async recheckCheckouts(worktreeIds: readonly string[]): Promise<void> {
+    for (const id of worktreeIds) {
+      const worktree = this.#store.getWorktree(id)
+      if (worktree?.state === 'ready') await this.#notePresence(worktree)
+    }
+  }
+
+  /** Checks a missing checkout's branch out again where it was. A folder in the way is refused, never overwritten. */
+  async recreateCheckout(params: ParamsOf<'worktree.recreate'>): Promise<Worktree> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'restoring')
+    const project = this.#requireProject(worktree.projectId)
+    const presence = await this.#notePresence(worktree)
+    if (presence === 'present') throw new GitServiceError(ErrorCode.Conflict, `"${worktree.name}" is on disk`)
+    if (presence === 'foreign') throw new GitServiceError(ErrorCode.Conflict, `${worktree.path} is in use`)
+    if ((await this.#branchTip(project, worktree.branch)) === null) {
+      throw new GitServiceError(ErrorCode.NotFound, `branch "${worktree.branch}" is gone`)
+    }
+    // `-f` overrides the stale registration at this path, and also a live checkout of the branch elsewhere.
+    const inventory = await readWorktreeInventory(this.#runner, project.path)
+    const holder = inventory.find((entry) => entry.branch === worktree.branch && !samePath(entry.path, worktree.path))
+    if (holder !== undefined) {
+      throw new GitServiceError(ErrorCode.Conflict, `branch "${worktree.branch}" is checked out at ${holder.path}`)
+    }
+    await mkdir(path.dirname(worktree.path), { recursive: true })
+    const add = ['worktree', 'add', '-f', worktree.path, worktree.branch]
+    await this.#runner.run({ args: add, cwd: project.path, timeoutMs: this.#createTimeoutMs })
+    await prepareWorktree(this.#runner, {
+      repoPath: project.path,
       worktreePath: worktree.path,
-      fallbackBranch: worktree.branch,
-      baseRef: worktree.baseRef ?? project?.baseRef,
-      prepared: this.#preparedPaths(worktree.projectId),
-      now: this.#now
+      ...this.#preparedPaths(project.id)
+    }).catch((error: unknown) => console.warn(`[git] restored ${worktree.path} unprepared: ${describeError(error)}`))
+    await this.#notePresence(worktree)
+    return this.#requireWorktree(worktree.id)
+  }
+
+  /** Points a missing checkout's record, and git, at the folder it was moved to. */
+  async locateCheckout(params: ParamsOf<'worktree.locate'>): Promise<Worktree> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'locating')
+    const project = this.#requireProject(worktree.projectId)
+    const target = canonicalPath(params.path)
+    const other = this.#store.listWorktrees().find((entry) => entry.id !== worktree.id && samePath(entry.path, target))
+    if (other !== undefined) throw new GitServiceError(ErrorCode.Conflict, `${target} is "${other.name}"`)
+    const linked = await linkedCheckout(target)
+    const common = await commonGitDir(project.path)
+    if (linked === undefined || common === undefined || pathKey(linked.commonDir) !== pathKey(common)) {
+      throw new GitServiceError(ErrorCode.InvalidParams, `${target} is not a checkout of ${project.name}`)
+    }
+    const head = await this.#runner.tryRun({
+      args: ['symbolic-ref', '--short', '-q', 'HEAD'],
+      cwd: target,
+      readOnly: true
     })
+    const branch = head.stdout.trim()
+    if (branch !== worktree.branch) {
+      throw new GitServiceError(
+        ErrorCode.InvalidParams,
+        `${target} is on ${branch || 'no branch'}, not ${worktree.branch}`
+      )
+    }
+    await this.#runner.run({ args: ['worktree', 'repair', target], cwd: project.path, timeoutMs: 60_000 })
+    if (!samePath(target, worktree.path)) this.#patch(worktree.id, { path: target })
+    await this.#notePresence(this.#requireWorktree(worktree.id))
+    return this.#requireWorktree(worktree.id)
   }
 
   /** What this project puts in every worktree. Read fresh: the lists are editable. */
@@ -2190,10 +2289,7 @@ export class GitService {
           continue
         }
         // Still in git's inventory, but an `rm -rf` leaves the metadata behind.
-        // Patch only when the answer changes, so a quiet list says nothing.
-        const missing = !(await isDirectory(worktree.path))
-        if (missing && worktree.missing !== true) this.#patch(worktree.id, { missing: true })
-        else if (!missing && worktree.missing === true) this.#patch(worktree.id, { clearMissing: true })
+        await this.#notePresence(worktree)
       }
     }
   }

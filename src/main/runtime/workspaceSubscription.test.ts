@@ -434,6 +434,30 @@ describe('worktree files as a producer', () => {
   )
 
   it(
+    'marks a checkout deleted underneath it missing, with no listing or status read',
+    async (ctx) => {
+      const repo = await repository()
+      const app = await harness({ repo, watchFiles: true })
+      const project = await app.call<Project>('c1', 'project.add', { path: repo.repoPath })
+      const created = await app.call<Worktree>('c1', 'worktree.create', { projectId: project.id, name: 'ghost' })
+      const ready = await app.git.whenSettled(created.id)
+      await settle()
+
+      await rm(ready.path, { recursive: true, force: true })
+      const missing = (): boolean =>
+        app.git.snapshot().worktrees.find((worktree) => worktree.id === ready.id)?.missing === true
+      const deadline = Date.now() + 10_000
+      while (!missing() && app.watchRefused() === undefined && Date.now() < deadline) await settle()
+
+      const refused = app.watchRefused()
+      if (refused && isResourceShortage(refused)) ctx.skip(watchRefusalReport(refused))
+      if (refused) throw new Error(watchRefusalReport(refused))
+      expect(missing()).toBe(true)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'stops watching a worktree it has removed',
     async () => {
       const repo = await repository()

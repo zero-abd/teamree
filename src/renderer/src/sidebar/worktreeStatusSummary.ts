@@ -22,6 +22,7 @@ export function summarizeWorktreeStatus(
   child = false
 ): WorktreeStatusSummary | null {
   if (!status) return null
+  if (status.missing) return { ahead: 0, behind: 0, dirty: 0, conflicted: 0, tone: 'conflict', description: 'missing' }
 
   const dirty = status.staged + status.unstaged + status.untracked
   const tone: StatusTone = status.conflicted > 0 ? 'conflict' : dirty > 0 ? 'dirty' : 'quiet'

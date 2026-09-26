@@ -1691,3 +1691,25 @@ describe('the pull request’s checks', () => {
     expect(send.title).toBe('No idle agent')
   })
 })
+
+// Zeros read from no checkout are not a clean tree, and nothing is coming to replace a Reading….
+describe('a checkout missing from disk', () => {
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      worktrees: [{ ...childWorktree, parentId: undefined, baseRef: undefined, missing: true }],
+      changes: {},
+      statuses: { w1: status({ missing: true, ahead: 0, upstream: undefined }) }
+    })
+    render(<ChangesTab />)
+  })
+
+  it('says Checkout missing with the ways back, instead of Reading… or a clean tree', () => {
+    expect(screen.getByText('Checkout missing')).toBeTruthy()
+    for (const name of ['Restore', 'Locate…', 'Remove from teamree…']) {
+      expect(screen.getByRole('button', { name })).toBeTruthy()
+    }
+    expect(screen.queryByText('Reading…')).toBeNull()
+    expect(screen.queryByText(/clean|in sync|committed|No changes/i)).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Commit/ })).toBeNull()
+  })
+})

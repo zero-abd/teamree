@@ -873,7 +873,8 @@ export class TerminalSessionManager {
     if (cwd === undefined || cwd.length === 0) {
       throw invalidParams(`no cwd for worktree ${params.worktreeId}`)
     }
-    if (!isDirectory(cwd)) throw notFound(`cwd is not a directory: ${cwd}`)
+    if (!isDirectory(cwd))
+      throw notFound(params.cwd === undefined ? 'Checkout missing' : `cwd is not a directory: ${cwd}`)
 
     const shell = params.shell ?? resolveLoginShell()
     // A known agent gets a session id pinned now, after the caller's arguments

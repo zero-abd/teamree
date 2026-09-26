@@ -158,11 +158,14 @@ beforeEach(() => {
 
 // The fourth shape: the checkout deleted from disk with git none the wiser, and the row saying `ready`.
 describe('a worktree whose directory is gone', () => {
-  it('says so, dimmed, and cannot be opened', () => {
+  // Opened, it shows the ways back.
+  it('says so, dimmed, and still opens', () => {
     mount({ worktree: worktree({ missing: true }) })
     expect(screen.getByText('missing', { selector: '.chip' })).toBeTruthy()
     expect(row().classList.contains('worktree--missing')).toBe(true)
-    expect(openButton().getAttribute('aria-disabled')).toBe('true')
+    expect(openButton().getAttribute('aria-disabled')).toBeNull()
+    openButton().click()
+    expect(handlers.onOpen).toHaveBeenCalledOnce()
   })
 
   it('says nothing about git, and shows no panes, for a checkout that is not there', () => {
@@ -175,10 +178,16 @@ describe('a worktree whose directory is gone', () => {
     expect(document.querySelector('.pane-row')).toBeNull()
   })
 
-  it('offers only removal', () => {
+  it('offers only the ways back and removal', () => {
+    const recreateCheckout = vi.fn()
+    const locateCheckout = vi.fn()
+    useWorkspaceStore.setState({ recreateCheckout, locateCheckout })
     mount({ worktree: worktree({ missing: true }) })
     fireEvent.click(screen.getByRole('button', { name: 'More for Rewrite the pager' }))
-    expect(labels()).toEqual(['Remove from teamree', 'Delete Worktree…'])
+    expect(labels()).toEqual(['Restore', 'Locate…', 'Remove from teamree', 'Delete Worktree…'])
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Restore' }))
+    expect(recreateCheckout).toHaveBeenCalledExactlyOnceWith('w1')
+    fireEvent.click(screen.getByRole('button', { name: 'More for Rewrite the pager' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Worktree…' }))
     expect(handlers.onRemove).toHaveBeenCalledOnce()
   })

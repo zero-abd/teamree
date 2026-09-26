@@ -1104,6 +1104,12 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'worktree.restore': () => {
       throw new Error('the seeded runtime keeps no removed worktrees')
     },
+    'worktree.recreate': () => {
+      throw new Error('the seeded runtime has no checkouts on disk')
+    },
+    'worktree.locate': () => {
+      throw new Error('the seeded runtime has no checkouts on disk')
+    },
 
     'teamwork.relay': ({ projectId }) => relaySetting(projectId),
     // Refused rather than faked: a demo must not lie about somebody's git history.

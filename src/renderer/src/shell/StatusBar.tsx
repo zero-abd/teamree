@@ -2,6 +2,7 @@
 // as icons, the git line, the pane count, and how many panes anywhere are asking or failed.
 
 import { useMemo } from 'react'
+import type { WorktreeStatus } from '@shared/entities'
 import { attention, dashboardRows } from '../dashboard/dashboardRows'
 import { stepNeedingYou } from '../dashboard/needingYou'
 import { paneCount } from '../sidebar/agentRows'
@@ -44,7 +45,10 @@ export function StatusBar(): React.JSX.Element {
 
   const panes = paneCount(Object.values(terminals), worktrees.map((entry) => entry.id), activeWorktreeId)
   const child = worktrees.some((entry) => entry.id === activeWorktreeId && entry.parentId !== undefined)
-  const summary = summarizeWorktreeStatus(status, child)
+  // The record outlives a status read from before the folder went, and exists before any read.
+  const missing = worktrees.some((entry) => entry.id === activeWorktreeId && entry.missing === true)
+  const shownStatus = missing && activeWorktreeId ? missingStatus(activeWorktreeId, status) : status
+  const summary = summarizeWorktreeStatus(shownStatus, child)
   // `now` only moves the quiet-for column, which the count does not read.
   const owed = useMemo(
     () => attention(dashboardRows({ terminals: Object.values(terminals), worktrees, projects, layouts, now: 0 })),
@@ -68,14 +72,14 @@ export function StatusBar(): React.JSX.Element {
       <KeepAwakeControl />
       <ResourcesControl />
 
-      {summary && status && !pageOpen ? (
+      {summary && shownStatus && !pageOpen ? (
         // The count is in the accessible name too; offered on a clean tree for reading the last commits.
         <button
           type="button"
           className={`statusbar__item statusbar__button${changesOpen ? ' statusbar__button--on' : ''}`}
           aria-pressed={changesOpen}
           aria-label={`Changes, ${summary.description}`}
-          title={`Changes · read ${formatReadAge(status.readAt, Date.now())}`}
+          title={`Changes · read ${formatReadAge(shownStatus.readAt, Date.now())}`}
           onClick={toggleChanges}
         >
           <span className="statusbar__muted">git</span>
@@ -120,4 +124,10 @@ export function StatusBar(): React.JSX.Element {
       )}
     </footer>
   )
+}
+
+/** The zeros of a status with no checkout behind it, whatever was read before the folder went. */
+function missingStatus(worktreeId: string, read: WorktreeStatus | undefined): WorktreeStatus {
+  const zeros = { ahead: 0, behind: 0, staged: 0, unstaged: 0, untracked: 0, conflicted: 0 }
+  return { worktreeId, branch: read?.branch ?? '', ...zeros, readAt: read?.readAt ?? Date.now(), missing: true }
 }

@@ -15,6 +15,7 @@ import { SettingsView } from '../settings/SettingsView'
 import { TeamworkView } from '../teamwork/TeamworkView'
 import { measureCell, minPaneBox } from '../terminal/paneMetrics'
 import { WatchedPaneView } from '../terminal/WatchedPaneView'
+import { CheckoutMissing } from './CheckoutMissing'
 import { CoveredPanes } from './CoveredPanes'
 import { RightPanel } from './rightPanel/RightPanel'
 import { SetupAsk } from './SetupAsk'
@@ -190,6 +191,7 @@ function WorkspaceView({
 
   return (
     <main className="workspace">
+      {worktree.missing === true ? <CheckoutMissing worktree={worktree} /> : null}
       {worktree.setupAsk === undefined ? null : (
         <SetupAsk command={worktree.setupAsk} onAnswer={(run) => void answerSetup(worktree.id, run)} />
       )}

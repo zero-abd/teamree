@@ -42,6 +42,8 @@ export const GIT_METHODS = [
   'worktree.undoDiscard',
   'worktree.removed',
   'worktree.restore',
+  'worktree.recreate',
+  'worktree.locate',
   'worktree.log',
   'worktree.showCommit',
   'worktree.compare',
@@ -119,6 +121,8 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.undoDiscard': (params) => service.undoDiscard(params),
     'worktree.removed': (params) => service.listRemovedWorktrees(params),
     'worktree.restore': (params) => service.restoreWorktree(params),
+    'worktree.recreate': (params) => service.recreateCheckout(params),
+    'worktree.locate': (params) => service.locateCheckout(params),
     'worktree.log': (params) => service.worktreeLog(params),
     'worktree.showCommit': (params) => service.worktreeShowCommit(params),
     'worktree.compare': (params) => service.worktreeCompare(params),
@@ -185,6 +189,8 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.undoDiscard', Params.worktreeUndoDiscard, handlers['worktree.undoDiscard'])
   registry.register('worktree.removed', Params.worktreeRemoved, handlers['worktree.removed'])
   registry.register('worktree.restore', Params.worktreeRestore, handlers['worktree.restore'])
+  registry.register('worktree.recreate', Params.worktreeRecreate, handlers['worktree.recreate'])
+  registry.register('worktree.locate', Params.worktreeLocate, handlers['worktree.locate'])
   registry.register('worktree.log', Params.worktreeLog, handlers['worktree.log'])
   registry.register('worktree.showCommit', Params.worktreeShowCommit, handlers['worktree.showCommit'])
   registry.register('worktree.compare', Params.worktreeCompare, handlers['worktree.compare'])

@@ -168,6 +168,18 @@ describe('the git segment', () => {
     expect(screen.getByRole('button', { name: 'Changes, clean, in sync' })).toBeTruthy()
   })
 
+  // The status read before the folder went said clean; the record knows better.
+  it.each([
+    ['a clean status read before it went', { w1: status() }],
+    ['no status read yet', {}]
+  ])('says git missing for a missing checkout, with %s', (_, statuses) => {
+    seed({ worktrees: [{ ...worktree, missing: true }], statuses })
+    mount()
+    const git = screen.getByRole('button', { name: 'Changes, missing' })
+    expect(git.textContent).toBe('gitmissing')
+    expect(screen.queryByText(/clean|in sync/)).toBeNull()
+  })
+
   // A page covers the worktree; its git line was about something no longer on screen.
   it.each([
     ['All Panes', { dashboardOpen: true }],

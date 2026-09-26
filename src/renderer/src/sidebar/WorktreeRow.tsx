@@ -166,8 +166,8 @@ export function WorktreeRow({
   // that touches the checkout, and its own shape for what the row says.
   const missing = worktree.missing === true
   const ready = hasCheckout(worktree)
-  // Still focusable when it cannot open, so the tree's arrows reach its menu.
-  const openable = !creating && !failed && !missing
+  // Still focusable when it cannot open, so the tree's arrows reach its menu. A missing one opens on its ways back.
+  const openable = !creating && !failed
   // Landed: whether it would merge again says nothing.
   const merged = ready && landing?.merged === true
   const badge = ready && !merged ? mergeBadge(mergePreview) : null
@@ -201,6 +201,8 @@ export function WorktreeRow({
       state.byProject[worktree.projectId]?.worktrees.find((row) => row.worktreeId === worktree.id)?.claims.join('\n') ??
       ''
   )
+  const recreateCheckout = useWorkspaceStore((state) => state.recreateCheckout)
+  const locateCheckout = useWorkspaceStore((state) => state.locateCheckout)
   const heardFrom = useWorkspaceStore((state) =>
     heard === undefined ? undefined : state.worktrees.find((entry) => entry.id === heard.from.worktreeId)
   )
@@ -276,8 +278,12 @@ export function WorktreeRow({
       : [{ label: `Open Overlap: ${overlap.chip.label}`, onChoose: () => overlap.onOpen(firstOverlap) }]),
     ...(ready ? runItems.map((item, index) => (index === 0 ? { ...item, separated: true } : item)) : [])
   ]
-  // A directory that is not there has nothing to reveal, open or copy; removal is what is left.
-  const items: RowMenuItem[] = missing ? remove : merged ? [...remove, ...rest] : [...rest, ...remove]
+  // A directory that is not there has nothing to reveal, open or copy; bringing it back or removal is what is left.
+  const back: RowMenuItem[] = [
+    { label: 'Restore', onChoose: () => void recreateCheckout(worktree.id) },
+    { label: 'Locate…', onChoose: () => void locateCheckout(worktree.id) }
+  ]
+  const items: RowMenuItem[] = missing ? [...back, ...remove] : merged ? [...remove, ...rest] : [...rest, ...remove]
   const rows = ready ? agentRows(terminals, worktree, now, evidence) : []
   const expandable = (rows.length > 0 && !compact) || task !== undefined
   const shown = task === undefined ? panesShown : !task.collapsed

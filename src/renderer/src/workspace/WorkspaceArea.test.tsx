@@ -397,6 +397,55 @@ describe('a worktree with no panes in it', () => {
   })
 })
 
+describe('a worktree whose checkout is missing', () => {
+  const recreateCheckout = vi.fn()
+  const locateCheckout = vi.fn()
+  const removeFromTeamree = vi.fn()
+  const open = (state: Record<string, unknown> = {}): void => {
+    seed({
+      projects: [project],
+      worktrees: [worktree({ missing: true })],
+      activeWorktreeId: 'w1',
+      statuses: { w1: status({ missing: true }) },
+      recreateCheckout,
+      locateCheckout,
+      removeFromTeamree,
+      ...state
+    })
+    mount()
+  }
+
+  beforeEach(() => {
+    recreateCheckout.mockReset()
+    locateCheckout.mockReset()
+    removeFromTeamree.mockReset()
+  })
+
+  it('says so, and offers Restore, Locate… and Remove from teamree…', () => {
+    open()
+    expect(screen.getByText('Checkout missing')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Locate…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from teamree…' }))
+    expect(recreateCheckout).toHaveBeenCalledExactlyOnceWith('w1')
+    expect(locateCheckout).toHaveBeenCalledExactlyOnceWith('w1')
+    expect(removeFromTeamree).toHaveBeenCalledExactlyOnceWith({ worktreeId: 'w1' })
+  })
+
+  // Panes kept from before the folder went are still worth reading, under the same line.
+  it('says so over panes kept from before', () => {
+    open({ layouts: { w1: layout() } })
+    expect(screen.getByTestId('panes')).toBeTruthy()
+    expect(screen.getByText('Checkout missing')).toBeTruthy()
+  })
+
+  it('says nothing of the kind over a checkout that is there', () => {
+    seed({ projects: [project], worktrees: [worktree()], activeWorktreeId: 'w1' })
+    mount()
+    expect(screen.queryByText('Checkout missing')).toBeNull()
+  })
+})
+
 // No header between the strip and the panes; everything it said is printed elsewhere.
 describe('over an open worktree', () => {
   beforeEach(() => {
