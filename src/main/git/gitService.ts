@@ -64,8 +64,11 @@ import {
   allocateCheckoutPath,
   allocateChildBranchName,
   branchCollides,
-  childCheckoutDirName
+  branchPrefixFor,
+  childCheckoutDirName,
+  isValidBranchPrefix
 } from './worktreeNaming'
+import { checkWorktreesRoot, defaultWorktreesRoot, resolveWorktreesRoot } from './worktreesRoot'
 import { readMergePreview } from './mergePreview'
 import { readWorktreeLog } from './worktreeLog'
 import { readCommit } from './worktreeShowCommit'
@@ -141,8 +144,10 @@ export class GitEventEmitter {
 }
 
 export type GitServiceOptions = {
-  /** Parent of every checkout this app creates. */
+  /** Parent of the checkouts this app creates when Settings names no folder. */
   worktreesRoot?: string
+  /** Settings › General, read at each create: its worktrees folder and branch prefix. */
+  settings?: () => { worktreesRoot?: string | undefined; branchPrefix?: string | undefined }
   gitBinary?: string
   runner?: GitRunner
   /** Durable record store. Defaults to an in-memory one. */
@@ -186,6 +191,7 @@ export class GitService {
 
   readonly #runner: GitRunner
   readonly #worktreesRoot: string
+  readonly #settings: NonNullable<GitServiceOptions['settings']>
   readonly #createTimeoutMs: number
   readonly #now: () => number
   readonly #createId: () => string
@@ -216,7 +222,8 @@ export class GitService {
   constructor(options: GitServiceOptions = {}) {
     this.#runner = options.runner ?? createGitRunner(options.gitBinary)
     this.#store = options.store ?? createMemoryRecordStore()
-    this.#worktreesRoot = options.worktreesRoot ?? path.join(os.homedir(), '.teamree', 'worktrees')
+    this.#worktreesRoot = options.worktreesRoot ?? defaultWorktreesRoot()
+    this.#settings = options.settings ?? (() => ({}))
     this.#createTimeoutMs = options.createTimeoutMs ?? DEFAULT_CREATE_TIMEOUT_MS
     this.#startPointLimit = options.startPointLimit
     this.#now = options.now ?? Date.now
@@ -402,7 +409,7 @@ export class GitService {
       const worktree = this.#store.getWorktree(listed.id)
       if (worktree === undefined) continue
       // Only what this app made; a checkout adopted from elsewhere is the owner's own.
-      if (!isInside(this.#worktreesRoot, worktree.path)) this.#forget(worktree)
+      if (!this.#madeHere(project, worktree.path)) this.#forget(worktree)
       else await this.removeWorktree({ worktreeId: worktree.id, force: true, children: true })
     }
     await trash(project.path)
@@ -445,6 +452,24 @@ export class GitService {
     }
     if (params.fetchInBackground === true) delete next.fetchInBackground
     else if (params.fetchInBackground === false) next.fetchInBackground = false
+    if (params.worktreesRoot !== undefined) {
+      if (params.worktreesRoot.trim() === '') delete next.worktreesRoot
+      else {
+        next.worktreesRoot = await checkWorktreesRoot(
+          params.worktreesRoot,
+          [project],
+          params.allowInsideRepository === true
+        )
+      }
+    }
+    if (params.branchPrefix !== undefined) {
+      const prefix = params.branchPrefix.trim()
+      if (!isValidBranchPrefix(prefix)) {
+        throw new GitServiceError(ErrorCode.InvalidParams, `"${prefix}" cannot start a branch name`)
+      }
+      if (prefix === '') delete next.branchPrefix
+      else next.branchPrefix = prefix
+    }
     this.#store.putProject(next)
     const presented = this.#present(next)
     this.events.emit({ type: 'project.updated', project: presented })
@@ -735,11 +760,13 @@ export class GitService {
     const checkoutPath =
       claim.adopt ??
       (await allocateCheckoutPath(
-        this.#worktreesRoot,
+        this.#rootFor(project),
         project.name,
         branch,
         new Set(this.#store.listWorktrees().map((worktree) => pathKey(worktree.path))),
-        parent === undefined ? undefined : childCheckoutDirName(parent.path, parent.branch, branch)
+        parent === undefined
+          ? undefined
+          : childCheckoutDirName(parent.path, parent.branch, branch, this.#branchPrefix(project))
       ))
 
     const told = params.task?.trim()
@@ -1680,6 +1707,29 @@ export class GitService {
     return holder === undefined ? { branch } : { branch, adopt: holder.path }
   }
 
+  /** Where this project's new worktrees go now; see `resolveWorktreesRoot`. */
+  #rootFor(project: Project): string {
+    return resolveWorktreesRoot({
+      project: project.worktreesRoot,
+      global: this.#settings().worktreesRoot,
+      env: this.#worktreesRoot
+    })
+  }
+
+  /** Every folder this project's worktrees may have been made in: the default and both settings. */
+  #ownRoots(project: Project): string[] {
+    const roots = [this.#worktreesRoot, this.#settings().worktreesRoot, project.worktreesRoot]
+    return roots.filter((root): root is string => root !== undefined && root !== '')
+  }
+
+  #madeHere(project: Project, checkoutPath: string): boolean {
+    return this.#ownRoots(project).some((root) => isInside(root, checkoutPath))
+  }
+
+  #branchPrefix(project: Project): string {
+    return branchPrefixFor(project, this.#settings().branchPrefix)
+  }
+
   async #chooseBranch(project: Project, taskName: string, requested?: string, parent?: Worktree): Promise<string> {
     // In-flight creates own branch names git has not heard of yet.
     const recorded = this.#store.listWorktrees(project.id).map((worktree) => worktree.branch)
@@ -1688,9 +1738,10 @@ export class GitService {
     const existing = [...fromGit, ...recorded]
 
     if (requested === undefined) {
+      const prefix = this.#branchPrefix(project)
       return parent === undefined
-        ? allocateBranchName(taskName, existing)
-        : allocateChildBranchName(parent.branch, taskName, existing)
+        ? allocateBranchName(taskName, existing, prefix)
+        : allocateChildBranchName(parent.branch, taskName, existing, prefix)
     }
 
     const branch = requested.trim()
@@ -1866,9 +1917,9 @@ export class GitService {
       await quiet(['worktree', 'remove', '--force', worktree.path])
       await quiet(['worktree', 'prune'])
       // Only ever delete inside our own root; a user-chosen checkout path is theirs.
-      if (isInside(this.#worktreesRoot, worktree.path)) {
+      if (this.#madeHere(project, worktree.path)) {
         await rm(worktree.path, { recursive: true, force: true }).catch(() => undefined)
-        await this.#dropEmptyProjectDir(worktree.path)
+        await this.#dropEmptyProjectDir(project, worktree.path)
       }
     }
     if (!ourBranch) return
@@ -1882,9 +1933,9 @@ export class GitService {
    * Takes away `<worktreesRoot>/<project>` once the last checkout in it has gone.
    * Only straight under the root, and only by a plain `rmdir`, so anything in it makes that fail.
    */
-  async #dropEmptyProjectDir(checkoutPath: string): Promise<void> {
+  async #dropEmptyProjectDir(project: Project, checkoutPath: string): Promise<void> {
     const projectDir = path.dirname(checkoutPath)
-    if (!samePath(path.dirname(projectDir), this.#worktreesRoot)) return
+    if (!this.#ownRoots(project).some((root) => samePath(path.dirname(projectDir), root))) return
     await rmdir(projectDir).catch(() => undefined)
   }
 
@@ -1934,7 +1985,7 @@ export class GitService {
     args.push(worktree.path)
     const result = await this.#runner.tryRun({ args, cwd: project.path, timeoutMs: 120_000 })
     if (result.exitCode === 0) {
-      await this.#dropEmptyProjectDir(worktree.path)
+      await this.#dropEmptyProjectDir(project, worktree.path)
       return this.#surviving(worktree)
     }
 

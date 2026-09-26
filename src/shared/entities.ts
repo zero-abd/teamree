@@ -34,6 +34,10 @@ export type Project = {
   setupCommand?: string
   /** False stops the timed and on-focus fetch of the base ref; absent is on. */
   fetchInBackground?: boolean
+  /** Where this project's new worktrees go, over Settings › General; absent follows it. */
+  worktreesRoot?: string
+  /** Leads branch names the runtime picks here, over Settings › General; absent follows it. */
+  branchPrefix?: string
   /**
    * What `.teamree/project.json` in the primary checkout says. Read, never
    * stored: each field applies where this Mac has none of its own.

@@ -8,7 +8,7 @@ import { describeError, GitServiceError } from './errors'
 import { pathKey } from './pathIdentity'
 import { branchCollides, slugifyBranchName, taskNamesForAgents } from '../../shared/branchName'
 
-export { allocateBranchName, branchCollides } from '../../shared/branchName'
+export { allocateBranchName, branchCollides, branchPrefixFor, isValidBranchPrefix } from '../../shared/branchName'
 
 /** The slug rule lives in shared so the create dialog previews exactly what gets created. */
 export const slugify = slugifyBranchName
@@ -25,10 +25,19 @@ export { taskNamesForAgents }
  */
 export { isWindowsDeviceName } from '../../shared/windowsNames'
 
-/** `<parent-branch>--<slug>`: `--` because `a/b` cannot coexist with `a`. Deduped as `allocateBranchName` does. */
-export function allocateChildBranchName(parentBranch: string, taskName: string, existing: readonly string[]): string {
+/**
+ * `<parent-branch>--<slug>`: `--` because `a/b` cannot coexist with `a`. Deduped as `allocateBranchName` does;
+ * `prefix` leads it unless the parent's branch already starts with it.
+ */
+export function allocateChildBranchName(
+  parentBranch: string,
+  taskName: string,
+  existing: readonly string[],
+  prefix = ''
+): string {
   const taken = new Set(existing.map((branch) => branch.toLowerCase()))
-  const base = `${parentBranch}--${slugify(taskName)}`
+  const stem = parentBranch.startsWith(prefix) ? parentBranch : `${prefix}${parentBranch}`
+  const base = `${stem}--${slugify(taskName)}`
   if (!branchCollides(base, taken)) return base
   for (let suffix = 2; suffix < 1000; suffix += 1) {
     const candidate = `${base}-${suffix}`
@@ -38,9 +47,14 @@ export function allocateChildBranchName(parentBranch: string, taskName: string, 
 }
 
 /** `<parent-dir>--<tail>`, the tail being what the child's branch adds to its parent's. */
-export function childCheckoutDirName(parentPath: string, parentBranch: string, childBranch: string): string {
-  const prefix = `${parentBranch}--`
-  const tail = childBranch.startsWith(prefix) ? childBranch.slice(prefix.length) : childBranch
+export function childCheckoutDirName(
+  parentPath: string,
+  parentBranch: string,
+  childBranch: string,
+  branchPrefix = ''
+): string {
+  const lead = [`${parentBranch}--`, `${branchPrefix}${parentBranch}--`].find((each) => childBranch.startsWith(each))
+  const tail = lead === undefined ? childBranch : childBranch.slice(lead.length)
   return `${path.basename(parentPath)}--${checkoutDirName(tail)}`
 }
 

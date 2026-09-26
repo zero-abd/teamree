@@ -4,7 +4,7 @@
 // say a dev build has nothing to check against, clear a start point with null, write through, and
 // close on Escape.
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CliStatus, InstalledAgent, PaneConsent, Project, RelaySetting, UpdateState } from '@shared/entities'
 import { DEFAULT_RUNTIME_SETTINGS } from '@shared/settings'
@@ -618,6 +618,26 @@ describe('the filter', () => {
     const list = screen.getByRole('navigation', { name: 'Sections' })
     expect(filter().compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(filter().placeholder).toBe('Filter')
+  })
+
+  it('finds a row by what it is about, marks its label, and starts at its section', () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    render(<SettingsView />)
+    type('location')
+    expect(nav()).toEqual(['General', 'Projects'])
+    const general = document.getElementById('settings-general')?.closest('section') as HTMLElement
+    expect(within(general).getByText('Worktrees in').tagName).toBe('MARK')
+    expect(within(general).queryByText('Branch prefix')).toBeNull()
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' })
+  })
+
+  it('opens filtered to the setting the palette named', () => {
+    render(<SettingsView />)
+    act(() => useWorkspaceStore.getState().openSetting('Scrollback lines'))
+    expect(filter().value).toBe('Scrollback lines')
+    expect(nav()).toEqual(['Panes'])
+    expect(useWorkspaceStore.getState().settingsQuery).toBeNull()
   })
 
   it('hides every row whose label does not match, and the sections left empty', () => {
@@ -1269,6 +1289,7 @@ describe('general', () => {
       render(<SettingsView />)
       await screen.findByRole('checkbox', { name: 'Show Cost' })
       expect(screen.queryByRole('checkbox', { name: 'Show in Menu Bar' })).toBeNull()
+      expect(document.getElementById('settings-general')).not.toBeNull()
     } finally {
       call.mockRestore()
       delete (window as unknown as { teamree?: unknown }).teamree
@@ -1286,6 +1307,94 @@ describe('general', () => {
       expect(call).toHaveBeenCalledWith('settings.set', { showCost: true })
       expect(useUsageStore.getState().showCost).toBe(true)
       await vi.waitFor(() => expect(check).toHaveProperty('checked', true))
+    } finally {
+      call.mockRestore()
+      delete (window as unknown as { teamree?: unknown }).teamree
+    }
+  })
+
+  const folderBridge = (answer: (method: string, params: Record<string, unknown>) => unknown) => {
+    ;(window as unknown as { teamree: unknown }).teamree = {
+      platform: 'darwin',
+      homeDir: '/Users/sam',
+      chooseFolder: async () => '/Volumes/work/wt'
+    }
+    let settings: Record<string, unknown> = {
+      ...DEFAULT_RUNTIME_SETTINGS,
+      worktreesRootFallback: '/Users/sam/.teamree/worktrees'
+    }
+    return vi.spyOn(runtimeClient, 'call').mockImplementation(async (method: string, params: unknown) => {
+      const given = (params ?? {}) as Record<string, unknown>
+      const own = answer(method, given)
+      if (own !== undefined) return own
+      if (method === 'settings.set') settings = { ...settings, ...given }
+      return method.startsWith('settings.') ? settings : new Promise(() => {})
+    })
+  }
+
+  it('shows where worktrees go, and sets this Mac’s folder from Choose…', async () => {
+    const call = folderBridge(() => undefined)
+    try {
+      render(<SettingsView />)
+      const general = document.getElementById('settings-general')?.closest('section') as HTMLElement
+      await within(general).findByText('/Users/sam/.teamree/worktrees')
+      fireEvent.click(within(general).getByRole('button', { name: 'Choose…' }))
+      await vi.waitFor(() => expect(call).toHaveBeenCalledWith('settings.set', { worktreesRoot: '/Volumes/work/wt' }))
+      await within(general).findByText('/Volumes/work/wt')
+      expect(within(general).getByRole('button', { name: 'Reset' })).toBeTruthy()
+    } finally {
+      call.mockRestore()
+      delete (window as unknown as { teamree?: unknown }).teamree
+    }
+  })
+
+  it('says why a folder inside a repository was refused, and takes it with Use Anyway', async () => {
+    const refused = Object.assign(new Error('/Volumes/work/wt is inside pager'), {
+      data: { refusal: 'insideRepository' }
+    })
+    const call = folderBridge((method, params) =>
+      method === 'settings.set' && params.allowInsideRepository !== true ? Promise.reject(refused) : undefined
+    )
+    try {
+      render(<SettingsView />)
+      const general = document.getElementById('settings-general')?.closest('section') as HTMLElement
+      await within(general).findByText('/Users/sam/.teamree/worktrees')
+      fireEvent.click(within(general).getByRole('button', { name: 'Choose…' }))
+      await within(general).findByText('/Volumes/work/wt is inside pager')
+      fireEvent.click(within(general).getByRole('button', { name: 'Use Anyway' }))
+      await vi.waitFor(() =>
+        expect(call).toHaveBeenCalledWith('settings.set', {
+          worktreesRoot: '/Volumes/work/wt',
+          allowInsideRepository: true
+        })
+      )
+      await within(general).findByText('/Volumes/work/wt')
+    } finally {
+      call.mockRestore()
+      delete (window as unknown as { teamree?: unknown }).teamree
+    }
+  })
+
+  it('keeps a branch prefix for this Mac, and one per project over it', async () => {
+    seed({ projects: [project] })
+    const call = folderBridge((method, params) =>
+      method === 'project.setPaths' ? { ...project, branchPrefix: params.branchPrefix } : undefined
+    )
+    try {
+      render(<SettingsView />)
+      const mac = document.getElementById('settings-branch-prefix') as HTMLInputElement
+      fireEvent.change(mac, { target: { value: 'abd/' } })
+      fireEvent.blur(mac)
+      await vi.waitFor(() => expect(call).toHaveBeenCalledWith('settings.set', { branchPrefix: 'abd/' }))
+
+      const own = document.getElementById('settings-branch-prefix-p1') as HTMLInputElement
+      await vi.waitFor(() => expect(own.placeholder).toBe('abd/'))
+      fireEvent.change(own, { target: { value: 'team/' } })
+      fireEvent.keyDown(own, { key: 'Enter' })
+      await vi.waitFor(() =>
+        expect(call).toHaveBeenCalledWith('project.setPaths', { projectId: 'p1', branchPrefix: 'team/' })
+      )
+      await vi.waitFor(() => expect(own.value).toBe('team/'))
     } finally {
       call.mockRestore()
       delete (window as unknown as { teamree?: unknown }).teamree

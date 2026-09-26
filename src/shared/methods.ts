@@ -240,7 +240,12 @@ export const Params = {
         dev: z.string().max(MAX_SETUP_COMMAND_CHARS).optional(),
         test: z.string().max(MAX_SETUP_COMMAND_CHARS).optional()
       })
-      .optional()
+      .optional(),
+    /** Omitted leaves it alone; empty clears it. Checked as `settings.set` checks its own. */
+    worktreesRoot: z.string().max(4096).optional(),
+    allowInsideRepository: z.boolean().optional(),
+    /** Omitted leaves it alone; empty clears it. */
+    branchPrefix: z.string().max(64).optional()
   }),
 
   worktreeList: z.object({ projectId: z.string().min(1).optional() }),

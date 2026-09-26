@@ -201,6 +201,15 @@ describe('plannedBranches', () => {
   it('keeps a hand-named branch as typed', () => {
     expect(plannedBranches(taskCreates('Fix login', [claude], 'ada/login'), ['ada/login'])).toEqual(['ada/login'])
   })
+
+  it('puts the branch prefix before the names the runtime would pick, and not before a typed one', () => {
+    expect(plannedBranches(taskCreates('Fix login', [claude]), ['abd/fix-login'], 'abd/')).toEqual(['abd/fix-login-2'])
+    expect(plannedBranches(taskCreates('Fix login', [claude, codex]), [], 'abd/')).toEqual([
+      'abd/fix-login-claude',
+      'abd/fix-login-codex'
+    ])
+    expect(plannedBranches(taskCreates('Fix login', [claude], 'mine'), [], 'abd/')).toEqual(['mine'])
+  })
 })
 
 describe('branchProblem', () => {

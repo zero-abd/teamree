@@ -489,7 +489,7 @@ describe('the menu bar’s wording', () => {
     }
   })
 
-  // Theme rows carry the preset's own name; the CLI row is the sidebar badge's wording.
+  // Theme and setting rows carry the preset's or the setting's own name; the CLI row is the sidebar badge's wording.
   it('writes every palette action in title case too', () => {
     const labels = buildPaletteItems({
       worktrees: [
@@ -514,7 +514,13 @@ describe('the menu bar’s wording', () => {
       openIn: ['Cursor', 'Terminal'],
       focusedChange: { path: 'a.ts', discardable: true, staged: true }
     })
-      .filter((item) => item.kind === 'action' && !item.id.startsWith('theme:') && item.id !== 'install-cli')
+      .filter(
+        (item) =>
+          item.kind === 'action' &&
+          !item.id.startsWith('theme:') &&
+          !item.id.startsWith('setting:') &&
+          item.id !== 'install-cli'
+      )
       .map((item) => item.label)
     expect(labels).toEqual(expect.arrayContaining(['Show Changes', 'Rename Worktree…', 'Discard File Changes…']))
     for (const label of labels) expect(titleCaseFaults(label), label).toEqual([])

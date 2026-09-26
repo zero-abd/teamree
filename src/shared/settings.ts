@@ -13,6 +13,13 @@ export type RuntimeSettings = {
   showInMenuBar: boolean
   /** Settings › Agents › Warn Agents About Overlaps: the edit-time hook and session-start context. */
   warnAgentsAboutOverlaps: boolean
+
+  /** Settings › General › Worktrees in: where new worktrees go when their project names no folder. */
+  worktreesRoot?: string
+  /** Settings › General › Branch prefix, `abd/`: leads branch names the runtime picks. */
+  branchPrefix?: string
+  /** Where new worktrees go with no folder set: the launch's `TEAMREE_WORKTREES_ROOT`, else the default. Read only. */
+  worktreesRootFallback?: string
 }
 
 export const DEFAULT_RUNTIME_SETTINGS: RuntimeSettings = {

@@ -29,7 +29,9 @@ const ProjectSchema = z.object({
   runCommands: RunCommandsSchema.optional().catch(undefined),
   approvedRunCommands: RunCommandsSchema.optional().catch(undefined),
   // Only `false` is stored; on is the default and deletes the field.
-  fetchInBackground: z.literal(false).optional()
+  fetchInBackground: z.literal(false).optional(),
+  worktreesRoot: z.string().min(1).optional().catch(undefined),
+  branchPrefix: z.string().min(1).optional().catch(undefined)
 })
 
 const WorktreeSchema = z.object({
@@ -163,7 +165,9 @@ const SettingsSchema = z.object({
   showCost: z.boolean().optional().catch(undefined),
   jacMemoryAddon: z.boolean().optional().catch(undefined),
   showInMenuBar: z.boolean().optional().catch(undefined),
-  warnAgentsAboutOverlaps: z.boolean().optional().catch(undefined)
+  warnAgentsAboutOverlaps: z.boolean().optional().catch(undefined),
+  worktreesRoot: z.string().min(1).optional().catch(undefined),
+  branchPrefix: z.string().min(1).optional().catch(undefined)
 })
 
 export type SettingsRecord = Partial<RuntimeSettings>

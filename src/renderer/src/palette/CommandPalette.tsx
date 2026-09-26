@@ -360,6 +360,10 @@ export function CommandPalette({
       if (removed) void store.restoreWorktree(removed.projectId, removed.id)
       return
     }
+    if (item.id.startsWith('setting:')) {
+      store.openSetting(item.id.slice('setting:'.length))
+      return
+    }
     if (item.id.startsWith('clean-up:')) {
       store.openDialog({ kind: 'clean-up', projectId: item.id.slice('clean-up:'.length) })
       return

@@ -8,7 +8,17 @@
 
 import { describe, expect, it } from 'vitest'
 import type { CliStatus, RelaySetting, UpdateState } from '@shared/entities'
-import { cliLine, labelMatches, relayPanel, updatePanel } from './settingsModel'
+import {
+  cliLine,
+  describedOnly,
+  firstMatch,
+  labelMatches,
+  relayPanel,
+  rowMatches,
+  SETTINGS_CATALOG,
+  SETTINGS_SECTIONS,
+  updatePanel
+} from './settingsModel'
 
 const NOW = 1_700_000_000_000
 
@@ -241,5 +251,39 @@ describe('the filter', () => {
   it('keeps everything while empty', () => {
     expect(labelMatches('Cursor', '')).toBe(true)
     expect(labelMatches('Cursor', '   ')).toBe(true)
+  })
+})
+
+describe('finding a setting', () => {
+  it('matches what a row is about as well as its label', () => {
+    expect(rowMatches({ label: 'Worktrees in', words: [] }, 'folder')).toBe(true)
+    expect(rowMatches({ label: 'Worktrees in', words: [] }, 'location')).toBe(true)
+    expect(rowMatches({ label: 'Branch prefix', words: [] }, 'naming')).toBe(true)
+    expect(rowMatches({ label: 'Branch prefix', words: [] }, 'scrollback')).toBe(false)
+    expect(rowMatches({ label: 'Dev command', words: [] }, 'server')).toBe(true)
+    expect(rowMatches({ label: 'Test command', words: [] }, 'suite')).toBe(true)
+  })
+
+  it('says whether a row matched only by what it is about, so the page can mark the row', () => {
+    expect(describedOnly('Worktrees in', 'folder')).toBe(true)
+    expect(describedOnly('Worktrees in', 'worktrees')).toBe(false)
+    expect(describedOnly('Worktrees in', '')).toBe(false)
+  })
+
+  it('lists every setting under a section the page has, once per section', () => {
+    const sections = new Set(SETTINGS_SECTIONS.map((section) => section.id))
+    expect(SETTINGS_CATALOG.every((entry) => sections.has(entry.section))).toBe(true)
+    const keys = SETTINGS_CATALOG.map((entry) => `${entry.section} ${entry.label}`)
+    expect(new Set(keys).size).toBe(keys.length)
+    expect(SETTINGS_CATALOG.filter((entry) => entry.label === 'Branch prefix').map((entry) => entry.section)).toEqual([
+      'general',
+      'projects'
+    ])
+  })
+
+  it('takes a section’s first matching setting as where to jump', () => {
+    expect(firstMatch('prefix')).toMatchObject({ section: 'general', label: 'Branch prefix' })
+    expect(firstMatch('scrollback')).toMatchObject({ section: 'panes' })
+    expect(firstMatch('zzz')).toBeNull()
   })
 })

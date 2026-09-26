@@ -1088,3 +1088,28 @@ describe('the right panel’s rows say what they would do now', () => {
     expect(label('show-files', { rightPanelOpen: false, rightPanelTab: 'files' })).not.toHaveProperty('unavailable')
   })
 })
+
+describe('opening one setting from the palette', () => {
+  const settingRows = (): PaletteItem[] =>
+    buildPaletteItems(context()).filter((item) => item.kind === 'action' && item.id.startsWith('setting:'))
+
+  it('offers a row per setting, named once however many sections carry it', () => {
+    const labels = settingRows().map((item) => item.label)
+    expect(labels).toContain('Open Setting: Worktrees in')
+    expect(labels).toContain('Open Setting: Branch prefix')
+    expect(labels).toContain('Open Setting: Scrollback lines')
+    expect(new Set(labels).size).toBe(labels.length)
+    expect(settingRows().find((item) => item.label === 'Open Setting: Worktrees in')).toMatchObject({
+      id: 'setting:Worktrees in',
+      hint: 'General'
+    })
+  })
+
+  it('is found by what a setting is about, and stays out of the list before anything is typed', () => {
+    const items = buildPaletteItems(context())
+    expect(filterPalette(items, 'worktree folder')[0]?.label).toBe('Open Setting: Worktrees in')
+    expect(filterPalette(items, 'branch prefix')[0]?.label).toBe('Open Setting: Branch prefix')
+    const shown = paletteGroups(items, [], 'here').flatMap((group) => group.items)
+    expect(shown.some((item) => item.id.startsWith('setting:'))).toBe(false)
+  })
+})

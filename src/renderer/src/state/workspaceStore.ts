@@ -525,6 +525,8 @@ type WorkspaceState = {
   settingsOpen: boolean
   /** The section the settings page opens scrolled to, until it has. */
   settingsSection: SettingsSection | null
+  /** What the settings page's filter opens holding, until it has: the palette's Open Setting. */
+  settingsQuery: string | null
   helpOpen: boolean
   /** The theme sheet at the workspace's right edge; the panes stay visible under it. */
   appearanceOpen: boolean
@@ -851,6 +853,8 @@ type WorkspaceState = {
   toggleSettings: () => void
   /** Opens the settings page with the named section in view. */
   openSettings: (section: SettingsSection) => void
+  /** Settings, filtered to one setting by its label. */
+  openSetting: (label: string) => void
   /** The same for help. */
   toggleHelp: () => void
   showAppearance: (open: boolean) => void
@@ -1748,6 +1752,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     // Neither is restored: both are places you go to answer a question.
     settingsOpen: false,
     settingsSection: null,
+    settingsQuery: null,
     helpOpen: false,
     appearanceOpen: false,
 
@@ -3786,6 +3791,17 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         dashboardOpen: false,
         teamworkProjectId: null
       }))
+    },
+
+    openSetting(label) {
+      set({
+        settingsOpen: true,
+        settingsQuery: label,
+        appearanceOpen: false,
+        helpOpen: false,
+        dashboardOpen: false,
+        teamworkProjectId: null
+      })
     },
 
     openSettings(section) {

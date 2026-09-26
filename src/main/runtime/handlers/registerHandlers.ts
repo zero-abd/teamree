@@ -126,7 +126,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   registerWorkspaceSubscribeHandler(registry)
   registerAppearanceHandlers(registry, options.onAppearance)
   registerAgentTrustHandlers(registry)
-  registerSettingsHandlers(registry)
+  registerSettingsHandlers(registry, options.worktreesRoot)
   // One file of a worktree at a time, for a file pane.
   registerFileHandlers(registry)
   const workspaceEvents = registry.context.workspaceEvents
@@ -231,6 +231,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     store: registry.context.store,
     // Spread rather than passed as `undefined`, so the service's own default stands.
     ...(options.worktreesRoot === undefined ? {} : { worktreesRoot: options.worktreesRoot }),
+    settings: () => registry.context.store.runtimeSettings(),
     ...(options.trashItem === undefined ? {} : { trash: options.trashItem }),
     ghBinary: () => findProgram('gh', [process.env.PATH]) ?? findProgram('gh', [loginShellPath()]),
     trustCheckout: trustCheckoutFor(registry.context.store),

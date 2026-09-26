@@ -3,8 +3,10 @@ import {
   allocateBranchName,
   allocateChildBranchName,
   branchCollides,
+  branchPrefixFor,
   checkoutDirName,
   childCheckoutDirName,
+  isValidBranchPrefix,
   slugify,
   taskNamesForAgents
 } from './worktreeNaming'
@@ -155,5 +157,38 @@ describe('child names', () => {
     )
     expect(childCheckoutDirName('/wt/app/feat-auth', 'feat/auth', 'feat/auth--x')).toBe('feat-auth--x')
     expect(childCheckoutDirName('/wt/app/a', 'a', 'mine/own')).toBe('a--mine-own')
+  })
+})
+
+describe('a branch prefix', () => {
+  it('leads a task branch and is counted into the collision suffix', () => {
+    expect(allocateBranchName('Fix login', [], 'abd/')).toBe('abd/fix-login')
+    expect(allocateBranchName('Fix login', ['abd/fix-login'], 'abd/')).toBe('abd/fix-login-2')
+    expect(allocateBranchName('Fix login', ['fix-login'], 'abd/')).toBe('abd/fix-login')
+  })
+
+  it('leads a child branch once: a prefixed parent already carries it', () => {
+    expect(allocateChildBranchName('abd/auth', 'tests', [], 'abd/')).toBe('abd/auth--tests')
+    expect(allocateChildBranchName('auth', 'tests', [], 'abd/')).toBe('abd/auth--tests')
+    expect(allocateChildBranchName('auth', 'tests', [])).toBe('auth--tests')
+  })
+
+  it('leaves the child checkout named after the parent directory and the tail', () => {
+    expect(childCheckoutDirName('/wt/app/auth', 'auth', 'abd/auth--tests', 'abd/')).toBe('auth--tests')
+  })
+
+  it('is valid only where a branch name could follow it', () => {
+    expect(isValidBranchPrefix('')).toBe(true)
+    expect(isValidBranchPrefix('abd/')).toBe(true)
+    expect(isValidBranchPrefix('team-')).toBe(true)
+    expect(isValidBranchPrefix('a b/')).toBe(false)
+    expect(isValidBranchPrefix('/abd/')).toBe(false)
+    expect(isValidBranchPrefix('abd//')).toBe(false)
+  })
+
+  it("is the project's own, else the machine's, else none", () => {
+    expect(branchPrefixFor({ branchPrefix: 'p/' }, 'g/')).toBe('p/')
+    expect(branchPrefixFor({}, 'g/')).toBe('g/')
+    expect(branchPrefixFor(undefined, undefined)).toBe('')
   })
 })

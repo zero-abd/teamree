@@ -15,6 +15,7 @@ import {
 import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
 import { APPEARANCE_MODES, BUILT_IN_THEMES, type AppearanceMode } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from '../settings/AppearanceSettings'
+import { SETTINGS_CATALOG, SETTINGS_SECTIONS } from '../settings/settingsModel'
 import { canResumeConversations, harnessName } from '../agents/harnesses'
 import { runName, siblingRuns } from '../compare/siblingRuns'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
@@ -61,6 +62,8 @@ export type PaletteAction =
   | `run:${RunKind}`
   | `restart-run:${RunKind}`
   | `stop-run:${RunKind}`
+  /** Settings, opened at one setting by its label. */
+  | `setting:${string}`
 
 /** What the sidebar row's menu does to the worktree on screen. */
 type WorktreeAction =
@@ -200,7 +203,8 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     ...panelActions(context),
     ...ACTIONS,
     ...updateActions(context),
-    ...appearanceActions(context)
+    ...appearanceActions(context),
+    ...settingActions()
   ]
   const actions: PaletteItem[] = rows.map((action) => {
     const unavailable =
@@ -394,6 +398,22 @@ function cleanUpActions(context: PaletteContext): ActionRow[] {
     ...(context.merged === undefined || context.merged.has(project.id) ? {} : { unavailable: 'nothing merged' })
   }))
 }
+
+/** One row per setting label, hinted with the section it is first found in. */
+function settingActions(): ActionRow[] {
+  const seen = new Set<string>()
+  return SETTINGS_CATALOG.filter((entry) => !seen.has(entry.label) && seen.add(entry.label)).map((entry) => {
+    const section = SETTINGS_SECTIONS.find((each) => each.id === entry.section)?.label ?? ''
+    return {
+      id: `setting:${entry.label}` as const,
+      label: `Open Setting: ${entry.label}`,
+      keywords: `settings preferences ${section} ${entry.about}`,
+      hint: section
+    }
+  })
+}
+
+const isSetting = (item: PaletteItem): boolean => item.kind === 'action' && item.id.startsWith('setting:')
 
 /** The three modes and every preset; the ones on screen cannot run. */
 function appearanceActions(context: PaletteContext): ActionRow[] {
@@ -623,6 +643,7 @@ export function filterPalette(items: readonly PaletteItem[], query: string): Pal
     .sort(
       (left, right) =>
         Number(isDimmed(left.item)) - Number(isDimmed(right.item)) ||
+        Number(isSetting(left.item)) - Number(isSetting(right.item)) ||
         right.shown - left.shown ||
         right.points - left.points ||
         Number(isHere(right.item)) - Number(isHere(left.item)) ||
@@ -683,7 +704,7 @@ export type PaletteGroup = { title: string | null; items: PaletteItem[] }
 
 /**
  * The list before anything is typed: Recent, Worktrees, the worktree on screen under `here`, then
- * Commands, each row once, none that would do nothing; empty groups left out.
+ * Commands, each row once, none that would do nothing and no setting; empty groups left out.
  */
 export function paletteGroups(items: readonly PaletteItem[], recent: readonly string[], here: string): PaletteGroup[] {
   const byKey = new Map(items.map((item) => [paletteKey(item), item]))
@@ -691,7 +712,7 @@ export function paletteGroups(items: readonly PaletteItem[], recent: readonly st
     .map((key) => byKey.get(key))
     .filter((item): item is PaletteItem => item !== undefined && !isDimmed(item))
   const rest = filterPalette(
-    items.filter((item) => !first.includes(item)),
+    items.filter((item) => !first.includes(item) && !isSetting(item)),
     ''
   )
   const onScreen = (item: PaletteItem): boolean =>

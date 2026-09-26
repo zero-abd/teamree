@@ -138,10 +138,10 @@ export function taskCreates(
 }
 
 /** The branch each create will get: a hand-named one as typed, the rest as the runtime will allocate them. */
-export function plannedBranches(creates: readonly TaskCreate[], existing: readonly string[]): string[] {
+export function plannedBranches(creates: readonly TaskCreate[], existing: readonly string[], prefix = ''): string[] {
   const taken = [...existing]
   return creates.map((create) => {
-    const branch = create.branch ?? allocateBranchName(create.name, taken)
+    const branch = create.branch ?? allocateBranchName(create.name, taken, prefix)
     taken.push(branch)
     return branch
   })
