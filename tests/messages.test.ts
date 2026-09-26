@@ -122,7 +122,7 @@ function cliAs<T>(worktree: Worktree, args: string[]): T {
 }
 
 describe('agents talking over the socket', () => {
-  it('a supervising parent makes two children, answers their asks, and waits for both to be done', async () => {
+  it('a supervising parent makes two children, answers their asks, and waits for both to be done', { timeout: 120_000, retry: 2 }, async () => {
     const child = script('child', [
       'after 0.5s ask parent "Which store for the limiter?" options redis,postgres',
       'after 0.5s done "Added the limiter. Tests pass. Nothing left."'
@@ -159,7 +159,7 @@ describe('agents talking over the socket', () => {
       expect(screen(kidPane.id)).toContain('⎿ postgres')
     }
     expect(cliAs<TaskMessage[]>(lead, ['msg', 'inbox'])).toEqual([])
-  }, { timeout: 120_000, retry: 2 })
+  })
 
   it('pastes into an idle parent: the ask, and then the done', async () => {
     const lead = await worktree('Queue work')
