@@ -121,7 +121,11 @@ export type Worktree = {
   parentId?: string
   /** What the agent said when it finished; the latest `done` replaces it. */
   report?: WorktreeReport
+  /** The GitHub issue it was started from; its pull request closes it. */
+  issue?: WorktreeIssue
 }
+
+export type WorktreeIssue = { number: number; url: string }
 
 /** A branch a worktree could be opened on as it is: not checked out anywhere yet. */
 export type BranchEntry = {
@@ -159,6 +163,25 @@ export type PullRequestList = {
   available: boolean
   reason: string | null
   pullRequests: PullRequestEntry[]
+  readAt: number
+}
+
+/** An open issue, as `gh issue list` reports it; `body` is bounded. */
+export type IssueEntry = {
+  number: number
+  title: string
+  url: string
+  labels: string[]
+  body: string
+  updatedAt: number | null
+}
+
+/** `available` is false when `gh` is missing, signed out or refused; `reason` says which. */
+export type IssueList = {
+  projectId: string
+  available: boolean
+  reason: string | null
+  issues: IssueEntry[]
   readAt: number
 }
 

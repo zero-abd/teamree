@@ -237,6 +237,47 @@ describe('pull requests', () => {
     })
   })
 
+  it('closes the issue a worktree was started from, keeping the commit as title and body', async () => {
+    const context = await setup({ gh: 'signed-in' })
+    await lookLikeGitHub(context.repo)
+    const issue = { number: 123, url: 'https://github.com/acme/pantry/issues/123' }
+    const pending = await context.service.createWorktree({ projectId: context.projectId, name: 'Login loop', issue })
+    const worktree = await context.service.whenSettled(pending.id)
+    expect(worktree.issue).toEqual(issue)
+    await context.repo.write('src/login.ts', 'export const loop = false\n', worktree.path)
+    await context.repo.git(['add', '--all'], worktree.path)
+    await context.repo.git(
+      ['commit', '-m', 'Stop the login loop', '-m', 'The redirect kept its own URL.'],
+      worktree.path
+    )
+    await context.service.worktreePush({ worktreeId: worktree.id })
+
+    await context.service.worktreeCreatePullRequest({ worktreeId: worktree.id })
+
+    const log = await readFile(path.join(context.repo.base, 'gh.log'), 'utf8')
+    expect(log).toContain(
+      `pr create --title Stop the login loop --body The redirect kept its own URL.\n\nCloses #123 --head ${worktree.branch} --base main`
+    )
+  })
+
+  it('lists the commits and closes the issue when there are several', async () => {
+    const context = await setup({ gh: 'signed-in' })
+    await lookLikeGitHub(context.repo)
+    const issue = { number: 9, url: 'https://github.com/acme/pantry/issues/9' }
+    const pending = await context.service.createWorktree({ projectId: context.projectId, name: 'Two steps', issue })
+    const worktree = await context.service.whenSettled(pending.id)
+    await context.repo.write('a.txt', 'a\n', worktree.path)
+    await context.repo.commit('First step', worktree.path)
+    await context.repo.write('b.txt', 'b\n', worktree.path)
+    await context.repo.commit('Second step', worktree.path)
+    await context.service.worktreePush({ worktreeId: worktree.id })
+
+    await context.service.worktreeCreatePullRequest({ worktreeId: worktree.id })
+
+    const log = await readFile(path.join(context.repo.base, 'gh.log'), 'utf8')
+    expect(log).toContain(`pr create --title Two steps --body - First step\n- Second step\n\nCloses #9 --head`)
+  })
+
   it('hands back the compare page when gh is not signed in, and never runs pr create', async () => {
     const context = await setup({ gh: 'signed-out' })
     await lookLikeGitHub(context.repo)

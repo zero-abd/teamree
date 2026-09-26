@@ -389,6 +389,11 @@
   font-size: var(--text-sm);
 }
 
+.worktree-start__issue {
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+}
+
 .worktree-start__actions {
   display: flex;
   flex-wrap: wrap;

@@ -599,6 +599,13 @@ export function createSeededRuntimeClient(): RuntimeClient {
       pullRequests: [],
       readAt: Date.now()
     }),
+    'worktree.issues': ({ projectId }) => ({
+      projectId,
+      available: false,
+      reason: 'not in a seeded window',
+      issues: [],
+      readAt: Date.now()
+    }),
     'project.remove': ({ projectId }) => {
       projects.delete(projectId)
       for (const worktree of worktrees.values()) {
@@ -624,7 +631,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'worktree.list': ({ projectId }) =>
       [...worktrees.values()].filter((worktree) => !projectId || worktree.projectId === projectId),
     'worktree.get': ({ worktreeId }) => required(worktrees.get(worktreeId), 'worktree'),
-    'worktree.create': ({ projectId, name, startedFrom, branch, task, parentId }) => {
+    'worktree.create': ({ projectId, name, startedFrom, branch, task, parentId, issue }) => {
       const project = required(projects.get(projectId), 'project')
       const parent = parentId === undefined ? undefined : required(worktrees.get(parentId), 'worktree')
       const slug =
@@ -642,7 +649,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
         state: 'creating',
         createdAt: Date.now(),
         ...(task === undefined ? {} : { task }),
-        ...(parent === undefined ? {} : { parentId: parent.id, baseRef: parent.branch })
+        ...(parent === undefined ? {} : { parentId: parent.id, baseRef: parent.branch }),
+        ...(issue === undefined ? {} : { issue })
       }
       worktrees.set(worktree.id, worktree)
       announce({ type: 'worktrees' })

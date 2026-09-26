@@ -3,7 +3,7 @@
 
 import { accessSync, constants, statSync } from 'node:fs'
 import path from 'node:path'
-import type { WorktreeLanding, WorktreeMerge, WorktreePullRequest } from '../../shared/entities'
+import type { WorktreeIssue, WorktreeLanding, WorktreeMerge, WorktreePullRequest } from '../../shared/entities'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
@@ -97,6 +97,10 @@ export type LandingOptions = {
   startedFrom: string
   /** A child lands in this worktree's branch, `baseRef`, here and never through its host. */
   parent?: { worktreeId: string; name: string }
+  /** The worktree's name, a pull request's title when several commits leave none. */
+  name?: string
+  /** The issue its pull request closes. */
+  issue?: WorktreeIssue
   gh?: GhProbe
   now?: () => number
 }
@@ -176,8 +180,12 @@ export async function createPullRequest(runner: GitRunner, options: LandingOptio
   const gh = landing.host === 'github' ? await options.gh?.signedIn(options.worktreePath) : null
   if (gh === null || gh === undefined) return answer(landing.compareUrl, false)
 
+  const fill =
+    options.issue === undefined
+      ? ['--fill']
+      : await closingTitleAndBody(runner, options, `${REMOTE}/${landing.base}`, options.issue.number)
   const made = await gh.tryRun({
-    args: ['pr', 'create', '--fill', '--head', options.branch, '--base', landing.base],
+    args: ['pr', 'create', ...fill, '--head', options.branch, '--base', landing.base],
     cwd: options.worktreePath,
     env: GH_ENV,
     timeoutMs: 120_000
@@ -192,6 +200,37 @@ export async function createPullRequest(runner: GitRunner, options: LandingOptio
   }
   const number = /\/pull\/(\d+)/.exec(url)?.[1]
   return answer(url, true, number === undefined ? undefined : Number(number))
+}
+
+/**
+ * What `--fill` would say, plus `Closes #N`: one commit is its subject and body, several are listed.
+ * `--fill` with `--body` is not relied on, so both are given.
+ */
+async function closingTitleAndBody(
+  runner: GitRunner,
+  options: LandingOptions,
+  base: string,
+  issue: number
+): Promise<string[]> {
+  const log = await runner.tryRun({
+    args: ['log', '--reverse', '--format=%s%x1f%b%x1e', `${base}..${options.branch}`],
+    cwd: options.worktreePath,
+    readOnly: true,
+    timeoutMs: 30_000
+  })
+  const commits = (log.exitCode === 0 ? log.stdout : '')
+    .split('\x1e')
+    .map((record) => record.trim())
+    .filter(Boolean)
+    .map((record) => {
+      const [subject = '', body = ''] = record.split('\x1f')
+      return { subject: subject.trim(), body: body.trim() }
+    })
+  const only = commits.length === 1 ? commits[0] : undefined
+  const title = only?.subject || options.name || options.branch
+  const summary = only === undefined ? commits.map((commit) => `- ${commit.subject}`).join('\n') : only.body
+  const closes = `Closes #${issue}`
+  return ['--title', title, '--body', summary === '' ? closes : `${summary}\n\n${closes}`]
 }
 
 export type MergeOptions = {

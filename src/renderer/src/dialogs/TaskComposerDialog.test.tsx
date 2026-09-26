@@ -12,7 +12,7 @@
 
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { StartPoint, StartPointList } from '@shared/entities'
+import type { IssueList, StartPoint, StartPointList } from '@shared/entities'
 
 const call = vi.fn<(method: string, params: unknown) => Promise<unknown>>()
 
@@ -575,5 +575,118 @@ describe('a child task', () => {
       parentId: 'w1',
       creates: [{ name: 'Write the migration', agentCommand: 'claude', task: 'Write the migration' }]
     })
+  })
+})
+
+describe('from a GitHub issue', () => {
+  const ISSUES: IssueList = {
+    projectId: 'p1',
+    available: true,
+    reason: null,
+    readAt: 0,
+    issues: [
+      {
+        number: 123,
+        title: 'Login redirect loops',
+        url: 'https://github.com/acme/pager/issues/123',
+        labels: ['bug', 'auth'],
+        body: 'It loops.',
+        updatedAt: null
+      },
+      {
+        number: 40,
+        title: 'Pager drops lines',
+        url: 'https://github.com/acme/pager/issues/40',
+        labels: [],
+        body: '',
+        updatedAt: null
+      }
+    ]
+  }
+
+  const answer = (issues: IssueList): void => {
+    call.mockImplementation(async (method, params) => {
+      if (method === 'worktree.issues') return issues
+      if (method !== 'worktree.startPoints') throw new Error(`unexpected ${method}`)
+      return listFor((params as { projectId: string }).projectId)
+    })
+  }
+  const filter = (): HTMLInputElement => screen.getByRole('textbox', { name: 'Filter issues' })
+  const issueRows = (): string[] =>
+    within(screen.getByRole('listbox', { name: 'Issues' }))
+      .getAllByRole('option')
+      .map((row) => row.textContent ?? '')
+
+  it('lists open issues with their labels, filtered as typed', async () => {
+    answer(ISSUES)
+    await open()
+    fireEvent.click(screen.getByRole('button', { name: 'From Issue…' }))
+    await screen.findByRole('listbox', { name: 'Issues' })
+    expect(call).toHaveBeenCalledWith('worktree.issues', { projectId: 'p1' })
+    expect(issueRows()).toEqual(['#123 Login redirect loopsbug · auth', '#40 Pager drops lines'])
+    fireEvent.change(filter(), { target: { value: 'pager' } })
+    expect(issueRows()).toEqual(['#40 Pager drops lines'])
+  })
+
+  it('fills the task, the branch and the link from the issue picked, and submits the link', async () => {
+    answer(ISSUES)
+    await open()
+    fireEvent.click(screen.getByRole('button', { name: 'From Issue…' }))
+    await screen.findByRole('listbox', { name: 'Issues' })
+    fireEvent.keyDown(filter(), { key: 'Enter' })
+
+    expect(task().value).toBe('#123 Login redirect loops\n\nIt loops.')
+    expect(branch().value).toBe('123-login-redirect-loops')
+    expect(screen.getByRole('link', { name: '#123' }).getAttribute('href')).toBe(
+      'https://github.com/acme/pager/issues/123'
+    )
+    submit().click()
+    expect(startTask).toHaveBeenCalledWith({
+      projectId: 'p1',
+      startedFrom: 'origin/main',
+      issue: { number: 123, url: 'https://github.com/acme/pager/issues/123' },
+      creates: [
+        {
+          name: '#123 Login redirect loops',
+          agentCommand: 'claude',
+          task: '#123 Login redirect loops\n\nIt loops.',
+          branch: '123-login-redirect-loops'
+        }
+      ]
+    })
+  })
+
+  it('drops the link when asked, keeping the text', async () => {
+    answer(ISSUES)
+    await open()
+    fireEvent.click(screen.getByRole('button', { name: 'From Issue…' }))
+    await screen.findByRole('listbox', { name: 'Issues' })
+    fireEvent.keyDown(filter(), { key: 'ArrowDown' })
+    fireEvent.keyDown(filter(), { key: 'Enter' })
+    fireEvent.click(screen.getByRole('button', { name: 'Unlink #40' }))
+    expect(screen.queryByRole('link', { name: '#40' })).toBeNull()
+    submit().click()
+    expect(startTask.mock.calls[0]?.[0]).not.toHaveProperty('issue')
+    expect(task().value).toBe('#40 Pager drops lines')
+  })
+
+  it('says it needs gh, dimmed, when gh is missing', async () => {
+    answer({ projectId: 'p1', available: false, reason: 'Needs gh', issues: [], readAt: 0 })
+    await open()
+    fireEvent.click(screen.getByRole('button', { name: 'From Issue…' }))
+    const reason = await screen.findByText('Needs gh')
+    expect(reason.classList.contains('issue-picker__unavailable')).toBe(true)
+    expect(screen.queryByRole('listbox', { name: 'Issues' })).toBeNull()
+  })
+
+  it('opens on the picker when asked for from the menu, and Escape goes back to the task', async () => {
+    answer(ISSUES)
+    render(<TaskComposerDialog projectId="p1" fromIssue />)
+    await screen.findByRole('listbox', { name: 'Issues' })
+    expect(document.activeElement).toBe(filter())
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.queryByRole('listbox', { name: 'Issues' })).toBeNull()
+    expect(closeDialog).not.toHaveBeenCalled()
+    expect(task()).toBeTruthy()
   })
 })

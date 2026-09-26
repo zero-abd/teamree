@@ -54,6 +54,10 @@ const WorktreeSchema = z.object({
       at: z.number()
     })
     .optional()
+    .catch(undefined),
+  issue: z
+    .object({ number: z.number().int().positive(), url: z.string().min(1) })
+    .optional()
     .catch(undefined)
 })
 

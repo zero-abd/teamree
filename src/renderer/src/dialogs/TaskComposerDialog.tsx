@@ -3,11 +3,14 @@
 
 import { useEffect, useState } from 'react'
 import { MAX_AGENT_ARGS_CHARS } from '@shared/agentLaunch'
+import type { WorktreeIssue } from '@shared/entities'
 import { permissionModesFor } from '@shared/permissionMode'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { AgentSteppers } from './AgentSteppers'
 import { BranchField } from './BranchField'
 import { branchNameFromTask } from './branchNameFromTask'
+import { IssuePicker } from './IssuePicker'
+import { issueBranch, issueTask } from './issueModel'
 import { Modal } from './Modal'
 import { Select } from './Select'
 import { StartPointPicker, type StartPointValue } from './StartPointPicker'
@@ -28,11 +31,14 @@ import { worktreeDisplay } from '../sidebar/worktreeDisplay'
 
 export function TaskComposerDialog({
   projectId: openedFor,
-  parentId
+  parentId,
+  fromIssue = false
 }: {
   projectId: string
   /** A child task of this worktree: it starts from its branch. */
   parentId?: string
+  /** Opens on the issue picker. */
+  fromIssue?: boolean
 }): React.JSX.Element | null {
   const projects = useWorkspaceStore((state) => state.projects)
   const agents = useWorkspaceStore((state) => state.agents)
@@ -56,6 +62,10 @@ export function TaskComposerDialog({
   const [touched, setTouched] = useState(false)
   // A branch typed by hand, kept while the task is edited; null follows the task.
   const [branchEdit, setBranchEdit] = useState<string | null>(null)
+  const [picking, setPicking] = useState(fromIssue)
+  // Whether the picker has been open, so the task box it gives way to takes the cursor back.
+  const [pickedOnce, setPickedOnce] = useState(fromIssue)
+  const [issue, setIssue] = useState<WorktreeIssue | null>(null)
 
   const project = projects.find((entry) => entry.id === projectId)
   const { state: startPoints, reload } = useStartPoints(projectId)
@@ -117,7 +127,13 @@ export function TaskComposerDialog({
         .map((agent) => [agent.kind, modes[agent.kind] ?? 'default'])
     )
     rememberPermissionModes(projectId, used)
-    startTask({ projectId, startedFrom, ...(parent === undefined ? {} : { parentId: parent.id }), creates })
+    startTask({
+      projectId,
+      startedFrom,
+      ...(parent === undefined ? {} : { parentId: parent.id }),
+      ...(issue === null ? {} : { issue }),
+      creates
+    })
   }
 
   return (
@@ -145,29 +161,73 @@ export function TaskComposerDialog({
           </p>
         )}
 
-        <label className="field field--task">
-          <span className="field__label">Task</span>
-          <textarea
-            className="field__input field__input--task"
-            value={task}
-            onChange={(event) => setTask(event.target.value)}
-            // Enter submits: this is the field people finish in.
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' || event.shiftKey) return
-              event.preventDefault()
-              submit()
+        {picking ? (
+          <IssuePicker
+            projectId={projectId}
+            onPick={(picked) => {
+              setTask(issueTask(picked))
+              // A child's branch is named from its parent's; the issue names only a new one.
+              if (parent === undefined) setBranchEdit(issueBranch(picked))
+              setIssue({ number: picked.number, url: picked.url })
+              setPicking(false)
             }}
-            rows={3}
-            placeholder="Task"
-            autoComplete="off"
-            spellCheck={true}
+            onClose={() => setPicking(false)}
           />
-          {tooLong ? (
-            <span className="field__hint">
-              {task.trim().length} / {MAX_AGENT_ARGS_CHARS} chars
-            </span>
-          ) : null}
-        </label>
+        ) : (
+          <div className="task-field">
+            <label className="field field--task">
+              <span className="field__label">Task</span>
+              <textarea
+                className="field__input field__input--task"
+                value={task}
+                onChange={(event) => setTask(event.target.value)}
+                // Enter submits: this is the field people finish in.
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter' || event.shiftKey) return
+                  event.preventDefault()
+                  submit()
+                }}
+                // Back from the picker, the task is what is left to edit.
+                autoFocus={pickedOnce}
+                rows={3}
+                placeholder="Task"
+                autoComplete="off"
+                spellCheck={true}
+              />
+              {tooLong ? (
+                <span className="field__hint">
+                  {task.trim().length} / {MAX_AGENT_ARGS_CHARS} chars
+                </span>
+              ) : null}
+            </label>
+            {/* After the box in the DOM, so the dialog still opens with the cursor in the task. */}
+            <div className="task-source">
+              {issue === null ? null : (
+                <span className="chip task-source__issue">
+                  <a href={issue.url} target="_blank" rel="noreferrer">{`#${issue.number}`}</a>
+                  <button
+                    type="button"
+                    className="task-source__unlink"
+                    aria-label={`Unlink #${issue.number}`}
+                    onClick={() => setIssue(null)}
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              <button
+                type="button"
+                className="button button--ghost button--tiny"
+                onClick={() => {
+                  setPickedOnce(true)
+                  setPicking(true)
+                }}
+              >
+                From Issue…
+              </button>
+            </div>
+          </div>
+        )}
 
         <AgentSteppers
           agents={agents}
@@ -186,6 +246,8 @@ export function TaskComposerDialog({
                   value={projectId}
                   onChange={(event) => {
                     setProjectId(event.target.value)
+                    // An issue of the old project's repository.
+                    setIssue(null)
                     // The old project's base ref has no meaning in the new one.
                     setTouched(false)
                     setStartPoint({ text: '', option: null })

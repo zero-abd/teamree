@@ -14,6 +14,7 @@ import type {
   FileContent,
   FileWritten,
   InstalledAgent,
+  IssueList,
   Layout,
   MemberList,
   PaneConsent,
@@ -253,6 +254,8 @@ export const Params = {
     base: z.string().min(1).max(256).optional(),
     /** Makes a child task: it branches from this worktree's branch and lands back in it. */
     parentId: z.string().min(1).max(256).optional(),
+    /** The GitHub issue it is for; kept on the worktree, and its pull request closes it. */
+    issue: z.object({ number: z.number().int().positive(), url: z.string().url().max(512) }).optional(),
     /** The calling pane, set by the CLI from `TEAMREE_TERMINAL_ID`; agent calls get the child limits. */
     fromTerminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS).optional()
   }),
@@ -372,6 +375,7 @@ export const Params = {
   worktreeBranches: z.object({ projectId: z.string().min(1) }),
   /** Open pull requests through `gh`, for Check Out Pull Request. */
   worktreePullRequests: z.object({ projectId: z.string().min(1) }),
+  worktreeIssues: z.object({ projectId: z.string().min(1) }),
   /**
    * Writes the project's setup as it applies here to `.teamree/project.json` in
    * the primary checkout. Commits nothing. `startFrom` is the window's own setting.
@@ -860,6 +864,7 @@ export type MethodContract = TaskMethodContract & {
   'worktree.setupCheck': { params: z.infer<typeof Params.worktreeSetupCheck>; result: WorktreeSetupCheck }
   'worktree.runSetup': { params: z.infer<typeof Params.worktreeRunSetup>; result: Worktree }
   'worktree.pullRequests': { params: z.infer<typeof Params.worktreePullRequests>; result: PullRequestList }
+  'worktree.issues': { params: z.infer<typeof Params.worktreeIssues>; result: IssueList }
   'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }
   'worktree.diff': { params: z.infer<typeof Params.worktreeDiff>; result: WorktreeDiff }
   'worktree.files': { params: z.infer<typeof Params.worktreeFiles>; result: WorktreeFiles }

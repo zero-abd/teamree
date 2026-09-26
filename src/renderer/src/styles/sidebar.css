@@ -406,6 +406,15 @@
   color: var(--fg-secondary);
 }
 
+.worktree__issue {
+  color: var(--fg-secondary);
+  cursor: pointer;
+}
+
+.worktree__issue:hover {
+  color: var(--accent-bright);
+}
+
 .worktree__row {
   position: relative;
   display: flex;

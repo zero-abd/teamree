@@ -207,6 +207,7 @@ export function App(): React.JSX.Element {
         <TaskComposerDialog
           projectId={dialog.projectId}
           {...(dialog.parentId === undefined ? {} : { parentId: dialog.parentId })}
+          fromIssue={dialog.fromIssue === true}
         />
       ) : null}
       {dialog?.kind === 'join-team' ? <JoinTeamDialog invitation={dialog.invitation} /> : null}

@@ -9,6 +9,7 @@ import path from 'node:path'
 import type {
   BranchList,
   CloneProgress,
+  IssueList,
   Project,
   RemovedWorktree,
   PullRequestList,
@@ -83,6 +84,7 @@ import {
 import { pushWorktree } from './worktreePush'
 import { abortWorktreeUpdate, updateWorktree } from './worktreeUpdate'
 import { createGhProbe, createPullRequest, mergeIntoBase, readLanding, type GhProbe } from './worktreeLanding'
+import { listIssues } from './issues'
 import { keptName } from './worktreeKeep'
 import { landedInBase, planCleanup, type CleanupRead } from './worktreeCleanup'
 import { readBranchChanges, readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
@@ -693,7 +695,8 @@ export class GitService {
       ...(told ? { task: told } : {}),
       ...(parent === undefined ? {} : { parentId: parent.id, baseRef: parent.branch }),
       ...(checkout ? { checkout } : {}),
-      ...(checkout && params.base?.trim() ? { baseRef: params.base.trim() } : {})
+      ...(checkout && params.base?.trim() ? { baseRef: params.base.trim() } : {}),
+      ...(params.issue === undefined ? {} : { issue: { number: params.issue.number, url: params.issue.url } })
     }
     if (claim.adopt !== undefined) {
       // Already built and set up: taken back as it is, nothing run in it.
@@ -1400,6 +1403,8 @@ export class GitService {
       branch: worktree.branch,
       baseRef: parent?.branch ?? project.baseRef,
       startedFrom: worktree.startedFrom,
+      name: worktree.name,
+      ...(worktree.issue === undefined ? {} : { issue: worktree.issue }),
       ...(parent === undefined ? {} : { parent: { worktreeId: parent.id, name: parent.name } }),
       ...(this.#gh === undefined ? {} : { gh: this.#gh }),
       now: this.#now
@@ -1458,6 +1463,12 @@ export class GitService {
     ])
     const pullRequests = read.pullRequests.filter((pull) => !taken.has(pull.branch))
     return { projectId: project.id, ...read, pullRequests, readAt: this.#now() }
+  }
+
+  async listIssues(params: ParamsOf<'worktree.issues'>): Promise<IssueList> {
+    const project = this.#requireProject(params.projectId)
+    const read = await listIssues(this.#locateGh?.() ?? null, project.path)
+    return { projectId: project.id, ...read, readAt: this.#now() }
   }
 
   /** How a worktree's start point was read. Present only for worktrees this process created. */

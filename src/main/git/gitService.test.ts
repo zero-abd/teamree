@@ -1089,3 +1089,28 @@ describe('open pull requests, when gh is there', () => {
     expect(list).toMatchObject({ available: false, pullRequests: [] })
   })
 })
+
+describe('open issues', () => {
+  it('lists them for the project through gh', async () => {
+    const repo = await newRepo({ withRemote: true })
+    const script = path.join(repo.base, 'gh')
+    const issue = { number: 5, title: 'Pager drops lines', url: 'https://github.com/acme/pager/issues/5', labels: [] }
+    await writeFile(script, `#!/bin/sh\ncat <<'JSON'\n${JSON.stringify([issue])}\nJSON\n`)
+    await chmod(script, 0o755)
+    const service = newService(repo, { ghBinary: () => script })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const list = await service.listIssues({ projectId: project.id })
+
+    expect(list).toMatchObject({ projectId: project.id, available: true, reason: null })
+    expect(list.issues).toEqual([{ ...issue, body: '', updatedAt: null }])
+  })
+
+  it('needs gh when it is not installed', async () => {
+    const repo = await newRepo({ withRemote: true })
+    const service = newService(repo, { ghBinary: () => null })
+    const project = await service.addProject({ path: repo.repoPath })
+
+    expect(await service.listIssues({ projectId: project.id })).toMatchObject({ available: false, reason: 'Needs gh' })
+  })
+})

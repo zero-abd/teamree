@@ -29,6 +29,7 @@ export type PaletteAction =
   | 'show-files'
   | 'open-branch'
   | 'open-pull-request'
+  | 'new-task-from-issue'
   | 'install-cli'
   | 'check-for-updates'
   | 'toggle-automatic-updates'
@@ -168,7 +169,8 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     const unavailable =
       action.unavailable ??
       (action.id === 'install-cli' && context.cli?.state === 'linked' ? 'installed' : null) ??
-      ((action.id === 'open-branch' || action.id === 'open-pull-request') && context.projects.length === 0
+      ((action.id === 'open-branch' || action.id === 'open-pull-request' || action.id === 'new-task-from-issue') &&
+      context.projects.length === 0
         ? 'no project'
         : null) ??
       context.whyUnavailable?.(action.id) ??
@@ -444,6 +446,7 @@ const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[]
     keywords: 'checkout existing branch teammate remote worktree track take over'
   },
   { id: 'open-pull-request', label: 'Check Out Pull Request…', keywords: 'review pr github gh checkout teammate' },
+  { id: 'new-task-from-issue', label: 'New Task from Issue…', keywords: 'github gh issue ticket bug start task' },
   {
     id: 'install-cli',
     label: 'Install Command Line Tool',
