@@ -882,6 +882,7 @@
 /* ---------------------------------------------------------- shared notes */
 
 .shared-notes {
+  max-width: 78ch;
   display: flex;
   flex-direction: column;
   gap: var(--s2);
@@ -948,4 +949,9 @@
   margin-top: var(--s2);
   overflow: auto;
   border-top: 1px solid var(--line);
+}
+
+/* The pane's room to scroll past the end is dead space in a list. */
+.shared-notes__text .md-editor {
+  padding: var(--s3) var(--page-gutter) var(--s4);
 }
