@@ -371,6 +371,8 @@ export type WorktreeLanding = {
   readAt: number
   /** A child lands in its parent: set, the page offers that merge and never a pull request. */
   parent?: { worktreeId: string; name: string }
+  /** `origin` exists, so the branch can be published; absent reads as yes. */
+  remote?: boolean
 }
 
 /** A pull request made with `gh`, or, with `created` false and no number, the host's page to make one. */

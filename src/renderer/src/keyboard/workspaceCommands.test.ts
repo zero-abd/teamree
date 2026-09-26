@@ -647,6 +647,12 @@ describe('the commands that were in no menu', () => {
     )
   })
 
+  it('offers no Push in a repository with no remote', () => {
+    const local = { ...AHEAD, landings: { w1: { remote: false } } } as CommandState
+    expect(whyUnavailable('push-worktree', local)).toBe('no remote')
+    expect(whyUnavailable('push-worktree', { ...AHEAD, landings: { w1: { remote: true } } } as CommandState)).toBeNull()
+  })
+
   it('offers Commit… only where something has changed', () => {
     expect(isCommandAvailable('commit-changes' as WorkspaceCommand, WORKING)).toBe(false)
     expect(isCommandAvailable('commit-changes' as WorkspaceCommand, DIRTY)).toBe(true)

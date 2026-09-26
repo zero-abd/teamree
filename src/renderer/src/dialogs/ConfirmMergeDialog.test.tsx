@@ -3,7 +3,7 @@
 // Merging a worktree: the commits that go in, how much the branch changes against its base, and a way to read it first.
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Worktree, WorktreeChanges, WorktreeMerge } from '@shared/entities'
 import { fileLeavesIn, isReviewLeaf } from '@shared/filePane'
 
@@ -96,4 +96,86 @@ it('reviews the whole branch instead of merging it', async () => {
   expect(fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root).filter(isReviewLeaf)).toHaveLength(1)
   expect(useReviewStore.getState().scope.w1).toBe('branch')
   expect(call).not.toHaveBeenCalledWith('worktree.mergeIntoBase', { worktreeId: 'w1' })
+})
+
+describe('a worktree with uncommitted work', () => {
+  const uncommitted = [
+    { path: 'README.md', kind: 'modified' as const, staged: false, unstaged: true },
+    { path: 'notes.md', kind: 'untracked' as const, staged: false, unstaged: true }
+  ]
+  const commit = {
+    worktreeId: 'w1',
+    sha: 'b'.repeat(40),
+    shortSha: 'bbbbbbb',
+    message: 'Add usage',
+    paths: ['README.md', 'notes.md'],
+    committedAt: 0
+  }
+
+  beforeEach(() => {
+    call.mockClear()
+    useWorkspaceStore.setState({
+      statuses: {
+        w1: {
+          worktreeId: 'w1',
+          branch: 'fix-typo',
+          upstream: null,
+          ahead: 1,
+          behind: 0,
+          staged: 0,
+          unstaged: 1,
+          untracked: 1,
+          conflicted: 0,
+          readAt: 0
+        }
+      },
+      changes: { w1: { worktreeId: 'w1', changes: uncommitted, total: 2, limit: 500, truncated: false, readAt: 0 } }
+    })
+  })
+
+  it('commits all of it with the message typed, and only then merges', async () => {
+    call.mockImplementation((method: unknown, params: unknown) => {
+      if (method === 'worktree.commit') return Promise.resolve(commit)
+      if (method === 'worktree.mergeIntoBase') return Promise.resolve(plan)
+      if (method === 'worktree.changes' && (params as { base?: boolean }).base === true) return Promise.resolve(branch)
+      return new Promise(() => {})
+    })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+
+    expect(screen.getByText('2 uncommitted')).toBeTruthy()
+    expect(screen.getByText('notes.md')).toBeTruthy()
+    const confirm = screen.getByRole('button', { name: 'Commit & Merge' }) as HTMLButtonElement
+    expect(confirm.disabled).toBe(true)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Add usage' } })
+    fireEvent.click(confirm)
+
+    await waitFor(() => expect(call).toHaveBeenCalledWith('worktree.mergeIntoBase', { worktreeId: 'w1' }))
+    const methods = call.mock.calls.map(([method, params]) => [method, params])
+    const committed = methods.findIndex(([method]) => method === 'worktree.commit')
+    const merged = methods.findIndex(
+      ([method, params]) => method === 'worktree.mergeIntoBase' && (params as { dryRun?: boolean }).dryRun !== true
+    )
+    expect(methods[committed]).toEqual([
+      'worktree.commit',
+      { worktreeId: 'w1', message: 'Add usage', paths: ['README.md', 'notes.md'] }
+    ])
+    expect(committed).toBeLessThan(merged)
+  })
+
+  it('merges nothing when the commit is refused, and says why', async () => {
+    call.mockImplementation((method: unknown, params: unknown) => {
+      if (method === 'worktree.commit') return Promise.reject(new Error('no git identity'))
+      if (method === 'worktree.mergeIntoBase') return Promise.resolve(plan)
+      if (method === 'worktree.changes' && (params as { base?: boolean }).base === true) return Promise.resolve(branch)
+      return new Promise(() => {})
+    })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Add usage' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Commit & Merge' }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe('no git identity')
+    expect(call).not.toHaveBeenCalledWith('worktree.mergeIntoBase', { worktreeId: 'w1' })
+  })
 })

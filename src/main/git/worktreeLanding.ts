@@ -115,8 +115,10 @@ export async function readLanding(runner: GitRunner, options: LandingOptions): P
     (await git(['merge-base', '--is-ancestor', options.branch, ref])).exitCode === 0
 
   const base = bareRef(options.baseRef, REMOTE)
-  const remoteUrl = options.parent === undefined ? await git(['remote', 'get-url', REMOTE]) : undefined
-  const url = remoteUrl?.exitCode === 0 ? remoteUrl.stdout.trim() : ''
+  const remoteUrl = await git(['remote', 'get-url', REMOTE])
+  const remote = remoteUrl.exitCode === 0
+  // A child lands in its parent, whatever the origin's host.
+  const url = remote && options.parent === undefined ? remoteUrl.stdout.trim() : ''
   const host = remoteForge(url)
   const published =
     (await git(['rev-parse', '--verify', '--quiet', `refs/remotes/${REMOTE}/${options.branch}`])).exitCode === 0
@@ -146,7 +148,8 @@ export async function readLanding(runner: GitRunner, options: LandingOptions): P
     ...(compareUrl === undefined ? {} : { compareUrl }),
     ...(pullRequest === undefined ? {} : { pullRequest }),
     readAt: (options.now ?? Date.now)(),
-    ...(options.parent === undefined ? {} : { parent: options.parent })
+    ...(options.parent === undefined ? {} : { parent: options.parent }),
+    remote
   }
 }
 

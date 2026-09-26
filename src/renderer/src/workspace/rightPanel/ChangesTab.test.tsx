@@ -107,6 +107,25 @@ function pendingPush(): PromiseWithResolvers<WorktreePush> {
   return push
 }
 
+const childWorktree = {
+  id: 'w1',
+  projectId: 'p1',
+  name: 'Write tests',
+  branch: 'rework-auth--write-tests',
+  path: '/wt/rework-auth--write-tests',
+  startedFrom: 'abc',
+  state: 'ready' as const,
+  createdAt: 0,
+  parentId: 'w0',
+  baseRef: 'rework-auth'
+}
+
+/** The header's ⋯ menu, opened; its rows are what the header does not show. */
+function moreMenu(): HTMLElement {
+  fireEvent.click(screen.getByRole('button', { name: 'More actions' }))
+  return screen.getByRole('menu', { name: 'More actions' })
+}
+
 beforeEach(() => {
   call.mockReset()
   call.mockImplementation(() => new Promise(() => {}))
@@ -336,7 +355,9 @@ describe('landing the work', () => {
     render(<ChangesTab />)
 
     expect(primary('Merge into main…')).toBe(true)
-    expect(primary('Publish Branch')).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Publish Branch' })).toBeNull()
+    expect(within(moreMenu()).getByRole('menuitem', { name: 'Publish Branch' })).toBeTruthy()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
     fireEvent.click(screen.getByRole('button', { name: 'Merge into main…' }))
     expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'w1' })
     expect(call).not.toHaveBeenCalledWith('worktree.mergeIntoBase', expect.anything())
@@ -352,17 +373,71 @@ describe('landing the work', () => {
     expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'w1' })
   })
 
-  it('waits for Push while the remote lacks commits, and for Commit while there are changes', () => {
+  it('waits for Push while the remote lacks commits, the pull request dimmed in the menu with why', () => {
     landed({}, { ahead: 1 })
-    const { unmount } = render(<ChangesTab />)
+    render(<ChangesTab />)
     expect(screen.queryByRole('button', { name: 'Create Pull Request' })).toBeNull()
     expect(primary('Push')).toBe(true)
-    unmount()
+    const pr = within(moreMenu()).getByRole('menuitem', { name: 'Create Pull Request' })
+    expect(pr.getAttribute('aria-disabled')).toBe('true')
+    expect(pr.textContent).toContain('1 unpushed')
+    fireEvent.click(pr)
+    expect(call).not.toHaveBeenCalledWith('worktree.createPullRequest', expect.anything())
+  })
 
-    landed({ host: null }, { ahead: 0, unstaged: 1 })
+  it('keeps the merge on screen with uncommitted work, as Commit & Merge, and asks before committing', () => {
+    landed({ host: null, unmerged: 0 }, { ahead: 0, unstaged: 2, untracked: 1 })
     withChanges(rows)
     render(<ChangesTab />)
-    expect(screen.queryByRole('button', { name: 'Merge into main…' })).toBeNull()
+
+    const button = screen.getByRole('button', { name: 'Commit & Merge into main…' })
+    expect(primary('Commit All')).toBe(true)
+    expect(button.className).not.toContain('button--primary')
+    expect(button.title).toBe('3 uncommitted')
+    fireEvent.click(button)
+    expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'w1' })
+    expect(call).not.toHaveBeenCalledWith('worktree.commit', expect.anything())
+  })
+
+  it('shows Create Pull Request disabled, saying what is needed, while there are changes', () => {
+    landed({}, { ahead: 0, unstaged: 1 })
+    withChanges(rows.slice(0, 1))
+    render(<ChangesTab />)
+
+    const button = screen.getByRole('button', { name: 'Create Pull Request' }) as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    expect(button.title).toBe('1 uncommitted')
+  })
+
+  it('offers no Publish in a repository with no remote', () => {
+    landed({ host: null, published: false, compareUrl: undefined, remote: false }, { upstream: null, ahead: 1 })
+    render(<ChangesTab />)
+
+    expect(screen.getByRole('button', { name: 'Merge into main…' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Publish Branch' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull()
+  })
+
+  it('tidies a child’s header to one button and a menu for the rest', () => {
+    landed(
+      { base: 'rework-auth', host: null, published: false, parent: { worktreeId: 'w0', name: 'Rework auth' } },
+      { upstream: null, ahead: 1, behind: 1 }
+    )
+    useWorkspaceStore.setState({ worktrees: [childWorktree] })
+    render(<ChangesTab />)
+
+    const head = document.querySelector('.changes__head') as HTMLElement
+    expect(
+      within(head)
+        .getAllByRole('button')
+        .map((button) => button.getAttribute('aria-label') ?? button.textContent)
+    ).toEqual(['Merge into Rework auth…', 'More actions'])
+    expect(primary('Merge into Rework auth…')).toBe(true)
+    expect(
+      within(moreMenu())
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    ).toEqual(['Publish Branch', 'Update from Parent'])
   })
 
   it('says Merged once the branch is in its base, and offers the removal', () => {
@@ -518,7 +593,7 @@ describe('the changes header', () => {
     render(<ChangesTab />)
     const head = screen.getByRole('button', { name: 'Push' }).parentElement as HTMLElement
     expect(head.querySelector('.changes__ref')?.textContent).toBe('rewrite-the-pager · ↑1 ↓2')
-    expect(head.lastElementChild?.textContent).toBe('Push')
+    expect(head.children[1]?.textContent).toBe('Push')
   })
 
   it('counts against the base when the branch tracks nothing, and says what each arrow measures', () => {
@@ -1048,32 +1123,20 @@ describe('keeping up with the base', () => {
     )
     render(<ChangesTab />)
 
-    const update = screen.getByRole('button', { name: 'Update from main' })
-    expect(update.className).not.toContain('button--primary')
     expect(screen.getByRole('button', { name: 'Push' }).className).toContain('button--primary')
-    await act(async () => fireEvent.click(update))
+    const item = within(moreMenu()).getByRole('menuitem', { name: 'Update from main' })
+    await act(async () => fireEvent.click(item))
     expect(call).toHaveBeenCalledWith('worktree.update', { worktreeId: 'w1' })
   })
 
   it('offers Update from Parent to a child behind its parent', async () => {
     seed({ behind: 2 })
-    const child = {
-      id: 'w1',
-      projectId: 'p1',
-      name: 'Write tests',
-      branch: 'rework-auth--write-tests',
-      path: '/wt/rework-auth--write-tests',
-      startedFrom: 'abc',
-      state: 'ready' as const,
-      createdAt: 0,
-      parentId: 'w0',
-      baseRef: 'rework-auth'
-    }
-    useWorkspaceStore.setState({ worktrees: [child] })
+    useWorkspaceStore.setState({ worktrees: [childWorktree] })
     call.mockImplementation(() => new Promise(() => {}))
     render(<ChangesTab />)
 
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Update from Parent' })))
+    const item = within(moreMenu()).getByRole('menuitem', { name: 'Update from Parent' })
+    await act(async () => fireEvent.click(item))
     expect(call).toHaveBeenCalledWith('worktree.update', { worktreeId: 'w1' })
   })
 
@@ -1088,7 +1151,8 @@ describe('keeping up with the base', () => {
       method === 'worktree.update' ? Promise.reject(new Error('Commit or stash first')) : new Promise(() => {})
     )
     render(<ChangesTab />)
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Update from main' })))
+    const item = within(moreMenu()).getByRole('menuitem', { name: 'Update from main' })
+    await act(async () => fireEvent.click(item))
     expect(screen.getByRole('alert').textContent).toBe('Commit or stash first')
   })
 

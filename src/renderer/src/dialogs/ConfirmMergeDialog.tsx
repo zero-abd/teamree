@@ -1,5 +1,6 @@
 // Asked before a worktree's branch is merged into the base in the project's own checkout, or a child's
 // into its parent's: the commits that go in, read fresh, and the files in the way when that checkout has uncommitted work.
+// Work uncommitted in the worktree itself is committed first, under a message typed here, never left behind.
 
 import { useEffect, useState } from 'react'
 import type { WorktreeChanges, WorktreeMerge } from '@shared/entities'
@@ -16,6 +17,9 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   const landing = useWorkspaceStore((state) => state.landings[worktreeId])
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
   const mergeIntoBase = useWorkspaceStore((state) => state.mergeIntoBase)
+  const pending = useWorkspaceStore((state) => state.changes[worktreeId])
+  const status = useWorkspaceStore((state) => state.statuses[worktreeId])
+  const [message, setMessage] = useState('')
   const reviewBranch = useReviewStore((state) => state.reviewBranch)
   const [plan, setPlan] = useState<WorktreeMerge | null>(null)
   const [branch, setBranch] = useState<WorktreeChanges | null>(null)
@@ -47,15 +51,28 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   const name = worktree === undefined ? 'this worktree' : `"${worktreeLabel(worktreeDisplay(worktree))}"`
   const dirty = plan?.dirty ?? []
   const commits = (plan?.commits ?? []).map((commit) => `${commit.shortSha} ${commit.subject}`)
+  const uncommitted = pending?.changes.map((change) => change.path) ?? []
+  const counted = status === undefined ? 0 : status.staged + status.unstaged + status.untracked + status.conflicted
+  const commitFirst = uncommitted.length > 0 || counted > 0
+  // An unread or cut-off list would commit only part of the work and merge without the rest.
+  const cannotCommit = commitFirst && (message.trim() === '' || uncommitted.length === 0 || pending?.truncated === true)
 
-  const merge = (): void => {
+  const merge = async (): Promise<void> => {
     setMerging(true)
     setError(null)
-    void mergeIntoBase(worktreeId).then((why) => {
-      if (why === null) return
-      setError(why)
-      setMerging(false)
-    })
+    if (commitFirst) {
+      try {
+        await runtimeClient.call('worktree.commit', { worktreeId, message, paths: uncommitted })
+      } catch (failure) {
+        setError(failure instanceof Error ? failure.message : String(failure))
+        setMerging(false)
+        return
+      }
+    }
+    const why = await mergeIntoBase(worktreeId)
+    if (why === null) return
+    setError(why)
+    setMerging(false)
   }
 
   return (
@@ -63,11 +80,11 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
       title={`Merge ${name} into ${into}?`}
       titleHint={plan?.checkout}
       cancel="Cancel"
-      confirm={merging ? 'Merging…' : 'Merge'}
+      confirm={merging ? 'Merging…' : commitFirst ? 'Commit & Merge' : 'Merge'}
       tone="primary"
-      confirmDisabled={merging || dirty.length > 0}
+      confirmDisabled={merging || dirty.length > 0 || cannotCommit}
       onCancel={closeDialog}
-      onConfirm={merge}
+      onConfirm={() => void merge()}
     >
       {branch === null || branch.total === 0 ? null : (
         <div className="merge__stat">
@@ -85,6 +102,27 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
         </div>
       )}
       {commits.length > 0 ? <Lines lines={commits} /> : null}
+      {commitFirst ? (
+        <>
+          <p className="confirm__body">{`${uncommitted.length || counted} uncommitted`}</p>
+          <Lines lines={uncommitted} />
+          <input
+            className="field__input"
+            type="text"
+            value={message}
+            placeholder="Commit message"
+            aria-label="Commit message"
+            autoFocus
+            disabled={merging}
+            onChange={(event) => setMessage(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || merging || dirty.length > 0 || cannotCommit) return
+              event.preventDefault()
+              void merge()
+            }}
+          />
+        </>
+      ) : null}
       {dirty.length > 0 ? (
         <>
           <p className="confirm__body" title={plan?.checkout}>

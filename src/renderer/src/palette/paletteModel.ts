@@ -16,11 +16,11 @@ import { APPEARANCE_MODE_LABEL } from '../settings/AppearanceSettings'
 import { canResumeConversations, harnessName } from '../agents/harnesses'
 import { runName, siblingRuns } from '../compare/siblingRuns'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
-import { MENU_ORDER, menuLabel } from '../menu/menuBar'
+import { MENU_ORDER, menuLabel, type PanelState } from '../menu/menuBar'
 import { agoLabel } from '../sidebar/agentRows'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { automaticUpdatesLabel } from '../updates/updateNotice'
-import { landLabel, type LandOffer } from '../workspace/rightPanel/landOffer'
+import { landLabel, landNote, type LandOffer } from '../workspace/rightPanel/landOffer'
 
 /** Every command this window has (derived from `WorkspaceCommand`, so none go missing) plus the palette's own rows. */
 export type PaletteAction =
@@ -111,6 +111,8 @@ export type PaletteContext = {
   focusedChange?: { path: string; discardable: boolean; staged: boolean } | null
   /** What the worktree on screen can do with its finished branch; see `landOffer`. */
   land?: LandOffer | null
+  /** What git last said about each worktree; Push reads Publish Branch on one that tracks nothing. */
+  statuses?: PanelState['statuses']
   /** Removed worktrees that can be restored, newest first. */
   removed?: readonly RemovedWorktree[]
   /** Projects with a merged worktree; absent reads as every project. */
@@ -223,15 +225,7 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
             label: `Open in ${target}`,
             keywords: 'open in editor ide terminal finder external app'
           })),
-        ...(land === null || land.kind === 'merged'
-          ? []
-          : [
-              {
-                id: land.kind === 'merge' ? ('merge-into-base' as const) : ('create-pull-request' as const),
-                label: landLabel(land),
-                keywords: 'land pull request pr merge review ship done github finish parent'
-              }
-            ]),
+        ...(land === null || land.kind === 'merged' ? [] : [landRow(land)]),
         ...siblings.map((other) => ({
           id: `compare:${other.id}` as const,
           label: `Compare with ${runName(other)}`,
@@ -284,8 +278,21 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
     hint: row.hint ?? '',
     detail: '',
     search: `${row.label} ${row.keywords}`,
-    here: true
+    here: true,
+    ...(row.unavailable === undefined ? {} : { unavailable: row.unavailable })
   }))
+}
+
+/** The header's land: dimmed with why while blocked, and a merge that commits first counts what it commits. */
+function landRow(land: Exclude<LandOffer, { kind: 'merged' }>): ActionRow {
+  const note = landNote(land)
+  const commitsFirst = land.kind === 'merge' && land.uncommitted !== undefined
+  return {
+    id: land.kind === 'merge' ? 'merge-into-base' : 'create-pull-request',
+    label: landLabel(land),
+    keywords: 'land pull request pr merge review ship done github finish parent',
+    ...(note === undefined ? {} : commitsFirst ? { hint: note } : { unavailable: note })
+  }
 }
 
 /** One row per removed worktree that can still come back, its age as the hint. */
@@ -515,10 +522,12 @@ function isWordStart(text: string, index: number): boolean {
 }
 
 const isDimmed = (item: PaletteItem): boolean => item.kind === 'action' && item.unavailable !== undefined
+const isHere = (item: PaletteItem): boolean => item.kind === 'action' && item.here === true
 
 /**
- * The list narrowed by the query, what a row says before its hidden keywords; ties keep build order so
- * the list does not reshuffle under the cursor. What cannot run is left out unless it is all there is.
+ * The list narrowed by the query, what a row says before its hidden keywords; ties go to the worktree
+ * on screen, then keep build order so the list does not reshuffle under the cursor. What cannot run is
+ * left out unless it is all there is, or it is the worktree's own and named by the query, and then it goes last.
  */
 export function filterPalette(items: readonly PaletteItem[], query: string): PaletteItem[] {
   const trimmed = query.trim()
@@ -532,13 +541,16 @@ export function filterPalette(items: readonly PaletteItem[], query: string): Pal
     .filter((row): row is { item: PaletteItem; index: number; shown: number; points: number } => row.points !== null)
     .sort(
       (left, right) =>
+        Number(isDimmed(left.item)) - Number(isDimmed(right.item)) ||
         right.shown - left.shown ||
         right.points - left.points ||
+        Number(isHere(right.item)) - Number(isHere(left.item)) ||
         left.item.label.length - right.item.label.length ||
         left.index - right.index
     )
-    .map((row) => row.item)
-  return found.every(isDimmed) ? found : found.filter((item) => !isDimmed(item))
+  if (found.every((row) => isDimmed(row.item))) return found.map((row) => row.item)
+  const named = (row: (typeof found)[number]): boolean => row.shown === 1 && isHere(row.item)
+  return found.filter((row) => !isDimmed(row.item) || named(row)).map((row) => row.item)
 }
 
 /** What identifies a row across openings, for the Recent group. */
