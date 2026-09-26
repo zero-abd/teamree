@@ -3,12 +3,16 @@
 // are about two things: that it survives a restart, and that nothing a peer
 // sends can make it grow without limit or come back as something it is not.
 
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { PeerWorktree } from '../../shared/entities'
+import { MAX_PEER_PATHS } from '../../shared/presenceExtras'
 import {
+  CACHE_BUDGET_BYTES,
+  MAX_CACHED_PATH_CHARS,
+  MAX_CACHE_BYTES,
   MAX_CACHED_PANES,
   MAX_CACHED_PEERS,
   MAX_CACHED_TEXT,
@@ -214,5 +218,80 @@ describe('a file this process could not read', () => {
     const store = await TeammateCacheStore.open(await cacheFile(), { onProblem: (p) => problems.push(p) })
     expect(problems).toEqual([])
     expect(store.list()).toEqual([])
+  })
+})
+
+describe('presence v2 in the cache', () => {
+  const v2 = theirWorktree({
+    task: 'Add rate limits',
+    parentId: 'wt_0',
+    paths: ['src/limiter.ts'],
+    ahead: 2,
+    stage: 'done',
+    report: { outcome: 'succeeded', summary: 'Added limiter.' }
+  })
+
+  it('keeps the task details across a restart, and reads an old row unchanged', async () => {
+    const filePath = await cacheFile()
+    const first = await TeammateCacheStore.open(filePath, { now: () => NOW })
+    first.put(entry({ worktrees: [v2, theirWorktree({ id: 'wt_old' })] }))
+    await first.flush()
+
+    const second = await TeammateCacheStore.open(filePath, { now: () => NOW })
+    const [kept, old] = second.get('bobkey==', 'abc123')?.worktrees ?? []
+    expect(kept).toEqual(v2)
+    expect(old).toEqual(theirWorktree({ id: 'wt_old' }))
+  })
+
+  it('drops a malformed field alone', () => {
+    const read = parseTeammateCache({
+      teammates: [{ ...entry(), worktrees: [{ ...v2, stage: 'celebrating', paths: 'src' }] }]
+    })
+    const [worktree] = read.teammates[0]?.worktrees ?? []
+    expect(worktree?.stage).toBeUndefined()
+    expect(worktree?.paths).toBeUndefined()
+    expect(worktree?.task).toBe('Add rate limits')
+  })
+
+  it('holds a worktree’s paths to a character budget', () => {
+    const paths = Array.from({ length: MAX_PEER_PATHS }, (_, index) => `${'deep/'.repeat(800)}file-${index}.ts`)
+    const bounded = boundTeammate(entry({ worktrees: [theirWorktree({ paths })] }))
+    const kept = bounded.worktrees[0]?.paths ?? []
+    expect(kept.length).toBeGreaterThan(0)
+    expect(kept.join('').length).toBeLessThanOrEqual(MAX_CACHED_PATH_CHARS)
+  })
+
+  const heavy = (publicKey: string, heardAt: number): CachedTeammate => {
+    const paths = Array.from({ length: MAX_PEER_PATHS }, (_, index) => `src/module-${index}/some-longer-name.ts`)
+    return entry({
+      publicKey,
+      heardAt,
+      worktrees: Array.from({ length: MAX_CACHED_WORKTREES }, (_, index) =>
+        theirWorktree({ id: `wt_${index}`, task: 't'.repeat(200), paths })
+      )
+    })
+  }
+
+  it('stays under the size it will read back, however much every teammate sends', async () => {
+    const filePath = await cacheFile()
+    const store = await TeammateCacheStore.open(filePath, { now: () => NOW })
+    for (let peer = 0; peer < MAX_CACHED_PEERS; peer += 1)
+      store.put(heavy(`key_${peer}`, NOW - MAX_CACHED_PEERS + peer))
+    await store.flush()
+
+    expect(CACHE_BUDGET_BYTES).toBeLessThan(MAX_CACHE_BYTES)
+    expect((await stat(filePath)).size).toBeLessThanOrEqual(CACHE_BUDGET_BYTES)
+    expect(store.get(`key_${MAX_CACHED_PEERS - 1}`, 'abc123')?.worktrees).toHaveLength(MAX_CACHED_WORKTREES)
+    const reopened = await TeammateCacheStore.open(filePath, { now: () => NOW })
+    expect(reopened.list().length).toBe(store.list().length)
+  })
+
+  it('sheds the paths of the teammate heard from longest ago first', async () => {
+    const store = await TeammateCacheStore.open(await cacheFile(), { now: () => NOW })
+    for (const [index, key] of ['old', 'middle', 'new'].entries()) store.put(heavy(key, NOW - 3 + index))
+
+    expect(store.list()).toHaveLength(3)
+    expect(store.get('old', 'abc123')?.worktrees[0]?.paths).toBeUndefined()
+    expect(store.get('new', 'abc123')?.worktrees[0]?.paths).toHaveLength(MAX_PEER_PATHS)
   })
 })

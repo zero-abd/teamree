@@ -25,6 +25,7 @@ import { installerStep } from '../updates/updateNotice'
 import { PageFrame } from '../workspace/PageFrame'
 import { activeChoice, BUILT_IN_THEMES, themeById } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from './AppearanceSettings'
+import { useRuntimeSettings } from './runtimeSettings'
 import {
   agentRows,
   cliLine,
@@ -173,6 +174,7 @@ function useSectionRows(): Record<Exclude<SectionId, 'projects'>, SettingsRow[]>
       { label: 'Scrollback lines', words: [String(options.scrollback)] }
     ],
     notices: [{ label: 'When an agent stops', words: NOTICE_CHOICES.map((choice) => choice.label) }],
+    teamwork: [{ label: 'Share Task Details', words: [] }],
     appearance: [{ label: 'Theme', words: [themeValue, ...THEME_WORDS] }],
     updates: [{ label: 'Check automatically', words: [] }],
     cli: []
@@ -287,6 +289,8 @@ function SectionBody({ id, projects }: { id: SectionId; projects: readonly Proje
       return <PanesSection />
     case 'notices':
       return <NoticesSection />
+    case 'teamwork':
+      return <TeamworkSection />
     case 'appearance':
       return <AppearanceSection />
     case 'updates':
@@ -513,6 +517,32 @@ function NoticesSection(): React.JSX.Element {
             ))}
           </Select>
         </div>
+      </div>
+    </section>
+  )
+}
+
+/** What teammates' presence carries from this machine. */
+function TeamworkSection(): React.JSX.Element {
+  const { settings, problem, change } = useRuntimeSettings()
+  return (
+    <section className="settings-section" aria-labelledby="settings-teamwork">
+      <h2 className="settings-section__title" id="settings-teamwork" tabIndex={-1}>
+        <Marked text="Teamwork" />
+      </h2>
+      <div className="settings-group">
+        <label className="settings-check">
+          <input
+            type="checkbox"
+            checked={settings?.shareTaskDetails ?? true}
+            disabled={settings === null}
+            onChange={(event) => change({ shareTaskDetails: event.target.checked })}
+          />
+          <span>
+            <Marked text="Share Task Details" />
+          </span>
+        </label>
+        {problem === null ? null : <p className="settings-error">{problem}</p>}
       </div>
     </section>
   )

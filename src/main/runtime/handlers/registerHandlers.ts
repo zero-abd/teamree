@@ -13,7 +13,7 @@ import { startSetupCommand } from '../../git/worktreeSetup'
 import { findProgram } from '../../git/worktreeLanding'
 import { loginShellPath } from '../../terminals/shell-environment'
 import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, TeamworkService } from '../../teamwork'
-import { PeerService, registerPeerHandlers } from '../../teamwork/peer'
+import { PeerService, registerPeerHandlers, taskGitReader } from '../../teamwork/peer'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
 import { UpdateService, registerUpdateHandlers, type SelfInstall } from '../../updates'
 import type { TerminalService } from '../../terminals/method-handlers'
@@ -300,6 +300,10 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
       },
       dataDir,
       subscriptions: registry.context.subscriptions,
+      shareTaskDetails: () => registry.context.store.runtimeSettings().shareTaskDetails,
+      readTaskGit: taskGitReader(createGitRunner(), (projectId) =>
+        git.listProjects().find((candidate) => candidate.id === projectId)
+      ),
       // Kept beside the terminal records, so a restored pane comes back as muted as it was left.
       mutes: {
         list: () => registry.context.store.listMutedTerminals(),

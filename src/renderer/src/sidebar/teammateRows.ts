@@ -3,6 +3,7 @@
 // owner's duration and the receiver adds what has elapsed since, trusting nobody's clock.
 
 import { teammatesHeard, type PeerPane, type TeammatePresence, type TeammateWorktree } from '@shared/entities'
+import type { TaskStage } from '@shared/tasks'
 import { activityOf, paneNames, paneText, worktreeTone, type AgentRow, type DotTone } from './agentRows'
 import { teammateStaleness, type TeammateStaleness } from './teammateStaleness'
 import { worktreeDisplay } from './worktreeDisplay'
@@ -19,7 +20,16 @@ export type TeammateWorktreeRowModel = {
   /** Already namespaced by the runtime; unique across every teammate. */
   id: string
   handle: string
+  /** The task's first line when they share task details, else the name. */
   name: string
+  /** Steps under the top of its teammate's tree. */
+  depth: number
+  stage?: TaskStage
+  /** The report's first sentence, once the task is done or failed. */
+  report?: string
+  /** Changed paths and commits ahead, for the hover. */
+  paths?: number
+  ahead?: number
   /** Absent when it only repeats the name; see `worktreeDisplay`. */
   branch?: string
   state: TeammateWorktree['state']
@@ -44,7 +54,7 @@ export function teammateRows(
   /** The last line each watched pane said, by namespaced pane id. Only open panes have one: a teammate's pane does not stream until opened. */
   evidence: Readonly<Record<string, string | null>> = {}
 ): TeammateWorktreeRowModel[] {
-  return worktrees.map((worktree) => {
+  return inTreeOrder(worktrees).map(({ worktree, depth }) => {
     const display = worktreeDisplay(worktree)
     const heardAgoMs = Math.max(0, now - worktree.heardAt)
     // Named together, as the owner's own sidebar names them: twins are told apart by each other.
@@ -55,7 +65,14 @@ export function teammateRows(
     return {
       id: worktree.id,
       handle: worktree.handle,
-      name: display.title,
+      name: worktree.task ?? display.title,
+      depth,
+      ...(worktree.stage === undefined ? {} : { stage: worktree.stage }),
+      ...(worktree.report !== undefined && (worktree.stage === 'done' || worktree.stage === 'failed')
+        ? { report: worktree.report.summary }
+        : {}),
+      ...(worktree.paths === undefined ? {} : { paths: worktree.paths.length }),
+      ...(worktree.ahead === undefined ? {} : { ahead: worktree.ahead }),
       ...(display.branch === undefined ? {} : { branch: display.branch }),
       state: worktree.state,
       panes,
@@ -65,6 +82,24 @@ export function teammateRows(
       staleness: teammateStaleness({ live: worktree.live, heardAt: worktree.heardAt, handle: worktree.handle, now })
     }
   })
+}
+
+/** Each child after its parent, one step deeper; a missing or circular parent leaves a row at the top. */
+function inTreeOrder(worktrees: readonly TeammateWorktree[]): { worktree: TeammateWorktree; depth: number }[] {
+  const ids = new Set(worktrees.map((worktree) => worktree.id))
+  const ordered: { worktree: TeammateWorktree; depth: number }[] = []
+  const placed = new Set<string>()
+  const place = (worktree: TeammateWorktree, depth: number): void => {
+    if (placed.has(worktree.id)) return
+    placed.add(worktree.id)
+    ordered.push({ worktree, depth })
+    for (const child of worktrees) if (child.parentId === worktree.id) place(child, depth + 1)
+  }
+  for (const worktree of worktrees) {
+    if (worktree.parentId === undefined || !ids.has(worktree.parentId)) place(worktree, 0)
+  }
+  for (const worktree of worktrees) place(worktree, 0)
+  return ordered
 }
 
 function paneRow(
@@ -93,7 +128,11 @@ function paneRow(
 /** The hover text for a teammate's worktree row; whose it is comes first. */
 export function teammateTitle(row: TeammateWorktreeRowModel): string {
   const panes = `${row.panes.length} pane${row.panes.length === 1 ? '' : 's'}`
-  const head = [row.name, `${row.handle}’s worktree on their machine`, row.branch, panes].filter(Boolean).join(' · ')
+  const files = row.paths === undefined ? undefined : `${row.paths} file${row.paths === 1 ? '' : 's'}`
+  const ahead = row.ahead ? `${row.ahead} ahead` : undefined
+  const head = [row.name, `${row.handle}’s worktree on their machine`, row.branch, panes, files, ahead]
+    .filter(Boolean)
+    .join(' · ')
   return row.staleness ? `${head}\n${row.staleness.detail}` : head
 }
 

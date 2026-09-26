@@ -49,10 +49,12 @@ import {
 import type { SubscriptionChannel, SubscriptionHub } from '../../runtime/subscriptionHub'
 import { notFound } from '../../runtime/runtimeError'
 import { ErrorCode } from '../../../shared/protocol'
+import { PeerWorktreeExtrasOnRead } from '../../../shared/presenceExtras'
 import {
   MAX_CACHED_PANES,
   MAX_CACHED_TEXT,
   MAX_CACHED_WORKTREES,
+  boundTaskDetails,
   PaneLabelOnRead,
   PaneOrdinalOnRead,
   TeammateCacheStore,
@@ -69,6 +71,7 @@ import { createNoteInbox, type NoteInbox } from './noteInbox'
 import { watchPane } from './paneWatch'
 import { createPeerLink, type LinkScheduler, type PeerLink } from './peerLink'
 import { presenceFor, type PresenceProject, type PresenceSource } from './presence'
+import { TaskDetails, type TaskGitDetails } from './presenceDetails'
 import { originMark, readProjectKey } from './projectKey'
 import { readRelayConfig, type RelayLocation } from './relayUrl'
 import { watchForWake, type WakeWatch } from './wakeWatch'
@@ -107,6 +110,10 @@ export type PeerServiceOptions = {
   env?: NodeJS.ProcessEnv
   /** What each teammate last showed, across a drop and across a restart. */
   cache?: TeammateCache
+  /** Settings › Teamwork › Share Task Details. Left out, it is on; off, peers get presence v1 only. */
+  shareTaskDetails?: () => boolean
+  /** Changed paths and commits ahead of one of this machine's worktrees. Left out, presence carries neither. */
+  readTaskGit?: (worktree: Worktree) => Promise<TaskGitDetails | undefined>
   /**
    * Where the owner's mutes live between runs: read once at startup, written
    * through on change. Left out, mutes last as long as the runtime.
@@ -198,6 +205,11 @@ export class PeerService {
    */
   readonly #heard = new Map<string, HeardPresence>()
   readonly #subscribers = new Map<string, SubscriptionChannel>()
+  readonly #taskDetails = new TaskDetails({
+    read: (worktree) => this.#options.readTaskGit?.(worktree) ?? Promise.resolve(undefined),
+    setTimer: (run, delayMs) => this.#scheduler.setTimer(run, delayMs),
+    onChange: () => this.#pushPresence()
+  })
   /** Which of this machine's panes each link's teammate has open, and since when. Per link, so per project. */
   readonly #watchers = new Map<string, Map<string, number>>()
   /**
@@ -537,6 +549,9 @@ export class PeerService {
             // Namespaced, because a teammate's worktree id is theirs and two
             // installations can and do generate the same one.
             id: `peer:${publicKey.slice(0, 12)}:${worktree.id}`,
+            ...(worktree.parentId === undefined
+              ? {}
+              : { parentId: `peer:${publicKey.slice(0, 12)}:${worktree.parentId}` }),
             panes: worktree.panes.map((pane) => ({
               ...pane,
               id: `peer:${publicKey.slice(0, 12)}:${pane.id}`
@@ -955,7 +970,11 @@ export class PeerService {
     if (peer === undefined) throw notFound('this connection is not a peer link')
     // Narrowed to the one project this session is for, on top of the roster filter.
     return presenceFor(
-      { source: this.#presenceSource(peer.projectKey), now: this.#scheduler.now },
+      {
+        source: this.#presenceSource(peer.projectKey),
+        now: this.#scheduler.now,
+        taskDetails: this.#sharesTaskDetails()
+      },
       peer.publicKey,
       this.#ownHandleIn(peer.projectKey),
       this.#revision
@@ -975,6 +994,7 @@ export class PeerService {
     previous?.close()
     // Immediately, so there is no separate first read for the stream to race.
     channel.emit(snapshot)
+    this.#requestTaskDetails()
     return () => {
       if (this.#subscribers.get(connectionId) === channel) this.#subscribers.delete(connectionId)
     }
@@ -1069,6 +1089,11 @@ export class PeerService {
 
   /** Something in the workspace moved: bump the revision and tell the peers once per burst. */
   notifyWorkspaceChanged(): void {
+    this.#requestTaskDetails()
+    this.#pushPresence()
+  }
+
+  #pushPresence(): void {
     if (!this.#started || this.#subscribers.size === 0) return
     if (this.#cancelCoalesce) return
     this.#cancelCoalesce = this.#scheduler.setTimer(() => {
@@ -1686,8 +1711,25 @@ export class PeerService {
             rosterKeys: fact.rosterKeys
           })),
       worktrees: (projectId) => this.#options.workspace.listWorktrees(projectId),
-      terminals: (worktreeId) => this.#options.workspace.listTerminals(worktreeId)
+      terminals: (worktreeId) => this.#options.workspace.listTerminals(worktreeId),
+      details: (worktreeId) => this.#taskDetails.get(worktreeId)
     }
+  }
+
+  #sharesTaskDetails(): boolean {
+    return this.#options.shareTaskDetails?.() ?? true
+  }
+
+  /** Git is asked only while someone is subscribed and sharing is on, and only about projects a subscriber is in. */
+  #requestTaskDetails(): void {
+    if (!this.#started || this.#subscribers.size === 0 || !this.#sharesTaskDetails()) return
+    this.#taskDetails.request(() => {
+      const keys = new Set([...this.#subscribers.keys()].map((id) => this.#peerByConnection.get(id)?.projectKey))
+      return [...this.#projects.values()]
+        .filter((fact) => fact.disabledReason === null && keys.has(fact.projectKey))
+        .flatMap((fact) => this.#options.workspace.listWorktrees(fact.projectId))
+        .filter((worktree) => worktree.state === 'ready')
+    })
   }
 
   async #readProject(project: Project, identityKey: string): Promise<ProjectFacts> {
@@ -2008,13 +2050,15 @@ const PanePayload = z.object({
   quietForMs: z.number().nonnegative()
 })
 
-const WorktreePayload = z.object({
-  id: z.string().min(1),
-  name: z.string(),
-  branch: z.string(),
-  state: z.enum(['creating', 'ready', 'removing', 'failed']),
-  panes: z.array(PanePayload)
-})
+const WorktreePayload = z
+  .object({
+    id: z.string().min(1),
+    name: z.string(),
+    branch: z.string(),
+    state: z.enum(['creating', 'ready', 'removing', 'failed']),
+    panes: z.array(PanePayload)
+  })
+  .extend(PeerWorktreeExtrasOnRead)
 
 const ProjectPayload = z.object({
   projectKey: z.string().min(1),
@@ -2056,7 +2100,7 @@ function boundProject(project: PeerProject): PeerProject {
 
 function boundWorktree(worktree: PeerWorktree): PeerWorktree {
   return {
-    ...worktree,
+    ...boundTaskDetails(worktree),
     id: clip(worktree.id),
     name: clip(worktree.name),
     branch: clip(worktree.branch),

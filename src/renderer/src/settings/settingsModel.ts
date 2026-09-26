@@ -140,6 +140,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'projects', label: 'Projects' },
   { id: 'panes', label: 'Panes' },
   { id: 'notices', label: 'Notifications' },
+  { id: 'teamwork', label: 'Teamwork' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'updates', label: 'Updates' },
   { id: 'cli', label: 'CLI' }
