@@ -51,11 +51,19 @@ import {
   type SplitDirection
 } from './pane-tree'
 import { conversationOnDisk, type ConversationEvidence, type ConversationQuestion } from './agent-conversations'
-import { restorableRecords, restoreLaunch, type ClosedTerminalRecord, type TerminalRecord } from './session-restore'
+import {
+  endedRunCommand,
+  restorableRecords,
+  restoreLaunch,
+  type ClosedTerminalRecord,
+  type RestoreLaunch,
+  type TerminalRecord
+} from './session-restore'
 import { CHECKPOINT_SOURCE_BYTES, ScrollbackCheckpoints } from './scrollbackCheckpoints'
 import {
   closingMark,
   NEW_SHELL_BELOW,
+  NOT_RUN_AGAIN_BELOW,
   sanitizeRecordedOutput,
   startsAgainBelow,
   tailFromLineBoundary,
@@ -333,7 +341,8 @@ export class TerminalSessionManager {
     const size = previous.snapshot()
     const stored = this.records.listTerminals().find((record) => record.id === params.terminalId)
     // A Run button's pane runs its command again, `command` when the project's has changed since.
-    const rerun = previous.run === undefined ? undefined : (command ?? previous.command)
+    // The record's, not the session's: a restored Run pane's session only ended.
+    const rerun = previous.run === undefined ? undefined : (command ?? stored?.command ?? previous.command)
     const launch: ReturnType<typeof relaunchCommand> =
       rerun === undefined ? relaunchCommand(stored) : { command: rerun }
     const below =
@@ -693,7 +702,10 @@ export class TerminalSessionManager {
     let resumed = 0
     for (const record of records) {
       if (this.sessions.has(record.id)) continue
-      const launch = restoreLaunch(record, this.options.conversationEvidence)
+      const launch: RestoreLaunch =
+        record.run === undefined
+          ? restoreLaunch(record, this.options.conversationEvidence)
+          : { command: endedRunCommand(record), resumed: false }
       // Handed over even for a resume, which prints the conversation itself:
       // a resume that fails would otherwise leave the pane holding a one-line
       // refusal, and the next quit wrote *that* back over the transcript.
@@ -721,11 +733,19 @@ export class TerminalSessionManager {
             // A pane starting its agent over was never spoken to, so its task goes with it again.
             ...(launch.repinned === undefined ? {} : this.taskFor(record)),
             ...(launch.resumed && launch.fallback !== undefined ? { fallback: launch.fallback } : {}),
-            ...(launch.note === undefined ? {} : { startupNote: launch.note })
+            ...(launch.note === undefined ? {} : { startupNote: launch.note }),
+            ...(record.run === undefined ? {} : { run: record.run, recordStartsBelow: NOT_RUN_AGAIN_BELOW })
           },
           restoring,
           // 'restarted' is running its agent; calling it a shell had the badge contradicting the banner.
-          launch.resumed ? 'agent' : launch.repinned === undefined ? 'shell' : 'restarted'
+          // A Run pane is no shell: its exit and Run Again say how it came back.
+          record.run !== undefined
+            ? undefined
+            : launch.resumed
+              ? 'agent'
+              : launch.repinned === undefined
+                ? 'shell'
+                : 'restarted'
         )
         restored += 1
         if (launch.resumed) resumed += 1
@@ -954,6 +974,7 @@ export class TerminalSessionManager {
       // from before this field existed may have a real conversation behind it.
       // `markNotResumable` answers the unknown when the agent refuses.
       ...(restoring === undefined ? { typed: false } : restoring.typed === undefined ? {} : { typed: restoring.typed }),
+      ...(params.run === undefined ? {} : { run: params.run }),
       cols: snapshot.cols,
       rows: snapshot.rows,
       createdAt: restoring?.createdAt ?? Date.now()
@@ -1081,6 +1102,12 @@ export class TerminalSessionManager {
     this.records.putTerminal(next)
   }
 
+  /** Written at the exit, so a relaunch can say how the run ended; a run the quit ends is not. */
+  private noteRunEnded(terminalId: string, exitCode: number): void {
+    const stored = this.records.listTerminals().find((record) => record.id === terminalId)
+    if (stored !== undefined && stored.exitCode !== exitCode) this.records.putTerminal({ ...stored, exitCode })
+  }
+
   private markNotResumable(terminalId: string): void {
     const stored = this.records.listTerminals().find((record) => record.id === terminalId)
     if (stored === undefined || stored.typed === false) return
@@ -1142,6 +1169,7 @@ export class TerminalSessionManager {
       // The only moment anything knows a resume did not take; unrecorded, the
       // pane asks for the same missing conversation on every launch.
       if (session.resumeDidNotTake) this.markNotResumable(session.id)
+      if (session.run !== undefined) this.noteRunEnded(session.id, event.exitCode)
       this.scrollback?.put(session.id, session.recordedOutput())
       this.reportSettled(session, 'exit')
       for (const listener of this.exitListeners) listener(session.id, event.exitCode)

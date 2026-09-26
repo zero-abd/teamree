@@ -1,12 +1,17 @@
 // Run Dev and Run Tests over real PTYs: one pane per kind, reused while it runs, stopped and
-// restarted in place, and its exit code kept as the run's result.
+// restarted in place, its exit code kept as the run's result, and all of it across a relaunch.
 
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { Terminal } from '../../shared/entities'
+import type { Layout, Terminal } from '../../shared/entities'
 import { runState } from '../../shared/runCommands'
 import { createTerminalService, type TerminalService } from './method-handlers'
 import { canSpawnPty, printThenExit, waitUntil } from './pty-test-support'
 import { RunPanes } from './run-panes'
+import { TerminalSessionManager, type LayoutRepository, type SessionRepository } from './session-manager'
+import type { TerminalRecord } from './session-restore'
 
 const describePty = canSpawnPty() ? describe : describe.skip
 const TEST_TIMEOUT_MS = 20_000
@@ -131,3 +136,125 @@ describePty('run panes', () => {
     TEST_TIMEOUT_MS
   )
 })
+
+describePty('run panes across a relaunch', () => {
+  const managers: TerminalSessionManager[] = []
+  const dirs: string[] = []
+
+  afterEach(async () => {
+    await Promise.all(managers.splice(0).map((manager) => manager.shutdown()))
+    await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  })
+
+  /** One launch of the app over records that outlive it. */
+  function launch(saved: LayoutRepository & SessionRepository): {
+    manager: TerminalSessionManager
+    runs: RunPanes
+    list: () => Terminal[]
+  } {
+    const manager = new TerminalSessionManager({
+      resolveWorktreeCwd: () => process.cwd(),
+      layouts: saved,
+      sessions: saved
+    })
+    managers.push(manager)
+    const runs = new RunPanes({
+      list: (worktreeId) => manager.list(worktreeId),
+      create: (params) => manager.create(params),
+      relaunch: (params, command) => manager.relaunch(params, command),
+      interrupt: (terminalId) => manager.interrupt(terminalId)
+    })
+    return { manager, runs, list: () => manager.list(WORKTREE) }
+  }
+
+  /** A server that writes a line to `marker` each time it starts. */
+  async function countedServer(): Promise<{ command: string; starts: () => Promise<number> }> {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'teamree-run-'))
+    dirs.push(dir)
+    const marker = path.join(dir, 'starts')
+    return {
+      command: `echo started >> "${marker}"; ${SERVER}`,
+      starts: async () => (await readFile(marker, 'utf8').catch(() => '')).split('\n').filter(Boolean).length
+    }
+  }
+
+  it(
+    'comes back as the same Run pane, ended, without running its command again',
+    async () => {
+      const saved = memoryRepositories()
+      const server = await countedServer()
+      const first = launch(saved)
+      const pane = await first.runs.start({
+        worktreeId: WORKTREE,
+        kind: 'dev',
+        command: server.command,
+        restart: false
+      })
+      await waitUntil(async () => (await server.starts()) === 1, 'the server to start')
+      await first.manager.shutdown()
+
+      const second = launch(saved)
+      expect(second.manager.restoreSessions().restored).toBe(1)
+      await waitUntil(exited(second.list, pane.id), 'the restored pane to settle')
+      const restored = second.list()[0] as Terminal
+      // `run` is what makes the pane's button read Run Again.
+      expect(restored).toMatchObject({ id: pane.id, label: 'dev', run: 'dev', running: false })
+      expect(runState(restored)).toBe('stopped')
+      expect(await server.starts()).toBe(1)
+
+      const again = await second.runs.start({
+        worktreeId: WORKTREE,
+        kind: 'dev',
+        command: server.command,
+        restart: false
+      })
+      expect(again).toMatchObject({ id: pane.id, run: 'dev', running: true })
+      expect(second.list()).toHaveLength(1)
+      await waitUntil(async () => (await server.starts()) === 2, 'the server to start again')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'runs the recorded command on Run Again, and keeps how a finished run ended',
+    async () => {
+      const saved = memoryRepositories()
+      const server = await countedServer()
+      const first = launch(saved)
+      const tests = await first.runs.start({ worktreeId: WORKTREE, kind: 'test', command: 'exit 1', restart: false })
+      const dev = await first.runs.start({ worktreeId: WORKTREE, kind: 'dev', command: server.command, restart: false })
+      await waitUntil(exited(first.list, tests.id), 'the test run to end')
+      await first.manager.shutdown()
+
+      const second = launch(saved)
+      second.manager.restoreSessions()
+      await waitUntil(() => second.list().every((pane) => !pane.running), 'the restored panes to settle')
+      expect(runState(second.list().find((pane) => pane.id === tests.id) as Terminal)).toBe('failed')
+
+      const rerun = await second.manager.relaunch({ terminalId: dev.id })
+      expect(rerun).toMatchObject({ id: dev.id, run: 'dev', running: true })
+      await waitUntil(async () => (await server.starts()) === 2, 'Run Again to start the server')
+    },
+    TEST_TIMEOUT_MS
+  )
+})
+
+/** Layouts and terminal records in memory, standing in for the workspace file. */
+function memoryRepositories(): LayoutRepository & SessionRepository {
+  const layouts = new Map<string, Layout>()
+  const records = new Map<string, TerminalRecord>()
+  return {
+    getLayout: (worktreeId) => layouts.get(worktreeId),
+    putLayout: (layout) => {
+      layouts.set(layout.worktreeId, layout)
+      return layout
+    },
+    listLayouts: () => [...layouts.values()],
+    listTerminals: () => [...records.values()],
+    putTerminal: (row) => {
+      records.set(row.id, row)
+      return row
+    },
+    removeTerminal: (terminalId) => records.delete(terminalId)
+  }
+}

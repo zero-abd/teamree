@@ -616,7 +616,7 @@ export type Terminal = {
   restored?: RestoredAs
   /** Running subagents its Claude Code session started; see `src/main/terminals/subagents.ts`. */
   subagents?: Subagent[]
-  /** Set on the pane a Run button started, for as long as this app runs; its `exitCode` is the run's result. */
+  /** Set on the pane a Run button started, and kept across relaunches; its `exitCode` is the run's result. */
   run?: RunKind
 }
 

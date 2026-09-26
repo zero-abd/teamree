@@ -598,6 +598,21 @@ describe('workspace store', () => {
       expect((await WorkspaceStore.open(filePath)).listTerminals()).toEqual([terminal('t1', false)])
     })
 
+    it('brings a Run pane back as one, with its command and how it ended', async () => {
+      const dev: TerminalRecord = { ...terminal('t2'), command: 'npm run dev', run: 'dev', exitCode: 1 }
+      delete dev.agent
+      delete dev.agentSessionId
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal(dev)
+      // A kind a later build added is dropped, not the pane.
+      store.putTerminal({ ...dev, id: 't3', run: 'lint' as TerminalRecord['run'] })
+      await store.flush()
+
+      const byId = new Map((await WorkspaceStore.open(filePath)).listTerminals().map((record) => [record.id, record]))
+      expect(byId.get('t2')).toEqual(dev)
+      expect(byId.get('t3')?.run).toBeUndefined()
+    })
+
     it('brings back a pane whose harness this build has never heard of, as a plain shell', async () => {
       const path = join(directory, 'workspace.json')
       const newer = { ...terminal('t1'), command: 'someday --go', agent: 'harness-from-next-year' }
