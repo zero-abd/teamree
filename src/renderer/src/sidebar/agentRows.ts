@@ -2,7 +2,7 @@
 // PTY, not an agent's protocol: the readings are bytes arriving, how the process
 // ended, the title, the bell, and — outranking all of them — what the agent's hooks report.
 
-import type { AgentEvent, AgentKind, PaneWatcher, Terminal } from '@shared/entities'
+import type { AgentEvent, AgentKind, PaneWatcher, Subagent, Terminal } from '@shared/entities'
 import { hookQuestion, isAnswerOrHint, type ScreenChoice, type ScreenOpinion } from '@shared/screenOpinion'
 import type { TitleOpinion } from '@shared/titleOpinion'
 import { harnessName } from '../agents/harnesses'
@@ -35,6 +35,8 @@ export type AgentRow = {
   evidence: string | null
   /** The answers its menu offers while it asks; see `screenMenu`. */
   choices?: readonly ScreenChoice[]
+  /** Subagents its session started. */
+  subagents?: readonly Subagent[]
 }
 
 /** What a dot is coloured: `idle` is a quiet pane with no agent, drawn grey; a stopped agent is hollow. */
@@ -185,7 +187,8 @@ export function agentRows(
       activity,
       quietFor: Math.max(0, now - terminal.lastOutputAt),
       evidence: activity === 'waiting' ? askingLine(line, terminal.agentEvent) : line,
-      ...(choices === undefined ? {} : { choices })
+      ...(choices === undefined ? {} : { choices }),
+      ...(terminal.subagents === undefined ? {} : { subagents: terminal.subagents })
     }
   })
 }

@@ -711,6 +711,57 @@ button.picker__chevron:hover {
   font-size: var(--text-xs);
 }
 
+/* A subagent's transcript: wide enough for a tool line, tall enough to read, its own scroll. */
+.modal:has(.subagent-log) {
+  width: min(760px, 90vw);
+}
+
+.subagent-log__meta {
+  margin: 0 0 var(--s3);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.subagent-log__meta--error {
+  color: var(--danger);
+}
+
+.subagent-log__lines {
+  max-height: 60vh;
+  margin: 0 0 var(--s3);
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.subagent-log__line {
+  padding: var(--s1) 0;
+  border-top: 1px solid var(--line);
+}
+
+.subagent-log__line pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.subagent-log__line--prompt pre {
+  color: var(--accent-bright);
+}
+
+.subagent-log__line--tool pre,
+.subagent-log__line--result pre,
+.subagent-log__line--note pre {
+  color: var(--fg-muted);
+}
+
+.subagent-log__line--note {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
 /* A pasted image, as large as the window allows. */
 .modal:has(.pasted-image) {
   width: fit-content;

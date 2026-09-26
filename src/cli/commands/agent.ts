@@ -1,11 +1,13 @@
-import type { AgentEventName } from '../../shared/entities.js'
+import type { AgentEventName, SubagentEventName } from '../../shared/entities.js'
 import { MAX_AGENT_EVENT_DETAIL_CHARS, MAX_AGENT_EVENT_MESSAGE_CHARS, Params } from '../../shared/methods.js'
 import type { CommandSpec } from '../command-spec.js'
 import { requireString } from '../argv.js'
 import { formatTable } from '../output.js'
 
 /** The events the runtime takes, read off the contract rather than restated. */
-const EVENT_NAMES: readonly string[] = Params.terminalAgentEvent.shape.event.options
+const PANE_EVENTS: readonly string[] = Params.terminalAgentEvent.shape.event.options
+const SUBAGENT_EVENTS: readonly string[] = Params.terminalSubagentEvent.shape.event.options
+const EVENT_NAMES: readonly string[] = [...PANE_EVENTS, ...SUBAGENT_EVENTS]
 
 export const agentCommands: readonly CommandSpec[] = [
   {
@@ -54,10 +56,24 @@ export const agentCommands: readonly CommandSpec[] = [
     silent: true,
     run: async (context) => {
       const terminalId = requireString(context.flags, 'terminal')
-      // Checked against the contract by `choices`, so this is the cast it looks like.
-      const event = requireString(context.flags, 'event') as AgentEventName
-      const said = eventFields(await context.stdin(), event)
-      const terminal = await context.client.call('terminal.agentEvent', { terminalId, event, at: Date.now(), ...said })
+      const name = requireString(context.flags, 'event')
+      const stdin = await context.stdin()
+      const at = Date.now()
+      // Checked against the contract by `choices`, so these are the casts they look like.
+      if (SUBAGENT_EVENTS.includes(name)) {
+        const subagent = subagentFields(stdin)
+        if (subagent === undefined) return { data: null, text: '' }
+        const terminal = await context.client.call('terminal.subagentEvent', {
+          terminalId,
+          event: name as SubagentEventName,
+          at,
+          ...subagent
+        })
+        return { data: terminal, text: '' }
+      }
+      const event = name as AgentEventName
+      const said = { ...eventFields(stdin, event), ...sessionFields(stdin) }
+      const terminal = await context.client.call('terminal.agentEvent', { terminalId, event, at, ...said })
       return { data: terminal, text: '' }
     }
   }
@@ -81,5 +97,46 @@ export function eventFields(stdin: string, event: AgentEventName): { detail?: st
     ...(event === 'Notification' && typeof message === 'string' && message.trim().length > 0
       ? { message: message.trim().slice(0, MAX_AGENT_EVENT_MESSAGE_CHARS) }
       : {})
+  }
+}
+
+/** The hook JSON as an object, or undefined for anything else. */
+function hookJson(stdin: string): Record<string, unknown> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(stdin)
+    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const USABLE_ID = /^[A-Za-z0-9_-]{1,128}$/
+
+/** The session the hook ran in and where its transcript is, which find the session's subagents. */
+export function sessionFields(stdin: string): { sessionId?: string; transcriptPath?: string } {
+  const hook = hookJson(stdin)
+  const sessionId = hook?.session_id
+  if (typeof sessionId !== 'string' || !USABLE_ID.test(sessionId)) return {}
+  const transcriptPath = hook?.transcript_path
+  return {
+    sessionId,
+    ...(typeof transcriptPath === 'string' && transcriptPath.length <= 4096 ? { transcriptPath } : {})
+  }
+}
+
+/** A subagent hook's ids, or undefined when it carries no usable ones. */
+export function subagentFields(
+  stdin: string
+): { sessionId: string; agentId: string; agentType?: string; transcriptPath?: string } | undefined {
+  const hook = hookJson(stdin)
+  const session = sessionFields(stdin)
+  const agentId = hook?.agent_id
+  if (session.sessionId === undefined || typeof agentId !== 'string' || !USABLE_ID.test(agentId)) return undefined
+  const agentType = hook?.agent_type
+  return {
+    ...session,
+    sessionId: session.sessionId,
+    agentId,
+    ...(typeof agentType === 'string' && agentType.length > 0 ? { agentType: agentType.slice(0, 128) } : {})
   }
 }

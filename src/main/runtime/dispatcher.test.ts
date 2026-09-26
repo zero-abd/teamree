@@ -234,6 +234,9 @@ describe('dispatcher', () => {
       'terminal.reopen',
       'terminal.resize',
       'terminal.split',
+      // Local, like `terminal.agentEvent`; the transcript is read off this disk.
+      'terminal.subagentEvent',
+      'terminal.subagentTranscript',
       'terminal.subscribe',
       'terminal.write',
       'unsubscribe',

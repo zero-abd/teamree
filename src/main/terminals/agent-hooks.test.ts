@@ -19,9 +19,17 @@ const CLI = '/Applications/teamree.app/Contents/Resources/cli/teamree'
 describe('hookSettings', () => {
   const settings = hookSettings({ userDataDir: USER_DATA, cli: CLI }, 'term_7')
 
-  it('subscribes to the five events a pane state is read from, and nothing else', () => {
+  it('subscribes to the five events a pane state is read from and the two about subagents, and nothing else', () => {
     expect(Object.keys(settings.hooks).sort()).toEqual([...AGENT_HOOK_EVENTS].sort())
-    expect(AGENT_HOOK_EVENTS).toEqual(['SessionStart', 'UserPromptSubmit', 'Notification', 'Stop', 'SessionEnd'])
+    expect(AGENT_HOOK_EVENTS).toEqual([
+      'SessionStart',
+      'UserPromptSubmit',
+      'Notification',
+      'Stop',
+      'SessionEnd',
+      'SubagentStart',
+      'SubagentStop'
+    ])
   })
 
   it('runs this app’s own CLI, naming the pane, the event and the profile', () => {

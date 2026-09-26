@@ -7,7 +7,7 @@
 
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { AgentEventName, AgentKind } from '../../shared/entities'
+import type { AgentEventName, AgentKind, SubagentEventName } from '../../shared/entities'
 import { insertArguments, quoteArgument, tokenizeCommand } from './agent-command'
 
 /** Where the runtime is, and what to run to reach it. */
@@ -18,13 +18,18 @@ export type AgentHookOptions = {
   cli: string
 }
 
+/** Every event a pane's hooks report. */
+export type HookedEvent = AgentEventName | SubagentEventName
+
 /** The events subscribed to. Not the per-tool ones: every hook is a process the agent waits for. */
-export const AGENT_HOOK_EVENTS: readonly AgentEventName[] = [
+export const AGENT_HOOK_EVENTS: readonly HookedEvent[] = [
   'SessionStart',
   'UserPromptSubmit',
   'Notification',
   'Stop',
-  'SessionEnd'
+  'SessionEnd',
+  'SubagentStart',
+  'SubagentStop'
 ]
 
 /** How long the agent waits for one hook, in seconds; a hung hook is a hung turn. */
@@ -38,7 +43,7 @@ const HOOKS_DIRECTORY = 'agent-hooks'
 
 /** The shape of the file, as far as this app writes it. */
 export type HookSettingsFile = {
-  hooks: Record<AgentEventName, Array<{ hooks: Array<{ type: 'command'; command: string; timeout: number }> }>>
+  hooks: Record<HookedEvent, Array<{ hooks: Array<{ type: 'command'; command: string; timeout: number }> }>>
 }
 
 /** One file per pane, under the profile, so a pane's file goes with the pane. */
@@ -52,7 +57,7 @@ export function hookSettingsPath(userDataDir: string, terminalId: string): strin
  * so the agent is never told a hook failed; stdout stays silent because on
  * `UserPromptSubmit` it becomes agent context.
  */
-export function hookCommand(options: AgentHookOptions, terminalId: string, event: AgentEventName): string {
+export function hookCommand(options: AgentHookOptions, terminalId: string, event: HookedEvent): string {
   const argv = [
     options.cli,
     'agent',

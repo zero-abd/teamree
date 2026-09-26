@@ -558,6 +558,44 @@ export type Terminal = {
    * for a terminal opened now; clears the moment the user types into the pane.
    */
   restored?: RestoredAs
+  /** Subagents its Claude Code session started; see `src/main/terminals/subagents.ts`. */
+  subagents?: Subagent[]
+}
+
+/** How a subagent stands: `stopped` is killed, or gone with its session without saying it finished. */
+export type SubagentStatus = 'running' | 'done' | 'failed' | 'stopped'
+
+/** One subagent of a pane's session, from its hooks and its files under the agent's store. */
+export type Subagent = {
+  /** The agent's own id, e.g. `a62396c4dbccd099c`. */
+  id: string
+  /** The description it was started with, else its type. */
+  description: string
+  agentType?: string
+  /** The subagent that started this one. */
+  parentId?: string
+  status: SubagentStatus
+  startedAt: number
+  /** Set whenever `status` is not `running`. */
+  endedAt?: number
+  /** The worktree it was isolated in, and its branch. */
+  worktreePath?: string
+  branch?: string
+}
+
+/** One line of a subagent's transcript as the viewer draws it. */
+export type SubagentLine = {
+  kind: 'prompt' | 'text' | 'tool' | 'result'
+  text: string
+  at?: number
+}
+
+/** A subagent's transcript, newest lines kept when it is long. */
+export type SubagentTranscript = {
+  agentId: string
+  lines: SubagentLine[]
+  /** Older lines were left out. */
+  truncated: boolean
 }
 
 /**
@@ -755,6 +793,9 @@ export type AgentKind =
  * own names. The set is what `agent-hooks.ts` subscribes to; the hook line is generated, so nothing else arrives.
  */
 export type AgentEventName = 'SessionStart' | 'UserPromptSubmit' | 'Notification' | 'Stop' | 'SessionEnd'
+
+/** The hook events about a Claude Code session's subagents, reported by the same CLI. */
+export type SubagentEventName = 'SubagentStart' | 'SubagentStop'
 
 /** One thing an agent said about itself, and when. */
 export type AgentEvent = {
