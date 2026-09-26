@@ -1,26 +1,31 @@
 // An asking pane's answers as buttons, on the rows that list it: the board's and the sidebar's, at rest.
 // A click sends nothing the runtime has not just seen on the pane's screen; see `answerPane`.
 
+import type { ReactNode } from 'react'
 import type { ScreenChoice } from '@shared/screenOpinion'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
 export type AnswerChoice = { label: string; title?: string }
 
-/** Answers as tiny buttons on a line that wraps: a pane's menu, or a task's question for you. */
+/** Answers as tiny buttons on a line that wraps: a pane's menu, or a task's question for you, whose Reply… is `children`. */
 export function AnswerChoices({
   choices,
   onChoose,
   className,
-  tabbable = true
+  tabbable = true,
+  disabled = false,
+  children
 }: {
   choices: readonly AnswerChoice[]
   onChoose: (index: number) => void
-  className: string
+  className?: string
   /** False keeps them out of the Tab order, for a tree that is one Tab stop. */
   tabbable?: boolean
+  disabled?: boolean
+  children?: ReactNode
 }): React.JSX.Element {
   return (
-    <span className={`answers ${className}`} role="group" aria-label="Answer">
+    <span className={className === undefined ? 'answers' : `answers ${className}`} role="group" aria-label="Answer">
       {choices.map((choice, index) => (
         <button
           key={choice.label}
@@ -28,11 +33,13 @@ export function AnswerChoices({
           className="button button--tiny answers__choice"
           title={choice.title}
           tabIndex={tabbable ? undefined : -1}
+          disabled={disabled}
           onClick={() => onChoose(index)}
         >
           {choice.label}
         </button>
       ))}
+      {children}
     </span>
   )
 }

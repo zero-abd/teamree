@@ -1356,10 +1356,6 @@
   -webkit-box-orient: vertical;
 }
 
-.worktree__ask .answers {
-  flex-wrap: wrap;
-}
-
 .worktree__ask-field {
   width: 100%;
   font-size: var(--text-xs);
