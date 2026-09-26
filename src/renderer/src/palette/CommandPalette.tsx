@@ -408,11 +408,9 @@ export function CommandPalette({
         }
         break
       }
-      case 'new-task-from-issue': {
-        const projectId = active?.projectId ?? store.projects[0]?.id
+      case 'new-task-from-issue':
         if (projectId !== undefined) store.openDialog({ kind: 'new-task', projectId, fromIssue: true })
         break
-      }
       case 'install-cli':
         store.openDialog({ kind: 'install-cli' })
         break
