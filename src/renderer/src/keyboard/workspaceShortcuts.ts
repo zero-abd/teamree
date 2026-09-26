@@ -38,6 +38,8 @@ export type WorkspaceCommand =
   | 'find-in-pane'
   | 'open-dashboard'
   | 'open-appearance'
+  | 'toggle-diff-wrap'
+  | 'toggle-diff-whitespace'
   | 'open-settings'
   | 'add-project'
   | 'clone-repository'
@@ -105,6 +107,8 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'open-settings', chord: { key: ',' }, title: 'Settings' },
   // No chord: shift+comma yields `<`, so ⌘⇧, cannot be bound. Menu, palette and rail reach it.
   { command: 'open-appearance', title: 'Appearance' },
+  { command: 'toggle-diff-wrap', title: 'Wrap Diff Lines' },
+  { command: 'toggle-diff-whitespace', title: 'Hide Whitespace Changes' },
   // The picker straight away; cloning is the other way in.
   { command: 'add-project', title: 'Add Project…' },
   { command: 'clone-repository', title: 'Clone Repository…' },

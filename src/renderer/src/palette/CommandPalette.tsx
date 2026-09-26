@@ -63,6 +63,7 @@ export function CommandPalette({
   const cli = useWorkspaceStore((state) => state.cli)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
   const rightPanelOpen = useWorkspaceStore((state) => state.rightPanelOpen)
+  const diffOptions = useWorkspaceStore((state) => state.diffOptions)
 
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
@@ -133,6 +134,7 @@ export function CommandPalette({
         cli,
         sidebarVisible,
         rightPanelOpen,
+        diffOptions,
         // Empty for a command with no key.
         hintFor: (action) => {
           const command = commandNamed(action)
@@ -193,6 +195,7 @@ export function CommandPalette({
       cli,
       sidebarVisible,
       rightPanelOpen,
+      diffOptions,
       modifier,
       consent,
       layouts,

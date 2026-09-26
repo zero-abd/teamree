@@ -481,6 +481,16 @@ describe('every command the menu has is a row in the palette', () => {
     expect(items.find((item) => item.id === 'toggle-sidebar')?.label).toBe('Show Sidebar')
   })
 
+  it('offers the diff toggles by what they do next', () => {
+    const find = (options?: { wrap: boolean; hideWhitespace: boolean }, id = 'toggle-diff-wrap'): string | undefined =>
+      buildPaletteItems(context(options === undefined ? {} : { diffOptions: options })).find((item) => item.id === id)
+        ?.label
+    expect(find()).toBe('Wrap Diff Lines')
+    expect(find({ wrap: true, hideWhitespace: false })).toBe('Unwrap Diff Lines')
+    expect(find(undefined, 'toggle-diff-whitespace')).toBe('Hide Whitespace Changes')
+    expect(find({ wrap: false, hideWhitespace: true }, 'toggle-diff-whitespace')).toBe('Show Whitespace Changes')
+  })
+
   it('names its own rows as the menu names commands', () => {
     const labels = buildPaletteItems(context())
       .filter((item) => item.kind === 'action')

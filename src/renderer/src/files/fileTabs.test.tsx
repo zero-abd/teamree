@@ -521,6 +521,8 @@ describe('one header for code and markdown', () => {
       'Diff',
       'Inline',
       'Side by side',
+      'Wrap',
+      'Hide Whitespace',
       'More for app.ts',
       'Close pane app.ts'
     ])
@@ -529,7 +531,9 @@ describe('one header for code and markdown', () => {
       'Code',
       'Diff',
       'Inline',
-      'Side by side'
+      'Side by side',
+      'Wrap',
+      'Hide Whitespace'
     ])
     for (const toggle of toggles) expect(toggle.parentElement?.getAttribute('role')).toBe('group')
     expect(bar.querySelector('.file__tool--on')).toBeNull()

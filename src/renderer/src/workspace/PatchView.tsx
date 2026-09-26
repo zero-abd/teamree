@@ -4,10 +4,12 @@
 
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { parsePatch, type PatchFile, type PatchHunk, type PatchLine } from '@shared/patch'
-import { syntaxLanguage, tokenizeLine, type SyntaxLanguage } from '@shared/syntax'
+import { syntaxLanguage, tokenizeLine, type SyntaxLanguage, type SyntaxToken } from '@shared/syntax'
 import { CommentComposer } from '../review/CommentComposer'
 import { hunkLabel } from '../review/reviewModel'
 import type { DiffLayout } from '../state/preferences'
+import { useWorkspaceStore } from '../state/workspaceStore'
+import { changedSpans, sourceHunk, withoutWhitespace, type Spans } from './lineDiff'
 
 /** What a file's header says happened to it, when it is worth saying. */
 const STATUS_NOTE: Record<PatchFile['status'], string> = {
@@ -84,8 +86,10 @@ export function PatchView({
   /** Offers `Discard` on each hunk of a modified or renamed file; a whole-file change is discarded as a file. */
   onDiscard?: (file: PatchFile, hunk: PatchHunk) => void
 }): React.JSX.Element {
+  const { wrap, hideWhitespace } = useWorkspaceStore((state) => state.diffOptions)
   // Once per patch: the panel re-renders on every refresh tick and a patch is thousands of lines.
-  const files = useMemo(() => parsePatch(patch), [patch])
+  const parsed = useMemo(() => parsePatch(patch), [patch])
+  const files = useMemo(() => (hideWhitespace ? withoutWhitespace(parsed) : parsed), [parsed, hideWhitespace])
   const folded = useMemo(() => foldOnOpen(files), [files])
   const headless = named && files.length === 1
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -103,13 +107,13 @@ export function PatchView({
   useCommentKeys(root, commentsIn !== undefined, setDraft)
 
   return (
-    <div className={`patch patch--${layout}${viewing ? ' patch--review' : ''}`} ref={root}>
+    <div className={`patch patch--${layout}${viewing ? ' patch--review' : ''}${wrap ? ' patch--wrap' : ''}`} ref={root}>
       {files.map((file, index) => (
         // The index: a rename of A to B plus an edit to A is two entries called A.
         <details
           className="patch__file"
           key={`${file.path}-${index}`}
-          open={viewing === undefined || !viewing.viewed(file)}
+          open={viewing === undefined || !viewing.viewed(parsed[index] ?? file)}
         >
           <summary className="patch__fileHead" hidden={headless}>
             {/* Split here rather than through the panel's own helpers, which
@@ -128,8 +132,8 @@ export function PatchView({
               <label className="patch__viewed" onClick={(event) => event.stopPropagation()}>
                 <input
                   type="checkbox"
-                  checked={viewing.viewed(file)}
-                  onChange={(event) => viewing.onViewed(file, event.target.checked)}
+                  checked={viewing.viewed(parsed[index] ?? file)}
+                  onChange={(event) => viewing.onViewed(parsed[index] ?? file, event.target.checked)}
                 />
                 Viewed
               </label>
@@ -138,7 +142,9 @@ export function PatchView({
           {file.binary ? (
             <p className="patch__binary">Binary file</p>
           ) : file.hunks.length === 0 ? (
-            <p className="patch__binary">No content changed</p>
+            <p className="patch__binary">
+              {(parsed[index]?.hunks.length ?? 0) > 0 ? 'Whitespace only' : 'No content changed'}
+            </p>
           ) : (
             file.hunks.map((hunk, at) => (
               // By position: hunks of a truncated patch can share a header, and a duplicate key drops one.
@@ -174,10 +180,10 @@ export function PatchView({
                   : // A binary file has no hunks to reach this, and an added
                     // one stages whole — the runtime refuses a hunk of either,
                     // so the control is not offered for them here.
-                    { action, onHunk: () => onHunk(file, hunk) })}
+                    { action, onHunk: () => onHunk(parsed[index] ?? file, sourceHunk(hunk)) })}
                 {...(onDiscard === undefined || (file.status !== 'modified' && file.status !== 'renamed')
                   ? {}
-                  : { onDiscard: () => onDiscard(file, hunk) })}
+                  : { onDiscard: () => onDiscard(parsed[index] ?? file, sourceHunk(hunk)) })}
               />
             ))
           )}
@@ -351,6 +357,7 @@ const HunkLines = memo(function HunkLines({
     [onPick, place]
   )
   const rows = useMemo(() => (layout === 'split' ? pairLines(hunk.lines) : null), [hunk, layout])
+  const words = useMemo(() => changedSpans(hunk.lines), [hunk])
   // Each line's index, which find paints by; a split row does not keep it.
   const lineIndex = useMemo(
     () => (rows === null ? null : new Map(hunk.lines.map((line, index) => [line, index]))),
@@ -376,6 +383,7 @@ const HunkLines = memo(function HunkLines({
             lines={hunk.lines}
             from={from}
             language={language}
+            words={words}
             draft={draft}
             {...(onPlus === undefined ? {} : { onPlus })}
             composer={composer}
@@ -387,6 +395,7 @@ const HunkLines = memo(function HunkLines({
             lineIndex={lineIndex}
             from={from}
             language={language}
+            words={words}
             draft={draft}
             {...(onPlus === undefined ? {} : { onPlus })}
             composer={composer}
@@ -409,6 +418,7 @@ const InlineRows = memo(function InlineRows({
   lines,
   from,
   language,
+  words,
   draft = null,
   onPlus,
   composer = null
@@ -416,6 +426,7 @@ const InlineRows = memo(function InlineRows({
   lines: readonly PatchLine[]
   from: number
   language: SyntaxLanguage | null
+  words: ReadonlyMap<PatchLine, Spans>
 }): React.JSX.Element {
   return (
     <>
@@ -428,7 +439,7 @@ const InlineRows = memo(function InlineRows({
               <Plus line={line} index={index} onPlus={onPlus} />
               <span className="patch__num">{line.oldNumber ?? ''}</span>
               <span className="patch__num">{line.newNumber ?? ''}</span>
-              <Text line={line} index={index} language={language} />
+              <Text line={line} index={index} language={language} spans={words.get(line)} />
             </div>
             {draft?.to === index ? composer : null}
           </Fragment>
@@ -479,6 +490,7 @@ const SplitRows = memo(function SplitRows({
   lineIndex,
   from,
   language,
+  words,
   draft = null,
   onPlus,
   composer = null
@@ -487,6 +499,7 @@ const SplitRows = memo(function SplitRows({
   lineIndex: ReadonlyMap<PatchLine, number>
   from: number
   language: SyntaxLanguage | null
+  words: ReadonlyMap<PatchLine, Spans>
 }): React.JSX.Element {
   return (
     <>
@@ -500,8 +513,8 @@ const SplitRows = memo(function SplitRows({
           <Fragment key={offset}>
             <div className={`patch__row patch__row--split${rowPicked(draft, index) || rowPicked(draft, oldIndex)}`}>
               <Plus line={row.new ?? row.old} index={index} onPlus={onPlus} />
-              <Side line={row.old} index={oldIndex} side="old" language={language} />
-              <Side line={row.new} index={newIndex} side="new" language={language} />
+              <Side line={row.old} index={oldIndex} side="old" language={language} words={words} />
+              <Side line={row.new} index={newIndex} side="new" language={language} words={words} />
             </div>
             {last ? composer : null}
           </Fragment>
@@ -544,18 +557,20 @@ function Side({
   line,
   index,
   side,
-  language
+  language,
+  words
 }: {
   line: PatchLine | null
   index: number
   side: 'old' | 'new'
   language: SyntaxLanguage | null
+  words: ReadonlyMap<PatchLine, Spans>
 }): React.JSX.Element {
   if (line === null) return <span className="patch__side patch__side--gap" />
   return (
     <span className={`patch__side patch__side--${line.kind}`}>
       <span className="patch__num">{(side === 'old' ? line.oldNumber : line.newNumber) ?? ''}</span>
-      <Text line={line} index={index} language={language} />
+      <Text line={line} index={index} language={language} spans={words.get(line)} />
     </span>
   )
 }
@@ -564,19 +579,22 @@ function Side({
 function Text({
   line,
   index,
-  language
+  language,
+  spans
 }: {
   line: PatchLine
   index: number
   language: SyntaxLanguage | null
+  /** The words that differ from the line it pairs with. */
+  spans?: Spans | undefined
 }): React.JSX.Element {
   const sign = line.kind === 'added' ? '+' : line.kind === 'removed' ? '-' : ' '
   return (
     <>
       <span className={`patch__sign patch__sign--${line.kind}`}>{sign}</span>
       <code className="patch__text" data-line={index}>
-        {tokenizeLine(line.text, language).map((token, index) => (
-          <span className={`patch__tok patch__tok--${token.kind}`} key={index}>
+        {markTokens(tokenizeLine(line.text, language), spans).map((token, index) => (
+          <span className={`patch__tok patch__tok--${token.kind}${token.changed ? ' patch__word' : ''}`} key={index}>
             {token.text}
           </span>
         ))}
@@ -588,6 +606,31 @@ function Text({
       </code>
     </>
   )
+}
+
+/** The tokens cut at the spans' edges, each piece saying whether it is inside one. */
+function markTokens(
+  tokens: readonly SyntaxToken[],
+  spans: Spans | undefined
+): readonly (SyntaxToken & { changed?: boolean })[] {
+  if (spans === undefined || spans.length === 0) return tokens
+  const pieces: (SyntaxToken & { changed: boolean })[] = []
+  let offset = 0
+  let span = 0
+  for (const token of tokens) {
+    const end = offset + token.text.length
+    let at = offset
+    while (at < end) {
+      while (span < spans.length && (spans[span] as readonly [number, number])[1] <= at) span += 1
+      const [start, stop] = spans[span] ?? [end, end]
+      const inside = start <= at
+      const until = Math.min(end, inside ? stop : start)
+      pieces.push({ ...token, text: token.text.slice(at - offset, until - offset), changed: inside })
+      at = until
+    }
+    offset = end
+  }
+  return pieces
 }
 
 export type PatchRow = {

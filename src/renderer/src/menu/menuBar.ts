@@ -115,6 +115,8 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   // view of the window rather than a setting of the machine, and this is the
   // menu somebody looks in for how the window looks.
   'open-appearance': { section: 'view', label: 'Appearance…' },
+  'toggle-diff-wrap': { section: 'view' },
+  'toggle-diff-whitespace': { section: 'view' },
 
   // View's own group, where the zoom roles were.
   'actual-size': { section: 'text' },
@@ -163,14 +165,18 @@ export function menuLabel(command: WorkspaceCommand, panels?: PanelState): strin
   )
 }
 
-/** Whether each side panel is on screen, absent reading as shown, and what the worktree on screen tracks. */
-export type PanelState = Pick<CommandState, 'sidebarVisible' | 'rightPanelOpen'> &
+/** Whether each side panel is on screen, absent reading as shown, what the worktree on screen tracks, and the diff options. */
+export type PanelState = Pick<CommandState, 'sidebarVisible' | 'rightPanelOpen' | 'diffOptions'> &
   Partial<Pick<CommandState, 'statuses' | 'activeWorktreeId'>>
 
 /** Finder's wording: a toggle names what choosing it does now. Null for every other command. */
 function panelLabel(command: WorkspaceCommand, panels: PanelState): string | null {
   if (command === 'toggle-sidebar') return panels.sidebarVisible === false ? 'Show Sidebar' : 'Hide Sidebar'
   if (command === 'toggle-right-panel') return panels.rightPanelOpen === false ? 'Show Right Panel' : 'Hide Right Panel'
+  if (command === 'toggle-diff-wrap') return panels.diffOptions?.wrap === true ? 'Unwrap Diff Lines' : 'Wrap Diff Lines'
+  if (command === 'toggle-diff-whitespace') {
+    return panels.diffOptions?.hideWhitespace === true ? 'Show Whitespace Changes' : 'Hide Whitespace Changes'
+  }
   if (command === 'push-worktree' && panels.activeWorktreeId) {
     return panels.statuses?.[panels.activeWorktreeId]?.upstream === null ? 'Publish Branch' : null
   }

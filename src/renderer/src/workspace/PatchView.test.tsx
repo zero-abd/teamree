@@ -45,7 +45,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { FileView } = await import('../files/FileView')
 const { fitLayout, PatchView } = await import('./PatchView')
-const { readStoredDiffLayout } = await import('../state/preferences')
+const { readStoredDiffLayout, readStoredDiffOptions } = await import('../state/preferences')
 const { ConfirmDiscardDialog } = await import('../dialogs/ConfirmDiscardDialog')
 type ConfirmDiscardProps = Parameters<typeof ConfirmDiscardDialog>[0]
 
@@ -138,7 +138,8 @@ beforeEach(() => {
     selectedChangePath: null,
     diffPanes: { 'file:1': true },
     stagedPaths: [],
-    diffLayout: 'inline'
+    diffLayout: 'inline',
+    diffOptions: { wrap: false, hideWhitespace: false }
   })
   window.localStorage.clear()
   call.mockReset()
@@ -555,11 +556,110 @@ describe('finding in the diff', () => {
   })
 })
 
+// A fix of one word marks the word; Wrap and Hide Whitespace change what is drawn and outlive the window.
+describe('reading a changed line', () => {
+  const TYPO = `diff --git a/src/rank.ts b/src/rank.ts
+--- a/src/rank.ts
++++ b/src/rank.ts
+@@ -1,3 +1,3 @@
+ import { byScore } from './score'
+-const rows = servce(byScore)
++const rows = service(byScore)
+ 
+`
+
+  // One hunk that only re-indents, one that changes a value.
+  const INDENTED = `diff --git a/src/rank.ts b/src/rank.ts
+--- a/src/rank.ts
++++ b/src/rank.ts
+@@ -1,3 +1,3 @@
+ function a() {
+-    return 1
++  return 1
+ }
+@@ -210,6 +210,6 @@ export function rank(rows: Row[]): Row[] {
+   const scored = rows.map(score)
+-  const sorted = scored.sort(byScore)
++  const sorted = scored.sort(byRank)
+   return sorted
+`
+
+  const words = (): string[] => [...document.querySelectorAll('.patch__word')].map((node) => node.textContent ?? '')
+
+  it.each(['inline', 'split'] as const)('marks the changed word on both lines, %s', (layout) => {
+    render(<PatchView patch={TYPO} truncated={false} layout={layout} />)
+    expect(words()).toEqual(['servce', 'service'])
+    expect(
+      document.querySelector('.patch__row--removed .patch__word, .patch__side--removed .patch__word')
+    ).not.toBeNull()
+  })
+
+  it('wraps long lines when Wrap is on, and remembers it', async () => {
+    await mountDiff()
+    expect(document.querySelector('.patch--wrap')).toBeNull()
+
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(screen.getByRole('button', { name: 'Wrap' }))
+
+    expect(document.querySelector('.patch--wrap')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Wrap' }).getAttribute('aria-pressed')).toBe('true')
+    expect(readStoredDiffOptions(window.localStorage)).toEqual({ wrap: true, hideWhitespace: false })
+  })
+
+  it('hides a hunk that only changes whitespace, and remembers it', async () => {
+    await mountDiff({ working: { ...diff, patch: INDENTED } })
+    expect(document.querySelectorAll('details.patch__hunk')).toHaveLength(2)
+
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(screen.getByRole('button', { name: 'Hide Whitespace' }))
+
+    expect(document.querySelectorAll('details.patch__hunk')).toHaveLength(1)
+    expect(document.querySelector('.patch__hunkAt')?.textContent).toBe('export function rank(…)')
+    expect(readStoredDiffOptions(window.localStorage)).toEqual({ wrap: false, hideWhitespace: true })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide Whitespace' }))
+    expect(document.querySelectorAll('details.patch__hunk')).toHaveLength(2)
+  })
+
+  it('says so when a file changed only in whitespace', () => {
+    useWorkspaceStore.setState({ diffOptions: { wrap: false, hideWhitespace: true } })
+    render(<PatchView patch={INDENTED.split('@@ -210')[0] ?? ''} truncated={false} layout="inline" />)
+    expect(screen.getByText('Whitespace only')).toBeTruthy()
+  })
+
+  it('stages the hunk git wrote while whitespace is hidden', async () => {
+    useWorkspaceStore.setState({ diffOptions: { wrap: false, hideWhitespace: true } })
+    const patch = `diff --git a/src/rank.ts b/src/rank.ts
+--- a/src/rank.ts
++++ b/src/rank.ts
+@@ -210,4 +210,4 @@ export function rank(rows: Row[]): Row[] {
+-    const scored = rows.map(score)
+-  const sorted = scored.sort(byScore)
++  const scored = rows.map(score)
++  const sorted = scored.sort(byRank)
+   return sorted
+`
+    await mountDiff({ working: { ...diff, patch } })
+    expect(document.querySelectorAll('.patch__row--removed')).toHaveLength(1)
+
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(screen.getByRole('button', { name: 'Stage Hunk' }))
+
+    const sent = call.mock.calls.find(([method]) => method === 'worktree.stageHunk')?.[1] as unknown as {
+      hunk: { lines: { kind: string; text: string }[] }
+    }
+    expect(sent.hunk.lines.filter((line) => line.kind === 'removed').map((line) => line.text)).toEqual([
+      '    const scored = rows.map(score)',
+      '  const sorted = scored.sort(byScore)'
+    ])
+  })
+})
+
 // The stylesheet's half of the same two claims.
 describe('the rules the patch is drawn with', () => {
   const styles = path.join(path.dirname(fileURLToPath(import.meta.url)), '../styles')
   const css = postcss.parse(
-    ['workspace.css', 'files.css'].map((file) => readFileSync(path.join(styles, file), 'utf8')).join('\n')
+    ['workspace.css', 'files.css', 'review.css'].map((file) => readFileSync(path.join(styles, file), 'utf8')).join('\n')
   )
 
   const declarations = (selector: string, property: string): string[] => {
@@ -588,6 +688,12 @@ describe('the rules the patch is drawn with', () => {
       expect(declarations(head, 'width')).toContain('100cqi')
     }
     expect(declarations('.file__diff', 'container-type')).toContain('inline-size')
+  })
+
+  it('breaks long lines inside their column when wrapping', () => {
+    expect(declarations('.patch--wrap', 'width')).toContain('100%')
+    expect(declarations('.patch--wrap .patch__row', 'white-space')).toContain('pre-wrap')
+    expect(declarations('.patch--wrap .patch__text', 'overflow-wrap')).toContain('anywhere')
   })
 
   // No literal colours: every shade on this surface has to be a palette token,
