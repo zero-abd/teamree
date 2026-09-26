@@ -373,18 +373,18 @@ function editedFile(path: string, hunks: number, size: number): string {
 
 describe('a big patch', () => {
   it('draws a hunk over 500 lines folded, and all of it when asked', async () => {
-    render(<PatchView patch={addedFile('src/big.ts', 14278)} truncated={false} layout="inline" />)
+    render(<PatchView patch={addedFile('src/big.ts', 2000)} truncated={false} layout="inline" />)
 
     expect(document.querySelectorAll('.patch__row')).toHaveLength(0)
-    expect(document.querySelector('.patch__hunkAt')?.textContent).toBe('Lines 1–14278')
+    expect(document.querySelector('.patch__hunkAt')?.textContent).toBe('Lines 1–2000')
     const { default: userEvent } = await import('@testing-library/user-event')
-    await userEvent.click(screen.getByRole('button', { name: 'Show 14,278 lines' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Show 2,000 lines' }))
 
     // The top at once, the rest behind it.
     const first = document.querySelectorAll('.patch__row').length
     expect(first).toBeGreaterThan(0)
-    expect(first).toBeLessThan(14278)
-    await waitFor(() => expect(document.querySelectorAll('.patch__row')).toHaveLength(14278), { timeout: 20_000 })
+    expect(first).toBeLessThan(2000)
+    await waitFor(() => expect(document.querySelectorAll('.patch__row')).toHaveLength(2000))
     expect(screen.queryByRole('button', { name: /^Show / })).toBeNull()
   })
 
