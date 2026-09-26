@@ -4,7 +4,7 @@
 // is held until the teardown finishes, and the only one let through is the one
 // this file asks for. A quit during startup waits for the launch (bounded by
 // the grace below), since `restoreSessions()` spawns panes before the handle
-// that can kill them exists. A teardown that throws still quits. A quit the
+// that can kill them exists. A teardown that throws or hangs still quits. A quit the
 // window declines (Cancel on its Save question) leaves everything running.
 
 /**
@@ -12,6 +12,9 @@
  * milliseconds; a hung one should cost one pause, not a process to kill outside.
  */
 export const STARTUP_GRACE_MS = 5_000
+
+/** How long the whole teardown may take before the quit goes ahead without it. Each step has its own, shorter bound. */
+export const STOP_GRACE_MS = 15_000
 
 export type QuitSequenceOptions = {
   /** Asks the window about unsaved files before anything stops; false keeps the app. */
@@ -28,6 +31,8 @@ export type QuitSequenceOptions = {
   whenStarted?: () => Promise<unknown>
   /** Overrides {@link STARTUP_GRACE_MS}. For the tests, which cannot wait. */
   startupGraceMs?: number
+  /** Overrides {@link STOP_GRACE_MS}. */
+  stopGraceMs?: number
   /** Where a teardown that failed goes. Never a dialog: the app is leaving. */
   onProblem?: (error: unknown) => void
 }
@@ -58,7 +63,7 @@ export function createQuitSequence(options: QuitSequenceOptions): (event: Quitta
           phase = 'idle'
           return
         }
-        await options.stop()
+        await within(options.stop(), options.stopGraceMs ?? STOP_GRACE_MS, onProblem, 'the teardown')
       } catch (error) {
         onProblem(error)
       }
@@ -72,25 +77,37 @@ export function createQuitSequence(options: QuitSequenceOptions): (event: Quitta
  * Waits for the launch in flight, and gives up on it after `graceMs`. A failed
  * launch is still over, so its rejection is swallowed; nothing is thrown either way.
  */
-async function waitForLaunch(
+function waitForLaunch(
   whenStarted: () => Promise<unknown>,
   graceMs: number,
   onProblem: (error: unknown) => void
 ): Promise<void> {
+  // The only record of why a quit left panes behind.
+  return within(
+    whenStarted().catch(() => {}),
+    graceMs,
+    onProblem,
+    'the launch'
+  )
+}
+
+/** Waits for `work`, or for `graceMs` and then says `what` was not waited for. Rejects only if `work` does in time. */
+async function within(
+  work: Promise<unknown>,
+  graceMs: number,
+  onProblem: (error: unknown) => void,
+  what: string
+): Promise<void> {
   let expiry: ReturnType<typeof setTimeout> | undefined
   try {
     const outcome = await Promise.race([
-      whenStarted().then(
-        () => 'launched' as const,
-        () => 'launched' as const
-      ),
+      work.then(() => 'done' as const),
       new Promise<'gave up'>((resolve) => {
         expiry = setTimeout(() => resolve('gave up'), graceMs)
       })
     ])
-    // The only record of why a quit left panes behind.
     if (outcome === 'gave up') {
-      onProblem(new Error(`the launch had not finished after ${graceMs}ms, so this quit is not waiting for it`))
+      onProblem(new Error(`${what} had not finished after ${graceMs}ms, so this quit is not waiting for it`))
     }
   } finally {
     // A pending timer would hold a process that has been asked to leave.

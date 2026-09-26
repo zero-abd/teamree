@@ -86,6 +86,18 @@ describe('quitting while the runtime is still letting go', () => {
     expect(onProblem).toHaveBeenCalledTimes(1)
     expect(firstProblem(onProblem).message).toContain('socket')
   })
+
+  // A teardown that never settles used to leave an app no quit could end.
+  it('quits anyway when the teardown outlasts its grace, and says so', async () => {
+    const teardown = pendingStop()
+    const quit = vi.fn()
+    const onProblem = vi.fn()
+
+    createQuitSequence({ stop: teardown.stop, quit, onProblem, stopGraceMs: 20 })({ preventDefault: vi.fn() })
+
+    await vi.waitFor(() => expect(quit).toHaveBeenCalledTimes(1))
+    expect(firstProblem(onProblem).message).toContain('20ms')
+  })
 })
 
 // A quit before the launch has finished: panes running, no handle to kill them yet.

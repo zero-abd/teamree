@@ -7,6 +7,9 @@ import { execFile } from 'node:child_process'
 /** How long a process tree gets to honour SIGHUP before SIGKILL. */
 export const KILL_ESCALATION_MS = 2_000
 
+/** The same grace when the app is quitting, where someone is waiting on it. */
+export const QUIT_KILL_GRACE_MS = 500
+
 const LIVENESS_POLL_MS = 25
 
 export type ProcessTreeHost = {
@@ -56,16 +59,18 @@ export async function killProcessTree(
     // Nothing to walk, and taskkill on a recycled pid would hit a stranger.
     if (!isProcessAlive(pid, host)) return
     await host.killWindowsTree(pid)
-    await waitForExit(pid, escalationMs, host)
+    await waitUntilGone(() => isProcessAlive(pid, host), escalationMs, host)
     return
   }
 
   // SIGHUP first: a shell treats it as the terminal going away and runs its own
-  // exit path, which is what lets child processes clean up.
+  // exit path, which is what lets child processes clean up. The group, not just
+  // its leader: a member that ignores the hangup outlives a shell that honours it.
+  const treeAlive = (): boolean => isProcessAlive(pid, host) || groupReachable(pid, host)
   if (!signalTree(pid, 'SIGHUP', host)) return
-  if (await waitForExit(pid, escalationMs, host)) return
+  if (await waitUntilGone(treeAlive, escalationMs, host)) return
   signalTree(pid, 'SIGKILL', host)
-  await waitForExit(pid, escalationMs, host)
+  await waitUntilGone(treeAlive, escalationMs, host)
 }
 
 /** True when the process still exists. A pid we may not signal counts as alive. */
@@ -75,6 +80,16 @@ export function isProcessAlive(pid: number, host: ProcessTreeHost = defaultProce
     return true
   } catch (error) {
     return errorCode(error) === 'EPERM'
+  }
+}
+
+/** A member we may not signal (a setuid program) is not ours to wait for. */
+function groupReachable(pid: number, host: ProcessTreeHost): boolean {
+  try {
+    host.kill(-pid, 0)
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -100,13 +115,13 @@ function signalTree(pid: number, signal: NodeJS.Signals, host: ProcessTreeHost):
   return reached
 }
 
-async function waitForExit(pid: number, timeoutMs: number, host: ProcessTreeHost): Promise<boolean> {
+async function waitUntilGone(alive: () => boolean, timeoutMs: number, host: ProcessTreeHost): Promise<boolean> {
   const deadline = host.now() + timeoutMs
   while (host.now() < deadline) {
-    if (!isProcessAlive(pid, host)) return true
+    if (!alive()) return true
     await host.delay(LIVENESS_POLL_MS)
   }
-  return !isProcessAlive(pid, host)
+  return !alive()
 }
 
 function errorCode(error: unknown): string | undefined {

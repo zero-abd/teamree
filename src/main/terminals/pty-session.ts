@@ -6,7 +6,7 @@ import { spawn } from 'node-pty'
 import type { IDisposable, IPty } from 'node-pty'
 import type { AgentEvent, Terminal } from '../../shared/entities'
 import type { TerminalEvent } from '../../shared/methods'
-import { killProcessTree } from './process-tree'
+import { KILL_ESCALATION_MS, killProcessTree } from './process-tree'
 import { recoverTailOnTeardown } from './pty-tail'
 import { ScrollbackBuffer } from './scrollback'
 import {
@@ -43,8 +43,8 @@ import {
 import { screenRows } from './screenRows'
 import type { Tone } from '../../shared/theme'
 
-/** How long close() waits for the tree to die before giving up on the exit event. */
-const CLOSE_TIMEOUT_MS = 5_000
+/** How long close() waits for the exit event beyond the kill's own two graces. */
+const EXIT_EVENT_SLACK_MS = 1_000
 
 /**
  * How long the exit event is held open after the last byte arrives: waitpid
@@ -442,12 +442,12 @@ export class PtySession {
   }
 
   /** Kills the process tree and releases every listener. Safe to call twice. */
-  async close(): Promise<void> {
+  async close(graceMs: number = KILL_ESCALATION_MS): Promise<void> {
     // Before the kill: the exit that follows must not be read as a refused resume.
     this.closing = true
     if (this.running) {
-      const exited = this.waitForExit(CLOSE_TIMEOUT_MS)
-      await killProcessTree(this.pid, this.platform)
+      const exited = this.waitForExit(2 * graceMs + EXIT_EVENT_SLACK_MS)
+      await killProcessTree(this.pid, this.platform, graceMs)
       await exited
     }
 

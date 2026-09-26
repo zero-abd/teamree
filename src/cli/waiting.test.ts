@@ -1,14 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { TerminalEvent } from '../shared/methods.js'
 import type { RuntimeClient } from './transport.js'
-import {
-  waitForEndpointGone,
-  waitForState,
-  waitForTerminal,
-  WaitTimeout,
-  type Delay,
-  type WaitTiming
-} from './waiting.js'
+import { waitForAppGone, waitForState, waitForTerminal, WaitTimeout, type Delay, type WaitTiming } from './waiting.js'
 
 type Timeline = {
   timing: WaitTiming
@@ -224,38 +217,68 @@ describe('waiting for a state', () => {
   })
 })
 
-describe('waiting for the endpoint to go', () => {
-  it('returns as soon as the socket is gone, charging only the time it watched', async () => {
+describe('waiting for the app to go', () => {
+  it('returns once the socket and the process are both gone, charging only the time it watched', async () => {
     const clock = timeline()
-    let looks = 0
-    const outcome = await waitForEndpointGone({
+    const at = (): number => clock.timing.clock?.monotonicNow?.() ?? 0
+    const outcome = await waitForAppGone({
       endpoint: '/tmp/teamree.sock',
+      pid: 4242,
       timeoutMs: 1000,
-      exists: () => (looks += 1) < 4,
+      exists: () => at() < 75,
+      isAlive: () => at() < 125,
       ...clock.timing
     })
 
-    expect(outcome.gone).toBe(true)
-    expect(outcome.waitedMs).toBe(75)
+    expect(outcome).toEqual({ gone: true, endpointGone: true, waitedMs: 125 })
+  })
+
+  // The socket goes mid-teardown; the process can outlive it by seconds, and "gone" has to be true.
+  it('is not gone while the process lives on after its socket', async () => {
+    const clock = timeline()
+    const outcome = await waitForAppGone({
+      endpoint: '/tmp/teamree.sock',
+      pid: 4242,
+      timeoutMs: 100,
+      exists: () => false,
+      isAlive: () => true,
+      ...clock.timing
+    })
+
+    expect(outcome).toEqual({ gone: false, endpointGone: true, waitedMs: 100 })
   })
 
   it('gives up rather than waiting forever on a socket that stays', async () => {
     const clock = timeline()
-    const outcome = await waitForEndpointGone({
+    const outcome = await waitForAppGone({
       endpoint: '/tmp/teamree.sock',
+      pid: null,
       timeoutMs: 100,
       exists: () => true,
       ...clock.timing
     })
 
-    expect(outcome).toEqual({ gone: false, waitedMs: 100 })
+    expect(outcome).toEqual({ gone: false, endpointGone: false, waitedMs: 100 })
   })
 
-  // A named pipe lives in the kernel and cannot be stat'd, so there is nothing
-  // to watch. Saying so beats waiting out a timeout for an answer that can
-  // never arrive.
-  it('does not pretend to watch a named pipe', async () => {
-    const outcome = await waitForEndpointGone({ endpoint: '\\\\.\\pipe\\teamree', timeoutMs: 1000 })
-    expect(outcome).toEqual({ gone: true, waitedMs: null })
+  // A named pipe lives in the kernel and cannot be stat'd; the process still can be watched.
+  it('watches only the process behind a named pipe', async () => {
+    const clock = timeline()
+    const at = (): number => clock.timing.clock?.monotonicNow?.() ?? 0
+    const outcome = await waitForAppGone({
+      endpoint: '\\\\.\\pipe\\teamree',
+      pid: 4242,
+      timeoutMs: 1000,
+      exists: () => true,
+      isAlive: () => at() < 50,
+      ...clock.timing
+    })
+
+    expect(outcome).toEqual({ gone: true, endpointGone: true, waitedMs: 50 })
+  })
+
+  it('does not pretend to watch a named pipe with no process to watch', async () => {
+    const outcome = await waitForAppGone({ endpoint: '\\\\.\\pipe\\teamree', pid: null, timeoutMs: 1000 })
+    expect(outcome).toEqual({ gone: true, endpointGone: true, waitedMs: null })
   })
 })

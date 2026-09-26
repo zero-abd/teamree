@@ -224,3 +224,65 @@ describe.skipIf(process.platform === 'win32')('the real POSIX process group', ()
     await expect(killProcessTree(gone, process.platform, 50)).resolves.toBeUndefined()
   })
 })
+
+type FakeProcess = { pid: number; group: number; ignoresHangup: boolean; alive: boolean }
+
+/** A process table on a fake clock: signals land at once, a hangup only where it is not ignored. */
+function groupHost(processes: FakeProcess[]): ProcessTreeHost & { elapsed: () => number; sent: string[] } {
+  let now = 0
+  const sent: string[] = []
+  const noSuchProcess = (): Error => Object.assign(new Error('ESRCH'), { code: 'ESRCH' })
+  return {
+    kill: (target, signal) => {
+      const hit = processes.filter(
+        (entry) => entry.alive && (target < 0 ? entry.group === -target : entry.pid === target)
+      )
+      if (hit.length === 0) throw noSuchProcess()
+      if (signal === 0) return
+      sent.push(`${signal} ${target}`)
+      for (const entry of hit) if (signal === 'SIGKILL' || !entry.ignoresHangup) entry.alive = false
+    },
+    killWindowsTree: async () => {},
+    delay: async (ms) => {
+      now += ms
+    },
+    now: () => now,
+    elapsed: () => now,
+    sent
+  }
+}
+
+describe('a process group whose members answer the hangup differently', () => {
+  it('kills what ignores the hangup once the grace is up, and no later', async () => {
+    const shell = { pid: 100, group: 100, ignoresHangup: true, alive: true }
+    const host = groupHost([shell])
+
+    await killProcessTree(100, 'darwin', 500, host)
+
+    expect(shell.alive).toBe(false)
+    expect(host.sent).toContain('SIGKILL -100')
+    expect(host.elapsed()).toBeLessThanOrEqual(550)
+  })
+
+  // The shell leaves on the hangup; a child of its group that ignores it would outlive the app.
+  it('kills a group member that outlives the shell', async () => {
+    const shell = { pid: 100, group: 100, ignoresHangup: false, alive: true }
+    const stubborn = { pid: 101, group: 100, ignoresHangup: true, alive: true }
+    const host = groupHost([shell, stubborn])
+
+    await killProcessTree(100, 'darwin', 500, host)
+
+    expect(shell.alive).toBe(false)
+    expect(stubborn.alive).toBe(false)
+  })
+
+  it('sends nothing more once the hangup has emptied the group', async () => {
+    const shell = { pid: 100, group: 100, ignoresHangup: false, alive: true }
+    const host = groupHost([shell])
+
+    await killProcessTree(100, 'darwin', 500, host)
+
+    expect(host.sent).toEqual(['SIGHUP -100'])
+    expect(host.elapsed()).toBe(0)
+  })
+})
