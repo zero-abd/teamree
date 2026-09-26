@@ -156,7 +156,8 @@ const SettingsSchema = z.object({
   shareTaskDetails: z.boolean().optional().catch(undefined),
   showCost: z.boolean().optional().catch(undefined),
   jacMemoryAddon: z.boolean().optional().catch(undefined),
-  showInMenuBar: z.boolean().optional().catch(undefined)
+  showInMenuBar: z.boolean().optional().catch(undefined),
+  warnAgentsAboutOverlaps: z.boolean().optional().catch(undefined)
 })
 
 export type SettingsRecord = Partial<RuntimeSettings>

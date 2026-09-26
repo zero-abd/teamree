@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { PROVIDER_TIMEOUT_MS, type MemoryEvent } from '../../shared/contextProvider'
 import type { Project, Worktree } from '../../shared/entities'
-import { MAX_CLAIM_GLOBS, type WorktreeClaims } from '../../shared/ledgerMethods'
+import { MAX_CLAIM_GLOBS, type EditCheck, type EditOverlapKind, type WorktreeClaims } from '../../shared/ledgerMethods'
 import {
   LEDGER_BUDGET_TOKENS,
   clampContextBudget,
@@ -22,6 +22,7 @@ import { createGitRunner, type GitRunner } from '../git/gitProcess'
 import type { GitSnapshot } from '../git/gitService'
 import { notFound } from '../runtime/runtimeError'
 import { buildBundle } from './bundle'
+import { editOverlaps, editWarning, repoRelative } from './editCheck'
 import { isAncestor, landingConflicts, mergeConflicts, readTouches } from './gitReads'
 import { normalizeGlob } from './globs'
 import {
@@ -57,6 +58,8 @@ export type ContextLedgerOptions = {
   /** Something an agent or the window reads changed. */
   onChange?: (projectId: string) => void
   providers?: ContextSource[]
+  /** Settings › Warn Agents About Overlaps; absent, on. */
+  warnAgents?: () => boolean
 }
 
 /** A teammate's worktree as presence carries it: changed paths, never contents. */
@@ -274,13 +277,69 @@ export class ContextLedger {
     return { projectId, overlaps, readAt: this.#lastPassAt.get(projectId) ?? 0 }
   }
 
-  /** A warning shown about an overlap, kept for the landing log. `via` names the surface. */
-  async warned(worktreeId: string, warning: { path: string; with: string; via: string }): Promise<void> {
+  /**
+   * A warning shown about an overlap, kept for the landing log. `via` names the surface.
+   * False when that surface already said it, unless it has since become a conflict.
+   */
+  async warned(
+    worktreeId: string,
+    warning: { path: string; with: string; via: string; kind?: EditOverlapKind }
+  ): Promise<boolean> {
     const { store, row } = await this.#row(worktreeId)
-    if (row.warnings.some((seen) => seen.path === warning.path && seen.with === warning.with)) return
-    row.warnings.push({ ...warning, at: this.#now(), heeded: null })
-    row.warnings.splice(0, Math.max(0, row.warnings.length - MAX_WARNINGS))
+    const seen = row.warnings.find(
+      (old) => old.path === warning.path && old.with === warning.with && old.via === warning.via
+    )
+    if (seen !== undefined) {
+      if (warning.kind !== 'conflict' || seen.kind === 'conflict') return false
+      seen.kind = 'conflict'
+      seen.at = this.#now()
+    } else {
+      row.warnings.push({ ...warning, at: this.#now(), heeded: null })
+      row.warnings.splice(0, Math.max(0, row.warnings.length - MAX_WARNINGS))
+    }
     store.save()
+    return true
+  }
+
+  /**
+   * Siblings sharing the file at `path`, from the last pass alone. A `hook` check is an
+   * agent about to edit: the path counts as touched at once, and each warning is logged and said once.
+   */
+  async check(params: { worktreeId: string; path: string; hook?: boolean }): Promise<EditCheck> {
+    const { project, worktree } = this.#locate(params.worktreeId)
+    const relative = repoRelative(worktree.path, params.path)
+    const nothing: EditCheck = { worktreeId: worktree.id, path: relative ?? params.path, siblings: [], text: '' }
+    if (relative === undefined || (params.hook === true && this.#options.warnAgents?.() === false)) return nothing
+    const store = await this.#store(project.id)
+    const viewer = store.worktree(worktree.id)
+    const live = this.#live(store)
+    if (viewer === undefined || !live.includes(viewer)) return nothing
+    const byId = new Map(store.document.worktrees.map((row) => [row.id, row]))
+    const siblings = editOverlaps(
+      relative,
+      live.filter((other) => unrelated(viewer, other, byId)),
+      {
+        conflicts: (other) => this.#merges.get(pairKey(viewer, other) ?? '') ?? [],
+        isHot: hotPathTest(live)
+      }
+    )
+    if (params.hook !== true) return { ...nothing, siblings, text: editWarning(relative, siblings) }
+
+    if (!viewer.touched.includes(relative)) {
+      viewer.touched = [...viewer.touched, relative].sort(byCodeUnit).slice(0, MAX_TOUCHED)
+      this.#changed(store)
+    }
+    const fresh: EditCheck['siblings'] = []
+    for (const sibling of siblings) {
+      const logged = await this.warned(worktree.id, {
+        path: relative,
+        with: sibling.worktreeId,
+        via: 'edit',
+        kind: sibling.kind
+      })
+      if (logged) fresh.push(sibling)
+    }
+    return { ...nothing, siblings, text: editWarning(relative, fresh) }
   }
 
   async #bundle(
@@ -466,7 +525,8 @@ export class ContextLedger {
       landedAt: this.#now(),
       conflicts,
       shared: [...row.shared],
-      warnings: [...row.warnings]
+      // Heeded: the file an agent was warned about did not conflict when it landed.
+      warnings: row.warnings.map((warning) => ({ ...warning, heeded: !conflicts.includes(warning.path) }))
     })
     row.state = 'landed'
     row.claims = []

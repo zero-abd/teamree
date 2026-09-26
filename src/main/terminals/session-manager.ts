@@ -26,6 +26,7 @@ import {
   hookSettings,
   hookSettingsPath,
   hookedLaunch,
+  mcpLaunch,
   removeHookSettings,
   writeHookSettings,
   type AgentHookOptions
@@ -838,7 +839,7 @@ export class TerminalSessionManager {
     const id = restoring?.id ?? `term_${this.nextId()}`
     // After the selector and before the prompt; a restore's command already
     // carries the flag and only the file is written again, under the same name.
-    launch.command = this.hookAgentLaunch(launch.command, agent, id)
+    launch.command = this.hookAgentLaunch(launch.command, agent, id, params.worktreeId)
     // The prompt goes on the line that runs, never in the record.
     const spawned =
       launch.command !== undefined && agent !== undefined && params.prompt !== undefined
@@ -1018,12 +1019,13 @@ export class TerminalSessionManager {
   private hookAgentLaunch(
     command: string | undefined,
     agent: AgentKind | undefined,
-    terminalId: string
+    terminalId: string,
+    worktreeId: string
   ): string | undefined {
     const hooks = this.options.agentHooks
     if (hooks === undefined || command === undefined || agent === undefined) return command
     const file = hookSettingsPath(hooks.userDataDir, terminalId)
-    const hooked = hookedLaunch(command, agent, file)
+    const hooked = hookedLaunch(mcpLaunch(command, agent, hooks, terminalId, worktreeId), agent, file)
     if (hooked.includes(file)) writeHookSettings(file, hookSettings(hooks, terminalId))
     return hooked
   }

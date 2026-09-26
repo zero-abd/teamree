@@ -142,7 +142,8 @@ export const TaskParams = {
     shareTaskDetails: z.boolean().optional(),
     showCost: z.boolean().optional(),
     jacMemoryAddon: z.boolean().optional(),
-    showInMenuBar: z.boolean().optional()
+    showInMenuBar: z.boolean().optional(),
+    warnAgentsAboutOverlaps: z.boolean().optional()
   }),
 
   addonsStatus: z.object({}),

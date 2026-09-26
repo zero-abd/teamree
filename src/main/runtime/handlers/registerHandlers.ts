@@ -135,7 +135,15 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     ...(options.scrollback === undefined ? {} : { scrollback: options.scrollback }),
     // Agent hooks report the agent's state through this app's CLI; without one
     // the pane is read off the pty alone.
-    ...(shippedCli === null ? {} : { agentHooks: { userDataDir: dataDir, cli: shippedCli.path } }),
+    ...(shippedCli === null
+      ? {}
+      : {
+          agentHooks: {
+            userDataDir: dataDir,
+            cli: shippedCli.path,
+            warnOverlaps: () => registry.context.store.runtimeSettings().warnAgentsAboutOverlaps
+          }
+        }),
     paneIdentity: {
       ...(options.paneEndpoint === undefined ? {} : { endpoint: options.paneEndpoint }),
       ...(shippedCli === null ? {} : { cli: shippedCli.path }),

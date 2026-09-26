@@ -8,7 +8,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { shippedCliCandidates } from '../cli/shippedCli'
-import { AGENT_HOOK_EVENTS, hookCommand, hookSettings, hookSettingsPath, hookedLaunch } from './agent-hooks'
+import { AGENT_HOOK_EVENTS, hookCommand, hookSettings, hookSettingsPath, hookedLaunch, mcpLaunch } from './agent-hooks'
 import { canSpawnPty, waitUntil, writeFakeAgent } from './pty-test-support'
 import type { TerminalRecord } from './session-restore'
 import { TerminalSessionManager, type SessionRepository } from './session-manager'
@@ -19,8 +19,8 @@ const CLI = '/Applications/teamree.app/Contents/Resources/cli/teamree'
 describe('hookSettings', () => {
   const settings = hookSettings({ userDataDir: USER_DATA, cli: CLI }, 'term_7')
 
-  it('subscribes to the five events a pane state is read from and the two about subagents, and nothing else', () => {
-    expect(Object.keys(settings.hooks).sort()).toEqual([...AGENT_HOOK_EVENTS].sort())
+  it('subscribes to the five events a pane state is read from, the two about subagents, and edits', () => {
+    expect(Object.keys(settings.hooks).sort()).toEqual([...AGENT_HOOK_EVENTS, 'PreToolUse'].sort())
     expect(AGENT_HOOK_EVENTS).toEqual([
       'SessionStart',
       'UserPromptSubmit',
@@ -47,11 +47,42 @@ describe('hookSettings', () => {
   // A failed hook is a line in the transcript; a hung hook is a hung turn.
   it('never fails the agent and never holds it for long', () => {
     for (const event of AGENT_HOOK_EVENTS) {
-      const [hook] = settings.hooks[event][0]?.hooks ?? []
+      const [hook] = settings.hooks[event]?.[0]?.hooks ?? []
       expect(hook?.command.endsWith('|| true')).toBe(true)
       expect(hook?.command).toContain('--timeout 3000')
       expect(hook?.timeout).toBeLessThanOrEqual(10)
     }
+  })
+
+  // The edit waits on this one, so its budget is a second, not three.
+  it('checks every Edit, Write and MultiEdit against the siblings, and never blocks one', () => {
+    expect(settings.hooks.PreToolUse).toEqual([
+      {
+        matcher: 'Edit|Write|MultiEdit',
+        hooks: [
+          {
+            type: 'command',
+            command: `${CLI} agent check --terminal term_7 ` + `--user-data-dir '${USER_DATA}' --timeout 1000 || true`,
+            timeout: 5
+          }
+        ]
+      }
+    ])
+  })
+
+  it('asks for the overlap as context at session start', () => {
+    expect(settings.hooks.SessionStart[0]?.hooks[0]?.command).toBe(
+      `${CLI} agent event --terminal term_7 --event SessionStart ` +
+        `--user-data-dir '${USER_DATA}' --timeout 3000 --context || true`
+    )
+    expect(settings.hooks.Stop[0]?.hooks[0]?.command).not.toContain('--context')
+  })
+
+  it('with Warn Agents About Overlaps off, neither checks edits nor adds context', () => {
+    const off = hookSettings({ userDataDir: USER_DATA, cli: CLI, warnOverlaps: () => false }, 'term_7')
+    expect(Object.keys(off.hooks).sort()).toEqual([...AGENT_HOOK_EVENTS].sort())
+    expect(JSON.stringify(off)).not.toContain('--context')
+    expect(JSON.stringify(off)).not.toContain('agent check')
   })
 
   it('does not name a matcher, so every notification type is heard', () => {
@@ -129,6 +160,27 @@ describe('hookedLaunch', () => {
 
   it('leaves a line it cannot model alone rather than mangling it', () => {
     expect(hookedLaunch('claude | tee log', 'claude', file)).toBe('claude | tee log')
+  })
+})
+
+// `-c key=value` parses the value as TOML (codex-rs `config_override.rs`); a JSON string or array of strings is TOML too.
+describe('mcpLaunch', () => {
+  const options = { userDataDir: USER_DATA, cli: CLI }
+  const server =
+    `-c 'mcp_servers.teamree.command="${CLI}"' ` +
+    `-c 'mcp_servers.teamree.args=["mcp","--terminal","term_7","--worktree","wt_1","--user-data-dir",` +
+    `"${USER_DATA}"]'`
+
+  it('hands Codex the siblings and note tools as a stdio MCP server, per launch', () => {
+    expect(mcpLaunch('codex', 'codex', options, 'term_7', 'wt_1')).toBe(`codex ${server}`)
+    expect(mcpLaunch('codex resume 019a', 'codex', options, 'term_7', 'wt_1')).toBe(`codex resume 019a ${server}`)
+  })
+
+  it('leaves a line that already names the server, other agents and unmodellable lines alone', () => {
+    const named = `codex ${server}`
+    expect(mcpLaunch(named, 'codex', options, 'term_7', 'wt_1')).toBe(named)
+    expect(mcpLaunch('claude', 'claude', options, 'term_7', 'wt_1')).toBe('claude')
+    expect(mcpLaunch('codex | tee log', 'codex', options, 'term_7', 'wt_1')).toBe('codex | tee log')
   })
 })
 

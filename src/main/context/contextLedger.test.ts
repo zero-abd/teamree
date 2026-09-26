@@ -14,6 +14,7 @@ let dataDir: string
 let project: Project
 let worktrees: Worktree[]
 let ledger: ContextLedger
+let warnAgents: boolean
 
 async function addWorktree(id: string, task: string, parentId?: string): Promise<Worktree> {
   const checkout = path.join(repo.worktreesRoot, id)
@@ -39,6 +40,7 @@ function open(options: { maxMergeTreesPerPass?: number } = {}): ContextLedger {
   return new ContextLedger({
     dataDir,
     runner: repo.runner,
+    warnAgents: () => warnAgents,
     snapshot: () => ({ projects: [project], worktrees }),
     ...options
   })
@@ -55,6 +57,7 @@ beforeEach(async () => {
   await repo.commit('shared file')
   project = { id: 'p1', name: 'repo', path: repo.repoPath, baseRef: 'main' }
   worktrees = []
+  warnAgents = true
   ledger = open()
 })
 
@@ -201,7 +204,8 @@ describe('the coordination ledger', () => {
         into: 'main',
         conflicts: [],
         shared: ['src/shared.ts'],
-        warnings: [expect.objectContaining({ path: 'src/shared.ts', with: 'b', heeded: null })]
+        // Shown by `project.context`; the file did not conflict when a landed.
+        warnings: [expect.objectContaining({ path: 'src/shared.ts', with: 'b', via: 'context', heeded: true })]
       })
     ])
   })
@@ -214,6 +218,7 @@ describe('the coordination ledger', () => {
     await edit(b, 'line two from b')
     await repo.commit('b edits', b.path)
     await ledger.refresh()
+    await ledger.check({ worktreeId: 'b', path: path.join(b.path, 'src/shared.ts'), hook: true })
 
     await repo.git(['merge', '--ff-only', 'a'])
     await repo.runner.tryRun({ args: ['merge', '--no-ff', '-m', 'land b', 'b'], cwd: repo.repoPath })
@@ -224,6 +229,9 @@ describe('the coordination ledger', () => {
     const landed = (await ledger.inspect('p1')).landings
     expect(landed.find((row) => row.worktreeId === 'a')?.conflicts).toEqual([])
     expect(landed.find((row) => row.worktreeId === 'b')?.conflicts).toEqual(['src/shared.ts'])
+    expect(landed.find((row) => row.worktreeId === 'b')?.warnings).toEqual([
+      expect.objectContaining({ path: 'src/shared.ts', with: 'a', via: 'edit', heeded: false })
+    ])
   })
 
   it('never compares a child with its parent', async () => {
@@ -304,5 +312,126 @@ describe('the coordination ledger', () => {
     const after = await ledger.inspect('p1')
     expect(after.worktrees).toEqual([])
     expect(after.notes).toEqual([])
+  })
+})
+
+describe('before an agent edits a file', () => {
+  const at = (worktree: Worktree, file = 'src/shared.ts'): string => path.join(worktree.path, file)
+
+  it('names the sibling a merge would conflict with, in at most three lines, and says it once', async () => {
+    const a = await addWorktree('a', 'Add rate limits')
+    const b = await addWorktree('b', 'Fix login redirect')
+    await edit(a, 'line two from a')
+    await repo.commit('a edits', a.path)
+    await edit(b, 'line two from b')
+    await repo.commit('b edits', b.path)
+    await ledger.refresh()
+    const runs = ledger.stats().gitRuns
+
+    const check = await ledger.check({ worktreeId: 'a', path: at(a), hook: true })
+    expect(check).toEqual({
+      worktreeId: 'a',
+      path: 'src/shared.ts',
+      siblings: [{ worktreeId: 'b', name: 'b', goal: 'Fix login redirect', kind: 'conflict' }],
+      text: [
+        'b (sibling: "Fix login redirect") also changes src/shared.ts — would conflict.',
+        'Coordinate first: teamree msg ask --to b "<question>", or pick another file.'
+      ].join('\n')
+    })
+    // Read from the last pass: an edit never waits on git.
+    expect(ledger.stats().gitRuns).toBe(runs)
+    expect((await ledger.check({ worktreeId: 'a', path: at(a), hook: true })).text).toBe('')
+    const row = (await ledger.inspect('p1')).worktrees.find((worktree) => worktree.id === 'a')
+    expect(row?.warnings).toEqual([
+      expect.objectContaining({ path: 'src/shared.ts', with: 'b', via: 'edit', kind: 'conflict', heeded: null })
+    ])
+  })
+
+  it('says nothing when no sibling changes or claims the file', async () => {
+    const a = await addWorktree('a', 'Add rate limits')
+    const b = await addWorktree('b', 'Fix login redirect')
+    await repo.write('src/b.ts', 'b\n', b.path)
+    await ledger.refresh()
+    const check = await ledger.check({ worktreeId: 'a', path: at(a, 'src/a.ts'), hook: true })
+    expect(check).toEqual({ worktreeId: 'a', path: 'src/a.ts', siblings: [], text: '' })
+    expect((await ledger.inspect('p1')).worktrees.find((row) => row.id === 'a')?.warnings).toEqual([])
+  })
+
+  it('warns about a sibling’s claim and a sibling’s uncommitted change', async () => {
+    const a = await addWorktree('a', 'Add rate limits')
+    const b = await addWorktree('b', '')
+    await ledger.claim({ worktreeId: 'b', globs: ['src/limiter/**'] })
+    await repo.write('src/other.ts', 'b\n', b.path)
+    await ledger.refresh()
+    expect((await ledger.check({ worktreeId: 'a', path: at(a, 'src/limiter/core.ts') })).text).toBe(
+      [
+        'b (sibling) claims src/limiter/core.ts.',
+        'Coordinate first: teamree msg ask --to b "<question>", or pick another file.'
+      ].join('\n')
+    )
+    expect((await ledger.check({ worktreeId: 'a', path: at(a, 'src/other.ts') })).text.split('\n')[0]).toBe(
+      'b (sibling) also changes src/other.ts.'
+    )
+  })
+
+  it('counts the file an agent is about to edit as touched, so a sibling hears of it at once', async () => {
+    const a = await addWorktree('a', 'Add rate limits')
+    const b = await addWorktree('b', 'Fix login redirect')
+    await ledger.refresh()
+    expect((await ledger.check({ worktreeId: 'a', path: at(a, 'src/new.ts'), hook: true })).text).toBe('')
+    expect((await ledger.check({ worktreeId: 'b', path: at(b, 'src/new.ts'), hook: true })).siblings).toEqual([
+      { worktreeId: 'a', name: 'a', goal: 'Add rate limits', kind: 'changed' }
+    ])
+  })
+
+  it('leaves a person’s check out of the log and the touched paths', async () => {
+    const a = await addWorktree('a', 'Add rate limits')
+    const b = await addWorktree('b', 'Fix login redirect')
+    await repo.write('src/shared.ts', 'b\n', b.path)
+    await ledger.refresh()
+    expect((await ledger.check({ worktreeId: 'a', path: at(a) })).siblings).toHaveLength(1)
+    expect((await ledger.check({ worktreeId: 'a', path: at(a) })).text).not.toBe('')
+    const row = (await ledger.inspect('p1')).worktrees.find((worktree) => worktree.id === 'a')
+    expect(row).toMatchObject({ warnings: [], touched: [] })
+  })
+
+  it('ignores a lockfile only a sibling changes, and a path outside the worktree', async () => {
+    const a = await addWorktree('a', 'Add rate limits')
+    const b = await addWorktree('b', 'Fix login redirect')
+    await repo.write('package-lock.json', '{}\n', b.path)
+    await repo.write('src/shared.ts', 'b\n', b.path)
+    await ledger.refresh()
+    expect((await ledger.check({ worktreeId: 'a', path: at(a, 'package-lock.json'), hook: true })).text).toBe('')
+    expect((await ledger.check({ worktreeId: 'a', path: at(b), hook: true })).text).toBe('')
+    expect((await ledger.check({ worktreeId: 'a', path: '/etc/hosts', hook: true })).siblings).toEqual([])
+  })
+
+  it('tells an agent nothing with Warn Agents About Overlaps off, and still answers a person', async () => {
+    const a = await addWorktree('a', 'Add rate limits')
+    const b = await addWorktree('b', 'Fix login redirect')
+    await repo.write('src/shared.ts', 'b\n', b.path)
+    await ledger.refresh()
+    warnAgents = false
+    expect(await ledger.check({ worktreeId: 'a', path: at(a), hook: true })).toEqual({
+      worktreeId: 'a',
+      path: 'src/shared.ts',
+      siblings: [],
+      text: ''
+    })
+    expect((await ledger.check({ worktreeId: 'a', path: at(a) })).siblings).toHaveLength(1)
+    expect((await ledger.inspect('p1')).worktrees.find((row) => row.id === 'a')?.warnings).toEqual([])
+  })
+
+  it('says it again when a plain overlap becomes a conflict', async () => {
+    const a = await addWorktree('a', 'Add rate limits')
+    const b = await addWorktree('b', 'Fix login redirect')
+    await edit(b, 'line two from b')
+    await repo.commit('b edits', b.path)
+    await ledger.refresh()
+    expect((await ledger.check({ worktreeId: 'a', path: at(a), hook: true })).siblings[0]?.kind).toBe('changed')
+    await edit(a, 'line two from a')
+    await repo.commit('a edits', a.path)
+    await ledger.refresh()
+    expect((await ledger.check({ worktreeId: 'a', path: at(a), hook: true })).text).toContain('would conflict')
   })
 })

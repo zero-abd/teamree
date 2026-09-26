@@ -1,0 +1,15 @@
+{
+  "session_id": "abc123",
+  "transcript_path": "/Users/ana/.claude/projects/-repos-api-fix-login/abc123.jsonl",
+  "cwd": "/repos/api-fix-login",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/repos/api-fix-login/src/auth.ts",
+    "old_string": "const limit = 10",
+    "new_string": "const limit = 20",
+    "replace_all": false
+  },
+  "tool_use_id": "toolu_01ABC123"
+}
