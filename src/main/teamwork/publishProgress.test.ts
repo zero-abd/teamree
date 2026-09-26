@@ -64,6 +64,10 @@ async function wire(push: PushScript): Promise<Fake> {
     if (args === 'symbolic-ref --quiet --short HEAD') return ok('main\n')
     if (args.startsWith('rev-parse --abbrev-ref')) return ok('origin/main\n')
     if (args === 'rev-parse HEAD') return ok('9f1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5\n')
+    // Pulling first finds origin with nothing this checkout lacks.
+    if (args.startsWith('fetch --no-tags origin')) return ok()
+    if (args.startsWith('rev-parse --verify --quiet')) return ok('9f1d2c3b4a5968778695a4b3c2d1e0f9a8b7c6d5\n')
+    if (args.startsWith('merge-base --is-ancestor')) return ok()
     if (args === 'remote get-url origin') return ok('https://example.com/ada/pager.git\n')
     if (args === 'var GIT_AUTHOR_IDENT') return ok('Ada <ada@example.com> 1 +0000\n')
     if (args.startsWith('status --porcelain')) return ok(' M .teamree/relay\n')
@@ -232,7 +236,7 @@ describe('a push the remote would not take', () => {
   })
 
   // Both people commit a key onto the same base and the second push is turned away; forcing is the wrong instinct.
-  it('says to pull rather than to force when somebody pushed first', async () => {
+  it('says it was turned away, never to force, when pulling found nothing to add', async () => {
     const fake = await wire(() =>
       Promise.resolve({
         exitCode: 1,
@@ -248,7 +252,7 @@ describe('a push the remote would not take', () => {
     expect(result.push.ok).toBe(false)
     if (!result.push.ok) {
       expect(result.push.kind).toBe('rejected')
-      expect(result.push.advice).toBe('origin has commits that main does not · pull or rebase onto origin/main')
+      expect(result.push.advice).toBe('Push rejected: origin is ahead')
       expect(result.push.advice).not.toMatch(/force/i)
     }
   })

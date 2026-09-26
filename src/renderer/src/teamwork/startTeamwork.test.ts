@@ -666,6 +666,11 @@ describe('step 5, connected', () => {
     expect(step(written, 'connected').summary).toBe('Nobody else on the roster')
   })
 
+  it('says origin has somebody this checkout has not pulled, rather than nobody', () => {
+    const waiting = { ...written, list: { ...enrolled(), incoming: ['sam'] } }
+    expect(step(waiting, 'connected').summary).toBe('origin has 1 new member · Pull')
+  })
+
   it('separates a relay this machine cannot reach from a teammate who is away', () => {
     const unreachable = step({ ...written, status: status({ links: [link({ phase: 'unreachable' })] }) }, 'connected')
     expect(unreachable.summary).toBe('Cannot reach wss://relay.example/v1/relay (from .teamree/relay)')
@@ -1067,10 +1072,9 @@ describe('how long something took, for somebody watching a clock', () => {
 })
 
 describe('what to do about a push that did not land', () => {
-  // A rejection is the one failure trying again fixes, and only after a pull.
-  it('says to pull first after a rejection, and never to force', () => {
-    expect(retryHint('rejected')).toMatch(/git pull --rebase/)
-    expect(retryHint('rejected')).not.toMatch(/force/i)
+  // Pull and Retry is the answer, so no command is spelled out beside it.
+  it('has no hint for a rejection: the button says it', () => {
+    expect(retryHint('rejected')).toBeNull()
   })
 
   it('says a credential is not something this window changes', () => {

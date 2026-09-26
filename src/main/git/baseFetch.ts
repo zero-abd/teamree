@@ -100,6 +100,8 @@ export type BaseFetcherOptions = {
   /** The projects worth fetching for: those with a worktree to be behind. */
   projects: () => readonly BaseFetchProject[]
   onMoved: (projectId: string) => void
+  /** What one fetch of a project is; `fetchBase` by default. */
+  fetch?: (project: BaseFetchProject, signal: AbortSignal) => Promise<BaseFetchOutcome>
   /** False skips the cycle; `net.isOnline` in the app. */
   online?: () => boolean
   intervalMs?: number
@@ -145,6 +147,11 @@ export class BaseFetcher {
     this.#controller.abort()
   }
 
+  /** True between `start()` and `stop()`. */
+  get armed(): boolean {
+    return this.#cancelTimer !== undefined
+  }
+
   /** Window focus: fetches the projects not tried in the last minute. */
   nudge(): Promise<void> {
     return this.#run(this.#options.focusFloorMs ?? DEFAULT_FOCUS_FLOOR_MS)
@@ -184,11 +191,12 @@ export class BaseFetcher {
       state.lastAttemptAt = now
       this.#state.set(project.id, state)
 
-      const outcome = await fetchBase(this.#options.runner, {
-        repoPath: project.path,
-        baseRef: project.baseRef,
-        signal: this.#controller.signal
-      }).catch(() => 'failed' as const)
+      const signal = this.#controller.signal
+      const fetch =
+        this.#options.fetch ??
+        ((): Promise<BaseFetchOutcome> =>
+          fetchBase(this.#options.runner, { repoPath: project.path, baseRef: project.baseRef, signal }))
+      const outcome = await fetch(project, signal).catch(() => 'failed' as const)
       if (outcome === 'auth' || outcome === 'timeout') {
         state.authBackoffMs = Math.min(
           state.authBackoffMs === 0 ? AUTH_BACKOFF_FROM_MS : state.authBackoffMs * 2,

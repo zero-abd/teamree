@@ -924,7 +924,21 @@ export type MemberList = {
    * fault and must not be shown as one: the list is only as fresh as this read.
    */
   watched: boolean
+  /** Handles with a key on the remote branch that this checkout has not pulled. */
+  incoming?: string[]
   readAt: number
+}
+
+/** What `teamwork.pull` did to the checkout's branch. Uncommitted work is never touched. */
+export type TeamworkPull = {
+  projectId: string
+  /** True when the branch now has everything the remote had. */
+  ok: boolean
+  moved: boolean
+  /** One line when not ok, e.g. `Conflict in .teamree/relay`. */
+  problem: string | null
+  /** git's own words behind `problem`. */
+  detail: string | null
 }
 
 /**
@@ -1018,7 +1032,7 @@ export type TeamworkPublish = {
 export type PushFailureKind = 'rejected' | 'auth' | 'host-key' | 'cancelled' | 'timeout' | 'other'
 
 /** What a publish is doing right now. `finished` covers success and failure alike. */
-export type TeamworkPublishPhase = 'staging' | 'committing' | 'pushing' | 'finished'
+export type TeamworkPublishPhase = 'pulling' | 'staging' | 'committing' | 'pushing' | 'finished'
 
 /**
  * A publish while it is happening. A push waiting on a credential, one copying

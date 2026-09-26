@@ -44,6 +44,31 @@ describe('BaseFetcher', () => {
     expect(moved).toEqual(['p1'])
   })
 
+  // The teamwork fetch is a different fetch on the same timer, focus floor and back-off.
+  it('runs the fetch it is given instead of its own, and is armed only once started', async () => {
+    const { runner, fetches } = fakeRunner(() => ok)
+    const asked: string[] = []
+    const moved: string[] = []
+    const fetcher = new BaseFetcher({
+      runner,
+      projects: () => [project],
+      fetch: (target) => (asked.push(target.id), Promise.resolve('moved')),
+      onMoved: (id) => moved.push(id),
+      schedule: () => () => {}
+    })
+    expect(fetcher.armed).toBe(false)
+
+    await fetcher.fetchNow()
+    fetcher.start()
+
+    expect(fetches).toEqual([])
+    expect(asked).toEqual(['p1'])
+    expect(moved).toEqual(['p1'])
+    expect(fetcher.armed).toBe(true)
+    fetcher.stop()
+    expect(fetcher.armed).toBe(false)
+  })
+
   it('says nothing when the base did not move', async () => {
     const { runner } = fakeRunner(() => ok)
     const moved: string[] = []

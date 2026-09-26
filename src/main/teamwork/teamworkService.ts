@@ -12,19 +12,21 @@ import type {
   TeamworkOrigin,
   TeamworkPublish,
   TeamworkPublishPlan,
-  TeamworkPublishProgress
+  TeamworkPublishProgress,
+  TeamworkPull
 } from '../../shared/entities'
 import type { ParamsOf } from '../../shared/methods'
 import { checkOrigin } from '../../shared/origin'
+import { classifyFetchFailure, type BaseFetchOutcome, type BaseFetchProject } from '../git/baseFetch'
 import { createGitRunner, type GitRunner } from '../git/gitProcess'
 import { ErrorCode } from '../../shared/protocol'
 import { notFound } from '../runtime/runtimeError'
 import { badHandle, badOriginUrl, badRelayUrl, rosterConflict, TeamworkError } from './errors'
-import { publish, readPublishPlan, type PublishPhase } from './publish'
+import { publish, readPublishPlan, sshCommand, type PublishPhase } from './publish'
 import { shippedRelayCommand } from './relayCommand'
 import { resolveHandle } from './handle'
 import { loadIdentity } from './identity'
-import { formatMemberFile } from './memberFile'
+import { formatMemberFile, MEMBER_FILE_SUFFIX, MEMBERS_DIR_SEGMENTS } from './memberFile'
 import {
   parseRelayUrl,
   readRelayFile,
@@ -34,6 +36,12 @@ import {
   writeRelayFile
 } from './peer/relayUrl'
 import { memberFileName, memberFilePath, readRoster, type Roster } from './roster'
+import { catchUp, type CatchUp } from './sync'
+
+const membersDirectoryName = MEMBERS_DIR_SEGMENTS.join('/')
+
+/** How often origin is fetched while you are the only one on a roster. */
+export const WAITING_FETCH_MS = 30_000
 
 /** Only the sliver of the workspace store this needs, so a test can hand it one project. */
 export type ProjectSource = { getProject: (projectId: string) => Project | undefined }
@@ -61,6 +69,8 @@ export type TeamworkServiceOptions = {
   onRosterChange?: () => void
   /** Where the relay project this build carries is; the default reads a packaged app's resources and the checkout. */
   relayDeploy?: () => RelaySetting['deploy']
+  /** Called when a read finds only you on a roster, so origin is fetched for whoever joins next. */
+  onAlone?: () => void
 }
 
 export class TeamworkService {
@@ -72,6 +82,9 @@ export class TeamworkService {
   readonly #watching: (projectId: string) => boolean
   readonly #onRosterChange: (() => void) | undefined
   readonly #relayDeploy: () => RelaySetting['deploy']
+  readonly #onAlone: (() => void) | undefined
+  /** Projects whose last roster read held only this installation's key. */
+  readonly #alone = new Set<string>()
   /**
    * The roster as this service last read it, per project, so *any* read can be
    * the thing that notices a change. Only ever compared, never served.
@@ -93,6 +106,7 @@ export class TeamworkService {
     this.#env = options.env ?? process.env
     this.#watching = options.watching ?? ((): boolean => false)
     this.#onRosterChange = options.onRosterChange
+    this.#onAlone = options.onAlone
     this.#relayDeploy =
       options.relayDeploy ??
       ((): RelaySetting['deploy'] => shippedRelayCommand({ resourcesPath: process.resourcesPath, cwd: process.cwd() }))
@@ -104,7 +118,54 @@ export class TeamworkService {
     // Belt and braces beside the watch on `.teamree`. Only a *change* is
     // announced, so the re-read this causes elsewhere finds the same roster and stops.
     this.#noteRoster(project.id, roster)
-    return this.#describe(project, roster)
+    const list = await this.#describe(project, roster)
+    if (this.#alone.has(project.id)) this.#onAlone?.()
+    const incoming = await this.#incoming(project.path, roster)
+    return incoming.length === 0 ? list : { ...list, incoming }
+  }
+
+  /** The projects to fetch often: set up, and nobody else on the roster yet. */
+  waitingProjects(): BaseFetchProject[] {
+    return [...this.#alone]
+      .map((projectId) => this.#store.getProject(projectId))
+      .filter((project): project is Project => project !== undefined && project.fetchInBackground !== false)
+      .map((project) => ({ id: project.id, path: project.path, baseRef: project.baseRef }))
+  }
+
+  /**
+   * Fetches origin and fast-forwards the checkout when only `.teamree` changed, so a
+   * teammate's key arrives without a pull. `moved` covers the remote ref moving too.
+   */
+  async refresh(projectId: string, options: { fetch?: boolean; signal?: AbortSignal } = {}): Promise<BaseFetchOutcome> {
+    const project = this.#store.getProject(projectId)
+    if (project === undefined || !(await this.#enrolled(project.path))) return 'skipped'
+    const branch = await this.#branch(project.path)
+    if (branch === null) return 'skipped'
+    const remoteRef = `refs/remotes/origin/${branch}`
+    const before = await this.#revParse(project.path, remoteRef)
+    const caught = await this.#catchUp(project, branch, { incoming: 'teamree', replay: 'none' }, options)
+    if (!caught.ok && caught.why === 'fetch') {
+      return /no such remote|does not appear to be a git repository/i.test(caught.detail)
+        ? 'skipped'
+        : classifyFetchFailure(caught.detail)
+    }
+    const moved = (caught.ok && caught.moved) || (await this.#revParse(project.path, remoteRef)) !== before
+    if (moved) this.#onRosterChange?.()
+    return moved ? 'moved' : 'unchanged'
+  }
+
+  /** Brings the checkout's branch up to origin, rebuilding any unpushed commits on top. Never touches uncommitted work. */
+  async pull(params: ParamsOf<'teamwork.pull'>): Promise<TeamworkPull> {
+    const project = this.#project(params.projectId)
+    const branch = await this.#branch(project.path)
+    const answer = (fields: Omit<TeamworkPull, 'projectId'>): TeamworkPull => ({ projectId: project.id, ...fields })
+    if (branch === null) return answer({ ok: false, moved: false, problem: 'Not on a branch', detail: null })
+    const caught = await this.#catchUp(project, branch, { incoming: 'any', replay: 'all' })
+    if (caught.ok) {
+      if (caught.moved) this.#onRosterChange?.()
+      return answer({ ok: true, moved: caught.moved, problem: null, detail: null })
+    }
+    return answer({ ok: false, moved: false, problem: pullProblem(caught, branch), detail: caught.detail || null })
   }
 
   async joinProject(params: ParamsOf<'members.join'>): Promise<MemberList> {
@@ -321,6 +382,80 @@ export class TeamworkService {
     }
   }
 
+  #catchUp(
+    project: Project,
+    branch: string,
+    scope: Parameters<typeof catchUp>[1]['scope'],
+    options: { fetch?: boolean; signal?: AbortSignal } = {}
+  ): Promise<CatchUp> {
+    return sshCommand(this.#runner, project.path).then((ssh) =>
+      catchUp(this.#runner, {
+        cwd: project.path,
+        remote: 'origin',
+        branch,
+        scope,
+        env: { GIT_SSH_COMMAND: ssh },
+        ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+        ...(options.signal === undefined ? {} : { signal: options.signal })
+      })
+    )
+  }
+
+  /** Member handles on origin's copy of this branch that the checkout has not pulled yet. */
+  async #incoming(projectPath: string, roster: Roster): Promise<string[]> {
+    const branch = await this.#branch(projectPath)
+    if (branch === null) return []
+    const ref = `refs/remotes/origin/${branch}`
+    if ((await this.#revParse(projectPath, ref)) === null) return []
+    const merged = await this.#runner.tryRun({
+      args: ['merge-base', '--is-ancestor', ref, 'HEAD'],
+      cwd: projectPath,
+      readOnly: true
+    })
+    if (merged.exitCode === 0) return []
+    const listed = await this.#runner.tryRun({
+      args: ['ls-tree', '--name-only', ref, '--', `${membersDirectoryName}/`],
+      cwd: projectPath,
+      readOnly: true
+    })
+    if (listed.exitCode !== 0) return []
+    const here = new Set([
+      ...roster.entries.map((entry) => entry.file),
+      ...roster.problems.map((problem) => problem.file)
+    ])
+    return listed.stdout
+      .split('\n')
+      .filter((file) => file.endsWith(MEMBER_FILE_SUFFIX) && !here.has(file))
+      .map((file) => file.slice(membersDirectoryName.length + 1, -MEMBER_FILE_SUFFIX.length))
+      .sort()
+  }
+
+  /** Only a checkout this installation has joined is ever moved in the background. */
+  async #enrolled(projectPath: string): Promise<boolean> {
+    const roster = await readRoster(projectPath)
+    if (roster.entries.length === 0) return false
+    const identity = await loadIdentity(this.#dataDir)
+    return roster.entries.some((entry) => entry.publicKey === identity.publicKey)
+  }
+
+  async #branch(cwd: string): Promise<string | null> {
+    const { exitCode, stdout } = await this.#runner.tryRun({
+      args: ['symbolic-ref', '--quiet', '--short', 'HEAD'],
+      cwd,
+      readOnly: true
+    })
+    return exitCode === 0 && stdout.trim() !== '' ? stdout.trim() : null
+  }
+
+  async #revParse(cwd: string, ref: string): Promise<string | null> {
+    const { exitCode, stdout } = await this.#runner.tryRun({
+      args: ['rev-parse', '--verify', '--quiet', ref],
+      cwd,
+      readOnly: true
+    })
+    return exitCode === 0 ? stdout.trim() : null
+  }
+
   #project(projectId: string): Project {
     const project = this.#store.getProject(projectId)
     if (!project) throw notFound(`no project with id ${projectId}`)
@@ -372,6 +507,8 @@ export class TeamworkService {
     const handle = mine?.handle ?? resolveHandle({ gitEmail: await this.#gitEmail(project.path) }) ?? null
 
     const self: MemberIdentity = { handle, publicKey: identity.publicKey }
+    if (roster.entries.length === 1 && mine !== undefined) this.#alone.add(project.id)
+    else this.#alone.delete(project.id)
     return {
       projectId: project.id,
       members: roster.entries.map((entry) => ({
@@ -436,6 +573,21 @@ function fingerprint(roster: Roster): string {
     roster.entries.map((entry) => [entry.file, entry.publicKey, entry.addedAt]),
     roster.problems.map((problem) => [problem.file, problem.reason])
   ])
+}
+
+/** A failed pull in one line; git's words go in `detail`. */
+function pullProblem(caught: Extract<CatchUp, { ok: false }>, branch: string): string {
+  const named = caught.paths.slice(0, 2).join(', ') + (caught.paths.length > 2 ? ` +${caught.paths.length - 2}` : '')
+  switch (caught.why) {
+    case 'conflict':
+      return named === '' ? 'Conflict' : `Conflict in ${named}`
+    case 'local':
+      return named === '' ? 'Local changes are in the way' : `Local changes to ${named} are in the way`
+    case 'fetch':
+      return 'Fetch failed'
+    case 'scope':
+      return `${branch} has a merge origin does not · pull in Terminal`
+  }
 }
 
 /** UTC, so two members added on the same day agree about which day that was. */

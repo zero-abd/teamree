@@ -203,10 +203,11 @@ describe('dispatcher', () => {
       'teamwork.mute',
       'teamwork.presence',
       // Local: these write to the repository this machine owns, and the peer
-      // allow-list admits none of them. `publishProgress` only reads.
+      // allow-list admits none of them. `publishProgress` only reads; `pull` moves the checkout.
       'teamwork.publish',
       'teamwork.publishPlan',
       'teamwork.publishProgress',
+      'teamwork.pull',
       'teamwork.relay',
       'teamwork.requests',
       'teamwork.revoke',

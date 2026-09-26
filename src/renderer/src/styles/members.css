@@ -181,6 +181,14 @@
   font-size: var(--text-xs);
 }
 
+.members__incoming {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--fg);
+  font-size: var(--text-xs);
+}
+
 /* ---------------------------------------------------------- the setup flow */
 
 /* Wide enough for a command block, narrow enough to read: the steps are prose
@@ -658,7 +666,8 @@
   white-space: pre-wrap;
 }
 
-.push__manual summary {
+.push__manual summary,
+.push__details summary {
   color: var(--fg-muted);
   font-size: var(--text-xs);
   cursor: pointer;
