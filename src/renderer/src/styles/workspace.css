@@ -1192,13 +1192,13 @@
   background: var(--bg-input);
 }
 
-/* Context: claims and notes from the ledger. Capped like the commits, so it never pushes the list out. */
+/* Context: claims and notes from the ledger. Shrinks and scrolls like the list, never pushing it out. */
 .context {
-  flex: none;
-  max-height: 30%;
+  flex: 0 1 auto;
+  min-height: 0;
   overflow-y: auto;
   border-top: 1px solid var(--line);
-  padding-bottom: var(--s2);
+  padding-bottom: var(--s3);
 }
 
 .context__add {

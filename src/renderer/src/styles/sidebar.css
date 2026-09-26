@@ -1380,7 +1380,7 @@
 
 /* Holds claims: quiet, since a claim is a note to other agents, not something to act on. */
 .worktree__claims {
-  gap: 3px;
+  padding: 0 2px;
   background: none;
   color: var(--fg-muted);
 }

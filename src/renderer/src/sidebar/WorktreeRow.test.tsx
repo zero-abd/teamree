@@ -1159,7 +1159,7 @@ describe('a worktree holding claims', () => {
     const mark = row().querySelector('.worktree__claims') as HTMLElement
     expect(mark.title).toBe('src/api/**\ndocs/api.md')
     expect(mark.getAttribute('aria-label')).toBe('Claims: src/api/**, docs/api.md')
-    expect(mark.textContent).toBe('⚑2')
+    expect(mark.textContent).toBe('⚑')
   })
 
   it('draws nothing without a claim', () => {

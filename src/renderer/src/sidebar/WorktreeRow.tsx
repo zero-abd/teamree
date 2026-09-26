@@ -324,9 +324,13 @@ export function WorktreeRow({
       {ready ? <RunChip terminals={terminals} worktreeId={worktree.id} /> : null}
       {handoff === null ? null : <span className="chip worktree__handoff">{handoff}</span>}
       {claims === '' || !ready ? null : (
-        <span className="chip worktree__claims" title={claims} aria-label={`Claims: ${claims.split('\n').join(', ')}`}>
-          <span aria-hidden="true">⚑</span>
-          {claims.split('\n').length}
+        <span
+          className="chip worktree__claims"
+          role="img"
+          title={claims}
+          aria-label={`Claims: ${claims.split('\n').join(', ')}`}
+        >
+          ⚑
         </span>
       )}
       {task === undefined ? null : (
