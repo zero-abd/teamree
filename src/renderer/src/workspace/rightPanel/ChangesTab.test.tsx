@@ -1280,6 +1280,18 @@ describe('the whole branch', () => {
     expect(reviews()).toHaveLength(1)
   })
 
+  it('counts the files past the cap it does not list', () => {
+    useWorkspaceStore.setState({
+      branchChanges: {
+        w1: { worktreeId: 'w1', changes: onBranch, total: 2002, limit: 2, truncated: true, readAt: 0 }
+      }
+    })
+    render(<ChangesTab />)
+    const group = screen.getByRole('region', { name: 'On branch' })
+    expect(group.querySelector('.commits__title')?.textContent).toBe('On Branch2,002')
+    expect(within(group).getByText('+2,000 more')).toBeTruthy()
+  })
+
   it('opens the review on the branch at the file picked', () => {
     withBranch(onBranch)
     useReviewStore.setState({ scope: { w1: 'uncommitted' } })

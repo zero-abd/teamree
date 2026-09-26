@@ -147,15 +147,17 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   )
 }
 
-/** `3 files +41 −7`: the branch against its base. */
+/** `3 files +41 −7`: the branch against its base. Lines are counted per listed file, so a cut-off list gives none. */
 function branchStat(branch: WorktreeChanges): string {
+  const files = `${branch.total.toLocaleString('en-US')} ${branch.total === 1 ? 'file' : 'files'}`
+  if (branch.truncated) return files
   let added = 0
   let removed = 0
   for (const change of branch.changes) {
     added += change.added ?? 0
     removed += change.removed ?? 0
   }
-  return `${branch.total} ${branch.total === 1 ? 'file' : 'files'} +${added} −${removed}`
+  return `${files} +${added} −${removed}`
 }
 
 function folderName(path: string): string {

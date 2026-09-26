@@ -441,7 +441,7 @@ export function ChangesTab(): React.JSX.Element | null {
         <section className="changes__group changes__group--branch" aria-label="On branch">
           <h3 className="commits__title" title={`vs ${log?.baseRef ?? base ?? ''}`}>
             On Branch
-            <span className="panel__count">{branch?.total ?? branchRows.length}</span>
+            <span className="panel__count">{counted(branch?.total ?? branchRows.length)}</span>
           </h3>
           <ul className="changes__list">
             {branchRows.map((change) => (
@@ -468,6 +468,9 @@ export function ChangesTab(): React.JSX.Element | null {
               </li>
             ))}
           </ul>
+          {branch !== undefined && branch.total > branchRows.length ? (
+            <p className="changes__note">+{counted(branch.total - branchRows.length)} more</p>
+          ) : null}
         </section>
       ) : null}
 

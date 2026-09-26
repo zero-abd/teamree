@@ -89,6 +89,19 @@ it('says how much the branch changes against its base, beside the commits', asyn
   expect(screen.getByText('6c1738c Fix README typo')).toBeTruthy()
 })
 
+// The line counts cover only the listed files, so a cut-off list gives none rather than too few.
+it('gives a cut-off branch its file count and no line counts', async () => {
+  call.mockImplementation((method: unknown, params: unknown) => {
+    if (method === 'worktree.mergeIntoBase') return Promise.resolve(plan)
+    if (method === 'worktree.changes' && (params as { base?: boolean }).base === true) {
+      return Promise.resolve({ ...branch, total: 3000, limit: 3, truncated: true })
+    }
+    return new Promise(() => {})
+  })
+  render(<ConfirmMergeDialog worktreeId="w1" />)
+  await waitFor(() => expect(screen.getByText('3,000 files')).toBeTruthy())
+})
+
 it('reviews the whole branch instead of merging it', async () => {
   render(<ConfirmMergeDialog worktreeId="w1" />)
   fireEvent.click(await screen.findByRole('button', { name: 'Review' }))
