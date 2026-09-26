@@ -19,8 +19,8 @@ export function screenOf(term: Pick<XTerm, 'buffer' | 'rows'>): string[] {
   return rows
 }
 
-/** The image numbers in the input box, in order; null when no input box is showing. */
-export function promptImageIndices(rows: readonly string[]): number[] | null {
+/** The rows of the rules above and below Claude Code's input box; null when none is showing. */
+export function inputBox(rows: readonly string[]): { top: number; bottom: number } | null {
   const isRule = (row: string | undefined): boolean => RULE.test(row?.trim() ?? '')
   // Drawn inline, the input can sit high on a screen with nothing under it yet.
   let end = rows.length - 1
@@ -30,10 +30,17 @@ export function promptImageIndices(rows: readonly string[]): number[] | null {
   if (!isRule(rows[bottom])) return null
   let top = bottom - 1
   while (top >= 0 && !isRule(rows[top])) top--
-  const input = rows.slice(top + 1, bottom)
-  if (top < 0 || input.length === 0 || !INPUT_START.test(input[0]!)) return null
+  if (top < 0 || top + 1 === bottom || !INPUT_START.test(rows[top + 1]!)) return null
+  return { top, bottom }
+}
+
+/** The image numbers in the input box, in order; null when no input box is showing. */
+export function promptImageIndices(rows: readonly string[]): number[] | null {
+  const box = inputBox(rows)
+  if (box === null) return null
   // Joined with a space so a placeholder the input wrapped at its space reads whole.
-  const text = input
+  const text = rows
+    .slice(box.top + 1, box.bottom)
     .map((row) =>
       row
         .replace(/^\s*│?\s*[❯>]?/u, '')
@@ -42,11 +49,6 @@ export function promptImageIndices(rows: readonly string[]): number[] | null {
     )
     .join(' ')
   return [...new Set(printedImages(text).map((image) => image.index))]
-}
-
-/** The prompt's images less the ones taken off, by file: a new session reuses the numbers. */
-export function stripImages(images: readonly ShownImage[], removed: ReadonlySet<string>): ShownImage[] {
-  return images.filter((image) => !removed.has(image.path))
 }
 
 const SCAN_MS = 150

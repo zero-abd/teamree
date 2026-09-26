@@ -74,11 +74,43 @@ The images in the prompt still being written show as thumbnails in a row under t
 - **Where.** A row, not an overlay, so it covers no text; the pty is refit when it comes and
   goes, at a paste and a submit. It sits ahead of the surface in the DOM for Tab (xterm keeps
   Tab) and is drawn below it, next to the input. Each pane has its own, in any split.
-- **−** folds it to a count, per pane. **×** takes a thumbnail off the strip, by file, so a
-  new session's image under the same number shows again.
-- **× does not edit the prompt.** Claude Code drops an image whose placeholder leaves the input,
-  but teamree sees only the screen: the input's cursor, wrapping and vim mode are Claude Code's,
-  and keystrokes would race the person typing and a queued prompt being sent.
+- **−** folds it to a count, per pane.
+- **×** deletes the image's placeholder from the input (below). The thumbnail goes when the
+  input no longer holds it; when it stays, the strip says why in a few words.
+
+## Removing an image
+
+Claude Code keeps a pasted image only while its placeholder is in the input. Deleting the
+placeholder is the whole removal; teamree does it with the keys a person would press.
+
+Read in the 2.1.283 bundle (strings only, the CLI was never run):
+
+- **The placeholder is one caret stop.** The input's cursor class matches
+  `\[(?:Pasted text|Image|Audio|...Truncated text) #\d+( \+\d+ lines)?\.*\]` at the caret:
+  `left()` and `right()` jump the whole placeholder, and `backspace()` is
+  `left().modifyText(this)`, so one Backspace after its `]` deletes all of it.
+- **The keys.** In the prompt, ← is `left()` (on an empty input it opens agents instead), → is
+  `right()` (on an empty input it takes the suggestion), Backspace is `backspace()`. ↑ and ↓ move
+  into history at the first and last rows, so they are never sent.
+- **The image goes with it.** A subscription on the input's value deletes every image entry whose
+  id is no longer among its placeholders, on the edit itself, not at submit.
+- **The caret is on screen.** The prompt declares its caret cell, and the renderer moves the
+  terminal cursor there after every frame (absolute in full screen, relative inline).
+- **The input is all there.** In full screen the input shows at most
+  `max(3, floor(rows / 2) - 5)` rows and scrolls with the caret, silently; inline it has no cap.
+
+So, in `promptEdit.ts`, only when all hold:
+
+1. The pane reads `quiet` (`paneActivity.ts`): its turn is over and it is not asking anything.
+2. Nobody typed into the pane in the last second, here or as a teammate.
+3. The input box is on screen, shorter than the full-screen cap, holds `[Image #N]` exactly
+   once, and the terminal cursor is inside it.
+
+Then ← or → one at a time until the cursor sits on the placeholder's `[`, each press checked to
+have moved it. One → must land just past its `]`: proof the placeholder is a single stop in this
+version. If not, one ← puts the caret back and nothing is deleted. A keystroke from anybody on
+the way stops it short of deleting. Then Backspace, and the input must read as before less the
+placeholder. A miss is not undone; the strip says "not removed" and the person looks.
 
 ## Surface
 
