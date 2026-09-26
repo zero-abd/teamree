@@ -3552,7 +3552,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     rememberPermissionModes(projectId, modes) {
-      const permissionModes = { ...get().permissionModes, [projectId]: { ...get().permissionModes[projectId], ...modes } }
+      const permissionModes = {
+        ...get().permissionModes,
+        [projectId]: { ...get().permissionModes[projectId], ...modes }
+      }
       set({ permissionModes })
       writeStoredPermissionModes(storage, permissionModes)
     },

@@ -69,7 +69,11 @@ describe('the plan the dialog submits', () => {
       codex: 'default',
       gemini: 'bypass'
     })
-    expect(creates.map((create) => create.permissionArgs)).toEqual(['--dangerously-skip-permissions', undefined, undefined])
+    expect(creates.map((create) => create.permissionArgs)).toEqual([
+      '--dangerously-skip-permissions',
+      undefined,
+      undefined
+    ])
     expect(taskCreates('Rewrite the pager', [codex], '', { codex: 'auto' })[0]?.permissionArgs).toBe(
       '--sandbox workspace-write --ask-for-approval on-request'
     )

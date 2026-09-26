@@ -264,10 +264,7 @@ it('launches the agent in the permission mode the composer chose', { timeout: 20
 
     store.startTask({ projectId, creates: taskCreates('Skip the prompts', [claude], '', { claude: 'bypass' }) })
 
-    await until(
-      () => call.mock.calls.some(([method]) => method === 'terminal.create'),
-      'the agent to be started'
-    )
+    await until(() => call.mock.calls.some(([method]) => method === 'terminal.create'), 'the agent to be started')
     const pane = call.mock.calls.find(([method]) => method === 'terminal.create')![1]
     expect(pane).toEqual(
       expect.objectContaining({
