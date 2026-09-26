@@ -2,6 +2,7 @@
 // Merged into the contract through taskMethods.ts. Claims never lock anything.
 
 import { z } from 'zod'
+import type { MemoryNote } from './memory'
 
 /** Most globs one worktree may claim. */
 export const MAX_CLAIM_GLOBS = 50
@@ -19,7 +20,8 @@ export const LedgerParams = {
     terminalId: Id.optional(),
     path: z.string().min(1).max(4096),
     hook: z.boolean().optional()
-  })
+  }),
+  memoryList: z.object({ projectId: Id })
 } as const
 
 /** A worktree's claims after the change, repo-relative globs. */
@@ -37,10 +39,19 @@ export type EditCheck = {
   text: string
 }
 
+/** A project's ledger for the window: each live worktree's claims and touched paths, and every note. */
+export type ProjectMemory = {
+  projectId: string
+  revision: number
+  worktrees: { worktreeId: string; claims: string[]; touched: string[] }[]
+  notes: MemoryNote[]
+}
+
 type P = typeof LedgerParams
 
 export type LedgerMethodContract = {
   'memory.claim': { params: z.infer<P['memoryClaim']>; result: WorktreeClaims }
   'memory.unclaim': { params: z.infer<P['memoryUnclaim']>; result: WorktreeClaims }
   'memory.check': { params: z.infer<P['memoryCheck']>; result: EditCheck }
+  'memory.list': { params: z.infer<P['memoryList']>; result: ProjectMemory }
 }

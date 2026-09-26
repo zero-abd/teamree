@@ -180,6 +180,23 @@ describe('the coordination ledger', () => {
     expect((await ledger.unclaim({ worktreeId: 'a' })).globs).toEqual([])
   })
 
+  it('lists every live claim and note for the window, overlap or not', async () => {
+    const a = await addWorktree('a', 'Add rate limits')
+    await addWorktree('b', 'Fix login redirect')
+    await repo.write('src/limits.ts', 'x\n', a.path)
+    await ledger.claim({ worktreeId: 'a', globs: ['src/api/**'] })
+    const note = await ledger.note({ worktreeId: 'b', kind: 'question', text: 'Keep v1 tokens?' })
+    await ledger.refresh()
+
+    const listed = await ledger.list('p1')
+    expect(listed.worktrees).toEqual([
+      { worktreeId: 'a', claims: ['src/api/**'], touched: ['src/limits.ts'] },
+      { worktreeId: 'b', claims: [], touched: [] }
+    ])
+    expect(listed.notes).toEqual([note])
+    expect(listed.revision).toBeGreaterThan(0)
+  })
+
   it('expires a decision when its worktree lands, and logs the landing', async () => {
     const a = await addWorktree('a', 'Add rate limits')
     const b = await addWorktree('b', 'Fix login redirect')

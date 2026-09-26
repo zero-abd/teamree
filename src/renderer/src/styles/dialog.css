@@ -965,3 +965,38 @@ button.picker__chevron:hover {
   color: var(--fg-muted);
   cursor: default;
 }
+
+/* Show Decisions: one block per task, its name opening it. */
+.decisions {
+  max-height: 60vh;
+  min-width: 420px;
+  overflow-y: auto;
+}
+
+.decisions__empty {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.decisions__task + .decisions__task {
+  margin-top: var(--s3);
+}
+
+.decisions__name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.decisions__name:hover {
+  color: var(--accent-bright);
+}
+
+.decisions .context__row {
+  padding-inline: 0;
+}

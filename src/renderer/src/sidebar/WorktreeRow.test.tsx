@@ -35,6 +35,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { WorktreeRow } = await import('./WorktreeRow')
 const { useUsageStore } = await import('../state/usageStore')
+const { useLedger } = await import('../state/ledgerStore')
 
 const NOW = 1_700_000_000_000
 
@@ -1141,6 +1142,30 @@ describe('a worktree sharing files with another task', () => {
   it('draws nothing without an overlap', () => {
     mount()
     expect(row().querySelector('.overlap')).toBeNull()
+  })
+})
+
+describe('a worktree holding claims', () => {
+  const claim = (claims: string[]): void =>
+    useLedger.setState({
+      byProject: {
+        p1: { projectId: 'p1', revision: 1, worktrees: [{ worktreeId: 'w1', claims, touched: [] }], notes: [] }
+      }
+    })
+
+  it('carries a quiet mark listing its globs on hover', () => {
+    claim(['src/api/**', 'docs/api.md'])
+    mount()
+    const mark = row().querySelector('.worktree__claims') as HTMLElement
+    expect(mark.title).toBe('src/api/**\ndocs/api.md')
+    expect(mark.getAttribute('aria-label')).toBe('Claims: src/api/**, docs/api.md')
+    expect(mark.textContent).toBe('⚑2')
+  })
+
+  it('draws nothing without a claim', () => {
+    claim([])
+    mount()
+    expect(row().querySelector('.worktree__claims')).toBeNull()
   })
 })
 

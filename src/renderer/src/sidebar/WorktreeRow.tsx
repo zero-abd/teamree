@@ -14,6 +14,7 @@ import {
 import { usageLines } from '@shared/usage'
 import { AgentGlyph } from '../agents/glyphs'
 import { openInBrowser } from '../shell/openInBrowser'
+import { useLedger } from '../state/ledgerStore'
 import { askForYou, childDone, firstSentence, useMessageStore } from '../state/messages'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { PaneAttention } from '../state/paneAttention'
@@ -177,6 +178,12 @@ export function WorktreeRow({
   const draggable = ready && !renaming && onMoveUnder !== undefined
   const ask = useMessageStore((state) => askForYou(state.messages, worktree.id))
   const heard = useMessageStore((state) => childDone(state.messages, worktree.id))
+  // Joined, so the selector answers the same string while nothing changed.
+  const claims = useLedger(
+    (state) =>
+      state.byProject[worktree.projectId]?.worktrees.find((row) => row.worktreeId === worktree.id)?.claims.join('\n') ??
+      ''
+  )
   const heardFrom = useWorkspaceStore((state) =>
     heard === undefined ? undefined : state.worktrees.find((entry) => entry.id === heard.from.worktreeId)
   )
@@ -316,6 +323,12 @@ export function WorktreeRow({
       {overlap === undefined || !ready ? null : <OverlapMark chip={overlap.chip} onOpen={overlap.onOpen} />}
       {ready ? <RunChip terminals={terminals} worktreeId={worktree.id} /> : null}
       {handoff === null ? null : <span className="chip worktree__handoff">{handoff}</span>}
+      {claims === '' || !ready ? null : (
+        <span className="chip worktree__claims" title={claims} aria-label={`Claims: ${claims.split('\n').join(', ')}`}>
+          <span aria-hidden="true">⚑</span>
+          {claims.split('\n').length}
+        </span>
+      )}
       {task === undefined ? null : (
         <span className="chip worktree__tally" title={task.children.join('\n')}>
           {`${task.tally.done}/${task.tally.total} done`}

@@ -38,6 +38,7 @@ export type PaletteAction =
   | 'new-task-from-issue'
   | 'install-cli'
   | 'search-contents'
+  | 'show-decisions'
   | 'check-for-updates'
   | 'toggle-automatic-updates'
   | WorktreeAction
@@ -206,7 +207,10 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     const unavailable =
       action.unavailable ??
       (action.id === 'install-cli' && context.cli?.state === 'linked' ? 'installed' : null) ??
-      ((action.id === 'open-branch' || action.id === 'open-pull-request' || action.id === 'new-task-from-issue') &&
+      ((action.id === 'open-branch' ||
+        action.id === 'open-pull-request' ||
+        action.id === 'new-task-from-issue' ||
+        action.id === 'show-decisions') &&
       context.projects.length === 0
         ? 'no project'
         : null) ??
@@ -525,6 +529,11 @@ const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[]
   },
   { id: 'open-pull-request', label: 'Check Out Pull Request…', keywords: 'review pr github gh checkout teammate' },
   { id: 'new-task-from-issue', label: 'New Task from Issue…', keywords: 'github gh issue ticket bug start task' },
+  {
+    id: 'show-decisions',
+    label: 'Show Decisions',
+    keywords: 'decisions claims notes questions context ledger memory agents overlap resolve'
+  },
   {
     id: 'install-cli',
     label: 'Install Command Line Tool',

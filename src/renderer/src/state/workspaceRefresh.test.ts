@@ -29,10 +29,12 @@ describe('targetsForEvent', () => {
 
   // Overlaps come from the ledger, which says `memory` when a pass changed them; teammates' paths join them.
   it('re-reads overlaps on a ledger change and on a teammate change, never on a timer', () => {
-    expect(targetsForEvent({ type: 'memory' })).toEqual(refreshTargets({ overlaps: true }))
+    expect(targetsForEvent({ type: 'memory' })).toEqual(refreshTargets({ overlaps: true, memory: true }))
     expect(targetsForEvent({ type: 'teammates' })).toEqual(refreshTargets({ teammates: true, overlaps: true }))
     expect(isEmptyRefresh(refreshTargets({ overlaps: true }))).toBe(false)
     expect(mergeTargets(refreshTargets({ overlaps: true }), NOTHING_TO_REFRESH).overlaps).toBe(true)
+    expect(isEmptyRefresh(refreshTargets({ memory: true }))).toBe(false)
+    expect(mergeTargets(NOTHING_TO_REFRESH, refreshTargets({ memory: true })).memory).toBe(true)
   })
 
   it('scopes a layout event to the worktree it names', () => {

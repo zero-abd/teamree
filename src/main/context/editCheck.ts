@@ -4,7 +4,7 @@
 import { realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 import type { EditCheck, EditOverlapKind } from '../../shared/ledgerMethods'
-import { matchesAny, normalizeGlob } from './globs'
+import { matchesAny, normalizeGlob } from '../../shared/globs'
 import type { LedgerWorktree } from './ledgerStore'
 
 const SIBLINGS_TOLD = 2

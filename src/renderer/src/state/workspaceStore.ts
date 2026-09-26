@@ -174,6 +174,7 @@ import { descendantsOf } from '@shared/taskTree'
 import { joinTeam, type JoinStage, type JoinTarget } from '../teamwork/joinTeam'
 import type { DiffLayout, DiffOptions } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
+import { useLedger } from './ledgerStore'
 import { useOverlaps } from './overlapStore'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
 import { readSystemTone } from '../theme/systemTone'
@@ -223,6 +224,8 @@ export type DialogState =
   | { kind: 'confirm-keep'; worktreeId: string; refused?: true }
   /** Clean Up Merged: a project's landed worktrees, as a checklist. */
   | { kind: 'clean-up'; projectId: string }
+  /** Show Decisions: every task's claims and notes in a project. */
+  | { kind: 'decisions'; projectId: string }
   /** An invitation link, opened or pasted, asking where to join from. */
   | { kind: 'join-team'; invitation: Invitation }
   /** A worktree on an existing branch; `pullRequests` lists open pull requests instead; `query` starts the filter. */
@@ -1318,6 +1321,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     if (targets.members) reads.push(refreshMembers(), refreshRelays())
     if (targets.teammates) reads.push(refreshTeammates())
     if (targets.overlaps) reads.push(useOverlaps.getState().refresh(get().projects.map((project) => project.id)))
+    if (targets.memory) reads.push(useLedger.getState().refresh(get().projects.map((project) => project.id)))
     if (targets.updates) reads.push(get().loadUpdate())
     for (const worktreeId of targets.layouts) reads.push(refreshLayout(worktreeId))
     if (targets.worktrees) {
@@ -1805,7 +1809,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
         await refresher.flush()
         // After the projects exist: teamwork is read per project.
-        refresher.request(refreshTargets({ teammates: true, overlaps: true }))
+        refresher.request(refreshTargets({ teammates: true, overlaps: true, memory: true }))
         await refresher.flush()
 
         if (!get().activeWorktreeId) {

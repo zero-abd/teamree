@@ -153,6 +153,7 @@ describe('dispatcher', () => {
       'memory.claim',
       'memory.conflicts',
       'memory.forget',
+      'memory.list',
       'memory.note',
       'memory.resolve',
       'memory.unclaim',

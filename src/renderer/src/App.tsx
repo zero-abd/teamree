@@ -31,6 +31,7 @@ import { HandOffDialog } from './dialogs/HandOffDialog'
 import { FirstRunCliOffer } from './dialogs/FirstRunCliOffer'
 import { SetupDialog } from './workspace/SetupDialog'
 import { InstallCliDialog } from './dialogs/InstallCliDialog'
+import { DecisionsDialog } from './dialogs/DecisionsDialog'
 import { ProjectRefusedDialog } from './dialogs/ProjectRefusedDialog'
 import { AppearanceSheet } from './settings/AppearanceSheet'
 import { firstQuestion } from './dialogs/modalLayer'
@@ -208,6 +209,7 @@ export function App(): React.JSX.Element {
       ) : null}
       {dialog?.kind === 'clone-project' ? <CloneProjectDialog /> : null}
       {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
+      {dialog?.kind === 'decisions' ? <DecisionsDialog projectId={dialog.projectId} /> : null}
       {dialog?.kind === 'setup' ? <SetupDialog /> : null}
       {dialog?.kind === 'new-task' ? (
         <TaskComposerDialog

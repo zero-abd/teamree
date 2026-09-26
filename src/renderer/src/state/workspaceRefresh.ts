@@ -15,6 +15,8 @@ export type RefreshTargets = {
   teammates: boolean
   /** Which worktrees share files, for every project on screen. */
   overlaps: boolean
+  /** Claims and notes, for every project on screen. */
+  memory: boolean
   /** What the update check has to say: one small read, nothing to narrow. */
   updates: boolean
   /** Layouts of exactly these worktrees. Never widened to "every layout". */
@@ -34,6 +36,7 @@ export const NOTHING_TO_REFRESH: RefreshTargets = {
   members: false,
   teammates: false,
   overlaps: false,
+  memory: false,
   updates: false,
   layouts: [],
   statuses: [],
@@ -52,6 +55,7 @@ export function isEmptyRefresh(targets: RefreshTargets): boolean {
     !targets.members &&
     !targets.teammates &&
     !targets.overlaps &&
+    !targets.memory &&
     !targets.updates &&
     targets.layouts.length === 0 &&
     targets.statuses.length === 0 &&
@@ -75,7 +79,7 @@ export function targetsForEvent(event: WorkspaceEvent): RefreshTargets {
     case 'teammates':
       return refreshTargets({ teammates: true, overlaps: true })
     case 'memory':
-      return refreshTargets({ overlaps: true })
+      return refreshTargets({ overlaps: true, memory: true })
     case 'updates':
       return refreshTargets({ updates: true })
     case 'layout':
@@ -101,6 +105,7 @@ export function mergeTargets(a: RefreshTargets, b: RefreshTargets): RefreshTarge
     members: a.members || b.members,
     teammates: a.teammates || b.teammates,
     overlaps: a.overlaps || b.overlaps,
+    memory: a.memory || b.memory,
     updates: a.updates || b.updates,
     layouts: union(a.layouts, b.layouts),
     statuses: union(a.statuses, b.statuses),
