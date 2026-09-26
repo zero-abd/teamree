@@ -1,0 +1,8 @@
+{
+  "session_id": "abc123",
+  "transcript_path": "/Users/ana/.claude/projects/-repos-api-fix-login/abc123.jsonl",
+  "cwd": "/repos/api-fix-login",
+  "hook_event_name": "SessionStart",
+  "source": "startup",
+  "model": "claude-sonnet-4-6"
+}

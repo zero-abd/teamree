@@ -11,11 +11,14 @@ export type RuntimeSettings = {
 
   /** Settings › General › Show in Menu Bar: the macOS status item. */
   showInMenuBar: boolean
+  /** Settings › Agents › Warn Agents About Overlaps: the edit-time hook and session-start context. */
+  warnAgentsAboutOverlaps: boolean
 }
 
 export const DEFAULT_RUNTIME_SETTINGS: RuntimeSettings = {
   shareTaskDetails: true,
   showCost: false,
   jacMemoryAddon: false,
-  showInMenuBar: true
+  showInMenuBar: true,
+  warnAgentsAboutOverlaps: true
 }

@@ -52,7 +52,8 @@ describe('workspace document: task-tree fields and settings', () => {
       shareTaskDetails: false,
       showCost: false,
       jacMemoryAddon: true,
-      showInMenuBar: true
+      showInMenuBar: true,
+      warnAgentsAboutOverlaps: true
     })
     expect(parseWorkspaceDocument({ settings: 'on' }).settings).toEqual({})
   })

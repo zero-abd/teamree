@@ -4,7 +4,7 @@
 import { rename, stat } from 'node:fs/promises'
 import { z } from 'zod'
 import { MAX_NOTE_CHARS, MAX_NOTE_PATHS, NOTE_KINDS, type MemoryNote } from '../../shared/memory'
-import { MAX_CLAIM_GLOBS } from '../../shared/ledgerMethods'
+import { MAX_CLAIM_GLOBS, type EditOverlapKind } from '../../shared/ledgerMethods'
 import { openJsonFile, writeJsonFileAtomically } from '../store/atomicJsonFile'
 import type { StoreProblem } from '../store/workspaceStore'
 
@@ -15,8 +15,15 @@ export const MAX_TOUCHED = 1000
 export const MAX_WARNINGS = 50
 const MAX_FILE_BYTES = 4_000_000
 
-/** A warning shown about an overlap; `heeded` stays null until the edit-time hook measures it. */
-export type LedgerWarning = { path: string; with: string; at: number; via: string; heeded: boolean | null }
+/** A warning shown about an overlap; `heeded` is null until the worktree lands, then whether the file stayed clear of conflict. */
+export type LedgerWarning = {
+  path: string
+  with: string
+  at: number
+  via: string
+  kind?: EditOverlapKind
+  heeded: boolean | null
+}
 
 export type LedgerWorktree = {
   id: string
@@ -86,6 +93,7 @@ const Warning = z.object({
   with: Text,
   at: z.number(),
   via: z.string().max(32),
+  kind: z.enum(['conflict', 'claimed', 'changed']).optional().catch(undefined),
   heeded: z.boolean().nullable()
 })
 

@@ -166,7 +166,8 @@ function useSectionRows(): Record<Exclude<SectionId, 'projects'>, SettingsRow[]>
         words: ['First found', ...agents.filter((row) => row.command !== null).map((row) => harnessName(row.kind))]
       },
       ...agents.map((row) => ({ label: harnessName(row.kind), words: [agentArgs[row.kind] ?? ''] })),
-      { label: 'Trust New Worktrees', words: [] }
+      { label: 'Trust New Worktrees', words: [] },
+      { label: 'Warn Agents About Overlaps', words: [] }
     ],
     panes: [
       { label: 'Terminal text size', words: [`${fontSize}px`] },
@@ -801,8 +802,8 @@ function useDraft(
 }
 
 /**
- * Which agent you always use, what you pass it, and whether new worktrees get the main checkout's
- * folder trust; per machine, shown once the probe found one. No autonomy flag is pre-applied.
+ * Which agent you always use, what you pass it, whether new worktrees get the main checkout's
+ * folder trust, and whether agents hear about sibling overlaps; per machine, shown once the probe found one.
  */
 function AgentsSection(): React.JSX.Element | null {
   const rows = useAgentRows()
@@ -811,6 +812,7 @@ function AgentsSection(): React.JSX.Element | null {
   const setDefaultAgent = useWorkspaceStore((state) => state.setDefaultAgent)
   const trustNewWorktrees = useWorkspaceStore((state) => state.trustNewWorktrees)
   const setTrustNewWorktrees = useWorkspaceStore((state) => state.setTrustNewWorktrees)
+  const runtime = useRuntimeSettings()
   const shown = useShown()
 
   if (rows.length === 0) return null
@@ -864,6 +866,23 @@ function AgentsSection(): React.JSX.Element | null {
             />
           </div>
         ) : null}
+
+        {shown.row('Warn Agents About Overlaps') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-warn-overlaps">
+              <Marked text="Warn Agents About Overlaps" />
+            </label>
+            <input
+              id="settings-warn-overlaps"
+              className="settings-field__check"
+              type="checkbox"
+              checked={runtime.settings?.warnAgentsAboutOverlaps ?? true}
+              disabled={runtime.settings === null}
+              onChange={(event) => runtime.change({ warnAgentsAboutOverlaps: event.target.checked })}
+            />
+          </div>
+        ) : null}
+        {runtime.problem === null ? null : <p className="settings-error">{runtime.problem}</p>}
       </div>
     </section>
   )

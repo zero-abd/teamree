@@ -1052,6 +1052,33 @@ describe('the agent you always use', () => {
     expect(check.closest('.settings-field')?.textContent).toBe('Trust New Worktrees')
   })
 
+  it('warns agents about overlaps unless unticked, through the runtime', async () => {
+    const sent: unknown[] = []
+    runtimeCall.answer = (method, params) => {
+      if (method === 'settings.get') return Promise.resolve({ ...DEFAULT_RUNTIME_SETTINGS })
+      if (method !== 'settings.set') return new Promise(() => {})
+      sent.push(params)
+      return Promise.resolve({ ...DEFAULT_RUNTIME_SETTINGS, warnAgentsAboutOverlaps: false })
+    }
+    try {
+      seed({ agents: [claude, codex] })
+      render(<SettingsView />)
+      const box = (await screen.findByRole('checkbox', { name: 'Warn Agents About Overlaps' })) as HTMLInputElement
+      await vi.waitFor(() => expect(box.disabled).toBe(false))
+      expect(box.checked).toBe(true)
+      expect(box.closest('.settings-field')?.textContent).toBe('Warn Agents About Overlaps')
+      fireEvent.click(box)
+      await vi.waitFor(() => expect(box.checked).toBe(false))
+      expect(sent).toEqual([{ warnAgentsAboutOverlaps: false }])
+
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'overlap' } })
+      expect(screen.getByRole('checkbox', { name: 'Warn Agents About Overlaps' })).toBeTruthy()
+      expect(screen.queryByRole('checkbox', { name: 'Trust New Worktrees' })).toBeNull()
+    } finally {
+      runtimeCall.answer = () => new Promise(() => {})
+    }
+  })
+
   it('keeps the trust row under a filter for it', () => {
     seed({ agents: [claude, codex], trustNewWorktrees: false })
     render(<SettingsView />)

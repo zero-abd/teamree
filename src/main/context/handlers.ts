@@ -6,6 +6,7 @@ import { emptyProjectContext } from '../../shared/memory'
 import { Params } from '../../shared/methods'
 import type { GitService } from '../git'
 import type { MethodRegistry } from '../runtime/methodRegistry'
+import { notFound } from '../runtime/runtimeError'
 import { ContextLedger, type TeammatePaths } from './contextLedger'
 
 export function registerContextHandlers(registry: MethodRegistry, git: GitService, dataDir: string): ContextLedger {
@@ -13,7 +14,8 @@ export function registerContextHandlers(registry: MethodRegistry, git: GitServic
   const ledger = new ContextLedger({
     dataDir,
     snapshot: () => git.snapshot(),
-    onChange: () => bus.emit({ type: 'memory' })
+    onChange: () => bus.emit({ type: 'memory' }),
+    warnAgents: () => registry.context.store.runtimeSettings().warnAgentsAboutOverlaps
   })
 
   registry.register('project.context', Params.projectContext, async ({ format, ...params }) => {
@@ -35,6 +37,12 @@ export function registerContextHandlers(registry: MethodRegistry, git: GitServic
   registry.register('memory.conflicts', Params.memoryConflicts, ({ worktreeId }) => ledger.conflicts(worktreeId))
   registry.register('memory.claim', Params.memoryClaim, (params) => ledger.claim(params))
   registry.register('memory.unclaim', Params.memoryUnclaim, (params) => ledger.unclaim(params))
+  registry.register('memory.check', Params.memoryCheck, ({ worktreeId, terminalId, path, hook }) => {
+    const owner =
+      worktreeId ?? registry.context.store.listTerminals().find((terminal) => terminal.id === terminalId)?.worktreeId
+    if (owner === undefined) throw notFound(`No pane "${terminalId ?? ''}"`)
+    return ledger.check({ worktreeId: owner, path, ...(hook === undefined ? {} : { hook }) })
+  })
   registry.register('worktree.overlaps', Params.worktreeOverlaps, async ({ projectId }, call) => {
     const presence = registry.lookup('teamwork.presence')
     let teammates: TeammatePaths[] = []

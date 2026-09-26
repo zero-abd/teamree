@@ -1,7 +1,8 @@
+import { isAbsolute, resolve } from 'node:path'
 import type { AgentEventName, SubagentEventName } from '../../shared/entities.js'
 import { MAX_AGENT_EVENT_DETAIL_CHARS, MAX_AGENT_EVENT_MESSAGE_CHARS, Params } from '../../shared/methods.js'
-import type { CommandSpec } from '../command-spec.js'
-import { requireString } from '../argv.js'
+import type { CommandContext, CommandSpec } from '../command-spec.js'
+import { readBoolean, requireString } from '../argv.js'
 import { formatTable } from '../output.js'
 
 /** The events the runtime takes, read off the contract rather than restated. */
@@ -50,6 +51,11 @@ export const agentCommands: readonly CommandSpec[] = [
         required: true,
         choices: EVENT_NAMES,
         description: `The hook event, as the agent names it: ${EVENT_NAMES.join(', ')}.`
+      },
+      {
+        name: 'context',
+        kind: 'boolean',
+        description: 'On SessionStart, print what overlaps this worktree as hook context; nothing when nothing does.'
       }
     ],
     examples: ['teamree agent event --terminal term_1 --event Notification --user-data-dir "$PROFILE" < hook.json'],
@@ -74,10 +80,72 @@ export const agentCommands: readonly CommandSpec[] = [
       const event = name as AgentEventName
       const said = { ...eventFields(stdin, event), ...sessionFields(stdin) }
       const terminal = await context.client.call('terminal.agentEvent', { terminalId, event, at, ...said })
+      if (event === 'SessionStart' && readBoolean(context.flags, 'context')) {
+        await sessionContext(context, terminal.worktreeId)
+      }
       return { data: terminal, text: '' }
+    }
+  },
+  {
+    path: ['agent', 'check'],
+    summary: 'Warn an agent, from its PreToolUse hook, that a sibling worktree changes the file it is about to edit.',
+    details:
+      'The hook JSON arrives on stdin. Prints Claude Code hook output with one to three lines of context when a ' +
+      'live sibling changes or claims the file, or a merge would conflict on it; otherwise prints nothing. Never ' +
+      'blocks the edit and exits 0 whatever happens.',
+    flags: [
+      {
+        name: 'terminal',
+        kind: 'string',
+        placeholder: '<id>',
+        required: true,
+        description: 'The pane the agent runs in.'
+      }
+    ],
+    examples: ['teamree agent check --terminal term_1 --user-data-dir "$PROFILE" < pre-tool-use.json'],
+    silent: true,
+    run: async (context) => {
+      const path = editTarget(await context.stdin())
+      if (path === undefined) return { data: null, text: '' }
+      const terminalId = requireString(context.flags, 'terminal')
+      const check = await context.client.call('memory.check', { terminalId, path, hook: true })
+      if (check.text !== '') context.streams.out(hookOutput('PreToolUse', check.text))
+      return { data: check, text: '' }
     }
   }
 ]
+
+/** Session-start context stays under about 400 tokens with its heading. */
+const SESSION_CONTEXT_TOKENS = 380
+
+async function sessionContext(context: CommandContext, worktreeId: string): Promise<void> {
+  const settings = await context.client.call('settings.get', {})
+  if (!settings.warnAgentsAboutOverlaps) return
+  const bundle = await context.client.call('project.context', {
+    worktreeId,
+    budgetTokens: SESSION_CONTEXT_TOKENS,
+    format: 'text'
+  })
+  if (bundle.text === '') return
+  const text = `teamree: live sibling worktrees overlap this one.\n${bundle.text}`
+  context.streams.out(hookOutput('SessionStart', text))
+}
+
+/** Claude Code's documented hook output: context only, no permission decision. */
+export function hookOutput(event: 'PreToolUse' | 'SessionStart', additionalContext: string): string {
+  return `${JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext } })}\n`
+}
+
+/** The file an Edit, Write or MultiEdit is about to change, absolute when the hook says where it ran. */
+export function editTarget(stdin: string): string | undefined {
+  const hook = hookJson(stdin)
+  const input = hook?.tool_input
+  if (typeof input !== 'object' || input === null) return undefined
+  const file = (input as { file_path?: unknown }).file_path
+  if (typeof file !== 'string' || file.length === 0 || file.length > 4096) return undefined
+  const cwd = hook?.cwd
+  return isAbsolute(file) || typeof cwd !== 'string' || !isAbsolute(cwd) ? file : resolve(cwd, file)
+}
 
 /**
  * The two fields of the hook's JSON worth carrying: the notification type, which tells a permission

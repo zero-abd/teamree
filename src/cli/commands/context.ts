@@ -1,10 +1,12 @@
 // The coordination ledger from a pane: what overlaps this worktree, the paths it
 // claims, and the short decisions its siblings should see.
 
+import { resolve } from 'node:path'
 import type { ProjectContext } from '../../shared/memory.js'
 import { PANE_IDENTITY_ENV } from '../../shared/tasks.js'
 import { readBoolean, readNumber, readString, readStrings } from '../argv.js'
 import type { CommandContext, CommandSpec } from '../command-spec.js'
+import { serveMcp } from '../mcp.js'
 import { HERE, resolveWorktree } from '../selectors.js'
 
 const WORKTREE_FLAG = {
@@ -41,11 +43,28 @@ export const contextCommands: readonly CommandSpec[] = [
         placeholder: '<tokens>',
         description: 'Token budget, 200 to 4000. Default 500.'
       },
-      { name: 'text', kind: 'boolean', description: 'Print the bundle alone, and nothing when nothing overlaps.' }
+      { name: 'text', kind: 'boolean', description: 'Print the bundle alone, and nothing when nothing overlaps.' },
+      {
+        name: 'check',
+        kind: 'string',
+        placeholder: '<path>',
+        description: 'Only the siblings changing or claiming this file: what an agent is told before editing it.'
+      }
     ],
-    examples: ['teamree context', 'teamree context --worktree fix-login --json', 'teamree context --text --budget 300'],
+    examples: [
+      'teamree context',
+      'teamree context --worktree fix-login --json',
+      'teamree context --text --budget 300',
+      'teamree context --check src/auth.ts'
+    ],
     run: async (context) => {
       const worktreeId = await callerWorktree(context)
+      const file = readString(context.flags, 'check')
+      if (file !== undefined) {
+        const check = await context.client.call('memory.check', { worktreeId, path: resolve(context.cwd, file) })
+        const raw = readBoolean(context.flags, 'text')
+        return { data: check, text: check.text === '' && !raw ? 'No overlap.' : check.text }
+      }
       const budget = readNumber(context.flags, 'budget')
       const raw = readBoolean(context.flags, 'text')
       const result = await context.client.call('project.context', {
@@ -112,6 +131,27 @@ export const contextCommands: readonly CommandSpec[] = [
         ...(pane ? { terminalId: pane } : {})
       })
       return { data: note, text: `noted ${note.id}` }
+    }
+  },
+  {
+    path: ['mcp'],
+    summary: 'Serve the siblings and note tools to an agent over MCP on stdio.',
+    details: 'Handed to Codex panes at launch. Ends when stdin closes.',
+    flags: [
+      WORKTREE_FLAG,
+      { name: 'terminal', kind: 'string', placeholder: '<id>', description: 'The pane the agent runs in.' }
+    ],
+    examples: ['teamree mcp --worktree fix-login'],
+    // stdout is the protocol: nothing else may reach it.
+    silent: true,
+    run: async (context) => {
+      const terminalId = readString(context.flags, 'terminal') ?? context.env[PANE_IDENTITY_ENV.terminalId]
+      await serveMcp(process.stdin, context.streams.out, {
+        call: context.client.call,
+        worktreeId: await callerWorktree(context),
+        ...(terminalId ? { terminalId } : {})
+      })
+      return { data: null, text: '' }
     }
   }
 ]
