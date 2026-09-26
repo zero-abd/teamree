@@ -15,6 +15,7 @@ import { KIND_LABEL, KIND_LETTER } from './changeKinds'
 import { headerActions, landLabel, landNote, landOffer, pushOffer, type HeaderAction } from './landOffer'
 import type { PaneNode, Terminal, Worktree, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 import { fileColumnIn, isCommitLeaf, shownTabId } from '@shared/filePane'
+import { TokensLine } from './TokensLine'
 
 export function ChangesTab(): React.JSX.Element | null {
   const worktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
@@ -148,6 +149,7 @@ export function ChangesTab(): React.JSX.Element | null {
             <span className="changes__branch">{status.branch}</span>
             {aheadBehind(status)}
           </span>
+          <TokensLine worktreeId={worktreeId} />
           {land?.kind === 'merged' ? (
             <>
               <span className="chip changes__merged">Merged</span>

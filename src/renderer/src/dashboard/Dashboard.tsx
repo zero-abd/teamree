@@ -22,6 +22,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { PageFrame } from '../workspace/PageFrame'
 import { Segments } from '../files/FileBar'
 import { useTaskTreeStore } from '../state/taskTreeStore'
+import { useUsageReads } from '../state/usageStore'
 import { dashboardRows, toneCounts } from './dashboardRows'
 import { TaskBoard, useChangedLines } from './TaskBoard'
 import { taskRows } from './taskRows'
@@ -49,6 +50,7 @@ export function Dashboard(): React.JSX.Element {
   )
   const counts = useMemo(() => toneCounts(rows), [rows])
   const changes = useChangedLines(mode === 'tasks' ? worktrees : [])
+  useUsageReads(mode === 'tasks' ? {} : null)
   const tasks = useMemo(
     () =>
       mode === 'tasks'

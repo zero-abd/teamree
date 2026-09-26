@@ -28,6 +28,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { runtimeClient } = await import('../runtimeClient/currentRuntimeClient')
 const { SettingsView } = await import('./SettingsView')
+const { useUsageStore } = await import('../state/usageStore')
 const { TERMINAL_OPTIONS_DEFAULT } = await import('../state/preferences')
 
 const INITIAL = useWorkspaceStore.getState()
@@ -333,7 +334,7 @@ describe('the section list', () => {
       within(nav())
         .getAllByRole('button')
         .map((button) => button.textContent)
-    ).toEqual(['Agents', 'Projects', 'Panes', 'Notifications', 'Teamwork', 'Appearance', 'Updates', 'CLI'])
+    ).toEqual(['General', 'Agents', 'Projects', 'Panes', 'Notifications', 'Teamwork', 'Appearance', 'Updates', 'CLI'])
     unmount()
 
     seed({ agents: [] })
@@ -709,7 +710,7 @@ describe('the filter', () => {
     render(<SettingsView />)
     type('cursor')
     type('')
-    expect(nav()).toEqual(['Projects', 'Panes', 'Notifications', 'Teamwork', 'Appearance', 'Updates', 'CLI'])
+    expect(nav()).toEqual(['General', 'Projects', 'Panes', 'Notifications', 'Teamwork', 'Appearance', 'Updates', 'CLI'])
   })
 
   // Escape empties a filter before it closes the page.
@@ -1262,12 +1263,29 @@ describe('general', () => {
     }
   })
 
-  it('has no General section where there is no menu bar to show in', () => {
+  it('leaves Show in Menu Bar out where there is no menu bar to show in', async () => {
     const call = bridge('linux')
     try {
       render(<SettingsView />)
+      await screen.findByRole('checkbox', { name: 'Show Cost' })
       expect(screen.queryByRole('checkbox', { name: 'Show in Menu Bar' })).toBeNull()
-      expect(document.getElementById('settings-general')).toBeNull()
+    } finally {
+      call.mockRestore()
+      delete (window as unknown as { teamree?: unknown }).teamree
+    }
+  })
+
+  it('offers Show Cost, off by default, and tells the token surfaces at once', async () => {
+    const call = bridge('darwin')
+    try {
+      render(<SettingsView />)
+      const check = await screen.findByRole('checkbox', { name: 'Show Cost' })
+      await vi.waitFor(() => expect(check).toHaveProperty('disabled', false))
+      expect(check).toHaveProperty('checked', false)
+      fireEvent.click(check)
+      expect(call).toHaveBeenCalledWith('settings.set', { showCost: true })
+      expect(useUsageStore.getState().showCost).toBe(true)
+      await vi.waitFor(() => expect(check).toHaveProperty('checked', true))
     } finally {
       call.mockRestore()
       delete (window as unknown as { teamree?: unknown }).teamree

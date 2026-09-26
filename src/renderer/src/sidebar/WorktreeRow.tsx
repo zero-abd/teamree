@@ -11,11 +11,13 @@ import {
   type WorktreeMergePreview,
   type WorktreeStatus
 } from '@shared/entities'
+import { usageLines } from '@shared/usage'
 import { AgentGlyph } from '../agents/glyphs'
 import { openInBrowser } from '../shell/openInBrowser'
 import { askForYou, childDone, firstSentence, useMessageStore } from '../state/messages'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { PaneAttention } from '../state/paneAttention'
+import { useUsageStore } from '../state/usageStore'
 import { agentRows, dotClass, TONE_LABEL, worktreeTone, type DotTone } from './agentRows'
 import { AskForYou } from './AskForYou'
 import { PaneRows } from './PaneRows'
@@ -231,6 +233,10 @@ export function WorktreeRow({
   const tone = rolled?.tone ?? (ask === undefined ? worktreeTone(rows) : 'waiting')
   const report = ask === undefined ? reportLine(worktree) : null
   const label = worktreeLabel(display)
+  const usage = useUsageStore((state) => state.usage[worktree.id])
+  const showCost = useUsageStore((state) => state.showCost)
+  const tokens = usageLines(usage, showCost)
+  const hoverUsage = useUsageStore((state) => state.hover)
   // The glyph names the agent; words only where it cannot tell two runs apart.
   const agentWord = display.agent?.kind === undefined || twinRun
   // A task's tally needs the second line too, or its chips squeeze the name.
@@ -333,7 +339,10 @@ export function WorktreeRow({
             ) : null}
             <span
               className={`worktree__name${unreadHere ? ' worktree__name--unread' : ''}`}
-              title={pullRequest === undefined ? label : `${label} · Pull Request #${pullRequest.number}`}
+              title={[
+                pullRequest === undefined ? label : `${label} · Pull Request #${pullRequest.number}`,
+                ...(tokens ?? [])
+              ].join('\n')}
               onDoubleClick={() => setRenaming(true)}
             >
               {display.title}
@@ -379,6 +388,8 @@ export function WorktreeRow({
       }${drop.target === null ? '' : drop.target.allowed ? ' worktree--drop' : ' worktree--no-drop'}`}
       style={depth === 0 ? undefined : ({ '--depth': depth } as React.CSSProperties)}
       role="none"
+      // Read as the pointer arrives, so the name's tooltip has tokens by the time it shows.
+      onMouseEnter={ready ? () => hoverUsage(worktree.id) : undefined}
       onContextMenu={(event) => {
         event.preventDefault()
         // The context-menu key and Shift+F10 raise this same event with

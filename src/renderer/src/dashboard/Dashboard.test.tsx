@@ -34,6 +34,7 @@ vi.mock('../sidebar/usePaneEvidence', () => ({ usePaneEvidence: () => printed })
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { Dashboard } = await import('./Dashboard')
 const { useTaskTreeStore } = await import('../state/taskTreeStore')
+const { useUsageStore } = await import('../state/usageStore')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -440,6 +441,31 @@ describe('the Tasks view', () => {
       'src/db.ts · Update the tests · conflict'
     )
     useOverlaps.setState({ byProject: {} })
+  })
+
+  it('shows each task’s tokens, a parent’s subtree beside its own, and ≈$ only with Show Cost', () => {
+    const read = { input: 0, cacheRead: 0, cacheWrite: 0, sessions: 1, unknownPanes: 0, readAt: Date.now() }
+    const usage = {
+      w1: {
+        ...read,
+        worktreeId: 'w1',
+        output: 1_200_000,
+        costUsd: 3.1,
+        subtree: { ...read, output: 3_400_000, costUsd: 9 }
+      },
+      w2: { ...read, worktreeId: 'w2', output: 2_200_000, costUsd: 5.9 }
+    }
+    useUsageStore.setState({ usage, showCost: false })
+    useTaskTreeStore.setState({ boardMode: 'tasks' })
+    const { unmount } = render(<Dashboard />)
+    const cells = (): string[] =>
+      [...document.querySelectorAll('.task-row__tokens')].map((cell) => cell.textContent ?? '')
+    expect(cells()).toEqual(['1.2M tokΣ 3.4M tok', '2.2M tok', ''])
+    unmount()
+
+    useUsageStore.setState({ showCost: true })
+    render(<Dashboard />)
+    expect(cells()[0]).toBe('1.2M tok · ≈$3.10Σ 3.4M tok · ≈$9.00')
   })
 
   it('opens the worktree from its row', () => {

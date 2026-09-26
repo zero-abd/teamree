@@ -409,6 +409,14 @@
   border-bottom: 1px solid var(--line);
 }
 
+.changes__tokens {
+  flex: none;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
 .changes__more {
   flex: none;
   display: inline-flex;

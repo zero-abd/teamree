@@ -5,7 +5,7 @@
 
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   PaneWatcher,
@@ -34,6 +34,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { WorktreeRow } = await import('./WorktreeRow')
+const { useUsageStore } = await import('../state/usageStore')
 
 const NOW = 1_700_000_000_000
 
@@ -1126,5 +1127,39 @@ describe('a worktree sharing files with another task', () => {
   it('draws nothing without an overlap', () => {
     mount()
     expect(row().querySelector('.overlap')).toBeNull()
+  })
+})
+
+describe('tokens on hover', () => {
+  it('reads the worktree’s tokens as the pointer arrives and puts them under the name', () => {
+    const read = vi.fn(() => Promise.resolve())
+    useUsageStore.setState({ usage: {}, showCost: false, read })
+    mount()
+    fireEvent.mouseEnter(document.querySelector('li.worktree')!)
+    expect(read).toHaveBeenCalledWith({ worktreeId: 'w1' })
+
+    const counted = { input: 0, cacheRead: 0, cacheWrite: 0, sessions: 1, unknownPanes: 0, readAt: Date.now() }
+    act(() =>
+      useUsageStore.setState({
+        usage: {
+          w1: {
+            ...counted,
+            worktreeId: 'w1',
+            output: 1_200_000,
+            costUsd: 3.1,
+            subtree: { ...counted, output: 3_400_000, costUsd: 9 }
+          }
+        }
+      })
+    )
+    const name = (): string | null => document.querySelector('.worktree__name')?.getAttribute('title') ?? null
+    expect(name()).toBe('Rewrite the pager\n1.2M tok\n3.4M tok with children')
+
+    // Read a moment ago: a second hover asks nothing.
+    fireEvent.mouseEnter(document.querySelector('li.worktree')!)
+    expect(read).toHaveBeenCalledTimes(1)
+
+    act(() => useUsageStore.setState({ showCost: true }))
+    expect(name()).toBe('Rewrite the pager\n1.2M tok · ≈$3.10\n3.4M tok · ≈$9.00 with children')
   })
 })

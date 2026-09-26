@@ -202,7 +202,7 @@
 .task-head,
 .board-item--task {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 9ch minmax(6ch, auto) 14ch 5ch;
+  grid-template-columns: minmax(0, 1fr) 9ch minmax(6ch, auto) 14ch 22ch 5ch;
   align-items: center;
   column-gap: var(--s3);
 }
@@ -287,6 +287,20 @@
 
 .task-row__removed {
   color: var(--danger);
+}
+
+.task-row__tokens {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg-secondary);
+  white-space: nowrap;
+}
+
+.task-row__subtree {
+  color: var(--fg-muted);
 }
 
 .task-row__age {
