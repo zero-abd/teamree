@@ -165,6 +165,8 @@ describe('having nothing to show', () => {
     seed({ projects: [] })
     mount()
     expect(screen.getByText('No projects yet')).toBeTruthy()
+    // Nothing to narrow or compact yet.
+    expect(screen.queryByRole('searchbox', { name: 'Filter worktrees' })).toBeNull()
   })
 
   it('says nothing about projects before the runtime has listed them', () => {
@@ -561,10 +563,11 @@ describe('the rail reaches the window-level surfaces', () => {
     expect(showAppearance).toHaveBeenLastCalledWith(false)
   })
 
-  // Two ways in, one control: a menu under the +, not a dialog of two buttons.
-  it('offers Open Folder… and Clone… under the projects +', () => {
+  // The welcome's three ways in, one control: a menu under the +, not a dialog of buttons.
+  it('offers New Project…, Open Folder… and Clone Repository… under the projects +', () => {
     const chooseProjectFolder = vi.fn(() => Promise.resolve())
-    seed({ chooseProjectFolder })
+    const newProject = vi.fn(() => Promise.resolve())
+    seed({ chooseProjectFolder, newProject })
     mount()
     act(() => screen.getByRole('button', { name: 'Add project' }).click())
     const menu = screen.getByRole('menu', { name: 'Add project' })
@@ -572,13 +575,17 @@ describe('the rail reaches the window-level surfaces', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map((item) => item.textContent)
-    ).toEqual(['Open Folder…', 'Clone…'])
+    ).toEqual(['New Project…', 'Open Folder…', 'Clone Repository…'])
     act(() => within(menu).getByRole('menuitem', { name: 'Open Folder…' }).click())
     expect(chooseProjectFolder).toHaveBeenCalledOnce()
     expect(screen.queryByRole('menu')).toBeNull()
 
     act(() => screen.getByRole('button', { name: 'Add project' }).click())
-    act(() => screen.getByRole('menuitem', { name: 'Clone…' }).click())
+    act(() => screen.getByRole('menuitem', { name: 'New Project…' }).click())
+    expect(newProject).toHaveBeenCalledOnce()
+
+    act(() => screen.getByRole('button', { name: 'Add project' }).click())
+    act(() => screen.getByRole('menuitem', { name: 'Clone Repository…' }).click())
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'clone-project' })
   })
 
@@ -1132,6 +1139,12 @@ describe('starting a task in any project from the keyboard', () => {
     expect(openTeamwork).toHaveBeenCalledExactlyOnceWith('p2')
   })
 
+  it('reaches the project’s setup command in Settings from its menu', () => {
+    fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Setup Command…' }))
+    expect(useWorkspaceStore.getState()).toMatchObject({ settingsOpen: true, settingsQuery: 'Setup command' })
+  })
+
   it('offers Clean Up Merged… only in a project with a merged worktree', () => {
     const labels = (): (string | null)[] => {
       fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
@@ -1191,8 +1204,8 @@ describe('starting a task in any project from the keyboard', () => {
     fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
     expect(loadRemovedWorktrees).toHaveBeenCalledOnce()
     const menu = screen.getByRole('menu', { name: 'Actions for ledger' })
-    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Recently Removed' }))
-    const removed = screen.getByRole('menu', { name: 'Recently Removed' })
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Recently Deleted' }))
+    const removed = screen.getByRole('menu', { name: 'Recently Deleted' })
     expect(
       within(removed)
         .getAllByRole('menuitem')

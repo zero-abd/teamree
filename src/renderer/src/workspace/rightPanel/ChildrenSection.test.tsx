@@ -265,9 +265,13 @@ describe('the Children section', () => {
     }))
     render(<ChildrenSection worktreeId="parent" />)
 
-    expect(within(rowOf('Notes')).getByText('landed')).toBeTruthy()
+    expect(within(rowOf('Notes')).getByText('merged')).toBeTruthy()
+    expect(
+      document.getElementById(rowOf('Notes').querySelector('.child__name')?.getAttribute('aria-describedby') ?? '')
+        ?.textContent
+    ).toMatch(/^merged/)
     expect(within(rowOf('Notes')).queryByRole('button', { name: 'Merge' })).toBeNull()
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Clean Up 1 Landed' })))
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Delete 1 Merged' })))
 
     expect(confirmCleanUp).toHaveBeenCalledWith('p1', ['notes'])
   })

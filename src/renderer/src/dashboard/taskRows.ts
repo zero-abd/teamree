@@ -40,6 +40,18 @@ export function taskStage({ worktree, tone, status, ahead, landed }: StageFacts)
   return clean && ahead > 0 ? 'ready' : 'stopped'
 }
 
+/** A stage as the board says it: `landed` reads Merged, as the sidebar and Changes chips do. */
+export const STAGE_WORD: Record<TaskStage, string> = {
+  working: 'working',
+  asking: 'asking',
+  stopped: 'stopped',
+  ready: 'ready',
+  done: 'done',
+  landed: 'merged',
+  missing: 'missing',
+  failed: 'failed'
+}
+
 /** Reported done, or landed in its parent. */
 export function isDoneStage(stage: TaskStage): boolean {
   return stage === 'done' || stage === 'landed'

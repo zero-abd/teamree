@@ -233,7 +233,7 @@
   grid-column: 1;
   align-self: start;
   margin: 0;
-  padding-top: 6px;
+  padding-top: var(--s2);
   color: var(--fg);
   font-size: var(--text-sm);
   font-weight: 400;

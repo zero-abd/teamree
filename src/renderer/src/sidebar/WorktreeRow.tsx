@@ -27,7 +27,7 @@ import { PaneRows } from './PaneRows'
 import { listPorts, portUrl } from './portChip'
 import { PortChipView } from './PortChipView'
 import { GitStatusChips } from './GitStatusChips'
-import { mergeBadge } from './mergeBadge'
+import { mergeBadge, mergedChip } from './mergeBadge'
 import type { OverlapChip, OverlapEntry } from './overlapChip'
 import { OverlapMark } from './OverlapMark'
 import { PullRequestMark } from './PullRequestMark'
@@ -169,7 +169,7 @@ export function WorktreeRow({
   const ready = hasCheckout(worktree)
   // Still focusable when it cannot open, so the tree's arrows reach its menu. A missing one opens on its ways back.
   const openable = !creating && !failed
-  // Landed: whether it would merge again says nothing.
+  // Merged: whether it would merge again says nothing.
   const merged = ready && landing?.merged === true
   const badge = ready && !merged ? mergeBadge(mergePreview) : null
   const pullRequest = landing?.pullRequest?.state === 'open' ? landing.pullRequest : undefined
@@ -325,12 +325,7 @@ export function WorktreeRow({
       : {}),
     ...(merged
       ? {
-          landed:
-            landing?.parent !== undefined
-              ? ('landed' as const)
-              : landing?.notPushed
-                ? ('merged, not pushed' as const)
-                : ('merged' as const)
+          landed: landing?.notPushed ? ('merged, not pushed' as const) : ('merged' as const)
         }
       : {}),
     ...(badge === null || mergePreview === undefined ? {} : { merge: mergePreview }),
@@ -353,8 +348,8 @@ export function WorktreeRow({
           <GitStatusChips status={status} child={worktree.parentId !== undefined} aheadBehind={!merged} />
         ) : null}
         {merged ? (
-          <span className="chip worktree__merged">
-            {landing?.parent !== undefined ? 'Landed' : landing?.notPushed ? 'Merged · not pushed' : 'Merged'}
+          <span className="chip worktree__merged" title={mergedChip(landing).title}>
+            {mergedChip(landing).label}
           </span>
         ) : null}
         {badge?.tone === 'clean' ? (

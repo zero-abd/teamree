@@ -132,7 +132,7 @@
   border-radius: 99px;
   background: var(--bg-press);
   color: var(--fg-secondary);
-  font-size: 10px;
+  font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
   line-height: 14px;
   text-align: center;
@@ -422,7 +422,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding-inline: 6px;
+  padding-inline: var(--s2);
 }
 
 .changes__more svg {

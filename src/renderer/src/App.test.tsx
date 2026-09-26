@@ -154,13 +154,13 @@ describe('the notice layer', () => {
           id: 1,
           text: 'Pushed work to origin · now tracking origin/work',
           tone: 'info',
-          action: { label: 'Open review', url }
+          action: { label: 'Open Review', url }
         }
       ]
     })
     render(<App />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open review' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Review' }))
     // `window.open`, which is the window's one way to the browser — the main
     // process decides what is handed to the OS, once, in windowNavigation.ts.
     expect(opened).toEqual([url])
@@ -170,7 +170,7 @@ describe('the notice layer', () => {
   it('offers nothing to do when the notice carries no action', () => {
     seed({ notices: [{ id: 1, text: 'Pushed work to origin', tone: 'info' }] })
     render(<App />)
-    expect(screen.queryByRole('button', { name: 'Open review' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open Review' })).toBeNull()
   })
 })
 

@@ -10,7 +10,6 @@ import {
   MAX_PER_AGENT,
   NO_AGENT,
   plannedBranches,
-  submitLabel,
   taskCreates,
   taskName,
   taskPlanNote,
@@ -163,12 +162,6 @@ describe('the agent the dialog opens with', () => {
 })
 
 describe('what the dialog promises', () => {
-  // The button must not say "Start Task" when submitting starts nothing.
-  it('offers to start a task only when something will run', () => {
-    expect(submitLabel([claude])).toBe('Start Task')
-    expect(submitLabel([])).toBe('Create Worktree')
-  })
-
   it('counts the worktrees and names what runs in each, in order', () => {
     expect(taskPlanNote(found, true, [claude])).toBe('1 worktree · Claude Code')
     expect(taskPlanNote(found, true, [claude, codex])).toBe('2 worktrees · Claude Code, Codex')

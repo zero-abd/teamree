@@ -78,7 +78,7 @@ it('takes the chosen worktrees in one call and says so in one notice with one Un
   expect(after.worktrees.map((entry) => entry.id)).toEqual(['other'])
   expect(after.notices).toHaveLength(1)
   expect(after.notices[0]).toMatchObject({
-    text: 'Removed 2 worktrees',
+    text: 'Deleted 2 worktrees',
     tone: 'info',
     action: { label: 'Undo', undo: { kind: 'remove-many', projectId: 'p1', removedIds: ['parent/1', 'child/1'] } }
   })

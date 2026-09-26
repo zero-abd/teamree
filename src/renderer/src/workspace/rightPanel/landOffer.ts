@@ -7,7 +7,7 @@ import type { PushState } from '../../state/workspaceStore'
 export type LandOffer =
   | { kind: 'create-pr'; uncommitted?: number; blocked?: string }
   | { kind: 'open-pr'; number: number; url: string }
-  | { kind: 'merge'; into: string; uncommitted?: number; blocked?: string }
+  | { kind: 'merge'; into: string; parent?: boolean; uncommitted?: number; blocked?: string }
   | { kind: 'merged' }
 
 /** What the branch can do next; null only when there is nothing to land. */
@@ -16,10 +16,10 @@ export function landOffer(landing: WorktreeLanding | undefined, status: Worktree
   if (landing.merged) return { kind: 'merged' }
   const uncommitted = status.staged + status.unstaged + status.untracked + status.conflicted
   if (landing.parent !== undefined || landing.host === null) {
-    const into = landing.parent?.name ?? landing.base
-    if (status.conflicted > 0) return { kind: 'merge', into, blocked: `${status.conflicted} conflicted` }
-    if (uncommitted > 0) return { kind: 'merge', into, uncommitted }
-    return landing.unmerged > 0 ? { kind: 'merge', into } : null
+    const into = mergeTarget(landing)
+    if (status.conflicted > 0) return { ...into, blocked: `${status.conflicted} conflicted` }
+    if (uncommitted > 0) return { ...into, uncommitted }
+    return landing.unmerged > 0 ? into : null
   }
   if (landing.pullRequest?.state === 'open') {
     return { kind: 'open-pr', number: landing.pullRequest.number, url: landing.pullRequest.url }
@@ -33,19 +33,31 @@ export function landOffer(landing: WorktreeLanding | undefined, status: Worktree
 export function idleLand(landing: WorktreeLanding | undefined): LandOffer | null {
   if (landing === undefined) return null
   if (landing.parent === undefined && landing.host !== null) return { kind: 'create-pr', blocked: 'nothing to land' }
-  return { kind: 'merge', into: landing.parent?.name ?? landing.base, blocked: 'nothing to land' }
+  return { ...mergeTarget(landing), blocked: 'nothing to land' }
+}
+
+function mergeTarget(landing: WorktreeLanding): { kind: 'merge'; into: string; parent?: boolean } {
+  return landing.parent === undefined
+    ? { kind: 'merge', into: landing.base }
+    : { kind: 'merge', into: landing.parent.name, parent: true }
 }
 
 /** The offer's button, as the Changes header and the palette name it. */
 export function landLabel(offer: Exclude<LandOffer, { kind: 'merged' }>): string {
   switch (offer.kind) {
     case 'create-pr':
-      return offer.uncommitted === undefined ? 'Create Pull Request…' : 'Commit & Create PR…'
+      return offer.uncommitted === undefined ? 'Create Pull Request…' : 'Commit & Create Pull Request…'
     case 'open-pr':
       return `Open Pull Request #${offer.number}`
     case 'merge':
-      return `${offer.uncommitted === undefined ? '' : 'Commit & '}Merge into ${offer.into}…`
+      return `${offer.uncommitted === undefined ? '' : 'Commit & '}Merge into ${offer.parent ? 'Parent' : offer.into}…`
   }
+}
+
+/** The button's tooltip: the note, after the parent's full name that the label leaves out. */
+export function landTitle(offer: Exclude<LandOffer, { kind: 'merged' }>): string | undefined {
+  const named = offer.kind === 'merge' && offer.parent ? `Merge into ${offer.into}` : undefined
+  return [named, landNote(offer)].filter(Boolean).join(' · ') || undefined
 }
 
 /** Why the offer cannot run, or what running it commits first. */

@@ -20,7 +20,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { SetupOffer } = await import('./SetupOffer')
-const { setupOfferFor } = await import('./setupOfferModel')
+const { offeredOn, setupOfferFor } = await import('./setupOfferModel')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -90,6 +90,17 @@ describe('setupOfferFor', () => {
   })
 })
 
+describe('offeredOn', () => {
+  it('records a project’s first two worktrees and refuses a third', () => {
+    const one = offeredOn({}, 'p1', 'w1')
+    expect(one).toEqual({ p1: ['w1'] })
+    const two = offeredOn(one ?? {}, 'p1', 'w2')
+    expect(offeredOn(two ?? {}, 'p1', 'w1')).toBe(two)
+    expect(offeredOn(two ?? {}, 'p1', 'w3')).toBeNull()
+    expect(offeredOn(two ?? {}, 'p2', 'w3')).toEqual({ p1: ['w1', 'w2'], p2: ['w3'] })
+  })
+})
+
 describe('SetupOffer', () => {
   it('saves the suggestion on Use, and runs nothing', async () => {
     answering({ command: 'npm ci' })
@@ -97,7 +108,7 @@ describe('SetupOffer', () => {
     await act(async () => {})
 
     expect(screen.getByText('npm ci').tagName).toBe('CODE')
-    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Use', 'Edit…', 'Not now'])
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Use', 'Edit…', 'Not Now'])
     expect(document.body.textContent).not.toMatch(/\.\s|\?/)
 
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Use' })))
@@ -121,11 +132,11 @@ describe('SetupOffer', () => {
     expect(methods()).not.toContain('worktree.runSetup')
   })
 
-  it('asks once per project: Not now is remembered', async () => {
+  it('asks once per project: Not Now is remembered', async () => {
     answering({ command: 'npm ci' })
     const { unmount } = render(<SetupOffer project={project()} worktree={worktree()} />)
     await act(async () => {})
-    fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Not Now' }))
     expect(screen.queryByRole('button')).toBeNull()
     unmount()
 
@@ -143,7 +154,7 @@ describe('SetupOffer', () => {
     await act(async () => {})
 
     expect(screen.getByText('no node_modules')).toBeTruthy()
-    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Run', 'Not now'])
+    expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Run', 'Not Now'])
     expect(methods()).toEqual(['worktree.setupCheck'])
 
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Run' })))
@@ -158,5 +169,23 @@ describe('SetupOffer', () => {
     )
     await act(async () => {})
     expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('suggests on the project’s first two worktrees, then leaves it to Settings and the project menu', async () => {
+    answering({ command: 'npm ci' })
+    for (const id of ['w1', 'w2']) {
+      const { unmount } = render(<SetupOffer project={project()} worktree={worktree({ id })} />)
+      await act(async () => {})
+      expect(screen.getByRole('button', { name: 'Use' })).toBeTruthy()
+      unmount()
+    }
+    const { unmount } = render(<SetupOffer project={project()} worktree={worktree({ id: 'w3' })} />)
+    await act(async () => {})
+    expect(screen.queryByRole('button')).toBeNull()
+    unmount()
+
+    render(<SetupOffer project={project()} worktree={worktree({ id: 'w1' })} />)
+    await act(async () => {})
+    expect(screen.getByRole('button', { name: 'Use' })).toBeTruthy()
   })
 })

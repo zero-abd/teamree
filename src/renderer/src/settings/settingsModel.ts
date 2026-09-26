@@ -185,12 +185,12 @@ export const SETTINGS_CATALOG: readonly SettingEntry[] = [
   { section: 'panes', label: 'Font', about: 'typeface family monospace' },
   { section: 'panes', label: 'Cursor', about: 'caret blink bar block underline' },
   { section: 'panes', label: 'Option as Meta', about: 'alt key keyboard' },
-  { section: 'panes', label: 'Copy on select', about: 'clipboard selection' },
+  { section: 'panes', label: 'Copy on Select', about: 'clipboard selection' },
   { section: 'panes', label: 'Scrollback lines', about: 'history buffer' },
   { section: 'notices', label: 'When an agent stops or asks', about: 'notification sound alert notify' },
   { section: 'teamwork', label: 'Share Task Details', about: 'privacy presence teammates' },
   { section: 'appearance', label: 'Theme', about: 'colors colours dark light mode' },
-  { section: 'updates', label: 'Check automatically', about: 'update version release' },
+  { section: 'updates', label: 'Check Automatically', about: 'update version release' },
   { section: 'cli', label: 'teamree command', about: 'cli terminal install link path shell' }
 ]
 

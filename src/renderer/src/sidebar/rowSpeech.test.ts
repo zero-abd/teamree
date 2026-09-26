@@ -118,9 +118,9 @@ describe('what a worktree row says', () => {
     expect(rowSpeech({ pull: { ...pull, state: 'closed', checks: checks(0, 1, 0) } })).toBe('PR 42 closed')
   })
 
-  it('says merged or landed instead of what a merge would do', () => {
+  it('says merged instead of what a merge would do', () => {
     expect(rowSpeech({ landed: 'merged', merge: preview({ state: 'clean' }) })).toBe('merged')
-    expect(rowSpeech({ landed: 'landed' })).toBe('landed')
+    expect(rowSpeech({ landed: 'merged, not pushed' })).toBe('merged, not pushed')
   })
 
   it('lists ports, and a report when the row shows one', () => {

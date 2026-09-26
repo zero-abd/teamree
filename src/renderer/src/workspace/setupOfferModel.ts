@@ -9,9 +9,9 @@ export function setupOfferFor(input: {
   project: Project
   worktree: Worktree
   check: WorktreeSetupCheck
-  /** Not now was pressed on this project's suggestion. */
+  /** Not Now was pressed on this project's suggestion. */
   dismissed: boolean
-  /** Not now was pressed on this worktree's Run. */
+  /** Not Now was pressed on this worktree's Run. */
   skipped: boolean
 }): SetupOffer | null {
   const { project, worktree, check } = input
@@ -28,7 +28,7 @@ export function setupOfferFor(input: {
 
 const DISMISSED_KEY = 'teamree.setup.dismissed'
 
-/** Projects whose suggestion got Not now, from this window's storage. */
+/** Projects whose suggestion got Not Now, from this window's storage. */
 export function readDismissed(storage: Pick<Storage, 'getItem'> | undefined): string[] {
   try {
     const parsed: unknown = JSON.parse(storage?.getItem(DISMISSED_KEY) ?? '[]')
@@ -43,5 +43,35 @@ export function writeDismissed(storage: Pick<Storage, 'setItem'> | undefined, pr
     storage?.setItem(DISMISSED_KEY, JSON.stringify(projectIds))
   } catch {
     // Unavailable storage: the offer comes back next launch.
+  }
+}
+
+const OFFERED_KEY = 'teamree.setup.offeredOn'
+/** A suggestion shows on this many of a project's worktrees; after that Settings and the project menu have it. */
+const OFFERED_ON = 2
+
+export type OfferedOn = Readonly<Record<string, readonly string[]>>
+
+/** The record with this worktree in it, the same record if it was already, or null past the project's first two. */
+export function offeredOn(record: OfferedOn, projectId: string, worktreeId: string): OfferedOn | null {
+  const seen = record[projectId] ?? []
+  if (seen.includes(worktreeId)) return record
+  return seen.length >= OFFERED_ON ? null : { ...record, [projectId]: [...seen, worktreeId] }
+}
+
+export function readOfferedOn(storage: Pick<Storage, 'getItem'> | undefined): OfferedOn {
+  try {
+    const parsed: unknown = JSON.parse(storage?.getItem(OFFERED_KEY) ?? '{}')
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed) ? (parsed as OfferedOn) : {}
+  } catch {
+    return {}
+  }
+}
+
+export function writeOfferedOn(storage: Pick<Storage, 'setItem'> | undefined, record: OfferedOn): void {
+  try {
+    storage?.setItem(OFFERED_KEY, JSON.stringify(record))
+  } catch {
+    // Unavailable storage: the count starts again next launch.
   }
 }

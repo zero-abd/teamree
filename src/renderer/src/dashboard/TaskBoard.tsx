@@ -14,7 +14,7 @@ import { useOverlapChips } from '../sidebar/useOverlapChip'
 import { useUsageStore } from '../state/usageStore'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { useChildren } from '../workspace/rightPanel/childrenStore'
-import type { TaskRow } from './taskRows'
+import { STAGE_WORD, type TaskRow } from './taskRows'
 
 /** Uncommitted lines for each listed worktree, read again whenever its git status is. */
 export function useChangedLines(worktrees: readonly Worktree[]): Record<string, WorktreeChanges> {
@@ -102,6 +102,8 @@ export function TaskBoard({
               >
                 <span className="task-row__task" aria-hidden="true">
                   <span className="task-row__name">{row.title}</span>
+                  <PullRequestMark pull={landings[row.worktreeId]?.pullRequest} />
+                  {overlap === null ? null : <OverlapMark chip={overlap} />}
                   {row.tally === undefined ? null : (
                     <span
                       className="chip task-row__tally"
@@ -112,11 +114,9 @@ export function TaskBoard({
                       }}
                     >{`${row.tally.done}/${row.tally.total} done`}</span>
                   )}
-                  <PullRequestMark pull={landings[row.worktreeId]?.pullRequest} />
-                  {overlap === null ? null : <OverlapMark chip={overlap} />}
                 </span>
                 <span className="task-row__stage">
-                  {row.stage}
+                  {STAGE_WORD[row.stage]}
                   {row.notPushed ? <span className="task-row__unpushed">not pushed</span> : null}
                 </span>
                 <span className="task-row__panes">

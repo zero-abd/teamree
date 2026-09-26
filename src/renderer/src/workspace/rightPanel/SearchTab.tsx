@@ -273,9 +273,9 @@ export function statusLine(state: {
   if (state.query === '') return null
   if (state.error !== null) return state.error
   if (state.running && state.matches === 0) return 'Searching…'
-  if (state.matches === 0) return 'No results'
+  if (state.matches === 0) return 'No matches'
   const count = `${state.matches.toLocaleString('en-US')}${state.truncated ? '+' : ''}`
-  const noun = state.matches === 1 && !state.truncated ? 'result' : 'results'
+  const noun = state.matches === 1 && !state.truncated ? 'match' : 'matches'
   const where = `${state.files} ${state.files === 1 ? 'file' : 'files'}`
   return `${count} ${noun} in ${where}${state.timedOut ? ' · timed out' : ''}`
 }

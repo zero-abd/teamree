@@ -1074,7 +1074,7 @@ button.picker__chevron:hover {
 .ports__row {
   display: grid;
   grid-template-columns: 52px minmax(0, 0.8fr) minmax(0, 1.2fr) auto auto auto;
-  gap: 6px;
+  gap: var(--s2);
   align-items: center;
   min-height: 28px;
   border-bottom: 1px solid var(--line);

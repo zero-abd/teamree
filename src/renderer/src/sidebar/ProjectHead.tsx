@@ -48,6 +48,7 @@ export function ProjectHead({
   const drop = useNestDrop({ projectId: project.id }, false)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
+  const openSetting = useWorkspaceStore((state) => state.openSetting)
   const unpushed = useWorkspaceStore((state) => unpushedBase(state.bases[project.id]))
   const anyMerged = useWorkspaceStore((state) =>
     state.worktrees.some((worktree) => worktree.projectId === project.id && state.landings[worktree.id]?.merged)
@@ -69,7 +70,7 @@ export function ProjectHead({
     { label: 'New Task from Issue…', onChoose: onNewTaskFromIssue },
     { label: 'Open Branch…', onChoose: () => onOpenBranch(false) },
     { label: 'Check Out Pull Request…', onChoose: () => onOpenBranch(true) },
-    ...(removed.length === 0 ? [] : [{ label: 'Recently Removed', items: removed, onChoose: () => {} }]),
+    ...(removed.length === 0 ? [] : [{ label: 'Recently Deleted', items: removed, onChoose: () => {} }]),
     ...(unpushed === null
       ? []
       : [
@@ -79,6 +80,7 @@ export function ProjectHead({
       ? [{ label: 'Clean Up Merged…', onChoose: () => openDialog({ kind: 'clean-up', projectId: project.id }) }]
       : []),
     { label: 'Teamwork…', onChoose: () => openTeamwork(project.id), separated: true },
+    { label: 'Setup Command…', onChoose: () => openSetting('Setup command') },
     { label: 'Remove from teamree', onChoose: onForget, separated: true },
     { label: 'Move to Trash…', onChoose: onTrash, danger: true }
   ]

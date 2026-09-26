@@ -1,7 +1,7 @@
 // How a merge preview reads in one word. It has to survive being three
 // characters wide and keep "could not tell" visibly apart from "nothing wrong".
 
-import type { WorktreeMergePreview } from '@shared/entities'
+import type { WorktreeLanding, WorktreeMergePreview } from '@shared/entities'
 
 export type MergeBadge = {
   /** What the row shows. */
@@ -53,4 +53,12 @@ function conflictDetail(preview: WorktreeMergePreview): string {
   const paths = shown.join('\n')
   const more = rest > 0 ? `\n…and ${rest} more` : ''
   return `Would conflict with ${preview.baseRef} in:\n${paths}${more}`
+}
+
+/** The chip once the branch is in where it lands, a child's parent or the base; the title names which. */
+export function mergedChip(landing: WorktreeLanding | undefined): { label: string; title: string } {
+  return {
+    label: landing?.notPushed ? 'Merged · not pushed' : 'Merged',
+    title: `Merged into ${landing?.parent?.name ?? landing?.base ?? 'main'}`
+  }
 }

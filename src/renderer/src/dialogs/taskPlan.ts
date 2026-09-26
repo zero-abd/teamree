@@ -155,10 +155,6 @@ export function branchProblem(creates: readonly TaskCreate[], existing: readonly
   return named.some((branch) => branchCollides(branch, taken)) ? 'Branch exists' : null
 }
 
-export function submitLabel(selection: readonly InstalledAgent[]): string {
-  return selection.length === 0 ? 'Create Worktree' : 'Start Task'
-}
-
 /** What the button will do, in one line; `probed` separates "not looked yet" from "found nothing". */
 export function taskPlanNote(
   agents: readonly InstalledAgent[],

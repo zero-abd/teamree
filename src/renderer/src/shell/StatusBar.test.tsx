@@ -220,15 +220,15 @@ describe('the rail as a whole', () => {
 
 describe('the pane count', () => {
   // `terminals 1 / 14` beside a Panes badge of 4: two numbers, neither the tab's.
-  // The Panes tab counts one worktree's; the bar, counting every worktree's, says how many it spans.
-  it('shows every pane in the window and the worktrees they span, with the split on hover', () => {
+  // A second number read as every worktree; how many hold panes waits for the hover.
+  it('shows every pane in the window, with the worktrees they span on hover', () => {
     const other: Worktree = { ...worktree, id: 'w2', name: 'Fix the index' }
     seed({
       worktrees: [worktree, other],
       terminals: { a: pane('a', 'w1'), b: pane('b', 'w2'), c: pane('c', 'w2'), d: pane('d', 'gone') }
     })
     mount()
-    const count = screen.getByText('3 panes · 2 worktrees')
+    const count = screen.getByText('3 panes')
     expect(count.getAttribute('title')).toBe('1 in this worktree · 3 across 2 worktrees')
     expect(screen.queryByText('terminals')).toBeNull()
   })

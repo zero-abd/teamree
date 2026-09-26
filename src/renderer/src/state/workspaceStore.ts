@@ -1175,13 +1175,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const widened = (by: number): boolean =>
       grid !== undefined && fits(grid, { width: grid.area.width + by, height: grid.area.height })
     if (rightPanelOpen && widened(panelCost(rightPanelWidth))) {
-      notify(NO_ROOM, 'info', { label: 'Hide panel', hide: 'panel' })
+      notify(NO_ROOM, 'info', { label: 'Hide Panel', hide: 'panel' })
     } else if (
       !rightPanelOpen &&
       sidebarVisible &&
       widened(sidebarCost(sidebarWidth, globalThis.window?.innerWidth ?? 0))
     ) {
-      notify(NO_ROOM, 'info', { label: 'Hide sidebar', hide: 'sidebar' })
+      notify(NO_ROOM, 'info', { label: 'Hide Sidebar', hide: 'sidebar' })
     } else {
       notify(NO_ROOM, 'info')
     }
@@ -2228,7 +2228,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           set({ dialog: { kind: 'confirm-remove', worktreeId, intent: retrying ? 'retry' : 'remove', refused: true } })
           return
         }
-        failed(retrying ? 'Retry failed' : 'Could not remove the worktree')(error)
+        failed(retrying ? 'Retry failed' : 'Could not delete the worktree')(error)
       }
     },
 
@@ -2244,7 +2244,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       for (const { worktree } of cleanup.removed) forgetWorktree(worktree.id)
       const [first] = cleanup.kept
       if (cleanup.removed.length === 0) {
-        if (first !== undefined) notify(`Nothing removed: ${first.reason}`)
+        if (first !== undefined) notify(`Nothing deleted: ${first.reason}`)
         return
       }
       const count = cleanup.removed.length
@@ -2252,7 +2252,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // Parents first on the way back, so each child finds its parent.
       const removedIds = cleanup.removed.flatMap((entry) => (entry.trashId === undefined ? [] : [entry.trashId]))
       const undo: UndoTarget = { kind: 'remove-many', projectId, removedIds: removedIds.reverse() }
-      notify(`Removed ${count} worktree${count === 1 ? '' : 's'}${kept}`, 'info', { label: 'Undo', undo })
+      notify(`Deleted ${count} worktree${count === 1 ? '' : 's'}${kept}`, 'info', { label: 'Undo', undo })
     },
 
     async loadRemovedWorktrees() {
@@ -3723,13 +3723,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       setPush({ phase: 'pushing' })
       try {
         const result = await runtimeClient.call('worktree.push', { worktreeId })
-        // The Changes header says it where it was asked: Push gives way to Open review.
+        // The Changes header says it where it was asked: Push gives way to Open Review.
         const { rightPanelOpen, rightPanelTab } = get()
         if (!rightPanelOpen || rightPanelTab !== 'changes') {
           notify(
             result.alreadyUpToDate ? 'Up to date' : 'Pushed',
             'info',
-            result.reviewUrl === undefined ? undefined : { label: 'Open review', url: result.reviewUrl }
+            result.reviewUrl === undefined ? undefined : { label: 'Open Review', url: result.reviewUrl }
           )
         }
         setPush({

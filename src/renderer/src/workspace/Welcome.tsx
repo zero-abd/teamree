@@ -46,7 +46,7 @@ export function Welcome({
               Open Folder…
             </button>
             <button type="button" className="button button--lead" onClick={() => openDialog({ kind: 'clone-project' })}>
-              Clone…
+              Clone Repository…
             </button>
           </>
         ) : (
@@ -56,7 +56,7 @@ export function Welcome({
             title={`New Task · ${shortcutHint('new-worktree', modifier)}`}
             onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
           >
-            New Task
+            New Task…
           </button>
         )}
       </div>

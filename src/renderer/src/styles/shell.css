@@ -171,7 +171,7 @@
 }
 
 .wordmark--welcome {
-  gap: 3px;
+  gap: var(--s1);
   font-size: var(--text-xl);
 }
 

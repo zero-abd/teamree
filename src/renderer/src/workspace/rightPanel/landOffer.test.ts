@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WorktreeLanding, WorktreeStatus } from '@shared/entities'
-import { headerActions, idleLand, landLabel, landOffer, pushOffer } from './landOffer'
+import { headerActions, idleLand, landLabel, landOffer, landTitle, pushOffer } from './landOffer'
 
 const status: WorktreeStatus = {
   worktreeId: 'w1',
@@ -29,10 +29,14 @@ const child: WorktreeLanding = {
 }
 
 describe('a child landing', () => {
-  it('merges into its parent by name, whatever host the origin is on', () => {
+  it('merges into its parent, whatever host the origin is on, naming it on hover', () => {
     const offer = landOffer(child, status)
-    expect(offer).toEqual({ kind: 'merge', into: 'Rework auth' })
-    expect(landLabel(offer as { kind: 'merge'; into: string })).toBe('Merge into Rework auth…')
+    expect(offer).toEqual({ kind: 'merge', into: 'Rework auth', parent: true })
+    expect(landLabel(offer as { kind: 'merge'; into: string })).toBe('Merge into Parent…')
+    expect(landTitle(offer as { kind: 'merge'; into: string })).toBe('Merge into Rework auth')
+    const dirtyOffer = landOffer(child, { ...status, unstaged: 2 }) as { kind: 'merge'; into: string }
+    expect(landLabel(dirtyOffer)).toBe('Commit & Merge into Parent…')
+    expect(landTitle(dirtyOffer)).toBe('Merge into Rework auth · 2 uncommitted')
   })
 
   it('has nothing to offer once it is in the parent', () => {
@@ -64,7 +68,7 @@ describe('the land offer in every state', () => {
     const offer = landOffer({ ...top, unmerged: 0 }, dirty)
     expect(offer).toEqual({ kind: 'merge', into: 'main', uncommitted: 2 })
     expect(landLabel(offer as { kind: 'merge'; into: string })).toBe('Commit & Merge into main…')
-    expect(landOffer(child, dirty)).toEqual({ kind: 'merge', into: 'Rework auth', uncommitted: 2 })
+    expect(landOffer(child, dirty)).toEqual({ kind: 'merge', into: 'Rework auth', parent: true, uncommitted: 2 })
   })
 
   it('is blocked by conflicts, which no commit settles', () => {
@@ -80,7 +84,7 @@ describe('the land offer in every state', () => {
     expect(landLabel({ kind: 'create-pr' })).toBe('Create Pull Request…')
     const commitFirst = landOffer(hub, dirty)
     expect(commitFirst).toEqual({ kind: 'create-pr', uncommitted: 2 })
-    expect(landLabel(commitFirst as { kind: 'create-pr' })).toBe('Commit & Create PR…')
+    expect(landLabel(commitFirst as { kind: 'create-pr' })).toBe('Commit & Create Pull Request…')
     expect(landOffer({ ...hub, unmerged: 0 }, dirty)).toEqual({ kind: 'create-pr', uncommitted: 2 })
     expect(landOffer({ ...hub, published: false }, { ...status, upstream: null, ahead: 1 })).toEqual({
       kind: 'create-pr'
@@ -105,6 +109,7 @@ describe('what the palette lists when there is nothing to land', () => {
     expect(idleLand({ ...child, unmerged: 0 })).toEqual({
       kind: 'merge',
       into: 'Rework auth',
+      parent: true,
       blocked: 'nothing to land'
     })
     expect(idleLand({ ...hub, unmerged: 0 })).toEqual({ kind: 'create-pr', blocked: 'nothing to land' })

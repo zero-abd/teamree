@@ -325,7 +325,7 @@ describe('the file viewer', () => {
     view.unmount()
     view = mount('a.bin')
     expect(await screen.findByText('Binary · 2.0 KB')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Open in default app' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open in Default App' })).toBeTruthy()
     view.unmount()
     mount('big.log')
     expect(await screen.findByText('Too large · 2.0 KB')).toBeTruthy()

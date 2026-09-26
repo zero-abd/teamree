@@ -182,7 +182,7 @@ describe('pushing from the changes tab', () => {
     expect(screen.getByRole('button', { name: 'Pushing…' })).toHaveProperty('disabled', true)
 
     await act(async () => push.resolve(pushed))
-    fireEvent.click(screen.getByRole('button', { name: 'Open review' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Review' }))
     expect(openInBrowser).toHaveBeenCalledWith(pushed.reviewUrl)
     expect(screen.queryByRole('button', { name: 'Push' })).toBeNull()
   })
@@ -257,7 +257,7 @@ describe('pushing from the changes tab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Push' }))
     await act(async () => push.resolve({ ...pushed, setUpstream: true, uncommitted: 2 }))
 
-    expect(screen.getByRole('button', { name: 'Open review' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open Review' })).toBeTruthy()
     expect(useWorkspaceStore.getState().notices).toEqual([])
   })
 
@@ -275,7 +275,7 @@ describe('pushing from the changes tab', () => {
     expect(notice).toMatchObject({
       text: 'Pushed',
       tone: 'info',
-      action: { label: 'Open review', url: pushed.reviewUrl }
+      action: { label: 'Open Review', url: pushed.reviewUrl }
     })
   })
 
@@ -360,7 +360,7 @@ describe('landing the work', () => {
     render(<ChangesTab />)
 
     expect(primary('Create Pull Request…')).toBe(true)
-    expect(screen.queryByRole('button', { name: 'Open review' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open Review' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Create Pull Request…' }))
 
     expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'create-pr', worktreeId: 'w1' })
@@ -393,9 +393,10 @@ describe('landing the work', () => {
     landed({ base: 'rework-auth', host: null, parent: { worktreeId: 'w0', name: 'Rework auth' } })
     render(<ChangesTab />)
 
-    expect(primary('Merge into Rework auth…')).toBe(true)
+    expect(primary('Merge into Parent…')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Merge into Parent…' }).title).toBe('Merge into Rework auth')
     expect(screen.queryByRole('button', { name: 'Create Pull Request…' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Merge into Rework auth…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Merge into Parent…' }))
     expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'w1' })
   })
 
@@ -427,15 +428,15 @@ describe('landing the work', () => {
     expect(call).not.toHaveBeenCalledWith('worktree.commit', expect.anything())
   })
 
-  it('is Commit & Create PR… while there are changes, quiet beside Commit, and opens the dialog', () => {
+  it('is Commit & Create Pull Request… while there are changes, quiet beside Commit, and opens the dialog', () => {
     landed({}, { ahead: 0, unstaged: 1 })
     withChanges(rows.slice(0, 1))
     render(<ChangesTab />)
 
-    const button = screen.getByRole('button', { name: 'Commit & Create PR…' }) as HTMLButtonElement
+    const button = screen.getByRole('button', { name: 'Commit & Create Pull Request…' }) as HTMLButtonElement
     expect(button.disabled).toBe(false)
     expect(button.title).toBe('1 uncommitted')
-    expect(primary('Commit & Create PR…')).toBe(false)
+    expect(primary('Commit & Create Pull Request…')).toBe(false)
     fireEvent.click(button)
     expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'create-pr', worktreeId: 'w1' })
   })
@@ -462,8 +463,8 @@ describe('landing the work', () => {
       within(head)
         .getAllByRole('button')
         .map((button) => button.getAttribute('aria-label') ?? button.textContent)
-    ).toEqual(['Merge into Rework auth…', 'More actions'])
-    expect(primary('Merge into Rework auth…')).toBe(true)
+    ).toEqual(['Merge into Parent…', 'More actions'])
+    expect(primary('Merge into Parent…')).toBe(true)
     expect(
       within(moreMenu())
         .getAllByRole('menuitem')
@@ -475,7 +476,7 @@ describe('landing the work', () => {
     landed({ merged: true, unmerged: 0 })
     render(<ChangesTab />)
 
-    expect(screen.getByText('Merged')).toBeTruthy()
+    expect(screen.getByText('Merged').getAttribute('title')).toBe('Merged into main')
     expect(screen.queryByRole('button', { name: 'Create Pull Request…' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Delete Worktree…' }))
     expect(useWorkspaceStore.getState().dialog).toMatchObject({ kind: 'confirm-remove', worktreeId: 'w1' })

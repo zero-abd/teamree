@@ -47,7 +47,7 @@ export function CreatePullRequestDialog({ worktreeId }: { worktreeId: string }):
   const shownTitle = title ?? drafted?.title ?? ''
   const shownBody = body ?? drafted?.body ?? ''
   const label = (step: PullRequestStep): string =>
-    step === 'commit' ? 'Commit' : step === 'create' ? 'Create pull request' : landing?.published ? 'Push' : 'Publish'
+    step === 'commit' ? 'Commit' : step === 'create' ? 'Create Pull Request' : landing?.published ? 'Push' : 'Publish'
   const blocked =
     commitFirst && message.trim() === ''
       ? 'Needs a commit message'
