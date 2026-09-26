@@ -161,16 +161,8 @@ const ALLOWED = [
   {
     file: 'src/main/terminals/shell-integration.test.ts',
     suite: 'the startup files',
-    test: 'find the bundled CLI after every zsh startup file rebuilds PATH, reading the user’s files where their .zshenv moved them',
     when: offMac,
-    why: 'not macOS: zsh is not on the Linux runner; the bash half of the same files runs there.'
-  },
-  {
-    file: 'src/main/terminals/shell-integration.test.ts',
-    suite: 'the startup files',
-    test: 'keeps the history where the user’s shell keeps it',
-    when: offMac,
-    why: 'not macOS: zsh is not on the Linux runner.'
+    why: 'not macOS: the zsh cases need zsh, which the Linux runner lacks; the bash case runs there.'
   },
 
   // POSIX-only; listed so a Windows run still reports exactly what it did not run.

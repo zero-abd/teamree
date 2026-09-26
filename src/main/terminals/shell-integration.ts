@@ -1,21 +1,28 @@
 // Startup files that run the user's own and then put this build's CLI first on
 // PATH, so a login shell that rebuilds PATH (path_helper, a profile) still finds it.
-// zsh through ZDOTDIR, bash through --init-file and BASH_ENV; kept for every child shell.
+// zsh through ZDOTDIR, handed back once startup ends; bash through --init-file and BASH_ENV.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { shellName, type ShellCommand } from './shell-environment'
 
-/** Where the user's own ZDOTDIR and BASH_ENV are kept while ours stand in for them. */
+/** The user's own ZDOTDIR while ours stands in; absent when theirs is unset. */
 export const USER_ZDOTDIR_ENV = 'TEAMREE_USER_ZDOTDIR'
 export const USER_BASH_ENV_ENV = 'TEAMREE_USER_BASH_ENV'
 
-const ZSH_FILES = ['.zshenv', '.zprofile', '.zshrc', '.zlogin', '.zlogout'] as const
+/** Each file, and when it is the last one this shell reads: there ZDOTDIR goes back to the user's. */
+const ZSH_FILES = {
+  '.zshenv': '[[ ! -o rcs ]] || [[ ! -o login && ! -o interactive ]]',
+  '.zprofile': 'false',
+  '.zshrc': '[[ ! -o login ]]',
+  '.zlogin': 'true'
+} as const
 
 const ZSH_PREPEND = '[[ -n $TEAMREE_CLI ]] && path=("${TEAMREE_CLI:h}" "${(@)path:#${TEAMREE_CLI:h}}")'
 
 // Top level, not a function: a user's `typeset` inside a sourced file would otherwise turn local.
-function zshFile(name: string): string {
+// Set and unset are kept apart: an unset ZDOTDIR means $HOME, and tools test which it is.
+function zshFile(name: keyof typeof ZSH_FILES): string {
   // macOS's /etc/zshrc points HISTFILE at ${ZDOTDIR:-$HOME}, which is ours by then.
   const history =
     name === '.zshrc'
@@ -23,14 +30,19 @@ function zshFile(name: string): string {
       : ''
   return `# teamree: the user's own ${name}, then this build's CLI first on PATH.
 __teamree_zdotdir=$ZDOTDIR
-${history}ZDOTDIR=\${TEAMREE_USER_ZDOTDIR:-$HOME}
-if [[ $ZDOTDIR != $__teamree_zdotdir && -r $ZDOTDIR/${name} ]]; then
-  source "$ZDOTDIR/${name}"
+${history}if (( \${+TEAMREE_USER_ZDOTDIR} )); then ZDOTDIR=$TEAMREE_USER_ZDOTDIR; else unset ZDOTDIR; fi
+if [[ \${ZDOTDIR:-$HOME} != $__teamree_zdotdir && -r \${ZDOTDIR:-$HOME}/${name} ]]; then
+  source "\${ZDOTDIR:-$HOME}/${name}"
 fi
-export TEAMREE_USER_ZDOTDIR=$ZDOTDIR
-ZDOTDIR=$__teamree_zdotdir
-unset __teamree_zdotdir
+if (( \${+ZDOTDIR} )); then export TEAMREE_USER_ZDOTDIR=$ZDOTDIR; else unset TEAMREE_USER_ZDOTDIR; fi
 ${ZSH_PREPEND}
+if ${ZSH_FILES[name]}; then
+  if (( \${+TEAMREE_USER_ZDOTDIR} )); then export ZDOTDIR=$TEAMREE_USER_ZDOTDIR; else unset ZDOTDIR; fi
+  unset TEAMREE_USER_ZDOTDIR
+else
+  export ZDOTDIR=$__teamree_zdotdir
+fi
+unset __teamree_zdotdir
 `
 }
 
@@ -60,7 +72,10 @@ ${BASH_PREPEND}`
 
 function files(dir: string): Array<[string, string]> {
   return [
-    ...ZSH_FILES.map((name): [string, string] => [join(dir, 'zsh', name), zshFile(name)]),
+    ...Object.keys(ZSH_FILES).map((name): [string, string] => [
+      join(dir, 'zsh', name),
+      zshFile(name as keyof typeof ZSH_FILES)
+    ]),
     [join(dir, 'bash', 'init.bash'), BASH_INIT],
     [join(dir, 'bash', 'env.bash'), BASH_ENV_FILE]
   ]
@@ -97,8 +112,8 @@ export function integrateShell(
 ): ShellCommand & { env: Record<string, string> } {
   if (platform === 'win32') return { ...command, env }
   const next = { ...env }
-  // Inside another teamree pane ZDOTDIR is already somebody's stand-in; the user's is the one it kept.
-  next[USER_ZDOTDIR_ENV] = env[USER_ZDOTDIR_ENV] ?? env.ZDOTDIR ?? ''
+  delete next[USER_ZDOTDIR_ENV]
+  if (env.ZDOTDIR !== undefined) next[USER_ZDOTDIR_ENV] = env.ZDOTDIR
   next.ZDOTDIR = join(dir, 'zsh')
   next[USER_BASH_ENV_ENV] = env[USER_BASH_ENV_ENV] ?? env.BASH_ENV ?? ''
   next.BASH_ENV = join(dir, 'bash', 'env.bash')

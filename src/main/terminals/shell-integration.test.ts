@@ -55,9 +55,9 @@ describe('integrateShell', () => {
     })
   })
 
-  it('keeps the user’s own ZDOTDIR when the app was started inside another teamree pane', () => {
-    const env = { ZDOTDIR: '/other/zsh', TEAMREE_USER_ZDOTDIR: '/u/zsh' }
-    expect(integrateShell({ file: '/bin/zsh', args: ['-l'] }, env, '/d').env.TEAMREE_USER_ZDOTDIR).toBe('/u/zsh')
+  it('leaves the user’s ZDOTDIR out when they have none, rather than calling it empty', () => {
+    const launched = integrateShell({ file: '/bin/zsh', args: ['-l'] }, { TEAMREE_USER_ZDOTDIR: '/stale' }, '/d')
+    expect(launched.env).not.toHaveProperty('TEAMREE_USER_ZDOTDIR')
   })
 
   it('starts an interactive bash on its init file and leaves a command alone', () => {
@@ -75,33 +75,83 @@ describe('integrateShell', () => {
 })
 
 unix('the startup files', () => {
+  const ZSH_STARTUPS: Array<[string, string[]]> = [
+    ['an interactive login zsh', ['-l', '-i']],
+    ['an interactive zsh', ['-i']],
+    ['a login zsh', ['-l']],
+    ['zsh -c', []]
+  ]
+
+  it.runIf(process.platform === 'darwin').each(ZSH_STARTUPS)(
+    'hands %s the user’s ZDOTDIR back after startup, with the bundled CLI first on PATH',
+    (_, flags) => {
+      const { root, integration, cli, stale, user } = rig()
+      const first = `path=(${stale} $path)\n`
+      for (const name of ['.zshenv', '.zprofile', '.zshrc', '.zlogin']) writeFileSync(path.join(user, name), first)
+      // Unset, zsh reads the user's files from HOME; bash and zsh are not node and never reach a keychain.
+      const home = path.join(root, 'home')
+      mkdirSync(home)
+      for (const name of ['.zshenv', '.zprofile', '.zshrc', '.zlogin']) writeFileSync(path.join(home, name), first)
+      const probe = 'print -r -- "${ZDOTDIR-unset} $(command -v teamree) ${PATH%%:*} ${+TEAMREE_USER_ZDOTDIR}"'
+      const after = (zdotdir: string | undefined): string => {
+        const base = { PATH: '/usr/bin:/bin', HOME: home, TEAMREE_CLI: cli }
+        const launch = integrateShell(
+          { file: '/bin/zsh', args: ['-l'] },
+          zdotdir === undefined ? base : { ...base, ZDOTDIR: zdotdir },
+          integration
+        )
+        return run('/bin/zsh', [...flags, '-c', probe], launch.env)
+      }
+      const found = `${cli} ${path.dirname(cli)} 0`
+      expect(after(user)).toBe(`${user} ${found}`)
+      expect(after(undefined)).toBe(`unset ${found}`)
+    }
+  )
+
   it.runIf(process.platform === 'darwin')(
-    'find the bundled CLI after every zsh startup file rebuilds PATH, reading the user’s files where their .zshenv moved them',
+    'reads the user’s files where their .zshenv moved ZDOTDIR, and leaves it there',
     () => {
       const { integration, cli, stale, user } = rig()
       const moved = path.join(user, 'conf')
       mkdirSync(moved)
-      const first = `path=(${stale} $path)\n`
-      writeFileSync(path.join(user, '.zshenv'), `${first}ZDOTDIR=${moved}\n`)
-      for (const name of ['.zprofile', '.zlogin']) writeFileSync(path.join(moved, name), first)
-      writeFileSync(path.join(moved, '.zshrc'), `${first}READ_ZSHRC=yes\n`)
-
+      writeFileSync(path.join(user, '.zshenv'), `ZDOTDIR=${moved}\n`)
+      writeFileSync(path.join(moved, '.zshrc'), `path=(${stale} $path)\nREAD_ZSHRC=yes\n`)
       const launch = integrateShell(
         { file: '/bin/zsh', args: ['-l'] },
         { PATH: '/usr/bin:/bin', HOME: os.homedir(), TEAMREE_CLI: cli, ZDOTDIR: user },
         integration
       )
-      const shell = (flags: string[]): string =>
-        run(
-          '/bin/zsh',
-          [...flags, '-c', 'print -r -- "$(command -v teamree) ${PATH%%:*} ${READ_ZSHRC:-no}"'],
-          launch.env
-        )
+      const said = run(
+        '/bin/zsh',
+        ['-l', '-i', '-c', 'print -r -- "$ZDOTDIR $(command -v teamree) $READ_ZSHRC"'],
+        launch.env
+      )
+      expect(said).toBe(`${moved} ${cli} yes`)
+    }
+  )
 
-      const found = `${cli} ${path.dirname(cli)}`
-      expect(shell([])).toBe(`${found} no`)
-      expect(shell(['-l'])).toBe(`${found} no`)
-      expect(shell(['-l', '-i'])).toBe(`${found} yes`)
+  // The cost of handing ZDOTDIR back: a nested zsh runs only the user's files and keeps their PATH order.
+  // A login one also runs path_helper, which puts /usr/local/bin ahead; $TEAMREE_CLI names the CLI regardless.
+  it.runIf(process.platform === 'darwin')(
+    'leaves a zsh started inside the pane the CLI on PATH, first unless the user’s files put another ahead',
+    () => {
+      const { root, integration, cli, stale, user } = rig()
+      const other = path.join(root, 'other')
+      mkdirSync(other)
+      const env = integrateShell(
+        { file: '/bin/zsh', args: ['-l'] },
+        { PATH: '/usr/bin:/bin', HOME: os.homedir(), TEAMREE_CLI: cli, ZDOTDIR: user },
+        integration
+      ).env
+      const nested = (dir: string, inner: string): string => {
+        writeFileSync(path.join(user, '.zshenv'), `path=(${dir} $path)\n`)
+        return run('/bin/zsh', ['-l', '-i', '-c', inner], env)
+      }
+      expect(nested(other, 'zsh -c "command -v teamree"')).toBe(cli)
+      expect(nested(stale, 'zsh -c "command -v teamree"')).toBe(path.join(stale, 'teamree'))
+      const [index, named] = nested(other, "zsh -lc 'print -r -- ${path[(I)${TEAMREE_CLI:h}]} $TEAMREE_CLI'").split(' ')
+      expect(Number(index)).toBeGreaterThan(0)
+      expect(named).toBe(cli)
     }
   )
 

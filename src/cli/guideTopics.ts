@@ -18,6 +18,7 @@ const PANE = `teamree guide: the teamree CLI for an agent in a teamree pane.
 This pane
   TEAMREE_TERMINAL_ID, TEAMREE_WORKTREE_ID and TEAMREE_PROJECT_ID name it.
   \`here\` means this pane, worktree or project wherever a command takes one.
+  "$TEAMREE_CLI" is this app's teamree, for a shell that finds another first.
   teamree whoami [--json]                  pane, worktree, branch, project, parent tasks
 
 Your worktree
