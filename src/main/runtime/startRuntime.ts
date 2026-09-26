@@ -4,6 +4,7 @@
 
 import { join } from 'node:path'
 import type { AgentNotice } from '../agentNotices'
+import type { SharedNoteSummary } from '../../shared/sharedNote'
 import type { Appearance, Tone } from '../../shared/theme'
 import { ScrollbackArchive, SCROLLBACK_DIR_NAME } from '../store/scrollbackArchive'
 import type { SelfInstall } from '../updates'
@@ -55,6 +56,8 @@ export type RuntimeOptions = {
   trashItem?: (path: string) => Promise<void>
   /** Announces an agent pane that has stopped. Passed in for the same reason `openExternal` is. */
   onAgentNotice?: (notice: AgentNotice) => void
+  /** Announces a note a teammate shared; see `onAgentNotice`. */
+  onSharedNote?: (note: SharedNoteSummary) => void
   /** Ends the app, for `teamree quit`; `app.quit` in the main process. Absent, the method refuses. */
   requestQuit?: (force: boolean) => void
   /** The window's edited files, which `teamree quit` refuses over without `--force`. */
@@ -102,6 +105,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     selfInstall,
     trashItem,
     onAgentNotice,
+    onSharedNote,
     requestQuit,
     unsavedFiles,
     onAppearance,
@@ -128,6 +132,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     ...(selfInstall === undefined ? {} : { selfInstall }),
     ...(trashItem === undefined ? {} : { trashItem }),
     onAgentNotice,
+    ...(onSharedNote === undefined ? {} : { onSharedNote }),
     scrollback,
     worktreesRoot,
     ...(requestQuit === undefined ? {} : { requestQuit }),

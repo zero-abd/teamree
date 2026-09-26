@@ -92,6 +92,7 @@ function FileLeaf({
         {...(leaf.commit === undefined ? {} : { commit: leaf.commit })}
         {...(leaf.compare === undefined ? {} : { compare: leaf.compare })}
         {...(leaf.review === true ? { review: true } : {})}
+        {...(leaf.sharedNote === undefined ? {} : { sharedNote: leaf.sharedNote })}
         focused={focusedTerminalId === paneId}
         onFocus={() => onFocus(paneId)}
         onClose={() => onClose(paneId)}

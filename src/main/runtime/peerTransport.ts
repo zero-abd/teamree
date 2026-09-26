@@ -40,6 +40,8 @@ export type PeerScope = 'link' | 'read-pane' | 'write-pane'
 export const PEER_METHODS: Readonly<Partial<Record<MethodName, PeerScope>>> = {
   'peer.presence': 'link',
   'peer.subscribe': 'link',
+  // The roster check is the service's, against the key this link authenticated.
+  'peer.shareNote': 'link',
   unsubscribe: 'link',
   'terminal.read': 'read-pane',
   'terminal.subscribe': 'read-pane',

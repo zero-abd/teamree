@@ -20,6 +20,7 @@ import type { TerminalService } from '../../terminals/method-handlers'
 import type { ScrollbackRepository } from '../../terminals/session-manager'
 import type { AgentNotice, NoticeAnswer } from '../../agentNotices'
 import type { ScreenMenu } from '../../../shared/screenOpinion'
+import type { SharedNoteSummary } from '../../../shared/sharedNote'
 import { paletteTone, resolvePalette, type Appearance, type Tone } from '../../../shared/theme'
 import { registerAgentTrustHandlers, trustCheckoutFor } from './agentTrustHandlers'
 import { registerAppearanceHandlers } from './appearanceHandlers'
@@ -71,6 +72,8 @@ export type RegisterHandlersOptions = {
   worktreesRoot?: string
   /** Announces an agent pane that has stopped (an OS notification in the app). Absent with no window around. */
   onAgentNotice?: (notice: AgentNotice) => void
+  /** Announces a note a teammate shared. Absent with no window around. */
+  onSharedNote?: (note: SharedNoteSummary) => void
   /**
    * Ends the app: `app.quit()` and nothing else, the one ending that runs
    * `before-quit`, where the ptys are killed and awaited. Absent, the method refuses.
@@ -294,6 +297,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
         set: (terminalId, publicKey, since) => registry.context.store.setStandingConsent(terminalId, publicKey, since)
       },
       onChange: () => workspaceEvents.emit({ type: 'teammates' }),
+      ...(options.onSharedNote === undefined ? {} : { onNote: options.onSharedNote }),
       // Nothing a peer does may fail quietly: none of it stops the app, and
       // without this none of it leaves a trace either.
       onError: (error) => console.error('[teamwork]', error)

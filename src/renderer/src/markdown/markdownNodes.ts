@@ -179,6 +179,7 @@ export const CodeBlockWithLanguage = CodeBlockLowlight.extend({
       const language = document.createElement('select')
       language.className = 'md-code__language'
       language.contentEditable = 'false'
+      language.disabled = !editor.isEditable
       language.setAttribute('aria-label', 'Code language')
       const fill = (): void => {
         const value = String(current.attrs.language ?? '')

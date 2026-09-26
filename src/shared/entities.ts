@@ -641,6 +641,8 @@ export type PaneNode =
       compare?: string
       /** A file leaf showing every change of its worktree as one patch, read-only; `path` holds the tab's title. */
       review?: true
+      /** A file leaf showing a note a teammate shared, read-only, by its share id; `path` holds the tab's title. */
+      sharedNote?: string
     }
   | {
       kind: 'split'

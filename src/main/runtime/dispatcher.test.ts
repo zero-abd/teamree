@@ -158,6 +158,7 @@ describe('dispatcher', () => {
       // Reachable over the peer transport and nowhere else; in the one registry
       // because a teammate is another transport onto the catalogue. See `PEER_METHODS`.
       'peer.presence',
+      'peer.shareNote',
       'peer.subscribe',
       'project.add',
       // Local: git on this machine, with this machine's credentials.
@@ -186,6 +187,8 @@ describe('dispatcher', () => {
       'system.resources',
       // Local for the reason the push is.
       'teamwork.cancelPublish',
+      // Local: this machine's received notes, and sending one; on the wire it is `peer.shareNote`.
+      'teamwork.closeNote',
       // Local and the owner's own; the write log never leaves this machine.
       'teamwork.decide',
       // Local: a handoff crosses in this machine's presence, never as a teammate's call.
@@ -204,11 +207,14 @@ describe('dispatcher', () => {
       'teamwork.revoke',
       'teamwork.setOrigin',
       'teamwork.setRelay',
+      'teamwork.shareNote',
+      'teamwork.sharedNotes',
       'teamwork.status',
       'teamwork.take',
       // Local: this machine asking to read and type into somebody else's pane; on
       // the wire they are `terminal.subscribe`, `terminal.read` and `terminal.write`.
       'teamwork.type',
+      'teamwork.viewNote',
       'teamwork.watch',
       'teamwork.watchers',
       'teamwork.writeLog',

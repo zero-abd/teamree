@@ -492,11 +492,12 @@ describe('one header for code and markdown', () => {
       .filter((item) => item.parentElement === screen.getByRole('menu'))
       .map((item) => item.querySelector('.row-menu__label')?.textContent ?? '')
 
-  it('lays both out alike: path, the dot only when dirty, the view, ⋯, ×', async () => {
+  it('lays both out alike: path, the dot only when dirty, the view, ⋯, ×; a page adds Share', async () => {
     await screen.findByText('a', { selector: '.ProseMirror p' })
     expect(parts('app.ts')).toEqual(['src/|src/app.ts', 'Code', 'Diff', 'More for app.ts', 'Close pane app.ts'])
     expect(parts('guide.md')).toEqual([
       'docs/|docs/guide.md',
+      'Share',
       'Page',
       'Diff',
       'More for guide.md',

@@ -60,6 +60,8 @@ import type {
 import { MAX_AGENT_ARGS_CHARS } from './agentLaunch'
 import { MAX_FILE_PANE_BYTES } from './filePane'
 import { TaskParams, type TaskMethodContract, type TaskWorkspaceEvent } from './taskMethods'
+import type { NoteShareResult, SharedNote, SharedNoteSummary } from './sharedNote'
+import { SharedNotePayload, ShareNoteRequest } from './sharedNoteSchema'
 import { APPEARANCE_MODES, THEME_TOKENS, type Appearance, type AppearanceMode } from './theme'
 
 /**
@@ -593,6 +595,18 @@ export const Params = {
   /** PEER-ONLY. Streams this runtime's presence: once now, and on every change. */
   peerSubscribe: z.object({}),
 
+  // Shared notes: see `sharedNote.ts` and `sharedNoteSchema.ts`.
+  /** Sends a note to every connected teammate on the project; the answer names who got it. */
+  teamworkShareNote: ShareNoteRequest,
+  /** Notes teammates have shared with this machine, bodies left out, oldest first. */
+  teamworkSharedNotes: z.object({}),
+  /** One received note whole; marks it seen. */
+  teamworkViewNote: z.object({ shareId: z.string().min(1) }),
+  /** Forgets a received note. */
+  teamworkCloseNote: z.object({ shareId: z.string().min(1) }),
+  /** PEER-ONLY. A teammate's note arriving; the sender is the link's key. */
+  peerShareNote: SharedNotePayload,
+
   terminalList: z.object({ worktreeId: z.string().min(1).optional() }),
   terminalCreate: z.object({
     worktreeId: z.string().min(1),
@@ -895,6 +909,11 @@ export type MethodContract = TaskMethodContract & {
 
   'peer.presence': { params: z.infer<typeof Params.peerPresence>; result: PeerPresence }
   'peer.subscribe': { params: z.infer<typeof Params.peerSubscribe>; result: { subscription: string } }
+  'teamwork.shareNote': { params: z.infer<typeof Params.teamworkShareNote>; result: NoteShareResult }
+  'teamwork.sharedNotes': { params: z.infer<typeof Params.teamworkSharedNotes>; result: SharedNoteSummary[] }
+  'teamwork.viewNote': { params: z.infer<typeof Params.teamworkViewNote>; result: SharedNote }
+  'teamwork.closeNote': { params: z.infer<typeof Params.teamworkCloseNote>; result: { closed: boolean } }
+  'peer.shareNote': { params: z.infer<typeof Params.peerShareNote>; result: { received: true } }
 
   'terminal.list': { params: z.infer<typeof Params.terminalList>; result: Terminal[] }
   'terminal.create': { params: z.infer<typeof Params.terminalCreate>; result: Terminal }
