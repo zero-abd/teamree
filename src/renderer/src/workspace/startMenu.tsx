@@ -3,11 +3,13 @@
 
 import type { InstalledAgent } from '@shared/entities'
 import { AgentGlyph } from '../agents/glyphs'
-import { canResumeConversations, harnessName } from '../agents/harnesses'
+import { harnessName, hasResumable } from '../agents/harnesses'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import type { RowMenuItem } from '../sidebar/RowMenu'
 import { useWorkspaceStore } from '../state/workspaceStore'
+
+export const RESUME_CONVERSATION = 'Resume Conversation…'
 
 /** What choosing a row does; the strip binds each to the store. */
 export type StartMenuActions = {
@@ -26,7 +28,7 @@ type FixedRow = {
   run: (actions: StartMenuActions) => void
   /** Opens no pane, so an empty worktree's buttons leave it out. */
   menuOnly?: boolean
-  /** Shown only when an agent whose past conversations can be listed is installed. */
+  /** Shown only where the worktree has a past conversation to resume. */
   needsHistory?: boolean
 }
 
@@ -52,7 +54,7 @@ export const MENU_ROWS: readonly StartMenuGroup[] = [
   'agents',
   [
     {
-      label: 'Resume Conversation…',
+      label: RESUME_CONVERSATION,
       icon: <HistoryGlyph />,
       run: (actions) => actions.resumeConversation(),
       needsHistory: true
@@ -70,10 +72,10 @@ export function startMenuItems(
   agents: readonly InstalledAgent[],
   modifier: PlatformModifier,
   actions: StartMenuActions,
-  panesOnly = false
+  panesOnly = false,
+  resumable = false
 ): RowMenuItem[] {
   const items: RowMenuItem[] = []
-  const history = canResumeConversations(agents)
   for (const group of MENU_ROWS) {
     const rows: RowMenuItem[] =
       group === 'agents'
@@ -83,7 +85,7 @@ export function startMenuItems(
             onChoose: () => actions.startAgent(agent.command)
           }))
         : group
-            .filter((row) => !(panesOnly && row.menuOnly === true) && (history || row.needsHistory !== true))
+            .filter((row) => !(panesOnly && row.menuOnly === true) && (resumable || row.needsHistory !== true))
             .map((row) => ({
               label: row.label,
               icon: row.icon,
@@ -104,6 +106,9 @@ export function useStartMenuItems(
   panesOnly = false
 ): RowMenuItem[] {
   const agents = useWorkspaceStore((state) => state.agents)
+  const conversations = useWorkspaceStore((state) =>
+    worktreeId === null ? undefined : state.conversations[worktreeId]
+  )
   const createTerminal = useWorkspaceStore((state) => state.createTerminal)
   const newMarkdown = useWorkspaceStore((state) => state.newMarkdown)
   const startAgent = useWorkspaceStore((state) => state.startAgent)
@@ -120,7 +125,8 @@ export function useStartMenuItems(
       resumeConversation: () => openDialog({ kind: 'resume-conversation', worktreeId }),
       openAgentSettings: () => openSettings('agents')
     },
-    panesOnly
+    panesOnly,
+    hasResumable(conversations, agents)
   )
 }
 

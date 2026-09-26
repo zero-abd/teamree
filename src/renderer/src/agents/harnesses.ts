@@ -1,7 +1,7 @@
 // Each harness's display name and monochrome mark, drawn at 16px in currentColor. Third-party
 // marks identify the tool only; each path names where it came from.
 
-import type { AgentKind } from '@shared/entities'
+import type { AgentConversation, AgentKind } from '@shared/entities'
 
 export type Harness = { name: string; path: string; evenOdd?: boolean }
 
@@ -130,4 +130,12 @@ const WITH_HISTORY: ReadonlySet<AgentKind> = new Set(['claude', 'codex'])
 /** Whether any installed agent has conversations a worktree could resume. */
 export function canResumeConversations(agents: readonly { kind: AgentKind }[]): boolean {
   return agents.some((agent) => WITH_HISTORY.has(agent.kind))
+}
+
+/** Whether a worktree's past conversations, as last read, hold one an installed agent can resume. */
+export function hasResumable(
+  conversations: readonly AgentConversation[] | undefined,
+  agents: readonly { kind: AgentKind }[]
+): boolean {
+  return (conversations ?? []).some((conversation) => agents.some((agent) => agent.kind === conversation.agent))
 }

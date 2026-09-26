@@ -140,6 +140,8 @@ export type PaletteContext = {
   rightPanelTab?: RightPanelTab
   /** Every pane, for each worktree row's dot. */
   terminals?: readonly Terminal[]
+  /** Whether the worktree on screen has a past conversation to resume; absent reads as none. */
+  resumable?: boolean
 }
 
 /**
@@ -257,7 +259,8 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
               {
                 id: 'resume-conversation' as const,
                 label: 'Resume Conversation…',
-                keywords: 'resume conversation session history past agent continue'
+                keywords: 'resume conversation session history past agent continue',
+                ...(context.resumable === true ? {} : { unavailable: 'no past conversations' })
               }
             ]
           : []),

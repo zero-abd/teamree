@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useRef } from 'react'
 import { hasCheckout, teammatesHeard, type Worktree } from '@shared/entities'
-import { canResumeConversations } from '../agents/harnesses'
+import { hasResumable } from '../agents/harnesses'
 import { cliActionLabel, cliTitle, offerCliInstall } from '../dialogs/cliInstallModel'
 import { attentionByPane } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
@@ -86,7 +86,8 @@ export function Sidebar({
   const agents = useWorkspaceStore((state) => state.agents)
   const restoring = useWorkspaceStore((state) => state.restoring)
   const kindOf = useMemo(() => agentWords(agents), [agents])
-  const resumable = canResumeConversations(agents)
+  const conversations = useWorkspaceStore((state) => state.conversations)
+  const loadConversations = useWorkspaceStore((state) => state.loadConversations)
   const collapsedTasks = useTaskTreeStore((state) => state.collapsedTasks)
   const overlaps = useOverlaps((state) => state.byProject)
   const setTaskCollapsed = useTaskTreeStore((state) => state.setTaskCollapsed)
@@ -359,9 +360,10 @@ export function Sidebar({
                   {...(worktree.parentId === undefined
                     ? {}
                     : { onMoveToTop: () => void moveWorktree(worktree.id, null) })}
-                  {...(resumable
+                  {...(hasResumable(conversations[worktree.id], agents)
                     ? { onResume: () => openDialog({ kind: 'resume-conversation', worktreeId: worktree.id }) }
                     : {})}
+                  onMenuOpen={() => void loadConversations(worktree.id)}
                   status={statuses[worktree.id]}
                   mergePreview={mergePreviews[worktree.id]}
                   {...(landings[worktree.id] === undefined ? {} : { landing: landings[worktree.id] })}
