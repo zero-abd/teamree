@@ -364,6 +364,86 @@ describe('the file viewer', () => {
     expect(screen.getByRole('button', { name: 'Code' }).getAttribute('aria-pressed')).toBe('true')
   })
 
+  it('shows a conflicted file as its two sides, named by task, instead of an empty diff', async () => {
+    const merged = [
+      'const a = 1',
+      '<<<<<<< HEAD',
+      'const tax = 0.2',
+      '=======',
+      'const tax = 0.1',
+      '>>>>>>> checkout-tax',
+      'const b = 2',
+      '<<<<<<< HEAD',
+      'x',
+      '=======',
+      'y',
+      '>>>>>>> checkout-tax',
+      ''
+    ].join('\n')
+    const parent: Worktree = {
+      id: 'w0',
+      projectId: 'p1',
+      name: 'Checkout tax',
+      branch: 'checkout-tax',
+      path: '/wt/w0',
+      startedFrom: 'abc',
+      state: 'ready',
+      createdAt: 0
+    }
+    useWorkspaceStore.setState({
+      worktrees: [parent, { ...parent, id: 'w1', name: 'Payment', branch: 'payment', parentId: 'w0' }],
+      statuses: {
+        w1: {
+          worktreeId: 'w1',
+          branch: 'payment',
+          ahead: 1,
+          behind: 1,
+          staged: 0,
+          unstaged: 0,
+          untracked: 0,
+          conflicted: 1,
+          operation: 'merge',
+          readAt: 0
+        }
+      },
+      diffPanes: { 'file:1': true }
+    })
+    call.mockImplementation(async (method: string) => {
+      if (method === 'file.read') return text(merged)
+      if (method === 'worktree.changes') {
+        const change = { path: 'src/app.ts', kind: 'conflicted', staged: false, unstaged: true, markers: 2 }
+        return { worktreeId: 'w1', changes: [change], total: 1, limit: 1, truncated: false, readAt: 1 }
+      }
+      if (method === 'worktree.diff') return patchOf('* Unmerged path src/app.ts\n')
+      if (method === 'worktree.resolve') return { worktreeId: 'w1', conflicts: [] }
+      return undefined
+    })
+    mount()
+
+    const blocks = await waitFor(() => {
+      const found = document.querySelectorAll('.conflict__block')
+      if (found.length === 0) throw new Error('no conflict view yet')
+      return found
+    })
+    expect(blocks).toHaveLength(2)
+    expect(screen.queryByText('No content changed')).toBeNull()
+    // In a merge HEAD is this task; the other side is the parent coming in.
+    const sides = [...blocks[0]!.querySelectorAll('.conflict__side')].map((side) => [
+      side.querySelector('.conflict__label')?.textContent,
+      side.querySelector('pre')?.textContent
+    ])
+    expect(sides).toEqual([
+      ['Payment', 'const tax = 0.2'],
+      ['Checkout tax', 'const tax = 0.1']
+    ])
+    expect(screen.getByText('1 of 2')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Next conflict' }))
+    expect(screen.getByText('2 of 2')).toBeTruthy()
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Take Theirs' })))
+    expect(call).toHaveBeenCalledWith('worktree.resolve', { worktreeId: 'w1', path: 'src/app.ts', take: 'theirs' })
+  })
+
   const changes = (total: number) => ({ worktreeId: 'w1', changes: [], total, limit: 1, truncated: false, readAt: 1 })
   const patchOf = (patch: string, staged = false) => ({
     worktreeId: 'w1',

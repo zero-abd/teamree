@@ -11,7 +11,8 @@ import {
   type RunKind,
   type Terminal,
   type UpdateState,
-  type Worktree
+  type Worktree,
+  type WorktreeStatus
 } from '@shared/entities'
 import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
 import type { SharedNoteSummary } from '@shared/sharedNote'
@@ -83,6 +84,9 @@ type WorktreeAction =
   | 'copy-worktree-path'
   | 'copy-worktree-branch'
   | 'update-worktree'
+  | 'resolve-conflicts'
+  | 'continue-update'
+  | 'abort-update'
   | 'remove-worktree'
   | 'forget-worktree'
   | 'create-pull-request'
@@ -272,6 +276,21 @@ function panelActions(context: PaletteContext): ActionRow[] {
   ]
 }
 
+/** An update stopped part-way: the conflicts, and the two ways out of it. */
+function midUpdateRows(status: Pick<Partial<WorktreeStatus>, 'operation' | 'conflicted'> | undefined): ActionRow[] {
+  if (status?.operation === undefined) return []
+  return [
+    { id: 'resolve-conflicts', label: 'Resolve Conflicts', keywords: 'conflicts merge rebase resolve markers' },
+    {
+      id: 'continue-update',
+      label: 'Continue Update',
+      keywords: 'continue finish merge rebase conflicts resolved',
+      ...((status.conflicted ?? 0) > 0 ? { unavailable: `${status.conflicted} conflicted` } : {})
+    },
+    { id: 'abort-update', label: 'Abort Update', keywords: 'abort undo cancel merge rebase conflicts' }
+  ]
+}
+
 /** The sidebar row's menu for the worktree on screen, and the focused file's discard and unstage. */
 function worktreeActions(context: PaletteContext): PaletteItem[] {
   const active = context.worktrees.find((worktree) => worktree.id === context.activeWorktreeId)
@@ -316,6 +335,7 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
           label: `Compare with ${runName(other)}`,
           keywords: 'compare diff runs sibling agents task side by side'
         })),
+        ...midUpdateRows(context.statuses?.[active.id]),
         ...(context.updateFrom
           ? [
               {

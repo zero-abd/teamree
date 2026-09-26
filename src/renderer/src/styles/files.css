@@ -498,3 +498,115 @@
 .shared-note__gone {
   color: var(--fg-muted);
 }
+
+/* A conflicted file in place of its diff: the blocks, ↑/↓ between them, and the file's answers. */
+.conflict__bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s1) var(--s3);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-raised);
+  font-size: var(--text-sm);
+}
+
+.conflict__count {
+  min-width: 7ch;
+  color: var(--fg-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.conflict__bar .file__icon {
+  padding: 0 var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-secondary);
+  cursor: pointer;
+}
+
+.conflict__bar .file__icon:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.conflict__answers {
+  display: flex;
+  gap: var(--s2);
+  margin-inline-start: auto;
+}
+
+.conflict__answers button {
+  padding: 2px var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: var(--bg-hover);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.conflict__answers button:hover {
+  background: var(--bg-press);
+}
+
+.conflict {
+  padding: var(--s2) 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+.conflict pre {
+  margin: 0;
+  padding: 0 var(--s4);
+  font: inherit;
+  white-space: pre;
+}
+
+.conflict__text {
+  color: var(--fg-secondary);
+}
+
+.conflict__fold > summary {
+  padding: 0 var(--s4);
+  color: var(--fg-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.conflict__block {
+  margin: var(--s1) 0;
+  border-inline-start: 2px solid var(--line-strong);
+}
+
+.conflict__block--current {
+  border-inline-start-color: var(--accent);
+}
+
+.conflict__side {
+  padding: var(--s1) 0;
+}
+
+.conflict__side--ours {
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.conflict__side--theirs {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.conflict__side--base {
+  background: var(--bg-hover);
+}
+
+.conflict__label {
+  display: block;
+  padding: 0 var(--s4);
+  color: var(--fg-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}

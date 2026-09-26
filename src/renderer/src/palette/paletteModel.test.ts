@@ -687,6 +687,40 @@ describe('what the palette offers for the worktree on screen', () => {
     expect(filterPalette(behind, 'rebase')[0]?.label).toBe('Update from main')
   })
 
+  it('offers Resolve Conflicts, Continue Update and Abort Update while an update is stopped', () => {
+    const stopped = (conflicted: number) =>
+      buildPaletteItems(
+        context({
+          worktrees: [worktree({ id: 'w1' })],
+          activeWorktreeId: 'w1',
+          statuses: {
+            w1: {
+              worktreeId: 'w1',
+              branch: 'task/w1',
+              ahead: 1,
+              behind: 1,
+              staged: 0,
+              unstaged: 0,
+              untracked: 0,
+              conflicted,
+              operation: 'rebase',
+              readAt: 0
+            }
+          }
+        })
+      )
+    const rows = stopped(2).filter((item) => item.kind === 'action' && item.here === true)
+    expect(rows.map((item) => item.label)).toEqual(
+      expect.arrayContaining(['Resolve Conflicts', 'Continue Update', 'Abort Update'])
+    )
+    expect(rows.find((item) => item.label === 'Continue Update')).toMatchObject({ unavailable: '2 conflicted' })
+    expect(stopped(0).find((item) => item.label === 'Continue Update')?.kind === 'action').toBe(true)
+    expect(
+      (stopped(0).find((item) => item.label === 'Continue Update') as { unavailable?: string }).unavailable
+    ).toBeUndefined()
+    expect(labels()).not.toContain('Continue Update')
+  })
+
   it('offers discard and unstage only for a focused file that has them', () => {
     expect(labels()).not.toContain('Discard File Changes…')
     const both = labels({ focusedChange: { path: 'src/a.ts', discardable: true, staged: true } })

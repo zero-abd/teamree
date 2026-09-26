@@ -10,6 +10,8 @@ import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { CommitFrom } from '../workspace/rightPanel/CommitFrom'
 import { useCommitMessage } from '../workspace/rightPanel/commitMessage'
+import { harnessName } from '../agents/harnesses'
+import { askerOf, conflictHeadline, updateSides } from '../workspace/rightPanel/conflictState'
 import { Confirm } from './Confirm'
 
 const SHOWN = 5
@@ -38,6 +40,12 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   )
   const [pushEdit, setPushEdit] = useState<boolean | null>(null)
   const push = offerPush && (pushEdit ?? pushChoice)
+  const worktrees = useWorkspaceStore((state) => state.worktrees)
+  const projects = useWorkspaceStore((state) => state.projects)
+  const asker = useWorkspaceStore((state) => askerOf(state, worktreeId))
+  const showRightPanelTab = useWorkspaceStore((state) => state.showRightPanelTab)
+  const updateWorktree = useWorkspaceStore((state) => state.updateWorktree)
+  const askToResolve = useWorkspaceStore((state) => state.askToResolve)
 
   // Selected, so typing replaces a suggestion rather than adding to it.
   useEffect(() => {
@@ -96,13 +104,102 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
     }
     const why = await mergeIntoBase(worktreeId, offerPush ? push : undefined)
     if (why === null) return
-    setError(why)
+    // A conflict the commit just made is said as one, with the way through, rather than as git's line.
+    const replanned = await runtimeClient.call('worktree.mergeIntoBase', { worktreeId, dryRun: true }).catch(() => null)
+    if (replanned?.conflicts !== undefined) setPlan(replanned)
+    else setError(why)
     setMerging(false)
+  }
+
+  /** Brings what it would conflict with into the task, where the conflict can be resolved, and shows it there. */
+  const takeIn = async (ask: boolean): Promise<void> => {
+    setMerging(true)
+    setError(null)
+    if (commitFirst) {
+      try {
+        await runtimeClient.call('worktree.commit', { worktreeId, message, all: true })
+        setMessage('')
+      } catch (failure) {
+        setError(failure instanceof Error ? failure.message : String(failure))
+        setMerging(false)
+        return
+      }
+    }
+    await showConflicts()
+    const update = await updateWorktree(worktreeId, true)
+    if (ask && update?.outcome === 'conflicts') await askToResolve(worktreeId, update.conflicts)
+  }
+
+  const showConflicts = async (): Promise<void> => {
+    closeDialog()
+    const store = useWorkspaceStore.getState()
+    if (store.activeWorktreeId !== worktreeId) await store.openWorktree(worktreeId)
+    showRightPanelTab('changes')
+  }
+
+  const sides = updateSides(worktrees, projects, worktreeId)
+  const title = `Merge ${name} into ${into}?`
+  if (status?.operation !== undefined) {
+    return (
+      <Confirm
+        title={title}
+        body={conflictHeadline(status.operation, sides, status.conflicted)}
+        cancel="Cancel"
+        confirm="Show Conflicts"
+        tone="primary"
+        onCancel={closeDialog}
+        onConfirm={() => void showConflicts()}
+      />
+    )
+  }
+  const conflicts = plan?.conflicts ?? []
+  if (conflicts.length > 0) {
+    const needsMessage = commitFirst && message.trim() === ''
+    return (
+      <Confirm
+        title={title}
+        titleHint={plan?.checkout}
+        cancel="Cancel"
+        confirm={worktree?.parentId === undefined ? `Update from ${into}` : 'Update from Parent'}
+        tone="primary"
+        confirmDisabled={merging || needsMessage}
+        {...(needsMessage ? { confirmHint: 'Needs a commit message' } : {})}
+        {...(asker === null
+          ? {}
+          : { decline: { label: `Ask ${harnessName(asker)} to Resolve`, onChoose: () => void takeIn(true) } })}
+        onCancel={closeDialog}
+        onConfirm={() => void takeIn(false)}
+      >
+        <p className="confirm__body">{`Conflicts with ${sides.incoming}`}</p>
+        <Lines lines={conflicts} />
+        {commitFirst ? (
+          <>
+            <textarea
+              ref={messageBox}
+              className="field__input field__input--message"
+              rows={1}
+              value={message}
+              placeholder="Commit message"
+              aria-label="Commit message"
+              autoFocus
+              disabled={merging}
+              onChange={(event) => setMessage(event.target.value)}
+            />
+            <CommitFrom from={merging ? null : from} onClear={() => setMessage('')} />
+          </>
+        ) : null}
+        {error === null ? null : (
+          <span className="field__error" role="alert">
+            {error}
+          </span>
+        )}
+      </Confirm>
+    )
   }
 
   return (
     <Confirm
-      title={`Merge ${name} into ${into}?`}
+      title={title}
       titleHint={plan?.checkout}
       cancel="Cancel"
       confirm={merging ? 'Merging…' : commitFirst ? 'Commit & Merge' : 'Merge'}

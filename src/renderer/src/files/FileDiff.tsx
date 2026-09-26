@@ -11,6 +11,7 @@ import { EMPTY_PANE_SEARCH, paneSearchReducer, type PaneSearchState } from '../t
 import { TerminalSearchBar } from '../terminal/TerminalSearchBar'
 import { withoutWhitespace } from '../workspace/lineDiff'
 import { fitLayout, PatchView, type PatchPlace, type PatchViewProps } from '../workspace/PatchView'
+import { ConflictView } from './ConflictView'
 import { Segments } from './FileBar'
 import { DIFF_MATCH_LIMIT, findInPatches, stepMatch, type DiffMatch } from './diffFind'
 import { usePagedPatch } from './usePagedPatch'
@@ -23,6 +24,8 @@ export type FileDiff = {
   shown: boolean
   /** Null until the worktree has answered. */
   changed: boolean | null
+  /** Mid-update with this file unmerged: its diff is its two sides. */
+  conflicted: boolean
   diffs: Diffs | null
   error: string | null
   layout: DiffLayout
@@ -37,6 +40,7 @@ export function useFileDiff(paneId: string, worktreeId: string, path: string): F
   const shown = useWorkspaceStore((state) => state.diffPanes[paneId] === true)
   const setPaneDiff = useWorkspaceStore((state) => state.setPaneDiff)
   const [changed, setChanged] = useState<boolean | null>(null)
+  const [conflicted, setConflicted] = useState(false)
   const [diffs, setDiffs] = useState<Diffs | null>(null)
   const [error, setError] = useState<string | null>(null)
   const body = useRef<HTMLDivElement | null>(null)
@@ -49,7 +53,9 @@ export function useFileDiff(paneId: string, worktreeId: string, path: string): F
     runtimeClient
       .call('worktree.changes', { worktreeId, path, limit: 1 })
       .then((changes) => {
-        if (alive && changes) setChanged(changes.total > 0)
+        if (!alive || !changes) return
+        setChanged(changes.total > 0)
+        setConflicted(changes.changes[0]?.kind === 'conflicted')
       })
       .catch(() => undefined)
     return () => {
@@ -86,7 +92,18 @@ export function useFileDiff(paneId: string, worktreeId: string, path: string): F
     }
   }, [shown, diffs, paneId, setPaneDiff])
 
-  return { paneId, path, shown, changed, diffs, error, layout: fitLayout(diffLayout, bodyWidth), body, bodyWidth }
+  return {
+    paneId,
+    path,
+    shown,
+    changed,
+    conflicted,
+    diffs,
+    error,
+    layout: fitLayout(diffLayout, bodyWidth),
+    body,
+    bodyWidth
+  }
 }
 
 /** The bar's diff controls: the file (`view` names it) or its diff, then the layouts while the diff is open. */
@@ -108,7 +125,7 @@ export function DiffTools({ diff, view = 'Code' }: { diff: FileDiff; view?: stri
           Diff
         </button>
       </Segments>
-      {shown ? <LayoutTools layout={layout} bodyWidth={diff.bodyWidth} /> : null}
+      {shown && !diff.conflicted ? <LayoutTools layout={layout} bodyWidth={diff.bodyWidth} /> : null}
     </>
   )
 }
@@ -302,6 +319,7 @@ export function DiffBody({
 
   const bar = findBar(find, scroller, searchToken, onCloseSearch)
 
+  if (diff.conflicted) return <ConflictView worktreeId={worktreeId} path={path} />
   if (diffs === null || (staged === null && working === null)) {
     return (
       <div className="file__diffs">

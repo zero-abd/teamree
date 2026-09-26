@@ -3,7 +3,7 @@
 // optimisation: without it git C-quotes paths with spaces, quotes or non-ASCII bytes.
 
 import { createReadStream } from 'node:fs'
-import { lstat } from 'node:fs/promises'
+import { lstat, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { WorktreeChange, WorktreeChangeKind, WorktreeChanges, WorktreeDiff } from '../../shared/entities'
 import { conflictCount } from '../../shared/conflictMarkers'
