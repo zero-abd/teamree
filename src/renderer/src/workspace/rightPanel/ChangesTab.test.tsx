@@ -1297,39 +1297,196 @@ describe('keeping up with the base', () => {
     withChanges([{ path: 'src/math.ts', kind: 'conflicted', staged: false, unstaged: true }, ...rows.slice(0, 1)])
     useWorkspaceStore.setState({ terminals: { 't-claude': agentPane } })
     call.mockImplementation((method: string) =>
-      method === 'worktree.abortUpdate' || method === 'terminal.write'
+      method === 'worktree.abortUpdate' || method === 'message.send'
         ? Promise.resolve({ worktreeId: 'w1', aborted: 'rebase' })
         : new Promise(() => {})
     )
     render(<ChangesTab />)
 
     const conflicts = screen.getByRole('region', { name: 'Conflicts' })
-    expect(conflicts.textContent).toContain('Conflicts')
-    expect(conflicts.textContent).toContain('1')
+    expect(conflicts.textContent).toContain('1 conflicted')
     expect(conflicts.textContent).toContain('math.ts')
     // Not twice: the conflicted file is not also a row to tick for a commit.
     expect(screen.getAllByText('math.ts')).toHaveLength(1)
     expect(screen.queryByRole('button', { name: /Update from/ })).toBeNull()
 
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Ask Claude Code to Resolve' })))
-    const write = call.mock.calls.find(([method]) => method === 'terminal.write') as [string, { data: string }]
-    expect(write[1]).toMatchObject({ terminalId: 't-claude' })
-    const typed = write[1].data
-    expect(typed).toContain('src/math.ts')
-    expect(typed).toContain('rebase')
-    // Typed, not sent: the owner reads it and presses Return.
-    expect(typed).not.toMatch(/[\r\n]/)
+    // Through the message queue: pasted once the agent is at its prompt and nobody is typing there.
+    const sent = call.mock.calls.find(([method]) => method === 'message.send') as [string, { text: string }]
+    expect(sent[1]).toMatchObject({
+      from: { you: true },
+      to: { worktreeId: 'w1', terminalId: 't-claude' },
+      kind: 'note'
+    })
+    expect(sent[1].text).toContain('src/math.ts')
+    expect(sent[1].text).toContain('git rebase --continue')
+    expect(call.mock.calls.some(([method]) => method === 'terminal.write')).toBe(false)
 
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Abort' })))
     expect(call).toHaveBeenCalledWith('worktree.abortUpdate', { worktreeId: 'w1' })
   })
 
-  it('offers no agent to ask when the worktree runs none', () => {
+  it('still offers the default agent when the worktree runs none, and starts it with the prompt', async () => {
     seed({ operation: 'merge', conflicted: 1 })
     withChanges([{ path: 'src/math.ts', kind: 'conflicted', staged: false, unstaged: true }])
+    useWorkspaceStore.setState({
+      agents: [
+        { kind: 'codex', command: 'codex', binary: '/bin/codex' },
+        { kind: 'claude', command: 'claude', binary: '/bin/claude' }
+      ],
+      defaultAgent: 'claude'
+    })
+    call.mockImplementation((method: string) =>
+      method === 'terminal.create' ? Promise.resolve({ ...agentPane, id: 't-new' }) : new Promise(() => {})
+    )
     render(<ChangesTab />)
-    expect(screen.queryByRole('button', { name: /to Resolve/ })).toBeNull()
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Ask Claude Code to Resolve' })))
+    const created = call.mock.calls.find(([method]) => method === 'terminal.create') as [
+      string,
+      { worktreeId: string; command: string; prompt: string }
+    ]
+    expect(created[1]).toMatchObject({ worktreeId: 'w1', command: 'claude' })
+    expect(created[1].prompt).toContain('src/math.ts')
+    expect(created[1].prompt).toContain('git commit --no-edit')
     expect(screen.getByRole('button', { name: 'Abort' })).toBeTruthy()
+  })
+})
+
+describe('a stopped update', () => {
+  const parentWorktree: Worktree = {
+    id: 'w0',
+    projectId: 'p1',
+    name: 'Checkout tax',
+    branch: 'checkout-tax',
+    path: '/wt/checkout-tax',
+    startedFrom: 'abc',
+    state: 'ready',
+    createdAt: 0
+  }
+  const payment: Worktree = {
+    ...parentWorktree,
+    id: 'w1',
+    name: 'Payment',
+    branch: 'checkout-tax--payment',
+    path: '/wt/checkout-tax--payment',
+    parentId: 'w0',
+    baseRef: 'checkout-tax'
+  }
+  const money = (markers?: number): WorktreeChange => ({
+    path: 'src/money.js',
+    kind: 'conflicted',
+    staged: false,
+    unstaged: true,
+    ...(markers === undefined ? {} : { markers })
+  })
+  const resolved = { worktreeId: 'w1', conflicts: [] }
+
+  beforeEach(() => {
+    useWorkspaceStore.setState({ worktrees: [parentWorktree, payment] })
+  })
+
+  it('names the tasks, not their folders, and counts what is conflicted', () => {
+    seed({ operation: 'merge', conflicted: 1 })
+    useWorkspaceStore.setState({ worktrees: [parentWorktree, payment] })
+    withChanges([money(2)])
+    render(<ChangesTab />)
+    const head = screen.getByRole('region', { name: 'Conflicts' }).querySelector('.changes__conflictHead')
+    expect(head?.textContent).toBe('Merging Checkout tax into Payment · 1 conflicted')
+  })
+
+  it('says a rebase the other way round, and a top-level task names main', () => {
+    seed({ operation: 'rebase', conflicted: 1 })
+    useWorkspaceStore.setState({ worktrees: [parentWorktree, payment] })
+    withChanges([money(1)])
+    const { unmount } = render(<ChangesTab />)
+    expect(document.querySelector('.changes__conflictHead')?.textContent).toBe(
+      'Rebasing Payment onto Checkout tax · 1 conflicted'
+    )
+    unmount()
+
+    useWorkspaceStore.setState({ worktrees: [{ ...payment, parentId: undefined, baseRef: undefined }] })
+    render(<ChangesTab />)
+    expect(document.querySelector('.changes__conflictHead')?.textContent).toBe(
+      'Rebasing Payment onto main · 1 conflicted'
+    )
+  })
+
+  it('marks each file Unresolved while markers remain and Resolved once they are gone', () => {
+    seed({ operation: 'merge', conflicted: 2 })
+    useWorkspaceStore.setState({ worktrees: [parentWorktree, payment] })
+    withChanges([money(1), { path: 'src/tax.js', kind: 'conflicted', staged: false, unstaged: true, markers: 0 }])
+    render(<ChangesTab />)
+    const region = screen.getByRole('region', { name: 'Conflicts' })
+    expect(within(region).getByTitle('src/money.js').closest('li')?.textContent).toContain('Unresolved')
+    expect(within(region).getByTitle('src/tax.js').closest('li')?.textContent).toContain('Resolved')
+  })
+
+  it('marks a file resolved, or takes one side whole, per file', async () => {
+    seed({ operation: 'merge', conflicted: 1 })
+    useWorkspaceStore.setState({ worktrees: [parentWorktree, payment] })
+    withChanges([money(0)])
+    call.mockImplementation((method: string) =>
+      method === 'worktree.resolve' ? Promise.resolve(resolved) : new Promise(() => {})
+    )
+    render(<ChangesTab />)
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Mark src/money.js Resolved' })))
+    expect(call).toHaveBeenCalledWith('worktree.resolve', { worktreeId: 'w1', path: 'src/money.js' })
+    const ours = screen.getByRole('button', { name: 'Take Ours for src/money.js' })
+    expect(ours.getAttribute('title')).toBe('Payment’s version')
+    await act(async () => fireEvent.click(ours))
+    expect(call).toHaveBeenCalledWith('worktree.resolve', { worktreeId: 'w1', path: 'src/money.js', take: 'ours' })
+    const theirs = screen.getByRole('button', { name: 'Take Theirs for src/money.js' })
+    expect(theirs.getAttribute('title')).toBe('Checkout tax’s version')
+    await act(async () => fireEvent.click(theirs))
+    expect(call).toHaveBeenCalledWith('worktree.resolve', { worktreeId: 'w1', path: 'src/money.js', take: 'theirs' })
+  })
+
+  it('keeps Continue off until nothing is conflicted, then finishes the update with it', async () => {
+    seed({ operation: 'merge', conflicted: 1 })
+    useWorkspaceStore.setState({ worktrees: [parentWorktree, payment] })
+    withChanges([money(1)])
+    const { rerender } = render(<ChangesTab />)
+    expect((screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement).disabled).toBe(true)
+
+    seed({ operation: 'merge', conflicted: 0, staged: 1 })
+    useWorkspaceStore.setState({ worktrees: [parentWorktree, payment] })
+    withChanges([{ path: 'src/money.js', kind: 'modified', staged: true, unstaged: false }])
+    call.mockImplementation((method: string) =>
+      method === 'worktree.continueUpdate'
+        ? Promise.resolve({
+            worktreeId: 'w1',
+            baseRef: 'checkout-tax',
+            mode: 'merge',
+            outcome: 'updated',
+            conflicts: [],
+            updatedAt: 0
+          })
+        : new Promise(() => {})
+    )
+    rerender(<ChangesTab />)
+    expect(document.querySelector('.changes__conflictHead')?.textContent).toBe(
+      'Merging Checkout tax into Payment · all resolved'
+    )
+    const go = screen.getByRole('button', { name: 'Continue' }) as HTMLButtonElement
+    expect(go.disabled).toBe(false)
+    await act(async () => fireEvent.click(go))
+    expect(call).toHaveBeenCalledWith('worktree.continueUpdate', { worktreeId: 'w1' })
+  })
+
+  it('continues a rebase the same way, and says why it stopped when git refuses', async () => {
+    seed({ operation: 'rebase', conflicted: 0 })
+    useWorkspaceStore.setState({ worktrees: [parentWorktree, payment] })
+    call.mockImplementation((method: string) =>
+      method === 'worktree.continueUpdate'
+        ? Promise.reject(new Error('could not continue the rebase'))
+        : new Promise(() => {})
+    )
+    render(<ChangesTab />)
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Continue' })))
+    expect(call).toHaveBeenCalledWith('worktree.continueUpdate', { worktreeId: 'w1' })
+    expect(screen.getByRole('alert').textContent).toBe('could not continue the rebase')
   })
 })
 

@@ -843,10 +843,17 @@ export const worktreeCommands: readonly CommandSpec[] = [
     summary: "Bring the base into a worktree, or a child's parent into it.",
     details:
       'Rebases an unpublished branch and merges into a published one. Refused over uncommitted changes. ' +
-      'A conflict stops part-way, exits 1 and names the paths; resolve them, or --abort.',
+      'A conflict stops part-way, exits 1 and names the paths; resolve them and git add each, then --continue, or --abort.',
     args: [{ name: 'worktree', description: 'Worktree id, name, path, branch, or here.', required: true }],
-    flags: [{ name: 'abort', kind: 'boolean', description: 'Undo an update that stopped on conflicts.' }],
-    examples: ['teamree worktree update here', 'teamree worktree update here --abort'],
+    flags: [
+      { name: 'abort', kind: 'boolean', description: 'Undo an update that stopped on conflicts.' },
+      { name: 'continue', kind: 'boolean', description: 'Finish it once no conflict is left.' }
+    ],
+    examples: [
+      'teamree worktree update here',
+      'teamree worktree update here --continue',
+      'teamree worktree update here --abort'
+    ],
     run: async (context) => {
       const selector = context.args[0] as string
       const worktree = await resolveWorktree(context.client, selector, { env: context.env, cwd: context.cwd })
@@ -854,11 +861,13 @@ export const worktreeCommands: readonly CommandSpec[] = [
         const undone = await context.client.call('worktree.abortUpdate', { worktreeId: worktree.id })
         return { data: undone, text: undone.aborted === null ? 'Nothing to abort.' : `Aborted the ${undone.aborted}.` }
       }
-      const result = await context.client.call('worktree.update', { worktreeId: worktree.id })
+      const result = readBoolean(context.flags, 'continue')
+        ? await context.client.call('worktree.continueUpdate', { worktreeId: worktree.id })
+        : await context.client.call('worktree.update', { worktreeId: worktree.id })
       if (result.outcome === 'conflicts') {
         throw new CliError({
           code: 'conflicts',
-          message: `Conflicts in ${result.conflicts.join(', ')}. Resolve them, or: teamree worktree update ${selector} --abort`,
+          message: `Conflicts in ${result.conflicts.join(', ')}. Resolve and git add them, then: teamree worktree update ${selector} --continue (or --abort)`,
           exitCode: ExitCode.Failure,
           data: result
         })

@@ -386,3 +386,109 @@ describe('pushing main after the merge', () => {
     )
   })
 })
+
+describe('a merge that would conflict', () => {
+  const parent: Worktree = { ...worktree, id: 'w0', name: 'Checkout tax', branch: 'checkout-tax' }
+  const payment: Worktree = {
+    ...worktree,
+    name: 'Payment',
+    branch: 'checkout-tax--payment',
+    parentId: 'w0',
+    baseRef: 'checkout-tax'
+  }
+  const conflicted: WorktreeMerge = {
+    ...plan,
+    into: 'checkout-tax',
+    fastForward: false,
+    conflicts: ['src/shared/money.js']
+  }
+  const stopped = {
+    worktreeId: 'w1',
+    baseRef: 'checkout-tax',
+    mode: 'merge',
+    outcome: 'conflicts',
+    conflicts: ['src/shared/money.js'],
+    updatedAt: 0
+  }
+
+  const midMerge = {
+    worktreeId: 'w1',
+    branch: 'checkout-tax--payment',
+    ahead: 1,
+    behind: 1,
+    staged: 0,
+    unstaged: 0,
+    untracked: 0,
+    conflicted: 1,
+    operation: 'merge',
+    readAt: 0
+  } as const
+
+  beforeEach(() => {
+    useWorkspaceStore.setState({
+      worktrees: [parent, payment],
+      agents: [{ kind: 'claude', command: 'claude', binary: '/bin/claude' }],
+      defaultAgent: 'claude'
+    })
+    call.mockImplementation((method: unknown) => {
+      if (method === 'worktree.mergeIntoBase') return Promise.resolve(conflicted)
+      if (method === 'worktree.update') return Promise.resolve(stopped)
+      if (method === 'terminal.create') return Promise.resolve({ id: 't9', worktreeId: 'w1', running: true })
+      if (method === 'worktree.status') return Promise.resolve(midMerge)
+      return new Promise(() => {})
+    })
+  })
+
+  it('says which files instead of offering a Merge that cannot land, and names the parent task', async () => {
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    await screen.findByText('Conflicts with Checkout tax')
+    expect(screen.getByText('src/shared/money.js')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
+    expect(screen.queryByText(/checkout-tax--payment/)).toBeNull()
+  })
+
+  it('updates from the parent into the task, where the conflict can be resolved, and shows it', async () => {
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Update from Parent' }))
+    await waitFor(() => expect(call).toHaveBeenCalledWith('worktree.update', { worktreeId: 'w1', landing: true }))
+    expect(useWorkspaceStore.getState().dialog).toBeNull()
+    expect(useWorkspaceStore.getState().rightPanelTab).toBe('changes')
+  })
+
+  it('asks the default agent to resolve, starting it on the conflicts the update stopped on', async () => {
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask Claude Code to Resolve' }))
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith('terminal.create', expect.objectContaining({ worktreeId: 'w1' }))
+    )
+    const created = call.mock.calls.find(([method]) => method === 'terminal.create')?.[1] as { prompt: string }
+    expect(created.prompt).toContain('src/shared/money.js')
+    expect(created.prompt).toContain('Checkout tax is being merged into Payment')
+  })
+
+  it('learns of the conflict from a merge that failed on it, and stops offering Merge', async () => {
+    let dry = true
+    call.mockImplementation((method: unknown, params: unknown) => {
+      if (method === 'worktree.mergeIntoBase') {
+        if ((params as { dryRun?: boolean }).dryRun === true) return Promise.resolve(dry ? plan : conflicted)
+        dry = false
+        return Promise.reject(new Error('checkout-tax--payment conflicts with checkout-tax in src/shared/money.js'))
+      }
+      return new Promise(() => {})
+    })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
+    await screen.findByText('Conflicts with Checkout tax')
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Merge' })).toBeNull()
+  })
+
+  it('points at the conflicts already in the task while it is mid-update', async () => {
+    useWorkspaceStore.setState({ statuses: { w1: midMerge } })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    expect(await screen.findByText('Merging Checkout tax into Payment · 1 conflicted')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Show Conflicts' }))
+    expect(useWorkspaceStore.getState().dialog).toBeNull()
+    expect(useWorkspaceStore.getState().rightPanelTab).toBe('changes')
+  })
+})

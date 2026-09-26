@@ -893,6 +893,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
       }
       return { worktreeId, aborted }
     },
+    'worktree.continueUpdate': notInDemo('worktree.continueUpdate'),
+    'worktree.resolve': notInDemo('worktree.resolve'),
     // No origin here: every landing is a merge into the base, and none is ever made.
     'worktree.landing': ({ worktreeId }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')

@@ -16,8 +16,9 @@ import { CommitFrom } from './CommitFrom'
 import { useCommitMessage } from './commitMessage'
 import { headerActions, landLabel, landNote, landOffer, pushOffer, type HeaderAction } from './landOffer'
 import { PullRequestChecks } from './PullRequestChecks'
-import type { PaneNode, Terminal, Worktree, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
+import type { PaneNode, Worktree, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 import { fileColumnIn, isCommitLeaf, shownTabId } from '@shared/filePane'
+import { askerOf, conflictHeadline, updateSides } from './conflictState'
 import { TokensLine } from './TokensLine'
 import { ContextSection } from './ContextSection'
 
@@ -51,15 +52,19 @@ export function ChangesTab(): React.JSX.Element | null {
   const updateError = useWorkspaceStore((state) => (worktreeId ? state.updateErrors[worktreeId] : undefined))
   const updateWorktree = useWorkspaceStore((state) => state.updateWorktree)
   const abortUpdate = useWorkspaceStore((state) => state.abortUpdate)
-  const typeIntoPane = useWorkspaceStore((state) => state.typeIntoPane)
-  const focusPane = useWorkspaceStore((state) => state.focusPane)
+  const continueUpdate = useWorkspaceStore((state) => state.continueUpdate)
+  const resolveConflict = useWorkspaceStore((state) => state.resolveConflict)
+  const askToResolve = useWorkspaceStore((state) => state.askToResolve)
+  const worktrees = useWorkspaceStore((state) => state.worktrees)
+  const projects = useWorkspaceStore((state) => state.projects)
+  // The running agent is asked; with none, the default agent is started for it.
+  const asker = useWorkspaceStore((state) => (worktreeId === null ? null : askerOf(state, worktreeId)))
   const child = useWorkspaceStore((state) => childOf(state.worktrees, worktreeId))
   const baseRef = useWorkspaceStore((state) => {
     const worktree = state.worktrees.find((entry) => entry.id === worktreeId)
     if (worktree?.parentId !== undefined && worktree.baseRef !== undefined) return worktree.baseRef
     return state.projects.find((project) => project.id === worktree?.projectId)?.baseRef
   })
-  const terminals = useWorkspaceStore((state) => state.terminals)
   const shownCommit = useWorkspaceStore((state) =>
     worktreeId ? shownCommitIn(state.layouts[worktreeId]?.root ?? null) : null
   )
@@ -72,6 +77,8 @@ export function ChangesTab(): React.JSX.Element | null {
 
   if (!worktreeId) return null
 
+  const sides = updateSides(worktrees, projects, worktreeId)
+
   const listed = changes?.changes ?? []
   // Conflicts get a list of their own; they cannot be ticked into a commit.
   const conflictRows = listed.filter((change) => change.kind === 'conflicted')
@@ -82,7 +89,6 @@ export function ChangesTab(): React.JSX.Element | null {
   const branchRows = branch?.changes ?? []
   const midway = status?.operation
   const base = baseRef ?? log?.baseRef
-  const agentPane = agentPaneOf(terminals, worktreeId)
   const ticked = new Set(stagedPaths)
   const tick = (change: WorktreeChange): Tick => tickOf(change, ticked.has(change.path))
   const checked = (change: WorktreeChange): boolean => tick(change) === 'on' || tick(change) === 'index'
@@ -215,14 +221,17 @@ export function ChangesTab(): React.JSX.Element | null {
       )}
       {conflictRows.length > 0 || midway !== undefined ? (
         <section className="changes__conflicts" aria-label="Conflicts">
-          <h3 className="commits__title">
-            Conflicts
-            <span className="panel__count">{conflictRows.length}</span>
-          </h3>
+          <p className="changes__conflictHead">
+            {midway === undefined
+              ? `${conflictRows.length} conflicted`
+              : conflictHeadline(midway, sides, conflictRows.length)}
+          </p>
           <ul className="changes__list">
             {conflictRows.map((change) => (
               <li
-                className={`changes__item${change.path === selectedPath ? ' changes__item--selected' : ''}`}
+                className={`changes__item changes__item--conflict${
+                  change.path === selectedPath ? ' changes__item--selected' : ''
+                }`}
                 key={change.path}
               >
                 <button
@@ -239,28 +248,66 @@ export function ChangesTab(): React.JSX.Element | null {
                     <span className="change__dir">{directoryOf(change.path)}</span>
                     <span className="change__name">{fileNameOf(change.path)}</span>
                   </span>
+                  <span className={`change__where${change.markers === 0 ? ' change__where--resolved' : ''}`}>
+                    {change.markers === 0 ? 'Resolved' : 'Unresolved'}
+                  </span>
                 </button>
+                <span className="change__resolve">
+                  <button
+                    type="button"
+                    className={`change__discard${change.markers === 0 ? ' change__discard--go' : ''}`}
+                    aria-label={`Mark ${change.path} Resolved`}
+                    onClick={() => void resolveConflict(worktreeId, change.path)}
+                  >
+                    Mark Resolved
+                  </button>
+                  <button
+                    type="button"
+                    className="change__discard"
+                    aria-label={`Take Ours for ${change.path}`}
+                    title={`${sides.task}’s version`}
+                    onClick={() => void resolveConflict(worktreeId, change.path, 'ours')}
+                  >
+                    Take Ours
+                  </button>
+                  <button
+                    type="button"
+                    className="change__discard"
+                    aria-label={`Take Theirs for ${change.path}`}
+                    title={`${sides.incoming}’s version`}
+                    onClick={() => void resolveConflict(worktreeId, change.path, 'theirs')}
+                  >
+                    Take Theirs
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
           <div className="changes__conflictActions">
-            {agentPane !== undefined && conflictRows.length > 0 ? (
+            {conflictRows.length > 0 ? (
               <button
                 type="button"
                 className="button button--small button--primary"
-                onClick={() => {
-                  const paths = conflictRows.map((change) => change.path)
-                  void typeIntoPane(agentPane.id, resolvePrompt(paths, midway, base))
-                  focusPane(agentPane.id)
-                }}
+                disabled={asker === null}
+                onClick={() => void askToResolve(worktreeId)}
               >
-                Ask {harnessName(agentPane.kind)} to Resolve
+                {asker === null ? 'Ask Agent to Resolve' : `Ask ${harnessName(asker)} to Resolve`}
               </button>
             ) : null}
             {midway === undefined ? null : (
-              <button type="button" className="button button--small" onClick={() => void abortUpdate(worktreeId)}>
-                Abort
-              </button>
+              <>
+                <button
+                  type="button"
+                  className={`button button--small${conflictRows.length === 0 ? ' button--primary' : ''}`}
+                  disabled={conflictRows.length > 0 || updating !== null}
+                  onClick={() => void continueUpdate(worktreeId)}
+                >
+                  Continue
+                </button>
+                <button type="button" className="button button--small" onClick={() => void abortUpdate(worktreeId)}>
+                  Abort
+                </button>
+              </>
             )}
           </div>
         </section>
@@ -272,7 +319,7 @@ export function ChangesTab(): React.JSX.Element | null {
       {changes === undefined ? (
         <p className="changes__empty">Reading…</p>
       ) : rows.length === 0 ? (
-        conflictRows.length > 0 ? null : (
+        conflictRows.length > 0 || midway !== undefined ? null : (
           <p className="changes__empty">{emptyChangesLabel(log)}</p>
         )
       ) : (
@@ -517,33 +564,6 @@ export function ChangesTab(): React.JSX.Element | null {
       ) : null}
     </section>
   )
-}
-
-/** The running agent pane of this worktree, one started as an agent before one typed into a shell. */
-export function agentPaneOf(
-  terminals: Readonly<Record<string, Terminal>>,
-  worktreeId: string
-): { id: string; kind: NonNullable<Terminal['agent']> } | undefined {
-  const panes = Object.values(terminals).filter((terminal) => terminal.worktreeId === worktreeId && terminal.running)
-  const started = panes.find((terminal) => terminal.agent !== undefined)
-  if (started?.agent !== undefined) return { id: started.id, kind: started.agent }
-  const typed = panes.find((terminal) => terminal.foregroundAgent !== undefined)
-  return typed?.foregroundAgent === undefined ? undefined : { id: typed.id, kind: typed.foregroundAgent }
-}
-
-/** One line for the agent, typed and not sent: the files, and how to finish without an editor. */
-export function resolvePrompt(
-  paths: readonly string[],
-  operation: 'rebase' | 'merge' | undefined,
-  base = 'the base'
-): string {
-  const files = paths.join(', ')
-  if (operation === 'rebase') {
-    return `Resolve the conflicts in ${files} from rebasing onto ${base}, then run GIT_EDITOR=true git rebase --continue`
-  }
-  if (operation === 'merge')
-    return `Resolve the conflicts in ${files} from merging ${base}, then run git commit --no-edit`
-  return `Resolve the conflicts in ${files}`
 }
 
 /** Whether the worktree is a child, which updates from and lands in its parent. */

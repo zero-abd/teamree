@@ -176,3 +176,68 @@ describe('updating a child from its parent', () => {
     expect(await repo.git(['log', '--format=%s', '-1'], child.path)).toBe('child edit')
   })
 })
+
+describe('a child that conflicts with its parent', () => {
+  it('is told before the merge, updates from the parent, resolves, continues, and then lands', async () => {
+    const { repo, service, parent, child } = await tree()
+    await repo.write('auth.ts', 'child\n', child.path)
+    await repo.commit('child edit', child.path)
+    await repo.git(['push', '-u', 'origin', child.branch], child.path)
+    await repo.write('auth.ts', 'parent again\n', parent.path)
+    await repo.commit('parent edit', parent.path)
+
+    const plan = await service.worktreeMergeIntoBase({ worktreeId: child.id, dryRun: true })
+    expect(plan).toMatchObject({ into: parent.branch, conflicts: ['auth.ts'] })
+    const refused = await rejection(service.worktreeMergeIntoBase({ worktreeId: child.id }))
+    expect(refused.data).toEqual({ conflicts: ['auth.ts'] })
+
+    expect(await service.worktreeUpdate({ worktreeId: child.id })).toMatchObject({ outcome: 'conflicts' })
+    expect(await service.worktreeResolve({ worktreeId: child.id, path: 'auth.ts', take: 'ours' })).toEqual({
+      worktreeId: child.id,
+      conflicts: []
+    })
+    expect(await service.worktreeContinueUpdate({ worktreeId: child.id })).toMatchObject({
+      baseRef: parent.branch,
+      mode: 'merge',
+      outcome: 'updated'
+    })
+
+    const clean = await service.worktreeMergeIntoBase({ worktreeId: child.id, dryRun: true })
+    expect(clean.conflicts).toBeUndefined()
+    expect((await service.worktreeMergeIntoBase({ worktreeId: child.id })).merged).toBe(true)
+    expect(await repo.git(['show', 'HEAD:auth.ts'], parent.path)).toBe('child')
+  })
+})
+
+describe('a top-level task that conflicts with main', () => {
+  it('updates from main itself, where a landing not pushed yet sits ahead of origin', async () => {
+    const repo = await createTempRepo({ withRemote: true })
+    repos.push(repo)
+    await repo.write('shared.ts', 'base\n')
+    await repo.commit('shared')
+    await repo.git(['push', 'origin', 'main'])
+    const service = new GitService({ worktreesRoot: repo.worktreesRoot })
+    services.push(service)
+    const project = await service.addProject({ path: repo.repoPath })
+    const first = await ready(service, { projectId: project.id, name: 'First' })
+    const second = await ready(service, { projectId: project.id, name: 'Second' })
+    await repo.write('shared.ts', 'first\n', first.path)
+    await repo.commit('first edit', first.path)
+    await repo.git(['merge', '--ff-only', first.branch])
+    await repo.write('shared.ts', 'second\n', second.path)
+    await repo.commit('second edit', second.path)
+
+    expect((await service.worktreeMergeIntoBase({ worktreeId: second.id, dryRun: true })).conflicts).toEqual([
+      'shared.ts'
+    ])
+    // origin/main never saw the first landing, so only main itself brings the conflict in.
+    expect(await service.worktreeUpdate({ worktreeId: second.id, landing: true })).toMatchObject({
+      baseRef: 'main',
+      outcome: 'conflicts',
+      conflicts: ['shared.ts']
+    })
+    await service.worktreeResolve({ worktreeId: second.id, path: 'shared.ts', take: 'ours' })
+    expect(await service.worktreeContinueUpdate({ worktreeId: second.id })).toMatchObject({ outcome: 'updated' })
+    expect((await service.worktreeMergeIntoBase({ worktreeId: second.id })).merged).toBe(true)
+  })
+})

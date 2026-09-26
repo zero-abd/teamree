@@ -3,9 +3,10 @@
 // optimisation: without it git C-quotes paths with spaces, quotes or non-ASCII bytes.
 
 import { createReadStream } from 'node:fs'
-import { lstat } from 'node:fs/promises'
+import { lstat, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { WorktreeChange, WorktreeChangeKind, WorktreeChanges, WorktreeDiff } from '../../shared/entities'
+import { conflictCount } from '../../shared/conflictMarkers'
 import type { GitRunner } from './gitProcess'
 import { hasPreparedPaths, isPreparedPath, type PreparedPaths } from './worktreePreparation'
 
@@ -160,12 +161,29 @@ export async function readWorktreeChanges(runner: GitRunner, options: ChangesRea
   const all = sortChanges(await readStatusRecords(runner, options))
   return {
     worktreeId: options.worktreeId,
-    changes: await withLineCounts(runner, options, all.slice(0, limit)),
+    changes: await withMarkers(options.worktreePath, await withLineCounts(runner, options, all.slice(0, limit))),
     total: all.length,
     limit,
     truncated: all.length > limit,
     readAt: (options.now ?? Date.now)()
   }
+}
+
+/** Each conflicted row with the conflict blocks its file still holds, so a hand fix reads as resolved. */
+async function withMarkers(worktreePath: string, changes: WorktreeChange[]): Promise<WorktreeChange[]> {
+  return Promise.all(
+    changes.map(async (change) => {
+      if (change.kind !== 'conflicted') return change
+      try {
+        const file = join(worktreePath, change.path)
+        if ((await lstat(file)).size > COUNTED_BYTES) return change
+        return { ...change, markers: conflictCount(await readFile(file, 'utf8')) }
+      } catch {
+        // Deleted on one side: a delete against an edit is no marker to count, and not resolved either.
+        return change
+      }
+    })
+  )
 }
 
 /** The files the branch changed since `against`, uncommitted work and new files included, counted against it. */

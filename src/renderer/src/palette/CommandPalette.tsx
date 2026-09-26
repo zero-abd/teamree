@@ -441,6 +441,15 @@ export function CommandPalette({
       case 'update-worktree':
         if (active) void store.updateWorktree(active.id)
         break
+      case 'resolve-conflicts':
+        store.showRightPanelTab('changes')
+        break
+      case 'continue-update':
+        if (active) void store.continueUpdate(active.id)
+        break
+      case 'abort-update':
+        if (active) void store.abortUpdate(active.id)
+        break
       case 'create-pull-request':
         if (active) void store.createPullRequest(active.id)
         break

@@ -596,6 +596,41 @@
   flex: none;
 }
 
+/* `Merging cart totals into payment · 1 conflicted`: the whole state in one line. */
+.changes__conflictHead {
+  margin: 0;
+  padding: var(--s3) var(--s4) var(--s2);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+/* The file on one line, its three answers under it. */
+.changes__item--conflict {
+  flex-wrap: wrap;
+}
+
+.change__resolve {
+  display: flex;
+  flex-basis: 100%;
+  gap: var(--s1);
+  padding: 0 var(--s4) var(--s1) calc(var(--s4) + 1ch);
+}
+
+.change__resolve .change__discard {
+  margin: 0;
+  opacity: 1;
+}
+
+.change__resolve .change__discard--go {
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+
+.change__where--resolved {
+  color: var(--success);
+}
+
 /* Uncommitted and On Branch: each list shrinks and scrolls under its heading. */
 .changes__group {
   display: flex;

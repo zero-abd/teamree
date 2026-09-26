@@ -263,6 +263,8 @@ export type WorktreeChange = {
   /** Lines added and removed against HEAD, a new file's lines as added; absent when git cannot count them. */
   added?: number
   removed?: number
+  /** A conflicted path's conflict blocks still in the file; absent when it could not be read. */
+  markers?: number
 }
 
 /** Every changed path in a worktree, as of one read. */
@@ -459,6 +461,8 @@ export type WorktreeMerge = {
   pushed?: boolean
   /** Why that push did not land; the merge stands. */
   pushError?: { message: string; detail: string; kind?: PushFailureKind }
+  /** A plan's paths that would conflict; absent when it merges cleanly or git cannot tell. */
+  conflicts?: string[]
 }
 
 /** The project checkout's base branch against its upstream; `ahead` is landed work not pushed yet. */
@@ -532,6 +536,9 @@ export type WorktreeUpdate = {
 
 /** What `worktree.abortUpdate` undid; null when nothing was in progress. */
 export type WorktreeUpdateAbort = { worktreeId: string; aborted: 'rebase' | 'merge' | null }
+
+/** What `worktree.resolve` left: the paths still conflicted. */
+export type WorktreeResolve = { worktreeId: string; conflicts: string[] }
 
 /** `data` of a failed `worktree.push`, whose message is one clause: git's whole refusal. */
 export type PushFailureData = { detail: string; kind?: PushFailureKind }

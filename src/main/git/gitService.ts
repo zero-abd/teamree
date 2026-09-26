@@ -39,7 +39,8 @@ import type {
   WorktreeSetupCheck,
   WorktreeStatus,
   WorktreeUpdate,
-  WorktreeUpdateAbort
+  WorktreeUpdateAbort,
+  WorktreeResolve
 } from '../../shared/entities'
 import type { ParamsOf, ResultOf } from '../../shared/methods'
 import { checkTransport } from '../../shared/origin'
@@ -90,7 +91,8 @@ import {
 } from './worktreeTrash'
 import { pushWorktree } from './worktreePush'
 import { pullProjectBase, pushProjectBase, readProjectBase, type ProjectBaseOptions } from './projectBase'
-import { abortWorktreeUpdate, updateWorktree } from './worktreeUpdate'
+import { bareRef } from './reviewUrl'
+import { abortWorktreeUpdate, continueWorktreeUpdate, resolveWorktreeConflict, updateWorktree } from './worktreeUpdate'
 import {
   createGhProbe,
   createPullRequest,
@@ -1388,11 +1390,10 @@ export class GitService {
   /** Brings its base into this worktree, a child's parent branch included; a conflict leaves it mid-way. See worktreeUpdate.ts. */
   async worktreeUpdate(params: ParamsOf<'worktree.update'>): Promise<WorktreeUpdate> {
     const worktree = this.#requireReadyWorktree(params.worktreeId, 'updating')
-    const project = this.#requireProject(worktree.projectId)
     return updateWorktree(this.#runner, {
       worktreeId: worktree.id,
       worktreePath: worktree.path,
-      baseRef: worktree.baseRef ?? project.baseRef,
+      baseRef: this.#updateBase(worktree, params.landing === true),
       now: this.#now
     })
   }
@@ -1400,6 +1401,33 @@ export class GitService {
   async worktreeAbortUpdate(params: ParamsOf<'worktree.abortUpdate'>): Promise<WorktreeUpdateAbort> {
     const worktree = this.#requireReadyWorktree(params.worktreeId, 'aborting an update')
     return abortWorktreeUpdate(this.#runner, { worktreeId: worktree.id, worktreePath: worktree.path })
+  }
+
+  async worktreeContinueUpdate(params: ParamsOf<'worktree.continueUpdate'>): Promise<WorktreeUpdate> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'continuing an update')
+    return continueWorktreeUpdate(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      baseRef: this.#updateBase(worktree, false),
+      now: this.#now
+    })
+  }
+
+  async worktreeResolve(params: ParamsOf<'worktree.resolve'>): Promise<WorktreeResolve> {
+    const worktree = this.#requireReadyWorktree(params.worktreeId, 'resolving a conflict')
+    return resolveWorktreeConflict(this.#runner, {
+      worktreeId: worktree.id,
+      worktreePath: worktree.path,
+      path: params.path,
+      ...(params.take === undefined ? {} : { take: params.take })
+    })
+  }
+
+  /** The base ref, or with `landing` the branch a top-level worktree lands in: the checkout's `main` rather than `origin/main`. */
+  #updateBase(worktree: Worktree, landing: boolean): string {
+    const project = this.#requireProject(worktree.projectId)
+    if (worktree.baseRef !== undefined) return worktree.baseRef
+    return landing ? bareRef(project.baseRef, 'origin') : project.baseRef
   }
 
   /** Where this worktree's branch can land, and whether it already has. */

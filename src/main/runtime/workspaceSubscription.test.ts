@@ -331,6 +331,40 @@ describe('git writes as producers', () => {
   )
 })
 
+describe('a stopped update as a producer', () => {
+  it(
+    'names the worktree when a conflict is resolved and when the update continues',
+    async () => {
+      const repo = await repository()
+      await repo.write('money.js', 'export const TAX = 0\n')
+      await repo.commit('money')
+      const app = await harness({ repo })
+      const project = await app.call<Project>('c1', 'project.add', { path: repo.repoPath })
+      const worktree = await app.call<Worktree>('c1', 'worktree.create', { projectId: project.id, name: 'payment' })
+      const ready = await app.git.whenSettled(worktree.id)
+      expect(ready.state, ready.error).toBe('ready')
+      await repo.write('money.js', 'export const TAX = 0.1\n', ready.path)
+      await repo.commit('payment tax', ready.path)
+      await repo.write('money.js', 'export const TAX = 0.08\n')
+      await repo.commit('cart tax')
+      await app.call('c1', 'worktree.update', { worktreeId: worktree.id, landing: true })
+
+      const watcher = await app.watch('c1')
+      await settle()
+      watcher.clear()
+      await app.call('c1', 'worktree.resolve', { worktreeId: worktree.id, path: 'money.js', take: 'ours' })
+      await watcher.waitFor(has('worktrees'), 'the invalidation for a resolve')
+      expect(watcher.events).toContainEqual({ type: 'worktrees', worktreeIds: [worktree.id] })
+
+      watcher.clear()
+      await app.call('c1', 'worktree.continueUpdate', { worktreeId: worktree.id })
+      await watcher.waitFor(has('worktrees'), 'the invalidation for a continue')
+      expect(watcher.events).toContainEqual({ type: 'worktrees', worktreeIds: [worktree.id] })
+    },
+    TEST_TIMEOUT_MS
+  )
+})
+
 describe('worktree files as a producer', () => {
   it(
     'announces an edit nobody made through a method call',

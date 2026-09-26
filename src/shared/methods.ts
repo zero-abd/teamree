@@ -59,6 +59,7 @@ import type {
   WorktreeMergePreview,
   WorktreePullRequest,
   WorktreePush,
+  WorktreeResolve,
   WorktreeSetupCheck,
   WorktreeStatus,
   WorktreeUnstage,
@@ -337,9 +338,21 @@ export const Params = {
   /** Whether this worktree would merge into its base, without merging it. */
   worktreeMergePreview: z.object({ worktreeId: z.string().min(1) }),
   /** Brings the base ref's new commits in: a rebase when unpublished, a merge when published. */
-  worktreeUpdate: z.object({ worktreeId: z.string().min(1) }),
+  worktreeUpdate: z.object({
+    worktreeId: z.string().min(1),
+    /** From the branch it lands in instead (the checkout's `main`, or the parent's), which may be ahead of the base ref. */
+    landing: z.boolean().optional()
+  }),
   /** Undoes an update stopped on conflicts. */
   worktreeAbortUpdate: z.object({ worktreeId: z.string().min(1) }),
+  /** Finishes an update stopped on conflicts once none is left: commits the merge, or continues the rebase. */
+  worktreeContinueUpdate: z.object({ worktreeId: z.string().min(1) }),
+  /** Marks a conflicted path resolved, first taking this task's side (`ours`) or the incoming one whole. */
+  worktreeResolve: z.object({
+    worktreeId: z.string().min(1),
+    path: z.string().min(1).max(4096),
+    take: z.enum(['ours', 'theirs']).optional()
+  }),
   /** Where this worktree's branch can land, and whether it already has. */
   worktreeLanding: z.object({
     worktreeId: z.string().min(1),
@@ -953,6 +966,8 @@ export type MethodContract = TaskMethodContract &
     }
     'worktree.update': { params: z.infer<typeof Params.worktreeUpdate>; result: WorktreeUpdate }
     'worktree.abortUpdate': { params: z.infer<typeof Params.worktreeAbortUpdate>; result: WorktreeUpdateAbort }
+    'worktree.continueUpdate': { params: z.infer<typeof Params.worktreeContinueUpdate>; result: WorktreeUpdate }
+    'worktree.resolve': { params: z.infer<typeof Params.worktreeResolve>; result: WorktreeResolve }
     'worktree.landing': { params: z.infer<typeof Params.worktreeLanding>; result: WorktreeLanding }
     'worktree.checkFailure': { params: z.infer<typeof Params.worktreeCheckFailure>; result: CheckFailure }
     'worktree.createPullRequest': {

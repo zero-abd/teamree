@@ -270,6 +270,7 @@ describe('dispatcher', () => {
       'worktree.cleanMerged',
       'worktree.commit',
       'worktree.compare',
+      'worktree.continueUpdate',
       'worktree.create',
       'worktree.createPullRequest',
       'worktree.diff',
@@ -298,6 +299,7 @@ describe('dispatcher', () => {
       'worktree.remove',
       'worktree.removed',
       'worktree.rename',
+      'worktree.resolve',
       // Local: checks a copy out on this machine's disk.
       'worktree.restore',
       // Local: runs a command on this machine, as pressed.

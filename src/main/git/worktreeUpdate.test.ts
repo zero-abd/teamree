@@ -1,9 +1,11 @@
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { GitServiceError } from './errors'
 import { fetchBase } from './baseFetch'
 import { createTempRepo, type TempRepo } from './testRepository'
-import { abortWorktreeUpdate, updateWorktree } from './worktreeUpdate'
+import { readWorktreeChanges } from './worktreeChanges'
+import { abortWorktreeUpdate, continueWorktreeUpdate, resolveWorktreeConflict, updateWorktree } from './worktreeUpdate'
 import { readOperation, readWorktreeStatus } from './worktreeStatus'
 
 let repo: TempRepo | undefined
@@ -184,5 +186,105 @@ describe('updateWorktree', () => {
   it('aborts nothing when nothing is in progress', async () => {
     const { repo: made, worktree } = await setUp()
     expect((await abortWorktreeUpdate(made.runner, { worktreeId: 'w1', worktreePath: worktree })).aborted).toBeNull()
+  })
+})
+
+/** The worktree's branch and origin/main each rewrote the one line after `add`; `publish` makes the update a merge. */
+async function conflicting(publish: boolean, commits = 1): Promise<{ made: TempRepo; worktree: string }> {
+  const { repo: made, worktree, teammate } = await setUp()
+  for (let at = 1; at <= commits; at += 1) {
+    await made.write('src/math.ts', `export const add = 1\nexport const sub = ${at + 1}\n`, worktree)
+    await made.commit(`Add sub ${at}`, worktree)
+  }
+  if (publish) await made.git(['push', '-u', 'origin', 'work'], worktree)
+  await teammatePushes(made, teammate, 'src/math.ts', 'export const add = 1\nexport const div = 3\n')
+  await fetchBase(made.runner, { repoPath: made.repoPath, baseRef: 'origin/main' })
+  const stopped = await updateWorktree(made.runner, {
+    worktreeId: 'w1',
+    worktreePath: worktree,
+    baseRef: 'origin/main'
+  })
+  expect(stopped.outcome).toBe('conflicts')
+  return { made, worktree }
+}
+
+const at = (made: TempRepo, worktree: string) => ({ worktreeId: 'w1', worktreePath: worktree, baseRef: 'origin/main' })
+const conflictedRows = async (made: TempRepo, worktree: string) =>
+  (await readWorktreeChanges(made.runner, { worktreeId: 'w1', worktreePath: worktree })).changes.filter(
+    (change) => change.kind === 'conflicted'
+  )
+
+describe('a stopped update', () => {
+  it('lists each conflicted file with the blocks its markers still hold', async () => {
+    const { made, worktree } = await conflicting(true)
+    expect(await conflictedRows(made, worktree)).toEqual([expect.objectContaining({ path: 'src/math.ts', markers: 1 })])
+    await made.write('src/math.ts', 'export const add = 1\nexport const sub = 2\nexport const div = 3\n', worktree)
+    expect(await conflictedRows(made, worktree)).toEqual([expect.objectContaining({ path: 'src/math.ts', markers: 0 })])
+  })
+
+  it('marks a hand-fixed file resolved, refuses Continue before that, and commits the merge after', async () => {
+    const { made, worktree } = await conflicting(true)
+    await expect(continueWorktreeUpdate(made.runner, at(made, worktree))).rejects.toThrow(
+      /^Resolve src\/math.ts first$/
+    )
+    await made.write('src/math.ts', 'export const add = 1\nexport const sub = 2\nexport const div = 3\n', worktree)
+
+    expect(await resolveWorktreeConflict(made.runner, { ...at(made, worktree), path: 'src/math.ts' })).toEqual({
+      worktreeId: 'w1',
+      conflicts: []
+    })
+    const done = await continueWorktreeUpdate(made.runner, at(made, worktree))
+    expect(done).toMatchObject({ mode: 'merge', outcome: 'updated', conflicts: [] })
+    expect(readOperation(worktree)).toBeUndefined()
+    expect((await made.git(['rev-list', '--parents', '-n', '1', 'HEAD'], worktree)).split(' ')).toHaveLength(3)
+    expect(await status(made, worktree)).toMatchObject({ behind: 0, conflicted: 0, staged: 0 })
+  })
+
+  it("takes this task's side or the base's in a merge", async () => {
+    const { made, worktree } = await conflicting(true)
+    await resolveWorktreeConflict(made.runner, { ...at(made, worktree), path: 'src/math.ts', take: 'ours' })
+    expect(await readFile(path.join(worktree, 'src/math.ts'), 'utf8')).toBe(
+      'export const add = 1\nexport const sub = 2\n'
+    )
+    await abortWorktreeUpdate(made.runner, { worktreeId: 'w1', worktreePath: worktree })
+
+    await updateWorktree(made.runner, at(made, worktree))
+    await resolveWorktreeConflict(made.runner, { ...at(made, worktree), path: 'src/math.ts', take: 'theirs' })
+    expect(await readFile(path.join(worktree, 'src/math.ts'), 'utf8')).toBe(
+      'export const add = 1\nexport const div = 3\n'
+    )
+    expect(await conflictedRows(made, worktree)).toEqual([])
+  })
+
+  it('keeps ours meaning this task in a rebase, where git swaps the sides', async () => {
+    const { made, worktree } = await conflicting(false)
+    expect(readOperation(worktree)).toBe('rebase')
+    await resolveWorktreeConflict(made.runner, { ...at(made, worktree), path: 'src/math.ts', take: 'ours' })
+    expect(await readFile(path.join(worktree, 'src/math.ts'), 'utf8')).toBe(
+      'export const add = 1\nexport const sub = 2\n'
+    )
+    const done = await continueWorktreeUpdate(made.runner, at(made, worktree))
+    expect(done).toMatchObject({ mode: 'rebase', outcome: 'updated' })
+    expect(await made.git(['rev-parse', 'HEAD~1'], worktree)).toBe(await made.git(['rev-parse', 'origin/main']))
+    expect(await made.git(['log', '-1', '--format=%s'], worktree)).toBe('Add sub 1')
+  })
+
+  it('continues a rebase commit by commit, stopping again on the next conflict, and skips one left empty', async () => {
+    const { made, worktree } = await conflicting(false, 2)
+    await resolveWorktreeConflict(made.runner, { ...at(made, worktree), path: 'src/math.ts', take: 'theirs' })
+    // Taking the base's side leaves the first commit with nothing: skipped, not refused.
+    const next = await continueWorktreeUpdate(made.runner, at(made, worktree))
+    expect(next).toMatchObject({ mode: 'rebase', outcome: 'conflicts', conflicts: ['src/math.ts'] })
+    expect(readOperation(worktree)).toBe('rebase')
+
+    await resolveWorktreeConflict(made.runner, { ...at(made, worktree), path: 'src/math.ts', take: 'ours' })
+    expect(await continueWorktreeUpdate(made.runner, at(made, worktree))).toMatchObject({ outcome: 'updated' })
+    expect(readOperation(worktree)).toBeUndefined()
+    expect(await made.git(['log', '--format=%s', '-2'], worktree)).toBe('Add sub 2\nTeammate edits src/math.ts')
+  })
+
+  it('refuses Continue with nothing in progress', async () => {
+    const { repo: made, worktree } = await setUp()
+    await expect(continueWorktreeUpdate(made.runner, at(made, worktree))).rejects.toThrow(/^Nothing to continue$/)
   })
 })

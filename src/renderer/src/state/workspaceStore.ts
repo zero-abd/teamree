@@ -42,7 +42,8 @@ import type {
   WorktreeLog,
   WorktreeMerge,
   WorktreeMergePreview,
-  WorktreeStatus
+  WorktreeStatus,
+  WorktreeUpdate
 } from '@shared/entities'
 import { DEFAULT_APPEARANCE, type Appearance, type Tone } from '@shared/theme'
 import {
@@ -81,7 +82,8 @@ import {
   type ClosedFile,
   type ClosedFiles
 } from './closedPanes'
-import type { AgentModes, TaskCreate } from '../dialogs/taskPlan'
+import { defaultAgentKind, type AgentModes, type TaskCreate } from '../dialogs/taskPlan'
+import { agentPaneOf, resolvePrompt, updateSides } from '../workspace/rightPanel/conflictState'
 import { agentLaunchCommand } from '@shared/agentLaunch'
 import { canResumeConversations } from '../agents/harnesses'
 import {
@@ -758,12 +760,16 @@ type WorkspaceState = {
   discardChange: (worktreeId: string, path: string, hunk?: PatchHunk) => Promise<void>
   /** Sends the active worktree's branch to its remote. Never forces. */
   pushActiveWorktree: () => Promise<void>
-  /** Brings the base ref's new commits into a worktree: rebase if unpublished, merge if published. */
-  updateWorktree: (worktreeId: string) => Promise<void>
+  /** Brings the base ref's new commits into a worktree, or with `landing` the branch it lands in: rebase if unpublished, merge if published. */
+  updateWorktree: (worktreeId: string, landing?: boolean) => Promise<WorktreeUpdate | null>
   /** Undoes an update stopped on conflicts. */
   abortUpdate: (worktreeId: string) => Promise<void>
-  /** Types a line into a pane without pressing Return. */
-  typeIntoPane: (terminalId: string, text: string) => Promise<void>
+  /** Finishes an update stopped on conflicts once none is left: commits the merge, or continues the rebase. */
+  continueUpdate: (worktreeId: string) => Promise<void>
+  /** Marks a conflicted path resolved, first taking this task's side (`ours`) or the incoming one whole. */
+  resolveConflict: (worktreeId: string, path: string, take?: 'ours' | 'theirs') => Promise<void>
+  /** Hands `paths` (the listed conflicts by default) to the worktree's running agent, or starts the default agent on them. */
+  askToResolve: (worktreeId: string, paths?: readonly string[]) => Promise<void>
   /** `gh pr create` for a published branch, else the host's page for one in the browser; an open one is opened. */
   createPullRequest: (worktreeId: string) => Promise<void>
   /** Asks `gh` about these worktrees' pull requests again, past its cache. */
@@ -1560,8 +1566,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     return kind === undefined ? undefined : get().agentArgs[kind]
   }
 
-  /** A pane running `command` in the worktree, resuming `resume` when given. */
-  const launchAgent = async (worktreeId: string, command: string, resume?: string): Promise<void> => {
+  /** A pane running `command` in the worktree, resuming `resume` or starting on `prompt` when given. */
+  const launchAgent = async (worktreeId: string, command: string, resume?: string, prompt?: string): Promise<void> => {
     yieldPanel()
     const { room, zoomed } = roomOrZoom(worktreeId)
     try {
@@ -1572,7 +1578,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         command,
         ...room,
         ...(agentArgs === undefined ? {} : { agentArgs }),
-        ...(resume === undefined ? {} : { resume })
+        ...(resume === undefined ? {} : { resume }),
+        ...(prompt === undefined ? {} : { prompt })
       })
       set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
       // A click, like the new-terminal button: named before the refresh that reads it, as `createTerminal` does.
@@ -3701,17 +3708,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
-    async updateWorktree(worktreeId) {
-      if (get().updating !== null) return
+    async updateWorktree(worktreeId, landing) {
+      if (get().updating !== null) return null
       set((state) => {
         const { [worktreeId]: _cleared, ...updateErrors } = state.updateErrors
         return { updating: worktreeId, updateErrors }
       })
       try {
-        await runtimeClient.call('worktree.update', { worktreeId })
+        return await runtimeClient.call('worktree.update', landing === true ? { worktreeId, landing } : { worktreeId })
       } catch (error) {
         const line = error instanceof Error ? error.message : String(error)
         set((state) => ({ updateErrors: { ...state.updateErrors, [worktreeId]: line } }))
+        return null
       } finally {
         set({ updating: null })
         await refreshStatuses([worktreeId])
@@ -3729,10 +3737,66 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (changesOnScreen(get()) && get().activeWorktreeId === worktreeId) readChangesNow(worktreeId)
     },
 
-    async typeIntoPane(terminalId, text) {
-      await runtimeClient
-        .call('terminal.write', { terminalId, data: text })
-        .catch(failed('Could not type into the pane'))
+    async continueUpdate(worktreeId) {
+      if (get().updating !== null) return
+      set((state) => {
+        const { [worktreeId]: _cleared, ...updateErrors } = state.updateErrors
+        return { updating: worktreeId, updateErrors }
+      })
+      try {
+        await runtimeClient.call('worktree.continueUpdate', { worktreeId })
+      } catch (error) {
+        const line = error instanceof Error ? error.message : String(error)
+        set((state) => ({ updateErrors: { ...state.updateErrors, [worktreeId]: line } }))
+      } finally {
+        set({ updating: null })
+        await refreshStatuses([worktreeId])
+        if (changesOnScreen(get()) && get().activeWorktreeId === worktreeId) readChangesNow(worktreeId)
+      }
+    },
+
+    async resolveConflict(worktreeId, path, take) {
+      try {
+        await runtimeClient.call(
+          'worktree.resolve',
+          take === undefined ? { worktreeId, path } : { worktreeId, path, take }
+        )
+      } catch (error) {
+        failed(`Could not resolve ${path}`)(error)
+      }
+      await refreshStatuses([worktreeId])
+      if (changesOnScreen(get()) && get().activeWorktreeId === worktreeId) readChangesNow(worktreeId)
+    },
+
+    async askToResolve(worktreeId, listed) {
+      const state = get()
+      const paths =
+        listed ??
+        (state.changes[worktreeId]?.changes ?? [])
+          .filter((change) => change.kind === 'conflicted')
+          .map((change) => change.path)
+      const text = resolvePrompt(
+        paths,
+        state.statuses[worktreeId]?.operation,
+        updateSides(state.worktrees, state.projects, worktreeId)
+      )
+      const pane = agentPaneOf(state.terminals, worktreeId)
+      if (pane !== undefined) {
+        // The message queue pastes it once the agent is at its prompt and nobody is typing there.
+        await runtimeClient
+          .call('message.send', { from: { you: true }, to: { worktreeId, terminalId: pane.id }, kind: 'note', text })
+          .catch(failed('Could not ask the agent'))
+        get().focusPane(pane.id)
+        return
+      }
+      const kind = defaultAgentKind(state.agents, state.defaultAgent)
+      const command = state.agents.find((agent) => agent.kind === kind)?.command
+      if (command === undefined) {
+        notify('No agent found')
+        return
+      }
+      if (state.activeWorktreeId !== worktreeId) await get().openWorktree(worktreeId)
+      await launchAgent(worktreeId, command, undefined, text)
     },
 
     async createPullRequest(worktreeId) {
