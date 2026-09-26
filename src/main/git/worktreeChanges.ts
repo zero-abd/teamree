@@ -156,6 +156,65 @@ export type ChangesReadOptions = {
 
 export async function readWorktreeChanges(runner: GitRunner, options: ChangesReadOptions): Promise<WorktreeChanges> {
   const limit = options.limit ?? DEFAULT_CHANGE_LIMIT
+  const all = sortChanges(await readStatusRecords(runner, options))
+  return {
+    worktreeId: options.worktreeId,
+    changes: await withLineCounts(runner, options, all.slice(0, limit)),
+    total: all.length,
+    limit,
+    truncated: all.length > limit,
+    readAt: (options.now ?? Date.now)()
+  }
+}
+
+/** The files the branch changed since `against`, uncommitted work and new files included, counted against it. */
+export async function readBranchChanges(
+  runner: GitRunner,
+  options: ChangesReadOptions & { against: string }
+): Promise<WorktreeChanges> {
+  const limit = options.limit ?? DEFAULT_CHANGE_LIMIT
+  const { stdout } = await runner.run({
+    args: ['diff', '--name-status', '-z', '-M', options.against, ...pathspec(options.path)],
+    cwd: options.worktreePath,
+    readOnly: true,
+    ...(options.signal ? { signal: options.signal } : {}),
+    timeoutMs: 30_000
+  })
+  const untracked = (await readStatusRecords(runner, options)).filter((change) => change.kind === 'untracked')
+  const all = sortChanges([...withoutPreparedPaths(parseNameStatus(stdout), options.prepared), ...untracked])
+  return {
+    worktreeId: options.worktreeId,
+    changes: await withLineCounts(runner, options, all.slice(0, limit), options.against),
+    total: all.length,
+    limit,
+    truncated: all.length > limit,
+    readAt: (options.now ?? Date.now)()
+  }
+}
+
+/** `git diff --name-status -z` records; a rename or copy carries its old path before the new. */
+export function parseNameStatus(raw: string): WorktreeChange[] {
+  const fields = raw.split('\0')
+  const changes: WorktreeChange[] = []
+  for (let index = 0; index < fields.length; index += 1) {
+    const code = (fields[index] as string)[0]
+    if (code === undefined) continue
+    if (code === 'R' || code === 'C') {
+      const from = fields[index + 1]
+      const path = fields[index + 2]
+      index += 2
+      if (path)
+        changes.push({ path, kind: changeKind(code, '.'), staged: false, unstaged: false, ...(from ? { from } : {}) })
+      continue
+    }
+    const path = fields[index + 1]
+    index += 1
+    if (path) changes.push({ path, kind: changeKind(code, '.'), staged: false, unstaged: false })
+  }
+  return changes
+}
+
+async function readStatusRecords(runner: GitRunner, options: ChangesReadOptions): Promise<WorktreeChange[]> {
   // The untracked mode is always passed: people set `status.showUntrackedFiles=no`
   // in ~/.gitconfig for a large repository, and this read would then answer
   // "nothing untracked" for a checkout whose status chip says otherwise.
@@ -170,18 +229,9 @@ export async function readWorktreeChanges(runner: GitRunner, options: ChangesRea
     return withoutPreparedPaths(parseChangeRecords(stdout), options.prepared)
   }
 
-  let found = await read('all')
-  if (found.filter((change) => change.kind === 'untracked').length > UNTRACKED_LISTED_LIMIT)
-    found = await read('normal')
-  const all = sortChanges(found)
-  return {
-    worktreeId: options.worktreeId,
-    changes: await withLineCounts(runner, options, all.slice(0, limit)),
-    total: all.length,
-    limit,
-    truncated: all.length > limit,
-    readAt: (options.now ?? Date.now)()
-  }
+  const found = await read('all')
+  if (found.filter((change) => change.kind === 'untracked').length <= UNTRACKED_LISTED_LIMIT) return found
+  return read('normal')
 }
 
 export type DiffReadOptions = {
@@ -305,16 +355,17 @@ function pathspec(path: string | undefined): string[] {
   return path === undefined ? [] : ['--', path]
 }
 
-/** The rows with `git diff --numstat HEAD` counts, and a new file's lines read from disk. */
+/** The rows with `git diff --numstat <against>` counts, and a new file's lines read from disk. */
 async function withLineCounts(
   runner: GitRunner,
   options: ChangesReadOptions,
-  changes: WorktreeChange[]
+  changes: WorktreeChange[],
+  against = 'HEAD'
 ): Promise<WorktreeChange[]> {
   if (changes.length === 0) return changes
   // Fails on a branch with no commit yet; the rows go uncounted rather than unlisted.
   const numstat = await runner.tryRun({
-    args: ['diff', '--numstat', '-z', 'HEAD', ...pathspec(options.path)],
+    args: ['diff', '--numstat', '-z', ...(against === 'HEAD' ? [] : ['-M']), against, ...pathspec(options.path)],
     cwd: options.worktreePath,
     readOnly: true,
     ...(options.signal ? { signal: options.signal } : {}),

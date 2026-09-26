@@ -1,11 +1,11 @@
 // Every change of a worktree as one tab of the file column: the task and what its agent last said, then each
-// file in the Changes list's order with a Viewed box, read-only, with comments to the agent.
+// file with a Viewed box, read-only, with comments to the agent. The whole branch against its base, or what is uncommitted.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { WorktreeDiff } from '@shared/entities'
 import { parsePatch, type PatchFile } from '@shared/patch'
 import { AgentGlyph } from '../agents/glyphs'
-import { FileBar } from '../files/FileBar'
+import { FileBar, Segments } from '../files/FileBar'
 import { LayoutTools, ReadOnlyDiffBody, useWidth } from '../files/FileDiff'
 import type { FilePaneProps } from '../panes/FilePane'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
@@ -14,7 +14,7 @@ import { usePaneEvidence } from '../sidebar/usePaneEvidence'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { fitLayout, type PatchViewing } from '../workspace/PatchView'
 import { inChangesOrder, isViewedFile, viewedMark } from './reviewModel'
-import { useReviewStore } from './reviewStore'
+import { useReviewStore, type ReviewScope } from './reviewStore'
 
 /** `path` is the tab's title. */
 export function ReviewView({
@@ -32,10 +32,17 @@ export function ReviewView({
   const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
   const diffLayout = useWorkspaceStore((state) => state.diffLayout)
   const filesEpoch = useWorkspaceStore((state) => state.worktreeFilesEpoch)
-  const changes = useWorkspaceStore((state) => state.changes[worktreeId]?.changes)
+  const scope = useReviewStore((state) => state.scope[worktreeId] ?? 'branch')
+  const setScope = useReviewStore((state) => state.setScope)
+  const jump = useReviewStore((state) => state.jump[worktreeId])
+  const jumped = useReviewStore((state) => state.jumped)
+  const changes = useWorkspaceStore((state) =>
+    scope === 'branch' ? state.branchChanges[worktreeId]?.changes : state.changes[worktreeId]?.changes
+  )
   const viewed = useReviewStore((state) => state.viewed[worktreeId])
   const markViewed = useReviewStore((state) => state.markViewed)
-  const [diff, setDiff] = useState<WorktreeDiff | null>(null)
+  const [read, setRead] = useState<{ scope: ReviewScope; diff: WorktreeDiff } | null>(null)
+  const diff = read?.scope === scope ? read.diff : null
   const [error, setError] = useState<string | null>(null)
   const body = useRef<HTMLDivElement | null>(null)
   const width = useWidth(body, true)
@@ -44,10 +51,10 @@ export function ReviewView({
   useEffect(() => {
     let alive = true
     runtimeClient
-      .call('worktree.diff', { worktreeId, head: true })
+      .call('worktree.diff', scope === 'branch' ? { worktreeId, base: true } : { worktreeId, head: true })
       .then((next) => {
         if (!alive) return
-        setDiff(next)
+        setRead({ scope, diff: next })
         setError(null)
       })
       .catch((failure: unknown) => {
@@ -56,10 +63,19 @@ export function ReviewView({
     return () => {
       alive = false
     }
-  }, [worktreeId, filesEpoch])
+  }, [worktreeId, filesEpoch, scope])
 
   const patch = useMemo(() => (diff === null ? null : inChangesOrder(diff.patch, changes ?? [])), [diff, changes])
   const files = useMemo(() => (patch === null ? [] : parsePatch(patch)), [patch])
+
+  useEffect(() => {
+    if (jump === undefined || patch === null) return
+    const target = [...(body.current?.querySelectorAll('.patch__file') ?? [])].find(
+      (file) => file.querySelector('.patch__fileName')?.textContent === jump
+    )
+    target?.scrollIntoView({ block: 'start' })
+    jumped(worktreeId)
+  }, [jump, patch, jumped, worktreeId])
   const viewing: PatchViewing = {
     viewed: (file) => isViewedFile(viewed?.[file.path], file),
     onViewed: (file, on) => markViewed(worktreeId, file.path, on ? viewedMark(file) : null)
@@ -82,6 +98,18 @@ export function ReviewView({
         onMenu={onMenu}
         onClose={onClose}
       >
+        <Segments label="Compare">
+          {SCOPES.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={scope === value}
+              onClick={() => setScope(worktreeId, value)}
+            >
+              {label}
+            </button>
+          ))}
+        </Segments>
         <LayoutTools layout={layout} bodyWidth={width} />
       </FileBar>
       <div className="file__body" ref={body}>
@@ -109,6 +137,11 @@ export function ReviewView({
 }
 
 const FILE_KEYS: Record<string, 1 | -1> = { j: 1, n: 1, k: -1, p: -1 }
+
+const SCOPES: readonly [ReviewScope, string][] = [
+  ['branch', 'Branch'],
+  ['uncommitted', 'Uncommitted']
+]
 
 /** `3 files · +12 −2`, and how many are viewed once any are. */
 function summary(files: readonly PatchFile[], viewed: number): string {

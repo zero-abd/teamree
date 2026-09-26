@@ -466,6 +466,28 @@
   flex: none;
 }
 
+/* Uncommitted and On Branch: each list shrinks and scrolls under its heading. */
+.changes__group {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.changes__group--branch {
+  border-top: 1px solid var(--line);
+}
+
+/* The merge dialog's `3 files +41 −7` and its Review. */
+.merge__stat {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
 .changes__conflictActions {
   display: flex;
   gap: var(--s2);
