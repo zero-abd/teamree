@@ -208,11 +208,16 @@ export function App(): React.JSX.Element {
           projectId={dialog.projectId}
           {...(dialog.parentId === undefined ? {} : { parentId: dialog.parentId })}
           fromIssue={dialog.fromIssue === true}
+          {...(dialog.task === undefined ? {} : { task: dialog.task })}
         />
       ) : null}
       {dialog?.kind === 'join-team' ? <JoinTeamDialog invitation={dialog.invitation} /> : null}
       {dialog?.kind === 'open-branch' ? (
-        <OpenBranchDialog projectId={dialog.projectId} pullRequests={dialog.pullRequests === true} />
+        <OpenBranchDialog
+          projectId={dialog.projectId}
+          pullRequests={dialog.pullRequests === true}
+          {...(dialog.query === undefined ? {} : { query: dialog.query })}
+        />
       ) : null}
       {dialog?.kind === 'resume-conversation' ? <ResumeConversationDialog worktreeId={dialog.worktreeId} /> : null}
 

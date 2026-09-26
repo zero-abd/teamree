@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { CliStatus, InstalledAgent, Project, UpdateState, Worktree } from '@shared/entities'
+import type { CliStatus, InstalledAgent, Project, Terminal, UpdateState, Worktree } from '@shared/entities'
 import { menuBarSpec } from '../menu/menuBar'
 import {
   buildPaletteItems,
@@ -8,6 +8,7 @@ import {
   moveSelection,
   paletteGroups,
   paletteKey,
+  queryGroups,
   rankFiles,
   readStoredRecent,
   RECENT_KEPT,
@@ -15,6 +16,7 @@ import {
   trailing,
   withRecent,
   writeStoredRecent,
+  type PaletteGroup,
   type PaletteItem
 } from './paletteModel'
 
@@ -920,5 +922,129 @@ describe('starting a task from an issue', () => {
   it('says there is no project to start one in', () => {
     const items = buildPaletteItems(context({ projects: [] }))
     expect(items.find((item) => item.id === 'new-task-from-issue')).toMatchObject({ unavailable: 'no project' })
+  })
+})
+
+describe('a query that finds nothing to run', () => {
+  const items = (overrides: Partial<Parameters<typeof buildPaletteItems>[0]> = {}): PaletteItem[] =>
+    buildPaletteItems(
+      context({
+        worktrees: [worktree({ id: 'w1', name: 'login fix' })],
+        activeWorktreeId: 'w1',
+        hintFor: (action) => (action === 'new-worktree' ? '⌘N' : ''),
+        ...overrides
+      })
+    )
+  const shown = (groups: PaletteGroup[]): [string | null, string[]][] =>
+    groups.map((group) => [group.title, group.items.map((item) => item.label)])
+
+  it('offers a new task with the query as its text, then Open Branch narrowed to it', () => {
+    const [group] = queryGroups(items(), '  rate limits ', [])
+    expect(group?.items.map((item) => [item.id, item.label, trailing(item)])).toEqual([
+      ['new-task:rate limits', 'New Task: “rate limits”', '⌘N'],
+      ['open-branch:rate limits', 'Open Branch: “rate limits”', '']
+    ])
+  })
+
+  it('keeps what the query named, dimmed, above them', () => {
+    const dimmed = items({ whyUnavailable: (action) => (action === 'save-all' ? 'nothing unsaved' : null) })
+    expect(shown(queryGroups(dimmed, 'save all', []))).toEqual([
+      [null, ['Save All', 'New Task: “save all”', 'Open Branch: “save all”']]
+    ])
+  })
+
+  it('adds nothing while a row would run, a file matched, or the files are still being searched', () => {
+    expect(shown(queryGroups(items(), 'login', []))).toEqual([[null, ['login fix']]])
+    expect(shown(queryGroups(items(), 'zzz', [fileItem('src/zzz.ts')]))).toEqual([
+      [null, []],
+      ['Files', ['zzz.ts']]
+    ])
+    expect(shown(queryGroups(items(), 'zzz', null))).toEqual([[null, []]])
+  })
+
+  it('offers neither with no project to start in or open from', () => {
+    const none = items({ projects: [], worktrees: [], activeWorktreeId: null, whyUnavailable: () => 'no project' })
+    expect(shown(queryGroups(none, 'zzz', []))).toEqual([[null, []]])
+  })
+
+  it('leaves the order of a query that matches as it was', () => {
+    const all = items({ worktrees: [worktree({ id: 'w1' }), worktree({ id: 'w2', name: 'new tests' })] })
+    for (const query of ['new', 'split', 'w2', 'nt']) {
+      const [group] = queryGroups(all, query, [])
+      expect(group?.items).toEqual(filterPalette(all, query))
+    }
+  })
+})
+
+describe('a worktree row’s state', () => {
+  const terminal = (overrides: Partial<Terminal> & { id: string; worktreeId: string }): Terminal => ({
+    title: 'zsh',
+    cwd: '/checkouts',
+    shell: '/bin/zsh',
+    cols: 80,
+    rows: 24,
+    running: true,
+    busy: false,
+    lastOutputAt: 0,
+    ...overrides
+  })
+  const items = buildPaletteItems(
+    context({
+      worktrees: [
+        worktree({ id: 'busy' }),
+        worktree({ id: 'asks' }),
+        worktree({ id: 'broke' }),
+        worktree({ id: 'shell' }),
+        worktree({ id: 'bare' }),
+        worktree({ id: 'making', state: 'creating' })
+      ],
+      terminals: [
+        terminal({ id: 't1', worktreeId: 'busy', agent: 'claude', busy: true }),
+        terminal({ id: 't2', worktreeId: 'asks', agent: 'claude', titleSays: 'waiting' }),
+        terminal({ id: 't3', worktreeId: 'broke', agent: 'codex', running: false, exitCode: 1 }),
+        terminal({ id: 't4', worktreeId: 'shell' }),
+        terminal({ id: 't5', worktreeId: 'making', agent: 'claude', busy: true })
+      ]
+    })
+  )
+  const worktreeRow = (id: string): PaletteItem | undefined => items.find((item) => item.id === id)
+
+  it('carries the sidebar’s dot, and says working, asking or failed after the project', () => {
+    expect(
+      ['busy', 'asks', 'broke', 'shell', 'bare'].map((id) => {
+        const item = worktreeRow(id)
+        return [id, item?.kind === 'worktree' ? item.tone : 'none', item && trailing(item)]
+      })
+    ).toEqual([
+      ['busy', 'working', 'atlas · working'],
+      ['asks', 'waiting', 'atlas · asking'],
+      ['broke', 'failed', 'atlas · failed'],
+      ['shell', 'idle', 'atlas'],
+      ['bare', undefined, 'atlas']
+    ])
+  })
+
+  it('draws no dot for a worktree still being made', () => {
+    const making = worktreeRow('making')
+    expect(making?.kind === 'worktree' ? making.tone : 'none').toBeUndefined()
+    expect(making && trailing(making)).toBe('atlas · creating')
+  })
+})
+
+describe('the right panel’s rows say what they would do now', () => {
+  const label = (id: string, overrides: Partial<Parameters<typeof buildPaletteItems>[0]>): PaletteItem | undefined =>
+    buildPaletteItems(context(overrides)).find((item) => item.id === id)
+
+  it('reads Hide Changes while the Changes tab is showing', () => {
+    expect(label('toggle-changes', { rightPanelOpen: true, rightPanelTab: 'changes' })?.label).toBe('Hide Changes')
+    expect(label('toggle-changes', { rightPanelOpen: false, rightPanelTab: 'changes' })?.label).toBe('Show Changes')
+    expect(label('toggle-changes', { rightPanelOpen: true, rightPanelTab: 'files' })?.label).toBe('Show Changes')
+  })
+
+  it('dims Show Files while the Files tab is showing', () => {
+    expect(label('show-files', { rightPanelOpen: true, rightPanelTab: 'files' })).toMatchObject({
+      unavailable: 'shown'
+    })
+    expect(label('show-files', { rightPanelOpen: false, rightPanelTab: 'files' })).not.toHaveProperty('unavailable')
   })
 })

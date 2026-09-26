@@ -492,3 +492,73 @@ describe('the first screen', () => {
     expect(labels()).toEqual(['Copy Path', 'Copy Branch'])
   })
 })
+
+describe('a query that finds nothing', () => {
+  beforeEach(() => {
+    call.mockImplementation((method: unknown, params: unknown) =>
+      method === 'worktree.findFiles'
+        ? Promise.resolve({ worktreeId: 'w1', query: (params as { query: string }).query, paths: [], truncated: false })
+        : new Promise(() => {})
+    )
+  })
+
+  const typed = async (value: string): Promise<void> => {
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value } })
+    await waitFor(() => expect(labels()).toContain(`New Task: “${value}”`))
+  }
+
+  it('offers a New Task and an Open Branch from it instead of a dead end', async () => {
+    await typed('rate limits')
+    expect(labels()).toEqual(['New Task: “rate limits”', 'Open Branch: “rate limits”'])
+    expect(screen.queryByText(/Nothing matches/)).toBeNull()
+  })
+
+  it('opens New Task with the query as the task, and leaves Recent alone', async () => {
+    await typed('rate limits')
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p1', task: 'rate limits' })
+    expect(closeDialog).toHaveBeenCalledOnce()
+    expect(localStorage.getItem('teamree.palette.recent')).toBeNull()
+  })
+
+  it('opens Open Branch narrowed to the query', async () => {
+    await typed('spike')
+    fireEvent.click(row('Open Branch: “spike”'))
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'open-branch', projectId: 'p1', query: 'spike' })
+  })
+})
+
+describe('what a row shows about now', () => {
+  it('gives a worktree row the sidebar’s dot and says it is working', () => {
+    seed({
+      worktrees: [worktree(), worktree({ id: 'w2', name: 'Fix the ruler', branch: 'fix-the-ruler' })],
+      terminals: [
+        {
+          id: 't1',
+          worktreeId: 'w2',
+          title: 'claude',
+          cwd: '/repos/pager-wt/rewrite',
+          shell: '/bin/zsh',
+          cols: 80,
+          rows: 24,
+          running: true,
+          busy: true,
+          lastOutputAt: 0,
+          agent: 'claude'
+        }
+      ]
+    })
+    mount()
+    expect(row('Fix the ruler').querySelector('.activity--working')?.getAttribute('aria-label')).toBe('working')
+    expect(trailingOf('Fix the ruler')).toBe('pager · working')
+    expect(row('Rewrite the pager').querySelector('.activity')).toBeNull()
+  })
+
+  it('names the Changes toggle for what it does now', () => {
+    seed({ rightPanelOpen: true, rightPanelTab: 'changes' })
+    mount()
+    expect(labels()).toContain('Hide Changes')
+    expect(labels()).not.toContain('Show Changes')
+  })
+})

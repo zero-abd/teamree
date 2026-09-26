@@ -134,6 +134,13 @@ describe('the dialog itself', () => {
     expect(document.activeElement).toBe(task())
   })
 
+  it('starts with the task the palette was given', async () => {
+    render(<TaskComposerDialog projectId="p1" task="Add rate limits" />)
+    await act(async () => {})
+    expect(task().value).toBe('Add rate limits')
+    expect(branch().value).toMatch(/rate-limits/)
+  })
+
   it('renders nothing at all for a project that is no longer there', () => {
     render(<TaskComposerDialog projectId="gone" />)
     expect(screen.queryByRole('dialog')).toBeNull()

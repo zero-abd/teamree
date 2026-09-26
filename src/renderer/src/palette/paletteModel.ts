@@ -7,6 +7,7 @@ import {
   type InstalledAgent,
   type Project,
   type RemovedWorktree,
+  type Terminal,
   type UpdateState,
   type Worktree
 } from '@shared/entities'
@@ -18,10 +19,11 @@ import { runName, siblingRuns } from '../compare/siblingRuns'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import type { DiffOptions } from '../state/preferences'
 import { MENU_ORDER, menuLabel, type PanelState } from '../menu/menuBar'
-import { agoLabel } from '../sidebar/agentRows'
+import { agentRows, agoLabel, TONE_LABEL, worktreeTone, type DotTone } from '../sidebar/agentRows'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { automaticUpdatesLabel } from '../updates/updateNotice'
 import { landLabel, landNote, type LandOffer } from '../workspace/rightPanel/landOffer'
+import type { RightPanelTab } from '../workspace/rightPanel/rightPanelState'
 
 /** Every command this window has (derived from `WorkspaceCommand`, so none go missing) plus the palette's own rows. */
 export type PaletteAction =
@@ -48,6 +50,9 @@ export type PaletteAction =
   | `restore:${string}`
   /** Clean Up Merged… for a project, by its id. */
   | `clean-up:${string}`
+  /** A query that found nothing to run: New Task with it as the task, Open Branch narrowed to it. */
+  | `new-task:${string}`
+  | `open-branch:${string}`
 
 /** What the sidebar row's menu does to the worktree on screen. */
 type WorktreeAction =
@@ -64,8 +69,17 @@ type WorktreeAction =
   | 'keep-run'
 
 export type PaletteItem =
-  /** Jump to a worktree; `agent` is a task run's, drawn as its glyph. */
-  | { kind: 'worktree'; id: string; label: string; hint: string; detail: string; search: string; agent?: AgentKind }
+  /** Jump to a worktree; `agent` is a task run's, drawn as its glyph; `tone` is the sidebar row's dot. */
+  | {
+      kind: 'worktree'
+      id: string
+      label: string
+      hint: string
+      detail: string
+      search: string
+      agent?: AgentKind
+      tone?: DotTone
+    }
   /** Run something; `unavailable` says why it would do nothing now (hidden unless it is all a query finds); `here` acts on the worktree on screen. */
   | {
       kind: 'action'
@@ -123,6 +137,9 @@ export type PaletteContext = {
   sidebarVisible?: boolean
   rightPanelOpen?: boolean
   diffOptions?: DiffOptions
+  rightPanelTab?: RightPanelTab
+  /** Every pane, for each worktree row's dot. */
+  terminals?: readonly Terminal[]
 }
 
 /**
@@ -132,6 +149,7 @@ export type PaletteContext = {
 export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
   const projectName = new Map(context.projects.map((project) => [project.id, project.name]))
   const open = (worktree: Worktree): boolean => worktree.id === context.activeWorktreeId
+  const terminals = context.terminals ?? []
 
   const worktrees: PaletteItem[] = [
     ...context.worktrees.filter((worktree) => !open(worktree)),
@@ -141,15 +159,19 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     const display = worktreeDisplay(worktree)
     const label = display.title
     const agent = display.agent?.kind
+    // The clock only feeds `quietFor`, which no tone reads.
+    const tone = hasCheckout(worktree) ? worktreeTone(agentRows(terminals, worktree.id, 0)) : null
     return {
       kind: 'worktree',
       id: worktree.id,
       label,
       ...(agent === undefined ? {} : { agent }),
+      ...(tone === null ? {} : { tone }),
       hint: display.branch ?? '',
       detail: [
         project,
         hasCheckout(worktree) ? '' : worktree.missing ? 'missing' : worktree.state,
+        tone !== null && SAID_TONES.has(tone) ? TONE_LABEL[tone] : '',
         open(worktree) ? 'current' : ''
       ]
         .filter(Boolean)
@@ -163,6 +185,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     ...commandActions(context),
     ...restoreActions(context),
     ...cleanUpActions(context),
+    ...panelActions(context),
     ...ACTIONS,
     ...updateActions(context),
     ...appearanceActions(context)
@@ -192,6 +215,27 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
 }
 
 type ActionRow = { id: PaletteAction; label: string; keywords: string; hint?: string; unavailable?: string }
+
+/** The tones a worktree row names in words; the dot alone says the rest. */
+const SAID_TONES: ReadonlySet<DotTone> = new Set(['failed', 'waiting', 'working'])
+
+/** The right panel's two tabs, worded for what choosing them does now. */
+function panelActions(context: PaletteContext): ActionRow[] {
+  const showing = (tab: RightPanelTab): boolean => context.rightPanelOpen !== false && context.rightPanelTab === tab
+  return [
+    {
+      id: 'toggle-changes',
+      label: showing('changes') ? 'Hide Changes' : 'Show Changes',
+      keywords: 'diff git status files review changes'
+    },
+    {
+      id: 'show-files',
+      label: 'Show Files',
+      keywords: 'tree folder directory explorer browse open panel',
+      ...(showing('files') ? { unavailable: 'shown' } : {})
+    }
+  ]
+}
 
 /** The sidebar row's menu for the worktree on screen, and the focused file's discard and unstage. */
 function worktreeActions(context: PaletteContext): PaletteItem[] {
@@ -442,8 +486,6 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
 
 /** The rows that are the palette's own, with no command and no menu item. */
 const ACTIONS: readonly { id: PaletteAction; label: string; keywords: string }[] = [
-  { id: 'toggle-changes', label: 'Show Changes', keywords: 'diff git status files review changes' },
-  { id: 'show-files', label: 'Show Files', keywords: 'tree folder directory explorer browse open panel' },
   {
     id: 'open-branch',
     label: 'Open Branch…',
@@ -558,6 +600,41 @@ export function filterPalette(items: readonly PaletteItem[], query: string): Pal
   if (found.every((row) => isDimmed(row.item))) return found.map((row) => row.item)
   const named = (row: (typeof found)[number]): boolean => row.shown === 1 && isHere(row.item)
   return found.filter((row) => !isDimmed(row.item) || named(row)).map((row) => row.item)
+}
+
+/**
+ * A typed query as one ranked list, files under their own header. When nothing in it would run, it
+ * ends on New Task and Open Branch from the query; `files` is null while the runtime is still asked.
+ */
+export function queryGroups(
+  items: readonly PaletteItem[],
+  query: string,
+  files: readonly PaletteItem[] | null
+): PaletteGroup[] {
+  const found = filterPalette(items, query)
+  const stuck = files !== null && files.length === 0 && found.every(isDimmed)
+  const named: PaletteGroup[] = files !== null && files.length > 0 ? [{ title: 'Files', items: [...files] }] : []
+  return [{ title: null, items: stuck ? [...found, ...startFrom(items, query.trim())] : found }, ...named]
+}
+
+/** New Task and Open Branch with the query carried in, each only where its own row would run. */
+function startFrom(items: readonly PaletteItem[], query: string): PaletteItem[] {
+  const runs = (id: PaletteAction): PaletteItem | undefined =>
+    items.find((item) => item.kind === 'action' && item.id === id && item.unavailable === undefined)
+  const task = runs('new-worktree')
+  const branch = runs('open-branch')
+  const row = (id: PaletteAction, label: string, hint: string): PaletteItem => ({
+    kind: 'action',
+    id,
+    label,
+    hint,
+    detail: '',
+    search: label
+  })
+  return [
+    ...(task === undefined ? [] : [row(`new-task:${query}`, `New Task: “${query}”`, task.hint)]),
+    ...(branch === undefined ? [] : [row(`open-branch:${query}`, `Open Branch: “${query}”`, '')])
+  ]
 }
 
 /** What identifies a row across openings, for the Recent group. */
