@@ -541,6 +541,15 @@ describe('the first screen', () => {
   })
 })
 
+describe('Show Ports', () => {
+  it('opens the Ports dialog', () => {
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'ports' } })
+    fireEvent.click(row('Show Ports'))
+    expect(openDialog).toHaveBeenCalledWith({ kind: 'ports' })
+  })
+})
+
 describe('a query that finds nothing', () => {
   beforeEach(() => {
     call.mockImplementation((method: unknown, params: unknown) =>

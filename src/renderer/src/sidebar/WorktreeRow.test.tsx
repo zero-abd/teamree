@@ -1108,6 +1108,40 @@ describe('a worktree started from an issue', () => {
   })
 })
 
+describe('a worktree whose panes listen on ports', () => {
+  const serving = (worktreeId: string, id: string, port: number, command = 'node'): Terminal =>
+    terminal({ id, worktreeId, ports: [{ port, pid: port + 1, command }] })
+
+  it('shows :5173, which opens localhost in the browser and not the row', () => {
+    const opened = vi.spyOn(window, 'open').mockImplementation(() => null)
+    mount({ terminals: [serving('w1', 't1', 5173)] })
+    fireEvent.click(within(openButton()).getByRole('link', { name: ':5173' }))
+    expect(opened).toHaveBeenCalledWith('http://localhost:5173', '_blank', 'noopener')
+    expect(handlers.onOpen).not.toHaveBeenCalled()
+    opened.mockRestore()
+  })
+
+  it('counts the other ports and lists them all on hover', () => {
+    mount({ terminals: [serving('w1', 't1', 5173), serving('w1', 't2', 8000, 'Python')] })
+    const chip = within(openButton()).getByRole('link', { name: ':5173 +1' })
+    expect(chip.getAttribute('title')).toBe(':5173  node\n:8000  Python')
+  })
+
+  it('says when another worktree holds the same port', () => {
+    useWorkspaceStore.setState({ worktrees: [worktree(), worktree({ id: 'w2', name: 'Pager in Go' })] })
+    mount({ terminals: [serving('w1', 't1', 5173), serving('w2', 't9', 5173)] })
+    const chip = within(openButton()).getByRole('link', { name: ':5173' })
+    expect(chip.getAttribute('title')).toContain(':5173 also in Pager in Go')
+    expect(chip.className).toContain('worktree__port--clash')
+    useWorkspaceStore.setState({ worktrees: [] })
+  })
+
+  it('shows no port chip when nothing listens', () => {
+    mount({ terminals: [terminal()] })
+    expect(within(openButton()).queryByRole('link')).toBeNull()
+  })
+})
+
 describe('a worktree sharing files with another task', () => {
   const chip = (conflicts: string[] = []): OverlapChip =>
     overlapChip(

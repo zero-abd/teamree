@@ -4,7 +4,7 @@
 import type { RestoredAs } from '../../shared/paneRestore'
 import { spawn } from 'node-pty'
 import type { IDisposable, IPty } from 'node-pty'
-import type { AgentEvent, RunKind, Terminal } from '../../shared/entities'
+import type { AgentEvent, ListeningPort, RunKind, Terminal } from '../../shared/entities'
 import type { TerminalEvent } from '../../shared/methods'
 import { KILL_ESCALATION_MS, killProcessTree } from './process-tree'
 import { recoverTailOnTeardown } from './pty-tail'
@@ -131,6 +131,8 @@ export type PtySessionInit = {
   ordinal?: number
   /** See `Terminal.run`. */
   run?: RunKind
+  /** See `Terminal.ports`; read on every snapshot. */
+  ports?: () => ListeningPort[] | undefined
   /** Called when the pane starts or stops producing output. */
   onActivityChange?: (session: PtySession) => void
   /** Called when the bottom of an agent pane's screen starts or stops showing a question. */
@@ -151,6 +153,7 @@ export class PtySession {
   readonly agent: AgentKind | undefined
   readonly ordinal: number | undefined
   readonly run: RunKind | undefined
+  private readonly portsOf: (() => ListeningPort[] | undefined) | undefined
 
   /** Not a field: a restarted agent has a different child, and `close()` kills by pid. */
   get pid(): number {
@@ -227,6 +230,7 @@ export class PtySession {
     this.agent = init.agent
     this.ordinal = init.ordinal
     this.run = init.run
+    this.portsOf = init.ports
     this.cols = init.cols
     this.rows = init.rows
     this.widest = init.cols
@@ -266,6 +270,7 @@ export class PtySession {
   snapshot(): Terminal {
     const foregroundAgent = this.foregroundAgent()
     const titleSays: TitleOpinion | null = titleOpinion(this.agent ?? foregroundAgent, this.title)
+    const ports = this.running ? this.portsOf?.() : undefined
     return {
       id: this.id,
       worktreeId: this.worktreeId,
@@ -284,6 +289,7 @@ export class PtySession {
       ...(this.label === undefined ? {} : { label: this.label }),
       ...(this.ordinal === undefined ? {} : { ordinal: this.ordinal }),
       ...(this.run === undefined ? {} : { run: this.run }),
+      ...(ports === undefined || ports.length === 0 ? {} : { ports }),
       busy: this.busy,
       // Derived, not stored, so it cannot drift from the title.
       ...(titleSays === null ? {} : { titleSays }),

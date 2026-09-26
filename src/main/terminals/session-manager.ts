@@ -9,6 +9,7 @@ import type {
   AgentEvent,
   ClosedPane,
   Layout,
+  ListeningPort,
   PaneNode,
   RunKind,
   SubagentTranscript,
@@ -158,6 +159,8 @@ export type TerminalSessionManagerOptions = {
   paneIdentity?: PaneIdentityOptions
   /** Lines put before a pane's first prompt, e.g. a child task's (`childPrompt.ts`). */
   promptPrefix?: (worktreeId: string) => string | undefined
+  /** What each pane's tree listens on (`resources/ports.ts`); absent, panes carry no ports. */
+  ports?: (terminalId: string) => ListeningPort[] | undefined
 }
 
 export type PaneIdentityOptions = {
@@ -926,6 +929,7 @@ export class TerminalSessionManager {
       ...(label === undefined ? {} : { label }),
       ordinal,
       ...(params.run === undefined ? {} : { run: params.run }),
+      ...(this.options.ports === undefined ? {} : { ports: () => this.options.ports?.(id) }),
       ...(this.options.onActivityChange === undefined && this.options.onAgentSettled === undefined
         ? {}
         : {

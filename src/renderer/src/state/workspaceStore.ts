@@ -197,6 +197,7 @@ export type DialogState =
   | { kind: 'project-refused'; folder: string; refusal: ProjectAddRefusal }
   | { kind: 'clone-project' }
   | { kind: 'install-cli' }
+  | { kind: 'ports' }
   /** Help's Setup…: the welcome's rows, with a project already added. */
   | { kind: 'setup' }
   /** `parentId`: a child task of that worktree; `fromIssue`: opens on the issue picker; `task`: its starting text. */

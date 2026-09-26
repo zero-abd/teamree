@@ -1000,3 +1000,53 @@ button.picker__chevron:hover {
 .decisions .context__row {
   padding-inline: 0;
 }
+
+/* Show Ports: one row per listening process. */
+.ports {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ports__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ports__row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 0.8fr) minmax(0, 1.2fr) auto auto auto;
+  gap: 6px;
+  align-items: center;
+  min-height: 28px;
+  border-bottom: 1px solid var(--line);
+}
+
+.ports__port {
+  font-variant-numeric: tabular-nums;
+}
+
+.ports__port--clash,
+.ports__clash {
+  color: var(--info);
+}
+
+.ports__command,
+.ports__worktree {
+  overflow: hidden;
+  color: var(--fg-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ports__clash,
+.ports__empty {
+  margin: 0;
+}
+
+.ports__empty {
+  color: var(--fg-secondary);
+}

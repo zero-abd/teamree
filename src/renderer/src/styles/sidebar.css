@@ -1384,3 +1384,19 @@
   background: none;
   color: var(--fg-muted);
 }
+
+/* A pane's listening port; blue, as an overlap is, when another worktree holds the same one. */
+.worktree__port {
+  color: var(--fg-secondary);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.worktree__port:hover {
+  color: var(--accent-bright);
+}
+
+.worktree__port--clash {
+  background: color-mix(in srgb, var(--info) 14%, transparent);
+  color: var(--info);
+}

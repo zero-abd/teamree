@@ -22,6 +22,7 @@ import { useUsageStore } from '../state/usageStore'
 import { agentRows, dotClass, TONE_LABEL, worktreeTone, type DotTone } from './agentRows'
 import { AskForYou } from './AskForYou'
 import { PaneRows } from './PaneRows'
+import { PortChipView } from './PortChipView'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
 import type { OverlapChip, OverlapEntry } from './overlapChip'
@@ -320,6 +321,7 @@ export function WorktreeRow({
           {`#${issue.number}`}
         </span>
       )}
+      {ready ? <PortChipView terminals={terminals} worktreeId={worktree.id} /> : null}
       {overlap === undefined || !ready ? null : <OverlapMark chip={overlap.chip} onOpen={overlap.onOpen} />}
       {ready ? <RunChip terminals={terminals} worktreeId={worktree.id} /> : null}
       {handoff === null ? null : <span className="chip worktree__handoff">{handoff}</span>}
