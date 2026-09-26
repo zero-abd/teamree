@@ -160,7 +160,7 @@ beforeEach(() => {
 describe('a worktree whose directory is gone', () => {
   it('says so, dimmed, and cannot be opened', () => {
     mount({ worktree: worktree({ missing: true }) })
-    expect(screen.getByText('missing')).toBeTruthy()
+    expect(screen.getByText('missing', { selector: '.chip' })).toBeTruthy()
     expect(row().classList.contains('worktree--missing')).toBe(true)
     expect(openButton().getAttribute('aria-disabled')).toBe('true')
   })
@@ -187,7 +187,7 @@ describe('a worktree whose directory is gone', () => {
 describe('a worktree still being made', () => {
   it('says so, and cannot be opened while it is not there', () => {
     mount({ worktree: worktree({ state: 'creating' }) })
-    expect(screen.getByText('creating')).toBeTruthy()
+    expect(screen.getByText('creating', { selector: '.chip' })).toBeTruthy()
     expect(openButton().getAttribute('aria-disabled')).toBe('true')
     openButton().click()
     expect(handlers.onOpen).not.toHaveBeenCalled()
@@ -241,7 +241,7 @@ describe('a worktree that failed to be made', () => {
     mount({ worktree: worktree({ state: 'failed', error: reason }) })
     expect(failure().textContent).toBe('Invalid reference: origin/nope')
     expect(failure().title).toBe(reason)
-    expect(screen.getByText('failed')).toBeTruthy()
+    expect(screen.getByText('failed', { selector: '.chip' })).toBeTruthy()
   })
 
   it('cuts a long reason to about sixty characters', () => {
@@ -330,6 +330,7 @@ describe('a worktree that is ready', () => {
     expect(within(meta).getByText('ada/pager')).toBeTruthy()
     expect(meta.querySelector('.gitchips')).not.toBeNull()
     expect(document.querySelector('.worktree__title .gitchips')).toBeNull()
+    expect(screen.getByRole('treeitem', { description: 'branch ada/pager, 1 uncommitted' })).toBe(openButton())
   })
 
   it('draws a clean merge as a mark, with the sentence on hover', () => {
@@ -344,7 +345,7 @@ describe('a worktree that is ready', () => {
       } as WorktreeMergePreview
     })
     expect(screen.queryByText('merges')).toBeNull()
-    const mark = screen.getByRole('img', { name: '2 commits merge cleanly into origin/main' })
+    const mark = screen.getByRole('img', { name: '2 commits merge cleanly into origin/main', hidden: true })
     expect(mark.getAttribute('title')).toBe('2 commits merge cleanly into origin/main')
   })
 
@@ -404,7 +405,7 @@ describe('a worktree that is ready', () => {
     })
     // A mark like the clean one, not a word: the count and paths are on hover.
     expect(screen.queryByText('2 conflicts')).toBeNull()
-    const mark = screen.getByRole('img', { name: /^Would conflict with origin\/main/ })
+    const mark = screen.getByRole('img', { name: /^Would conflict with origin\/main/, hidden: true })
     expect(mark.getAttribute('title')).toContain('src/pager.ts')
     expect(mark.className).toContain('worktree__merge--conflicts')
     expect(mark.querySelector('svg')).not.toBeNull()
@@ -447,19 +448,11 @@ describe('one of several runs of a task', () => {
       terminals: [terminal({ agent: 'claude', lastOutputAt: NOW - 90_000 })],
       status: status({ unstaged: 1 })
     })
-    const button = screen.getByRole('treeitem', { name: 'Add a subtract function to calc (Claude Code)' })
+    const button = screen.getByRole('treeitem', {
+      name: 'Add a subtract function to calc (Claude Code)',
+      description: 'stopped, 1 uncommitted'
+    })
     expect(button.classList.contains('worktree__open')).toBe(true)
-    expect(
-      button
-        .getAttribute('aria-describedby')
-        ?.split(' ')
-        .map((id) => document.getElementById(id))
-    ).toEqual([screen.getByRole('img', { name: 'stopped' }), document.querySelector('.worktree__facts')])
-    expect(
-      within(document.querySelector('.worktree__facts') as HTMLElement)
-        .getByRole('img')
-        .getAttribute('aria-label')
-    ).toBe('git status: 1 uncommitted')
   })
 
   // The pane row under it starts with the same glyph; the word only costs the title width.
@@ -496,7 +489,7 @@ describe('one of several runs of a task', () => {
       evidence: { t1: 'Edited calc.js (+1 -0)' }
     })
     const pane = document.querySelector('.pane-row') as HTMLElement
-    expect(within(pane).getByRole('img', { name: 'Codex' })).toBeTruthy()
+    expect(pane.getAttribute('aria-label')).toBe('Codex, stopped: Edited calc.js (+1 -0)')
     expect(pane.querySelector('.pane-row__label')).toBeNull()
     expect(pane.querySelector('.pane-row__head')?.textContent).toContain('Edited calc.js (+1 -0)')
   })
@@ -1088,8 +1081,13 @@ describe('a worktree whose work has landed', () => {
       })
     })
 
-    const chip = screen.getByRole('link', { name: /Pull Request #42/ })
+    const chip = screen.getByRole('link', { name: /Pull Request #42/, hidden: true })
     expect(chip.textContent).toBe('PR #42 ✗ 2')
+    expect(screen.getByRole('treeitem', { description: 'PR 42, 2 checks failing, changes requested' })).toBe(
+      openButton()
+    )
+    fireEvent.contextMenu(row())
+    expect(labels()).toContain('Open Pull Request #42')
     // On the second line, beside a run's chip, so neither squeezes the name.
     expect(chip.closest('.worktree__meta')).not.toBeNull()
     expect(chip.classList.contains('prchip--fail')).toBe(true)
@@ -1134,13 +1132,148 @@ describe('a worktree whose work has landed', () => {
   })
 })
 
+// Glued together, the chips read `search-page--sorting↑1↓1 parent` and left the agent out.
+describe('what a screen reader hears for a row', () => {
+  const asking = (): Terminal =>
+    terminal({
+      agent: 'claude',
+      agentEvent: { event: 'Notification', at: NOW, detail: 'permission_prompt' },
+      ports: [{ port: 5173, pid: 9, command: 'node' }]
+    })
+
+  it('describes its state, git, pull request, port and overlap in words joined by commas', () => {
+    const overlap = overlapChip(
+      'w1',
+      [{ worktreeId: 'w1', with: { worktreeId: 'w2' }, paths: ['src/server.js'], conflicts: ['src/server.js'] }],
+      () => 'search page'
+    ) as OverlapChip
+    mount({
+      worktree: worktree({ parentId: 'w0' }),
+      status: status({ ahead: 1, behind: 1 }),
+      terminals: [asking()],
+      evidence: { t1: 'Allow command?' },
+      landing: {
+        worktreeId: 'w1',
+        branch: 'rewrite-the-pager',
+        base: 'main',
+        host: 'github',
+        published: true,
+        unmerged: 1,
+        merged: false,
+        pullRequest: {
+          number: 42,
+          url: 'u',
+          state: 'open',
+          checks: { passing: 1, failing: 2, pending: 0, list: [] }
+        },
+        readAt: NOW
+      },
+      overlap: { chip: overlap, onOpen: vi.fn() }
+    })
+    expect(openButton().getAttribute('aria-label')).toBe('Rewrite the pager')
+    expect(screen.getByRole('treeitem', { name: 'Rewrite the pager' })).toBe(openButton())
+    expect(
+      screen.getByRole('treeitem', {
+        description:
+          'asking: Allow command?, 1 ahead, 1 behind parent, PR 42, 2 checks failing, port 5173, ' +
+          'would conflict with search page in server.js'
+      })
+    ).toBe(openButton())
+  })
+
+  it('says merged, and the report it shows under the name', () => {
+    mount({
+      worktree: worktree({
+        report: { outcome: 'succeeded', summary: 'Cart totals include tax. Rounded per line.', paths: [], at: NOW }
+      }),
+      landing: {
+        worktreeId: 'w1',
+        branch: 'rewrite-the-pager',
+        base: 'main',
+        host: 'github',
+        published: true,
+        unmerged: 0,
+        merged: true,
+        readAt: NOW
+      }
+    })
+    expect(screen.getByRole('treeitem', { description: 'merged, reported: Cart totals include tax.' })).toBe(
+      openButton()
+    )
+  })
+
+  it('says merged but not pushed, as its chip does', () => {
+    mount({
+      landing: {
+        worktreeId: 'w1',
+        branch: 'rewrite-the-pager',
+        base: 'main',
+        host: 'github',
+        published: true,
+        unmerged: 0,
+        merged: true,
+        notPushed: true,
+        readAt: NOW
+      }
+    })
+    expect(screen.getByRole('treeitem', { description: 'merged, not pushed' })).toBe(openButton())
+  })
+
+  it('hides its chips, dot and glyphs from the accessibility tree, so nothing is read twice', () => {
+    mount({
+      worktree: worktree({ issue: { number: 7, url: 'https://github.com/acme/pager/issues/7' }, task: 'x' }),
+      status: status({ ahead: 1, unstaged: 1 }),
+      terminals: [asking()],
+      mergePreview: {
+        worktreeId: 'w1',
+        baseRef: 'origin/main',
+        state: 'clean',
+        ahead: 1,
+        conflicts: [],
+        readAt: NOW
+      } as WorktreeMergePreview
+    })
+    const open = document.querySelector('.worktree__open') as HTMLElement
+    const drawn = [...open.querySelectorAll('.chip, .gitchips, .activity, .worktree__merge, .agent-glyph')]
+    expect(drawn.length).toBeGreaterThan(4)
+    for (const mark of drawn) expect(mark.closest('[aria-hidden="true"]'), mark.className).not.toBeNull()
+    expect(within(open).queryAllByRole('img')).toEqual([])
+    expect(within(open).queryAllByRole('link')).toEqual([])
+  })
+
+  it('keeps the rename field in the tree while it is open', () => {
+    mount()
+    fireEvent.doubleClick(screen.getByText('Rewrite the pager'))
+    expect(screen.getByRole('textbox')).toBeTruthy()
+  })
+
+  // The chips sit inside the row's button, where no key reaches them; their menu items do.
+  it('offers what its port and overlap chips open in its menu', () => {
+    const onOpen = vi.fn()
+    const opened = vi.spyOn(window, 'open').mockImplementation(() => null)
+    const overlap = overlapChip(
+      'w1',
+      [{ worktreeId: 'w1', with: { worktreeId: 'w2' }, paths: ['src/api/auth.ts'], conflicts: [] }],
+      () => 'Add rate limits'
+    ) as OverlapChip
+    mount({ terminals: [asking()], overlap: { chip: overlap, onOpen } })
+    fireEvent.keyDown(openButton(), { key: 'F10', shiftKey: true })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Open localhost:5173' }))
+    expect(opened).toHaveBeenCalledWith('http://localhost:5173', '_blank', 'noopener')
+    fireEvent.keyDown(openButton(), { key: 'F10', shiftKey: true })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Open Overlap: auth.ts' }))
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ path: 'src/api/auth.ts' }))
+    opened.mockRestore()
+  })
+})
+
 describe('a worktree started from an issue', () => {
   const linked = (): Worktree => worktree({ issue: { number: 123, url: 'https://github.com/acme/pager/issues/123' } })
 
   it('shows #123, which opens the issue and not the row', () => {
     const opened = vi.spyOn(window, 'open').mockImplementation(() => null)
     mount({ worktree: linked() })
-    fireEvent.click(within(openButton()).getByRole('link', { name: '#123' }))
+    fireEvent.click(within(openButton()).getByRole('link', { name: '#123', hidden: true }))
     expect(opened).toHaveBeenCalledWith('https://github.com/acme/pager/issues/123', '_blank', 'noopener')
     expect(handlers.onOpen).not.toHaveBeenCalled()
     opened.mockRestore()
@@ -1154,7 +1287,7 @@ describe('a worktree started from an issue', () => {
 
   it('shows no issue when it has none', () => {
     mount()
-    expect(within(openButton()).queryByRole('link')).toBeNull()
+    expect(within(openButton()).queryByRole('link', { hidden: true })).toBeNull()
   })
 })
 
@@ -1165,7 +1298,7 @@ describe('a worktree whose panes listen on ports', () => {
   it('shows :5173, which opens localhost in the browser and not the row', () => {
     const opened = vi.spyOn(window, 'open').mockImplementation(() => null)
     mount({ terminals: [serving('w1', 't1', 5173)] })
-    fireEvent.click(within(openButton()).getByRole('link', { name: ':5173' }))
+    fireEvent.click(within(openButton()).getByRole('link', { name: ':5173', hidden: true }))
     expect(opened).toHaveBeenCalledWith('http://localhost:5173', '_blank', 'noopener')
     expect(handlers.onOpen).not.toHaveBeenCalled()
     opened.mockRestore()
@@ -1173,14 +1306,14 @@ describe('a worktree whose panes listen on ports', () => {
 
   it('counts the other ports and lists them all on hover', () => {
     mount({ terminals: [serving('w1', 't1', 5173), serving('w1', 't2', 8000, 'Python')] })
-    const chip = within(openButton()).getByRole('link', { name: ':5173 +1' })
+    const chip = within(openButton()).getByRole('link', { name: ':5173 +1', hidden: true })
     expect(chip.getAttribute('title')).toBe(':5173  node\n:8000  Python')
   })
 
   it('says when another worktree holds the same port', () => {
     useWorkspaceStore.setState({ worktrees: [worktree(), worktree({ id: 'w2', name: 'Pager in Go' })] })
     mount({ terminals: [serving('w1', 't1', 5173), serving('w2', 't9', 5173)] })
-    const chip = within(openButton()).getByRole('link', { name: ':5173' })
+    const chip = within(openButton()).getByRole('link', { name: ':5173', hidden: true })
     expect(chip.getAttribute('title')).toContain(':5173 also in Pager in Go')
     expect(chip.className).toContain('worktree__port--clash')
     useWorkspaceStore.setState({ worktrees: [] })
@@ -1188,7 +1321,7 @@ describe('a worktree whose panes listen on ports', () => {
 
   it('shows no port chip when nothing listens', () => {
     mount({ terminals: [terminal()] })
-    expect(within(openButton()).queryByRole('link')).toBeNull()
+    expect(within(openButton()).queryByRole('link', { hidden: true })).toBeNull()
   })
 })
 

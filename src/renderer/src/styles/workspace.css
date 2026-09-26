@@ -987,19 +987,19 @@
   background: none;
 }
 
-/* Focus rings the whole row, checkbox and counts included, inside its fill. */
+/* Focus rings the whole row, checkbox and counts included, inside its fill, as thick as the shared ring. */
 .changes__item .change:focus-visible {
   outline: none;
 }
 
 .changes__item:has(.change:focus-visible) {
-  box-shadow: inset 0 0 0 1px var(--accent-bright);
+  box-shadow: inset 0 0 0 2px var(--accent-bright);
 }
 
 .changes__item--selected:has(.change:focus-visible) {
   box-shadow:
     inset 2px 0 var(--accent),
-    inset 0 0 0 1px var(--accent-bright);
+    inset 0 0 0 2px var(--accent-bright);
 }
 
 .change__tick {
@@ -1019,17 +1019,16 @@
   border: 1px solid transparent;
   border-radius: var(--r1);
   background: none;
-  color: var(--fg-secondary);
+  color: var(--fg-muted);
   font-family: var(--font-ui);
   font-size: var(--text-xs);
   cursor: pointer;
-  opacity: var(--control-rest);
 }
 
 .changes__item:hover .change__discard,
 .changes__item--selected .change__discard,
 .change__discard:focus-visible {
-  opacity: 1;
+  color: var(--fg-secondary);
 }
 
 .change__discard:hover {
@@ -1334,17 +1333,16 @@ textarea.changes__message {
   border: 1px solid transparent;
   border-radius: var(--r1);
   background: none;
-  color: var(--fg-secondary);
+  color: var(--fg-muted);
   font-size: var(--text-xs);
   cursor: pointer;
-  opacity: var(--control-rest);
 }
 
 .context__row:hover .context__resolve,
 .context__row:hover .context__x,
 .context__resolve:focus-visible,
 .context__x:focus-visible {
-  opacity: 1;
+  color: var(--fg-secondary);
 }
 
 .context__resolve:hover,

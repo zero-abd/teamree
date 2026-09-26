@@ -49,13 +49,18 @@ describe('the rows', () => {
     ])
   })
 
-  it('marks each agent row with that harness’s glyph, named for a screen reader', () => {
+  // Its name is the row's label beside it; a named glyph read `Claude CodeClaude Code`.
+  it('marks each agent row with that harness’s glyph, unnamed beside the name', () => {
     const kiro: InstalledAgent = { kind: 'kiro', command: 'kiro-cli', binary: '/bin/kiro-cli' }
     const marks = startMenuItems([claude, kiro], mac, actions())
       .slice(2, 4)
       .map((item) => (isValidElement(item.icon) ? renderToStaticMarkup(item.icon) : ''))
-    expect(marks[0]).toContain('aria-label="Claude Code"')
-    expect(marks[1]).toContain('aria-label="Kiro"')
+    expect(marks[0]).toContain('data-agent="claude"')
+    expect(marks[1]).toContain('data-agent="kiro"')
+    for (const mark of marks) {
+      expect(mark).toContain('aria-hidden="true"')
+      expect(mark).not.toContain('<title>')
+    }
   })
 
   it('draws a rule before the agents and another after them', () => {

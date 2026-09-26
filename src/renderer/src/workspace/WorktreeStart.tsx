@@ -71,7 +71,7 @@ export function WorktreeStart({
               onClick={() => void reopenTerminal(worktree.id, resume.terminalId)}
             >
               <span className="worktree-start__icon" aria-hidden="true">
-                <AgentGlyph kind={resume.agent} />
+                <AgentGlyph kind={resume.agent} decorative />
               </span>
               {`Resume ${harnessName(resume.agent)}`}
             </button>

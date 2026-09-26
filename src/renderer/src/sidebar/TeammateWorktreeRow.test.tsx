@@ -170,6 +170,13 @@ describe('a pane of theirs', () => {
     expect(button.getAttribute('title')).toBe('Watch priya’s Claude Code · working · reading only')
   })
 
+  it('is named once, by whose it is and its state, with its glyph unnamed', () => {
+    mount()
+    const button = watchButton()
+    expect(button.getAttribute('aria-label')).toBe('priya’s Claude Code, working')
+    expect(button.querySelector('.agent-glyph')?.getAttribute('aria-hidden')).toBe('true')
+  })
+
   it('says whether this window has it open, as a selected row rather than a colour', () => {
     mount(theirs(), ['priya:t7'])
     const button = watchButton()

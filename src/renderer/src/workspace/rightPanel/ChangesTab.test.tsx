@@ -527,7 +527,7 @@ describe('committing', () => {
     expect(screen.getByText('+1,500 more')).toBeTruthy()
     expect(screen.getByText('0/2,000')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'All' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all changes' }))
     expect(screen.getByText('2,000/2,000')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Commit All 2,000' }))
     expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
@@ -661,7 +661,7 @@ describe('what git has staged', () => {
     render(<ChangesTab />)
     expect(box('src/done.ts').checked).toBe(true)
     expect(screen.getByText('1/2')).toBeTruthy()
-    const all = screen.getByRole('checkbox', { name: 'All' }) as HTMLInputElement
+    const all = screen.getByRole('checkbox', { name: 'Select all changes' }) as HTMLInputElement
     expect(all.indeterminate).toBe(true)
 
     fireEvent.click(all)
@@ -716,7 +716,7 @@ describe('what git has staged', () => {
   it('leaves All nothing to do when git already holds every change', () => {
     withChanges([whole])
     render(<ChangesTab />)
-    const all = screen.getByRole('checkbox', { name: 'All' }) as HTMLInputElement
+    const all = screen.getByRole('checkbox', { name: 'Select all changes' }) as HTMLInputElement
     expect(all.checked).toBe(true)
     expect(all.disabled).toBe(true)
     expect(screen.getByRole('button', { name: 'Commit Staged' })).toBeTruthy()
@@ -863,7 +863,7 @@ describe('the commits list', () => {
 })
 
 describe('ticking every file', () => {
-  it('is a checkbox named All, with the count after it', () => {
+  it('is a checkbox beside the word All, with the count after it', () => {
     seed()
     useWorkspaceStore.setState({
       changes: {
@@ -882,7 +882,7 @@ describe('ticking every file', () => {
     })
     render(<ChangesTab />)
 
-    const all = screen.getByRole('checkbox', { name: 'All' })
+    const all = screen.getByRole('checkbox', { name: 'Select all changes' })
     expect(screen.getByText('0/2')).toBeTruthy()
     fireEvent.click(all)
     expect(all).toHaveProperty('checked', true)
@@ -890,10 +890,18 @@ describe('ticking every file', () => {
     expect(screen.queryByText(/selected/)).toBeNull()
   })
 
+  // The word beside it was not its name to a screen reader that reads the box alone.
+  it('names the box itself, not only by the word beside it', () => {
+    withChanges(rows)
+    render(<ChangesTab />)
+    const all = document.querySelector('.changes__all input') as HTMLInputElement
+    expect(all.getAttribute('aria-label')).toBe('Select all changes')
+  })
+
   it('is mixed while only some are ticked', () => {
     withChanges(rows)
     render(<ChangesTab />)
-    const all = screen.getByRole('checkbox', { name: 'All' }) as HTMLInputElement
+    const all = screen.getByRole('checkbox', { name: 'Select all changes' }) as HTMLInputElement
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Include README.md in the next commit' }))
     expect(all.indeterminate).toBe(true)

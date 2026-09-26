@@ -40,7 +40,7 @@ export function AgentSteppers({
             <span className="agents__name">
               {/* The name beside it says it once; the mark's own label would say it twice. */}
               <span aria-hidden="true" className="agents__mark">
-                <AgentGlyph kind={entry.kind} />
+                <AgentGlyph kind={entry.kind} decorative />
               </span>
               {harnessName(entry.kind)}
             </span>

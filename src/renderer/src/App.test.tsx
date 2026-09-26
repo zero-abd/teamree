@@ -13,8 +13,9 @@
 // Everything below the shell is replaced by a marker. Each has its own file,
 // and none of them decides what the shell decides.
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Terminal, Worktree } from '@shared/entities'
 
 vi.mock('./runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
@@ -67,9 +68,48 @@ beforeEach(() => {
 })
 
 describe('the notice layer', () => {
-  it('is absent while there is nothing to say', () => {
+  // Mounted only once it had something in it, its first message was often never heard.
+  it('is there, empty, while there is nothing to say', () => {
     render(<App />)
-    expect(screen.queryByRole('status')).toBeNull()
+    const layer = screen.getByRole('status')
+    expect(layer.textContent).toBe('')
+    expect(layer.querySelector('.notice')).toBeNull()
+  })
+
+  it('says aloud when an agent turns asking', () => {
+    const worktree: Worktree = {
+      id: 'w1',
+      projectId: 'p1',
+      name: 'billing',
+      branch: 'billing',
+      path: '/w1',
+      startedFrom: 'origin/main',
+      state: 'ready',
+      createdAt: 0
+    }
+    const pane: Terminal = {
+      id: 't1',
+      worktreeId: 'w1',
+      title: 'claude',
+      cwd: '/w1',
+      shell: '/bin/zsh',
+      cols: 80,
+      rows: 24,
+      running: true,
+      busy: false,
+      lastOutputAt: 0,
+      agent: 'claude',
+      agentEvent: { event: 'UserPromptSubmit', at: 0 }
+    }
+    seed({ worktrees: [worktree], terminals: { t1: pane } })
+    render(<App />)
+    expect(screen.getByRole('status').textContent).toBe('')
+    act(() =>
+      useWorkspaceStore.setState({
+        terminals: { t1: { ...pane, agentEvent: { event: 'Notification', at: 1, detail: 'permission_prompt' } } }
+      })
+    )
+    expect(screen.getByRole('status').textContent).toBe('billing is asking')
   })
 
   // Announced, not merely drawn: a refusal that only appears in a corner is one

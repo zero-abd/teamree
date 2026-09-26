@@ -81,7 +81,7 @@ export function startMenuItems(
       group === 'agents'
         ? agents.map((agent) => ({
             label: harnessName(agent.kind),
-            icon: <AgentGlyph kind={agent.kind} />,
+            icon: <AgentGlyph kind={agent.kind} decorative />,
             onChoose: () => actions.startAgent(agent.command)
           }))
         : group

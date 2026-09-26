@@ -38,22 +38,25 @@ const mountUnread = (unread: string[], ...panes: Terminal[]): HTMLElement[] => {
 }
 
 describe('PaneRows', () => {
-  it('draws an agent as its harness glyph, labelled with the harness name only', () => {
+  // The glyph and the text beside it read `Claude CodeClaude Code` when both were named.
+  it('draws an agent as its harness glyph, named once, by the row', () => {
     const [row] = mount(terminal({ id: 't1', agent: 'claude' }))
-    const glyph = within(row as HTMLElement).getByRole('img')
-    expect(glyph.getAttribute('aria-label')).toBe('Claude Code')
+    expect(within(row as HTMLElement).queryByRole('img')).toBeNull()
+    expect(row?.querySelector('.agent-glyph')?.getAttribute('aria-hidden')).toBe('true')
+    expect(row?.getAttribute('aria-label')).toBe('Claude Code, stopped')
     expect(row?.querySelector('.pane-row__label')?.textContent).toBe('')
   })
 
   it('keeps the task name as text beside the glyph', () => {
     const [row] = mount(terminal({ id: 't1', agent: 'codex', label: 'auth refactor' }))
-    expect(within(row as HTMLElement).getByRole('img', { name: 'Codex' })).toBeTruthy()
+    expect(row?.getAttribute('aria-label')).toBe('auth refactor, stopped')
+    expect(row?.querySelector('[data-agent="codex"]')).not.toBeNull()
     expect(row?.querySelector('.pane-row__label')?.textContent).toBe('auth refactor')
   })
 
   it('draws a harness found in a plain shell’s foreground', () => {
     const [row] = mount(terminal({ id: 't1', title: '✳ Claude Code', foregroundAgent: 'claude' }))
-    expect(within(row as HTMLElement).getByRole('img', { name: 'Claude Code' })).toBeTruthy()
+    expect(row?.querySelector('[data-agent="claude"]')).not.toBeNull()
   })
 
   it('gives a plain shell the terminal glyph and its own name', () => {
@@ -61,6 +64,32 @@ describe('PaneRows', () => {
     expect(within(row as HTMLElement).queryByRole('img')).toBeNull()
     expect(row?.querySelector('.agent-glyph--terminal')).not.toBeNull()
     expect(row?.querySelector('.pane-row__label')?.textContent).toBe('npm test')
+  })
+
+  it('is named by its state and the question it shows, and who is on it', () => {
+    render(
+      <PaneRows
+        rows={agentRows(
+          [
+            terminal({
+              id: 't1',
+              agent: 'claude',
+              agentEvent: { event: 'Notification', at: 0, detail: 'permission_prompt' }
+            })
+          ],
+          'w1',
+          0,
+          { t1: 'Allow command?' }
+        )}
+        watchers={{ t1: { watchers: [{ handle: 'ana', publicKey: 'k', since: 0 }], typists: [], muted: true } }}
+        unread={new Set(['t1'])}
+        now={0}
+        onFocusTerminal={() => {}}
+      />
+    )
+    expect(
+      screen.getByRole('button', { name: 'Claude Code, asking: Allow command?, unread, ana is watching, muted' })
+    ).toBeTruthy()
   })
 
   // The worktree row carries the one dot; a dot on every pane repeated it.

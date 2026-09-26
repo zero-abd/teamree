@@ -6,7 +6,15 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import postcss from 'postcss'
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_APPEARANCE, resolvePalette, THEME_TOKENS } from '@shared/theme'
+import { contrastRatio, mix, parseColor, type Rgb } from '@shared/color'
+import {
+  BUILT_IN_THEMES,
+  DEFAULT_APPEARANCE,
+  resolvePalette,
+  THEME_TOKENS,
+  themeTone,
+  type Appearance
+} from '@shared/theme'
 import { PANEL_OVERLAY_QUERY } from '../workspace/roomForPanes'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -41,8 +49,8 @@ describe('stylesheets', () => {
   })
 
   // Red is for the confirm; a row's Discard is one pointer move from the row being read.
-  it('draws a changed file’s Discard and line counts in the secondary colour', () => {
-    expect(declarationOf(ruleFor('workspace.css', '.change__discard'), 'color')).toBe('var(--fg-secondary)')
+  it('draws a changed file’s Discard and line counts in grey, never red', () => {
+    expect(declarationOf(ruleFor('workspace.css', '.change__discard'), 'color')).toBe('var(--fg-muted)')
     expect(declarationOf(ruleFor('workspace.css', '.change__stat'), 'color')).toBe('var(--fg-secondary)')
   })
 
@@ -587,7 +595,6 @@ describe('stylesheets', () => {
     ['panes.css', '.pane__close'],
     ['sidebar.css', '.worktree__action'],
     ['sidebar.css', '.project__more'],
-    ['workspace.css', '.change__discard'],
     ['review.css', '.patch__plus'],
     ['rightPanel.css', '.tree__reveal'],
     ['files.css', '.column__close']
@@ -616,6 +623,72 @@ describe('stylesheets', () => {
       })
     })
     expect(hiding).toEqual([])
+  })
+
+  // Faded text failed 4.5:1 (Discard… at 2.4:1); a word rests in the muted ink, which the theme tests hold to 4.5:1.
+  it.each([
+    ['workspace.css', '.change__discard'],
+    ['workspace.css', '.context__resolve']
+  ])('rests the text control %s %s at full opacity, in the muted ink', (sheet, selector) => {
+    const faded: string[] = []
+    postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkRules((rule) => {
+      if (!rule.selectors.some((each) => each.includes(selector) && !each.includes(':disabled'))) return
+      rule.walkDecls('opacity', (decl) => {
+        faded.push(`${rule.selector} { opacity: ${decl.value} }`)
+      })
+    })
+    expect(faded).toEqual([])
+    expect(declarationOf(ruleListing(sheet, selector) as postcss.Rule, 'color')).toBe('var(--fg-muted)')
+  })
+
+  // WCAG's 3:1 for a control's shape: the muted ink at the resting opacity, on each ground a resting control sits on.
+  it.each(BUILT_IN_THEMES.map((theme) => theme.id))('keeps a resting icon control at 3:1 on %s', (id) => {
+    const rest = Number(customProperties('tokens.css').get('--control-rest'))
+    const appearance: Appearance =
+      themeTone(id) === 'dark'
+        ? { ...DEFAULT_APPEARANCE, mode: 'dark', themeId: id }
+        : { ...DEFAULT_APPEARANCE, mode: 'light', light: { themeId: id, ground: null, accent: null, overrides: {} } }
+    const palette = resolvePalette(appearance)
+    const ink = parseColor(palette['fg-muted']) as Rgb
+    for (const ground of ['bg-window', 'bg-rail', 'bg-panel'] as const) {
+      const under = parseColor(palette[ground]) as Rgb
+      const seen = mix(under, ink, rest)
+      expect(contrastRatio(seen, under), `${ground} at ${rest}`).toBeGreaterThanOrEqual(3)
+    }
+  })
+
+  // A 1px ring inside the row read as no ring on the On Branch rows; the shared one is 2px.
+  it('rings a focused changed file as thickly as every other control', () => {
+    expect(declarationOf(ruleFor('base.css', ':focus-visible'), 'outline')).toMatch(/^2px /)
+    expect(declarationOf(ruleFor('workspace.css', '.changes__item:has(.change:focus-visible)'), 'box-shadow')).toBe(
+      'inset 0 0 0 2px var(--accent-bright)'
+    )
+  })
+
+  it('mutes a row shown only for context by its ink, never by fading it', () => {
+    const faded: string[] = []
+    postcss.parse(readFileSync(path.join(here, 'sidebar.css'), 'utf8')).walkRules((rule) => {
+      if (!rule.selector.includes('.worktree--context')) return
+      rule.walkDecls('opacity', (decl) => {
+        faded.push(`${rule.selector} { opacity: ${decl.value} }`)
+      })
+    })
+    expect(faded).toEqual([])
+    expect(declarationOf(ruleFor('sidebar.css', '.worktree--context .worktree__name'), 'color')).toBe('var(--fg-muted)')
+  })
+
+  it('rings the sidebar filter field as its chips are ringed', () => {
+    expect(declarationOf(ruleFor('sidebar.css', '.sidebar__filter-field:focus-visible'), 'box-shadow')).toBe(
+      'var(--ring)'
+    )
+  })
+
+  // Spoken, never drawn; and while it holds no notice the region takes no room in the corner stack.
+  it('keeps the spoken line out of sight, and the empty notice region out of the stack', () => {
+    const spoken = ruleFor('shell.css', '.notices__spoken')
+    expect(declarationOf(spoken, 'position')).toBe('absolute')
+    expect(declarationOf(spoken, 'clip-path')).toBe('inset(50%)')
+    expect(declarationOf(ruleFor('shell.css', '.notices:not(:has(.notice))'), 'position')).toBe('absolute')
   })
 
   it('draws resting controls at full strength where nothing can hover', () => {
