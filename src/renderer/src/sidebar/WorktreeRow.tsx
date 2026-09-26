@@ -213,8 +213,10 @@ export function WorktreeRow({
     <>
       {/* One group, so the open row can hide what its status bar and Changes badge already say. */}
       <span className="worktree__git">
-        {ready ? <GitStatusChips status={status} /> : null}
-        {merged ? <span className="chip worktree__merged">Merged</span> : null}
+        {ready ? <GitStatusChips status={status} child={worktree.parentId !== undefined} /> : null}
+        {merged ? (
+          <span className="chip worktree__merged">{landing?.parent === undefined ? 'Merged' : 'Landed'}</span>
+        ) : null}
         {badge?.tone === 'clean' ? (
           <span
             className="worktree__merge worktree__merge--clean"

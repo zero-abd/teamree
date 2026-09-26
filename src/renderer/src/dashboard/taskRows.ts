@@ -43,13 +43,22 @@ export function isDoneStage(stage: TaskStage): boolean {
   return stage === 'done' || stage === 'landed'
 }
 
+/** A child has landed once its commits are in its parent's branch; anything else, once they are in the base. */
+export function landedWhereItLands(
+  worktree: Pick<Worktree, 'parentId'>,
+  landing: Pick<WorktreeLanding, 'merged' | 'parent'> | undefined
+): boolean {
+  if (landing?.merged !== true) return false
+  return worktree.parentId === undefined || landing.parent?.worktreeId === worktree.parentId
+}
+
 export type TaskRowsInput = {
   projects: readonly Project[]
   worktrees: readonly Worktree[]
   terminals: readonly Terminal[]
   statuses: Readonly<Record<string, WorktreeStatus>>
   mergePreviews: Readonly<Record<string, Pick<WorktreeMergePreview, 'ahead'>>>
-  landings: Readonly<Record<string, Pick<WorktreeLanding, 'merged'>>>
+  landings: Readonly<Record<string, Pick<WorktreeLanding, 'merged' | 'parent'>>>
   /** Uncommitted lines per worktree, where read. */
   changes?: Readonly<Record<string, { changes: readonly Pick<WorktreeChange, 'added' | 'removed'>[] }>>
   now: number
@@ -84,7 +93,7 @@ export function taskStages(input: Omit<TaskRowsInput, 'projects' | 'changes'>): 
         tone,
         ...(status === undefined ? {} : { status }),
         ahead: input.mergePreviews[worktree.id]?.ahead ?? 0,
-        landed: input.landings[worktree.id]?.merged === true
+        landed: landedWhereItLands(worktree, input.landings[worktree.id])
       })
       return [worktree.id, stage]
     })

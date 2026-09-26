@@ -1191,14 +1191,14 @@ export class GitService {
     })
   }
 
-  /** Brings the project's base ref into this worktree; a conflict leaves it mid-way. See worktreeUpdate.ts. */
+  /** Brings its base into this worktree, a child's parent branch included; a conflict leaves it mid-way. See worktreeUpdate.ts. */
   async worktreeUpdate(params: ParamsOf<'worktree.update'>): Promise<WorktreeUpdate> {
     const worktree = this.#requireReadyWorktree(params.worktreeId, 'updating')
     const project = this.#requireProject(worktree.projectId)
     return updateWorktree(this.#runner, {
       worktreeId: worktree.id,
       worktreePath: worktree.path,
-      baseRef: project.baseRef,
+      baseRef: worktree.baseRef ?? project.baseRef,
       now: this.#now
     })
   }
@@ -1218,20 +1218,31 @@ export class GitService {
     return createPullRequest(this.#runner, this.#landingOptions(params.worktreeId, 'a pull request'))
   }
 
-  /** Merges the worktree's branch into the base branch in the project's own checkout. */
+  /** Merges the worktree's branch into the base branch in the project's own checkout, or a child's into its parent's. */
   async worktreeMergeIntoBase(params: ParamsOf<'worktree.mergeIntoBase'>): Promise<WorktreeMerge> {
     const worktree = this.#requireReadyWorktree(params.worktreeId, 'a merge')
     const project = this.#store.getProject(worktree.projectId)
     if (!project) {
       throw new GitServiceError(ErrorCode.NotFound, `worktree "${worktree.name}" has no project to merge into`)
     }
+    const parent = this.#landingParent(worktree)
     return mergeIntoBase(this.#runner, {
       worktreeId: worktree.id,
-      repoPath: project.path,
+      repoPath: parent?.path ?? project.path,
       branch: worktree.branch,
-      baseRef: project.baseRef,
+      baseRef: parent?.branch ?? project.baseRef,
+      ...(parent === undefined
+        ? {}
+        : { parent: { name: parent.name, agentWorking: () => this.#agentWorking(parent.id) } }),
       ...(params.dryRun === undefined ? {} : { dryRun: params.dryRun })
     })
+  }
+
+  /** The ready parent a child lands in; undefined for a top-level worktree. */
+  #landingParent(worktree: Worktree): Worktree | undefined {
+    const parent = worktree.parentId === undefined ? undefined : this.#store.getWorktree(worktree.parentId)
+    if (parent === undefined) return undefined
+    return this.#requireReadyWorktree(parent.id, 'landing in it')
   }
 
   /**
@@ -1272,12 +1283,14 @@ export class GitService {
     const worktree = this.#requireReadyWorktree(worktreeId, what)
     const project = this.#store.getProject(worktree.projectId)
     if (!project) throw new GitServiceError(ErrorCode.NotFound, `worktree "${worktree.name}" has no project`)
+    const parent = this.#landingParent(worktree)
     return {
       worktreeId: worktree.id,
       worktreePath: worktree.path,
       branch: worktree.branch,
-      baseRef: project.baseRef,
+      baseRef: parent?.branch ?? project.baseRef,
       startedFrom: worktree.startedFrom,
+      ...(parent === undefined ? {} : { parent: { worktreeId: parent.id, name: parent.name } }),
       ...(this.#gh === undefined ? {} : { gh: this.#gh }),
       now: this.#now
     }

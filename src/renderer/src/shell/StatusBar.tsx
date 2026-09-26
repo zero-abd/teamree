@@ -43,7 +43,8 @@ export function StatusBar(): React.JSX.Element {
   useKeepAwake()
 
   const panes = paneCount(Object.values(terminals), worktrees.map((entry) => entry.id), activeWorktreeId)
-  const summary = summarizeWorktreeStatus(status)
+  const child = worktrees.some((entry) => entry.id === activeWorktreeId && entry.parentId !== undefined)
+  const summary = summarizeWorktreeStatus(status, child)
   // `now` only moves the quiet-for column, which the count does not read.
   const owed = useMemo(
     () => attention(dashboardRows({ terminals: Object.values(terminals), worktrees, projects, layouts, now: 0 })),

@@ -575,7 +575,8 @@
 
 .worktree__git {
   display: inline-flex;
-  flex: 0 1 auto;
+  /* The branch gives way first: its name is on hover, the counts are not. */
+  flex: 0 0 auto;
   align-items: center;
   gap: var(--s2);
   min-width: 0;

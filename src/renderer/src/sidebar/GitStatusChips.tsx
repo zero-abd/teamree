@@ -7,11 +7,18 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { statusStaleness } from './statusStaleness'
 import { summarizeWorktreeStatus } from './worktreeStatusSummary'
 
-export function GitStatusChips({ status }: { status: WorktreeStatus | undefined }): React.JSX.Element | null {
+export function GitStatusChips({
+  status,
+  child = false
+}: {
+  status: WorktreeStatus | undefined
+  /** Behind its parent's branch rather than the project's base. */
+  child?: boolean
+}): React.JSX.Element | null {
   const unreadableSince = useWorkspaceStore((state) => (status ? state.unreadableSince[status.worktreeId] : undefined))
   // The age is the one number here that changes while nothing happens.
   const now = useNow()
-  const summary = summarizeWorktreeStatus(status)
+  const summary = summarizeWorktreeStatus(status, child)
   const stale = statusStaleness({ status, unreadableSince, now })
   if (!summary) return null
 
@@ -37,7 +44,7 @@ export function GitStatusChips({ status }: { status: WorktreeStatus | undefined 
           <span className="gitchip__glyph" aria-hidden="true">
             ↓
           </span>
-          {summary.behind}
+          {child ? `${summary.behind} parent` : summary.behind}
         </span>
       ) : null}
       {summary.tone !== 'quiet' ? (

@@ -1,4 +1,4 @@
-// The step after Publish: a pull request on the host, or a merge into the base here, then Done.
+// The step after Publish: a pull request on the host, or a merge into the base (a child's parent) here, then Done.
 
 import type { WorktreeLanding, WorktreeStatus } from '@shared/entities'
 
@@ -13,6 +13,7 @@ export function landOffer(landing: WorktreeLanding | undefined, status: Worktree
   if (landing === undefined || status === undefined || status.missing) return null
   if (landing.merged) return { kind: 'merged' }
   if (status.staged + status.unstaged + status.untracked + status.conflicted > 0) return null
+  if (landing.parent !== undefined) return landing.unmerged > 0 ? { kind: 'merge', into: landing.parent.name } : null
   if (landing.host === null) return landing.unmerged > 0 ? { kind: 'merge', into: landing.base } : null
   if (landing.pullRequest?.state === 'open') {
     return { kind: 'open-pr', number: landing.pullRequest.number, url: landing.pullRequest.url }

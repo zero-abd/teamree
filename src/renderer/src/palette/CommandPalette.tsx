@@ -14,7 +14,7 @@ import { compareTitle } from '../compare/siblingRuns'
 import { useOpenIn } from '../sidebar/openIn'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { canDiscard, updateFrom } from '../workspace/rightPanel/ChangesTab'
+import { canDiscard, childOf, updateFrom } from '../workspace/rightPanel/ChangesTab'
 import { landOffer } from '../workspace/rightPanel/landOffer'
 import {
   buildPaletteItems,
@@ -168,7 +168,11 @@ export function CommandPalette({
         appearance: { mode: appearance.mode ?? 'dark', themeId: activeChoice(appearance, systemTone).themeId },
         focusedChange:
           change === undefined ? null : { path: change.path, discardable: canDiscard(change), staged: change.staged },
-        updateFrom: updateFrom(active === undefined ? undefined : statuses[active.id], activeBase)
+        updateFrom: updateFrom(
+          active === undefined ? undefined : statuses[active.id],
+          activeBase,
+          childOf(worktrees, active?.id ?? null)
+        )
       }),
     [
       worktrees,

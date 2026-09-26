@@ -342,6 +342,16 @@ describe('landing the work', () => {
     expect(call).not.toHaveBeenCalledWith('worktree.mergeIntoBase', expect.anything())
   })
 
+  it('is Merge into the parent for a child, even on a known host, and never a pull request', () => {
+    landed({ base: 'rework-auth', host: null, parent: { worktreeId: 'w0', name: 'Rework auth' } })
+    render(<ChangesTab />)
+
+    expect(primary('Merge into Rework auth…')).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Create Pull Request' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Merge into Rework auth…' }))
+    expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'w1' })
+  })
+
   it('waits for Push while the remote lacks commits, and for Commit while there are changes', () => {
     landed({}, { ahead: 1 })
     const { unmount } = render(<ChangesTab />)
@@ -1042,6 +1052,28 @@ describe('keeping up with the base', () => {
     expect(update.className).not.toContain('button--primary')
     expect(screen.getByRole('button', { name: 'Push' }).className).toContain('button--primary')
     await act(async () => fireEvent.click(update))
+    expect(call).toHaveBeenCalledWith('worktree.update', { worktreeId: 'w1' })
+  })
+
+  it('offers Update from Parent to a child behind its parent', async () => {
+    seed({ behind: 2 })
+    const child = {
+      id: 'w1',
+      projectId: 'p1',
+      name: 'Write tests',
+      branch: 'rework-auth--write-tests',
+      path: '/wt/rework-auth--write-tests',
+      startedFrom: 'abc',
+      state: 'ready' as const,
+      createdAt: 0,
+      parentId: 'w0',
+      baseRef: 'rework-auth'
+    }
+    useWorkspaceStore.setState({ worktrees: [child] })
+    call.mockImplementation(() => new Promise(() => {}))
+    render(<ChangesTab />)
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Update from Parent' })))
     expect(call).toHaveBeenCalledWith('worktree.update', { worktreeId: 'w1' })
   })
 

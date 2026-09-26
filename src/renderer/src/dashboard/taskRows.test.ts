@@ -138,8 +138,16 @@ describe('the Tasks board rows', () => {
   })
 
   it('tallies a parent’s children, done counting landed', () => {
-    const [auth, , , limits] = taskRows(input({ landings: { migration: { merged: true } } }))
+    const inParent = { merged: true, parent: { worktreeId: 'auth', name: 'Rework auth session' } }
+    const [auth, , migration, limits] = taskRows(input({ landings: { migration: inParent } }))
+    expect(migration?.stage).toBe('landed')
     expect(auth?.tally).toEqual({ done: 1, total: 2 })
     expect(limits?.tally).toBeUndefined()
+  })
+
+  it('counts a child landed only in its parent, not in main', () => {
+    const [auth, , migration] = taskRows(input({ landings: { migration: { merged: true } } }))
+    expect(migration?.stage).toBe('ready')
+    expect(auth?.tally).toEqual({ done: 0, total: 2 })
   })
 })

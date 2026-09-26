@@ -781,21 +781,28 @@ export const worktreeCommands: readonly CommandSpec[] = [
     details:
       'On GitHub, GitLab or Bitbucket: a pull request for the published branch, made with gh when it is ' +
       'signed in, else the URL that opens one. Any other origin, or --merge: merges the branch into the ' +
-      "base branch in the project's own checkout, fast-forward when it can; refused over uncommitted work there.",
-    args: [{ name: 'worktree', description: 'Worktree id, name, path, or branch.', required: true }],
+      "base branch in the project's own checkout, fast-forward when it can; refused over uncommitted work there. " +
+      "A child always merges into its parent's checkout; refused over uncommitted changes there to the files " +
+      "it brings, or while the parent's agent is working.",
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, branch, or here.', required: true }],
     flags: [{ name: 'merge', kind: 'boolean', description: 'Merge into the base even on a known host.' }],
-    examples: ['teamree worktree land fix-login', 'teamree worktree land fix-login --merge'],
+    examples: [
+      'teamree worktree land fix-login',
+      'teamree worktree land fix-login --merge',
+      'teamree worktree land here'
+    ],
     run: async (context) => {
       const selector = context.args[0] as string
-      const worktree = await resolveWorktree(context.client, selector)
+      const worktree = await resolveWorktree(context.client, selector, { env: context.env, cwd: context.cwd })
       const landing = await context.client.call('worktree.landing', { worktreeId: worktree.id })
       if (landing.merged) {
         return { data: landing, text: `${landing.branch} is already in ${landing.base}.` }
       }
-      if (landing.host === null || readBoolean(context.flags, 'merge')) {
+      if (landing.host === null || landing.parent !== undefined || readBoolean(context.flags, 'merge')) {
         const merged = await context.client.call('worktree.mergeIntoBase', { worktreeId: worktree.id })
         const how = merged.fastForward ? 'fast-forward' : 'merge commit'
-        return { data: merged, text: `Merged ${landing.branch} into ${merged.into} in ${merged.checkout} (${how}).` }
+        const into = landing.parent === undefined ? `${merged.into} in ${merged.checkout}` : landing.parent.name
+        return { data: merged, text: `Merged ${landing.branch} into ${into} (${how}).` }
       }
       if (!landing.published) {
         throw new CliError({
@@ -807,6 +814,40 @@ export const worktreeCommands: readonly CommandSpec[] = [
       const made = await context.client.call('worktree.createPullRequest', { worktreeId: worktree.id })
       const said = made.number === undefined ? 'Open a pull request at:' : `Pull request #${made.number}:`
       return { data: made, text: `${said}\n${made.url}` }
+    }
+  },
+  {
+    path: ['worktree', 'update'],
+    summary: "Bring the base into a worktree, or a child's parent into it.",
+    details:
+      'Rebases an unpublished branch and merges into a published one. Refused over uncommitted changes. ' +
+      'A conflict stops part-way, exits 1 and names the paths; resolve them, or --abort.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, branch, or here.', required: true }],
+    flags: [{ name: 'abort', kind: 'boolean', description: 'Undo an update that stopped on conflicts.' }],
+    examples: ['teamree worktree update here', 'teamree worktree update here --abort'],
+    run: async (context) => {
+      const selector = context.args[0] as string
+      const worktree = await resolveWorktree(context.client, selector, { env: context.env, cwd: context.cwd })
+      if (readBoolean(context.flags, 'abort')) {
+        const undone = await context.client.call('worktree.abortUpdate', { worktreeId: worktree.id })
+        return { data: undone, text: undone.aborted === null ? 'Nothing to abort.' : `Aborted the ${undone.aborted}.` }
+      }
+      const result = await context.client.call('worktree.update', { worktreeId: worktree.id })
+      if (result.outcome === 'conflicts') {
+        throw new CliError({
+          code: 'conflicts',
+          message: `Conflicts in ${result.conflicts.join(', ')}. Resolve them, or: teamree worktree update ${selector} --abort`,
+          exitCode: ExitCode.Failure,
+          data: result
+        })
+      }
+      const text =
+        result.outcome === 'upToDate'
+          ? `${worktree.branch} already has ${result.baseRef}.`
+          : result.mode === 'rebase'
+            ? `Rebased ${worktree.branch} onto ${result.baseRef}.`
+            : `Merged ${result.baseRef} into ${worktree.branch}.`
+      return { data: result, text }
     }
   },
   {
