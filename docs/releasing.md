@@ -35,7 +35,7 @@ npm run release:dry-run      # everything except the tag and the release
 npm run release              # the same, and then publishes
 ```
 
-Both default to the tag that matches `package.json` — `v0.3.1` today. To cut a
+Both default to the tag that matches `package.json` — `v0.4.0` today. To cut a
 candidate, or any other tag, name it:
 
 ```sh
