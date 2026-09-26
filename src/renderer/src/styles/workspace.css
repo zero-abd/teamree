@@ -1048,3 +1048,10 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.setup-ask__field {
+  padding: 0 var(--s1);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+}

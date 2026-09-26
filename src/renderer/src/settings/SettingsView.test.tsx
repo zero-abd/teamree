@@ -741,6 +741,14 @@ describe('projects', () => {
       expect(field.getAttribute('title'), label).toContain(example)
     }
   })
+
+  it('names the command the lockfile suggests beside None, without filling it in', () => {
+    seed({ projects: [{ ...project, suggestedSetup: 'pnpm install --frozen-lockfile' }] })
+    render(<SettingsView />)
+    const field = screen.getByLabelText('Setup command') as HTMLInputElement
+    expect(field.value).toBe('')
+    expect(field.getAttribute('placeholder')).toBe('None · pnpm install --frozen-lockfile detected')
+  })
 })
 
 describe('fetching in the background', () => {

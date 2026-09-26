@@ -1216,7 +1216,7 @@ function SetupCommand({ project }: { project: Project }): React.JSX.Element {
         className="settings-field__input"
         type="text"
         value={draft}
-        placeholder="None"
+        placeholder={project.suggestedSetup === undefined ? 'None' : `None · ${project.suggestedSetup} detected`}
         title="e.g. npm ci"
         {...hitMark(shown, [stored])}
         autoComplete="off"

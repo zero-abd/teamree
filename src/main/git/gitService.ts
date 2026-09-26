@@ -30,6 +30,7 @@ import type {
   WorktreeMergePreview,
   WorktreePullRequest,
   WorktreePush,
+  WorktreeSetupCheck,
   WorktreeStatus,
   WorktreeUpdate,
   WorktreeUpdateAbort
@@ -87,6 +88,7 @@ import { findWorktreeFiles, readWorktreeFiles } from './worktreeFiles'
 import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
 import { normalizePreparedPaths, prepareWorktree, type PreparedPaths } from './worktreePreparation'
 import { normalizeSetupCommand } from './worktreeSetup'
+import { checkSetup } from './setupDetect'
 import {
   checkReplay,
   containsTip,
@@ -183,8 +185,8 @@ export class GitService {
   readonly #gh: GhProbe | undefined
   readonly #locateGh: (() => string | null) | undefined
   readonly #agentWorking: (worktreeId: string) => boolean
-  // What each project's `.teamree/project.json` said when last read; never persisted.
-  readonly #projectFiles = new Map<string, ProjectFileRead>()
+  // What each project's `.teamree/project.json` and lockfile said when last read; never persisted.
+  readonly #projectFiles = new Map<string, CheckoutRead>()
   readonly #ensureVersion: (cwd: string) => Promise<unknown>
 
   readonly #store: GitRecordStore
@@ -250,17 +252,19 @@ export class GitService {
   /** The stored project with what its repository file says beside it. */
   #present(project: Project): Project {
     const read = this.#projectFiles.get(project.id)
+    const suggest = project.setupCommand === undefined && read?.settings?.setupCommand === undefined
     return {
       ...project,
       ...(read?.settings === undefined ? {} : { repository: read.settings }),
-      ...(read?.problem === undefined ? {} : { repositoryProblem: read.problem })
+      ...(read?.problem === undefined ? {} : { repositoryProblem: read.problem }),
+      ...(suggest && read?.suggestedSetup !== undefined ? { suggestedSetup: read.suggestedSetup } : {})
     }
   }
 
   async #refreshProjectFile(projectId: string): Promise<void> {
     const project = this.#store.getProject(projectId)
     if (!project) return
-    const read = await readProjectFile(project.path)
+    const read = await readCheckout(project.path)
     const before = JSON.stringify(this.#projectFiles.get(projectId) ?? {})
     this.#projectFiles.set(projectId, read)
     if (JSON.stringify(read) === before || !this.#store.getProject(projectId)) return
@@ -287,7 +291,7 @@ export class GitService {
     }
     this.#store.putProject(project)
     // Before the announcement, so a project arrives with its repository's setup already applied.
-    this.#projectFiles.set(project.id, await readProjectFile(project.path))
+    this.#projectFiles.set(project.id, await readCheckout(project.path))
     const presented = this.#present(project)
     this.events.emit({ type: 'project.added', project: presented })
     return presented
@@ -459,6 +463,24 @@ export class GitService {
         ...(setupTerminalId === undefined ? {} : { setupTerminalId })
       }) ?? worktree
     )
+  }
+
+  /** What the worktree's lockfile suggests and whether the checkout lacks what it installs. */
+  async checkSetup(params: ParamsOf<'worktree.setupCheck'>): Promise<WorktreeSetupCheck> {
+    return checkSetup(this.#requireWorktree(params.worktreeId).path)
+  }
+
+  /** Runs a command someone pressed Run on in a `setup` pane of an existing worktree. */
+  async runSetup(params: ParamsOf<'worktree.runSetup'>): Promise<Worktree> {
+    const worktree = this.#requireWorktree(params.worktreeId)
+    const command = normalizeSetupCommand(params.command)
+    if (command === undefined) throw new GitServiceError(ErrorCode.InvalidParams, 'setup command must not be blank')
+    if (worktree.state !== 'ready') {
+      throw new GitServiceError(ErrorCode.Conflict, `worktree "${worktree.name}" is ${worktree.state}`)
+    }
+    const setupTerminalId = this.#runSetup(worktree, this.#requireProject(worktree.projectId), command)
+    if (setupTerminalId === undefined) return worktree
+    return this.#patch(worktree.id, { setupTerminalId }) ?? worktree
   }
 
   /** Renames the record only: branch, path and task are left alone, in any state. */
@@ -1891,6 +1913,13 @@ export class GitService {
       }
     }
   }
+}
+
+type CheckoutRead = ProjectFileRead & { suggestedSetup?: string }
+
+async function readCheckout(root: string): Promise<CheckoutRead> {
+  const [file, check] = await Promise.all([readProjectFile(root), checkSetup(root)])
+  return check.command === undefined ? file : { ...file, suggestedSetup: check.command }
 }
 
 /**
