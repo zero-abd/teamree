@@ -1360,8 +1360,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
    * coming into view is a read: see `readOnScreen` and `unread`.
    */
   const onScreenWorktreeIds = (): Set<string> => {
-    const { openWorktreeIds, sidebarVisible, collapsedProjects, worktrees, dashboardOpen } = get()
+    const { openWorktreeIds, sidebarVisible, collapsedProjects, worktrees, dashboardOpen, activeWorktreeId } = get()
     const shown = new Set(openWorktreeIds)
+    // The open task's Changes panel lists its children.
+    if (activeWorktreeId !== null && changesOnScreen(get())) {
+      for (const worktree of worktrees) if (worktree.parentId === activeWorktreeId) shown.add(worktree.id)
+    }
     if (dashboardOpen) {
       for (const worktree of worktrees) shown.add(worktree.id)
       return shown

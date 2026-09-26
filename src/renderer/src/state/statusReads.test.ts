@@ -203,3 +203,21 @@ it('fills in rows out of view on the slow beat, a few at a time, then goes quiet
   expect(await beat()).toEqual([hidden.id])
   expect(await beat()).toEqual([])
 })
+
+it('reads the open task’s children, which its Changes panel lists, though their rows are out of view', async () => {
+  const { useWorkspaceStore } = modules
+  const parent = rows[0]!.id
+  const child = rows[100]!.id
+  useWorkspaceStore.setState((state) => ({
+    worktrees: state.worktrees.map((worktree) =>
+      worktree.id === child ? { ...worktree, parentId: parent } : worktree
+    ),
+    activeWorktreeId: parent,
+    openWorktreeIds: [parent],
+    rightPanelOpen: true,
+    rightPanelTab: 'changes'
+  }))
+  invalidate({ type: 'worktrees', worktreeIds: [child, rows[101]!.id], paths: ['src/cart.ts'] })
+  await vi.waitFor(() => expect(asked('worktree.status')).toContain(child))
+  expect(asked('worktree.status')).not.toContain(rows[101]!.id)
+})

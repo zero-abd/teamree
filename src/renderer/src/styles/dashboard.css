@@ -271,6 +271,14 @@
   color: var(--success);
 }
 
+.task-row__tally {
+  cursor: pointer;
+}
+
+.task-row__tally:hover {
+  color: var(--accent-bright);
+}
+
 /* Under its stage: the column is sized for one word. */
 .task-row__unpushed {
   display: block;

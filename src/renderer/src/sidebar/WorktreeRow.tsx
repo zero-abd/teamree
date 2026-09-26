@@ -36,6 +36,7 @@ import { endNestDrag, NEST_DRAG_TYPE, startNestDrag, useNestDrag, useNestDrop } 
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { WorktreeNameField } from './WorktreeNameField'
 import { RunChip, runMenuItems, useRunActions, useRunOffers } from '../workspace/runButtons'
+import { useChildren } from '../workspace/rightPanel/childrenStore'
 import { agentName, worktreeDisplay, worktreeLabel, type WorktreeDisplay } from './worktreeDisplay'
 
 /** A task with child tasks: they sit under it in its box and fold with its panes. */
@@ -421,7 +422,16 @@ export function WorktreeRow({
         </span>
       )}
       {task === undefined ? null : (
-        <span className="chip worktree__tally" title={task.children.join('\n')}>
+        // Inside the row's button, so a span, as the issue chip is.
+        <span
+          className="chip worktree__tally"
+          role="link"
+          title={task.children.join('\n')}
+          onClick={(event) => {
+            event.stopPropagation()
+            void useChildren.getState().showChildren(worktree.id)
+          }}
+        >
           {`${task.tally.done}/${task.tally.total} done`}
         </span>
       )}

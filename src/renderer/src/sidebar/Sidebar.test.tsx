@@ -1280,6 +1280,15 @@ describe('task trees', () => {
     expect(within(rowNamed('Solo')).queryByText(/done$/)).toBeNull()
   })
 
+  it('opens the parent at its Children from the tally, not the row alone', async () => {
+    const { useChildren } = await import('../workspace/rightPanel/childrenStore')
+    const showChildren = vi.fn(async () => {})
+    useChildren.setState({ showChildren })
+    // A pointer shortcut: the row says the tally in words, and the chip is hidden from the tree.
+    fireEvent.click(within(rowNamed('Rework auth')).getByText('0/1 done'))
+    expect(showChildren).toHaveBeenCalledWith('auth')
+  })
+
   it('collapses on ← and expands on →, and remembers it', () => {
     act(() => rowNamed('Rework auth').focus())
     press('ArrowLeft')

@@ -543,6 +543,11 @@
 .worktree__tally {
   margin-left: auto;
   color: var(--fg-secondary);
+  cursor: pointer;
+}
+
+.worktree__tally:hover {
+  color: var(--accent-bright);
 }
 
 .worktree__issue {
