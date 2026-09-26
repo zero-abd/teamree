@@ -814,4 +814,36 @@
   .panel__resizer {
     display: none;
   }
+
+  /* A pane the overlaid panel hides, named on a strip at its edge. */
+  .covered-pane {
+    position: absolute;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    padding: var(--s2) 0;
+    overflow: hidden;
+    border: 0;
+    border-left: 1px solid var(--line);
+    background: var(--bg-rail);
+    color: var(--fg-secondary);
+    font: inherit;
+    font-size: var(--text-sm);
+    cursor: pointer;
+  }
+
+  .covered-pane:hover {
+    color: var(--fg);
+  }
+
+  .covered-pane__name {
+    overflow: hidden;
+    max-height: 100%;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+  }
 }

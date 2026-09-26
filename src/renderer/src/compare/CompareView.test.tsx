@@ -352,6 +352,8 @@ describe('keeping one run', () => {
   })
 
   it('folds the sidebar and panel away while on screen, and brings back what it folded', async () => {
+    // Beside the panes: in a narrower window the panel folds before the comparison opens.
+    Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true })
     call.mockResolvedValue(compared)
     useWorkspaceStore.setState({ sidebarVisible: true, rightPanelOpen: true })
     await useWorkspaceStore.getState().openCompare('w-claude', 'w-codex', 'Claude Code vs Codex')

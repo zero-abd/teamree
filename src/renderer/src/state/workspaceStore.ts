@@ -120,7 +120,7 @@ import {
 } from '../teamwork/startTeamwork'
 import type { ConnectionState } from '../runtimeClient/RuntimeClientContract'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
-import { newPaneRoom, paneGrid, roomForNewPane, type Box, type NewPane } from '../terminal/paneMetrics'
+import { newPaneRoom, paneGrid, zoomedPaneSize, type Box, type NewPane } from '../terminal/paneMetrics'
 import { leavesRoom, paneCellsIn, placePaneWithin } from '@shared/paneRoom'
 import { shownText } from '../terminal/shownPanes'
 import { replayLines } from '@shared/outputEvidence'
@@ -185,7 +185,7 @@ import {
   writeStoredRightPanelWidth,
   type RightPanelTab
 } from '../workspace/rightPanel/rightPanelState'
-import { panelCost, sidebarCost, type Sides } from '../workspace/roomForPanes'
+import { panelCost, panelYields, sidebarCost, type Sides } from '../workspace/roomForPanes'
 import { useMessageStore } from './messages'
 
 export type DialogState =
@@ -692,6 +692,8 @@ type WorkspaceState = {
   toggleChanges: () => void
   /** Opens the right panel, or closes it, on whichever tab it last showed. */
   toggleRightPanel: () => void
+  /** Folds the right panel to its rail for this window only; the next launch shows it as it was. */
+  foldPanel: () => void
   /** Opens the right panel on one tab. */
   showRightPanelTab: (tab: RightPanelTab) => void
   /** The Search tab, with the caret in its field. */
@@ -1056,13 +1058,17 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const room = paneRoomFor(worktreeId)
     return room === undefined || room === 'full' ? {} : room
   }
-  /** `paneSizeFor` for a pane somebody asked for here, or null, said, when every place is under `MIN_PANE_CELLS`. */
-  const roomOrRefuse = (worktreeId: string): Partial<NewPane> | null => {
+  /** `paneSizeFor` for a pane somebody asked for here; with no place over `MIN_PANE_CELLS`, the whole grid, to open `zoomed`. */
+  const roomOrZoom = (worktreeId: string): { room: Partial<NewPane>; zoomed: boolean } => {
     const room = paneRoomFor(worktreeId)
-    if (room !== 'full') return room ?? {}
-    const root = get().layouts[worktreeId]?.root ?? null
-    refuseForRoom((grid, area) => roomForNewPane(root, grid.cell, area) !== 'full')
-    return null
+    if (room !== 'full') return { room: room ?? {}, zoomed: false }
+    const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+    return { room: grid ? { ...zoomedPaneSize(grid.area, grid.cell), ...grid } : {}, zoomed: true }
+  }
+  /** Folds a panel laid over the panes, or one folded for room that would come back over them, before a pane opens. */
+  const yieldPanel = (): void => {
+    const { rightPanelOpen, roomHid } = get()
+    if (panelYields(globalThis.window?.innerWidth ?? Infinity, rightPanelOpen || roomHid.panel)) get().foldPanel()
   }
   /** Says `NO_ROOM`, replacing the last one, with the side to hide when hiding it `fits` the pane. */
   const refuseForRoom = (fits: (grid: { minPane: Box; cell: Box }, area: Box) => boolean): void => {
@@ -1083,21 +1089,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       notify(NO_ROOM, 'info')
     }
   }
-  /** `after` if it leaves every pane its floor, else `fallback`'s answer; null, said, when neither does. */
-  const withRoom = (
-    before: PaneNode | null,
-    after: PaneNode,
-    fallback: (grid: { area: Box; minPane: Box }) => PaneNode | null = () => null
-  ): PaneNode | null => {
+  /** `after` if it leaves every pane its floor; null, said, when it does not. */
+  const withRoom = (before: PaneNode | null, after: PaneNode): PaneNode | null => {
     const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
     if (!grid || leavesRoom(before, after, grid.area, grid.minPane)) return after
-    const placed = fallback(grid)
-    if (placed === null) {
-      refuseForRoom(
-        ({ minPane }, area) => leavesRoom(before, after, area, minPane) || fallback({ area, minPane }) !== null
-      )
-    }
-    return placed
+    refuseForRoom(({ minPane }, area) => leavesRoom(before, after, area, minPane))
+    return null
   }
 
   const refreshLayout = async (worktreeId: string): Promise<void> => {
@@ -1397,8 +1394,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
   /** A pane running `command` in the worktree, resuming `resume` when given. */
   const launchAgent = async (worktreeId: string, command: string, resume?: string): Promise<void> => {
-    const room = roomOrRefuse(worktreeId)
-    if (!room) return
+    yieldPanel()
+    const { room, zoomed } = roomOrZoom(worktreeId)
     try {
       // Straight through terminal.create: the runtime pins the session id, so a pane started here resumes like any other.
       const agentArgs = extraArgsFor(command)
@@ -1414,6 +1411,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       panesAskedFor.add(terminal.id)
       refresher.request(refreshTargets({ layouts: [worktreeId] }))
       await refresher.flush()
+      if (zoomed) set({ expandedTerminalId: terminal.id })
     } catch (error) {
       failed('Could not start the agent')(error)
     }
@@ -1450,11 +1448,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     set((state) => ({ worktrees: [...state.worktrees.filter((entry) => entry.id !== worktree.id), created] }))
   }
 
-  /** Puts a new file leaf in the column as a tab, or beside the focused pane; see `openFilePane`. */
+  /**
+   * Puts a new file leaf in the column as a tab, or beside the focused pane; see `openFilePane`. With no room
+   * beside, it is a tab of the column, folded, and shown zoomed.
+   */
   const placeFileLeaf = (layout: Layout, added: FileLeaf, mode?: FileOpenMode): void => {
     const column = fileColumnIn(layout.root)
     const asPreview = mode === 'preview' || mode === 'diff-preview'
     let root: PaneNode | null
+    let zoomed = false
     if (mode !== 'split' && column !== null && layout.root !== null) {
       // A tab takes no room from anyone, so it needs no room check.
       const preview = column.preview
@@ -1472,20 +1474,26 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const beside =
         inTree !== null ? splitPaneWith(layout.root, inTree, 'row', placed) : appendPane(layout.root, placed)
       const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
-      if (isFileColumn(placed) && grid !== undefined) {
-        const isAgent = (id: string): boolean => get().terminals[id]?.agent !== undefined
-        const place = (area: Box, minPane: Box): PaneNode | null =>
-          placeFileColumn(layout.root, placed, area, minPane, isAgent)
-        root = place(grid.area, grid.minPane)
-        if (root === null) refuseForRoom(({ minPane }, area) => place(area, minPane) !== null)
-      } else {
-        root = withRoom(layout.root, beside, (room) => placePaneWithin(layout.root, placed, room.area, room.minPane))
+      const isAgent = (id: string): boolean => get().terminals[id]?.agent !== undefined
+      if (grid === undefined) root = beside
+      else if (isFileColumn(placed)) root = placeFileColumn(layout.root, placed, grid.area, grid.minPane, isAgent)
+      else if (leavesRoom(layout.root, beside, grid.area, grid.minPane)) root = beside
+      else root = placePaneWithin(layout.root, placed, grid.area, grid.minPane)
+      if (root === null) {
+        root = column !== null && layout.root !== null ? addTab(layout.root, added, { preview: asPreview }) : beside
+        zoomed = true
       }
     }
-    if (root === null) return
     set({ namingMarkdown: null })
     if (mode === 'diff' || mode === 'diff-preview') get().setPaneDiff(added.terminalId, true)
     persistLayout({ worktreeId: layout.worktreeId, root, focusedTerminalId: added.terminalId })
+    if (!zoomed) return
+    const folds = hasTerminal(fileColumnIn(root), added.terminalId)
+    set((state) => ({
+      expandedTerminalId: added.terminalId,
+      ...(folds ? { foldedColumns: { ...state.foldedColumns, [layout.worktreeId]: true as const } } : {})
+    }))
+    zoomedFrom = layout.focusedTerminalId
   }
 
   /** Drops a worktree from this window once the runtime has really removed it. */
@@ -2172,8 +2180,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const planned = grid
         ? plan(grid.area, grid.minPane)
         : { before: layout.root, after: splitPane(layout.root, terminalId, direction, SPLIT_PROBE_ID), folded: false }
+      // No room beside it: a pane where there is some, else zoomed.
       if (planned === null) {
-        refuseForRoom(({ minPane }, area) => plan(area, minPane) !== null)
+        await get().createTerminal(layout.worktreeId)
         return
       }
       if (planned.before !== layout.root) {
@@ -2340,8 +2349,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     async reopenTerminal(worktreeId, terminalId) {
       if (get().expandedTerminalId !== null) restoreZoom()
-      const room = roomOrRefuse(worktreeId)
-      if (!room) return
+      yieldPanel()
+      const { room, zoomed } = roomOrZoom(worktreeId)
       try {
         const terminal = await runtimeClient.call('terminal.reopen', {
           worktreeId,
@@ -2354,6 +2363,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         panesAskedFor.add(terminal.id)
         refresher.request(refreshTargets({ layouts: [worktreeId] }))
         await refresher.flush()
+        if (zoomed) set({ expandedTerminalId: terminal.id })
         requestRegionFocus('panes')
       } catch (error) {
         failed('Could not reopen the pane')(error)
@@ -2412,6 +2422,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     openFilePane(worktreeId, path, mode) {
+      yieldPanel()
       set((state) => {
         const recent = [path, ...(state.recentFiles[worktreeId] ?? []).filter((entry) => entry !== path)]
         return { recentFiles: { ...state.recentFiles, [worktreeId]: recent.slice(0, RECENT_FILES_KEPT) } }
@@ -2442,6 +2453,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     openCommit(worktreeId, commit) {
+      yieldPanel()
       set({ selectedChangePath: null })
       const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
       const open = fileLeavesIn(layout.root).find((leaf) => isCommitLeaf(leaf) && leaf.commit === commit.sha)
@@ -2454,6 +2466,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async openCompare(worktreeId, otherId, title, path) {
+      yieldPanel()
       if (get().activeWorktreeId !== worktreeId) await get().openWorktree(worktreeId)
       const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
       const open = fileLeavesIn(layout.root).find((leaf) => isCompareLeaf(leaf) && leaf.compare === otherId)
@@ -2472,6 +2485,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async openSharedNote(projectId, shareId, title) {
+      yieldPanel()
       const { activeWorktreeId, worktrees } = get()
       const active = worktrees.find((worktree) => worktree.id === activeWorktreeId)
       const target =
@@ -2498,6 +2512,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     openReview(worktreeId) {
+      yieldPanel()
       const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
       const open = fileLeavesIn(layout.root).find(isReviewLeaf)
       if (open) {
@@ -2644,8 +2659,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     async createTerminal(worktreeId) {
       if (get().expandedTerminalId !== null) restoreZoom()
-      const room = roomOrRefuse(worktreeId)
-      if (!room) return
+      yieldPanel()
+      const { room, zoomed } = roomOrZoom(worktreeId)
       try {
         const terminal = await runtimeClient.call('terminal.create', { worktreeId, ...room })
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
@@ -2653,6 +2668,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         panesAskedFor.add(terminal.id)
         refresher.request(refreshTargets({ layouts: [worktreeId] }))
         await refresher.flush()
+        if (zoomed) set({ expandedTerminalId: terminal.id })
       } catch (error) {
         failed('Could not start a terminal')(error)
       }
@@ -2763,6 +2779,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // Read on the way open: until the panel is shown, nothing depends on it.
       const worktreeId = get().activeWorktreeId
       if (worktreeId && changesOnScreen(get())) readChangesNow(worktreeId)
+    },
+
+    foldPanel() {
+      set((state) => ({ rightPanelOpen: false, roomHid: { ...state.roomHid, panel: false } }))
     },
 
     showRightPanelTab(tab) {

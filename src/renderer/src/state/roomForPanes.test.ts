@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 // A window too narrow for its panes folds the right panel, then the sidebar, and brings them back;
-// a pane it cannot make room for is refused with one notice that names the fix.
+// a pane it cannot make room for opens zoomed, a tab of the strip, and is never refused.
 
 import { beforeEach, expect, it, vi } from 'vitest'
 
@@ -23,20 +23,24 @@ vi.mock('../terminal/paneMetrics', async (importOriginal) => {
   }
 })
 
+import { fileLeavesIn } from '@shared/filePane'
+import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
+import { zoomedPaneSize } from '../terminal/paneMetrics'
 import { useWorkspaceStore } from './workspaceStore'
-
-const NO_ROOM = 'No room for another pane'
 
 beforeEach(() => {
   measurement.grid = undefined
   useWorkspaceStore.setState({
     notices: [],
+    expandedTerminalId: null,
+    foldedColumns: {},
     rightPanelOpen: true,
     rightPanelWidth: 340,
     sidebarVisible: true,
     roomHid: { panel: false, sidebar: false }
   })
   localStorage.clear()
+  windowWidth(1440)
 })
 
 async function openedWorktree(): Promise<string> {
@@ -54,42 +58,101 @@ async function openedWorktree(): Promise<string> {
   return worktreeId
 }
 
-it('says a refused pane once, however often it is asked for', async () => {
+const GRID = { area: { width: 400, height: 300 }, minPane: { width: 337, height: 181 }, cell: { width: 8, height: 17 } }
+
+/** The terminal the runtime made last. */
+function newest(): string | undefined {
+  return Object.keys(useWorkspaceStore.getState().terminals).sort().at(-1)
+}
+
+function created(call: { mock: { calls: unknown[][] } }): unknown[] {
+  return call.mock.calls.filter(([method]) => method === 'terminal.create').map(([, params]) => params)
+}
+
+function windowWidth(width: number): void {
+  Object.defineProperty(window, 'innerWidth', { value: width, configurable: true })
+}
+
+it('opens a pane with no room zoomed, at the whole grid, and says nothing', async () => {
   const worktreeId = await openedWorktree()
-  for (let i = 0; i < 3; i++) await useWorkspaceStore.getState().createTerminal(worktreeId)
-  expect(useWorkspaceStore.getState().notices.filter((notice) => notice.text === NO_ROOM)).toHaveLength(1)
+  measurement.grid = GRID
+  const call = vi.spyOn(runtimeClient, 'call')
+  await useWorkspaceStore.getState().createTerminal(worktreeId)
+  await useWorkspaceStore.getState().startAgent('claude')
+
+  const [shell, agent] = created(call) as [object, object]
+  const size = { ...zoomedPaneSize(GRID.area, GRID.cell), area: GRID.area, minPane: GRID.minPane, cell: GRID.cell }
+  expect(shell).toEqual({ worktreeId, ...size })
+  expect(agent).toEqual({ worktreeId, command: 'claude', ...size })
+  const state = useWorkspaceStore.getState()
+  expect(state.expandedTerminalId).toBe(newest())
+  expect(state.notices).toEqual([])
+  call.mockRestore()
 })
 
-it('offers to hide the panel when that makes room, and hides it', async () => {
-  const worktreeId = await openedWorktree()
-  // One pane in 400x300 splits neither way above 337x181; 311 more pixels across and it does.
-  measurement.grid = {
-    area: { width: 400, height: 300 },
-    minPane: { width: 337, height: 181 },
-    cell: { width: 8, height: 17 }
-  }
-  await useWorkspaceStore.getState().createTerminal(worktreeId)
-
-  const notice = useWorkspaceStore.getState().notices.at(-1)!
-  expect(notice).toMatchObject({ text: NO_ROOM, action: { label: 'Hide panel', hide: 'panel' } })
-
-  useWorkspaceStore.getState().hideRegion('panel')
-  expect(useWorkspaceStore.getState().rightPanelOpen).toBe(false)
-  useWorkspaceStore.getState().hideRegion('panel')
-  expect(useWorkspaceStore.getState().rightPanelOpen).toBe(false)
+it('opens a split with no room as a new pane, zoomed', async () => {
+  await openedWorktree()
+  measurement.grid = GRID
+  const call = vi.spyOn(runtimeClient, 'call')
+  await useWorkspaceStore.getState().splitFocusedPane('row')
+  expect(call.mock.calls.filter(([method]) => method === 'terminal.split')).toEqual([])
+  expect(created(call)).toHaveLength(1)
+  const state = useWorkspaceStore.getState()
+  expect(state.expandedTerminalId).toBe(newest())
+  expect(state.notices).toEqual([])
+  call.mockRestore()
 })
 
-it('offers nothing when hiding the panel would not make room either', async () => {
+it('opens Review All with no room as a tab of the strip, zoomed, and says nothing', async () => {
   const worktreeId = await openedWorktree()
-  measurement.grid = {
-    area: { width: 200, height: 300 },
-    minPane: { width: 337, height: 181 },
-    cell: { width: 8, height: 17 }
-  }
-  useWorkspaceStore.setState({ sidebarVisible: false })
+  measurement.grid = GRID
+  useWorkspaceStore.getState().openReview(worktreeId)
+
+  const state = useWorkspaceStore.getState()
+  const review = fileLeavesIn(state.layouts[worktreeId]!.root).find((leaf) => leaf.review === true)
+  expect(review).toBeDefined()
+  expect(state.expandedTerminalId).toBe(review!.terminalId)
+  expect(state.foldedColumns[worktreeId]).toBe(true)
+  expect(state.notices).toEqual([])
+})
+
+it('opens a file with no room as a tab, zoomed, and a second as another tab', async () => {
+  const worktreeId = await openedWorktree()
+  measurement.grid = GRID
+  useWorkspaceStore.getState().openFilePane(worktreeId, 'README.md')
+  useWorkspaceStore.getState().openFilePane(worktreeId, 'src/index.ts', 'split')
+
+  const state = useWorkspaceStore.getState()
+  const files = fileLeavesIn(state.layouts[worktreeId]!.root)
+  expect(files.map((leaf) => leaf.path)).toEqual(['README.md', 'src/index.ts'])
+  expect(state.expandedTerminalId).toBe(files[1]!.terminalId)
+  expect(state.notices).toEqual([])
+})
+
+it('folds a panel laid over the panes before opening Review, a file, a diff or a terminal, for this window only', async () => {
+  const worktreeId = await openedWorktree()
+  windowWidth(1000)
+  useWorkspaceStore.getState().openReview(worktreeId)
+  expect(useWorkspaceStore.getState()).toMatchObject({ rightPanelOpen: false, roomHid: { panel: false } })
+  // The habit on disk is still an open panel.
+  expect(localStorage.getItem('teamree.shell.rightPanel')).toBeNull()
+
+  useWorkspaceStore.setState({ rightPanelOpen: true })
+  useWorkspaceStore.getState().selectChange('README.md')
+  expect(useWorkspaceStore.getState().rightPanelOpen).toBe(false)
+
+  // Folded for room, it would come back over the new pane once the room did.
+  useWorkspaceStore.setState({ rightPanelOpen: false, roomHid: { panel: true, sidebar: false } })
   await useWorkspaceStore.getState().createTerminal(worktreeId)
-  expect(useWorkspaceStore.getState().notices.at(-1)).toMatchObject({ text: NO_ROOM })
-  expect(useWorkspaceStore.getState().notices.at(-1)?.action).toBeUndefined()
+  expect(useWorkspaceStore.getState()).toMatchObject({ rightPanelOpen: false, roomHid: { panel: false } })
+})
+
+it('leaves a panel beside the panes open when a pane opens', async () => {
+  const worktreeId = await openedWorktree()
+  windowWidth(1440)
+  useWorkspaceStore.getState().openReview(worktreeId)
+  useWorkspaceStore.getState().openFilePane(worktreeId, 'README.md')
+  expect(useWorkspaceStore.getState().rightPanelOpen).toBe(true)
 })
 
 it('folds the panel for room without forgetting it was open, and brings it back', () => {

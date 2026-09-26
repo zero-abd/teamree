@@ -306,6 +306,11 @@ describe('the rail', () => {
 })
 
 describe('the files tab', () => {
+  // Beside the panes: in a narrower window, opening a file folds the panel first.
+  beforeEach(() => {
+    Object.defineProperty(window, 'innerWidth', { value: 1440, configurable: true })
+  })
+
   it('lists the root as the runtime answered, dims what git ignores, and letters what changed', async () => {
     seed({ rightPanelOpen: true, rightPanelTab: 'files' })
     mount()
