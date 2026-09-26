@@ -91,3 +91,30 @@ describe('seeded task, memory and add-on methods', () => {
     expect(await client.call('settings.get', {})).toMatchObject({ showCost: true })
   })
 })
+
+describe('seeded runtime client nesting', () => {
+  it('re-points a worktree under another and back, announcing each move but not a dry run', async () => {
+    const client = createSeededRuntimeClient()
+    const events: WorkspaceEvent[] = []
+    const watch = client.watchWorkspace((event) => events.push(event))
+    const rows = (await client.call('worktree.list', {})).filter((row) => row.state === 'ready' && !row.parentId)
+    const parent = rows[0]!
+    const child = rows.find((row) => row.projectId === parent.projectId && row.id !== parent.id)!
+
+    const dry = await client.call('worktree.nest', { worktreeId: child.id, parentId: parent.id, dryRun: true })
+    await delivered()
+    expect(dry).toMatchObject({ change: 'nest', dryRun: true })
+    expect(events).toEqual([])
+
+    const nested = await client.call('worktree.nest', { worktreeId: child.id, parentId: parent.id })
+    expect(nested.worktree).toMatchObject({ parentId: parent.id, baseRef: parent.branch })
+    await expect(client.call('worktree.nest', { worktreeId: parent.id, parentId: child.id })).rejects.toMatchObject({
+      data: { refusal: 'cycle' }
+    })
+    const top = await client.call('worktree.nest', { worktreeId: child.id, parentId: null })
+    expect(top.worktree.parentId).toBeUndefined()
+    await delivered()
+    expect(events.filter((event) => event.type === 'worktrees').length).toBeGreaterThan(0)
+    watch.close()
+  })
+})

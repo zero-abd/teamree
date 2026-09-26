@@ -272,6 +272,8 @@ describe('dispatcher', () => {
       'worktree.log',
       'worktree.mergeIntoBase',
       'worktree.mergePreview',
+      // Local: re-points this machine's records, and may rebase its branch.
+      'worktree.nest',
       'worktree.overlaps',
       // Local: runs this machine's gh, with its credentials.
       'worktree.pullRequests',

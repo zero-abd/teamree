@@ -17,6 +17,7 @@ import {
   type ProjectContext
 } from './memory'
 import { MAX_MESSAGE_BYTES, MAX_MESSAGE_OPTIONS, MESSAGE_KINDS, type MessageKind, type TaskMessage } from './messages'
+import type { WorktreeNest } from './nesting'
 import { MAX_HANDOFF_NOTE_CHARS } from './presenceExtras'
 import type { RuntimeSettings } from './settings'
 import type {
@@ -106,6 +107,15 @@ export const TaskParams = {
 
   worktreeOverlaps: z.object({ projectId: Id }),
   worktreeUsage: z.object({ worktreeId: Id.optional(), projectId: Id.optional() }),
+  /** Moves a worktree under `parentId`, or to the top level with null. `rebase` replays its commits onto the parent's tip. */
+  worktreeNest: z.object({
+    worktreeId: Id,
+    parentId: Id.nullable(),
+    rebase: z.boolean().optional(),
+    dryRun: z.boolean().optional(),
+    /** The calling pane, as on `worktree.create`: agent calls get the child limits. */
+    fromTerminalId: Id.optional()
+  }),
 
   teamworkHandOff: z.object({
     worktreeId: Id,
@@ -155,6 +165,7 @@ export type TaskMethodContract = {
 
   'worktree.overlaps': { params: z.infer<P['worktreeOverlaps']>; result: WorktreeOverlaps }
   'worktree.usage': { params: z.infer<P['worktreeUsage']>; result: WorktreeUsage[] }
+  'worktree.nest': { params: z.infer<P['worktreeNest']>; result: WorktreeNest }
 
   'teamwork.handOff': { params: z.infer<P['teamworkHandOff']>; result: PeerHandoff }
   'teamwork.handoffs': { params: z.infer<P['teamworkHandoffs']>; result: TeamworkHandoffs }

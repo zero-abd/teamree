@@ -10,6 +10,7 @@ import { registerFileHandlers } from '../../files'
 import { createGitRunner, GitService, registerGitHandlers } from '../../git'
 import { backgroundFetchProjects, BaseFetcher } from '../../git/baseFetch'
 import { startSetupCommand } from '../../git/worktreeSetup'
+import { agentMidTurn } from '../../git/worktreeNest'
 import { findProgram } from '../../git/worktreeLanding'
 import { loginShellPath } from '../../terminals/shell-environment'
 import { writeShellIntegration } from '../../terminals/shell-integration'
@@ -192,6 +193,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     ...(options.trashItem === undefined ? {} : { trash: options.trashItem }),
     ghBinary: () => findProgram('gh', [process.env.PATH]) ?? findProgram('gh', [loginShellPath()]),
     trustCheckout: trustCheckoutFor(registry.context.store),
+    agentWorking: (worktreeId) => terminals.manager.list(worktreeId).some(agentMidTurn),
     // The one seam between "a checkout is ready" and "a pane is open in it",
     // for a GUI create and a CLI create alike.
     startSetup: ({ worktree, command }) => {

@@ -43,6 +43,7 @@ import { readProjectFile, writeProjectFile, type ProjectFileRead } from '../team
 import { ErrorCode } from '../../shared/protocol'
 import { MAX_CHILD_DEPTH, MAX_OPEN_CHILDREN } from '../../shared/tasks'
 import { descendantsOf } from '../../shared/taskTree'
+import { nestRefusal, type WorktreeNest } from '../../shared/nesting'
 import { cloneDestination, cloneFailureCode, cloneFailureLine, runClone } from './clone'
 import { describeError, GitCommandError, GitServiceError, isTransient } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
@@ -86,6 +87,16 @@ import { findWorktreeFiles, readWorktreeFiles } from './worktreeFiles'
 import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
 import { normalizePreparedPaths, prepareWorktree, type PreparedPaths } from './worktreePreparation'
 import { normalizeSetupCommand } from './worktreeSetup'
+import {
+  checkReplay,
+  containsTip,
+  forkPoint,
+  hasLanded,
+  inheritedCommits,
+  nestError,
+  replay,
+  type ReplayPlan
+} from './worktreeNest'
 
 export type GitEvent =
   | { type: 'project.added'; project: Project }
@@ -143,6 +154,8 @@ export type GitServiceOptions = {
   trash?: Trash
   /** Where `gh` is, asked lazily; absent, pull requests open on the host's page instead. */
   ghBinary?: () => string | null
+  /** Whether an agent in this worktree is mid-turn; `worktree.nest` will not rebase under one. */
+  agentWorking?: (worktreeId: string) => boolean
 }
 
 /** What the runtime persists between launches. */
@@ -169,6 +182,7 @@ export class GitService {
   readonly #trash: Trash | undefined
   readonly #gh: GhProbe | undefined
   readonly #locateGh: (() => string | null) | undefined
+  readonly #agentWorking: (worktreeId: string) => boolean
   // What each project's `.teamree/project.json` said when last read; never persisted.
   readonly #projectFiles = new Map<string, ProjectFileRead>()
   readonly #ensureVersion: (cwd: string) => Promise<unknown>
@@ -199,6 +213,7 @@ export class GitService {
     this.#trash = options.trash
     this.#gh = options.ghBinary === undefined ? undefined : createGhProbe(options.ghBinary, this.#now)
     this.#locateGh = options.ghBinary
+    this.#agentWorking = options.agentWorking ?? (() => false)
     this.#ensureVersion = createVersionProbe(this.#runner)
   }
 
@@ -524,8 +539,86 @@ export class GitService {
     return this.#store.listWorktrees().filter((worktree) => worktree.parentId === worktreeId)
   }
 
+  /**
+   * Moves a worktree under another, or to the top level with `parentId` null. A branch that
+   * lacks the parent's tip is replayed onto it only with `rebase`; `dryRun` answers and changes nothing.
+   */
+  async nestWorktree(params: ParamsOf<'worktree.nest'>, options: { limited?: boolean } = {}): Promise<WorktreeNest> {
+    if (params.dryRun === true) return (await this.#planNest(params, options)).answer
+    const projectId = this.#store.getWorktree(params.worktreeId)?.projectId ?? ''
+    // Serialised with creates, so the limits are read with nothing in flight.
+    return this.#reserve(projectId, async () => {
+      const { answer, replayed } = await this.#planNest(params, options)
+      if (answer.change === 'none') return answer
+      if (replayed !== undefined) await replay(this.#runner, replayed)
+      const { worktree } = answer
+      const nested = this.#patch(worktree.id, {
+        ...(worktree.parentId === undefined ? { clearParent: true } : { parentId: worktree.parentId }),
+        ...(worktree.baseRef === undefined ? { clearBaseRef: true } : { baseRef: worktree.baseRef }),
+        startedFrom: worktree.startedFrom
+      })
+      if (nested === null) throw new GitServiceError(ErrorCode.NotFound, 'Removed')
+      return { ...answer, worktree: nested }
+    })
+  }
+
+  async #planNest(
+    params: ParamsOf<'worktree.nest'>,
+    options: { limited?: boolean }
+  ): Promise<{ answer: WorktreeNest; replayed?: ReplayPlan }> {
+    const dryRun = params.dryRun === true
+    const refusal = nestRefusal(this.#store.listWorktrees(), params.worktreeId, params.parentId, options)
+    const child = this.#store.getWorktree(params.worktreeId)
+    if (refusal?.refusal === 'unchanged' && child !== undefined) {
+      return { answer: { worktree: child, change: 'none', dryRun } }
+    }
+    if (refusal !== null || child === undefined) throw nestError(refusal ?? { refusal: 'missing', reason: 'Removed' })
+    const project = this.#requireProject(child.projectId)
+    const repo = { runner: this.#runner, cwd: project.path }
+    const { parentId: _parent, baseRef: _base, ...rest } = child
+
+    if (params.parentId === null) {
+      const oldParent = child.parentId === undefined ? undefined : this.#store.getWorktree(child.parentId)
+      const inherited =
+        oldParent === undefined ? 0 : await inheritedCommits(repo, child.branch, oldParent.branch, project.baseRef)
+      return { answer: { worktree: rest, change: 'unnest', dryRun, inherited } }
+    }
+
+    const parent = this.#requireWorktree(params.parentId)
+    for (const worktree of [child, parent]) {
+      if (await hasLanded(repo, worktree.branch, worktree.startedFrom, worktree.baseRef ?? project.baseRef)) {
+        throw nestError({ refusal: 'landed', reason: `${worktree.name} has landed` })
+      }
+    }
+    const nested: Worktree = { ...rest, parentId: parent.id, baseRef: parent.branch }
+    if (await containsTip(repo, child.branch, parent.branch)) {
+      return { answer: { worktree: nested, change: 'nest', dryRun } }
+    }
+
+    // Its children branched from commits a rebase would replace.
+    const below = descendantsOf(this.#store.listWorktrees(), child.id).length
+    if (below > 0) {
+      throw nestError({ refusal: 'hasChildren', reason: `Has ${below} ${below === 1 ? 'child' : 'children'}` })
+    }
+    if (params.rebase !== true && !dryRun) {
+      throw nestError({ refusal: 'needsRebase', reason: `Needs a rebase onto ${parent.branch}` })
+    }
+    const replayed: ReplayPlan = {
+      worktreePath: child.path,
+      branch: child.branch,
+      onto: parent.branch,
+      from: await forkPoint(repo, child.branch, child.baseRef ?? project.baseRef, child.startedFrom)
+    }
+    await checkReplay(this.#runner, replayed, this.#agentWorking(child.id))
+    const tip = await this.#runner.run({ args: ['rev-parse', parent.branch], cwd: project.path, readOnly: true })
+    return {
+      answer: { worktree: { ...nested, startedFrom: tip.stdout.trim() }, change: 'rebase', dryRun },
+      replayed
+    }
+  }
+
   /** Runs `reserve` after every earlier reservation for this project has finished. */
-  #reserve(projectId: string, reserve: () => Promise<Worktree>): Promise<Worktree> {
+  #reserve<T>(projectId: string, reserve: () => Promise<T>): Promise<T> {
     const previous = this.#reservations.get(projectId) ?? Promise.resolve()
     const reserved = previous.then(reserve, reserve)
     // The tail swallows the outcome; an unhandled rejection here would take the process.
