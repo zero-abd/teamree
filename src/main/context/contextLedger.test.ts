@@ -92,6 +92,21 @@ describe('the coordination ledger', () => {
     )
   })
 
+  it('still says conflict after a restart, before anything else asks for a pass', async () => {
+    const a = await addWorktree('a', 'Add rate limits')
+    const b = await addWorktree('b', 'Fix login redirect')
+    await edit(a, 'line two from a')
+    await repo.commit('a edits', a.path)
+    await edit(b, 'line two from b')
+    await repo.commit('b edits', b.path)
+    await ledger.refresh()
+    await ledger.close()
+
+    ledger = open()
+    const { overlaps } = await ledger.overlaps('p1')
+    expect(overlaps.map((row) => row.conflicts)).toEqual([['src/shared.ts'], ['src/shared.ts']])
+  })
+
   it('keeps an overlap that merges cleanly as an overlap, not a conflict', async () => {
     const a = await addWorktree('a', 'Add rate limits')
     const b = await addWorktree('b', 'Fix login redirect')

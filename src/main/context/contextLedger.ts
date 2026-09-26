@@ -239,6 +239,8 @@ export class ContextLedger {
 
   /** Every overlapping pair, both ways round, hot files included and marked; then each teammate's paths against yours. */
   async overlaps(projectId: string, teammates: readonly TeammatePaths[] = []): Promise<WorktreeOverlaps> {
+    // Merge-tree answers live in memory, so the first read after a launch runs a pass for them.
+    if (!this.#lastPassAt.has(projectId)) await this.refresh(projectId)
     const store = await this.#store(projectId)
     const overlaps: WorktreeOverlap[] = []
     const live = this.#live(store)
