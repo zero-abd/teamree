@@ -121,6 +121,9 @@ describe('dispatcher', () => {
   it('registers every method in the contract', () => {
     // Named rather than counted, so the diff says which method arrived or went.
     expect([...registry.methods()].sort()).toEqual([
+      // Local: a switch that turns on a process on this machine.
+      'addons.install',
+      'addons.status',
       'agent.list',
       // Local: what this machine's agent CLIs trust.
       'agents.setTrust',
@@ -143,6 +146,15 @@ describe('dispatcher', () => {
       'layout.set',
       'members.join',
       'members.list',
+      // Local: project memory stays on this machine; teammates see team notes only in presence.
+      'memory.conflicts',
+      'memory.forget',
+      'memory.note',
+      'memory.resolve',
+      // Local: agent mail never crosses to a teammate.
+      'message.list',
+      'message.read',
+      'message.send',
       // Reachable over the peer transport and nowhere else; in the one registry
       // because a teammate is another transport onto the catalogue. See `PEER_METHODS`.
       'peer.presence',
@@ -152,15 +164,21 @@ describe('dispatcher', () => {
       'project.cancelClone',
       'project.clone',
       'project.cloneProgress',
+      'project.context',
       'project.list',
       'project.remove',
       // Local: writes into this machine's checkout.
       'project.saveSettings',
+      'project.saveTemplate',
       // Local: what this machine's checkouts carry over is nobody else's setting.
       'project.setPaths',
       // Local: moves this machine's folder to its Trash.
+      'project.templates',
       'project.trash',
       'project.trashPreview',
+      // Local: switches for this machine.
+      'settings.get',
+      'settings.set',
       'status.get',
       // Local: this machine's processes are its own to read and signal. The kill is
       // guarded by a fresh sample too, so it reaches nothing but what a pane started.
@@ -170,6 +188,10 @@ describe('dispatcher', () => {
       'teamwork.cancelPublish',
       // Local and the owner's own; the write log never leaves this machine.
       'teamwork.decide',
+      // Local: a handoff crosses in this machine's presence, never as a teammate's call.
+      'teamwork.dismissHandoff',
+      'teamwork.handOff',
+      'teamwork.handoffs',
       'teamwork.mute',
       'teamwork.presence',
       // Local: these write to the repository this machine owns, and the peer
@@ -183,6 +205,7 @@ describe('dispatcher', () => {
       'teamwork.setOrigin',
       'teamwork.setRelay',
       'teamwork.status',
+      'teamwork.take',
       // Local: this machine asking to read and type into somebody else's pane; on
       // the wire they are `terminal.subscribe`, `terminal.read` and `terminal.write`.
       'teamwork.type',
@@ -238,6 +261,7 @@ describe('dispatcher', () => {
       'worktree.log',
       'worktree.mergeIntoBase',
       'worktree.mergePreview',
+      'worktree.overlaps',
       // Local: runs this machine's gh, with its credentials.
       'worktree.pullRequests',
       'worktree.push',
@@ -255,7 +279,9 @@ describe('dispatcher', () => {
       'worktree.undoDiscard',
       'worktree.unstageHunk',
       'worktree.unstagePath',
-      'worktree.update'
+      'worktree.update',
+      // Local: reads this machine's agent transcripts.
+      'worktree.usage'
     ])
   })
 })

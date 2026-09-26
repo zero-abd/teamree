@@ -7,6 +7,7 @@ import type { z } from 'zod'
 import { Params, type MethodName, type ParamsOf } from '../../../shared/methods'
 import type { MethodRegistry } from '../methodRegistry'
 import { notFound } from '../runtimeError'
+import { registerTaskPlaceholderHandlers } from './taskPlaceholderHandlers'
 
 export function registerPlaceholderHandlers(registry: MethodRegistry): void {
   placeholder(registry, 'project.list', Params.projectList)
@@ -50,6 +51,8 @@ export function registerPlaceholderHandlers(registry: MethodRegistry): void {
   placeholder(registry, 'layout.get', Params.layoutGet)
   placeholder(registry, 'layout.set', Params.layoutSet)
   placeholder(registry, 'agent.list', Params.agentList)
+
+  registerTaskPlaceholderHandlers(registry)
 }
 
 function placeholder<M extends MethodName>(registry: MethodRegistry, method: M, schema: z.ZodType<ParamsOf<M>>): void {

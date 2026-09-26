@@ -25,6 +25,8 @@ import type {
 } from '@shared/entities'
 import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WorkspaceEvent } from '@shared/methods'
 import { DEFAULT_APPEARANCE, sanitizeAppearance, type Appearance } from '@shared/theme'
+import { emptyProjectContext } from '@shared/memory'
+import { DEFAULT_RUNTIME_SETTINGS, type RuntimeSettings } from '@shared/settings'
 import { leaf, splitPane } from '../panes/paneLayout'
 import { rankPaths } from '@shared/fuzzyPath'
 import { siblingRuns } from '@shared/runCompare'
@@ -482,6 +484,10 @@ export function createSeededRuntimeClient(): RuntimeClient {
   })
 
   let appearance: Appearance = DEFAULT_APPEARANCE
+  let settings: RuntimeSettings = DEFAULT_RUNTIME_SETTINGS
+  const notInDemo = (method: string) => () => {
+    throw new Error(`${method} is not in the seeded runtime yet`)
+  }
   let trustNewWorktrees = true
   const updateState = (): UpdateState => ({
     current: '0.0.1-demo',
@@ -1427,6 +1433,32 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
 
     // The renderer watches through `watchWorkspace` below; this keeps the catalogue complete.
+    // Task, memory, handoff, template and add-on methods: empty until their branches seed them.
+    'message.send': notInDemo('message.send'),
+    'message.list': () => [],
+    'message.read': () => ({ read: 0 }),
+    'project.context': ({ worktreeId }) => emptyProjectContext(worktreeId),
+    'memory.note': notInDemo('memory.note'),
+    'memory.resolve': notInDemo('memory.resolve'),
+    'memory.forget': notInDemo('memory.forget'),
+    'memory.conflicts': () => [],
+    'worktree.overlaps': ({ projectId }) => ({ projectId, overlaps: [], readAt: Date.now() }),
+    'worktree.usage': () => [],
+    'teamwork.handOff': notInDemo('teamwork.handOff'),
+    'teamwork.handoffs': () => ({ incoming: [], outgoing: [] }),
+    'teamwork.take': notInDemo('teamwork.take'),
+    'teamwork.dismissHandoff': notInDemo('teamwork.dismissHandoff'),
+    'project.templates': ({ projectId }) => ({ projectId, templates: [], problems: [] }),
+    'project.saveTemplate': notInDemo('project.saveTemplate'),
+    'settings.get': () => settings,
+    'settings.set': (changes) => {
+      settings = { ...settings, ...Object.fromEntries(Object.entries(changes).filter(([, on]) => on !== undefined)) }
+      announce({ type: 'settings' })
+      return settings
+    },
+    'addons.status': () => [{ id: 'jac-memory', state: 'off' }],
+    'addons.install': notInDemo('addons.install'),
+
     'workspace.subscribe': () => ({ subscription: nextId('sub') }),
 
     unsubscribe: () => ({ unsubscribed: true })

@@ -27,6 +27,7 @@ import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerQuitHandler } from './quitHandler'
 import { registerResourcesHandlers } from './resourcesHandlers'
 import { registerStatusHandler } from './statusHandler'
+import { registerSettingsHandlers } from './taskPlaceholderHandlers'
 import { registerUnsubscribeHandler } from './unsubscribeHandler'
 import { registerWorkspaceSubscribeHandler } from './workspaceSubscribeHandler'
 import {
@@ -97,6 +98,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   registerWorkspaceSubscribeHandler(registry)
   registerAppearanceHandlers(registry, options.onAppearance)
   registerAgentTrustHandlers(registry)
+  registerSettingsHandlers(registry)
   // One file of a worktree at a time, for a file pane.
   registerFileHandlers(registry)
   const workspaceEvents = registry.context.workspaceEvents
