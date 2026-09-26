@@ -8,9 +8,10 @@ import { activeChoice, resolveTone, themeTone, withChoice, type AppearanceMode }
 import { AgentGlyph } from '../agents/glyphs'
 import { Modal } from '../dialogs/Modal'
 import { holdsModifier, type PlatformModifier } from '../keyboard/platformModifier'
-import { runWorkspaceCommand, whyUnavailable } from '../keyboard/workspaceCommands'
+import { projectForNewTask, runWorkspaceCommand, whyUnavailable } from '../keyboard/workspaceCommands'
 import { commandNamed, shortcutHint } from '../keyboard/workspaceShortcuts'
 import { compareTitle } from '../compare/siblingRuns'
+import { dotClass, TONE_LABEL } from '../sidebar/agentRows'
 import { useOpenIn } from '../sidebar/openIn'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -22,10 +23,10 @@ import {
   FILE_MODE_LIMIT,
   FILES_IN_COMMANDS,
   FILES_IN_COMMANDS_MIN_QUERY,
-  filterPalette,
   moveSelection,
   paletteGroups,
   paletteKey,
+  queryGroups,
   rankFiles,
   readStoredRecent,
   trailing,
@@ -64,6 +65,7 @@ export function CommandPalette({
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
   const rightPanelOpen = useWorkspaceStore((state) => state.rightPanelOpen)
   const diffOptions = useWorkspaceStore((state) => state.diffOptions)
+  const rightPanelTab = useWorkspaceStore((state) => state.rightPanelTab)
 
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
@@ -135,6 +137,8 @@ export function CommandPalette({
         sidebarVisible,
         rightPanelOpen,
         diffOptions,
+        rightPanelTab,
+        terminals: Object.values(terminals),
         // Empty for a command with no key.
         hintFor: (action) => {
           const command = commandNamed(action)
@@ -196,6 +200,7 @@ export function CommandPalette({
       sidebarVisible,
       rightPanelOpen,
       diffOptions,
+      rightPanelTab,
       modifier,
       consent,
       layouts,
@@ -247,16 +252,15 @@ export function CommandPalette({
     () => (filesWanted ? rankFiles(found?.paths ?? NO_PATHS, recent, query, fileLimit).map(fileItem) : []),
     [filesWanted, found, recent, query, fileLimit]
   )
-  // Grouped only before anything is typed; a query is one ranked list, with files under their own header.
+  // "Nothing matches" and the rows that start something from the query wait for the runtime's answer.
+  const settled = !filesWanted || wanted === '' || found?.query === wanted
+  // Grouped only before anything is typed.
   const groups = useMemo((): PaletteGroup[] => {
     if (mode === 'files') return [{ title: null, items: files }]
     if (wanted === '') return paletteGroups(items, recentCommands, activeName)
-    const named: PaletteGroup[] = files.length > 0 ? [{ title: 'Files', items: files }] : []
-    return [{ title: null, items: filterPalette(items, query) }, ...named]
-  }, [mode, files, wanted, items, recentCommands, activeName, query])
+    return queryGroups(items, query, settled ? files : null)
+  }, [mode, files, wanted, items, recentCommands, activeName, query, settled])
   const matches = useMemo(() => groups.flatMap((group) => group.items), [groups])
-  // "Nothing matches" waits for the runtime's answer to what is typed.
-  const settled = !filesWanted || wanted === '' || found?.query === wanted
   // The list can shrink under a selection that was valid a keystroke ago.
   const cursor = Math.min(selected, Math.max(matches.length - 1, 0))
 
@@ -270,6 +274,23 @@ export function CommandPalette({
     if (!item || dimmed(item)) return
     closeDialog()
     const store = useWorkspaceStore.getState()
+    // The project on screen, else the first: the sheet names the project it lists.
+    const projectId = active?.projectId ?? store.projects[0]?.id
+
+    // Made from the query, so never kept as Recent.
+    if (item.kind === 'action' && item.id.startsWith('new-task:')) {
+      const taskProject = projectForNewTask(store)
+      if (taskProject)
+        store.openDialog({ kind: 'new-task', projectId: taskProject, task: item.id.slice('new-task:'.length) })
+      return
+    }
+    if (item.kind === 'action' && item.id.startsWith('open-branch:')) {
+      if (projectId !== undefined) {
+        store.openDialog({ kind: 'open-branch', projectId, query: item.id.slice('open-branch:'.length) })
+      }
+      return
+    }
+
     if (item.kind === 'action' || item.kind === 'agent')
       writeStoredRecent(storage, withRecent(recentCommands, paletteKey(item)))
 
@@ -378,8 +399,6 @@ export function CommandPalette({
         break
       case 'open-branch':
       case 'open-pull-request': {
-        // The project on screen, else the first: the sheet names the project it lists.
-        const projectId = active?.projectId ?? store.projects[0]?.id
         if (projectId !== undefined) {
           store.openDialog({
             kind: 'open-branch',
@@ -481,6 +500,9 @@ export function CommandPalette({
                       {item.kind === 'worktree' && item.agent !== undefined ? <AgentGlyph kind={item.agent} /> : null}
                       <span className="palette__label">{item.label}</span>
                       <span className="palette__trailing">{trailing(item)}</span>
+                      {item.kind === 'worktree' && item.tone !== undefined ? (
+                        <span className={dotClass(item.tone)} role="img" aria-label={TONE_LABEL[item.tone]} />
+                      ) : null}
                     </button>
                   </li>
                 )

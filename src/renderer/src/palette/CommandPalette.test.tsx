@@ -476,13 +476,13 @@ describe('the first screen', () => {
 
   it('leads with a command once it has been run from here, after a reopen too', () => {
     const { unmount } = render(<CommandPalette modifier={MAC} mode="all" />)
-    fireEvent.click(row('Show Files'))
+    fireEvent.click(row('Install Command Line Tool'))
     unmount()
 
     mount()
     expect(headers()[0]).toBe('Recent')
-    expect(labels()[0]).toBe('Show Files')
-    expect(labels().filter((label) => label === 'Show Files')).toHaveLength(1)
+    expect(labels()[0]).toBe('Install Command Line Tool')
+    expect(labels().filter((label) => label === 'Install Command Line Tool')).toHaveLength(1)
   })
 
   it('collapses to one ranked list once something is typed', () => {
@@ -533,8 +533,8 @@ describe('what a row shows about now', () => {
   it('gives a worktree row the sidebar’s dot and says it is working', () => {
     seed({
       worktrees: [worktree(), worktree({ id: 'w2', name: 'Fix the ruler', branch: 'fix-the-ruler' })],
-      terminals: [
-        {
+      terminals: {
+        t1: {
           id: 't1',
           worktreeId: 'w2',
           title: 'claude',
@@ -547,7 +547,7 @@ describe('what a row shows about now', () => {
           lastOutputAt: 0,
           agent: 'claude'
         }
-      ]
+      }
     })
     mount()
     expect(row('Fix the ruler').querySelector('.activity--working')?.getAttribute('aria-label')).toBe('working')

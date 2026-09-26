@@ -666,6 +666,10 @@ button.picker__chevron:hover {
   margin-right: calc(var(--s1) - var(--s3));
 }
 
+.palette__row > .activity {
+  align-self: center;
+}
+
 .palette__label {
   min-width: 0;
   flex: 1;
