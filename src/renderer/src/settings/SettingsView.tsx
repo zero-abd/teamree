@@ -18,6 +18,7 @@ import {
   type AgentNoticePreference,
   type TerminalCursorStyle
 } from '../state/preferences'
+import { NoticeTest } from '../notices/NoticeTest'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
@@ -175,7 +176,7 @@ function useSectionRows(): Record<Exclude<SectionId, 'projects'>, SettingsRow[]>
       { label: 'Copy on select', words: [] },
       { label: 'Scrollback lines', words: [String(options.scrollback)] }
     ],
-    notices: [{ label: 'When an agent stops', words: NOTICE_CHOICES.map((choice) => choice.label) }],
+    notices: [{ label: 'When an agent stops or asks', words: NOTICE_CHOICES.map((choice) => choice.label) }],
     teamwork: [{ label: 'Share Task Details', words: [] }],
     appearance: [{ label: 'Theme', words: [themeValue, ...THEME_WORDS] }],
     updates: [{ label: 'Check automatically', words: [] }],
@@ -546,23 +547,27 @@ function NoticesSection(): React.JSX.Element {
       <div className="settings-group">
         <div className="settings-field">
           <label className="settings-field__label" htmlFor="settings-agent-notices">
-            <Marked text="When an agent stops" />
+            <Marked text="When an agent stops or asks" />
           </label>
-          <Select
-            id="settings-agent-notices"
-            value={agentNotices}
-            onChange={(event) => setAgentNotices(event.target.value as AgentNoticePreference)}
-            {...hitMark(
-              shown,
-              NOTICE_CHOICES.map((choice) => choice.label)
-            )}
-          >
-            {NOTICE_CHOICES.map((choice) => (
-              <option key={choice.value} value={choice.value}>
-                {choice.label}
-              </option>
-            ))}
-          </Select>
+          <div className="settings-field__row">
+            <Select
+              id="settings-agent-notices"
+              value={agentNotices}
+              onChange={(event) => setAgentNotices(event.target.value as AgentNoticePreference)}
+              {...hitMark(
+                shown,
+                NOTICE_CHOICES.map((choice) => choice.label)
+              )}
+            >
+              {NOTICE_CHOICES.map((choice) => (
+                <option key={choice.value} value={choice.value}>
+                  {choice.label}
+                </option>
+              ))}
+            </Select>
+            {/* Keyed so a result from another setting does not linger. */}
+            <NoticeTest key={agentNotices} />
+          </div>
         </div>
       </div>
     </section>

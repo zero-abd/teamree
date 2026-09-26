@@ -14,7 +14,7 @@ import {
   shell,
   systemPreferences
 } from 'electron'
-import { installAgentNotices, type AgentNoticeChannel } from './agentNotices'
+import { installAgentNotices, notificationSettingsUrl, type AgentNoticeChannel } from './agentNotices'
 import { aboutPanelOptions, applicationMenuTemplate, offersDevTools, type ApplicationMenuOptions } from './appMenu'
 import { FILE_SCHEME, FILE_SCHEME_PRIVILEGES, fileGrants, serveGrantedFile } from './files/fileProtocol'
 import { installKeepAwake } from './keepAwake'
@@ -294,7 +294,14 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
         window.focus()
       },
       // A subframe is not the window and does not speak for it.
-      fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame
+      fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame,
+      // Electron cannot see a macOS "Allow notifications" that is switched off.
+      blocked: () => !Notification.isSupported(),
+      openSettings: () => {
+        // electron-builder.yml's appId.
+        const url = notificationSettingsUrl(process.platform, 'dev.teamree.app')
+        if (url !== null) void shell.openExternal(url)
+      }
     })
     app.on('browser-window-focus', () => {
       notices?.noteWindowFocus()
