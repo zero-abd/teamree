@@ -89,6 +89,19 @@ it('says how much the branch changes against its base, beside the commits', asyn
   expect(screen.getByText('6c1738c Fix README typo')).toBeTruthy()
 })
 
+// The line counts cover only the listed files, so a cut-off list gives none rather than too few.
+it('gives a cut-off branch its file count and no line counts', async () => {
+  call.mockImplementation((method: unknown, params: unknown) => {
+    if (method === 'worktree.mergeIntoBase') return Promise.resolve(plan)
+    if (method === 'worktree.changes' && (params as { base?: boolean }).base === true) {
+      return Promise.resolve({ ...branch, total: 3000, limit: 3, truncated: true })
+    }
+    return new Promise(() => {})
+  })
+  render(<ConfirmMergeDialog worktreeId="w1" />)
+  await waitFor(() => expect(screen.getByText('3,000 files')).toBeTruthy())
+})
+
 it('reviews the whole branch instead of merging it', async () => {
   render(<ConfirmMergeDialog worktreeId="w1" />)
   fireEvent.click(await screen.findByRole('button', { name: 'Review' }))
@@ -156,11 +169,58 @@ describe('a worktree with uncommitted work', () => {
     const merged = methods.findIndex(
       ([method, params]) => method === 'worktree.mergeIntoBase' && (params as { dryRun?: boolean }).dryRun !== true
     )
-    expect(methods[committed]).toEqual([
-      'worktree.commit',
-      { worktreeId: 'w1', message: 'Add usage', paths: ['README.md', 'notes.md'] }
-    ])
+    expect(methods[committed]).toEqual(['worktree.commit', { worktreeId: 'w1', message: 'Add usage', all: true }])
     expect(committed).toBeLessThan(merged)
+  })
+
+  // The Changes list stops at 500; the commit before the merge must take all 2,000.
+  it('commits and merges past the list cap, counting every change', async () => {
+    const listed = Array.from({ length: 500 }, (_, index) => ({
+      path: `src/f${index}.ts`,
+      kind: 'modified' as const,
+      staged: false,
+      unstaged: true
+    }))
+    useWorkspaceStore.setState((state) => ({
+      statuses: { w1: { ...state.statuses.w1!, unstaged: 1000, untracked: 1000 } },
+      changes: { w1: { worktreeId: 'w1', changes: listed, total: 2000, limit: 500, truncated: true, readAt: 0 } }
+    }))
+    call.mockImplementation((method: unknown, params: unknown) => {
+      if (method === 'worktree.commit') return Promise.resolve(commit)
+      if (method === 'worktree.mergeIntoBase') return Promise.resolve(plan)
+      if (method === 'worktree.changes' && (params as { base?: boolean }).base === true) return Promise.resolve(branch)
+      return new Promise(() => {})
+    })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+
+    expect(screen.getByText('2,000 uncommitted')).toBeTruthy()
+    expect(screen.getByText('+1,995 more')).toBeTruthy()
+    const confirm = screen.getByRole('button', { name: 'Commit & Merge' }) as HTMLButtonElement
+    expect(confirm.disabled).toBe(true)
+    expect(confirm.title).toBe('Needs a commit message')
+    expect(screen.getByText('Needs a commit message')).toBeTruthy()
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Everything' } })
+    expect(confirm.disabled).toBe(false)
+    expect(screen.queryByText('Needs a commit message')).toBeNull()
+    fireEvent.click(confirm)
+
+    await waitFor(() => expect(call).toHaveBeenCalledWith('worktree.mergeIntoBase', { worktreeId: 'w1' }))
+    expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Everything', all: true })
+  })
+
+  it('says why Merge waits on the checkout it lands in', async () => {
+    call.mockImplementation((method: unknown, params: unknown) => {
+      if (method === 'worktree.mergeIntoBase') return Promise.resolve({ ...plan, dirty: ['README.md'] })
+      if (method === 'worktree.changes' && (params as { base?: boolean }).base === true) return Promise.resolve(branch)
+      return new Promise(() => {})
+    })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Everything' } })
+
+    const confirm = screen.getByRole('button', { name: 'Commit & Merge' }) as HTMLButtonElement
+    await waitFor(() => expect(confirm.title).toBe('acme-api has uncommitted changes'))
+    expect(confirm.disabled).toBe(true)
   })
 
   it('merges nothing when the commit is refused, and says why', async () => {

@@ -280,12 +280,14 @@ export const Params = {
     /** List against where the branch left its base (a child's parent branch), committed and uncommitted together. */
     base: z.boolean().optional()
   }),
-  /** Commits staged work plus the paths named. Deliberately no "commit everything". */
+  /** Commits staged work plus the paths named, or with `all` every change. */
   worktreeCommit: z.object({
     worktreeId: z.string().min(1),
     message: z.string().min(1),
     /** Stage these before committing. Omitted commits what is already staged. */
-    paths: z.array(z.string().min(1)).optional()
+    paths: z.array(z.string().min(1)).optional(),
+    /** Stage every change first, new files included (`git add -A`); not with `paths`. */
+    all: z.boolean().optional()
   }),
   /** Sends the branch to its remote. Deliberately no force. */
   worktreePush: z.object({

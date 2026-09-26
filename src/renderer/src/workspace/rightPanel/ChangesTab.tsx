@@ -75,6 +75,9 @@ export function ChangesTab(): React.JSX.Element | null {
   // Conflicts get a list of their own; they cannot be ticked into a commit.
   const conflictRows = listed.filter((change) => change.kind === 'conflicted')
   const rows = listed.filter((change) => change.kind !== 'conflicted')
+  // Past the list's cap: counted by git, never listed, and still in Commit All.
+  const unlisted = changes === undefined ? 0 : Math.max(0, changes.total - listed.length)
+  const uncommitted = rows.length + unlisted
   const branchRows = branch?.changes ?? []
   const midway = status?.operation
   const base = baseRef ?? log?.baseRef
@@ -86,7 +89,7 @@ export function ChangesTab(): React.JSX.Element | null {
   const allChecked = rows.length > 0 && checkedCount === rows.length
   const tickable = rows.filter((change) => tick(change) !== 'index')
   const allTicked = tickable.every((change) => ticked.has(change.path))
-  const scope = commitScope(stagedPaths, rows)
+  const scope = commitScope(stagedPaths, rows, unlisted > 0)
   const canCommit = rows.length > 0 && message.trim().length > 0 && !committing
 
   const land = midway === undefined ? landOffer(landing, status) : null
@@ -271,7 +274,7 @@ export function ChangesTab(): React.JSX.Element | null {
         <section className="changes__group" aria-label="Uncommitted">
           <h3 className="commits__title">
             Uncommitted
-            <span className="panel__count">{rows.length}</span>
+            <span className="panel__count">{counted(uncommitted)}</span>
           </h3>
           <ul className="changes__list">
             {rows.map((change, index) => (
@@ -363,6 +366,7 @@ export function ChangesTab(): React.JSX.Element | null {
               </li>
             ))}
           </ul>
+          {unlisted > 0 ? <p className="changes__note">+{counted(unlisted)} more</p> : null}
         </section>
       )}
       {moreAt === null || header.more.length === 0 ? null : (
@@ -406,7 +410,7 @@ export function ChangesTab(): React.JSX.Element | null {
               All
             </label>
             <span className="changes__allCount">
-              {checkedCount}/{rows.length}
+              {counted(scope === 'all' && checkedCount > 0 ? uncommitted : checkedCount)}/{counted(uncommitted)}
             </span>
           </div>
           <input
@@ -424,22 +428,20 @@ export function ChangesTab(): React.JSX.Element | null {
             }}
           />
           <button type="button" className="button button--primary button--small" disabled={!canCommit} onClick={commit}>
-            {committing ? 'Committing…' : COMMIT_LABEL[scope]}
+            {committing
+              ? 'Committing…'
+              : scope === 'all' && unlisted > 0
+                ? `Commit All ${counted(uncommitted)}`
+                : COMMIT_LABEL[scope]}
           </button>
         </div>
-      ) : null}
-
-      {changes?.truncated ? (
-        <p className="changes__note">
-          {changes.limit} of {changes.total}
-        </p>
       ) : null}
 
       {branchRows.length > 0 ? (
         <section className="changes__group changes__group--branch" aria-label="On branch">
           <h3 className="commits__title" title={`vs ${log?.baseRef ?? base ?? ''}`}>
             On Branch
-            <span className="panel__count">{branch?.total ?? branchRows.length}</span>
+            <span className="panel__count">{counted(branch?.total ?? branchRows.length)}</span>
           </h3>
           <ul className="changes__list">
             {branchRows.map((change) => (
@@ -466,6 +468,9 @@ export function ChangesTab(): React.JSX.Element | null {
               </li>
             ))}
           </ul>
+          {branch !== undefined && branch.total > branchRows.length ? (
+            <p className="changes__note">+{counted(branch.total - branchRows.length)} more</p>
+          ) : null}
         </section>
       ) : null}
 
@@ -626,6 +631,11 @@ export function shownCommitIn(root: PaneNode | null): string | null {
 }
 
 const COMMIT_LABEL = { ticked: 'Commit', staged: 'Commit Staged', all: 'Commit All' } as const
+
+/** `2,000`: a count past the list's cap is read at a glance. */
+function counted(count: number): string {
+  return count.toLocaleString('en-US')
+}
 
 /** `index`: git already holds the whole change; unticking it unstages the path. */
 type Tick = 'on' | 'off' | 'mixed' | 'index'

@@ -757,11 +757,15 @@ export function createSeededRuntimeClient(): RuntimeClient {
         readAt: Date.now()
       }
     },
-    'worktree.commit': ({ worktreeId, message, paths }) => {
+    'worktree.commit': ({ worktreeId, message, paths, all }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const status = statuses.get(worktreeId)
       const changes = status ? seededChanges(status) : []
-      const captured = paths && paths.length > 0 ? paths : changes.filter((c) => c.staged).map((c) => c.path)
+      const captured = all
+        ? changes.filter((c) => c.kind !== 'conflicted').map((c) => c.path)
+        : paths && paths.length > 0
+          ? paths
+          : changes.filter((c) => c.staged).map((c) => c.path)
       // What was committed is no longer a pending change, so the chips settle.
       if (status) {
         seedStatus(worktree, {

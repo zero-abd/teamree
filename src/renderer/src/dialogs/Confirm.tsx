@@ -21,6 +21,8 @@ type ConfirmProps = {
   tone?: 'danger' | 'primary'
   /** Nothing to go through with yet, or something in the way. */
   confirmDisabled?: boolean
+  /** Why the confirm is disabled: its tooltip, and a line under the answers. */
+  confirmHint?: string
   onCancel: () => void
   onConfirm: () => void
   /** A third answer that goes on without the confirm's act, e.g. Don't Save; ⌘D chooses it, as in a macOS sheet. */
@@ -39,6 +41,7 @@ export function Confirm({
   confirm,
   tone = 'danger',
   confirmDisabled = false,
+  confirmHint,
   onCancel,
   onConfirm,
   decline,
@@ -82,11 +85,13 @@ export function Confirm({
             className={`button ${destructive ? 'button--danger' : 'button--primary'}`}
             data-default={destructive ? undefined : 'true'}
             disabled={confirmDisabled}
+            title={confirmHint}
             onClick={onConfirm}
           >
             {confirm}
           </button>
         </div>
+        {confirmHint === undefined ? null : <p className="confirm__hint">{confirmHint}</p>}
       </div>
     </Modal>
   )

@@ -1,12 +1,13 @@
 // Committing from inside the app: the first thing here that writes to a
-// repository, so it refuses rather than guesses. Nothing is staged on the caller's
-// behalf; a conflicted tree, an empty commit and a git with no identity are refused.
+// repository, so it refuses rather than guesses. Nothing is staged unasked; `all` asks for
+// everything. A conflicted tree, an empty commit and a git with no identity are refused.
 
 import type { WorktreeCommit } from '../../shared/entities'
 import { GitServiceError } from './errors'
 import type { GitRunner } from './gitProcess'
 import { ErrorCode } from '../../shared/protocol'
 import { parseChangeRecords } from './worktreeChanges'
+import { preparedExcludes, type PreparedPaths } from './worktreePreparation'
 
 /** Hooks run, and a hook can be slow; this is the ceiling before one is killed. */
 const COMMIT_TIMEOUT_MS = 120_000
@@ -15,8 +16,12 @@ export type CommitOptions = {
   worktreeId: string
   worktreePath: string
   message: string
-  /** Paths to stage before committing. Omitted means commit what is already staged — never everything. */
+  /** Paths to stage before committing. Omitted means commit what is already staged. */
   paths?: readonly string[]
+  /** Stage every change first (`git add -A`), however many; never with `paths`. */
+  all?: boolean
+  /** Left out of `all`: what the project put in the checkout is not a change. */
+  prepared?: PreparedPaths
   signal?: AbortSignal
   now?: () => number
 }
@@ -25,6 +30,9 @@ export async function commitWorktree(runner: GitRunner, options: CommitOptions):
   const message = options.message.trim()
   if (message.length === 0) {
     throw new GitServiceError(ErrorCode.InvalidParams, 'a commit needs a message')
+  }
+  if (options.all === true && options.paths !== undefined) {
+    throw new GitServiceError(ErrorCode.InvalidParams, 'name paths or commit all, not both')
   }
 
   const run = { cwd: options.worktreePath, timeoutMs: COMMIT_TIMEOUT_MS } as const
@@ -41,7 +49,9 @@ export async function commitWorktree(runner: GitRunner, options: CommitOptions):
     )
   }
 
-  if (options.paths && options.paths.length > 0) {
+  if (options.all === true) {
+    await runner.run({ args: ['add', '-A', '--', '.', ...preparedExcludes(options.prepared)], ...run, ...signal })
+  } else if (options.paths && options.paths.length > 0) {
     // `--` first, so a path that looks like a flag or a ref is still a path.
     await runner.run({ args: ['add', '--', ...options.paths], ...run, ...signal })
   }
@@ -50,9 +60,11 @@ export async function commitWorktree(runner: GitRunner, options: CommitOptions):
   if (staged.length === 0) {
     throw new GitServiceError(
       ErrorCode.Conflict,
-      options.paths && options.paths.length > 0
-        ? 'those paths have nothing staged to commit'
-        : 'nothing is staged; name the paths to commit, or stage them first'
+      options.all === true
+        ? 'nothing to commit'
+        : options.paths && options.paths.length > 0
+          ? 'those paths have nothing staged to commit'
+          : 'nothing is staged; name the paths to commit, or stage them first'
     )
   }
 

@@ -1094,6 +1094,8 @@ export class GitService {
       worktreePath: worktree.path,
       message: params.message,
       ...(params.paths === undefined ? {} : { paths: params.paths }),
+      ...(params.all === undefined ? {} : { all: params.all }),
+      prepared: this.#preparedPaths(worktree.projectId),
       now: this.#now
     })
   }
