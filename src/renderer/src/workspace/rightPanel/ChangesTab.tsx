@@ -29,6 +29,7 @@ export function ChangesTab(): React.JSX.Element | null {
   const commitStaged = useWorkspaceStore((state) => state.commitStaged)
   const committing = useWorkspaceStore((state) => state.committing)
   const log = useWorkspaceStore((state) => (worktreeId ? state.logs[worktreeId] : undefined))
+  const branch = useWorkspaceStore((state) => (worktreeId ? state.branchChanges[worktreeId] : undefined))
   const status = useWorkspaceStore((state) => (worktreeId ? state.statuses[worktreeId] : undefined))
   const push = useWorkspaceStore((state) => (worktreeId ? state.pushes[worktreeId] : undefined))
   const pushing = useWorkspaceStore((state) => state.pushing)
@@ -54,6 +55,7 @@ export function ChangesTab(): React.JSX.Element | null {
     worktreeId ? shownCommitIn(state.layouts[worktreeId]?.root ?? null) : null
   )
   const viewed = useReviewStore((state) => (worktreeId ? state.viewed[worktreeId] : undefined))
+  const reviewBranch = useReviewStore((state) => state.reviewBranch)
   const [menu, setMenu] = useState<{ path: string; at: RowMenuAnchor } | null>(null)
   // Per worktree: the panel is not remounted on tab change, and a message could land on the wrong diff.
   const [drafts, setDrafts] = useState<Record<string, string>>({})
@@ -67,6 +69,7 @@ export function ChangesTab(): React.JSX.Element | null {
   // Conflicts get a list of their own; they cannot be ticked into a commit.
   const conflictRows = listed.filter((change) => change.kind === 'conflicted')
   const rows = listed.filter((change) => change.kind !== 'conflicted')
+  const branchRows = branch?.changes ?? []
   const midway = status?.operation
   const base = baseRef ?? log?.baseRef
   const agentPane = agentPaneOf(terminals, worktreeId)
@@ -214,7 +217,7 @@ export function ChangesTab(): React.JSX.Element | null {
       {push?.phase === 'failed' ? (
         <PushFailed error={push.error} detail={push.detail} retry={() => void pushActiveWorktree()} busy={pushing} />
       ) : null}
-      <ReviewBar worktreeId={worktreeId} changed={rows.length > 0} />
+      <ReviewBar worktreeId={worktreeId} changed={rows.length > 0 || branchRows.length > 0} />
       {changes === undefined ? (
         <p className="changes__empty">Reading…</p>
       ) : rows.length === 0 ? (
@@ -222,96 +225,102 @@ export function ChangesTab(): React.JSX.Element | null {
           <p className="changes__empty">{emptyChangesLabel(log)}</p>
         )
       ) : (
-        <ul className="changes__list">
-          {rows.map((change, index) => (
-            <li
-              className={`changes__item${change.path === selectedPath ? ' changes__item--selected' : ''}`}
-              key={change.path}
-            >
-              <input
-                type="checkbox"
-                className="change__tick"
-                checked={checked(change)}
-                ref={(box) => {
-                  if (box) box.indeterminate = tick(change) === 'mixed'
-                }}
-                aria-label={`Include ${change.path} in the next commit`}
-                onChange={() => {
-                  // Unticking anything git holds takes the whole path out of the index.
-                  if (checked(change) && change.staged) void unstagePath(worktreeId, change.path)
-                  else toggleStaged(change.path)
-                }}
-              />
-              <button
-                type="button"
-                className="change"
-                aria-current={change.path === selectedPath ? 'true' : undefined}
-                title={change.from === undefined ? change.path : `${change.from} → ${change.path}`}
-                onClick={() => selectChange(change.path)}
-                onDoubleClick={() => selectChange(change.path, true)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                    event.preventDefault()
-                    selectChange(change.path, true)
-                    return
-                  }
-                  if (event.key === 'Escape' && zoomed) {
-                    event.preventDefault()
-                    toggleExpandedPane()
-                    return
-                  }
-                  const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0
-                  const next = rows[index + step]
-                  if (step === 0 || next === undefined) return
-                  event.preventDefault()
-                  selectChange(next.path)
-                  const item = event.currentTarget.closest('li')
-                  const sibling = step === 1 ? item?.nextElementSibling : item?.previousElementSibling
-                  sibling?.querySelector<HTMLElement>('.change')?.focus()
-                }}
-                onContextMenu={(event) => {
-                  if (!canDiscard(change)) return
-                  event.preventDefault()
-                  setMenu({ path: change.path, at: { x: event.clientX, y: event.clientY } })
-                }}
+        <section className="changes__group" aria-label="Uncommitted">
+          <h3 className="commits__title">
+            Uncommitted
+            <span className="panel__count">{rows.length}</span>
+          </h3>
+          <ul className="changes__list">
+            {rows.map((change, index) => (
+              <li
+                className={`changes__item${change.path === selectedPath ? ' changes__item--selected' : ''}`}
+                key={change.path}
               >
-                <span className={`change__kind change__kind--${change.kind}`} aria-label={KIND_LABEL[change.kind]}>
-                  {KIND_LETTER[change.kind]}
-                </span>
-                <span className="change__path">
-                  <span className="change__dir">{directoryOf(change.path)}</span>
-                  <span className="change__name">{fileNameOf(change.path)}</span>
-                </span>
-                {isViewedRow(viewed?.[change.path], change) ? (
-                  <span className="change__viewed" role="img" aria-label="Viewed" title="Viewed">
-                    ✓
-                  </span>
-                ) : null}
-                {change.staged ? (
-                  <span className="change__where" title={change.unstaged ? 'Staged, and edited since' : 'Staged'}>
-                    {change.unstaged ? 'both' : 'staged'}
-                  </span>
-                ) : null}
-                {change.added === undefined || change.removed === undefined ? null : (
-                  <span className="change__stat">
-                    +{change.added} −{change.removed}
-                  </span>
-                )}
-              </button>
-              {canDiscard(change) ? (
+                <input
+                  type="checkbox"
+                  className="change__tick"
+                  checked={checked(change)}
+                  ref={(box) => {
+                    if (box) box.indeterminate = tick(change) === 'mixed'
+                  }}
+                  aria-label={`Include ${change.path} in the next commit`}
+                  onChange={() => {
+                    // Unticking anything git holds takes the whole path out of the index.
+                    if (checked(change) && change.staged) void unstagePath(worktreeId, change.path)
+                    else toggleStaged(change.path)
+                  }}
+                />
                 <button
                   type="button"
-                  className="change__discard"
-                  aria-label={`Discard ${change.path}…`}
-                  disabled={hunkPending}
-                  onClick={() => discard(change.path)}
+                  className="change"
+                  aria-current={change.path === selectedPath ? 'true' : undefined}
+                  title={change.from === undefined ? change.path : `${change.from} → ${change.path}`}
+                  onClick={() => selectChange(change.path)}
+                  onDoubleClick={() => selectChange(change.path, true)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                      event.preventDefault()
+                      selectChange(change.path, true)
+                      return
+                    }
+                    if (event.key === 'Escape' && zoomed) {
+                      event.preventDefault()
+                      toggleExpandedPane()
+                      return
+                    }
+                    const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0
+                    const next = rows[index + step]
+                    if (step === 0 || next === undefined) return
+                    event.preventDefault()
+                    selectChange(next.path)
+                    const item = event.currentTarget.closest('li')
+                    const sibling = step === 1 ? item?.nextElementSibling : item?.previousElementSibling
+                    sibling?.querySelector<HTMLElement>('.change')?.focus()
+                  }}
+                  onContextMenu={(event) => {
+                    if (!canDiscard(change)) return
+                    event.preventDefault()
+                    setMenu({ path: change.path, at: { x: event.clientX, y: event.clientY } })
+                  }}
                 >
-                  Discard…
+                  <span className={`change__kind change__kind--${change.kind}`} aria-label={KIND_LABEL[change.kind]}>
+                    {KIND_LETTER[change.kind]}
+                  </span>
+                  <span className="change__path">
+                    <span className="change__dir">{directoryOf(change.path)}</span>
+                    <span className="change__name">{fileNameOf(change.path)}</span>
+                  </span>
+                  {isViewedRow(viewed?.[change.path], change) ? (
+                    <span className="change__viewed" role="img" aria-label="Viewed" title="Viewed">
+                      ✓
+                    </span>
+                  ) : null}
+                  {change.staged ? (
+                    <span className="change__where" title={change.unstaged ? 'Staged, and edited since' : 'Staged'}>
+                      {change.unstaged ? 'both' : 'staged'}
+                    </span>
+                  ) : null}
+                  {change.added === undefined || change.removed === undefined ? null : (
+                    <span className="change__stat">
+                      +{change.added} −{change.removed}
+                    </span>
+                  )}
                 </button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+                {canDiscard(change) ? (
+                  <button
+                    type="button"
+                    className="change__discard"
+                    aria-label={`Discard ${change.path}…`}
+                    disabled={hunkPending}
+                    onClick={() => discard(change.path)}
+                  >
+                    Discard…
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       {menu === null ? null : (
         <RowMenu
@@ -365,6 +374,40 @@ export function ChangesTab(): React.JSX.Element | null {
         <p className="changes__note">
           {changes.limit} of {changes.total}
         </p>
+      ) : null}
+
+      {branchRows.length > 0 ? (
+        <section className="changes__group changes__group--branch" aria-label="On branch">
+          <h3 className="commits__title" title={`vs ${log?.baseRef ?? base ?? ''}`}>
+            On Branch
+            <span className="panel__count">{branch?.total ?? branchRows.length}</span>
+          </h3>
+          <ul className="changes__list">
+            {branchRows.map((change) => (
+              <li className="changes__item" key={change.path}>
+                <button
+                  type="button"
+                  className="change"
+                  title={change.from === undefined ? change.path : `${change.from} → ${change.path}`}
+                  onClick={() => reviewBranch(worktreeId, change.path)}
+                >
+                  <span className={`change__kind change__kind--${change.kind}`} aria-label={KIND_LABEL[change.kind]}>
+                    {KIND_LETTER[change.kind]}
+                  </span>
+                  <span className="change__path">
+                    <span className="change__dir">{directoryOf(change.path)}</span>
+                    <span className="change__name">{fileNameOf(change.path)}</span>
+                  </span>
+                  {change.added === undefined || change.removed === undefined ? null : (
+                    <span className="change__stat">
+                      +{change.added} −{change.removed}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       ) : null}
 
       {log?.unavailable !== undefined ? (

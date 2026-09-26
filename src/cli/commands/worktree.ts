@@ -899,6 +899,11 @@ export const worktreeCommands: readonly CommandSpec[] = [
     flags: [
       { name: 'path', kind: 'string', placeholder: '<path>', description: 'Restrict the patch to one path.' },
       { name: 'staged', kind: 'boolean', description: 'Diff the index against HEAD instead of the working tree.' },
+      {
+        name: 'base',
+        kind: 'boolean',
+        description: 'Diff the working tree against where the branch left its base: the whole task, committed or not.'
+      },
       { name: 'context', kind: 'number', placeholder: '<lines>', description: 'Context lines around each hunk.' },
       {
         name: 'max-bytes',
@@ -910,12 +915,14 @@ export const worktreeCommands: readonly CommandSpec[] = [
     examples: [
       'teamree worktree diff fix-login',
       'teamree worktree diff fix-login --path src/app.ts',
-      'teamree worktree diff fix-login --staged'
+      'teamree worktree diff fix-login --staged',
+      'teamree worktree diff fix-login --base'
     ],
     run: async (context) => {
       const worktree = await resolveWorktree(context.client, context.args[0] as string)
       const patchPath = readString(context.flags, 'path')
       const staged = readBoolean(context.flags, 'staged')
+      const base = readBoolean(context.flags, 'base')
       const contextLines = readNumber(context.flags, 'context')
       const maxBytes = readNumber(context.flags, 'max-bytes')
 
@@ -923,6 +930,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
         worktreeId: worktree.id,
         ...(patchPath === undefined ? {} : { path: patchPath }),
         ...(staged ? { staged: true } : {}),
+        ...(base ? { base: true } : {}),
         ...(contextLines === undefined ? {} : { contextLines }),
         ...(maxBytes === undefined ? {} : { maxBytes })
       })

@@ -2,7 +2,8 @@
 // that go in, read fresh, and the files in the way when that checkout has uncommitted work.
 
 import { useEffect, useState } from 'react'
-import type { WorktreeMerge } from '@shared/entities'
+import type { WorktreeChanges, WorktreeMerge } from '@shared/entities'
+import { useReviewStore } from '../review/reviewStore'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -15,7 +16,9 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   const base = useWorkspaceStore((state) => state.landings[worktreeId]?.base ?? 'main')
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
   const mergeIntoBase = useWorkspaceStore((state) => state.mergeIntoBase)
+  const reviewBranch = useReviewStore((state) => state.reviewBranch)
   const [plan, setPlan] = useState<WorktreeMerge | null>(null)
+  const [branch, setBranch] = useState<WorktreeChanges | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [merging, setMerging] = useState(false)
 
@@ -29,6 +32,12 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
       .catch((failure: unknown) => {
         if (alive) setError(failure instanceof Error ? failure.message : String(failure))
       })
+    runtimeClient
+      .call('worktree.changes', { worktreeId, base: true })
+      .then((read) => {
+        if (alive) setBranch(read)
+      })
+      .catch(() => undefined)
     return () => {
       alive = false
     }
@@ -60,6 +69,21 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
       onCancel={closeDialog}
       onConfirm={merge}
     >
+      {branch === null || branch.total === 0 ? null : (
+        <div className="merge__stat">
+          <span>{branchStat(branch)}</span>
+          <button
+            type="button"
+            className="button button--small"
+            onClick={() => {
+              closeDialog()
+              reviewBranch(worktreeId)
+            }}
+          >
+            Review
+          </button>
+        </div>
+      )}
       {commits.length > 0 ? <Lines lines={commits} /> : null}
       {dirty.length > 0 ? (
         <>
@@ -76,6 +100,17 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
       )}
     </Confirm>
   )
+}
+
+/** `3 files +41 −7`: the branch against its base. */
+function branchStat(branch: WorktreeChanges): string {
+  let added = 0
+  let removed = 0
+  for (const change of branch.changes) {
+    added += change.added ?? 0
+    removed += change.removed ?? 0
+  }
+  return `${branch.total} ${branch.total === 1 ? 'file' : 'files'} +${added} −${removed}`
 }
 
 function folderName(path: string): string {

@@ -652,6 +652,14 @@ describe('the commands that were in no menu', () => {
     expect(isCommandAvailable('commit-changes' as WorkspaceCommand, DIRTY)).toBe(true)
   })
 
+  it('offers Review Changes on a clean branch that is ahead, or whose files differ from its base', () => {
+    expect(isCommandAvailable('review-changes' as WorkspaceCommand, WORKING)).toBe(false)
+    expect(isCommandAvailable('review-changes' as WorkspaceCommand, AHEAD)).toBe(true)
+    const pushed = { ...WORKING, branchChanges: { w1: { total: 2 } } } as CommandState
+    expect(isCommandAvailable('review-changes' as WorkspaceCommand, pushed)).toBe(true)
+    expect(isCommandAvailable('commit-changes' as WorkspaceCommand, AHEAD)).toBe(false)
+  })
+
   it('runs each of them through the one dispatcher', () => {
     const settings = workspace(WORKING)
     runWorkspaceCommand('open-settings' as WorkspaceCommand, settings)

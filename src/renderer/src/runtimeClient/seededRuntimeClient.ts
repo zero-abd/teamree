@@ -125,6 +125,22 @@ function seededChanges(status: WorktreeStatus): WorktreeChange[] {
   return changes
 }
 
+/** The branch against its base: the uncommitted paths, and one committed file per commit ahead, each at the seeded patch's counts. */
+function seededBranchChanges(status: WorktreeStatus): WorktreeChange[] {
+  const uncommitted = seededChanges(status).filter((change) => change.kind !== 'conflicted')
+  const taken = new Set(uncommitted.map((change) => change.path))
+  const committed = SEEDED_PATHS.slice(SEEDED_PATHS.length - Math.min(status.ahead, SEEDED_PATHS.length))
+    .filter((path) => !taken.has(path))
+    .map((path): WorktreeChange => ({ path, kind: 'modified', staged: false, unstaged: false }))
+  return [...committed, ...uncommitted].map((change) => ({
+    ...change,
+    staged: false,
+    unstaged: false,
+    added: 3,
+    removed: 1
+  }))
+}
+
 /** One directory of the invented tree, off the same paths as the changes. `node_modules` is there and ignored to show dimming. */
 function seededDirectory(directory: string): WorktreeFileEntry[] {
   const prefix = directory === '' ? '' : `${directory}/`
@@ -716,10 +732,11 @@ export function createSeededRuntimeClient(): RuntimeClient {
       statuses.set(worktreeId, status)
       return status
     },
-    'worktree.changes': ({ worktreeId, path, limit }) => {
+    'worktree.changes': ({ worktreeId, path, limit, base }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const status = statuses.get(worktreeId)
-      const all = (status ? seededChanges(status) : []).filter((change) => path === undefined || change.path === path)
+      const read = base === true ? seededBranchChanges : seededChanges
+      const all = (status ? read(status) : []).filter((change) => path === undefined || change.path === path)
       const cap = limit ?? 500
       return {
         worktreeId: worktree.id,
@@ -957,13 +974,15 @@ export function createSeededRuntimeClient(): RuntimeClient {
         readAt: Date.now()
       }
     },
-    'worktree.diff': ({ worktreeId, path, staged, head }) => {
+    'worktree.diff': ({ worktreeId, path, staged, head, base }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const status = statuses.get(worktreeId)
-      const changes = status ? seededChanges(status) : []
+      const whole = base === true && staged !== true
+      const changes = status ? (whole ? seededBranchChanges : seededChanges)(status) : []
       const wanted = changes.filter(
         (change) =>
-          (head === true || change.staged === (staged ?? false)) && (path === undefined || change.path === path)
+          (whole || head === true || change.staged === (staged ?? false)) &&
+          (path === undefined || change.path === path)
       )
       return {
         worktreeId: worktree.id,

@@ -270,7 +270,9 @@ export const Params = {
     worktreeId: z.string().min(1),
     /** Restricts the list to one path. */
     path: z.string().min(1).optional(),
-    limit: z.number().int().positive().optional()
+    limit: z.number().int().positive().optional(),
+    /** List against where the branch left its base (a child's parent branch), committed and uncommitted together. */
+    base: z.boolean().optional()
   }),
   /** Commits staged work plus the paths named. Deliberately no "commit everything". */
   worktreeCommit: z.object({
@@ -334,6 +336,8 @@ export const Params = {
     staged: z.boolean().optional(),
     /** Diff the working tree against HEAD, staged and unstaged together. */
     head: z.boolean().optional(),
+    /** Diff the working tree against where the branch left its base (a child's parent branch). */
+    base: z.boolean().optional(),
     contextLines: z.number().int().min(0).max(100).optional(),
     /** Ceiling on the patch returned, so one huge file cannot flood a caller. */
     maxBytes: z.number().int().positive().optional()

@@ -30,6 +30,8 @@ export type CommandState = {
   statuses: Readonly<Record<string, Partial<WorktreeStatus>>>
   /** A push already in flight, which is the one thing that makes Push inert. */
   pushing: boolean
+  /** Files differing from each worktree's base; absent reads as none. */
+  branchChanges?: Readonly<Record<string, { total: number }>>
   /** A markdown editor holds the keyboard; ⌘B and ⌘E are bold and code there. */
   editingMarkdown?: boolean
   /** Absent reads as the default size. */
@@ -240,7 +242,11 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
       return unless(stepNeedingYou(state, 1) !== null, 'nothing needs you')
     case 'previous-needing':
       return unless(stepNeedingYou(state, -1) !== null, 'nothing needs you')
-    case 'review-changes':
+    case 'review-changes': {
+      const status = activeStatus(state)
+      const branch = state.activeWorktreeId === null ? 0 : (state.branchChanges?.[state.activeWorktreeId]?.total ?? 0)
+      return unless(changedCount(status) > 0 || (status?.ahead ?? 0) > 0 || branch > 0, 'no changes')
+    }
     case 'commit-changes':
       // The same count as the header's Changes chip.
       return unless(changedCount(activeStatus(state)) > 0, 'no changes')

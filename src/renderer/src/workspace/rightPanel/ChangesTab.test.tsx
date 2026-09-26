@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   Terminal,
@@ -111,7 +111,7 @@ beforeEach(() => {
   call.mockReset()
   call.mockImplementation(() => new Promise(() => {}))
   openInBrowser.mockReset()
-  useReviewStore.setState({ viewed: {}, batch: {}, queued: {} })
+  useReviewStore.setState({ viewed: {}, batch: {}, queued: {}, scope: {}, jump: {} })
   seed()
 })
 
@@ -1098,5 +1098,60 @@ describe('keeping up with the base', () => {
     render(<ChangesTab />)
     expect(screen.queryByRole('button', { name: /to Resolve/ })).toBeNull()
     expect(screen.getByRole('button', { name: 'Abort' })).toBeTruthy()
+  })
+})
+
+describe('the whole branch', () => {
+  const onBranch: WorktreeChange[] = [
+    { path: 'README.md', kind: 'modified', staged: false, unstaged: false, added: 1, removed: 1 },
+    { path: 'src/limits.ts', kind: 'added', staged: false, unstaged: false, added: 40, removed: 0 }
+  ]
+  function withBranch(changes: WorktreeChange[]): void {
+    useWorkspaceStore.setState({
+      layouts: { w1: { worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' } },
+      branchChanges: {
+        w1: { worktreeId: 'w1', changes, total: changes.length, limit: 500, truncated: false, readAt: 0 }
+      }
+    })
+  }
+  const reviews = () => fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root).filter(isReviewLeaf)
+
+  it('keeps Review All when the tree is clean and the branch is ahead, and lists the files against the base', () => {
+    withBranch(onBranch)
+    render(<ChangesTab />)
+    expect(screen.getByText('All committed')).toBeTruthy()
+    const group = screen.getByRole('region', { name: 'On branch' })
+    expect(group.querySelector('.commits__title')?.textContent).toBe('On Branch2')
+    expect(group.querySelector('.commits__title')?.getAttribute('title')).toBe('vs origin/main')
+    expect(within(group).getByTitle('src/limits.ts').querySelector('.change__stat')?.textContent).toBe('+40 −0')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review All' }))
+    expect(reviews()).toHaveLength(1)
+  })
+
+  it('opens the review on the branch at the file picked', () => {
+    withBranch(onBranch)
+    useReviewStore.setState({ scope: { w1: 'uncommitted' } })
+    render(<ChangesTab />)
+    fireEvent.click(within(screen.getByRole('region', { name: 'On branch' })).getByTitle('src/limits.ts'))
+    expect(reviews()).toHaveLength(1)
+    expect(useReviewStore.getState().scope.w1).toBe('branch')
+    expect(useReviewStore.getState().jump.w1).toBe('src/limits.ts')
+  })
+
+  it('heads the uncommitted list with its count once there is one', () => {
+    withBranch(onBranch)
+    withChanges(rows)
+    render(<ChangesTab />)
+    expect(screen.getByRole('region', { name: 'Uncommitted' }).querySelector('.commits__title')?.textContent).toBe(
+      'Uncommitted3'
+    )
+  })
+
+  it('has no branch group, and no Review All, when nothing differs from the base', () => {
+    withBranch([])
+    render(<ChangesTab />)
+    expect(screen.queryByRole('region', { name: 'On branch' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Review All' })).toBeNull()
   })
 })
