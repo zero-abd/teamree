@@ -322,7 +322,9 @@ export const Params = {
     worktreeId: z.string().min(1),
     sha: z.string().regex(/^[0-9a-f]{4,64}$/i),
     contextLines: z.number().int().min(0).max(100).optional(),
-    maxBytes: z.number().int().positive().optional()
+    maxBytes: z.number().int().positive().optional(),
+    /** Where in the whole patch to start: the bytes the pages before this one returned. */
+    offsetBytes: z.number().int().min(0).optional()
   }),
   /** Two worktrees of one project, each as its patch against the commit both started from. */
   worktreeCompare: z.object({
@@ -367,7 +369,9 @@ export const Params = {
     base: z.boolean().optional(),
     contextLines: z.number().int().min(0).max(100).optional(),
     /** Ceiling on the patch returned, so one huge file cannot flood a caller. */
-    maxBytes: z.number().int().positive().optional()
+    maxBytes: z.number().int().positive().optional(),
+    /** Where in the whole patch to start: the bytes the pages before this one returned. */
+    offsetBytes: z.number().int().min(0).optional()
   }),
   /**
    * One directory of a worktree: names and kinds, never contents. `path` is

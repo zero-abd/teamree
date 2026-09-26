@@ -19,11 +19,17 @@ const STATUS_NOTE: Record<PatchFile['status'], string> = {
   modified: ''
 }
 
-/** A hunk heavier than this starts folded; see `drawCost`. */
+/** A hunk heavier than this opens on its first lines only; see `lineCost`. */
 const FOLD_OVER = 500
 
 /** What one patch draws when it opens; hunks past it start folded. */
 const DRAW_BUDGET = 2000
+
+/** The most a heavy hunk draws on open: one task's rows, so the next step leaves them be. */
+const HEAD_LINES = 400
+
+/** Lines each `Show more` adds to a hunk. */
+const MORE_LINES = 2000
 
 /** Lockfiles and minified output: nobody reads them line by line. */
 const GENERATED =
@@ -52,10 +58,22 @@ export type PatchViewing = {
 /** Lines of one hunk a comment is being written on: the hunk by `file:hunk`, its lines by index, `from` <= `to`. */
 type Draft = { place: string; from: number; to: number }
 
+/** A cut patch's way to the rest: the whole patch's changed lines, and reading on while it loads. */
+export type PatchMore = {
+  totalLines?: number | undefined
+  loading?: boolean
+  /** Absent once reading on has gone as far as it will. */
+  onShowAll?: (() => void) | undefined
+  onStop?: () => void
+  /** Offered in place of `Show Full Diff` for a generated file, or once that is spent. */
+  onOpenFile?: ((path: string) => void) | undefined
+}
+
 export type PatchViewProps = {
   /** The worktree a `+` on a line writes a comment for its agent in; absent offers none. */
   commentsIn?: string
   viewing?: PatchViewing
+  more?: PatchMore
 }
 
 export function PatchView({
@@ -69,7 +87,8 @@ export function PatchView({
   onHunk,
   onDiscard,
   commentsIn,
-  viewing
+  viewing,
+  more
 }: PatchViewProps & {
   patch: string
   truncated: boolean
@@ -90,7 +109,7 @@ export function PatchView({
   // Once per patch: the panel re-renders on every refresh tick and a patch is thousands of lines.
   const parsed = useMemo(() => parsePatch(patch), [patch])
   const files = useMemo(() => (hideWhitespace ? withoutWhitespace(parsed) : parsed), [parsed, hideWhitespace])
-  const folded = useMemo(() => foldOnOpen(files), [files])
+  const opening = useMemo(() => linesOnOpen(files), [files])
   const headless = named && files.length === 1
   const [draft, setDraft] = useState<Draft | null>(null)
   const root = useRef<HTMLDivElement | null>(null)
@@ -154,7 +173,7 @@ export function PatchView({
                 place={`${index}:${at}`}
                 language={syntaxLanguage(file.path)}
                 layout={layout}
-                startFolded={folded[index]?.[at] ?? false}
+                startLines={opening[index]?.[at] ?? 0}
                 revealLine={reveal?.file === index && reveal.hunk === at ? reveal.line : null}
                 busy={busy}
                 {...(commentsIn === undefined
@@ -189,9 +208,53 @@ export function PatchView({
           )}
         </details>
       ))}
-      {truncated ? <p className="patch__cut">… cut short</p> : null}
+      {truncated ? <PatchCut files={parsed} more={more} /> : null}
     </div>
   )
+}
+
+/** The end of a cut patch: how much of it is here, and the way to the rest. */
+function PatchCut({ files, more }: { files: readonly PatchFile[]; more: PatchMore | undefined }): React.JSX.Element {
+  const shown = useMemo(
+    () => files.reduce((sum, file) => sum + file.hunks.reduce((lines, hunk) => lines + changedIn(hunk), 0), 0),
+    [files]
+  )
+  const total = more?.totalLines
+  const last = files.at(-1)
+  const onOpenFile = more?.onOpenFile
+  const openFile = last === undefined || onOpenFile === undefined ? undefined : () => onOpenFile(last.path)
+  const showAll =
+    openFile !== undefined && last !== undefined && GENERATED.test(last.path) ? undefined : more?.onShowAll
+  return (
+    <div className="patch__cut">
+      <span>
+        Showing {shown.toLocaleString('en-US')}
+        {total === undefined ? '' : ` of ${total.toLocaleString('en-US')}`} lines
+      </span>
+      {more?.loading === true ? (
+        <>
+          <progress className="patch__progress" {...(total === undefined ? {} : { max: total, value: shown })} />
+          <button type="button" className="button" onClick={more.onStop}>
+            Stop
+          </button>
+        </>
+      ) : showAll !== undefined ? (
+        <button type="button" className="button" onClick={showAll}>
+          Show Full Diff
+        </button>
+      ) : openFile !== undefined ? (
+        <button type="button" className="button" onClick={openFile}>
+          Open File
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+function changedIn(hunk: PatchHunk): number {
+  let changed = 0
+  for (const line of hunk.lines) if (line.kind !== 'context') changed += 1
+  return changed
 }
 
 /** `c`, or ⌘⇧A, with lines of this patch selected opens a comment on them. */
@@ -232,25 +295,41 @@ function selectedDraft(root: HTMLElement | null, selection: Selection | null): D
   return { place: anchor.hunk, from: Math.min(anchor.line, focus.line), to: Math.max(anchor.line, focus.line) }
 }
 
-/** Which hunks open folded: generated files, heavy hunks, and whatever is past the patch's budget. */
-function foldOnOpen(files: readonly PatchFile[]): boolean[][] {
-  let drawn = 0
+/**
+ * Lines each hunk draws on open, 0 folded: a light hunk all of them, a heavy one its first lines, while the
+ * patch's budget lasts. Generated files start folded.
+ */
+function linesOnOpen(files: readonly PatchFile[]): number[][] {
+  let left = DRAW_BUDGET
   return files.map((file) => {
     const generated = GENERATED.test(file.path)
     return file.hunks.map((hunk) => {
-      const cost = drawCost(hunk)
-      const fold = generated || cost > FOLD_OVER || drawn + cost > DRAW_BUDGET
-      if (!fold) drawn += cost
-      return fold
+      if (generated) return 0
+      let cost = 0
+      for (const line of hunk.lines) cost += lineCost(line)
+      if (cost <= FOLD_OVER) {
+        if (cost > left) return 0
+        left -= cost
+        // Not its length: a hunk that grows on a refresh stays whole.
+        return Infinity
+      }
+      let room = Math.min(left, HEAD_LINES)
+      let lines = 0
+      for (const line of hunk.lines) {
+        const next = lineCost(line)
+        if (next > room) break
+        room -= next
+        lines += 1
+      }
+      left -= Math.min(left, HEAD_LINES) - room
+      return lines
     })
   })
 }
 
-/** A hunk's lines, a long one counting once per 120 characters: a minified line is thousands of tokens. */
-function drawCost(hunk: PatchHunk): number {
-  let cost = 0
-  for (const line of hunk.lines) cost += Math.max(1, Math.ceil(line.text.length / 120))
-  return cost
+/** A long line counts once per 120 characters: a minified line is thousands of tokens. */
+function lineCost(line: PatchLine): number {
+  return Math.max(1, Math.ceil(line.text.length / 120))
 }
 
 function HunkView({
@@ -258,7 +337,7 @@ function HunkView({
   place,
   language,
   layout,
-  startFolded,
+  startLines,
   revealLine,
   action,
   busy,
@@ -273,15 +352,18 @@ function HunkView({
   place: string
   language: SyntaxLanguage | null
   layout: DiffLayout
-  startFolded: boolean
+  startLines: number
   revealLine: number | null
   action?: HunkAction
   busy: boolean
   onHunk?: () => void
   onDiscard?: () => void
 }): React.JSX.Element {
-  const [folded, setFolded] = useState(startFolded)
-  if (folded && revealLine !== null) setFolded(false)
+  const [limit, setLimit] = useState(startLines)
+  // Side by side, a row can carry two lines, so the line found is within twice its index.
+  const need = revealLine === null ? 0 : (layout === 'split' ? 2 : 1) * (revealLine + 1)
+  if (need > limit) setLimit(Math.ceil(need / ROWS_PER_TASK) * ROWS_PER_TASK)
+  const more = useCallback(() => setLimit((now) => now + MORE_LINES), [])
   const head = useRef<HTMLElement | null>(null)
   const count = hunk.lines.length
   return (
@@ -302,12 +384,12 @@ function HunkView({
           <HunkButton label={action} busy={busy} onClick={onHunk} className="patch__stage" />
         )}
       </summary>
-      {folded ? (
+      {limit === 0 ? (
         <button
           type="button"
           className="patch__more"
           onClick={() => {
-            setFolded(false)
+            setLimit(Infinity)
             // The button goes; the header keeps the keyboard in this hunk.
             head.current?.focus()
           }}
@@ -321,6 +403,8 @@ function HunkView({
           hunk={hunk}
           language={language}
           layout={layout}
+          limit={limit}
+          onMore={more}
           revealLine={revealLine}
           place={place}
           draft={draft}
@@ -333,13 +417,15 @@ function HunkView({
 }
 
 /** Rows drawn per task once a hunk is shown: a long one appears at once and fills in behind. */
-const ROWS_PER_TASK = 500
+const ROWS_PER_TASK = 400
 
 // Memoised: a Stage click flips `busy` on every hunk, and a shown hunk can be thousands of rows.
 const HunkLines = memo(function HunkLines({
   hunk,
   language,
   layout,
+  limit,
+  onMore,
   revealLine,
   place,
   draft = null,
@@ -349,6 +435,9 @@ const HunkLines = memo(function HunkLines({
   hunk: PatchHunk
   language: SyntaxLanguage | null
   layout: DiffLayout
+  /** Lines to draw; the rest wait behind `Show more`. */
+  limit: number
+  onMore: () => void
   revealLine: number | null
   place: string
 }): React.JSX.Element {
@@ -363,17 +452,19 @@ const HunkLines = memo(function HunkLines({
     () => (rows === null ? null : new Map(hunk.lines.map((line, index) => [line, index]))),
     [hunk, rows]
   )
-  const total = rows?.length ?? hunk.lines.length
+  const shown = useMemo(() => rowsWithin(hunk, rows, limit), [hunk, rows, limit])
   const [drawn, setDrawn] = useState(ROWS_PER_TASK)
   const reach = rowOf(hunk, rows, revealLine) + 1
   if (reach > drawn) setDrawn(Math.ceil(reach / ROWS_PER_TASK) * ROWS_PER_TASK)
   useEffect(() => {
-    if (drawn >= total) return
+    if (drawn >= shown.rows) return
     const next = setTimeout(() => setDrawn((now) => now + ROWS_PER_TASK), 0)
     return () => clearTimeout(next)
-  }, [drawn, total])
+  }, [drawn, shown.rows])
+  const end = Math.min(drawn, shown.rows)
   const slices: number[] = []
-  for (let from = 0; from < Math.min(drawn, total); from += ROWS_PER_TASK) slices.push(from)
+  for (let from = 0; from < end; from += ROWS_PER_TASK) slices.push(from)
+  const hidden = hunk.lines.length - shown.lines
   return (
     <div className="patch__lines">
       {slices.map((from) =>
@@ -382,6 +473,7 @@ const HunkLines = memo(function HunkLines({
             key={from}
             lines={hunk.lines}
             from={from}
+            to={Math.min(from + ROWS_PER_TASK, end)}
             language={language}
             words={words}
             draft={draft}
@@ -394,6 +486,7 @@ const HunkLines = memo(function HunkLines({
             rows={rows}
             lineIndex={lineIndex}
             from={from}
+            to={Math.min(from + ROWS_PER_TASK, end)}
             language={language}
             words={words}
             draft={draft}
@@ -402,9 +495,31 @@ const HunkLines = memo(function HunkLines({
           />
         )
       )}
+      {hidden > 0 ? (
+        <button type="button" className="patch__more" onClick={onMore}>
+          Show {Math.min(MORE_LINES, hidden).toLocaleString('en-US')} more lines
+          {hidden > MORE_LINES ? ` · ${hidden.toLocaleString('en-US')} hidden` : ''}
+        </button>
+      ) : null}
     </div>
   )
 })
+
+/** The rows that draw no more than `limit` of the hunk's lines, and the lines they draw. */
+function rowsWithin(hunk: PatchHunk, rows: readonly PatchRow[] | null, limit: number): { rows: number; lines: number } {
+  if (rows === null) {
+    const lines = Math.min(limit, hunk.lines.length)
+    return { rows: lines, lines }
+  }
+  let lines = 0
+  for (let at = 0; at < rows.length; at += 1) {
+    const row = rows[at] as PatchRow
+    const next = lines + (row.old === null ? 0 : 1) + (row.new === null || row.new === row.old ? 0 : 1)
+    if (next > limit) return { rows: at, lines }
+    lines = next
+  }
+  return { rows: rows.length, lines }
+}
 
 /** The row `line` is drawn on, or -1. */
 function rowOf(hunk: PatchHunk, rows: readonly PatchRow[] | null, line: number | null): number {
@@ -417,6 +532,7 @@ function rowOf(hunk: PatchHunk, rows: readonly PatchRow[] | null, line: number |
 const InlineRows = memo(function InlineRows({
   lines,
   from,
+  to,
   language,
   words,
   draft = null,
@@ -425,12 +541,13 @@ const InlineRows = memo(function InlineRows({
 }: LineComments & {
   lines: readonly PatchLine[]
   from: number
+  to: number
   language: SyntaxLanguage | null
   words: ReadonlyMap<PatchLine, Spans>
 }): React.JSX.Element {
   return (
     <>
-      {lines.slice(from, from + ROWS_PER_TASK).map((line, offset) => {
+      {lines.slice(from, to).map((line, offset) => {
         const index = from + offset
         return (
           // Two lines can be byte-identical and still be different lines.
@@ -489,6 +606,7 @@ const SplitRows = memo(function SplitRows({
   rows,
   lineIndex,
   from,
+  to,
   language,
   words,
   draft = null,
@@ -498,12 +616,13 @@ const SplitRows = memo(function SplitRows({
   rows: readonly PatchRow[]
   lineIndex: ReadonlyMap<PatchLine, number>
   from: number
+  to: number
   language: SyntaxLanguage | null
   words: ReadonlyMap<PatchLine, Spans>
 }): React.JSX.Element {
   return (
     <>
-      {rows.slice(from, from + ROWS_PER_TASK).map((row, offset) => {
+      {rows.slice(from, to).map((row, offset) => {
         const oldIndex = row.old === null ? -1 : (lineIndex.get(row.old) ?? -1)
         const newIndex = row.new === null ? -1 : (lineIndex.get(row.new) ?? -1)
         // The later of the two, so a comment on a changed pair takes both and the composer lands under it.

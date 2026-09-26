@@ -13,11 +13,13 @@ import { withoutWhitespace } from '../workspace/lineDiff'
 import { fitLayout, PatchView, type PatchPlace, type PatchViewProps } from '../workspace/PatchView'
 import { Segments } from './FileBar'
 import { DIFF_MATCH_LIMIT, findInPatches, stepMatch, type DiffMatch } from './diffFind'
+import { usePagedPatch } from './usePagedPatch'
 
 type Diffs = { working: WorktreeDiff; staged: WorktreeDiff }
 
 export type FileDiff = {
   paneId: string
+  path: string
   shown: boolean
   /** Null until the worktree has answered. */
   changed: boolean | null
@@ -84,7 +86,7 @@ export function useFileDiff(paneId: string, worktreeId: string, path: string): F
     }
   }, [shown, diffs, paneId, setPaneDiff])
 
-  return { paneId, shown, changed, diffs, error, layout: fitLayout(diffLayout, bodyWidth), body, bodyWidth }
+  return { paneId, path, shown, changed, diffs, error, layout: fitLayout(diffLayout, bodyWidth), body, bodyWidth }
 }
 
 /** The bar's diff controls: the file (`view` names it) or its diff, then the layouts while the diff is open. */
@@ -286,9 +288,15 @@ export function DiffBody({
   const busy = useWorkspaceStore((state) => state.hunkPending)
   const applyHunk = useWorkspaceStore((state) => state.applyHunk)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
-  const { diffs, layout } = diff
-  const staged = diffs === null || diffs.staged.patch === '' ? null : diffs.staged
-  const working = diffs === null || diffs.working.patch === '' ? null : diffs.working
+  const setPaneDiff = useWorkspaceStore((state) => state.setPaneDiff)
+  const { diffs, layout, path, paneId } = diff
+  const readHalf = (staged: boolean) => (offsetBytes: number, maxBytes: number) =>
+    runtimeClient.call('worktree.diff', { worktreeId, path, ...(staged ? { staged } : {}), offsetBytes, maxBytes })
+  const openFile = (): void => setPaneDiff(paneId, false)
+  const stagedPages = usePagedPatch(diffs?.staged ?? null, readHalf(true))
+  const workingPages = usePagedPatch(diffs?.working ?? null, readHalf(false))
+  const staged = stagedPages.patch ? { ...stagedPages, patch: stagedPages.patch } : null
+  const working = workingPages.patch ? { ...workingPages, patch: workingPages.patch } : null
   const scroller = useRef<HTMLDivElement | null>(null)
   const find = useDiffFind(scroller, staged?.patch ?? null, working?.patch ?? null, searchToken)
 
@@ -313,6 +321,7 @@ export function DiffBody({
             <PatchView
               patch={staged.patch}
               truncated={staged.truncated}
+              more={{ ...staged.more, onOpenFile: openFile }}
               layout={layout}
               named
               commentsIn={worktreeId}
@@ -329,6 +338,7 @@ export function DiffBody({
             <PatchView
               patch={working.patch}
               truncated={working.truncated}
+              more={{ ...working.more, onOpenFile: openFile }}
               layout={layout}
               named
               commentsIn={worktreeId}

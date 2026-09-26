@@ -343,6 +343,50 @@ describe('changes and diffs against a real repository', () => {
     expect(diff.patch.endsWith('\n')).toBe(true)
   })
 
+  it('reads a cut patch on in pages from an offset, which join up to the whole patch', async () => {
+    const repo = await repository()
+    await repo.write('big.txt', 'seed\n')
+    await repo.commit('seed')
+    await repo.write('big.txt', `${Array.from({ length: 400 }, (_, index) => `line ${index}`).join('\n')}\n`)
+    await repo.write('new.txt', 'fresh\n')
+    const read = (offsetBytes?: number, maxBytes = 1000): ReturnType<typeof readWorktreeDiff> =>
+      readWorktreeDiff(repo.runner, {
+        worktreeId: 'wt',
+        worktreePath: repo.repoPath,
+        maxBytes,
+        ...(offsetBytes === undefined ? {} : { offsetBytes })
+      })
+    const whole = await read(undefined, 1024 * 1024)
+
+    let joined = ''
+    let page = await read()
+    for (let reads = 1; ; reads += 1) {
+      joined += page.patch
+      expect(Buffer.byteLength(page.patch, 'utf8')).toBeLessThanOrEqual(1000)
+      if (!page.truncated) break
+      expect(reads).toBeLessThan(20)
+      page = await read(Buffer.byteLength(joined, 'utf8'))
+    }
+
+    expect(whole.truncated).toBe(false)
+    expect(joined).toBe(whole.patch)
+  })
+
+  it('counts the whole patch’s changed lines when it cuts it', async () => {
+    const repo = await repository()
+    await repo.write('big.txt', 'seed\n')
+    await repo.commit('seed')
+    await repo.write('big.txt', `${Array.from({ length: 400 }, (_, index) => `line ${index}`).join('\n')}\n`)
+    await repo.write('new.txt', 'one\ntwo\n')
+
+    const cut = await readWorktreeDiff(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath, maxBytes: 200 })
+    const whole = await readWorktreeDiff(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath })
+
+    // 400 added and the seed removed, and the new file's two lines.
+    expect(cut.totalLines).toBe(403)
+    expect(whole.totalLines).toBeUndefined()
+  })
+
   // A file past the runner's 32MB ceiling came back as a failure, which the
   // panel rendered as "No patch for this path".
   it('cuts a very large untracked file down rather than failing to read it', async () => {

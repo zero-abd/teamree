@@ -1170,6 +1170,7 @@ export class GitService {
             : {}),
       ...(params.contextLines === undefined ? {} : { contextLines: params.contextLines }),
       ...(params.maxBytes === undefined ? {} : { maxBytes: params.maxBytes }),
+      ...(params.offsetBytes === undefined ? {} : { offsetBytes: params.offsetBytes }),
       prepared: this.#preparedPaths(worktree.projectId),
       now: this.#now
     })
@@ -1283,6 +1284,7 @@ export class GitService {
       sha: params.sha,
       ...(params.contextLines === undefined ? {} : { contextLines: params.contextLines }),
       ...(params.maxBytes === undefined ? {} : { maxBytes: params.maxBytes }),
+      ...(params.offsetBytes === undefined ? {} : { offsetBytes: params.offsetBytes }),
       now: this.#now
     })
   }
