@@ -92,13 +92,15 @@ export function cliPanel(status: CliStatus | null): CliPanel {
   const password = status.needsAdministrator ? `Administrator password for ${status.directory}` : 'No password'
 
   if (status.state === 'elsewhere') {
+    // Linking over another copy is this dialog's alone, and never on a separate profile.
+    const action = !leavesLinkAlone(status) ? 'Repair' : status.copy === 'profile' ? null : 'Link This Copy'
     return {
       // Two failures: a link that drives the wrong app, and one into nothing.
       headline: status.dangling ? 'Broken link' : 'Linked to another copy',
       detail: `${status.destination} → ${status.resolved}${status.dangling ? ' (missing)' : ''}`,
-      promise: `${status.destination} → ${status.source}`,
-      password,
-      action: 'Repair',
+      promise: action === null ? null : `${status.destination} → ${status.source}`,
+      password: action === null ? null : password,
+      action,
       manual: null,
       pathWarning: pathWarning(status)
     }
@@ -113,6 +115,15 @@ export function cliPanel(status: CliStatus | null): CliPanel {
     manual: null,
     pathWarning: pathWarning(status)
   }
+}
+
+/**
+ * A link nothing but this dialog replaces: one to another working copy, unless this is the installed
+ * app. On a separate profile, any link.
+ */
+export function leavesLinkAlone(status: CliStatus): boolean {
+  if (status.state !== 'elsewhere') return false
+  return status.copy === 'profile' || (!status.dangling && status.copy !== 'installed')
 }
 
 /** What the sidebar button and the palette entry call this; a dangling link is named, not re-offered. */
@@ -138,7 +149,8 @@ export function offerCliInstall(status: CliStatus | null): boolean {
     status.installable &&
     status.source !== null &&
     status.bundle !== null &&
-    status.state !== 'linked'
+    status.state !== 'linked' &&
+    !leavesLinkAlone(status)
   )
 }
 
@@ -152,9 +164,9 @@ export type CliOffer = {
   decline: string
 }
 
-/** Whether to ask at all: not when answered, nothing to do, a source checkout, or something is in the way. */
+/** Whether to ask at all: not when answered, nothing to do, a checkout, a separate profile, or something in the way. */
 export function cliOffer(status: CliStatus | null): CliOffer | null {
-  if (status === null || status.askedAt !== null || !status.packaged) return null
+  if (status === null || status.askedAt !== null || !status.packaged || status.copy === 'profile') return null
   if (!offerCliInstall(status)) return null
   const panel = cliPanel(status)
   if (panel.action === null || panel.promise === null || panel.password === null) return null

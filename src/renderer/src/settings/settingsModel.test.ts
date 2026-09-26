@@ -150,6 +150,7 @@ describe('cliLine', () => {
     platform: 'darwin',
     source: '/Applications/teamree.app/Contents/Resources/cli/teamree',
     packaged: true,
+    copy: 'installed',
     bundle: '/Applications/teamree.app/Contents/Resources/cli/index.js',
     impermanent: null,
     destination: '/usr/local/bin/teamree',
@@ -188,6 +189,18 @@ describe('cliLine', () => {
       state: '/usr/local/bin/teamree → /opt/teamree/cli/teamree (another copy)',
       action: 'Repair'
     })
+  })
+
+  it('leaves a link to another working copy alone from any other copy', () => {
+    for (const copy of ['profile', 'other'] as const) {
+      expect(cliLine(status({ copy, state: 'elsewhere', resolved: '/opt/teamree/cli/teamree' }))).toMatchObject({
+        state: '/usr/local/bin/teamree → /opt/teamree/cli/teamree (another copy)',
+        action: null
+      })
+    }
+    expect(
+      cliLine(status({ copy: 'profile', state: 'elsewhere', resolved: '/gone/teamree', dangling: true })).action
+    ).toBeNull()
   })
 
   it('says when the link is right but no PATH teamree can read reaches it', () => {

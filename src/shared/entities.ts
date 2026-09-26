@@ -1487,6 +1487,12 @@ export type CliPathSource = 'environment' | 'shell' | 'login'
  */
 export type CliImpermanence = 'volume' | 'translocated'
 
+/**
+ * The installed app on its own profile, any other copy (checkout, build, download), or any copy on a
+ * separate profile (TEAMREE_USER_DATA_DIR). Only the installed app replaces a link to another working copy.
+ */
+export type CliCopy = 'installed' | 'other' | 'profile'
+
 /** Where the CLI is, what is at its destination, and what linking will cost. */
 export type CliStatus = {
   /**
@@ -1515,6 +1521,8 @@ export type CliStatus = {
    * translocation): the link is made, reads back, and dangles by the evening. Null when ordinary.
    */
   impermanent: CliImpermanence | null
+  /** Which copy this is; absent means not the installed app. */
+  copy?: CliCopy
   /** The link itself. */
   destination: string
   /** The directory holding it — the thing that has to be writable. */

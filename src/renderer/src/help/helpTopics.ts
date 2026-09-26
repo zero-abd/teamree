@@ -2,7 +2,7 @@
 // key handler reads; the worktree section names the code behind each claim.
 
 import type { CliStatus } from '@shared/entities'
-import { cliPanel } from '../dialogs/cliInstallModel'
+import { cliPanel, leavesLinkAlone } from '../dialogs/cliInstallModel'
 import { formatChord, type PlatformModifier } from '../keyboard/platformModifier'
 import { WORKSPACE_SHORTCUTS, type WorkspaceCommand, type WorkspaceShortcut } from '../keyboard/workspaceShortcuts'
 
@@ -140,13 +140,13 @@ export function cliHelp(status: CliStatus | null): CliHelp {
     return { headline: panel.headline, command: null, settings: false, caveat: null }
   }
 
-  if (status.state === 'linked') {
+  if (status.state === 'linked' || (leavesLinkAlone(status) && !status.dangling)) {
     // The caveat is non-null only when no readable PATH includes the link's directory.
     return { headline: panel.headline, command: CLI_HELP_COMMAND, settings: false, caveat: panel.pathWarning }
   }
 
   // The headline already said which case this is.
-  return { headline: panel.headline, command: null, settings: true, caveat: null }
+  return { headline: panel.headline, command: null, settings: !leavesLinkAlone(status), caveat: null }
 }
 
 /** The label on the button that leaves for the settings page. */

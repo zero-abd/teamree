@@ -562,3 +562,63 @@ describe('a link whose app has gone', () => {
     expect(await readlink(join(bin, 'teamree'))).toBe(source)
   })
 })
+
+describe('which copy of teamree this is', () => {
+  /** A second, working teamree the destination already leads to. */
+  async function anotherCopy(root: string, bin: string): Promise<string> {
+    const cli = join(root, 'Installed', 'teamree.app', 'Contents', 'Resources', 'cli')
+    await mkdir(cli, { recursive: true })
+    await writeFile(join(cli, 'teamree'), '#!/bin/sh\n')
+    await symlink(join(cli, 'teamree'), join(bin, 'teamree'))
+    return join(cli, 'teamree')
+  }
+
+  it('is the installed app when packaged, in an Applications folder, on its own profile', async () => {
+    const { source, bin, root } = await scratchApp('teamree.app')
+    const installed = harness({ source, directory: bin, packaged: true, applications: [root] })
+    expect((await installed.service.status()).copy).toBe('installed')
+
+    const elsewhere = harness({ source, directory: bin, packaged: true, applications: ['/Applications'] })
+    expect((await elsewhere.service.status()).copy).toBe('other')
+  })
+
+  it('is another copy when it is a source checkout', async () => {
+    const { source, bin } = await scratchCheckout()
+    const { service } = harness({ source, directory: bin, applications: [dirname(dirname(source))] })
+    expect((await service.status()).copy).toBe('other')
+  })
+
+  it('is on a separate profile whatever it is built from', async () => {
+    const { source, bin, root } = await scratchApp('teamree.app')
+    const { service } = harness({ source, directory: bin, packaged: true, applications: [root], separateProfile: true })
+    expect((await service.status()).copy).toBe('profile')
+  })
+
+  it('leaves a link to another working copy alone on a separate profile', async () => {
+    const { source, bin, root } = await scratchApp('teamree.app')
+    const other = await anotherCopy(root, bin)
+    const { service, escalated } = harness({ source, directory: bin, packaged: true, separateProfile: true })
+
+    await expect(service.install()).rejects.toThrow(/separate profile/i)
+    expect(escalated).toEqual([])
+    expect(await readlink(join(bin, 'teamree'))).toBe(other)
+  })
+
+  it('leaves even a broken link alone on a separate profile', async () => {
+    const { source, bin, root } = await scratchApp('teamree.app')
+    await symlink(join(root, 'gone', 'teamree'), join(bin, 'teamree'))
+    const { service } = harness({ source, directory: bin, separateProfile: true })
+
+    await expect(service.install()).rejects.toThrow(/separate profile/i)
+    expect(await readlink(join(bin, 'teamree'))).toBe(join(root, 'gone', 'teamree'))
+  })
+
+  it('still repairs from the installed app', async () => {
+    const { source, bin, root } = await scratchApp('teamree.app')
+    await anotherCopy(root, bin)
+    const { service } = harness({ source, directory: bin, packaged: true, applications: [root] })
+
+    expect((await service.install()).outcome).toBe('replaced')
+    expect(await readlink(join(bin, 'teamree'))).toBe(source)
+  })
+})

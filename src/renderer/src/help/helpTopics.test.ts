@@ -108,6 +108,14 @@ describe('the CLI section', () => {
     }
   })
 
+  it('sends a copy that leaves the link alone to the command, not to Settings', () => {
+    const help = cliHelp(status({ copy: 'profile', state: 'elsewhere', resolved: '/opt/teamree/cli/teamree' }))
+    expect(help.headline).toBe('Linked to another copy')
+    expect(help.command).toBe(CLI_HELP_COMMAND)
+    expect(help.settings).toBe(false)
+    expect(cliHelp(status({ copy: 'profile', state: 'elsewhere', dangling: true })).settings).toBe(false)
+  })
+
   it('points nowhere at all until the first read has come back', () => {
     const help = cliHelp(null)
     expect(help.command).toBeNull()
@@ -130,6 +138,7 @@ function status(patch: Partial<CliStatus> = {}): CliStatus {
     platform: 'darwin',
     source: '/Applications/teamree.app/Contents/Resources/cli/teamree',
     packaged: true,
+    copy: 'installed',
     bundle: '/Applications/teamree.app/Contents/Resources/cli/index.js',
     impermanent: null,
     destination: '/usr/local/bin/teamree',
