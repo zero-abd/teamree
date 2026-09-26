@@ -82,6 +82,7 @@ const EXPECTED = [
   'team requests',
   'team allow',
   'team deny',
+  'team handoff',
   'team revoke',
   'team mute',
   'team unmute',

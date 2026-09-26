@@ -378,6 +378,13 @@ again and drop a malformed one alone; a build older than the fields ignores
 them. The local cache keeps what it heard under 1.5 MB, shedding the paths of
 the teammate heard from longest ago first.
 
+A handoff rides the same snapshot. **Hand Off…** pushes the branch (publishing
+it if it tracks nothing), then puts `{id, to, worktreeName, branch, note, at}`
+in the presence sent to the one roster handle named in `to`; the note is at
+most 4,096 characters. Their machine answers with `took: [id]`, which turns the
+sender's row from "Handed to" into "Taken by". Offers and answers are kept in
+`handoffs.json` in the app's data directory, so both outlive a restart.
+
 ### Offline is stale, not absent
 
 When a peer drops, **their worktrees stay in the sidebar, marked stale**, with

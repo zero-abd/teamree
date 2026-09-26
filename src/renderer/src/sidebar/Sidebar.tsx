@@ -31,6 +31,7 @@ import { useTaskTreeStore } from '../state/taskTreeStore'
 import { useOverlaps } from '../state/overlapStore'
 import { overlapChip } from './overlapChip'
 import { openOverlap, overlapNamer } from './useOverlapChip'
+import { handoffLine, useHandoffs } from '../teamwork/handoffsStore'
 import { agentWords, worktreeDisplay, worktreeLabel } from './worktreeDisplay'
 
 export function Sidebar({
@@ -67,6 +68,7 @@ export function Sidebar({
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const teamwork = useWorkspaceStore((state) => state.teamwork)
   const teammates = useWorkspaceStore((state) => state.teammates)
+  const handoffs = useHandoffs((state) => state.byProject)
   const cli = useWorkspaceStore((state) => state.cli)
   // What the `!` on Settings is about, named after the row that fixes it.
   const cliFlag = offerCliInstall(cli) ? `CLI: ${cliActionLabel(cli)}` : null
@@ -333,6 +335,8 @@ export function Sidebar({
             // Roster teammates never heard from: not away, and not without worktrees.
             const unheard = unheardTeammates(teammates[project.id])
             const nameOf = overlapNamer(worktrees, teammatesHeard(teammates[project.id])?.worktrees ?? [])
+            const canHandOff =
+              teamworkOn(teamwork[project.id]) && (teammatesHeard(teammates[project.id])?.teammates.length ?? 0) > 0
             const drawRow = (node: TaskNode<Worktree>, depth: number): React.JSX.Element => {
               const { worktree } = node
               const display = worktreeDisplay(worktree, kindOf)
@@ -364,6 +368,10 @@ export function Sidebar({
                     ? { onResume: () => openDialog({ kind: 'resume-conversation', worktreeId: worktree.id }) }
                     : {})}
                   onMenuOpen={() => void loadConversations(worktree.id)}
+                  {...(canHandOff
+                    ? { onHandOff: () => openDialog({ kind: 'hand-off', worktreeId: worktree.id }) }
+                    : {})}
+                  handoff={handoffLine(handoffs[project.id]?.outgoing ?? [], worktree.id)}
                   status={statuses[worktree.id]}
                   mergePreview={mergePreviews[worktree.id]}
                   {...(landings[worktree.id] === undefined ? {} : { landing: landings[worktree.id] })}

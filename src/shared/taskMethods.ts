@@ -126,6 +126,8 @@ export const TaskParams = {
   teamworkHandoffs: z.object({ projectId: Id }),
   teamworkTake: z.object({ projectId: Id, id: Id, agent: z.string().min(1).max(64).optional() }),
   teamworkDismissHandoff: z.object({ projectId: Id, id: Id }),
+  /** Hand Off's starting note: the task, the ledger's decisions and open questions, the last commits. */
+  teamworkHandoffDraft: z.object({ worktreeId: Id }),
 
   projectTemplates: z.object({ projectId: Id }),
   projectSaveTemplate: z.object({
@@ -175,6 +177,7 @@ export type TaskMethodContract = LedgerMethodContract & {
   'teamwork.handoffs': { params: z.infer<P['teamworkHandoffs']>; result: TeamworkHandoffs }
   'teamwork.take': { params: z.infer<P['teamworkTake']>; result: Worktree }
   'teamwork.dismissHandoff': { params: z.infer<P['teamworkDismissHandoff']>; result: { dismissed: true } }
+  'teamwork.handoffDraft': { params: z.infer<P['teamworkHandoffDraft']>; result: { note: string } }
 
   'project.templates': { params: z.infer<P['projectTemplates']>; result: TaskTemplateList }
   'project.saveTemplate': { params: z.infer<P['projectSaveTemplate']>; result: TaskTemplate }

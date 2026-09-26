@@ -27,6 +27,7 @@ import { ConfirmCleanUpDialog } from './dialogs/ConfirmCleanUpDialog'
 import { ConfirmKeepDialog } from './dialogs/ConfirmKeepDialog'
 import { ConfirmRebaseDialog } from './dialogs/ConfirmRebaseDialog'
 import { MoveUnderDialog } from './dialogs/MoveUnderDialog'
+import { HandOffDialog } from './dialogs/HandOffDialog'
 import { FirstRunCliOffer } from './dialogs/FirstRunCliOffer'
 import { SetupDialog } from './workspace/SetupDialog'
 import { InstallCliDialog } from './dialogs/InstallCliDialog'
@@ -47,6 +48,7 @@ import { useWorkspaceStore, type Notice } from './state/workspaceStore'
 import { watchSystemTone } from './theme/systemTone'
 import { applyPalette } from './theme/applyPalette'
 import { SharedNotePopups } from './teamwork/SharedNotePopups'
+import { HandoffPopups } from './teamwork/HandoffPopups'
 import { UpdateAvailableCard } from './updates/UpdateAvailableCard'
 import { WorkspaceArea } from './workspace/WorkspaceArea'
 
@@ -143,6 +145,7 @@ export function App(): React.JSX.Element {
       {/* Bottom right above the status bar: notices stack above the update card, never over it. */}
       <div className="corner-stack">
         <SharedNotePopups />
+        <HandoffPopups />
         {notices.length > 0 ? (
           <div className="notices" role="status" aria-live="polite">
             {notices.map((notice) => (
@@ -185,6 +188,7 @@ export function App(): React.JSX.Element {
       {dialog?.kind === 'confirm-merge' ? <ConfirmMergeDialog worktreeId={dialog.worktreeId} /> : null}
       {dialog?.kind === 'confirm-keep' ? <ConfirmKeepDialog worktreeId={dialog.worktreeId} /> : null}
       {dialog?.kind === 'move-under' ? <MoveUnderDialog worktreeId={dialog.worktreeId} /> : null}
+      {dialog?.kind === 'hand-off' ? <HandOffDialog worktreeId={dialog.worktreeId} /> : null}
       {dialog?.kind === 'confirm-rebase' ? (
         <ConfirmRebaseDialog worktreeId={dialog.worktreeId} parentId={dialog.parentId} />
       ) : null}

@@ -1,4 +1,4 @@
-// Task, memory, handoff, template and add-on methods until their branches land:
+// Task, memory, template and add-on methods until their branches land:
 // reads answer empty, writes refuse as not implemented. Settings are real.
 
 import { emptyProjectContext } from '../../../shared/memory'
@@ -27,11 +27,6 @@ export function registerTaskPlaceholderHandlers(registry: MethodRegistry): void 
     readAt: Date.now()
   }))
   registry.register('worktree.usage', Params.worktreeUsage, () => [])
-
-  registry.register('teamwork.handOff', Params.teamworkHandOff, refuse('teamwork.handOff'))
-  registry.register('teamwork.handoffs', Params.teamworkHandoffs, () => ({ incoming: [], outgoing: [] }))
-  registry.register('teamwork.take', Params.teamworkTake, refuse('teamwork.take'))
-  registry.register('teamwork.dismissHandoff', Params.teamworkDismissHandoff, refuse('teamwork.dismissHandoff'))
 
   registry.register('project.templates', Params.projectTemplates, ({ projectId }) => ({
     projectId,

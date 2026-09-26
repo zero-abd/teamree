@@ -102,6 +102,8 @@ function mount(
     landing?: WorktreeLanding
     onKeep?: () => void
     onResume?: () => void
+    onHandOff?: () => void
+    handoff?: string
     terminals?: Terminal[]
     evidence?: Record<string, string | null>
     watchers?: Record<string, PaneAttention>
@@ -121,6 +123,8 @@ function mount(
         {...(overrides.landing === undefined ? {} : { landing: overrides.landing })}
         {...(overrides.onKeep === undefined ? {} : { onKeep: overrides.onKeep })}
         {...(overrides.onResume === undefined ? {} : { onResume: overrides.onResume })}
+        {...(overrides.onHandOff === undefined ? {} : { onHandOff: overrides.onHandOff })}
+        {...(overrides.handoff === undefined ? {} : { handoff: overrides.handoff })}
         terminals={overrides.terminals ?? []}
         evidence={overrides.evidence ?? {}}
         watchers={overrides.watchers ?? {}}
@@ -1066,6 +1070,16 @@ describe('a worktree whose work has landed', () => {
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Resume Conversation…' }))
     expect(onResume).toHaveBeenCalled()
+  })
+
+  it('offers Hand Off… when it is given one, and says who has it', () => {
+    const onHandOff = vi.fn()
+    mount({ onHandOff, handoff: 'Handed to ana' })
+    expect(within(openButton()).getByText('Handed to ana')).toBeTruthy()
+    fireEvent.contextMenu(row())
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Hand Off…' }))
+    expect(onHandOff).toHaveBeenCalled()
   })
 })
 

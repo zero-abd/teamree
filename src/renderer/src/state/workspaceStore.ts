@@ -69,6 +69,7 @@ import { closePaneWarning } from '../dialogs/closePaneModel'
 import { openInBrowser } from '../shell/openInBrowser'
 import { noticeLifetime } from '../notices/noticeLifetime'
 import { useSharedNotes } from '../teamwork/sharedNotesStore'
+import { useHandoffs } from '../teamwork/handoffsStore'
 import {
   nextToReopen,
   readClosedFiles,
@@ -232,6 +233,8 @@ export type DialogState =
   | { kind: 'confirm-rebase'; worktreeId: string; parentId: string }
   /** A worktree's past agent conversations, to resume one. */
   | { kind: 'resume-conversation'; worktreeId: string }
+  /** Hand Off…: a teammate and a note for them. */
+  | { kind: 'hand-off'; worktreeId: string }
   | null
 
 /** Forgetting a project or a worktree, or moving a project's folder to the Trash. */
@@ -1380,6 +1383,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     void useSharedNotes.getState().refresh()
     const projectIds = get().projects.map((project) => project.id)
     if (projectIds.length === 0) return
+    void useHandoffs.getState().refresh(projectIds)
     const answers = await Promise.all(
       projectIds.map((projectId) =>
         Promise.all([
