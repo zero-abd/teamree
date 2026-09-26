@@ -10,6 +10,7 @@ import type { IDisposable, ILinkHandler, ITerminalOptions } from '@xterm/xterm'
 import { Terminal as XTerm } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import type { PaneTypist } from '@shared/entities'
+import { activityOf } from '@shared/paneActivity'
 import type { TerminalEvent } from '@shared/methods'
 import { copyText, pasteText } from '../clipboard/clipboard'
 import {
@@ -33,6 +34,7 @@ import { paneImageLinks, pastedImageLookup, type PastedImage, type ShownImage } 
 import { PastedImagePeek, PastedImageViewer, type ImagePeek } from './PastedImageViews'
 import { PastedImageStrip } from './PastedImageStrip'
 import { watchPromptImages } from './promptImages'
+import { removePromptImage, type NotRemoved } from './promptEdit'
 import { frameWrites, paneWebgl, syncScrollbarPerFrame } from './paneFrames'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOptions } from './paneSearchModel'
 import { TerminalSearchBar } from './TerminalSearchBar'
@@ -399,6 +401,7 @@ export function TerminalView({
           setPeek(null)
           setViewing(image)
         }}
+        onRemove={(image) => emulatorRef.current?.removeImage(image.index) ?? Promise.resolve('hidden')}
       />
       <div
         className="terminal-surface"
@@ -440,6 +443,8 @@ type PaneEmulator = {
   search: SearchAddon
   gpu: { retry: () => void }
   findImage: (index: number) => Promise<PastedImage | null>
+  /** Takes image `index` out of the agent's unsent prompt; see `promptEdit.ts`. */
+  removeImage: (index: number) => Promise<NotRemoved | null>
   view: EmulatorView
   /** The link or path under the pointer, for the right-click menu. */
   pointed: Pointed | null
@@ -538,6 +543,22 @@ function openEmulator(
     search,
     gpu,
     findImage,
+    removeImage: (index) =>
+      removePromptImage(
+        {
+          term,
+          send,
+          busy: () => {
+            const record = useWorkspaceStore.getState().terminals[terminalId]
+            return record === undefined || activityOf(record) !== 'quiet'
+          },
+          typedAt: () => {
+            const { watchers } = useWorkspaceStore.getState()
+            return Math.max(typedAt, ...paneAttention(watchers, terminalId).typists.map((typist) => typist.at))
+          }
+        },
+        index
+      ),
     view: {
       isAppChord: () => false,
       copyOnSelect: () => false,
@@ -576,19 +597,27 @@ function openEmulator(
 
   const hands = handsHere(term.element)
 
-  term.attachCustomKeyEventHandler(
-    paneKeyHandler({
-      isAppChord: (event) => emulator.view.isAppChord(event),
-      term,
-      modifier,
-      send,
-      // The clipboard read a paste chord waits on outlives the keypress, so
-      // the person behind it has to be vouched for rather than observed.
-      byHand: hands.mark
-    })
-  )
+  const keys = paneKeyHandler({
+    isAppChord: (event) => emulator.view.isAppChord(event),
+    term,
+    modifier,
+    send,
+    // The clipboard read a paste chord waits on outlives the keypress, so
+    // the person behind it has to be vouched for rather than observed.
+    byHand: hands.mark
+  })
+  // Every keydown, not only those that reach `onData` at once: an IME's text arrives a turn later.
+  let typedAt = 0
+  term.attachCustomKeyEventHandler((event) => {
+    if (event.type === 'keydown') typedAt = Date.now()
+    return keys(event)
+  })
 
-  term.onData((data) => send(data, hands.acting()))
+  term.onData((data) => {
+    const byHand = hands.acting()
+    if (byHand) typedAt = Date.now()
+    send(data, byHand)
+  })
   // A resize for the replay alone; the pty keeps the size it has.
   let quiet = false
   const resizeQuietly = (cols: number, rows: number): void => {

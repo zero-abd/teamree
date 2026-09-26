@@ -581,6 +581,17 @@ body.is-dragging-pane * {
   background: var(--danger);
 }
 
+.image-strip__remove[aria-busy='true'] {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.image-strip__note {
+  flex: none;
+  color: var(--fg-secondary);
+  white-space: nowrap;
+}
+
 .image-strip__minimize {
   flex: none;
   align-self: flex-start;

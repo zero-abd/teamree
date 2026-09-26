@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Terminal as XTerm } from '@xterm/xterm'
-import { promptImageIndices, screenOf, stripImages, watchPromptImages } from './promptImages'
+import { promptImageIndices, screenOf, watchPromptImages } from './promptImages'
 import type { PastedImage, ShownImage } from './paneImageLinks'
 
 const fixture = (name: string): string =>
@@ -83,20 +83,6 @@ describe('promptImageIndices', () => {
   it('ignores a pair of rules far above the bottom of the screen', () => {
     const rows = [RULE, '❯ [Image #1]', RULE, ...Array.from({ length: 20 }, () => 'output')]
     expect(promptImageIndices(rows)).toBeNull()
-  })
-})
-
-describe('stripImages', () => {
-  const one = { index: 1, url: 'teamree-file://a/1', path: '/t/a/images/1.png' }
-  const two = { index: 2, url: 'teamree-file://a/2', path: '/t/a/images/2.png' }
-
-  it('leaves out what was taken off, by file', () => {
-    expect(stripImages([one, two], new Set([two.path]))).toEqual([one])
-  })
-
-  it('shows a new session’s image under a number that was taken off before', () => {
-    const fresh = { index: 2, url: 'teamree-file://b/2', path: '/t/b/images/2.png' }
-    expect(stripImages([fresh], new Set([two.path]))).toEqual([fresh])
   })
 })
 
