@@ -1019,9 +1019,11 @@ describe('a worktree whose work has landed', () => {
   })
 
   it('says not pushed while the merge is only in the local base', () => {
-    mount({ status: status(), landing: landing({ notPushed: true }) })
+    mount({ status: status({ ahead: 1, behind: 1 }), landing: landing({ notPushed: true }) })
 
     expect(screen.getByText('Merged · not pushed').classList.contains('chip')).toBe(true)
+    // Landed: its count against origin/main would only repeat the chip.
+    expect(document.querySelector('.gitchip')).toBeNull()
   })
 
   it('says Landed for a child whose work is in its parent', () => {

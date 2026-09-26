@@ -465,6 +465,23 @@ describe('the Tasks view', () => {
     expect(depth).toEqual(['', '1', '1'])
   })
 
+  it('says not pushed under landed while the landing is only in the local main', () => {
+    const landing = {
+      worktreeId: 'w1',
+      branch: 'atlas',
+      base: 'main',
+      host: null,
+      published: false,
+      unmerged: 0,
+      readAt: 0
+    }
+    useWorkspaceStore.setState({ landings: { w1: { ...landing, merged: true, notPushed: true } } })
+    useTaskTreeStore.setState({ boardMode: 'tasks' })
+    render(<Dashboard />)
+    expect(document.querySelector('.task-row__stage')?.textContent).toBe('landednot pushed')
+    expect(document.querySelector('.task-row__unpushed')?.textContent).toBe('not pushed')
+  })
+
   it('marks a task sharing files with another, red for a conflict, and nothing for hot files alone', async () => {
     const { useOverlaps } = await import('../state/overlapStore')
     useOverlaps.setState({
