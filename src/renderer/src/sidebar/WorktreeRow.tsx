@@ -18,6 +18,8 @@ import { agentRows, dotClass, TONE_LABEL, worktreeTone, type DotTone } from './a
 import { PaneRows } from './PaneRows'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
+import type { OverlapChip, OverlapEntry } from './overlapChip'
+import { OverlapMark } from './OverlapMark'
 import { endNestDrag, NEST_DRAG_TYPE, startNestDrag, useNestDrag, useNestDrop } from './nestDrag'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { WorktreeNameField } from './WorktreeNameField'
@@ -88,6 +90,8 @@ type WorktreeRowProps = {
   onMoveToTop?: () => void
   /** Resume Conversation…; absent leaves the item out. */
   onResume?: () => void
+  /** Files another task or a teammate changes too; the chip's click opens the first. */
+  overlap?: { chip: OverlapChip; onOpen: (entry: OverlapEntry) => void }
 }
 
 export function WorktreeRow({
@@ -122,7 +126,8 @@ export function WorktreeRow({
   onNewChild,
   onMoveUnder,
   onMoveToTop,
-  onResume
+  onResume,
+  overlap
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
   const failed = worktree.state === 'failed'
@@ -275,6 +280,7 @@ export function WorktreeRow({
           {`#${issue.number}`}
         </span>
       )}
+      {overlap === undefined || !ready ? null : <OverlapMark chip={overlap.chip} onOpen={overlap.onOpen} />}
       {task === undefined ? null : (
         <span className="chip worktree__tally" title={task.children.join('\n')}>
           {`${task.tally.done}/${task.tally.total} done`}

@@ -169,6 +169,7 @@ import { descendantsOf } from '@shared/taskTree'
 import { joinTeam, type JoinStage, type JoinTarget } from '../teamwork/joinTeam'
 import type { DiffLayout, DiffOptions } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
+import { useOverlaps } from './overlapStore'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
 import { readSystemTone } from '../theme/systemTone'
 import { requestRegionFocus } from '../shell/regions'
@@ -620,8 +621,11 @@ type WorkspaceState = {
   wentToLine: (token: number) => void
   /** Opens a commit read-only as a tab of the file column, or focuses the tab already on it. */
   openCommit: (worktreeId: string, commit: WorktreeCommitSummary) => void
-  /** Opens `worktreeId` with a read-only compare against `otherId` as a tab of its file column, or focuses that tab. */
-  openCompare: (worktreeId: string, otherId: string, title: string) => Promise<void>
+  /** Opens `worktreeId` with a read-only compare against `otherId` as a tab of its file column, or focuses that tab; `path` scrolls it there. */
+  openCompare: (worktreeId: string, otherId: string, title: string, path?: string) => Promise<void>
+  /** The file a compare tab scrolls to once read; that tab lets go of it. */
+  compareFocus: { paneId: string; path: string } | null
+  comparedFocus: (paneId: string) => void
   /** Opens every change of the worktree as one read-only tab of its file column, zoomed, or focuses that tab. */
   openReview: (worktreeId: string) => void
   /** Opens a note a teammate shared, read-only, as a tab in a worktree of its project; focuses the tab already on it. */
@@ -1225,6 +1229,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     if (targets.terminals) reads.push(refreshTerminals())
     if (targets.members) reads.push(refreshMembers(), refreshRelays())
     if (targets.teammates) reads.push(refreshTeammates())
+    if (targets.overlaps) reads.push(useOverlaps.getState().refresh(get().projects.map((project) => project.id)))
     if (targets.updates) reads.push(get().loadUpdate())
     for (const worktreeId of targets.layouts) reads.push(refreshLayout(worktreeId))
     if (targets.worktrees) {
@@ -1571,6 +1576,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     rightPanelWidth: readStoredRightPanelWidth(storage),
     changes: {},
     goToLine: null,
+    compareFocus: null,
     logs: {},
     branchChanges: {},
     selectedChangePath: null,
@@ -1663,7 +1669,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
         await refresher.flush()
         // After the projects exist: teamwork is read per project.
-        refresher.request(refreshTargets({ teammates: true }))
+        refresher.request(refreshTargets({ teammates: true, overlaps: true }))
         await refresher.flush()
 
         if (!get().activeWorktreeId) {
@@ -2389,16 +2395,22 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       placeFileLeaf(layout, commitLeaf(newFilePaneId(), commit.sha, `${commit.shortSha} ${commit.subject}`))
     },
 
-    async openCompare(worktreeId, otherId, title) {
+    async openCompare(worktreeId, otherId, title, path) {
       if (get().activeWorktreeId !== worktreeId) await get().openWorktree(worktreeId)
       const layout = get().layouts[worktreeId] ?? { worktreeId, root: null, focusedTerminalId: null }
       const open = fileLeavesIn(layout.root).find((leaf) => isCompareLeaf(leaf) && leaf.compare === otherId)
+      const paneId = open?.terminalId ?? newFilePaneId()
+      if (path !== undefined) set({ compareFocus: { paneId, path } })
       if (open) {
         get().pinFilePane(open.terminalId)
         get().focusPane(open.terminalId)
         return
       }
-      placeFileLeaf(layout, compareLeaf(newFilePaneId(), otherId, title))
+      placeFileLeaf(layout, compareLeaf(paneId, otherId, title))
+    },
+
+    comparedFocus(paneId) {
+      if (get().compareFocus?.paneId === paneId) set({ compareFocus: null })
     },
 
     async openSharedNote(projectId, shareId, title) {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Worktree, WorktreeCompare } from '@shared/entities'
 import { fileColumnIn, shownTabId } from '@shared/filePane'
-import { compareRuns, type ComparedFile, type RunFile } from '@shared/runCompare'
+import { compareRuns, siblingRuns, type ComparedFile, type RunFile } from '@shared/runCompare'
 import { AgentGlyph } from '../agents/glyphs'
 import { FileBar } from '../files/FileBar'
 import { LayoutTools, useWidth } from '../files/FileDiff'
@@ -45,6 +45,10 @@ export function CompareView({
     return state.activeWorktreeId === worktreeId && column !== null && shownTabId(column) === paneId
   })
   const foldForCompare = useWorkspaceStore((state) => state.foldForCompare)
+  const focusPath = useWorkspaceStore((state) =>
+    state.compareFocus?.paneId === paneId ? state.compareFocus.path : null
+  )
+  const comparedFocus = useWorkspaceStore((state) => state.comparedFocus)
 
   // Two runs side by side want the whole window; the sidebar and panel come back when the compare goes.
   useEffect(() => {
@@ -75,6 +79,9 @@ export function CompareView({
   const listed = (id: string): boolean => worktrees.some((worktree) => worktree.id === id)
   const removed = listed(worktreeId) && !listed(other)
   const kindOf = useMemo(() => agentWords(agents), [agents])
+  // Two different tasks sharing a file compare too; Keep only means something between runs of one.
+  const left = worktrees.find((worktree) => worktree.id === worktreeId)
+  const runsOfOneTask = left !== undefined && siblingRuns(left, worktrees).some((run) => run.id === other)
   const runs = [worktreeId, other].map((id) =>
     runOf(
       id,
@@ -86,6 +93,15 @@ export function CompareView({
     () => (compared === null ? [] : compareRuns(compared.left.patch, compared.right.patch)),
     [compared]
   )
+
+  useEffect(() => {
+    if (focusPath === null || files.length === 0) return
+    const sections = body.current?.querySelectorAll<HTMLElement>('.compare__file') ?? []
+    ;[...sections]
+      .find((section) => section.getAttribute('aria-label') === focusPath)
+      ?.scrollIntoView({ block: 'start' })
+    comparedFocus(paneId)
+  }, [focusPath, files, paneId, comparedFocus])
 
   return (
     <section
@@ -121,7 +137,13 @@ export function CompareView({
           <div className={`compare compare--${layout}`} tabIndex={-1}>
             <div className="compare__heads">
               {runs.map((run, side) => (
-                <RunHead key={run.id} run={run} files={files} side={side === 0 ? 'left' : 'right'} />
+                <RunHead
+                  key={run.id}
+                  run={run}
+                  files={files}
+                  side={side === 0 ? 'left' : 'right'}
+                  keepable={runsOfOneTask}
+                />
               ))}
             </div>
             {files.length === 0 ? <p className="file__state">No changes</p> : null}
@@ -145,9 +167,11 @@ function runOf(id: string, worktree: Worktree | undefined, kindOf: ReturnType<ty
 function RunHead({
   run,
   files,
-  side
+  side,
+  keepable
 }: {
   run: Run
+  keepable: boolean
   files: readonly ComparedFile[]
   side: 'left' | 'right'
 }): React.JSX.Element {
@@ -174,13 +198,15 @@ function RunHead({
       <button type="button" className="file__tool" onClick={() => void openWorktree(run.id)}>
         Open
       </button>
-      <button
-        type="button"
-        className="file__tool"
-        onClick={() => openDialog({ kind: 'confirm-keep', worktreeId: run.id })}
-      >
-        Keep
-      </button>
+      {keepable ? (
+        <button
+          type="button"
+          className="file__tool"
+          onClick={() => openDialog({ kind: 'confirm-keep', worktreeId: run.id })}
+        >
+          Keep
+        </button>
+      ) : null}
     </div>
   )
 }

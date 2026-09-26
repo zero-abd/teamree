@@ -18,6 +18,7 @@ import type {
 // @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
 import { pressWorktreeRow, worktreeRowIsOpen } from '../../../../scripts/smoke-probes.mjs'
 import type { PaneAttention } from '../state/paneAttention'
+import { overlapChip, type OverlapChip, type OverlapEntry } from './overlapChip'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
@@ -107,6 +108,7 @@ function mount(
     active?: boolean
     openIn?: { label: string; onChoose: () => void }[]
     twinRun?: boolean
+    overlap?: { chip: OverlapChip; onOpen: (entry: OverlapEntry) => void }
   } = {}
 ): void {
   render(
@@ -125,6 +127,7 @@ function mount(
         now={NOW}
         active={overrides.active ?? false}
         {...(overrides.twinRun === undefined ? {} : { twinRun: overrides.twinRun })}
+        {...(overrides.overlap === undefined ? {} : { overlap: overrides.overlap })}
         openIn={
           overrides.openIn ?? [
             { label: 'Zed', onChoose: openInZed },
@@ -1086,5 +1089,42 @@ describe('a worktree started from an issue', () => {
   it('shows no issue when it has none', () => {
     mount()
     expect(within(openButton()).queryByRole('link')).toBeNull()
+  })
+})
+
+describe('a worktree sharing files with another task', () => {
+  const chip = (conflicts: string[] = []): OverlapChip =>
+    overlapChip(
+      'w1',
+      [{ worktreeId: 'w1', with: { worktreeId: 'w2' }, paths: ['src/api/auth.ts'], conflicts }],
+      () => 'Add rate limits'
+    ) as OverlapChip
+
+  it('names the file on its chip line, the other task on hover', () => {
+    mount({ overlap: { chip: chip(), onOpen: vi.fn() } })
+    const mark = row().querySelector('.overlap') as HTMLElement
+    expect(mark.textContent).toBe('⚠auth.ts')
+    expect(mark.classList.contains('overlap--overlap')).toBe(true)
+    expect(mark.title).toBe('src/api/auth.ts · Add rate limits · overlap')
+  })
+
+  it('turns red when a merge would conflict', () => {
+    mount({ overlap: { chip: chip(['src/api/auth.ts']), onOpen: vi.fn() } })
+    expect(row().querySelector('.overlap--conflict')).not.toBeNull()
+  })
+
+  it('opens Compare on the file from a click, without opening the row', () => {
+    const onOpen = vi.fn()
+    mount({ overlap: { chip: chip(), onOpen } })
+    fireEvent.click(row().querySelector('.overlap') as HTMLElement)
+    expect(onOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'src/api/auth.ts', with: { worktreeId: 'w2' } })
+    )
+    expect(handlers.onOpen).not.toHaveBeenCalled()
+  })
+
+  it('draws nothing without an overlap', () => {
+    mount()
+    expect(row().querySelector('.overlap')).toBeNull()
   })
 })

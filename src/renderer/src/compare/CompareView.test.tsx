@@ -103,6 +103,55 @@ describe('opening a compare', () => {
   })
 })
 
+describe('opening a compare on one file', () => {
+  it('offers no Keep between two different tasks', async () => {
+    call.mockResolvedValue(compared)
+    useWorkspaceStore.setState({
+      worktrees: [worktree('w-claude', 'claude'), { ...worktree('w-codex', 'codex'), task: 'Add rate limits' }]
+    })
+    render(
+      <FilePane
+        paneId="file:x"
+        worktreeId="w-claude"
+        path="Add a sub vs Add rate limits"
+        compare="w-codex"
+        focused
+        onFocus={() => {}}
+        onClose={() => {}}
+      />
+    )
+    await screen.findByRole('region', { name: 'src/math.ts' })
+    expect(screen.getAllByRole('button', { name: 'Open' })).toHaveLength(2)
+    expect(screen.queryByRole('button', { name: 'Keep' })).toBeNull()
+  })
+
+  it('scrolls the tab to that file once both runs are read, then lets go of it', async () => {
+    call.mockResolvedValue(compared)
+    const scrolled: string[] = []
+    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+      scrolled.push(this.getAttribute('aria-label') ?? '')
+    })
+    await useWorkspaceStore.getState().openCompare('w-claude', 'w-codex', 'Claude Code vs Codex', 'src/math.test.ts')
+    const leaf = fileLeavesIn(useWorkspaceStore.getState().layouts['w-claude']!.root)[0]!
+    expect(useWorkspaceStore.getState().compareFocus).toEqual({ paneId: leaf.terminalId, path: 'src/math.test.ts' })
+
+    render(
+      <FilePane
+        paneId={leaf.terminalId}
+        worktreeId="w-claude"
+        path="Claude Code vs Codex"
+        compare="w-codex"
+        focused
+        onFocus={() => {}}
+        onClose={() => {}}
+      />
+    )
+    await screen.findByRole('region', { name: 'src/math.test.ts' })
+    await vi.waitFor(() => expect(scrolled).toEqual(['src/math.test.ts']))
+    expect(useWorkspaceStore.getState().compareFocus).toBeNull()
+  })
+})
+
 describe('the compare pane', () => {
   const renderCompare = (): void => {
     render(

@@ -13,6 +13,8 @@ export type RefreshTargets = {
   members: boolean
   /** Link states and what teammates are showing; no project id either, so the projects on screen. */
   teammates: boolean
+  /** Which worktrees share files, for every project on screen. */
+  overlaps: boolean
   /** What the update check has to say: one small read, nothing to narrow. */
   updates: boolean
   /** Layouts of exactly these worktrees. Never widened to "every layout". */
@@ -31,6 +33,7 @@ export const NOTHING_TO_REFRESH: RefreshTargets = {
   terminals: false,
   members: false,
   teammates: false,
+  overlaps: false,
   updates: false,
   layouts: [],
   statuses: [],
@@ -48,6 +51,7 @@ export function isEmptyRefresh(targets: RefreshTargets): boolean {
     !targets.terminals &&
     !targets.members &&
     !targets.teammates &&
+    !targets.overlaps &&
     !targets.updates &&
     targets.layouts.length === 0 &&
     targets.statuses.length === 0 &&
@@ -67,9 +71,11 @@ export function targetsForEvent(event: WorkspaceEvent): RefreshTargets {
     case 'members':
       return refreshTargets({ members: true })
     // A roster change moves the link set too, but the runtime emits `teammates` once it has
-    // reconciled; coupling the two here would refetch twice for one thing.
+    // reconciled; coupling the two here would refetch twice for one thing. Teammates' paths are in overlaps.
     case 'teammates':
-      return refreshTargets({ teammates: true })
+      return refreshTargets({ teammates: true, overlaps: true })
+    case 'memory':
+      return refreshTargets({ overlaps: true })
     case 'updates':
       return refreshTargets({ updates: true })
     case 'layout':
@@ -79,7 +85,6 @@ export function targetsForEvent(event: WorkspaceEvent): RefreshTargets {
       return refreshTargets({ exits: [{ terminalId: event.terminalId, exitCode: event.exitCode }] })
     // Read by surfaces that do not exist yet; each branch that adds one maps its event here.
     case 'messages':
-    case 'memory':
     case 'settings':
     case 'addons':
     case 'templates':
@@ -95,6 +100,7 @@ export function mergeTargets(a: RefreshTargets, b: RefreshTargets): RefreshTarge
     terminals: a.terminals || b.terminals,
     members: a.members || b.members,
     teammates: a.teammates || b.teammates,
+    overlaps: a.overlaps || b.overlaps,
     updates: a.updates || b.updates,
     layouts: union(a.layouts, b.layouts),
     statuses: union(a.statuses, b.statuses),

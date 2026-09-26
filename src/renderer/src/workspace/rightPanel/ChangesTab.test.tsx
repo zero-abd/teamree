@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   Terminal,
+  Worktree,
   WorktreeChange,
   WorktreeLanding,
   WorktreeLog,
@@ -132,6 +133,41 @@ beforeEach(() => {
   openInBrowser.mockReset()
   useReviewStore.setState({ viewed: {}, batch: {}, queued: {}, scope: {}, jump: {} })
   seed()
+})
+
+describe('files another task changes too', () => {
+  const task = (id: string, name: string): Worktree => ({
+    id,
+    projectId: 'p1',
+    name,
+    branch: name.toLowerCase().replaceAll(' ', '-'),
+    path: `/wt/${id}`,
+    startedFrom: 'abc',
+    state: 'ready',
+    createdAt: 0
+  })
+
+  it('says which task and how many files under the header, and opens Compare on the first', async () => {
+    const { useOverlaps } = await import('../../state/overlapStore')
+    const openCompare = vi.fn(async () => {})
+    useWorkspaceStore.setState({
+      worktrees: [task('w1', 'Rewrite the pager'), task('w2', 'Add rate limits')],
+      openCompare
+    })
+    useOverlaps.setState({
+      byProject: {
+        p1: [
+          { worktreeId: 'w1', with: { worktreeId: 'w2' }, paths: ['src/a.ts', 'src/b.ts'], conflicts: [] },
+          { worktreeId: 'w2', with: { worktreeId: 'w1' }, paths: ['src/a.ts', 'src/b.ts'], conflicts: [] }
+        ]
+      }
+    })
+    render(<ChangesTab />)
+    const line = screen.getByRole('button', { name: /Overlaps with Add rate limits: 2 files/ })
+    fireEvent.click(line)
+    expect(openCompare).toHaveBeenCalledWith('w1', 'w2', 'Rewrite the pager vs Add rate limits', 'src/a.ts')
+    useOverlaps.setState({ byProject: {} })
+  })
 })
 
 describe('pushing from the changes tab', () => {

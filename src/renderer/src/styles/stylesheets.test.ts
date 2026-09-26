@@ -374,6 +374,13 @@ describe('stylesheets', () => {
       expect(moving).toEqual(['.activity--waiting'])
     })
 
+    // Amber is the asking agent's, so an overlap is blue and a conflict red.
+    it('draws an overlap in the info tone and a conflicting one in the danger tone', () => {
+      expect(declarationOf(ruleFor('sidebar.css', '.overlap--overlap'), 'color')).toBe('var(--info)')
+      expect(declarationOf(ruleFor('sidebar.css', '.overlap--conflict'), 'color')).toBe('var(--danger)')
+      expect(declarationOf(ruleFor('rightPanel.css', '.changes__overlap--conflict'), 'color')).toBe('var(--danger)')
+    })
+
     it('marks a folder holding changes in the file letter’s ink', () => {
       expect(declarationOf(ruleFor('rightPanel.css', '.tree__under'), 'background')).toBe(
         declarationOf(ruleFor('workspace.css', '.change__kind'), 'color')

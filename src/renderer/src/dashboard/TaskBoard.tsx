@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react'
 import { hasCheckout, type Worktree, type WorktreeChanges } from '@shared/entities'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { dotClass, sinceLabel, TONE_LABEL } from '../sidebar/agentRows'
+import { OverlapMark } from '../sidebar/OverlapMark'
+import { useOverlapChips } from '../sidebar/useOverlapChip'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { TaskRow } from './taskRows'
 
@@ -55,6 +57,7 @@ export function TaskBoard({
   listRef: React.Ref<HTMLUListElement>
   onKeyDown: (event: React.KeyboardEvent<HTMLUListElement>) => void
 }): React.JSX.Element {
+  const overlapOf = useOverlapChips()
   return (
     <>
       <div className="task-head" aria-hidden="true">
@@ -67,6 +70,7 @@ export function TaskBoard({
       <ul className="board__list" ref={listRef} onKeyDown={onKeyDown}>
         {rows.map((row) => {
           const isUnread = row.panes.some((pane) => unread.has(pane.terminalId))
+          const overlap = overlapOf(row.worktreeId)
           return (
             <li key={row.worktreeId} className="board-item board-item--task">
               <button
@@ -81,6 +85,7 @@ export function TaskBoard({
                   {row.tally === undefined ? null : (
                     <span className="chip task-row__tally">{`${row.tally.done}/${row.tally.total} done`}</span>
                   )}
+                  {overlap === null ? null : <OverlapMark chip={overlap} />}
                 </span>
                 <span className="task-row__stage">{row.stage}</span>
                 <span className="task-row__panes">

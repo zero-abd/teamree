@@ -59,6 +59,9 @@ export type ContextLedgerOptions = {
   providers?: ContextSource[]
 }
 
+/** A teammate's worktree as presence carries it: changed paths, never contents. */
+export type TeammatePaths = { handle: string; worktreeId: string; paths: readonly string[] }
+
 export type LedgerStats = { passes: number; gitRuns: number; mergeTrees: number; lastPassMs: number }
 
 type ProjectView = { project: Project; worktrees: Worktree[] }
@@ -234,11 +237,15 @@ export class ContextLedger {
       }))
   }
 
-  /** Every overlapping pair, both ways round, hot files included and marked. */
-  async overlaps(projectId: string): Promise<WorktreeOverlaps> {
+  /** Every overlapping pair, both ways round, hot files included and marked; then each teammate's paths against yours. */
+  async overlaps(projectId: string, teammates: readonly TeammatePaths[] = []): Promise<WorktreeOverlaps> {
+    // Merge-tree answers live in memory, so the first read after a launch runs a pass for them.
+    if (!this.#lastPassAt.has(projectId)) await this.refresh(projectId)
     const store = await this.#store(projectId)
     const overlaps: WorktreeOverlap[] = []
-    for (const viewer of this.#live(store)) {
+    const live = this.#live(store)
+    const isHot = hotPathTest(live)
+    for (const viewer of live) {
       for (const overlap of this.#rank(store, viewer)) {
         overlaps.push({
           worktreeId: viewer.id,
@@ -247,6 +254,20 @@ export class ContextLedger {
           conflicts: overlap.conflicts,
           ...(overlap.claimed.length > 0 ? { claimed: overlap.claimed } : {}),
           ...(overlap.hot.length > 0 ? { hot: overlap.hot } : {})
+        })
+      }
+      const mine = new Set(viewer.touched)
+      for (const teammate of teammates) {
+        const paths = teammate.paths.filter((path) => mine.has(path))
+        if (paths.length === 0) continue
+        paths.sort((a, b) => Number(isHot(a)) - Number(isHot(b)) || byCodeUnit(a, b))
+        const hot = paths.filter(isHot)
+        overlaps.push({
+          worktreeId: viewer.id,
+          with: { handle: teammate.handle, worktreeId: teammate.worktreeId },
+          paths,
+          conflicts: [],
+          ...(hot.length > 0 ? { hot } : {})
         })
       }
     }
