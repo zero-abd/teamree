@@ -38,6 +38,7 @@ export type PaneActivitySource = {
   agentEvent?: AgentEvent
   tookTurn?: boolean
   run?: RunKind
+  askingYou?: number
 }
 
 /**
@@ -85,6 +86,8 @@ export function activityOf(terminal: PaneActivitySource): AgentActivity {
     // Declining a trust prompt also exits 0; only an agent that took a turn finished one.
     return terminal.tookTurn === false ? 'quiet' : 'done'
   }
+  // The agent is blocked in `msg ask`, which its hooks report as a turn in progress.
+  if (terminal.askingYou !== undefined) return 'waiting'
   const said = agentSays(terminal.agentEvent)
   if (said !== null) return said
   // A shell rings for a failed tab completion: only an agent can be asking.

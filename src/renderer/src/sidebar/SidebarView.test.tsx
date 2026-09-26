@@ -23,6 +23,7 @@ const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { useTaskTreeStore } = await import('../state/taskTreeStore')
 const { useSidebarView } = await import('../state/sidebarViewStore')
 const { runWorkspaceCommand } = await import('../keyboard/workspaceCommands')
+const { useMessageStore } = await import('../state/messages')
 const { Sidebar } = await import('./Sidebar')
 
 const INITIAL = useWorkspaceStore.getState()
@@ -123,7 +124,10 @@ beforeEach(() => {
   )
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  useMessageStore.setState({ messages: [] })
+})
 
 const mount = (): void => void render(<Sidebar searchHint="⌘K" />)
 
@@ -198,6 +202,29 @@ describe('the chips', () => {
     expect(names()).toEqual(['broken'])
   })
 
+  it('Needs You keeps a task whose agent asks you, by its pane or by the question alone', () => {
+    useWorkspaceStore.setState((state) => ({
+      terminals: { ...state.terminals, t1: { ...pane('t1', 'ghost', true), askingYou: 11 } }
+    }))
+    useMessageStore.setState({
+      messages: [
+        {
+          id: 12,
+          projectId: 'p1',
+          kind: 'ask',
+          from: { worktreeId: 'shipped' },
+          to: { you: true },
+          text: 'Sandbox or live?',
+          at: NOW,
+          state: 'queued'
+        }
+      ]
+    })
+    mount()
+    fireEvent.click(chip('Needs You'))
+    expect(names()).toEqual(['ghost', 'shipped'])
+  })
+
   it('Mine leaves teammates’ rows out', () => {
     mount()
     expect(screen.getByText('ana task')).toBeTruthy()
@@ -216,6 +243,18 @@ describe('the chips', () => {
     expect(names()).toContain('shipped')
     expect(names()).toContain('merged')
     expect(screen.getByRole('treeitem', { name: '2 done' }).getAttribute('aria-expanded')).toBe('true')
+  })
+})
+
+describe('a folded task', () => {
+  it('draws a child asking you on its dot', () => {
+    useTaskTreeStore.setState({ collapsedTasks: { checkout: true } })
+    useWorkspaceStore.setState((state) => ({
+      terminals: { ...state.terminals, t2: { ...pane('t2', 'cart', true), askingYou: 11 } }
+    }))
+    mount()
+    const dot = document.querySelector('[data-worktree-id="checkout"] [aria-label="asking"]')
+    expect(dot?.getAttribute('title')).toBe('asking · Cart totals')
   })
 })
 

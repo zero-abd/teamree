@@ -161,6 +161,7 @@ describe('dispatcher', () => {
       'message.list',
       'message.read',
       'message.send',
+      'message.waiting',
       // Reachable over the peer transport and nowhere else; in the one registry
       // because a teammate is another transport onto the catalogue. See `PEER_METHODS`.
       'peer.presence',

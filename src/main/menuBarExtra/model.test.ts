@@ -67,6 +67,11 @@ describe('askingPanes', () => {
     expect(found.map((item) => item.label)).toEqual(['login-bug — fix auth', 'api-refactor — zsh'])
   })
 
+  it('lists an agent waiting on an ask for you', () => {
+    const found = askingPanes(state({ terminals: [pane('t1', 'w1', { agent: 'claude', busy: true, askingYou: 11 })] }))
+    expect(found.map((item) => item.terminalId)).toEqual(['t1'])
+  })
+
   it('says the worktree once when the pane is named after it', () => {
     const found = askingPanes(state({ terminals: [asking('t1', 'w1')], paneNames: { t1: 'login-bug' } }))
     expect(found[0]?.label).toBe('login-bug')

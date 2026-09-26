@@ -11,8 +11,9 @@ const READ_LIMIT = 500
 type MessagesState = {
   messages: readonly TaskMessage[]
   load: () => Promise<void>
-  /** Sends your answer; false when it was refused, e.g. somebody answered first. */
+  /** Sends your answer, as a note once nobody waits on it; false when refused, e.g. somebody answered first. */
   answer: (ask: TaskMessage, text: string) => Promise<boolean>
+  dismiss: (ask: TaskMessage) => Promise<void>
 }
 
 export const useMessageStore = create<MessagesState>()((set, get) => ({
@@ -31,7 +32,7 @@ export const useMessageStore = create<MessagesState>()((set, get) => ({
       await runtimeClient.call('message.send', {
         from: { you: true },
         to: ask.from,
-        kind: 'reply',
+        kind: waitedOn(ask) ? 'reply' : 'note',
         replyTo: ask.id,
         text: trimmed
       })
@@ -41,17 +42,39 @@ export const useMessageStore = create<MessagesState>()((set, get) => ({
     } finally {
       await get().load()
     }
+  },
+  async dismiss(ask) {
+    try {
+      await runtimeClient.call('message.read', { ids: [ask.id] })
+    } catch {
+      // Still drawn; the next click tries again.
+    }
+    await get().load()
   }
 }))
 
-/** The newest unanswered ask this worktree put to you. */
+/** Something still waits on this ask's answer. */
+export function waitedOn(ask: TaskMessage): boolean {
+  return ask.expiredAt === undefined
+}
+
+function openForYou(message: TaskMessage): boolean {
+  // Read once nobody waits on it is dismissed; read while waited on is only `msg inbox` having listed it.
+  const dismissed = !waitedOn(message) && message.state === 'read'
+  return message.kind === 'ask' && message.to.you === true && message.state !== 'answered' && !dismissed
+}
+
+/** The newest ask this worktree put to you that is neither answered nor dismissed. */
 export function askForYou(messages: readonly TaskMessage[], worktreeId: string): TaskMessage | undefined {
-  return messages.findLast(
-    (message) =>
-      message.kind === 'ask' &&
-      message.to.you === true &&
-      message.state !== 'answered' &&
-      message.from.worktreeId === worktreeId
+  return messages.findLast((message) => openForYou(message) && message.from.worktreeId === worktreeId)
+}
+
+/** Worktrees with an ask for you something still waits on. */
+export function askingWorktrees(messages: readonly TaskMessage[]): Set<string> {
+  return new Set(
+    messages.flatMap((message) =>
+      openForYou(message) && waitedOn(message) && message.from.worktreeId !== undefined ? [message.from.worktreeId] : []
+    )
   )
 }
 

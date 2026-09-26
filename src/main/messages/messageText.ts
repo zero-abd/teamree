@@ -23,11 +23,16 @@ export function pastedText(message: TaskMessage, nameOf: NameOf): string {
         return `[teamree] "${from}" done (${message.outcome ?? 'succeeded'}): ${message.text}${files}${land}`
       }
       case 'note':
-        return `[teamree] note from "${from}": ${message.text}`
+        return `[teamree] note from "${from}"${answering(message)}: ${message.text}`
     }
   })()
   const tail = message.kind === 'ask' ? `\nAnswer: teamree msg reply ${message.id} "<answer>"` : ''
   return `${cutToBytes(head, MAX_MESSAGE_BYTES - byteLength(tail))}${tail}`
+}
+
+/** A note that answers an ask its asker stopped waiting on says which. */
+export function answering(message: Pick<TaskMessage, 'kind' | 'replyTo'>): string {
+  return message.kind === 'note' && message.replyTo !== undefined ? `, answering #${message.replyTo}` : ''
 }
 
 const encoder = new TextEncoder()

@@ -1597,6 +1597,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'message.send': notInDemo('message.send'),
     'message.list': () => [],
     'message.read': () => ({ read: 0 }),
+    'message.waiting': () => ({ changed: 0 }),
     'project.context': ({ worktreeId }) => emptyProjectContext(worktreeId),
     'memory.note': notInDemo('memory.note'),
     'memory.resolve': notInDemo('memory.resolve'),

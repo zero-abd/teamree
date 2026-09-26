@@ -16,7 +16,7 @@ import { usageLines } from '@shared/usage'
 import { AgentGlyph } from '../agents/glyphs'
 import { openInBrowser } from '../shell/openInBrowser'
 import { useLedger } from '../state/ledgerStore'
-import { askForYou, childDone, firstSentence, useMessageStore } from '../state/messages'
+import { askForYou, childDone, firstSentence, useMessageStore, waitedOn } from '../state/messages'
 import { rowVisibility } from '../state/rowVisibility'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { PaneAttention } from '../state/paneAttention'
@@ -195,6 +195,8 @@ export function WorktreeRow({
   const dragged = useNestDrag((state) => state.dragging === worktree.id)
   const draggable = ready && !renaming && onMoveUnder !== undefined
   const ask = useMessageStore((state) => askForYou(state.messages, worktree.id))
+  // One nobody waits on any more is still drawn, but no longer asks.
+  const liveAsk = ask !== undefined && waitedOn(ask) ? ask : undefined
   const heard = useMessageStore((state) => childDone(state.messages, worktree.id))
   // Joined, so the selector answers the same string while nothing changed.
   const claims = useLedger(
@@ -292,8 +294,8 @@ export function WorktreeRow({
   // Folded, a task's dot speaks for its whole tree.
   const rolled = task?.collapsed === true ? task.rolled : null
   // A question for you outranks whatever the panes say: the agent is only waiting on the answer.
-  const tone = rolled?.tone ?? (ask === undefined ? worktreeTone(rows) : 'waiting')
-  const report = ask === undefined ? reportLine(worktree) : null
+  const tone = rolled?.tone ?? (liveAsk === undefined ? worktreeTone(rows) : 'waiting')
+  const report = liveAsk === undefined ? reportLine(worktree) : null
   const label = worktreeLabel(display)
   const usage = useUsageStore((state) => state.usage[worktree.id])
   const showCost = useUsageStore((state) => state.showCost)
@@ -316,7 +318,7 @@ export function WorktreeRow({
           ? { lifecycle: 'missing' as const }
           : {}),
     tone,
-    question: ask === undefined ? (rows.find((row) => row.activity === 'waiting')?.evidence ?? null) : ask.text,
+    question: liveAsk?.text ?? rows.find((row) => row.activity === 'waiting')?.evidence ?? null,
     ...(rolled?.from === undefined ? {} : { from: rolled.from }),
     unread: unreadHere,
     ...(display.branch === undefined ? {} : { branch: display.branch }),
@@ -628,7 +630,9 @@ export function WorktreeRow({
         <DropHint text={drop.target.allowed ? drop.target.hint : drop.target.reason} refused={!drop.target.allowed} />
       )}
 
-      {ask === undefined || compact ? null : <AskForYou ask={ask} />}
+      {ask === undefined || (compact && liveAsk === undefined) ? null : (
+        <AskForYou key={ask.id} ask={ask} compact={compact} />
+      )}
       {report === null || compact ? null : <p className="worktree__line worktree__report">{report}</p>}
       {heard === undefined || heardFrom === undefined || compact ? null : (
         <p className="worktree__line worktree__report" title={heard.text}>

@@ -24,13 +24,17 @@ export type StageFacts = {
   /** Commits its base does not have. */
   ahead: number
   landed: boolean
+  /** An ask for you is open; see `askingWorktrees`. */
+  askingYou?: boolean
 }
 
 /** A pane asking or working outranks a report or a landing: an agent asked again after `done` is asking. */
-export function taskStage({ worktree, tone, status, ahead, landed }: StageFacts): TaskStage {
+export function taskStage({ worktree, tone, status, ahead, landed, askingYou }: StageFacts): TaskStage {
   if (worktree.state === 'failed') return 'failed'
   // Nothing on disk to be clean, ready or working in.
   if (worktree.missing === true) return 'missing'
+  // Its pane reads as working while the agent is blocked on the question.
+  if (askingYou === true) return 'asking'
   if (worktree.state === 'creating' || tone === 'working') return 'working'
   if (tone === 'waiting') return 'asking'
   if (landed) return 'landed'
@@ -73,6 +77,8 @@ export type TaskRowsInput = {
   statuses: Readonly<Record<string, WorktreeStatus>>
   mergePreviews: Readonly<Record<string, Pick<WorktreeMergePreview, 'ahead'>>>
   landings: Readonly<Record<string, Pick<WorktreeLanding, 'merged' | 'parent' | 'notPushed'>>>
+  /** Worktrees with an ask for you open. */
+  asking?: ReadonlySet<string>
   /** Uncommitted lines per worktree, where read. */
   changes?: Readonly<Record<string, { changes: readonly Pick<WorktreeChange, 'added' | 'removed'>[] }>>
   now: number
@@ -109,7 +115,8 @@ export function taskStages(input: Omit<TaskRowsInput, 'projects' | 'changes'>): 
         tone,
         ...(status === undefined ? {} : { status }),
         ahead: input.mergePreviews[worktree.id]?.ahead ?? 0,
-        landed: landedWhereItLands(worktree, input.landings[worktree.id])
+        landed: landedWhereItLands(worktree, input.landings[worktree.id]),
+        askingYou: input.asking?.has(worktree.id) === true
       })
       return [worktree.id, stage]
     })

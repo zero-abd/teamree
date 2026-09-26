@@ -675,6 +675,8 @@ export type Terminal = {
   subagents?: Subagent[]
   /** Set on the pane a Run button started, and kept across relaunches; its `exitCode` is the run's result. */
   run?: RunKind
+  /** The open `msg ask --to you` this pane's agent is waiting on; it reads as asking. */
+  askingYou?: number
 }
 
 /** One running subagent of a pane's session, from its hooks and its files under the agent's store. */

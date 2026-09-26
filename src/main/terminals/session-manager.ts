@@ -223,6 +223,7 @@ export class TerminalSessionManager {
   private minPane: Box | undefined
   private cell: Box | undefined
   private readonly subagents: SubagentTracker
+  private askingYou: ReadonlyMap<string, number> = new Map()
 
   constructor(private readonly options: TerminalSessionManagerOptions = {}) {
     this.subagents = new SubagentTracker({
@@ -248,7 +249,16 @@ export class TerminalSessionManager {
   list(worktreeId?: string): Terminal[] {
     const all = [...this.sessions.values()]
     const scoped = worktreeId === undefined ? all : all.filter((session) => session.worktreeId === worktreeId)
-    return scoped.map((session) => this.withSubagents(session.snapshot()))
+    return scoped.map((session) => this.withOverlays(session.snapshot()))
+  }
+
+  /** Each pane whose agent waits on an ask for you; a pane that changes is reported as its activity would be. */
+  setAskingYou(byPane: ReadonlyMap<string, number>): void {
+    const before = this.askingYou
+    this.askingYou = new Map(byPane)
+    for (const terminalId of new Set([...before.keys(), ...byPane.keys()])) {
+      if (before.get(terminalId) !== byPane.get(terminalId)) this.options.onActivityChange?.(terminalId)
+    }
   }
 
   /** Reads every Claude pane's subagents off disk now, rather than on the next poll. */
@@ -435,7 +445,7 @@ export class TerminalSessionManager {
   async interrupt(terminalId: string): Promise<Terminal> {
     const session = this.require(terminalId)
     await session.interrupt()
-    return this.withSubagents(session.snapshot())
+    return this.withOverlays(session.snapshot())
   }
 
   /** Chooses an answer the pane's menu offers: `data`'s keypresses, one at a time, only while the screen still shows `prompt`. */
@@ -479,14 +489,14 @@ export class TerminalSessionManager {
     const pane = this.require(terminalId)
     pane.noteAgentEvent(event)
     if (session !== undefined) this.subagents.noteSession(terminalId, session.sessionId, session.transcriptPath)
-    return this.withSubagents(pane.snapshot())
+    return this.withOverlays(pane.snapshot())
   }
 
   /** A subagent starting or stopping, as the pane's hook reported it. */
   subagentEvent(params: ParamsOf<'terminal.subagentEvent'>): Terminal {
     const pane = this.require(params.terminalId)
     this.subagents.hook(params.terminalId, params)
-    return this.withSubagents(pane.snapshot())
+    return this.withOverlays(pane.snapshot())
   }
 
   async subagentTranscript(params: ParamsOf<'terminal.subagentTranscript'>): Promise<SubagentTranscript> {
@@ -1026,9 +1036,15 @@ export class TerminalSessionManager {
     return never ? this.taskFor(record).prompt : undefined
   }
 
-  private withSubagents(terminal: Terminal): Terminal {
+  /** A pane's snapshot with what the manager keeps beside its session. */
+  private withOverlays(terminal: Terminal): Terminal {
     const subagents = this.subagents.list(terminal.id)
-    return subagents === undefined ? terminal : { ...terminal, subagents }
+    const askingYou = this.askingYou.get(terminal.id)
+    return {
+      ...terminal,
+      ...(subagents === undefined ? {} : { subagents }),
+      ...(askingYou === undefined ? {} : { askingYou })
+    }
   }
 
   /** Hands on a pane that has stopped, when it is an agent; one rule for both edges. */

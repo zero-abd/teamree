@@ -23,6 +23,7 @@ import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { PageFrame } from '../workspace/PageFrame'
 import { Segments } from '../files/FileBar'
+import { askingWorktrees, useMessageStore } from '../state/messages'
 import { useTaskTreeStore } from '../state/taskTreeStore'
 import { useUsageReads } from '../state/usageStore'
 import { dashboardRows, toneCounts, type DashboardRow } from './dashboardRows'
@@ -66,12 +67,23 @@ export function Dashboard(): React.JSX.Element {
   const counts = useMemo(() => toneCounts(rows), [rows])
   const changes = useChangedLines(mode === 'tasks' ? worktrees : [])
   useUsageReads(mode === 'tasks' ? {} : null)
+  const messages = useMessageStore((state) => state.messages)
   const tasks = useMemo(
     () =>
       mode === 'tasks'
-        ? taskRows({ projects, worktrees, terminals: paneList, statuses, mergePreviews, landings, changes, now })
+        ? taskRows({
+            projects,
+            worktrees,
+            terminals: paneList,
+            statuses,
+            mergePreviews,
+            landings,
+            asking: askingWorktrees(messages),
+            changes,
+            now
+          })
         : [],
-    [mode, projects, worktrees, paneList, statuses, mergePreviews, landings, changes, now]
+    [mode, projects, worktrees, paneList, statuses, mergePreviews, landings, messages, changes, now]
   )
 
   // A state nothing is in any more has no filter to press, so it filters nothing.

@@ -5,7 +5,7 @@
 // ($TEAMREE_STAND_IN_CLI, else $TEAMREE_CLI), reporting Stop and UserPromptSubmit as hooks would.
 //
 // Script lines, `#` for comments:
-//   ask parent "Which store?" options redis,postgres     each step starts when the last one ends
+//   ask parent "Which store?" options redis,postgres [timeout 5000]   each step starts when the last one ends
 //   done "Added limiter. Tests pass. Nothing left." [failed]
 //   child tests ./child.script "Write the limiter tests"
 //   supervise 2                        wait on children: answer their asks, until 2 are done
@@ -108,13 +108,15 @@ async function act(action, trigger = '') {
     }
     case 'ask': {
       const options = flagged('options')
+      const timeout = flagged('timeout')
       const args = [
         'msg',
         'ask',
         rest[1] ?? '',
         '--to',
         rest[0] ?? 'parent',
-        ...(options ? ['--options', options] : [])
+        ...(options ? ['--options', options] : []),
+        ...(timeout ? ['--timeout-ms', timeout] : [])
       ]
       called(args, teamree(args))
       return

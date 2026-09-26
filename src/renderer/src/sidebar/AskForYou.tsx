@@ -1,12 +1,16 @@
 // A task's question for you, under its row: the question, its options as buttons, and Reply… for anything else.
+// Once the agent stops waiting it says so, and an answer goes as a note.
 
 import { useState } from 'react'
 import type { TaskMessage } from '@shared/messages'
-import { useMessageStore } from '../state/messages'
+import { useMessageStore, waitedOn } from '../state/messages'
 import { AnswerChoices } from './AnswerButtons'
 
-export function AskForYou({ ask }: { ask: TaskMessage }): React.JSX.Element {
+export function AskForYou({ ask, compact = false }: { ask: TaskMessage; compact?: boolean }): React.JSX.Element {
   const answer = useMessageStore((state) => state.answer)
+  const dismiss = useMessageStore((state) => state.dismiss)
+  const lapsed = !waitedOn(ask)
+  const [answering, setAnswering] = useState(false)
   const [replying, setReplying] = useState(false)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
@@ -21,48 +25,64 @@ export function AskForYou({ ask }: { ask: TaskMessage }): React.JSX.Element {
     }
   }
 
+  const actions = replying ? (
+    <form
+      className="worktree__ask-reply"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void send(draft)
+      }}
+    >
+      <input
+        className="worktree__ask-field"
+        aria-label="Answer"
+        placeholder="Answer"
+        value={draft}
+        disabled={sending}
+        autoComplete="off"
+        autoFocus
+        data-own-escape
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') setReplying(false)
+        }}
+      />
+    </form>
+  ) : lapsed && !answering ? (
+    <AnswerChoices choices={[]} onChoose={() => {}}>
+      <button type="button" className="button button--tiny" onClick={() => setAnswering(true)}>
+        Send Anyway…
+      </button>
+      <button type="button" className="button button--ghost button--tiny" onClick={() => void dismiss(ask)}>
+        Dismiss
+      </button>
+    </AnswerChoices>
+  ) : (
+    <AnswerChoices
+      choices={(ask.options ?? []).map((label) => ({ label }))}
+      onChoose={(index) => {
+        const option = ask.options?.[index]
+        if (option !== undefined) void send(option)
+      }}
+      disabled={sending}
+    >
+      <button type="button" className="button button--ghost button--tiny" onClick={() => setReplying(true)}>
+        Reply…
+      </button>
+    </AnswerChoices>
+  )
+
   return (
-    <div className="worktree__ask" role="group" aria-label={`Question #${ask.id}`}>
+    <div
+      className={`worktree__ask${compact ? ' worktree__ask--compact' : ''}${lapsed ? ' worktree__ask--lapsed' : ''}`}
+      role="group"
+      aria-label={`Question #${ask.id}`}
+    >
+      {lapsed ? <p className="worktree__ask-lapsed">Timed out · the agent moved on</p> : null}
       <p className="worktree__ask-text" title={ask.text}>
         {ask.text}
       </p>
-      {replying ? (
-        <form
-          className="worktree__ask-reply"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void send(draft)
-          }}
-        >
-          <input
-            className="worktree__ask-field"
-            aria-label="Answer"
-            placeholder="Answer"
-            value={draft}
-            disabled={sending}
-            autoComplete="off"
-            autoFocus
-            data-own-escape
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') setReplying(false)
-            }}
-          />
-        </form>
-      ) : (
-        <AnswerChoices
-          choices={(ask.options ?? []).map((label) => ({ label }))}
-          onChoose={(index) => {
-            const option = ask.options?.[index]
-            if (option !== undefined) void send(option)
-          }}
-          disabled={sending}
-        >
-          <button type="button" className="button button--ghost button--tiny" onClick={() => setReplying(true)}>
-            Reply…
-          </button>
-        </AnswerChoices>
-      )}
+      {actions}
     </div>
   )
 }
