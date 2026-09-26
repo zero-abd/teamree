@@ -32,6 +32,7 @@ vi.mock('../sidebar/usePaneEvidence', () => ({ usePaneEvidence: () => printed })
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { Dashboard } = await import('./Dashboard')
+const { useTaskTreeStore } = await import('../state/taskTreeStore')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -329,5 +330,61 @@ describe('answers on the board', () => {
     expect(groups).toHaveLength(1)
     expect([...groups[0]!.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Trust', 'Exit'])
     expect(groups[0]!.closest('li')?.querySelector('.board-row__state')?.textContent).toBe('asking')
+  })
+})
+
+// The same board, by task: tree order, and a stage nobody sets.
+describe('the Tasks view', () => {
+  const openWorktree = vi.fn()
+  const child = (id: string, name: string, overrides: Partial<Worktree> = {}): Worktree => ({
+    ...WORKTREE,
+    id,
+    name,
+    branch: `atlas--${id}`,
+    parentId: 'w1',
+    ...overrides
+  })
+
+  beforeEach(() => {
+    openWorktree.mockReset()
+    useTaskTreeStore.setState({ boardMode: 'panes' })
+    seed({
+      worktrees: [WORKTREE, child('w2', 'Write the migration'), child('w3', 'Update the tests')],
+      terminals: {
+        [PANE.id]: PANE,
+        t2: { ...PANE, id: 't2', worktreeId: 'w2', agent: 'claude', screenSays: 'waiting' }
+      },
+      openWorktree
+    })
+  })
+
+  const rows = (): string[] =>
+    [...document.querySelectorAll('.task-row')].map((row) => row.querySelector('.task-row__name')?.textContent ?? '')
+
+  it('switches from Panes to Tasks, and remembers the choice', () => {
+    render(<Dashboard />)
+    expect(screen.getByRole('button', { name: 'Panes' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Tasks' }))
+    expect(useTaskTreeStore.getState().boardMode).toBe('tasks')
+    expect(rows()).toEqual(['atlas', 'Write the migration', 'Update the tests'])
+  })
+
+  it('shows each task’s stage and indents children', () => {
+    useTaskTreeStore.setState({ boardMode: 'tasks' })
+    render(<Dashboard />)
+    const stages = [...document.querySelectorAll('.task-row__stage')].map((cell) => cell.textContent)
+    expect(stages).toEqual(['stopped', 'asking', 'stopped'])
+    expect(screen.getByText('0/2 done')).toBeTruthy()
+    const depth = [...document.querySelectorAll<HTMLElement>('.task-row')].map((row) =>
+      row.style.getPropertyValue('--depth')
+    )
+    expect(depth).toEqual(['', '1', '1'])
+  })
+
+  it('opens the worktree from its row', () => {
+    useTaskTreeStore.setState({ boardMode: 'tasks' })
+    render(<Dashboard />)
+    fireEvent.click(document.querySelectorAll<HTMLElement>('.task-row')[1]!)
+    expect(openWorktree).toHaveBeenCalledWith('w2')
   })
 })

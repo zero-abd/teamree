@@ -103,6 +103,13 @@ function projectForNewTask(state: CommandState): string | undefined {
   return active?.projectId ?? state.projects.at(-1)?.id
 }
 
+/** The open worktree, when it has a checkout a child can branch from. */
+function parentForNewChild(state: CommandState): { id: string; projectId: string } | undefined {
+  return state.worktrees.find(
+    (worktree) => worktree.id === state.activeWorktreeId && worktree.state === 'ready' && worktree.missing !== true
+  )
+}
+
 /** A focused pane of your own, or null; split and find refuse a watched pane. */
 function ownFocusedPane(state: CommandState): string | null {
   if (state.focusedWatchId !== null) return null
@@ -207,6 +214,8 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
       return unless(state.activeWorktreeId !== null, 'no worktree open')
     case 'new-worktree':
       return unless(projectForNewTask(state) !== undefined, 'no project')
+    case 'new-child-task':
+      return unless(parentForNewChild(state) !== undefined, 'no worktree open')
     case 'focus-next-pane':
     case 'focus-previous-pane':
       // Two or more, counting watched panes as the walk does; with one, `focusPane` returns early.
@@ -305,6 +314,11 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
     case 'new-worktree': {
       const projectId = projectForNewTask(store)
       if (projectId) store.openDialog({ kind: 'new-task', projectId })
+      break
+    }
+    case 'new-child-task': {
+      const parent = parentForNewChild(store)
+      if (parent) store.openDialog({ kind: 'new-task', projectId: parent.projectId, parentId: parent.id })
       break
     }
     case 'toggle-sidebar':

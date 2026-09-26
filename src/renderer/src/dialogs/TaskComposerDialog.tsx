@@ -1,5 +1,5 @@
 // Starting work: describe the task, pick who does it (a count per agent, for racing attempts), and
-// where from. One action makes the worktree and starts the agents; progress lives on the sidebar row.
+// where from, or under which worktree. One action makes the worktree and starts the agents; progress lives on the sidebar row.
 
 import { useEffect, useState } from 'react'
 import { MAX_AGENT_ARGS_CHARS } from '@shared/agentLaunch'
@@ -24,8 +24,16 @@ import {
   type AgentModes
 } from './taskPlan'
 import { useStartPoints } from './useStartPoints'
+import { worktreeDisplay } from '../sidebar/worktreeDisplay'
 
-export function TaskComposerDialog({ projectId: openedFor }: { projectId: string }): React.JSX.Element | null {
+export function TaskComposerDialog({
+  projectId: openedFor,
+  parentId
+}: {
+  projectId: string
+  /** A child task of this worktree: it starts from its branch. */
+  parentId?: string
+}): React.JSX.Element | null {
   const projects = useWorkspaceStore((state) => state.projects)
   const agents = useWorkspaceStore((state) => state.agents)
   const agentsProbed = useWorkspaceStore((state) => state.agentsProbed)
@@ -36,6 +44,8 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   const worktrees = useWorkspaceStore((state) => state.worktrees)
   const permissionModes = useWorkspaceStore((state) => state.permissionModes)
   const rememberPermissionModes = useWorkspaceStore((state) => state.rememberPermissionModes)
+  const parent = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === parentId))
+  const parentStatus = useWorkspaceStore((state) => (parentId === undefined ? undefined : state.statuses[parentId]))
 
   const [projectId, setProjectId] = useState(openedFor)
   const [task, setTask] = useState('')
@@ -92,7 +102,9 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
       ? branchNameFromTask(taskName(task))
       : (plannedBranches(taskCreates(task, selection), existing)[0] ?? '')
   const problem = branchProblem(creates, existing)
-  const startedFrom = startPoint.text.trim()
+  const startedFrom = parent?.branch ?? startPoint.text.trim()
+  const leftBehind =
+    parentStatus === undefined ? 0 : parentStatus.staged + parentStatus.unstaged + parentStatus.untracked
   // Bounded by the agent's command line; a paste past it is refused, not cut.
   const tooLong = task.trim().length > MAX_AGENT_ARGS_CHARS
   const canSubmit = hasTask && !tooLong && startedFrom.length > 0 && problem === null
@@ -105,7 +117,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
         .map((agent) => [agent.kind, modes[agent.kind] ?? 'default'])
     )
     rememberPermissionModes(projectId, used)
-    startTask({ projectId, startedFrom, creates })
+    startTask({ projectId, startedFrom, ...(parent === undefined ? {} : { parentId: parent.id }), creates })
   }
 
   return (
@@ -123,6 +135,16 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
           submit()
         }}
       >
+        {parent === undefined ? null : (
+          <p className="form__under">
+            <span className="form__under-name">{`Under ${worktreeDisplay(parent).title}`}</span>
+            <span className="form__under-from">{`from ${parent.branch}`}</span>
+            {leftBehind > 0 ? (
+              <span className="form__under-left">{`${leftBehind} uncommitted not included`}</span>
+            ) : null}
+          </p>
+        )}
+
         <label className="field field--task">
           <span className="field__label">Task</span>
           <textarea
@@ -155,37 +177,47 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
           onMode={(kind, mode) => setModeEdits({ ...modeEdits, [kind]: mode })}
         />
 
-        <div className="form__where">
-          <label className="field">
-            <span className="field__label">Project</span>
-            <Select
-              value={projectId}
-              onChange={(event) => {
-                setProjectId(event.target.value)
-                // The old project's base ref has no meaning in the new one.
-                setTouched(false)
-                setStartPoint({ text: '', option: null })
-              }}
-            >
-              {projects.map((entry) => (
-                <option value={entry.id} key={entry.id}>
-                  {entry.name}
-                </option>
-              ))}
-            </Select>
-          </label>
-          <StartPointPicker
-            state={startPoints}
-            onReload={reload}
-            value={startPoint}
-            onChange={(value) => {
-              setTouched(true)
-              setStartPoint(value)
-            }}
-          />
-        </div>
+        {parent === undefined ? (
+          <>
+            <div className="form__where">
+              <label className="field">
+                <span className="field__label">Project</span>
+                <Select
+                  value={projectId}
+                  onChange={(event) => {
+                    setProjectId(event.target.value)
+                    // The old project's base ref has no meaning in the new one.
+                    setTouched(false)
+                    setStartPoint({ text: '', option: null })
+                  }}
+                >
+                  {projects.map((entry) => (
+                    <option value={entry.id} key={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <StartPointPicker
+                state={startPoints}
+                onReload={reload}
+                value={startPoint}
+                onChange={(value) => {
+                  setTouched(true)
+                  setStartPoint(value)
+                }}
+              />
+            </div>
 
-        <BranchField edit={branchEdit} derived={derived} planned={planned} problem={problem} onEdit={setBranchEdit} />
+            <BranchField
+              edit={branchEdit}
+              derived={derived}
+              planned={planned}
+              problem={problem}
+              onEdit={setBranchEdit}
+            />
+          </>
+        ) : null}
 
         <footer className="modal__actions">
           <p className="form__note">{taskPlanNote(agents, agentsProbed, selection)}</p>

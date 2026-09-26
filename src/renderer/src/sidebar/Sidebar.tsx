@@ -3,7 +3,7 @@
 // clothes: it opens the palette rather than being a second, weaker search.
 
 import { useEffect, useMemo, useRef } from 'react'
-import { teammatesHeard } from '@shared/entities'
+import { hasCheckout, teammatesHeard, type Worktree } from '@shared/entities'
 import { cliActionLabel, cliTitle, offerCliInstall } from '../dialogs/cliInstallModel'
 import { attentionByPane } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
@@ -21,7 +21,11 @@ import { teamworkControlLabel, teamworkOn, teamworkSummary } from './teamworkSum
 import { usePaneEvidence } from './usePaneEvidence'
 import { useTreeKeys } from './treeKeys'
 import { worktreesByProject } from './worktreeOrder'
-import { WorktreeRow } from './WorktreeRow'
+import { WorktreeRow, type TaskFold } from './WorktreeRow'
+import { agentRows, worktreeTone, type DotTone } from './agentRows'
+import { flattenTask, taskForest, taskTally, treeTone, type TaskNode } from './taskTree'
+import { isDoneStage, taskStages } from '../dashboard/taskRows'
+import { useTaskTreeStore } from '../state/taskTreeStore'
 import { agentWords, worktreeDisplay, worktreeLabel } from './worktreeDisplay'
 
 export function Sidebar({
@@ -74,6 +78,23 @@ export function Sidebar({
   const agents = useWorkspaceStore((state) => state.agents)
   const restoring = useWorkspaceStore((state) => state.restoring)
   const kindOf = useMemo(() => agentWords(agents), [agents])
+  const collapsedTasks = useTaskTreeStore((state) => state.collapsedTasks)
+  const setTaskCollapsed = useTaskTreeStore((state) => state.setTaskCollapsed)
+  const stages = useMemo(
+    () => taskStages({ worktrees, terminals: paneList, statuses, mergePreviews, landings, now }),
+    [worktrees, paneList, statuses, mergePreviews, landings, now]
+  )
+  const tones = useMemo(() => {
+    const byId: Record<string, DotTone | null> = {}
+    for (const worktree of worktrees) {
+      byId[worktree.id] = hasCheckout(worktree) ? worktreeTone(agentRows(paneList, worktree.id, now)) : null
+    }
+    return byId
+  }, [worktrees, paneList, now])
+  const titleOf = (worktreeId: string): string => {
+    const worktree = worktrees.find((entry) => entry.id === worktreeId)
+    return worktree === undefined ? '' : worktreeDisplay(worktree, kindOf).title
+  }
   const tree = useRef<HTMLDivElement | null>(null)
   const treeKeys = useTreeKeys(tree)
 
@@ -295,6 +316,68 @@ export function Sidebar({
             const reading = attentionByPane(watching[project.id])
             // Roster teammates never heard from: not away, and not without worktrees.
             const unheard = unheardTeammates(teammates[project.id])
+            const drawRow = (node: TaskNode<Worktree>, depth: number): React.JSX.Element => {
+              const { worktree } = node
+              const display = worktreeDisplay(worktree, kindOf)
+              const label = worktreeLabel(display)
+              const siblings = siblingRuns(worktree, worktrees)
+              const kind = display.agent?.kind
+              const twinRun =
+                kind !== undefined && siblings.some((other) => worktreeDisplay(other, kindOf).agent?.kind === kind)
+              return (
+                <WorktreeRow
+                  key={worktree.id}
+                  worktree={worktree}
+                  display={display}
+                  depth={depth}
+                  {...(node.children.length === 0 ? {} : { task: taskFold(node) })}
+                  onNewChild={() => openDialog({ kind: 'new-task', projectId: project.id, parentId: worktree.id })}
+                  status={statuses[worktree.id]}
+                  mergePreview={mergePreviews[worktree.id]}
+                  {...(landings[worktree.id] === undefined ? {} : { landing: landings[worktree.id] })}
+                  terminals={paneList}
+                  evidence={evidence}
+                  watchers={reading}
+                  unread={unread}
+                  now={now}
+                  onFocusTerminal={(terminalId) => revealPane(worktree.id, terminalId)}
+                  active={worktree.id === activeWorktreeId}
+                  onOpen={() => void openWorktree(worktree.id)}
+                  onRetry={() => retryWorktree(worktree.id)}
+                  onRemove={() => void removeWorktree(worktree.id)}
+                  onForget={() => void removeFromTeamree({ worktreeId: worktree.id })}
+                  onRename={(name) => void renameWorktree(worktree.id, name)}
+                  renameAsked={editingWorktreeName === worktree.id}
+                  onRenameShown={() => editWorktreeName(null)}
+                  onReveal={() => void revealInFinder(worktree.path, `the ${label} checkout`)}
+                  onCopyPath={() => void copyToClipboard(worktree.path, `the path to ${label}`)}
+                  onCopyBranch={() => void copyToClipboard(worktree.branch, `the branch ${worktree.branch}`)}
+                  openIn={openIn(project.id, worktree.path, `the ${label} checkout`, false)}
+                  twinRun={twinRun}
+                  {...(siblings.length === 0
+                    ? {}
+                    : { onKeep: () => openDialog({ kind: 'confirm-keep', worktreeId: worktree.id }) })}
+                  compareWith={siblings.map((other) => ({
+                    label: runName(other, kindOf),
+                    onChoose: () => void openCompare(worktree.id, other.id, compareTitle(worktree, other, kindOf))
+                  }))}
+                />
+              )
+            }
+            const taskFold = (node: TaskNode<Worktree>): TaskFold => {
+              const rolled = treeTone(node, (id) => tones[id] ?? null)
+              const from =
+                rolled === null ? undefined : node.worktree.id === rolled.from ? undefined : titleOf(rolled.from)
+              return {
+                collapsed: collapsedTasks[node.worktree.id] === true,
+                onCollapse: (collapsed) => setTaskCollapsed(node.worktree.id, collapsed),
+                rolled: rolled === null ? null : { tone: rolled.tone, ...(from === undefined ? {} : { from }) },
+                tally: taskTally(node, (child) => isDoneStage(stages[child.id] ?? 'stopped')),
+                children: node.children.map(
+                  (child) => `${titleOf(child.worktree.id)} · ${stages[child.worktree.id] ?? 'stopped'}`
+                )
+              }
+            }
             return (
               <section className="project" key={project.id} data-project-id={project.id}>
                 <ProjectHead
@@ -334,50 +417,15 @@ export function Sidebar({
 
                 {isCollapsed ? null : (
                   <ul className="project__worktrees" role="group">
-                    {rows.map((worktree) => {
-                      const display = worktreeDisplay(worktree, kindOf)
-                      const label = worktreeLabel(display)
-                      const siblings = siblingRuns(worktree, worktrees)
-                      const kind = display.agent?.kind
-                      const twinRun =
-                        kind !== undefined &&
-                        siblings.some((other) => worktreeDisplay(other, kindOf).agent?.kind === kind)
+                    {taskForest(rows).map((node) => {
+                      if (node.children.length === 0) return drawRow(node, 0)
+                      // A task and its child tasks share one box.
                       return (
-                        <WorktreeRow
-                          key={worktree.id}
-                          worktree={worktree}
-                          display={display}
-                          status={statuses[worktree.id]}
-                          mergePreview={mergePreviews[worktree.id]}
-                          {...(landings[worktree.id] === undefined ? {} : { landing: landings[worktree.id] })}
-                          terminals={paneList}
-                          evidence={evidence}
-                          watchers={reading}
-                          unread={unread}
-                          now={now}
-                          onFocusTerminal={(terminalId) => revealPane(worktree.id, terminalId)}
-                          active={worktree.id === activeWorktreeId}
-                          onOpen={() => void openWorktree(worktree.id)}
-                          onRetry={() => retryWorktree(worktree.id)}
-                          onRemove={() => void removeWorktree(worktree.id)}
-                          onForget={() => void removeFromTeamree({ worktreeId: worktree.id })}
-                          onRename={(name) => void renameWorktree(worktree.id, name)}
-                          renameAsked={editingWorktreeName === worktree.id}
-                          onRenameShown={() => editWorktreeName(null)}
-                          onReveal={() => void revealInFinder(worktree.path, `the ${label} checkout`)}
-                          onCopyPath={() => void copyToClipboard(worktree.path, `the path to ${label}`)}
-                          onCopyBranch={() => void copyToClipboard(worktree.branch, `the branch ${worktree.branch}`)}
-                          openIn={openIn(project.id, worktree.path, `the ${label} checkout`, false)}
-                          twinRun={twinRun}
-                          {...(siblings.length === 0
-                            ? {}
-                            : { onKeep: () => openDialog({ kind: 'confirm-keep', worktreeId: worktree.id }) })}
-                          compareWith={siblings.map((other) => ({
-                            label: runName(other, kindOf),
-                            onChoose: () =>
-                              void openCompare(worktree.id, other.id, compareTitle(worktree, other, kindOf))
-                          }))}
-                        />
+                        <li className="task" role="none" key={`task-${node.worktree.id}`}>
+                          <ul className="task__rows" role="none">
+                            {flattenTask(node, collapsedTasks).map((entry) => drawRow(entry.node, entry.depth))}
+                          </ul>
+                        </li>
                       )
                     })}
                     {theirs.map((row) => (

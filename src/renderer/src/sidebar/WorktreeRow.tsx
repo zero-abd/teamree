@@ -13,13 +13,24 @@ import {
 } from '@shared/entities'
 import { AgentGlyph } from '../agents/glyphs'
 import type { PaneAttention } from '../state/paneAttention'
-import { agentRows, dotClass, TONE_LABEL, worktreeTone } from './agentRows'
+import { agentRows, dotClass, TONE_LABEL, worktreeTone, type DotTone } from './agentRows'
 import { PaneRows } from './PaneRows'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { WorktreeNameField } from './WorktreeNameField'
 import { agentName, worktreeDisplay, worktreeLabel, type WorktreeDisplay } from './worktreeDisplay'
+
+/** A task with child tasks: they sit under it in its box and fold with its panes. */
+export type TaskFold = {
+  collapsed: boolean
+  onCollapse: (collapsed: boolean) => void
+  /** The most urgent dot in its tree, drawn while folded, and the child task it comes from. */
+  rolled: { tone: DotTone; from?: string } | null
+  tally: { done: number; total: number }
+  /** A line per child, its name and stage, for the tally's hover. */
+  children: readonly string[]
+}
 
 type WorktreeRowProps = {
   worktree: Worktree
@@ -64,6 +75,11 @@ type WorktreeRowProps = {
   onKeep?: () => void
   /** Another run of the task runs the same agent, so the glyph alone would not tell the rows apart. */
   twinRun?: boolean
+  /** Levels under its top-level task. */
+  depth?: number
+  task?: TaskFold
+  /** New Child Task…; absent leaves the item out. */
+  onNewChild?: () => void
 }
 
 export function WorktreeRow({
@@ -92,7 +108,10 @@ export function WorktreeRow({
   openIn,
   compareWith = [],
   onKeep,
-  twinRun = false
+  twinRun = false,
+  depth = 0,
+  task,
+  onNewChild
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
   const failed = worktree.state === 'failed'
@@ -150,6 +169,7 @@ export function WorktreeRow({
   if (merged) remove.reverse()
   const rest: RowMenuItem[] = [
     ...(failed && worktree.retryable ? [{ label: 'Retry', onChoose: onRetry }] : []),
+    ...(onNewChild !== undefined && ready ? [{ label: 'New Child Task…', onChoose: onNewChild }] : []),
     { label: 'Rename…', onChoose: () => setRenaming(true), separated: merged },
     { label: 'Reveal in Finder', onChoose: onReveal },
     { label: 'Copy Path', onChoose: onCopyPath },
@@ -161,11 +181,17 @@ export function WorktreeRow({
   // A directory that is not there has nothing to reveal, open or copy; removal is what is left.
   const items: RowMenuItem[] = missing ? remove : merged ? [...remove, ...rest] : [...rest, ...remove]
   const rows = ready ? agentRows(terminals, worktree, now, evidence) : []
-  const tone = worktreeTone(rows)
+  const expandable = rows.length > 0 || task !== undefined
+  const shown = task === undefined ? panesShown : !task.collapsed
+  const show = (next: boolean): void => (task === undefined ? setPanesShown(next) : task.onCollapse(!next))
+  // Folded, a task's dot speaks for its whole tree.
+  const rolled = task?.collapsed === true ? task.rolled : null
+  const tone = rolled?.tone ?? worktreeTone(rows)
   const label = worktreeLabel(display)
   // The glyph names the agent; words only where it cannot tell two runs apart.
   const agentWord = display.agent?.kind === undefined || twinRun
-  const branchSaysMore = display.branch !== undefined
+  // A task's tally needs the second line too, or its chips squeeze the name.
+  const twoLines = display.branch !== undefined || task !== undefined
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
   const stateId = `${describedBy}-state`
@@ -212,6 +238,11 @@ export function WorktreeRow({
           </span>
         ) : null}
       </span>
+      {task === undefined ? null : (
+        <span className="chip worktree__tally" title={task.children.join('\n')}>
+          {`${task.tally.done}/${task.tally.total} done`}
+        </span>
+      )}
       {creating ? <span className="chip worktree__tag">creating</span> : null}
       {failed ? <span className="chip worktree__tag worktree__tag--failed">failed</span> : null}
       {missing ? (
@@ -251,7 +282,7 @@ export function WorktreeRow({
         )}
         {/* Slides over the title's tail when the ⋯ shows, so the title never reflows under the pointer. */}
         <span className="worktree__end">
-          {branchSaysMore ? null : (
+          {twoLines ? null : (
             <span className="worktree__facts" id={factsId}>
               {facts}
             </span>
@@ -261,17 +292,21 @@ export function WorktreeRow({
               id={stateId}
               className={dotClass(tone)}
               role="img"
-              title={`${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${TONE_LABEL[tone]}${
-                unreadHere ? ' · unread' : ''
-              }`}
+              title={
+                rolled?.from === undefined
+                  ? `${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${TONE_LABEL[tone]}${
+                      unreadHere ? ' · unread' : ''
+                    }`
+                  : `${TONE_LABEL[tone]} · ${rolled.from}`
+              }
               aria-label={TONE_LABEL[tone]}
             />
           ) : null}
         </span>
       </span>
-      {branchSaysMore ? (
+      {twoLines ? (
         <span className="worktree__meta" id={factsId}>
-          <span className="worktree__branch">{display.branch}</span>
+          <span className="worktree__branch">{display.branch ?? ''}</span>
           {facts}
         </span>
       ) : null}
@@ -281,6 +316,7 @@ export function WorktreeRow({
   return (
     <li
       className={`worktree${active ? ' worktree--active' : ''} worktree--${missing ? 'missing' : worktree.state}`}
+      style={depth === 0 ? undefined : ({ '--depth': depth } as React.CSSProperties)}
       role="none"
       onContextMenu={(event) => {
         event.preventDefault()
@@ -302,6 +338,20 @@ export function WorktreeRow({
       }}
     >
       <div className="worktree__row">
+        {task === undefined ? null : (
+          <button
+            type="button"
+            className="worktree__fold"
+            tabIndex={-1}
+            aria-label={`${task.collapsed ? 'Expand' : 'Collapse'} ${label}`}
+            aria-expanded={!task.collapsed}
+            onClick={() => task.onCollapse(!task.collapsed)}
+          >
+            <svg className={`chevron${task.collapsed ? '' : ' chevron--open'}`} viewBox="0 0 12 12" aria-hidden="true">
+              <path d="M4.5 2.5 L8.5 6 L4.5 9.5" />
+            </svg>
+          </button>
+        )}
         {/* A field cannot sit inside a button, so while renaming the row is a plain box. */}
         {renaming ? (
           <div className="worktree__open worktree__open--renaming">{body}</div>
@@ -311,16 +361,16 @@ export function WorktreeRow({
             className="worktree__open"
             ref={openControl}
             role="treeitem"
-            aria-level={2}
-            aria-expanded={rows.length > 0 ? panesShown : undefined}
+            aria-level={2 + depth}
+            aria-expanded={expandable ? shown : undefined}
             tabIndex={-1}
             onClick={openable ? onOpen : undefined}
             // As in Finder: Return renames, ⌘↓ opens. Space still opens, being the button's own key.
             onKeyDown={(event) => {
               const bare = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey
-              if (bare && rows.length > 0 && event.key === (panesShown ? 'ArrowLeft' : 'ArrowRight')) {
+              if (bare && expandable && event.key === (shown ? 'ArrowLeft' : 'ArrowRight')) {
                 event.preventDefault()
-                setPanesShown(!panesShown)
+                show(!shown)
               }
               if (!openable) return
               if (event.key === 'Enter' && bare) {
@@ -368,9 +418,10 @@ export function WorktreeRow({
         <RowMenu label={`Actions for ${label}`} items={items} anchor={menuAt} onClose={closeMenu} />
       )}
 
-      {rows.length > 0 && panesShown ? (
+      {rows.length > 0 && shown ? (
         <PaneRows
           tree
+          level={3 + depth}
           rows={rows}
           worktreeName={display.title}
           watchers={watchers}

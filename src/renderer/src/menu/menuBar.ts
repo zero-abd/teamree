@@ -74,6 +74,7 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'open-settings': { section: 'application', label: 'Settings…' },
 
   'new-worktree': { section: 'file' },
+  'new-child-task': { section: 'file' },
   'new-terminal': { section: 'file' },
   'new-markdown': { section: 'file' },
   'add-project': { section: 'file' },

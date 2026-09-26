@@ -184,7 +184,8 @@ export type DialogState =
   | { kind: 'project-refused'; folder: string; refusal: ProjectAddRefusal }
   | { kind: 'clone-project' }
   | { kind: 'install-cli' }
-  | { kind: 'new-task'; projectId: string }
+  /** `parentId`: a child task of that worktree. */
+  | { kind: 'new-task'; projectId: string; parentId?: string }
   /** `files`: ⌘P, only the worktree's files. */
   | { kind: 'palette'; mode?: 'files' }
   /** Asked before every removal; `refused` once the runtime has refused one unforced. */
@@ -238,6 +239,8 @@ export type TaskDraft = {
   base?: string
   /** One worktree per entry, in creation order, each already named by `taskCreates`. */
   creates: readonly TaskCreate[]
+  /** Makes each a child task of this worktree. */
+  parentId?: string
 }
 
 export type Notice = {
@@ -1680,7 +1683,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
      * Creates are requested in order, because names were handed out in order and the runtime allocates
      * branches on arrival; what follows each create is not. Only the first is opened.
      */
-    startTask({ projectId, startedFrom, checkout, base, creates }) {
+    startTask({ projectId, startedFrom, checkout, base, creates, parentId }) {
       set({ dialog: null })
 
       void (async () => {
@@ -1701,7 +1704,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             ...(create.branch && !checkout ? { branch: create.branch } : {}),
             ...(task ? { task } : {}),
             ...(checkout ? { checkout } : {}),
-            ...(checkout && base ? { base } : {})
+            ...(checkout && base ? { base } : {}),
+            ...(parentId ? { parentId } : {})
           })
           set((state) => ({
             worktrees: [...state.worktrees.filter((entry) => entry.id !== created.id), created],

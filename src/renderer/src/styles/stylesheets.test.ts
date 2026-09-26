@@ -331,7 +331,9 @@ describe('stylesheets', () => {
         '.pane-row__since--waiting',
         '.statusbar__asking',
         '.board-filter__number--waiting',
-        '.board-row__state--waiting'
+        '.board-row__state--waiting',
+        '.board-filter__number--asking',
+        '.task-row--asking .task-row__stage'
       ])
       const elsewhere: string[] = []
       for (const name of sheets) {

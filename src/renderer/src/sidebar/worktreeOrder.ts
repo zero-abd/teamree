@@ -1,9 +1,11 @@
 // The order the sidebar lays worktrees out in: projects in order, each project's worktrees
-// under it. Computed once so the list and the "next worktree" chord cannot disagree; generic
+// under it, each child task under its parent. Computed once so the list and the "next worktree" chord cannot disagree; generic
 // over the row types so the structural slice in `workspaceCommands.ts` can pass what it has.
 
+import { taskOrder } from './taskTree'
+
 export type ProjectLike = { id: string }
-export type WorktreeLike = { projectId: string }
+export type WorktreeLike = { id: string; projectId: string; parentId?: string }
 
 /** Each project with its own worktrees, in the order the sidebar draws them. */
 export function worktreesByProject<P extends ProjectLike, W extends WorktreeLike>(
@@ -12,7 +14,7 @@ export function worktreesByProject<P extends ProjectLike, W extends WorktreeLike
 ): { project: P; rows: W[] }[] {
   return projects.map((project) => ({
     project,
-    rows: worktrees.filter((worktree) => worktree.projectId === project.id)
+    rows: taskOrder(worktrees.filter((worktree) => worktree.projectId === project.id))
   }))
 }
 

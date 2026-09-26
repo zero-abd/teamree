@@ -33,6 +33,8 @@ type PaneRowsProps = {
   onFocusTerminal: (terminalId: string) => void | Promise<void>
   /** Drawn as the sidebar tree's third level, whose arrows reach the rows instead of Tab. */
   tree?: boolean
+  /** Their tree level, one under their worktree's. */
+  level?: number
 }
 
 export function PaneRows({
@@ -42,9 +44,10 @@ export function PaneRows({
   unread,
   now,
   onFocusTerminal,
-  tree = false
+  tree = false,
+  level = 3
 }: PaneRowsProps): React.JSX.Element {
-  const item = tree ? ({ role: 'treeitem', 'aria-level': 3, tabIndex: -1 } as const) : {}
+  const item = tree ? ({ role: 'treeitem', 'aria-level': level, tabIndex: -1 } as const) : {}
   const [reading, setReading] = useState<{ terminalId: string; subagent: Subagent } | null>(null)
   return (
     <ul className="panes" role={tree ? 'group' : undefined}>
