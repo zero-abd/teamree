@@ -9,8 +9,8 @@ export const PROJECT_FILE = '.teamree/project.json'
 /** The line Settings shows when the file is there and cannot be used. */
 export const PROJECT_FILE_UNREADABLE = 'project.json unreadable'
 
-/** The three settings both places can hold; the start point is the renderer's and has its own helper. */
-export type ProjectSettingField = 'linkedPaths' | 'copiedPaths' | 'setupCommand'
+/** The settings both places can hold; the start point is the renderer's and has its own helper. */
+export type ProjectSettingField = 'linkedPaths' | 'copiedPaths' | 'setupCommand' | 'runCommands'
 
 export type EffectiveProjectSettings = Pick<Project, ProjectSettingField>
 
@@ -23,6 +23,9 @@ export function effectiveProjectSettings(project: Project): EffectiveProjectSett
   }
   const command = project.setupCommand ?? repository.setupCommand
   if (command !== undefined) settings.setupCommand = command
+  // Per kind: this Mac's test command leaves the repository's dev command standing.
+  const run = { ...repository.runCommands, ...project.runCommands }
+  if (Object.keys(run).length > 0) settings.runCommands = run
   return settings
 }
 
@@ -51,5 +54,8 @@ export function projectFileContents(settings: ProjectRepositorySettings): string
   if (settings.setupCommand) ordered.setupCommand = settings.setupCommand
   if (settings.linkedPaths?.length) ordered.linkedPaths = settings.linkedPaths
   if (settings.copiedPaths?.length) ordered.copiedPaths = settings.copiedPaths
+  const run = settings.runCommands
+  if (run?.dev || run?.test)
+    ordered.runCommands = { ...(run.dev ? { dev: run.dev } : {}), ...(run.test ? { test: run.test } : {}) }
   return `${JSON.stringify(ordered, null, 2)}\n`
 }

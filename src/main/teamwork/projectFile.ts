@@ -15,11 +15,14 @@ export type ProjectFileRead = { settings?: ProjectRepositorySettings; problem?: 
 
 const PathList = z.array(z.string().min(1).max(512)).max(64)
 
+const Command = z.string().trim().min(1).max(MAX_SETUP_COMMAND_CHARS)
+
 const ProjectFileSchema = z.object({
   startFrom: z.string().trim().min(1).max(256).optional(),
-  setupCommand: z.string().trim().min(1).max(MAX_SETUP_COMMAND_CHARS).optional(),
+  setupCommand: Command.optional(),
   linkedPaths: PathList.optional(),
-  copiedPaths: PathList.optional()
+  copiedPaths: PathList.optional(),
+  runCommands: z.object({ dev: Command.optional(), test: Command.optional() }).optional()
 })
 
 export async function readProjectFile(root: string): Promise<ProjectFileRead> {
@@ -38,6 +41,10 @@ export async function readProjectFile(root: string): Promise<ProjectFileRead> {
     // The same judgement a path typed into Settings gets; one that leaves the repository spoils the file.
     if (parsed.linkedPaths !== undefined) settings.linkedPaths = normalizePreparedPaths(parsed.linkedPaths)
     if (parsed.copiedPaths !== undefined) settings.copiedPaths = normalizePreparedPaths(parsed.copiedPaths)
+    const { dev, test } = parsed.runCommands ?? {}
+    if (dev !== undefined || test !== undefined) {
+      settings.runCommands = { ...(dev === undefined ? {} : { dev }), ...(test === undefined ? {} : { test }) }
+    }
     return { settings }
   } catch {
     return { problem: PROJECT_FILE_UNREADABLE }

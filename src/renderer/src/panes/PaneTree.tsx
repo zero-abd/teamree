@@ -212,10 +212,10 @@ function PaneLeaf({
         <span className="chip pane__exit">exited{terminal?.exitCode === undefined ? '' : ` ${terminal.exitCode}`}</span>
       ) : null}
       {/* Beside the badge that says the pane is dead, because the next thing anybody does about a
-          dead pane is this; the pane menu's word for an agent, since that is not a new shell. */}
+          dead pane is this; the pane menu's word for an agent or a Run pane, since that is not a new shell. */}
       {exited ? (
         <button type="button" className="pane__again" onClick={() => onRelaunch(terminalId)}>
-          {terminal?.agent === undefined ? 'New Shell' : 'Run Again'}
+          {terminal?.agent === undefined && terminal?.run === undefined ? 'New Shell' : 'Run Again'}
         </button>
       ) : null}
       {terminal?.restored === undefined ? null : (

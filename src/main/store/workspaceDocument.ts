@@ -13,6 +13,8 @@ import type { ClosedTerminalRecord, TerminalRecord } from '../terminals/session-
 
 export const WORKSPACE_DOCUMENT_VERSION = 1
 
+const RunCommandsSchema = z.object({ dev: z.string().min(1).optional(), test: z.string().min(1).optional() })
+
 const ProjectSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -23,7 +25,9 @@ const ProjectSchema = z.object({
   copiedPaths: z.array(z.string().min(1)).optional(),
   // Never an empty string: the service deletes the field rather than storing one.
   setupCommand: z.string().min(1).optional(),
-  approvedSetupCommand: z.string().min(1).optional()
+  approvedSetupCommand: z.string().min(1).optional(),
+  runCommands: RunCommandsSchema.optional().catch(undefined),
+  approvedRunCommands: RunCommandsSchema.optional().catch(undefined)
 })
 
 const WorktreeSchema = z.object({

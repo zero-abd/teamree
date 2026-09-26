@@ -57,7 +57,9 @@ export const GIT_METHODS = [
   'worktree.issues',
   'worktree.setup',
   'worktree.setupCheck',
-  'worktree.runSetup'
+  'worktree.runSetup',
+  'worktree.run',
+  'worktree.stopRun'
 ] as const
 
 export type GitMethodName = (typeof GIT_METHODS)[number]
@@ -127,7 +129,11 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.issues': (params) => service.listIssues(params),
     'worktree.setup': (params) => service.answerSetup(params),
     'worktree.setupCheck': (params) => service.checkSetup(params),
-    'worktree.runSetup': (params) => service.runSetup(params)
+    'worktree.runSetup': (params) => service.runSetup(params),
+    // Only a person in the window approves a repository's command; an agent's call runs what is approved.
+    'worktree.run': (params, call) =>
+      service.runCommand({ ...params, approve: params.approve === true && (call === undefined || fromWindow(call)) }),
+    'worktree.stopRun': (params) => service.stopRun(params)
   }
 }
 
@@ -187,5 +193,7 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.setup', Params.worktreeSetup, handlers['worktree.setup'])
   registry.register('worktree.setupCheck', Params.worktreeSetupCheck, handlers['worktree.setupCheck'])
   registry.register('worktree.runSetup', Params.worktreeRunSetup, handlers['worktree.runSetup'])
+  registry.register('worktree.run', Params.worktreeRun, handlers['worktree.run'])
+  registry.register('worktree.stopRun', Params.worktreeStopRun, handlers['worktree.stopRun'])
   return service
 }

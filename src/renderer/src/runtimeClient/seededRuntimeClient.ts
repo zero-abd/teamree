@@ -31,6 +31,7 @@ import { leaf, splitPane } from '../panes/paneLayout'
 import { rankPaths } from '@shared/fuzzyPath'
 import { searchLine, searchPattern, type SearchFileHits } from '@shared/search'
 import { siblingRuns } from '@shared/runCompare'
+import { RUN_KINDS, runCommandOf, runPaneOf } from '@shared/runCommands'
 import { descendantsOf } from '@shared/taskTree'
 import { nestRefusal } from '@shared/nesting'
 import { placePane, placePaneWithin } from '@shared/paneRoom'
@@ -550,7 +551,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
     'project.cloneProgress': () => null,
     'project.cancelClone': () => ({ cancelled: false }),
-    'project.setPaths': ({ projectId, linkedPaths, copiedPaths, setupCommand, fetchInBackground }) => {
+    'project.setPaths': ({ projectId, linkedPaths, copiedPaths, setupCommand, fetchInBackground, runCommands }) => {
       const project = required(projects.get(projectId), 'project')
       const next: Project = { ...project }
       if (linkedPaths !== undefined) {
@@ -568,6 +569,12 @@ export function createSeededRuntimeClient(): RuntimeClient {
       }
       if (fetchInBackground === true) delete next.fetchInBackground
       else if (fetchInBackground === false) next.fetchInBackground = false
+      if (runCommands !== undefined) {
+        const run = { ...next.runCommands, ...runCommands }
+        for (const kind of RUN_KINDS) if (!run[kind]?.trim()) delete run[kind]
+        if (Object.keys(run).length === 0) delete next.runCommands
+        else next.runCommands = run
+      }
       projects.set(next.id, next)
       announce({ type: 'projects' })
       return next
@@ -592,6 +599,34 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
     'worktree.setupCheck': () => ({}),
     'worktree.runSetup': ({ worktreeId }) => required(worktrees.get(worktreeId), 'worktree'),
+    'worktree.run': ({ worktreeId, kind, restart }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const run = runCommandOf(required(projects.get(worktree.projectId), 'project'), kind)
+      if (run === undefined) throw new Error(`no ${kind} command`)
+      const pane = runPaneOf(
+        [...terminals.values()].map((entry) => entry.record),
+        worktreeId,
+        kind
+      )
+      if (pane?.running === true && restart !== true) return pane
+      if (pane !== undefined) return handlers['terminal.relaunch']({ terminalId: pane.id })
+      const created = handlers['terminal.create']({ worktreeId, command: run.command, label: kind })
+      const terminal = required(terminals.get(created.id), 'terminal')
+      terminal.record = { ...terminal.record, run: kind }
+      return terminal.record
+    },
+    'worktree.stopRun': ({ worktreeId, kind }) => {
+      const pane = runPaneOf(
+        [...terminals.values()].map((entry) => entry.record),
+        worktreeId,
+        kind
+      )
+      const terminal = pane === undefined ? undefined : terminals.get(pane.id)
+      if (terminal === undefined) return null
+      terminal.record = { ...terminal.record, running: false, exitCode: 130 }
+      announce({ type: 'terminals' })
+      return terminal.record
+    },
     'worktree.branches': ({ projectId }) => ({ projectId, branches: [], readAt: Date.now() }),
     'worktree.pullRequests': ({ projectId }) => ({
       projectId,

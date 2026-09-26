@@ -1,7 +1,8 @@
 // What a pane is doing, read from a PTY rather than an agent's protocol: bytes arriving, how the
 // process ended, the title, the bell, and, outranking all of them, what the agent's hooks report.
 
-import type { AgentEvent, AgentKind } from './entities'
+import type { AgentEvent, AgentKind, RunKind } from './entities'
+import { runState } from './runCommands'
 import type { ScreenOpinion } from './screenOpinion'
 import type { TitleOpinion } from './titleOpinion'
 
@@ -36,6 +37,7 @@ export type PaneActivitySource = {
   /** What the agent last reported about itself, when it reports at all. */
   agentEvent?: AgentEvent
   tookTurn?: boolean
+  run?: RunKind
 }
 
 /**
@@ -77,6 +79,8 @@ export function agentSays(event: AgentEvent | undefined): AgentActivity | null {
  */
 export function activityOf(terminal: PaneActivitySource): AgentActivity {
   if (!terminal.running) {
+    // A Run pane somebody stopped ended as asked.
+    if (terminal.run !== undefined && runState(terminal) === 'stopped') return 'done'
     if (terminal.exitCode !== 0) return 'failed'
     // Declining a trust prompt also exits 0; only an agent that took a turn finished one.
     return terminal.tookTurn === false ? 'quiet' : 'done'

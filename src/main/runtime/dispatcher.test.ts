@@ -292,6 +292,7 @@ describe('dispatcher', () => {
       // Local: checks a copy out on this machine's disk.
       'worktree.restore',
       // Local: runs a command on this machine, as pressed.
+      'worktree.run',
       'worktree.runSetup',
       // Local: reads this machine's checkouts.
       'worktree.search',
@@ -303,6 +304,8 @@ describe('dispatcher', () => {
       'worktree.stageHunk',
       'worktree.startPoints',
       'worktree.status',
+      // Local: stops a process on this machine.
+      'worktree.stopRun',
       'worktree.undoDiscard',
       'worktree.unstageHunk',
       'worktree.unstagePath',

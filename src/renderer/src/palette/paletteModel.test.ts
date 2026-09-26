@@ -593,6 +593,30 @@ describe('what the palette offers for the worktree on screen', () => {
     expect(labels().some((label) => label.startsWith('Compare with'))).toBe(false)
   })
 
+  it('offers Run: Dev and Run: Tests with their commands, and Show, Restart and Stop while one runs', () => {
+    const runs = [
+      { kind: 'dev' as const, command: 'npm run dev' },
+      { kind: 'test' as const, command: 'npm test' }
+    ]
+    const items = buildPaletteItems(
+      context({ worktrees: [worktree({ id: 'w1' })], activeWorktreeId: 'w1', runs })
+    ).filter((item) => item.kind === 'action' && /^(run|restart-run|stop-run):/.test(item.id))
+    expect(items.map((item) => [item.id, item.label, item.hint])).toEqual([
+      ['run:dev', 'Run: Dev', 'npm run dev'],
+      ['run:test', 'Run: Tests', 'npm test']
+    ])
+    expect(
+      filterPalette(
+        buildPaletteItems(context({ worktrees: [worktree({ id: 'w1' })], activeWorktreeId: 'w1', runs })),
+        'run dev'
+      )[0]?.id
+    ).toBe('run:dev')
+
+    const running = [{ kind: 'dev' as const, command: 'npm run dev', state: 'running' as const }]
+    expect(labels({ runs: running })).toEqual(expect.arrayContaining(['Show Dev', 'Restart Dev', 'Stop Dev']))
+    expect(labels().some((label) => label.startsWith('Run:'))).toBe(false)
+  })
+
   it('offers Keep This Run… beside the compares, and none for a lone worktree', () => {
     const task = 'Add a sub function to src/math.ts'
     const runs = ['claude', 'codex'].map((agent, at) =>

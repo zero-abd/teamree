@@ -45,7 +45,18 @@ export type Project = {
   approvedSetupCommand?: string
   /** The command the primary checkout's lockfile suggests, while no setup command applies. Never run unasked. */
   suggestedSetup?: string
+  /** This Mac's Run Dev and Run Tests commands; each outranks the repository's and the detected one. */
+  runCommands?: RunCommands
+  /** The repository's run commands as this Mac last approved them; a different one asks before it runs. */
+  approvedRunCommands?: RunCommands
+  /** What the primary checkout's manifests suggest (`package.json` scripts, a Makefile, go.mod…). Read, never stored. */
+  detectedRun?: RunCommands
 }
+
+/** What a worktree's Run buttons start: its dev server, or its tests. */
+export type RunKind = 'dev' | 'test'
+
+export type RunCommands = { dev?: string; test?: string }
 
 /** What a checkout's lockfile suggests (`command`) and the directory it lacks for it (`missing`). */
 export type WorktreeSetupCheck = { command?: string; missing?: string }
@@ -57,6 +68,7 @@ export type ProjectRepositorySettings = {
   setupCommand?: string
   /** The ref new worktrees start from, as Settings' "Start new worktrees from" names it. */
   startFrom?: string
+  runCommands?: RunCommands
 }
 
 /** A `project.clone` while it runs. */
@@ -600,6 +612,8 @@ export type Terminal = {
   restored?: RestoredAs
   /** Running subagents its Claude Code session started; see `src/main/terminals/subagents.ts`. */
   subagents?: Subagent[]
+  /** Set on the pane a Run button started, for as long as this app runs; its `exitCode` is the run's result. */
+  run?: RunKind
 }
 
 /** One running subagent of a pane's session, from its hooks and its files under the agent's store. */

@@ -13,6 +13,7 @@ import { registerFileHandlers } from '../../files'
 import { createGitRunner, GitService, registerGitHandlers } from '../../git'
 import { backgroundFetchProjects, BaseFetcher } from '../../git/baseFetch'
 import { startSetupCommand } from '../../git/worktreeSetup'
+import { RunPanes } from '../../terminals/run-panes'
 import { agentMidTurn } from '../../git/worktreeNest'
 import { findProgram } from '../../git/worktreeLanding'
 import { registerSearchHandler } from '../../git/searchHandler'
@@ -28,6 +29,7 @@ import type { ScrollbackRepository } from '../../terminals/session-manager'
 import type { AgentNotice, NoticeAnswer } from '../../agentNotices'
 import type { ScreenMenu } from '../../../shared/screenOpinion'
 import type { SharedNoteSummary } from '../../../shared/sharedNote'
+import type { Terminal } from '../../../shared/entities'
 import { paletteTone, resolvePalette, type Appearance, type Tone } from '../../../shared/theme'
 import { registerAgentTrustHandlers, trustCheckoutFor } from './agentTrustHandlers'
 import { registerAppearanceHandlers } from './appearanceHandlers'
@@ -200,6 +202,20 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     }
   })
 
+  const manager = terminals.manager
+  const runPanes = new RunPanes({
+    list: (worktreeId) => manager.list(worktreeId),
+    create: (params) => manager.create(params),
+    relaunch: (params, command) => manager.relaunch(params, command),
+    interrupt: (terminalId) => manager.interrupt(terminalId)
+  })
+  // Announced by hand, as the setup pane is: none of these go through `terminal.create`.
+  const announced = async (pane: Promise<Terminal>): Promise<Terminal> => {
+    const terminal = await pane
+    workspaceEvents.emit({ type: 'terminals' })
+    workspaceEvents.emit({ type: 'layout', worktreeId: terminal.worktreeId })
+    return terminal
+  }
   const git = new GitService({
     store: registry.context.store,
     // Spread rather than passed as `undefined`, so the service's own default stands.
@@ -208,6 +224,13 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     ghBinary: () => findProgram('gh', [process.env.PATH]) ?? findProgram('gh', [loginShellPath()]),
     trustCheckout: trustCheckoutFor(registry.context.store),
     agentWorking: (worktreeId) => terminals.manager.list(worktreeId).some(agentMidTurn),
+    runPanes: {
+      start: (input) => announced(runPanes.start(input)),
+      stop: async (input) => {
+        const pane = await runPanes.stop(input)
+        return pane === null ? null : announced(Promise.resolve(pane))
+      }
+    },
     // The one seam between "a checkout is ready" and "a pane is open in it",
     // for a GUI create and a CLI create alike.
     startSetup: ({ worktree, command }) => {

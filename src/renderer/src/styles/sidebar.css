@@ -636,6 +636,15 @@
   color: var(--danger);
 }
 
+.worktree__run--passed {
+  color: var(--success);
+}
+
+.worktree__run--failed {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
 /* On the title line after the dot, in room the line always keeps, so nothing moves on hover. */
 .worktree__row:has(> .worktree__action) .worktree__title {
   padding-right: 18px;

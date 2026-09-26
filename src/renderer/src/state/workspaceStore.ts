@@ -4,9 +4,11 @@
 
 import { create } from 'zustand'
 import { hasCheckout } from '@shared/entities'
+import { RUN_LABEL, runCommandOf, runPaneOf } from '@shared/runCommands'
 import type {
   AgentConversation,
   AgentKind,
+  RunKind,
   CliInstall,
   CliStatus,
   ClosedPane,
@@ -393,6 +395,8 @@ type WorkspaceState = {
   recentFiles: Record<string, readonly string[]>
   /** The pane whose tab shows the name field, or null. */
   editingPaneName: string | null
+  /** A repository's run command waiting on Run or Skip before it first runs on this Mac. */
+  runAsk: { worktreeId: string; kind: RunKind; command: string } | null
   /** The worktree whose sidebar row shows the name field, or null. */
   editingWorktreeName: string | null
   /** Bumped when the runtime says a worktree's files moved; a file pane re-reads on it. */
@@ -800,6 +804,14 @@ type WorkspaceState = {
   /** Runs or skips a repository's setup command a new worktree is waiting on; Run approves it for the project. */
   answerSetup: (worktreeId: string, run: boolean) => Promise<void>
   /**
+   * Run Dev or Run Tests: shows the pane while it runs, else starts it (`restart` stops it first). A repository
+   * command this Mac has not approved asks first, in `runAsk`.
+   */
+  runInWorktree: (worktreeId: string, kind: RunKind, restart?: boolean) => Promise<void>
+  stopRun: (worktreeId: string, kind: RunKind) => Promise<void>
+  /** Run approves `runAsk`'s command for the project and runs it; Skip only drops the question. */
+  answerRunAsk: (run: boolean) => Promise<void>
+  /**
    * Stops or restarts teammates' keystrokes reaching a pane. Applied here, not waited for from the
    * stream: a mute that took a round trip to look pressed would be pressed twice.
    */
@@ -866,7 +878,13 @@ type WorkspaceState = {
    */
   setProjectPaths: (
     projectId: string,
-    settings: { linkedPaths?: string[]; copiedPaths?: string[]; setupCommand?: string; fetchInBackground?: boolean }
+    settings: {
+      linkedPaths?: string[]
+      copiedPaths?: string[]
+      setupCommand?: string
+      fetchInBackground?: boolean
+      runCommands?: { dev?: string; test?: string }
+    }
   ) => Promise<void>
   /** Sets one project's editor command, or clears it when given null. */
   setEditorCommand: (projectId: string, command: string | null) => void
@@ -1419,6 +1437,39 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }
   }
 
+  /** See `runInWorktree`; `approve` is the Run of `runAsk`, never a click on the button itself. */
+  const startRun = async (worktreeId: string, kind: RunKind, restart: boolean, approve: boolean): Promise<void> => {
+    const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
+    const project = get().projects.find((entry) => entry.id === worktree?.projectId)
+    const run = project === undefined ? undefined : runCommandOf(project, kind)
+    if (worktree === undefined || run === undefined) return
+    if (get().activeWorktreeId !== worktreeId) await get().openWorktree(worktreeId)
+    if (!run.approved && !approve) {
+      set({ runAsk: { worktreeId, kind, command: run.command } })
+      return
+    }
+    const pane = runPaneOf(Object.values(get().terminals), worktreeId, kind)
+    if (pane?.running === true && !restart) {
+      get().showPane(pane.id)
+      return
+    }
+    try {
+      const terminal = await runtimeClient.call('worktree.run', {
+        worktreeId,
+        kind,
+        ...(restart ? { restart: true } : {}),
+        ...(approve ? { approve: true } : {})
+      })
+      set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
+      panesAskedFor.add(terminal.id)
+      refresher.request(refreshTargets({ layouts: [worktreeId] }))
+      await refresher.flush()
+      get().showPane(terminal.id)
+    } catch (error) {
+      failed(`Could not run ${RUN_LABEL[kind]}`)(error)
+    }
+  }
+
   /** Shows a layout without writing it back: this window's copy is only as new as the last event that reached it. */
   const showLayout = (layout: Layout): void => {
     layoutEdits.bump(layout.worktreeId)
@@ -1590,6 +1641,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     namingMarkdown: null,
     recentFiles: {},
     editingPaneName: null,
+    runAsk: null,
     editingWorktreeName: null,
     worktreeFilesEpoch: 0,
 
@@ -3177,6 +3229,25 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       } catch (error) {
         failed(run ? 'Could not run the setup command' : 'Could not skip the setup command')(error)
       }
+    },
+
+    async runInWorktree(worktreeId, kind, restart = false) {
+      await startRun(worktreeId, kind, restart, false)
+    },
+
+    async stopRun(worktreeId, kind) {
+      try {
+        const terminal = await runtimeClient.call('worktree.stopRun', { worktreeId, kind })
+        if (terminal !== null) set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
+      } catch (error) {
+        failed(`Could not stop ${RUN_LABEL[kind]}`)(error)
+      }
+    },
+
+    async answerRunAsk(run) {
+      const ask = get().runAsk
+      set({ runAsk: null })
+      if (ask !== null && run) await startRun(ask.worktreeId, ask.kind, false, true)
     },
 
     async saveProjectSettings(projectId) {

@@ -3,10 +3,10 @@
 
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { Project, Worktree } from '../../shared/entities'
+import type { Project, Terminal, Worktree } from '../../shared/entities'
 import { MAX_WORKTREE_NAME_CHARS } from '../../shared/methods'
 import { createDispatcher } from '../runtime/dispatcher'
-import { MethodRegistry } from '../runtime/methodRegistry'
+import { MethodRegistry, WINDOW_CONNECTION_PREFIX } from '../runtime/methodRegistry'
 import { createRuntimeContext } from '../runtime/runtimeContext'
 import { SubscriptionHub } from '../runtime/subscriptionHub'
 import { WorkspaceStore } from '../store/workspaceStore'
@@ -108,5 +108,51 @@ describe('worktree.rename on the wire', () => {
     await expect(
       call('worktree.rename', { worktreeId: 'w1', name: 'x'.repeat(MAX_WORKTREE_NAME_CHARS + 1) })
     ).rejects.toThrow(/^invalid_params:/)
+  })
+})
+
+describe('worktree.run', () => {
+  it('lets only a person in the window approve a repository’s command, and keeps the approval', async () => {
+    const repo = await createTempRepo()
+    repos.push(repo)
+    await repo.write('.teamree/project.json', '{"runCommands": {"test": "make check"}}')
+    await repo.commit('share run commands')
+    const file = path.join(repo.base, 'workspace.json')
+    const store = await WorkspaceStore.open(file)
+    const registry = new MethodRegistry(
+      createRuntimeContext({ version: '0.0.0-test', store, subscriptions: new SubscriptionHub() })
+    )
+    const started: string[] = []
+    const service = new GitService({
+      worktreesRoot: repo.worktreesRoot,
+      store,
+      runPanes: {
+        start: async ({ command }) => (started.push(command), { id: 't_test', run: 'test' } as Terminal),
+        stop: async () => null
+      }
+    })
+    services.push(service)
+    registerGitHandlers(registry, service)
+    const dispatch = createDispatcher(registry)
+    const from = async (connectionId: string, method: string, params: unknown): Promise<unknown> => {
+      const response = await dispatch({ id: `${method}-${connectionId}`, method, params }, { connectionId })
+      if (!response.ok) throw new Error(`${response.error.code}: ${response.error.message}`)
+      return response.result
+    }
+
+    const project = (await from('cli', 'project.add', { path: repo.repoPath })) as Project
+    const worktree = await service.whenSettled(
+      ((await from('cli', 'worktree.create', { projectId: project.id, name: 'x' })) as Worktree).id
+    )
+    const run = { worktreeId: worktree.id, kind: 'test', approve: true }
+    await expect(from('cli', 'worktree.run', run)).rejects.toThrow(/^conflict:/)
+    expect(started).toEqual([])
+
+    await from(`${WINDOW_CONNECTION_PREFIX}1`, 'worktree.run', run)
+    await from('cli', 'worktree.run', { worktreeId: worktree.id, kind: 'test' })
+    expect(started).toEqual(['make check', 'make check'])
+    await store.flush()
+    const reopened = await WorkspaceStore.open(file)
+    expect(reopened.getProject(project.id)?.approvedRunCommands).toEqual({ test: 'make check' })
   })
 })

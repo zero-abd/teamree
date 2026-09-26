@@ -3,7 +3,8 @@
 
 import { createContext, Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { agentLaunchCommand } from '@shared/agentLaunch'
-import type { Project } from '@shared/entities'
+import type { Project, RunKind } from '@shared/entities'
+import { RUN_KINDS } from '@shared/runCommands'
 import { effectiveProjectSettings, settingSource, startPointOf } from '@shared/projectSettings'
 import { AgentGlyph } from '../agents/glyphs'
 import { harnessName } from '../agents/harnesses'
@@ -142,6 +143,7 @@ function useProjectRows(): (project: Project) => SettingsRow[] {
       { label: 'Symlink into every new worktree', words: applied.linkedPaths ?? [] },
       { label: 'Copy into every new worktree', words: applied.copiedPaths ?? [] },
       { label: 'Setup command', words: [applied.setupCommand ?? ''] },
+      ...RUN_KINDS.map((kind) => ({ label: RUN_SETTING[kind], words: [applied.runCommands?.[kind] ?? ''] })),
       {
         label: 'Open checkouts in',
         words: [firstFound, ...editors.map((option) => option.label), 'Other…', typed]
@@ -1212,6 +1214,9 @@ function CarriedPaths({ project }: { project: Project }): React.JSX.Element {
         />
       ) : null}
       {shown.row('Setup command') ? <SetupCommand project={project} /> : null}
+      {RUN_KINDS.map((kind) =>
+        shown.row(RUN_SETTING[kind]) ? <RunCommand key={kind} project={project} kind={kind} /> : null
+      )}
     </>
   )
 }
@@ -1219,9 +1224,57 @@ function CarriedPaths({ project }: { project: Project }): React.JSX.Element {
 /** The one setup command a new worktree runs, stored and typed into the pane verbatim. */
 function SetupCommand({ project }: { project: Project }): React.JSX.Element {
   const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
+  return (
+    <CommandField
+      id={`settings-setup-${project.id}`}
+      label="Setup command"
+      example="npm ci"
+      local={project.setupCommand}
+      shared={project.repository?.setupCommand}
+      detected={project.suggestedSetup}
+      save={(setupCommand) => void setProjectPaths(project.id, { setupCommand })}
+    />
+  )
+}
+
+/** What Run Dev or Run Tests starts in a worktree of this project. */
+function RunCommand({ project, kind }: { project: Project; kind: RunKind }): React.JSX.Element {
+  const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
+  return (
+    <CommandField
+      id={`settings-run-${kind}-${project.id}`}
+      label={RUN_SETTING[kind]}
+      example={kind === 'dev' ? 'npm run dev' : 'npm test'}
+      local={project.runCommands?.[kind]}
+      shared={project.repository?.runCommands?.[kind]}
+      detected={project.detectedRun?.[kind]}
+      save={(command) => void setProjectPaths(project.id, { runCommands: { [kind]: command } })}
+    />
+  )
+}
+
+const RUN_SETTING: Record<RunKind, string> = { dev: 'Dev command', test: 'Test command' }
+
+/** One command, written on blur or Enter; emptied, it falls back to the repository's and says so. */
+function CommandField({
+  id,
+  label,
+  example,
+  local,
+  shared,
+  detected,
+  save
+}: {
+  id: string
+  label: string
+  example: string
+  local: string | undefined
+  shared: string | undefined
+  detected: string | undefined
+  save: (command: string) => void
+}): React.JSX.Element {
   const shown = useShown()
-  const shared = project.repository?.setupCommand
-  const stored = project.setupCommand ?? shared ?? ''
+  const stored = local ?? shared ?? ''
   const [draft, setDraft] = useState(stored)
 
   useEffect(() => {
@@ -1231,25 +1284,22 @@ function SetupCommand({ project }: { project: Project }): React.JSX.Element {
   const commit = (): void => {
     const next = draft.trim()
     if (next === stored) return
-    // Emptied, the field falls back to the repository's command, and says so.
     if (next === '' && shared !== undefined) setDraft(shared)
-    void setProjectPaths(project.id, { setupCommand: next })
+    save(next)
   }
-
-  const id = `settings-setup-${project.id}`
 
   return (
     <div className="settings-field">
       <label className="settings-field__label" htmlFor={id}>
-        <Marked text="Setup command" />
+        <Marked text={label} />
       </label>
       <input
         id={id}
         className="settings-field__input"
         type="text"
         value={draft}
-        placeholder={project.suggestedSetup === undefined ? 'None' : `None · ${project.suggestedSetup} detected`}
-        title="e.g. npm ci"
+        placeholder={detected === undefined ? 'None' : `None · ${detected} detected`}
+        title={`e.g. ${example}`}
         {...hitMark(shown, [stored])}
         autoComplete="off"
         spellCheck={false}
@@ -1262,11 +1312,7 @@ function SetupCommand({ project }: { project: Project }): React.JSX.Element {
           }
         }}
       />
-      <SettingSource
-        local={project.setupCommand}
-        repository={shared}
-        onReset={() => void setProjectPaths(project.id, { setupCommand: '' })}
-      />
+      <SettingSource local={local} repository={shared} onReset={() => save('')} />
     </div>
   )
 }

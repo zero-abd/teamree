@@ -112,6 +112,8 @@ function WorkspaceView({
   const paneSearch = useWorkspaceStore((state) => state.paneSearch)
   const closePaneSearch = useWorkspaceStore((state) => state.closePaneSearch)
   const answerSetup = useWorkspaceStore((state) => state.answerSetup)
+  const runAsk = useWorkspaceStore((state) => state.runAsk)
+  const answerRunAsk = useWorkspaceStore((state) => state.answerRunAsk)
   const dashboardOpen = useWorkspaceStore((state) => state.dashboardOpen)
   const projects = useWorkspaceStore((state) => state.projects)
   const connection = useWorkspaceStore((state) => state.connection)
@@ -189,6 +191,9 @@ function WorkspaceView({
     <main className="workspace">
       {worktree.setupAsk === undefined ? null : (
         <SetupAsk command={worktree.setupAsk} onAnswer={(run) => void answerSetup(worktree.id, run)} />
+      )}
+      {runAsk === null || runAsk.worktreeId !== worktree.id ? null : (
+        <SetupAsk command={runAsk.command} label={runAsk.kind} onAnswer={(run) => void answerRunAsk(run)} />
       )}
       {setupProject === undefined ? null : <SetupOffer key={worktree.id} project={setupProject} worktree={worktree} />}
       <div className="workspace__body">

@@ -7,6 +7,7 @@ import {
   type InstalledAgent,
   type Project,
   type RemovedWorktree,
+  type RunKind,
   type Terminal,
   type UpdateState,
   type Worktree
@@ -23,6 +24,8 @@ import { agentRows, agoLabel, TONE_LABEL, worktreeTone, type DotTone } from '../
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { automaticUpdatesLabel } from '../updates/updateNotice'
 import { landLabel, landNote, type LandOffer } from '../workspace/rightPanel/landOffer'
+import type { RunOffer } from '../workspace/runButtons'
+import { RUN_LABEL } from '@shared/runCommands'
 import type { RightPanelTab } from '../workspace/rightPanel/rightPanelState'
 
 /** Every command this window has (derived from `WorkspaceCommand`, so none go missing) plus the palette's own rows. */
@@ -54,6 +57,10 @@ export type PaletteAction =
   /** A query that found nothing to run: New Task with it as the task, Open Branch narrowed to it. */
   | `new-task:${string}`
   | `open-branch:${string}`
+  /** Run Dev or Run Tests in the worktree on screen, restarted, or stopped. */
+  | `run:${RunKind}`
+  | `restart-run:${RunKind}`
+  | `stop-run:${RunKind}`
 
 /** What the sidebar row's menu does to the worktree on screen. */
 type WorktreeAction =
@@ -143,6 +150,8 @@ export type PaletteContext = {
   terminals?: readonly Terminal[]
   /** Whether the worktree on screen has a past conversation to resume; absent reads as none. */
   resumable?: boolean
+  /** The run commands of the worktree on screen, each with its pane. */
+  runs?: readonly RunOffer[]
 }
 
 /**
@@ -265,6 +274,7 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
               }
             ]
           : []),
+        ...runRows(context.runs ?? []),
         { id: 'rename-worktree', label: 'Rename Worktree…', keywords: 'rename name title worktree' },
         { id: 'reveal-worktree', label: 'Reveal in Finder', keywords: 'reveal finder show folder directory checkout' },
         { id: 'copy-worktree-path', label: 'Copy Path', keywords: 'copy path clipboard worktree checkout directory' },
@@ -333,6 +343,22 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
     here: true,
     ...(row.unavailable === undefined ? {} : { unavailable: row.unavailable })
   }))
+}
+
+/** `Run: Dev` with its command as the hint, or Show, Restart and Stop while its pane runs. */
+function runRows(runs: readonly RunOffer[]): ActionRow[] {
+  const keywords = 'run start dev server test tests script npm serve watch'
+  return runs.flatMap((run): ActionRow[] => {
+    const label = RUN_LABEL[run.kind]
+    if (run.state !== 'running') {
+      return [{ id: `run:${run.kind}`, label: `Run: ${label}`, keywords, hint: run.command }]
+    }
+    return [
+      { id: `run:${run.kind}`, label: `Show ${label}`, keywords, hint: run.command },
+      { id: `restart-run:${run.kind}`, label: `Restart ${label}`, keywords: `${keywords} restart again` },
+      { id: `stop-run:${run.kind}`, label: `Stop ${label}`, keywords: `${keywords} stop kill interrupt` }
+    ]
+  })
 }
 
 /** The header's land: dimmed with why while blocked, and a merge that commits first counts what it commits. */
