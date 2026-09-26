@@ -1,9 +1,9 @@
 // The whole in-place update against real tools: a tiny ad-hoc-signed app in a temporary
-// "Applications", its next version zipped and served with a manifest from a local server,
+// "Applications", its next version zipped and served with a signed manifest from a local server,
 // then check → download → verify → unpack → restart → the helper's swap and relaunch.
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, generateKeyPairSync, sign, type KeyObject } from 'node:crypto'
 import {
   chmodSync,
   existsSync,
@@ -27,6 +27,9 @@ import { UpdateService } from './updateService'
 
 const REPOSITORY = 'owner/project'
 const IDENTIFIER = 'us.teamree.updatetest'
+/** Stands in for the owner's key; the app under test trusts only its public half. */
+const OWNER = generateKeyPairSync('ed25519')
+const TRUSTED = [OWNER.publicKey.export({ type: 'spki', format: 'pem' }).toString()]
 
 let root: string
 let server: Server | undefined
@@ -75,10 +78,10 @@ function versionOf(path: string): string {
   ).stdout.trim()
 }
 
-type Published = { release: LatestRelease; allowed: (url: string) => boolean }
+type Published = { release: LatestRelease; allowed: (url: string) => boolean; requested: string[] }
 
-/** Zips `build/teamree.app`, writes its manifest, and serves both the way a release does. */
-async function publish(options: { sha256?: string } = {}): Promise<Published> {
+/** Zips `build/teamree.app`, writes and signs its manifest, and serves them the way a release does. */
+async function publish(options: { sha256?: string; signer?: KeyObject | null } = {}): Promise<Published> {
   const serve = join(root, 'serve')
   mkdirSync(serve)
   const zip = join(serve, 'teamree-0.3.0.zip')
@@ -92,11 +95,17 @@ async function publish(options: { sha256?: string } = {}): Promise<Published> {
     size: bytes.length,
     sha256: options.sha256 ?? createHash('sha256').update(bytes).digest('hex')
   }
-  writeFileSync(join(serve, 'teamree-mac.json'), JSON.stringify(manifest))
+  const text = JSON.stringify(manifest)
+  writeFileSync(join(serve, 'teamree-mac.json'), text)
+  const signer = options.signer === undefined ? OWNER.privateKey : options.signer
+  if (signer !== null)
+    writeFileSync(join(serve, 'teamree-mac.json.sig'), sign(null, Buffer.from(text), signer).toString('base64'))
 
   const prefix = `/${REPOSITORY}/releases/download/v0.3.0/`
+  const requested: string[] = []
   server = createServer((request, response) => {
     const name = request.url?.startsWith(prefix) ? request.url.slice(prefix.length) : ''
+    requested.push(name)
     const file = join(serve, name)
     if (name === '' || name.includes('/') || !existsSync(file)) return void response.writeHead(404).end()
     response.writeHead(200).end(readFileSync(file))
@@ -120,9 +129,10 @@ async function publish(options: { sha256?: string } = {}): Promise<Published> {
       installer: null,
       releaseUrl: `https://github.com/${REPOSITORY}/releases/tag/v0.3.0`,
       publishedAt: null,
-      assets: [asset('teamree-mac.json'), asset('teamree-0.3.0.zip')]
+      assets: readdirSync(serve).map(asset)
     },
-    allowed: (url) => new URL(url).origin === origin
+    allowed: (url) => new URL(url).origin === origin,
+    requested
   }
 }
 
@@ -153,7 +163,8 @@ function service(published: Published) {
       bundlePath: join(root, 'Applications', 'teamree.app'),
       stagingRoot: join(root, 'userData', 'updates'),
       pid: app.pid as number,
-      opener: opener()
+      opener: opener(),
+      trustedKeys: TRUSTED
     }),
     restart: () => restarts.push(1),
     onProblem: (message) => problems.push(message)
@@ -194,6 +205,26 @@ describe.runIf(process.platform === 'darwin')('updating in place', () => {
     const flagged = spawnSync('/usr/bin/xattr', ['-r', join(applications, 'teamree.app')], { encoding: 'utf8' })
     expect(flagged.stdout).not.toContain('com.apple.quarantine')
     expect(existsSync(join(root, 'userData', 'updates', '0.3.0'))).toBe(false)
+  })
+
+  it('ignores a release the owner did not sign: nothing offered, the zip never fetched', async () => {
+    for (const signer of [null, generateKeyPairSync('ed25519').privateKey]) {
+      rmSync(root, { recursive: true, force: true })
+      mkdirSync(root)
+      fakeApp(join(root, 'Applications', 'teamree.app'), '0.2.0')
+      fakeApp(join(root, 'build', 'teamree.app'), '0.3.0')
+      const published = await publish({ signer })
+      const { update, problems } = service(published)
+
+      await update.check({ force: true, person: true })
+      await vi.waitFor(() => expect(problems.join('\n')).toMatch(/teamree-mac\.json/), { timeout: 30_000 })
+      expect(update.state().available).toBeNull()
+      expect(update.state().install ?? null).toBeNull()
+      expect(published.requested).not.toContain('teamree-0.3.0.zip')
+      app?.kill()
+      await new Promise((resolve) => server?.close(resolve))
+      server = undefined
+    }
   })
 
   it('refuses a zip whose checksum the manifest does not promise, and keeps nothing', async () => {

@@ -42,13 +42,14 @@ describe('the zip', () => {
 })
 
 describe('what is uploaded', () => {
-  it('is the two images, the zip, the manifest and the checksums', () => {
+  it('is the two images, the zip, the manifest, its signature and the checksums', () => {
     expect(
       releaseAssets({
         dmg: 'dist/teamree-0.3.0.dmg',
         stableDmg: 'dist/teamree-mac-universal.dmg',
         zip: 'dist/teamree-0.3.0.zip',
         manifest: 'dist/teamree-mac.json',
+        signature: 'dist/teamree-mac.json.sig',
         sums: 'dist/SHA256SUMS.txt'
       })
     ).toEqual([
@@ -56,6 +57,7 @@ describe('what is uploaded', () => {
       'dist/teamree-mac-universal.dmg',
       'dist/teamree-0.3.0.zip',
       'dist/teamree-mac.json',
+      'dist/teamree-mac.json.sig',
       'dist/SHA256SUMS.txt'
     ])
   })
@@ -74,6 +76,6 @@ describe('what is uploaded', () => {
       zip: 'teamree-0.3.0.zip'
     }).join('\n')
     expect(plan).toContain('teamree-0.3.0.zip')
-    expect(plan).toContain('teamree-mac.json')
+    expect(plan).toContain('teamree-mac.json.sig')
   })
 })

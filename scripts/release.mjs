@@ -1,6 +1,6 @@
 // Cuts a release from this machine and runs every gate first, stopping at the first that says no.
 // `--dry-run` does all of it and stops before the tag and the release.
-import { createHash } from 'node:crypto'
+import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign } from 'node:crypto'
 import {
   copyFileSync,
   createReadStream,
@@ -14,7 +14,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { spawnSync } from 'node:child_process'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
@@ -141,6 +141,8 @@ export function preflightRefusals(state) {
     )
   }
 
+  if (state.signing) refusals.push(state.signing)
+
   if (state.localTag && state.localTag !== state.head) {
     refusals.push(
       `the tag ${state.tag} already exists here and points at ${short(state.localTag)}, not at HEAD ` +
@@ -179,6 +181,56 @@ export const STABLE_DMG_NAME = 'teamree-mac-universal.dmg'
 /** Read by the app (src/main/updates/releaseManifest.ts) to find, size and hash the zip it installs from. */
 export const MANIFEST_NAME = 'teamree-mac.json'
 
+/** Uploaded beside the manifest: the base64 ed25519 signature over its exact bytes. */
+export const SIGNATURE_NAME = `${MANIFEST_NAME}.sig`
+
+/** Holds the signing key's path, or the PKCS8 PEM itself; unset, the key is read from `~/.config/teamree`. */
+export const SIGNING_KEY_ENV = 'TEAMREE_RELEASE_SIGNING_KEY'
+
+const KEYS_SOURCE = join(REPO_ROOT, 'src', 'main', 'updates', 'releaseKeys.ts')
+
+/** The public keys the app trusts, read out of the file it embeds them from. */
+export function trustedPublicKeys(source = readFileSync(KEYS_SOURCE, 'utf8')) {
+  return [...source.matchAll(/-----BEGIN PUBLIC KEY-----[\s\S]*?-----END PUBLIC KEY-----/g)].map(([pem]) => pem)
+}
+
+/**
+ * The key the manifest is signed with, or `{ refusal }`. Refused when missing (a dry run gets a throwaway),
+ * readable by others, not ed25519, or not one the app trusts. Its contents are never printed.
+ */
+export function loadSigningKey({ env = process.env, home = homedir(), trusted = trustedPublicKeys(), dryRun = false }) {
+  const given = env[SIGNING_KEY_ENV]?.trim() || null
+  const inline = given?.startsWith('-----BEGIN') ? given : null
+  const path = inline === null ? (given ?? join(home, '.config', 'teamree', 'release-signing-key.pem')) : null
+  if (path !== null && !existsSync(path)) {
+    if (dryRun) return { key: generateKeyPairSync('ed25519').privateKey, throwaway: true }
+    return { refusal: `no release signing key at ${path}. Set ${SIGNING_KEY_ENV} or put it there (docs/releasing.md).` }
+  }
+  if (path !== null) {
+    const mode = statSync(path).mode & 0o777
+    if ((mode & 0o077) !== 0) {
+      return { refusal: `the signing key ${path} is mode ${mode.toString(8)}; run \`chmod 600 ${path}\`.` }
+    }
+  }
+  let key
+  try {
+    key = createPrivateKey(inline ?? readFileSync(path, 'utf8'))
+  } catch {
+    return { refusal: `the signing key ${path ?? `in ${SIGNING_KEY_ENV}`} is not a PKCS8 PEM private key.` }
+  }
+  if (key.asymmetricKeyType !== 'ed25519') return { refusal: 'the signing key is not an ed25519 key.' }
+  const own = createPublicKey(key).export({ type: 'spki', format: 'pem' }).toString().trim()
+  if (!trusted.some((pem) => pem.trim() === own)) {
+    return { refusal: 'the signing key does not match any key in src/main/updates/releaseKeys.ts.' }
+  }
+  return { key, throwaway: false }
+}
+
+/** The base64 ed25519 signature over `bytes`, the manifest exactly as uploaded. */
+export function signManifest(bytes, key) {
+  return sign(null, bytes, key).toString('base64')
+}
+
 /** The manifest's text: the tag's version, and the zip's name, size and SHA-256. */
 export function releaseManifest({ tag, file, size, sha256 }) {
   return `${JSON.stringify({ version: tag.replace(/^v/, ''), file, size, sha256 }, null, 2)}\n`
@@ -195,8 +247,8 @@ export function zipRefusal({ entries, version, verifies }, expected) {
 }
 
 /** Every file the release carries, in upload order. */
-export function releaseAssets({ dmg, stableDmg, zip, manifest, sums }) {
-  return [dmg, stableDmg, zip, manifest, sums]
+export function releaseAssets({ dmg, stableDmg, zip, manifest, signature, sums }) {
+  return [dmg, stableDmg, zip, manifest, signature, sums]
 }
 
 /** `shasum -a 256` output, byte for byte, so a reader can compare it as printed. */
@@ -274,7 +326,7 @@ export function releaseNotes({ tag, repo, checksums, kind, highlights = null }) 
 }
 
 /** What is about to happen, said in full before anything irreversible starts. */
-export function planLines({ tag, repo, head, branch, dmg, size, hash, kind, dryRun, zip }) {
+export function planLines({ tag, repo, head, branch, dmg, size, hash, kind, dryRun, zip, throwaway = false }) {
   return [
     '',
     '================================================================',
@@ -287,7 +339,8 @@ export function planLines({ tag, repo, head, branch, dmg, size, hash, kind, dryR
     `  sha256       ${hash}`,
     `  signature    ${kind}${isDistributable(kind) ? '' : ' — a Mac that downloads this will refuse it until'}`,
     ...(isDistributable(kind) ? [] : ['               the quarantine attribute is cleared by hand.']),
-    `  also         ${zip}, ${MANIFEST_NAME}, SHA256SUMS.txt`,
+    `  also         ${zip}, ${MANIFEST_NAME}, ${SIGNATURE_NAME}, SHA256SUMS.txt`,
+    ...(throwaway ? ['  manifest     signed with a throwaway key; the app would refuse it'] : []),
     '================================================================',
     ''
   ]
@@ -445,7 +498,11 @@ async function main(argv) {
   })
   const repoName = process.env.GH_REPO?.trim() || (named.status === 0 ? named.stdout.trim() : '') || null
 
+  // Read once, before any gate: a release that could not sign would fail after the whole build.
+  const signing = loadSigningKey({ dryRun: parsed.dryRun })
+
   const state = {
+    signing: signing.refusal ?? null,
     tag,
     version: pkg.version,
     head,
@@ -474,6 +531,7 @@ async function main(argv) {
 
   console.log(`release: ${tag} from ${short(head)} on ${branch}, into ${repoName}.`)
   console.log(`release: ${GATES.length + 2} gates to pass; every one of them can stop this.`)
+  if (signing.throwaway) console.log('release: no signing key; this dry run signs with a throwaway key.')
 
   for (const gate of GATES) {
     if (!runGate(gate)) {
@@ -505,10 +563,10 @@ async function main(argv) {
   // A report when unsigned (the default), a gate when credentials are set: a signing run
   // that silently produced an unsigned build is the failure that reaches people.
   heading('--- verify-signing ---')
-  const signing = resolveMacSigning(process.env)
+  const macSigning = resolveMacSigning(process.env)
   const signingResult = spawnSync(
     process.execPath,
-    [join(REPO_ROOT, 'scripts', 'verify-signing.mjs'), ...(signing.mode === 'signed' ? ['--require-signed'] : [])],
+    [join(REPO_ROOT, 'scripts', 'verify-signing.mjs'), ...(macSigning.mode === 'signed' ? ['--require-signed'] : [])],
     { stdio: 'inherit', cwd: REPO_ROOT }
   )
   if (signingResult.status !== 0) {
@@ -544,12 +602,22 @@ async function main(argv) {
 
   const manifestPath = join(dist, MANIFEST_NAME)
   writeFileSync(manifestPath, releaseManifest({ tag, file: zips[0], size: statSync(zip).size, sha256: zipHash }))
+  const signaturePath = join(dist, SIGNATURE_NAME)
+  writeFileSync(signaturePath, `${signManifest(readFileSync(manifestPath), signing.key)}\n`)
 
   const checksums =
-    `${checksumLine(hash, dmgs[0])}\n${checksumLine(hash, STABLE_DMG_NAME)}\n` + `${checksumLine(zipHash, zips[0])}\n`
+    `${checksumLine(hash, dmgs[0])}\n${checksumLine(hash, STABLE_DMG_NAME)}\n` +
+    `${checksumLine(zipHash, zips[0])}\n${checksumLine(await sha256(signaturePath), SIGNATURE_NAME)}\n`
   const sumsPath = join(dist, 'SHA256SUMS.txt')
   writeFileSync(sumsPath, checksums)
-  const assets = releaseAssets({ dmg, stableDmg, zip, manifest: manifestPath, sums: sumsPath })
+  const assets = releaseAssets({
+    dmg,
+    stableDmg,
+    zip,
+    manifest: manifestPath,
+    signature: signaturePath,
+    sums: sumsPath
+  })
 
   const notes = releaseNotes({ tag, repo: repoName, checksums, kind, highlights: state.highlights })
   const notesPath = join(dist, 'RELEASE_NOTES.md')
@@ -565,7 +633,8 @@ async function main(argv) {
     hash,
     kind,
     dryRun: parsed.dryRun,
-    zip: zips[0]
+    zip: zips[0],
+    throwaway: signing.throwaway
   })) {
     console.log(line)
   }
@@ -574,7 +643,9 @@ async function main(argv) {
   console.log('----------------------------------------------------------------')
   console.log(notes)
   console.log('----------------------------------------------------------------')
-  console.log(`Written to ${sumsPath}, ${manifestPath} and ${notesPath}; all inside gitignored dist/.`)
+  console.log(
+    `Written to ${sumsPath}, ${manifestPath}, ${signaturePath} and ${notesPath}; all inside gitignored dist/.`
+  )
 
   if (parsed.dryRun) {
     console.log('')

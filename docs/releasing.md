@@ -180,7 +180,7 @@ Publishing is three steps, in this order, and each is announced:
 git tag -a v0.1.0 -m "teamree v0.1.0"
 git push origin v0.1.0
 gh release create v0.1.0 teamree-0.1.0.dmg teamree-mac-universal.dmg \
-  teamree-0.1.0.zip teamree-mac.json SHA256SUMS.txt ...
+  teamree-0.1.0.zip teamree-mac.json teamree-mac.json.sig SHA256SUMS.txt ...
 ```
 
 A dry run prints that line with the real file names.
@@ -191,7 +191,8 @@ uses the existing tag rather than making another.
 ### How the app updates itself from it
 
 `package:mac` builds a universal `.zip` of the app beside the `.dmg`, and the
-release carries both plus `teamree-mac.json`:
+release carries both plus `teamree-mac.json` and its signature,
+`teamree-mac.json.sig`:
 
 ```json
 { "version": "0.1.0", "file": "teamree-0.1.0.zip", "size": 201761957, "sha256": "…" }
@@ -201,7 +202,10 @@ A running teamree checks `releases/latest` on launch, every hour, on waking
 from sleep, and when the window regains focus after 30 or more minutes away —
 no two automatic checks inside 10 minutes, so GitHub's unauthenticated rate
 limit (60 requests/hour per IP) is never in reach. When it is older, it
-fetches the manifest, then the zip, and refuses unless the size
+fetches the manifest and its signature and ignores the release, logging why,
+unless a key in `src/main/updates/releaseKeys.ts` signed the manifest's exact
+bytes, the manifest names the tag's version, and that version is newer than the
+running one. Only then does it fetch the zip, and it refuses unless the size
 and SHA-256 match the manifest (and GitHub's own digest, when it gives one). It
 unpacks into `~/Library/Application Support/teamree/updates` and refuses unless
 the app there has teamree's identifier, the manifest's version and a signature
@@ -226,6 +230,24 @@ candidate (`v0.2.0-rc.1`) is not installed in place either: its manifest names
 the tag's version and the app inside says `0.2.0`. A copy running from the
 disk image, translocated, or from a folder it cannot write gets the `.dmg`.
 
+### The release signing key
+
+Publishing a release is not enough to push an update: the app ignores a
+manifest that no key it embeds has signed.
+
+- **Where.** `~/.config/teamree/release-signing-key.pem` (ed25519, PKCS8 PEM,
+  mode 600), or `TEAMREE_RELEASE_SIGNING_KEY` holding its path or the PEM
+  itself. The release refuses to start without it, when the file is readable by
+  others, or when its public half is not in `releaseKeys.ts`. A dry run with no
+  key signs with a throwaway one and says so.
+- **Back it up** in a password manager. It never goes in the repository.
+- **Rotation.** Add the new public key to `TRUSTED_RELEASE_KEYS` and release
+  that, signed with the old key. Once people have it, sign with the new key and
+  drop the old one. A leaked key is rotated out the same way, at once.
+- **Lost.** Installed copies accept no further update. Make a new key, put its
+  public half in `releaseKeys.ts` in place of the old, and release; everybody
+  reinstalls from the `.dmg` by hand once.
+
 ### One check that is deliberately not a gate
 
 ```sh
@@ -242,7 +264,8 @@ that anybody new will follow.
 
 ### What a dry run leaves behind
 
-`dist/SHA256SUMS.txt`, `dist/teamree-mac.json` and `dist/RELEASE_NOTES.md`,
+`dist/SHA256SUMS.txt`, `dist/teamree-mac.json`, `dist/teamree-mac.json.sig` and
+`dist/RELEASE_NOTES.md`,
 all inside gitignored `dist/`, plus whatever the packaging step built. Nothing
 else, anywhere.
 

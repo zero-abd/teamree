@@ -5,7 +5,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } fr
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { relaunchOptions, swapBlock } from './selfInstaller'
+import { relaunchOptions, SelfInstaller, swapBlock } from './selfInstaller'
 
 let root: string
 let bundle: string
@@ -62,5 +62,17 @@ describe('the relaunch', () => {
       foreground: false,
       env: { TEAMREE_USER_DATA_DIR: '/tmp/p', TEAMREE_WORKTREES_ROOT: '/tmp/w', TEAMREE_BACKGROUND_LAUNCH: '1' }
     })
+  })
+})
+
+describe('the keys a manifest may be signed with', () => {
+  it('are the shipped ones outside the test runner', () => {
+    const vitest = process.env['VITEST']
+    delete process.env['VITEST']
+    try {
+      expect(() => new SelfInstaller({ bundlePath: bundle, stagingRoot: root, trustedKeys: [] })).toThrow(/tests/)
+    } finally {
+      process.env['VITEST'] = vitest
+    }
   })
 })
