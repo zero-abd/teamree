@@ -6,8 +6,10 @@ import type { WorktreeStatus } from '@shared/entities'
 import { attention, dashboardRows } from '../dashboard/dashboardRows'
 import { stepNeedingYou } from '../dashboard/needingYou'
 import { paneCount } from '../sidebar/agentRows'
+import { baseFreshness } from '../sidebar/baseFreshness'
 import { formatReadAge, summarizeWorktreeStatus } from '../sidebar/worktreeStatusSummary'
 import { RUNTIME_IS_SEEDED } from '../runtimeClient/currentRuntimeClient'
+import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { requestRegionFocus } from './regions'
 import { useKeepAwake } from './keepAwake'
@@ -39,6 +41,9 @@ export function StatusBar(): React.JSX.Element {
     (state) => state.dashboardOpen || state.settingsOpen || state.helpOpen || state.teamworkProjectId !== null
   )
   const revealPane = useWorkspaceStore((state) => state.revealPane)
+  const fetching = useWorkspaceStore((state) => state.fetching)
+  const fetchProject = useWorkspaceStore((state) => state.fetchProject)
+  const now = useNow(60_000)
 
   // The rail is always mounted, so it keeps main told which way sleep should go.
   useKeepAwake()
@@ -49,6 +54,13 @@ export function StatusBar(): React.JSX.Element {
   const missing = worktrees.some((entry) => entry.id === activeWorktreeId && entry.missing === true)
   const shownStatus = missing && activeWorktreeId ? missingStatus(activeWorktreeId, status) : status
   const summary = summarizeWorktreeStatus(shownStatus, child)
+  const project = projects.find(
+    (entry) => entry.id === worktrees.find((worktree) => worktree.id === activeWorktreeId)?.projectId
+  )
+  const fresh = project === undefined ? null : baseFreshness(project, now)
+  // In sync with a base that could not be fetched, or was fetched hours ago, is not known.
+  const description =
+    fresh !== null && !child && summary?.description === 'clean, in sync' ? 'clean' : summary?.description
   // `now` only moves the quiet-for column, which the count does not read.
   const owed = useMemo(
     () => attention(dashboardRows({ terminals: Object.values(terminals), worktrees, projects, layouts, now: 0 })),
@@ -78,12 +90,27 @@ export function StatusBar(): React.JSX.Element {
           type="button"
           className={`statusbar__item statusbar__button${changesOpen ? ' statusbar__button--on' : ''}`}
           aria-pressed={changesOpen}
-          aria-label={`Changes, ${summary.description}`}
+          aria-label={`Changes, ${description}`}
           title={`Changes · read ${formatReadAge(shownStatus.readAt, Date.now())}`}
           onClick={toggleChanges}
         >
           <span className="statusbar__muted">git</span>
-          {summary.description}
+          {description}
+        </button>
+      ) : null}
+
+      {project !== undefined && (fresh !== null || fetching[project.id]) && !pageOpen ? (
+        <button
+          type="button"
+          className={`statusbar__item statusbar__button${
+            project.fetch?.failure === undefined ? '' : ' statusbar__stale'
+          }`}
+          title="Fetch Now"
+          aria-label={`Fetch ${project.baseRef} now${fresh === null ? '' : `, ${fresh}`}`}
+          disabled={fetching[project.id] === true}
+          onClick={() => void fetchProject(project.id)}
+        >
+          {fetching[project.id] ? 'fetching…' : fresh}
         </button>
       ) : null}
 

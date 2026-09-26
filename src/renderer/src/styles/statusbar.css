@@ -125,6 +125,11 @@
   color: var(--danger);
 }
 
+/* The active project's base could not be fetched; pressing it tries again. */
+.statusbar__stale {
+  color: var(--danger);
+}
+
 /* A panel above the rail. Fixed to the viewport, because the rail clips its
    overflow to stay one line high. */
 .statusbar__popover {

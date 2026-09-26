@@ -28,6 +28,7 @@ const EXPECTED = [
   'project linked',
   'project copied',
   'project setup',
+  'project fetch',
   'project remove',
   'worktree list',
   'worktree create',

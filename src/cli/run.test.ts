@@ -870,6 +870,21 @@ describe('selectors and flags reach the runtime', () => {
     expect((await cli.run(['project', 'setup', 'api'])).out).toMatch(/runs nothing in a new worktree/)
   })
 
+  it('fetches a project now, and fails saying why origin could not be fetched', async () => {
+    let fetch: unknown = { fetchedAt: 1 }
+    const cli = await harness((method, params, context) =>
+      method === 'project.fetch' ? { ...PROJECTS[0], fetch } : defaultHandler(method, params, context)
+    )
+    const fetched = await cli.run(['project', 'fetch', 'api'])
+    expect(cli.stub.received.at(-1)).toMatchObject({ method: 'project.fetch', params: { projectId: 'p_api' } })
+    expect(fetched.out).toBe('fetched origin/main\n')
+
+    fetch = { fetchedAt: 1, failure: 'offline' }
+    const failed = await cli.run(['project', 'fetch', 'api'])
+    expect(failed.code).toBe(ExitCode.Failure)
+    expect(failed.err).toBe("error: could not fetch origin/main: can't reach origin\n")
+  })
+
   it('prints a path list one per line, and says so when there is none', async () => {
     const cli = await harness()
     expect((await cli.run(['project', 'linked', 'api', 'node_modules', '.venv'])).out).toBe('node_modules\n.venv\n')
@@ -1209,7 +1224,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(87)
+    expect(data.commands.length).toBe(88)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })

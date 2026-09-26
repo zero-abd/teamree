@@ -1,15 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { BaseFetcher, backgroundFetchProjects, classifyFetchFailure, type BaseFetchProject } from './baseFetch'
+import type { BaseFetchState } from '../../shared/entities'
+import {
+  BaseFetcher,
+  backgroundFetchProjects,
+  classifyFetchFailure,
+  ONLINE_POLL_MS,
+  RECONNECT_DELAY_MS,
+  type BaseFetchProject
+} from './baseFetch'
 import { GitCommandError } from './errors'
 import type { GitOutput, GitRun, GitRunner } from './gitProcess'
 
-/** Answers `git remote` and `rev-parse`, and hands every fetch to `onFetch`, which may throw. */
+/** Answers `git remote`, `rev-parse` and `log`, and hands every fetch to `onFetch`, which may throw. */
 function fakeRunner(onFetch: (run: GitRun) => GitOutput): { runner: GitRunner; fetches: GitRun[] } {
   const fetches: GitRun[] = []
   let sha = 1
   const tryRun = async (run: GitRun): Promise<GitOutput> => {
     if (run.args[0] === 'remote') return { exitCode: 0, stdout: 'origin\n', stderr: '' }
     if (run.args[0] === 'rev-parse') return { exitCode: 0, stdout: `${sha}\n`, stderr: '' }
+    if (run.args[0] === 'log') return { exitCode: 0, stdout: '', stderr: '' }
     fetches.push(run)
     const output = onFetch(run)
     if (output.exitCode === 0 && output.stdout === 'moved') sha += 1
@@ -170,6 +179,131 @@ describe('BaseFetcher', () => {
   })
 })
 
+describe('BaseFetcher state', () => {
+  function failing(stderr: string): GitOutput {
+    return { exitCode: 128, stdout: '', stderr }
+  }
+
+  it('keeps the last success and names each kind of failure', async () => {
+    const time = clock()
+    let next: GitOutput = ok
+    const { runner } = fakeRunner(() => next)
+    const states: BaseFetchState[] = []
+    const fetcher = new BaseFetcher({
+      runner,
+      projects: () => [project],
+      onMoved: () => {},
+      onState: (id, state) => id === 'p1' && states.push(state),
+      now: time.now
+    })
+
+    await fetcher.fetchNow()
+    expect(states.at(-1)).toEqual({ fetchedAt: 1_000_000 })
+
+    const kinds: [string, BaseFetchState['failure']][] = [
+      ["fatal: unable to access 'https://x/': Could not resolve host: x", 'offline'],
+      ["fatal: couldn't find remote ref main", 'not-found'],
+      ['fatal: something else', 'failed'],
+      ['fatal: Authentication failed for https://x', 'auth']
+    ]
+    for (const [stderr, failure] of kinds) {
+      next = failing(stderr)
+      time.advance(10 * 60_000)
+      await fetcher.fetchProject(project)
+      expect(states.at(-1)).toMatchObject({ fetchedAt: 1_000_000, failure })
+    }
+    expect(states.at(-1)?.retryAt).toBe(time.now() + 30 * 60_000)
+  })
+
+  it('says offline without trying while the machine has no network', async () => {
+    const { runner, fetches } = fakeRunner(() => ok)
+    const states: BaseFetchState[] = []
+    const fetcher = new BaseFetcher({
+      runner,
+      projects: () => [project],
+      onMoved: () => {},
+      onState: (_id, state) => states.push(state),
+      online: () => false,
+      lastFetchedAt: () => Promise.resolve(42)
+    })
+    await fetcher.fetchNow()
+    expect(fetches).toHaveLength(0)
+    expect(states).toEqual([{ fetchedAt: 42, failure: 'offline' }])
+  })
+
+  it('Fetch Now tries at once through a sign-in back-off, and clears it on success', async () => {
+    const time = clock()
+    let next: GitOutput = failing('fatal: Authentication failed for https://x')
+    const { runner, fetches } = fakeRunner(() => next)
+    const states: BaseFetchState[] = []
+    const fetcher = new BaseFetcher({
+      runner,
+      projects: () => [project],
+      onMoved: () => {},
+      onState: (_id, state) => states.push(state),
+      now: time.now
+    })
+
+    await fetcher.fetchNow()
+    expect(states.at(-1)?.retryAt).toBeDefined()
+    time.advance(60_000)
+    next = ok
+    expect(await fetcher.fetchProject(project)).toEqual({ fetchedAt: time.now() })
+    expect(fetches).toHaveLength(2)
+
+    // The back-off is gone: the next timed cycle fetches.
+    time.advance(5 * 60_000)
+    await fetcher.fetchNow()
+    expect(fetches).toHaveLength(3)
+  })
+
+  it('never backs off a refused sign-in for more than an hour', async () => {
+    const time = clock()
+    const { runner, fetches } = fakeRunner(() => failing('fatal: Authentication failed for https://x'))
+    const fetcher = new BaseFetcher({ runner, projects: () => [project], onMoved: () => {}, now: time.now })
+    for (let hour = 0; hour < 6; hour += 1) {
+      await fetcher.fetchNow()
+      time.advance(60 * 60_000)
+    }
+    expect(fetches).toHaveLength(6)
+  })
+
+  it('fetches soon after the network comes back', async () => {
+    const timers: { run: () => void; delayMs: number }[] = []
+    let online = false
+    const { runner, fetches } = fakeRunner(() => ok)
+    const fetcher = new BaseFetcher({
+      runner,
+      projects: () => [project],
+      onMoved: () => {},
+      online: () => online,
+      schedule: (run, delayMs) => {
+        const timer = { run, delayMs }
+        timers.push(timer)
+        return () => timers.splice(timers.indexOf(timer), 1)
+      }
+    })
+    fetcher.start()
+    const fire = (delayMs: number): void => {
+      const timer = timers.find((each) => each.delayMs === delayMs)
+      expect(timer).toBeDefined()
+      timers.splice(timers.indexOf(timer!), 1)
+      timer!.run()
+    }
+
+    fire(ONLINE_POLL_MS)
+    await fetcher.idle()
+    expect(fetches).toHaveLength(0)
+
+    online = true
+    fire(ONLINE_POLL_MS)
+    fire(RECONNECT_DELAY_MS)
+    await fetcher.idle()
+    expect(fetches).toHaveLength(1)
+    fetcher.stop()
+  })
+})
+
 describe('backgroundFetchProjects', () => {
   it('takes projects with a ready worktree, leaving out any with background fetching turned off', () => {
     const worktree = (id: string, projectId: string, state: 'ready' | 'creating') =>
@@ -193,5 +327,14 @@ describe('classifyFetchFailure', () => {
     expect(classifyFetchFailure('Host key verification failed.')).toBe('auth')
     expect(classifyFetchFailure("fatal: unable to access 'https://x/': Could not resolve host: x")).toBe('offline')
     expect(classifyFetchFailure('fatal: something else')).toBe('failed')
+  })
+
+  it('tells a missing branch or repository from a refused sign-in', () => {
+    expect(classifyFetchFailure("fatal: couldn't find remote ref main")).toBe('not-found')
+    expect(
+      classifyFetchFailure(
+        "fatal: '/tmp/gone.git' does not appear to be a git repository\nfatal: Could not read from remote repository."
+      )
+    ).toBe('not-found')
   })
 })

@@ -25,6 +25,7 @@ import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import type { DiffOptions } from '../state/preferences'
 import { MENU_ORDER, menuLabel, type PanelState } from '../menu/menuBar'
 import { agentRows, agoLabel, TONE_LABEL, worktreeTone, type DotTone } from '../sidebar/agentRows'
+import { baseFreshness } from '../sidebar/baseFreshness'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { automaticUpdatesLabel } from '../updates/updateNotice'
 import { landLabel, landNote, type LandOffer } from '../workspace/rightPanel/landOffer'
@@ -62,6 +63,8 @@ export type PaletteAction =
   | `clean-up:${string}`
   /** Push main for a project, by its id. */
   | `push-base:${string}`
+  /** Fetch Now for a project, by its id. */
+  | `fetch:${string}`
   /** A project's Teamwork page, by its id. */
   | `teamwork:${string}`
   /** A note a teammate shared, by its share id. */
@@ -219,6 +222,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     ...restoreActions(context),
     ...cleanUpActions(context),
     ...pushBaseActions(context),
+    ...fetchActions(context),
     ...teamworkActions(context),
     ...panelActions(context),
     ...ACTIONS,
@@ -452,6 +456,17 @@ function pushBaseActions(context: PaletteContext): ActionRow[] {
       }
     ]
   })
+}
+
+/** Fetch Now per project, its name and how old its base is as the hint. */
+function fetchActions(context: PaletteContext): ActionRow[] {
+  const now = Date.now()
+  return context.projects.map((project) => ({
+    id: `fetch:${project.id}` as const,
+    label: 'Fetch Now',
+    keywords: `fetch origin remote refresh sync pull base ${project.baseRef} ${project.name}`,
+    hint: `${project.name} · ${baseFreshness(project, now) ?? project.baseRef}`
+  }))
 }
 
 /** One row per setting label, hinted with the section it is first found in. */

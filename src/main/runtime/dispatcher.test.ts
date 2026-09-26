@@ -173,6 +173,8 @@ describe('dispatcher', () => {
       'project.clone',
       'project.cloneProgress',
       'project.context',
+      // Local: this machine's credentials, as the push.
+      'project.fetch',
       'project.list',
       'project.pullBase',
       'project.pushBase',

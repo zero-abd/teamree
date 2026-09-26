@@ -339,6 +339,35 @@
   font-size: var(--text-xs);
 }
 
+/* Why the base may be old; pressing it fetches. */
+.project__fresh {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-right: auto;
+  padding: 0 var(--s1);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.project__fresh:has(+ .project__unpushed) {
+  margin-right: 0;
+}
+
+.project__fresh--failed {
+  color: var(--danger);
+}
+
+.project__fresh:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
 /* A landing only this Mac has: sits beside the base ref, and pressing it asks to push. */
 .project__unpushed {
   flex: none;

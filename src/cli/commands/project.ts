@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import { cloneDestination, cloneFailureLine, runClone } from '../../main/git/clone.js'
 import { createGitRunner } from '../../main/git/gitProcess.js'
+import { fetchFailureWords } from '../../shared/baseFetchWords.js'
 import type { Project } from '../../shared/entities.js'
 import { checkTransport } from '../../shared/origin.js'
 import type { CommandSpec } from '../command-spec.js'
@@ -162,6 +163,27 @@ export const projectCommands: readonly CommandSpec[] = [
         data: withProjectDefaults(after),
         text: after.setupCommand ?? `${after.name} runs nothing in a new worktree`
       }
+    }
+  },
+  {
+    path: ['project', 'fetch'],
+    summary: "Fetch a project's base ref now.",
+    details: 'Also clears the back-off the background fetch keeps after a refused sign-in.',
+    args: [{ name: 'project', description: 'Project id, name, or path.', required: true }],
+    examples: ['teamree project fetch api'],
+    run: async (context) => {
+      const project = await resolveProject(context.client, context.args[0] as string)
+      const after = await context.client.call('project.fetch', { projectId: project.id })
+      const failure = after.fetch?.failure
+      if (failure !== undefined) {
+        throw new CliError({
+          code: 'fetch_failed',
+          message: `could not fetch ${after.baseRef}: ${fetchFailureWords(failure, after.baseRef)}`,
+          exitCode: ExitCode.Failure,
+          data: { project: withProjectDefaults(after) }
+        })
+      }
+      return { data: withProjectDefaults(after), text: `fetched ${after.baseRef}` }
     }
   },
   {

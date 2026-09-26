@@ -198,6 +198,39 @@ describe('the git segment', () => {
   })
 })
 
+describe('the base fetch', () => {
+  const hours = (count: number): number => Date.now() - count * 60 * 60_000
+
+  it('does not call a worktree in sync with a base origin could not be fetched from, and offers Fetch Now', () => {
+    const fetchProject = vi.fn(() => Promise.resolve())
+    seed({
+      projects: [{ ...project, fetch: { fetchedAt: hours(3), failure: 'offline' } }],
+      statuses: { w1: status() },
+      fetchProject
+    })
+    mount()
+    expect(screen.getByRole('button', { name: 'Changes, clean' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: "Fetch origin/main now, can't reach origin" }))
+    expect(fetchProject).toHaveBeenCalledWith('p1')
+  })
+
+  it.each([
+    [{ fetchedAt: hours(3) }, 'fetched 3h ago'],
+    [{ failure: 'auth' as const }, 'sign-in failed']
+  ])('says %o as %s', (fetch, words) => {
+    seed({ projects: [{ ...project, fetch }], statuses: { w1: status() } })
+    mount()
+    expect(screen.getByRole('button', { name: `Fetch origin/main now, ${words}` }).textContent).toBe(words)
+  })
+
+  it('says nothing more for a base fetched in the last hour', () => {
+    seed({ projects: [{ ...project, fetch: { fetchedAt: hours(0.5) } }], statuses: { w1: status() } })
+    mount()
+    expect(screen.getByRole('button', { name: 'Changes, clean, in sync' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Fetch/ })).toBeNull()
+  })
+})
+
 describe('the worktree', () => {
   // The strip, the sidebar and the pane header already name it.
   it('is not named on the rail', () => {
