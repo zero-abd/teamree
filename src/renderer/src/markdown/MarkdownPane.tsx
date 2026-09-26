@@ -11,6 +11,7 @@ import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { openInBrowser } from '../shell/openInBrowser'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { createAutosave } from './autosave'
+import { ShareNoteButton } from '../teamwork/ShareNoteButton'
 import { MarkdownEditor, type MarkdownEditorHandle } from './MarkdownEditor'
 import { registerPage } from './openAsArtifact'
 
@@ -219,6 +220,11 @@ export function MarkdownPane({
             Reload
           </button>
         )}
+        <ShareNoteButton
+          worktreeId={worktreeId}
+          path={path}
+          getMarkdown={() => editor.current?.getMarkdown() ?? known.current.content}
+        />
         <DiffTools diff={diff} view="Page" />
       </FileBar>
       <div className="file__body" ref={diff.body}>

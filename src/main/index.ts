@@ -348,6 +348,7 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
         ...selfInstall(),
         trashItem: (path) => shell.trashItem(path),
         onAgentNotice: (notice) => notices?.deliver(notice),
+        onSharedNote: (note) => notices?.announce({ title: `${note.handle} shared a note`, body: note.title }),
         // `teamree quit`: only `app.quit` runs `before-quit`. See quitSequence.ts.
         requestQuit: (force) => (force ? quitWithoutAsking() : app.quit()),
         unsavedFiles: () => unsaved?.paths() ?? [],

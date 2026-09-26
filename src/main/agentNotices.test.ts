@@ -305,6 +305,28 @@ describe('what a stopped agent is allowed to do to the window', () => {
     expect(host.focusWindow).toHaveBeenCalledOnce()
   })
 
+  it('raises a teammate’s shared note only while the window is away, and focuses nothing until clicked', () => {
+    const away = install(false)
+    away.publish({ preference: 'notify', focusedPaneId: null })
+    away.channel.announce({ title: 'ana shared a note', body: 'Plan' })
+    expect(away.shown.map((spec) => [spec.title, spec.body, spec.silent])).toEqual([
+      ['ana shared a note', 'Plan', true]
+    ])
+    expect(away.host.focusWindow).not.toHaveBeenCalled()
+    away.shown[0]?.onActivate()
+    expect(away.host.focusWindow).toHaveBeenCalledOnce()
+
+    const looking = install(true)
+    looking.publish({ preference: 'notify', focusedPaneId: null })
+    looking.channel.announce({ title: 'ana shared a note', body: 'Plan' })
+    expect(looking.shown).toEqual([])
+
+    const off = install(false)
+    off.publish({ preference: 'off', focusedPaneId: null })
+    off.channel.announce({ title: 'ana shared a note', body: 'Plan' })
+    expect(off.shown).toEqual([])
+  })
+
   it('drops the click once the window that published is gone', () => {
     const listeners = new Map<string, (event: IpcMainEvent, payload: unknown) => void>()
     const ipc = {

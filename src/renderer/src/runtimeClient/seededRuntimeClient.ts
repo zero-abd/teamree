@@ -1218,6 +1218,19 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'peer.subscribe': () => {
       throw new Error('peer.subscribe is a teammate’s call, not a window’s')
     },
+    'peer.shareNote': () => {
+      throw new Error('peer.shareNote is a teammate’s call, not a window’s')
+    },
+    'teamwork.shareNote': ({ projectId }) => ({
+      projectId,
+      delivered: ['priya'],
+      missed: [{ handle: 'marcus', reason: 'offline' }]
+    }),
+    'teamwork.sharedNotes': () => [],
+    'teamwork.viewNote': () => {
+      throw new Error('that note is gone')
+    },
+    'teamwork.closeNote': () => ({ closed: false }),
 
     'agent.list': () => [
       { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' },

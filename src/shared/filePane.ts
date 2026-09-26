@@ -61,14 +61,27 @@ export function isReviewLeaf(node: PaneNode | null | undefined): node is ReviewL
   return isFileLeaf(node) && node.review === true
 }
 
-/** A leaf showing a file of the worktree, not a commit, a compare or a review. */
-export function isWorktreeFileLeaf(node: PaneNode | null | undefined): boolean {
-  return isFileLeaf(node) && !isCommitLeaf(node) && !isCompareLeaf(node) && !isReviewLeaf(node)
+/** A file-column tab showing a note a teammate shared, read-only; `path` is the tab's title. */
+export type SharedNoteLeaf = FileLeaf & { sharedNote: string }
+
+export function sharedNoteLeaf(id: string, shareId: string, title: string): SharedNoteLeaf {
+  return { ...fileLeaf(id, title), sharedNote: shareId }
 }
 
-/** What a file-column tab reads: a commit's, compare's or review's title whole, a file by its name. */
+export function isSharedNoteLeaf(node: PaneNode | null | undefined): node is SharedNoteLeaf {
+  return isFileLeaf(node) && typeof node.sharedNote === 'string' && node.sharedNote.length > 0
+}
+
+/** A leaf showing a file of the worktree, not a commit, a compare, a review or a shared note. */
+export function isWorktreeFileLeaf(node: PaneNode | null | undefined): boolean {
+  return (
+    isFileLeaf(node) && !isCommitLeaf(node) && !isCompareLeaf(node) && !isReviewLeaf(node) && !isSharedNoteLeaf(node)
+  )
+}
+
+/** What a file-column tab reads: a commit's, compare's, review's or shared note's title whole, a file by its name. */
 export function fileTabName(leaf: FileLeaf): string {
-  return isCommitLeaf(leaf) || isCompareLeaf(leaf) || isReviewLeaf(leaf) ? leaf.path : filePaneName(leaf.path)
+  return isWorktreeFileLeaf(leaf) ? filePaneName(leaf.path) : leaf.path
 }
 
 /** A fresh pane id; `random` is injected so a test can choose it. */

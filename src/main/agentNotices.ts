@@ -140,6 +140,8 @@ export type AgentNoticeHost = {
 export type AgentNoticeChannel = {
   /** One agent pane has stopped. */
   deliver: (notice: AgentNotice) => void
+  /** Something a teammate did, raised only while the window is away; a click brings it forward. */
+  announce: (spec: { title: string; body: string }) => void
   /** The window has the focus again. */
   noteWindowFocus: () => void
   stop: () => void
@@ -196,6 +198,10 @@ export function installAgentNotices(ipc: IpcMain, host: AgentNoticeHost): AgentN
         onActivate: reveal,
         ...(actions.length === 0 ? {} : { actions })
       })
+    },
+    announce(spec) {
+      if (settings.preference === 'off' || host.windowFocused()) return
+      host.show({ ...spec, silent: noticeIsSilent(settings.preference), onActivate: host.focusWindow })
     },
     noteWindowFocus() {
       badge({ kind: 'window-focused' })
