@@ -1096,6 +1096,43 @@
   box-shadow: var(--ring);
 }
 
+textarea.changes__message {
+  max-height: 12lh;
+  field-sizing: content;
+  resize: none;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+.changes__commit > .button {
+  align-self: flex-end;
+}
+
+/* Marks a commit message still as suggested; ✕ empties it. */
+.commit-from {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.commit-from__clear {
+  padding: 0 var(--s1);
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.commit-from__clear:hover {
+  color: var(--fg);
+  background: var(--bg-hover);
+}
+
 /* Said instead of the commit list, never beside it: the point is that there is
    no list. Kept quiet — this is a gap in what is known, not a fault. */
 .commits__unknown {

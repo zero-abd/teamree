@@ -34,6 +34,7 @@ const { ChangesTab, canDiscard } = await import('./ChangesTab')
 const { ConfirmDiscardDialog } = await import('../../dialogs/ConfirmDiscardDialog')
 const { FilePane } = await import('../../panes/FilePane')
 const { useReviewStore } = await import('../../review/reviewStore')
+const { useCommitDrafts } = await import('./commitMessage')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -132,6 +133,7 @@ beforeEach(() => {
   call.mockImplementation(() => new Promise(() => {}))
   openInBrowser.mockReset()
   useReviewStore.setState({ viewed: {}, batch: {}, queued: {}, scope: {}, jump: {} })
+  useCommitDrafts.setState({ drafts: {} })
   seed()
 })
 
@@ -548,6 +550,78 @@ describe('committing', () => {
     expect(commitAll).toHaveProperty('disabled', false)
     fireEvent.click(commitAll)
     expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
+  })
+})
+
+describe('the message from the done report', () => {
+  const reported = (summary: string): Worktree => ({
+    ...childWorktree,
+    task: 'Add tax to cart totals',
+    report: { outcome: 'succeeded', summary, paths: [], at: 0 }
+  })
+  const box = (): HTMLTextAreaElement => screen.getByRole('textbox', { name: 'Commit message' }) as HTMLTextAreaElement
+
+  it('starts the box with the report, marked, and commits it only when asked', () => {
+    withChanges(rows)
+    useWorkspaceStore.setState({ worktrees: [reported('Cart totals include tax.\nRounded per line.')] })
+    render(<ChangesTab />)
+
+    expect(box().value).toBe('Cart totals include tax.\n\nRounded per line.')
+    expect(screen.getByText('from report')).toBeTruthy()
+    expect(call).not.toHaveBeenCalledWith('worktree.commit', expect.anything())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Commit All' }))
+    expect(call).toHaveBeenCalledWith('worktree.commit', {
+      worktreeId: 'w1',
+      message: 'Cart totals include tax.\n\nRounded per line.',
+      all: true
+    })
+  })
+
+  it('clears it with ✕', () => {
+    withChanges(rows)
+    useWorkspaceStore.setState({ worktrees: [reported('Cart totals include tax.')] })
+    render(<ChangesTab />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear message' }))
+    expect(box().value).toBe('')
+    expect(screen.queryByText('from report')).toBeNull()
+    expect((screen.getByRole('button', { name: 'Commit All' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('keeps what was typed when the agent reports again', () => {
+    withChanges(rows)
+    useWorkspaceStore.setState({ worktrees: [reported('Cart totals include tax.')] })
+    render(<ChangesTab />)
+
+    fireEvent.change(box(), { target: { value: 'Tax on totals' } })
+    expect(screen.queryByText('from report')).toBeNull()
+    act(() => useWorkspaceStore.setState({ worktrees: [reported('Cart totals include tax and fees.')] }))
+    expect(box().value).toBe('Tax on totals')
+  })
+
+  it('follows a new report while the old one is untouched', () => {
+    withChanges(rows)
+    useWorkspaceStore.setState({ worktrees: [reported('Cart totals include tax.')] })
+    render(<ChangesTab />)
+
+    act(() => useWorkspaceStore.setState({ worktrees: [reported('Cart totals include tax and fees.')] }))
+    expect(box().value).toBe('Cart totals include tax and fees.')
+  })
+
+  it('commits on Enter and breaks the line on Shift+Enter', () => {
+    withChanges(rows)
+    useWorkspaceStore.setState({ worktrees: [reported('Cart totals include tax.')] })
+    render(<ChangesTab />)
+
+    fireEvent.keyDown(box(), { key: 'Enter', shiftKey: true })
+    expect(call).not.toHaveBeenCalledWith('worktree.commit', expect.anything())
+    fireEvent.keyDown(box(), { key: 'Enter' })
+    expect(call).toHaveBeenCalledWith('worktree.commit', {
+      worktreeId: 'w1',
+      message: 'Cart totals include tax.',
+      all: true
+    })
   })
 })
 

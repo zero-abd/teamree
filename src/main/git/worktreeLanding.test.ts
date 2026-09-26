@@ -260,6 +260,23 @@ describe('pull requests', () => {
     )
   })
 
+  it('does not close the issue twice when the commit already does', async () => {
+    const context = await setup({ gh: 'signed-in' })
+    await lookLikeGitHub(context.repo)
+    const issue = { number: 123, url: 'https://github.com/acme/pantry/issues/123' }
+    const pending = await context.service.createWorktree({ projectId: context.projectId, name: 'Login loop', issue })
+    const worktree = await context.service.whenSettled(pending.id)
+    await context.repo.write('src/login.ts', 'export const loop = false\n', worktree.path)
+    await context.repo.git(['add', '--all'], worktree.path)
+    await context.repo.git(['commit', '-m', 'Stop the login loop', '-m', 'Closes #123'], worktree.path)
+    await context.service.worktreePush({ worktreeId: worktree.id })
+
+    await context.service.worktreeCreatePullRequest({ worktreeId: worktree.id })
+
+    const log = await readFile(path.join(context.repo.base, 'gh.log'), 'utf8')
+    expect(log).toContain(`pr create --title Stop the login loop --body Closes #123 --head ${worktree.branch}`)
+  })
+
   it('lists the commits and closes the issue when there are several', async () => {
     const context = await setup({ gh: 'signed-in' })
     await lookLikeGitHub(context.repo)

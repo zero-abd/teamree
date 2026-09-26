@@ -2,12 +2,14 @@
 // into its parent's: the commits that go in, read fresh, and the files in the way when that checkout has uncommitted work.
 // Work uncommitted in the worktree itself is committed first, under a message typed here, never left behind.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { WorktreeChanges, WorktreeMerge } from '@shared/entities'
 import { useReviewStore } from '../review/reviewStore'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { CommitFrom } from '../workspace/rightPanel/CommitFrom'
+import { useCommitMessage } from '../workspace/rightPanel/commitMessage'
 import { Confirm } from './Confirm'
 
 const SHOWN = 5
@@ -19,7 +21,8 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   const mergeIntoBase = useWorkspaceStore((state) => state.mergeIntoBase)
   const pending = useWorkspaceStore((state) => state.changes[worktreeId])
   const status = useWorkspaceStore((state) => state.statuses[worktreeId])
-  const [message, setMessage] = useState('')
+  const { message, from, setMessage } = useCommitMessage(worktreeId)
+  const messageBox = useRef<HTMLTextAreaElement>(null)
   const reviewBranch = useReviewStore((state) => state.reviewBranch)
   const [plan, setPlan] = useState<WorktreeMerge | null>(null)
   const [branch, setBranch] = useState<WorktreeChanges | null>(null)
@@ -35,6 +38,11 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   )
   const [pushEdit, setPushEdit] = useState<boolean | null>(null)
   const push = offerPush && (pushEdit ?? pushChoice)
+
+  // Selected, so typing replaces a suggestion rather than adding to it.
+  useEffect(() => {
+    if (from !== null) messageBox.current?.select()
+  }, [])
 
   useEffect(() => {
     let alive = true
@@ -79,6 +87,7 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
     if (commitFirst) {
       try {
         await runtimeClient.call('worktree.commit', { worktreeId, message, all: true })
+        setMessage('')
       } catch (failure) {
         setError(failure instanceof Error ? failure.message : String(failure))
         setMerging(false)
@@ -123,9 +132,10 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
         <>
           <p className="confirm__body">{`${(total || counted).toLocaleString('en-US')} uncommitted`}</p>
           <Lines lines={uncommitted} total={total} />
-          <input
-            className="field__input"
-            type="text"
+          <textarea
+            ref={messageBox}
+            className="field__input field__input--message"
+            rows={1}
             value={message}
             placeholder="Commit message"
             aria-label="Commit message"
@@ -133,11 +143,12 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
             disabled={merging}
             onChange={(event) => setMessage(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key !== 'Enter' || merging || blocked !== undefined) return
+              if (event.key !== 'Enter' || event.shiftKey || merging || blocked !== undefined) return
               event.preventDefault()
               void merge()
             }}
           />
+          <CommitFrom from={merging ? null : from} onClear={() => setMessage('')} />
         </>
       ) : null}
       {dirty.length > 0 ? (
