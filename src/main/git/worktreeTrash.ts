@@ -2,7 +2,7 @@
 // the working tree (untracked files included), kept under `refs/teamree/trash/` in the repository.
 
 import { randomUUID } from 'node:crypto'
-import { copyFile, rm } from 'node:fs/promises'
+import { copyFile, rm, stat, utimes } from 'node:fs/promises'
 import path from 'node:path'
 import type { RemovedWorktree, Worktree } from '../../shared/entities'
 import { ErrorCode } from '../../shared/protocol'
@@ -82,9 +82,20 @@ export async function snapshotWorktree(
   const scratch = path.join(gitDir, `teamree-trash-${randomUUID()}.index`)
   let tree: string
   try {
-    await copyFile(realIndex, scratch).catch((error: NodeJS.ErrnoException) => {
-      if (error.code !== 'ENOENT') throw error
-    })
+    const copied = await copyFile(realIndex, scratch).then(
+      () => true,
+      (error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error
+        return false
+      }
+    )
+    // A copy newer than its entries hides same-size edits from git's racy-clean check, so it is
+    // dated a second before the real index: every entry that could be racy gets its content read.
+    if (copied) {
+      const { mtimeMs } = await stat(realIndex)
+      const earlier = (mtimeMs - 1000) / 1000
+      await utimes(scratch, earlier, earlier)
+    }
     const env = { GIT_INDEX_FILE: scratch }
     const pathspec = options.paths === undefined ? [] : ['--', ...options.paths]
     await git(['--literal-pathspecs', 'add', '-A', ...pathspec], env)
