@@ -206,6 +206,24 @@ describe('the coordination ledger', () => {
     expect((await ledger.overlaps('p1')).overlaps.map((row) => row.worktreeId).sort()).toEqual(['c', 'p'])
   })
 
+  it('logs a child landing in its parent, with main untouched', async () => {
+    const parent = await addWorktree('p', 'Rework the API')
+    await edit(parent, 'line two from parent')
+    await repo.commit('parent edits', parent.path)
+    const child = await addWorktree('c', 'Split the auth routes', 'p')
+    await repo.write('src/routes.ts', 'routes\n', child.path)
+    await repo.commit('child routes', child.path)
+    await ledger.refresh()
+
+    await repo.git(['merge', '--no-ff', '-m', 'land c', 'c'], parent.path)
+    await ledger.refresh()
+
+    expect((await ledger.inspect('p1')).landings).toEqual([
+      expect.objectContaining({ worktreeId: 'c', into: 'p', conflicts: [] })
+    ])
+    expect((await ledger.inspect('p1')).worktrees.find((row) => row.id === 'p')?.state).toBe('ready')
+  })
+
   it('runs merge-tree at most so many times a pass, and never twice for the same two commits', async () => {
     ledger = open({ maxMergeTreesPerPass: 1 })
     for (const id of ['a', 'b', 'c']) {

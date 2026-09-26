@@ -11,7 +11,7 @@ import { openInBrowser } from '../../shell/openInBrowser'
 import { commitScope, useWorkspaceStore, type PushState } from '../../state/workspaceStore'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
 import { landLabel, landOffer, type LandOffer } from './landOffer'
-import type { PaneNode, Terminal, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
+import type { PaneNode, Terminal, Worktree, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 import { fileColumnIn, isCommitLeaf, shownTabId } from '@shared/filePane'
 
 export function ChangesTab(): React.JSX.Element | null {
@@ -45,9 +45,11 @@ export function ChangesTab(): React.JSX.Element | null {
   const abortUpdate = useWorkspaceStore((state) => state.abortUpdate)
   const typeIntoPane = useWorkspaceStore((state) => state.typeIntoPane)
   const focusPane = useWorkspaceStore((state) => state.focusPane)
+  const child = useWorkspaceStore((state) => childOf(state.worktrees, worktreeId))
   const baseRef = useWorkspaceStore((state) => {
-    const projectId = state.worktrees.find((worktree) => worktree.id === worktreeId)?.projectId
-    return state.projects.find((project) => project.id === projectId)?.baseRef
+    const worktree = state.worktrees.find((entry) => entry.id === worktreeId)
+    if (worktree?.parentId !== undefined && worktree.baseRef !== undefined) return worktree.baseRef
+    return state.projects.find((project) => project.id === worktree?.projectId)?.baseRef
   })
   const terminals = useWorkspaceStore((state) => state.terminals)
   const shownCommit = useWorkspaceStore((state) =>
@@ -85,7 +87,7 @@ export function ChangesTab(): React.JSX.Element | null {
   const pushed = midway === undefined && land?.kind !== 'merged' ? pushOffer(status, push) : null
   // A pull request button is the review page, and more.
   const offer = pushed?.kind === 'review' && land !== null ? null : pushed
-  const offersUpdate = updateFrom(status, base) !== null && conflictRows.length === 0
+  const offersUpdate = updateFrom(status, base, child) !== null && conflictRows.length === 0
   // One primary at a time: commit what is uncommitted first, then send it, then land it.
   const pushIsNext = rows.length === 0 && (status?.ahead ?? 0) > 0 && land?.kind !== 'merge'
   const landIsNext = rows.length === 0 && !pushIsNext
@@ -118,7 +120,7 @@ export function ChangesTab(): React.JSX.Element | null {
               disabled={updating !== null}
               onClick={() => void updateWorktree(worktreeId)}
             >
-              {updating === worktreeId ? 'Updating…' : `Update from ${updateFrom(status, base)}`}
+              {updating === worktreeId ? 'Updating…' : `Update from ${updateFrom(status, base, child)}`}
             </button>
           ) : null}
           {offer?.kind === 'review' ? (
@@ -431,9 +433,19 @@ export function resolvePrompt(
   return `Resolve the conflicts in ${files}`
 }
 
-/** The base's branch name (`main` for `origin/main`) when the worktree is behind it and nothing is mid-way; else null. */
-export function updateFrom(status: WorktreeStatus | undefined, baseRef: string | undefined): string | null {
+/** Whether the worktree is a child, which updates from and lands in its parent. */
+export function childOf(worktrees: readonly Worktree[], worktreeId: string | null): boolean {
+  return worktrees.some((worktree) => worktree.id === worktreeId && worktree.parentId !== undefined)
+}
+
+/** The base's branch name (`main` for `origin/main`), or `Parent`, when the worktree is behind it and nothing is mid-way; else null. */
+export function updateFrom(
+  status: WorktreeStatus | undefined,
+  baseRef: string | undefined,
+  child = false
+): string | null {
   if (!status || status.missing || status.behind === 0 || status.operation !== undefined) return null
+  if (child) return 'Parent'
   if (baseRef === undefined) return 'base'
   const slash = baseRef.indexOf('/')
   return slash === -1 ? baseRef : baseRef.slice(slash + 1)

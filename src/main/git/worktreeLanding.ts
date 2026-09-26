@@ -95,6 +95,8 @@ export type LandingOptions = {
   baseRef: string
   /** The sha the branch was cut from: a branch that made no commit is not merged, whatever git says. */
   startedFrom: string
+  /** A child lands in this worktree's branch, `baseRef`, here and never through its host. */
+  parent?: { worktreeId: string; name: string }
   gh?: GhProbe
   now?: () => number
 }
@@ -113,8 +115,8 @@ export async function readLanding(runner: GitRunner, options: LandingOptions): P
     (await git(['merge-base', '--is-ancestor', options.branch, ref])).exitCode === 0
 
   const base = bareRef(options.baseRef, REMOTE)
-  const remoteUrl = await git(['remote', 'get-url', REMOTE])
-  const url = remoteUrl.exitCode === 0 ? remoteUrl.stdout.trim() : ''
+  const remoteUrl = options.parent === undefined ? await git(['remote', 'get-url', REMOTE]) : undefined
+  const url = remoteUrl?.exitCode === 0 ? remoteUrl.stdout.trim() : ''
   const host = remoteForge(url)
   const published =
     (await git(['rev-parse', '--verify', '--quiet', `refs/remotes/${REMOTE}/${options.branch}`])).exitCode === 0
@@ -143,7 +145,8 @@ export async function readLanding(runner: GitRunner, options: LandingOptions): P
     merged: inBase || pullRequest?.state === 'merged',
     ...(compareUrl === undefined ? {} : { compareUrl }),
     ...(pullRequest === undefined ? {} : { pullRequest }),
-    readAt: (options.now ?? Date.now)()
+    readAt: (options.now ?? Date.now)(),
+    ...(options.parent === undefined ? {} : { parent: options.parent })
   }
 }
 
@@ -156,6 +159,9 @@ export async function createPullRequest(runner: GitRunner, options: LandingOptio
     ...(number === undefined ? {} : { number }),
     created
   })
+  if (landing.parent !== undefined) {
+    throw new GitServiceError(ErrorCode.Conflict, `Lands in ${landing.parent.name}`)
+  }
   if (landing.host === null || landing.compareUrl === undefined) {
     throw new GitServiceError(ErrorCode.Conflict, `${REMOTE} is not on GitHub, GitLab or Bitbucket`)
   }
@@ -191,6 +197,8 @@ export type MergeOptions = {
   repoPath: string
   branch: string
   baseRef: string
+  /** A child landing in its parent's checkout: only dirty paths it brings refuse it, and so does the parent's agent mid-turn. */
+  parent?: { name: string; agentWorking: () => boolean }
   dryRun?: boolean
 }
 
@@ -216,8 +224,12 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
   }
 
   const status = await read(['status', '--porcelain=v2', '-z'])
+  const brought =
+    options.parent === undefined
+      ? null
+      : new Set((await read(['diff', '--name-only', '-z', `${into}...${options.branch}`])).stdout.split('\0'))
   const dirty = parseChangeRecords(status.stdout)
-    .filter((change) => change.kind !== 'untracked')
+    .filter((change) => change.kind !== 'untracked' && (brought === null || brought.has(change.path)))
     .map((change) => change.path)
   const log = await read(['log', `-n${MERGE_COMMITS_SHOWN}`, '--format=%h%x1f%s', `${into}..${options.branch}`])
   const commits = log.stdout
@@ -240,7 +252,14 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
   if (options.dryRun) return plan
 
   if (dirty.length > 0) {
-    throw new GitServiceError(ErrorCode.Conflict, `${cwd} has uncommitted changes`, { dirty })
+    const refusal =
+      options.parent === undefined
+        ? `${cwd} has uncommitted changes`
+        : `${options.parent.name} has uncommitted changes to ${dirty.join(', ')}`
+    throw new GitServiceError(ErrorCode.Conflict, refusal, { dirty })
+  }
+  if (options.parent?.agentWorking() === true) {
+    throw new GitServiceError(ErrorCode.Conflict, `${options.parent.name}'s agent is working`)
   }
   if (commits.length === 0) throw new GitServiceError(ErrorCode.Conflict, `${into} already has ${options.branch}`)
 

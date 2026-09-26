@@ -29,7 +29,8 @@ Your worktree
   teamree worktree merges here             would it merge cleanly
   teamree worktree commit here -m "<msg>" -- <paths>
   teamree worktree push here
-  teamree worktree land here               open a pull request
+  teamree worktree land here               open a pull request; a child merges into its parent
+  teamree worktree update here             bring in the base, or a child's parent
 
 Other panes and worktrees
   teamree worktree list [--project here]
@@ -51,6 +52,8 @@ A child worktree branches from its parent's branch and lands back in it.
     From a pane, create makes a child of this worktree; --top makes a top-level task.
     --agent with --prompt starts an agent on the child: that is how work is handed out.
   teamree worktree list --tree             the task tree, indented
+  teamree worktree land here               merge this child into its parent
+  teamree worktree update here             bring in what the parent committed since
   teamree worktree remove <child>          a parent with children needs --children
 Agents may nest 3 deep and keep 6 open children per parent.`
 

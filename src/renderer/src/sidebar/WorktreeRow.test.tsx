@@ -306,6 +306,13 @@ describe('a worktree that is ready', () => {
     expect(end.lastElementChild?.classList.contains('activity')).toBe(true)
   })
 
+  it('says a child is behind its parent, not behind main', () => {
+    mount({ worktree: worktree({ parentId: 'w0', baseRef: 'rework-auth' }), status: status({ behind: 2 }) })
+    const chips = document.querySelector('.gitchips') as HTMLElement
+    expect(chips.textContent).toBe('2 behind parent')
+    expect(chips.getAttribute('aria-label')).toBe('git status: 2 behind parent')
+  })
+
   it('keeps its chips beside the branch when the branch says more', () => {
     mount({ worktree: worktree({ branch: 'ada/pager' }), status: status({ unstaged: 1 }) })
     const meta = document.querySelector('.worktree__meta') as HTMLElement
@@ -998,6 +1005,17 @@ describe('a worktree whose work has landed', () => {
     const chip = screen.getByText('Merged')
     expect(chip.classList.contains('chip')).toBe(true)
     expect(screen.queryByRole('img', { name: /merge cleanly/ })).toBeNull()
+  })
+
+  it('says Landed for a child whose work is in its parent', () => {
+    mount({
+      worktree: worktree({ parentId: 'w0', baseRef: 'rework-auth' }),
+      status: status(),
+      landing: landing({ base: 'rework-auth', host: null, parent: { worktreeId: 'w0', name: 'Rework auth' } })
+    })
+
+    expect(screen.getByText('Landed').classList.contains('chip')).toBe(true)
+    expect(screen.queryByText('Merged')).toBeNull()
   })
 
   it('leads its menu with Delete Worktree…', () => {

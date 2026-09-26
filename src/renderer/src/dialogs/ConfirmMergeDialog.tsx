@@ -1,5 +1,5 @@
-// Asked before a worktree's branch is merged into the base in the project's own checkout: the commits
-// that go in, read fresh, and the files in the way when that checkout has uncommitted work.
+// Asked before a worktree's branch is merged into the base in the project's own checkout, or a child's
+// into its parent's: the commits that go in, read fresh, and the files in the way when that checkout has uncommitted work.
 
 import { useEffect, useState } from 'react'
 import type { WorktreeMerge } from '@shared/entities'
@@ -12,7 +12,7 @@ const SHOWN = 5
 
 export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): React.JSX.Element {
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId))
-  const base = useWorkspaceStore((state) => state.landings[worktreeId]?.base ?? 'main')
+  const landing = useWorkspaceStore((state) => state.landings[worktreeId])
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
   const mergeIntoBase = useWorkspaceStore((state) => state.mergeIntoBase)
   const [plan, setPlan] = useState<WorktreeMerge | null>(null)
@@ -34,7 +34,7 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
     }
   }, [worktreeId])
 
-  const into = plan?.into ?? base
+  const into = landing?.parent?.name ?? plan?.into ?? landing?.base ?? 'main'
   const name = worktree === undefined ? 'this worktree' : `"${worktreeLabel(worktreeDisplay(worktree))}"`
   const dirty = plan?.dirty ?? []
   const commits = (plan?.commits ?? []).map((commit) => `${commit.shortSha} ${commit.subject}`)

@@ -781,7 +781,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'worktree.update': ({ worktreeId }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const status = statuses.get(worktreeId)
-      const baseRef = projects.get(worktree.projectId)?.baseRef ?? 'origin/main'
+      const baseRef = worktree.baseRef ?? projects.get(worktree.projectId)?.baseRef ?? 'origin/main'
       const mode = status?.upstream ? 'merge' : 'rebase'
       if (status && status.staged + status.unstaged + status.conflicted > 0) throw new Error('Commit or stash first')
       if (status && status.behind > 0) {
@@ -806,24 +806,29 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'worktree.landing': ({ worktreeId }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const status = statuses.get(worktreeId)
+      const parent = worktree.parentId === undefined ? undefined : worktrees.get(worktree.parentId)
       return {
         worktreeId,
         branch: worktree.branch,
-        base: 'main',
+        base: parent?.branch ?? 'main',
         host: null,
         published: (status?.upstream ?? null) !== null,
         unmerged: status?.ahead ?? 0,
         merged: false,
-        readAt: Date.now()
+        readAt: Date.now(),
+        ...(parent === undefined ? {} : { parent: { worktreeId: parent.id, name: parent.name } })
       }
     },
     'worktree.createPullRequest': () => {
       throw Object.assign(new Error('origin is not on GitHub, GitLab or Bitbucket'), { code: 'conflict' })
     },
     'worktree.mergeIntoBase': ({ worktreeId, dryRun }) => {
-      required(worktrees.get(worktreeId), 'worktree')
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
       if (!dryRun) throw Object.assign(new Error('the demo has no checkout to merge into'), { code: 'conflict' })
-      return { worktreeId, into: 'main', checkout: '/demo', commits: [], fastForward: true, dirty: [], merged: false }
+      const parent = worktree.parentId === undefined ? undefined : worktrees.get(worktree.parentId)
+      const into = parent?.branch ?? 'main'
+      const checkout = parent?.path ?? '/demo'
+      return { worktreeId, into, checkout, commits: [], fastForward: true, dirty: [], merged: false }
     },
     'worktree.keep': ({ worktreeId }) => {
       const kept = required(worktrees.get(worktreeId), 'worktree')

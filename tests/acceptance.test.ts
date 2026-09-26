@@ -16,8 +16,10 @@ import type {
   WorktreeCommit,
   WorktreeDiff,
   WorktreeLog,
+  WorktreeMerge,
   WorktreeMergePreview,
-  WorktreeStatus
+  WorktreeStatus,
+  WorktreeUpdate
 } from '../src/shared/entities'
 import type { WorktreeNest } from '../src/shared/nesting'
 import { PANE_IDENTITY_ENV } from '../src/shared/tasks'
@@ -403,6 +405,70 @@ describe('nesting an existing worktree', () => {
     expect(rebased).toMatchObject({ change: 'rebase', worktree: { parentId: parent.id } })
     const log = cli<WorktreeLog>(['worktree', 'log', docs.id])
     expect(log.commits.map((commit) => commit.subject)).toEqual(['docs'])
+  }, 60_000)
+})
+
+describe('a child lands in its parent', () => {
+  let parent: Worktree
+  let child: Worktree
+
+  const settle = (created: Worktree): Worktree => cli<Worktree>(['worktree', 'wait', created.id])
+  const inChild = (): NodeJS.ProcessEnv => ({ ...env, [PANE_IDENTITY_ENV.worktreeId]: child.id })
+  const commit = (worktree: Worktree, file: string, text: string): void => {
+    writeFileSync(join(worktree.path, file), text)
+    git(['add', '.'], worktree.path)
+    git(['commit', '-m', `${file} ${text.trim()}`], worktree.path)
+  }
+  const here = (args: string[]): ReturnType<typeof spawnSync> =>
+    spawnSync('node', [CLI, 'worktree', ...args, 'here', '--json'], { encoding: 'utf8', env: inChild() })
+  const subjects = (ref: string, cwd: string): string =>
+    execFileSync('git', ['log', '--format=%s', ref], { cwd, encoding: 'utf8' })
+
+  beforeAll(() => {
+    const project = cli<Project[]>(['project', 'list']).find((row) => row.path === realpathSync(repoPath)) as Project
+    parent = settle(cli<Worktree>(['worktree', 'create', '--project', project.id, '--name', 'store rework']))
+    commit(parent, 'store.txt', 'parent')
+    child = settle(cli<Worktree>(['worktree', 'create', '--parent', parent.id, '--name', 'cache']))
+  }, 60_000)
+
+  it('merges the child into the parent over the socket, never main, and then says it is in', () => {
+    commit(child, 'cache.txt', 'child')
+    const landed = here(['land'])
+    expect(landed.status).toBe(0)
+    const merge = (JSON.parse(landed.stdout as string) as { data: WorktreeMerge }).data
+    expect(merge).toMatchObject({ into: parent.branch, checkout: parent.path, merged: true, fastForward: true })
+
+    expect(subjects(parent.branch, parent.path)).toContain('cache.txt child')
+    expect(subjects('main', repoPath)).not.toContain('cache.txt child')
+    const again = spawnSync('node', [CLI, 'worktree', 'land', 'here'], { encoding: 'utf8', env: inChild() })
+    expect(again.stdout).toBe(`${child.branch} is already in ${parent.branch}.\n`)
+  }, 60_000)
+
+  it('counts behind against the parent, and updates from it', () => {
+    commit(parent, 'store.txt', 'parent again')
+    expect(cli<WorktreeStatus>(['worktree', 'status', child.id]).behind).toBe(1)
+
+    const updated = here(['update'])
+    expect(updated.status).toBe(0)
+    expect((JSON.parse(updated.stdout as string) as { data: WorktreeUpdate }).data).toMatchObject({
+      baseRef: parent.branch,
+      outcome: 'updated'
+    })
+    expect(cli<WorktreeStatus>(['worktree', 'status', child.id]).behind).toBe(0)
+  }, 60_000)
+
+  it('refuses over uncommitted parent changes to the files the child brings', () => {
+    commit(child, 'store.txt', 'child edit')
+    writeFileSync(join(parent.path, 'store.txt'), 'parent draft\n')
+    const refused = here(['land'])
+    expect(refused.status).toBe(1)
+    const error = (
+      JSON.parse((refused.stderr as string) || (refused.stdout as string)) as {
+        error: { code: string; message: string }
+      }
+    ).error
+    expect(error).toMatchObject({ code: 'conflict', message: 'store rework has uncommitted changes to store.txt' })
+    expect(subjects(parent.branch, parent.path)).not.toContain('store.txt child edit')
   }, 60_000)
 })
 

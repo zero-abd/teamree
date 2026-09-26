@@ -16,7 +16,11 @@ export type WorktreeStatusSummary = {
   description: string
 }
 
-export function summarizeWorktreeStatus(status: WorktreeStatus | undefined): WorktreeStatusSummary | null {
+/** `child`: behind is counted against its parent's branch, and says so. */
+export function summarizeWorktreeStatus(
+  status: WorktreeStatus | undefined,
+  child = false
+): WorktreeStatusSummary | null {
   if (!status) return null
 
   const dirty = status.staged + status.unstaged + status.untracked
@@ -25,7 +29,7 @@ export function summarizeWorktreeStatus(status: WorktreeStatus | undefined): Wor
   const parts: string[] = []
   if (status.operation !== undefined) parts.push(status.operation === 'rebase' ? 'rebasing' : 'merging')
   if (status.ahead > 0) parts.push(`${status.ahead} ahead`)
-  if (status.behind > 0) parts.push(`${status.behind} behind`)
+  if (status.behind > 0) parts.push(child ? `${status.behind} behind parent` : `${status.behind} behind`)
   if (status.conflicted > 0) parts.push(`${status.conflicted} conflicted`)
   if (dirty > 0) parts.push(`${dirty} uncommitted`)
   if (parts.length === 0) parts.push('clean, in sync')

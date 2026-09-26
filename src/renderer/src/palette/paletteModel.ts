@@ -214,7 +214,7 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
               {
                 id: land.kind === 'merge' ? ('merge-into-base' as const) : ('create-pull-request' as const),
                 label: landLabel(land),
-                keywords: 'land pull request pr merge review ship done github finish'
+                keywords: 'land pull request pr merge review ship done github finish parent'
               }
             ]),
         ...siblings.map((other) => ({
@@ -227,7 +227,7 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
               {
                 id: 'update-worktree' as const,
                 label: `Update from ${context.updateFrom}`,
-                keywords: 'update rebase merge pull behind base main sync'
+                keywords: 'update rebase merge pull behind base main sync parent'
               }
             ]
           : []),

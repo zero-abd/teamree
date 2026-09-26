@@ -3272,7 +3272,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         return error instanceof Error ? error.message : String(error)
       }
       if (get().dialog?.kind === 'confirm-merge') set({ dialog: null })
-      refresher.request(refreshTargets({ statuses: [worktreeId] }))
+      // A child lands in its parent's checkout, which moves too.
+      const parentId = get().worktrees.find((worktree) => worktree.id === worktreeId)?.parentId
+      refresher.request(refreshTargets({ statuses: parentId === undefined ? [worktreeId] : [worktreeId, parentId] }))
       return null
     },
 
