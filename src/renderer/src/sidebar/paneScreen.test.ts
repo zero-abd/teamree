@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { Terminal } from '@shared/entities'
 import { evidenceLine } from '@shared/outputEvidence'
+import { agentRows } from './agentRows'
 import { replayScreen, screenEvidence } from './paneScreen'
 
 // A Claude pane after a restart, as `terminal read` returned it: the resumed agent redraws its
@@ -94,5 +96,64 @@ describe('screenEvidence', () => {
   it('quotes nothing from a shell’s pager or editor', async () => {
     const screen = await replayScreen('\x1b[?1049h\x1b[1;1Hcalc.js 3L, 60B', 20, 5)
     expect(screenEvidence(screen, {})).toBeNull()
+  })
+})
+
+describe('the row’s line', () => {
+  const alternate = (rows: readonly string[]): string => `\x1b[?1049h\x1b[H${rows.join('\r\n')}`
+  const TITLED = '✳ Create out directory and hello.txt file'
+  const TASK = 'Rotate refresh tokens\nKeep the old ones valid for a day.'
+
+  // A worktree named apart from its task, as in the audit's `auth two … E`.
+  const rowLine = async (
+    output: string,
+    size: readonly [number, number],
+    agent: 'claude' | 'codex',
+    title: string,
+    task?: string
+  ): Promise<string | null> => {
+    const screen = await replayScreen(output, size[0], size[1])
+    const pane: Terminal = {
+      id: 'p',
+      worktreeId: 'w',
+      title,
+      cwd: '/checkouts/auth-two',
+      shell: '/bin/zsh',
+      cols: size[0],
+      rows: size[1],
+      running: true,
+      busy: false,
+      lastOutputAt: 0,
+      agent
+    }
+    const worktree = { id: 'w', name: 'auth two', branch: 'auth-two', ...(task === undefined ? {} : { task }) }
+    return agentRows([pane], worktree, 0, { p: screenEvidence(screen, pane) })[0]?.evidence ?? null
+  }
+
+  it.each([
+    ['claude-permission.txt', [100, 30], 'claude', TITLED, 'Allow command: mkdir -p out && touch out/hello.txt?'],
+    // Replayed at a size it was not drawn for, the dialog garbles and its last row reads `E`.
+    ['claude-permission.txt', [80, 24], 'claude', TITLED, 'Creating out directory and empty hello.txt'],
+    ['claude-trust.txt', [100, 30], 'claude', '✳ Claude Code', 'Trust this folder?'],
+    ['codex-trust.txt', [100, 30], 'codex', 'auth-two', 'Trust this directory?'],
+    ['claude-images-draft.txt', [100, 30], 'claude', TITLED, 'Create out directory and hello.txt file'],
+    ['claude-images-sent.txt', [100, 30], 'claude', '✳ Claude Code', 'Rotate refresh tokens']
+  ] as const)('%s at %j', async (name, size, agent, title, line) => {
+    expect(await rowLine(recorded(name), size, agent, title, TASK)).toBe(line)
+  })
+
+  it.each([
+    ['E', TITLED, 'Create out directory and hello.txt file'],
+    ['│', '◐ Create out directory and hello.txt file', 'Create out directory and hello.txt file'],
+    ['⠋', '✳ Claude Code', 'Rotate refresh tokens'],
+    ['…', '⠏ auth-two', 'Rotate refresh tokens'],
+    ['[?25h', 'claude', 'Rotate refresh tokens']
+  ])('falls back from %j with the title %j', async (junk, title, line) => {
+    expect(await rowLine(alternate(['', `  ${junk}`]), [80, 24], 'claude', title, TASK)).toBe(line)
+  })
+
+  it('says nothing rather than junk, or the name the row already shows', async () => {
+    expect(await rowLine(alternate(['E']), [80, 24], 'claude', '✳ Claude Code')).toBeNull()
+    expect(await rowLine(alternate(['E']), [80, 24], 'claude', '✳ Claude Code', 'auth two')).toBeNull()
   })
 })

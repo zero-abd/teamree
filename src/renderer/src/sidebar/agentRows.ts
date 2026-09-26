@@ -3,9 +3,11 @@
 // ended, the title, the bell, and — outranking all of them — what the agent's hooks report.
 
 import type { AgentEvent, AgentKind, PaneWatcher, Subagent, Terminal } from '@shared/entities'
+import { saysSomething } from '@shared/outputEvidence'
 import { activityOf, type AgentActivity } from '@shared/paneActivity'
 import { hookQuestion, isAnswerOrHint, type ScreenChoice } from '@shared/screenOpinion'
 import { harnessName } from '../agents/harnesses'
+import { taskName } from '../dialogs/taskPlan'
 import { paneInWorktree, worktreeDisplay, type WorktreeNameSource } from './worktreeDisplay'
 
 export { activityOf, agentSays, type AgentActivity, type PaneActivitySource } from '@shared/paneActivity'
@@ -89,11 +91,13 @@ export function agentRows(
 ): AgentRow[] {
   const worktreeId = typeof worktree === 'string' ? worktree : worktree.id
   const mine = terminals.filter((terminal) => terminal.worktreeId === worktreeId)
-  const names = paneNames(mine, typeof worktree === 'string' ? undefined : worktree)
+  const source = typeof worktree === 'string' ? undefined : worktree
+  const names = paneNames(mine, source)
   return mine.map((terminal, index) => {
     const label = names[index] ?? paneName(terminal)
     const activity = activityOf(terminal)
-    const line = evidence[terminal.id] ?? null
+    const read = evidence[terminal.id] ?? null
+    const line = rowLine(activity === 'waiting' ? askingLine(read, terminal.agentEvent) : read, terminal, label, source)
     const choices = activity === 'waiting' ? terminal.screenMenu?.choices : undefined
     return {
       terminalId: terminal.id,
@@ -102,7 +106,7 @@ export function agentRows(
       text: paneText(terminal, label),
       activity,
       quietFor: Math.max(0, now - terminal.lastOutputAt),
-      evidence: activity === 'waiting' ? askingLine(line, terminal.agentEvent) : line,
+      evidence: line,
       ...(choices === undefined ? {} : { choices }),
       ...(terminal.subagents === undefined ? {} : { subagents: terminal.subagents })
     }
@@ -113,6 +117,35 @@ export function agentRows(
 export function askingLine(line: string | null, said: AgentEvent | undefined): string | null {
   if (line !== null && !isAnswerOrHint(line)) return line
   return said?.event === 'Notification' ? hookQuestion(said.message) : null
+}
+
+/**
+ * A row's one line, best first: what the screen said, the agent's own title, the task's first line.
+ * Never a fragment, and never what the row or its worktree is already called.
+ */
+function rowLine(
+  said: string | null,
+  pane: Terminal,
+  label: string,
+  worktree: WorktreeNameSource | undefined
+): string | null {
+  const agent = paneAgent(pane)
+  const task = worktree?.task?.trim() ? taskName(worktree.task, Infinity) : null
+  const fallbacks = agent === undefined ? [] : [agentTitle(pane, agent), task]
+  const shown = new Set(worktree === undefined ? [label] : [label, worktreeDisplay(worktree).title])
+  for (const line of [said, ...fallbacks]) {
+    if (line !== null && !shown.has(line) && saysSomething(line)) return line
+  }
+  return null
+}
+
+/** The summary an agent writes into the window title, without its status glyph; null for a default title. */
+function agentTitle(pane: Pick<Terminal, 'title' | 'shell' | 'cwd'>, agent: AgentKind): string | null {
+  const title = pane.title.replace(/^[^\p{L}\p{N}]+/u, '').trim()
+  if (title === '' || title === harnessName(agent) || title.toLowerCase() === agent) return null
+  // Codex's idle title is its folder; a shell's is its name or `user@host: path`.
+  if (title === basename(pane.cwd) || title === shellName(pane.shell)) return null
+  return paneLabel({ title, shell: pane.shell }) === title ? title : null
 }
 
 /** Everything a pane's name can be read from; a teammate's pane is these fields minus `foregroundAgent`. */

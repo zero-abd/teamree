@@ -183,6 +183,17 @@ describe('evidenceLine, over the app’s own marks', () => {
   it('still quotes a program’s own bracketed line', () => {
     expect(evidenceLine('[build] 12 modules transformed')).toBe('[build] 12 modules transformed')
   })
+
+  it('skips a fragment: a lone letter, bare punctuation, a spinner glyph, an escape remnant', () => {
+    for (const junk of ['E', 'ok', '│', '⠋', '…', '[?25h', '38;2;153;153;153m', ']0;✳ Claude Code']) {
+      expect(evidenceInRows(['3 tests passed', junk])).toBe('3 tests passed')
+    }
+  })
+
+  it('drops an escape remnant the tail slice left at the head of a line', () => {
+    expect(evidenceInRows(['38;2;153;153;153mAdded subtract to calc.js'])).toBe('Added subtract to calc.js')
+    expect(evidenceInRows(['[12:30:01] server started'])).toBe('[12:30:01] server started')
+  })
 })
 
 describe('evidenceLine, over an agent’s own chrome', () => {
@@ -203,7 +214,12 @@ describe('evidenceLine, over an agent’s own chrome', () => {
       '• Working (10s • esc to interrupt)',
       '100% context left · ? for shortcuts',
       '⏎ send   ⇧⏎ newline   ⌃T transcript   ⌃C quit',
-      '(disable recaps in /config)'
+      '(disable recaps in /config)',
+      '⏸ manual mode on · ← for agents',
+      'Esc to cancel · Tab to amend',
+      'Enter to confirm · Esc to cancel',
+      '✢ Flummoxing…',
+      '✢ Gesticulating… ●────────────Do─you─want─to─proceed?──────'
     ]) {
       expect(evidenceLine(`3 tests passed\n${footer}\n`)).toBe('3 tests passed')
     }
@@ -251,6 +267,12 @@ describe('evidenceInRows, over an agent’s screen', () => {
     const rows = ['• Added subtract to calc.js', '', '› Write tests for @filename', '', '  gpt-5.6 default · ~/calc']
     expect(evidenceInRows(rows)).toBe('Added subtract to calc.js')
     expect(evidenceInRows(['3 tests passed', '❯ ', '  and a second typed line'])).toBe('3 tests passed')
+  })
+
+  // Claude opens every dialog with a rule; its body is chrome unless read as a question.
+  it('skips what hangs under a rule', () => {
+    const rows = ['⏺ Creating out directory', '', '─'.repeat(40), ' Bash command', '   mkdir -p out', ' E']
+    expect(evidenceInRows(rows)).toBe('Creating out directory')
   })
 
   it('leaves an indented line alone when no message heads it', () => {

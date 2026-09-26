@@ -320,6 +320,12 @@ describe('agentRows', () => {
     )
   })
 
+  it('quotes a shell’s title nowhere but its name', () => {
+    const shell = terminal({ id: 'a', title: 'vim notes.md' })
+    const task = { id: 'wt1', name: 'notes', branch: 'notes', task: 'Tidy the notes' }
+    expect(agentRows([shell], task, 0, { a: 'E' })[0]?.evidence).toBeNull()
+  })
+
   it('has no evidence at all when none has been read yet', () => {
     expect(agentRows([terminal({ id: 'a' })], 'wt1', 0)[0]?.evidence).toBeNull()
   })
