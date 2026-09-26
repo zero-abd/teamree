@@ -83,6 +83,7 @@ export type CommandActions = {
   showAppearance: (open: boolean) => void
   chooseProjectFolder: () => Promise<void>
   showRightPanelTab: (tab: RightPanelTab) => void
+  openSearch: () => void
   pushActiveWorktree: () => Promise<void>
   openReview: (worktreeId: string) => void
   setTerminalFontSize: (size: number) => void
@@ -211,6 +212,7 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
         'checkout missing'
       )
     case 'go-to-file':
+    case 'search-in-files':
       if (state.activeWorktreeId === null) return 'no worktree open'
       return unless(
         state.worktrees.some(
@@ -407,6 +409,9 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
     }
     case 'find-in-pane':
       store.openPaneSearch()
+      break
+    case 'search-in-files':
+      store.openSearch()
       break
     case 'open-dashboard':
       store.toggleDashboard()

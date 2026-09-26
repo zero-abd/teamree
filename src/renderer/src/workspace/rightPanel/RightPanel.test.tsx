@@ -191,7 +191,7 @@ describe('the rail', () => {
   it('has no Panes tab', () => {
     seed({ rightPanelOpen: true })
     mount()
-    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Files', 'Changes2'])
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Files', 'Changes2', 'Search'])
   })
 
   it('switches between the two tabs, one at a time', async () => {

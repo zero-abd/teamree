@@ -29,6 +29,7 @@ import { emptyProjectContext } from '@shared/memory'
 import { DEFAULT_RUNTIME_SETTINGS, type RuntimeSettings } from '@shared/settings'
 import { leaf, splitPane } from '../panes/paneLayout'
 import { rankPaths } from '@shared/fuzzyPath'
+import { searchLine, searchPattern, type SearchFileHits } from '@shared/search'
 import { siblingRuns } from '@shared/runCompare'
 import { descendantsOf } from '@shared/taskTree'
 import { nestRefusal } from '@shared/nesting'
@@ -1550,6 +1551,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'addons.install': notInDemo('addons.install'),
 
     'workspace.subscribe': () => ({ subscription: nextId('sub') }),
+    'worktree.search': () => ({ subscription: nextId('sub') }),
 
     unsubscribe: () => ({ unsubscribed: true })
   }
@@ -1591,6 +1593,36 @@ export function createSeededRuntimeClient(): RuntimeClient {
         rows: opened.rows,
         handle: opened.handle
       }
+    },
+    async searchContents(params, onEvent) {
+      await sleep(LATENCY_MS)
+      const started = Date.now()
+      const ids = [...worktrees.values()]
+        .filter((worktree) => worktree.id === params.worktreeId || worktree.projectId === params.projectId)
+        .map((worktree) => worktree.id)
+      const pattern = searchPattern(params.query, params)
+      const found: SearchFileHits[] = []
+      for (const worktreeId of ids) {
+        for (const path of SEEDED_PATHS) {
+          const text = files.get(`${worktreeId}:${path}`)?.content ?? seededSource(path)
+          const lines = text
+            .split('\n')
+            .map((line, index) => searchLine(index + 1, line, pattern))
+            .filter((line) => line.ranges.length > 0)
+          if (lines.length > 0) found.push({ worktreeId, path, lines })
+        }
+      }
+      const matches = found.reduce((sum, file) => sum + file.lines.length, 0)
+      onEvent({ type: 'hits', files: found })
+      onEvent({
+        type: 'done',
+        matches,
+        truncated: false,
+        timedOut: false,
+        elapsedMs: Date.now() - started,
+        engine: 'git'
+      })
+      return { close: () => {} }
     },
     async subscribeTerminal(terminalId, onEvent) {
       await sleep(LATENCY_MS)
@@ -1731,6 +1763,12 @@ function fakeSha(ref: string): string {
 function required<T>(value: T | undefined, what: string): T {
   if (value === undefined) throw new Error(`not_found: ${what}`)
   return value
+}
+
+/** A seeded file's text, so the demo's content search has something to find. */
+function seededSource(path: string): string {
+  const name = path.split('/').pop()?.replace(/\..*$/, '') ?? path
+  return `// ${path}\nimport { search } from './index'\n\nexport function ${name}(query: string) {\n  return search(query)\n}\n`
 }
 
 function sleep(ms: number): Promise<void> {

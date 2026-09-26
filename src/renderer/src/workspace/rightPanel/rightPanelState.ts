@@ -1,7 +1,7 @@
 // The right panel's tab, open state and width, remembered per machine (a habit, not a worktree fact).
 // Read like the sidebar width: anything that is not what was written is the default.
 
-export const RIGHT_PANEL_TABS = ['files', 'changes'] as const
+export const RIGHT_PANEL_TABS = ['files', 'changes', 'search'] as const
 
 export type RightPanelTab = (typeof RIGHT_PANEL_TABS)[number]
 

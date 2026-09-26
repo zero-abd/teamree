@@ -410,6 +410,8 @@ type WorkspaceState = {
   rightPanelOpen: boolean
   rightPanelTab: RightPanelTab
   rightPanelWidth: number
+  /** Bumped to put the caret in the Search tab's field. */
+  searchFocus: number
 
   changes: Record<string, WorktreeChanges>
   /** What each worktree has committed that its base has not. */
@@ -686,6 +688,8 @@ type WorkspaceState = {
   toggleRightPanel: () => void
   /** Opens the right panel on one tab. */
   showRightPanelTab: (tab: RightPanelTab) => void
+  /** The Search tab, with the caret in its field. */
+  openSearch: () => void
   /** Hides the panel or the sidebar if it is showing, and keeps hidden what `makeRoom` hid. */
   hideRegion: (region: keyof Sides) => void
   /** Hides the sides `hide` names for the panes' room and shows again those it hid; a hand toggle takes a side back. */
@@ -1605,6 +1609,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     rightPanelOpen: lastPanel.open,
     rightPanelTab: lastPanel.tab,
     rightPanelWidth: readStoredRightPanelWidth(storage),
+    searchFocus: 0,
     changes: {},
     goToLine: null,
     compareFocus: null,
@@ -2738,6 +2743,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const worktreeId = get().activeWorktreeId
       // A tab that draws changes reads them on arrival, unless the replaced tab was already drawing them.
       if (worktreeId && changesOnScreen(get()) && !wasShowing) readChangesNow(worktreeId)
+    },
+
+    openSearch() {
+      get().showRightPanelTab('search')
+      set((state) => ({ searchFocus: state.searchFocus + 1 }))
     },
 
     hideRegion(region) {

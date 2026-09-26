@@ -29,12 +29,14 @@ import {
   queryGroups,
   rankFiles,
   readStoredRecent,
+  searchContentsItem,
   trailing,
   withRecent,
   writeStoredRecent,
   type PaletteGroup,
   type PaletteItem
 } from './paletteModel'
+import { useSearchStore } from '../workspace/rightPanel/searchStore'
 import { useFileMatches } from './useFileMatches'
 import { useFocusedChange } from './useFocusedChange'
 
@@ -258,8 +260,12 @@ export function CommandPalette({
   const groups = useMemo((): PaletteGroup[] => {
     if (mode === 'files') return [{ title: null, items: files }]
     if (wanted === '') return paletteGroups(items, recentCommands, activeName)
-    return queryGroups(items, query, settled ? files : null)
-  }, [mode, files, wanted, items, recentCommands, activeName, query, settled])
+    const contents: PaletteGroup[] =
+      filesOf !== null && wanted.length >= FILES_IN_COMMANDS_MIN_QUERY
+        ? [{ title: 'Contents', items: [searchContentsItem(wanted)] }]
+        : []
+    return [...queryGroups(items, query, settled ? files : null), ...contents]
+  }, [mode, files, wanted, items, recentCommands, activeName, query, settled, filesOf])
   const matches = useMemo(() => groups.flatMap((group) => group.items), [groups])
   // The list can shrink under a selection that was valid a keystroke ago.
   const cursor = Math.min(selected, Math.max(matches.length - 1, 0))
@@ -396,6 +402,10 @@ export function CommandPalette({
         break
       case 'show-files':
         store.showRightPanelTab('files')
+        break
+      case 'search-contents':
+        useSearchStore.getState().setForm({ query: wanted })
+        store.openSearch()
         break
       case 'open-branch':
       case 'open-pull-request': {

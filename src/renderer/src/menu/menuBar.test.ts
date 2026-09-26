@@ -160,6 +160,7 @@ describe('the menu bar is built from the table the keyboard reads', () => {
     expect(sectionOrder('application')).toEqual(['open-settings'])
     expect(sectionOrder('view')).toEqual([
       'open-palette',
+      'search-in-files',
       'previous-worktree',
       'next-worktree',
       'next-needing',
@@ -255,6 +256,7 @@ describe('what the menu bar says can be done', () => {
       'focus-previous-region': true,
       'open-palette': true,
       'go-to-file': false,
+      'search-in-files': false,
       'open-dashboard': true,
       'open-appearance': true,
       'toggle-diff-wrap': true,
