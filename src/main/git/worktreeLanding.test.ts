@@ -28,11 +28,12 @@ async function setup(options: { gh?: 'signed-in' | 'signed-out' } = {}): Promise
   return { repo, service, projectId: project.id }
 }
 
-/** A script named gh that answers the three calls the landing makes, and logs every call. */
+/** A script named gh that answers the calls the landing and a failing check make, and logs every call. */
 async function standInGh(repo: TempRepo, signedIn: boolean): Promise<string> {
   const file = path.join(repo.base, 'gh')
   const state = path.join(repo.base, 'pr.json')
   const log = path.join(repo.base, 'gh.log')
+  const runLog = path.join(repo.base, 'run.log')
   await writeFile(
     file,
     [
@@ -41,6 +42,7 @@ async function standInGh(repo: TempRepo, signedIn: boolean): Promise<string> {
       'case "$1 $2" in',
       `  "auth status") exit ${signedIn ? 0 : 1} ;;`,
       `  "pr view") if [ -f '${state}' ]; then cat '${state}'; exit 0; fi; echo 'no pull requests found' >&2; exit 1 ;;`,
+      `  "run view") if [ -f '${runLog}' ]; then cat '${runLog}'; exit 0; fi; exit 1 ;;`,
       `  "pr create") echo '{"number":12,"url":"https://github.com/acme/pantry/pull/12","state":"OPEN"}' > '${state}'; echo 'https://github.com/acme/pantry/pull/12'; exit 0 ;;`,
       'esac',
       'exit 2',
@@ -51,6 +53,30 @@ async function standInGh(repo: TempRepo, signedIn: boolean): Promise<string> {
   await chmod(file, 0o755)
   return file
 }
+
+const FAILING_PR = JSON.stringify({
+  number: 42,
+  url: 'https://github.com/acme/pantry/pull/42',
+  state: 'OPEN',
+  isDraft: false,
+  reviewDecision: 'CHANGES_REQUESTED',
+  statusCheckRollup: [
+    {
+      __typename: 'CheckRun',
+      name: 'test',
+      status: 'COMPLETED',
+      conclusion: 'FAILURE',
+      detailsUrl: 'https://github.com/acme/pantry/actions/runs/7/job/70'
+    },
+    {
+      __typename: 'CheckRun',
+      name: 'lint',
+      status: 'COMPLETED',
+      conclusion: 'SUCCESS',
+      detailsUrl: 'https://github.com/acme/pantry/actions/runs/7/job/71'
+    }
+  ]
+})
 
 async function ghCalls(repo: TempRepo): Promise<string[]> {
   return (await readFile(path.join(repo.base, 'gh.log'), 'utf8').catch(() => '')).split('\n').filter(Boolean)
@@ -324,6 +350,72 @@ describe('pull requests', () => {
     const landing = await context.service.worktreeLanding({ worktreeId: worktree.id })
 
     expect(landing).toMatchObject({ merged: true, pullRequest: { number: 7, state: 'merged' } })
+  })
+
+  it('reads checks and review with the pull request, and asks gh again when told to or after a push', async () => {
+    const context = await setup({ gh: 'signed-in' })
+    await lookLikeGitHub(context.repo)
+    const worktree = await worktreeWithCommit(context)
+    await context.service.worktreePush({ worktreeId: worktree.id })
+    await writeFile(path.join(context.repo.base, 'pr.json'), FAILING_PR)
+    const views = async (): Promise<number> =>
+      (await ghCalls(context.repo)).filter((call) => call.startsWith('pr view')).length
+
+    const landing = await context.service.worktreeLanding({ worktreeId: worktree.id })
+    expect(landing.pullRequest).toMatchObject({
+      number: 42,
+      review: 'changes',
+      checks: { passing: 1, failing: 1, pending: 0 }
+    })
+    expect((await ghCalls(context.repo)).find((call) => call.startsWith('pr view'))).toBe(
+      `pr view ${worktree.branch} --json number,url,state,isDraft,reviewDecision,statusCheckRollup`
+    )
+
+    await context.service.worktreeLanding({ worktreeId: worktree.id })
+    expect(await views()).toBe(1)
+    await context.service.worktreeLanding({ worktreeId: worktree.id, fresh: true })
+    expect(await views()).toBe(2)
+    await context.repo.write('src/more.ts', 'export const more = 1\n', worktree.path)
+    await context.repo.commit('More', worktree.path)
+    await context.service.worktreePush({ worktreeId: worktree.id })
+    await context.service.worktreeLanding({ worktreeId: worktree.id })
+    expect(await views()).toBe(3)
+  })
+
+  it('reads a failing check’s log for its job, trimmed to the failure', async () => {
+    const context = await setup({ gh: 'signed-in' })
+    await lookLikeGitHub(context.repo)
+    const worktree = await worktreeWithCommit(context)
+    await context.service.worktreePush({ worktreeId: worktree.id })
+    await writeFile(path.join(context.repo.base, 'pr.json'), FAILING_PR)
+    await writeFile(
+      path.join(context.repo.base, 'run.log'),
+      'test\tRun npm test\t2026-09-26T18:00:00.0000000Z FAIL src/sum.test.ts\n'
+    )
+
+    const failure = await context.service.worktreeCheckFailure({ worktreeId: worktree.id, name: 'test' })
+
+    expect(failure).toEqual({
+      worktreeId: worktree.id,
+      name: 'test',
+      url: 'https://github.com/acme/pantry/actions/runs/7/job/70',
+      excerpt: 'FAIL src/sum.test.ts'
+    })
+    expect(await ghCalls(context.repo)).toContain('run view --job 70 --log-failed')
+    expect(
+      (await rejection(context.service.worktreeCheckFailure({ worktreeId: worktree.id, name: 'lint' }))).code
+    ).toBe(ErrorCode.Conflict)
+  })
+
+  it('refuses a failing check’s log without gh', async () => {
+    const context = await setup()
+    await lookLikeGitHub(context.repo)
+    const worktree = await worktreeWithCommit(context)
+    await context.service.worktreePush({ worktreeId: worktree.id })
+
+    expect(
+      (await rejection(context.service.worktreeCheckFailure({ worktreeId: worktree.id, name: 'test' }))).code
+    ).toBe(ErrorCode.Conflict)
   })
 
   it('is refused for an origin that is not a known host', async () => {

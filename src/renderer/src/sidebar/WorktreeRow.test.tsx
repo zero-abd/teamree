@@ -1063,6 +1063,46 @@ describe('a worktree whose work has landed', () => {
     expect(labels().at(-1)).toBe('Delete Worktree…')
   })
 
+  it('carries a pull request chip tinted by its checks, naming the failing ones on hover', () => {
+    mount({
+      status: status(),
+      landing: landing({
+        merged: false,
+        unmerged: 1,
+        pullRequest: {
+          number: 42,
+          url: 'https://github.com/a/b/pull/42',
+          state: 'open',
+          review: 'changes',
+          checks: {
+            passing: 1,
+            failing: 2,
+            pending: 0,
+            list: [
+              { name: 'test', state: 'fail' },
+              { name: 'e2e', state: 'fail' },
+              { name: 'lint', state: 'pass' }
+            ]
+          }
+        }
+      })
+    })
+
+    const chip = screen.getByRole('link', { name: /Pull Request #42/ })
+    expect(chip.textContent).toBe('PR #42 ✗ 2')
+    expect(chip.classList.contains('prchip--fail')).toBe(true)
+    expect(chip.getAttribute('title')).toContain('2 failing: test, e2e')
+  })
+
+  it('carries no pull request chip once the work has merged', () => {
+    mount({
+      status: status(),
+      landing: landing({ pullRequest: { number: 42, url: 'https://github.com/a/b/pull/42', state: 'merged' } })
+    })
+
+    expect(screen.queryByRole('link', { name: /Pull Request #42/ })).toBeNull()
+  })
+
   it('offers Keep This Run… when the task has other runs', () => {
     const onKeep = vi.fn()
     mount({ onKeep })

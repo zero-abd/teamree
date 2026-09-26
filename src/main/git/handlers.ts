@@ -50,6 +50,7 @@ export const GIT_METHODS = [
   'worktree.update',
   'worktree.abortUpdate',
   'worktree.landing',
+  'worktree.checkFailure',
   'worktree.createPullRequest',
   'worktree.mergeIntoBase',
   'worktree.keep',
@@ -124,6 +125,7 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.update': (params) => service.worktreeUpdate(params),
     'worktree.abortUpdate': (params) => service.worktreeAbortUpdate(params),
     'worktree.landing': (params) => service.worktreeLanding(params),
+    'worktree.checkFailure': (params) => service.worktreeCheckFailure(params),
     'worktree.createPullRequest': (params) => service.worktreeCreatePullRequest(params),
     'worktree.mergeIntoBase': (params) => service.worktreeMergeIntoBase(params),
     'worktree.keep': (params) => service.keepWorktree(params),
@@ -187,6 +189,7 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.update', Params.worktreeUpdate, handlers['worktree.update'])
   registry.register('worktree.abortUpdate', Params.worktreeAbortUpdate, handlers['worktree.abortUpdate'])
   registry.register('worktree.landing', Params.worktreeLanding, handlers['worktree.landing'])
+  registry.register('worktree.checkFailure', Params.worktreeCheckFailure, handlers['worktree.checkFailure'])
   registry.register(
     'worktree.createPullRequest',
     Params.worktreeCreatePullRequest,

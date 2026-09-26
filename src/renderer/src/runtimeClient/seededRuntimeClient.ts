@@ -910,6 +910,9 @@ export function createSeededRuntimeClient(): RuntimeClient {
         ...(parent === undefined ? {} : { parent: { worktreeId: parent.id, name: parent.name } })
       }
     },
+    'worktree.checkFailure': () => {
+      throw Object.assign(new Error('the demo has no pull request'), { code: 'conflict' })
+    },
     'worktree.createPullRequest': () => {
       throw Object.assign(new Error('origin is not on GitHub, GitLab or Bitbucket'), { code: 'conflict' })
     },

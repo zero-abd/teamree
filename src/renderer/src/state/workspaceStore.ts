@@ -303,7 +303,7 @@ export type UndoTarget =
 /** The last push of one worktree, as the Changes tab shows it. A failure is one clause, and git's words. */
 export type PushState =
   | { phase: 'pushing' }
-  | { phase: 'pushed'; reviewUrl?: string }
+  | { phase: 'pushed'; reviewUrl?: string; at: number }
   | { phase: 'failed'; error: string; detail: string }
 
 /** The find bar belongs to the focused pane. `token` changes on every press, which is how a repeat press re-takes an open field. */
@@ -765,6 +765,8 @@ type WorkspaceState = {
   typeIntoPane: (terminalId: string, text: string) => Promise<void>
   /** `gh pr create` for a published branch, else the host's page for one in the browser; an open one is opened. */
   createPullRequest: (worktreeId: string) => Promise<void>
+  /** Asks `gh` about these worktrees' pull requests again, past its cache. */
+  refreshPullRequests: (worktreeIds: string[]) => Promise<void>
   /** Merges into the base branch in the project's checkout, then pushes it when `push`; answers with why not, or null once merged. */
   mergeIntoBase: (worktreeId: string, push?: boolean) => Promise<string | null>
   /** Pushes a project's base to origin, pulling origin's first when `pull`; answers with why not, or null once pushed. */
@@ -1286,12 +1288,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   }
 
   /** Where the worktrees named can land, a few at a time; one unreadable worktree costs nobody else. */
-  const refreshLandings = async (worktreeIds: string[]): Promise<void> => {
+  const refreshLandings = async (worktreeIds: string[], fresh = false): Promise<void> => {
     const queue = [...worktreeIds]
     const found: WorktreeLanding[] = []
     const worker = async (): Promise<void> => {
       for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
-        const landing = await runtimeClient.call('worktree.landing', { worktreeId: next }).catch(() => null)
+        const params = fresh ? { worktreeId: next, fresh } : { worktreeId: next }
+        const landing = await runtimeClient.call('worktree.landing', params).catch(() => null)
         if (landing) found.push(landing)
       }
     }
@@ -3600,7 +3603,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
             result.reviewUrl === undefined ? undefined : { label: 'Open review', url: result.reviewUrl }
           )
         }
-        setPush({ phase: 'pushed', ...(result.reviewUrl === undefined ? {} : { reviewUrl: result.reviewUrl }) })
+        setPush({
+          phase: 'pushed',
+          at: Date.now(),
+          ...(result.reviewUrl === undefined ? {} : { reviewUrl: result.reviewUrl })
+        })
+        void refreshLandings([worktreeId])
         // The remote has every commit now; the next status read confirms it, and the tab should not offer Push until then.
         set((state) => {
           const status = state.statuses[worktreeId]
@@ -3677,6 +3685,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       } finally {
         set({ openingPullRequest: false })
       }
+    },
+
+    async refreshPullRequests(worktreeIds) {
+      await refreshLandings(worktreeIds, true)
     },
 
     async mergeIntoBase(worktreeId, push) {

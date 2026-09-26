@@ -27,6 +27,7 @@ import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
 import type { OverlapChip, OverlapEntry } from './overlapChip'
 import { OverlapMark } from './OverlapMark'
+import { PullRequestMark } from './PullRequestMark'
 import { endNestDrag, NEST_DRAG_TYPE, startNestDrag, useNestDrag, useNestDrop } from './nestDrag'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { WorktreeNameField } from './WorktreeNameField'
@@ -331,6 +332,7 @@ export function WorktreeRow({
           {`#${issue.number}`}
         </span>
       )}
+      {ready && !merged ? <PullRequestMark pull={landing?.pullRequest} /> : null}
       {ready ? <PortChipView terminals={terminals} worktreeId={worktree.id} /> : null}
       {overlap === undefined || !ready ? null : <OverlapMark chip={overlap.chip} onOpen={overlap.onOpen} />}
       {ready ? <RunChip terminals={terminals} worktreeId={worktree.id} /> : null}

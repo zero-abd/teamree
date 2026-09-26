@@ -408,7 +408,16 @@ export type WorktreeLanding = {
   /** The host's page for opening a pull request from this branch. */
   compareUrl?: string
   /** Read with `gh`, for a GitHub origin only. */
-  pullRequest?: { number: number; url: string; state: 'open' | 'merged' | 'closed' }
+  pullRequest?: {
+    number: number
+    url: string
+    state: 'open' | 'merged' | 'closed'
+    draft?: boolean
+    /** Absent when the repository asks for no review. */
+    review?: 'approved' | 'changes' | 'required'
+    /** Absent when the head has no checks, or `gh` did not say. */
+    checks?: PullRequestChecks
+  }
   readAt: number
   /** A child lands in its parent: set, the page offers that merge and never a pull request. */
   parent?: { worktreeId: string; name: string }
@@ -417,6 +426,15 @@ export type WorktreeLanding = {
   /** Merged into the local base only: `origin` does not have it yet. */
   notPushed?: boolean
 }
+
+/** One check on a pull request's head, by its latest run. */
+export type PullRequestCheck = { name: string; state: 'pass' | 'fail' | 'pending'; url?: string }
+
+/** The head's checks: counts, and the list failing first. */
+export type PullRequestChecks = { passing: number; failing: number; pending: number; list: PullRequestCheck[] }
+
+/** A failing check's name and the tail of its failed steps' log; `excerpt` is empty when no log could be read. */
+export type CheckFailure = { worktreeId: string; name: string; url?: string; excerpt: string }
 
 /** A pull request made with `gh`, or, with `created` false and no number, the host's page to make one. */
 export type WorktreePullRequest = { worktreeId: string; url: string; number?: number; created: boolean }

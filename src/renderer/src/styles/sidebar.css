@@ -557,6 +557,30 @@
   color: var(--accent-bright);
 }
 
+/* A pull request, tinted by its checks: red failing, green passing, ink while they run. Outlined
+   rather than on the press tint, which takes red and green under AA. */
+.prchip {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  cursor: pointer;
+}
+
+.prchip:hover {
+  text-decoration: underline;
+}
+
+.prchip--fail {
+  color: var(--danger);
+}
+
+.prchip--pass {
+  color: var(--success);
+}
+
+.prchip--pending {
+  color: var(--fg-secondary);
+}
+
 /* Files another task changes too. Blue, since amber is an agent asking; red once a merge would stop. */
 .overlap {
   gap: 3px;

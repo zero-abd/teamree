@@ -389,6 +389,18 @@ describe('stylesheets', () => {
       )
     })
 
+    it('draws a pull request’s checks red, green or ink, never amber, straight on the ground', () => {
+      expect(declarationOf(ruleFor('sidebar.css', '.prchip'), 'background')).toBe('transparent')
+      for (const [sheet, prefix] of [
+        ['sidebar.css', '.prchip'],
+        ['rightPanel.css', '.prcheck']
+      ] as const) {
+        expect(declarationOf(ruleFor(sheet, `${prefix}--fail`), 'color')).toBe('var(--danger)')
+        expect(declarationOf(ruleFor(sheet, `${prefix}--pass`), 'color')).toBe('var(--success)')
+        expect(declarationOf(ruleFor(sheet, `${prefix}--pending`), 'color')).toBe('var(--fg-secondary)')
+      }
+    })
+
     it('draws the Settings mark, the change count and both merge marks in ink', () => {
       expect(declarationOf(ruleFor('sidebar.css', '.rail__badge'), 'background')).toBeUndefined()
       expect(declarationOf(ruleFor('sidebar.css', '.rail__badge'), 'color')).toMatch(/^var\(--fg/)

@@ -8,6 +8,7 @@ import { usageDetail, usageLabel } from '@shared/usage'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { dotClass, sinceLabel, TONE_LABEL } from '../sidebar/agentRows'
 import { OverlapMark } from '../sidebar/OverlapMark'
+import { PullRequestMark } from '../sidebar/PullRequestMark'
 import { useOverlapChips } from '../sidebar/useOverlapChip'
 import { useUsageStore } from '../state/usageStore'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -63,6 +64,7 @@ export function TaskBoard({
   const overlapOf = useOverlapChips()
   const usage = useUsageStore((state) => state.usage)
   const showCost = useUsageStore((state) => state.showCost)
+  const landings = useWorkspaceStore((state) => state.landings)
   return (
     <>
       <div className="task-head" aria-hidden="true">
@@ -91,6 +93,7 @@ export function TaskBoard({
                   {row.tally === undefined ? null : (
                     <span className="chip task-row__tally">{`${row.tally.done}/${row.tally.total} done`}</span>
                   )}
+                  <PullRequestMark pull={landings[row.worktreeId]?.pullRequest} />
                   {overlap === null ? null : <OverlapMark chip={overlap} />}
                 </span>
                 <span className="task-row__stage">

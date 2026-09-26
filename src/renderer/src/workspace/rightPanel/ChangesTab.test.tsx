@@ -1399,3 +1399,130 @@ describe('the whole branch', () => {
     expect(screen.queryByRole('button', { name: 'Review All' })).toBeNull()
   })
 })
+
+describe('the pull request’s checks', () => {
+  const PR = 'https://github.com/team/pager/pull/42'
+  const withPull = (pullRequest?: WorktreeLanding['pullRequest']): void => {
+    seed({ ahead: 0 })
+    useWorkspaceStore.setState({
+      landings: {
+        w1: {
+          worktreeId: 'w1',
+          branch: 'rewrite-the-pager',
+          base: 'main',
+          host: 'github',
+          published: true,
+          unmerged: 1,
+          merged: false,
+          readAt: 0,
+          ...(pullRequest === undefined ? {} : { pullRequest })
+        }
+      }
+    })
+  }
+  const failing: NonNullable<WorktreeLanding['pullRequest']> = {
+    number: 42,
+    url: PR,
+    state: 'open',
+    review: 'changes',
+    checks: {
+      passing: 1,
+      failing: 1,
+      pending: 0,
+      list: [
+        { name: 'test', state: 'fail', url: 'https://github.com/team/pager/actions/runs/1/job/2' },
+        { name: 'lint', state: 'pass' }
+      ]
+    }
+  }
+  const agent = (overrides: Partial<Terminal> = {}): Terminal => ({
+    id: 't1',
+    worktreeId: 'w1',
+    title: 'claude',
+    cwd: '/wt',
+    shell: '/bin/zsh',
+    cols: 80,
+    rows: 24,
+    running: true,
+    busy: false,
+    agent: 'claude',
+    lastOutputAt: 0,
+    ...overrides
+  })
+
+  it('says the state, the failing count and the review, each a link, with a row per check', () => {
+    withPull(failing)
+    render(<ChangesTab />)
+    const section = screen.getByRole('region', { name: 'Pull Request #42' })
+
+    expect(within(section).getByText('Open')).toBeTruthy()
+    fireEvent.click(within(section).getByRole('button', { name: '#42' }))
+    expect(openInBrowser).toHaveBeenLastCalledWith(PR)
+    fireEvent.click(within(section).getByRole('button', { name: '✗ 1 failing' }))
+    expect(openInBrowser).toHaveBeenLastCalledWith(`${PR}/checks`)
+    fireEvent.click(within(section).getByRole('button', { name: 'Changes requested' }))
+    expect(openInBrowser).toHaveBeenLastCalledWith(`${PR}/files`)
+    const checks = within(within(section).getByRole('list', { name: 'Checks' })).getAllByRole('listitem')
+    expect(checks.map((row) => row.textContent)).toEqual(['✗test', '✓lint'])
+    fireEvent.click(within(checks[0] as HTMLElement).getByRole('button', { name: 'test' }))
+    expect(openInBrowser).toHaveBeenLastCalledWith('https://github.com/team/pager/actions/runs/1/job/2')
+    // Today's button stays, beside it.
+    expect(screen.getByRole('button', { name: 'Open Pull Request #42' })).toBeTruthy()
+  })
+
+  it('says draft, and nothing about checks or review it was not told', () => {
+    withPull({ number: 42, url: PR, state: 'open', draft: true })
+    render(<ChangesTab />)
+    const section = screen.getByRole('region', { name: 'Pull Request #42' })
+
+    expect(within(section).getByText('Draft')).toBeTruthy()
+    expect(within(section).queryByRole('list', { name: 'Checks' })).toBeNull()
+    expect(within(section).queryByRole('button', { name: 'Send Failure to Agent' })).toBeNull()
+  })
+
+  it('is today’s button alone without gh', () => {
+    withPull(undefined)
+    render(<ChangesTab />)
+
+    expect(screen.queryByRole('region', { name: /Pull Request/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Create Pull Request' })).toBeTruthy()
+  })
+
+  it('sends the failure to an idle agent, and focuses it', async () => {
+    withPull(failing)
+    useWorkspaceStore.setState({ terminals: { t1: agent() } })
+    call.mockImplementation((method: string) =>
+      method === 'worktree.checkFailure'
+        ? Promise.resolve({ worktreeId: 'w1', name: 'test', excerpt: 'FAIL src/pager.test.ts' })
+        : Promise.resolve(undefined)
+    )
+    render(<ChangesTab />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send Failure to Agent' }))
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    })
+
+    expect(call).toHaveBeenCalledWith('worktree.checkFailure', { worktreeId: 'w1', name: 'test' })
+    const writes = call.mock.calls.filter(([method]) => method === 'terminal.write')
+    expect(writes.map(([, params]) => (params as { data: string }).data.includes('FAIL src/pager.test.ts'))).toEqual([
+      true,
+      false
+    ])
+  })
+
+  it('will not send to a working agent or a shell', () => {
+    withPull(failing)
+    useWorkspaceStore.setState({
+      terminals: {
+        t1: agent({ agentEvent: { event: 'UserPromptSubmit', at: 1 } } as Partial<Terminal>),
+        t2: agent({ id: 't2', agent: undefined })
+      }
+    })
+    render(<ChangesTab />)
+
+    const send = screen.getByRole('button', { name: 'Send Failure to Agent' }) as HTMLButtonElement
+    expect(send.disabled).toBe(true)
+    expect(send.title).toBe('No idle agent')
+  })
+})

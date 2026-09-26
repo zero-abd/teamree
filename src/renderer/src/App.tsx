@@ -14,6 +14,7 @@ import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
 import { useMenuBar } from './menu/useMenuBar'
 import { useUnsavedFiles } from './files/useUnsavedFiles'
 import { useAgentNotices } from './notices/useAgentNotices'
+import { usePullRequestRefresh } from './state/usePullRequestRefresh'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmCloseFileDialog } from './dialogs/ConfirmCloseFileDialog'
 import { ConfirmUnsavedDialog } from './dialogs/ConfirmUnsavedDialog'
@@ -67,6 +68,7 @@ export function App(): React.JSX.Element {
   useUnsavedFiles()
   // What this window tells the main process about agent notices. See src/renderer/src/notices.
   useAgentNotices()
+  usePullRequestRefresh()
 
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)

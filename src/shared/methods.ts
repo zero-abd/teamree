@@ -8,6 +8,7 @@ import type {
   ClosedPane,
   RemovedWorktree,
   BranchList,
+  CheckFailure,
   CliInstall,
   CloneProgress,
   CliStatus,
@@ -340,7 +341,13 @@ export const Params = {
   /** Undoes an update stopped on conflicts. */
   worktreeAbortUpdate: z.object({ worktreeId: z.string().min(1) }),
   /** Where this worktree's branch can land, and whether it already has. */
-  worktreeLanding: z.object({ worktreeId: z.string().min(1) }),
+  worktreeLanding: z.object({
+    worktreeId: z.string().min(1),
+    /** Ask `gh` again rather than answer from the minute-long cache. */
+    fresh: z.boolean().optional()
+  }),
+  /** A failing check's name and the tail of its log, read with `gh run view --log-failed`. */
+  worktreeCheckFailure: z.object({ worktreeId: z.string().min(1), name: z.string().min(1).max(512) }),
   /** `gh pr create` when `gh` is signed in, else the host's page for one. The branch must be published. */
   worktreeCreatePullRequest: z.object({ worktreeId: z.string().min(1) }),
   /** Merges the branch into the base branch in the project's own checkout; refused when that checkout is dirty. */
@@ -947,6 +954,7 @@ export type MethodContract = TaskMethodContract &
     'worktree.update': { params: z.infer<typeof Params.worktreeUpdate>; result: WorktreeUpdate }
     'worktree.abortUpdate': { params: z.infer<typeof Params.worktreeAbortUpdate>; result: WorktreeUpdateAbort }
     'worktree.landing': { params: z.infer<typeof Params.worktreeLanding>; result: WorktreeLanding }
+    'worktree.checkFailure': { params: z.infer<typeof Params.worktreeCheckFailure>; result: CheckFailure }
     'worktree.createPullRequest': {
       params: z.infer<typeof Params.worktreeCreatePullRequest>
       result: WorktreePullRequest
