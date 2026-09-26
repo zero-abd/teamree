@@ -4,7 +4,6 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ErrorCode, type ErrorResponse, type SuccessResponse } from '../../../shared/protocol'
 import { DEFAULT_RUNTIME_SETTINGS } from '../../../shared/settings'
-import { emptyProjectContext } from '../../../shared/memory'
 import type { WorkspaceEvent } from '../../../shared/methods'
 import { WorkspaceStore } from '../../store/workspaceStore'
 import { createDispatcher, type Dispatcher } from '../dispatcher'
@@ -45,9 +44,6 @@ describe('task, memory and add-on methods before their branches land', () => {
   it('answers every read with an empty result', async () => {
     expect(await result('message.list', {})).toEqual([])
     expect(await result('message.read', { ids: [1] })).toEqual({ read: 0 })
-    expect(await result('project.context', { worktreeId: 'wt_1' })).toEqual(emptyProjectContext('wt_1'))
-    expect(await result('memory.conflicts', { worktreeId: 'wt_1' })).toEqual([])
-    expect(await result('worktree.overlaps', { projectId: 'p' })).toMatchObject({ projectId: 'p', overlaps: [] })
     expect(await result('worktree.usage', {})).toEqual([])
     expect(await result('teamwork.handoffs', { projectId: 'p' })).toEqual({ incoming: [], outgoing: [] })
     expect(await result('project.templates', { projectId: 'p' })).toEqual({
@@ -61,9 +57,6 @@ describe('task, memory and add-on methods before their branches land', () => {
   it('refuses every write as not implemented yet', async () => {
     const writes: [string, unknown][] = [
       ['message.send', { from: { you: true }, to: { worktreeId: 'w' }, kind: 'note', text: 'hi' }],
-      ['memory.note', { worktreeId: 'w', kind: 'decision', text: 'x' }],
-      ['memory.resolve', { noteId: 'n' }],
-      ['memory.forget', { noteId: 'n' }],
       ['teamwork.handOff', { worktreeId: 'w', to: 'ana', note: '' }],
       ['teamwork.take', { projectId: 'p', id: 'h' }],
       ['teamwork.dismissHandoff', { projectId: 'p', id: 'h' }],

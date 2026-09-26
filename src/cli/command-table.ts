@@ -7,6 +7,7 @@ import { UsageError } from './exit.js'
 import { agentCommands } from './commands/agent.js'
 import { cliCommands } from './commands/cli.js'
 import { guideCommands } from './commands/guide.js'
+import { contextCommands } from './commands/context.js'
 import { projectCommands } from './commands/project.js'
 import { quitCommands } from './commands/quit.js'
 import { resourcesCommands } from './commands/resources.js'
@@ -25,6 +26,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   ...terminalCommands,
   ...teamCommands,
   ...agentCommands,
+  ...contextCommands,
   ...cliCommands,
   ...whoamiCommands,
   ...guideCommands(() => COMMANDS)

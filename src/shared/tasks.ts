@@ -39,6 +39,10 @@ export type WorktreeOverlap = {
   with: { worktreeId: string } | { handle: string; worktreeId: string }
   paths: string[]
   conflicts: string[]
+  /** Paths one side changed inside the other's claims. */
+  claimed?: string[]
+  /** Hot files among `paths` (lockfiles, package.json, touched by most worktrees): weak evidence alone. */
+  hot?: string[]
 }
 
 export type WorktreeOverlaps = { projectId: string; overlaps: WorktreeOverlap[]; readAt: number }

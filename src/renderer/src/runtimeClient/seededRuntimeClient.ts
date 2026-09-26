@@ -1488,6 +1488,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'memory.resolve': notInDemo('memory.resolve'),
     'memory.forget': notInDemo('memory.forget'),
     'memory.conflicts': () => [],
+    'memory.claim': ({ worktreeId, globs }) => ({ worktreeId, globs }),
+    'memory.unclaim': ({ worktreeId }) => ({ worktreeId, globs: [] }),
     'worktree.overlaps': ({ projectId }) => ({ projectId, overlaps: [], readAt: Date.now() }),
     'worktree.usage': () => [],
     'teamwork.handOff': notInDemo('teamwork.handOff'),
