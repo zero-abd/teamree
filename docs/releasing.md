@@ -11,52 +11,22 @@ prerequisites are refusals that arrive fifteen minutes into a packaging run.
 
 ## Why this is a script and not a workflow
 
-Releases are cut from a maintainer's Mac, by one command, rather than by hosted
-CI. Three reasons, and none of them is temporary.
+Releases are cut from a maintainer's Mac, by one command. The artifact is a
+universal macOS `.dmg`, and the check that matters is that the packaged app opens
+a real terminal — `node-pty` has to survive packaging, with its native binary
+outside the asar and an executable `spawn-helper` beside it. Proving that means
+launching the app on the platform it was built for.
 
-The artifact is a universal macOS `.dmg`, and the check that matters is that the
-packaged app opens a real terminal — `node-pty` has to survive packaging, with
-its native binary outside the asar and an executable `spawn-helper` beside it.
-Proving that means launching the app, which means the platform it was built for.
-A release that has not been launched is not a release.
+`scripts/release.mjs` runs typecheck, lint, format, the relay build, the full
+suite, the build, the smoke test, the package, and then the packaged app twice —
+unpacked, and the copy inside the mounted `.dmg` — refusing at the first failure.
 
-And the gate is the same either way. `scripts/release.mjs` runs typecheck, lint,
-format, the relay build, the full suite, the build, the smoke test, the package,
-and then the packaged app twice — unpacked, and the copy inside the mounted
-`.dmg` — in one command, refusing at the first one that fails. Putting that
-sequence somewhere else would not make it stricter; it would only make it
-somebody else's machine.
-
-The third reason is what somebody else's machine costs. There were four GitHub
-Actions workflows here — `ci.yml`, `build.yml`, `release.yml` and a temporary
-`macwatch.yml` — and they have been removed. Not because they were broken: they
-ran, and they ran the whole sequence above. Every job in them ran on a `macos`
-runner, which GitHub bills at ten times the Linux rate against a free account's
-monthly allowance, and a full run packaged a 190 MB Electron app. A handful of
-pushes spent the month, after which every pull request carried a red cross that
-was about the allowance rather than about the code — which is the fastest way to
-teach everybody to ignore a red cross.
-
-That sequence has been run on a hosted runner, once, on 13 September 2026. It is
-also the only time that will have happened until somebody runs it by hand again.
-
-One correction to what this paragraph used to say. It claimed that run included
-`npm run install:verify`, and therefore that the instructions in
-[`install.md`](install.md) had been machine-checked rather than only written
-down. They had not been. The script reached its macOS half and died there on an
-unimported `existsSync` — a fault that arrived in the same commit as the script
-and as this claim, so the command has never once completed. What had been run was
-its first half, which compares the document against the release notes and stops
-before the bundle on anything that is not a Mac; that half exits 0, and exiting 0
-was read as the check having passed. The import is fixed, and the macOS half is
-waiting for the first Mac to run it.
-
-Nothing runs on a push, on a pull request or on a tag now, which puts the
-day-to-day checks on whoever is editing.
-[`../CONTRIBUTING.md`](../CONTRIBUTING.md) names them.
-`npm run release:dry-run` runs those and everything below it, and stops before
-creating anything — the honest rehearsal, and the thing to run when a change
-touches packaging.
+CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs the Linux
+half of that on every pull request and every push to `main`: typecheck, lint,
+format and the suite, on a free public-repo runner. The macOS gate, the smoke
+test and packaging stay local and release-only, because macOS runners cost ten
+times as much and a full run packages a 190 MB app. `npm run release:dry-run`
+runs everything and creates nothing; run it when a change touches packaging.
 
 ## The command
 
