@@ -461,6 +461,27 @@
   color: var(--danger);
 }
 
+.changes__overlap {
+  flex: none;
+  padding: var(--s2) var(--s4);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--info);
+  font: inherit;
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.changes__overlap:hover {
+  background: var(--bg-hover);
+}
+
+.changes__overlap--conflict {
+  color: var(--danger);
+}
+
 .changes__updateFailed {
   flex: none;
   margin: 0;

@@ -381,6 +381,36 @@ describe('the Tasks view', () => {
     expect(depth).toEqual(['', '1', '1'])
   })
 
+  it('marks a task sharing files with another, red for a conflict, and nothing for hot files alone', async () => {
+    const { useOverlaps } = await import('../state/overlapStore')
+    useOverlaps.setState({
+      byProject: {
+        p1: [
+          { worktreeId: 'w2', with: { worktreeId: 'w3' }, paths: ['src/db.ts'], conflicts: ['src/db.ts'] },
+          { worktreeId: 'w3', with: { worktreeId: 'w2' }, paths: ['src/db.ts'], conflicts: ['src/db.ts'] },
+          {
+            worktreeId: 'w1',
+            with: { worktreeId: 'w9' },
+            paths: ['package.json'],
+            conflicts: [],
+            hot: ['package.json']
+          }
+        ]
+      }
+    })
+    useTaskTreeStore.setState({ boardMode: 'tasks' })
+    render(<Dashboard />)
+    const marks = [...document.querySelectorAll('.task-row')].map(
+      (row) => row.querySelector('.overlap')?.textContent ?? ''
+    )
+    expect(marks).toEqual(['', '⚠db.ts', '⚠db.ts'])
+    expect(document.querySelectorAll('.task-row .overlap--conflict')).toHaveLength(2)
+    expect((document.querySelector('.task-row .overlap') as HTMLElement).title).toBe(
+      'src/db.ts · Update the tests · conflict'
+    )
+    useOverlaps.setState({ byProject: {} })
+  })
+
   it('opens the worktree from its row', () => {
     useTaskTreeStore.setState({ boardMode: 'tasks' })
     render(<Dashboard />)

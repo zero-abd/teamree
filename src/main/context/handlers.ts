@@ -1,12 +1,12 @@
 // Wires the ledger into the runtime: `project.context`, `memory.*`, `worktree.overlaps`,
 // and the two moments it re-reads git: a workspace change and an agent stopping or asking.
 
-import type { Terminal } from '../../shared/entities'
+import { teammatesHeard, type TeammatePresence, type Terminal } from '../../shared/entities'
 import { emptyProjectContext } from '../../shared/memory'
 import { Params } from '../../shared/methods'
 import type { GitService } from '../git'
 import type { MethodRegistry } from '../runtime/methodRegistry'
-import { ContextLedger } from './contextLedger'
+import { ContextLedger, type TeammatePaths } from './contextLedger'
 
 export function registerContextHandlers(registry: MethodRegistry, git: GitService, dataDir: string): ContextLedger {
   const bus = registry.context.workspaceEvents
@@ -35,7 +35,21 @@ export function registerContextHandlers(registry: MethodRegistry, git: GitServic
   registry.register('memory.conflicts', Params.memoryConflicts, ({ worktreeId }) => ledger.conflicts(worktreeId))
   registry.register('memory.claim', Params.memoryClaim, (params) => ledger.claim(params))
   registry.register('memory.unclaim', Params.memoryUnclaim, (params) => ledger.unclaim(params))
-  registry.register('worktree.overlaps', Params.worktreeOverlaps, ({ projectId }) => ledger.overlaps(projectId))
+  registry.register('worktree.overlaps', Params.worktreeOverlaps, async ({ projectId }, call) => {
+    const presence = registry.lookup('teamwork.presence')
+    let teammates: TeammatePaths[] = []
+    try {
+      const read = (await presence?.handler({ projectId } as never, call)) as TeammatePresence | undefined
+      teammates = (teammatesHeard(read)?.worktrees ?? []).flatMap((worktree) =>
+        worktree.paths === undefined || worktree.stage === 'landed'
+          ? []
+          : [{ handle: worktree.handle, worktreeId: worktree.id, paths: worktree.paths }]
+      )
+    } catch {
+      // Teamwork off or the project unread: local overlaps alone.
+    }
+    return ledger.overlaps(projectId, teammates)
+  })
 
   bus.on((event) => {
     if (event.type === 'worktrees' || event.type === 'projects') ledger.schedule()

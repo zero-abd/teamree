@@ -45,6 +45,10 @@ export function CompareView({
     return state.activeWorktreeId === worktreeId && column !== null && shownTabId(column) === paneId
   })
   const foldForCompare = useWorkspaceStore((state) => state.foldForCompare)
+  const focusPath = useWorkspaceStore((state) =>
+    state.compareFocus?.paneId === paneId ? state.compareFocus.path : null
+  )
+  const comparedFocus = useWorkspaceStore((state) => state.comparedFocus)
 
   // Two runs side by side want the whole window; the sidebar and panel come back when the compare goes.
   useEffect(() => {
@@ -86,6 +90,15 @@ export function CompareView({
     () => (compared === null ? [] : compareRuns(compared.left.patch, compared.right.patch)),
     [compared]
   )
+
+  useEffect(() => {
+    if (focusPath === null || files.length === 0) return
+    const sections = body.current?.querySelectorAll<HTMLElement>('.compare__file') ?? []
+    ;[...sections]
+      .find((section) => section.getAttribute('aria-label') === focusPath)
+      ?.scrollIntoView({ block: 'start' })
+    comparedFocus(paneId)
+  }, [focusPath, files, paneId, comparedFocus])
 
   return (
     <section

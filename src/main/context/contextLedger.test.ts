@@ -109,6 +109,27 @@ describe('the coordination ledger', () => {
     expect((await ledger.context({ worktreeId: 'b' })).text).toContain('  overlap: src/extra.ts, src/shared.ts')
   })
 
+  it('adds a teammate whose changed paths meet a live worktree’s, hot files marked', async () => {
+    const a = await addWorktree('a', 'Add rate limits')
+    await edit(a, 'line two from a')
+    await repo.write('package.json', '{}\n', a.path)
+    await ledger.refresh()
+
+    const { overlaps } = await ledger.overlaps('p1', [
+      { handle: 'ana', worktreeId: 'peer:ana:w9', paths: ['package.json', 'src/shared.ts', 'src/other.ts'] },
+      { handle: 'bo', worktreeId: 'peer:bo:w1', paths: ['docs/readme.md'] }
+    ])
+    expect(overlaps).toEqual([
+      {
+        worktreeId: 'a',
+        with: { handle: 'ana', worktreeId: 'peer:ana:w9' },
+        paths: ['src/shared.ts', 'package.json'],
+        conflicts: [],
+        hot: ['package.json']
+      }
+    ])
+  })
+
   it('answers empty when nothing overlaps', async () => {
     const a = await addWorktree('a', 'Add rate limits')
     const b = await addWorktree('b', 'Fix login redirect')

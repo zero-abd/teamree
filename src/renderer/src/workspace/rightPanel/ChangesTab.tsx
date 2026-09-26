@@ -7,6 +7,8 @@ import { ReviewBar } from '../../review/ReviewBar'
 import { isViewedRow } from '../../review/reviewModel'
 import { useReviewStore } from '../../review/reviewStore'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
+import { overlapLines } from '../../sidebar/overlapChip'
+import { openOverlap, useOverlapChip } from '../../sidebar/useOverlapChip'
 import { openInBrowser } from '../../shell/openInBrowser'
 import { commitScope, useWorkspaceStore } from '../../state/workspaceStore'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
@@ -57,6 +59,7 @@ export function ChangesTab(): React.JSX.Element | null {
     worktreeId ? shownCommitIn(state.layouts[worktreeId]?.root ?? null) : null
   )
   const viewed = useReviewStore((state) => (worktreeId ? state.viewed[worktreeId] : undefined))
+  const overlap = useOverlapChip(worktreeId)
   const reviewBranch = useReviewStore((state) => state.reviewBranch)
   const [menu, setMenu] = useState<{ path: string; at: RowMenuAnchor } | null>(null)
   const [moreAt, setMoreAt] = useState<{ at: RowMenuAnchor; opener: HTMLElement } | null>(null)
@@ -184,6 +187,19 @@ export function ChangesTab(): React.JSX.Element | null {
           )}
         </div>
       ) : null}
+      {worktreeId === null
+        ? null
+        : overlapLines(overlap).map((line) => (
+            <button
+              type="button"
+              key={line.text}
+              className={`changes__overlap${line.conflict ? ' changes__overlap--conflict' : ''}`}
+              title={overlap?.title}
+              onClick={() => openOverlap(worktreeId, line.entry)}
+            >
+              <span aria-hidden="true">⚠</span> {line.text}
+            </button>
+          ))}
       {updateError === undefined ? null : (
         <p className="changes__updateFailed" role="alert">
           {updateError}

@@ -415,6 +415,31 @@
   color: var(--accent-bright);
 }
 
+/* Files another task changes too. Blue, since amber is an agent asking; red once a merge would stop. */
+.overlap {
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.overlap__glyph {
+  font-size: 9px;
+  line-height: 1;
+}
+
+.overlap--overlap {
+  background: color-mix(in srgb, var(--info) 14%, transparent);
+  color: var(--info);
+}
+
+.overlap--conflict {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
+.overlap--open {
+  cursor: pointer;
+}
+
 .worktree__row {
   position: relative;
   display: flex;

@@ -28,6 +28,9 @@ import { agentRows, worktreeTone, type DotTone } from './agentRows'
 import { flattenTask, taskForest, taskTally, treeTone, type TaskNode } from './taskTree'
 import { isDoneStage, taskStages } from '../dashboard/taskRows'
 import { useTaskTreeStore } from '../state/taskTreeStore'
+import { useOverlaps } from '../state/overlapStore'
+import { overlapChip } from './overlapChip'
+import { openOverlap, overlapNamer } from './useOverlapChip'
 import { agentWords, worktreeDisplay, worktreeLabel } from './worktreeDisplay'
 
 export function Sidebar({
@@ -85,6 +88,7 @@ export function Sidebar({
   const kindOf = useMemo(() => agentWords(agents), [agents])
   const resumable = canResumeConversations(agents)
   const collapsedTasks = useTaskTreeStore((state) => state.collapsedTasks)
+  const overlaps = useOverlaps((state) => state.byProject)
   const setTaskCollapsed = useTaskTreeStore((state) => state.setTaskCollapsed)
   const stages = useMemo(
     () => taskStages({ worktrees, terminals: paneList, statuses, mergePreviews, landings, now }),
@@ -323,11 +327,19 @@ export function Sidebar({
             const reading = attentionByPane(watching[project.id])
             // Roster teammates never heard from: not away, and not without worktrees.
             const unheard = unheardTeammates(teammates[project.id])
+            const nameOf = overlapNamer(worktrees, teammatesHeard(teammates[project.id])?.worktrees ?? [])
             const drawRow = (node: TaskNode<Worktree>, depth: number): React.JSX.Element => {
               const { worktree } = node
               const display = worktreeDisplay(worktree, kindOf)
               const label = worktreeLabel(display)
               const siblings = siblingRuns(worktree, worktrees)
+              const chip = overlapChip(worktree.id, overlaps[project.id], nameOf)
+              const overlapping = (chip?.entries ?? []).filter(
+                (entry, index, all) =>
+                  !('handle' in entry.with) &&
+                  !siblings.some((other) => other.id === entry.with.worktreeId) &&
+                  all.findIndex((first) => first.with.worktreeId === entry.with.worktreeId) === index
+              )
               const kind = display.agent?.kind
               const twinRun =
                 kind !== undefined && siblings.some((other) => worktreeDisplay(other, kindOf).agent?.kind === kind)
@@ -371,10 +383,17 @@ export function Sidebar({
                   {...(siblings.length === 0
                     ? {}
                     : { onKeep: () => openDialog({ kind: 'confirm-keep', worktreeId: worktree.id }) })}
-                  compareWith={siblings.map((other) => ({
-                    label: runName(other, kindOf),
-                    onChoose: () => void openCompare(worktree.id, other.id, compareTitle(worktree, other, kindOf))
-                  }))}
+                  compareWith={[
+                    ...siblings.map((other) => ({
+                      label: runName(other, kindOf),
+                      onChoose: () => void openCompare(worktree.id, other.id, compareTitle(worktree, other, kindOf))
+                    })),
+                    ...overlapping.map((entry) => ({
+                      label: entry.name,
+                      onChoose: () => openOverlap(worktree.id, entry)
+                    }))
+                  ]}
+                  {...(chip === null ? {} : { overlap: { chip, onOpen: (entry) => openOverlap(worktree.id, entry) } })}
                 />
               )
             }
