@@ -27,7 +27,9 @@ const ProjectSchema = z.object({
   setupCommand: z.string().min(1).optional(),
   approvedSetupCommand: z.string().min(1).optional(),
   runCommands: RunCommandsSchema.optional().catch(undefined),
-  approvedRunCommands: RunCommandsSchema.optional().catch(undefined)
+  approvedRunCommands: RunCommandsSchema.optional().catch(undefined),
+  // Only `false` is stored; on is the default and deletes the field.
+  fetchInBackground: z.literal(false).optional()
 })
 
 const WorktreeSchema = z.object({
