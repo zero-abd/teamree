@@ -1,13 +1,11 @@
 // Copies of uncommitted work taken before Remove or Discard throws it away: a commit whose tree is
 // the working tree (untracked files included), kept under `refs/teamree/trash/` in the repository.
 
-import { randomUUID } from 'node:crypto'
-import { copyFile, rm, stat, utimes } from 'node:fs/promises'
-import path from 'node:path'
 import type { RemovedWorktree, Worktree } from '../../shared/entities'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import type { GitRunner } from './gitProcess'
+import { writeWorkingTree } from './workingTree'
 
 export const TRASH_PREFIX = 'refs/teamree/trash/'
 
@@ -76,33 +74,11 @@ export async function snapshotWorktree(
       ? await git(['commit-tree', '--no-gpg-sign', indexTree.stdout.trim(), ...parents, '-m', 'index'], IDENTITY)
       : null
 
-  // A private index beside the real one, seeded from it so unchanged files are not re-read.
-  const gitDir = path.resolve(cwd, await git(['rev-parse', '--git-dir']))
-  const realIndex = path.resolve(cwd, await git(['rev-parse', '--git-path', 'index']))
-  const scratch = path.join(gitDir, `teamree-trash-${randomUUID()}.index`)
-  let tree: string
-  try {
-    const copied = await copyFile(realIndex, scratch).then(
-      () => true,
-      (error: NodeJS.ErrnoException) => {
-        if (error.code !== 'ENOENT') throw error
-        return false
-      }
-    )
-    // A copy newer than its entries hides same-size edits from git's racy-clean check, so it is
-    // dated a second before the real index: every entry that could be racy gets its content read.
-    if (copied) {
-      const { mtimeMs } = await stat(realIndex)
-      const earlier = (mtimeMs - 1000) / 1000
-      await utimes(scratch, earlier, earlier)
-    }
-    const env = { GIT_INDEX_FILE: scratch }
-    const pathspec = options.paths === undefined ? [] : ['--', ...options.paths]
-    await git(['--literal-pathspecs', 'add', '-A', ...pathspec], env)
-    tree = await git(['write-tree'], env)
-  } finally {
-    await rm(scratch, { force: true })
-  }
+  const tree = await writeWorkingTree(runner, {
+    cwd,
+    timeoutMs: TIMEOUT_MS,
+    ...(options.paths === undefined ? {} : { paths: options.paths })
+  })
 
   const note: TrashNote = {
     kind: options.kind,

@@ -4,7 +4,11 @@ import { overlapChip, overlapLines } from './overlapChip'
 
 const names: Record<string, string> = { b: 'Fix login redirect', c: 'Add rate limits', 'peer:ana:w9': 'Tidy auth' }
 const nameOf = (other: WorktreeOverlap['with']): string =>
-  'handle' in other ? `${other.handle} · ${names[other.worktreeId]}` : (names[other.worktreeId] ?? other.worktreeId)
+  'base' in other
+    ? other.base
+    : 'handle' in other
+      ? `${other.handle} · ${names[other.worktreeId]}`
+      : (names[other.worktreeId] ?? other.worktreeId)
 
 const overlap = (overrides: Partial<WorktreeOverlap> & Pick<WorktreeOverlap, 'with' | 'paths'>): WorktreeOverlap => ({
   worktreeId: 'a',
@@ -100,6 +104,43 @@ describe('the overlap chip on a row', () => {
         'src/a.ts · ana · Tidy auth · overlap'
       ].join('\n')
     )
+  })
+})
+
+describe('conflicts before a commit, and with the base', () => {
+  it('turns red for a conflict that rests on uncommitted work, and says so on hover', () => {
+    const chip = overlapChip(
+      'a',
+      [
+        overlap({
+          with: { worktreeId: 'b' },
+          paths: ['src/money.js'],
+          conflicts: ['src/money.js'],
+          uncommitted: ['src/money.js']
+        })
+      ],
+      nameOf
+    )
+    expect(chip).toMatchObject({ tone: 'conflict', label: 'money.js' })
+    expect(chip?.title).toBe('src/money.js · Fix login redirect · conflict · uncommitted')
+  })
+
+  it('keeps warning against the base once the sibling landed there', () => {
+    const chip = overlapChip(
+      'a',
+      [
+        overlap({
+          with: { base: 'main' },
+          paths: ['src/money.js'],
+          conflicts: ['src/money.js'],
+          uncommitted: ['src/money.js']
+        })
+      ],
+      nameOf
+    )
+    expect(chip).toMatchObject({ tone: 'conflict', label: 'money.js' })
+    expect(chip?.title).toBe('src/money.js · would conflict with main · uncommitted')
+    expect(overlapLines(chip).map((line) => line.text)).toEqual(['Conflicts with main: 1 file'])
   })
 })
 

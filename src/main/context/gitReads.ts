@@ -1,5 +1,5 @@
-// The git the ledger reads: paths a worktree touched, whether two branches
-// would conflict, and what a landing merge had to resolve. Read-only throughout.
+// The git the ledger reads: paths a worktree touched, whether two sides would
+// conflict, and what a landing merge had to resolve. Writes objects, never refs.
 
 import type { GitRunner } from '../git/gitProcess'
 import { parseMergeTree } from '../git/mergePreview'
@@ -68,10 +68,13 @@ export async function readTouches(
   }
 }
 
-/** Paths a merge of the two commits would stop on; undefined when git cannot tell. */
+/**
+ * Paths a merge of the two commits would stop on; undefined when git cannot tell.
+ * A tree stands in for its commit's side, found from the commits (git 2.45 takes trees).
+ */
 export async function mergeConflicts(
   runner: GitRunner,
-  options: { cwd: string; left: string; right: string }
+  options: { cwd: string; left: string; right: string; leftTree?: string; rightTree?: string }
 ): Promise<string[] | undefined> {
   if (!usableRef(options.left) || !usableRef(options.right)) return undefined
   const run = { cwd: options.cwd, readOnly: true, timeoutMs: TIMEOUT_MS } as const
@@ -85,13 +88,51 @@ export async function mergeConflicts(
         '--write-tree',
         '--name-only',
         `--merge-base=${base.stdout.trim()}`,
-        options.left,
-        options.right
+        options.leftTree ?? options.left,
+        options.rightTree ?? options.right
       ],
       ...run
     })
     if (merged.exitCode > 1) return undefined
     return merged.exitCode === 0 ? [] : parseMergeTree(merged.stdout).conflicts
+  } catch {
+    return undefined
+  }
+}
+
+export async function resolveCommit(runner: GitRunner, cwd: string, ref: string): Promise<string | undefined> {
+  if (!usableRef(ref)) return undefined
+  try {
+    const read = await runner.tryRun({
+      args: ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`],
+      cwd,
+      readOnly: true,
+      timeoutMs: TIMEOUT_MS
+    })
+    return read.exitCode === 0 ? read.stdout.trim() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** What `base` changed since `tip` left it; `clipped` when too much to list. Undefined when git cannot tell. */
+export async function baseChanges(
+  runner: GitRunner,
+  options: { cwd: string; tip: string; base: string }
+): Promise<{ paths: string[]; clipped: boolean } | undefined> {
+  if (!usableRef(options.tip) || !usableRef(options.base)) return undefined
+  const run = { cwd: options.cwd, readOnly: true, timeoutMs: TIMEOUT_MS } as const
+  try {
+    const parted = await runner.tryRun({ args: ['merge-base', options.tip, options.base], ...run })
+    if (parted.exitCode !== 0) return undefined
+    const from = parted.stdout.trim()
+    if (from === options.base) return { paths: [], clipped: false }
+    const diff = await runner.run({
+      args: ['diff', '--name-only', '-z', from, options.base, '--'],
+      ...run,
+      stdoutLimitBytes: 1_000_000
+    })
+    return { paths: nulList(diff.stdout), clipped: diff.stdoutClipped === true }
   } catch {
     return undefined
   }

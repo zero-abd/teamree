@@ -7,12 +7,13 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { overlapChip, type OverlapChip, type OverlapEntry } from './overlapChip'
 import { worktreeDisplay } from './worktreeDisplay'
 
-/** A local worktree by its task; a teammate's by handle, then task. */
+/** A local worktree by its task; a teammate's by handle, then task; a base as `parent` or its ref. */
 export function overlapNamer(
   worktrees: readonly Worktree[],
   theirs: readonly TeammateWorktree[]
 ): (other: WorktreeOverlap['with']) => string {
   return (other) => {
+    if ('base' in other) return other.worktreeId === undefined ? other.base : 'parent'
     if ('handle' in other) {
       const row = theirs.find((worktree) => worktree.id === other.worktreeId)
       return `${other.handle} · ${(row?.task ?? row?.name ?? '').split('\n')[0]}`
@@ -45,6 +46,12 @@ export function openOverlap(worktreeId: string, entry: OverlapEntry): void {
   const worktree = state.worktrees.find((row) => row.id === worktreeId)
   if (worktree === undefined) return
   const other = entry.with
+  if ('base' in other) {
+    if (other.worktreeId === undefined) void state.openFileAt(worktreeId, entry.path)
+    else
+      void state.openCompare(worktreeId, other.worktreeId, `${worktreeDisplay(worktree).title} vs parent`, entry.path)
+    return
+  }
   if (!('handle' in other)) {
     const title = `${worktreeDisplay(worktree).title} vs ${entry.name}`
     void state.openCompare(worktreeId, other.worktreeId, title, entry.path)

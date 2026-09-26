@@ -347,6 +347,7 @@ export function Sidebar({
               const overlapping = (chip?.entries ?? []).filter(
                 (entry, index, all) =>
                   !('handle' in entry.with) &&
+                  !('base' in entry.with) &&
                   !siblings.some((other) => other.id === entry.with.worktreeId) &&
                   all.findIndex((first) => first.with.worktreeId === entry.with.worktreeId) === index
               )
