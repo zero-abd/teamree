@@ -31,6 +31,7 @@ import { leaf, splitPane } from '../panes/paneLayout'
 import { rankPaths } from '@shared/fuzzyPath'
 import { siblingRuns } from '@shared/runCompare'
 import { descendantsOf } from '@shared/taskTree'
+import { nestRefusal } from '@shared/nesting'
 import { placePane, placePaneWithin } from '@shared/paneRoom'
 import type { ConnectionState, RuntimeClient, Subscription } from './RuntimeClientContract'
 
@@ -664,6 +665,23 @@ export function createSeededRuntimeClient(): RuntimeClient {
       worktrees.set(worktreeId, renamed)
       announce({ type: 'worktrees' })
       return renamed
+    },
+    // No git here: every move is a plain re-point, refused only where the records refuse it.
+    'worktree.nest': ({ worktreeId, parentId, dryRun }) => {
+      const worktree = required(worktrees.get(worktreeId), 'worktree')
+      const refusal = nestRefusal([...worktrees.values()], worktreeId, parentId)
+      if (refusal?.refusal === 'unchanged') return { worktree, change: 'none', dryRun: dryRun === true }
+      if (refusal !== null) {
+        throw Object.assign(new Error(refusal.reason), { code: 'conflict', data: { refusal: refusal.refusal } })
+      }
+      const { parentId: _parent, baseRef: _base, ...rest } = worktree
+      const parent = parentId === null ? undefined : required(worktrees.get(parentId), 'worktree')
+      const moved: Worktree = parent === undefined ? rest : { ...rest, parentId: parent.id, baseRef: parent.branch }
+      if (dryRun !== true) {
+        worktrees.set(worktreeId, moved)
+        announce({ type: 'worktrees' })
+      }
+      return { worktree: moved, change: parent === undefined ? 'unnest' : 'nest', dryRun: dryRun === true }
     },
     'worktree.startPoints': ({ projectId, limit }) => {
       const project = required(projects.get(projectId), 'project')

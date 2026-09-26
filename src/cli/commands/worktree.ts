@@ -3,6 +3,7 @@ import { MAX_AGENT_ARGS_CHARS } from '../../shared/agentLaunch.js'
 import { MAX_TERMINAL_ID_CHARS } from '../../shared/methods.js'
 import { PANE_IDENTITY_ENV } from '../../shared/tasks.js'
 import { descendantsOf } from '../../shared/taskTree.js'
+import type { WorktreeNest } from '../../shared/nesting.js'
 import { parsePatch, type PatchHunk } from '../../shared/patch.js'
 import { compareRuns, type RunFile } from '../../shared/runCompare.js'
 import { taskNamesForAgents } from '../../main/git/worktreeNaming.js'
@@ -134,6 +135,36 @@ async function chooseParent(
     })
   }
   return { projectId: parent.projectId, parent }
+}
+
+/** One line for a nest: what moved where, or with a dry run what would. */
+export function nestText(
+  result: WorktreeNest,
+  worktree: Worktree,
+  parent: Worktree | undefined,
+  from?: Worktree
+): string {
+  const would = result.dryRun
+  const where = parent === undefined ? 'the top level' : parent.name
+  switch (result.change) {
+    case 'none':
+      return parent === undefined
+        ? `${worktree.name} is already top level`
+        : `${worktree.name} is already under ${where}`
+    case 'nest':
+      return `${would ? 'would nest' : 'nested'} ${worktree.name} under ${where}`
+    case 'rebase':
+      return would
+        ? `would rebase ${worktree.name} onto ${parent?.branch} and nest it under ${where}`
+        : `rebased ${worktree.name} onto ${parent?.branch} and nested it under ${where}`
+    case 'unnest': {
+      const moved = `${would ? 'would move' : 'moved'} ${worktree.name} to the top level`
+      const count = result.inherited ?? 0
+      if (count === 0 || from === undefined) return moved
+      const commits = count === 1 ? '1 commit' : `${count} commits`
+      return `${moved}; ${commits} from ${from.name} ${would ? 'will show' : 'now show'} in the diff`
+    }
+  }
 }
 
 /** Both runs and their start, each file with what each run did to it, then the patches, one for a file both changed alike. */
@@ -457,6 +488,52 @@ export const worktreeCommands: readonly CommandSpec[] = [
       const worktree = await resolveWorktree(context.client, context.args[0] as string)
       const renamed = await context.client.call('worktree.rename', { worktreeId: worktree.id, name })
       return { data: renamed, text: `renamed worktree ${worktree.name} to ${renamed.name} (${renamed.id})` }
+    }
+  },
+  {
+    path: ['worktree', 'nest'],
+    summary: 'Move a worktree under another, or back to the top level.',
+    details:
+      "A branch that already holds the new parent's tip just moves. Otherwise --rebase replays its own commits " +
+      'onto the parent, refused over uncommitted changes, a working agent, or a conflict.\n' +
+      '--top measures it against the project base again; its commits stay as they are.',
+    args: [{ name: 'worktree', description: 'Worktree id, name, path, branch, or here.', required: true }],
+    flags: [
+      { name: 'under', kind: 'string', placeholder: '<worktree|here>', description: 'The new parent.' },
+      { name: 'top', kind: 'boolean', description: 'Move it to the top level.' },
+      {
+        name: 'rebase',
+        kind: 'boolean',
+        description: "Rebase onto the parent when its branch lacks the parent's tip."
+      },
+      { name: 'dry-run', kind: 'boolean', description: 'Say what would happen and change nothing.' }
+    ],
+    examples: [
+      'teamree worktree nest docs --under "rework auth"',
+      'teamree worktree nest here --under w1 --rebase --dry-run',
+      'teamree worktree nest migration --top --dry-run'
+    ],
+    run: async (context) => {
+      const under = readString(context.flags, 'under')
+      const top = readBoolean(context.flags, 'top')
+      if ((under === undefined) === !top) {
+        throw new CliError({ code: 'usage', message: 'Give one of --under and --top.', exitCode: ExitCode.Usage })
+      }
+      const caller: Caller = { env: context.env, cwd: context.cwd }
+      const worktrees = await context.client.call('worktree.list', {})
+      const worktree = selectWorktree(worktrees, context.args[0] as string, caller)
+      const parent = under === undefined ? undefined : selectWorktree(worktrees, under, caller)
+      const fromTerminal = context.env[PANE_IDENTITY_ENV.terminalId]
+      const dryRun = readBoolean(context.flags, 'dry-run')
+      const result = await context.client.call('worktree.nest', {
+        worktreeId: worktree.id,
+        parentId: parent?.id ?? null,
+        ...(readBoolean(context.flags, 'rebase') ? { rebase: true } : {}),
+        ...(dryRun ? { dryRun: true } : {}),
+        ...(fromTerminal && fromTerminal.length <= MAX_TERMINAL_ID_CHARS ? { fromTerminalId: fromTerminal } : {})
+      })
+      const from = worktrees.find((row) => row.id === worktree.parentId)
+      return { data: result, text: nestText(result, worktree, parent, from) }
     }
   },
   {

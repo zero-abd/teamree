@@ -19,6 +19,7 @@ import type {
   WorktreeMergePreview,
   WorktreeStatus
 } from '../src/shared/entities'
+import type { WorktreeNest } from '../src/shared/nesting'
 import { PANE_IDENTITY_ENV } from '../src/shared/tasks'
 
 const CLI = join(process.cwd(), 'out/cli/index.js')
@@ -333,6 +334,77 @@ describe('child worktrees', () => {
     expect(left).not.toContain('rework auth')
     expect(left).not.toContain('migration')
     expect(left).not.toContain('fixtures')
+  }, 60_000)
+})
+
+describe('nesting an existing worktree', () => {
+  let project: Project
+  let parent: Worktree
+
+  const settle = (created: Worktree): Worktree => cli<Worktree>(['worktree', 'wait', created.id])
+  const committed = (name: string, file: string, from?: string): Worktree => {
+    const worktree = settle(
+      cli<Worktree>(['worktree', 'create', '--project', project.id, '--name', name, ...(from ? ['--from', from] : [])])
+    )
+    writeFileSync(join(worktree.path, file), `${name}\n`)
+    git(['add', '.'], worktree.path)
+    git(['commit', '-m', name], worktree.path)
+    return worktree
+  }
+  const listed = (worktree: Worktree): Worktree =>
+    cli<Worktree[]>(['worktree', 'list']).find((row) => row.id === worktree.id) as Worktree
+  const head = (worktree: Worktree): string =>
+    execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktree.path, encoding: 'utf8' }).trim()
+  const refusal = (args: string[]): { code: string; message: string } => {
+    const failed = spawnSync('node', [CLI, ...args, '--json'], { encoding: 'utf8', env })
+    expect(failed.status).not.toBe(0)
+    return (JSON.parse(failed.stderr || failed.stdout) as { error: { code: string; message: string } }).error
+  }
+
+  beforeAll(() => {
+    project = cli<Project[]>(['project', 'list']).find((row) => row.path === realpathSync(repoPath)) as Project
+    parent = committed('api layer', 'api.txt')
+  }, 60_000)
+
+  it("moves a branch holding the parent's tip under it over the socket, and back to the top", () => {
+    const client = committed('client', 'client.txt', parent.branch)
+    const nested = cli<WorktreeNest>(['worktree', 'nest', client.id, '--under', parent.id])
+    expect(nested).toMatchObject({ change: 'nest', worktree: { parentId: parent.id, baseRef: parent.branch } })
+    expect(listed(client).parentId).toBe(parent.id)
+
+    const text = execFileSync('node', [CLI, 'worktree', 'nest', client.id, '--top', '--dry-run'], {
+      encoding: 'utf8',
+      env
+    })
+    expect(text).toBe('would move client to the top level; 1 commit from api layer will show in the diff\n')
+    expect(listed(client).parentId).toBe(parent.id)
+
+    cli(['worktree', 'nest', client.id, '--top'])
+    const top = listed(client)
+    expect(top.parentId).toBeUndefined()
+    expect(top.baseRef).toBeUndefined()
+  }, 60_000)
+
+  it('rebases only when asked, and refuses a conflict leaving the branch where it was', () => {
+    const clashing = committed('clashing', 'api.txt')
+    const before = head(clashing)
+    expect(refusal(['worktree', 'nest', clashing.id, '--under', parent.id])).toMatchObject({
+      code: 'conflict',
+      message: 'Needs a rebase onto api-layer',
+      data: { refusal: 'needsRebase' }
+    })
+    expect(refusal(['worktree', 'nest', clashing.id, '--under', parent.id, '--rebase'])).toMatchObject({
+      code: 'conflict',
+      message: 'Would conflict in 1 file',
+      data: { refusal: 'conflicts', paths: ['api.txt'] }
+    })
+    expect(head(clashing)).toBe(before)
+
+    const docs = committed('docs', 'docs.txt')
+    const rebased = cli<WorktreeNest>(['worktree', 'nest', docs.id, '--under', parent.id, '--rebase'])
+    expect(rebased).toMatchObject({ change: 'rebase', worktree: { parentId: parent.id } })
+    const log = cli<WorktreeLog>(['worktree', 'log', docs.id])
+    expect(log.commits.map((commit) => commit.subject)).toEqual(['docs'])
   }, 60_000)
 })
 

@@ -24,6 +24,7 @@ export const GIT_METHODS = [
   'worktree.remove',
   'worktree.forget',
   'worktree.rename',
+  'worktree.nest',
   'worktree.status',
   'worktree.changes',
   'worktree.diff',
@@ -61,6 +62,11 @@ export type GitHandlers = {
   [M in GitMethodName]: (params: ParamsOf<M>, call?: CallContext) => Promise<ResultOf<M>>
 }
 
+/** Agents and scripts are held to the child limits; a person in the window is not. */
+function limited(params: { fromTerminalId?: string }, call: CallContext | undefined): boolean {
+  return params.fromTerminalId !== undefined || (call !== undefined && !fromWindow(call))
+}
+
 export function createGitHandlers(service: GitService): GitHandlers {
   return {
     // Read afresh on every list: a `git pull` can change `.teamree/project.json` under a running app.
@@ -79,14 +85,11 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'project.saveSettings': (params) => service.saveProjectSettings(params),
     'worktree.list': (params) => service.listWorktrees(params),
     'worktree.get': (params) => service.getWorktree(params),
-    // Agents and scripts are held to the child limits; a person in the window is not.
-    'worktree.create': (params, call) =>
-      service.createWorktree(params, {
-        limited: params.fromTerminalId !== undefined || (call !== undefined && !fromWindow(call))
-      }),
+    'worktree.create': (params, call) => service.createWorktree(params, { limited: limited(params, call) }),
     'worktree.remove': (params) => service.removeWorktree(params),
     'worktree.forget': (params) => service.forgetWorktree(params),
     'worktree.rename': (params) => service.renameWorktree(params),
+    'worktree.nest': (params, call) => service.nestWorktree(params, { limited: limited(params, call) }),
     'worktree.status': (params) => service.worktreeStatus(params),
     'worktree.changes': (params) => service.worktreeChanges(params),
     'worktree.diff': (params) => service.worktreeDiff(params),
@@ -138,6 +141,7 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('worktree.remove', Params.worktreeRemove, handlers['worktree.remove'])
   registry.register('worktree.forget', Params.worktreeForget, handlers['worktree.forget'])
   registry.register('worktree.rename', Params.worktreeRename, handlers['worktree.rename'])
+  registry.register('worktree.nest', Params.worktreeNest, handlers['worktree.nest'])
   registry.register('worktree.status', Params.worktreeStatus, handlers['worktree.status'])
   registry.register('worktree.changes', Params.worktreeChanges, handlers['worktree.changes'])
   registry.register('worktree.diff', Params.worktreeDiff, handlers['worktree.diff'])

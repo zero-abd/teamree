@@ -35,6 +35,7 @@ const EXPECTED = [
   'worktree forget',
   'worktree restore',
   'worktree rename',
+  'worktree nest',
   'worktree status',
   'worktree changes',
   'worktree diff',

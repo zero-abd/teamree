@@ -112,7 +112,7 @@ export type Worktree = {
   checkout?: string
   /** A setup command from `.teamree/project.json` this Mac has not approved, waiting on `worktree.setup`. */
   setupAsk?: string
-  /** The worktree this is a child task of: set at creation, never re-pointed. */
+  /** The worktree this is a child task of: set at creation, re-pointed only by `worktree.nest`. */
   parentId?: string
   /** What the agent said when it finished; the latest `done` replaces it. */
   report?: WorktreeReport
