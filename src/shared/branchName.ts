@@ -1,6 +1,5 @@
-// The one rule for turning a task name into a branch name; the runtime creates
-// it and the create dialog previews it. Collision handling is not here: the
-// runtime appends `-2`, `-3` and so on once it knows what is taken.
+// The branch naming rules the runtime applies and the create dialog previews:
+// slug, collision suffix (`-2`, `-3`) and the refusal of names git would reject.
 
 const MAX_SLUG_LENGTH = 60
 const FALLBACK_SLUG = 'worktree'
@@ -41,4 +40,40 @@ export function taskNamesForAgents(task: string, agents: readonly string[]): str
     seen.set(agent, nth)
     return nth === 1 ? `${task} ${agent}` : `${task} ${agent} ${nth}`
   })
+}
+
+/**
+ * git stores branches as files, so `feature` and `feature/login` cannot both
+ * exist. Case-insensitive because loose refs live on case-insensitive filesystems.
+ */
+export function branchCollides(candidate: string, taken: ReadonlySet<string>): boolean {
+  const lower = candidate.toLowerCase()
+  if (taken.has(lower)) return true
+  for (const name of taken) {
+    if (name.startsWith(`${lower}/`) || lower.startsWith(`${name}/`)) return true
+  }
+  return false
+}
+
+export function allocateBranchName(taskName: string, existingBranches: readonly string[]): string {
+  const taken = new Set(existingBranches.map((branch) => branch.toLowerCase()))
+  const base = slugifyBranchName(taskName)
+  if (!branchCollides(base, taken)) return base
+  for (let suffix = 2; suffix < 1000; suffix += 1) {
+    const candidate = `${base}-${suffix}`
+    if (!branchCollides(candidate, taken)) return candidate
+  }
+  return `${base}-${Date.now().toString(36)}`
+}
+
+const BRANCH_FORBIDDEN = /[\s~^:?*[\\]|^-|^\.|\.\.|@\{|\.lock$|^\/|\/$|\/\/|\/\./
+
+/** A name `git branch` accepts; control characters are checked apart so the regex holds no literals. */
+export function isValidBranchName(name: string): boolean {
+  if (!name || BRANCH_FORBIDDEN.test(name)) return false
+  for (const character of name) {
+    const code = character.codePointAt(0) ?? 0
+    if (code < 0x20 || code === 0x7f) return false
+  }
+  return true
 }

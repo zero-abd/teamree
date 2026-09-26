@@ -36,6 +36,7 @@ import type {
 } from '../../shared/entities'
 import type { ParamsOf, ResultOf } from '../../shared/methods'
 import { checkTransport } from '../../shared/origin'
+import { isValidBranchName } from '../../shared/branchName'
 import { siblingRuns } from '../../shared/runCompare'
 import { effectiveProjectSettings } from '../../shared/projectSettings'
 import { readProjectFile, writeProjectFile, type ProjectFileRead } from '../teamwork/projectFile'
@@ -148,8 +149,6 @@ type BranchVerdict = 'skip' | 'merged' | 'unjudged' | 'force'
 const DEFAULT_CREATE_TIMEOUT_MS = 10 * 60_000
 
 // git's own ref rules, minus the parts our slugs can never produce.
-const BRANCH_FORBIDDEN = /[\s~^:?*[\\]|^-|^\.|\.\.|@\{|\.lock$|^\/|\/$|\/\/|\/\./
-
 export class GitService {
   readonly events = new GitEventEmitter()
 
@@ -1232,7 +1231,7 @@ export class GitService {
    */
   async #claimCheckout(project: Project, checkout: string): Promise<{ branch: string; adopt?: string }> {
     const branch = branchForCheckout(checkout)
-    if (!branch || BRANCH_FORBIDDEN.test(branch) || hasControlCharacter(branch) || checkout.startsWith('-')) {
+    if (!isValidBranchName(branch) || checkout.startsWith('-')) {
       throw new GitServiceError(ErrorCode.InvalidParams, `"${checkout}" is not a branch to check out`)
     }
     const inventory = await readWorktreeInventory(this.#runner, project.path)
@@ -1260,7 +1259,7 @@ export class GitService {
     if (requested === undefined) return allocateBranchName(taskName, existing)
 
     const branch = requested.trim()
-    if (!branch || BRANCH_FORBIDDEN.test(branch) || hasControlCharacter(branch)) {
+    if (!isValidBranchName(branch)) {
       throw new GitServiceError(ErrorCode.InvalidParams, `"${requested}" is not a valid branch name`)
     }
     if (branchCollides(branch, new Set(existing.map((name) => name.toLowerCase())))) {
@@ -1620,15 +1619,6 @@ export class GitService {
 function unapprovedSetup(project: Project, command: string | undefined): string | undefined {
   if (command === undefined || project.setupCommand !== undefined) return undefined
   return command === project.approvedSetupCommand ? undefined : command
-}
-
-/** Checked outside the ref regex so the regex stays free of control literals. */
-function hasControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const code = character.codePointAt(0) ?? 0
-    if (code < 0x20 || code === 0x7f) return true
-  }
-  return false
 }
 
 /** Git's several ways of saying there is no checkout at that path. */

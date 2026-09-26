@@ -26,20 +26,9 @@ type StartPointPickerProps = {
   onReload: () => void
   value: StartPointValue
   onChange: (value: StartPointValue) => void
-  /** Branch the task will get, so the summary can say what is about to happen. */
-  branchName: string
-  /** Renames that branch; the summary's name is then a button. An empty name asks for the task's own. */
-  onBranchName?: (name: string) => void
 }
 
-export function StartPointPicker({
-  state,
-  onReload,
-  value,
-  onChange,
-  branchName,
-  onBranchName
-}: StartPointPickerProps): React.JSX.Element {
+export function StartPointPicker({ state, onReload, value, onChange }: StartPointPickerProps): React.JSX.Element {
   const prefix = useId()
   const inputId = `${prefix}-input`
   const listboxId = `${prefix}-listbox`
@@ -110,6 +99,7 @@ export function StartPointPicker({
 
   const summaryOption = (open && activeRow?.kind === 'option' ? activeRow.option : null) ?? value.option
   const summaryRef = (open && activeRow ? choiceOf(activeRow).ref : value.text).trim()
+  const browsing = open && activeRow !== null
 
   return (
     <div className="field">
@@ -157,8 +147,7 @@ export function StartPointPicker({
           <StartPointStatus
             state={state}
             onReload={onReload}
-            branchName={branchName}
-            onBranchName={onBranchName}
+            browsing={browsing}
             summaryRef={summaryRef}
             summaryOption={summaryOption}
           />
@@ -254,15 +243,13 @@ function Row({
 function StartPointStatus({
   state,
   onReload,
-  branchName,
-  onBranchName,
+  browsing,
   summaryRef,
   summaryOption
 }: {
   state: StartPointsState
   onReload: () => void
-  branchName: string
-  onBranchName: ((name: string) => void) | undefined
+  browsing: boolean
   summaryRef: string
   summaryOption: StartPoint | null
 }): React.JSX.Element {
@@ -282,85 +269,11 @@ function StartPointStatus({
   // Describes what the field takes; the field is already labelled.
   if (summaryRef.length === 0) return <>Branch, tag or commit</>
 
-  // No task yet, no name: the line is only where it starts.
+  // The box already shows the ref; the ref is repeated only for the row being browsed.
   return (
     <span className="combo__summary">
-      {branchName === '' ? null : (
-        <>
-          {onBranchName === undefined ? branchName : <BranchName name={branchName} onRename={onBranchName} />}
-          {' ← '}
-        </>
-      )}
-      {summaryRef}
-      {summaryOption ? ` ${summaryOption.shortSha}` : ' (resolved on create)'}
+      {browsing ? `${summaryRef} ` : null}
+      {summaryOption ? summaryOption.shortSha : 'resolved on create'}
     </span>
-  )
-}
-
-/** The branch in the summary: a click renames it in place, Enter or leaving keeps the name, Escape drops it. */
-function BranchName({ name, onRename }: { name: string; onRename: (name: string) => void }): React.JSX.Element {
-  const [draft, setDraft] = useState<string | null>(null)
-  const button = useRef<HTMLButtonElement | null>(null)
-  // The input's blur after Escape or Enter must not keep the draft a second time.
-  const settled = useRef(false)
-  // Escape and Enter leave the focus on the name; a blur has already put it elsewhere.
-  const refocus = useRef(false)
-
-  useEscapeClaim(() => {
-    if (draft === null) return false
-    settled.current = true
-    refocus.current = true
-    setDraft(null)
-    return true
-  })
-
-  useEffect(() => {
-    if (draft !== null || !refocus.current) return
-    refocus.current = false
-    button.current?.focus()
-  }, [draft])
-
-  if (draft === null) {
-    return (
-      <button
-        type="button"
-        ref={button}
-        className="combo__branch"
-        title="Rename Branch"
-        onClick={() => {
-          settled.current = false
-          setDraft(name)
-        }}
-      >
-        {name}
-      </button>
-    )
-  }
-
-  const keep = (): void => {
-    if (settled.current) return
-    settled.current = true
-    onRename(draft.trim().replace(/\s+/gu, '-'))
-    setDraft(null)
-  }
-  return (
-    <input
-      className="combo__branchInput"
-      aria-label="Branch"
-      value={draft}
-      size={Math.max(draft.length, 12)}
-      autoFocus
-      autoComplete="off"
-      spellCheck={false}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={keep}
-      onKeyDown={(event) => {
-        if (event.key !== 'Enter') return
-        // Keeps the name; the form's Enter would start the task.
-        event.preventDefault()
-        refocus.current = true
-        keep()
-      }}
-    />
   )
 }

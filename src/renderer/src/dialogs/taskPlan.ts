@@ -1,7 +1,7 @@
 // What the composer promises before submit: the footer and button never claim an agent will run when
 // none can. The choice is a count per agent, turned here into the ordered list a submission is made of.
 
-import { taskNamesForAgents } from '@shared/branchName'
+import { allocateBranchName, branchCollides, isValidBranchName, taskNamesForAgents } from '@shared/branchName'
 import type { InstalledAgent } from '@shared/entities'
 import { harnessName } from '../agents/harnesses'
 
@@ -121,6 +121,24 @@ export function taskCreates(task: string, selection: readonly InstalledAgent[], 
       ...(named === undefined ? {} : { branch: named })
     }
   })
+}
+
+/** The branch each create will get: a hand-named one as typed, the rest as the runtime will allocate them. */
+export function plannedBranches(creates: readonly TaskCreate[], existing: readonly string[]): string[] {
+  const taken = [...existing]
+  return creates.map((create) => {
+    const branch = create.branch ?? allocateBranchName(create.name, taken)
+    taken.push(branch)
+    return branch
+  })
+}
+
+/** Why the hand-named branches cannot be made, or null; named by the runtime, they always can. */
+export function branchProblem(creates: readonly TaskCreate[], existing: readonly string[]): string | null {
+  const named = creates.flatMap((create) => (create.branch === undefined ? [] : [create.branch]))
+  if (named.some((branch) => !isValidBranchName(branch))) return 'Not a valid branch name'
+  const taken = new Set(existing.map((branch) => branch.toLowerCase()))
+  return named.some((branch) => branchCollides(branch, taken)) ? 'Branch exists' : null
 }
 
 export function submitLabel(selection: readonly InstalledAgent[]): string {
