@@ -33,6 +33,7 @@ const { InstallCliDialog } = await import('./InstallCliDialog')
 const { FirstRunCliOffer } = await import('./FirstRunCliOffer')
 const { ConfirmRemoveDialog } = await import('./ConfirmRemoveDialog')
 const { ConfirmDiscardDialog } = await import('./ConfirmDiscardDialog')
+const { ClearLockDialog } = await import('./ClearLockDialog')
 const { ConfirmCloseFileDialog } = await import('./ConfirmCloseFileDialog')
 const { ConfirmUnsavedDialog } = await import('./ConfirmUnsavedDialog')
 const { closePaneWarning } = await import('./closePaneModel')
@@ -670,6 +671,7 @@ describe('buttons and titles', () => {
       <FirstRunCliOffer key="offer" />,
       <ConfirmRemoveDialog key="remove" worktreeId="w1" />,
       <ConfirmDiscardDialog key="discard" worktreeId="w1" path="src/app.ts" />,
+      <ClearLockDialog key="lock" worktreeId="w1" lockPath="/repo/.git/index.lock" />,
       <ConfirmCloseFileDialog key="file" terminalId="file:1" />,
       <ConfirmUnsavedDialog key="unsaved" paneIds={['file:1']} />,
       <ConfirmClosePaneDialog key="pane" terminalId="t2" />,

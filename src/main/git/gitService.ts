@@ -29,6 +29,7 @@ import type {
   WorktreeFiles,
   WorktreeHunkStage,
   WorktreeKeep,
+  WorktreeLock,
   WorktreeLanding,
   WorktreeUnstage,
   WorktreeLog,
@@ -60,7 +61,7 @@ import {
   linkedCheckout,
   type CheckoutPresence
 } from './checkoutPresence'
-import { describeError, GitCommandError, GitServiceError, isTransient } from './errors'
+import { describeError, GitCommandError, GitServiceError, isTransient, lockedIndex } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
 import { createVersionProbe } from './gitVersion'
 import { canonicalPath, isInside, pathKey, samePath } from './pathIdentity'
@@ -109,6 +110,7 @@ import {
   type GhProbe
 } from './worktreeLanding'
 import { listIssues } from './issues'
+import { clearIndexLock, readIndexLock, type GitProcesses, type IndexLockOptions } from './indexLock'
 import { keptName } from './worktreeKeep'
 import { landedInBase, planCleanup, type CleanupRead } from './worktreeCleanup'
 import { readBranchChanges, readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
@@ -192,6 +194,8 @@ export type GitServiceOptions = {
   ghBinary?: () => string | null
   /** Whether an agent in this worktree is mid-turn; `worktree.nest` will not rebase under one. */
   agentWorking?: (worktreeId: string) => boolean
+  /** Lists running git processes for Clear Lock; defaults to `ps` and `lsof`. */
+  gitProcesses?: GitProcesses
 }
 
 /** What the runtime persists between launches. */
@@ -218,6 +222,7 @@ export class GitService {
   readonly #runPanes: GitServiceOptions['runPanes']
   readonly #trustCheckout: GitServiceOptions['trustCheckout']
   readonly #trash: Trash | undefined
+  readonly #gitProcesses: GitProcesses | undefined
   readonly #gh: GhProbe | undefined
   readonly #locateGh: (() => string | null) | undefined
   readonly #agentWorking: (worktreeId: string) => boolean
@@ -253,6 +258,7 @@ export class GitService {
     this.#runPanes = options.runPanes
     this.#trustCheckout = options.trustCheckout
     this.#trash = options.trash
+    this.#gitProcesses = options.gitProcesses
     this.#gh = options.ghBinary === undefined ? undefined : createGhProbe(options.ghBinary, this.#now)
     this.#locateGh = options.ghBinary
     this.#agentWorking = options.agentWorking ?? (() => false)
@@ -1073,6 +1079,7 @@ export class GitService {
       return entry.id
     } catch (error) {
       if (kind === 'remove' && error instanceof GitCommandError && isNotAWorkingTree(error.stderr)) return undefined
+      if (error instanceof GitCommandError && lockedIndex(error.stderr) !== null) throw error
       throw new GitServiceError(
         ErrorCode.Conflict,
         `could not keep a copy first, so nothing was ${
@@ -1591,6 +1598,25 @@ export class GitService {
     const parent = worktree.parentId === undefined ? undefined : this.#store.getWorktree(worktree.parentId)
     if (parent === undefined) return undefined
     return this.#requireReadyWorktree(parent.id, 'landing in it')
+  }
+
+  /** An `index.lock` a `locked` error named, and whether Clear Lock may remove it. */
+  async worktreeLock(params: ParamsOf<'worktree.lock'>): Promise<WorktreeLock> {
+    return readIndexLock(this.#runner, this.#lockOptions(params))
+  }
+
+  /** Removes that lock once no git runs in its checkout and it is not fresh; refused otherwise. */
+  async worktreeClearLock(params: ParamsOf<'worktree.clearLock'>): Promise<WorktreeLock> {
+    return clearIndexLock(this.#runner, this.#lockOptions(params))
+  }
+
+  #lockOptions(params: { worktreeId: string; lockPath: string }): IndexLockOptions {
+    const worktree = this.#requireWorktree(params.worktreeId)
+    return {
+      worktreePath: worktree.path,
+      lockPath: params.lockPath,
+      ...(this.#gitProcesses ? { gitProcesses: this.#gitProcesses } : {})
+    }
   }
 
   /**

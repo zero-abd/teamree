@@ -548,6 +548,12 @@ export type WorktreeUpdateAbort = { worktreeId: string; aborted: 'rebase' | 'mer
 /** What `worktree.resolve` left: the paths still conflicted. */
 export type WorktreeResolve = { worktreeId: string; conflicts: string[] }
 
+/** `data` of a git error raised because another process holds the checkout's `index.lock`. */
+export type GitLockedData = { kind: 'locked'; lockPath: string }
+
+/** A checkout's `index.lock` as Clear Lock judges it: removable only with no git running there and not fresh. */
+export type WorktreeLock = { lockPath: string; exists: boolean; ageMs: number; gitRunning: boolean; clearable: boolean }
+
 /** `data` of a failed `worktree.push`, whose message is one clause: git's whole refusal. */
 export type PushFailureData = { detail: string; kind?: PushFailureKind }
 

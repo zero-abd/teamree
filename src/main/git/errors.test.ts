@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ErrorCode } from '../../shared/protocol'
-import { GitCommandError, GitServiceError, isTransient } from './errors'
+import { GitCommandError, GitServiceError, isTransient, lockedIndex } from './errors'
 
 const failedGit = (input: Partial<ConstructorParameters<typeof GitCommandError>[0]>): GitCommandError =>
   new GitCommandError({ args: ['worktree', 'add'], cwd: '/repo', exitCode: 128, stderr: '', ...input })
@@ -29,5 +29,24 @@ describe('isTransient', () => {
     expect(isTransient(failedGit({ stderr: 'fatal: invalid reference: origin/nope' }))).toBe(false)
     expect(isTransient(new GitServiceError(ErrorCode.NotFound, 'start point "x" is not a ref'))).toBe(false)
     expect(isTransient(new Error('EACCES: permission denied'))).toBe(false)
+  })
+})
+
+describe('a held index lock', () => {
+  const held =
+    "fatal: Unable to create '/repo/.git/worktrees/a b/index.lock': File exists.\n\nAnother git process seems"
+
+  it('is recognised, carrying the lock path', () => {
+    expect(lockedIndex(held)).toBe('/repo/.git/worktrees/a b/index.lock')
+    expect(failedGit({ stderr: held }).data).toEqual({
+      kind: 'locked',
+      lockPath: '/repo/.git/worktrees/a b/index.lock'
+    })
+  })
+
+  it('is not another lock file or another failure', () => {
+    expect(lockedIndex("fatal: Unable to create '/repo/.git/refs/heads/x.lock': File exists.")).toBeNull()
+    expect(lockedIndex('fatal: invalid reference: origin/nope')).toBeNull()
+    expect(failedGit({ stderr: 'fatal: invalid reference: origin/nope' }).data).toBeUndefined()
   })
 })

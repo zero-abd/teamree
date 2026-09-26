@@ -167,6 +167,26 @@ describe('the notice layer', () => {
     vi.unstubAllGlobals()
   })
 
+  it('offers Retry on a held lock, and Clear Lock only when the lock may go, asking first', () => {
+    const retryLocked = vi.fn(async () => {})
+    const lock = { worktreeId: 'w1', lockPath: '/repo/.git/index.lock' }
+    const text = 'Another git process holds the lock'
+    seed({ retryLocked, notices: [{ id: 1, text, tone: 'error', lock: { ...lock, clearable: false } }] })
+    const { unmount } = render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(retryLocked).toHaveBeenCalledWith('w1')
+    expect(screen.queryByRole('button', { name: 'Clear Lock…' })).toBeNull()
+    unmount()
+
+    seed({ notices: [{ id: 1, text, tone: 'error', lock: { ...lock, clearable: true } }] })
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Lock…' }))
+    const dialog = screen.getByRole('dialog', { name: 'Clear Lock?' })
+    expect(within(dialog).getByText('/repo/.git/index.lock')).toBeTruthy()
+    expect(within(dialog).getByText('Deletes this lock file, then retries')).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Clear Lock' })).toBeTruthy()
+  })
+
   it('offers nothing to do when the notice carries no action', () => {
     seed({ notices: [{ id: 1, text: 'Pushed work to origin', tone: 'info' }] })
     render(<App />)

@@ -1,6 +1,7 @@
 // Errors this service raises. They extend RuntimeError because the dispatcher
 // recognizes only that type; anything else reaches the wire as `internal`.
 
+import type { GitLockedData } from '../../shared/entities'
 import { ErrorCode } from '../../shared/protocol'
 import { RuntimeError } from '../runtime/runtimeError'
 
@@ -27,6 +28,8 @@ export class GitCommandError extends GitServiceError {
     stderr: string
     timedOut?: boolean
     cancelled?: boolean
+    /** The held `index.lock` when stderr does not name it. */
+    lockPath?: string
   }) {
     // git's own stderr is the only diagnosis a user can act on, so it leads.
     const detail = firstMeaningfulLine(input.stderr)
@@ -35,9 +38,11 @@ export class GitCommandError extends GitServiceError {
       : input.timedOut
         ? 'timed out'
         : `exited with code ${input.exitCode ?? 'unknown'}`
+    const lockPath = input.lockPath ?? lockedIndex(input.stderr)
     super(
       ErrorCode.GitFailed,
-      detail ? `git ${input.args.join(' ')} ${reason}: ${detail}` : `git ${input.args.join(' ')} ${reason}`
+      detail ? `git ${input.args.join(' ')} ${reason}: ${detail}` : `git ${input.args.join(' ')} ${reason}`,
+      lockPath === null ? undefined : ({ kind: 'locked', lockPath } satisfies GitLockedData)
     )
     this.name = 'GitCommandError'
     this.args = input.args
@@ -47,6 +52,11 @@ export class GitCommandError extends GitServiceError {
     this.timedOut = input.timedOut ?? false
     this.cancelled = input.cancelled ?? false
   }
+}
+
+/** The path of the `index.lock` git could not take because it already exists, or null. */
+export function lockedIndex(stderr: string): string | null {
+  return /Unable to create '(.+[\\/]index\.lock)': File exists/.exec(stderr)?.[1] ?? null
 }
 
 /** git's own `fatal:` or `error:` line when there is one; progress like "Preparing worktree" comes first. */
