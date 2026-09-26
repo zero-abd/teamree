@@ -436,9 +436,14 @@ async function checkWorktreeSurfaces(ask) {
       failures.push(`the row menu does not end with Delete Worktree…: ${JSON.stringify(items)}`)
     if (items.at(-2) !== 'Remove from teamree')
       failures.push(`the row menu has no Remove from teamree before Delete Worktree…: ${JSON.stringify(items)}`)
-    if (items[0] !== 'New Child Task…' || items[1] !== 'Move Under…' || items[2] !== 'Rename…')
-      failures.push(`the row menu does not start with New Child Task…, Move Under…, Rename…: ${JSON.stringify(items)}`)
-    if (items.length !== 9) failures.push(`the row menu has ${items.length} items rather than nine`)
+    // Resume Conversation… is there only when Claude Code or Codex was found.
+    const found = (await call('agent.list', {})).result ?? []
+    const resumable = found.some((agent) => agent.kind === 'claude' || agent.kind === 'codex')
+    const head = ['New Child Task…', 'Move Under…', ...(resumable ? ['Resume Conversation…'] : []), 'Rename…']
+    if (JSON.stringify(items.slice(0, head.length)) !== JSON.stringify(head))
+      failures.push(`the row menu does not start with ${head.join(', ')}: ${JSON.stringify(items)}`)
+    const count = resumable ? 10 : 9
+    if (items.length !== count) failures.push(`the row menu has ${items.length} items rather than ${count}`)
   }
   // Closed again, so nothing below this is driving a window with a menu over it.
   await ask(
@@ -532,7 +537,16 @@ async function checkWorktreeSurfaces(ask) {
     )
   await waitFor(async () => ((await menuRows()) ?? []).length > 0, 'pressing + on the pane strip opened no menu')
   const agents = (await call('agent.list', {})).result ?? []
-  const expectedRows = ['New Terminal', 'New Markdown', ...agents.map((agent) => agent.kind), 'Agent Settings…']
+  const resumeRow = agents.some((agent) => agent.kind === 'claude' || agent.kind === 'codex')
+    ? ['Resume Conversation…']
+    : []
+  const expectedRows = [
+    'New Terminal',
+    'New Markdown',
+    ...agents.map((agent) => agent.kind),
+    ...resumeRow,
+    'Agent Settings…'
+  ]
   const rows = await menuRows()
   if (JSON.stringify(rows) !== JSON.stringify(expectedRows)) {
     failures.push(`the + menu lists ${JSON.stringify(rows)}, not ${JSON.stringify(expectedRows)}`)

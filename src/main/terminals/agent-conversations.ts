@@ -37,7 +37,7 @@ function storeRoot(home: string, override: string | undefined, directory: string
  * A session id this file is willing to build a filename out of. Narrower than
  * `isUsableSessionId`: a separator or `..` is a path traversal here.
  */
-function isUsableFileName(value: string): boolean {
+export function isUsableFileName(value: string): boolean {
   return /^[A-Za-z0-9_-]+$/.test(value) && value.length <= 128
 }
 
@@ -86,7 +86,7 @@ export function claudeTranscriptPath(cwd: string, sessionId: string, home: strin
 }
 
 /** The path with its symlinks followed, or the path itself if it is not there. */
-function resolved(cwd: string): string {
+export function resolved(cwd: string): string {
   try {
     return realpathSync(cwd)
   } catch {
@@ -101,7 +101,7 @@ function resolved(cwd: string): string {
  * cwd, which every rollout records in its first line and `codex resume` filters on.
  */
 function codexConversation(question: ConversationQuestion, home: string): ConversationEvidence {
-  const sessions = path.join(storeRoot(home, process.env.CODEX_HOME, '.codex'), 'sessions')
+  const sessions = codexSessionsDirectory(home)
   if (!existsSync(sessions)) return 'unknown'
 
   const sessionId = question.agentSessionId
@@ -123,8 +123,13 @@ function codexConversation(question: ConversationQuestion, home: string): Conver
   return 'absent'
 }
 
+/** Where Codex keeps its rollouts, by day. */
+export function codexSessionsDirectory(home: string = os.homedir()): string {
+  return path.join(storeRoot(home, process.env.CODEX_HOME, '.codex'), 'sessions')
+}
+
 /** How many rollout files are worth looking at before a startup is being slowed down. */
-const MAX_ROLLOUTS_SEARCHED = 500
+export const MAX_ROLLOUTS_SEARCHED = 500
 
 /** Enough of a rollout's first line to carry the cwd, which sits near its front. */
 const ROLLOUT_HEAD_BYTES = 4096
@@ -133,7 +138,7 @@ const ROLLOUT_HEAD_BYTES = 4096
  * Every rollout under a sessions directory, newest day first and lazy: the
  * session asked about is nearly always recent, and the caller stops at the first match.
  */
-function* rolloutFiles(directory: string): Generator<string> {
+export function* rolloutFiles(directory: string): Generator<string> {
   for (const entry of listing(directory).sort().reverse()) {
     const full = path.join(directory, entry)
     if (entry.endsWith('.jsonl')) {
@@ -155,7 +160,7 @@ function listing(directory: string): string[] {
 }
 
 /** The first `ROLLOUT_HEAD_BYTES` of a file, as text. */
-function head(file: string): string {
+export function head(file: string): string {
   let handle: number | undefined
   try {
     handle = openSync(file, 'r')

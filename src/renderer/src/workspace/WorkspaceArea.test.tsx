@@ -273,10 +273,11 @@ describe('a worktree with no panes in it', () => {
       newTerminal: () => {},
       newMarkdown: () => {},
       startAgent: () => {},
+      resumeConversation: () => {},
       openAgentSettings: () => {}
     })
     expect(startButtons()).toEqual(menu.map((item) => item.label).filter((label) => label !== 'Agent Settings…'))
-    expect(startButtons()).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Codex'])
+    expect(startButtons()).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Codex', 'Resume Conversation…'])
   })
 
   it('marks each agent with its harness glyph', () => {
@@ -311,7 +312,14 @@ describe('a worktree with no panes in it', () => {
       }
     })
     mount()
-    expect(startButtons()).toEqual(['Resume Claude Code', 'New Terminal', 'New Markdown', 'Claude Code', 'Codex'])
+    expect(startButtons()).toEqual([
+      'Resume Claude Code',
+      'New Terminal',
+      'New Markdown',
+      'Claude Code',
+      'Codex',
+      'Resume Conversation…'
+    ])
     const primary = [...document.querySelectorAll('.worktree-start__actions .button--primary')]
     expect(primary.map((button) => button.lastChild?.textContent)).toEqual(['Resume Claude Code'])
     fireEvent.click(screen.getByRole('button', { name: 'Resume Claude Code' }))
@@ -328,8 +336,14 @@ describe('a worktree with no panes in it', () => {
       closedPanes: { w1: [{ terminalId: 't1', worktreeId: 'w1', agent: 'claude', resumable: false, closedAt: 2 }] }
     })
     mount()
-    expect(startButtons()).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Codex'])
+    expect(startButtons()).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Codex', 'Resume Conversation…'])
     expect(document.querySelector('.worktree-start__actions .button--primary')).toBeNull()
+  })
+
+  it('opens the worktree’s past conversations from Resume Conversation…', () => {
+    openEmpty()
+    fireEvent.click(screen.getByRole('button', { name: 'Resume Conversation…' }))
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'resume-conversation', worktreeId: 'w1' })
   })
 
   it('offers nothing to start while the checkout is still being prepared', () => {

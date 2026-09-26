@@ -3,7 +3,7 @@
 
 import type { InstalledAgent } from '@shared/entities'
 import { AgentGlyph } from '../agents/glyphs'
-import { harnessName } from '../agents/harnesses'
+import { canResumeConversations, harnessName } from '../agents/harnesses'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import type { RowMenuItem } from '../sidebar/RowMenu'
@@ -14,6 +14,7 @@ export type StartMenuActions = {
   newTerminal: () => void
   newMarkdown: () => void
   startAgent: (command: string) => void
+  resumeConversation: () => void
   openAgentSettings: () => void
 }
 
@@ -25,6 +26,8 @@ type FixedRow = {
   run: (actions: StartMenuActions) => void
   /** Opens no pane, so an empty worktree's buttons leave it out. */
   menuOnly?: boolean
+  /** Shown only when an agent whose past conversations can be listed is installed. */
+  needsHistory?: boolean
 }
 
 /** A group of fixed rows, or the installed agents, one row each. */
@@ -49,6 +52,12 @@ export const MENU_ROWS: readonly StartMenuGroup[] = [
   'agents',
   [
     {
+      label: 'Resume Conversation…',
+      icon: <HistoryGlyph />,
+      run: (actions) => actions.resumeConversation(),
+      needsHistory: true
+    },
+    {
       label: 'Agent Settings…',
       icon: <SettingsGlyph />,
       run: (actions) => actions.openAgentSettings(),
@@ -64,6 +73,7 @@ export function startMenuItems(
   panesOnly = false
 ): RowMenuItem[] {
   const items: RowMenuItem[] = []
+  const history = canResumeConversations(agents)
   for (const group of MENU_ROWS) {
     const rows: RowMenuItem[] =
       group === 'agents'
@@ -73,7 +83,7 @@ export function startMenuItems(
             onChoose: () => actions.startAgent(agent.command)
           }))
         : group
-            .filter((row) => !(panesOnly && row.menuOnly === true))
+            .filter((row) => !(panesOnly && row.menuOnly === true) && (history || row.needsHistory !== true))
             .map((row) => ({
               label: row.label,
               icon: row.icon,
@@ -98,6 +108,7 @@ export function useStartMenuItems(
   const newMarkdown = useWorkspaceStore((state) => state.newMarkdown)
   const startAgent = useWorkspaceStore((state) => state.startAgent)
   const openSettings = useWorkspaceStore((state) => state.openSettings)
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
   if (worktreeId === null) return []
   return startMenuItems(
     agents,
@@ -106,6 +117,7 @@ export function useStartMenuItems(
       newTerminal: () => void createTerminal(worktreeId),
       newMarkdown: () => newMarkdown(worktreeId),
       startAgent: (command) => void startAgent(command),
+      resumeConversation: () => openDialog({ kind: 'resume-conversation', worktreeId }),
       openAgentSettings: () => openSettings('agents')
     },
     panesOnly
@@ -116,6 +128,14 @@ function TerminalGlyph(): React.JSX.Element {
   return (
     <svg viewBox="0 0 12 12" aria-hidden="true">
       <path d="M1.5 2.5 H10.5 V9.5 H1.5 Z M3.5 4.8 L5.3 6.2 L3.5 7.6 M6.3 7.6 H8.5" />
+    </svg>
+  )
+}
+
+function HistoryGlyph(): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 12 12" aria-hidden="true">
+      <path d="M2.2 4.2 A4 4 0 1 1 2 6.8 M2.2 1.8 V4.2 H4.6 M6 3.6 V6 L7.6 7.2" />
     </svg>
   )
 }

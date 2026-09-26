@@ -5,6 +5,7 @@
 import { create } from 'zustand'
 import { hasCheckout } from '@shared/entities'
 import type {
+  AgentKind,
   CliInstall,
   CliStatus,
   ClosedPane,
@@ -218,6 +219,8 @@ export type DialogState =
   | { kind: 'move-under'; worktreeId: string }
   /** A move whose dry run needs its commits replayed onto the new parent. */
   | { kind: 'confirm-rebase'; worktreeId: string; parentId: string }
+  /** A worktree's past agent conversations, to resume one. */
+  | { kind: 'resume-conversation'; worktreeId: string }
   | null
 
 /** Forgetting a project or a worktree, or moving a project's folder to the Trash. */
@@ -698,6 +701,8 @@ type WorkspaceState = {
   foldForCompare: (on: boolean) => void
   /** Opens a pane already running one of the agents found on this machine. */
   startAgent: (command: string) => Promise<void>
+  /** Opens the worktree with a pane resuming that conversation of that agent. */
+  resumeConversation: (worktreeId: string, agent: AgentKind, sessionId: string) => Promise<void>
 
   /** Reads where the CLI is and what is at its destination. */
   loadCli: () => Promise<void>
@@ -1327,6 +1332,30 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   const extraArgsFor = (command: string): string | undefined => {
     const kind = get().agents.find((agent) => agent.command === command)?.kind
     return kind === undefined ? undefined : get().agentArgs[kind]
+  }
+
+  /** A pane running `command` in the worktree, resuming `resume` when given. */
+  const launchAgent = async (worktreeId: string, command: string, resume?: string): Promise<void> => {
+    const room = roomOrRefuse(worktreeId)
+    if (!room) return
+    try {
+      // Straight through terminal.create: the runtime pins the session id, so a pane started here resumes like any other.
+      const agentArgs = extraArgsFor(command)
+      const terminal = await runtimeClient.call('terminal.create', {
+        worktreeId,
+        command,
+        ...room,
+        ...(agentArgs === undefined ? {} : { agentArgs }),
+        ...(resume === undefined ? {} : { resume })
+      })
+      set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
+      // A click, like the new-terminal button: named before the refresh that reads it, as `createTerminal` does.
+      panesAskedFor.add(terminal.id)
+      refresher.request(refreshTargets({ layouts: [worktreeId] }))
+      await refresher.flush()
+    } catch (error) {
+      failed('Could not start the agent')(error)
+    }
   }
 
   /** Shows a layout without writing it back: this window's copy is only as new as the last event that reached it. */
@@ -2791,25 +2820,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     async startAgent(command) {
       const worktreeId = get().activeWorktreeId
-      const room = worktreeId ? roomOrRefuse(worktreeId) : null
-      if (!worktreeId || !room) return
-      try {
-        // Straight through terminal.create: the runtime pins the session id, so a pane started here resumes like any other.
-        const agentArgs = extraArgsFor(command)
-        const terminal = await runtimeClient.call('terminal.create', {
-          worktreeId,
-          command,
-          ...room,
-          ...(agentArgs === undefined ? {} : { agentArgs })
-        })
-        set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
-        // A click, like the new-terminal button: named before the refresh that reads it, as `createTerminal` does.
-        panesAskedFor.add(terminal.id)
-        refresher.request(refreshTargets({ layouts: [worktreeId] }))
-        await refresher.flush()
-      } catch (error) {
-        failed('Could not start the agent')(error)
-      }
+      if (worktreeId) await launchAgent(worktreeId, command)
+    },
+
+    async resumeConversation(worktreeId, agent, sessionId) {
+      const command = get().agents.find((installed) => installed.kind === agent)?.command
+      if (command === undefined) return
+      if (get().activeWorktreeId !== worktreeId) await get().openWorktree(worktreeId)
+      await launchAgent(worktreeId, command, sessionId)
     },
 
     async loadCli() {

@@ -20,17 +20,19 @@ const actions = (): StartMenuActions => ({
   newTerminal: vi.fn(),
   newMarkdown: vi.fn(),
   startAgent: vi.fn(),
+  resumeConversation: vi.fn(),
   openAgentSettings: vi.fn()
 })
 
 describe('the rows', () => {
-  it('lists a terminal, then every agent the runtime found, then the agent settings', () => {
+  it('lists a terminal, then every agent the runtime found, then resuming and the agent settings', () => {
     const items = startMenuItems([claude, codex], mac, actions())
     expect(items.map((item) => item.label)).toEqual([
       'New Terminal',
       'New Markdown',
       'Claude Code',
       'Codex',
+      'Resume Conversation…',
       'Agent Settings…'
     ])
   })
@@ -42,6 +44,7 @@ describe('the rows', () => {
       'New Markdown',
       'Codex',
       'Claude Code',
+      'Resume Conversation…',
       'Agent Settings…'
     ])
   })
@@ -55,14 +58,14 @@ describe('the rows', () => {
     expect(marks[1]).toContain('aria-label="Kiro"')
   })
 
-  it('draws a rule before the agents and another before the settings', () => {
+  it('draws a rule before the agents and another after them', () => {
     const items = startMenuItems([claude, codex], mac, actions())
-    expect(items.map((item) => item.separated === true)).toEqual([false, false, true, false, true])
+    expect(items.map((item) => item.separated === true)).toEqual([false, false, true, false, true, false])
   })
 
   it('names the terminal chord on its row, and no other', () => {
     const items = startMenuItems([claude], mac, actions())
-    expect(items.map((item) => item.hint ?? '')).toEqual(['⌘T', '⌘⇧M', '', ''])
+    expect(items.map((item) => item.hint ?? '')).toEqual(['⌘T', '⌘⇧M', '', '', ''])
   })
 
   it('offers nothing for an agent the runtime did not find', () => {
@@ -78,7 +81,19 @@ describe('the rows', () => {
 
   it('leaves the settings off when only rows that open a pane are wanted', () => {
     const items = startMenuItems([claude], mac, actions(), true)
-    expect(items.map((item) => item.label)).toEqual(['New Terminal', 'New Markdown', 'Claude Code'])
+    expect(items.map((item) => item.label)).toEqual([
+      'New Terminal',
+      'New Markdown',
+      'Claude Code',
+      'Resume Conversation…'
+    ])
+  })
+
+  // Only Claude Code's and Codex's stores are read for past conversations.
+  it('offers resuming only when an agent whose conversations can be listed is installed', () => {
+    const kiro: InstalledAgent = { kind: 'kiro', command: 'kiro-cli', binary: '/bin/kiro-cli' }
+    expect(startMenuItems([kiro], mac, actions()).map((item) => item.label)).not.toContain('Resume Conversation…')
+    expect(startMenuItems([kiro, codex], mac, actions()).map((item) => item.label)).toContain('Resume Conversation…')
   })
 
   // The insertion point another pane kind is added at: a fixed row before the
@@ -102,6 +117,15 @@ describe('choosing a row', () => {
     const chosen = actions()
     startMenuItems([claude], mac, chosen)[0]?.onChoose()
     expect(chosen.newTerminal).toHaveBeenCalledOnce()
+    expect(chosen.startAgent).not.toHaveBeenCalled()
+  })
+
+  it('opens the conversation picker from its row', () => {
+    const chosen = actions()
+    startMenuItems([claude], mac, chosen)
+      .find((item) => item.label === 'Resume Conversation…')
+      ?.onChoose()
+    expect(chosen.resumeConversation).toHaveBeenCalledOnce()
     expect(chosen.startAgent).not.toHaveBeenCalled()
   })
 

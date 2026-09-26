@@ -1292,6 +1292,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' },
       { kind: 'codex', command: 'codex', binary: '/usr/local/bin/codex' }
     ],
+    'agent.conversations': () => [],
 
     // Not linked yet and the destination needs a password; the button moves it.
     'cli.status': () => cliStatus(),

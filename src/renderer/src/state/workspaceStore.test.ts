@@ -874,12 +874,14 @@ it('offers the + menu the agents agent.list reported, in its order', async () =>
     newTerminal: () => {},
     newMarkdown: () => {},
     startAgent: () => {},
+    resumeConversation: () => {},
     openAgentSettings: () => {}
   })
   expect(items.map((item) => item.label)).toEqual([
     'New Terminal',
     'New Markdown',
     ...reported.map((agent) => harnessName(agent.kind)),
+    'Resume Conversation…',
     'Agent Settings…'
   ])
 })

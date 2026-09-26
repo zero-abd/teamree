@@ -18,6 +18,7 @@ import {
   pinSessionCommand,
   pinsOwnSessionId,
   restartSessionCommand,
+  resumeByIdCommand,
   resumeSessionCommand,
   type AgentKind
 } from './agent-command'
@@ -825,9 +826,12 @@ export class TerminalSessionManager {
     // A known agent gets a session id pinned now, after the caller's arguments
     // go on, so `agent-command.ts` decides about the line that will actually
     // run. A restore's command is already settled and is not rewritten.
+    const line = params.command === undefined ? undefined : agentLaunchCommand(params.command, params.agentArgs)
     const launch = restoring
       ? { command: params.command }
-      : pinAgentSession(params.command === undefined ? undefined : agentLaunchCommand(params.command, params.agentArgs))
+      : params.resume === undefined
+        ? pinAgentSession(line)
+        : resumeAgentSession(line, params.resume)
     const agent = restoring?.agent ?? launch.agent
     // Minted before the command is final: the hook file's path carries the id.
     const id = restoring?.id ?? `term_${this.nextId()}`
@@ -1153,6 +1157,17 @@ function pinAgentSession(command: string | undefined): {
   // Untouched means it already named a session of its own; the caller's choice.
   if (pinned === command) return { command, agent }
   return { command: pinned, agent, agentSessionId }
+}
+
+/** An agent command resuming the conversation the caller chose, its id kept as the pane's. */
+function resumeAgentSession(
+  command: string | undefined,
+  sessionId: string
+): { command: string; agent: AgentKind; agentSessionId: string } {
+  const agent = command === undefined ? null : detectAgent(command)
+  const resumed = command === undefined || agent === null ? null : resumeByIdCommand(command, agent, sessionId)
+  if (agent === null || resumed === null) throw invalidParams('this command cannot resume a conversation')
+  return { command: resumed, agent, agentSessionId: sessionId }
 }
 
 /**
