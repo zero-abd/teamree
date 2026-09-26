@@ -366,22 +366,41 @@ describe('the CLI mark on Settings', () => {
         // Spelled out: the panel branches on `!== null`, so a seed omitting these describes a state the app never reports.
         impermanent: null,
         onPath: 'environment'
-      },
-      toggleSettings
+      }
     })
     mount()
     const mark = badge()
     expect(mark).toBeTruthy()
-    expect(mark?.getAttribute('title')).toContain('/usr/local/bin/teamree')
-    expect(mark?.getAttribute('aria-label')).toBe('Put teamree on my PATH')
+    // Names the row that needs attention, on the mark and on the entry's own hover.
+    expect(mark?.getAttribute('aria-label')).toBe('CLI: Put teamree on my PATH')
     // Ink, not a coloured dot: colour is kept for what agents are doing.
     expect(mark?.textContent).toBe('!')
     // Inside the Settings entry, so pressing the mark is pressing Settings.
-    const settings = screen.getByRole('button', { name: /Settings/ })
+    const settings = screen.getByRole('button', { name: 'Settings, CLI: Put teamree on my PATH' })
     expect(settings.contains(mark)).toBe(true)
+    expect(settings.title).toMatch(/^Settings · CLI: /)
+    expect(settings.title).toContain('/usr/local/bin/teamree')
     expect(document.querySelector('.sidebar__foot')).toBeNull()
-    act(() => settings.click())
-    expect(toggleSettings).toHaveBeenCalled()
+  })
+
+  it('opens Settings at the row the mark is about', () => {
+    seed({
+      cli: {
+        installable: true,
+        packaged: true,
+        state: 'absent',
+        destination: '/usr/local/bin/teamree',
+        directory: '/usr/local/bin',
+        source: '/Applications/teamree.app/cli',
+        bundle: '/Applications/teamree.app/cli.js',
+        impermanent: null,
+        onPath: 'environment'
+      }
+    })
+    mount()
+    act(() => screen.getByRole('button', { name: /^Settings/ }).click())
+    expect(useWorkspaceStore.getState().settingsOpen).toBe(true)
+    expect(useWorkspaceStore.getState().settingsSection).toBe('cli')
   })
 
   it('goes as soon as it is linked', () => {
@@ -947,6 +966,26 @@ describe('starting a task in any project from the keyboard', () => {
       .getByRole('menuitem', { name: 'New Task…' })
       .click()
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p2' })
+  })
+
+  // Discoverable without a right-click: the same menu from a button that is always drawn.
+  it('opens the same menu from the ⋯ on the project row', () => {
+    const labels = (): (string | null)[] =>
+      within(screen.getByRole('menu', { name: 'Actions for ledger' }))
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
+    const byRightClick = labels()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    const more = screen.getByRole('button', { name: 'More for ledger' })
+    expect(more.getAttribute('aria-haspopup')).toBe('menu')
+    expect(more.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(more)
+    expect(labels()).toEqual(byRightClick)
+    expect(labels()).toEqual(expect.arrayContaining(['Check Out Pull Request…', 'Move to Trash…']))
+    expect(more.getAttribute('aria-expanded')).toBe('true')
   })
 
   it('ends its menu with Remove from teamree and Move to Trash…, each asking first', () => {

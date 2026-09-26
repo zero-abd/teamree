@@ -298,7 +298,6 @@ export function WorktreeRow({
             </span>
           </>
         )}
-        {/* Slides over the title's tail when the ⋯ shows, so the title never reflows under the pointer. */}
         <span className="worktree__end">
           {twoLines ? null : (
             <span className="worktree__facts" id={factsId}>

@@ -360,7 +360,6 @@
   background: var(--fg-muted);
 }
 
-/* Shown on hover, and to the keyboard always. */
 .tree__reveal {
   display: flex;
   flex: none;
@@ -374,7 +373,7 @@
   border-radius: var(--r1);
   background: transparent;
   color: var(--fg-muted);
-  opacity: 0;
+  opacity: var(--control-rest);
   cursor: pointer;
 }
 

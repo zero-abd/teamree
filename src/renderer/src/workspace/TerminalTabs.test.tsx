@@ -351,6 +351,47 @@ describe('the pane buttons at the end of the strip', () => {
   })
 })
 
+// Maximize had only a menu row and a chord; the strip is where the pane buttons are seen.
+describe('the Maximize button at the end of the strip', () => {
+  const toggleExpandedPane = vi.fn()
+  const twoPanes = (overrides: Record<string, unknown> = {}): void => {
+    toggleExpandedPane.mockReset()
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout('w1', row('t1', 't2'), 't2') },
+      terminals: byId(terminal({ id: 't1', title: 'npm test' }), terminal({ id: 't2', title: 'vim' })),
+      toggleExpandedPane,
+      ...overrides
+    })
+    mount()
+  }
+
+  it('maximizes the focused pane', () => {
+    twoPanes()
+    const button = screen.getByRole('button', { name: 'Maximize' })
+    expect(button.getAttribute('title')).toBe('Maximize')
+    fireEvent.click(button)
+    expect(toggleExpandedPane).toHaveBeenCalledOnce()
+  })
+
+  it('offers Restore while a pane fills the centre', () => {
+    twoPanes({ expandedTerminalId: 't2' })
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+    expect(toggleExpandedPane).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: 'Maximize' })).toBeNull()
+  })
+
+  it('has nothing to maximize with one pane', () => {
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout('w1', row('t1'), 't1') },
+      terminals: byId(terminal({ id: 't1', title: 'npm test' }))
+    })
+    mount()
+    expect((screen.getByRole('button', { name: 'Maximize' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
 // The `+` menu: a terminal, one row per agent `agent.list` found, then agent settings.
 describe('the menu the + opens', () => {
   const onePane = (overrides: Record<string, unknown> = {}): void => {

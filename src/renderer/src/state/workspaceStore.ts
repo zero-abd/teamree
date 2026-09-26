@@ -341,7 +341,7 @@ export function reconcileRelayPanes(
 }
 
 /** A section of the settings page that can be asked for by name. */
-export type SettingsSection = 'agents'
+export type SettingsSection = 'agents' | 'cli'
 
 type WorkspaceState = {
   connection: ConnectionState

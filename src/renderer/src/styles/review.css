@@ -66,7 +66,7 @@
   text-overflow: ellipsis;
 }
 
-/* The gutter's `+`, on the row under the pointer; the column is the line numbers' own. */
+/* The gutter's `+`: faint on a hunk's first row, filled on the row under the pointer. */
 .patch__row {
   position: relative;
 }
@@ -81,17 +81,24 @@
   padding: 0;
   border: 0;
   border-radius: var(--r1);
-  background: var(--accent);
-  color: var(--bg-window);
+  background: transparent;
+  color: var(--fg-muted);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
   line-height: 1;
   cursor: pointer;
+  opacity: var(--control-rest);
+}
+
+/* One per hunk teaches the gutter; a column of them read as a second diff sign. */
+.patch__row ~ .patch__row .patch__plus {
   opacity: 0;
 }
 
 .patch__row:hover .patch__plus,
-.patch__plus:focus-visible {
+.patch__row .patch__plus:focus-visible {
+  background: var(--accent);
+  color: var(--bg-window);
   opacity: 1;
 }
 
@@ -224,6 +231,10 @@
   color: var(--accent-bright);
   cursor: pointer;
   opacity: 0;
+}
+
+.cm-commentGutter .cm-activeLineGutter {
+  opacity: var(--control-rest);
 }
 
 .cm-commentGutter .cm-gutterElement:hover {

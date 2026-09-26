@@ -1,4 +1,4 @@
-// A project's row in the tree: folds its worktrees, and has a menu on right-click, ⇧F10 or the menu key.
+// A project's row in the tree: folds its worktrees, and has a menu on the `⋯`, right-click, ⇧F10 or the menu key.
 
 import { useRef, useState } from 'react'
 import type { Project } from '@shared/entities'
@@ -37,6 +37,7 @@ export function ProjectHead({
   onTrash
 }: ProjectHeadProps): React.JSX.Element {
   const row = useRef<HTMLButtonElement | null>(null)
+  const opener = useRef<HTMLElement | null>(null)
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
   const removedWorktrees = useWorkspaceStore((state) => state.removedWorktrees)
   const loadRemovedWorktrees = useWorkspaceStore((state) => state.loadRemovedWorktrees)
@@ -47,7 +48,8 @@ export function ProjectHead({
   const anyMerged = useWorkspaceStore((state) =>
     state.worktrees.some((worktree) => worktree.projectId === project.id && state.landings[worktree.id]?.merged)
   )
-  const openMenu = (anchor: RowMenuAnchor): void => {
+  const openMenu = (anchor: RowMenuAnchor, from: HTMLElement | null = row.current): void => {
+    opener.current = from
     setMenuAt(anchor)
     void loadRemovedWorktrees()
   }
@@ -78,7 +80,7 @@ export function ProjectHead({
 
   const closeMenu = (): void => {
     setMenuAt(null)
-    row.current?.focus()
+    opener.current?.focus()
   }
 
   return (
@@ -142,6 +144,25 @@ export function ProjectHead({
         <svg viewBox="0 0 14 14" aria-hidden="true">
           <path d="M6.5 2.5h-3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-3" />
           <path d="M10.3 2.2a1.1 1.1 0 0 1 1.5 1.5L7.2 8.3 5.5 8.8 6 7.1Z" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className="button button--ghost button--icon project__more"
+        tabIndex={-1}
+        title={`More for ${project.name}`}
+        aria-label={`More for ${project.name}`}
+        aria-haspopup="menu"
+        aria-expanded={menuAt !== null}
+        onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect()
+          openMenu({ x: rect.right - 8, y: rect.bottom + 2 }, event.currentTarget)
+        }}
+      >
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <circle cx="2.5" cy="6" r="1" />
+          <circle cx="6" cy="6" r="1" />
+          <circle cx="9.5" cy="6" r="1" />
         </svg>
       </button>
       {drop.target === null ? null : (

@@ -246,6 +246,7 @@ export function SettingsView(): React.JSX.Element {
   useEffect(() => {
     if (section === null) return
     goTo(section)
+    flash(section)
     useWorkspaceStore.setState({ settingsSection: null })
   }, [section])
 
@@ -307,6 +308,18 @@ function SectionBody({ id, projects }: { id: SectionId; projects: readonly Proje
 
 function atBottom(scroller: HTMLElement): boolean {
   return scroller.scrollTop > 0 && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
+}
+
+/** Rings a section's rows for a moment, so the one asked for is found on a long page. */
+function flash(id: SectionId): void {
+  const group = document
+    .getElementById(`settings-${id}`)
+    ?.closest('.settings-section')
+    ?.querySelector('.settings-group')
+  group?.animate?.([{ boxShadow: '0 0 0 2px var(--accent)' }, { boxShadow: '0 0 0 2px transparent' }], {
+    duration: 1600,
+    easing: 'ease-out'
+  })
 }
 
 /** The last section whose heading has reached the top; at the bottom, the one picked or the last. */

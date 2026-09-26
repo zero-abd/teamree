@@ -433,7 +433,7 @@
   background: transparent;
   color: var(--fg-muted);
   cursor: pointer;
-  opacity: 0;
+  opacity: var(--control-rest);
 }
 
 .column__close svg {
