@@ -5,8 +5,10 @@
 // answer covers only the keystrokes shown; later ones come back as a new question.
 
 import { useEffect, useState } from 'react'
-import type { ConsentRequest } from '@shared/entities'
+import type { ConsentRequest, Terminal, Worktree } from '@shared/entities'
 import { Modal } from './Modal'
+import { paneNamesById } from '../sidebar/agentRows'
+import { worktreeDisplay } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
 /** How often the countdown is redrawn. A second, because it counts seconds. */
@@ -14,6 +16,8 @@ const TICK_MS = 1_000
 
 export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest }): React.JSX.Element {
   const decideConsent = useWorkspaceStore((state) => state.decideConsent)
+  const terminals = useWorkspaceStore((state) => state.terminals)
+  const worktrees = useWorkspaceStore((state) => state.worktrees)
   const [now, setNow] = useState(() => Date.now())
 
   // The clock is the fourth answer: the runtime expires the request, and counting down here means no surprise.
@@ -28,7 +32,7 @@ export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest })
 
   return (
     <Modal
-      title={`${request.handle} wants to type in ${request.terminalId}`}
+      title={`${request.handle} wants to type in ${paneWhere(request.terminalId, terminals, worktrees)}`}
       // Deliberately nothing: a stray Escape does not answer somebody else's keystrokes.
       onClose={() => {}}
     >
@@ -81,4 +85,19 @@ export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest })
       </div>
     </Modal>
   )
+}
+
+/** The pane as the sidebar names it, then its task: `billing · Add billing`. The id only for a pane this window never listed. */
+function paneWhere(
+  terminalId: string,
+  terminals: Readonly<Record<string, Terminal>>,
+  worktrees: readonly Worktree[]
+): string {
+  const pane = terminals[terminalId]
+  if (pane === undefined) return terminalId
+  const worktree = worktrees.find((candidate) => candidate.id === pane.worktreeId)
+  const siblings = Object.values(terminals).filter((terminal) => terminal.worktreeId === pane.worktreeId)
+  const name = paneNamesById(siblings, worktree)[terminalId] ?? terminalId
+  const task = worktree === undefined ? undefined : worktreeDisplay(worktree).title
+  return task === undefined || task === name ? name : `${name} · ${task}`
 }

@@ -29,7 +29,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 
 /** What each pane last printed, as the sidebar's reader would have it. */
 const printed: Record<string, string | null> = {}
-vi.mock('../sidebar/usePaneEvidence', () => ({ usePaneEvidence: () => printed }))
+vi.mock('../sidebar/usePaneEvidence', () => ({ usePaneEvidence: () => printed, useWatchEvidence: () => ({}) }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { Dashboard } = await import('./Dashboard')
@@ -362,6 +362,58 @@ describe('answers on the board', () => {
     row?.focus()
     await user.tab()
     expect(document.activeElement?.textContent).toBe('Yes')
+  })
+
+  it('lists a teammate’s asking pane, whose it is, and answers it through their machine', () => {
+    const answerTeammatePane = vi.fn(async () => {})
+    const menu = { prompt: '1a2b3c4d', choices: [{ label: 'Yes', keys: ['\r'] }] }
+    seed({
+      answerTeammatePane,
+      teammates: {
+        p1: {
+          state: 'read',
+          projectId: 'p1',
+          readAt: 1,
+          teammates: [],
+          worktrees: [
+            {
+              id: 'peer:sam:w1',
+              name: 'billing',
+              branch: 'billing',
+              state: 'ready',
+              handle: 'sam',
+              publicKey: 'sam-key',
+              heardAt: Date.now(),
+              live: true,
+              panes: [
+                {
+                  id: 'peer:sam:t1',
+                  title: 'claude',
+                  shell: '/bin/zsh',
+                  agent: 'claude',
+                  running: true,
+                  busy: false,
+                  quietForMs: 0,
+                  asking: true,
+                  menu
+                }
+              ]
+            }
+          ]
+        }
+      }
+    })
+    render(<Dashboard />)
+    const group = screen.getByRole('group', { name: 'Answer' })
+    const item = group.closest('li') as HTMLElement
+    expect(item.querySelector('.board-row__worktree')?.textContent).toBe('sam · billing')
+    expect(item.querySelector('.board-row__state')?.textContent).toBe('asking')
+    fireEvent.click(screen.getByRole('button', { name: 'Yes' }))
+    expect(answerTeammatePane).toHaveBeenCalledWith(
+      'p1',
+      expect.objectContaining({ terminalId: 'peer:sam:t1', answering: '1a2b3c4d' }),
+      menu.choices[0]
+    )
   })
 })
 

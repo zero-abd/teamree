@@ -45,6 +45,19 @@ export const PeerWorktreeExtrasOnRead = {
   memory: onRead(PeerWorktreeMemorySchema)
 }
 
+/** A teammate's pane's `menu`: a fingerprint and a few short answers, each a few keypresses; malformed reads as none. */
+export const PeerMenuOnRead = onRead(
+  z.object({
+    prompt: z.string().min(1).max(64),
+    choices: z
+      .array(
+        z.object({ label: z.string().min(1).max(40), keys: z.array(z.string().min(1).max(16)).max(16).nullable() })
+      )
+      .min(1)
+      .max(8)
+  })
+)
+
 const PeerHandoffSchema = z.object({
   id: Id,
   to: z.string().min(1).max(160),

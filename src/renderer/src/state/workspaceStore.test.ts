@@ -956,3 +956,42 @@ it('puts the old name back when the runtime refuses a rename, and never sends a 
   expect(useWorkspaceStore.getState().notices.at(-1)?.text).toBe('Could not rename the worktree: no')
   call.mockRestore()
 })
+
+describe('answering a teammate’s asking pane', () => {
+  const pane = { terminalId: 'peer:abc:t_1', label: 'billing', handle: 'sam', answering: '1a2b3c4d' }
+
+  it('sends the answer’s keys through the consented remote path, naming the menu', async () => {
+    useWorkspaceStore.setState({ watches: [], focusedWatchId: null })
+    const call = vi.spyOn(runtimeClient, 'call').mockResolvedValueOnce({ written: true } as never)
+    await useWorkspaceStore.getState().answerTeammatePane('p_1', pane, { label: 'Yes', keys: ['\u001b[B', '\r'] })
+    expect(call).toHaveBeenCalledWith('teamwork.type', {
+      projectId: 'p_1',
+      paneId: 'peer:abc:t_1',
+      data: '\u001b[B\r',
+      answering: '1a2b3c4d'
+    })
+    expect(call.mock.calls.some(([method]) => method === 'terminal.write')).toBe(false)
+    expect(useWorkspaceStore.getState().watches).toEqual([])
+    call.mockRestore()
+  })
+
+  it('opens their pane for an answer that wants typing, and sends nothing', async () => {
+    useWorkspaceStore.setState({ watches: [], focusedWatchId: null })
+    const call = vi.spyOn(runtimeClient, 'call')
+    await useWorkspaceStore.getState().answerTeammatePane('p_1', pane, { label: 'No…', keys: null })
+    expect(call.mock.calls.some(([method]) => method === 'teamwork.type')).toBe(false)
+    expect(useWorkspaceStore.getState().watches.map((watch) => watch.paneId)).toEqual(['peer:abc:t_1'])
+    call.mockRestore()
+  })
+
+  it('says what the owner’s machine answered when it refused, and opens the pane', async () => {
+    useWorkspaceStore.setState({ watches: [], focusedWatchId: null, notices: [] })
+    const call = vi
+      .spyOn(runtimeClient, 'call')
+      .mockRejectedValueOnce(new Error('the owner has muted this pane') as never)
+    await useWorkspaceStore.getState().answerTeammatePane('p_1', pane, { label: 'Yes', keys: ['\r'] })
+    expect(useWorkspaceStore.getState().notices.at(-1)?.text).toBe('Not answered: the owner has muted this pane')
+    expect(useWorkspaceStore.getState().watches.map((watch) => watch.paneId)).toEqual(['peer:abc:t_1'])
+    call.mockRestore()
+  })
+})

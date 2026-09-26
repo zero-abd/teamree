@@ -10,7 +10,6 @@ import { attentionByPane } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { evidenceLine } from '@shared/outputEvidence'
 import { Brand, SidebarGlyph } from '../shell/Brand'
 import { AddProjectButton } from './AddProjectButton'
 import { compareTitle, runName, siblingRuns } from '../compare/siblingRuns'
@@ -19,7 +18,7 @@ import { ProjectHead } from './ProjectHead'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
 import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
 import { teamworkControlLabel, teamworkOn, teamworkSummary } from './teamworkSummary'
-import { usePaneEvidence } from './usePaneEvidence'
+import { usePaneEvidence, useWatchEvidence } from './usePaneEvidence'
 import { useTreeKeys } from './treeKeys'
 import { moveWorktree } from './nestDrag'
 import { worktreesByProject } from './worktreeOrder'
@@ -147,15 +146,10 @@ export function Sidebar({
   // The panes themselves are in the workspace; the sidebar only says which
   // rows are watched and quotes what they have printed.
   const watches = useWorkspaceStore((state) => state.watches)
-  const watchTails = useWorkspaceStore((state) => state.watchTails)
   const toggleWatchedPane = useWorkspaceStore((state) => state.toggleWatchedPane)
+  const answerTeammatePane = useWorkspaceStore((state) => state.answerTeammatePane)
 
-  // Only an open pane has a line to quote, because only an open pane streams.
-  const watchEvidence = useMemo(() => {
-    const lines: Record<string, string | null> = {}
-    for (const watch of watches) lines[watch.paneId] = evidenceLine(watchTails[watch.id] ?? '')
-    return lines
-  }, [watches, watchTails])
+  const watchEvidence = useWatchEvidence()
 
   // Teamwork is per repository, so the app-level entry picks the one whose
   // worktree is open, else the first. Undefined only before any has been added.
@@ -483,6 +477,7 @@ export function Sidebar({
                         row={row}
                         watchingPaneIds={watchingIn(watches, project.id)}
                         onWatch={(pane) => toggleWatchedPane(project.id, pane)}
+                        onAnswer={(pane, choice) => void answerTeammatePane(project.id, pane, choice)}
                       />
                     ))}
                     {unheard.length > 0 ? (

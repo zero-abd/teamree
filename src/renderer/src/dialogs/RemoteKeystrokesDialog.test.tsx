@@ -13,12 +13,13 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { ConsentRequest } from '@shared/entities'
+import type { ConsentRequest, Terminal, Worktree } from '@shared/entities'
 
 const decideConsent = vi.fn<(requestId: string, decision: string, through: number) => Promise<void>>()
+const workspace: { terminals: Record<string, Terminal>; worktrees: Worktree[] } = { terminals: {}, worktrees: [] }
 
 vi.mock('../state/workspaceStore', () => ({
-  useWorkspaceStore: (select: (state: unknown) => unknown) => select({ decideConsent })
+  useWorkspaceStore: (select: (state: unknown) => unknown) => select({ decideConsent, ...workspace })
 }))
 
 const { RemoteKeystrokesDialog } = await import('./RemoteKeystrokesDialog')
@@ -49,6 +50,44 @@ describe('the question the owner is asked', () => {
     // And says what it will cost, in the only terms that matter: this runs on
     // your machine, as you.
     expect(screen.getByText('Runs on your machine, as you')).toBeTruthy()
+  })
+
+  it('names the pane as the sidebar does, and its task, never by its id', () => {
+    const pane: Terminal = {
+      id: 't_7',
+      worktreeId: 'w1',
+      title: '✳ Create out directory',
+      cwd: '/w1',
+      shell: '/bin/zsh',
+      cols: 80,
+      rows: 24,
+      running: true,
+      busy: false,
+      agent: 'claude',
+      label: 'billing',
+      lastOutputAt: 0
+    }
+    const task: Worktree = {
+      id: 'w1',
+      projectId: 'p1',
+      name: 'Add billing',
+      branch: 'add-billing',
+      path: '/w1',
+      startedFrom: 'main',
+      state: 'ready',
+      createdAt: 0,
+      task: 'Add billing\nStripe, test mode.'
+    }
+    workspace.terminals = { t_7: pane }
+    workspace.worktrees = [task]
+    try {
+      render(<RemoteKeystrokesDialog request={request()} />)
+      expect(screen.getByRole('dialog', { name: 'priya wants to type in billing · Add billing' })).toBeTruthy()
+      expect(document.body.textContent).not.toContain('t_7')
+    } finally {
+      workspace.terminals = {}
+      workspace.worktrees = []
+    }
   })
 
   it('shows the bytes as text, never as something the pane would obey', () => {

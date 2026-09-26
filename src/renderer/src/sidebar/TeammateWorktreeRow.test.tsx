@@ -4,11 +4,22 @@
 // that it is not yours to act on must be structural (a `div`, not a disabled button). The one
 // exception is a pane, and only for reading.
 
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PeerPane, TeammateWorktree } from '@shared/entities'
-import { teammateRows } from './teammateRows'
-import { TeammateWorktreeRow } from './TeammateWorktreeRow'
+
+vi.mock('../runtimeClient/currentRuntimeClient', () => ({
+  runtimeClient: {
+    call: () => Promise.reject(new Error('not in this test')),
+    watchWorkspace: () => ({ close: () => {} }),
+    connection: { phase: 'ready' },
+    onConnectionChange: () => () => {}
+  },
+  RUNTIME_IS_SEEDED: false
+}))
+
+const { teammateRows } = await import('./teammateRows')
+const { TeammateWorktreeRow } = await import('./TeammateWorktreeRow')
 
 const NOW = 1_700_000_000_000
 
@@ -39,12 +50,13 @@ const theirs = (overrides: Partial<TeammateWorktree> = {}): TeammateWorktree => 
 })
 
 const onWatch = vi.fn()
+const onAnswer = vi.fn()
 
 function mount(worktree: TeammateWorktree = theirs(), watchingPaneIds: string[] = []): void {
   const [row] = teammateRows([worktree], NOW, {})
   render(
     <ul>
-      <TeammateWorktreeRow row={row!} watchingPaneIds={watchingPaneIds} onWatch={onWatch} />
+      <TeammateWorktreeRow row={row!} watchingPaneIds={watchingPaneIds} onWatch={onWatch} onAnswer={onAnswer} />
     </ul>
   )
 }
@@ -53,6 +65,56 @@ const watchButton = (): HTMLElement => document.querySelector('button.pane-row')
 
 beforeEach(() => {
   onWatch.mockReset()
+  onAnswer.mockReset()
+})
+
+describe('a pane of theirs that is asking', () => {
+  const menu = {
+    prompt: '1a2b3c4d',
+    choices: [
+      { label: 'Yes', keys: ['\r'] },
+      { label: 'Yes, Always', keys: ['2'] },
+      { label: 'No…', keys: null }
+    ]
+  }
+  const asking = (overrides: Partial<PeerPane> = {}): TeammateWorktree =>
+    theirs({ panes: [pane({ busy: false, asking: true, menu, ...overrides })] })
+
+  it('reads asking in amber on the row and on the worktree’s dot', () => {
+    mount(asking())
+    expect(document.querySelector('.pane-row__since--waiting')?.textContent).toBe('asking')
+    expect(document.querySelector('.worktree__title .activity--waiting')).toBeTruthy()
+  })
+
+  it('offers the owner’s answers, and a click hands back the pane and the choice', () => {
+    mount(asking())
+    const answers = screen.getByRole('group', { name: 'Answer' })
+    expect(
+      within(answers)
+        .getAllByRole('button')
+        .map((button) => button.textContent)
+    ).toEqual(['Yes', 'Always', 'No…'])
+    fireEvent.click(within(answers).getByRole('button', { name: 'Yes' }))
+    expect(onAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ terminalId: 'priya:t7', answering: '1a2b3c4d' }),
+      menu.choices[0]
+    )
+    expect(onWatch).not.toHaveBeenCalled()
+  })
+
+  it('offers no answers where a keystroke would be refused: muted, or their machine away', () => {
+    mount(asking({ muted: true }))
+    expect(screen.queryByRole('group', { name: 'Answer' })).toBeNull()
+    document.body.innerHTML = ''
+    mount({ ...asking(), live: false })
+    expect(screen.queryByRole('group', { name: 'Answer' })).toBeNull()
+  })
+
+  it('opens the first pane when the task’s title is clicked', () => {
+    mount(asking())
+    fireEvent.click(screen.getByText('Fix the relay budget'))
+    expect(onWatch).toHaveBeenCalledWith(expect.objectContaining({ terminalId: 'priya:t7' }))
+  })
 })
 
 describe('whose worktree this is', () => {
@@ -139,7 +201,7 @@ describe('a pane of theirs', () => {
     const [row] = teammateRows([theirs()], NOW, { 'priya:t7': 'running tests' })
     render(
       <ul>
-        <TeammateWorktreeRow row={row!} watchingPaneIds={['priya:t7']} onWatch={onWatch} />
+        <TeammateWorktreeRow row={row!} watchingPaneIds={['priya:t7']} onWatch={onWatch} onAnswer={onAnswer} />
       </ul>
     )
     expect(watchButton().querySelector('.pane-row__head .pane-row__evidence')?.textContent).toBe('running tests')
@@ -226,7 +288,7 @@ describe('what the teammate is doing', () => {
     render(
       <ul>
         {rows.map((row) => (
-          <TeammateWorktreeRow key={row.id} row={row} watchingPaneIds={[]} onWatch={onWatch} />
+          <TeammateWorktreeRow key={row.id} row={row} watchingPaneIds={[]} onWatch={onWatch} onAnswer={onAnswer} />
         ))}
       </ul>
     )

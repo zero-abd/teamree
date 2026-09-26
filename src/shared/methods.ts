@@ -603,7 +603,9 @@ export const Params = {
   teamworkType: z.object({
     projectId: z.string().min(1),
     paneId: z.string().min(1),
-    data: atMostBytes(MAX_REMOTE_WRITE_BYTES, 1)
+    data: atMostBytes(MAX_REMOTE_WRITE_BYTES, 1),
+    /** An answer: the owner writes it only while that `PeerPane.menu.prompt` is on screen and offers `data`. */
+    answering: z.string().max(64).optional()
   }),
   /**
    * Who is reading and typing into this machine's panes in one project. One
