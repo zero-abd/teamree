@@ -3,7 +3,7 @@
 
 import type { AgentKind, CliStatus, InstalledAgent, RelaySetting, UpdateState } from '@shared/entities'
 import { HARNESSES } from '../agents/harnesses'
-import { cliPanel } from '../dialogs/cliInstallModel'
+import { cliPanel, leavesLinkAlone } from '../dialogs/cliInstallModel'
 import { sinceLabel } from '../sidebar/agentRows'
 
 export type UpdatePanel = {
@@ -122,8 +122,8 @@ export function cliLine(status: CliStatus | null): CliLine {
     case 'elsewhere':
       return {
         state: `${status.destination} → ${status.resolved} (${status.dangling ? 'missing' : 'another copy'})${reach}`,
-        action: 'Repair',
-        title,
+        action: leavesLinkAlone(status) ? null : 'Repair',
+        title: leavesLinkAlone(status) ? null : title,
         manual: null
       }
     case 'file':

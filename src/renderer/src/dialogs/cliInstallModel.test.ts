@@ -13,6 +13,7 @@ function status(extra: Partial<CliStatus> = {}): CliStatus {
     platform: 'darwin',
     source: APP_CLI,
     packaged: true,
+    copy: 'installed',
     bundle: APP_BUNDLE,
     impermanent: null,
     destination: '/usr/local/bin/teamree',
@@ -365,5 +366,53 @@ describe('what the line reporting success is standing on', () => {
 
   it('stands the already-linked line on the same footing', () => {
     expect(cliOutcome({ ...linked({ onPath: 'login' }), outcome: 'already-linked' })).toContain('/etc/paths')
+  })
+})
+
+describe('a copy that is not the installed app', () => {
+  const OTHER = '/Applications/teamree.app/Contents/Resources/cli/teamree'
+  const GONE = '/Users/ann/Downloads/teamree.app/Contents/Resources/cli/teamree'
+  const TEST_CLI = '/Users/ann/scratch/teamree.app/Contents/Resources/cli/teamree'
+  const copies = {
+    installed: status(),
+    profile: status({ copy: 'profile', source: TEST_CLI }),
+    checkout: status({ copy: 'other', packaged: false, source: CHECKOUT_CLI, bundle: `${CHECKOUT_CLI}.mjs` })
+  }
+  const links = {
+    same: (s: CliStatus) => ({ ...s, state: 'linked' as const, resolved: s.source }),
+    another: (s: CliStatus) => ({ ...s, state: 'elsewhere' as const, resolved: OTHER }),
+    missing: (s: CliStatus) => ({ ...s, state: 'elsewhere' as const, resolved: GONE, dangling: true })
+  }
+
+  it.each([
+    ['installed', 'same', 'On your PATH', null],
+    ['installed', 'another', 'Linked to another copy', 'Repair'],
+    ['installed', 'missing', 'Broken link', 'Repair'],
+    ['profile', 'same', 'On your PATH', null],
+    ['profile', 'another', 'Linked to another copy', null],
+    ['profile', 'missing', 'Broken link', null],
+    ['checkout', 'same', 'On your PATH', null],
+    ['checkout', 'another', 'Linked to another copy', 'Link This Copy'],
+    ['checkout', 'missing', 'Broken link', 'Repair']
+  ] as const)('%s copy, link to the %s target: %s, %s', (copy, link, headline, action) => {
+    const panel = cliPanel(links[link](copies[copy]))
+    expect(panel.headline).toBe(headline)
+    expect(panel.action).toBe(action)
+    expect(panel.promise === null).toBe(action === null)
+  })
+
+  it('offers nothing outside the dialog for a link to another working copy', () => {
+    for (const copy of [copies.profile, copies.checkout]) {
+      expect(offerCliInstall(links.another(copy))).toBe(false)
+      expect(cliOffer(links.another(copy))).toBeNull()
+    }
+  })
+
+  it('never makes the first-run offer on a separate profile', () => {
+    const profile = copies.profile
+    expect(cliOffer(profile)).toBeNull()
+    expect(cliOffer(links.another(profile))).toBeNull()
+    expect(cliOffer(links.missing(profile))).toBeNull()
+    expect(cliOffer({ ...profile, needsAdministrator: true })).toBeNull()
   })
 })

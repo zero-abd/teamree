@@ -5,6 +5,7 @@
 import { dirname, join } from 'node:path'
 import type { MethodRegistry } from '../methodRegistry'
 import { CliService, createAdministratorRunner, findShippedCli, registerCliHandlers } from '../../cli'
+import { userDataOverride } from '../../launchProfile'
 import { registerContextHandlers, type ContextLedger } from '../../context'
 import { createEditorActions, registerEditorHandlers } from '../../editor'
 import { registerFileHandlers } from '../../files'
@@ -263,6 +264,8 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     })
   )
 
+  const separateProfile = userDataOverride(process.env, process.cwd()) !== undefined
+  const cliDirectory = separateProfile ? process.env['TEAMREE_CLI_DIRECTORY'] : undefined
   // The privileged runner is handed over here so the only code that can reach
   // osascript is code that asked for it.
   registerCliHandlers(
@@ -270,6 +273,9 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     new CliService({
       source: shippedCli?.path ?? null,
       packaged: shippedCli?.packaged ?? false,
+      separateProfile,
+      // A test copy may look at a scratch bin instead; the default profile always uses /usr/local/bin.
+      ...(cliDirectory ? { directory: cliDirectory } : {}),
       administrator: createAdministratorRunner(),
       // Asked once and never again; the workspace file gains one field.
       prompt: {

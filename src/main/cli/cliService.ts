@@ -3,8 +3,9 @@
 // path is the ordinary one. Refuses to overwrite a file; a link already right is success.
 
 import { access, constants, lstat, mkdir, readFile, readlink, realpath, stat, symlink, unlink } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import type { CliImpermanence, CliInstall, CliPathSource, CliStatus } from '../../shared/entities'
+import type { CliCopy, CliImpermanence, CliInstall, CliPathSource, CliStatus } from '../../shared/entities'
 import { conflict, internal, notFound } from '../runtime/runtimeError'
 import { loginShellPath } from '../terminals/shell-environment'
 import { linkCommand, type AdministratorRunner } from './administrator'
@@ -43,6 +44,10 @@ export type CliServiceOptions = {
   source: string | null
   /** Whether that CLI is a packaged app's rather than a source checkout's. */
   packaged?: boolean
+  /** Whether this process runs on a profile other than the default (TEAMREE_USER_DATA_DIR). */
+  separateProfile?: boolean
+  /** The folders a packaged app counts as installed in. */
+  applications?: string[]
   /** Where the one-time question's answer is remembered. Defaults to this process. */
   prompt?: CliPromptRecord
   /** Injected so a test never goes near the real one. */
@@ -64,6 +69,7 @@ export type CliServiceOptions = {
 export class CliService {
   readonly #source: string | null
   readonly #packaged: boolean
+  readonly #copy: CliCopy
   readonly #prompt: CliPromptRecord
   readonly #directory: string
   readonly #platform: NodeJS.Platform
@@ -77,6 +83,12 @@ export class CliService {
   constructor(options: CliServiceOptions) {
     this.#source = options.source
     this.#packaged = options.packaged ?? false
+    this.#copy = whichCopy(
+      this.#source,
+      this.#packaged,
+      options.separateProfile ?? false,
+      options.applications ?? ['/Applications', join(homedir(), 'Applications')]
+    )
     this.#prompt = options.prompt ?? inMemoryPrompt()
     this.#directory = options.directory ?? CLI_DESTINATION_DIRECTORY
     this.#platform = options.platform ?? process.platform
@@ -99,6 +111,7 @@ export class CliService {
       packaged: this.#packaged,
       bundle: await this.#bundle(),
       impermanent: this.#source === null ? null : impermanentSource(this.#source),
+      copy: this.#copy,
       destination,
       directory: this.#directory,
       state,
@@ -147,6 +160,10 @@ export class CliService {
     }
     if (before.state === 'linked') {
       return { outcome: 'already-linked', replaced: null, administrator: false, status: await this.#answered(before) }
+    }
+    // A test or background copy must never repoint the owner's command at itself.
+    if (before.copy === 'profile' && before.state === 'elsewhere') {
+      throw conflict(`teamree on a separate profile leaves ${before.destination} alone`)
     }
     if (before.state === 'file' || before.state === 'directory') {
       const what = before.state === 'file' ? 'a regular file' : 'a directory'
@@ -255,6 +272,17 @@ export class CliService {
     const login = await this.#loginPaths().catch(() => [])
     return login.map(withoutTrailingSlash).includes(wanted) ? 'login' : null
   }
+}
+
+function whichCopy(
+  source: string | null,
+  packaged: boolean,
+  separateProfile: boolean,
+  applications: string[]
+): CliCopy {
+  if (separateProfile) return 'profile'
+  const installed = packaged && source !== null && applications.some((folder) => source.startsWith(`${folder}/`))
+  return installed ? 'installed' : 'other'
 }
 
 /** What a service built without anywhere to remember gets: this process. */
