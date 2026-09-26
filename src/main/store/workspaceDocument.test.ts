@@ -58,3 +58,14 @@ describe('workspace document: task-tree fields and settings', () => {
     expect(parseWorkspaceDocument({ settings: 'on' }).settings).toEqual({})
   })
 })
+
+describe('workspace document: project fields', () => {
+  const project = { id: 'proj_1', name: 'api', path: '/tmp/api', baseRef: 'origin/main' }
+
+  it('keeps Fetch in Background off across a relaunch', () => {
+    expect(parseWorkspaceDocument({ projects: [{ ...project, fetchInBackground: false }] }).projects).toEqual([
+      { ...project, fetchInBackground: false }
+    ])
+    expect(parseWorkspaceDocument({ projects: [project] }).projects).toEqual([project])
+  })
+})
