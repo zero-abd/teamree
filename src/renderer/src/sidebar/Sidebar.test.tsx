@@ -1280,6 +1280,14 @@ describe('task trees', () => {
     expect(within(rowNamed('Solo')).queryByText(/done$/)).toBeNull()
   })
 
+  it('opens the parent at its Children from the tally, not the row alone', async () => {
+    const { useChildren } = await import('../workspace/rightPanel/childrenStore')
+    const showChildren = vi.fn(async () => {})
+    useChildren.setState({ showChildren })
+    fireEvent.click(within(rowNamed('Rework auth')).getByRole('link', { name: '0/1 done' }))
+    expect(showChildren).toHaveBeenCalledWith('auth')
+  })
+
   it('collapses on ← and expands on →, and remembers it', () => {
     act(() => rowNamed('Rework auth').focus())
     press('ArrowLeft')

@@ -984,3 +984,120 @@
     transform: rotate(180deg);
   }
 }
+
+/* A parent's Children: a line per child, its report under it. */
+.children {
+  flex: none;
+  border-top: 1px solid var(--line);
+}
+
+.children .commits__title {
+  flex-wrap: wrap;
+}
+
+.children__actions {
+  display: flex;
+  gap: var(--s2);
+  margin-left: auto;
+}
+
+.children__actions .button,
+.children__stop .button,
+.child__merge {
+  white-space: nowrap;
+}
+
+.children__stop {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0;
+  padding: var(--s1) var(--s4) var(--s2);
+  color: var(--danger);
+  font-size: var(--text-xs);
+}
+
+.children__list {
+  margin: 0;
+  padding: 0 0 var(--s2);
+  list-style: none;
+}
+
+.child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--s2);
+  padding: var(--s1) var(--s4);
+  font-size: var(--text-sm);
+}
+
+.child__name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.child__name:hover {
+  color: var(--accent-bright);
+}
+
+.child__stage,
+.child__arrows,
+.child__uncommitted {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.child__stage--asking {
+  color: var(--warning);
+}
+
+.child__stage--working,
+.child__stage--ready {
+  color: var(--fg-secondary);
+}
+
+.child__stage--done,
+.child__stage--landed {
+  color: var(--success);
+}
+
+.child__stage--failed,
+.child__conflict {
+  color: var(--danger);
+}
+
+.child__conflict {
+  flex: none;
+  font-size: var(--text-xs);
+}
+
+.child__merge {
+  flex: none;
+  align-self: center;
+}
+
+.child__report {
+  flex-basis: 100%;
+  overflow: hidden;
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merge__children {
+  color: var(--fg);
+}

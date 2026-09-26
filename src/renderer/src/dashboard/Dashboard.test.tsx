@@ -476,6 +476,17 @@ describe('the Tasks view', () => {
     expect(depth).toEqual(['', '1', '1'])
   })
 
+  it('opens the parent at its Children from its tally', async () => {
+    const { useChildren } = await import('../workspace/rightPanel/childrenStore')
+    const showChildren = vi.fn(async () => {})
+    useChildren.setState({ showChildren })
+    useTaskTreeStore.setState({ boardMode: 'tasks' })
+    render(<Dashboard />)
+    fireEvent.click(screen.getByRole('link', { name: '0/2 done' }))
+    expect(showChildren).toHaveBeenCalledWith('w1')
+    expect(openWorktree).not.toHaveBeenCalled()
+  })
+
   it('says not pushed under landed while the landing is only in the local main', () => {
     const landing = {
       worktreeId: 'w1',

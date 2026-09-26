@@ -342,6 +342,7 @@ describe('stylesheets', () => {
         '.board-row__state--waiting',
         '.board-filter__number--asking',
         '.task-row--asking .task-row__stage',
+        '.child__stage--asking',
         // A task's question for you, under its row.
         '.worktree__ask'
       ])

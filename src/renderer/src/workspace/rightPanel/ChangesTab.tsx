@@ -22,6 +22,7 @@ import { CheckoutMissing } from '../CheckoutMissing'
 import { askerOf, conflictHeadline, updateSides } from './conflictState'
 import { TokensLine } from './TokensLine'
 import { ContextSection } from './ContextSection'
+import { ChildrenSection } from './ChildrenSection'
 
 export function ChangesTab(): React.JSX.Element | null {
   const worktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
@@ -504,6 +505,7 @@ export function ChangesTab(): React.JSX.Element | null {
         </div>
       ) : null}
 
+      <ChildrenSection worktreeId={worktreeId} />
       {branchRows.length > 0 ? (
         <section className="changes__group changes__group--branch" aria-label="On branch">
           <h3 className="commits__title" title={`vs ${log?.baseRef ?? base ?? ''}`}>

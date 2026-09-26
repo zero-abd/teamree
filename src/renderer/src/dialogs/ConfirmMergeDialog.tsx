@@ -8,6 +8,9 @@ import { useReviewStore } from '../review/reviewStore'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { useChildRows } from '../workspace/rightPanel/ChildrenSection'
+import { mergeable, unmerged } from '../workspace/rightPanel/childrenModel'
+import { useChildren } from '../workspace/rightPanel/childrenStore'
 import { CommitFrom } from '../workspace/rightPanel/CommitFrom'
 import { useCommitMessage } from '../workspace/rightPanel/commitMessage'
 import { harnessName } from '../agents/harnesses'
@@ -46,6 +49,9 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   const showRightPanelTab = useWorkspaceStore((state) => state.showRightPanelTab)
   const updateWorktree = useWorkspaceStore((state) => state.updateWorktree)
   const askToResolve = useWorkspaceStore((state) => state.askToResolve)
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
+  const children = useChildRows(worktreeId).filter(unmerged)
+  const landable = children.filter(mergeable)
 
   // Selected, so typing replaces a suggestion rather than adding to it.
   useEffect(() => {
@@ -109,6 +115,18 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
     if (replanned?.conflicts !== undefined) setPlan(replanned)
     else setError(why)
     setMerging(false)
+  }
+
+  /** Lands the children first, then asks about this one again; a stop is shown where it can be resolved. */
+  const mergeChildrenFirst = async (): Promise<void> => {
+    closeDialog()
+    const store = useChildren.getState()
+    const landed = await store.mergeChildren(
+      worktreeId,
+      landable.map((child) => child.worktreeId)
+    )
+    if (landed) openDialog({ kind: 'confirm-merge', worktreeId })
+    else await store.showChildren(worktreeId)
   }
 
   /** Brings what it would conflict with into the task, where the conflict can be resolved, and shows it there. */
@@ -209,6 +227,20 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
       onCancel={closeDialog}
       onConfirm={() => void merge()}
     >
+      {children.length === 0 ? null : (
+        <div className="merge__stat merge__children">
+          <span>{`${children.length} ${children.length === 1 ? 'child' : 'children'} not merged`}</span>
+          <button
+            type="button"
+            className="button button--small"
+            disabled={merging || landable.length === 0}
+            title={children.map((child) => `${child.title} · ${child.stage}`).join('\n')}
+            onClick={() => void mergeChildrenFirst()}
+          >
+            Merge Them First
+          </button>
+        </div>
+      )}
       {branch === null || branch.total === 0 ? null : (
         <div className="merge__stat">
           <span>{branchStat(branch)}</span>

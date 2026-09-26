@@ -13,6 +13,7 @@ import { taskRowSpeech } from '../sidebar/rowSpeech'
 import { useOverlapChips } from '../sidebar/useOverlapChip'
 import { useUsageStore } from '../state/usageStore'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { useChildren } from '../workspace/rightPanel/childrenStore'
 import type { TaskRow } from './taskRows'
 
 /** Uncommitted lines for each listed worktree, read again whenever its git status is. */
@@ -102,7 +103,14 @@ export function TaskBoard({
                 <span className="task-row__task" aria-hidden="true">
                   <span className="task-row__name">{row.title}</span>
                   {row.tally === undefined ? null : (
-                    <span className="chip task-row__tally">{`${row.tally.done}/${row.tally.total} done`}</span>
+                    <span
+                      className="chip task-row__tally"
+                      role="link"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void useChildren.getState().showChildren(row.worktreeId)
+                      }}
+                    >{`${row.tally.done}/${row.tally.total} done`}</span>
                   )}
                   <PullRequestMark pull={landings[row.worktreeId]?.pullRequest} />
                   {overlap === null ? null : <OverlapMark chip={overlap} />}

@@ -4,7 +4,14 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ProjectBase, Worktree, WorktreeChanges, WorktreeLanding, WorktreeMerge } from '@shared/entities'
+import type {
+  ProjectBase,
+  Worktree,
+  WorktreeChanges,
+  WorktreeLanding,
+  WorktreeMerge,
+  WorktreeMergePreview
+} from '@shared/entities'
 import { fileLeavesIn, isReviewLeaf } from '@shared/filePane'
 
 const call = vi.hoisted(() => vi.fn((..._args: unknown[]): Promise<unknown> => new Promise(() => {})))
@@ -24,6 +31,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { useReviewStore } = await import('../review/reviewStore')
 const { ConfirmMergeDialog } = await import('./ConfirmMergeDialog')
+const { useChildren } = await import('../workspace/rightPanel/childrenStore')
 const { useCommitDrafts } = await import('../workspace/rightPanel/commitMessage')
 
 const INITIAL = useWorkspaceStore.getState()
@@ -490,5 +498,96 @@ describe('a merge that would conflict', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Show Conflicts' }))
     expect(useWorkspaceStore.getState().dialog).toBeNull()
     expect(useWorkspaceStore.getState().rightPanelTab).toBe('changes')
+  })
+})
+
+describe('a parent with children not merged', () => {
+  const child = (id: string, name: string, extra: Partial<Worktree> = {}): Worktree => ({
+    ...worktree,
+    id,
+    name,
+    branch: `fix-typo--${id}`,
+    path: `/repos/acme-wt/${id}`,
+    parentId: 'w1',
+    ...extra
+  })
+  const done = { outcome: 'succeeded' as const, summary: 'Done.', paths: [], at: 0 }
+  const ahead = (worktreeId: string): WorktreeMergePreview => ({
+    worktreeId,
+    baseRef: 'fix-typo',
+    state: 'clean',
+    ahead: 1,
+    conflicts: [],
+    readAt: 0
+  })
+
+  beforeEach(() => {
+    call.mockImplementation((method: unknown, params: unknown) => {
+      if (method === 'worktree.mergeIntoBase') return Promise.resolve(plan)
+      if (method === 'worktree.changes' && (params as { base?: boolean }).base === true) return Promise.resolve(branch)
+      return new Promise(() => {})
+    })
+    useChildren.setState({ merging: {}, stopped: {}, reveal: null })
+    useWorkspaceStore.setState({
+      worktrees: [
+        worktree,
+        child('c1', 'Search page', { report: done }),
+        child('c2', 'Cart totals'),
+        child('c3', 'Old one', { report: done })
+      ],
+      mergePreviews: { c1: ahead('c1'), c2: ahead('c2'), c3: { ...ahead('c3'), ahead: 0, state: 'nothingToMerge' } },
+      landings: {
+        c3: {
+          worktreeId: 'c3',
+          branch: 'fix-typo--c3',
+          base: 'fix-typo',
+          host: null,
+          published: false,
+          unmerged: 0,
+          merged: true,
+          readAt: 0,
+          parent: { worktreeId: 'w1', name: 'fix typo' }
+        }
+      }
+    })
+  })
+
+  it('warns how many are not merged', () => {
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    expect(screen.getByText('2 children not merged')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Merge Them First' })).toBeTruthy()
+  })
+
+  it('says nothing once every child has landed', () => {
+    useWorkspaceStore.setState({ worktrees: [worktree, child('c3', 'Old one', { report: done })] })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    expect(screen.queryByText(/not merged/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Merge Them First' })).toBeNull()
+  })
+
+  it('Merge Them First lands them in order, then asks again about the parent', async () => {
+    const mergeChildren = vi.fn(async () => true)
+    useChildren.setState({ mergeChildren })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Merge Them First' }))
+
+    expect(mergeChildren).toHaveBeenCalledWith('w1', ['c1', 'c2'])
+    expect(call).not.toHaveBeenCalledWith('worktree.mergeIntoBase', { worktreeId: 'w1' })
+    await waitFor(() =>
+      expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'w1' })
+    )
+  })
+
+  it('a stop leaves the parent unmerged and shows its Children', async () => {
+    const mergeChildren = vi.fn(async () => false)
+    const showChildren = vi.fn(async () => {})
+    useChildren.setState({ mergeChildren, showChildren })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Merge Them First' }))
+
+    await waitFor(() => expect(showChildren).toHaveBeenCalledWith('w1'))
+    expect(useWorkspaceStore.getState().dialog).toBeNull()
   })
 })
