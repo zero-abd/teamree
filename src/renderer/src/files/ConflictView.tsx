@@ -99,7 +99,7 @@ export function ConflictView({ worktreeId, path }: { worktreeId: string; path: s
       ) : (
         <div className="file__diff conflict" ref={scroller} tabIndex={-1}>
           {parts.map((part) => {
-            if (part.kind === 'text') return <Text key={`text:${index}`} lines={part.lines} />
+            if (part.kind === 'text') return <Text key={`text:${index}`} lines={part.lines} fold={blocks > 0} />
             index += 1
             return (
               <section
@@ -129,8 +129,9 @@ function Side({ kind, name, lines }: { kind: string; name: string; lines: string
   )
 }
 
-function Text({ lines }: { lines: string[] }): React.JSX.Element {
-  if (lines.length <= SHOWN_TEXT) return <pre className="conflict__text">{lines.join('\n')}</pre>
+/** With no block left the file is shown whole, since the fix is what there is to read. */
+function Text({ lines, fold }: { lines: string[]; fold: boolean }): React.JSX.Element {
+  if (!fold || lines.length <= SHOWN_TEXT) return <pre className="conflict__text">{lines.join('\n')}</pre>
   return (
     <>
       <pre className="conflict__text">{lines.slice(0, EDGE).join('\n')}</pre>

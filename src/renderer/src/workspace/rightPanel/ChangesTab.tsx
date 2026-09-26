@@ -319,7 +319,7 @@ export function ChangesTab(): React.JSX.Element | null {
       {changes === undefined ? (
         <p className="changes__empty">Reading…</p>
       ) : rows.length === 0 ? (
-        conflictRows.length > 0 ? null : (
+        conflictRows.length > 0 || midway !== undefined ? null : (
           <p className="changes__empty">{emptyChangesLabel(log)}</p>
         )
       ) : (
