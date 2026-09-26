@@ -411,7 +411,7 @@
 }
 
 .worktree__issue:hover {
-  color: var(--accent);
+  color: var(--accent-bright);
 }
 
 .worktree__row {
