@@ -10,6 +10,20 @@ import type { TerminalService } from '../terminals/method-handlers'
 import type { MethodRegistry } from './methodRegistry'
 import type { WorkspaceEventBus } from './workspaceEvents'
 
+/** A worktree and the children measured against its branch. */
+export function withChildren(git: GitService, worktreeId: string): string[] {
+  const children = git.snapshot().worktrees.filter((worktree) => worktree.parentId === worktreeId)
+  return [worktreeId, ...children.map((child) => child.id)]
+}
+
+/** Every worktree of a project, for a change to the base they are all measured against. */
+export function projectWorktreeIds(git: GitService, projectId: string): string[] {
+  return git
+    .snapshot()
+    .worktrees.filter((worktree) => worktree.projectId === projectId)
+    .map((worktree) => worktree.id)
+}
+
 /** Bridges git's own transitions onto the bus. Returns the detach function. */
 export function publishGitEvents(git: GitService, bus: WorkspaceEventBus): () => void {
   return git.events.on((event) => {
@@ -19,9 +33,12 @@ export function publishGitEvents(git: GitService, bus: WorkspaceEventBus): () =>
       case 'project.removed':
         bus.emit({ type: 'projects' })
         return
+      case 'worktree.removed':
+        bus.emit({ type: 'worktrees', worktreeIds: [event.worktreeId] })
+        return
       default:
-        // created / updated / removed all mean the same to a client: refetch.
-        bus.emit({ type: 'worktrees' })
+        // A rename or a re-nest moves what its children are measured against.
+        bus.emit({ type: 'worktrees', worktreeIds: withChildren(git, event.worktree.id) })
     }
   })
 }
@@ -34,7 +51,7 @@ export function publishGitEvents(git: GitService, bus: WorkspaceEventBus): () =>
 export function publishGitWrites(registry: MethodRegistry, git: GitService, bus: WorkspaceEventBus): void {
   registry.register('worktree.commit', Params.worktreeCommit, async (params) => {
     const result = await git.worktreeCommit(params)
-    bus.emit({ type: 'worktrees' })
+    bus.emit({ type: 'worktrees', worktreeIds: withChildren(git, params.worktreeId) })
     return result
   })
 
@@ -42,83 +59,89 @@ export function publishGitWrites(registry: MethodRegistry, git: GitService, bus:
   // `.git/index` is luck, not design.
   registry.register('worktree.stageHunk', Params.worktreeStageHunk, async (params) => {
     const result = await git.worktreeStageHunk(params)
-    bus.emit({ type: 'worktrees' })
+    bus.emit({ type: 'worktrees', worktreeIds: [params.worktreeId] })
     return result
   })
 
   registry.register('worktree.unstageHunk', Params.worktreeUnstageHunk, async (params) => {
     const result = await git.worktreeUnstageHunk(params)
-    bus.emit({ type: 'worktrees' })
+    bus.emit({ type: 'worktrees', worktreeIds: [params.worktreeId] })
     return result
   })
 
   registry.register('worktree.unstagePath', Params.worktreeUnstagePath, async (params) => {
     const result = await git.worktreeUnstagePath(params)
-    bus.emit({ type: 'worktrees' })
+    bus.emit({ type: 'worktrees', worktreeIds: [params.worktreeId] })
     return result
   })
 
   // Discarding writes the working tree; announced for the same reason staging is.
   registry.register('worktree.discardPath', Params.worktreeDiscardPath, async (params) => {
     const result = await git.worktreeDiscardPath(params)
-    bus.emit({ type: 'worktrees' })
+    bus.emit({ type: 'worktrees', worktreeIds: [params.worktreeId] })
     return result
   })
 
   registry.register('worktree.discardHunk', Params.worktreeDiscardHunk, async (params) => {
     const result = await git.worktreeDiscardHunk(params)
-    bus.emit({ type: 'worktrees' })
+    bus.emit({ type: 'worktrees', worktreeIds: [params.worktreeId] })
     return result
   })
 
   registry.register('worktree.undoDiscard', Params.worktreeUndoDiscard, async (params) => {
     const result = await git.undoDiscard(params)
-    bus.emit({ type: 'worktrees' })
+    bus.emit({ type: 'worktrees', worktreeIds: [params.worktreeId] })
     return result
   })
 
   registry.register('worktree.push', Params.worktreePush, async (params) => {
     const result = await git.worktreePush(params)
     // Ahead and behind moved even when nothing was sent.
-    bus.emit({ type: 'worktrees' })
+    bus.emit({ type: 'worktrees', worktreeIds: [params.worktreeId] })
     return result
   })
 
   registry.register('worktree.update', Params.worktreeUpdate, async (params) => {
     const result = await git.worktreeUpdate(params)
-    bus.emit({ type: 'worktrees' })
+    bus.emit({ type: 'worktrees', worktreeIds: withChildren(git, params.worktreeId) })
     return result
   })
 
   registry.register('worktree.abortUpdate', Params.worktreeAbortUpdate, async (params) => {
     const result = await git.worktreeAbortUpdate(params)
-    bus.emit({ type: 'worktrees' })
+    bus.emit({ type: 'worktrees', worktreeIds: withChildren(git, params.worktreeId) })
     return result
   })
 
-  // A merge moves the base every row is measured against; a pull request is a landing of its own.
+  // A merge moves the base every row of the project is measured against; a pull request is a landing of its own.
   registry.register('worktree.mergeIntoBase', Params.worktreeMergeIntoBase, async (params) => {
+    const projectId = git.snapshot().worktrees.find((worktree) => worktree.id === params.worktreeId)?.projectId
     const result = await git.worktreeMergeIntoBase(params)
-    if (result.merged) bus.emit({ type: 'worktrees' })
+    if (!result.merged) return result
+    bus.emit(
+      projectId === undefined
+        ? { type: 'worktrees' }
+        : { type: 'worktrees', worktreeIds: projectWorktreeIds(git, projectId) }
+    )
     return result
   })
 
   // Moving the base, or origin's, changes which landings read as not pushed.
   registry.register('project.pushBase', Params.projectPushBase, async (params) => {
     const result = await git.projectPushBase(params)
-    bus.emit({ type: 'worktrees' })
+    bus.emit({ type: 'worktrees', worktreeIds: projectWorktreeIds(git, params.projectId) })
     return result
   })
 
   registry.register('project.pullBase', Params.projectPullBase, async (params) => {
     const result = await git.projectPullBase(params)
-    bus.emit({ type: 'worktrees' })
+    bus.emit({ type: 'worktrees', worktreeIds: projectWorktreeIds(git, params.projectId) })
     return result
   })
 
   registry.register('worktree.createPullRequest', Params.worktreeCreatePullRequest, async (params) => {
     const result = await git.worktreeCreatePullRequest(params)
-    bus.emit({ type: 'worktrees' })
+    bus.emit({ type: 'worktrees', worktreeIds: [params.worktreeId] })
     return result
   })
 }
@@ -137,7 +160,7 @@ export function publishWorktreeFileEvents(
     onError: (error) => console.warn('[worktrees] a filesystem watch failed', error),
     onDegraded: (event) => console.warn(`[worktrees] ${degradedWatchReport(event)}`),
     ...options,
-    onChange: () => bus.emit({ type: 'worktrees' })
+    onChange: (change) => bus.emit({ type: 'worktrees', ...change })
   })
 
   const resync = (): void => watcher.sync(git.snapshot().worktrees)

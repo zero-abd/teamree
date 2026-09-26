@@ -122,6 +122,8 @@ export class ContextLedger {
   readonly #lastPassAt = new Map<string, number>()
   #running: Promise<void> = Promise.resolve()
   #timer: NodeJS.Timeout | undefined
+  /** What the scheduled pass re-reads: 'all' once anything asked without naming worktrees. */
+  #dirty: Set<string> | 'all' = new Set()
   #closed = false
 
   constructor(options: ContextLedgerOptions) {
@@ -147,9 +149,12 @@ export class ContextLedger {
     return { ...this.#stats }
   }
 
-  /** Asks for a pass soon: after a quiet spell, and never sooner than the floor after the last. */
-  schedule(): void {
-    if (this.#closed || this.#timer !== undefined) return
+  /** Asks for a pass soon, re-reading `worktreeIds` or every worktree: after a quiet spell, never sooner than the floor. */
+  schedule(worktreeIds?: readonly string[]): void {
+    if (this.#closed) return
+    if (worktreeIds === undefined || this.#dirty === 'all') this.#dirty = 'all'
+    else for (const id of worktreeIds) this.#dirty.add(id)
+    if (this.#timer !== undefined) return
     const last = Math.max(0, ...this.#lastPassAt.values())
     const wait = Math.max(
       this.#options.refreshDelayMs ?? 2_000,
@@ -157,17 +162,22 @@ export class ContextLedger {
     )
     this.#timer = setTimeout(() => {
       this.#timer = undefined
-      void this.refresh().catch((error: unknown) => console.error('[context]', error))
+      const dirty = this.#dirty
+      this.#dirty = new Set()
+      void this.refresh(undefined, dirty === 'all' ? undefined : [...dirty]).catch((error: unknown) =>
+        console.error('[context]', error)
+      )
     }, wait)
     this.#timer.unref?.()
   }
 
-  /** Re-reads git for every project, or one; passes run one at a time. */
-  refresh(projectId?: string): Promise<void> {
+  /** Re-reads git for every project, or one, and every worktree or those named; passes run one at a time. */
+  refresh(projectId?: string, worktreeIds?: readonly string[]): Promise<void> {
+    const only = worktreeIds === undefined ? undefined : new Set(worktreeIds)
     const pass = this.#running.then(async () => {
       if (this.#closed) return
       for (const view of this.#views()) {
-        if (projectId === undefined || view.project.id === projectId) await this.#pass(view)
+        if (projectId === undefined || view.project.id === projectId) await this.#pass(view, only)
       }
     })
     this.#running = pass.catch(() => {})
@@ -529,7 +539,7 @@ export class ContextLedger {
     return parent?.branch ?? worktree.baseRef ?? view.project.baseRef
   }
 
-  async #pass(view: ProjectView): Promise<void> {
+  async #pass(view: ProjectView, only?: ReadonlySet<string>): Promise<void> {
     const started = this.#now()
     this.#lastPassAt.set(view.project.id, started)
     const store = await this.#store(view.project.id)
@@ -555,7 +565,10 @@ export class ContextLedger {
     }
 
     const rows = new Map(view.worktrees.map((worktree) => [worktree.id, this.#node(store, worktree)]))
-    const ready = view.worktrees.filter((worktree) => worktree.state === 'ready' && worktree.missing !== true)
+    const ready = view.worktrees.filter(
+      (worktree) =>
+        worktree.state === 'ready' && worktree.missing !== true && (only === undefined || only.has(worktree.id))
+    )
     await forEachLimited(ready, GIT_READS_AT_ONCE, async (worktree) => {
       const row = rows.get(worktree.id) as LedgerWorktree
       const base = this.#baseOf(view, worktree)
@@ -582,7 +595,8 @@ export class ContextLedger {
     if (landedOrGone || JSON.stringify(document.worktrees) !== before) this.#changed(store)
     this.#stats.passes += 1
     this.#stats.lastPassMs = this.#now() - started
-    if (more) this.schedule()
+    // Pairs left over need no worktree re-read.
+    if (more) this.schedule([])
   }
 
   async #land(store: LedgerStore, row: LedgerWorktree, into: string, cwd: string): Promise<void> {

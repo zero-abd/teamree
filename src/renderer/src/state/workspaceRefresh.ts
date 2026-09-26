@@ -21,8 +21,12 @@ export type RefreshTargets = {
   updates: boolean
   /** Layouts of exactly these worktrees. Never widened to "every layout". */
   layouts: readonly string[]
-  /** Git status of exactly these worktrees. */
+  /** Every worktree's git state may have moved: an event that named none. */
+  allStatuses: boolean
+  /** Git status, merge preview and landing of exactly these worktrees. */
   statuses: readonly string[]
+  /** Only files changed in these worktrees: their status alone. */
+  edits: readonly string[]
   /** Exits are applied from the event itself; they need no call. */
   exits: readonly TerminalExit[]
 }
@@ -39,7 +43,9 @@ export const NOTHING_TO_REFRESH: RefreshTargets = {
   memory: false,
   updates: false,
   layouts: [],
+  allStatuses: false,
   statuses: [],
+  edits: [],
   exits: []
 }
 
@@ -58,18 +64,23 @@ export function isEmptyRefresh(targets: RefreshTargets): boolean {
     !targets.memory &&
     !targets.updates &&
     targets.layouts.length === 0 &&
+    !targets.allStatuses &&
     targets.statuses.length === 0 &&
+    targets.edits.length === 0 &&
     targets.exits.length === 0
   )
 }
 
-/** The event-to-refetch mapping: a layout change names its worktree, so nothing else is re-read for it. */
+/** The event-to-refetch mapping: a layout or worktrees change that names its worktrees re-reads nothing else. */
 export function targetsForEvent(event: WorkspaceEvent): RefreshTargets {
   switch (event.type) {
     case 'projects':
       return refreshTargets({ projects: true })
     case 'worktrees':
-      return refreshTargets({ worktrees: true })
+      if (event.worktreeIds === undefined) return refreshTargets({ worktrees: true, allStatuses: true })
+      // Files alone changed no record, so the list need not be read again.
+      if (event.paths !== undefined) return refreshTargets({ edits: event.worktreeIds })
+      return refreshTargets({ worktrees: true, statuses: event.worktreeIds })
     case 'terminals':
       return refreshTargets({ terminals: true })
     case 'members':
@@ -108,7 +119,9 @@ export function mergeTargets(a: RefreshTargets, b: RefreshTargets): RefreshTarge
     memory: a.memory || b.memory,
     updates: a.updates || b.updates,
     layouts: union(a.layouts, b.layouts),
+    allStatuses: a.allStatuses || b.allStatuses,
     statuses: union(a.statuses, b.statuses),
+    edits: union(a.edits, b.edits),
     exits: mergeExits(a.exits, b.exits)
   }
 }

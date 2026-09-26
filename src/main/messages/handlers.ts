@@ -27,7 +27,7 @@ export function registerMessageHandlers(
         const worktree = store.getWorktree(worktreeId)
         if (worktree === undefined) return
         store.putWorktree({ ...worktree, report })
-        workspaceEvents.emit({ type: 'worktrees' })
+        workspaceEvents.emit({ type: 'worktrees', worktreeIds: [worktreeId] })
       }
     },
     panes: {

@@ -30,7 +30,7 @@ export function registerFileHandlers(registry: MethodRegistry): void {
       ...(params.expectedModifiedAt === undefined ? {} : { expectedModifiedAt: params.expectedModifiedAt })
     })
     // The watcher reports this too, but not on a machine whose watch is degraded.
-    registry.context.workspaceEvents.emit({ type: 'worktrees' })
+    registry.context.workspaceEvents.emit({ type: 'worktrees', worktreeIds: [params.worktreeId], paths: [params.path] })
     return written
   })
 }

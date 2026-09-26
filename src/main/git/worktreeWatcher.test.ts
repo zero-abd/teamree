@@ -11,7 +11,8 @@ import {
   WorktreeWatcher,
   type WatchDegraded,
   type WatchFn,
-  type WatchHandle
+  type WatchHandle,
+  type WorktreeChange
 } from './worktreeWatcher'
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
@@ -279,6 +280,95 @@ describe('WorktreeWatcher', () => {
     expect(reports).toBe(1)
   })
 
+  describe('names what changed', () => {
+    const setup = (
+      worktrees: Worktree[],
+      gitDirOf: (checkout: string) => string = (checkout) => `/repo/.git/worktrees/${path.basename(checkout)}`
+    ): { fake: ReturnType<typeof createFakeWatch>; flush: () => void; reports: WorktreeChange[] } => {
+      const clock = createClock()
+      const fake = createFakeWatch()
+      const reports: WorktreeChange[] = []
+      const watcher = new WorktreeWatcher({
+        onChange: (change) => reports.push(change),
+        watch: fake.watch,
+        resolveGitDir: gitDirOf,
+        settleMs: 10,
+        minIntervalMs: 0,
+        now: clock.now,
+        schedule: clock.schedule
+      })
+      watcher.sync(worktrees)
+      return { fake, flush: () => clock.advance(10), reports }
+    }
+
+    it('reports a write in one checkout as that worktree and that file', () => {
+      const { fake, flush, reports } = setup([worktree('a'), worktree('b')])
+      fake.fire('/checkouts/a', 'src/cart.ts')
+      flush()
+      expect(reports).toEqual([{ worktreeIds: ['a'], paths: ['src/cart.ts'] }])
+    })
+
+    it('reports a burst across two checkouts once, naming both', () => {
+      const { fake, flush, reports } = setup([worktree('a'), worktree('b'), worktree('c')])
+      fake.fire('/checkouts/a', 'src/one.ts')
+      fake.fire('/checkouts/b', 'src/two.ts')
+      fake.fire('/checkouts/a', 'src/one.ts')
+      flush()
+      expect(reports).toEqual([{ worktreeIds: ['a', 'b'], paths: ['src/one.ts', 'src/two.ts'] }])
+    })
+
+    it('drops the paths once git state moved, or the OS named no file', () => {
+      const { fake, flush, reports } = setup([worktree('a'), worktree('b')])
+      fake.fire('/checkouts/a', 'src/one.ts')
+      fake.fire('/repo/.git/worktrees/a', 'index')
+      flush()
+      fake.fire('/checkouts/b', null)
+      flush()
+      expect(reports).toEqual([{ worktreeIds: ['a'] }, { worktreeIds: ['b'] }])
+    })
+
+    it('names a committing parent and its children, since they are measured against it', () => {
+      const { fake, flush, reports } = setup([
+        worktree('parent'),
+        worktree('child', { parentId: 'parent' }),
+        worktree('other')
+      ])
+      fake.fire('/repo/.git/worktrees/parent', 'logs/HEAD')
+      flush()
+      fake.fire('/repo/.git/worktrees/parent', 'index')
+      flush()
+      expect(reports).toEqual([{ worktreeIds: ['parent', 'child'] }, { worktreeIds: ['parent'] }])
+    })
+
+    it('names nobody, meaning everybody, for a shared ref in a primary checkout', () => {
+      const { fake, flush, reports } = setup([worktree('main'), worktree('b')], (checkout) =>
+        checkout === '/checkouts/main' ? '/checkouts/main/.git' : `/repo/.git/worktrees/${path.basename(checkout)}`
+      )
+      fake.fire('/checkouts/main/.git', 'refs/remotes/origin/main')
+      flush()
+      fake.fire('/checkouts/main/.git', 'packed-refs')
+      fake.fire('/checkouts/b', 'src/x.ts')
+      flush()
+      fake.fire('/checkouts/main/.git', 'HEAD')
+      flush()
+      expect(reports).toEqual([{}, {}, { worktreeIds: ['main'] }])
+    })
+
+    it("keeps a linked worktree's own refs to itself", () => {
+      const { fake, flush, reports } = setup([worktree('a'), worktree('b')])
+      fake.fire('/repo/.git/worktrees/a', 'refs/bisect/bad')
+      flush()
+      expect(reports).toEqual([{ worktreeIds: ['a'] }])
+    })
+
+    it('stops listing paths past the cap, still naming the worktree', () => {
+      const { fake, flush, reports } = setup([worktree('a')])
+      for (let index = 0; index < 500; index += 1) fake.fire('/checkouts/a', `gen/${index}.js`)
+      flush()
+      expect(reports).toEqual([{ worktreeIds: ['a'] }])
+    })
+  })
+
   it('keeps the git directory covered when the recursive watch is refused', () => {
     const fake = createFakeWatch()
     const degraded: WatchDegraded[] = []
@@ -490,7 +580,7 @@ describe('WorktreeWatcher', () => {
     let watcher!: WorktreeWatcher
     const reported = new Promise<void>((resolve, reject) => {
       watcher = new WorktreeWatcher({
-        onChange: resolve,
+        onChange: () => resolve(),
         // The only test asking the kernel for a real watch, a scarce per-user resource.
         // Left alone it never fires and the run dies thirty seconds later saying nothing.
         onDegraded: (event) => reject(new WatchRefused(event)),

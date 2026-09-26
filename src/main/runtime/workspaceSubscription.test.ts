@@ -295,6 +295,7 @@ describe('git writes as producers', () => {
 
       // The record did not change, so this event came from the write announcing itself.
       await watcher.waitFor(has('worktrees'), 'the invalidation for a commit')
+      expect(watcher.events).toContainEqual({ type: 'worktrees', worktreeIds: [worktree.id] })
     },
     TEST_TIMEOUT_MS
   )
@@ -324,6 +325,7 @@ describe('git writes as producers', () => {
       await app.call('c1', 'worktree.push', { worktreeId: worktree.id })
 
       await watcher.waitFor(has('worktrees'), 'the invalidation for a push')
+      expect(watcher.events).toContainEqual({ type: 'worktrees', worktreeIds: [worktree.id] })
     },
     TEST_TIMEOUT_MS
   )
@@ -360,6 +362,39 @@ describe('worktree files as a producer', () => {
       if (refused && isResourceShortage(refused)) ctx.skip(watchRefusalReport(refused))
       if (refused) throw new Error(watchRefusalReport(refused))
       expect(watcher.events.some((event) => event.type === 'worktrees')).toBe(true)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'names only the worktree a file was written in, and the file',
+    async (ctx) => {
+      const repo = await repository()
+      const app = await harness({ repo, watchFiles: true })
+      const project = await app.call<Project>('c1', 'project.add', { path: repo.repoPath })
+      const [written, quiet] = await Promise.all(
+        ['written', 'quiet'].map(async (name) => {
+          const created = await app.call<Worktree>('c1', 'worktree.create', { projectId: project.id, name })
+          return app.git.whenSettled(created.id)
+        })
+      )
+      const watcher = await app.watch('c1')
+      await settle()
+      watcher.clear()
+
+      await writeFile(join(written!.path, 'NOTES.md'), '# changed underneath\n')
+      await watcher.waitFor(
+        (events) => has('worktrees')(events) || app.watchRefused() !== undefined,
+        'the invalidation for a file that changed on disk'
+      )
+      const refused = app.watchRefused()
+      if (refused && isResourceShortage(refused)) ctx.skip(watchRefusalReport(refused))
+      if (refused) throw new Error(watchRefusalReport(refused))
+
+      const named = watcher.events.flatMap((event) => (event.type === 'worktrees' ? [event] : []))
+      expect(named.every((event) => event.worktreeIds?.join() === written!.id)).toBe(true)
+      expect(named.some((event) => event.paths?.includes('NOTES.md'))).toBe(true)
+      expect(named.some((event) => event.worktreeIds?.includes(quiet!.id))).toBe(false)
     },
     TEST_TIMEOUT_MS
   )

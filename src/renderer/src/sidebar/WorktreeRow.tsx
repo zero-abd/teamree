@@ -16,6 +16,7 @@ import { AgentGlyph } from '../agents/glyphs'
 import { openInBrowser } from '../shell/openInBrowser'
 import { useLedger } from '../state/ledgerStore'
 import { askForYou, childDone, firstSentence, useMessageStore } from '../state/messages'
+import { rowVisibility } from '../state/rowVisibility'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { PaneAttention } from '../state/paneAttention'
 import { useUsageStore } from '../state/usageStore'
@@ -172,6 +173,11 @@ export function WorktreeRow({
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
   const openControl = useRef<HTMLButtonElement | null>(null)
   const opener = useRef<HTMLElement | null>(null)
+  const rowElement = useRef<HTMLLIElement | null>(null)
+  useEffect(() => {
+    if (rowElement.current === null) return
+    return rowVisibility.observe(rowElement.current, worktree.id)
+  }, [worktree.id])
   const [renaming, setRenaming] = useState(false)
   useEffect(() => {
     if (!renameAsked) return
@@ -427,6 +433,7 @@ export function WorktreeRow({
 
   return (
     <li
+      ref={rowElement}
       className={`worktree${active ? ' worktree--active' : ''} worktree--${missing ? 'missing' : worktree.state}${
         dragged ? ' worktree--dragging' : ''
       }${drop.target === null ? '' : drop.target.allowed ? ' worktree--drop' : ' worktree--no-drop'}${

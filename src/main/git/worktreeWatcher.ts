@@ -1,6 +1,6 @@
 // Watching a worktree's files so git status stops going stale. Two watches per
 // worktree: the checkout, and its git directory (a linked worktree's `.git` is a
-// file pointing elsewhere). Emits one coarse `worktrees` invalidation, nothing finer.
+// file pointing elsewhere). Each report names the worktrees that changed.
 
 import { readFileSync, statSync, watch as fsWatch } from 'node:fs'
 import path from 'node:path'
@@ -9,7 +9,7 @@ import type { Worktree } from '../../shared/entities'
 /** A quiet period long enough to swallow a save, short enough to feel live. */
 export const DEFAULT_SETTLE_MS = 250
 
-/** The floor between two reports; every report costs a `git status` per ready worktree. */
+/** The floor between two reports; every report costs a `git status` per worktree it names. */
 export const DEFAULT_MIN_INTERVAL_MS = 1_000
 
 /**
@@ -66,6 +66,26 @@ export function ignoresGitDirChange(relative: string | null): boolean {
   return !GIT_DIR_FILES.has(head)
 }
 
+/** Files listed per report; a bigger burst (an install, a build) is reported as the worktree alone. */
+export const MAX_REPORTED_PATHS = 64
+
+/**
+ * Refs every worktree is measured against: a fetch, a push, or the base branch moving. Only a
+ * primary checkout's git directory holds them; a linked worktree's `refs/` is its own.
+ */
+function movesSharedRefs(relative: string): boolean {
+  const normal = relative.replace(/\\/g, '/')
+  return normal === 'packed-refs' || /^(logs\/)?refs\/(remotes|heads)\//.test(normal)
+}
+
+/** Git state that moves the branch itself, so the worktrees measured against it move too. */
+function movesBranch(relative: string): boolean {
+  return relative !== 'index'
+}
+
+/** What one report says changed. No `worktreeIds` means every worktree; `paths` only when files alone changed. */
+export type WorktreeChange = { worktreeIds?: string[]; paths?: string[] }
+
 const GIT_DIR_FILES = new Set([
   'index',
   'HEAD',
@@ -101,8 +121,8 @@ export type WatchDegraded = {
 }
 
 export type WorktreeWatcherOptions = {
-  /** Called once per settled burst. Always the same coarse invalidation. */
-  onChange: () => void
+  /** Called once per settled burst, naming what changed in it. */
+  onChange: (change: WorktreeChange) => void
   watch?: WatchFn
   settleMs?: number
   minIntervalMs?: number
@@ -136,6 +156,7 @@ export function degradedWatchReport(event: WatchDegraded): string {
 
 type WatchedWorktree = {
   path: string
+  parentId: string | undefined
   handles: WatchHandle[]
   /** False when the recursive watch failed and only the git dir is covered. */
   watchesWorkingTree: boolean
@@ -147,7 +168,7 @@ type WatchedWorktree = {
  */
 export class WorktreeWatcher {
   readonly #watched = new Map<string, WatchedWorktree>()
-  readonly #onChange: () => void
+  readonly #onChange: (change: WorktreeChange) => void
   readonly #watch: WatchFn
   readonly #settleMs: number
   readonly #minIntervalMs: number
@@ -165,6 +186,10 @@ export class WorktreeWatcher {
   #cancelRetry: (() => void) | undefined
   #retryDelayMs: number
   #cancelPending: (() => void) | undefined
+  /** What the pending report will name: 'all' once a shared ref moved. */
+  #pendingIds: Set<string> | 'all' = new Set()
+  /** Undefined once anything but a named file changed, or past the cap. */
+  #pendingPaths: Set<string> | undefined = new Set()
   /** Undefined until the first report, so the very first change is not held. */
   #lastReportAt: number | undefined
   #closed = false
@@ -210,7 +235,10 @@ export class WorktreeWatcher {
     for (const [id, watched] of this.#watched) {
       const worktree = wanted.get(id)
       // A moved checkout is a different thing to watch under the same id.
-      if (worktree && worktree.path === watched.path) continue
+      if (worktree && worktree.path === watched.path) {
+        watched.parentId = worktree.parentId
+        continue
+      }
       this.#stopWatching(id)
     }
 
@@ -221,7 +249,7 @@ export class WorktreeWatcher {
     for (const [id, worktree] of wanted) {
       const watched = this.#watched.get(id)
       if (watched === undefined) {
-        this.#startWatching(id, worktree.path)
+        this.#startWatching(id, worktree)
         continue
       }
       // `continue` on any entry was the bug: a worktree refused a recursive watch
@@ -242,19 +270,29 @@ export class WorktreeWatcher {
     this.#reported.clear()
   }
 
-  #startWatching(id: string, checkoutPath: string): void {
-    const watched: WatchedWorktree = { path: checkoutPath, handles: [], watchesWorkingTree: false }
+  #startWatching(id: string, worktree: Worktree): void {
+    const checkoutPath = worktree.path
+    const watched: WatchedWorktree = {
+      path: checkoutPath,
+      parentId: worktree.parentId,
+      handles: [],
+      watchesWorkingTree: false
+    }
     this.#attachWorkingTree(id, watched)
 
     const gitDir = this.#resolveGitDir(checkoutPath)
     if (gitDir !== undefined) {
+      const primary = path.resolve(gitDir) === path.resolve(checkoutPath, '.git')
       try {
         watched.handles.push(
           this.#watch({
             target: gitDir,
             recursive: true,
             onChange: (relative) => {
-              if (!ignoresGitDirChange(relative)) this.#report()
+              if (ignoresGitDirChange(relative)) return
+              if (relative === null) this.#report([id])
+              else if (primary && movesSharedRefs(relative)) this.#report('all')
+              else this.#report(movesBranch(relative) ? this.#withChildren(id) : [id])
             },
             onError: (error) => this.#onError(error)
           })
@@ -280,7 +318,7 @@ export class WorktreeWatcher {
           target: watched.path,
           recursive: true,
           onChange: (relative) => {
-            if (!ignoresCheckoutChange(relative)) this.#report()
+            if (!ignoresCheckoutChange(relative)) this.#report([id], relative)
           },
           // A recursive watch can fail well after setup (inotify runs out while the app runs).
           onError: (error) => this.#degrade(id, error)
@@ -288,7 +326,7 @@ export class WorktreeWatcher {
       )
       watched.watchesWorkingTree = true
       // Coming back from degraded is itself news: what is on screen is as old as the outage.
-      if (this.#reported.delete(id)) this.#report()
+      if (this.#reported.delete(id)) this.#report([id])
     } catch (error) {
       // Recursive watching is unavailable on some filesystems and exhaustible on
       // any. The git directory alone still catches staged changes and commits.
@@ -362,12 +400,27 @@ export class WorktreeWatcher {
     this.#armRetry(false)
   }
 
+  /** A worktree and those nested directly under it. */
+  #withChildren(id: string): string[] {
+    const children = [...this.#watched].filter(([, watched]) => watched.parentId === id).map(([child]) => child)
+    return [id, ...children]
+  }
+
   /**
    * Collapses a burst into one report: the settle window, pushed out to respect
    * the minimum interval, so continuous change reports on a steady beat.
+   * `file` is the checkout path that changed; undefined when git state moved.
    */
-  #report(): void {
-    if (this.#closed || this.#cancelPending) return
+  #report(ids: string[] | 'all', file?: string | null): void {
+    if (this.#closed) return
+    if (ids === 'all' || this.#pendingIds === 'all') this.#pendingIds = 'all'
+    else for (const id of ids) this.#pendingIds.add(id)
+    if (typeof file === 'string' && file !== '' && this.#pendingPaths !== undefined) {
+      this.#pendingPaths.add(file)
+      if (this.#pendingPaths.size > MAX_REPORTED_PATHS) this.#pendingPaths = undefined
+    } else this.#pendingPaths = undefined
+
+    if (this.#cancelPending) return
     const delay =
       this.#lastReportAt === undefined
         ? this.#settleMs
@@ -375,7 +428,12 @@ export class WorktreeWatcher {
     this.#cancelPending = this.#schedule(() => {
       this.#cancelPending = undefined
       this.#lastReportAt = this.#now()
-      this.#onChange()
+      const ids = this.#pendingIds
+      const paths = this.#pendingPaths
+      this.#pendingIds = new Set()
+      this.#pendingPaths = new Set()
+      if (ids === 'all') this.#onChange({})
+      else this.#onChange({ worktreeIds: [...ids], ...(paths === undefined ? {} : { paths: [...paths] }) })
     }, delay)
   }
 }

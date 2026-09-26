@@ -502,6 +502,45 @@ describe('a worktree whose directory has gone', () => {
   })
 })
 
+describe('worktree.status', () => {
+  it('runs one status at a time per worktree: overlapping callers share the read after the one in flight', async () => {
+    const repo = await newRepo()
+    const inner = createGitRunner()
+    let reads = 0
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const runner: GitRunner = {
+      binary: inner.binary,
+      run: async (run) => {
+        if (run.args[0] === 'status' && run.args.includes('--branch')) {
+          reads += 1
+          await gate
+        }
+        return inner.run(run)
+      },
+      tryRun: (run) => inner.tryRun(run)
+    }
+    const service = newService(repo, { runner })
+    const project = await service.addProject({ path: repo.repoPath })
+    const worktree = await service.whenSettled(
+      (await service.createWorktree({ projectId: project.id, name: 'busy' })).id
+    )
+
+    const first = service.worktreeStatus({ worktreeId: worktree.id })
+    const second = service.worktreeStatus({ worktreeId: worktree.id })
+    const third = service.worktreeStatus({ worktreeId: worktree.id })
+    await vi.waitFor(() => expect(reads).toBe(1))
+    release()
+    const answers = await Promise.all([first, second, third])
+
+    expect(reads).toBe(2)
+    expect(answers[1]).toBe(answers[2])
+    expect(answers.every((answer) => answer.worktreeId === worktree.id)).toBe(true)
+  })
+})
+
 describe('persistence', () => {
   it('marks creates that a restart interrupted as failed', async () => {
     const repo = await newRepo()
