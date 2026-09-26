@@ -6,6 +6,7 @@ import { hasCheckout } from '@shared/entities'
 import { fileLeavesIn, isFilePaneId, isWorktreeFileLeaf } from '@shared/filePane'
 import { activeChoice, resolveTone, themeTone, withChoice, type AppearanceMode } from '@shared/theme'
 import { AgentGlyph } from '../agents/glyphs'
+import { hasResumable } from '../agents/harnesses'
 import { Modal } from '../dialogs/Modal'
 import { holdsModifier, type PlatformModifier } from '../keyboard/platformModifier'
 import { projectForNewTask, runWorkspaceCommand, whyUnavailable } from '../keyboard/workspaceCommands'
@@ -89,6 +90,10 @@ export function CommandPalette({
   const closedFiles = useWorkspaceStore((state) => state.closedFiles)
   const removedWorktrees = useWorkspaceStore((state) => state.removedWorktrees)
   const loadRemovedWorktrees = useWorkspaceStore((state) => state.loadRemovedWorktrees)
+  const loadConversations = useWorkspaceStore((state) => state.loadConversations)
+  const resumable = useWorkspaceStore((state) =>
+    hasResumable(activeWorktreeId === null ? undefined : state.conversations[activeWorktreeId], state.agents)
+  )
   // What Go to Next Needing You reads.
   const terminals = useWorkspaceStore((state) => state.terminals)
   const paneSeenAt = useWorkspaceStore((state) => state.paneSeenAt)
@@ -104,6 +109,9 @@ export function CommandPalette({
   useEffect(() => {
     void loadRemovedWorktrees()
   }, [loadRemovedWorktrees])
+  useEffect(() => {
+    if (activeWorktreeId !== null) void loadConversations(activeWorktreeId)
+  }, [activeWorktreeId, loadConversations])
 
   const active = worktrees.find((worktree) => worktree.id === activeWorktreeId)
   const activeBase = projects.find((project) => project.id === active?.projectId)?.baseRef
@@ -141,6 +149,7 @@ export function CommandPalette({
         diffOptions,
         rightPanelTab,
         terminals: Object.values(terminals),
+        resumable,
         // Empty for a command with no key.
         hintFor: (action) => {
           const command = commandNamed(action)
@@ -225,7 +234,8 @@ export function CommandPalette({
       activeBase,
       appearance,
       systemTone,
-      change
+      change,
+      resumable
     ]
   )
 

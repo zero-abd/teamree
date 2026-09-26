@@ -5,6 +5,7 @@
 import { create } from 'zustand'
 import { hasCheckout } from '@shared/entities'
 import type {
+  AgentConversation,
   AgentKind,
   CliInstall,
   CliStatus,
@@ -77,6 +78,7 @@ import {
 } from './closedPanes'
 import type { AgentModes, TaskCreate } from '../dialogs/taskPlan'
 import { agentLaunchCommand } from '@shared/agentLaunch'
+import { canResumeConversations } from '../agents/harnesses'
 import {
   addTab,
   appendPane,
@@ -494,6 +496,8 @@ type WorkspaceState = {
   /** Closed terminals the runtime can reopen, and closed file panes, by worktree id, newest first. */
   closedPanes: Record<string, ClosedPane[]>
   closedFiles: ClosedFiles
+  /** Each worktree's past agent conversations, as last read; absent until asked. */
+  conversations: Record<string, AgentConversation[]>
 
   collapsedProjects: Record<string, boolean>
   openWorktreeIds: string[]
@@ -603,6 +607,8 @@ type WorkspaceState = {
   /** Closes a pane, asking first when the close would kill work. Every close path comes through here, so the question is asked once. */
   closeTerminal: (terminalId: string) => Promise<void>
   loadClosedPanes: (worktreeId: string) => Promise<void>
+  /** Re-reads a worktree's past conversations; nothing when no installed agent keeps any. */
+  loadConversations: (worktreeId: string) => Promise<void>
   /** Brings back the open worktree's last closed pane, of either kind. */
   reopenClosedPane: () => Promise<void>
   /** Brings back one closed terminal, or the last one; an agent resumes its conversation. */
@@ -1109,6 +1115,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
    * window asked for is named in `panesAskedFor` first and is the exception. Only the tab in front.
    */
   const panesAskedFor = new Set<string>()
+  const conversationReads = new Map<string, Promise<void>>()
   const keepingFocus = (
     state: { activeWorktreeId: string | null; layouts: Record<string, Layout> },
     layout: Layout
@@ -1223,6 +1230,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   }
 
   const markExited = (exits: RefreshTargets['exits']): void => {
+    const stopped = new Set<string>()
+    for (const exit of exits) {
+      const terminal = get().terminals[exit.terminalId]
+      if (terminal?.agent !== undefined) stopped.add(terminal.worktreeId)
+    }
+    for (const worktreeId of stopped) void get().loadConversations(worktreeId)
     set((state) => {
       const terminals = { ...state.terminals }
       for (const exit of exits) {
@@ -1634,6 +1647,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     removedWorktrees: [],
     closedPanes: {},
     closedFiles: readClosedFiles(storage),
+    conversations: {},
 
     // Folded projects are remembered with the sidebar's width. Tabs are restored in `bootstrap`,
     // once the runtime has said which worktrees still exist.
@@ -2286,6 +2300,21 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     async loadClosedPanes(worktreeId) {
       const closed = await runtimeClient.call('terminal.closed', { worktreeId }).catch(() => null)
       if (closed !== null) set((state) => ({ closedPanes: { ...state.closedPanes, [worktreeId]: closed } }))
+    },
+
+    loadConversations(worktreeId) {
+      if (!canResumeConversations(get().agents)) return Promise.resolve()
+      const running = conversationReads.get(worktreeId)
+      if (running !== undefined) return running
+      const read = runtimeClient
+        .call('agent.conversations', { worktreeId })
+        .then(
+          (found) => set((state) => ({ conversations: { ...state.conversations, [worktreeId]: found } })),
+          () => undefined
+        )
+        .finally(() => conversationReads.delete(worktreeId))
+      conversationReads.set(worktreeId, read)
+      return read
     },
 
     async reopenClosedPane() {

@@ -614,6 +614,30 @@ describe('the row menu acts on the worktree it was opened on', () => {
     expect(useWorkspaceStore.getState().notices.at(-1)?.text).toContain('Copied')
   })
 
+  // #305 offered it on every row and opened an empty picker.
+  it('offers Resume Conversation… only on a worktree with a past conversation', () => {
+    const past = { agent: 'claude' as const, sessionId: 's1', prompt: 'fix it', updatedAt: 1, messages: 2 }
+    const claude = { kind: 'claude' as const, command: 'claude', binary: '/bin/claude' }
+    seed({ worktrees: [worktree()], agents: [claude], conversations: { w1: [] }, loadConversations: vi.fn() })
+    openMenu()
+    expect(screen.queryByRole('menuitem', { name: 'Resume Conversation…' })).toBeNull()
+    cleanup()
+
+    seed({ worktrees: [worktree()], agents: [claude], conversations: { w1: [past] }, loadConversations: vi.fn() })
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Resume Conversation…' }))
+    expect(openDialog).toHaveBeenCalledWith({ kind: 'resume-conversation', worktreeId: 'w1' })
+  })
+
+  it('asks for that worktree’s past conversations as its menu opens', () => {
+    const loadConversations = vi.fn()
+    seed({ worktrees: [worktree(), worktree({ id: 'w2', name: 'Other' })], loadConversations })
+    mount()
+    expect(loadConversations).not.toHaveBeenCalled()
+    fireEvent.contextMenu(document.querySelectorAll('.worktree')[1] as HTMLElement)
+    expect(loadConversations).toHaveBeenCalledExactlyOnceWith('w2')
+  })
+
   it('copies the branch rather than the path when that is what was chosen', async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })

@@ -67,6 +67,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   // The sidebar's reading, so the strip and the row agree.
   const unread = useUnreadPanes()
   const startItems = useStartMenuItems(activeWorktreeId, modifier)
+  const loadConversations = useWorkspaceStore((state) => state.loadConversations)
 
   const tabs = panesShown ? paneTabs(layout?.root ?? null, terminals, worktree) : []
 
@@ -298,6 +299,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                 closeMenu()
                 return
               }
+              if (activeWorktreeId !== null) void loadConversations(activeWorktreeId)
               const rect = plus.current?.getBoundingClientRect()
               if (rect) setMenuAt({ x: rect.right, y: rect.bottom + MENU_GAP_PX, align: 'right' })
             }}
