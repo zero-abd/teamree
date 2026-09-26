@@ -6,7 +6,7 @@
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { InstalledAgent, Layout, Project, Worktree, WorktreeStatus } from '@shared/entities'
+import type { AgentConversation, InstalledAgent, Layout, Project, Worktree, WorktreeStatus } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
@@ -238,8 +238,15 @@ describe('when there is nothing open', () => {
 describe('a worktree with no panes in it', () => {
   const claude: InstalledAgent = { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }
   const codex: InstalledAgent = { kind: 'codex', command: 'codex', binary: '/opt/bin/codex' }
-  const openEmpty = (overrides: Partial<Worktree> = {}): void => {
-    seed({ projects: [project], worktrees: [worktree(overrides)], activeWorktreeId: 'w1', agents: [claude, codex] })
+  const past: AgentConversation = { agent: 'codex', sessionId: 's1', prompt: 'fix it', updatedAt: 1, messages: 2 }
+  const openEmpty = (overrides: Partial<Worktree> = {}, state: Record<string, unknown> = {}): void => {
+    seed({
+      projects: [project],
+      worktrees: [worktree(overrides)],
+      activeWorktreeId: 'w1',
+      agents: [claude, codex],
+      ...state
+    })
     mount()
   }
   // The label only: a glyph's <title> is text too.
@@ -281,7 +288,32 @@ describe('a worktree with no panes in it', () => {
       openAgentSettings: () => {}
     })
     expect(startButtons()).toEqual(menu.map((item) => item.label).filter((label) => label !== 'Agent Settings…'))
-    expect(startButtons()).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Codex', 'Resume Conversation…'])
+    expect(startButtons()).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Codex'])
+  })
+
+  // #305 opened an empty picker from here.
+  it('offers no Resume Conversation… in a worktree with no past conversations', () => {
+    openEmpty({}, { conversations: { w1: [] } })
+    expect(screen.queryByRole('button', { name: 'Resume Conversation…' })).toBeNull()
+  })
+
+  it('offers no Resume Conversation… for a conversation of an agent not installed', () => {
+    openEmpty({}, { agents: [claude], conversations: { w1: [past] } })
+    expect(screen.queryByRole('button', { name: 'Resume Conversation…' })).toBeNull()
+  })
+
+  it('puts Resume Conversation… on its own row under the new panes when there is one', () => {
+    openEmpty({}, { conversations: { w1: [past, { ...past, sessionId: 's2' }] } })
+    const rows = [...document.querySelectorAll('.worktree-start__actions')].map((row) =>
+      [...row.querySelectorAll('button')].map((button) => button.lastChild?.textContent)
+    )
+    expect(rows).toEqual([['New Terminal', 'New Markdown', 'Claude Code', 'Codex'], ['Resume Conversation…']])
+  })
+
+  it('asks for the worktree’s past conversations when it is shown', () => {
+    const loadConversations = vi.fn()
+    openEmpty({}, { loadConversations })
+    expect(loadConversations).toHaveBeenCalledWith('w1')
   })
 
   it('marks each agent with its harness glyph', () => {
@@ -308,6 +340,7 @@ describe('a worktree with no panes in it', () => {
       agents: [claude, codex],
       loadClosedPanes: vi.fn(),
       reopenTerminal,
+      conversations: { w1: [past] },
       closedPanes: {
         w1: [
           { terminalId: 't2', worktreeId: 'w1', resumable: false, closedAt: 3 },
@@ -317,11 +350,11 @@ describe('a worktree with no panes in it', () => {
     })
     mount()
     expect(startButtons()).toEqual([
-      'Resume Claude Code',
       'New Terminal',
       'New Markdown',
       'Claude Code',
       'Codex',
+      'Resume Claude Code',
       'Resume Conversation…'
     ])
     const primary = [...document.querySelectorAll('.worktree-start__actions .button--primary')]
@@ -340,12 +373,12 @@ describe('a worktree with no panes in it', () => {
       closedPanes: { w1: [{ terminalId: 't1', worktreeId: 'w1', agent: 'claude', resumable: false, closedAt: 2 }] }
     })
     mount()
-    expect(startButtons()).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Codex', 'Resume Conversation…'])
+    expect(startButtons()).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Codex'])
     expect(document.querySelector('.worktree-start__actions .button--primary')).toBeNull()
   })
 
   it('opens the worktree’s past conversations from Resume Conversation…', () => {
-    openEmpty()
+    openEmpty({}, { conversations: { w1: [past] } })
     fireEvent.click(screen.getByRole('button', { name: 'Resume Conversation…' }))
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'resume-conversation', worktreeId: 'w1' })
   })

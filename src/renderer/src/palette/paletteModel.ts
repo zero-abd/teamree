@@ -34,6 +34,7 @@ export type PaletteAction =
   | 'open-pull-request'
   | 'new-task-from-issue'
   | 'install-cli'
+  | 'search-contents'
   | 'check-for-updates'
   | 'toggle-automatic-updates'
   | WorktreeAction
@@ -140,6 +141,8 @@ export type PaletteContext = {
   rightPanelTab?: RightPanelTab
   /** Every pane, for each worktree row's dot. */
   terminals?: readonly Terminal[]
+  /** Whether the worktree on screen has a past conversation to resume; absent reads as none. */
+  resumable?: boolean
 }
 
 /**
@@ -257,7 +260,8 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
               {
                 id: 'resume-conversation' as const,
                 label: 'Resume Conversation…',
-                keywords: 'resume conversation session history past agent continue'
+                keywords: 'resume conversation session history past agent continue',
+                ...(context.resumable === true ? {} : { unavailable: 'no past conversations' })
               }
             ]
           : []),
@@ -459,6 +463,7 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'previous-needing': 'previous needing you asking failed finished unread attention question answer back',
   'open-palette': 'go to worktree command palette search anything',
   'go-to-file': 'go to file open quick find path',
+  'search-in-files': 'search find in files contents text grep across tasks worktrees usages references',
   'open-dashboard': 'all panes agents dashboard overview attention waiting failed working everywhere',
   'toggle-sidebar': 'toggle sidebar hide show projects',
   'toggle-right-panel': 'toggle right panel hide show files changes panes',
@@ -720,6 +725,18 @@ export function rankFiles(found: readonly string[], recent: readonly string[], q
   const age = (seen: number): number => (seen === -1 ? Infinity : seen)
   rows.sort((left, right) => right.tier - left.tier || age(left.seen) - age(right.seen) || right.points - left.points)
   return rows.slice(0, limit).map((row) => row.path)
+}
+
+/** The row that hands what is typed to the Search tab. */
+export function searchContentsItem(query: string): PaletteItem {
+  return {
+    kind: 'action',
+    id: 'search-contents',
+    label: `Search in Files: “${query}”`,
+    hint: '',
+    detail: '',
+    search: query
+  }
 }
 
 /** A file row: the name to read, its directory beside it. */

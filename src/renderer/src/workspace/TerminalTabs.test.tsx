@@ -5,7 +5,7 @@
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { InstalledAgent, Layout, PaneNode, Terminal } from '@shared/entities'
+import type { AgentConversation, InstalledAgent, Layout, PaneNode, Terminal } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 import { leaf } from '../panes/paneLayout'
 
@@ -416,16 +416,26 @@ describe('the menu the + opens', () => {
       .getAllByRole('menuitem')
       .map((item) => item.querySelector('.row-menu__label')?.textContent ?? '')
 
+  const past: AgentConversation = { agent: 'claude', sessionId: 's1', prompt: 'fix it', updatedAt: 1, messages: 2 }
+
   it('lists a terminal, a markdown page, the agents the runtime found, and the agent settings', () => {
     onePane()
-    expect(rows(open())).toEqual([
-      'New Terminal',
-      'New Markdown',
-      'Claude Code',
-      'Codex',
-      'Resume Conversation…',
-      'Agent Settings…'
-    ])
+    expect(rows(open())).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Codex', 'Agent Settings…'])
+  })
+
+  it('offers Resume Conversation… only once the worktree has a past conversation', () => {
+    onePane({ conversations: { w1: [past] } })
+    expect(rows(open())).toContain('Resume Conversation…')
+    cleanup()
+    onePane({ conversations: { w1: [] } })
+    expect(rows(open())).not.toContain('Resume Conversation…')
+  })
+
+  it('asks for the worktree’s past conversations as it opens', () => {
+    const loadConversations = vi.fn()
+    onePane({ loadConversations })
+    open()
+    expect(loadConversations).toHaveBeenCalledWith('w1')
   })
 
   it('names the terminal chord on its row', () => {
@@ -436,13 +446,7 @@ describe('the menu the + opens', () => {
 
   it('lists no agent the runtime did not find', () => {
     onePane({ agents: [claude] })
-    expect(rows(open())).toEqual([
-      'New Terminal',
-      'New Markdown',
-      'Claude Code',
-      'Resume Conversation…',
-      'Agent Settings…'
-    ])
+    expect(rows(open())).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Agent Settings…'])
   })
 
   it('opens a markdown page in the worktree the strip belongs to', () => {

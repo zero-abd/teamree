@@ -46,6 +46,7 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
   'previous-needing': 'around',
   'open-palette': 'around',
   'go-to-file': 'around',
+  'search-in-files': 'around',
   'open-dashboard': 'around',
   'toggle-sidebar': 'around',
   'toggle-right-panel': 'around',

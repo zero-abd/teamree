@@ -3,6 +3,7 @@
 // swapping the seeded stand-in for the real client is a single assignment.
 
 import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WatchedPaneEvent, WorkspaceEvent } from '@shared/methods'
+import type { WorktreeSearchEvent } from '@shared/search'
 
 /** Connection lifecycle as the status bar needs to report it. */
 export type ConnectionPhase = 'connecting' | 'ready' | 'retrying' | 'offline'
@@ -37,6 +38,12 @@ export interface RuntimeClient {
 
   /** Live output for a teammate's pane over the peer link: read-only, and able to report a gap or lost link. */
   watchPane(projectId: string, paneId: string, onEvent: (event: WatchedPaneEvent) => void): Promise<WatchedPaneHandle>
+
+  /** A content search's hits as they come; closing the subscription cancels it. */
+  searchContents(
+    params: ParamsOf<'worktree.search'>,
+    onEvent: (event: WorktreeSearchEvent) => void
+  ): Promise<Subscription>
 
   /** Watches the workspace and keeps the stream up; each event names a collection to re-read. */
   watchWorkspace(onEvent: (event: WorkspaceEvent) => void): WorkspaceWatch

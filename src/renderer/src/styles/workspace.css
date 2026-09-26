@@ -477,6 +477,10 @@
   margin-top: var(--s5);
 }
 
+.worktree-start__actions--resume {
+  margin-top: 0;
+}
+
 .worktree-start__icon {
   display: flex;
   color: var(--fg-muted);

@@ -2,7 +2,8 @@
 // the only connection state IPC can observe.
 
 import type { MethodName, ParamsOf, ResultOf, TerminalEvent, WatchedPaneEvent, WorkspaceEvent } from '@shared/methods'
-import { call, openStream, RuntimeCallError, subscribeTerminal, type Subscription } from './runtimeClient'
+import type { WorktreeSearchEvent } from '@shared/search'
+import { call, openStream, RuntimeCallError, subscribe, subscribeTerminal, type Subscription } from './runtimeClient'
 import { watchWorkspace, type WorkspaceWatch } from './workspaceStream'
 
 export type ConnectionPhase = 'connecting' | 'ready' | 'retrying' | 'offline'
@@ -26,6 +27,10 @@ export type RuntimeClient = {
   subscribeTerminal(terminalId: string, onEvent: (event: TerminalEvent) => void): Promise<Subscription>
   /** Live output for one of a teammate's panes. Read-only; there is no write. */
   watchPane(projectId: string, paneId: string, onEvent: (event: WatchedPaneEvent) => void): Promise<WatchedPaneHandle>
+  searchContents(
+    params: ParamsOf<'worktree.search'>,
+    onEvent: (event: WorktreeSearchEvent) => void
+  ): Promise<Subscription>
   /** Watches workspace changes and keeps the stream up; each event names a collection to refetch. */
   watchWorkspace(onEvent: (event: WorkspaceEvent) => void): WorkspaceWatch
   readonly connection: ConnectionState
@@ -77,6 +82,8 @@ export function createRuntimeClient(): RuntimeClient {
       )
       return { subscription, cols: result.cols, rows: result.rows, handle: result.handle }
     },
+    searchContents: (params, onEvent) =>
+      subscribe('worktree.search', params, (event) => onEvent(event as WorktreeSearchEvent)),
     watchWorkspace: (onEvent) =>
       // A failed stream says as much about the connection as a failed call.
       watchWorkspace(onEvent, { onError: (error) => setState({ phase: 'offline', detail: describe(error) }) }),

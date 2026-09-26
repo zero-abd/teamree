@@ -6,6 +6,7 @@ import { hasCheckout } from '@shared/entities'
 import { fileLeavesIn, isFilePaneId, isWorktreeFileLeaf } from '@shared/filePane'
 import { activeChoice, resolveTone, themeTone, withChoice, type AppearanceMode } from '@shared/theme'
 import { AgentGlyph } from '../agents/glyphs'
+import { hasResumable } from '../agents/harnesses'
 import { Modal } from '../dialogs/Modal'
 import { holdsModifier, type PlatformModifier } from '../keyboard/platformModifier'
 import { projectForNewTask, runWorkspaceCommand, whyUnavailable } from '../keyboard/workspaceCommands'
@@ -29,12 +30,14 @@ import {
   queryGroups,
   rankFiles,
   readStoredRecent,
+  searchContentsItem,
   trailing,
   withRecent,
   writeStoredRecent,
   type PaletteGroup,
   type PaletteItem
 } from './paletteModel'
+import { useSearchStore } from '../workspace/rightPanel/searchStore'
 import { useFileMatches } from './useFileMatches'
 import { useFocusedChange } from './useFocusedChange'
 
@@ -87,6 +90,10 @@ export function CommandPalette({
   const closedFiles = useWorkspaceStore((state) => state.closedFiles)
   const removedWorktrees = useWorkspaceStore((state) => state.removedWorktrees)
   const loadRemovedWorktrees = useWorkspaceStore((state) => state.loadRemovedWorktrees)
+  const loadConversations = useWorkspaceStore((state) => state.loadConversations)
+  const resumable = useWorkspaceStore((state) =>
+    hasResumable(activeWorktreeId === null ? undefined : state.conversations[activeWorktreeId], state.agents)
+  )
   // What Go to Next Needing You reads.
   const terminals = useWorkspaceStore((state) => state.terminals)
   const paneSeenAt = useWorkspaceStore((state) => state.paneSeenAt)
@@ -102,6 +109,9 @@ export function CommandPalette({
   useEffect(() => {
     void loadRemovedWorktrees()
   }, [loadRemovedWorktrees])
+  useEffect(() => {
+    if (activeWorktreeId !== null) void loadConversations(activeWorktreeId)
+  }, [activeWorktreeId, loadConversations])
 
   const active = worktrees.find((worktree) => worktree.id === activeWorktreeId)
   const activeBase = projects.find((project) => project.id === active?.projectId)?.baseRef
@@ -139,6 +149,7 @@ export function CommandPalette({
         diffOptions,
         rightPanelTab,
         terminals: Object.values(terminals),
+        resumable,
         // Empty for a command with no key.
         hintFor: (action) => {
           const command = commandNamed(action)
@@ -223,7 +234,8 @@ export function CommandPalette({
       activeBase,
       appearance,
       systemTone,
-      change
+      change,
+      resumable
     ]
   )
 
@@ -258,8 +270,12 @@ export function CommandPalette({
   const groups = useMemo((): PaletteGroup[] => {
     if (mode === 'files') return [{ title: null, items: files }]
     if (wanted === '') return paletteGroups(items, recentCommands, activeName)
-    return queryGroups(items, query, settled ? files : null)
-  }, [mode, files, wanted, items, recentCommands, activeName, query, settled])
+    const contents: PaletteGroup[] =
+      filesOf !== null && wanted.length >= FILES_IN_COMMANDS_MIN_QUERY
+        ? [{ title: 'Contents', items: [searchContentsItem(wanted)] }]
+        : []
+    return [...queryGroups(items, query, settled ? files : null), ...contents]
+  }, [mode, files, wanted, items, recentCommands, activeName, query, settled, filesOf])
   const matches = useMemo(() => groups.flatMap((group) => group.items), [groups])
   // The list can shrink under a selection that was valid a keystroke ago.
   const cursor = Math.min(selected, Math.max(matches.length - 1, 0))
@@ -396,6 +412,10 @@ export function CommandPalette({
         break
       case 'show-files':
         store.showRightPanelTab('files')
+        break
+      case 'search-contents':
+        useSearchStore.getState().setForm({ query: wanted })
+        store.openSearch()
         break
       case 'open-branch':
       case 'open-pull-request': {

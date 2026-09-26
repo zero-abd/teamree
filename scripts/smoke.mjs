@@ -436,9 +436,8 @@ async function checkWorktreeSurfaces(ask) {
       failures.push(`the row menu does not end with Delete Worktree…: ${JSON.stringify(items)}`)
     if (items.at(-2) !== 'Remove from teamree')
       failures.push(`the row menu has no Remove from teamree before Delete Worktree…: ${JSON.stringify(items)}`)
-    // Resume Conversation… is there only when Claude Code or Codex was found.
-    const found = (await call('agent.list', {})).result ?? []
-    const resumable = found.some((agent) => agent.kind === 'claude' || agent.kind === 'codex')
+    // Resume Conversation… is there only when the worktree has a conversation to resume.
+    const resumable = await hasResumable(call, worktreeId)
     const head = ['New Child Task…', 'Move Under…', ...(resumable ? ['Resume Conversation…'] : []), 'Rename…']
     if (JSON.stringify(items.slice(0, head.length)) !== JSON.stringify(head))
       failures.push(`the row menu does not start with ${head.join(', ')}: ${JSON.stringify(items)}`)
@@ -537,9 +536,7 @@ async function checkWorktreeSurfaces(ask) {
     )
   await waitFor(async () => ((await menuRows()) ?? []).length > 0, 'pressing + on the pane strip opened no menu')
   const agents = (await call('agent.list', {})).result ?? []
-  const resumeRow = agents.some((agent) => agent.kind === 'claude' || agent.kind === 'codex')
-    ? ['Resume Conversation…']
-    : []
+  const resumeRow = (await hasResumable(call, worktreeId)) ? ['Resume Conversation…'] : []
   const expectedRows = [
     'New Terminal',
     'New Markdown',
@@ -606,6 +603,12 @@ async function checkWorktreeSurfaces(ask) {
  * After the close above, not before: a pane is busy for four seconds after it
  * prints, and a busy pane is asked about before closing.
  */
+async function hasResumable(call, worktreeId) {
+  const agents = (await call('agent.list', {})).result ?? []
+  const past = (await call('agent.conversations', { worktreeId })).result ?? []
+  return past.some((conversation) => agents.some((agent) => agent.kind === conversation.agent))
+}
+
 async function checkUnreadPanes(ask, call, worktreeId) {
   // Every tab pressed first, so whatever is marked afterwards is what this
   // check caused rather than a prompt that printed while panes were opening.

@@ -1,6 +1,6 @@
-// The only place in the app that starts a git process. `shell: false` is not
-// negotiable: names and refs are user input. Everything else exists so a hung
-// or chatty git can never wedge the runtime.
+// The only place in the app that starts a git process, bar the streamed `git grep`
+// in worktreeSearch.ts. `shell: false` is not negotiable: names and refs are user
+// input. Everything else exists so a hung or chatty git can never wedge the runtime.
 
 import { spawn } from 'node:child_process'
 import { GitCommandError } from './errors'

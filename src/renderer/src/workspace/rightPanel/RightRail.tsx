@@ -38,11 +38,20 @@ const TABS: readonly { id: RightPanelTab; label: string; icon: React.JSX.Element
         <path d="M4 1.5 H8.5 L11 4 V12.5 H4 Z M5.5 6.5 H9.5 M5.5 9 H9.5" />
       </svg>
     )
+  },
+  {
+    id: 'search',
+    label: 'Search',
+    icon: (
+      <svg viewBox="0 0 14 14" aria-hidden="true">
+        <path d="M6 2 A4 4 0 1 1 6 10 A4 4 0 1 1 6 2 Z M9 9 L12.5 12.5" />
+      </svg>
+    )
   }
 ]
 
 export function RightRail({ open, tab, status, onPick, onToggle }: RightRailProps): React.JSX.Element {
-  const counts: Record<RightPanelTab, number> = { files: 0, changes: changedCount(status) }
+  const counts: Record<RightPanelTab, number> = { files: 0, changes: changedCount(status), search: 0 }
   return (
     <div className={`panel__rail${open ? '' : ' panel__rail--edge'}`}>
       <div

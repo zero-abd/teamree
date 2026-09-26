@@ -1,4 +1,4 @@
-// The panel on the right of the panes: the worktree's files or its changes, one at a time.
+// The panel on the right of the panes: the worktree's files, its changes or a content search, one at a time.
 //
 // Per worktree in what it shows and per machine in how it is shown. Switching
 // worktrees keeps the tab and the width and re-reads the content, which is
@@ -14,6 +14,7 @@ import { useWorkspaceStore } from '../../state/workspaceStore'
 import { ChangesTab } from './ChangesTab'
 import { FilesTab } from './FilesTab'
 import { RightRail } from './RightRail'
+import { SearchTab } from './SearchTab'
 import { RIGHT_PANEL_DEFAULT_PX, RIGHT_PANEL_MAX_PX, RIGHT_PANEL_MIN_PX } from './rightPanelState'
 
 export function RightPanel(): React.JSX.Element | null {
@@ -60,6 +61,7 @@ export function RightPanel(): React.JSX.Element | null {
           <div className="panel__body" role="tabpanel">
             {tab === 'files' ? <FilesTab key={worktree.id} worktree={worktree} /> : null}
             {tab === 'changes' ? <ChangesTab /> : null}
+            {tab === 'search' ? <SearchTab key={worktree.id} worktree={worktree} /> : null}
           </div>
         ) : null}
       </aside>
