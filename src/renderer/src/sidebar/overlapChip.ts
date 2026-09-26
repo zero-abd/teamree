@@ -5,7 +5,14 @@ import type { WorktreeOverlap } from '@shared/tasks'
 
 export type OverlapKind = 'conflict' | 'claimed' | 'overlap'
 
-export type OverlapEntry = { path: string; with: WorktreeOverlap['with']; name: string; kind: OverlapKind }
+export type OverlapEntry = {
+  path: string
+  with: WorktreeOverlap['with']
+  name: string
+  kind: OverlapKind
+  /** A conflict that rests on work not yet committed. */
+  uncommitted?: true
+}
 
 export type OverlapChip = {
   tone: 'overlap' | 'conflict'
@@ -29,11 +36,12 @@ export function overlapChip(
     const conflicts = new Set(overlap.conflicts)
     const hot = new Set(overlap.hot ?? [])
     const claimed = new Set(overlap.claimed ?? [])
+    const uncommitted = new Set(overlap.uncommitted ?? [])
     const name = nameOf(overlap.with)
     for (const path of overlap.paths) {
       if (hot.has(path) && !conflicts.has(path)) continue
       const kind = conflicts.has(path) ? 'conflict' : claimed.has(path) ? 'claimed' : 'overlap'
-      entries.push({ path, with: overlap.with, name, kind })
+      entries.push({ path, with: overlap.with, name, kind, ...(uncommitted.has(path) ? { uncommitted: true } : {}) })
     }
   }
   if (entries.length === 0) return null
@@ -44,8 +52,13 @@ export function overlapChip(
     tone: entries.some((entry) => entry.kind === 'conflict') ? 'conflict' : 'overlap',
     label: files.size === 1 && only !== undefined ? only.slice(only.lastIndexOf('/') + 1) : `${files.size} files`,
     entries,
-    title: entries.map((entry) => `${entry.path} · ${entry.name} · ${entry.kind}`).join('\n')
+    title: entries.map(titleLine).join('\n')
   }
+}
+
+function titleLine(entry: OverlapEntry): string {
+  const what = 'base' in entry.with ? `would conflict with ${entry.name}` : `${entry.name} · ${entry.kind}`
+  return `${entry.path} · ${what}${entry.uncommitted === true ? ' · uncommitted' : ''}`
 }
 
 export type OverlapLine = { text: string; conflict: boolean; entry: OverlapEntry }
@@ -54,7 +67,13 @@ export type OverlapLine = { text: string; conflict: boolean; entry: OverlapEntry
 export function overlapLines(chip: OverlapChip | null): OverlapLine[] {
   const byOther = new Map<string, OverlapEntry[]>()
   for (const entry of chip?.entries ?? []) {
-    const key = 'handle' in entry.with ? `${entry.with.handle}\0${entry.with.worktreeId}` : entry.with.worktreeId
+    const other = entry.with
+    const key =
+      'handle' in other
+        ? `${other.handle}\0${other.worktreeId}`
+        : 'base' in other
+          ? `\0${other.base}`
+          : other.worktreeId
     byOther.set(key, [...(byOther.get(key) ?? []), entry])
   }
   return [...byOther.values()].map((entries) => {

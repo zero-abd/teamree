@@ -36,9 +36,12 @@ export const PANE_IDENTITY_ENV = {
 /** Two worktrees changing the same paths; `conflicts` are the ones a merge would stop on. */
 export type WorktreeOverlap = {
   worktreeId: string
-  with: { worktreeId: string } | { handle: string; worktreeId: string }
+  /** `base`: the branch it merges into, which holds a landed sibling's work; `worktreeId` is the parent owning it. */
+  with: { worktreeId: string } | { handle: string; worktreeId: string } | { base: string; worktreeId?: string }
   paths: string[]
   conflicts: string[]
+  /** Conflicts that rest on work not yet committed. */
+  uncommitted?: string[]
   /** Paths one side changed inside the other's claims. */
   claimed?: string[]
   /** Hot files among `paths` (lockfiles, package.json, touched by most worktrees): weak evidence alone. */

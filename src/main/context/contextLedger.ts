@@ -2,6 +2,7 @@
 // it touched or claimed, which of those a sibling shares, and the few decisions on them.
 
 import { randomUUID } from 'node:crypto'
+import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { PROVIDER_TIMEOUT_MS, type MemoryEvent } from '../../shared/contextProvider'
 import type { Project, Worktree } from '../../shared/entities'
@@ -26,10 +27,11 @@ import {
 import type { WorktreeOverlap, WorktreeOverlaps } from '../../shared/tasks'
 import { createGitRunner, type GitRunner } from '../git/gitProcess'
 import type { GitSnapshot } from '../git/gitService'
+import { writeWorkingTree } from '../git/workingTree'
 import { notFound } from '../runtime/runtimeError'
 import { buildBundle } from './bundle'
 import { editOverlaps, editWarning, repoRelative } from './editCheck'
-import { isAncestor, landingConflicts, mergeConflicts, readTouches } from './gitReads'
+import { baseChanges, isAncestor, landingConflicts, mergeConflicts, readTouches, resolveCommit } from './gitReads'
 import { normalizeGlob } from '../../shared/globs'
 import {
   LedgerStore,
@@ -59,7 +61,7 @@ export type ContextLedgerOptions = {
   refreshDelayMs?: number
   /** Floor between two scheduled passes. */
   minPassIntervalMs?: number
-  /** Pairs checked with `git merge-tree` per pass; the rest wait for the next. */
+  /** `git merge-tree` runs per pass, pairs and bases together; the rest wait for the next. */
   maxMergeTreesPerPass?: number
   /** Something an agent or the window reads changed. */
   onChange?: (projectId: string) => void
@@ -71,18 +73,51 @@ export type ContextLedgerOptions = {
 /** A teammate's worktree as presence carries it: changed paths, never contents. */
 export type TeammatePaths = { handle: string; worktreeId: string; paths: readonly string[] }
 
-export type LedgerStats = { passes: number; gitRuns: number; mergeTrees: number; lastPassMs: number }
+export type LedgerStats = {
+  passes: number
+  gitRuns: number
+  mergeTrees: number
+  /** Working trees written for a merge-tree; an idle one is not written again. */
+  snapshots: number
+  lastPassMs: number
+}
 
 type ProjectView = { project: Project; worktrees: Worktree[] }
+
+/** One worktree's side of a merge, as the last pass read it. */
+type Side = {
+  path: string
+  tip: string
+  ahead: number
+  /** Changed on disk, not committed; relative to the checkout. */
+  uncommitted: string[]
+  /** The working tree last written, and the file dates behind it; none while a date could still move unseen. */
+  tree?: string
+  print?: string
+  /** What this pass compares: the tip, or the tip and its working tree. Unset when out of any comparison. */
+  key?: string
+  snapped?: boolean
+}
+
+/** A worktree against the branch it merges into, once that branch changed a file it shared with a sibling. */
+type Against = { with: { base: string; worktreeId?: string }; key: string }
+
+const SNAPSHOT_TIMEOUT_MS = 20_000
 
 export class ContextLedger {
   readonly #options: ContextLedgerOptions
   readonly #runner: GitRunner
   readonly #now: () => number
   readonly #stores = new Map<string, Promise<LedgerStore>>()
-  /** Conflicts by the two commits compared, so an unchanged pair never runs twice. */
+  /** Conflicts by the two sides compared (commit, or commit and tree), so an unchanged pair never runs twice. */
   readonly #merges = new Map<string, string[]>()
-  readonly #stats: LedgerStats = { passes: 0, gitRuns: 0, mergeTrees: 0, lastPassMs: 0 }
+  readonly #sides = new Map<string, Side>()
+  /** What a base changed since a tip left it, by tip and base commit. */
+  readonly #moves = new Map<string, { paths: string[]; clipped: boolean }>()
+  readonly #against = new Map<string, Against>()
+  /** False once git turns down a tree for a side (before 2.45): commits alone, as before. */
+  #treesWork = true
+  readonly #stats: LedgerStats = { passes: 0, gitRuns: 0, mergeTrees: 0, snapshots: 0, lastPassMs: 0 }
   readonly #builtIn: ContextSource
   readonly #lastPassAt = new Map<string, number>()
   #running: Promise<void> = Promise.resolve()
@@ -270,13 +305,27 @@ export class ContextLedger {
     const isHot = hotPathTest(live)
     for (const viewer of live) {
       for (const overlap of this.#rank(store, viewer)) {
+        const uncommitted = this.#uncommitted(overlap.conflicts, viewer.id, overlap.worktreeId)
         overlaps.push({
           worktreeId: viewer.id,
           with: { worktreeId: overlap.worktreeId },
           paths: overlap.paths,
           conflicts: overlap.conflicts,
           ...(overlap.claimed.length > 0 ? { claimed: overlap.claimed } : {}),
-          ...(overlap.hot.length > 0 ? { hot: overlap.hot } : {})
+          ...(overlap.hot.length > 0 ? { hot: overlap.hot } : {}),
+          ...(uncommitted.length > 0 ? { uncommitted } : {})
+        })
+      }
+      const against = this.#against.get(viewer.id)
+      const conflicts = against === undefined ? [] : (this.#merges.get(against.key) ?? [])
+      if (against !== undefined && conflicts.length > 0) {
+        const uncommitted = this.#uncommitted(conflicts, viewer.id)
+        overlaps.push({
+          worktreeId: viewer.id,
+          with: against.with,
+          paths: conflicts,
+          conflicts,
+          ...(uncommitted.length > 0 ? { uncommitted } : {})
         })
       }
       const mine = new Set(viewer.touched)
@@ -339,7 +388,7 @@ export class ContextLedger {
       relative,
       live.filter((other) => unrelated(viewer, other, byId)),
       {
-        conflicts: (other) => this.#merges.get(pairKey(viewer, other) ?? '') ?? [],
+        conflicts: (other) => this.#merges.get(this.#pairKey(viewer.id, other.id) ?? '') ?? [],
         isHot: hotPathTest(live)
       }
     )
@@ -401,11 +450,7 @@ export class ContextLedger {
     const byId = new Map(store.document.worktrees.map((row) => [row.id, row]))
     const others = live.filter((other) => unrelated(viewer, other, byId))
     return rankOverlaps(viewer, others, {
-      conflicts: (otherId) => {
-        const other = byId.get(otherId)
-        const key = other === undefined ? undefined : pairKey(viewer, other)
-        return key === undefined ? [] : (this.#merges.get(key) ?? [])
-      },
+      conflicts: (otherId) => this.#merges.get(this.#pairKey(viewer.id, otherId) ?? '') ?? [],
       isHot: hotPathTest(live)
     })
   }
@@ -495,6 +540,8 @@ export class ContextLedger {
     const present = new Set(view.worktrees.map((worktree) => worktree.id))
     for (const row of [...document.worktrees]) {
       if (present.has(row.id)) continue
+      this.#sides.delete(row.id)
+      this.#against.delete(row.id)
       // Removed: a landing is still worth logging when its commits reached the base.
       const base = row.base ?? view.project.baseRef
       if (row.state === 'ready' && row.tip !== undefined && (row.ahead ?? 0) > 0) {
@@ -525,6 +572,9 @@ export class ContextLedger {
       row.touched = [...new Set([...touches.committed, ...touches.uncommitted])].sort(byCodeUnit).slice(0, MAX_TOUCHED)
       row.tip = touches.tip
       row.ahead = touches.ahead
+      const side = this.#sides.get(row.id)
+      const read = { path: worktree.path, tip: touches.tip, ahead: touches.ahead, uncommitted: touches.uncommitted }
+      this.#sides.set(row.id, side === undefined || touches.uncommitted.length === 0 ? read : { ...side, ...read })
     })
 
     this.#accumulateShared(store)
@@ -570,33 +620,149 @@ export class ContextLedger {
     }
   }
 
-  /** Runs merge-tree for pairs whose commits share a path and were not compared yet. True when some had to wait. */
+  /**
+   * Runs merge-tree for pairs whose work shares a path, and for a worktree against its base once that base changed a
+   * file it shared with a sibling; each side is its commit plus any uncommitted work. True when some had to wait.
+   */
   async #checkPairs(store: LedgerStore, cwd: string): Promise<boolean> {
-    const live = this.#live(store).filter((row) => (row.ahead ?? 0) > 0 && row.tip !== undefined)
+    const live = this.#live(store)
     const byId = new Map(store.document.worktrees.map((row) => [row.id, row]))
+    for (const row of live) {
+      delete this.#sides.get(row.id)?.key
+      this.#against.delete(row.id)
+    }
+    const working = live.filter((row) => this.#hasWork(row.id))
     let budget = this.#options.maxMergeTreesPerPass ?? 8
-    for (let i = 0; i < live.length; i += 1) {
-      for (let j = i + 1; j < live.length; j += 1) {
-        const [left, right] = [live[i] as LedgerWorktree, live[j] as LedgerWorktree]
-        const key = pairKey(left, right)
-        if (key === undefined || this.#merges.has(key) || !unrelated(left, right, byId)) continue
-        const theirs = new Set(right.committed)
-        if (!left.committed.some((path) => theirs.has(path))) continue
-        if (budget === 0) return true
-        budget -= 1
-        this.#stats.mergeTrees += 1
-        const conflicts = await mergeConflicts(this.#runner, { cwd, left: left.tip!, right: right.tip! })
-        if (this.#merges.size > 2_000) this.#merges.clear()
-        this.#merges.set(key, conflicts ?? [])
+    let more = false
+    const merge = async (key: string, left: Side, right: string, rightSide?: Side): Promise<void> => {
+      if (this.#merges.has(key)) return
+      if (budget === 0) {
+        more = true
+        return
+      }
+      budget -= 1
+      this.#stats.mergeTrees += 1
+      const trees = {
+        ...(left.snapped === true ? { leftTree: left.tree } : {}),
+        ...(rightSide?.snapped === true ? { rightTree: rightSide.tree } : {})
+      }
+      let conflicts = await mergeConflicts(this.#runner, { cwd, left: left.tip, right, ...trees })
+      if (conflicts === undefined && Object.keys(trees).length > 0) {
+        conflicts = await mergeConflicts(this.#runner, { cwd, left: left.tip, right })
+        if (conflicts !== undefined) this.#treesWork = false
+      }
+      if (this.#merges.size > 2_000) this.#merges.clear()
+      this.#merges.set(key, conflicts ?? [])
+    }
+
+    for (let i = 0; i < working.length; i += 1) {
+      for (let j = i + 1; j < working.length; j += 1) {
+        const [left, right] = [working[i] as LedgerWorktree, working[j] as LedgerWorktree]
+        if (!unrelated(left, right, byId)) continue
+        const shared = this.#treesWork ? left.touched : left.committed
+        const theirs = new Set(this.#treesWork ? right.touched : right.committed)
+        if (!shared.some((path) => theirs.has(path))) continue
+        const [a, b] = [await this.#sideFor(left.id), await this.#sideFor(right.id)]
+        const key = this.#pairKey(left.id, right.id)
+        if (a === undefined || b === undefined || key === undefined) continue
+        await merge(key, a, b.tip, b)
       }
     }
-    return false
-  }
-}
 
-function pairKey(a: LedgerWorktree, b: LedgerWorktree): string | undefined {
-  if (a.tip === undefined || b.tip === undefined || !(a.ahead ?? 0) || !(b.ahead ?? 0)) return undefined
-  return a.tip < b.tip ? `${a.tip}:${b.tip}` : `${b.tip}:${a.tip}`
+    const tips = new Map<string, string | undefined>()
+    for (const row of working) {
+      const touched = new Set(row.touched)
+      if (row.base === undefined || !row.shared.some((path) => touched.has(path))) continue
+      if (!tips.has(row.base)) tips.set(row.base, await resolveCommit(this.#runner, cwd, row.base))
+      const tip = tips.get(row.base)
+      const side = this.#sides.get(row.id)
+      if (tip === undefined || side === undefined) continue
+      const moveKey = `${side.tip}:${tip}`
+      let moved = this.#moves.get(moveKey)
+      if (moved === undefined) {
+        moved = (await baseChanges(this.#runner, { cwd, tip: side.tip, base: tip })) ?? { paths: [], clipped: false }
+        if (this.#moves.size > 2_000) this.#moves.clear()
+        this.#moves.set(moveKey, moved)
+      }
+      if (!moved.clipped && !moved.paths.some((path) => touched.has(path))) continue
+      const mine = await this.#sideFor(row.id)
+      if (mine?.key === undefined) continue
+      const key = `${mine.key}>${tip}`
+      const parent = row.parentId === undefined ? undefined : byId.get(row.parentId)
+      this.#against.set(row.id, {
+        with: { base: row.base, ...(parent === undefined ? {} : { worktreeId: parent.id }) },
+        key
+      })
+      await merge(key, mine, tip)
+    }
+    return more
+  }
+
+  #hasWork(worktreeId: string): boolean {
+    const side = this.#sides.get(worktreeId)
+    return side !== undefined && (side.ahead > 0 || (this.#treesWork && side.uncommitted.length > 0))
+  }
+
+  /** This pass's side for a worktree: its tip, and the tree of its uncommitted work when there is any. */
+  async #sideFor(worktreeId: string): Promise<Side | undefined> {
+    const side = this.#sides.get(worktreeId)
+    if (side === undefined || side.key !== undefined) return side
+    const tree = await this.#workingTree(side)
+    side.snapped = tree !== undefined
+    side.key = tree === undefined ? side.tip : `${side.tip}+${tree}`
+    return side
+  }
+
+  /** Written again only when an uncommitted file's size or date moved; a list at the cap is left to the commits. */
+  async #workingTree(side: Side): Promise<string | undefined> {
+    if (!this.#treesWork || side.uncommitted.length === 0 || side.uncommitted.length >= MAX_TOUCHED) return undefined
+    const readAt = Date.now()
+    let settled = true
+    const dates = await Promise.all(
+      side.uncommitted.map((path) =>
+        stat(join(side.path, path)).then(
+          (file) => {
+            // A file written within the clock's grain of this read could change again under the same date.
+            if (file.mtimeMs > readAt - 1_000) settled = false
+            return `${path}\0${file.size}\0${file.mtimeMs}`
+          },
+          () => `${path}\0gone`
+        )
+      )
+    )
+    const print = `${side.tip}\n${dates.join('\n')}`
+    if (side.tree !== undefined && side.print === print) return side.tree
+    this.#stats.snapshots += 1
+    try {
+      side.tree = await writeWorkingTree(this.#runner, {
+        cwd: side.path,
+        timeoutMs: SNAPSHOT_TIMEOUT_MS,
+        readOnly: true
+      })
+    } catch {
+      delete side.tree
+    }
+    if (settled) side.print = print
+    else delete side.print
+    return side.tree
+  }
+
+  #pairKey(a: string, b: string): string | undefined {
+    const [x, y] = [this.#sides.get(a)?.key, this.#sides.get(b)?.key]
+    if (x === undefined || y === undefined) return undefined
+    return x < y ? `${x}:${y}` : `${y}:${x}`
+  }
+
+  /** The conflicts that rest on work not yet committed on either side. */
+  #uncommitted(conflicts: readonly string[], ...worktreeIds: string[]): string[] {
+    const paths = new Set(
+      worktreeIds.flatMap((id) => {
+        const side = this.#sides.get(id)
+        return side?.snapped === true ? side.uncommitted : []
+      })
+    )
+    return conflicts.filter((path) => paths.has(path))
+  }
 }
 
 async function forEachLimited<T>(items: readonly T[], limit: number, run: (item: T) => Promise<void>): Promise<void> {

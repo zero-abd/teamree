@@ -1,7 +1,7 @@
 // The ledger against real git: sibling worktrees in a throwaway repository,
 // merged and landed the way a person would, read through the service.
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -119,7 +119,7 @@ describe('the coordination ledger', () => {
     await repo.commit('b edits', b.path)
     // Uncommitted work counts as touched, too.
     await repo.write('src/extra.ts', 'x\n', a.path)
-    await repo.write('src/extra.ts', 'y\n', b.path)
+    await repo.write('src/extra.ts', 'x\n', b.path)
 
     await ledger.refresh()
     const [overlap] = (await ledger.overlaps('p1')).overlaps
@@ -329,6 +329,148 @@ describe('the coordination ledger', () => {
     const after = await ledger.inspect('p1')
     expect(after.worktrees).toEqual([])
     expect(after.notes).toEqual([])
+  })
+})
+
+describe('uncommitted work', () => {
+  it('predicts a conflict between two siblings that have not committed', async () => {
+    const a = await addWorktree('a', 'Cart totals')
+    const b = await addWorktree('b', 'Payment')
+    await edit(a, 'line two from a')
+    await edit(b, 'line two from b')
+
+    await ledger.refresh()
+    expect((await ledger.overlaps('p1')).overlaps).toEqual([
+      {
+        worktreeId: 'a',
+        with: { worktreeId: 'b' },
+        paths: ['src/shared.ts'],
+        conflicts: ['src/shared.ts'],
+        uncommitted: ['src/shared.ts']
+      },
+      {
+        worktreeId: 'b',
+        with: { worktreeId: 'a' },
+        paths: ['src/shared.ts'],
+        conflicts: ['src/shared.ts'],
+        uncommitted: ['src/shared.ts']
+      }
+    ])
+    expect((await ledger.check({ worktreeId: 'a', path: path.join(a.path, 'src/shared.ts') })).siblings).toEqual([
+      { worktreeId: 'b', name: 'b', goal: 'Payment', kind: 'conflict' }
+    ])
+  })
+
+  it('keeps uncommitted edits to different lines of one file an overlap', async () => {
+    const a = await addWorktree('a', 'Cart totals')
+    const b = await addWorktree('b', 'Payment')
+    await repo.write('src/shared.ts', 'line one from a\nline two\nline three\n', a.path)
+    await repo.write('src/shared.ts', 'line one\nline two\nline three from b\n', b.path)
+
+    await ledger.refresh()
+    const { overlaps } = await ledger.overlaps('p1')
+    expect(overlaps.map((row) => [row.worktreeId, row.paths, row.conflicts])).toEqual([
+      ['a', ['src/shared.ts'], []],
+      ['b', ['src/shared.ts'], []]
+    ])
+    expect(overlaps.every((row) => row.uncommitted === undefined)).toBe(true)
+  })
+
+  it('still warns once one sibling lands, against the base that now holds it, until it is updated', async () => {
+    const a = await addWorktree('a', 'Cart totals')
+    const b = await addWorktree('b', 'Payment')
+    await edit(a, 'line two from a')
+    await edit(b, 'line two from b')
+    await ledger.refresh()
+
+    // Committed and landed between two passes, as Commit & Merge does.
+    await repo.commit('a edits', a.path)
+    await repo.git(['merge', '--no-ff', '-m', 'land a', 'a'])
+    await ledger.refresh()
+    expect((await ledger.overlaps('p1')).overlaps).toEqual([
+      {
+        worktreeId: 'b',
+        with: { base: 'main' },
+        paths: ['src/shared.ts'],
+        conflicts: ['src/shared.ts'],
+        uncommitted: ['src/shared.ts']
+      }
+    ])
+
+    await repo.commit('b edits', b.path)
+    await repo.runner.tryRun({ args: ['merge', 'main'], cwd: b.path })
+    await edit(b, 'line two from both')
+    await repo.commit('b takes main', b.path)
+    await ledger.refresh()
+    expect((await ledger.overlaps('p1')).overlaps).toEqual([])
+  })
+
+  it('names the parent when a child lands in it', async () => {
+    const parent = await addWorktree('p', 'Checkout')
+    const a = await addWorktree('a', 'Cart totals', 'p')
+    const b = await addWorktree('b', 'Payment', 'p')
+    await edit(a, 'line two from a')
+    await edit(b, 'line two from b')
+    await ledger.refresh()
+
+    await repo.commit('a edits', a.path)
+    await repo.git(['merge', '--no-ff', '-m', 'land a', 'a'], parent.path)
+    await ledger.refresh()
+    expect((await ledger.overlaps('p1')).overlaps).toEqual([
+      expect.objectContaining({ worktreeId: 'b', with: { base: 'p', worktreeId: 'p' }, conflicts: ['src/shared.ts'] })
+    ])
+  })
+
+  it('snapshots nothing and merges nothing again while a pair sits idle, and keys merges by tree', async () => {
+    const a = await addWorktree('a', 'Cart totals')
+    const b = await addWorktree('b', 'Payment')
+    // Dated well before the pass, so the ledger may trust a file's date to say it is unchanged.
+    const settled = async (worktree: Worktree, line: string): Promise<void> => {
+      await edit(worktree, line)
+      const past = Date.now() / 1000 - 60 + Math.random()
+      await utimes(path.join(worktree.path, 'src/shared.ts'), past, past)
+    }
+    await settled(a, 'line two from a')
+    await settled(b, 'line two from b')
+    await ledger.refresh()
+    const first = ledger.stats()
+    expect(first.snapshots).toBe(2)
+    expect(first.mergeTrees).toBe(1)
+
+    await ledger.refresh()
+    expect(ledger.stats()).toMatchObject({ snapshots: 2, mergeTrees: 1 })
+
+    // Rewritten with the same bytes: a new snapshot, the same tree, no new merge.
+    await settled(b, 'line two from b')
+    await ledger.refresh()
+    expect(ledger.stats()).toMatchObject({ snapshots: 3, mergeTrees: 1 })
+
+    await settled(b, 'line two from b, again')
+    await ledger.refresh()
+    expect(ledger.stats()).toMatchObject({ snapshots: 4, mergeTrees: 2 })
+  })
+
+  it('runs no more merges a pass than the budget allows', async () => {
+    ledger = open({ maxMergeTreesPerPass: 1 })
+    for (const id of ['a', 'b', 'c']) await edit(await addWorktree(id, `task ${id}`), `line two from ${id}`)
+    await ledger.refresh()
+    expect(ledger.stats().mergeTrees).toBe(1)
+    await ledger.refresh()
+    await ledger.refresh()
+    expect(ledger.stats().mergeTrees).toBe(3)
+    await ledger.refresh()
+    expect(ledger.stats().mergeTrees).toBe(3)
+    expect((await ledger.conflicts('a')).map((row) => row.conflicts)).toEqual([['src/shared.ts'], ['src/shared.ts']])
+  })
+
+  it('leaves the real index alone', async () => {
+    const a = await addWorktree('a', 'Cart totals')
+    const b = await addWorktree('b', 'Payment')
+    await edit(a, 'line two from a')
+    await repo.write('src/new.ts', 'new\n', a.path)
+    await edit(b, 'line two from b')
+    await ledger.refresh()
+    expect(await repo.git(['status', '--porcelain'], a.path)).toBe('M src/shared.ts\n?? src/new.ts')
   })
 })
 
