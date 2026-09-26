@@ -311,7 +311,16 @@ export function WorktreeRow({
     ...(ready && status !== undefined
       ? { status, child: worktree.parentId !== undefined, ignored: status.ignored ?? 0 }
       : {}),
-    ...(merged ? { landed: landing?.parent === undefined ? ('merged' as const) : ('landed' as const) } : {}),
+    ...(merged
+      ? {
+          landed:
+            landing?.parent !== undefined
+              ? ('landed' as const)
+              : landing?.notPushed
+                ? ('merged, not pushed' as const)
+                : ('merged' as const)
+        }
+      : {}),
     ...(badge === null || mergePreview === undefined ? {} : { merge: mergePreview }),
     ...(pullRequest === undefined ? {} : { pullRequest: pullRequest.number }),
     ...(issue === undefined ? {} : { issue: issue.number }),

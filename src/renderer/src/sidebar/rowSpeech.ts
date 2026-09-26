@@ -17,7 +17,7 @@ export type RowFacts = {
   /** Behind counts against the parent. */
   child?: boolean
   ignored?: number
-  landed?: 'merged' | 'landed'
+  landed?: 'merged' | 'merged, not pushed' | 'landed'
   merge?: WorktreeMergePreview
   pullRequest?: number
   issue?: number

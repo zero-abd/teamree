@@ -1191,6 +1191,23 @@ describe('what a screen reader hears for a row', () => {
     )
   })
 
+  it('says merged but not pushed, as its chip does', () => {
+    mount({
+      landing: {
+        worktreeId: 'w1',
+        branch: 'rewrite-the-pager',
+        base: 'main',
+        host: 'github',
+        published: true,
+        unmerged: 0,
+        merged: true,
+        notPushed: true,
+        readAt: NOW
+      }
+    })
+    expect(screen.getByRole('treeitem', { description: 'merged, not pushed' })).toBe(openButton())
+  })
+
   it('hides its chips, dot and glyphs from the accessibility tree, so nothing is read twice', () => {
     mount({
       worktree: worktree({ issue: { number: 7, url: 'https://github.com/acme/pager/issues/7' }, task: 'x' }),
