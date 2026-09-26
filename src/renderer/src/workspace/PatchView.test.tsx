@@ -362,6 +362,13 @@ function addedFile(
   return `diff --git a/${path} b/${path}\nnew file mode 100644\n--- /dev/null\n+++ b/${path}\n@@ -0,0 +1,${count} @@\n${body}\n`
 }
 
+/** A file whose `count` lines were all rewritten, in one hunk: every line removed, then every line added. */
+function rewrittenFile(path: string, count: number): string {
+  const removed = Array.from({ length: count }, (_, at) => `-  "k${at}": ${at},`).join('\n')
+  const added = Array.from({ length: count }, (_, at) => `+  "k${at}": ${at + 1},`).join('\n')
+  return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1,${count} +1,${count} @@\n${removed}\n${added}\n`
+}
+
 /** A modified file with `hunks` hunks of `size` added lines each. */
 function editedFile(path: string, hunks: number, size: number): string {
   const parts = Array.from({ length: hunks }, (_, at) => {
@@ -373,20 +380,50 @@ function editedFile(path: string, hunks: number, size: number): string {
 }
 
 describe('a big patch', () => {
-  it('draws a hunk over 500 lines folded, and all of it when asked', async () => {
+  it('draws the first lines of a hunk over 500 lines, and the rest when asked', async () => {
     render(<PatchView patch={addedFile('src/big.ts', 2000)} truncated={false} layout="inline" />)
 
-    expect(document.querySelectorAll('.patch__row')).toHaveLength(0)
+    expect(document.querySelectorAll('.patch__row')).toHaveLength(400)
     expect(document.querySelector('.patch__hunkAt')?.textContent).toBe('Lines 1–2000')
     const { default: userEvent } = await import('@testing-library/user-event')
-    await userEvent.click(screen.getByRole('button', { name: 'Show 2,000 lines' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Show 1,600 more lines' }))
 
     // The top at once, the rest behind it.
     const first = document.querySelectorAll('.patch__row').length
-    expect(first).toBeGreaterThan(0)
+    expect(first).toBeGreaterThan(400)
     expect(first).toBeLessThan(2000)
     await waitFor(() => expect(document.querySelectorAll('.patch__row')).toHaveLength(2000), { timeout: 15_000 })
     expect(screen.queryByRole('button', { name: /^Show / })).toBeNull()
+  })
+
+  it('opens a 20,000-line rewrite with its first 400 lines drawn, and the rest in steps', async () => {
+    const patch = rewrittenFile('data.json', 20_000)
+    const started = performance.now()
+    render(<PatchView patch={patch} truncated={false} layout="inline" />)
+    const took = performance.now() - started
+
+    expect(document.querySelectorAll('.patch__row')).toHaveLength(400)
+    expect(took).toBeLessThan(2500)
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(screen.getByRole('button', { name: 'Show 2,000 more lines · 39,600 hidden' }))
+    await waitFor(() => expect(document.querySelectorAll('.patch__row')).toHaveLength(2400), { timeout: 15_000 })
+    expect(screen.getByRole('button', { name: 'Show 2,000 more lines · 37,600 hidden' })).toBeTruthy()
+  })
+
+  it('draws a 20,000-line rewrite side by side in under 5,000 elements', () => {
+    const { container } = render(
+      <PatchView patch={rewrittenFile('data.json', 20_000)} truncated={false} layout="split" />
+    )
+    expect(document.querySelectorAll('.patch__row').length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('*').length).toBeLessThan(5000)
+  })
+
+  it('draws no more than the patch’s budget on open, however many heavy hunks it has', () => {
+    render(<PatchView patch={editedFile('src/wide.ts', 12, 1000)} truncated={false} layout="inline" />)
+    const drawn = document.querySelectorAll('.patch__row').length
+    expect(drawn).toBeGreaterThan(0)
+    expect(drawn).toBeLessThanOrEqual(2000)
+    expect(screen.getAllByRole('button', { name: 'Show 1,001 lines' }).length).toBeGreaterThan(0)
   })
 
   it('draws a 1 MB added file in under 5,000 elements', () => {
@@ -470,19 +507,101 @@ describe('a big patch', () => {
     const patch = addedFile('src/big.ts', 600)
     const { rerender } = render(<PatchView patch={patch} truncated={false} layout="inline" />)
     const { default: userEvent } = await import('@testing-library/user-event')
-    await userEvent.click(screen.getByRole('button', { name: 'Show 600 lines' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Show 200 more lines' }))
 
     rerender(<PatchView patch={`${patch}`} truncated={false} layout="split" />)
     await waitFor(() => expect(document.querySelectorAll('.patch__row')).toHaveLength(600))
   })
 
   it('leaves focus on the hunk it unfolded', async () => {
-    render(<PatchView patch={addedFile('src/big.ts', 600)} truncated={false} layout="inline" />)
+    render(<PatchView patch={addedFile('package-lock.json', 600)} truncated={false} layout="inline" />)
     const { default: userEvent } = await import('@testing-library/user-event')
     screen.getByRole('button', { name: 'Show 600 lines' }).focus()
     await userEvent.keyboard('{Enter}')
 
     expect(document.activeElement?.className).toBe('patch__hunkHead')
+  })
+})
+
+describe('a patch cut short', () => {
+  it('says how much of the patch it shows, and reads the rest when asked', async () => {
+    const onShowAll = vi.fn()
+    render(
+      <PatchView
+        patch={editedFile('data.json', 1, 2)}
+        truncated
+        layout="inline"
+        more={{ totalLines: 40_000, onShowAll }}
+      />
+    )
+    expect(screen.getByText('Showing 2 of 40,000 lines')).toBeTruthy()
+    expect(screen.queryByText(/cut short/)).toBeNull()
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(screen.getByRole('button', { name: 'Show Full Diff' }))
+    expect(onShowAll).toHaveBeenCalledOnce()
+  })
+
+  it('shows its progress while it reads, and stops when told', async () => {
+    const onStop = vi.fn()
+    render(
+      <PatchView
+        patch={editedFile('data.json', 1, 2)}
+        truncated
+        layout="inline"
+        more={{ totalLines: 40_000, loading: true, onShowAll: () => {}, onStop }}
+      />
+    )
+    expect(screen.getByRole('progressbar')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Show Full Diff' })).toBeNull()
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    expect(onStop).toHaveBeenCalledOnce()
+  })
+
+  it('offers Open File instead for a generated file', async () => {
+    const onOpenFile = vi.fn()
+    render(
+      <PatchView
+        patch={editedFile('package-lock.json', 1, 2)}
+        truncated
+        layout="inline"
+        more={{ onShowAll: () => {}, onOpenFile }}
+      />
+    )
+    expect(screen.getByText('Showing 2 lines')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Show Full Diff' })).toBeNull()
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(screen.getByRole('button', { name: 'Open File' }))
+    expect(onOpenFile).toHaveBeenCalledWith('package-lock.json')
+  })
+
+  it('reads the rest of a file pane’s patch from where it was cut, and draws all of it', async () => {
+    const whole = rewrittenFile('src/rank.ts', 40)
+    const cut = whole.slice(0, whole.indexOf('\n+  "k10"') + 1)
+    const firstBytes = new TextEncoder().encode(cut).length
+    call.mockImplementation((method: string, params: unknown) => {
+      if (method !== 'worktree.diff') return new Promise(() => {})
+      const asked = params as { staged?: boolean; offsetBytes?: number }
+      if (asked.staged === true) return Promise.resolve(empty(true))
+      if (asked.offsetBytes === undefined) {
+        return Promise.resolve({ ...diff, patch: cut, truncated: true, totalLines: 80 })
+      }
+      return Promise.resolve({ ...diff, patch: whole.slice(cut.length), truncated: false })
+    })
+    render(
+      <FileView paneId="file:1" worktreeId="wt" path="src/rank.ts" focused onFocus={() => {}} onClose={() => {}} />
+    )
+    await waitFor(() => expect(screen.getByText('Showing 50 of 80 lines')).toBeTruthy())
+
+    const { default: userEvent } = await import('@testing-library/user-event')
+    await userEvent.click(screen.getByRole('button', { name: 'Show Full Diff' }))
+
+    await waitFor(() => expect(document.querySelectorAll('.patch__row')).toHaveLength(80))
+    expect(screen.queryByText(/^Showing/)).toBeNull()
+    expect(call).toHaveBeenCalledWith(
+      'worktree.diff',
+      expect.objectContaining({ worktreeId: 'wt', path: 'src/rank.ts', offsetBytes: firstBytes })
+    )
   })
 })
 

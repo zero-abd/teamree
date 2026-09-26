@@ -95,6 +95,25 @@ describe('reading one commit from a real repository', () => {
     expect(commit.subject).toBe('Add a big file')
   })
 
+  it('reads a cut patch on in pages from an offset, which join up to the whole patch', async () => {
+    const repo = await repository()
+    await repo.write('big.txt', Array.from({ length: 2000 }, (_, at) => `line ${at}\n`).join(''))
+    await repo.commit('Add a big file')
+    const sha = await repo.git(['rev-parse', 'HEAD'])
+    const page = (offsetBytes: number): ReturnType<typeof readCommit> =>
+      readCommit(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath, sha, maxBytes: 4096, offsetBytes })
+    const whole = await show(repo, sha)
+
+    let joined = ''
+    for (let reads = 0; reads < 20; reads += 1) {
+      const next = await page(Buffer.byteLength(joined, 'utf8'))
+      joined += next.patch
+      if (!next.truncated) break
+    }
+
+    expect(joined).toBe(whole.patch)
+  })
+
   it('refuses a commit the repository does not have', async () => {
     const repo = await repository()
     await expect(show(repo, 'f'.repeat(40))).rejects.toThrow()

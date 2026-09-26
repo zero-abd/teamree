@@ -8,6 +8,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { fitLayout } from '../workspace/PatchView'
 import { FileBar } from './FileBar'
 import { LayoutTools, ReadOnlyDiffBody, useWidth } from './FileDiff'
+import { usePagedPatch } from './usePagedPatch'
 
 /** `path` is the tab's title, `5bb16ed Add sub`. */
 export function CommitView({
@@ -47,6 +48,10 @@ export function CommitView({
     }
   }, [worktreeId, sha])
 
+  const paged = usePagedPatch(commit, (offsetBytes, maxBytes) =>
+    runtimeClient.call('worktree.showCommit', { worktreeId, sha, offsetBytes, maxBytes })
+  )
+
   return (
     <section
       className={`pane file${focused ? ' pane--focused' : ''}`}
@@ -68,8 +73,9 @@ export function CommitView({
       </FileBar>
       <div className="file__body" ref={body}>
         <ReadOnlyDiffBody
-          patch={commit?.patch ?? null}
-          truncated={commit?.truncated ?? false}
+          patch={paged.patch}
+          truncated={paged.truncated}
+          patchProps={{ more: paged.more }}
           error={error}
           layout={layout}
           searchToken={searchToken}

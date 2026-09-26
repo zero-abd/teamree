@@ -320,6 +320,8 @@ export type WorktreeDiff = {
   patch: string
   /** True when the patch was cut short at the byte ceiling. */
   truncated: boolean
+  /** Changed lines in the whole patch, when its first page was cut short. */
+  totalLines?: number
   readAt: number
 }
 

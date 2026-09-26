@@ -7,6 +7,7 @@ import { parsePatch, type PatchFile } from '@shared/patch'
 import { AgentGlyph } from '../agents/glyphs'
 import { FileBar, Segments } from '../files/FileBar'
 import { LayoutTools, ReadOnlyDiffBody, useWidth } from '../files/FileDiff'
+import { usePagedPatch } from '../files/usePagedPatch'
 import type { FilePaneProps } from '../panes/FilePane'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { paneAgent } from '../sidebar/agentRows'
@@ -65,7 +66,19 @@ export function ReviewView({
     }
   }, [worktreeId, filesEpoch, scope])
 
-  const patch = useMemo(() => (diff === null ? null : inChangesOrder(diff.patch, changes ?? [])), [diff, changes])
+  const openFilePane = useWorkspaceStore((state) => state.openFilePane)
+  const paged = usePagedPatch(diff, (offsetBytes, maxBytes) =>
+    runtimeClient.call('worktree.diff', {
+      worktreeId,
+      ...(scope === 'branch' ? { base: true } : { head: true }),
+      offsetBytes,
+      maxBytes
+    })
+  )
+  const patch = useMemo(
+    () => (paged.patch === null ? null : inChangesOrder(paged.patch, changes ?? [])),
+    [paged.patch, changes]
+  )
   const files = useMemo(() => (patch === null ? [] : parsePatch(patch)), [patch])
 
   useEffect(() => {
@@ -115,13 +128,17 @@ export function ReviewView({
       <div className="file__body" ref={body}>
         <ReadOnlyDiffBody
           patch={patch}
-          truncated={diff?.truncated ?? false}
+          truncated={paged.truncated}
           error={error}
           layout={layout}
           searchToken={searchToken}
           onCloseSearch={onCloseSearch}
           lead={<ReviewHead worktreeId={worktreeId} />}
-          patchProps={{ commentsIn: worktreeId, viewing }}
+          patchProps={{
+            commentsIn: worktreeId,
+            viewing,
+            more: { ...paged.more, onOpenFile: (file) => openFilePane(worktreeId, file) }
+          }}
           onKeyDown={(event) => {
             if (event.metaKey || event.ctrlKey || event.altKey) return
             if ((event.target as Element).closest('input, select, textarea')) return

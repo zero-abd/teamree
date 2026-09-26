@@ -2,7 +2,8 @@
 // `git status --porcelain=v2` as the counters, keeping the paths. `-z` is not an
 // optimisation: without it git C-quotes paths with spaces, quotes or non-ASCII bytes.
 
-import { lstat, readFile } from 'node:fs/promises'
+import { createReadStream } from 'node:fs'
+import { lstat } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { WorktreeChange, WorktreeChangeKind, WorktreeChanges, WorktreeDiff } from '../../shared/entities'
 import type { GitRunner } from './gitProcess'
@@ -243,6 +244,8 @@ export type DiffReadOptions = {
   against?: string
   contextLines?: number
   maxBytes?: number
+  /** Where in the whole patch this page starts: the bytes the pages before it returned. */
+  offsetBytes?: number
   /** Untracked files the whole-worktree patch will show. */
   untrackedLimit?: number
   /** What this project carries into every worktree, and so is not a change. */
@@ -261,6 +264,8 @@ export type DiffReadOptions = {
 export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptions): Promise<WorktreeDiff> {
   const staged = options.staged ?? false
   const maxBytes = options.maxBytes ?? DEFAULT_DIFF_MAX_BYTES
+  const offset = options.offsetBytes ?? 0
+  const end = offset + maxBytes
   const context = options.contextLines ?? DEFAULT_DIFF_CONTEXT_LINES
   const nullDevice = options.nullDevice ?? (process.platform === 'win32' ? 'NUL' : '/dev/null')
 
@@ -275,7 +280,7 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
 
   // One byte past the budget is enough to know the patch overflows. A 40MB log
   // read whole used to overrun the runner's hard cap and render as "No patch for this path".
-  const stdoutLimitBytes = maxBytes + 1
+  const stdoutLimitBytes = end + 1
 
   const { stdout } = await runner.run({
     args,
@@ -288,10 +293,10 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
 
   let patch = stdout
   let cutShort = false
+  let untracked: string[] = []
 
   // Nothing is untracked in the index, so a staged patch is already complete.
   if (!staged) {
-    let untracked: string[] = []
     // An empty patch for a path is as likely an untouched file as an untracked one; only status tells them apart.
     if (options.path === undefined || !patch) {
       const listed = await listUntrackedFiles(runner, options)
@@ -300,7 +305,7 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
     }
 
     for (const file of untracked) {
-      if (Buffer.byteLength(patch, 'utf8') > maxBytes) {
+      if (Buffer.byteLength(patch, 'utf8') > end) {
         cutShort = true
         break
       }
@@ -315,15 +320,44 @@ export async function readWorktreeDiff(runner: GitRunner, options: DiffReadOptio
     }
   }
 
-  const truncated = cutShort || Buffer.byteLength(patch, 'utf8') > maxBytes
+  const truncated = cutShort || Buffer.byteLength(patch, 'utf8') > end
+  const totalLines = truncated && offset === 0 ? await changedLines(runner, options, untracked) : undefined
   return {
     worktreeId: options.worktreeId,
     ...(options.path === undefined ? {} : { path: options.path }),
     staged,
-    patch: truncated ? cutToBytes(patch, maxBytes) : patch,
+    patch: pageOf(patch, offset, maxBytes),
     truncated,
+    ...(totalLines === undefined ? {} : { totalLines }),
     readAt: (options.now ?? Date.now)()
   }
+}
+
+/** Changed lines in the whole patch: git's counts for what it tracks, and each untracked file's lines. */
+async function changedLines(
+  runner: GitRunner,
+  options: DiffReadOptions,
+  untracked: readonly string[]
+): Promise<number | undefined> {
+  const numstat = await runner.tryRun({
+    args: [
+      'diff',
+      '--numstat',
+      '-z',
+      ...(options.staged === true ? ['--cached'] : []),
+      ...(options.against === undefined ? [] : [options.against]),
+      ...pathspec(options.path)
+    ],
+    cwd: options.worktreePath,
+    readOnly: true,
+    ...(options.signal ? { signal: options.signal } : {}),
+    timeoutMs: 30_000
+  })
+  if (numstat.exitCode !== 0) return undefined
+  let total = 0
+  for (const [added, removed] of parseNumstat(numstat.stdout).values()) total += added + removed
+  for (const file of untracked) total += (await newFileLines(options.worktreePath, file, Infinity))?.[0] ?? 0
+  return total
 }
 
 /**
@@ -402,17 +436,25 @@ export function parseNumstat(raw: string): Map<string, [number, number]> {
 }
 
 /** A new regular text file's line count as git would give it, or undefined for anything else. */
-async function newFileLines(root: string, file: string): Promise<[number, number] | undefined> {
+async function newFileLines(
+  root: string,
+  file: string,
+  maxBytes = COUNTED_BYTES
+): Promise<[number, number] | undefined> {
   try {
     const target = join(root, file)
     const stat = await lstat(target)
-    if (!stat.isFile() || stat.size > COUNTED_BYTES) return undefined
-    const bytes = await readFile(target)
-    if (bytes.subarray(0, 8000).includes(0)) return undefined
+    if (!stat.isFile() || stat.size > maxBytes) return undefined
     let lines = 0
-    for (const byte of bytes) if (byte === 10) lines += 1
-    if (bytes.length > 0 && bytes[bytes.length - 1] !== 10) lines += 1
-    return [lines, 0]
+    let last = 10
+    let first = true
+    for await (const chunk of createReadStream(target) as AsyncIterable<Buffer>) {
+      if (first && chunk.subarray(0, 8000).includes(0)) return undefined
+      first = false
+      for (let at = chunk.indexOf(10); at !== -1; at = chunk.indexOf(10, at + 1)) lines += 1
+      last = chunk[chunk.length - 1] ?? last
+    }
+    return [last === 10 ? lines : lines + 1, 0]
   } catch {
     return undefined
   }
@@ -444,6 +486,11 @@ async function addedFilePatch(
   })
   if (attempt.stdoutClipped === true || attempt.exitCode <= 1) return attempt.stdout
   return ''
+}
+
+/** The bytes of `text` from `offset`, a character's start, cut to `maxBytes` on a line's end. */
+export function pageOf(text: string, offset: number, maxBytes: number): string {
+  return cutToBytes(offset === 0 ? text : Buffer.from(text, 'utf8').subarray(offset).toString('utf8'), maxBytes)
 }
 
 /**

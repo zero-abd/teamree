@@ -4,7 +4,7 @@ import type { WorktreeCommitPatch } from '../../shared/entities'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import type { GitRunner } from './gitProcess'
-import { cutToBytes, DEFAULT_DIFF_CONTEXT_LINES, DEFAULT_DIFF_MAX_BYTES } from './worktreeChanges'
+import { DEFAULT_DIFF_CONTEXT_LINES, DEFAULT_DIFF_MAX_BYTES, pageOf } from './worktreeChanges'
 import { parseLogRecords } from './worktreeLog'
 
 /** An abbreviated or full object name; never a ref or anything git could read as an option. */
@@ -19,6 +19,8 @@ export type CommitReadOptions = {
   sha: string
   contextLines?: number
   maxBytes?: number
+  /** Where in the whole patch this page starts. */
+  offsetBytes?: number
   signal?: AbortSignal
   now?: () => number
 }
@@ -28,6 +30,7 @@ export async function readCommit(runner: GitRunner, options: CommitReadOptions):
     throw new GitServiceError(ErrorCode.InvalidParams, `"${options.sha}" is not a commit id`)
   }
   const maxBytes = options.maxBytes ?? DEFAULT_DIFF_MAX_BYTES
+  const end = (options.offsetBytes ?? 0) + maxBytes
   const result = await runner.tryRun({
     args: [
       'show',
@@ -43,7 +46,7 @@ export async function readCommit(runner: GitRunner, options: CommitReadOptions):
     ],
     cwd: options.worktreePath,
     readOnly: true,
-    stdoutLimitBytes: maxBytes + HEADER_ALLOWANCE_BYTES,
+    stdoutLimitBytes: end + HEADER_ALLOWANCE_BYTES,
     timeoutMs: 60_000,
     ...(options.signal ? { signal: options.signal } : {})
   })
@@ -58,11 +61,11 @@ export async function readCommit(runner: GitRunner, options: CommitReadOptions):
   let cut = 0
   for (let field = 0; field < 4; field += 1) cut = result.stdout.indexOf('\0', cut) + 1
   const patch = result.stdout.slice(cut).replace(/^\n+/, '')
-  const truncated = result.stdoutClipped === true || Buffer.byteLength(patch, 'utf8') > maxBytes
+  const truncated = result.stdoutClipped === true || Buffer.byteLength(patch, 'utf8') > end
   return {
     worktreeId: options.worktreeId,
     ...summary,
-    patch: truncated ? cutToBytes(patch, maxBytes) : patch,
+    patch: pageOf(patch, options.offsetBytes ?? 0, maxBytes),
     truncated,
     readAt: (options.now ?? Date.now)()
   }
