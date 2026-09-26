@@ -178,6 +178,21 @@ describe('PortWatcher', () => {
     expect(watcher.ports('t-api')).toBeUndefined()
   })
 
+  it('names a process by its executable where the host can say, not by its thread', async () => {
+    host.lsof.mockResolvedValue(LSOF.replace('p601\ncnode', 'p601\ncMainThread'))
+    const executable = vi.fn((pid: number) => (pid === 601 ? 'node' : undefined))
+    watcher = new PortWatcher({
+      panes: () => panes,
+      onChange: () => {},
+      host: { ...host, executable },
+      debounceMs: 500
+    })
+    watcher.poke()
+    await vi.advanceTimersByTimeAsync(500)
+    expect(watcher.ports('t-api')?.map((entry) => entry.command)).toEqual(['node', 'Python'])
+    expect(executable).not.toHaveBeenCalledWith(649)
+  })
+
   it('skips ps when nothing listens', async () => {
     host.lsof.mockResolvedValue('')
     watcher.poke()

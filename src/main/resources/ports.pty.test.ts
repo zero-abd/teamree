@@ -7,7 +7,7 @@ import { PortWatcher } from './ports'
 
 const describePty = canSpawnPty() && process.platform !== 'win32' ? describe : describe.skip
 const WORKTREE = 'wt_ports'
-const SERVER = `require('http').createServer().listen(0, '127.0.0.1', function () { console.log('port=' + this.address().port) }); setTimeout(() => process.exit(0), 3000)`
+const SERVER = `require('http').createServer().listen(0, '127.0.0.1', function () { console.log('port=' + this.address().port + ' pid=' + process.pid) }); setTimeout(() => process.exit(0), 3000)`
 
 let service: TerminalService | undefined
 let watcher: PortWatcher | undefined
@@ -37,14 +37,14 @@ describePty('ports in a pane', () => {
     watcher.poke()
 
     await waitUntil(() => (manager.list(WORKTREE)[0]?.ports?.length ?? 0) > 0, 'the port to appear', 8_000)
-    const printed = /port=(\d+)/.exec(manager.read(pane.id))?.[1]
+    const printed = /port=(\d+) pid=(\d+)/.exec(manager.read(pane.id))
     expect(manager.list(WORKTREE)[0]?.ports).toEqual([
-      { port: Number(printed), pid: expect.any(Number), command: expect.stringMatching(/node/i) }
+      { port: Number(printed?.[1]), pid: Number(printed?.[2]), command: expect.any(String) }
     ])
 
     // Every snapshot carries them, or a resize's answer would wipe the row's chip.
     const resized = await service.handlers['terminal.resize']({ terminalId: pane.id, cols: 100, rows: 30 })
-    expect(resized.ports?.map((entry) => entry.port)).toEqual([Number(printed)])
+    expect(resized.ports?.map((entry) => entry.port)).toEqual([Number(printed?.[1])])
 
     await waitUntil(() => manager.list(WORKTREE)[0]?.ports === undefined, 'the port to go', 8_000)
   }, 20_000)

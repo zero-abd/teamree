@@ -2,6 +2,8 @@
 // walking parent ids in one `ps`. A refused lsof (a sandboxed test copy) reads as no ports.
 
 import { execFile } from 'node:child_process'
+import { readlinkSync } from 'node:fs'
+import { basename } from 'node:path'
 import type { ListeningPort, ResourceProcess } from '../../shared/entities'
 import { parsePsTable } from './psTable'
 import { defaultResourceSamplerHost } from './sampleResources'
@@ -62,6 +64,8 @@ export type PortWatcherHost = {
   /** The text of `lsof` with `LSOF_ARGS`; rejects or is empty where it cannot run. */
   lsof: () => Promise<string>
   ps: () => Promise<string>
+  /** The executable's name, where lsof's would be a thread's (Linux: Node names its main thread `MainThread`). */
+  executable?: (pid: number) => string | undefined
 }
 
 const LSOF_MAX_BUFFER = 4 * 1024 * 1024
@@ -73,7 +77,15 @@ export const defaultPortWatcherHost: PortWatcherHost = {
       // lsof exits 1 when nothing listens; its stdout is still the answer.
       execFile('lsof', [...LSOF_ARGS], { maxBuffer: LSOF_MAX_BUFFER }, (_error, stdout) => resolve(stdout ?? ''))
     }),
-  ps: defaultResourceSamplerHost.ps
+  ps: defaultResourceSamplerHost.ps,
+  executable: (pid) => {
+    if (process.platform !== 'linux') return undefined
+    try {
+      return basename(readlinkSync(`/proc/${pid}/exe`))
+    } catch {
+      return undefined
+    }
+  }
 }
 
 export type PortWatcherOptions = {
@@ -155,6 +167,11 @@ export class PortWatcher {
       const listeners = parseLsofListeners(await this.#host.lsof())
       if (listeners.length > 0) {
         next = portsByPane(listeners, parsePsTable(await this.#host.ps()), panes)
+        const executable = this.#host.executable
+        if (executable !== undefined) {
+          for (const ports of next.values())
+            for (const entry of ports) entry.command = executable(entry.pid) ?? entry.command
+        }
       }
     } catch {
       // Fail soft: no ports is what a machine without lsof would show.
