@@ -908,7 +908,6 @@ it('offers the + menu the agents agent.list reported, in its order', async () =>
     'New Terminal',
     'New Markdown',
     ...reported.map((agent) => harnessName(agent.kind)),
-    'Resume Conversation…',
     'Agent Settings…'
   ])
 })

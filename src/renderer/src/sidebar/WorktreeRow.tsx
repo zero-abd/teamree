@@ -95,6 +95,8 @@ type WorktreeRowProps = {
   onMoveToTop?: () => void
   /** Resume Conversation…; absent leaves the item out. */
   onResume?: () => void
+  /** Called as the menu opens, so what it offers can be re-read. */
+  onMenuOpen?: () => void
   /** Files another task or a teammate changes too; the chip's click opens the first. */
   overlap?: { chip: OverlapChip; onOpen: (entry: OverlapEntry) => void }
 }
@@ -133,6 +135,7 @@ export function WorktreeRow({
   onMoveUnder,
   onMoveToTop,
   onResume,
+  onMenuOpen,
   overlap
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
@@ -177,6 +180,7 @@ export function WorktreeRow({
 
   const openMenu = (at: RowMenuAnchor, from: HTMLElement | null): void => {
     opener.current = from
+    onMenuOpen?.()
     setMenuAt(at)
   }
 

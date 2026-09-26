@@ -617,17 +617,32 @@ describe('what the palette offers for the worktree on screen', () => {
     expect(labels()).not.toContain('Resume Conversation…')
     expect(labels({ agents: [agent('gemini')] })).not.toContain('Resume Conversation…')
     const items = buildPaletteItems(
-      context({ worktrees: [worktree({ id: 'w1' })], activeWorktreeId: 'w1', agents: [agent('codex')] })
+      context({
+        worktrees: [worktree({ id: 'w1' })],
+        activeWorktreeId: 'w1',
+        agents: [agent('codex')],
+        resumable: true
+      })
     )
-    expect(items.find((item) => item.label === 'Resume Conversation…')).toMatchObject({
-      kind: 'action',
-      id: 'resume-conversation',
-      here: true
-    })
+    const row = items.find((item) => item.label === 'Resume Conversation…')
+    expect(row).toMatchObject({ kind: 'action', id: 'resume-conversation', here: true })
+    expect(row).not.toHaveProperty('unavailable')
     expect(filterPalette(items, 'resume')[0]?.label).toBe('Resume Conversation…')
     expect(labels({ agents: [agent('claude')], worktrees: [worktree({ id: 'w1', missing: true })] })).not.toContain(
       'Resume Conversation…'
     )
+  })
+
+  // Dimmed rather than hidden, so typing it still says why it would do nothing.
+  it('dims Resume Conversation… in a worktree with no past conversations', () => {
+    const items = buildPaletteItems(
+      context({ worktrees: [worktree({ id: 'w1' })], activeWorktreeId: 'w1', agents: [agent('claude')] })
+    )
+    expect(items.find((item) => item.label === 'Resume Conversation…')).toMatchObject({
+      unavailable: 'no past conversations'
+    })
+    expect(filterPalette(items, '').map((item) => item.label)).not.toContain('Resume Conversation…')
+    expect(filterPalette(items, 'resume conv').map((item) => item.label)).toContain('Resume Conversation…')
   })
 
   it('offers only removal for a checkout gone from disk, and nothing with no worktree open', () => {
@@ -734,6 +749,7 @@ describe('the first screen, before anything is typed', () => {
         worktrees: [worktree({ id: 'w1', name: 'login fix' }), worktree({ id: 'w2', name: 'schema' })],
         activeWorktreeId: 'w1',
         agents: [agent('claude')],
+        resumable: true,
         whyUnavailable: (action) => (action === 'save-file' ? 'nothing unsaved' : null)
       })
     )
