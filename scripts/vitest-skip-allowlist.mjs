@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 
 const onWindows = () => process.platform === 'win32'
+const offMac = () => process.platform !== 'darwin'
 const relayOptOut = () => process.env.TEAMREE_SKIP_RELAY_TESTS === '1'
 const ptyOptOut = () => process.env.TEAMREE_SKIP_PTY_TESTS === '1'
 const workerdOptOut = () => process.env.TEAMREE_SKIP_WORKERD_TESTS === '1'
@@ -129,6 +130,26 @@ const ALLOWED = [
       'TEAMREE_SKIP_WORKERD_TESTS=1: that a limit the Worker cannot parse refuses every request, ' +
       'rather than being quietly replaced by the default, is proven in this run only as far as ' +
       'configFromEnv throwing (relay/test/operability.test.ts).'
+  },
+
+  // macOS-only: the updater swaps .app bundles with macOS tools. CI runs the rest on Linux.
+  {
+    file: 'src/main/updates/installHelper.test.ts',
+    suite: 'the install helper',
+    when: offMac,
+    why: 'not macOS: the helper validates and clears bundles with plutil and xattr.'
+  },
+  {
+    file: 'src/main/updates/selfInstaller.test.ts',
+    test: 'says macOS refused, with the way to Settings, when the bundle cannot be written',
+    when: offMac,
+    why: 'not macOS: the refusal is made with chflags uchg, which Linux lacks.'
+  },
+  {
+    file: 'src/main/updates/selfInstall.integration.test.ts',
+    suite: 'updating in place',
+    when: offMac,
+    why: 'not macOS: it signs, stages and swaps a real .app bundle.'
   },
 
   // POSIX-only; listed so a Windows run still reports exactly what it did not run.

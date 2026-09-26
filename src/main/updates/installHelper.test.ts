@@ -112,7 +112,8 @@ function applications(): string[] {
   return readdirSync(join(root, 'Applications'))
 }
 
-describe('the install helper', () => {
+// The helper calls plutil and xattr, which only macOS has.
+describe.runIf(process.platform === 'darwin')('the install helper', () => {
   it('is a script sh can parse', () => {
     const script = join(root, 'install.sh')
     writeFileSync(script, helperScript(setup()))
