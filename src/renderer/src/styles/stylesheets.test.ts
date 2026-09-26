@@ -406,6 +406,14 @@ describe('stylesheets', () => {
       expect(reflowing).toEqual([])
     })
 
+    // On a narrow nested row the counts and the tally ran past the row's edge (#293).
+    it('wraps a row’s facts under its branch rather than past the row’s edge', () => {
+      expect(declarationOf(ruleFor('sidebar.css', '.worktree__meta'), 'flex-wrap')).toBe('wrap')
+      // A zero basis: a long branch never pushes the facts onto a line of their own.
+      expect(declarationOf(ruleFor('sidebar.css', '.worktree__branch'), 'flex')).toBe('1 1 0')
+      expect(declarationOf(ruleFor('sidebar.css', '.worktree__tally'), 'margin-left')).toBe('auto')
+    })
+
     // Closed, the panel is a 30px strip with a 1px border; a count on its edge was clipped.
     it('keeps a closed rail’s counts at least 2px inside the rail', () => {
       const px = (value: string | undefined): number => Number.parseFloat(value ?? 'NaN')
