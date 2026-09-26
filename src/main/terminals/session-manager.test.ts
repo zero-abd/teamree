@@ -758,6 +758,8 @@ describe('registerTerminalHandlers', () => {
       'terminal.reopen',
       'terminal.resize',
       'terminal.split',
+      'terminal.subagentEvent',
+      'terminal.subagentTranscript',
       'terminal.subscribe',
       'terminal.write'
     ])

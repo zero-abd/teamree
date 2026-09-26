@@ -1392,6 +1392,9 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'terminals' })
       return terminal.record
     },
+    // No agent store to read: a seeded pane has no subagents.
+    'terminal.subagentEvent': ({ terminalId }) => required(terminals.get(terminalId), 'terminal').record,
+    'terminal.subagentTranscript': ({ agentId }) => ({ agentId, lines: [], truncated: false }),
     'terminal.read': ({ terminalId, tailBytes }) => {
       const terminal = required(terminals.get(terminalId), 'terminal')
       return { data: tailBytes ? terminal.buffer.slice(-tailBytes) : terminal.buffer }

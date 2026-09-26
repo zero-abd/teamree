@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { statSync } from 'node:fs'
 import { agentLaunchCommand } from '../../shared/agentLaunch'
 import type { RestoredAs } from '../../shared/paneRestore'
-import type { AgentEvent, ClosedPane, Layout, PaneNode, Terminal } from '../../shared/entities'
+import type { AgentEvent, ClosedPane, Layout, PaneNode, SubagentTranscript, Terminal } from '../../shared/entities'
 import type { ScreenMenu } from '../../shared/screenOpinion'
 import { fileLeavesIn } from '../../shared/filePane'
 import { evidenceLine } from '../../shared/outputEvidence'
@@ -54,6 +54,7 @@ import {
 import { EXITED_RETENTION_BYTES, PtySession } from './pty-session'
 import { conflict, invalidParams, notFound } from './service-error'
 import { resolveLoginShell } from './shell-environment'
+import { SubagentTracker, type SubagentTrackerOptions } from './subagents'
 import type { Tone } from '../../shared/theme'
 
 /** Size a pane starts at before the renderer measures itself and resizes. */
@@ -132,6 +133,8 @@ export type TerminalSessionManagerOptions = {
   conversationEvidence?: (question: ConversationQuestion) => ConversationEvidence
   /** The window's tone, read as each pane starts; absent, panes are not told one. */
   colorTone?: () => Tone
+  /** Where a Claude pane's subagents are read from, and how often; tests point them at a tree they built. */
+  subagents?: Pick<SubagentTrackerOptions, 'projectDirectory' | 'pollMs'>
 }
 
 /**
@@ -183,8 +186,13 @@ export class TerminalSessionManager {
   private paneArea: Box = { width: 1200, height: 800 }
   private minPane: Box | undefined
   private cell: Box | undefined
+  private readonly subagents: SubagentTracker
 
   constructor(private readonly options: TerminalSessionManagerOptions = {}) {
+    this.subagents = new SubagentTracker({
+      ...options.subagents,
+      onChange: (terminalId) => options.onActivityChange?.(terminalId)
+    })
     this.layouts = options.layouts ?? new InMemoryLayoutRepository()
     this.records = options.sessions ?? new InMemorySessionRepository()
     this.scrollback = options.scrollback
@@ -204,7 +212,12 @@ export class TerminalSessionManager {
   list(worktreeId?: string): Terminal[] {
     const all = [...this.sessions.values()]
     const scoped = worktreeId === undefined ? all : all.filter((session) => session.worktreeId === worktreeId)
-    return scoped.map((session) => session.snapshot())
+    return scoped.map((session) => this.withSubagents(session.snapshot()))
+  }
+
+  /** Reads every Claude pane's subagents off disk now, rather than on the next poll. */
+  refreshSubagents(): Promise<void> {
+    return this.subagents.refresh()
   }
 
   /** Each running pane's pty child, for `system.resources`; an exited pid may be somebody else's by now. */
@@ -405,10 +418,29 @@ export class TerminalSessionManager {
   }
 
   /** What the agent's hook just reported. Not written to the record: the next launch starts a new process. */
-  agentEvent(terminalId: string, event: AgentEvent): Terminal {
-    const session = this.require(terminalId)
-    session.noteAgentEvent(event)
-    return session.snapshot()
+  agentEvent(
+    terminalId: string,
+    event: AgentEvent,
+    session?: { sessionId: string; transcriptPath?: string }
+  ): Terminal {
+    const pane = this.require(terminalId)
+    pane.noteAgentEvent(event)
+    if (session !== undefined) this.subagents.noteSession(terminalId, session.sessionId, session.transcriptPath)
+    return this.withSubagents(pane.snapshot())
+  }
+
+  /** A subagent starting or stopping, as the pane's hook reported it. */
+  subagentEvent(params: ParamsOf<'terminal.subagentEvent'>): Terminal {
+    const pane = this.require(params.terminalId)
+    this.subagents.hook(params.terminalId, params)
+    return this.withSubagents(pane.snapshot())
+  }
+
+  async subagentTranscript(params: ParamsOf<'terminal.subagentTranscript'>): Promise<SubagentTranscript> {
+    this.require(params.terminalId)
+    const transcript = await this.subagents.transcript(params.terminalId, params.agentId)
+    if (transcript === undefined) throw notFound(`no subagent ${params.agentId} in terminal ${params.terminalId}`)
+    return transcript
   }
 
   read(terminalId: string, tailBytes?: number): string {
@@ -698,6 +730,7 @@ export class TerminalSessionManager {
 
   /** Kills every PTY. Call from the app's before-quit path. */
   async shutdown(): Promise<void> {
+    this.subagents.close()
     const sessions = [...this.sessions.values()]
     this.sessions.clear()
     for (const terminalId of [...this.streams.keys()]) this.endStreamsFor(terminalId)
@@ -841,6 +874,16 @@ export class TerminalSessionManager {
     })
 
     this.sessions.set(session.id, session)
+    const agentSessionId = restoring?.agentSessionId ?? launch.agentSessionId
+    if (agent === 'claude') {
+      void this.subagents.track(session.id, {
+        cwd,
+        ...(agentSessionId ? { sessionId: agentSessionId } : {}),
+        isRunning: () => this.sessions.get(session.id)?.isRunning === true
+      })
+    } else {
+      this.subagents.untrack(session.id)
+    }
     if (restored !== undefined) this.resuming.add(session.id)
     this.watchSession(session)
     const snapshot = session.snapshot()
@@ -858,9 +901,7 @@ export class TerminalSessionManager {
         : { command: restoring.command }),
       ...((restoring?.agent ?? launch.agent) ? { agent: restoring?.agent ?? launch.agent } : {}),
       ...(label === undefined ? {} : { label }),
-      ...((restoring?.agentSessionId ?? launch.agentSessionId)
-        ? { agentSessionId: restoring?.agentSessionId ?? launch.agentSessionId }
-        : {}),
+      ...(agentSessionId ? { agentSessionId } : {}),
       // A restored record's absence is kept, not turned into `false`: a record
       // from before this field existed may have a real conversation behind it.
       // `markNotResumable` answers the unknown when the agent refuses.
@@ -888,6 +929,11 @@ export class TerminalSessionManager {
     })
     const never = evidence === 'absent' || (evidence === 'unknown' && record.typed === false)
     return never ? this.taskFor(record).prompt : undefined
+  }
+
+  private withSubagents(terminal: Terminal): Terminal {
+    const subagents = this.subagents.list(terminal.id)
+    return subagents === undefined ? terminal : { ...terminal, subagents }
   }
 
   /** Hands on a pane that has stopped, when it is an agent; one rule for both edges. */
@@ -918,6 +964,7 @@ export class TerminalSessionManager {
    */
   private forget(terminalId: string): void {
     this.resuming.delete(terminalId)
+    this.subagents.untrack(terminalId)
     this.checkpoints?.cancel(terminalId)
     this.records.removeTerminal(terminalId)
     this.scrollback?.remove(terminalId)

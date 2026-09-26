@@ -205,6 +205,12 @@ export function publishTerminalEvents(
     return terminal
   })
 
+  registry.register('terminal.subagentEvent', schemas['terminal.subagentEvent'], async (params, call) => {
+    const terminal = await handlers['terminal.subagentEvent'](params, call)
+    bus.emit({ type: 'terminals' })
+    return terminal
+  })
+
   registry.register('terminal.close', schemas['terminal.close'], async (params, call) => {
     // Read before closing: afterwards the session is gone.
     const worktreeId = terminals.manager.list().find((terminal) => terminal.id === params.terminalId)?.worktreeId

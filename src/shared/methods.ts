@@ -33,6 +33,7 @@ import type {
   TeamworkPublishPlan,
   TeamworkPublishProgress,
   TeamworkStatus,
+  SubagentTranscript,
   Terminal,
   UpdateState,
   Worktree,
@@ -155,6 +156,12 @@ export const Hunk = z.object({
 
 /** One hunk as it crosses the wire: the shape `Hunk` validates. */
 export type HunkInput = z.infer<typeof Hunk>
+
+/** A Claude Code session or agent id: it becomes a file name, so no separator or `..`. */
+const agentSessionId = z
+  .string()
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/)
 
 /** Why `project.add` turned a folder away, carried as `error.data.refusal`. */
 export type ProjectAddRefusal = 'not-a-repository' | 'no-commits'
@@ -684,7 +691,26 @@ export const Params = {
     event: z.enum(['SessionStart', 'UserPromptSubmit', 'Notification', 'Stop', 'SessionEnd']),
     at: z.number().int().nonnegative(),
     detail: z.string().max(MAX_AGENT_EVENT_DETAIL_CHARS).optional(),
-    message: z.string().max(MAX_AGENT_EVENT_MESSAGE_CHARS).optional()
+    message: z.string().max(MAX_AGENT_EVENT_MESSAGE_CHARS).optional(),
+    /** The session the agent runs under, which a `/clear` or a resume can change. */
+    sessionId: agentSessionId.optional(),
+    /** The session's transcript, which locates the agent's store. */
+    transcriptPath: z.string().max(4096).optional()
+  }),
+  /** A subagent starting or stopping, reported by the pane's own hook the same way. */
+  terminalSubagentEvent: z.object({
+    terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
+    event: z.enum(['SubagentStart', 'SubagentStop']),
+    at: z.number().int().nonnegative(),
+    sessionId: agentSessionId,
+    agentId: agentSessionId,
+    agentType: z.string().max(128).optional(),
+    transcriptPath: z.string().max(4096).optional()
+  }),
+  /** A subagent's transcript, read-only. */
+  terminalSubagentTranscript: z.object({
+    terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
+    agentId: agentSessionId
   }),
   /** Panes closed in a worktree that can be reopened, newest first. */
   terminalClosed: z.object({ worktreeId: z.string().min(1) }),
@@ -938,6 +964,12 @@ export type MethodContract = TaskMethodContract & {
   'terminal.relaunch': { params: z.infer<typeof Params.terminalRelaunch>; result: Terminal }
   /** Answers with the pane, now carrying what its agent just said. */
   'terminal.agentEvent': { params: z.infer<typeof Params.terminalAgentEvent>; result: Terminal }
+  /** Answers with the pane, carrying the subagent the event was about. */
+  'terminal.subagentEvent': { params: z.infer<typeof Params.terminalSubagentEvent>; result: Terminal }
+  'terminal.subagentTranscript': {
+    params: z.infer<typeof Params.terminalSubagentTranscript>
+    result: SubagentTranscript
+  }
 
   /** Whether a new worktree gets the agent CLIs' trust of its main checkout. Per machine. */
   'agents.trust': { params: z.infer<typeof Params.agentsTrust>; result: { trustNewWorktrees: boolean } }

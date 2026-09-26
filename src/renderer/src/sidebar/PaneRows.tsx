@@ -1,8 +1,12 @@
 // The panes of one worktree, one row each, under its row in the sidebar.
 
+import { useState } from 'react'
+import type { Subagent } from '@shared/entities'
 import { PaneGlyph } from '../agents/glyphs'
 import { requestRegionFocus } from '../shell/regions'
 import { AnswerButtons } from './AnswerButtons'
+import { SubagentRows } from './SubagentRows'
+import { SubagentTranscriptDialog } from './SubagentTranscriptDialog'
 import { NO_ATTENTION, typingNow, type PaneAttention } from '../state/paneAttention'
 import {
   agoLabel,
@@ -41,6 +45,7 @@ export function PaneRows({
   tree = false
 }: PaneRowsProps): React.JSX.Element {
   const item = tree ? ({ role: 'treeitem', 'aria-level': 3, tabIndex: -1 } as const) : {}
+  const [reading, setReading] = useState<{ terminalId: string; subagent: Subagent } | null>(null)
   return (
     <ul className="panes" role={tree ? 'group' : undefined}>
       {rows.map((row) => {
@@ -98,6 +103,23 @@ export function PaneRows({
             </button>
             {row.choices === undefined ? null : (
               <AnswerButtons terminalId={row.terminalId} choices={row.choices} className="pane-item__answers" />
+            )}
+            {row.subagents === undefined || row.subagents.length === 0 ? null : (
+              <SubagentRows
+                subagents={row.subagents}
+                now={now}
+                {...(tree ? { level: 3 } : {})}
+                onOpen={(subagent) => setReading({ terminalId: row.terminalId, subagent })}
+              />
+            )}
+            {reading?.terminalId !== row.terminalId ? null : (
+              <SubagentTranscriptDialog
+                terminalId={row.terminalId}
+                // The row's copy while listed, so the status keeps up; the last one seen once it is not.
+                subagent={row.subagents?.find((subagent) => subagent.id === reading.subagent.id) ?? reading.subagent}
+                now={now}
+                onClose={() => setReading(null)}
+              />
             )}
           </li>
         )

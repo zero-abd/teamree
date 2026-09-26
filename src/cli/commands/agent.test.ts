@@ -157,6 +157,42 @@ describe('agent event', () => {
     expect(app.stub.received[0]?.params).toEqual({ terminalId: 't_1', event: 'Stop', at: expect.any(Number) })
   })
 
+  it('hands a subagent hook to the runtime as a subagent event, with the session it belongs to', async () => {
+    const app = await harness(() => TERMINAL)
+    const transcript = '/Users/ana/.claude/projects/-repos-api/60b42195.jsonl'
+    const result = await app.run(
+      ['agent', 'event', '--terminal', 't_1', '--event', 'SubagentStart', '--user-data-dir', app.dir],
+      JSON.stringify({
+        session_id: '60b42195',
+        transcript_path: transcript,
+        agent_id: 'a29ee44b5514ef304',
+        agent_type: 'general-purpose',
+        hook_event_name: 'SubagentStart'
+      })
+    )
+    expect(result).toEqual({ code: ExitCode.Success, out: '', err: '' })
+    expect(app.stub.received[0]?.method).toBe('terminal.subagentEvent')
+    expect(app.stub.received[0]?.params).toEqual({
+      terminalId: 't_1',
+      event: 'SubagentStart',
+      at: expect.any(Number),
+      sessionId: '60b42195',
+      transcriptPath: transcript,
+      agentId: 'a29ee44b5514ef304',
+      agentType: 'general-purpose'
+    })
+  })
+
+  it('sends nothing for a subagent hook without an agent id it can use', async () => {
+    const app = await harness(() => TERMINAL)
+    const result = await app.run(
+      ['agent', 'event', '--terminal', 't_1', '--event', 'SubagentStop', '--user-data-dir', app.dir],
+      JSON.stringify({ session_id: '60b42195', agent_id: '../x' })
+    )
+    expect(result).toEqual({ code: ExitCode.Success, out: '', err: '' })
+    expect(app.stub.received).toHaveLength(0)
+  })
+
   // The one thing that is still an error: a person typing the command wrong.
   // A hook line is generated, so a usage error is a bug in this app and is
   // worth being loud about — and it can never reach an agent's transcript,

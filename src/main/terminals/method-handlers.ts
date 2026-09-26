@@ -23,6 +23,8 @@ export type TerminalMethodName =
   | 'terminal.split'
   | 'terminal.relaunch'
   | 'terminal.agentEvent'
+  | 'terminal.subagentEvent'
+  | 'terminal.subagentTranscript'
   | 'terminal.closed'
   | 'terminal.reopen'
   | 'layout.get'
@@ -49,6 +51,8 @@ export const terminalMethodSchemas = {
   'terminal.split': Params.terminalSplit,
   'terminal.relaunch': Params.terminalRelaunch,
   'terminal.agentEvent': Params.terminalAgentEvent,
+  'terminal.subagentEvent': Params.terminalSubagentEvent,
+  'terminal.subagentTranscript': Params.terminalSubagentTranscript,
   'terminal.closed': Params.terminalClosed,
   'terminal.reopen': Params.terminalReopen,
   'layout.get': Params.layoutGet,
@@ -128,12 +132,23 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
     'terminal.split': async (params) => manager.split(params),
     'terminal.relaunch': async (params) => manager.relaunch(params),
     'terminal.agentEvent': async (params) =>
-      manager.agentEvent(params.terminalId, {
-        event: params.event,
-        at: params.at,
-        ...(params.detail === undefined ? {} : { detail: params.detail }),
-        ...(params.message === undefined ? {} : { message: params.message })
-      }),
+      manager.agentEvent(
+        params.terminalId,
+        {
+          event: params.event,
+          at: params.at,
+          ...(params.detail === undefined ? {} : { detail: params.detail }),
+          ...(params.message === undefined ? {} : { message: params.message })
+        },
+        params.sessionId === undefined
+          ? undefined
+          : {
+              sessionId: params.sessionId,
+              ...(params.transcriptPath === undefined ? {} : { transcriptPath: params.transcriptPath })
+            }
+      ),
+    'terminal.subagentEvent': async (params) => manager.subagentEvent(params),
+    'terminal.subagentTranscript': async (params) => manager.subagentTranscript(params),
     'terminal.closed': async (params) => manager.closedPanes(params.worktreeId),
     'terminal.reopen': async (params) => manager.reopen(params),
     'layout.get': async (params) => manager.layoutGet(params.worktreeId),
@@ -167,6 +182,16 @@ export function registerTerminalHandlers(registry: MethodRegistry, service: Term
     'terminal.agentEvent',
     service.schemas['terminal.agentEvent'],
     service.handlers['terminal.agentEvent']
+  )
+  registry.register(
+    'terminal.subagentEvent',
+    service.schemas['terminal.subagentEvent'],
+    service.handlers['terminal.subagentEvent']
+  )
+  registry.register(
+    'terminal.subagentTranscript',
+    service.schemas['terminal.subagentTranscript'],
+    service.handlers['terminal.subagentTranscript']
   )
   registry.register('terminal.closed', service.schemas['terminal.closed'], service.handlers['terminal.closed'])
   registry.register('terminal.reopen', service.schemas['terminal.reopen'], service.handlers['terminal.reopen'])
