@@ -59,6 +59,7 @@ import type {
 } from './entities'
 import { MAX_AGENT_ARGS_CHARS } from './agentLaunch'
 import { MAX_FILE_PANE_BYTES } from './filePane'
+import { TaskParams, type TaskMethodContract, type TaskWorkspaceEvent } from './taskMethods'
 import { APPEARANCE_MODES, THEME_TOKENS, type Appearance, type AppearanceMode } from './theme'
 
 /**
@@ -237,14 +238,20 @@ export const Params = {
      */
     checkout: z.string().min(1).max(256).optional(),
     /** What the worktree is compared against instead of the project's base ref. With `checkout` only. */
-    base: z.string().min(1).max(256).optional()
+    base: z.string().min(1).max(256).optional(),
+    /** Makes a child task: it branches from this worktree's branch and lands back in it. */
+    parentId: z.string().min(1).max(256).optional(),
+    /** The calling pane, set by the CLI from `TEAMREE_TERMINAL_ID`; agent calls get the child limits. */
+    fromTerminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS).optional()
   }),
   worktreeRemove: z.object({
     worktreeId: z.string().min(1),
     /** Remove even with uncommitted changes or unmerged commits. */
     force: z.boolean().optional(),
     /** Delete the branch alongside the checkout. */
-    deleteBranch: z.boolean().optional()
+    deleteBranch: z.boolean().optional(),
+    /** Remove its child tasks first; without it a parent with children is refused. */
+    children: z.boolean().optional()
   }),
   /** Forgets the record; checkout and branch stay, and Open Branch offers the branch again. */
   worktreeForget: z.object({ worktreeId: z.string().min(1) }),
@@ -734,11 +741,13 @@ export const Params = {
 
   workspaceSubscribe: z.object({}),
 
-  unsubscribe: z.object({ subscription: z.string().min(1) })
+  unsubscribe: z.object({ subscription: z.string().min(1) }),
+
+  ...TaskParams
 } as const
 
 /** Maps every method name to its params schema and its result type. */
-export type MethodContract = {
+export type MethodContract = TaskMethodContract & {
   'status.get': { params: z.infer<typeof Params.statusGet>; result: RuntimeStatus }
   /** The reply is sent before teardown, so `quitting` is a promise; the endpoint going is the receipt. */
   'app.quit': { params: z.infer<typeof Params.appQuit>; result: { quitting: true; pid: number } }
@@ -960,6 +969,7 @@ export type WorkspaceEvent =
   | { type: 'updates' }
   | { type: 'layout'; worktreeId: string }
   | { type: 'terminalExited'; terminalId: string; exitCode: number }
+  | TaskWorkspaceEvent
 
 /** Events pushed on a terminal.subscribe subscription. */
 export type TerminalEvent =

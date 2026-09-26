@@ -15,7 +15,9 @@ export const ErrorCode = {
   Conflict: 'conflict',
   GitFailed: 'git_failed',
   TerminalFailed: 'terminal_failed',
-  Internal: 'internal'
+  Internal: 'internal',
+  /** An agent asked for a child past `MAX_CHILD_DEPTH` or `MAX_OPEN_CHILDREN`. */
+  ChildLimit: 'child_limit'
 } as const
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode]

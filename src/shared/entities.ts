@@ -1,8 +1,10 @@
 // Core domain entities. Every process agrees on these shapes: the runtime owns
 // them, the renderer and the CLI only ever read or request changes to them.
 
+import type { PeerWorktreeMemory } from './memory'
 import type { RestoredAs } from './paneRestore'
 import type { ScreenMenu, ScreenOpinion } from './screenOpinion'
+import type { PeerHandoff, TaskOutcome, TaskStage, WorktreeReport } from './tasks'
 import type { TitleOpinion } from './titleOpinion'
 
 /** A tracked git repository. One project owns many worktrees. */
@@ -110,6 +112,10 @@ export type Worktree = {
   checkout?: string
   /** A setup command from `.teamree/project.json` this Mac has not approved, waiting on `worktree.setup`. */
   setupAsk?: string
+  /** The worktree this is a child task of: set at creation, never re-pointed. */
+  parentId?: string
+  /** What the agent said when it finished; the latest `done` replaces it. */
+  report?: WorktreeReport
 }
 
 /** A branch a worktree could be opened on as it is: not checked out anywhere yet. */
@@ -358,6 +364,8 @@ export type WorktreeLanding = {
   /** Read with `gh`, for a GitHub origin only. */
   pullRequest?: { number: number; url: string; state: 'open' | 'merged' | 'closed' }
   readAt: number
+  /** A child lands in its parent: set, the page offers that merge and never a pull request. */
+  parent?: { worktreeId: string; name: string }
 }
 
 /** A pull request made with `gh`, or, with `created` false and no number, the host's page to make one. */
@@ -1000,6 +1008,15 @@ export type PeerWorktree = {
   branch: string
   state: WorktreeState
   panes: PeerPane[]
+  /** Presence v2, sent only while Share Task Details is on; bounded in `presenceExtras.ts`. */
+  task?: string
+  parentId?: string
+  /** Changed paths, repo-relative; never contents. */
+  paths?: string[]
+  ahead?: number
+  stage?: TaskStage
+  report?: { outcome: TaskOutcome; summary: string }
+  memory?: PeerWorktreeMemory
 }
 
 /**
@@ -1022,6 +1039,9 @@ export type PeerPresence = {
   /** The handle the sender's own roster files their key under. Display only. */
   handle: string | null
   projects: PeerProject[]
+  /** Worktrees offered to teammates, and the offers this runtime took. */
+  handoffs?: PeerHandoff[]
+  took?: string[]
 }
 
 /**

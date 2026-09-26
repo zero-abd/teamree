@@ -77,6 +77,13 @@ export function targetsForEvent(event: WorkspaceEvent): RefreshTargets {
     case 'terminalExited':
       // The runtime emits `terminals` alongside this; re-reading here would fetch twice for one exit.
       return refreshTargets({ exits: [{ terminalId: event.terminalId, exitCode: event.exitCode }] })
+    // Read by surfaces that do not exist yet; each branch that adds one maps its event here.
+    case 'messages':
+    case 'memory':
+    case 'settings':
+    case 'addons':
+    case 'templates':
+      return refreshTargets({})
   }
 }
 

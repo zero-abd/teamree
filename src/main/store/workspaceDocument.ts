@@ -6,6 +6,7 @@
 import { z } from 'zod'
 import type { Layout, PaneNode, Project, Worktree } from '../../shared/entities'
 import { MAX_PANE_LABEL_CHARS } from '../../shared/methods'
+import { DEFAULT_RUNTIME_SETTINGS, type RuntimeSettings } from '../../shared/settings'
 import { sanitizeAppearance, type Appearance } from '../../shared/theme'
 import { AgentKindOnRead } from '../terminals/agent-command'
 import type { ClosedTerminalRecord, TerminalRecord } from '../terminals/session-restore'
@@ -42,7 +43,18 @@ const WorktreeSchema = z.object({
   task: z.string().min(1).optional(),
   baseRef: z.string().min(1).optional(),
   checkout: z.string().min(1).optional(),
-  setupAsk: z.string().min(1).optional()
+  setupAsk: z.string().min(1).optional(),
+  // A mangled task-tree field costs that field, never the worktree.
+  parentId: z.string().min(1).optional().catch(undefined),
+  report: z
+    .object({
+      outcome: z.enum(['succeeded', 'failed']),
+      summary: z.string(),
+      paths: z.array(z.string().min(1)),
+      at: z.number()
+    })
+    .optional()
+    .catch(undefined)
 })
 
 const PaneNodeSchema: z.ZodType<PaneNode> = z.lazy(() =>
@@ -135,6 +147,19 @@ const AgentsSchema = z.object({ trustNewWorktrees: z.boolean().optional() })
 
 export type AgentsRecord = z.infer<typeof AgentsSchema>
 
+/** `RuntimeSettings` as stored: a switch is absent until changed, and read one at a time. */
+const SettingsSchema = z.object({
+  shareTaskDetails: z.boolean().optional().catch(undefined),
+  showCost: z.boolean().optional().catch(undefined),
+  jacMemoryAddon: z.boolean().optional().catch(undefined)
+})
+
+export type SettingsRecord = Partial<RuntimeSettings>
+
+export function runtimeSettings(record: SettingsRecord): RuntimeSettings {
+  return { ...DEFAULT_RUNTIME_SETTINGS, ...record }
+}
+
 export type WorkspaceDocument = {
   version: number
   projects: Project[]
@@ -163,6 +188,7 @@ export type WorkspaceDocument = {
   /** The update check's preference and clock. See `UpdatesSchema`. */
   updates: UpdateRecord
   agents: AgentsRecord
+  settings: SettingsRecord
 }
 
 /** One pane, one teammate, and when the owner said so. */
@@ -187,7 +213,8 @@ export function emptyWorkspaceDocument(): WorkspaceDocument {
     asked: {},
     appearance: sanitizeAppearance(undefined),
     updates: {},
-    agents: {}
+    agents: {},
+    settings: {}
   }
 }
 
@@ -213,8 +240,13 @@ export function parseWorkspaceDocument(raw: unknown): WorkspaceDocument {
     // Salvaged one colour at a time: a single bad hex costs that colour, not the theme.
     appearance: sanitizeAppearance(record.appearance),
     updates: UpdatesSchema.safeParse(record.updates).data ?? {},
-    agents: AgentsSchema.safeParse(record.agents).data ?? {}
+    agents: AgentsSchema.safeParse(record.agents).data ?? {},
+    settings: stripUndefined(SettingsSchema.safeParse(record.settings).data ?? {})
   }
+}
+
+function stripUndefined<T extends object>(record: T): T {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined)) as T
 }
 
 function salvage<T>(raw: unknown, schema: z.ZodType<T>): T[] {
