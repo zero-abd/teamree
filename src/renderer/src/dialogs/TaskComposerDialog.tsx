@@ -3,8 +3,10 @@
 
 import { useEffect, useState } from 'react'
 import { MAX_AGENT_ARGS_CHARS } from '@shared/agentLaunch'
+import { branchPrefixFor } from '@shared/branchName'
 import type { WorktreeIssue } from '@shared/entities'
 import { permissionModesFor } from '@shared/permissionMode'
+import { useRuntimeSettings } from '../settings/runtimeSettings'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { AgentSteppers } from './AgentSteppers'
 import { BranchField } from './BranchField'
@@ -68,6 +70,7 @@ export function TaskComposerDialog({
   // Whether the picker has been open, so the task box it gives way to takes the cursor back.
   const [pickedOnce, setPickedOnce] = useState(fromIssue)
   const [issue, setIssue] = useState<WorktreeIssue | null>(null)
+  const machine = useRuntimeSettings().settings
 
   const project = projects.find((entry) => entry.id === projectId)
   const { state: startPoints, reload } = useStartPoints(projectId)
@@ -105,14 +108,15 @@ export function TaskComposerDialog({
     ...worktrees.filter((worktree) => worktree.projectId === projectId).map((worktree) => worktree.branch)
   ]
   const hasTask = task.trim().length > 0
+  const prefix = branchPrefixFor(project, machine?.branchPrefix)
   const creates = taskCreates(task, selection, branchEdit?.trim() ?? '', modes)
-  const planned = hasTask ? plannedBranches(creates, existing) : []
+  const planned = hasTask ? plannedBranches(creates, existing, prefix) : []
   // One run shows its exact branch, suffix included; several show the stem their names share.
   const derived = !hasTask
     ? ''
     : creates.length > 1
-      ? branchNameFromTask(taskName(task))
-      : (plannedBranches(taskCreates(task, selection), existing)[0] ?? '')
+      ? `${prefix}${branchNameFromTask(taskName(task))}`
+      : (plannedBranches(taskCreates(task, selection), existing, prefix)[0] ?? '')
   const problem = branchProblem(creates, existing)
   const startedFrom = parent?.branch ?? startPoint.text.trim()
   const leftBehind =
@@ -169,7 +173,7 @@ export function TaskComposerDialog({
             onPick={(picked) => {
               setTask(issueTask(picked))
               // A child's branch is named from its parent's; the issue names only a new one.
-              if (parent === undefined) setBranchEdit(issueBranch(picked))
+              if (parent === undefined) setBranchEdit(`${prefix}${issueBranch(picked)}`)
               setIssue({ number: picked.number, url: picked.url })
               setPicking(false)
             }}

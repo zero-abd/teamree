@@ -3,8 +3,11 @@
 
 import { createContext, Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { agentLaunchCommand } from '@shared/agentLaunch'
+import { branchPrefixFor } from '@shared/branchName'
 import type { Project, RunKind } from '@shared/entities'
+import type { ParamsOf } from '@shared/methods'
 import { RUN_KINDS } from '@shared/runCommands'
+import type { RuntimeSettings } from '@shared/settings'
 import { effectiveProjectSettings, settingSource, startPointOf } from '@shared/projectSettings'
 import { AgentGlyph } from '../agents/glyphs'
 import { harnessName } from '../agents/harnesses'
@@ -22,16 +25,19 @@ import {
 import { NoticeTest } from '../notices/NoticeTest'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { InstallerButton } from '../updates/InstallerButton'
 import { installerStep } from '../updates/updateNotice'
 import { PageFrame } from '../workspace/PageFrame'
 import { activeChoice, BUILT_IN_THEMES, themeById } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from './AppearanceSettings'
-import { useRuntimeSettings } from './runtimeSettings'
+import { useRuntimeSettings, type RuntimeSettingsState } from './runtimeSettings'
 import { useUsageStore } from '../state/usageStore'
 import {
   agentRows,
   cliLine,
+  describedOnly,
+  firstMatch,
   labelMatches,
   relayPanel,
   rowMatches,
@@ -67,11 +73,12 @@ function shownUnder(title: string, query: string, rows: readonly SettingsRow[]):
   }
 }
 
-/** The text, with the filter's words marked where they occur. */
+/** The text, with the filter's words marked where they occur; a label found by what it is about is marked whole. */
 function Marked({ text }: { text: string }): React.JSX.Element {
-  const wanted = useShown().query.trim().toLowerCase()
+  const { query } = useShown()
+  const wanted = query.trim().toLowerCase()
   const at = wanted === '' ? -1 : text.toLowerCase().indexOf(wanted)
-  if (at < 0) return <>{text}</>
+  if (at < 0) return describedOnly(text, query) ? <mark className="settings-match">{text}</mark> : <>{text}</>
   return (
     <>
       {text.slice(0, at)}
@@ -79,6 +86,19 @@ function Marked({ text }: { text: string }): React.JSX.Element {
       {text.slice(at + wanted.length)}
     </>
   )
+}
+
+/** This Mac's settings, read once for the page so a change in General reaches the projects' rows. */
+const MachineContext = createContext<RuntimeSettingsState>({
+  settings: null,
+  problem: null,
+  change: () => {},
+  save: async () => {}
+})
+
+/** Where new worktrees go when a project names no folder. */
+function machineRoot(settings: RuntimeSettings | null): string {
+  return settings?.worktreesRoot ?? settings?.worktreesRootFallback ?? ''
 }
 
 /** For a control: the attribute that marks it when the filter matched one of its values. */
@@ -126,7 +146,7 @@ function editorChoices(found: readonly { command: string; label: string; kind?: 
 }
 
 /** A project's rows as the filter reads them, from the same values its controls show. */
-function useProjectRows(): (project: Project) => SettingsRow[] {
+function useProjectRows(machine: RuntimeSettings | null): (project: Project) => SettingsRow[] {
   const startPoints = useWorkspaceStore((state) => state.startPointDefaults)
   const editorCommands = useWorkspaceStore((state) => state.editorCommands)
   const found = useWorkspaceStore((state) => state.editors)
@@ -139,6 +159,8 @@ function useProjectRows(): (project: Project) => SettingsRow[] {
     const applied = effectiveProjectSettings(project)
     return [
       { label: 'Start new worktrees from', words: [startPointOf(project, startPoints[project.id])] },
+      { label: 'Worktrees in', words: [project.worktreesRoot ?? machineRoot(machine)] },
+      { label: 'Branch prefix', words: [branchPrefixFor(project, machine?.branchPrefix)] },
       { label: 'Fetch in Background', words: [] },
       { label: 'Symlink into every new worktree', words: applied.linkedPaths ?? [] },
       { label: 'Copy into every new worktree', words: applied.copiedPaths ?? [] },
@@ -154,7 +176,7 @@ function useProjectRows(): (project: Project) => SettingsRow[] {
 }
 
 /** Every row outside a project as the filter reads it: label, option labels and current value. */
-function useSectionRows(): Record<Exclude<SectionId, 'projects'>, SettingsRow[]> {
+function useSectionRows(machine: RuntimeSettings | null): Record<Exclude<SectionId, 'projects'>, SettingsRow[]> {
   const agentArgs = useWorkspaceStore((state) => state.agentArgs)
   const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
   const options = useWorkspaceStore((state) => state.terminalOptions)
@@ -162,6 +184,8 @@ function useSectionRows(): Record<Exclude<SectionId, 'projects'>, SettingsRow[]>
   const themeValue = useThemeValue()
   return {
     general: [
+      { label: 'Worktrees in', words: [machineRoot(machine)] },
+      { label: 'Branch prefix', words: [machine?.branchPrefix ?? ''] },
       ...(offersMenuBar() ? [{ label: 'Show in Menu Bar', words: [] }] : []),
       { label: 'Show Cost', words: [] }
     ],
@@ -186,7 +210,7 @@ function useSectionRows(): Record<Exclude<SectionId, 'projects'>, SettingsRow[]>
     teamwork: [{ label: 'Share Task Details', words: [] }],
     appearance: [{ label: 'Theme', words: [themeValue, ...THEME_WORDS] }],
     updates: [{ label: 'Check automatically', words: [] }],
-    cli: []
+    cli: [{ label: 'teamree command', words: [] }]
   }
 }
 
@@ -201,8 +225,9 @@ export function SettingsView(): React.JSX.Element {
   const loadAgentTrust = useWorkspaceStore((state) => state.loadAgentTrust)
   const agents = useAgentRows()
   const [query, setQuery] = useState('')
-  const sectionRows = useSectionRows()
-  const projectRows = useProjectRows()
+  const machine = useRuntimeSettings()
+  const sectionRows = useSectionRows(machine.settings)
+  const projectRows = useProjectRows(machine.settings)
   const rowsOf = (id: SectionId): SettingsRow[] =>
     id === 'projects'
       ? projects.flatMap((project) => [{ label: project.name, words: [] }, ...projectRows(project)])
@@ -256,6 +281,26 @@ export function SettingsView(): React.JSX.Element {
     useWorkspaceStore.setState({ settingsSection: null })
   }, [section])
 
+  // The palette's Open Setting: the filter holds its label and its section is rung once shown.
+  const asked = useWorkspaceStore((state) => state.settingsQuery)
+  const ring = useRef<SectionId | null>(null)
+  useEffect(() => {
+    if (asked === null) return
+    ring.current = firstMatch(asked)?.section ?? null
+    setQuery(asked)
+    useWorkspaceStore.setState({ settingsQuery: null })
+  }, [asked])
+
+  // Each new filter starts at its first section, so a match below the fold is not missed.
+  const first = sections[0]?.id
+  useEffect(() => {
+    if (query.trim() === '' || first === undefined) return
+    document.getElementById(`settings-${first}`)?.scrollIntoView?.({ block: 'start' })
+    setActive(first)
+    if (ring.current !== null) flash(ring.current)
+    ring.current = null
+  }, [query])
+
   return (
     <PageFrame label="Settings" title="Settings" onClose={toggleSettings} bodyRef={body} bodyTestId="settings-body">
       <div className="settings__layout">
@@ -278,11 +323,13 @@ export function SettingsView(): React.JSX.Element {
         </div>
         <div className="settings__content">
           {sections.length === 0 ? <p className="settings-note">No matches</p> : null}
-          {sections.map((entry) => (
-            <ShownContext.Provider key={entry.id} value={shownUnder(entry.label, query, rowsOf(entry.id))}>
-              <SectionBody id={entry.id} projects={projects} />
-            </ShownContext.Provider>
-          ))}
+          <MachineContext.Provider value={machine}>
+            {sections.map((entry) => (
+              <ShownContext.Provider key={entry.id} value={shownUnder(entry.label, query, rowsOf(entry.id))}>
+                <SectionBody id={entry.id} projects={projects} />
+              </ShownContext.Provider>
+            ))}
+          </MachineContext.Provider>
         </div>
       </div>
     </PageFrame>
@@ -514,10 +561,11 @@ function offersMenuBar(): boolean {
   return window.teamree?.platform === 'darwin'
 }
 
-/** Machine-wide switches that belong to no other section. */
+/** Machine-wide settings that belong to no other section. */
 function GeneralSection(): React.JSX.Element {
+  const machine = useContext(MachineContext)
+  const settings = machine.settings
   const show = useShown()
-  const { settings, problem, change } = useRuntimeSettings()
 
   return (
     <section className="settings-section" aria-labelledby="settings-general">
@@ -525,6 +573,23 @@ function GeneralSection(): React.JSX.Element {
         <Marked text="General" />
       </h2>
       <div className="settings-group">
+        {show.row('Worktrees in') ? (
+          <WorktreesIn
+            own={settings?.worktreesRoot}
+            applied={machineRoot(settings)}
+            save={(worktreesRoot, allowInsideRepository) =>
+              machine.save({ worktreesRoot, ...(allowInsideRepository ? { allowInsideRepository } : {}) })
+            }
+          />
+        ) : null}
+        {show.row('Branch prefix') ? (
+          <BranchPrefix
+            id="settings-branch-prefix"
+            own={settings?.branchPrefix ?? ''}
+            inherited=""
+            save={(branchPrefix) => machine.save({ branchPrefix })}
+          />
+        ) : null}
         {offersMenuBar() && show.row('Show in Menu Bar') ? (
           <div className="settings-field">
             <label className="settings-field__label" htmlFor="settings-menu-bar">
@@ -536,7 +601,7 @@ function GeneralSection(): React.JSX.Element {
               type="checkbox"
               checked={settings?.showInMenuBar ?? false}
               disabled={settings === null}
-              onChange={(event) => change({ showInMenuBar: event.target.checked })}
+              onChange={(event) => machine.change({ showInMenuBar: event.target.checked })}
             />
           </div>
         ) : null}
@@ -552,15 +617,132 @@ function GeneralSection(): React.JSX.Element {
               checked={settings?.showCost ?? false}
               disabled={settings === null}
               onChange={(event) => {
-                change({ showCost: event.target.checked })
+                machine.change({ showCost: event.target.checked })
                 useUsageStore.setState({ showCost: event.target.checked })
               }}
             />
           </div>
         ) : null}
-        {problem === null ? null : <p className="settings-error">{problem}</p>}
+        {machine.problem === null ? null : <p className="settings-error">{machine.problem}</p>}
       </div>
     </section>
+  )
+}
+
+function reasonFor(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * Where new worktrees go: the folder in effect, Choose… to pick another, Reveal, and Reset while `own` is set.
+ * A folder inside a repository is refused once, then taken with Use Anyway.
+ */
+function WorktreesIn({
+  own,
+  applied,
+  save
+}: {
+  own: string | undefined
+  applied: string
+  /** An empty folder clears it. */
+  save: (folder: string, allowInsideRepository?: boolean) => Promise<unknown>
+}): React.JSX.Element {
+  const revealInFinder = useWorkspaceStore((state) => state.revealInFinder)
+  const [problem, setProblem] = useState<{ message: string; folder: string; inside: boolean } | null>(null)
+
+  const attempt = async (folder: string, allowInsideRepository = false): Promise<void> => {
+    setProblem(null)
+    try {
+      await save(folder, allowInsideRepository)
+    } catch (error) {
+      const refusal = (error as { data?: { refusal?: string } } | null)?.data?.refusal
+      setProblem({ message: reasonFor(error), folder, inside: refusal === 'insideRepository' })
+    }
+  }
+  const choose = async (): Promise<void> => {
+    const picked = await window.teamree?.chooseFolder(applied || (window.teamree?.homeDir ?? ''))
+    if (picked) await attempt(picked)
+  }
+
+  return (
+    <div className="settings-field">
+      <span className="settings-field__label">
+        <Marked text="Worktrees in" />
+      </span>
+      <div className="settings-field__row">
+        <code className="settings-value settings-value--mono settings-value--path">
+          <Marked text={applied} />
+        </code>
+        <button type="button" className="button button--small" disabled={applied === ''} onClick={() => void choose()}>
+          Choose…
+        </button>
+        <button
+          type="button"
+          className="button button--small"
+          disabled={applied === ''}
+          onClick={() => void revealInFinder(applied, 'the worktrees folder')}
+        >
+          Reveal
+        </button>
+        {own === undefined ? null : (
+          <button type="button" className="button button--small" onClick={() => void attempt('')}>
+            Reset
+          </button>
+        )}
+      </div>
+      {problem === null ? null : (
+        <p className="settings-error">
+          {problem.message}
+          {problem.inside ? (
+            <>
+              {' '}
+              <button type="button" className="button button--small" onClick={() => void attempt(problem.folder, true)}>
+                Use Anyway
+              </button>
+            </>
+          ) : null}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** Leads the branch names teamree picks; `inherited` is the prefix in effect while this one is empty. */
+function BranchPrefix({
+  id,
+  own,
+  inherited,
+  save
+}: {
+  id: string
+  own: string
+  inherited: string
+  save: (prefix: string) => Promise<unknown>
+}): React.JSX.Element {
+  const shown = useShown()
+  const [problem, setProblem] = useState<string | null>(null)
+  const draft = useDraft(own, (prefix) => {
+    setProblem(null)
+    save(prefix).catch((error: unknown) => setProblem(reasonFor(error)))
+  })
+  return (
+    <div className="settings-field">
+      <label className="settings-field__label" htmlFor={id}>
+        <Marked text="Branch prefix" />
+      </label>
+      <input
+        id={id}
+        className={`settings-field__input settings-field__input--short${
+          inherited ? ' settings-field__input--command' : ''
+        }`}
+        type="text"
+        placeholder={inherited || 'None'}
+        aria-invalid={problem !== null}
+        {...hitMark(shown, [own])}
+        {...draft}
+      />
+      {problem === null ? null : <p className="settings-error">{problem}</p>}
+    </div>
   )
 }
 
@@ -1001,7 +1183,7 @@ function AppearanceSection(): React.JSX.Element {
 
 function ProjectsSection({ projects }: { projects: readonly Project[] }): React.JSX.Element {
   const shown = useShown()
-  const projectRows = useProjectRows()
+  const projectRows = useProjectRows(useContext(MachineContext).settings)
   const named = (project: Project): Shown => {
     const own = shownUnder(project.name, shown.query, projectRows(project))
     return shown.whole ? { ...own, whole: true, row: () => true } : own
@@ -1060,11 +1242,45 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
       {project.repositoryProblem === undefined ? null : <p className="settings-warning">{project.repositoryProblem}</p>}
 
       {shown.row('Start new worktrees from') ? <StartPoint project={project} /> : null}
+      <ProjectWorktrees project={project} />
       {shown.row('Fetch in Background') ? <FetchInBackground project={project} /> : null}
       <CarriedPaths project={project} />
       {shown.row('Open checkouts in') ? <EditorCommand project={project} /> : null}
       {shown.row('Relay') ? <RelayBlock project={project} /> : null}
     </article>
+  )
+}
+
+/** This project's worktrees folder and branch prefix, over General's; each saved as the runtime answers. */
+function ProjectWorktrees({ project }: { project: Project }): React.JSX.Element {
+  const machine = useContext(MachineContext).settings
+  const shown = useShown()
+  const save = async (changes: Omit<ParamsOf<'project.setPaths'>, 'projectId'>): Promise<void> => {
+    const saved = await runtimeClient.call('project.setPaths', { projectId: project.id, ...changes })
+    useWorkspaceStore.setState((state) => ({
+      projects: state.projects.map((row) => (row.id === saved.id ? saved : row))
+    }))
+  }
+  return (
+    <>
+      {shown.row('Worktrees in') ? (
+        <WorktreesIn
+          own={project.worktreesRoot}
+          applied={project.worktreesRoot ?? machineRoot(machine)}
+          save={(worktreesRoot, allowInsideRepository) =>
+            save({ worktreesRoot, ...(allowInsideRepository ? { allowInsideRepository } : {}) })
+          }
+        />
+      ) : null}
+      {shown.row('Branch prefix') ? (
+        <BranchPrefix
+          id={`settings-branch-prefix-${project.id}`}
+          own={project.branchPrefix ?? ''}
+          inherited={machine?.branchPrefix ?? ''}
+          save={(branchPrefix) => save({ branchPrefix })}
+        />
+      ) : null}
+    </>
   )
 }
 

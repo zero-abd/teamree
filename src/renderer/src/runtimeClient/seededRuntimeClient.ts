@@ -551,7 +551,16 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
     'project.cloneProgress': () => null,
     'project.cancelClone': () => ({ cancelled: false }),
-    'project.setPaths': ({ projectId, linkedPaths, copiedPaths, setupCommand, fetchInBackground, runCommands }) => {
+    'project.setPaths': ({
+      projectId,
+      linkedPaths,
+      copiedPaths,
+      setupCommand,
+      fetchInBackground,
+      runCommands,
+      worktreesRoot,
+      branchPrefix
+    }) => {
       const project = required(projects.get(projectId), 'project')
       const next: Project = { ...project }
       if (linkedPaths !== undefined) {
@@ -574,6 +583,14 @@ export function createSeededRuntimeClient(): RuntimeClient {
         for (const kind of RUN_KINDS) if (!run[kind]?.trim()) delete run[kind]
         if (Object.keys(run).length === 0) delete next.runCommands
         else next.runCommands = run
+      }
+      for (const [field, value] of [
+        ['worktreesRoot', worktreesRoot],
+        ['branchPrefix', branchPrefix]
+      ] as const) {
+        if (value === undefined) continue
+        if (value.trim() === '') delete next[field]
+        else next[field] = value.trim()
       }
       projects.set(next.id, next)
       announce({ type: 'projects' })
@@ -1578,8 +1595,9 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'project.templates': ({ projectId }) => ({ projectId, templates: [], problems: [] }),
     'project.saveTemplate': notInDemo('project.saveTemplate'),
     'settings.get': () => settings,
-    'settings.set': (changes) => {
+    'settings.set': ({ allowInsideRepository: _allow, ...changes }) => {
       settings = { ...settings, ...Object.fromEntries(Object.entries(changes).filter(([, on]) => on !== undefined)) }
+      for (const field of ['worktreesRoot', 'branchPrefix'] as const) if (settings[field] === '') delete settings[field]
       announce({ type: 'settings' })
       return settings
     },

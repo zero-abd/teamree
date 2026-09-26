@@ -143,7 +143,13 @@ export const TaskParams = {
     showCost: z.boolean().optional(),
     jacMemoryAddon: z.boolean().optional(),
     showInMenuBar: z.boolean().optional(),
-    warnAgentsAboutOverlaps: z.boolean().optional()
+    warnAgentsAboutOverlaps: z.boolean().optional(),
+    /** Absolute or `~/`; empty clears it. Refused when not writable or inside a project's repository. */
+    worktreesRoot: z.string().max(4096).optional(),
+    /** Takes a `worktreesRoot` inside a repository. */
+    allowInsideRepository: z.boolean().optional(),
+    /** Empty clears it. */
+    branchPrefix: z.string().max(64).optional()
   }),
 
   addonsStatus: z.object({}),

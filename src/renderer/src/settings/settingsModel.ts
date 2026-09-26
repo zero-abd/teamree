@@ -155,11 +155,68 @@ export function labelMatches(label: string, query: string): boolean {
   return wanted === '' || label.toLowerCase().includes(wanted)
 }
 
+/** One setting as the filter and the palette find it; `about` is search text, never shown. */
+export type SettingEntry = { section: SettingsSectionId; label: string; about: string }
+
+const WORKTREES_IN = 'folder location directory path disk where new worktrees checkouts go'
+const BRANCH_PREFIX = 'branch name naming prefix convention new task'
+
+/** Every setting the page has, in page order; a project's rows are listed once under Projects. */
+export const SETTINGS_CATALOG: readonly SettingEntry[] = [
+  { section: 'general', label: 'Worktrees in', about: WORKTREES_IN },
+  { section: 'general', label: 'Branch prefix', about: BRANCH_PREFIX },
+  { section: 'general', label: 'Show in Menu Bar', about: 'status item tray quick note' },
+  { section: 'general', label: 'Show Cost', about: 'tokens usage price dollars spend' },
+  { section: 'agents', label: 'Default agent', about: 'new task first harness' },
+  { section: 'agents', label: 'Trust New Worktrees', about: 'trust folder prompt permission' },
+  { section: 'agents', label: 'Warn Agents About Overlaps', about: 'overlap conflict same file hook' },
+  { section: 'projects', label: 'Start new worktrees from', about: 'base ref start point main' },
+  { section: 'projects', label: 'Fetch in Background', about: 'fetch remote origin timer focus' },
+  { section: 'projects', label: 'Symlink into every new worktree', about: 'linked paths dependencies share' },
+  { section: 'projects', label: 'Copy into every new worktree', about: 'copied paths secrets files' },
+  { section: 'projects', label: 'Setup command', about: 'install bootstrap script' },
+  { section: 'projects', label: 'Dev command', about: 'run dev server start watch' },
+  { section: 'projects', label: 'Test command', about: 'run tests suite check' },
+  { section: 'projects', label: 'Open checkouts in', about: 'editor ide app' },
+  { section: 'projects', label: 'Relay', about: 'teamwork server url' },
+  { section: 'projects', label: 'Worktrees in', about: WORKTREES_IN },
+  { section: 'projects', label: 'Branch prefix', about: BRANCH_PREFIX },
+  { section: 'panes', label: 'Terminal text size', about: 'font size zoom' },
+  { section: 'panes', label: 'Font', about: 'typeface family monospace' },
+  { section: 'panes', label: 'Cursor', about: 'caret blink bar block underline' },
+  { section: 'panes', label: 'Option as Meta', about: 'alt key keyboard' },
+  { section: 'panes', label: 'Copy on select', about: 'clipboard selection' },
+  { section: 'panes', label: 'Scrollback lines', about: 'history buffer' },
+  { section: 'notices', label: 'When an agent stops or asks', about: 'notification sound alert notify' },
+  { section: 'teamwork', label: 'Share Task Details', about: 'privacy presence teammates' },
+  { section: 'appearance', label: 'Theme', about: 'colors colours dark light mode' },
+  { section: 'updates', label: 'Check automatically', about: 'update version release' },
+  { section: 'cli', label: 'teamree command', about: 'cli terminal install link path shell' }
+]
+
+const ABOUT = new Map(SETTINGS_CATALOG.map((entry) => [entry.label, entry.about]))
+
 /** What the filter reads in one row: its label, the option labels it offers and the value it holds. */
 export type SettingsRow = { label: string; words: readonly string[] }
 
 export function rowMatches(row: SettingsRow, query: string): boolean {
-  return labelMatches(row.label, query) || row.words.some((word) => word !== '' && labelMatches(word, query))
+  return (
+    labelMatches(row.label, query) ||
+    row.words.some((word) => word !== '' && labelMatches(word, query)) ||
+    describedOnly(row.label, query)
+  )
+}
+
+/** True when only the setting's search text holds the query, so the page marks the whole label. */
+export function describedOnly(label: string, query: string): boolean {
+  const about = ABOUT.get(label)
+  return query.trim() !== '' && about !== undefined && !labelMatches(label, query) && labelMatches(about, query)
+}
+
+/** The first setting, in page order, whose label or search text holds the query. */
+export function firstMatch(query: string): SettingEntry | null {
+  if (query.trim() === '') return null
+  return SETTINGS_CATALOG.find((entry) => labelMatches(entry.label, query) || labelMatches(entry.about, query)) ?? null
 }
 
 /** An agent's row: `command` is null for one given arguments or chosen as default that the probe did not find. */

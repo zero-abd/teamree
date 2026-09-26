@@ -306,6 +306,19 @@
   box-shadow: var(--ring);
 }
 
+/* A path in effect; it wraps anywhere rather than pushing its buttons off the row. */
+.settings-value--path {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A branch prefix, `abd/`: a few characters. */
+.settings-field__input--short {
+  justify-self: start;
+  width: 20ch;
+}
+
 /* Six digits and the stepper; any wider reads as a text field. */
 .settings-field__input--number {
   justify-self: start;

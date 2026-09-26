@@ -489,7 +489,13 @@ describe('the first screen', () => {
     mount()
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'copy' } })
     expect(headers()).toEqual(['Contents'])
-    expect(labels()).toEqual(['Copy Path', 'Copy Branch', 'Search in Files: “copy”'])
+    expect(labels()).toEqual([
+      'Copy Path',
+      'Copy Branch',
+      'Open Setting: Copy on select',
+      'Open Setting: Copy into every new worktree',
+      'Search in Files: “copy”'
+    ])
   })
 })
 

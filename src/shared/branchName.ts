@@ -55,9 +55,10 @@ export function branchCollides(candidate: string, taken: ReadonlySet<string>): b
   return false
 }
 
-export function allocateBranchName(taskName: string, existingBranches: readonly string[]): string {
+/** `prefix` leads the slug, `abd/fix-login`; the suffix goes after both. */
+export function allocateBranchName(taskName: string, existingBranches: readonly string[], prefix = ''): string {
   const taken = new Set(existingBranches.map((branch) => branch.toLowerCase()))
-  const base = slugifyBranchName(taskName)
+  const base = `${prefix}${slugifyBranchName(taskName)}`
   if (!branchCollides(base, taken)) return base
   for (let suffix = 2; suffix < 1000; suffix += 1) {
     const candidate = `${base}-${suffix}`
@@ -76,4 +77,14 @@ export function isValidBranchName(name: string): boolean {
     if (code < 0x20 || code === 0x7f) return false
   }
   return true
+}
+
+/** Whether a branch name can start with `prefix`; empty is no prefix. */
+export function isValidBranchPrefix(prefix: string): boolean {
+  return prefix === '' || isValidBranchName(`${prefix}x`)
+}
+
+/** The project's own prefix, else this Mac's, else none. */
+export function branchPrefixFor(project: { branchPrefix?: string } | undefined, machine: string | undefined): string {
+  return project?.branchPrefix ?? machine ?? ''
 }

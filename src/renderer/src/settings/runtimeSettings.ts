@@ -1,6 +1,7 @@
 // The per-machine switches the runtime acts on, read when the page opens and written through.
 
 import { useEffect, useState } from 'react'
+import type { ParamsOf } from '@shared/methods'
 import type { RuntimeSettings } from '@shared/settings'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 
@@ -10,6 +11,8 @@ export type RuntimeSettingsState = {
   /** Why the last change did not stick, or null. */
   problem: string | null
   change: (changes: Partial<RuntimeSettings>) => void
+  /** Sends the changes and waits; a refusal is thrown to the caller and nothing on the page moves. */
+  save: (changes: ParamsOf<'settings.set'>) => Promise<void>
 }
 
 export function useRuntimeSettings(): RuntimeSettingsState {
@@ -39,7 +42,10 @@ export function useRuntimeSettings(): RuntimeSettingsState {
       setProblem(reasonFor(error))
     })
   }
-  return { settings, problem, change }
+  const save = async (changes: ParamsOf<'settings.set'>): Promise<void> => {
+    setSettings(await runtimeClient.call('settings.set', changes))
+  }
+  return { settings, problem, change, save }
 }
 
 function reasonFor(error: unknown): string {

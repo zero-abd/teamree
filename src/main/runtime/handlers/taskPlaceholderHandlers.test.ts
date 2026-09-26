@@ -1,5 +1,5 @@
 import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ErrorCode, type ErrorResponse, type SuccessResponse } from '../../../shared/protocol'
@@ -73,9 +73,37 @@ describe('task, memory and add-on methods before their branches land', () => {
   })
 
   it('keeps settings, defaulting Share Task Details on and the rest off', async () => {
-    expect(await result('settings.get', {})).toEqual(DEFAULT_RUNTIME_SETTINGS)
-    expect(await result('settings.set', { showCost: true })).toEqual({ ...DEFAULT_RUNTIME_SETTINGS, showCost: true })
+    const fallback = { worktreesRootFallback: join(homedir(), '.teamree', 'worktrees') }
+    expect(await result('settings.get', {})).toEqual({ ...DEFAULT_RUNTIME_SETTINGS, ...fallback })
+    expect(await result('settings.set', { showCost: true })).toEqual({
+      ...DEFAULT_RUNTIME_SETTINGS,
+      ...fallback,
+      showCost: true
+    })
     expect(store.runtimeSettings().showCost).toBe(true)
     expect(events).toContainEqual({ type: 'settings' })
+  })
+
+  it('keeps a checked worktrees folder and branch prefix, and clears either on empty', async () => {
+    const folder = join(directory, 'checkouts')
+    expect(await result('settings.set', { worktreesRoot: folder, branchPrefix: 'abd/' })).toMatchObject({
+      worktreesRoot: folder,
+      branchPrefix: 'abd/'
+    })
+    const cleared = (await result('settings.set', { worktreesRoot: '', branchPrefix: '' })) as Record<string, unknown>
+    expect([cleared.worktreesRoot, cleared.branchPrefix]).toEqual([undefined, undefined])
+
+    const relative = (await dispatch(
+      { id: 's', method: 'settings.set', params: { worktreesRoot: 'x' } },
+      call
+    )) as ErrorResponse
+    expect(relative.error.data).toMatchObject({ refusal: 'notAbsolute' })
+    const spaced = (await dispatch(
+      { id: 's', method: 'settings.set', params: { branchPrefix: 'a b' } },
+      call
+    )) as ErrorResponse
+    expect(spaced.error.code).toBe(ErrorCode.InvalidParams)
+    expect(store.runtimeSettings().branchPrefix).toBeUndefined()
+    await store.flush()
   })
 })
