@@ -108,6 +108,7 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'toggle-sidebar': { section: 'view' },
   'toggle-right-panel': { section: 'view' },
   'focus-sidebar': { section: 'view' },
+  'filter-sidebar': { section: 'view' },
   'focus-panes': { section: 'view' },
   'focus-right-panel': { section: 'view' },
   'focus-next-region': { section: 'view' },

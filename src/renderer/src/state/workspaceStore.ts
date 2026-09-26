@@ -177,6 +177,7 @@ import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type Re
 import { useLedger } from './ledgerStore'
 import { useOverlaps } from './overlapStore'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
+import { revealRow } from '../sidebar/revealRow'
 import { readSystemTone } from '../theme/systemTone'
 import { requestRegionFocus } from '../shell/regions'
 import { draftFor, dropDraft, keptDrafts, saverFor } from '../files/fileDrafts'
@@ -2165,6 +2166,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     async openWorktree(worktreeId) {
       const switching = get().activeWorktreeId !== worktreeId
+      revealRow(worktreeId, get())
       set((state) => ({
         activeWorktreeId: worktreeId,
         // Picking a worktree says the dashboard, teamwork, settings or help is done with.

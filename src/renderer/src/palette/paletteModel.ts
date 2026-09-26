@@ -553,6 +553,7 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'toggle-sidebar': 'toggle sidebar hide show projects',
   'toggle-right-panel': 'toggle right panel hide show files changes panes',
   'focus-sidebar': 'focus sidebar keyboard projects worktrees move',
+  'filter-sidebar': 'filter sidebar worktrees tasks branch issue compact hide done working changed mine',
   'focus-panes': 'focus panes terminal keyboard move back',
   'focus-right-panel': 'focus right panel keyboard files changes move',
   'focus-next-region': 'focus next region area part keyboard f6 cycle',

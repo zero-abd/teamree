@@ -10,6 +10,7 @@ import { stepNeedingYou, type NeedingState } from '../dashboard/needingYou'
 import { collectTerminalIds, paneStops } from '../panes/paneLayout'
 import { focusedTreeProject } from '../sidebar/treeKeys'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
+import { useSidebarView } from '../state/sidebarViewStore'
 import { focusedRegion, regionAfter, requestRegionFocus } from '../shell/regions'
 import { numberedTab, tabAfter } from '../workspace/paneTabs'
 import {
@@ -287,6 +288,7 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
     case 'open-help':
     case 'open-setup':
     case 'focus-sidebar':
+    case 'filter-sidebar':
     case 'focus-panes':
     case 'focus-next-region':
     case 'focus-previous-region':
@@ -352,6 +354,10 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
     case 'focus-sidebar':
       if (store.sidebarVisible === false) store.toggleSidebar()
       requestRegionFocus('sidebar')
+      break
+    case 'filter-sidebar':
+      if (store.sidebarVisible === false) store.toggleSidebar()
+      useSidebarView.getState().askFilter()
       break
     case 'focus-panes':
       requestRegionFocus('panes')

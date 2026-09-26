@@ -18,6 +18,7 @@ export type WorkspaceCommand =
   | 'toggle-sidebar'
   | 'toggle-right-panel'
   | 'focus-sidebar'
+  | 'filter-sidebar'
   | 'focus-panes'
   | 'focus-right-panel'
   | 'focus-next-region'
@@ -76,6 +77,8 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // J: the side-panel key in the editors people run in these panes.
   { command: 'toggle-right-panel', chord: { key: 'j' }, title: 'Show/Hide Right Panel' },
   { command: 'focus-sidebar', title: 'Focus Sidebar' },
+  // Alt, as ⌘F finds in a pane and ⌘⇧F searches files.
+  { command: 'filter-sidebar', chord: { key: 'f', alt: true }, title: 'Filter Sidebar' },
   { command: 'focus-panes', title: 'Focus Panes' },
   { command: 'focus-right-panel', title: 'Focus Right Panel' },
   // Bare F6, as Mac apps and editors walk their regions; the only way out of a terminal, which eats Tab.

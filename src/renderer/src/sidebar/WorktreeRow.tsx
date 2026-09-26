@@ -108,6 +108,10 @@ type WorktreeRowProps = {
   onHandOff?: () => void
   /** `Handed to ana` or `Taken by ana`, for its latest offer. */
   handoff?: string | null
+  /** One line: name, dot and chips; no branch line, pane rows or report. */
+  compact?: boolean
+  /** Shown without matching the filter: a match's parent, or the open row. */
+  context?: boolean
 }
 
 export function WorktreeRow({
@@ -147,7 +151,9 @@ export function WorktreeRow({
   onMenuOpen,
   overlap,
   onHandOff,
-  handoff = null
+  handoff = null,
+  compact = false,
+  context = false
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
   const failed = worktree.state === 'failed'
@@ -242,7 +248,7 @@ export function WorktreeRow({
   // A directory that is not there has nothing to reveal, open or copy; removal is what is left.
   const items: RowMenuItem[] = missing ? remove : merged ? [...remove, ...rest] : [...rest, ...remove]
   const rows = ready ? agentRows(terminals, worktree, now, evidence) : []
-  const expandable = rows.length > 0 || task !== undefined
+  const expandable = (rows.length > 0 && !compact) || task !== undefined
   const shown = task === undefined ? panesShown : !task.collapsed
   const show = (next: boolean): void => (task === undefined ? setPanesShown(next) : task.onCollapse(!next))
   // Folded, a task's dot speaks for its whole tree.
@@ -258,7 +264,7 @@ export function WorktreeRow({
   // The glyph names the agent; words only where it cannot tell two runs apart.
   const agentWord = display.agent?.kind === undefined || twinRun
   // A task's tally and a handoff need the second line too, or their chips squeeze the name.
-  const twoLines = display.branch !== undefined || task !== undefined || handoff !== null
+  const twoLines = !compact && (display.branch !== undefined || task !== undefined || handoff !== null)
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
   const stateId = `${describedBy}-state`
@@ -416,7 +422,10 @@ export function WorktreeRow({
     <li
       className={`worktree${active ? ' worktree--active' : ''} worktree--${missing ? 'missing' : worktree.state}${
         dragged ? ' worktree--dragging' : ''
-      }${drop.target === null ? '' : drop.target.allowed ? ' worktree--drop' : ' worktree--no-drop'}`}
+      }${drop.target === null ? '' : drop.target.allowed ? ' worktree--drop' : ' worktree--no-drop'}${
+        context ? ' worktree--context' : ''
+      }`}
+      data-worktree-id={worktree.id}
       style={depth === 0 ? undefined : ({ '--depth': depth } as React.CSSProperties)}
       role="none"
       // Read as the pointer arrives, so the name's tooltip has tokens by the time it shows.
@@ -535,9 +544,9 @@ export function WorktreeRow({
         <DropHint text={drop.target.allowed ? drop.target.hint : drop.target.reason} refused={!drop.target.allowed} />
       )}
 
-      {ask === undefined ? null : <AskForYou ask={ask} />}
-      {report === null ? null : <p className="worktree__line worktree__report">{report}</p>}
-      {heard === undefined || heardFrom === undefined ? null : (
+      {ask === undefined || compact ? null : <AskForYou ask={ask} />}
+      {report === null || compact ? null : <p className="worktree__line worktree__report">{report}</p>}
+      {heard === undefined || heardFrom === undefined || compact ? null : (
         <p className="worktree__line worktree__report" title={heard.text}>
           {`${heard.outcome === 'failed' ? '✗' : '✓'} ${heardFrom.name}: ${firstSentence(heard.text)}`}
         </p>
@@ -547,7 +556,7 @@ export function WorktreeRow({
         <RowMenu label={`Actions for ${label}`} items={items} anchor={menuAt} onClose={closeMenu} />
       )}
 
-      {rows.length > 0 && shown ? (
+      {rows.length > 0 && shown && !compact ? (
         <PaneRows
           tree
           level={3 + depth}
@@ -567,7 +576,7 @@ export function WorktreeRow({
         </div>
       ) : null}
 
-      {failed ? (
+      {failed && !compact ? (
         <div className="worktree__failure">
           <p className="worktree__error" title={worktree.error}>
             {failureLine(worktree.error)}
