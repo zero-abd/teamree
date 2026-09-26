@@ -5,7 +5,7 @@
 import { existsSync } from 'node:fs'
 import { startTimedWindow, type ElapsedClock } from '../main/runtime/elapsed.js'
 import type { TerminalEvent } from '../shared/methods.js'
-import { isPipe } from './discovery.js'
+import { isPipe, isProcessAlive } from './discovery.js'
 import { CliError, ExitCode } from './exit.js'
 import type { RuntimeClient } from './transport.js'
 
@@ -14,12 +14,12 @@ export const DEFAULT_QUIET_MS = 1500
 export const DEFAULT_WAIT_TIMEOUT_MS = 120_000
 
 /**
- * How long `teamree quit` waits for the endpoint to go. Teardown kills a process
- * tree per pane and writes every transcript, so a busy workspace takes a second or two.
+ * How long `teamree quit` waits for the app to go. Teardown kills a process
+ * tree per pane and writes every transcript, then Electron exits, so a busy workspace takes a second or two.
  */
 export const DEFAULT_QUIT_TIMEOUT_MS = 20_000
 
-/** How often the endpoint is looked for while quitting. */
+/** How often the endpoint and the process are looked for while quitting. */
 const QUIT_POLL_MS = 25
 
 /** Fallback cadence when the runtime has no change stream to listen to. */
@@ -151,32 +151,45 @@ export async function waitForState<T>(
   throw new WaitTimeout(what, timeoutMs, interrupted)
 }
 
-export type EndpointOutcome = {
-  /** False when the wait ran out with the endpoint still there. */
+export type AppGoneOutcome = {
+  /** True only once the endpoint is gone and the app's process has exited. */
   gone: boolean
-  /** Null when the endpoint is a named pipe, which cannot be watched from here. */
+  /** The socket goes mid-teardown, well before the process: true here and false above means still quitting. */
+  endpointGone: boolean
+  /** Null when there was nothing that could be watched: a named pipe, and no pid. */
   waitedMs: number | null
 }
 
 /**
- * Waits for the endpoint to disappear: the socket file is removed last in
- * `Runtime.stop`, so its absence proves the whole teardown ran, where a reply to
- * `app.quit` only proves the app heard. A Windows named pipe cannot be stat'd, so the wait says so.
+ * Waits for the app to be gone: its socket, which the teardown removes, and then
+ * its process, which outlives the socket by as long as Electron takes to exit.
+ * A Windows named pipe cannot be stat'd, so there only the pid is watched.
  */
-export async function waitForEndpointGone(
-  options: { endpoint: string; timeoutMs: number; exists?: (path: string) => boolean } & WaitTiming
-): Promise<EndpointOutcome> {
-  const { endpoint, timeoutMs } = options
-  if (isPipe(endpoint)) return { gone: true, waitedMs: null }
+export async function waitForAppGone(
+  options: {
+    endpoint: string
+    pid: number | null
+    timeoutMs: number
+    exists?: (path: string) => boolean
+    isAlive?: (pid: number) => boolean
+  } & WaitTiming
+): Promise<AppGoneOutcome> {
+  const { endpoint, pid, timeoutMs } = options
+  const pipe = isPipe(endpoint)
+  if (pipe && pid === null) return { gone: true, endpointGone: true, waitedMs: null }
   const exists = options.exists ?? existsSync
+  const isAlive = options.isAlive ?? isProcessAlive
   const clock = options.clock ?? systemClock
   const delay = options.delay ?? realDelay
 
   let observedMs = 0
+  let endpointGone = pipe
   while (true) {
+    endpointGone ||= !exists(endpoint)
     // Rounded: the monotonic clock counts fractions of a millisecond and this is printed.
-    if (!exists(endpoint)) return { gone: true, waitedMs: Math.round(observedMs) }
-    if (observedMs >= timeoutMs) return { gone: false, waitedMs: Math.round(observedMs) }
+    const waitedMs = Math.round(observedMs)
+    if (endpointGone && (pid === null || !isAlive(pid))) return { gone: true, endpointGone, waitedMs }
+    if (observedMs >= timeoutMs) return { gone: false, endpointGone, waitedMs }
     const tick = await observeIdle(clock, QUIT_POLL_MS, () => delay(QUIT_POLL_MS))
     observedMs += tick.observedMs
   }

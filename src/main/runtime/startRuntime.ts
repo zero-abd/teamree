@@ -13,6 +13,7 @@ import { WorkspaceStore } from '../store/workspaceStore'
 import { createDispatcher, type Dispatcher } from './dispatcher'
 import { discoveryFilePath, removeDiscoveryFile, writeDiscoveryFile } from './discoveryFile'
 import { registerHandlers } from './handlers/registerHandlers'
+import { releaseInTurn } from './releaseInTurn'
 import { MethodRegistry } from './methodRegistry'
 import { createRuntimeContext, type RuntimeContext } from './runtimeContext'
 import { resolveEndpoint } from './socketEndpoint'
@@ -20,6 +21,9 @@ import { startSocketServer, type RuntimeSocketServer } from './socketServer'
 import { SubscriptionHub } from './subscriptionHub'
 
 export const WORKSPACE_FILE_NAME = 'workspace.json'
+
+/** How long one resource may take to let go on the way out; the panes' own kill grace is far shorter. */
+const RELEASE_GRACE_MS = 5_000
 
 export type RuntimeOptions = {
   userDataDir: string
@@ -160,34 +164,37 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
 
   // Declared before the rest of the assembly because the assembly may not reach
   // the handle, and every step works on a runtime only part-way up. Each step is
-  // its own: one that throws is reported and the next still runs, so the socket
-  // and discovery file, which the world outside can see, go last and regardless.
-  const stop = async (): Promise<void> => {
-    const step = async (release: () => void | Promise<void>): Promise<void> => {
-      try {
-        await release()
-      } catch (error) {
-        report(error)
-      }
-    }
-    await step(uninstallBridge)
-    // A pending check firing during shutdown would be a request nobody reads.
-    await step(() => areas.updates.stop())
-    await step(() => areas.bases.stop())
-    await step(() => areas.context.close())
-    // Before the PTYs: a teammate must not watch panes already being killed.
-    await step(() => areas.peers.stop())
-    // Before the PTYs, because a shell dying rewrites files.
-    await step(() => areas.worktreeFiles.close())
-    await step(() => areas.teamworkFiles.close())
-    // Kills every PTY before the sockets go, so nothing is orphaned.
-    await step(() => areas.terminals.shutdown())
-    await step(() => subscriptions.closeAll())
-    if (socketServer) await step(socketServer.close)
-    // Whether or not the socket was ever bound: only this process writes the file.
-    if (wroteDiscovery) await step(() => removeDiscoveryFile(discoveryPath))
-    await step(() => store.flush())
-  }
+  // its own and bounded: one that throws or hangs is reported and the next still
+  // runs, so the socket and discovery file, which the world outside can see, go regardless.
+  const stop = (): Promise<void> =>
+    releaseInTurn(
+      [
+        { name: 'the renderer bridge', release: uninstallBridge },
+        // State first: whatever the rest does, the workspace and the ledgers are on disk.
+        { name: 'the workspace file', release: () => store.flush() },
+        { name: 'the context ledgers', release: () => areas.context.close() },
+        // A pending check firing during shutdown would be a request nobody reads.
+        { name: 'the update check', release: () => areas.updates.stop() },
+        { name: 'the base fetches', release: () => areas.bases.stop() },
+        // Before the PTYs: a teammate must not watch panes already being killed.
+        { name: 'the relay', release: () => areas.peers.stop() },
+        // Before the PTYs, because a shell dying rewrites files.
+        { name: 'the worktree watchers', release: () => areas.worktreeFiles.close() },
+        { name: 'the teamwork watchers', release: () => areas.teamworkFiles.close() },
+        // Kills every PTY before the sockets go, so nothing is orphaned, then writes their scrollback.
+        { name: 'the panes', release: () => areas.terminals.shutdown() },
+        { name: 'the subscriptions', release: () => subscriptions.closeAll() },
+        { name: 'the CLI socket', release: () => socketServer?.close() },
+        // Whether or not the socket was ever bound: only this process writes the file.
+        {
+          name: 'the discovery file',
+          release: () => (wroteDiscovery ? removeDiscoveryFile(discoveryPath) : undefined)
+        },
+        // Again: the teardown itself changes the workspace.
+        { name: 'the workspace file', release: () => store.flush() }
+      ],
+      { graceMs: RELEASE_GRACE_MS, onProblem: report }
+    )
 
   try {
     // After the dispatcher: a teammate reaching a half-filled registry would be

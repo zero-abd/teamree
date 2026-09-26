@@ -56,6 +56,7 @@ import { EXITED_RETENTION_BYTES, PtySession, type PtySessionInit } from './pty-s
 import { conflict, invalidParams, notFound } from './service-error'
 import { resolveLoginShell } from './shell-environment'
 import { SubagentTracker, type SubagentTrackerOptions } from './subagents'
+import { QUIT_KILL_GRACE_MS } from './process-tree'
 import type { Tone } from '../../shared/theme'
 
 /** Size a pane starts at before the renderer measures itself and resizes. */
@@ -741,14 +742,14 @@ export class TerminalSessionManager {
     })
   }
 
-  /** Kills every PTY. Call from the app's before-quit path. */
+  /** Kills every PTY on the quit's short grace, then writes their output. Call from the app's before-quit path. */
   async shutdown(): Promise<void> {
     this.subagents.close()
     const sessions = [...this.sessions.values()]
     this.sessions.clear()
     for (const terminalId of [...this.streams.keys()]) this.endStreamsFor(terminalId)
     this.ownSubscriptions.clear()
-    await Promise.all(sessions.map((session) => session.close()))
+    await Promise.all(sessions.map((session) => session.close(QUIT_KILL_GRACE_MS)))
 
     // After the closes: tearing a pty down drains undelivered output (see
     // `pty-tail.ts`), which arms a checkpoint that would fire after the flush.

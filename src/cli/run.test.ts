@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -1338,40 +1339,50 @@ describe('a project’s path lists in --json', () => {
 })
 
 describe('quitting the app', () => {
-  /** A stub that answers `app.quit` and then goes, socket and all, as the app does. */
-  async function quittingHarness(options: { reply?: boolean; leave?: boolean } = {}): Promise<Harness> {
-    const { reply = true, leave = true } = options
-    let stub: StubRuntime | undefined
-    const cli = await harness((method, params, context) => {
-      if (method !== 'app.quit') return defaultHandler(method, params, context)
-      if (leave) setTimeout(() => void stub?.close(), 10)
-      return reply ? { quitting: true, pid: 4242 } : NO_REPLY
-    })
-    stub = cli.stub
-    return cli
+  /** A process that has already exited: what the app's pid is once it has really gone. */
+  const exitedPid = (): number => {
+    const pid = spawnSync(process.execPath, ['-e', '']).pid
+    if (pid === undefined) throw new Error('no process could be started to stand in for a gone app')
+    return pid
   }
 
-  it('asks the app to quit and returns once the endpoint has gone', async () => {
+  /** A stub that answers `app.quit` and then goes, socket and all, as the app does. */
+  async function quittingHarness(
+    options: { reply?: boolean; leave?: boolean; pid?: number } = {}
+  ): Promise<Harness & { pid: number }> {
+    const { reply = true, leave = true, pid = exitedPid() } = options
+    let stub: StubRuntime | undefined
+    const cli = await harness((method, params, context) => {
+      if (method === 'status.get') return { ...(defaultHandler(method, params, context) as object), pid }
+      if (method !== 'app.quit') return defaultHandler(method, params, context)
+      if (leave) setTimeout(() => void stub?.close(), 10)
+      return reply ? { quitting: true, pid } : NO_REPLY
+    })
+    stub = cli.stub
+    return { ...cli, pid }
+  }
+
+  it('asks the app to quit and returns once the endpoint and the process have gone', async () => {
     const cli = await quittingHarness()
     const result = await cli.run(['quit'])
 
     expect(result.code).toBe(ExitCode.Success)
     expect(cli.stub.received.map((entry) => entry.method)).toContain('app.quit')
     expect(result.out).toContain('pid')
-    expect(result.out).toContain('4242')
+    expect(result.out).toContain(String(cli.pid))
     expect(existsSync(cli.stub.endpoint)).toBe(false)
   })
 
   // The quit takes the connection the reply was travelling on, so losing it is
-  // not evidence of failure. The endpoint is.
-  it('counts a connection that died mid-quit as a quit, once the endpoint is gone', async () => {
+  // not evidence of failure. The endpoint and the pid are.
+  it('counts a connection that died mid-quit as a quit, once the app is gone', async () => {
     const cli = await quittingHarness({ reply: false })
     const result = await cli.run(['quit', '--json'])
 
     expect(result.code).toBe(ExitCode.Success)
     const data = soleJsonDocument(result.out)['data'] as Record<string, unknown>
     expect(data['quit']).toBe(true)
-    expect(data['pid']).toBe(null)
+    expect(data['pid']).toBe(cli.pid)
   })
 
   it('fails when the app was asked and the endpoint is still there', async () => {
@@ -1381,6 +1392,16 @@ describe('quitting the app', () => {
     expect(result.code).toBe(ExitCode.Failure)
     const document = JSON.parse(result.err) as { error: { code: string } }
     expect(document.error.code).toBe('quit_timeout')
+  })
+
+  // The socket goes mid-teardown, seconds before the process can: that is not "gone".
+  it('says the app is still quitting while its process outlives the socket', async () => {
+    const cli = await quittingHarness({ pid: process.pid })
+    const result = await cli.run(['quit', '--timeout-ms', '100'])
+
+    expect(result.code).toBe(ExitCode.Failure)
+    expect(result.err).toContain('still quitting')
+    expect(result.err).toContain(String(process.pid))
   })
 
   it("passes the app's refusal over unsaved files on, and asks with force when told to", async () => {

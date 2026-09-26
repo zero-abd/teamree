@@ -6,7 +6,7 @@ import { readBoolean, readNumber } from '../argv.js'
 import type { CommandSpec } from '../command-spec.js'
 import { CliError, ExitCode } from '../exit.js'
 import { formatFields } from '../output.js'
-import { DEFAULT_QUIT_TIMEOUT_MS, waitForEndpointGone } from '../waiting.js'
+import { DEFAULT_QUIT_TIMEOUT_MS, waitForAppGone } from '../waiting.js'
 
 /** Failures that are as likely to be the app leaving as they are a fault. */
 const LEAVING = new Set(['connection_lost', 'connection_closed'])
@@ -19,8 +19,8 @@ export const quitCommands: readonly CommandSpec[] = [
       'The app quits the way its quit key does, so panes are killed, their transcripts written, and the ' +
       'socket and discovery file released before this returns. Refused while a file in the app has unsaved ' +
       'edits, unless --force.\n\n' +
-      'Returns once the endpoint is gone, which is the last thing the teardown does. Exit code 3 when no ' +
-      'app is running, 1 when one was asked and the endpoint was still there when the wait ran out.',
+      "Returns once the endpoint is gone and the app's process has exited. Exit code 3 when no app is " +
+      'running, 1 when one was asked and was still quitting when the wait ran out.',
     flags: [
       {
         name: 'timeout-ms',
@@ -38,31 +38,34 @@ export const quitCommands: readonly CommandSpec[] = [
     run: async (context) => {
       const timeoutMs = readNumber(context.flags, 'timeout-ms') ?? DEFAULT_QUIT_TIMEOUT_MS
       const endpoint = context.client.endpoint
+      // Asked first: the reply to the quit can be lost with the connection, and the pid is the proof it went.
+      const { pid } = await context.client.call('status.get', {})
 
-      let pid: number | null = null
       try {
-        pid = (await context.client.call('app.quit', readBoolean(context.flags, 'force') ? { force: true } : {})).pid
+        await context.client.call('app.quit', readBoolean(context.flags, 'force') ? { force: true } : {})
       } catch (error) {
         // The quit takes the connection the reply was travelling on; the
-        // endpoint below is the better evidence.
+        // endpoint and the pid below are the better evidence.
         if (!(error instanceof CliError) || !LEAVING.has(error.code)) throw error
       }
 
-      const outcome = await waitForEndpointGone({ endpoint, timeoutMs })
+      const outcome = await waitForAppGone({ endpoint, pid, timeoutMs })
       if (!outcome.gone) {
         throw new CliError({
           code: 'quit_timeout',
-          message: `The app was asked to quit, but ${endpoint} was still there after ${timeoutMs}ms.`,
+          message: outcome.endpointGone
+            ? `The app is still quitting: pid ${pid} had not exited after ${timeoutMs}ms.`
+            : `The app was asked to quit, but ${endpoint} was still there after ${timeoutMs}ms.`,
           exitCode: ExitCode.Failure,
           hint: 'A pane refusing to die holds the teardown. Raise --timeout-ms, or check the app.',
-          data: { pid, endpoint, timeoutMs }
+          data: { pid, endpoint, timeoutMs, endpointGone: outcome.endpointGone }
         })
       }
 
       return {
         data: { quit: true, pid, endpoint, waitedMs: outcome.waitedMs },
         text: formatFields([
-          ['pid', pid === null ? '-' : String(pid)],
+          ['pid', String(pid)],
           ['endpoint', endpoint],
           ['gone after', outcome.waitedMs === null ? 'unwatched (named pipe)' : `${outcome.waitedMs}ms`]
         ])
