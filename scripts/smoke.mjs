@@ -11,14 +11,17 @@ import { pathToFileURL } from 'node:url'
 import { childEnv } from './child-env.mjs'
 import { runPeerCheck } from './electron-peer-check.mjs'
 import { FIXTURE_REPO_FLAG, PEER_BUNDLE_FLAG, USER_DATA_FLAG, readNamedArg } from './smoke-args.mjs'
+import { pressWorktreeRow, worktreeRowIsOpen } from './smoke-probes.mjs'
 
-const TIMEOUT_MS = 30_000
+// Each wait fails on its own after READY_MS; the whole-run cap only catches a hang outside one, and names the last wait.
+const TIMEOUT_MS = 120_000
 const READY_MS = 15_000
 const root = process.cwd()
 const failures = []
+let waitingOn = 'launch'
 
 const bail = setTimeout(() => {
-  console.error(`smoke: timed out after ${TIMEOUT_MS}ms`)
+  console.error(`smoke: timed out after ${TIMEOUT_MS}ms, last waiting on: ${waitingOn}`)
   process.exit(1)
 }, TIMEOUT_MS)
 
@@ -84,6 +87,7 @@ function finish() {
 /** Polls `probe` until it is true, and records `failure` if it never is. */
 async function waitFor(probe, failure) {
   const deadline = Date.now() + READY_MS
+  waitingOn = failure
   for (;;) {
     if (await probe()) return true
     if (Date.now() >= deadline) {
@@ -377,22 +381,17 @@ async function checkWorktreeSurfaces(ask) {
   }, 'the worktree never became ready, so nothing below it could be checked')
   if (!ready) return
 
-  // Pressed in the sidebar, and only once it can be: the row is disabled while
-  // the checkout is being made, and a click on a disabled button succeeds at
-  // nothing. The runtime saying `ready` is not the window having heard it.
-  const opened = await waitFor(
-    () =>
-      ask(
-        `(() => {
-           const row = [...document.querySelectorAll('button')].find(
-             (node) => node.textContent?.includes('smoke task')
-           )
-           if (!row || row.disabled) return false
-           row.click()
-           return true
-         })()`
-      ),
+  // Pressed in the sidebar, and only once the window has heard it is ready: the
+  // runtime saying `ready` is not the window having heard it, and a press on a
+  // row still being created does nothing.
+  const pressed = await waitFor(
+    () => ask(pressWorktreeRow('smoke task')),
     'the worktree never became openable in the sidebar'
+  )
+  if (!pressed) return
+  const opened = await waitFor(
+    () => ask(worktreeRowIsOpen('smoke task')),
+    'pressing the worktree in the sidebar did not open it'
   )
   if (!opened) return
 
@@ -461,7 +460,7 @@ async function checkWorktreeSurfaces(ask) {
   // Matched on the pane's title, not a count: a strip showing another
   // worktree's panes would satisfy a count.
   const title = terminal.result.title
-  await waitFor(
+  const tabbed = await waitFor(
     () =>
       ask(
         `[...document.querySelectorAll('[role="tablist"] button, .tabs button')].some(
@@ -470,6 +469,7 @@ async function checkWorktreeSurfaces(ask) {
       ),
     `no tab for the pane the runtime opened (${title})`
   )
+  if (!tabbed) return
 
   await checkPaneLinks(ask, call, terminal.result.id)
 

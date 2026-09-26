@@ -15,6 +15,8 @@ import type {
   WorktreeMergePreview,
   WorktreeStatus
 } from '@shared/entities'
+// @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
+import { pressWorktreeRow, worktreeRowIsOpen } from '../../../../scripts/smoke-probes.mjs'
 import type { PaneAttention } from '../state/paneAttention'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
@@ -196,6 +198,26 @@ describe('a worktree still being made', () => {
     fireEvent.contextMenu(row())
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete Worktree…' }))
     expect(handlers.onRemove).toHaveBeenCalledOnce()
+  })
+})
+
+// The release smoke presses rows with these; pressing one still being created opened nothing.
+describe('the smoke probes', () => {
+  const inWindow = (code: string): unknown => new Function(`return ${code}`)()
+
+  it('wait for a row being created instead of pressing it', () => {
+    mount({ worktree: worktree({ state: 'creating' }) })
+    expect(inWindow(pressWorktreeRow('Rewrite the pager'))).toBe(false)
+  })
+
+  it('press a ready row and see it open', () => {
+    mount()
+    expect(inWindow(pressWorktreeRow('Rewrite the pager'))).toBe(true)
+    expect(handlers.onOpen).toHaveBeenCalledOnce()
+    expect(inWindow(worktreeRowIsOpen('Rewrite the pager'))).toBe(false)
+    cleanup()
+    mount({ active: true })
+    expect(inWindow(worktreeRowIsOpen('Rewrite the pager'))).toBe(true)
   })
 })
 
