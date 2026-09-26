@@ -217,19 +217,30 @@ const LEADING_BULLET = /^[•⏺●][ \t]*/u
 /** Opens Claude's recap of a turn. */
 const RECAP_GLYPH = '※'
 
-/** A row whose indented rows below belong to it and are chrome too: a recap, or a composer. */
-const CHROME_HEAD = /^(?:※|[❯›](?:\s|$))/u
+/** A row whose indented rows below belong to it and are chrome too: a recap, a composer, or a dialog's rule. */
+const CHROME_HEAD = /^(?:※|[❯›](?:\s|$)|[\u2500-\u259f]{2})/u
 
 /** Codex's composer glyph: from here on the line is the composer drawn over the output, never output. */
 const COMPOSER_GLYPH = '›'
 
+/** The tail of a CSI the tail slice cut in half: `[?25h`, `38;2;153;153;153m`. Needs a digit, so `[E]` stays. */
+const ESCAPE_REMNANT = /^(?:\[[?>=<]?\d[\d;]*|\d+(?:;\d+)+)[A-Za-z@`~]/u
+
+/** An OSC title whose escape the tail slice cut off: `]0;✳ Claude Code`. */
+const OSC_REMNANT = /^\]\d+;/u
+
 function tidy(line: string): string {
   const output = line.split(COMPOSER_GLYPH, 1)[0] ?? ''
-  return output.replace(/\s+/g, ' ').trim().replace(LEADING_SPINNER, '').replace(LEADING_BULLET, '')
+  return output
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(ESCAPE_REMNANT, '')
+    .replace(LEADING_SPINNER, '')
+    .replace(LEADING_BULLET, '')
 }
 
-/** Two box-drawing or block characters: a TUI's frame or rule, whatever is drawn over the rest of it. */
-const FRAME = /^[\u2500-\u259f]{2}/u
+/** A TUI's frame or rule: two box-drawing or block characters leading, or three anywhere in a garbled redraw. */
+const FRAME = /^[\u2500-\u259f]{2}|[\u2500-\u259f]{3}/u
 
 /** A composer's line: what sits there was typed or suggested, not printed. */
 const COMPOSER_LINE = /^[❯›] /u
@@ -242,15 +253,30 @@ const AGENT_FOOTERS = [
   /\b\d+% context left\b/iu,
   /⏎ send/u,
   /\(disable recaps in \/config\)/u,
-  /^✻ \p{L}+ for \d/u
+  /^✻ \p{L}+ for \d/u,
+  /^[·✢✳✶✻✽] \p{L}+…/u,
+  /^[⏵⏸]/u,
+  /· \/effort$/u,
+  /\besc to cancel\b/iu,
+  /\benter to confirm\b/iu
 ]
 
 /** The asides the app writes around a restored pane's record (see `scrollbackRecord.ts`); not the program's output. */
 const OWN_MARK = /^\[(?:record — up to |end of record — |resume refused — |no conversation to resume — )/
 
-/** A line with nothing to act on: a bare prompt, a frame, an agent's footer or composer, a spinner frame, the app's own mark. */
+/** A fragment: `E`, `│`, `⠋`, `…` — fewer letters and digits than any word worth quoting. */
+const MIN_WORD_CHARS = 3
+
+/** Whether `line` says something a row could quote: not a fragment, a frame, a prompt or an agent's chrome. */
+export function saysSomething(line: string): boolean {
+  const tidied = tidy(line)
+  return tidied.length > 0 && !isUninformative(tidied)
+}
+
+/** A line with nothing to act on: a fragment, a bare prompt, a frame, an agent's footer or composer, the app's own mark. */
 function isUninformative(line: string): boolean {
-  if (!/[\p{L}\p{N}]/u.test(line)) return true
+  if ((line.match(/[\p{L}\p{N}]/gu)?.length ?? 0) < MIN_WORD_CHARS) return true
+  if (OSC_REMNANT.test(line)) return true
   if (FRAME.test(line) || COMPOSER_LINE.test(line) || AGENT_FOOTERS.some((footer) => footer.test(line))) return true
   return OWN_MARK.test(line) || line.startsWith(RECAP_GLYPH) || isBarePrompt(line)
 }

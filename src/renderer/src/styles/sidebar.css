@@ -402,6 +402,7 @@
 }
 
 .worktree__tally {
+  margin-left: auto;
   color: var(--fg-secondary);
 }
 
@@ -483,6 +484,12 @@
   gap: var(--s2);
   width: 100%;
   min-width: 0;
+}
+
+/* Too narrow for its facts, the line wraps the tally under them rather than past the row's edge. */
+.worktree__meta {
+  flex-wrap: wrap;
+  row-gap: 2px;
 }
 
 .worktree__name {
@@ -574,7 +581,7 @@
 /* Takes the slack on its line, which pushes the chips and the merge badge to
    the right edge and lets the branch itself be the part that gives way. */
 .worktree__branch {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
