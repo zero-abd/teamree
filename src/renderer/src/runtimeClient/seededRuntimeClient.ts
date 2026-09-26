@@ -1353,6 +1353,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       throw new Error('that note is gone')
     },
     'teamwork.closeNote': () => ({ closed: false }),
+    'teamwork.dismissNote': () => ({ dismissed: false }),
 
     'agent.list': ({ versions }) => [
       { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude', ...(versions ? { version: '2.1.3' } : {}) },

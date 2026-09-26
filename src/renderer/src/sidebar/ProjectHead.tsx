@@ -47,6 +47,7 @@ export function ProjectHead({
   // A row dropped here goes to the top level.
   const drop = useNestDrop({ projectId: project.id }, false)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
+  const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
   const anyMerged = useWorkspaceStore((state) =>
     state.worktrees.some((worktree) => worktree.projectId === project.id && state.landings[worktree.id]?.merged)
   )
@@ -71,6 +72,7 @@ export function ProjectHead({
     ...(anyMerged
       ? [{ label: 'Clean Up Merged…', onChoose: () => openDialog({ kind: 'clean-up', projectId: project.id }) }]
       : []),
+    { label: 'Teamwork…', onChoose: () => openTeamwork(project.id), separated: true },
     { label: 'Remove from teamree', onChoose: onForget, separated: true },
     { label: 'Move to Trash…', onChoose: onTrash, danger: true }
   ]

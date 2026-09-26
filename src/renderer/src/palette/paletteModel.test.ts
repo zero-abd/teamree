@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CliStatus, InstalledAgent, Project, Terminal, UpdateState, Worktree } from '@shared/entities'
+import type { SharedNoteSummary } from '@shared/sharedNote'
 import { menuBarSpec } from '../menu/menuBar'
 import {
   buildPaletteItems,
@@ -898,6 +899,47 @@ describe('Clean Up Merged in the palette', () => {
       ['clean-up:p2', 'Clean Up Merged…', 'ledger', undefined]
     ])
     expect(filterPalette(items, 'clean up').map((item) => item.id)).toEqual(['clean-up:p2'])
+  })
+})
+
+describe('Teamwork and shared notes in the palette', () => {
+  const note = (shareId: string, over: Partial<SharedNoteSummary> = {}): SharedNoteSummary => ({
+    shareId,
+    projectId: 'p2',
+    handle: 'ana',
+    publicKey: 'k',
+    noteId: 'NOTES.md',
+    title: 'Search API plan',
+    sentAt: 0,
+    receivedAt: Date.now() - 5 * 60_000,
+    seen: false,
+    bytes: 10,
+    ...over
+  })
+
+  it('has a Teamwork row per project, whether or not it has a task, with its unread notes as the hint', () => {
+    const items = buildPaletteItems(context({ sharedNotes: [note('s1'), note('s2', { read: true })] }))
+    const rows = items.filter((item) => item.id.startsWith('teamwork:'))
+    expect(rows.map((item) => [item.id, item.label, item.hint])).toEqual([
+      ['teamwork:p1', 'Teamwork', 'atlas'],
+      ['teamwork:p2', 'Teamwork', 'ledger · 1 unread']
+    ])
+    expect(filterPalette(items, 'teamwork ledger')[0]?.id).toBe('teamwork:p2')
+  })
+
+  it('lists each shared note, newest first, found by title or sender', () => {
+    const items = buildPaletteItems(
+      context({ sharedNotes: [note('s1', { title: 'Old', receivedAt: 0, read: true }), note('s2')] })
+    )
+    const rows = items.filter((item) => item.id.startsWith('shared-note:'))
+    expect(rows.map((item) => [item.id, item.label, item.hint])).toEqual([
+      ['shared-note:s2', 'Shared Note: Search API plan', 'ana · 5m ago · unread'],
+      ['shared-note:s1', 'Shared Note: Old', expect.stringMatching(/^ana · /)]
+    ])
+    expect(filterPalette(items, 'search api')[0]?.id).toBe('shared-note:s2')
+    expect(filterPalette(items, 'ana').map((item) => item.id)).toEqual(
+      expect.arrayContaining(['shared-note:s1', 'shared-note:s2'])
+    )
   })
 })
 

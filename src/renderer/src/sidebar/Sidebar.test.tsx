@@ -35,6 +35,7 @@ const { Sidebar } = await import('./Sidebar')
 const { worktreeOrder } = await import('./worktreeOrder')
 const { useTaskTreeStore } = await import('../state/taskTreeStore')
 const { NEST_DRAG_TYPE, endNestDrag } = await import('./nestDrag')
+const { useSharedNotes } = await import('../teamwork/sharedNotesStore')
 
 const INITIAL = useWorkspaceStore.getState()
 const NOW = Date.now()
@@ -459,6 +460,33 @@ describe('the rail above the tree', () => {
     mount()
     screen.getByRole('button', { name: 'All Panes' }).click()
     expect(toggleDashboard).toHaveBeenCalledOnce()
+  })
+
+  it('counts the shared notes nobody has read yet on its Teamwork entry', () => {
+    const note = {
+      projectId: 'p1',
+      handle: 'ana',
+      publicKey: 'k',
+      noteId: 'n',
+      title: 'Plan',
+      sentAt: 0,
+      receivedAt: 0,
+      bytes: 1
+    }
+    useSharedNotes.setState({
+      inbox: [
+        { ...note, shareId: 's1', seen: true },
+        { ...note, shareId: 's2', seen: false },
+        { ...note, shareId: 's3', seen: true, read: true }
+      ],
+      deleting: {}
+    })
+    try {
+      mount()
+      expect(screen.getByRole('button', { name: 'Teamwork 2 unread' })).toBeTruthy()
+    } finally {
+      useSharedNotes.setState({ inbox: [] })
+    }
   })
 
   // Teamwork is set up per repository; with none added the entry says why.
@@ -1076,6 +1104,12 @@ describe('starting a task in any project from the keyboard', () => {
     fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
     fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Trash…' }))
     expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-trash-project', projectId: 'p2' })
+  })
+
+  it('reaches the project’s Teamwork page from its menu, with or without a task in it', () => {
+    fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Teamwork…' }))
+    expect(openTeamwork).toHaveBeenCalledExactlyOnceWith('p2')
   })
 
   it('offers Clean Up Merged… only in a project with a merged worktree', () => {

@@ -32,6 +32,7 @@ import { overlapChip } from './overlapChip'
 import { openOverlap, overlapNamer } from './useOverlapChip'
 import { handoffLine, useHandoffs } from '../teamwork/handoffsStore'
 import { agentWords, worktreeDisplay, worktreeLabel } from './worktreeDisplay'
+import { unreadNotes, useSharedNotes } from '../teamwork/sharedNotesStore'
 
 export function Sidebar({
   searchHint
@@ -155,6 +156,7 @@ export function Sidebar({
   // worktree is open, else the first. Undefined only before any has been added.
   const active = worktrees.find((entry) => entry.id === activeWorktreeId)
   const railProject = projects.find((project) => project.id === active?.projectId) ?? projects[0]
+  const notesUnread = useSharedNotes((state) => unreadNotes(state))
   const pageOpen = dashboardOpen || settingsOpen || helpOpen || teamworkProjectId !== null
 
   return (
@@ -215,7 +217,12 @@ export function Sidebar({
                 <path d="M1.6 11.4c0-2 1.5-3.2 3.4-3.2s3.4 1.2 3.4 3.2" />
                 <path d="M9.3 8.4c1.7 0 3.1 1 3.1 2.6" />
               </svg>
-              <span>Teamwork</span>
+              <span>Teamwork</span>{' '}
+              {notesUnread > 0 ? (
+                <span className="rail__badge" role="img" aria-label={`${notesUnread} unread`}>
+                  {notesUnread}
+                </span>
+              ) : null}
             </button>
           </li>
           <li>

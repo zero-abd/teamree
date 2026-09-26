@@ -40,6 +40,8 @@ export type SharedNoteSummary = {
   receivedAt: number
   /** Opened or dismissed from its popup once; a seen note no longer asks for attention. */
   seen: boolean
+  /** Opened whole at least once; the unread count is the notes without it. */
+  read?: boolean
   bytes: number
 }
 

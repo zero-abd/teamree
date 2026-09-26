@@ -69,7 +69,7 @@ import { createRemoteWriteLog, returnsIn, type RemoteWriteRecorder } from './wri
 import { previewOf } from './writePreview'
 import { loadIdentity, loadStaticPrivateKey } from '../identity'
 import { readRoster } from '../roster'
-import { createNoteInbox, type NoteInbox } from './noteInbox'
+import { createNoteInbox, NOTES_DIR, type NoteInbox } from './noteInbox'
 import { watchPane } from './paneWatch'
 import { createPeerLink, type LinkScheduler, type PeerLink } from './peerLink'
 import { presenceFor, type PresenceProject, type PresenceSource } from './presence'
@@ -161,6 +161,8 @@ type ProjectFacts = {
    */
   originMark: string | undefined
   rosterKeys: string[]
+  /** False when the roster could not be read, so an empty `rosterKeys` says nothing about the team. */
+  rosterRead: boolean
   /** Public key to the handle the roster files it under, for display. */
   handles: Map<string, string>
   relay: RelayLocation | null
@@ -291,7 +293,11 @@ export class PeerService {
       now: () => this.#scheduler.now(),
       ...(options.onError ? { onError: options.onError } : {})
     })
-    this.#notes = createNoteInbox({ now: () => this.#scheduler.now() })
+    this.#notes = createNoteInbox({
+      now: () => this.#scheduler.now(),
+      dir: join(options.dataDir, NOTES_DIR),
+      ...(options.onError ? { onError: options.onError } : {})
+    })
     this.#handoffs = new HandoffBook(join(options.dataDir, HANDOFFS_FILE), options.onError)
   }
 
@@ -321,6 +327,8 @@ export class PeerService {
     // Before the links, so a wake during startup finds them already listening.
     this.#unwatchWake ??= await (this.#options.watchWake ?? watchForWake)(() => this.#wake())
     await (this.#handoffsRead ??= this.#handoffs.load())
+    // Before the reconcile, which drops notes whose sender has left the roster.
+    await this.#notes.load()
     await this.reconcile()
   }
 
@@ -333,7 +341,8 @@ export class PeerService {
     for (const record of this.#links.values()) record.link.wake()
   }
 
-  stop(): void {
+  /** Resolves once received notes are on disk; the rest stops at once. */
+  stop(): Promise<void> {
     this.#started = false
     this.#cancelCoalesce?.()
     this.#cancelCoalesce = undefined
@@ -361,6 +370,7 @@ export class PeerService {
     this.#subscribers.clear()
     this.#watchers.clear()
     for (const linkId of Array.from(this.#watching.keys())) this.#endWatches(linkId, 'teamwork stopped')
+    return this.#notes.flush()
   }
 
   /**
@@ -378,7 +388,10 @@ export class PeerService {
     this.#projects.clear()
     for (const fact of facts) this.#projects.set(fact.projectId, fact)
     // A note stays only while its sender is still on its project's roster.
-    this.#notes.dropWhere((note) => !this.#projects.get(note.projectId)?.rosterKeys.includes(note.publicKey))
+    this.#notes.dropWhere((note) => {
+      const fact = this.#projects.get(note.projectId)
+      return fact === undefined || (fact.rosterRead && !fact.rosterKeys.includes(note.publicKey))
+    })
 
     // One link per (teammate, project) with a relay and a project key, each with
     // its own rendezvous and session.
@@ -1170,6 +1183,12 @@ export class PeerService {
     return this.#handoffs.flush()
   }
 
+  dismissNote(params: ParamsOf<'teamwork.dismissNote'>): { dismissed: boolean } {
+    const dismissed = this.#notes.dismiss(params.shareId)
+    if (dismissed) this.#options.onChange()
+    return { dismissed }
+  }
+
   /** Something in the workspace moved: bump the revision and tell the peers once per burst. */
   notifyWorkspaceChanged(): void {
     this.#requestTaskDetails()
@@ -1870,6 +1889,7 @@ export class PeerService {
       projectKey: key.ok ? key.key : undefined,
       originMark: mark,
       rosterKeys: roster.entries.map((entry) => entry.publicKey),
+      rosterRead: read.ok,
       relay: relay.configured ? relay.location : null,
       enrolled: roster.entries.some((entry) => entry.publicKey === identityKey),
       disabledReason: null,

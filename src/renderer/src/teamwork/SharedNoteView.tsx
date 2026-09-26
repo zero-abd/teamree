@@ -18,6 +18,20 @@ function openWebLink(url: string): void {
 const noImage = (): null => null
 const ignore = (): void => {}
 
+/** A received note's text, drawn read-only with the same guards wherever it is shown. */
+export function SharedNoteText({ markdown }: { markdown: string }): React.JSX.Element {
+  return (
+    <MarkdownEditor
+      initial={markdown}
+      readOnly
+      onChange={ignore}
+      onFocusChange={ignore}
+      onOpenUrl={openWebLink}
+      resolveImage={noImage}
+    />
+  )
+}
+
 export function SharedNoteView({
   shareId,
   worktreeId,
@@ -90,16 +104,7 @@ export function SharedNoteView({
         <div className="file__view">
           {note === undefined ? <div className="md-frame" /> : null}
           {note === null ? <div className="md-frame shared-note__gone">Gone</div> : null}
-          {note ? (
-            <MarkdownEditor
-              initial={note.markdown}
-              readOnly
-              onChange={ignore}
-              onFocusChange={ignore}
-              onOpenUrl={openWebLink}
-              resolveImage={noImage}
-            />
-          ) : null}
+          {note ? <SharedNoteText markdown={note.markdown} /> : null}
         </div>
       </div>
     </section>

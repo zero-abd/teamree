@@ -4,10 +4,13 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { copyText } from '../clipboard/clipboard'
+import { Select } from '../dialogs/Select'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { TerminalView } from '../terminal/TerminalView'
 import { PageFrame } from '../workspace/PageFrame'
+import { SharedNotesList } from './SharedNotesList'
+import { unreadNotes, useSharedNotes } from './sharedNotesStore'
 import { TeamworkSteps } from './TeamworkSteps'
 import type { TeamworkPath } from './startTeamwork'
 
@@ -27,7 +30,11 @@ const RELAY_PANE_TAIL_BYTES = 32_768
 const PUBLISH_POLL_MS = 500
 
 export function TeamworkView({ projectId }: { projectId: string }): React.JSX.Element {
-  const project = useWorkspaceStore((state) => state.projects.find((entry) => entry.id === projectId))
+  const projects = useWorkspaceStore((state) => state.projects)
+  const project = projects.find((entry) => entry.id === projectId)
+  const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
+  const inbox = useSharedNotes((state) => state.inbox)
+  const deleting = useSharedNotes((state) => state.deleting)
   const list = useWorkspaceStore((state) => state.members[projectId])
   const relay = useWorkspaceStore((state) => state.relays[projectId])
   const status = useWorkspaceStore((state) => state.teamwork[projectId])
@@ -155,7 +162,27 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   const [path, setPath] = useState<TeamworkPath | null>(joinedFrom === undefined ? null : 'join')
 
   return (
-    <PageFrame label={`Set up teamwork in ${name}`} title="Teamwork" onClose={closeTeamwork} focusKey={projectId}>
+    <PageFrame
+      label={`Set up teamwork in ${name}`}
+      title={project === undefined ? 'Teamwork' : `Teamwork · ${project.name}`}
+      actions={
+        projects.length > 1 ? (
+          <Select aria-label="Project" value={projectId} onChange={(event) => openTeamwork(event.target.value)}>
+            {projects.map((entry) => {
+              const unread = unreadNotes({ inbox, deleting }, entry.id)
+              return (
+                <option key={entry.id} value={entry.id}>
+                  {unread > 0 ? `${entry.name} · ${unread} unread` : entry.name}
+                </option>
+              )
+            })}
+          </Select>
+        ) : undefined
+      }
+      onClose={closeTeamwork}
+      focusKey={projectId}
+    >
+      <SharedNotesList projectId={projectId} />
       <TeamworkSteps
         projectPath={project?.path}
         list={list}

@@ -16,6 +16,7 @@ import { dotClass, TONE_LABEL } from '../sidebar/agentRows'
 import { useOpenIn } from '../sidebar/openIn'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { listedNotes, useSharedNotes } from '../teamwork/sharedNotesStore'
 import { canDiscard, childOf, updateFrom } from '../workspace/rightPanel/ChangesTab'
 import { idleLand, landOffer } from '../workspace/rightPanel/landOffer'
 import {
@@ -103,6 +104,12 @@ export function CommandPalette({
   const systemTone = useWorkspaceStore((state) => state.systemTone)
   const loadEditors = useWorkspaceStore((state) => state.loadEditors)
   const openIn = useOpenIn()
+  const noteInbox = useSharedNotes((state) => state.inbox)
+  const deletingNotes = useSharedNotes((state) => state.deleting)
+  const sharedNotes = useMemo(
+    () => listedNotes({ inbox: noteInbox, deleting: deletingNotes }),
+    [noteInbox, deletingNotes]
+  )
 
   // The sidebar asks too, but it can be hidden.
   useEffect(() => {
@@ -165,6 +172,7 @@ export function CommandPalette({
         terminals: Object.values(terminals),
         resumable,
         runs,
+        sharedNotes,
         // Empty for a command with no key.
         hintFor: (action) => {
           const command = commandNamed(action)
@@ -251,7 +259,8 @@ export function CommandPalette({
       systemTone,
       change,
       resumable,
-      runs
+      runs,
+      sharedNotes
     ]
   )
 
@@ -373,6 +382,15 @@ export function CommandPalette({
       const kind = run[2] as RunKind
       if (run[1] === 'stop-run') void store.stopRun(active.id, kind)
       else void store.runInWorktree(active.id, kind, run[1] === 'restart-run')
+      return
+    }
+    if (item.id.startsWith('teamwork:')) {
+      store.openTeamwork(item.id.slice('teamwork:'.length))
+      return
+    }
+    if (item.id.startsWith('shared-note:')) {
+      const note = sharedNotes.find((entry) => `shared-note:${entry.shareId}` === item.id)
+      if (note) void store.openSharedNote(note.projectId, note.shareId, note.title)
       return
     }
     if (item.id.startsWith('open-in:')) {
