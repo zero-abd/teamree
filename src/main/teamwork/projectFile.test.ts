@@ -32,7 +32,8 @@ describe('.teamree/project.json', () => {
       startFrom: 'origin/dev',
       setupCommand: 'npm ci',
       linkedPaths: ['node_modules'],
-      copiedPaths: ['.env']
+      copiedPaths: ['.env'],
+      runCommands: { dev: 'npm run dev', test: 'npm test' }
     }
     expect(await writeProjectFile(root, settings)).toBe('.teamree/project.json')
     expect(await readProjectFile(root)).toEqual({ settings })
@@ -40,7 +41,13 @@ describe('.teamree/project.json', () => {
   })
 
   it('ignores a malformed file whole, with one line to say so', async () => {
-    for (const bad of ['{ not json', '[]', '{"setupCommand": 7}', '{"linkedPaths": ["../outside"]}']) {
+    for (const bad of [
+      '{ not json',
+      '[]',
+      '{"setupCommand": 7}',
+      '{"linkedPaths": ["../outside"]}',
+      '{"runCommands": {"test": ""}}'
+    ]) {
       expect(await readProjectFile(await checkout(bad)), bad).toEqual({ problem: PROJECT_FILE_UNREADABLE })
     }
   })

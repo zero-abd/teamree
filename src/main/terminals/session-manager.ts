@@ -5,7 +5,15 @@ import { randomUUID } from 'node:crypto'
 import { statSync } from 'node:fs'
 import { agentLaunchCommand } from '../../shared/agentLaunch'
 import type { RestoredAs } from '../../shared/paneRestore'
-import type { AgentEvent, ClosedPane, Layout, PaneNode, SubagentTranscript, Terminal } from '../../shared/entities'
+import type {
+  AgentEvent,
+  ClosedPane,
+  Layout,
+  PaneNode,
+  RunKind,
+  SubagentTranscript,
+  Terminal
+} from '../../shared/entities'
 import type { ScreenMenu } from '../../shared/screenOpinion'
 import { fileLeavesIn } from '../../shared/filePane'
 import { evidenceLine } from '../../shared/outputEvidence'
@@ -243,7 +251,7 @@ export class TerminalSessionManager {
   }
 
   /** Starts a terminal in the largest pane's place (`paneRoom.ts`), on the last grid a window reported. */
-  create(params: ParamsOf<'terminal.create'>): Terminal {
+  create(params: ParamsOf<'terminal.create'> & { run?: RunKind }): Terminal {
     this.noteGrid(params)
     if (params.minPane !== undefined) this.minPane = params.minPane
     const layout = this.layoutFor(params.worktreeId)
@@ -314,7 +322,7 @@ export class TerminalSessionManager {
    * the agent starts over under a fresh id. Refused while `running`, which stays
    * true while a reaped pane's last output is still arriving.
    */
-  async relaunch(params: ParamsOf<'terminal.relaunch'>): Promise<Terminal> {
+  async relaunch(params: ParamsOf<'terminal.relaunch'>, command?: string): Promise<Terminal> {
     const previous = this.require(params.terminalId)
     if (previous.isRunning) {
       throw conflict(`terminal ${params.terminalId} has not exited; there is nothing to run again`)
@@ -322,8 +330,16 @@ export class TerminalSessionManager {
 
     const size = previous.snapshot()
     const stored = this.records.listTerminals().find((record) => record.id === params.terminalId)
-    const launch = relaunchCommand(stored)
-    const below = launch.agent === undefined ? NEW_SHELL_BELOW : startsAgainBelow(launch.agent)
+    // A Run button's pane runs its command again, `command` when the project's has changed since.
+    const rerun = previous.run === undefined ? undefined : (command ?? previous.command)
+    const launch: ReturnType<typeof relaunchCommand> =
+      rerun === undefined ? relaunchCommand(stored) : { command: rerun }
+    const below =
+      rerun !== undefined
+        ? startsAgainBelow(rerun)
+        : launch.agent === undefined
+          ? NEW_SHELL_BELOW
+          : startsAgainBelow(launch.agent)
     // Told its task again only when nobody ever told it anything.
     const prompt = stored !== undefined && launch.agent !== undefined ? this.taskToRepeat(stored) : undefined
 
@@ -358,6 +374,7 @@ export class TerminalSessionManager {
         cols: size.cols,
         rows: size.rows,
         recordStartsBelow: below,
+        ...(previous.run === undefined ? {} : { run: previous.run }),
         ...(launch.command === undefined ? {} : { command: launch.command }),
         ...(prompt === undefined ? {} : { prompt }),
         ...(kept === undefined ? {} : { restoredRecord: kept })
@@ -398,6 +415,13 @@ export class TerminalSessionManager {
     ) {
       for (const listener of this.answeredListeners) listener(terminalId)
     }
+  }
+
+  /** Stops a pane's program as Ctrl-C would, ending its process tree if that is ignored; the pane stays. */
+  async interrupt(terminalId: string): Promise<Terminal> {
+    const session = this.require(terminalId)
+    await session.interrupt()
+    return this.withSubagents(session.snapshot())
   }
 
   /** Chooses an answer the pane's menu offers: `data`'s keypresses, one at a time, only while the screen still shows `prompt`. */
@@ -814,6 +838,7 @@ export class TerminalSessionManager {
       startupNote?: string
       /** The number a reopened pane had; kept unless a live pane has it now. */
       ordinal?: number
+      run?: RunKind
     },
     restoring?: TerminalRecord,
     restored?: RestoredAs
@@ -877,6 +902,7 @@ export class TerminalSessionManager {
           }),
       ...(label === undefined ? {} : { label }),
       ordinal,
+      ...(params.run === undefined ? {} : { run: params.run }),
       ...(this.options.onActivityChange === undefined && this.options.onAgentSettled === undefined
         ? {}
         : {

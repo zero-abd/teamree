@@ -50,6 +50,12 @@ const row = (overrides: Partial<AgentRow> = {}): AgentRow => ({
 })
 
 describe('activityOf', () => {
+  it('reads a Run pane somebody stopped as done, and a failing test run as failed', () => {
+    expect(activityOf(terminal({ id: 't', run: 'dev', running: false, exitCode: 130 }))).toBe('done')
+    expect(activityOf(terminal({ id: 't', run: 'test', running: false, exitCode: 1 }))).toBe('failed')
+    expect(activityOf(terminal({ id: 't', running: false, exitCode: 130 }))).toBe('failed')
+  })
+
   it('is working while output is still arriving', () => {
     expect(activityOf(terminal({ id: 't', agent: 'claude', busy: true }))).toBe('working')
   })

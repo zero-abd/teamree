@@ -39,6 +39,8 @@ import {
 } from './paletteModel'
 import { useSearchStore } from '../workspace/rightPanel/searchStore'
 import { useFileMatches } from './useFileMatches'
+import { runOffers } from '../workspace/runButtons'
+import type { RunKind } from '@shared/entities'
 import { useFocusedChange } from './useFocusedChange'
 
 const NO_PATHS: readonly string[] = []
@@ -124,6 +126,18 @@ export function CommandPalette({
     [active, activeName, openIn]
   )
 
+  const runs = useMemo(
+    () =>
+      active !== undefined && hasCheckout(active)
+        ? runOffers(
+            projects.find((project) => project.id === active.projectId),
+            Object.values(terminals),
+            active.id
+          )
+        : [],
+    [active, projects, terminals]
+  )
+
   const activeLayout = activeWorktreeId === null ? undefined : layouts[activeWorktreeId]
   const focusedPane = focusedWatchId === null ? (activeLayout?.focusedTerminalId ?? null) : null
   const focusedPath =
@@ -150,6 +164,7 @@ export function CommandPalette({
         rightPanelTab,
         terminals: Object.values(terminals),
         resumable,
+        runs,
         // Empty for a command with no key.
         hintFor: (action) => {
           const command = commandNamed(action)
@@ -235,7 +250,8 @@ export function CommandPalette({
       appearance,
       systemTone,
       change,
-      resumable
+      resumable,
+      runs
     ]
   )
 
@@ -346,6 +362,13 @@ export function CommandPalette({
     }
     if (item.id.startsWith('clean-up:')) {
       store.openDialog({ kind: 'clean-up', projectId: item.id.slice('clean-up:'.length) })
+      return
+    }
+    const run = /^(run|restart-run|stop-run):(dev|test)$/.exec(item.id)
+    if (run !== null && active !== undefined) {
+      const kind = run[2] as RunKind
+      if (run[1] === 'stop-run') void store.stopRun(active.id, kind)
+      else void store.runInWorktree(active.id, kind, run[1] === 'restart-run')
       return
     }
     if (item.id.startsWith('open-in:')) {

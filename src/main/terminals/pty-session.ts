@@ -4,7 +4,7 @@
 import type { RestoredAs } from '../../shared/paneRestore'
 import { spawn } from 'node-pty'
 import type { IDisposable, IPty } from 'node-pty'
-import type { AgentEvent, Terminal } from '../../shared/entities'
+import type { AgentEvent, RunKind, Terminal } from '../../shared/entities'
 import type { TerminalEvent } from '../../shared/methods'
 import { KILL_ESCALATION_MS, killProcessTree } from './process-tree'
 import { recoverTailOnTeardown } from './pty-tail'
@@ -129,6 +129,8 @@ export type PtySessionInit = {
   label?: string
   /** See `Terminal.ordinal`. */
   ordinal?: number
+  /** See `Terminal.run`. */
+  run?: RunKind
   /** Called when the pane starts or stops producing output. */
   onActivityChange?: (session: PtySession) => void
   /** Called when the bottom of an agent pane's screen starts or stops showing a question. */
@@ -148,6 +150,7 @@ export class PtySession {
   readonly command: string | undefined
   readonly agent: AgentKind | undefined
   readonly ordinal: number | undefined
+  readonly run: RunKind | undefined
 
   /** Not a field: a restarted agent has a different child, and `close()` kills by pid. */
   get pid(): number {
@@ -223,6 +226,7 @@ export class PtySession {
     this.command = init.command
     this.agent = init.agent
     this.ordinal = init.ordinal
+    this.run = init.run
     this.cols = init.cols
     this.rows = init.rows
     this.widest = init.cols
@@ -279,6 +283,7 @@ export class PtySession {
       ...(foregroundAgent === undefined ? {} : { foregroundAgent }),
       ...(this.label === undefined ? {} : { label: this.label }),
       ...(this.ordinal === undefined ? {} : { ordinal: this.ordinal }),
+      ...(this.run === undefined ? {} : { run: this.run }),
       busy: this.busy,
       // Derived, not stored, so it cannot drift from the title.
       ...(titleSays === null ? {} : { titleSays }),
@@ -464,6 +469,22 @@ export class PtySession {
     for (const subscription of this.subscriptions) subscription.dispose()
     this.subscriptions.length = 0
     this.listeners.clear()
+  }
+
+  /** Ctrl-C, as a person would press it; then the process tree, once the program has ignored it for `graceMs`. */
+  async interrupt(graceMs: number = KILL_ESCALATION_MS): Promise<void> {
+    if (!this.running) return
+    const answered = this.waitForExit(graceMs)
+    try {
+      this.pty.write('\x03')
+    } catch {
+      // Reaped already; the exit is on its way.
+    }
+    await answered
+    if (!this.running) return
+    const exited = this.waitForExit(2 * graceMs + EXIT_EVENT_SLACK_MS)
+    await killProcessTree(this.pid, this.platform, graceMs)
+    await exited
   }
 
   /** Resolves when the child exits, or when `timeoutMs` elapses. */

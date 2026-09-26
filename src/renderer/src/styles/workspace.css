@@ -97,6 +97,57 @@
   gap: 1px;
 }
 
+/* Run Dev and Run Tests, ahead of the pane buttons: words, since two play glyphs would not tell them apart. */
+.run-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  margin-right: var(--s1);
+}
+
+.run-buttons__group {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.run-buttons__run {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 var(--s1);
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.run-buttons__run svg {
+  width: 12px;
+  height: 12px;
+  fill: currentcolor;
+}
+
+.run-buttons__run:hover,
+.run-buttons__run:focus-visible {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.run-buttons__run--running {
+  color: var(--fg);
+}
+
+.run-buttons__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+}
+
 /* A 16px icon box in a 24px button: the glyphs are drawn a unit and a half in
    from the edge of their 12-unit viewBox, so the mark itself is 12px and sits
    centred in the box, as the sidebar's toggle and the pane bar's close draw

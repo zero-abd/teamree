@@ -28,6 +28,7 @@ import { OverlapMark } from './OverlapMark'
 import { endNestDrag, NEST_DRAG_TYPE, startNestDrag, useNestDrag, useNestDrop } from './nestDrag'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { WorktreeNameField } from './WorktreeNameField'
+import { RunChip, runMenuItems, useRunActions, useRunOffers } from '../workspace/runButtons'
 import { agentName, worktreeDisplay, worktreeLabel, type WorktreeDisplay } from './worktreeDisplay'
 
 /** A task with child tasks: they sit under it in its box and fold with its panes. */
@@ -173,6 +174,7 @@ export function WorktreeRow({
   const heardFrom = useWorkspaceStore((state) =>
     heard === undefined ? undefined : state.worktrees.find((entry) => entry.id === heard.from.worktreeId)
   )
+  const runItems = runMenuItems(useRunOffers(worktree.id), useRunActions(worktree.id))
 
   // A field removed while focused leaves the focus on `document.body`; after a blur it is already elsewhere.
   useEffect(() => {
@@ -219,7 +221,8 @@ export function WorktreeRow({
     ...(issue === undefined
       ? []
       : [{ label: `Open Issue #${issue.number}`, onChoose: () => openInBrowser(issue.url) }]),
-    ...(onKeep === undefined ? [] : [{ label: 'Keep This Run…', onChoose: onKeep }])
+    ...(onKeep === undefined ? [] : [{ label: 'Keep This Run…', onChoose: onKeep }]),
+    ...(ready ? runItems.map((item, index) => (index === 0 ? { ...item, separated: true } : item)) : [])
   ]
   // A directory that is not there has nothing to reveal, open or copy; removal is what is left.
   const items: RowMenuItem[] = missing ? remove : merged ? [...remove, ...rest] : [...rest, ...remove]
@@ -304,6 +307,7 @@ export function WorktreeRow({
         </span>
       )}
       {overlap === undefined || !ready ? null : <OverlapMark chip={overlap.chip} onOpen={overlap.onOpen} />}
+      {ready ? <RunChip terminals={terminals} worktreeId={worktree.id} /> : null}
       {task === undefined ? null : (
         <span className="chip worktree__tally" title={task.children.join('\n')}>
           {`${task.tally.done}/${task.tally.total} done`}

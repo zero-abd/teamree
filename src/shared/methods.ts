@@ -130,6 +130,8 @@ export const MAX_AGENT_EVENT_MESSAGE_CHARS = 200
 /** Cap on a project's setup command: one shell line, bounded like `MAX_AGENT_ARGS_CHARS`. */
 export const MAX_SETUP_COMMAND_CHARS = 4096
 
+const RunKindSchema = z.enum(['dev', 'test'])
+
 /**
  * The most lines one hunk may carry over the wire, so a caller cannot hand the
  * runtime a megabyte of "hunk" to reassemble.
@@ -231,7 +233,14 @@ export const Params = {
      */
     setupCommand: z.string().max(MAX_SETUP_COMMAND_CHARS).optional(),
     /** Omitted leaves it alone; true is stored as absent. */
-    fetchInBackground: z.boolean().optional()
+    fetchInBackground: z.boolean().optional(),
+    /** This Mac's Run Dev and Run Tests commands; a kind omitted is left alone, an empty string clears it. */
+    runCommands: z
+      .object({
+        dev: z.string().max(MAX_SETUP_COMMAND_CHARS).optional(),
+        test: z.string().max(MAX_SETUP_COMMAND_CHARS).optional()
+      })
+      .optional()
   }),
 
   worktreeList: z.object({ projectId: z.string().min(1).optional() }),
@@ -375,6 +384,18 @@ export const Params = {
   worktreeSetupCheck: z.object({ worktreeId: z.string().min(1) }),
   /** Runs `command` once in a `setup` pane of the worktree, as pressed; approves nothing for the project. */
   worktreeRunSetup: z.object({ worktreeId: z.string().min(1), command: z.string().max(MAX_SETUP_COMMAND_CHARS) }),
+  /**
+   * Starts the project's dev or test command in the worktree's `dev` or `test` pane, or answers with that pane
+   * while it runs. `restart` stops it first; `approve` accepts a repository command this Mac has not approved.
+   */
+  worktreeRun: z.object({
+    worktreeId: z.string().min(1),
+    kind: RunKindSchema,
+    restart: z.boolean().optional(),
+    approve: z.boolean().optional()
+  }),
+  /** Interrupts the worktree's `dev` or `test` pane as Ctrl-C would, ending it if that is ignored. Null without one. */
+  worktreeStopRun: z.object({ worktreeId: z.string().min(1), kind: RunKindSchema }),
   /** Branches nobody has checked out, local and on origin, for Open Branch. */
   worktreeBranches: z.object({ projectId: z.string().min(1) }),
   /** Open pull requests through `gh`, for Check Out Pull Request. */
@@ -872,6 +893,8 @@ export type MethodContract = TaskMethodContract &
     'worktree.setup': { params: z.infer<typeof Params.worktreeSetup>; result: Worktree }
     'worktree.setupCheck': { params: z.infer<typeof Params.worktreeSetupCheck>; result: WorktreeSetupCheck }
     'worktree.runSetup': { params: z.infer<typeof Params.worktreeRunSetup>; result: Worktree }
+    'worktree.run': { params: z.infer<typeof Params.worktreeRun>; result: Terminal }
+    'worktree.stopRun': { params: z.infer<typeof Params.worktreeStopRun>; result: Terminal | null }
     'worktree.pullRequests': { params: z.infer<typeof Params.worktreePullRequests>; result: PullRequestList }
     'worktree.issues': { params: z.infer<typeof Params.worktreeIssues>; result: IssueList }
     'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }

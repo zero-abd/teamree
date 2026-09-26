@@ -13,6 +13,8 @@ import type {
   Project,
   RemovedWorktree,
   PullRequestList,
+  RunCommands,
+  Terminal,
   Worktree,
   WorktreeChanges,
   WorktreeCleanup,
@@ -92,7 +94,9 @@ import { findWorktreeFiles, readWorktreeFiles } from './worktreeFiles'
 import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
 import { normalizePreparedPaths, prepareWorktree, type PreparedPaths } from './worktreePreparation'
 import { normalizeSetupCommand } from './worktreeSetup'
-import { checkSetup } from './setupDetect'
+import { checkRun, checkSetup } from './setupDetect'
+import type { RunPanes } from '../terminals/run-panes'
+import { runCommandOf } from '../../shared/runCommands'
 import {
   checkReplay,
   containsTip,
@@ -154,6 +158,8 @@ export type GitServiceOptions = {
    * pane id. Handed in because opening a pane needs the terminal service.
    */
   startSetup?: (input: { worktree: Worktree; project: Project; command: string }) => string | undefined
+  /** Starts and stops a worktree's `dev` and `test` panes; handed in for the reason `startSetup` is. */
+  runPanes?: Pick<RunPanes, 'start' | 'stop'>
   /** Gives a checkout just made the agent CLIs' trust its main checkout has; a failure never fails the create. */
   trustCheckout?: (input: { projectPath: string; worktreePath: string }) => Promise<unknown>
   /** `shell.trashItem`. Absent, discarding an untracked file is refused. */
@@ -184,6 +190,7 @@ export class GitService {
   readonly #now: () => number
   readonly #createId: () => string
   readonly #startSetup: GitServiceOptions['startSetup']
+  readonly #runPanes: GitServiceOptions['runPanes']
   readonly #trustCheckout: GitServiceOptions['trustCheckout']
   readonly #trash: Trash | undefined
   readonly #gh: GhProbe | undefined
@@ -215,6 +222,7 @@ export class GitService {
     this.#now = options.now ?? Date.now
     this.#createId = options.createId ?? randomUUID
     this.#startSetup = options.startSetup
+    this.#runPanes = options.runPanes
     this.#trustCheckout = options.trustCheckout
     this.#trash = options.trash
     this.#gh = options.ghBinary === undefined ? undefined : createGhProbe(options.ghBinary, this.#now)
@@ -261,7 +269,8 @@ export class GitService {
       ...project,
       ...(read?.settings === undefined ? {} : { repository: read.settings }),
       ...(read?.problem === undefined ? {} : { repositoryProblem: read.problem }),
-      ...(suggest && read?.suggestedSetup !== undefined ? { suggestedSetup: read.suggestedSetup } : {})
+      ...(suggest && read?.suggestedSetup !== undefined ? { suggestedSetup: read.suggestedSetup } : {}),
+      ...(read?.detectedRun === undefined ? {} : { detectedRun: read.detectedRun })
     }
   }
 
@@ -422,6 +431,18 @@ export class GitService {
       if (command === undefined) delete next.setupCommand
       else next.setupCommand = command
     }
+    if (params.runCommands !== undefined) {
+      const run: RunCommands = { ...next.runCommands }
+      for (const kind of ['dev', 'test'] as const) {
+        const given = params.runCommands[kind]
+        if (given === undefined) continue
+        const command = normalizeSetupCommand(given)
+        if (command === undefined) delete run[kind]
+        else run[kind] = command
+      }
+      if (Object.keys(run).length === 0) delete next.runCommands
+      else next.runCommands = run
+    }
     if (params.fetchInBackground === true) delete next.fetchInBackground
     else if (params.fetchInBackground === false) next.fetchInBackground = false
     this.#store.putProject(next)
@@ -485,6 +506,45 @@ export class GitService {
     const setupTerminalId = this.#runSetup(worktree, this.#requireProject(worktree.projectId), command)
     if (setupTerminalId === undefined) return worktree
     return this.#patch(worktree.id, { setupTerminalId }) ?? worktree
+  }
+
+  /**
+   * Starts the project's dev or test command in the worktree's pane of that kind. A repository command
+   * this Mac has not approved is refused unless `approve` accepts exactly that string for the project.
+   */
+  async runCommand(params: ParamsOf<'worktree.run'>): Promise<Terminal> {
+    const worktree = this.#requireWorktree(params.worktreeId)
+    if (worktree.state !== 'ready' || worktree.missing === true) {
+      throw new GitServiceError(ErrorCode.Conflict, `worktree "${worktree.name}" has no checkout`)
+    }
+    const stored = this.#requireProject(worktree.projectId)
+    const run = runCommandOf(this.#present(stored), params.kind)
+    if (run === undefined) {
+      throw new GitServiceError(ErrorCode.InvalidParams, `${stored.name} has no ${params.kind} command`)
+    }
+    if (!run.approved) {
+      if (params.approve !== true) {
+        throw new GitServiceError(ErrorCode.Conflict, `not approved on this Mac: ${run.command}`)
+      }
+      const approved: Project = {
+        ...stored,
+        approvedRunCommands: { ...stored.approvedRunCommands, [params.kind]: run.command }
+      }
+      this.#store.putProject(approved)
+      this.events.emit({ type: 'project.updated', project: this.#present(approved) })
+    }
+    if (this.#runPanes === undefined) throw new GitServiceError(ErrorCode.Internal, 'no panes to run in')
+    return this.#runPanes.start({
+      worktreeId: worktree.id,
+      kind: params.kind,
+      command: run.command,
+      restart: params.restart === true
+    })
+  }
+
+  async stopRun(params: ParamsOf<'worktree.stopRun'>): Promise<Terminal | null> {
+    const worktree = this.#requireWorktree(params.worktreeId)
+    return (await this.#runPanes?.stop({ worktreeId: worktree.id, kind: params.kind })) ?? null
   }
 
   /** Renames the record only: branch, path and task are left alone, in any state. */
@@ -1986,11 +2046,15 @@ export class GitService {
   }
 }
 
-type CheckoutRead = ProjectFileRead & { suggestedSetup?: string }
+type CheckoutRead = ProjectFileRead & { suggestedSetup?: string; detectedRun?: RunCommands }
 
 async function readCheckout(root: string): Promise<CheckoutRead> {
-  const [file, check] = await Promise.all([readProjectFile(root), checkSetup(root)])
-  return check.command === undefined ? file : { ...file, suggestedSetup: check.command }
+  const [file, check, run] = await Promise.all([readProjectFile(root), checkSetup(root), checkRun(root)])
+  return {
+    ...file,
+    ...(check.command === undefined ? {} : { suggestedSetup: check.command }),
+    ...(Object.keys(run).length === 0 ? {} : { detectedRun: run })
+  }
 }
 
 /**

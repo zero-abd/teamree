@@ -215,6 +215,11 @@ describe('one pane', () => {
     expect(onRelaunch).toHaveBeenCalledExactlyOnceWith('t1')
   })
 
+  it('offers to run a Run pane’s command again, not a shell', () => {
+    mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 1, run: 'test' })])
+    expect(screen.getByRole('button', { name: 'Run Again' })).toBeTruthy()
+  })
+
   it('offers a shell for an exited pane that was not running an agent', () => {
     mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 0 })])
     expect(screen.getByRole('button', { name: 'New Shell' })).toBeTruthy()
