@@ -2,7 +2,7 @@
 // remounts panes on split changes and StrictMode doubles effects; the emulator
 // moves to the new mount rather than being rebuilt (`parkedEmulators`).
 
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -28,6 +28,8 @@ import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere } from './handsHere'
 import { paneFileLinks, type FileLinkHost } from './paneFileLinks'
+import { paneImageLinks, pastedImageLookup, type ShownImage } from './paneImageLinks'
+import { PastedImagePeek, PastedImageViewer, type ImagePeek } from './PastedImageViews'
 import { frameWrites, paneWebgl, syncScrollbarPerFrame } from './paneFrames'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOptions } from './paneSearchModel'
 import { TerminalSearchBar } from './TerminalSearchBar'
@@ -79,6 +81,8 @@ export function TerminalView({
   const fontSizeRef = useRef(useWorkspaceStore.getState().terminalFontSize)
   const optionsRef = useRef(useWorkspaceStore.getState().terminalOptions)
   const [search, dispatch] = useReducer(paneSearchReducer, EMPTY_PANE_SEARCH)
+  const [peek, setPeek] = useState<ImagePeek | null>(null)
+  const [viewing, setViewing] = useState<ShownImage | null>(null)
 
   const watchers = useWorkspaceStore((state) => state.watchers)
   const attention = useMemo(() => paneAttention(watchers, terminalId), [watchers, terminalId])
@@ -102,7 +106,12 @@ export function TerminalView({
     emulator.view = {
       isAppChord: (event) => chordRef.current(event),
       copyOnSelect: () => optionsRef.current.copyOnSelect,
-      onResults: (results) => dispatch({ type: 'results', ...results })
+      onResults: (results) => dispatch({ type: 'results', ...results }),
+      peekImage: setPeek,
+      openImage: (image) => {
+        setPeek(null)
+        setViewing(image)
+      }
     }
     const { term, fit, gpu } = emulator
     // A pane that moved in the tree gets its emulator back, which reflows to the new width.
@@ -313,6 +322,8 @@ export function TerminalView({
         />
       ) : null}
       <div className="terminal-surface" ref={hostRef} onFocus={onFocus} onMouseDown={onFocus} />
+      {peek === null ? null : <PastedImagePeek peek={peek} />}
+      {viewing === null ? null : <PastedImageViewer image={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }
@@ -322,6 +333,8 @@ type EmulatorView = {
   isAppChord: (event: KeyboardEvent) => boolean
   copyOnSelect: () => boolean
   onResults: (results: { resultIndex: number; resultCount: number }) => void
+  peekImage: (peek: ImagePeek | null) => void
+  openImage: (image: ShownImage) => void
 }
 
 /** One pane's emulator and its stream, which outlive a remount of the view that shows them. */
@@ -393,6 +406,12 @@ function openEmulator(
   // `http:` and `https:`, the set the main process hands the OS.
   term.loadAddon(paneLinkAddon())
   const fileLinks = paneFileLinks(term, fileLinkHost(terminalId, modifier))
+  const imageLinks = paneImageLinks(term, {
+    find: pastedImageLookup((index) => runtimeClient.call('terminal.pastedImage', { terminalId, index })),
+    hover: (image, event) => emulator.view.peekImage({ ...image, x: event.clientX, y: event.clientY }),
+    leave: () => emulator.view.peekImage(null),
+    open: (image) => emulator.view.openImage(image)
+  })
 
   // The limit is shared with the counter, so "1000+" means where the addon stopped looking.
   const search = new SearchAddon({ highlightLimit: SEARCH_HIGHLIGHT_LIMIT })
@@ -409,12 +428,19 @@ function openEmulator(
     fit,
     search,
     gpu,
-    view: { isAppChord: () => false, copyOnSelect: () => false, onResults: () => {} },
+    view: {
+      isAppChord: () => false,
+      copyOnSelect: () => false,
+      onResults: () => {},
+      peekImage: () => {},
+      openImage: () => {}
+    },
     dispose: () => {
       alive = false
       subscription?.close()
       hands.stop()
       fileLinks.dispose()
+      imageLinks.dispose()
       output.dispose()
       scrollbar.dispose()
       gpu.dispose()

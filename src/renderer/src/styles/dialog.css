@@ -697,3 +697,29 @@ button.picker__chevron:hover {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
 }
+
+/* A pasted image, as large as the window allows. */
+.modal:has(.pasted-image) {
+  width: fit-content;
+  max-width: 92vw;
+}
+
+.pasted-image {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+
+.pasted-image__img {
+  display: block;
+  min-width: 240px;
+  max-width: calc(92vw - 2 * var(--s5));
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+}
+
+.pasted-image__gone {
+  color: var(--fg-muted);
+}

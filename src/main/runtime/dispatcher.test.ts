@@ -218,6 +218,8 @@ describe('dispatcher', () => {
       'terminal.closed',
       'terminal.create',
       'terminal.list',
+      // Local: a file Claude Code wrote on this machine's disk.
+      'terminal.pastedImage',
       'terminal.read',
       // Local: a relaunch starts a process on this machine.
       'terminal.relaunch',
