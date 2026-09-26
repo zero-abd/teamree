@@ -216,6 +216,7 @@ export function WorktreeRow({
     : []
   const firstPort = ports[0]
   const firstOverlap = ready ? overlap?.chip.entries[0] : undefined
+  const pullLink = ready && landing?.merged !== true ? landing?.pullRequest : undefined
 
   // A field removed while focused leaves the focus on `document.body`; after a blur it is already elsewhere.
   useEffect(() => {
@@ -264,6 +265,9 @@ export function WorktreeRow({
       ? []
       : [{ label: `Open Issue #${issue.number}`, onChoose: () => openInBrowser(issue.url) }]),
     ...(onKeep === undefined ? [] : [{ label: 'Keep This Run…', onChoose: onKeep }]),
+    ...(pullLink === undefined
+      ? []
+      : [{ label: `Open Pull Request #${pullLink.number}`, onChoose: () => openInBrowser(pullLink.url) }]),
     ...(firstPort === undefined
       ? []
       : [{ label: `Open localhost:${firstPort}`, onChoose: () => openInBrowser(portUrl(firstPort)) }]),
@@ -323,7 +327,7 @@ export function WorktreeRow({
         }
       : {}),
     ...(badge === null || mergePreview === undefined ? {} : { merge: mergePreview }),
-    ...(pullRequest === undefined ? {} : { pullRequest: pullRequest.number }),
+    ...(pullShown && landing?.pullRequest !== undefined ? { pull: landing.pullRequest } : {}),
     ...(issue === undefined ? {} : { issue: issue.number }),
     ports,
     overlap: ready ? (overlap?.chip ?? null) : null,

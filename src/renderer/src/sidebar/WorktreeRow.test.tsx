@@ -1081,8 +1081,13 @@ describe('a worktree whose work has landed', () => {
       })
     })
 
-    const chip = screen.getByRole('link', { name: /Pull Request #42/ })
+    const chip = screen.getByRole('link', { name: /Pull Request #42/, hidden: true })
     expect(chip.textContent).toBe('PR #42 ✗ 2')
+    expect(screen.getByRole('treeitem', { description: 'PR 42, 2 checks failing, changes requested' })).toBe(
+      openButton()
+    )
+    fireEvent.contextMenu(row())
+    expect(labels()).toContain('Open Pull Request #42')
     // On the second line, beside a run's chip, so neither squeezes the name.
     expect(chip.closest('.worktree__meta')).not.toBeNull()
     expect(chip.classList.contains('prchip--fail')).toBe(true)
@@ -1155,7 +1160,12 @@ describe('what a screen reader hears for a row', () => {
         published: true,
         unmerged: 1,
         merged: false,
-        pullRequest: { number: 42, url: 'u', state: 'open' },
+        pullRequest: {
+          number: 42,
+          url: 'u',
+          state: 'open',
+          checks: { passing: 1, failing: 2, pending: 0, list: [] }
+        },
         readAt: NOW
       },
       overlap: { chip: overlap, onOpen: vi.fn() }
@@ -1165,7 +1175,7 @@ describe('what a screen reader hears for a row', () => {
     expect(
       screen.getByRole('treeitem', {
         description:
-          'asking: Allow command?, 1 ahead, 1 behind parent, PR 42, port 5173, ' +
+          'asking: Allow command?, 1 ahead, 1 behind parent, PR 42, 2 checks failing, port 5173, ' +
           'would conflict with search page in server.js'
       })
     ).toBe(openButton())

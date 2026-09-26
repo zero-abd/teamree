@@ -218,7 +218,7 @@ export function Dashboard(): React.JSX.Element {
                   title={`${row.label} in ${where} · ${TONE_LABEL[state]}${
                     isUnread ? ' · unread' : ''
                   } · last output ${agoLabel(row.quietFor)}${row.evidence ? `\nlast printed: ${row.evidence}` : ''}`}
-                  aria-label={boardRowSpeech(row, isUnread)}
+                  aria-label={boardRowSpeech(row, isUnread, landings[row.worktreeId]?.pullRequest)}
                   onClick={() => openRow(row)}
                 >
                   <span className="board-row__what">

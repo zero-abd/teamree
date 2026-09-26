@@ -90,6 +90,9 @@ export function TaskBoard({
                 title={[row.title, row.branch, row.projectName].filter(Boolean).join(' · ')}
                 aria-label={taskRowSpeech({
                   ...row,
+                  ...(landings[row.worktreeId]?.pullRequest === undefined
+                    ? {}
+                    : { pull: landings[row.worktreeId]?.pullRequest }),
                   overlap,
                   tokens: used === undefined ? null : usageLabel(used, showCost),
                   age: sinceLabel(row.age)

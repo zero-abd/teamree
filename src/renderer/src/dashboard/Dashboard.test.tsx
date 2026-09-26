@@ -569,12 +569,17 @@ describe('the Tasks view', () => {
     const chips = (): string[] =>
       [...document.querySelectorAll('.board-row')].map((row) => row.querySelector('.prchip')?.textContent ?? '')
 
+    const said = (): string[] =>
+      [...document.querySelectorAll('.board-row')].map((row) => row.getAttribute('aria-label') ?? '')
+
     const { unmount } = render(<Dashboard />)
     expect(chips().sort()).toEqual(['PR #1 ✓', 'PR #2 ✗ 2'])
+    expect(said().some((name) => name.includes('PR 2, 2 checks failing'))).toBe(true)
     unmount()
     useTaskTreeStore.setState({ boardMode: 'tasks' })
     render(<Dashboard />)
     expect(chips()).toEqual(['PR #1 ✓', 'PR #2 ✗ 2', ''])
+    expect(said()[0]).toContain('PR 1, 1 check passing')
   })
 
   it('names each task row in words, column by column', async () => {

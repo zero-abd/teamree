@@ -94,7 +94,7 @@ describe('what a worktree row says', () => {
         question: 'Allow command?',
         unread: true,
         status: status({ ahead: 2, unstaged: 1 }),
-        pullRequest: 42,
+        pull: { number: 42, url: 'u', state: 'open' },
         issue: 7,
         ports: [5173],
         tests: 'failed',
@@ -106,6 +106,16 @@ describe('what a worktree row says', () => {
       'asking: Allow command?, unread, 2 ahead, 1 uncommitted, PR 42, issue 7, port 5173, tests failed, ' +
         'claims src/api/**, 1 of 2 children done, handed to ana'
     )
+  })
+
+  it('reads a pull request by its state, review and worst checks, as its chip does', () => {
+    const pull = { number: 42, url: 'u', state: 'open' as const }
+    const checks = (passing: number, failing: number, pending: number) => ({ passing, failing, pending, list: [] })
+    expect(rowSpeech({ pull: { ...pull, checks: checks(3, 2, 1) } })).toBe('PR 42, 2 checks failing')
+    expect(rowSpeech({ pull: { ...pull, checks: checks(3, 0, 1) } })).toBe('PR 42, 1 check pending')
+    expect(rowSpeech({ pull: { ...pull, checks: checks(3, 0, 0) } })).toBe('PR 42, 3 checks passing')
+    expect(rowSpeech({ pull: { ...pull, draft: true, review: 'changes' } })).toBe('PR 42 draft, changes requested')
+    expect(rowSpeech({ pull: { ...pull, state: 'closed', checks: checks(0, 1, 0) } })).toBe('PR 42 closed')
   })
 
   it('says merged or landed instead of what a merge would do', () => {

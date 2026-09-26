@@ -1,9 +1,10 @@
 // What a screen reader hears for a row: plain words joined by commas, from the models the chips draw.
 
-import type { WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
+import type { WorktreeLanding, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
 import type { RunState } from '@shared/runCommands'
 import { dotTone, TONE_LABEL, type AgentRow, type DotTone } from './agentRows'
 import type { OverlapChip } from './overlapChip'
+import { reviewWord } from './pullRequestChip'
 import { summarizeWorktreeStatus } from './worktreeStatusSummary'
 
 export type RowFacts = {
@@ -21,7 +22,7 @@ export type RowFacts = {
   ignored?: number
   landed?: 'merged' | 'merged, not pushed' | 'landed'
   merge?: WorktreeMergePreview
-  pullRequest?: number
+  pull?: Pull
   issue?: number
   ports?: readonly number[]
   overlap?: OverlapChip | null
@@ -48,7 +49,7 @@ export function rowSpeech(facts: RowFacts): string {
     ...counts,
     facts.ignored ? `${facts.ignored} ignored` : null,
     facts.landed ?? (facts.merge === undefined ? null : mergeWords(facts.merge)),
-    facts.pullRequest === undefined ? null : `PR ${facts.pullRequest}`,
+    facts.pull === undefined ? null : pullWords(facts.pull),
     facts.issue === undefined ? null : `issue ${facts.issue}`,
     ports.length === 0 ? null : `${ports.length === 1 ? 'port' : 'ports'} ${ports.join(', ')}`,
     facts.overlap ? overlapWords(facts.overlap) : null,
@@ -79,10 +80,11 @@ export function paneRowSpeech(
 }
 
 /** An All Panes row, which also names its worktree unless the pane already goes by it. */
-export function boardRowSpeech(row: AgentRow & { worktreeName: string }, unread = false): string {
+export function boardRowSpeech(row: AgentRow & { worktreeName: string }, unread = false, pull?: Pull): string {
   return [
     row.label,
     row.label === row.worktreeName ? null : row.worktreeName,
+    pull === undefined ? null : pullWords(pull),
     lineWord(dotTone(row.activity, row.agent), row.evidence),
     unread ? 'unread' : null
   ]
@@ -94,7 +96,9 @@ export function boardRowSpeech(row: AgentRow & { worktreeName: string }, unread 
 export function taskRowSpeech(row: {
   title: string
   stage: string
+  notPushed?: boolean
   tally?: { done: number; total: number }
+  pull?: Pull
   overlap?: OverlapChip | null
   panes: readonly { label: string; tone: DotTone }[]
   added: number | null
@@ -105,8 +109,9 @@ export function taskRowSpeech(row: {
 }): string {
   return [
     row.title,
-    row.stage,
+    row.notPushed ? `${row.stage}, not pushed` : row.stage,
     row.tally ? `${row.tally.done} of ${row.tally.total} children done` : null,
+    row.pull === undefined ? null : pullWords(row.pull),
     row.overlap ? overlapWords(row.overlap) : null,
     // A task's only agent goes by the task, and its state is the stage already said.
     ...row.panes.filter((pane) => pane.label !== row.title).map((pane) => `${pane.label} ${TONE_LABEL[pane.tone]}`),
@@ -118,6 +123,31 @@ export function taskRowSpeech(row: {
   ]
     .filter(Boolean)
     .join(', ')
+}
+
+type Pull = NonNullable<WorktreeLanding['pullRequest']>
+
+/** `PR 42, 2 checks failing`: the chip's number, state and worst checks, and the review it hovers. */
+function pullWords(pull: Pull): string {
+  const open = pull.state === 'open'
+  const checks = open ? pull.checks : undefined
+  const worst =
+    checks === undefined
+      ? null
+      : checks.failing > 0
+        ? counted(checks.failing, 'failing')
+        : checks.pending > 0
+          ? counted(checks.pending, 'pending')
+          : checks.passing > 0
+            ? counted(checks.passing, 'passing')
+            : null
+  const state = !open ? pull.state : pull.draft === true ? 'draft' : null
+  const review = open ? reviewWord(pull.review)?.toLowerCase() : undefined
+  return [[`PR ${pull.number}`, state].filter(Boolean).join(' '), worst, review].filter(Boolean).join(', ')
+}
+
+function counted(count: number, word: string): string {
+  return `${count} ${count === 1 ? 'check' : 'checks'} ${word}`
 }
 
 function stateWord(tone: DotTone, question: string | null): string {
