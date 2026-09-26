@@ -655,6 +655,31 @@ describe('workspace store', () => {
     })
   })
 
+  describe('the menu bar extra', () => {
+    it('is shown until hidden, keeps the last note’s project, and survives a reopen', async () => {
+      const path = join(directory, 'workspace.json')
+      const store = await WorkspaceStore.open(path)
+      expect(store.runtimeSettings().showInMenuBar).toBe(true)
+      expect(store.quickNoteProject()).toBeUndefined()
+
+      store.setRuntimeSettings({ showInMenuBar: false })
+      store.setQuickNoteProject('p1')
+      await store.flush()
+      const written = JSON.parse(await readFile(path, 'utf8'))
+      expect([written.settings, written.quickNote]).toEqual([{ showInMenuBar: false }, { projectId: 'p1' }])
+      const reopened = await WorkspaceStore.open(path)
+      expect([reopened.runtimeSettings().showInMenuBar, reopened.quickNoteProject()]).toEqual([false, 'p1'])
+    })
+
+    it('reads a mangled field as its default and keeps the rest', async () => {
+      const path = join(directory, 'workspace.json')
+      const mangled = { version: 1, settings: { showInMenuBar: 'nope' }, quickNote: { projectId: 7 } }
+      await writeFile(path, JSON.stringify(mangled), 'utf8')
+      const store = await WorkspaceStore.open(path)
+      expect([store.runtimeSettings().showInMenuBar, store.quickNoteProject()]).toEqual([true, undefined])
+    })
+  })
+
   /** Each field is salvaged on its own terms: a mangled one costs that field and nothing else. */
   describe('three fields that arrived separately, in one file', () => {
     const ANA = 'Lx9TqvJ2mR0aUf7cHbN4sKwEdY1gZp6VtQiOnA3XjBM='

@@ -20,6 +20,7 @@ import {
 } from '../state/preferences'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { InstallerButton } from '../updates/InstallerButton'
 import { installerStep } from '../updates/updateNotice'
 import { PageFrame } from '../workspace/PageFrame'
@@ -157,6 +158,7 @@ function useSectionRows(): Record<Exclude<SectionId, 'projects'>, SettingsRow[]>
   const agents = useAgentRows()
   const themeValue = useThemeValue()
   return {
+    general: [{ label: 'Show in Menu Bar', words: [] }],
     agents: [
       {
         label: 'Default agent',
@@ -198,9 +200,9 @@ export function SettingsView(): React.JSX.Element {
     id === 'projects'
       ? projects.flatMap((project) => [{ label: project.name, words: [] }, ...projectRows(project)])
       : sectionRows[id]
-  const sections = SETTINGS_SECTIONS.filter((entry) => entry.id !== 'agents' || agents.length > 0).filter(
-    (entry) => labelMatches(entry.label, query) || rowsOf(entry.id).some((row) => rowMatches(row, query))
-  )
+  const sections = SETTINGS_SECTIONS.filter((entry) => entry.id !== 'agents' || agents.length > 0)
+    .filter((entry) => entry.id !== 'general' || offersMenuBar())
+    .filter((entry) => labelMatches(entry.label, query) || rowsOf(entry.id).some((row) => rowMatches(row, query)))
 
   // Read again on open: both are facts about the world outside this window that may have moved.
   useEffect(() => {
@@ -281,6 +283,8 @@ export function SettingsView(): React.JSX.Element {
 
 function SectionBody({ id, projects }: { id: SectionId; projects: readonly Project[] }): React.JSX.Element | null {
   switch (id) {
+    case 'general':
+      return <GeneralSection />
     case 'agents':
       return <AgentsSection />
     case 'projects':
@@ -480,6 +484,49 @@ function UpdatesSection(): React.JSX.Element {
 
         {/* Kept beside the button that tried rather than raised as a notice. */}
         {shown.whole && panel.problem ? <p className="settings-warning">{panel.problem}</p> : null}
+      </div>
+    </section>
+  )
+}
+
+/** The status item lives in the macOS menu bar only. */
+function offersMenuBar(): boolean {
+  return window.teamree?.platform === 'darwin'
+}
+
+/** Machine-wide switches that belong to no other section. */
+function GeneralSection(): React.JSX.Element {
+  const [shown, setShown] = useState<boolean | null>(null)
+  const show = useShown()
+  useEffect(() => {
+    void runtimeClient.call('settings.get', {}).then((settings) => setShown(settings.showInMenuBar))
+  }, [])
+  const change = (showInMenuBar: boolean): void => {
+    setShown(showInMenuBar)
+    void runtimeClient.call('settings.set', { showInMenuBar }).then((settings) => setShown(settings.showInMenuBar))
+  }
+
+  return (
+    <section className="settings-section" aria-labelledby="settings-general">
+      <h2 className="settings-section__title" id="settings-general" tabIndex={-1}>
+        <Marked text="General" />
+      </h2>
+      <div className="settings-group">
+        {show.row('Show in Menu Bar') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-menu-bar">
+              <Marked text="Show in Menu Bar" />
+            </label>
+            <input
+              id="settings-menu-bar"
+              className="settings-field__check"
+              type="checkbox"
+              checked={shown ?? false}
+              disabled={shown === null}
+              onChange={(event) => change(event.target.checked)}
+            />
+          </div>
+        ) : null}
       </div>
     </section>
   )

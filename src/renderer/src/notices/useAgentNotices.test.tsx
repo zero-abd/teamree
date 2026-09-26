@@ -30,7 +30,12 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { useAgentNotices } = await import('./useAgentNotices')
 
-type Settings = { preference: string; focusedPaneId: string | null; names?: Record<string, string> }
+type Settings = {
+  preference: string
+  focusedPaneId: string | null
+  names?: Record<string, string>
+  activeWorktreeId?: string | null
+}
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -101,12 +106,12 @@ afterEach(() => {
 })
 
 describe('what the window tells the main process', () => {
-  it('says what it wants and which pane it is looking at, as soon as it is up', () => {
+  it('says what it wants, which pane and which worktree it is looking at, as soon as it is up', () => {
     seed()
     render(<Harness />)
 
     expect(publish).toHaveBeenCalledTimes(1)
-    expect(latest()).toEqual({ preference: 'notify', focusedPaneId: 't1', names: {} })
+    expect(latest()).toEqual({ preference: 'notify', focusedPaneId: 't1', names: {}, activeWorktreeId: 'w1' })
   })
 
   // What a notification calls a pane is what the board calls it.

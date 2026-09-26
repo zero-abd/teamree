@@ -5,6 +5,7 @@
 import { join } from 'node:path'
 import type { AgentNotice } from '../agentNotices'
 import type { SharedNoteSummary } from '../../shared/sharedNote'
+import type { Terminal, UpdateState } from '../../shared/entities'
 import type { Appearance, Tone } from '../../shared/theme'
 import { ScrollbackArchive, SCROLLBACK_DIR_NAME } from '../store/scrollbackArchive'
 import type { SelfInstall } from '../updates'
@@ -79,6 +80,12 @@ export type Runtime = {
    * caller, the macOS app menu, is not a method call from a window.
    */
   checkForUpdates: () => Promise<void>
+  /** Restart to Update, for the menu bar extra; the quit's own questions still come first. */
+  restartToUpdate: () => Promise<unknown>
+  /** What the update check knows now. */
+  updateState: () => UpdateState
+  /** Every pane this runtime runs, for the menu bar extra, which has no window to ask. */
+  terminals: () => Terminal[]
   /** A quit was declined at its questions, so a Restart to Update that started it installs nothing. */
   quitDeclined: () => void
   /** The window came to the front: a moment to see whether the base refs moved, or a long absence to check updates over. */
@@ -233,6 +240,9 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     checkForUpdates: async () => {
       await areas.updates.check({ force: true, person: true })
     },
+    restartToUpdate: () => areas.updates.restartToUpdate(),
+    updateState: () => areas.updates.state(),
+    terminals: () => areas.terminals.manager.list(),
     quitDeclined: () => areas.updates.quitDeclined(),
     noteWindowFocus: () => {
       if (fetchBases) void areas.bases.nudge()

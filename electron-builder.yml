@@ -25,6 +25,8 @@ files:
   - out/main/**/*
   - out/preload/**/*
   - out/renderer/**/*
+  # The status item's template images, read from beside out/ (src/main/menuBarExtra/index.ts).
+  - resources/menu-bar/*.png
   - package.json
   - node_modules/**/*
   # Source maps, type declarations and package docs are dead weight in a

@@ -1,0 +1,78 @@
+/* The Quick Note panel: a bar to pick where the note goes, the note, and Save. */
+
+.quick-note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  height: 100%;
+  padding: var(--s3);
+  background: var(--bg-window);
+}
+
+/* The bar moves the frameless panel; its controls stay clickable. */
+.quick-note__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-width: 0;
+  -webkit-app-region: drag;
+}
+
+.quick-note__bar > * {
+  -webkit-app-region: no-drag;
+}
+
+.quick-note__attach {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.quick-note__attach input {
+  flex: none;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.quick-note__attach span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-note__text {
+  flex: 1;
+  min-height: 0;
+  padding: var(--s2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-input);
+  color: var(--fg);
+  font: inherit;
+  line-height: 1.5;
+  resize: none;
+}
+
+.quick-note__text:focus {
+  border-color: var(--accent-line);
+}
+
+.quick-note__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s3);
+}
+
+.quick-note__problem {
+  margin-right: auto;
+  overflow: hidden;
+  color: var(--danger);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

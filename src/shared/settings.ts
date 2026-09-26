@@ -8,10 +8,14 @@ export type RuntimeSettings = {
   showCost: boolean
   /** Settings › Add-ons › Jac Graph Memory. */
   jacMemoryAddon: boolean
+
+  /** Settings › General › Show in Menu Bar: the macOS status item. */
+  showInMenuBar: boolean
 }
 
 export const DEFAULT_RUNTIME_SETTINGS: RuntimeSettings = {
   shareTaskDetails: true,
   showCost: false,
-  jacMemoryAddon: false
+  jacMemoryAddon: false,
+  showInMenuBar: true
 }

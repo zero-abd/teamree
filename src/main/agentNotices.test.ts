@@ -169,6 +169,18 @@ describe('what the window publishes', () => {
     })
   })
 
+  it('takes the worktree in front, when it is one', () => {
+    expect(readNoticeSettings({ preference: 'notify', focusedPaneId: null, activeWorktreeId: 'wt_1' })).toEqual({
+      preference: 'notify',
+      focusedPaneId: null,
+      activeWorktreeId: 'wt_1'
+    })
+    expect(readNoticeSettings({ preference: 'notify', focusedPaneId: null, activeWorktreeId: 7 })).toEqual({
+      preference: 'notify',
+      focusedPaneId: null
+    })
+  })
+
   it('drops anything that is not an object', () => {
     expect(readNoticeSettings('notify')).toBeNull()
     expect(readNoticeSettings(null)).toBeNull()
@@ -355,5 +367,69 @@ describe('what a stopped agent is allowed to do to the window', () => {
     shown[0]?.onActivate()
 
     expect(sent).toEqual([])
+  })
+})
+
+// The menu bar extra reads the window's names and opens a pane in it, whether or not a window is open.
+describe('what the menu bar extra asks of the window', () => {
+  function install() {
+    const listeners = new Map<string, (event: IpcMainEvent, payload: unknown) => void>()
+    const ipc = {
+      on: (channel: string, listener: (event: IpcMainEvent, payload: unknown) => void) =>
+        listeners.set(channel, listener),
+      removeAllListeners: () => {}
+    } as unknown as IpcMain
+    const channel = installAgentNotices(ipc, {
+      windowFocused: () => false,
+      show: () => {},
+      setBadge: () => {},
+      focusWindow: () => {},
+      fromMainFrame: () => true
+    })
+    const window = () => {
+      const sent: unknown[][] = []
+      let closed = false
+      const sender = { isDestroyed: () => closed, send: (...args: unknown[]) => sent.push(args), mainFrame: {} }
+      return {
+        sent,
+        close: () => (closed = true),
+        publish: (payload: NoticeSettings) =>
+          listeners.get(NOTICE_PUBLISH_CHANNEL)?.(
+            { sender, senderFrame: sender.mainFrame } as unknown as IpcMainEvent,
+            payload
+          )
+      }
+    }
+    return { channel, window }
+  }
+  const pane = { worktreeId: 'wt_1', terminalId: 'term_1' }
+
+  it('knows no window until one publishes, and none once it is gone', () => {
+    const { channel, window } = install()
+    expect(channel.window()).toBeNull()
+    const open = window()
+    open.publish({ preference: 'notify', focusedPaneId: null, names: { term_1: 'Codex' }, activeWorktreeId: 'wt_1' })
+    expect(channel.window()).toEqual({ names: { term_1: 'Codex' }, activeWorktreeId: 'wt_1' })
+    open.close()
+    expect(channel.window()).toBeNull()
+  })
+
+  it('reveals a pane in the open window at once', () => {
+    const { channel, window } = install()
+    const open = window()
+    open.publish({ preference: 'notify', focusedPaneId: null })
+    channel.revealPane(pane)
+    expect(open.sent).toEqual([[NOTICE_REVEAL_CHANNEL, pane]])
+  })
+
+  it('holds a reveal for a window still opening until it has the pane', () => {
+    const { channel, window } = install()
+    channel.revealPane(pane)
+    const opening = window()
+    opening.publish({ preference: 'notify', focusedPaneId: null })
+    expect(opening.sent).toEqual([])
+    opening.publish({ preference: 'notify', focusedPaneId: null, names: { term_1: 'Codex' } })
+    opening.publish({ preference: 'notify', focusedPaneId: null, names: { term_1: 'Codex' } })
+    expect(opening.sent).toEqual([[NOTICE_REVEAL_CHANNEL, pane]])
   })
 })

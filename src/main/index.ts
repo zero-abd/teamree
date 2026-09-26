@@ -28,6 +28,8 @@ import {
 } from './launchProfile'
 import { bringForward, revealLaunchWindow, watchActivation } from './launchReveal'
 import { installMenuBar } from './menuBar'
+import { installMenuBarExtra } from './menuBarExtra'
+import { createCommandRelay } from './menuBarExtra/commandRelay'
 import { DEFAULT_APPEARANCE, type Appearance } from '../shared/theme'
 import { installNativeAppearance, windowBackground } from './nativeAppearance'
 import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
@@ -48,6 +50,8 @@ import {
   trackWindowState,
   WINDOW_STATE_FILE
 } from './windowState'
+
+const PRELOAD = join(import.meta.dirname, '../preload/index.mjs')
 
 function createWindow(): BrowserWindow {
   const stateFile = join(app.getPath('userData'), WINDOW_STATE_FILE)
@@ -70,7 +74,7 @@ function createWindow(): BrowserWindow {
     // The chosen theme's ground, or the first frame flashes the wrong colour.
     backgroundColor: windowBackground(currentAppearance(), nativeTheme),
     webPreferences: {
-      preload: join(import.meta.dirname, '../preload/index.mjs'),
+      preload: PRELOAD,
       // Off because the preload is an ES module: a sandboxed preload is
       // evaluated as a classic script and fails with "Cannot use import
       // statement outside a module". See `docs/renderer-boundary.md` for the cost.
@@ -81,6 +85,7 @@ function createWindow(): BrowserWindow {
   })
 
   trackWindowState(window, opened, (state) => saveWindowState(stateFile, state))
+  appWindow = window
 
   // The red button asks about edited files as ⌘Q does; a quit already asked.
   let mayClose = false
@@ -150,10 +155,26 @@ function quitWithoutAsking(): void {
   app.quit()
 }
 
+/** The app's window, not the Quick Note panel; undefined once closed. */
+let appWindow: BrowserWindow | undefined
+
 /** The window, for the handful of things that act on whichever one is open. */
 function mainWindow(): BrowserWindow | undefined {
-  return BrowserWindow.getAllWindows()[0]
+  return appWindow === undefined || appWindow.isDestroyed() ? undefined : appWindow
 }
+
+/** Fronts the window for something the person asked for in the menu bar, opening one when there is none. */
+function openWindow(): void {
+  const background = isBackgroundLaunch(process.env)
+  const existing = mainWindow()
+  // Activated first, so a new window's `ready-to-show` reveals it as a launch macOS fronted.
+  if (!background) app.focus({ steal: true })
+  if (existing === undefined) createWindow()
+  else if (!background) bringForward(existing)
+}
+
+/** Menu bar commands such as New Task…, chosen once a window has published them. */
+const windowCommands = createCommandRelay()
 
 /** Puts a number on the dock icon; `app.dock` is undefined off macOS. */
 function setDockBadge(count: number): void {
@@ -200,7 +221,7 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
   app.on('second-instance', (_event, argv, _cwd, knocking) => {
     const link = invitationInArgv(argv)
     if (link !== undefined) return invitations.receive(link)
-    const [existing] = BrowserWindow.getAllWindows()
+    const existing = mainWindow()
     if (!existing || !frontsExistingWindow(process.env, knocking)) return
     bringForward(existing)
   })
@@ -283,7 +304,10 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
 
     // The window's own menus, rebuilt whenever its answer changes; see src/main/menuBar.ts.
     installMenuBar(ipcMain, {
-      install: (items, choose) => installMenu({ items, choose }),
+      install: (items, choose) => {
+        installMenu({ items, choose })
+        windowCommands.published(items, choose)
+      },
       fromMainFrame: (event) => event.senderFrame === event.sender.mainFrame
     })
 
@@ -368,8 +392,23 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
     })
     createWindow()
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      if (mainWindow() === undefined) createWindow()
     })
+    // macOS only: the app already outlives its last window there, and the status item is how it is reached.
+    if (runtime && process.platform === 'darwin') {
+      installMenuBarExtra({
+        runtime,
+        notices,
+        openWindow,
+        runCommand: (command) => {
+          openWindow()
+          windowCommands.run(command)
+        },
+        quit: () => app.quit(),
+        preload: PRELOAD,
+        background: isBackgroundLaunch(process.env)
+      })
+    }
   })
   // Almost nothing awaits `launched`; without this a failed launch is an unhandled rejection.
   void launched.catch((error: unknown) => console.error('[launch]', error))

@@ -62,7 +62,9 @@ describe('the renderer transport names one set of channels', () => {
       // Unsaved files: the list out, the question in, its answer out.
       ...(await channelsNamedIn('src/main/unsavedFiles.ts')),
       // Invitation links: the one that launched the app, taken; each after, sent.
-      ...(await channelsNamedIn('src/main/invitationLinks.ts'))
+      ...(await channelsNamedIn('src/main/invitationLinks.ts')),
+      // The Quick Note panel: its context and save asked, its close sent.
+      ...(await channelsNamedIn('src/main/menuBarExtra/quickNoteWindow.ts'))
     ])
 
     expect([...preload].filter((channel) => !served.has(channel))).toEqual([])

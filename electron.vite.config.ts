@@ -24,6 +24,10 @@ export default defineConfig({
     root: 'src/renderer',
     plugins: [react()],
     resolve: { alias: { '@shared': resolve('src/shared') } },
-    build: { rollupOptions: { input: { index: resolve('src/renderer/index.html') } } }
+    build: {
+      rollupOptions: {
+        input: { index: resolve('src/renderer/index.html'), quickNote: resolve('src/renderer/quick-note.html') }
+      }
+    }
   }
 })

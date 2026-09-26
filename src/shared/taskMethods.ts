@@ -130,7 +130,8 @@ export const TaskParams = {
   settingsSet: z.object({
     shareTaskDetails: z.boolean().optional(),
     showCost: z.boolean().optional(),
-    jacMemoryAddon: z.boolean().optional()
+    jacMemoryAddon: z.boolean().optional(),
+    showInMenuBar: z.boolean().optional()
   }),
 
   addonsStatus: z.object({}),
