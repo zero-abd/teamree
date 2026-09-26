@@ -212,8 +212,8 @@ export function publishTerminalEvents(
   })
 
   registry.register('terminal.close', schemas['terminal.close'], async (params, call) => {
-    // Read before closing: afterwards the session is gone.
-    const worktreeId = terminals.manager.list().find((terminal) => terminal.id === params.terminalId)?.worktreeId
+    // Read before closing: afterwards neither the session nor the leaf is there.
+    const worktreeId = terminals.manager.paneWorktree(params.terminalId)
     const result = await handlers['terminal.close'](params, call)
     bus.emit({ type: 'terminals' })
     if (worktreeId !== undefined) bus.emit({ type: 'layout', worktreeId })

@@ -195,6 +195,8 @@ export class TerminalSessionManager {
   private readonly records: SessionRepository
   /** Used when the repository keeps no closed panes of its own. */
   private closedHere: ClosedTerminalRecord[] = []
+  /** Closed in this run: a second close of one is answered, not refused. */
+  private readonly closedIds = new Set<string>()
   private readonly scrollback: ScrollbackRepository | undefined
   private readonly checkpoints: ScrollbackCheckpoints | undefined
   /** The grid the last window-opened pane was placed on; a landscape guess until then. */
@@ -469,9 +471,15 @@ export class TerminalSessionManager {
     return session.isRunning ? placed : { ...placed, exited: true }
   }
 
-  /** Closes a terminal: process tree, pane leaf, streams and record all go. */
+  /** Closes a terminal: process tree, pane leaf, streams and record all go. Closing it again is a no-op. */
   async close(terminalId: string): Promise<void> {
-    const session = this.require(terminalId)
+    const session = this.sessions.get(terminalId)
+    if (session === undefined) {
+      const worktreeId = this.paneWorktree(terminalId)
+      if (worktreeId !== undefined) this.dropLeaf(worktreeId, terminalId)
+      else if (!this.closedIds.has(terminalId)) throw notFound(`no such terminal: ${terminalId}`)
+      return
+    }
     const layout = this.layoutFor(session.worktreeId)
     // Kept before the record goes, so `reopen` can bring the pane back as it was.
     const record = this.records.listTerminals().find((stored) => stored.id === terminalId)
@@ -485,18 +493,20 @@ export class TerminalSessionManager {
       })
     }
     this.sessions.delete(terminalId)
+    this.closedIds.add(terminalId)
     this.forget(terminalId)
     this.endStreamsFor(terminalId)
-
-    const root = removePane(layout.root, terminalId)
-    this.saveLayout({
-      worktreeId: session.worktreeId,
-      root,
-      focusedTerminalId:
-        layout.focusedTerminalId === terminalId ? (terminalIdsIn(root)[0] ?? null) : layout.focusedTerminalId
-    })
+    this.dropLeaf(session.worktreeId, terminalId)
 
     await session.close()
+  }
+
+  /** The worktree a pane belongs to: its session's, or the tree still holding its leaf. */
+  paneWorktree(paneId: string): string | undefined {
+    return (
+      this.sessions.get(paneId)?.worktreeId ??
+      this.layouts.listLayouts?.().find((layout) => terminalIdsIn(layout.root).includes(paneId))?.worktreeId
+    )
   }
 
   /** Panes closed in a worktree that `reopen` can bring back, newest first. */
@@ -624,8 +634,11 @@ export class TerminalSessionManager {
     return true
   }
 
+  /** The stored tree, healed of leaves whose terminal is gone. */
   layoutGet(worktreeId: string): Layout {
-    return this.layoutFor(worktreeId)
+    const layout = this.layoutFor(worktreeId)
+    const root = this.withoutOrphans(layout.root)
+    return root === layout.root ? layout : this.saveLayout(withRoot(layout, root))
   }
 
   /**
@@ -707,40 +720,30 @@ export class TerminalSessionManager {
 
     let changed = 0
     for (const layout of stored) {
-      // A file leaf has no session to have died.
-      const files = new Set(fileLeavesIn(layout.root).map((leaf) => leaf.terminalId))
-      const orphans = terminalIdsIn(layout.root).filter((id) => !this.sessions.has(id) && !files.has(id))
-      if (orphans.length === 0) continue
-
-      let root = layout.root
-      for (const orphan of orphans) root = removePane(root, orphan)
-
-      const focus = layout.focusedTerminalId
-      this.layouts.putLayout({
-        worktreeId: layout.worktreeId,
-        root,
-        focusedTerminalId: focus !== null && terminalIdsIn(root).includes(focus) ? focus : null
-      })
+      const root = this.withoutOrphans(layout.root)
+      if (root === layout.root) continue
+      this.layouts.putLayout(withRoot(layout, root))
       changed += 1
     }
     return changed
   }
 
-  /** Replaces a worktree's tree wholesale, e.g. after a drag-resize or restore. */
+  /**
+   * Replaces a worktree's tree wholesale, e.g. after a drag-resize or restore. A window's copy
+   * can still hold panes closed while its write was in flight; those leaves are dropped.
+   */
   layoutSet(params: ParamsOf<'layout.set'>): Layout {
     let root: PaneNode | null = null
     if (params.root !== null && params.root !== undefined) {
       root = parsePaneNode(params.root)
       if (root === null) throw invalidParams('root is not a valid pane tree')
     }
-
-    const focus = params.focusedTerminalId
-    return this.saveLayout({
-      worktreeId: params.worktreeId,
-      root,
-      // Focus has to name a pane that exists, or the renderer focuses nothing.
-      focusedTerminalId: focus !== null && terminalIdsIn(root).includes(focus) ? focus : null
-    })
+    return this.saveLayout(
+      withRoot(
+        { worktreeId: params.worktreeId, root, focusedTerminalId: params.focusedTerminalId },
+        this.withoutOrphans(root)
+      )
+    )
   }
 
   /** Kills every PTY on the quit's short grace, then writes their output. Call from the app's before-quit path. */
@@ -1074,6 +1077,25 @@ export class TerminalSessionManager {
     return cloneLayout(this.layouts.putLayout(cloneLayout(layout)))
   }
 
+  /** Takes a pane's leaf out of its worktree's tree; focus moves to the first pane left. */
+  private dropLeaf(worktreeId: string, terminalId: string): void {
+    const layout = this.layoutFor(worktreeId)
+    const root = removePane(layout.root, terminalId)
+    this.saveLayout({
+      worktreeId,
+      root,
+      focusedTerminalId:
+        layout.focusedTerminalId === terminalId ? (terminalIdsIn(root)[0] ?? null) : layout.focusedTerminalId
+    })
+  }
+
+  /** `root` without leaves whose terminal is gone; the same object when it has none. A file leaf has no session. */
+  private withoutOrphans(root: PaneNode | null): PaneNode | null {
+    const files = new Set(fileLeavesIn(root).map((leaf) => leaf.terminalId))
+    const orphans = terminalIdsIn(root).filter((id) => !this.sessions.has(id) && !files.has(id))
+    return orphans.reduce<PaneNode | null>((kept, orphan) => removePane(kept, orphan), root)
+  }
+
   /**
    * The manager's own subscription to a pane. One listener on the data path,
    * so per-chunk work stays at a map lookup; see `scrollbackCheckpoints.ts`.
@@ -1215,6 +1237,16 @@ class InMemorySessionRepository implements SessionRepository {
 function halved(size: { cols: number; rows: number }, direction: SplitDirection): { cols: number; rows: number } {
   const half = (cells: number): number => Math.max(2, Math.floor(cells / 2) - 2)
   return direction === 'row' ? { cols: half(size.cols), rows: size.rows } : { cols: size.cols, rows: half(size.rows) }
+}
+
+/** `layout` with `root`; focus that names a pane `root` lacks is cleared, or the renderer focuses nothing. */
+function withRoot(layout: Layout, root: PaneNode | null): Layout {
+  const focus = layout.focusedTerminalId
+  return {
+    worktreeId: layout.worktreeId,
+    root,
+    focusedTerminalId: focus !== null && terminalIdsIn(root).includes(focus) ? focus : null
+  }
 }
 
 function cloneLayout(layout: Layout): Layout {

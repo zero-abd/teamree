@@ -3,6 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { Layout, Terminal } from '../../shared/entities'
+import { fileLeaf } from '../../shared/filePane'
 import { ErrorCode } from '../../shared/protocol'
 import type { TerminalEvent } from '../../shared/methods'
 import { findShippedCli } from '../cli/shippedCli'
@@ -710,6 +711,10 @@ describePty('running an exited pane again', () => {
   )
 })
 
+// File leaves: a terminal leaf with no session behind it is dropped on the way in.
+const paneA = fileLeaf('file:a', 'a.md')
+const paneB = fileLeaf('file:b', 'b.md')
+
 describe('layout handlers', () => {
   it('stores a tree wholesale and normalises its sizes', async () => {
     const service = createTerminalService()
@@ -719,24 +724,18 @@ describe('layout handlers', () => {
         kind: 'split',
         direction: 'row',
         sizes: [3, 1],
-        children: [
-          { kind: 'leaf', terminalId: 'a' },
-          { kind: 'leaf', terminalId: 'b' }
-        ]
+        children: [paneA, paneB]
       },
-      focusedTerminalId: 'b'
+      focusedTerminalId: paneB.terminalId
     })
 
     expect(stored.root).toEqual({
       kind: 'split',
       direction: 'row',
       sizes: [0.75, 0.25],
-      children: [
-        { kind: 'leaf', terminalId: 'a' },
-        { kind: 'leaf', terminalId: 'b' }
-      ]
+      children: [paneA, paneB]
     })
-    expect(stored.focusedTerminalId).toBe('b')
+    expect(stored.focusedTerminalId).toBe(paneB.terminalId)
     expect(await service.handlers['layout.get']({ worktreeId: WORKTREE })).toEqual(stored)
   })
 
@@ -744,7 +743,7 @@ describe('layout handlers', () => {
     const service = createTerminalService()
     const stored = await service.handlers['layout.set']({
       worktreeId: WORKTREE,
-      root: { kind: 'leaf', terminalId: 'a' },
+      root: paneA,
       focusedTerminalId: 'ghost'
     })
     expect(stored.focusedTerminalId).toBeNull()
@@ -776,8 +775,8 @@ describe('layout handlers', () => {
     const first = await service.handlers['layout.get']({ worktreeId: WORKTREE })
     await service.handlers['layout.set']({
       worktreeId: WORKTREE,
-      root: { kind: 'leaf', terminalId: 'a' },
-      focusedTerminalId: 'a'
+      root: paneA,
+      focusedTerminalId: paneA.terminalId
     })
     expect(first.root).toBeNull()
 
@@ -785,8 +784,8 @@ describe('layout handlers', () => {
     if (stored.root?.kind === 'leaf') stored.root.terminalId = 'tampered'
     expect(await service.handlers['layout.get']({ worktreeId: WORKTREE })).toEqual({
       worktreeId: WORKTREE,
-      root: { kind: 'leaf', terminalId: 'a' },
-      focusedTerminalId: 'a'
+      root: paneA,
+      focusedTerminalId: paneA.terminalId
     })
   })
 })
@@ -807,13 +806,13 @@ describe('layout persistence', () => {
 
     await service.handlers['layout.set']({
       worktreeId: WORKTREE,
-      root: { kind: 'leaf', terminalId: 'a' },
-      focusedTerminalId: 'a'
+      root: paneA,
+      focusedTerminalId: paneA.terminalId
     })
     expect(saved.get(WORKTREE)).toEqual({
       worktreeId: WORKTREE,
-      root: { kind: 'leaf', terminalId: 'a' },
-      focusedTerminalId: 'a'
+      root: paneA,
+      focusedTerminalId: paneA.terminalId
     })
 
     const restored = createTerminalService({
