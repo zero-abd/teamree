@@ -7,7 +7,11 @@ import type { AgentKind } from './agent-command'
 import { carriesSelector, restartSessionCommand, resumeSessionCommand } from './agent-command'
 import { conversationOnDisk, type ConversationEvidence, type ConversationQuestion } from './agent-conversations'
 import type { PanePlace } from './pane-tree'
-import { noConversationMark } from './scrollbackRecord'
+import { agentStoppedMark, noConversationMark } from './scrollbackRecord'
+
+/** Why an agent pane is left stopped, as its note says. */
+export const NO_CONVERSATION = 'no conversation to resume'
+export const TASK_DONE = 'task done'
 
 /** One terminal, as much of it as outlives the process that ran it. */
 export type TerminalRecord = {
@@ -34,6 +38,8 @@ export type TerminalRecord = {
    * and unknown tries the resume, since a failed resume writes `false` on its way out.
    */
   typed?: boolean
+  /** Its agent was handed the worktree's task at launch; the conversation it began is not started again. */
+  prompted?: boolean
   /** Which Run button started it; see `Terminal.run`. */
   run?: RunKind
   /** How that run ended, when it ended before the app quit. */
@@ -69,15 +75,24 @@ export type RestoreLaunch = {
   fallback?: { command: string; agentSessionId?: string }
   /** A line for the pane to print first, when this launch is not the one the record asked for. */
   note?: string
+  /** The agent is left stopped: a conversation was had here and cannot be resumed, so starting over is the owner's call. */
+  stopped?: true
+}
+
+/** What a stopped agent pane runs: nothing, so it comes back ended with its record above. */
+const STOPPED_COMMAND = 'exit 0'
+
+/** An agent pane left stopped, saying why in the pane. */
+export function stoppedLaunch(reason: string): RestoreLaunch {
+  return { command: STOPPED_COMMAND, resumed: false, stopped: true, note: agentStoppedMark(reason) }
 }
 
 /**
  * How to bring one recorded terminal back. A command is re-issued only when it
  * resumes an agent conversation; `npm run deploy` is not re-run because the app
- * restarted. An agent pane with no conversation in the agent's own store (a
- * keystroke at Claude Code's trust gate is not one) is started over under a new
- * id rather than refused by the CLI on every launch; `typed` decides only where
- * the store cannot answer. `conversation` is a parameter so tests need no disk.
+ * restarted. An agent pane with no conversation in the agent's own store is left
+ * stopped when it was ever spoken to, and started over under a new id only when
+ * it never was. `conversation` is a parameter so tests need no disk.
  */
 export function restoreLaunch(
   record: TerminalRecord,
@@ -97,8 +112,12 @@ export function restoreLaunch(
     ...(record.agentSessionId === undefined ? {} : { agentSessionId: record.agentSessionId })
   })
 
+  // Typed into, handed its task, or a record too old to say: absent `typed` is unknown, not no.
+  const spoken = record.typed !== false || record.prompted === true
   // Evidence first, in both directions: the store is what the resume will read.
-  if (evidence === 'absent' || (evidence === 'unknown' && record.typed === false)) {
+  if (evidence === 'absent' || (evidence === 'unknown' && !spoken)) {
+    // A fresh start would begin again what was already begun: the task done twice.
+    if (spoken) return stoppedLaunch(NO_CONVERSATION)
     const restart = restartSessionCommand(record.command, record.agent)
     // Could not be modelled (a pipeline, an unclosed quote): re-issuing would
     // leave a dead session id on the line and a different one in the record.

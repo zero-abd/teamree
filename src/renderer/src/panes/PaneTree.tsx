@@ -19,6 +19,7 @@ import type { WorktreeNameSource } from '../sidebar/worktreeDisplay'
 import { TerminalView } from '../terminal/TerminalView'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { usePaneMenu } from '../workspace/paneMenu'
+import { RESUME_CONVERSATION } from '../workspace/startMenu'
 import { UnsavedDot } from '../files/FileBar'
 import { FilePane } from './FilePane'
 import { usePaneDrag, useTabDrag } from './paneDrag'
@@ -38,6 +39,8 @@ export type PaneCallbacks = {
   onClose: (terminalId: string) => void
   /** Runs an exited pane's program again, in the same pane. */
   onRelaunch: (terminalId: string) => void
+  /** Picks a conversation for an ended agent pane to resume in place; absent leaves the button out. */
+  onResumeConversation?: (terminalId: string) => void
   onResize: (path: number[], sizes: number[]) => void
   isAppChord: (event: KeyboardEvent) => boolean
   /** Spells the chords in the header's right-click menu. */
@@ -189,6 +192,7 @@ function PaneLeaf({
   onFocus,
   onClose,
   onRelaunch,
+  onResumeConversation,
   isAppChord,
   searchTerminalId,
   searchToken,
@@ -201,6 +205,8 @@ function PaneLeaf({
   const focused = focusedTerminalId === terminalId
   // A dead shell keeps its scrollback, so without this it looks like one at a prompt.
   const exited = terminal !== undefined && !terminal.running
+  // Never started this launch: the badge says so, and its exit code means nothing.
+  const stopped = terminal?.restored === 'stopped'
   // One name per pane, shared by strip, bar, close button and close question.
   const name = names?.[terminalId] ?? terminal?.title ?? 'terminal'
   // The grid size is on the name's hover: nobody acts on it.
@@ -208,14 +214,23 @@ function PaneLeaf({
 
   const status = (
     <>
-      {exited ? (
+      {exited && !stopped ? (
         <span className="chip pane__exit">exited{terminal?.exitCode === undefined ? '' : ` ${terminal.exitCode}`}</span>
       ) : null}
       {/* Beside the badge that says the pane is dead, because the next thing anybody does about a
           dead pane is this; the pane menu's word for an agent or a Run pane, since that is not a new shell. */}
+      {exited && stopped && onResumeConversation !== undefined ? (
+        <button type="button" className="pane__again" onClick={() => onResumeConversation(terminalId)}>
+          {RESUME_CONVERSATION}
+        </button>
+      ) : null}
       {exited ? (
         <button type="button" className="pane__again" onClick={() => onRelaunch(terminalId)}>
-          {terminal?.agent === undefined && terminal?.run === undefined ? 'New Shell' : 'Run Again'}
+          {stopped
+            ? 'Start Fresh'
+            : terminal?.agent === undefined && terminal?.run === undefined
+              ? 'New Shell'
+              : 'Run Again'}
         </button>
       ) : null}
       {terminal?.restored === undefined ? null : (
@@ -278,6 +293,8 @@ function restoredBadge(terminal: Terminal): string {
       return 'resumed'
     case 'restarted':
       return freshAgentLabel(terminal.agent ?? 'agent')
+    case 'stopped':
+      return 'stopped'
     default:
       return 'new shell'
   }
@@ -289,6 +306,8 @@ function restoredTitle(terminal: Terminal): string {
       return 'Restored · session resumed'
     case 'restarted':
       return `Restored · nothing to resume, ${freshAgentLabel(terminal.agent ?? 'agent')} running`
+    case 'stopped':
+      return 'Restored · agent not started, task not re-sent'
     default:
       return 'Restored · new shell, previous process gone'
   }

@@ -245,7 +245,12 @@ export function App(): React.JSX.Element {
           {...(dialog.query === undefined ? {} : { query: dialog.query })}
         />
       ) : null}
-      {dialog?.kind === 'resume-conversation' ? <ResumeConversationDialog worktreeId={dialog.worktreeId} /> : null}
+      {dialog?.kind === 'resume-conversation' ? (
+        <ResumeConversationDialog
+          worktreeId={dialog.worktreeId}
+          {...(dialog.terminalId === undefined ? {} : { terminalId: dialog.terminalId })}
+        />
+      ) : null}
 
       {/* Last, so it is on top of whatever else is open. A question about bytes
           that are about to run as this user outranks anything this user

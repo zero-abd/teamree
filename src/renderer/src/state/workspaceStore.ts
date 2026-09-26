@@ -248,7 +248,8 @@ export type DialogState =
   /** A move whose dry run needs its commits replayed onto the new parent. */
   | { kind: 'confirm-rebase'; worktreeId: string; parentId: string }
   /** A worktree's past agent conversations, to resume one. */
-  | { kind: 'resume-conversation'; worktreeId: string }
+  /** With `terminalId`, a conversation of that pane's agent resumes in the pane. */
+  | { kind: 'resume-conversation'; worktreeId: string; terminalId?: string }
   /** Hand Off…: a teammate and a note for them. */
   | { kind: 'hand-off'; worktreeId: string }
   | null
@@ -674,7 +675,8 @@ type WorkspaceState = {
   /** Goes through with it, once the question this app asked has been answered. */
   forceCloseTerminal: (terminalId: string) => Promise<void>
   /** Runs an exited pane's program again, in the same pane. */
-  relaunchTerminal: (terminalId: string) => Promise<void>
+  /** `task` hands the fresh agent its worktree's task again; `resume` resumes that conversation instead. */
+  relaunchTerminal: (terminalId: string, options?: { task?: boolean; resume?: string }) => Promise<void>
   createTerminal: (worktreeId: string) => Promise<void>
   /**
    * Opens `path` as a tab of the file column, or focuses the tab already on it; `diff` shows its diff,
@@ -2661,9 +2663,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     /** Runs an exited pane again, in place. Nothing is asked first: the pane is dead, and its output stays above the new run. */
-    async relaunchTerminal(terminalId) {
+    async relaunchTerminal(terminalId, options = {}) {
       try {
-        const terminal = await runtimeClient.call('terminal.relaunch', { terminalId })
+        const terminal = await runtimeClient.call('terminal.relaunch', { terminalId, ...options })
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
         // The press was on a button; the next keystroke is for what was run again.
         get().focusPane(terminal.id)

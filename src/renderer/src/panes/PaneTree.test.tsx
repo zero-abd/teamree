@@ -62,6 +62,7 @@ const terminal = (id: string, overrides: Partial<Terminal> = {}): Terminal => ({
 const onFocus = vi.fn()
 const onClose = vi.fn()
 const onRelaunch = vi.fn()
+const onResumeConversation = vi.fn()
 const onResize = vi.fn()
 
 function mount(
@@ -80,6 +81,7 @@ function mount(
       onFocus={onFocus}
       onClose={onClose}
       onRelaunch={onRelaunch}
+      onResumeConversation={onResumeConversation}
       onResize={onResize}
       isAppChord={() => false}
       modifier={resolvePlatformModifier('darwin')}
@@ -112,6 +114,7 @@ beforeEach(() => {
   onFocus.mockReset()
   onClose.mockReset()
   onRelaunch.mockReset()
+  onResumeConversation.mockReset()
   onResize.mockReset()
 })
 
@@ -193,6 +196,18 @@ describe('one pane', () => {
     mount(leaf('t1'), [terminal('t1', { agent: 'claude', restored: 'restarted' })])
     expect(screen.getByText('fresh claude').getAttribute('title')).toContain('fresh claude')
     expect(screen.queryByText('new shell')).toBeNull()
+  })
+
+  // Its conversation could not come back, and starting over would do its task twice.
+  it('offers a stopped agent its conversation or a fresh start, and no exit code', () => {
+    mount(leaf('t1'), [terminal('t1', { agent: 'claude', running: false, exitCode: 0, restored: 'stopped' })])
+    expect(screen.getByText('stopped').getAttribute('title')).toContain('task not re-sent')
+    expect(screen.queryByText(/exited/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Run Again' })).toBeNull()
+    screen.getByRole('button', { name: 'Resume Conversation…' }).click()
+    expect(onResumeConversation).toHaveBeenCalledExactlyOnceWith('t1')
+    screen.getByRole('button', { name: 'Start Fresh' }).click()
+    expect(onRelaunch).toHaveBeenCalledExactlyOnceWith('t1')
   })
 
   it('distinguishes a resumed conversation from a pane that only came back', () => {

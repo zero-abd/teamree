@@ -62,7 +62,7 @@ async function lastSession(): Promise<LastSession> {
   await mkdir(userDataDir, { recursive: true })
 
   const pidFile = join(base, 'pane.pid')
-  // Named for the agent: that is how the restore decides this pane resumes.
+  // Named for the agent: that is how the restore decides this pane runs it again.
   const binary = join(bin, 'claude')
   // READY first and the pid moved into place whole: once the file exists, both are out.
   await writeFile(
@@ -91,6 +91,8 @@ async function lastSession(): Promise<LastSession> {
     command: binary,
     agent: 'claude',
     agentSessionId: 'session_from_last_launch',
+    // Never spoken to, so it starts again whatever the store holds: an agent spoken to with nothing to resume stays stopped.
+    typed: false,
     cols: 80,
     rows: 24,
     createdAt: 0

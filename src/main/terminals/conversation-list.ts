@@ -7,9 +7,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { createInterface } from 'node:readline'
 import type { AgentConversation } from '../../shared/entities'
+import type { ProfileStores } from './shell-environment'
 import {
-  claudeProjectDirectory,
-  codexSessionsDirectory,
+  claudeProjectSlug,
+  claudeStoreRoots,
+  codexSessionsDirectories,
   head,
   isUsableFileName,
   MAX_ROLLOUTS_SEARCHED,
@@ -26,11 +28,30 @@ export const PROMPT_CHARS = 100
 /** Transcripts read before giving up on filling the list: a slug folder can hold other checkouts' files. */
 const MAX_TRANSCRIPTS_READ = 60
 
-/** Newest first across both agents, at most `MAX_CONVERSATIONS`. `home` is a test seam. */
-export async function listConversations(cwd: string, home: string = os.homedir()): Promise<AgentConversation[]> {
+/** Newest first across both agents and every store `conversationOnDisk` reads, at most `MAX_CONVERSATIONS`. */
+export async function listConversations(
+  cwd: string,
+  home: string = os.homedir(),
+  profile: ProfileStores = {}
+): Promise<AgentConversation[]> {
   const checkout = resolved(cwd)
-  const [claude, codex] = await Promise.all([claudeConversations(checkout, home), codexConversations(checkout, home)])
-  return [...claude, ...codex].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_CONVERSATIONS)
+  const found = await Promise.all([
+    ...claudeStoreRoots(home, profile).map((root) =>
+      claudeConversations(checkout, path.join(root, 'projects', claudeProjectSlug(checkout)))
+    ),
+    ...codexSessionsDirectories(home, profile).map((sessions) => codexConversations(checkout, sessions))
+  ])
+  const seen = new Set<string>()
+  return found
+    .flat()
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .filter((conversation) => {
+      const key = `${conversation.agent}:${conversation.sessionId}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, MAX_CONVERSATIONS)
 }
 
 type Tally = {
@@ -42,8 +63,7 @@ type Tally = {
   messages: number
 }
 
-async function claudeConversations(checkout: string, home: string): Promise<AgentConversation[]> {
-  const directory = claudeProjectDirectory(checkout, home)
+async function claudeConversations(checkout: string, directory: string): Promise<AgentConversation[]> {
   const names = (await readdir(directory).catch(() => [] as string[])).filter(
     (name) => name.endsWith('.jsonl') && isUsableFileName(name.slice(0, -'.jsonl'.length))
   )
@@ -105,12 +125,12 @@ async function readClaudeTranscript(file: string, checkout: string): Promise<Tal
   return tally
 }
 
-async function codexConversations(checkout: string, home: string): Promise<AgentConversation[]> {
+async function codexConversations(checkout: string, sessions: string): Promise<AgentConversation[]> {
   // The rollout's first line carries the cwd; searched as text before anything is parsed.
   const wanted = `"cwd":${JSON.stringify(checkout)}`
   const found: AgentConversation[] = []
   let examined = 0
-  for (const file of rolloutFiles(codexSessionsDirectory(home))) {
+  for (const file of rolloutFiles(sessions)) {
     examined += 1
     if (examined > MAX_ROLLOUTS_SEARCHED || found.length >= MAX_CONVERSATIONS) break
     if (!head(file).includes(wanted)) continue

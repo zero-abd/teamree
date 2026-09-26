@@ -6,6 +6,7 @@ import { closeSync, existsSync, openSync, readdirSync, readSync, realpathSync } 
 import os from 'node:os'
 import path from 'node:path'
 import type { AgentKind } from './agent-command'
+import type { ProfileStores } from './shell-environment'
 
 /** What this file can say about a conversation: it is there, it is not, or it cannot tell. */
 export type ConversationEvidence = 'present' | 'absent' | 'unknown'
@@ -41,38 +42,63 @@ export function isUsableFileName(value: string): boolean {
   return /^[A-Za-z0-9_-]+$/.test(value) && value.length <= 128
 }
 
-/** Whether the conversation this pane would resume is on this disk. `home` is a test seam. */
-export function conversationOnDisk(question: ConversationQuestion, home: string = os.homedir()): ConversationEvidence {
+/**
+ * Whether the conversation this pane would resume is on this disk, in the store the app's
+ * environment names or the one the login shell's does (`loginShellStores`). `home` is a test seam.
+ */
+export function conversationOnDisk(
+  question: ConversationQuestion,
+  home: string = os.homedir(),
+  profile: ProfileStores = {}
+): ConversationEvidence {
   // Both stores are keyed by the cwd the agent saw, symlinks followed: `/tmp`
   // on a Mac is `/private/tmp` to the process, and the two spell different slugs.
   const asked = { ...question, cwd: resolved(question.cwd) }
-  if (asked.agent === 'claude') return claudeConversation(asked, home)
-  if (asked.agent === 'codex') return codexConversation(asked, home)
+  if (asked.agent === 'claude')
+    return anyStore(claudeStoreRoots(home, profile), (root) => claudeConversation(asked, root))
+  if (asked.agent === 'codex') {
+    return anyStore(codexSessionsDirectories(home, profile), (sessions) => codexConversation(asked, sessions))
+  }
   // gemini, opencode and droid: their stores are not known well enough to call
   // a missing file proof of a missing conversation.
   return 'unknown'
+}
+
+/** Present in any store wins; absent only when every store there is says so. */
+function anyStore(roots: readonly string[], ask: (root: string) => ConversationEvidence): ConversationEvidence {
+  const answers = roots.map(ask)
+  if (answers.includes('present')) return 'present'
+  return answers.includes('absent') && !answers.includes('unknown') ? 'absent' : 'unknown'
 }
 
 /**
  * `~/.claude/projects/<slug of cwd>/<session id>.jsonl`, one file per
  * conversation. Without an id the question is what `--continue` would ask.
  */
-function claudeConversation(question: ConversationQuestion, home: string): ConversationEvidence {
+function claudeConversation(question: ConversationQuestion, root: string): ConversationEvidence {
   // No store at all proves nothing.
-  if (!existsSync(claudeStoreRoot(home))) return 'unknown'
+  if (!existsSync(root)) return 'unknown'
 
+  const directory = path.join(root, 'projects', claudeProjectSlug(question.cwd))
   const sessionId = question.agentSessionId
   if (sessionId !== undefined) {
     if (!isUsableFileName(sessionId)) return 'unknown'
-    return existsSync(claudeTranscriptPath(question.cwd, sessionId, home)) ? 'present' : 'absent'
+    return existsSync(path.join(directory, `${sessionId}.jsonl`)) ? 'present' : 'absent'
   }
-  return listing(claudeProjectDirectory(question.cwd, home)).some((entry) => entry.endsWith('.jsonl'))
-    ? 'present'
-    : 'absent'
+  return listing(directory).some((entry) => entry.endsWith('.jsonl')) ? 'present' : 'absent'
 }
 
 export function claudeStoreRoot(home: string): string {
   return storeRoot(home, process.env.CLAUDE_CONFIG_DIR, '.claude')
+}
+
+/** The app's own store, then the login shell's where that is somewhere else. */
+export function claudeStoreRoots(home: string = os.homedir(), profile: ProfileStores = {}): string[] {
+  return withProfile(claudeStoreRoot(home), profile.CLAUDE_CONFIG_DIR)
+}
+
+function withProfile(own: string, profiled: string | undefined): string[] {
+  return profiled === undefined || path.resolve(profiled) === path.resolve(own) ? [own] : [own, profiled]
 }
 
 /** Where Claude Code keeps every conversation had in one directory. */
@@ -100,8 +126,7 @@ export function resolved(cwd: string): string {
  * codex CLI has no flag to pin an id, so the question is usually answered by
  * cwd, which every rollout records in its first line and `codex resume` filters on.
  */
-function codexConversation(question: ConversationQuestion, home: string): ConversationEvidence {
-  const sessions = codexSessionsDirectory(home)
+function codexConversation(question: ConversationQuestion, sessions: string): ConversationEvidence {
   if (!existsSync(sessions)) return 'unknown'
 
   const sessionId = question.agentSessionId
@@ -126,6 +151,12 @@ function codexConversation(question: ConversationQuestion, home: string): Conver
 /** Where Codex keeps its rollouts, by day. */
 export function codexSessionsDirectory(home: string = os.homedir()): string {
   return path.join(storeRoot(home, process.env.CODEX_HOME, '.codex'), 'sessions')
+}
+
+/** The app's own rollouts, then the login shell's where `CODEX_HOME` puts them somewhere else. */
+export function codexSessionsDirectories(home: string = os.homedir(), profile: ProfileStores = {}): string[] {
+  const profiled = profile.CODEX_HOME === undefined ? undefined : path.join(profile.CODEX_HOME, 'sessions')
+  return withProfile(codexSessionsDirectory(home), profiled)
 }
 
 /** How many rollout files are worth looking at before a startup is being slowed down. */

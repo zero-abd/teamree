@@ -190,3 +190,17 @@ describe('the list', () => {
     expect(await listConversations(checkout, base)).toEqual([])
   })
 })
+
+describe('the login shell’s stores', () => {
+  it('lists what was had under the profile’s store too, each conversation once', async () => {
+    await claudeTranscript(checkout, 'both', [userLine(checkout, 'in both', 2)])
+    const profiled = path.join(base, 'profile-claude', 'projects', claudeProjectSlug(checkout))
+    await mkdir(profiled, { recursive: true })
+    await writeFile(path.join(profiled, 'profile-only.jsonl'), `${line(userLine(checkout, 'profile', 3))}\n`)
+    await writeFile(path.join(profiled, 'both.jsonl'), `${line(userLine(checkout, 'in both', 2))}\n`)
+
+    const listed = await listConversations(checkout, base, { CLAUDE_CONFIG_DIR: path.join(base, 'profile-claude') })
+    expect(listed.map((conversation) => conversation.sessionId).sort()).toEqual(['both', 'profile-only'])
+    expect((await listConversations(checkout, base)).map((conversation) => conversation.sessionId)).toEqual(['both'])
+  })
+})

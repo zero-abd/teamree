@@ -13,8 +13,8 @@ import {
   type ConversationEvidence,
   type ConversationQuestion
 } from './agent-conversations'
-import { INERT_RECORD, noConversationMark } from './scrollbackRecord'
-import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
+import { agentStoppedMark, INERT_RECORD, noConversationMark } from './scrollbackRecord'
+import { NO_CONVERSATION, restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
 import { TerminalSessionManager, type LayoutRepository, type SessionRepository } from './session-manager'
 
 function record(overrides: Partial<TerminalRecord> = {}): TerminalRecord {
@@ -145,18 +145,45 @@ describe('restoreLaunch', () => {
     expect(restoreLaunch(record())).toEqual({ resumed: false })
   })
 
-  // The first `claude` in a fresh worktree puts up "Is this a project you
-  // trust?"; answering it is a keystroke that reaches a gate, not an agent, so
-  // `typed` alone is not proof of a conversation.
-  it('starts over a pane whose conversation is not in the store, whatever was typed into it', () => {
+  // Started over, a finished parent planned and fanned out its children a second time.
+  it('leaves an agent stopped, not started over, when its conversation is gone and it was ever spoken to', () => {
+    const spoken = [{ typed: true }, { typed: false, prompted: true }, {}] as const
+    for (const said of spoken) {
+      const launch = restoreLaunch(
+        record({ command: 'claude --session-id old-zzz', agent: 'claude', agentSessionId: 'old-zzz', ...said }),
+        missing
+      )
+      expect(launch, JSON.stringify(said)).toEqual({
+        command: 'exit 0',
+        resumed: false,
+        stopped: true,
+        note: agentStoppedMark(NO_CONVERSATION)
+      })
+    }
+  })
+
+  // No store to ask, but its task went in on the command line: there is a conversation to try.
+  it('tries the resume for a pane handed its task, though nothing was typed into it', () => {
     const launch = restoreLaunch(
-      record({ command: 'claude --session-id old-zzz', agent: 'claude', agentSessionId: 'old-zzz', typed: true }),
+      record({
+        command: 'claude --session-id abc',
+        agent: 'claude',
+        agentSessionId: 'abc',
+        typed: false,
+        prompted: true
+      }),
+      unknowable
+    )
+    expect(launch.command).toBe('claude --resume abc')
+    expect(launch.resumed).toBe(true)
+  })
+
+  it('still starts over a pane nobody spoke to, with nothing to resume', () => {
+    const launch = restoreLaunch(
+      record({ command: 'claude --session-id old-zzz', agent: 'claude', agentSessionId: 'old-zzz', typed: false }),
       missing
     )
-
-    expect(launch.resumed).toBe(false)
-    expect(launch.command).not.toContain('--resume')
-    expect(launch.command).not.toContain('old-zzz')
+    expect(launch.stopped).toBeUndefined()
     expect(launch.repinned?.agentSessionId).toBeDefined()
     expect(launch.note).toBe(noConversationMark('claude'))
   })
@@ -569,7 +596,6 @@ describePty('restoring terminals across a restart', () => {
     const first = manager(repositories, checkout)
     const agentPane = first.create({ worktreeId: 'wt_1', command: launch })
     const plainPane = first.create({ worktreeId: 'wt_1', command: 'echo hello' })
-    first.write(agentPane.id, 'hello\r')
     await first.shutdown()
 
     const second = manager(repositories, checkout, undefined, undefined, () => 'absent')
@@ -967,8 +993,8 @@ describePty('restoring terminals across a restart', () => {
     }
   }
 
-  // The trust gate again: a keystroke no agent heard, `typed` set, store empty.
-  it('starts a fresh agent, saying why, when the store has nothing under the pinned id', async () => {
+  // A keystroke may have reached only the trust gate, or a whole conversation now lost; starting over is the owner's call.
+  it('leaves the agent stopped, saying why, when the store has nothing under the pinned id', async () => {
     const { checkout, launch } = await fakeAgent('claude')
     const store = await claudeStore()
     const repositories = createRepositories()
@@ -980,7 +1006,6 @@ describePty('restoring terminals across a restart', () => {
     const pinned = repositories.listTerminals()[0]?.agentSessionId
     expect(pinned).toBeDefined()
 
-    // The keystroke at the gate.
     first.write(opened.id, '\r')
     await waitUntil(() => repositories.listTerminals()[0]?.typed === true, 'the pane to write down the keystroke')
     await first.shutdown()
@@ -989,20 +1014,21 @@ describePty('restoring terminals across a restart', () => {
     const second = manager(repositories, checkout, reopened, undefined, store.evidence)
     expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
 
-    // Below the line is this launch; the record above it does contain the old id.
-    const below = (): string => second.read(opened.id).split(noConversationMark('claude'))[1] ?? ''
-    await waitUntil(() => below().includes('AGENT ARGS:'), 'the fresh agent to print its arguments under that line')
+    await waitUntil(() => second.list('wt_1')[0]?.running === false, 'the stopped pane to end')
+    const pane = second.list('wt_1')[0]
+    expect(pane?.restored).toBe('stopped')
+    expect(pane?.agent).toBe('claude')
 
-    const thisLaunch = below()
-    expect(thisLaunch).toContain('--session-id')
-    expect(thisLaunch).not.toContain('--resume')
-    expect(thisLaunch).not.toContain(pinned as string)
-    expect(second.list('wt_1')[0]?.running).toBe(true)
+    const shown = second.read(opened.id)
+    expect(shown).toContain(agentStoppedMark(NO_CONVERSATION))
+    // Printed once, by the first launch, above the record's end.
+    expect(shown.split('AGENT ARGS:')).toHaveLength(2)
+    expect(shown.split(agentStoppedMark(NO_CONVERSATION))[1]).not.toContain('AGENT ARGS:')
 
-    const rewritten = repositories.listTerminals()[0]
-    expect(rewritten?.agentSessionId).toBeDefined()
-    expect(rewritten?.agentSessionId).not.toBe(pinned)
-    expect(rewritten?.typed).toBe(false)
+    // Kept as it was, so the next launch asks the same question.
+    const kept = repositories.listTerminals()[0]
+    expect(kept?.agentSessionId).toBe(pinned)
+    expect(kept?.typed).toBe(true)
   }, 20_000)
 
   // The conversation is on the disk, so it is resumed whatever the app watched.

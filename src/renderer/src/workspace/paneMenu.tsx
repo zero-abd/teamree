@@ -10,6 +10,7 @@ import { collectTerminalIds, paneStopIndex, paneStops, reorderPanes } from '../p
 import { useOpenIn } from '../sidebar/openIn'
 import { anchorAtPointer, RowMenu, type RowMenuAnchor, type RowMenuItem } from '../sidebar/RowMenu'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { RESUME_CONVERSATION } from './startMenu'
 
 type Opened = {
   terminalId: string
@@ -157,15 +158,32 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
   }
 
   const exited = terminal !== undefined && !terminal.running
+  // An agent that ended is resumed, or started over bare; its task goes again only when asked for.
+  const fresh = terminal?.restored === 'stopped' ? 'Start Fresh' : 'Run Again'
+  const again: RowMenuItem[] = !exited
+    ? []
+    : terminal.agent === undefined || terminal.run !== undefined
+      ? [{ label: 'Run Again', separated: true, onChoose: () => void store.relaunchTerminal(terminalId) }]
+      : [
+          {
+            label: RESUME_CONVERSATION,
+            separated: true,
+            onChoose: () => store.openDialog({ kind: 'resume-conversation', worktreeId: worktree.id, terminalId })
+          },
+          { label: fresh, onChoose: () => void store.relaunchTerminal(terminalId) },
+          ...(worktree.task === undefined
+            ? []
+            : [
+                { label: `${fresh} with Task`, onChoose: () => void store.relaunchTerminal(terminalId, { task: true }) }
+              ])
+        ]
   return [
     { label: 'Rename…', onChoose: () => store.editPaneName(terminalId) },
     { label: 'Split Right', hint: hint('split-right'), separated: true, onChoose: () => split('row') },
     { label: 'Split Down', hint: hint('split-down'), onChoose: () => split('column') },
     maximize,
     ...moves,
-    ...(exited
-      ? [{ label: 'Run Again', separated: true, onChoose: () => void store.relaunchTerminal(terminalId) }]
-      : []),
+    ...again,
     { label: 'Copy Output', separated: !exited, onChoose: () => void store.copyPaneOutput(terminalId, name) },
     ...closing
   ]

@@ -46,6 +46,11 @@ export function startsAgainBelow(program: string): string {
   return `${program} starts again below`
 }
 
+/** What follows it when an exited pane resumes a chosen conversation. */
+export function resumesBelow(program: string): string {
+  return `${program} resumes below`
+}
+
 /**
  * Said into a pane whose resume did not take: only what the app knows. The
  * agent's own reason sits immediately above. `restarted` is told, not guessed.
@@ -63,6 +68,11 @@ export function failedResumeMark(exitCode: number, hasRecord: boolean, restarted
  */
 export function noConversationMark(agent: string): string {
   return `${RESET}\r\n${DIM}[no conversation to resume — ${freshAgentLabel(agent)} below]${RESET}\r\n`
+}
+
+/** Said into an agent pane left stopped on the way back up; its buttons offer the rest. */
+export function agentStoppedMark(reason: string): string {
+  return `${RESET}\r\n${DIM}[${reason} — agent stopped, task not re-sent]${RESET}\r\n`
 }
 
 /**

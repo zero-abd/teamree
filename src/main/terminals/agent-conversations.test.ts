@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -94,6 +94,29 @@ describe('conversationOnDisk', () => {
 
     expect(conversationOnDisk({ agent: 'codex', cwd }, base)).toBe('present')
     expect(conversationOnDisk({ agent: 'codex', cwd: '/checkouts/wt_2' }, base)).toBe('absent')
+  })
+
+  // A Dock-launched app has none of the profile's variables; the pane's agent wrote where the profile said.
+  it('looks in the stores the login shell names as well as its own', async () => {
+    const base = await home(['.claude/projects'])
+    const profile = await home(['claude/projects', 'codex/sessions/2026/09/26'])
+    const cwd = path.join(base, 'checkout')
+    await mkdir(cwd, { recursive: true })
+    const slug = path.join(profile, 'claude', 'projects', claudeProjectSlug(await realpath(cwd)))
+    await mkdir(slug, { recursive: true })
+    await writeFile(path.join(slug, 'sess-1.jsonl'), '{"type":"user"}\n', 'utf8')
+    await writeFile(
+      path.join(profile, 'codex', 'sessions', '2026', '09', '26', 'rollout-2026-09-26T01-00-00-abc.jsonl'),
+      `{"type":"session_meta","payload":{"cwd":${JSON.stringify(await realpath(cwd))}}}\n`,
+      'utf8'
+    )
+    const stores = { CLAUDE_CONFIG_DIR: path.join(profile, 'claude'), CODEX_HOME: path.join(profile, 'codex') }
+
+    expect(conversationOnDisk({ agent: 'claude', cwd, agentSessionId: 'sess-1' }, base)).toBe('absent')
+    expect(conversationOnDisk({ agent: 'claude', cwd, agentSessionId: 'sess-1' }, base, stores)).toBe('present')
+    expect(conversationOnDisk({ agent: 'claude', cwd, agentSessionId: 'sess-2' }, base, stores)).toBe('absent')
+    expect(conversationOnDisk({ agent: 'codex', cwd }, base)).toBe('unknown')
+    expect(conversationOnDisk({ agent: 'codex', cwd }, base, stores)).toBe('present')
   })
 
   // Deliberate: guessing a store wrong would read as "no conversation" for every pane.
