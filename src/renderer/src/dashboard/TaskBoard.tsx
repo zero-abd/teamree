@@ -1,12 +1,15 @@
 // The board by task: every worktree in tree order with its stage, its panes as dots, its uncommitted
-// lines and its age. Enter or a click opens the worktree.
+// lines, its tokens and its age. Enter or a click opens the worktree.
 
 import { useEffect, useRef, useState } from 'react'
 import { hasCheckout, type Worktree, type WorktreeChanges } from '@shared/entities'
+import type { WorktreeUsage } from '@shared/tasks'
+import { usageDetail, usageLabel } from '@shared/usage'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { dotClass, sinceLabel, TONE_LABEL } from '../sidebar/agentRows'
 import { OverlapMark } from '../sidebar/OverlapMark'
 import { useOverlapChips } from '../sidebar/useOverlapChip'
+import { useUsageStore } from '../state/usageStore'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { TaskRow } from './taskRows'
 
@@ -58,6 +61,8 @@ export function TaskBoard({
   onKeyDown: (event: React.KeyboardEvent<HTMLUListElement>) => void
 }): React.JSX.Element {
   const overlapOf = useOverlapChips()
+  const usage = useUsageStore((state) => state.usage)
+  const showCost = useUsageStore((state) => state.showCost)
   return (
     <>
       <div className="task-head" aria-hidden="true">
@@ -65,6 +70,7 @@ export function TaskBoard({
         <span>Stage</span>
         <span>Panes</span>
         <span className="task-head__end">Changes</span>
+        <span className="task-head__end">Tokens</span>
         <span className="task-head__end">Age</span>
       </div>
       <ul className="board__list" ref={listRef} onKeyDown={onKeyDown}>
@@ -104,6 +110,7 @@ export function TaskBoard({
                   {row.removed ? <span className="task-row__removed">−{row.removed}</span> : null}
                   {row.ahead > 0 ? <span className="task-row__ahead">{`↑${row.ahead}`}</span> : null}
                 </span>
+                <TokensCell usage={usage[row.worktreeId]} showCost={showCost} />
                 <span className="task-row__age">{sinceLabel(row.age)}</span>
               </button>
             </li>
@@ -111,5 +118,24 @@ export function TaskBoard({
         })}
       </ul>
     </>
+  )
+}
+
+/** Its own tokens, and under them its subtree's after Σ on a task with children. */
+function TokensCell({ usage, showCost }: { usage: WorktreeUsage | undefined; showCost: boolean }): React.JSX.Element {
+  const own = usage === undefined ? null : usageLabel(usage, showCost)
+  const subtree = usage?.subtree === undefined ? null : usageLabel(usage.subtree, showCost)
+  const title =
+    usage === undefined || (own === null && subtree === null)
+      ? undefined
+      : [
+          usageDetail(usage),
+          ...(usage.subtree === undefined ? [] : [`with children: ${usageDetail(usage.subtree)}`])
+        ].join('\n')
+  return (
+    <span className="task-row__tokens" title={title}>
+      {own ?? ''}
+      {subtree === null ? null : <span className="task-row__subtree">{`Σ ${subtree}`}</span>}
+    </span>
   )
 }

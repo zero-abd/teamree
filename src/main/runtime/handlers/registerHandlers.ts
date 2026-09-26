@@ -23,6 +23,7 @@ import { degradedTeamreeWatchReport, registerTeamworkHandlers, TeamreeWatcher, T
 import { PeerService, registerPeerHandlers, taskGitReader } from '../../teamwork/peer'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
 import { UpdateService, registerUpdateHandlers, type SelfInstall } from '../../updates'
+import { registerUsageHandlers } from '../../usage'
 import type { TerminalService } from '../../terminals/method-handlers'
 import type { ScrollbackRepository } from '../../terminals/session-manager'
 import type { AgentNotice, NoticeAnswer } from '../../agentNotices'
@@ -271,6 +272,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
       })
     }
   })
+  registerUsageHandlers(registry)
 
   // A teammate's push moves the base ref only once fetched; the watch above never sees `refs/remotes`.
   const bases = new BaseFetcher({

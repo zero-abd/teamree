@@ -59,7 +59,11 @@ export type WorktreeUsage = {
   /** Agent panes whose transcripts teamree cannot read; counted, never taken as zero. */
   unknownPanes: number
   readAt: number
+  /** Itself plus every worktree under it; present only on a worktree with children. */
+  subtree?: UsageTotals
 }
+
+export type UsageTotals = Pick<WorktreeUsage, 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'costUsd' | 'sessions'>
 
 /** A worktree offered to one teammate, carried in presence. */
 export type PeerHandoff = {

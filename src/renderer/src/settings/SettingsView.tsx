@@ -21,13 +21,13 @@ import {
 import { NoticeTest } from '../notices/NoticeTest'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { InstallerButton } from '../updates/InstallerButton'
 import { installerStep } from '../updates/updateNotice'
 import { PageFrame } from '../workspace/PageFrame'
 import { activeChoice, BUILT_IN_THEMES, themeById } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from './AppearanceSettings'
 import { useRuntimeSettings } from './runtimeSettings'
+import { useUsageStore } from '../state/usageStore'
 import {
   agentRows,
   cliLine,
@@ -159,7 +159,10 @@ function useSectionRows(): Record<Exclude<SectionId, 'projects'>, SettingsRow[]>
   const agents = useAgentRows()
   const themeValue = useThemeValue()
   return {
-    general: [{ label: 'Show in Menu Bar', words: [] }],
+    general: [
+      ...(offersMenuBar() ? [{ label: 'Show in Menu Bar', words: [] }] : []),
+      { label: 'Show Cost', words: [] }
+    ],
     agents: [
       {
         label: 'Default agent',
@@ -202,9 +205,9 @@ export function SettingsView(): React.JSX.Element {
     id === 'projects'
       ? projects.flatMap((project) => [{ label: project.name, words: [] }, ...projectRows(project)])
       : sectionRows[id]
-  const sections = SETTINGS_SECTIONS.filter((entry) => entry.id !== 'agents' || agents.length > 0)
-    .filter((entry) => entry.id !== 'general' || offersMenuBar())
-    .filter((entry) => labelMatches(entry.label, query) || rowsOf(entry.id).some((row) => rowMatches(row, query)))
+  const sections = SETTINGS_SECTIONS.filter((entry) => entry.id !== 'agents' || agents.length > 0).filter(
+    (entry) => labelMatches(entry.label, query) || rowsOf(entry.id).some((row) => rowMatches(row, query))
+  )
 
   // Read again on open: both are facts about the world outside this window that may have moved.
   useEffect(() => {
@@ -511,15 +514,8 @@ function offersMenuBar(): boolean {
 
 /** Machine-wide switches that belong to no other section. */
 function GeneralSection(): React.JSX.Element {
-  const [shown, setShown] = useState<boolean | null>(null)
   const show = useShown()
-  useEffect(() => {
-    void runtimeClient.call('settings.get', {}).then((settings) => setShown(settings.showInMenuBar))
-  }, [])
-  const change = (showInMenuBar: boolean): void => {
-    setShown(showInMenuBar)
-    void runtimeClient.call('settings.set', { showInMenuBar }).then((settings) => setShown(settings.showInMenuBar))
-  }
+  const { settings, problem, change } = useRuntimeSettings()
 
   return (
     <section className="settings-section" aria-labelledby="settings-general">
@@ -527,7 +523,7 @@ function GeneralSection(): React.JSX.Element {
         <Marked text="General" />
       </h2>
       <div className="settings-group">
-        {show.row('Show in Menu Bar') ? (
+        {offersMenuBar() && show.row('Show in Menu Bar') ? (
           <div className="settings-field">
             <label className="settings-field__label" htmlFor="settings-menu-bar">
               <Marked text="Show in Menu Bar" />
@@ -536,12 +532,31 @@ function GeneralSection(): React.JSX.Element {
               id="settings-menu-bar"
               className="settings-field__check"
               type="checkbox"
-              checked={shown ?? false}
-              disabled={shown === null}
-              onChange={(event) => change(event.target.checked)}
+              checked={settings?.showInMenuBar ?? false}
+              disabled={settings === null}
+              onChange={(event) => change({ showInMenuBar: event.target.checked })}
             />
           </div>
         ) : null}
+        {show.row('Show Cost') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-show-cost">
+              <Marked text="Show Cost" />
+            </label>
+            <input
+              id="settings-show-cost"
+              className="settings-field__check"
+              type="checkbox"
+              checked={settings?.showCost ?? false}
+              disabled={settings === null}
+              onChange={(event) => {
+                change({ showCost: event.target.checked })
+                useUsageStore.setState({ showCost: event.target.checked })
+              }}
+            />
+          </div>
+        ) : null}
+        {problem === null ? null : <p className="settings-error">{problem}</p>}
       </div>
     </section>
   )

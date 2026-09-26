@@ -71,7 +71,7 @@ function claudeConversation(question: ConversationQuestion, home: string): Conve
     : 'absent'
 }
 
-function claudeStoreRoot(home: string): string {
+export function claudeStoreRoot(home: string): string {
   return storeRoot(home, process.env.CLAUDE_CONFIG_DIR, '.claude')
 }
 
