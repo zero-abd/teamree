@@ -20,6 +20,7 @@ import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
 import { teamworkControlLabel, teamworkOn, teamworkSummary } from './teamworkSummary'
 import { usePaneEvidence } from './usePaneEvidence'
 import { useTreeKeys } from './treeKeys'
+import { moveWorktree } from './nestDrag'
 import { worktreesByProject } from './worktreeOrder'
 import { WorktreeRow, type TaskFold } from './WorktreeRow'
 import { agentRows, worktreeTone, type DotTone } from './agentRows'
@@ -332,6 +333,10 @@ export function Sidebar({
                   depth={depth}
                   {...(node.children.length === 0 ? {} : { task: taskFold(node) })}
                   onNewChild={() => openDialog({ kind: 'new-task', projectId: project.id, parentId: worktree.id })}
+                  onMoveUnder={() => openDialog({ kind: 'move-under', worktreeId: worktree.id })}
+                  {...(worktree.parentId === undefined
+                    ? {}
+                    : { onMoveToTop: () => void moveWorktree(worktree.id, null) })}
                   status={statuses[worktree.id]}
                   mergePreview={mergePreviews[worktree.id]}
                   {...(landings[worktree.id] === undefined ? {} : { landing: landings[worktree.id] })}

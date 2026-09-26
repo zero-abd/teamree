@@ -4,8 +4,10 @@ import { useRef, useState } from 'react'
 import type { Project } from '@shared/entities'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { agoLabel } from './agentRows'
+import { useNestDrop } from './nestDrag'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { worktreeDisplay, worktreeLabel } from './worktreeDisplay'
+import { DropHint } from './WorktreeRow'
 
 type ProjectHeadProps = {
   project: Project
@@ -39,6 +41,8 @@ export function ProjectHead({
   const removedWorktrees = useWorkspaceStore((state) => state.removedWorktrees)
   const loadRemovedWorktrees = useWorkspaceStore((state) => state.loadRemovedWorktrees)
   const restoreWorktree = useWorkspaceStore((state) => state.restoreWorktree)
+  // A row dropped here goes to the top level.
+  const drop = useNestDrop({ projectId: project.id }, false)
   const openMenu = (anchor: RowMenuAnchor): void => {
     setMenuAt(anchor)
     void loadRemovedWorktrees()
@@ -72,7 +76,10 @@ export function ProjectHead({
 
   return (
     <div
-      className="project__head"
+      className={`project__head${
+        drop.target === null ? '' : drop.target.allowed ? ' project__head--drop' : ' project__head--no-drop'
+      }`}
+      {...drop.handlers}
       onContextMenu={(event) => {
         event.preventDefault()
         // As on a worktree row: the keys raise this with no coordinates.
@@ -130,6 +137,9 @@ export function ProjectHead({
           <path d="M10.3 2.2a1.1 1.1 0 0 1 1.5 1.5L7.2 8.3 5.5 8.8 6 7.1Z" />
         </svg>
       </button>
+      {drop.target === null ? null : (
+        <DropHint text={drop.target.allowed ? drop.target.hint : drop.target.reason} refused={!drop.target.allowed} />
+      )}
       {menuAt === null ? null : (
         <RowMenu label={`Actions for ${project.name}`} items={items} anchor={menuAt} onClose={closeMenu} />
       )}

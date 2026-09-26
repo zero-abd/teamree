@@ -17,6 +17,7 @@ import { agentRows, dotClass, TONE_LABEL, worktreeTone, type DotTone } from './a
 import { PaneRows } from './PaneRows'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
+import { endNestDrag, NEST_DRAG_TYPE, startNestDrag, useNestDrag, useNestDrop } from './nestDrag'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { WorktreeNameField } from './WorktreeNameField'
 import { agentName, worktreeDisplay, worktreeLabel, type WorktreeDisplay } from './worktreeDisplay'
@@ -80,6 +81,10 @@ type WorktreeRowProps = {
   task?: TaskFold
   /** New Child Task…; absent leaves the item out. */
   onNewChild?: () => void
+  /** Move Under…; with it the row can be dragged onto another to nest there. */
+  onMoveUnder?: () => void
+  /** Move to Top Level; given only to a child. */
+  onMoveToTop?: () => void
 }
 
 export function WorktreeRow({
@@ -111,7 +116,9 @@ export function WorktreeRow({
   twinRun = false,
   depth = 0,
   task,
-  onNewChild
+  onNewChild,
+  onMoveUnder,
+  onMoveToTop
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
   const failed = worktree.state === 'failed'
@@ -137,6 +144,9 @@ export function WorktreeRow({
   const [panesShown, setPanesShown] = useState(true)
   const wasRenaming = useRef(false)
   const describedBy = useId()
+  const drop = useNestDrop({ parentId: worktree.id }, true)
+  const dragged = useNestDrag((state) => state.dragging === worktree.id)
+  const draggable = ready && !renaming && onMoveUnder !== undefined
 
   // A field removed while focused leaves the focus on `document.body`; after a blur it is already elsewhere.
   useEffect(() => {
@@ -170,6 +180,8 @@ export function WorktreeRow({
   const rest: RowMenuItem[] = [
     ...(failed && worktree.retryable ? [{ label: 'Retry', onChoose: onRetry }] : []),
     ...(onNewChild !== undefined && ready ? [{ label: 'New Child Task…', onChoose: onNewChild }] : []),
+    ...(onMoveUnder !== undefined && ready ? [{ label: 'Move Under…', onChoose: onMoveUnder }] : []),
+    ...(onMoveToTop !== undefined && ready ? [{ label: 'Move to Top Level', onChoose: onMoveToTop }] : []),
     { label: 'Rename…', onChoose: () => setRenaming(true), separated: merged },
     { label: 'Reveal in Finder', onChoose: onReveal },
     { label: 'Copy Path', onChoose: onCopyPath },
@@ -315,7 +327,9 @@ export function WorktreeRow({
 
   return (
     <li
-      className={`worktree${active ? ' worktree--active' : ''} worktree--${missing ? 'missing' : worktree.state}`}
+      className={`worktree${active ? ' worktree--active' : ''} worktree--${missing ? 'missing' : worktree.state}${
+        dragged ? ' worktree--dragging' : ''
+      }${drop.target === null ? '' : drop.target.allowed ? ' worktree--drop' : ' worktree--no-drop'}`}
       style={depth === 0 ? undefined : ({ '--depth': depth } as React.CSSProperties)}
       role="none"
       onContextMenu={(event) => {
@@ -337,7 +351,21 @@ export function WorktreeRow({
         openMenu(rowAnchor(), document.activeElement instanceof HTMLElement ? document.activeElement : null)
       }}
     >
-      <div className="worktree__row">
+      <div
+        className="worktree__row"
+        draggable={draggable}
+        {...drop.handlers}
+        {...(draggable
+          ? {
+              onDragStart: (event: React.DragEvent) => {
+                event.dataTransfer.setData(NEST_DRAG_TYPE, worktree.id)
+                event.dataTransfer.effectAllowed = 'move'
+                startNestDrag(worktree.id)
+              },
+              onDragEnd: endNestDrag
+            }
+          : {})}
+      >
         {task === undefined ? null : (
           <button
             type="button"
@@ -414,6 +442,10 @@ export function WorktreeRow({
         </button>
       </div>
 
+      {drop.target === null ? null : (
+        <DropHint text={drop.target.allowed ? drop.target.hint : drop.target.reason} refused={!drop.target.allowed} />
+      )}
+
       {menuAt === null ? null : (
         <RowMenu label={`Actions for ${label}`} items={items} anchor={menuAt} onClose={closeMenu} />
       )}
@@ -454,6 +486,12 @@ export function WorktreeRow({
       ) : null}
     </li>
   )
+}
+
+/** What a drop target says while a row is over it: why not, or what the move will also do. */
+export function DropHint({ text, refused }: { text: string | null; refused: boolean }): React.JSX.Element | null {
+  if (text === null) return null
+  return <span className={`drop-hint${refused ? ' drop-hint--refused' : ''}`}>{text}</span>
 }
 
 const FAILURE_LINE_MAX = 60

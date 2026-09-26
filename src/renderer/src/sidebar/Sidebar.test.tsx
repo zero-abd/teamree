@@ -4,7 +4,7 @@
 // the same project. What is only true here is the wiring between the rows, and the
 // three different sentences for having nothing to show.
 
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, createEvent, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   Project,
@@ -34,6 +34,7 @@ const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { Sidebar } = await import('./Sidebar')
 const { worktreeOrder } = await import('./worktreeOrder')
 const { useTaskTreeStore } = await import('../state/taskTreeStore')
+const { NEST_DRAG_TYPE, endNestDrag } = await import('./nestDrag')
 
 const INITIAL = useWorkspaceStore.getState()
 const NOW = Date.now()
@@ -1107,5 +1108,185 @@ describe('task trees', () => {
     fireEvent.contextMenu(rowNamed('Rework auth'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'New Child Task…' }))
     expect(openDialog).toHaveBeenCalledWith({ kind: 'new-task', projectId: 'p1', parentId: 'auth' })
+  })
+})
+
+describe('drag a row onto another to nest it', () => {
+  const rowNamed = (name: string): HTMLElement =>
+    screen.getAllByRole('treeitem').find((item) => item.getAttribute('aria-label') === name) as HTMLElement
+  const box = (name: string): HTMLElement => rowNamed(name).closest('.worktree__row') as HTMLElement
+  const item = (name: string): HTMLElement => rowNamed(name).closest('.worktree') as HTMLElement
+  const head = (): HTMLElement => document.querySelector('.project__head') as HTMLElement
+  const transfer = {
+    setData: vi.fn(),
+    getData: vi.fn(),
+    types: [NEST_DRAG_TYPE],
+    effectAllowed: 'all',
+    dropEffect: 'none'
+  }
+  /** Fires a drag event at `clientY`; true when the target took it (called `preventDefault`). */
+  const drag = (kind: 'dragStart' | 'dragOver' | 'drop' | 'dragEnd', target: HTMLElement, clientY = 0): boolean => {
+    const event = createEvent[kind](target, { dataTransfer: transfer })
+    Object.defineProperty(event, 'clientY', { value: clientY })
+    return !fireEvent(target, event)
+  }
+  const settle = async (): Promise<void> => {
+    for (let turn = 0; turn < 4; turn += 1) await act(async () => undefined)
+  }
+  const nested = (id: string, parentId: string | null, change: string, extra: Record<string, unknown> = {}) => {
+    const row = useWorkspaceStore.getState().worktrees.find((entry) => entry.id === id) as Worktree
+    const { parentId: _parent, ...rest } = row
+    return { worktree: parentId === null ? rest : { ...rest, parentId }, change, ...extra }
+  }
+  const nestCalls = (): unknown[] =>
+    call.mock.calls.filter(([method]) => method === 'worktree.nest').map(([, params]) => params)
+
+  beforeEach(() => {
+    endNestDrag()
+    useTaskTreeStore.setState({ collapsedTasks: {} })
+    seed({
+      worktrees: [
+        worktree({ id: 'auth', name: 'Rework auth', branch: 'rework-auth' }),
+        worktree({ id: 'mig', name: 'Write the migration', branch: 'rework-auth--mig', parentId: 'auth' }),
+        worktree({ id: 'fill', name: 'Backfill', branch: 'rework-auth--mig--fill', parentId: 'mig' }),
+        worktree({ id: 'solo', name: 'Solo', branch: 'solo' })
+      ]
+    })
+  })
+
+  it('marks the row being dragged until the drag ends', () => {
+    mount()
+    drag('dragStart', box('Solo'))
+    expect(transfer.setData).toHaveBeenCalledWith(NEST_DRAG_TYPE, 'solo')
+    expect(item('Solo').classList.contains('worktree--dragging')).toBe(true)
+    drag('dragEnd', box('Solo'))
+    expect(item('Solo').classList.contains('worktree--dragging')).toBe(false)
+  })
+
+  it('highlights an allowed row, and nests under it on drop', async () => {
+    call.mockImplementation(async (method, params) => {
+      if (method !== 'worktree.nest') throw new Error(method)
+      const { dryRun } = params as { dryRun?: boolean }
+      return { ...nested('solo', 'auth', 'nest'), dryRun: dryRun === true }
+    })
+    mount()
+    drag('dragStart', box('Solo'))
+    expect(drag('dragOver', box('Rework auth'))).toBe(true)
+    expect(item('Rework auth').classList.contains('worktree--drop')).toBe(true)
+
+    drag('drop', box('Rework auth'))
+    await settle()
+
+    expect(nestCalls().at(-1)).toEqual({ worktreeId: 'solo', parentId: 'auth' })
+    expect(useWorkspaceStore.getState().notices.at(-1)?.text).toBe('Moved Solo under Rework auth')
+    expect(useWorkspaceStore.getState().worktrees.find((entry) => entry.id === 'solo')?.parentId).toBe('auth')
+    expect(item('Rework auth').classList.contains('worktree--drop')).toBe(false)
+  })
+
+  it('dims a refused row and says why, and takes no drop there', async () => {
+    mount()
+    drag('dragStart', box('Rework auth'))
+    expect(drag('dragOver', box('Backfill'))).toBe(false)
+    expect(item('Backfill').classList.contains('worktree--no-drop')).toBe(true)
+    expect(within(item('Backfill')).getByText('Backfill is under Rework auth')).toBeTruthy()
+    drag('drop', box('Backfill'))
+    await settle()
+    expect(nestCalls()).toEqual([])
+  })
+
+  it('says what the dry run refused', async () => {
+    call.mockRejectedValue(Object.assign(new Error('Uncommitted changes'), { code: 'conflict' }))
+    mount()
+    drag('dragStart', box('Solo'))
+    drag('dragOver', box('Rework auth'))
+    await settle()
+    expect(drag('dragOver', box('Rework auth'))).toBe(false)
+    expect(within(item('Rework auth')).getByText('Uncommitted changes')).toBeTruthy()
+  })
+
+  it('warns of a rebase on hover, and asks before one on drop', async () => {
+    call.mockImplementation(async () => ({ ...nested('solo', 'mig', 'rebase'), dryRun: true }))
+    mount()
+    drag('dragStart', box('Solo'))
+    drag('dragOver', box('Write the migration'))
+    await settle()
+    expect(within(item('Write the migration')).getByText('Rebase onto Write the migration')).toBeTruthy()
+
+    drag('drop', box('Write the migration'))
+    await settle()
+    expect(openDialog).toHaveBeenCalledWith({ kind: 'confirm-rebase', worktreeId: 'solo', parentId: 'mig' })
+    expect(nestCalls().every((params) => (params as { dryRun?: boolean }).dryRun === true)).toBe(true)
+  })
+
+  it('treats a row’s edges as between rows, not onto it', async () => {
+    mount()
+    const target = box('Rework auth')
+    target.getBoundingClientRect = () => ({
+      top: 100,
+      height: 40,
+      bottom: 140,
+      left: 0,
+      right: 200,
+      width: 200,
+      x: 0,
+      y: 100,
+      toJSON: () => ({})
+    })
+    drag('dragStart', box('Solo'))
+    expect(drag('dragOver', target, 102)).toBe(false)
+    expect(item('Rework auth').className).not.toMatch(/worktree--(no-)?drop/)
+    expect(drag('dragOver', target, 120)).toBe(true)
+    expect(item('Rework auth').classList.contains('worktree--drop')).toBe(true)
+    drag('drop', target, 138)
+    await settle()
+    expect(nestCalls().filter((params) => (params as { dryRun?: boolean }).dryRun !== true)).toEqual([])
+  })
+
+  it('moves to the top level on the project header, saying what commits will show', async () => {
+    call.mockImplementation(async (_method, params) => ({
+      ...nested('fill', null, 'unnest', { inherited: 2 }),
+      dryRun: (params as { dryRun?: boolean }).dryRun === true
+    }))
+    mount()
+    drag('dragStart', box('Backfill'))
+    expect(drag('dragOver', head())).toBe(true)
+    await settle()
+    expect(head().classList.contains('project__head--drop')).toBe(true)
+    expect(within(head()).getByText('2 commits from Write the migration will show')).toBeTruthy()
+
+    drag('drop', head())
+    await settle()
+    expect(nestCalls().at(-1)).toEqual({ worktreeId: 'fill', parentId: null })
+    expect(useWorkspaceStore.getState().notices.at(-1)?.text).toBe(
+      'Moved Backfill to top level · 2 commits from Write the migration now show'
+    )
+  })
+
+  it('refuses the header for a row already at the top level', () => {
+    mount()
+    drag('dragStart', box('Solo'))
+    expect(drag('dragOver', head())).toBe(false)
+    expect(within(head()).getByText('Already top level')).toBeTruthy()
+  })
+
+  it('offers Move Under… on every row, and Move to Top Level only on a child', async () => {
+    call.mockImplementation(async (_method, params) => ({
+      ...nested('fill', null, 'unnest', { inherited: 0 }),
+      dryRun: (params as { dryRun?: boolean }).dryRun === true
+    }))
+    mount()
+    fireEvent.contextMenu(rowNamed('Solo'))
+    expect(screen.queryByRole('menuitem', { name: 'Move to Top Level' })).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move Under…' }))
+    expect(openDialog).toHaveBeenCalledWith({ kind: 'move-under', worktreeId: 'solo' })
+
+    fireEvent.contextMenu(rowNamed('Backfill'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Move to Top Level' }))
+    await settle()
+    expect(nestCalls()).toEqual([
+      { worktreeId: 'fill', parentId: null, dryRun: true },
+      { worktreeId: 'fill', parentId: null }
+    ])
+    expect(useWorkspaceStore.getState().notices.at(-1)?.text).toBe('Moved Backfill to top level')
   })
 })

@@ -436,9 +436,9 @@ async function checkWorktreeSurfaces(ask) {
       failures.push(`the row menu does not end with Delete Worktree…: ${JSON.stringify(items)}`)
     if (items.at(-2) !== 'Remove from teamree')
       failures.push(`the row menu has no Remove from teamree before Delete Worktree…: ${JSON.stringify(items)}`)
-    if (items[0] !== 'New Child Task…' || items[1] !== 'Rename…')
-      failures.push(`the row menu does not start with New Child Task…, Rename…: ${JSON.stringify(items)}`)
-    if (items.length !== 8) failures.push(`the row menu has ${items.length} items rather than eight`)
+    if (items[0] !== 'New Child Task…' || items[1] !== 'Move Under…' || items[2] !== 'Rename…')
+      failures.push(`the row menu does not start with New Child Task…, Move Under…, Rename…: ${JSON.stringify(items)}`)
+    if (items.length !== 9) failures.push(`the row menu has ${items.length} items rather than nine`)
   }
   // Closed again, so nothing below this is driving a window with a menu over it.
   await ask(

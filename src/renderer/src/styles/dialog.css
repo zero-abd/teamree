@@ -858,3 +858,13 @@ button.picker__chevron:hover {
 .pasted-image__gone {
   color: var(--fg-muted);
 }
+
+/* Move Under…: each task one step in per level, as in the sidebar. */
+.move-under__row {
+  padding-left: calc(var(--s3) + var(--depth, 0) * 14px);
+}
+
+.move-under__row:disabled {
+  color: var(--fg-muted);
+  cursor: default;
+}
