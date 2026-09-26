@@ -196,6 +196,7 @@
 
 .sidebar__filter-field:focus-visible {
   border-color: var(--accent-line);
+  box-shadow: var(--ring);
 }
 
 .sidebar__chips {
@@ -466,9 +467,9 @@
   scroll-margin-block: var(--s6);
 }
 
-/* Shown without matching the filter: a match's parent, or the open row. */
-.worktree--context > .worktree__row {
-  opacity: 0.55;
+/* Shown without matching the filter: a match's parent, or the open row. Muted, not faded: faded text fell under 4.5:1. */
+.worktree--context .worktree__name {
+  color: var(--fg-muted);
 }
 
 /* Compact: one line a row, the boxes drawn without their padding. */

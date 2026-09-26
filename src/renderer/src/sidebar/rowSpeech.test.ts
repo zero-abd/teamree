@@ -155,7 +155,10 @@ describe('what a task row on the board says', () => {
         title: 'checkout',
         stage: 'asking',
         tally: { done: 2, total: 2 },
-        panes: [{ label: 'Claude Code', tone: 'waiting' }],
+        panes: [
+          { label: 'checkout', tone: 'waiting' },
+          { label: 'Claude Code', tone: 'waiting' }
+        ],
         added: 12,
         removed: 3,
         ahead: 1,

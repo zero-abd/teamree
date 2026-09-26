@@ -105,7 +105,8 @@ export function taskRowSpeech(row: {
     row.stage,
     row.tally ? `${row.tally.done} of ${row.tally.total} children done` : null,
     row.overlap ? overlapWords(row.overlap) : null,
-    ...row.panes.map((pane) => `${pane.label} ${TONE_LABEL[pane.tone]}`),
+    // A task's only agent goes by the task, and its state is the stage already said.
+    ...row.panes.filter((pane) => pane.label !== row.title).map((pane) => `${pane.label} ${TONE_LABEL[pane.tone]}`),
     row.added ? `${row.added} added` : null,
     row.removed ? `${row.removed} removed` : null,
     row.ahead > 0 ? `${row.ahead} ahead` : null,

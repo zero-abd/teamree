@@ -613,11 +613,6 @@
   background: var(--bg-hover);
 }
 
-/* Inside the row: the list scrolls, and clips a ring drawn outside it. */
-.change:focus-visible {
-  outline-offset: -2px;
-}
-
 .change__kind {
   width: 11px;
   flex: none;
@@ -992,19 +987,19 @@
   background: none;
 }
 
-/* Focus rings the whole row, checkbox and counts included, inside its fill. */
+/* Focus rings the whole row, checkbox and counts included, inside its fill, as thick as the shared ring. */
 .changes__item .change:focus-visible {
   outline: none;
 }
 
 .changes__item:has(.change:focus-visible) {
-  box-shadow: inset 0 0 0 1px var(--accent-bright);
+  box-shadow: inset 0 0 0 2px var(--accent-bright);
 }
 
 .changes__item--selected:has(.change:focus-visible) {
   box-shadow:
     inset 2px 0 var(--accent),
-    inset 0 0 0 1px var(--accent-bright);
+    inset 0 0 0 2px var(--accent-bright);
 }
 
 .change__tick {

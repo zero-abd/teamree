@@ -657,9 +657,30 @@ describe('stylesheets', () => {
     }
   })
 
-  // The list scrolls, and clips a ring drawn outside the row; the On Branch rows took focus with none.
-  it('draws a changed file’s focus ring inside its row', () => {
-    expect(declarationOf(ruleFor('workspace.css', '.change:focus-visible'), 'outline-offset')).toBe('-2px')
+  // A 1px ring inside the row read as no ring on the On Branch rows; the shared one is 2px.
+  it('rings a focused changed file as thickly as every other control', () => {
+    expect(declarationOf(ruleFor('base.css', ':focus-visible'), 'outline')).toMatch(/^2px /)
+    expect(declarationOf(ruleFor('workspace.css', '.changes__item:has(.change:focus-visible)'), 'box-shadow')).toBe(
+      'inset 0 0 0 2px var(--accent-bright)'
+    )
+  })
+
+  it('mutes a row shown only for context by its ink, never by fading it', () => {
+    const faded: string[] = []
+    postcss.parse(readFileSync(path.join(here, 'sidebar.css'), 'utf8')).walkRules((rule) => {
+      if (!rule.selector.includes('.worktree--context')) return
+      rule.walkDecls('opacity', (decl) => {
+        faded.push(`${rule.selector} { opacity: ${decl.value} }`)
+      })
+    })
+    expect(faded).toEqual([])
+    expect(declarationOf(ruleFor('sidebar.css', '.worktree--context .worktree__name'), 'color')).toBe('var(--fg-muted)')
+  })
+
+  it('rings the sidebar filter field as its chips are ringed', () => {
+    expect(declarationOf(ruleFor('sidebar.css', '.sidebar__filter-field:focus-visible'), 'box-shadow')).toBe(
+      'var(--ring)'
+    )
   })
 
   // Spoken, never drawn; and while it holds no notice the region takes no room in the corner stack.
