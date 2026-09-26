@@ -50,7 +50,7 @@ import { createGitRunner, type GitRunner } from './gitProcess'
 import { createVersionProbe } from './gitVersion'
 import { isInside, pathKey, samePath } from './pathIdentity'
 import { createMemoryRecordStore, type GitRecordStore } from './recordStore'
-import { detectBaseRef, initializeRepository, inspectRepository, listBranchNames } from './repository'
+import { assertRefShape, detectBaseRef, initializeRepository, inspectRepository, listBranchNames } from './repository'
 import { listStartPoints, resolveStartPoint, type ResolvedStartPoint, type StartPointList } from './startPoint'
 import { readWorktreeInventory } from './worktreeInventory'
 import { branchForCheckout, listOpenableBranches, listPullRequests } from './openBranch'
@@ -82,7 +82,7 @@ import { pushWorktree } from './worktreePush'
 import { abortWorktreeUpdate, updateWorktree } from './worktreeUpdate'
 import { createGhProbe, createPullRequest, mergeIntoBase, readLanding, type GhProbe } from './worktreeLanding'
 import { keptName } from './worktreeKeep'
-import { readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
+import { readBranchChanges, readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
 import { findWorktreeFiles, readWorktreeFiles } from './worktreeFiles'
 import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
 import { normalizePreparedPaths, prepareWorktree, type PreparedPaths } from './worktreePreparation'
@@ -978,14 +978,38 @@ export class GitService {
   /** Every changed path in a worktree. */
   async worktreeChanges(params: ParamsOf<'worktree.changes'>): Promise<WorktreeChanges> {
     const worktree = this.#requireReadyWorktree(params.worktreeId, 'changes')
-    return readWorktreeChanges(this.#runner, {
+    const options = {
       worktreeId: worktree.id,
       worktreePath: worktree.path,
       ...(params.path === undefined ? {} : { path: params.path }),
       ...(params.limit === undefined ? {} : { limit: params.limit }),
       prepared: this.#preparedPaths(worktree.projectId),
       now: this.#now
+    }
+    if (params.base === true) {
+      return readBranchChanges(this.#runner, { ...options, against: await this.#branchBase(worktree) })
+    }
+    return readWorktreeChanges(this.#runner, options)
+  }
+
+  /** The commit this worktree's branch left its base at: a child's parent branch, else the project's. */
+  async #branchBase(worktree: Worktree): Promise<string> {
+    const baseRef = worktree.baseRef ?? this.#store.getProject(worktree.projectId)?.baseRef
+    if (baseRef === undefined) {
+      throw new GitServiceError(ErrorCode.NotFound, `worktree "${worktree.name}" has no base to compare against`)
+    }
+    assertRefShape(baseRef, 'base ref')
+    const found = await this.#runner.tryRun({
+      args: ['merge-base', baseRef, 'HEAD'],
+      cwd: worktree.path,
+      readOnly: true,
+      timeoutMs: 30_000
     })
+    const sha = found.stdout.trim()
+    if (found.exitCode !== 0 || sha === '') {
+      throw new GitServiceError(ErrorCode.Conflict, `this branch has no commit in common with ${baseRef}`)
+    }
+    return sha
   }
 
   /** One directory of a worktree — names and kinds, never contents. */
@@ -1021,7 +1045,13 @@ export class GitService {
       worktreePath: worktree.path,
       ...(params.path === undefined ? {} : { path: params.path }),
       ...(params.staged === undefined ? {} : { staged: params.staged }),
-      ...(params.head === true && params.staged !== true ? { against: 'HEAD' } : {}),
+      ...(params.staged === true
+        ? {}
+        : params.base === true
+          ? { against: await this.#branchBase(worktree) }
+          : params.head === true
+            ? { against: 'HEAD' }
+            : {}),
       ...(params.contextLines === undefined ? {} : { contextLines: params.contextLines }),
       ...(params.maxBytes === undefined ? {} : { maxBytes: params.maxBytes }),
       prepared: this.#preparedPaths(worktree.projectId),

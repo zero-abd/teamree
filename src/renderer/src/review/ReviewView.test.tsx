@@ -54,10 +54,17 @@ beforeEach(() => {
   answer = MATH + NOTES
   call.mockImplementation((method: string, params: unknown) => {
     if (method !== 'worktree.diff') return new Promise(() => {})
-    expect(params).toMatchObject({ worktreeId: 'w1', head: true })
-    return Promise.resolve({ worktreeId: 'w1', staged: false, patch: answer, truncated: false, readAt: 0 })
+    const whole = (params as { base?: boolean }).base === true
+    expect(params).toEqual(whole ? { worktreeId: 'w1', base: true } : { worktreeId: 'w1', head: true })
+    return Promise.resolve({
+      worktreeId: 'w1',
+      staged: false,
+      patch: whole ? answer : MATH,
+      truncated: false,
+      readAt: 0
+    })
   })
-  useReviewStore.setState({ viewed: {}, batch: {}, queued: {} })
+  useReviewStore.setState({ viewed: {}, batch: {}, queued: {}, scope: {}, jump: {} })
   useWorkspaceStore.setState(
     {
       ...INITIAL,
@@ -69,6 +76,19 @@ beforeEach(() => {
           changes: [
             { path: 'docs/NOTES.md', kind: 'untracked', staged: false, unstaged: true },
             { path: 'src/math.ts', kind: 'modified', staged: false, unstaged: true }
+          ],
+          total: 2,
+          limit: 500,
+          truncated: false,
+          readAt: 0
+        }
+      },
+      branchChanges: {
+        w1: {
+          worktreeId: 'w1',
+          changes: [
+            { path: 'docs/NOTES.md', kind: 'added', staged: false, unstaged: false },
+            { path: 'src/math.ts', kind: 'modified', staged: false, unstaged: false }
           ],
           total: 2,
           limit: 500,
@@ -96,12 +116,34 @@ const opened = (): boolean[] =>
   [...document.querySelectorAll<HTMLDetailsElement>('.patch__file')].map((file) => file.open)
 
 describe('Review All', () => {
-  it('reads every change against HEAD and draws each file in the Changes list’s order under the task', async () => {
+  it('reads the branch against its base and draws each file in the branch list’s order under the task', async () => {
     await mount()
     const names = [...document.querySelectorAll('.patch__fileName')].map((name) => name.textContent)
     expect(names).toEqual(['docs/NOTES.md', 'src/math.ts'])
     expect(document.querySelector('.review__task')?.textContent).toBe(worktree.task)
     expect(screen.getByText('2 files · +3 −0')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Branch' }).getAttribute('aria-pressed')).toBe('true')
+  })
+
+  it('switches to the uncommitted work and back, and remembers the choice for the worktree', async () => {
+    await mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Uncommitted' }))
+    await waitFor(() => expect(document.querySelectorAll('.patch__file')).toHaveLength(1))
+    expect(useReviewStore.getState().scope.w1).toBe('uncommitted')
+    expect(screen.getByRole('button', { name: 'Uncommitted' }).getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Branch' }))
+    await waitFor(() => expect(document.querySelectorAll('.patch__file')).toHaveLength(2))
+  })
+
+  it('scrolls to the file asked for, once', async () => {
+    const scrolled: string[] = []
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.querySelector('.patch__fileName')?.textContent ?? '')
+    }
+    useReviewStore.setState({ jump: { w1: 'src/math.ts' } })
+    await mount()
+    await waitFor(() => expect(scrolled).toEqual(['src/math.ts']))
+    expect(useReviewStore.getState().jump.w1).toBeUndefined()
   })
 
   it('folds a file marked viewed, keeps it viewed through a re-read, and opens it again once it changes', async () => {

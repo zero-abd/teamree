@@ -12,12 +12,23 @@ const PASTE_SETTLE_MS = 60
 
 export type SendOutcome = 'sent' | 'queued' | 'refused' | 'failed'
 
+/** `branch`: everything against where the branch left its base; `uncommitted`: against HEAD. */
+export type ReviewScope = 'branch' | 'uncommitted'
+
 type ReviewState = {
   /** Worktree id → path → what the file looked like when it was marked viewed. */
   viewed: Record<string, Record<string, ViewedMark>>
   batch: Record<string, ReviewComment[]>
   /** Panes holding review text typed without its Return, because they were working. */
   queued: Record<string, true>
+  /** Worktree id → what its review reads; absent reads as `branch`. */
+  scope: Record<string, ReviewScope>
+  /** Worktree id → the file its review scrolls to next, once. */
+  jump: Record<string, string>
+  setScope: (worktreeId: string, scope: ReviewScope) => void
+  /** Opens the review on the whole branch, at `path` when given. */
+  reviewBranch: (worktreeId: string, path?: string) => void
+  jumped: (worktreeId: string) => void
   markViewed: (worktreeId: string, path: string, mark: ViewedMark | null) => void
   addToBatch: (worktreeId: string, comment: ReviewComment) => void
   clearBatch: (worktreeId: string) => void
@@ -36,6 +47,29 @@ export const useReviewStore = create<ReviewState>()((set, get) => {
     viewed: {},
     batch: {},
     queued: {},
+    scope: {},
+    jump: {},
+
+    setScope(worktreeId, scope) {
+      set((state) => ({ scope: { ...state.scope, [worktreeId]: scope } }))
+    },
+
+    reviewBranch(worktreeId, path) {
+      set((state) => ({
+        scope: { ...state.scope, [worktreeId]: 'branch' },
+        ...(path === undefined ? {} : { jump: { ...state.jump, [worktreeId]: path } })
+      }))
+      useWorkspaceStore.getState().openReview(worktreeId)
+    },
+
+    jumped(worktreeId) {
+      set((state) => {
+        if (!(worktreeId in state.jump)) return {}
+        const jump = { ...state.jump }
+        delete jump[worktreeId]
+        return { jump }
+      })
+    },
 
     markViewed(worktreeId, path, mark) {
       set((state) => {

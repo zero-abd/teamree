@@ -391,6 +391,8 @@ type WorkspaceState = {
   changes: Record<string, WorktreeChanges>
   /** What each worktree has committed that its base has not. */
   logs: Record<string, WorktreeLog>
+  /** Each worktree's files against where its branch left its base, committed or not. */
+  branchChanges: Record<string, WorktreeChanges>
   selectedChangePath: string | null
   /** Paths ticked for the next commit. Held here, not in git's index: browsing must not stage anything. */
   stagedPaths: string[]
@@ -955,6 +957,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         mergePreviews: keptFor(state.mergePreviews, live),
         landings: keptFor(state.landings, live),
         logs: keptFor(state.logs, live),
+        branchChanges: keptFor(state.branchChanges, live),
         pushes: keptFor(state.pushes, live)
       }
     })
@@ -1091,6 +1094,17 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     set((state) => ({ logs: { ...state.logs, [worktreeId]: log } }))
   }
 
+  const refreshBranchChanges = async (worktreeId: string): Promise<void> => {
+    const branch = await runtimeClient.call('worktree.changes', { worktreeId, base: true }).catch(() => null)
+    set((state) => {
+      const branchChanges = { ...state.branchChanges }
+      // Unreadable (no base, or no commit in common) lists nothing rather than a stale list.
+      if (branch) branchChanges[worktreeId] = branch
+      else delete branchChanges[worktreeId]
+      return { branchChanges }
+    })
+  }
+
   const refreshChanges = async (worktreeId: string): Promise<void> => {
     const changes = await runtimeClient.call('worktree.changes', { worktreeId }).catch(() => null)
     if (!changes) return
@@ -1106,6 +1120,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   const readChangesNow = (worktreeId: string): void => {
     void refreshChanges(worktreeId).catch(failed('Could not read the changes'))
     void refreshLog(worktreeId).catch(() => undefined)
+    void refreshBranchChanges(worktreeId)
   }
 
   /** How many `git merge-tree` processes may be in flight at once; ten worktrees fanning out ten per file change is not worth it. */
@@ -1214,7 +1229,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     // The panel rides the same signal as the chips, so an edit in a shell moves both at once.
     const { activeWorktreeId } = get()
     if (!changesOnScreen(get()) || !activeWorktreeId || !readable.includes(activeWorktreeId)) return
-    await Promise.all([refreshChanges(activeWorktreeId), refreshLog(activeWorktreeId)])
+    await Promise.all([
+      refreshChanges(activeWorktreeId),
+      refreshLog(activeWorktreeId),
+      refreshBranchChanges(activeWorktreeId)
+    ])
   }
 
   /** Re-reads the rosters this window holds: the `members` event names no project, and only opened rosters are in the map. */
@@ -1502,6 +1521,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     changes: {},
     goToLine: null,
     logs: {},
+    branchChanges: {},
     selectedChangePath: null,
     stagedPaths: [],
     committing: false,
