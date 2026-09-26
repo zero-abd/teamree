@@ -1,7 +1,7 @@
 // A project's row in the tree: folds its worktrees, and has a menu on the `⋯`, right-click, ⇧F10 or the menu key.
 
 import { useRef, useState } from 'react'
-import type { Project } from '@shared/entities'
+import type { Project, ProjectBase } from '@shared/entities'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { agoLabel } from './agentRows'
 import { useNestDrop } from './nestDrag'
@@ -48,6 +48,7 @@ export function ProjectHead({
   const drop = useNestDrop({ projectId: project.id }, false)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
+  const unpushed = useWorkspaceStore((state) => unpushedBase(state.bases[project.id]))
   const anyMerged = useWorkspaceStore((state) =>
     state.worktrees.some((worktree) => worktree.projectId === project.id && state.landings[worktree.id]?.merged)
   )
@@ -69,6 +70,11 @@ export function ProjectHead({
     { label: 'Open Branch…', onChoose: () => onOpenBranch(false) },
     { label: 'Check Out Pull Request…', onChoose: () => onOpenBranch(true) },
     ...(removed.length === 0 ? [] : [{ label: 'Recently Removed', items: removed, onChoose: () => {} }]),
+    ...(unpushed === null
+      ? []
+      : [
+          { label: `Push ${unpushed.branch}`, onChoose: () => openDialog({ kind: 'push-base', projectId: project.id }) }
+        ]),
     ...(anyMerged
       ? [{ label: 'Clean Up Merged…', onChoose: () => openDialog({ kind: 'clean-up', projectId: project.id }) }]
       : []),
@@ -177,5 +183,30 @@ export function ProjectHead({
         <RowMenu label={`Actions for ${project.name}`} items={items} anchor={menuAt} onClose={closeMenu} />
       )}
     </div>
+  )
+}
+
+/** The base when it holds commits its upstream lacks, else null. */
+function unpushedBase(base: ProjectBase | undefined): ProjectBase | null {
+  return base !== undefined && base.ahead > 0 ? base : null
+}
+
+/** `main ↑2` beside the base ref while a landing is only local; pressing it asks to push. */
+export function UnpushedBase({ projectId }: { projectId: string }): React.JSX.Element | null {
+  const base = useWorkspaceStore((state) => unpushedBase(state.bases[projectId]))
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
+  if (base === null) return null
+  const upstream = base.upstream ?? 'origin'
+  return (
+    <button
+      type="button"
+      className="project__unpushed"
+      tabIndex={-1}
+      aria-label={`Push ${base.branch}, ${base.ahead} ahead of ${upstream}`}
+      title={`${base.ahead} ahead of ${upstream}`}
+      onClick={() => openDialog({ kind: 'push-base', projectId })}
+    >
+      {`${base.branch} ↑${base.ahead}`}
+    </button>
   )
 }

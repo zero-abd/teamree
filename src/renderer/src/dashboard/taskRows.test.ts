@@ -145,6 +145,13 @@ describe('the Tasks board rows', () => {
     expect(limits?.tally).toBeUndefined()
   })
 
+  it('says a landing only in the local base is not pushed', () => {
+    const rows = taskRows(input({ landings: { limits: { merged: true, notPushed: true }, auth: { merged: true } } }))
+    const limits = rows.find((row) => row.worktreeId === 'limits')
+    expect(limits).toMatchObject({ stage: 'landed', notPushed: true })
+    expect(rows.find((row) => row.worktreeId === 'auth')?.notPushed).toBeUndefined()
+  })
+
   it('counts a child landed only in its parent, not in main', () => {
     const [auth, , migration] = taskRows(input({ landings: { migration: { merged: true } } }))
     expect(migration?.stage).toBe('ready')

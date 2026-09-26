@@ -785,10 +785,14 @@ export const worktreeCommands: readonly CommandSpec[] = [
       "A child always merges into its parent's checkout; refused over uncommitted changes there to the files " +
       "it brings, or while the parent's agent is working.",
     args: [{ name: 'worktree', description: 'Worktree id, name, path, branch, or here.', required: true }],
-    flags: [{ name: 'merge', kind: 'boolean', description: 'Merge into the base even on a known host.' }],
+    flags: [
+      { name: 'merge', kind: 'boolean', description: 'Merge into the base even on a known host.' },
+      { name: 'push', kind: 'boolean', description: 'After merging into the base, push it to origin.' }
+    ],
     examples: [
       'teamree worktree land fix-login',
       'teamree worktree land fix-login --merge',
+      'teamree worktree land fix-login --merge --push',
       'teamree worktree land here'
     ],
     run: async (context) => {
@@ -796,13 +800,31 @@ export const worktreeCommands: readonly CommandSpec[] = [
       const worktree = await resolveWorktree(context.client, selector, { env: context.env, cwd: context.cwd })
       const landing = await context.client.call('worktree.landing', { worktreeId: worktree.id })
       if (landing.merged) {
-        return { data: landing, text: `${landing.branch} is already in ${landing.base}.` }
+        if (landing.notPushed !== true)
+          return { data: landing, text: `${landing.branch} is already in ${landing.base}.` }
+        if (!readBoolean(context.flags, 'push')) {
+          return { data: landing, text: `${landing.branch} is already in ${landing.base}, not pushed.` }
+        }
+        const base = await context.client.call('project.pushBase', { projectId: worktree.projectId })
+        return { data: base, text: `Pushed ${base.branch} to origin.` }
       }
       if (landing.host === null || landing.parent !== undefined || readBoolean(context.flags, 'merge')) {
-        const merged = await context.client.call('worktree.mergeIntoBase', { worktreeId: worktree.id })
+        const push = readBoolean(context.flags, 'push') && landing.parent === undefined
+        const merged = await context.client.call('worktree.mergeIntoBase', {
+          worktreeId: worktree.id,
+          ...(push ? { push: true } : {})
+        })
         const how = merged.fastForward ? 'fast-forward' : 'merge commit'
         const into = landing.parent === undefined ? `${merged.into} in ${merged.checkout}` : landing.parent.name
-        return { data: merged, text: `Merged ${landing.branch} into ${into} (${how}).` }
+        const text = `Merged ${landing.branch} into ${into} (${how}).`
+        if (merged.pushError !== undefined) {
+          throw new CliError({
+            code: 'push_failed',
+            message: `${text} Push failed: ${merged.pushError.message}\n${merged.pushError.detail}`,
+            exitCode: ExitCode.Failure
+          })
+        }
+        return { data: merged, text: merged.pushed === true ? `${text} Pushed ${merged.into} to origin.` : text }
       }
       if (!landing.published) {
         throw new CliError({

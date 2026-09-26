@@ -103,6 +103,19 @@ export function publishGitWrites(registry: MethodRegistry, git: GitService, bus:
     return result
   })
 
+  // Moving the base, or origin's, changes which landings read as not pushed.
+  registry.register('project.pushBase', Params.projectPushBase, async (params) => {
+    const result = await git.projectPushBase(params)
+    bus.emit({ type: 'worktrees' })
+    return result
+  })
+
+  registry.register('project.pullBase', Params.projectPullBase, async (params) => {
+    const result = await git.projectPullBase(params)
+    bus.emit({ type: 'worktrees' })
+    return result
+  })
+
   registry.register('worktree.createPullRequest', Params.worktreeCreatePullRequest, async (params) => {
     const result = await git.worktreeCreatePullRequest(params)
     bus.emit({ type: 'worktrees' })

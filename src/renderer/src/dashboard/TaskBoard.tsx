@@ -93,7 +93,7 @@ export function TaskBoard({
                   )}
                   {overlap === null ? null : <OverlapMark chip={overlap} />}
                 </span>
-                <span className="task-row__stage">{row.stage}</span>
+                <span className="task-row__stage">{row.notPushed ? 'landed · not pushed' : row.stage}</span>
                 <span className="task-row__panes">
                   {row.panes.map((pane) => (
                     <span

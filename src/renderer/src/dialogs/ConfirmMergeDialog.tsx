@@ -25,6 +25,16 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   const [branch, setBranch] = useState<WorktreeChanges | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [merging, setMerging] = useState(false)
+  // A child lands in its parent's branch, which is not main's to push.
+  const offerPush =
+    worktree !== undefined && worktree.parentId === undefined && landing !== undefined && landing.remote !== false
+  const pushChoice = useWorkspaceStore((state) =>
+    worktree === undefined
+      ? false
+      : (state.pushOnMerge[worktree.projectId] ?? state.bases[worktree.projectId]?.upstream !== undefined)
+  )
+  const [pushEdit, setPushEdit] = useState<boolean | null>(null)
+  const push = offerPush && (pushEdit ?? pushChoice)
 
   useEffect(() => {
     let alive = true
@@ -75,7 +85,7 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
         return
       }
     }
-    const why = await mergeIntoBase(worktreeId)
+    const why = await mergeIntoBase(worktreeId, offerPush ? push : undefined)
     if (why === null) return
     setError(why)
     setMerging(false)
@@ -137,6 +147,17 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
           </p>
           <Lines lines={dirty} />
         </>
+      ) : null}
+      {offerPush ? (
+        <label className="confirm__check">
+          <input
+            type="checkbox"
+            checked={push}
+            disabled={merging}
+            onChange={(event) => setPushEdit(event.target.checked)}
+          />
+          {`Push ${into} to origin`}
+        </label>
       ) : null}
       {error === null ? null : (
         <span className="field__error" role="alert">

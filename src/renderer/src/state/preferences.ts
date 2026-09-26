@@ -12,6 +12,7 @@ export const TERMINAL_FONT_DEFAULT_PX = 12
 
 const FONT_SIZE_KEY = 'teamree.terminal.fontSize'
 const START_POINTS_KEY = 'teamree.worktree.startPoints'
+const PUSH_ON_MERGE_KEY = 'teamree.merge.push'
 const AGENT_NOTICES_KEY = 'teamree.agent.notices'
 
 /**
@@ -210,6 +211,30 @@ export function writeStoredStartPoints(
     storage?.setItem(START_POINTS_KEY, JSON.stringify(refs))
   } catch {
     // As above: the choice holds for this window and is forgotten on the next.
+  }
+}
+
+/** Whether Merge into main… last pushed main, by project id. */
+export function readStoredPushOnMerge(storage: Pick<Storage, 'getItem'> | undefined): Record<string, boolean> {
+  try {
+    const parsed: unknown = JSON.parse(storage?.getItem(PUSH_ON_MERGE_KEY) ?? '{}')
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean')
+    )
+  } catch {
+    return {}
+  }
+}
+
+export function writeStoredPushOnMerge(
+  storage: Pick<Storage, 'setItem'> | undefined,
+  choices: Record<string, boolean>
+): void {
+  try {
+    storage?.setItem(PUSH_ON_MERGE_KEY, JSON.stringify(choices))
+  } catch {
+    // Kept for this window only.
   }
 }
 

@@ -11,6 +11,7 @@ import type {
   CloneProgress,
   IssueList,
   Project,
+  ProjectBase,
   RemovedWorktree,
   PullRequestList,
   RunCommands,
@@ -87,6 +88,7 @@ import {
   type TrashNote
 } from './worktreeTrash'
 import { pushWorktree } from './worktreePush'
+import { pullProjectBase, pushProjectBase, readProjectBase, type ProjectBaseOptions } from './projectBase'
 import { abortWorktreeUpdate, updateWorktree } from './worktreeUpdate'
 import { createGhProbe, createPullRequest, mergeIntoBase, readLanding, type GhProbe } from './worktreeLanding'
 import { listIssues } from './issues'
@@ -1380,8 +1382,27 @@ export class GitService {
       ...(parent === undefined
         ? {}
         : { parent: { name: parent.name, agentWorking: () => this.#agentWorking(parent.id) } }),
-      ...(params.dryRun === undefined ? {} : { dryRun: params.dryRun })
+      ...(params.dryRun === undefined ? {} : { dryRun: params.dryRun }),
+      ...(params.push === true ? { push: { projectId: project.id } } : {})
     })
+  }
+
+  /** The project checkout's base branch against its upstream. */
+  async projectBase(params: ParamsOf<'project.base'>): Promise<ProjectBase> {
+    return readProjectBase(this.#runner, this.#baseOptions(params.projectId))
+  }
+
+  async projectPushBase(params: ParamsOf<'project.pushBase'>): Promise<ProjectBase> {
+    return pushProjectBase(this.#runner, this.#baseOptions(params.projectId))
+  }
+
+  async projectPullBase(params: ParamsOf<'project.pullBase'>): Promise<ProjectBase> {
+    return pullProjectBase(this.#runner, this.#baseOptions(params.projectId))
+  }
+
+  #baseOptions(projectId: string): ProjectBaseOptions {
+    const project = this.#requireProject(projectId)
+    return { projectId: project.id, repoPath: project.path, baseRef: project.baseRef }
   }
 
   /** The ready parent a child lands in; undefined for a top-level worktree. */

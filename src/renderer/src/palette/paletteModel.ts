@@ -6,6 +6,7 @@ import {
   type CliStatus,
   type InstalledAgent,
   type Project,
+  type ProjectBase,
   type RemovedWorktree,
   type RunKind,
   type Terminal,
@@ -58,6 +59,8 @@ export type PaletteAction =
   | `restore:${string}`
   /** Clean Up Merged… for a project, by its id. */
   | `clean-up:${string}`
+  /** Push main for a project, by its id. */
+  | `push-base:${string}`
   /** A project's Teamwork page, by its id. */
   | `teamwork:${string}`
   /** A note a teammate shared, by its share id. */
@@ -151,6 +154,8 @@ export type PaletteContext = {
   removed?: readonly RemovedWorktree[]
   /** Projects with a merged worktree; absent reads as every project. */
   merged?: ReadonlySet<string>
+  /** Bases ahead of their upstream. */
+  unpushed?: readonly ProjectBase[]
   /** Which way the panel toggles read; absent reads as shown. */
   sidebarVisible?: boolean
   rightPanelOpen?: boolean
@@ -209,6 +214,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     ...commandActions(context),
     ...restoreActions(context),
     ...cleanUpActions(context),
+    ...pushBaseActions(context),
     ...teamworkActions(context),
     ...panelActions(context),
     ...ACTIONS,
@@ -410,6 +416,22 @@ function cleanUpActions(context: PaletteContext): ActionRow[] {
     hint: project.name,
     ...(context.merged === undefined || context.merged.has(project.id) ? {} : { unavailable: 'nothing merged' })
   }))
+}
+
+/** Push main per project whose main is ahead, its name and count as the hint. */
+function pushBaseActions(context: PaletteContext): ActionRow[] {
+  return (context.unpushed ?? []).flatMap((base) => {
+    const project = context.projects.find((entry) => entry.id === base.projectId)
+    if (project === undefined) return []
+    return [
+      {
+        id: `push-base:${project.id}` as const,
+        label: `Push ${base.branch}`,
+        keywords: 'push main base origin landed unpushed upload',
+        hint: `${project.name} · ↑${base.ahead}`
+      }
+    ]
+  })
 }
 
 /** One row per setting label, hinted with the section it is first found in. */

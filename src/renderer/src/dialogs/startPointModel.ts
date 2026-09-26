@@ -175,3 +175,14 @@ export function badgesOf(option: StartPoint): string[] {
   if (option.isCurrent) badges.push('current')
   return badges
 }
+
+/** `↑2 ↓1`: the base ref and its local branch against each other, or null for any other row. */
+export function countsOf(option: StartPoint): string | null {
+  const counts = [option.ahead ? `↑${option.ahead}` : '', option.behind ? `↓${option.behind}` : ''].filter(Boolean)
+  return counts.length === 0 ? null : counts.join(' ')
+}
+
+/** The base's local branch when it holds commits the base lacks and lacks none of the base's: landed work not pushed. */
+export function landedAhead(list: StartPointList): StartPoint | undefined {
+  return list.options.find((option) => option.kind === 'localBranch' && (option.ahead ?? 0) > 0 && !option.behind)
+}

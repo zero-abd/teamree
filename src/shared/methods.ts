@@ -23,6 +23,7 @@ import type {
   PeerPresence,
   ProcessKill,
   Project,
+  ProjectBase,
   PullRequestList,
   RelaySetting,
   RemoteWriteLog,
@@ -344,7 +345,9 @@ export const Params = {
   worktreeMergeIntoBase: z.object({
     worktreeId: z.string().min(1),
     /** Answer with the plan and merge nothing. */
-    dryRun: z.boolean().optional()
+    dryRun: z.boolean().optional(),
+    /** Then push the base to origin; a child landing in its parent ignores it. */
+    push: z.boolean().optional()
   }),
   /** Removes the task's other runs, keeping their branches; refused over their unsaved work without `force`. */
   worktreeKeep: z.object({ worktreeId: z.string().min(1), force: z.boolean().optional() }),
@@ -411,6 +414,12 @@ export const Params = {
    * the primary checkout. Commits nothing. `startFrom` is the window's own setting.
    */
   projectSaveSettings: z.object({ projectId: z.string().min(1), startFrom: z.string().min(1).max(256).optional() }),
+  /** The checkout's base branch against its upstream. */
+  projectBase: z.object({ projectId: z.string().min(1) }),
+  /** Pushes the checkout's base branch to origin; never forced. */
+  projectPushBase: z.object({ projectId: z.string().min(1) }),
+  /** Merges origin's base into the checkout's, backing out of a conflict. */
+  projectPullBase: z.object({ projectId: z.string().min(1) }),
   /** Everything a new worktree could branch from, for the create dialog. */
   worktreeStartPoints: z.object({
     projectId: z.string().min(1),
@@ -881,6 +890,9 @@ export type MethodContract = TaskMethodContract &
       params: z.infer<typeof Params.projectSaveSettings>
       result: { file: string; project: Project }
     }
+    'project.base': { params: z.infer<typeof Params.projectBase>; result: ProjectBase }
+    'project.pushBase': { params: z.infer<typeof Params.projectPushBase>; result: ProjectBase }
+    'project.pullBase': { params: z.infer<typeof Params.projectPullBase>; result: ProjectBase }
 
     'worktree.list': { params: z.infer<typeof Params.worktreeList>; result: Worktree[] }
     'worktree.get': { params: z.infer<typeof Params.worktreeGet>; result: Worktree }

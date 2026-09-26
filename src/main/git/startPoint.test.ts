@@ -337,6 +337,31 @@ describe('listStartPoints', () => {
     expect((await service.listStartPoints(project.id, { limit: 100 })).truncated).toBe(false)
   })
 
+  it('counts the base against its local branch when main holds commits origin lacks', async () => {
+    const repo = await newRepo({ withRemote: true })
+    await repo.write('landed.txt', 'one\n')
+    await repo.commit('Landed one')
+    await repo.write('landed.txt', 'two\n')
+    await repo.commit('Landed two')
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const listed = await service.listStartPoints(project.id)
+
+    expect(listed.options.find((option) => option.ref === 'main')).toMatchObject({ ahead: 2, behind: 0 })
+    expect(listed.options.find((option) => option.ref === 'origin/main')).toMatchObject({ ahead: 0, behind: 2 })
+  })
+
+  it('counts nothing while main and origin agree', async () => {
+    const repo = await newRepo({ withRemote: true })
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const listed = await service.listStartPoints(project.id)
+
+    expect(listed.options.some((option) => option.ahead !== undefined || option.behind !== undefined)).toBe(false)
+  })
+
   it('offers a detached HEAD as its own row', async () => {
     const repo = await newRepo()
     await repo.write('second.txt', 'second\n')

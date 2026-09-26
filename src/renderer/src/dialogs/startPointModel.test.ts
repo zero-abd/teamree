@@ -7,6 +7,7 @@ import {
   buildPickerModel,
   choiceOf,
   commitStartPoint,
+  countsOf,
   defaultActiveId,
   edgeActiveId,
   idForRef,
@@ -253,5 +254,14 @@ describe('a failed listing', () => {
   it('falls back to the first line, capped, when there is no git clause to find', () => {
     expect(startPointErrorText('the runtime went away\nstack trace here')).toBe('the runtime went away')
     expect(startPointErrorText('x'.repeat(400))).toHaveLength(140)
+  })
+})
+
+describe('countsOf', () => {
+  it('reads a base and its local branch against each other', () => {
+    expect(countsOf(option('main', 'localBranch', { ahead: 2, behind: 0 }))).toBe('↑2')
+    expect(countsOf(option('origin/main', 'remoteBranch', { ahead: 0, behind: 2 }))).toBe('↓2')
+    expect(countsOf(option('main', 'localBranch', { ahead: 2, behind: 3 }))).toBe('↑2 ↓3')
+    expect(countsOf(option('feature', 'localBranch'))).toBeNull()
   })
 })

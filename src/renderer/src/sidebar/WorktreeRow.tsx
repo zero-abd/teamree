@@ -270,7 +270,9 @@ export function WorktreeRow({
       <span className="worktree__git">
         {ready ? <GitStatusChips status={status} child={worktree.parentId !== undefined} /> : null}
         {merged ? (
-          <span className="chip worktree__merged">{landing?.parent === undefined ? 'Merged' : 'Landed'}</span>
+          <span className="chip worktree__merged">
+            {landing?.parent !== undefined ? 'Landed' : landing?.notPushed ? 'Merged · not pushed' : 'Merged'}
+          </span>
         ) : null}
         {badge?.tone === 'clean' ? (
           <span

@@ -168,11 +168,14 @@ describe('dispatcher', () => {
       'peer.subscribe',
       'project.add',
       // Local: git on this machine, with this machine's credentials.
+      'project.base',
       'project.cancelClone',
       'project.clone',
       'project.cloneProgress',
       'project.context',
       'project.list',
+      'project.pullBase',
+      'project.pushBase',
       'project.remove',
       // Local: writes into this machine's checkout.
       'project.saveSettings',

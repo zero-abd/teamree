@@ -56,6 +56,7 @@ export function ChangesTab(): React.JSX.Element | null {
     if (worktree?.parentId !== undefined && worktree.baseRef !== undefined) return worktree.baseRef
     return state.projects.find((project) => project.id === worktree?.projectId)?.baseRef
   })
+  const projectId = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId)?.projectId)
   const terminals = useWorkspaceStore((state) => state.terminals)
   const shownCommit = useWorkspaceStore((state) =>
     worktreeId ? shownCommitIn(state.layouts[worktreeId]?.root ?? null) : null
@@ -153,7 +154,16 @@ export function ChangesTab(): React.JSX.Element | null {
           <TokensLine worktreeId={worktreeId} />
           {land?.kind === 'merged' ? (
             <>
-              <span className="chip changes__merged">Merged</span>
+              <span className="chip changes__merged">{landing?.notPushed ? 'Merged · not pushed' : 'Merged'}</span>
+              {landing?.notPushed && projectId !== undefined ? (
+                <button
+                  type="button"
+                  className="button button--small"
+                  onClick={() => openDialog({ kind: 'push-base', projectId })}
+                >
+                  {`Push ${landing.base}`}
+                </button>
+              ) : null}
               <button type="button" className="button button--small" onClick={() => void removeWorktree(worktreeId)}>
                 Delete Worktree…
               </button>

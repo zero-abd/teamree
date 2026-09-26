@@ -23,6 +23,7 @@ import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
 import { ConfirmForgetDialog } from './dialogs/ConfirmForgetDialog'
 import { ConfirmTrashProjectDialog } from './dialogs/ConfirmTrashProjectDialog'
 import { ConfirmMergeDialog } from './dialogs/ConfirmMergeDialog'
+import { PushBaseDialog } from './dialogs/PushBaseDialog'
 import { ConfirmCleanUpDialog } from './dialogs/ConfirmCleanUpDialog'
 import { ConfirmKeepDialog } from './dialogs/ConfirmKeepDialog'
 import { ConfirmRebaseDialog } from './dialogs/ConfirmRebaseDialog'
@@ -188,6 +189,13 @@ export function App(): React.JSX.Element {
       {dialog?.kind === 'confirm-forget' ? <ConfirmForgetDialog target={dialog.target} /> : null}
       {dialog?.kind === 'confirm-trash-project' ? <ConfirmTrashProjectDialog projectId={dialog.projectId} /> : null}
       {dialog?.kind === 'confirm-merge' ? <ConfirmMergeDialog worktreeId={dialog.worktreeId} /> : null}
+      {dialog?.kind === 'push-base' ? (
+        <PushBaseDialog
+          key={dialog.projectId}
+          projectId={dialog.projectId}
+          {...(dialog.failure === undefined ? {} : { failure: dialog.failure })}
+        />
+      ) : null}
       {dialog?.kind === 'confirm-keep' ? <ConfirmKeepDialog worktreeId={dialog.worktreeId} /> : null}
       {dialog?.kind === 'move-under' ? <MoveUnderDialog worktreeId={dialog.worktreeId} /> : null}
       {dialog?.kind === 'hand-off' ? <HandOffDialog worktreeId={dialog.worktreeId} /> : null}

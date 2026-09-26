@@ -7,6 +7,7 @@ import type { WorktreeIssue, WorktreeLanding, WorktreeMerge, WorktreePullRequest
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
+import { tryPushProjectBase } from './projectBase'
 import { assertRefShape } from './repository'
 import { bareRef, remoteForge, reviewUrl } from './reviewUrl'
 import { parseChangeRecords } from './worktreeChanges'
@@ -131,8 +132,8 @@ export async function readLanding(runner: GitRunner, options: LandingOptions): P
   const target = host === null && localBase ? `refs/heads/${base}` : options.baseRef
   const unmerged = await count(`${target}..${options.branch}`)
   const made = (await count(`${options.startedFrom}..${options.branch}`)) > 0
-  const inBase =
-    made && ((await isAncestor(options.baseRef)) || (localBase && (await isAncestor(`refs/heads/${base}`))))
+  const inRemote = made && (await isAncestor(options.baseRef))
+  const inLocal = made && !inRemote && localBase && (await isAncestor(`refs/heads/${base}`))
 
   let pullRequest: PullRequest | undefined
   if (host === 'github' && published && options.gh !== undefined) {
@@ -148,12 +149,13 @@ export async function readLanding(runner: GitRunner, options: LandingOptions): P
     host,
     published,
     unmerged,
-    merged: inBase || pullRequest?.state === 'merged',
+    merged: inRemote || inLocal || pullRequest?.state === 'merged',
     ...(compareUrl === undefined ? {} : { compareUrl }),
     ...(pullRequest === undefined ? {} : { pullRequest }),
     readAt: (options.now ?? Date.now)(),
     ...(options.parent === undefined ? {} : { parent: options.parent }),
-    remote
+    remote,
+    ...(inLocal && remote && options.parent === undefined && pullRequest?.state !== 'merged' ? { notPushed: true } : {})
   }
 }
 
@@ -242,6 +244,8 @@ export type MergeOptions = {
   /** A child landing in its parent's checkout: only dirty paths it brings refuse it, and so does the parent's agent mid-turn. */
   parent?: { name: string; agentWorking: () => boolean }
   dryRun?: boolean
+  /** Then pushes the base to origin; ignored for a child. */
+  push?: { projectId: string }
 }
 
 /**
@@ -324,7 +328,11 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
     )
   }
   const tip = await read(['rev-parse', 'HEAD'])
-  return { ...plan, merged: true, head: tip.stdout.trim() }
+  const pushed =
+    options.push === undefined || options.parent !== undefined
+      ? {}
+      : await tryPushProjectBase(runner, { projectId: options.push.projectId, repoPath: cwd, baseRef: into })
+  return { ...plan, merged: true, head: tip.stdout.trim(), ...pushed }
 }
 
 function firstLine(text: string): string {

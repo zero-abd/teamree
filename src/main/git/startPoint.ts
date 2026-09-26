@@ -34,6 +34,9 @@ export type StartPointOption = {
   isCurrent: boolean
   /** Commit or tag time in seconds, which is what recency ordering uses. */
   updatedAt: number
+  /** The base ref and its local branch, counted against each other while they differ. */
+  ahead?: number
+  behind?: number
 }
 
 export type StartPointList = {
@@ -474,6 +477,7 @@ export async function listStartPoints(runner: GitRunner, options: ListStartPoint
 
   await addDetachedHead(runner, root, rows, baseNames, candidates)
   if (!candidates.some((option) => option.isBase)) await addMissingBase(runner, root, baseRef, candidates)
+  await countBaseAgainstLocal(runner, root, candidates)
 
   candidates.sort(compareOptions)
   return {
@@ -542,6 +546,24 @@ async function addMissingBase(
     isCurrent: false,
     updatedAt: await commitTime(runner, root, resolved.sha)
   })
+}
+
+/** `origin/main` against `main`: a landing that was never pushed is `main` ahead. */
+async function countBaseAgainstLocal(runner: GitRunner, root: string, options: StartPointOption[]): Promise<void> {
+  const base = options.find((option) => option.isBase && option.kind === 'remoteBranch')
+  const name = base?.ref.slice(base.ref.indexOf('/') + 1)
+  const local = options.find((option) => option.kind === 'localBranch' && option.ref === name)
+  if (base?.refName === undefined || local?.refName === undefined || local.sha === base.sha) return
+  const counted = await runner.tryRun({
+    args: ['rev-list', '--left-right', '--count', `${local.refName}...${base.refName}`],
+    cwd: root,
+    readOnly: true,
+    timeoutMs: 30_000
+  })
+  const [ahead, behind] = counted.stdout.trim().split(/\s+/).map(Number)
+  if (counted.exitCode !== 0 || ahead === undefined || behind === undefined) return
+  Object.assign(local, { ahead, behind })
+  Object.assign(base, { ahead: behind, behind: ahead })
 }
 
 async function commitTime(runner: GitRunner, root: string, sha: string): Promise<number> {

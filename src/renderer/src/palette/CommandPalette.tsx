@@ -84,6 +84,7 @@ export function CommandPalette({
   const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
   const statuses = useWorkspaceStore((state) => state.statuses)
   const landings = useWorkspaceStore((state) => state.landings)
+  const bases = useWorkspaceStore((state) => state.bases)
   const pushing = useWorkspaceStore((state) => state.pushing)
   const diffPanes = useWorkspaceStore((state) => state.diffPanes)
   const editedFiles = useWorkspaceStore((state) => state.editedFiles)
@@ -204,6 +205,7 @@ export function CommandPalette({
           })
         },
         removed: removedWorktrees,
+        unpushed: Object.values(bases).filter((base) => base.ahead > 0),
         merged: new Set(
           worktrees.filter((worktree) => landings[worktree.id]?.merged).map((worktree) => worktree.projectId)
         ),
@@ -242,6 +244,7 @@ export function CommandPalette({
       focusedWatchId,
       statuses,
       landings,
+      bases,
       pushing,
       diffPanes,
       editedFiles,
@@ -371,6 +374,10 @@ export function CommandPalette({
     }
     if (item.id.startsWith('setting:')) {
       store.openSetting(item.id.slice('setting:'.length))
+      return
+    }
+    if (item.id.startsWith('push-base:')) {
+      store.openDialog({ kind: 'push-base', projectId: item.id.slice('push-base:'.length) })
       return
     }
     if (item.id.startsWith('clean-up:')) {
