@@ -49,7 +49,7 @@ import {
 import type { SubscriptionChannel, SubscriptionHub } from '../../runtime/subscriptionHub'
 import { notFound } from '../../runtime/runtimeError'
 import { ErrorCode } from '../../../shared/protocol'
-import { PeerPresenceExtrasOnRead, PeerWorktreeExtrasOnRead } from '../../../shared/presenceExtras'
+import { PeerMenuOnRead, PeerPresenceExtrasOnRead, PeerWorktreeExtrasOnRead } from '../../../shared/presenceExtras'
 import type { PeerHandoff, TeamworkHandoffs } from '../../../shared/tasks'
 import {
   MAX_CACHED_PANES,
@@ -616,7 +616,11 @@ export class PeerService {
   async type(params: ParamsOf<'teamwork.type'>): Promise<ResultOf<'teamwork.type'>> {
     const { record, terminalId } = this.#resolvePeerPane(params.projectId, params.paneId, 'type into')
     try {
-      return await record.link.call('terminal.write', { terminalId, data: params.data })
+      return await record.link.call('terminal.write', {
+        terminalId,
+        data: params.data,
+        ...(params.answering === undefined ? {} : { answering: params.answering })
+      })
     } catch (error) {
       throw error instanceof PeerCallError ? new TeamworkError(error.code, error.message) : notFound(reasonFor(error))
     }
@@ -697,6 +701,7 @@ export class PeerService {
     } else this.#muted.delete(params.terminalId)
     this.#options.mutes?.set(params.terminalId, params.muted)
     this.#options.onChange()
+    this.#pushPresence()
     return this.watchers({ projectId })
   }
 
@@ -1821,7 +1826,8 @@ export class PeerService {
           })),
       worktrees: (projectId) => this.#options.workspace.listWorktrees(projectId),
       terminals: (worktreeId) => this.#options.workspace.listTerminals(worktreeId),
-      details: (worktreeId) => this.#taskDetails.get(worktreeId)
+      details: (worktreeId) => this.#taskDetails.get(worktreeId),
+      muted: (terminalId) => this.#muted.has(terminalId)
     }
   }
 
@@ -2156,7 +2162,10 @@ const PanePayload = z.object({
   busy: z.boolean(),
   cols: z.number().int().positive().optional(),
   rows: z.number().int().positive().optional(),
-  quietForMs: z.number().nonnegative()
+  quietForMs: z.number().nonnegative(),
+  asking: z.boolean().optional().catch(undefined),
+  menu: PeerMenuOnRead,
+  muted: z.boolean().optional().catch(undefined)
 })
 
 const WorktreePayload = z

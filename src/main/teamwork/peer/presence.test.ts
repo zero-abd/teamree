@@ -95,6 +95,55 @@ describe('presenceFor', () => {
     const panes = presence.projects[0]?.worktrees[0]?.panes ?? []
     expect(panes.map((pane) => pane.ordinal)).toEqual([2, undefined])
   })
+
+  const panesOf = (terminals: Terminal[], muted?: (terminalId: string) => boolean) =>
+    presenceFor(
+      {
+        source: {
+          projects: () => [{ projectId: 'p1', projectKey: 'key', rosterKeys: ['peer'] }],
+          worktrees: () => [worktree],
+          terminals: () => terminals,
+          ...(muted === undefined ? {} : { muted })
+        }
+      },
+      'peer',
+      'me',
+      1
+    ).projects[0]?.worktrees[0]?.panes ?? []
+
+  it('sends an asking pane as asking, with its menu and never its question', () => {
+    const menu = {
+      prompt: '1a2b3c4d',
+      choices: [
+        { label: 'Yes', keys: ['\r'] },
+        { label: 'Yes, Always', keys: ['2'] },
+        { label: 'No…', keys: null }
+      ]
+    }
+    const hook = { event: 'Notification' as const, at: 1, message: 'Claude needs your permission to use Bash' }
+    const [asking, working, hooked] = panesOf([
+      { ...terminal('t1'), agent: 'claude', screenSays: 'waiting', screenMenu: menu },
+      { ...terminal('t2'), agent: 'claude', busy: true },
+      { ...terminal('t3'), agent: 'claude', agentEvent: hook }
+    ])
+    expect(asking).toMatchObject({ asking: true, menu })
+    expect(working && ('asking' in working || 'menu' in working)).toBe(false)
+    expect(hooked).toMatchObject({ asking: true })
+    expect(hooked && 'menu' in hooked).toBe(false)
+    expect(JSON.stringify(hooked)).not.toContain('permission')
+  })
+
+  it('sends neither for a pane whose agent has exited', () => {
+    const menu = { prompt: 'ffff0000', choices: [{ label: 'Yes', keys: ['\r'] }] }
+    const [exited] = panesOf([{ ...terminal('t1'), agent: 'claude', running: false, exitCode: 0, screenMenu: menu }])
+    expect(exited && ('asking' in exited || 'menu' in exited)).toBe(false)
+  })
+
+  it('says which panes the owner muted', () => {
+    const panes = panesOf([terminal('t1'), terminal('t2')], (terminalId) => terminalId === 't1')
+    expect(panes.map((pane) => pane.muted)).toEqual([true, undefined])
+    expect('muted' in (panes[1] ?? {})).toBe(false)
+  })
 })
 
 describe('presenceFor with task details', () => {

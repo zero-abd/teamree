@@ -128,8 +128,14 @@ function describePane(candidate: PaneCandidate): Record<string, unknown> {
     worktree: candidate.worktree.name,
     running: candidate.pane.running,
     busy: candidate.pane.busy,
+    asking: candidate.pane.asking === true,
     live: candidate.live
   }
+}
+
+function paneState(pane: PeerPane): string {
+  if (!pane.running) return `exit ${pane.exitCode ?? '?'}`
+  return pane.asking === true ? 'asking' : pane.busy ? 'busy' : 'idle'
 }
 
 /** Picks the pane to act on; with several, guessing at somebody else's shell is the wrong guess. */
@@ -929,7 +935,7 @@ export const teamCommands: readonly CommandSpec[] = [
             candidate.pane.id,
             candidate.worktree.name,
             candidate.pane.title,
-            candidate.pane.running ? (candidate.pane.busy ? 'busy' : 'idle') : `exit ${candidate.pane.exitCode ?? '?'}`,
+            paneState(candidate.pane),
             candidate.live ? 'yes' : 'no',
             ago(Date.now() - candidate.pane.quietForMs, Date.now())
           ]),

@@ -78,4 +78,51 @@ describe('a presence snapshot', () => {
       ['agent', 'busy', 'cols', 'id', 'quietForMs', 'rows', 'running', 'shell', 'title'].sort()
     )
   })
+
+  it('says a pane is asking and offers its answers without a word of its question', () => {
+    const QUESTION = 'rm -rf secrets-3c9e'
+    const pane: Terminal = {
+      id: 't1',
+      worktreeId: 'w1',
+      title: 'claude',
+      cwd: '/w1',
+      shell: '/bin/zsh',
+      cols: 80,
+      rows: 24,
+      running: true,
+      busy: false,
+      agent: 'claude',
+      lastOutputAt: 0,
+      screenSays: 'waiting',
+      screenMenu: { prompt: '1a2b3c4d', choices: [{ label: 'Yes', keys: ['\r'] }] },
+      agentEvent: { event: 'Notification', at: 1, message: `Claude wants to run ${QUESTION}` }
+    }
+    const worktree: Worktree = {
+      id: 'w1',
+      projectId: 'p1',
+      name: 'w',
+      branch: 'w',
+      path: '/w1',
+      startedFrom: 'main',
+      state: 'ready',
+      createdAt: 0
+    }
+    const snapshot = presenceFor(
+      {
+        source: {
+          projects: () => [{ projectId: 'p1', projectKey: 'key', rosterKeys: ['peer'] }],
+          worktrees: () => [worktree],
+          terminals: () => [pane]
+        },
+        taskDetails: true
+      },
+      'peer',
+      'me',
+      1
+    )
+    const sent = snapshot.projects[0]?.worktrees[0]?.panes[0]
+    expect(sent?.asking).toBe(true)
+    expect(sent?.menu?.choices.map((choice) => choice.label)).toEqual(['Yes'])
+    expect(JSON.stringify(snapshot)).not.toContain('secrets-3c9e')
+  })
 })

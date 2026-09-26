@@ -1073,6 +1073,17 @@ describe('team panes', () => {
     expect(data.panes.map((pane) => pane.paneId)).toEqual(['peer:AAAABBBBCCCC:t_7', 'peer:AAAABBBBCCCC:t_8'])
   })
 
+  it('says asking for a pane whose agent is asking', async () => {
+    const asking = { ...PANE_CLAUDE, busy: false, asking: true }
+    const worktrees = [{ ...PRESENCE.worktrees[0], panes: [asking] }]
+    const cli = await harness(teamHandler({ 'teamwork.presence': () => ({ ...PRESENCE, worktrees }) }))
+    const result = await cli.run(['team', 'panes', 'api'])
+    expect(result.out).toMatch(/ana\s+peer:AAAABBBBCCCC:t_7\s+fix-login\s+claude\s+asking\s+yes/)
+    const json = await cli.run(['team', 'panes', 'api', '--json'])
+    const data = soleJsonDocument(json.out)['data'] as { panes: Array<{ asking?: boolean }> }
+    expect(data.panes[0]?.asking).toBe(true)
+  })
+
   // An empty table would read as "this teammate has no panes", so the wait
   // gets a code of its own.
   it('refuses rather than printing an empty table for a project teamwork has not read', async () => {

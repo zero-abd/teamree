@@ -1,8 +1,10 @@
 // One line of recent output for each pane the sidebar shows. The policy lives in ./evidenceReads;
 // this is only the wiring: a timer, a call, and the line picker.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Terminal } from '@shared/entities'
+import { evidenceLine } from '@shared/outputEvidence'
+import { useWorkspaceStore } from '../state/workspaceStore'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { shownScreen } from '../terminal/shownPanes'
 import { EVIDENCE_TAIL_BYTES, forgetClosed, readsTrueScreen, terminalsToRead, type EvidenceRead } from './evidenceReads'
@@ -75,4 +77,15 @@ export function usePaneEvidence(
   }, [terminals])
 
   return evidence
+}
+
+/** The last line each watched teammate pane said, by its namespaced id; only an open pane streams. */
+export function useWatchEvidence(): Record<string, string | null> {
+  const watches = useWorkspaceStore((state) => state.watches)
+  const watchTails = useWorkspaceStore((state) => state.watchTails)
+  return useMemo(() => {
+    const lines: Record<string, string | null> = {}
+    for (const watch of watches) lines[watch.paneId] = evidenceLine(watchTails[watch.id] ?? '')
+    return lines
+  }, [watches, watchTails])
 }

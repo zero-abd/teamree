@@ -4,7 +4,7 @@
 
 import { teammatesHeard, type PeerPane, type TeammatePresence, type TeammateWorktree } from '@shared/entities'
 import type { TaskStage } from '@shared/tasks'
-import { activityOf, paneNames, paneText, worktreeTone, type AgentRow, type DotTone } from './agentRows'
+import { activityOf, askingLine, paneNames, paneText, worktreeTone, type AgentRow, type DotTone } from './agentRows'
 import { teammateStaleness, type TeammateStaleness } from './teammateStaleness'
 import { worktreeDisplay } from './worktreeDisplay'
 
@@ -14,6 +14,8 @@ export type TeammatePaneRow = AgentRow & {
   /** The owner's pty size, for a watcher to letterbox to. */
   cols: number | undefined
   rows: number | undefined
+  /** The menu `choices` came from, which an answer names so the owner's machine refuses a stale one. */
+  answering?: string
 }
 
 export type TeammateWorktreeRowModel = {
@@ -60,7 +62,7 @@ export function teammateRows(
     // Named together, as the owner's own sidebar names them: twins are told apart by each other.
     const names = paneNames(worktree.panes, worktree)
     const panes = worktree.panes.map((pane, index) =>
-      paneRow(pane, names[index] ?? pane.title, worktree.handle, heardAgoMs, evidence[pane.id] ?? null)
+      paneRow(pane, names[index] ?? pane.title, worktree, heardAgoMs, evidence[pane.id] ?? null)
     )
     return {
       id: worktree.id,
@@ -105,23 +107,27 @@ function inTreeOrder(worktrees: readonly TeammateWorktree[]): { worktree: Teamma
 function paneRow(
   pane: PeerPane,
   label: string,
-  handle: string,
+  worktree: TeammateWorktree,
   heardAgoMs: number,
   evidence: string | null
 ): TeammatePaneRow {
+  const asking = pane.running && pane.asking === true
+  // Answers only where a keystroke could land: a live link and a pane its owner has not muted.
+  const menu = asking && worktree.live && pane.muted !== true ? pane.menu : undefined
   return {
     terminalId: pane.id,
     agent: pane.agent,
     label,
     text: paneText(pane, label),
-    activity: activityOf(pane),
+    activity: asking ? 'waiting' : activityOf(pane),
     // The owner's measurement plus the time it has sat here: the only arithmetic that believes no other clock.
     quietFor: pane.quietForMs + heardAgoMs,
     // Null until somebody opens the pane; no byte of it has crossed the wire before then.
-    evidence,
-    handle,
+    evidence: asking ? askingLine(evidence, undefined) : evidence,
+    handle: worktree.handle,
     cols: pane.cols,
-    rows: pane.rows
+    rows: pane.rows,
+    ...(menu === undefined ? {} : { choices: menu.choices, answering: menu.prompt })
   }
 }
 

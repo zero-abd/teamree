@@ -1124,6 +1124,12 @@ export type PeerPane = {
    * do not agree on the time. The receiver adds the time since it arrived.
    */
   quietForMs: number
+  /** Its agent is asking, by the owner's reading. Never the question: that is a byte the pane printed. */
+  asking?: boolean
+  /** The asking screen's answers and its fingerprint, which `teamwork.type`'s `answering` names. */
+  menu?: ScreenMenu
+  /** The owner has muted it: a keystroke would be refused. */
+  muted?: boolean
 }
 
 /** One of a teammate's worktrees, with the panes inside it. */

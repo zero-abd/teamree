@@ -136,6 +136,47 @@ describe('a teammate’s rows', () => {
   })
 })
 
+describe('a teammate’s asking pane', () => {
+  const menu = {
+    prompt: '1a2b3c4d',
+    choices: [
+      { label: 'Yes', keys: ['\r'] },
+      { label: 'No…', keys: null }
+    ]
+  }
+  const asking = (overrides = {}) => pane({ agent: 'claude', asking: true, menu, ...overrides })
+
+  it('reads as asking, amber on the row and the worktree, where it read idle before', () => {
+    const [row] = teammateRows([theirWorktree({ panes: [asking()] })], NOW)
+    expect(row?.panes[0]?.activity).toBe('waiting')
+    expect(row?.tone).toBe('waiting')
+  })
+
+  it('offers the owner’s answers while their link is up and the pane is not muted', () => {
+    const [live] = teammateRows([theirWorktree({ panes: [asking()] })], NOW)
+    expect(live?.panes[0]?.choices).toEqual(menu.choices)
+    expect(live?.panes[0]?.answering).toBe('1a2b3c4d')
+    const [away] = teammateRows([theirWorktree({ live: false, panes: [asking()] })], NOW)
+    expect(away?.panes[0]?.choices).toBeUndefined()
+    const [muted] = teammateRows([theirWorktree({ panes: [asking({ muted: true })] })], NOW)
+    expect(muted?.panes[0]?.choices).toBeUndefined()
+    expect(muted?.panes[0]?.activity).toBe('waiting')
+  })
+
+  it('quotes the question only from a watched pane, and never an answer line', () => {
+    const [unwatched] = teammateRows([theirWorktree({ panes: [asking()] })], NOW)
+    expect(unwatched?.panes[0]?.evidence).toBeNull()
+    const [watched] = teammateRows([theirWorktree({ panes: [asking()] })], NOW, {
+      'peer:abc123:t_1': 'Allow command: mkdir -p out?'
+    })
+    expect(watched?.panes[0]?.evidence).toBe('Allow command: mkdir -p out?')
+    const [hint] = teammateRows([theirWorktree({ panes: [asking()] })], NOW, {
+      'peer:abc123:t_1': 'Esc to cancel · Tab to amend'
+    })
+    expect(hint?.panes[0]?.evidence).toBeNull()
+  })
+})
+
 describe('a teammate whose machine is away', () => {
   it('keeps their worktrees on screen, and says how old what is on them is', () => {
     const [row] = teammateRows([theirWorktree({ live: false, heardAt: NOW - 600_000, panes: [pane()] })], NOW)

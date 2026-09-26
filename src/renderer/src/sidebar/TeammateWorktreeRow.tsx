@@ -1,8 +1,12 @@
 // One of a teammate's worktrees, under the same project as your own. The
-// handle is on the row and the row is a `<div>`, not a disabled button: it will
-// not act. Panes can be watched; an away teammate's row stays put and says how old it is.
+// handle is on the row and the row is a `<div>`, not a disabled button: it only opens its first pane.
+// Panes can be watched, and an asking one answered through its owner's consent; an away teammate's
+// row stays put and says how old it is.
 
+import { useState } from 'react'
+import type { ScreenChoice } from '@shared/screenOpinion'
 import { dotClass, dotTone, TONE_LABEL, truncateName } from './agentRows'
+import { AnswerButtons } from './AnswerButtons'
 import { PaneSince } from './PaneRows'
 import { teammateTitle, type TeammatePaneRow, type TeammateWorktreeRowModel } from './teammateRows'
 import { PaneGlyph } from '../agents/glyphs'
@@ -12,10 +16,20 @@ type TeammateWorktreeRowProps = {
   /** The panes of this project the window has open; they take slots in the workspace. */
   watchingPaneIds: readonly string[]
   onWatch: (pane: TeammatePaneRow) => void
+  /** An answer to an asking pane, which their machine holds for their consent. */
+  onAnswer: (pane: TeammatePaneRow, choice: ScreenChoice) => void
 }
 
-export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateWorktreeRowProps): React.JSX.Element {
+export function TeammateWorktreeRow({
+  row,
+  watchingPaneIds,
+  onWatch,
+  onAnswer
+}: TeammateWorktreeRowProps): React.JSX.Element {
   const { tone } = row
+  const first = row.panes[0]
+  // As on your own rows: Tab from a focused pane row reaches its answers, and the tree stays one Tab stop otherwise.
+  const [focused, setFocused] = useState<string | null>(null)
   return (
     <li
       className={`worktree worktree--teammate worktree--${row.state}${row.staleness ? ' worktree--stale' : ''}`}
@@ -30,6 +44,9 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
           aria-level={2 + row.depth}
           aria-expanded={row.panes.length > 0 ? true : undefined}
           tabIndex={-1}
+          onClick={() => {
+            if (first !== undefined && !watchingPaneIds.includes(first.terminalId)) onWatch(first)
+          }}
         >
           <span className="worktree__title">
             <span className="worktree__name">{row.name}</span>
@@ -63,7 +80,15 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
           {row.panes.map((pane) => {
             const watching = watchingPaneIds.includes(pane.terminalId)
             return (
-              <li key={pane.terminalId} role="none">
+              <li
+                key={pane.terminalId}
+                role="none"
+                className="pane-item"
+                onFocus={() => setFocused(pane.terminalId)}
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) setFocused(null)
+                }}
+              >
                 <button
                   type="button"
                   role="treeitem"
@@ -86,6 +111,15 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
                     <PaneSince tone={dotTone(pane.activity, pane.agent)} quietFor={pane.quietFor} />
                   </span>
                 </button>
+                {pane.choices === undefined ? null : (
+                  <AnswerButtons
+                    terminalId={pane.terminalId}
+                    choices={pane.choices}
+                    className="pane-item__answers"
+                    tabbable={focused === pane.terminalId}
+                    onChoose={(choice) => onAnswer(pane, choice)}
+                  />
+                )}
               </li>
             )
           })}

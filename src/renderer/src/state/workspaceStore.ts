@@ -610,6 +610,12 @@ type WorkspaceState = {
   revealPane: (worktreeId: string, terminalId: string) => Promise<void>
   /** Chooses an answer an asking pane's menu offers; one that wants typing, or a menu gone since, goes to the pane. */
   answerPane: (terminalId: string, choice: ScreenChoice) => Promise<void>
+  /** The same for a teammate's pane, as keystrokes their machine holds for their consent; a refusal opens the pane. */
+  answerTeammatePane: (
+    projectId: string,
+    pane: { terminalId: string; label: string; handle: string; answering?: string },
+    choice: ScreenChoice
+  ) => Promise<void>
 
   /** Puts the focus on one pane, whether it is yours or a teammate's. */
   focusPane: (paneId: string) => void
@@ -2210,6 +2216,28 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       } catch {
         notify('No longer asking that', 'info')
         await goThere()
+      }
+    },
+
+    async answerTeammatePane(projectId, pane, choice) {
+      const watch = (): void => {
+        const id = watchedPaneId(projectId, pane.terminalId)
+        // Their pane opens in the workspace, which a page would cover.
+        set({ dashboardOpen: false })
+        if (get().watches.some((open) => open.id === id)) set({ focusedWatchId: id })
+        else get().toggleWatchedPane(projectId, pane)
+      }
+      if (choice.keys === null || pane.answering === undefined) return watch()
+      try {
+        await runtimeClient.call('teamwork.type', {
+          projectId,
+          paneId: pane.terminalId,
+          data: choice.keys.join(''),
+          answering: pane.answering
+        })
+      } catch (error) {
+        notify(`Not answered: ${error instanceof Error ? error.message : String(error)}`, 'info')
+        watch()
       }
     },
 

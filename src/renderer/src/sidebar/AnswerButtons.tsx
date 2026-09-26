@@ -48,12 +48,15 @@ export function AnswerButtons({
   terminalId,
   choices,
   className,
-  tabbable = true
+  tabbable = true,
+  onChoose
 }: {
   terminalId: string
   choices: readonly ScreenChoice[]
   className: string
   tabbable?: boolean
+  /** Instead of answering this machine's pane: a teammate's goes through their consent. */
+  onChoose?: (choice: ScreenChoice) => void
 }): React.JSX.Element {
   const answerPane = useWorkspaceStore((state) => state.answerPane)
   return (
@@ -61,7 +64,9 @@ export function AnswerButtons({
       choices={choices.map((choice) => ({ label: shortAnswer(choice.label), title: choice.label }))}
       onChoose={(index) => {
         const choice = choices[index]
-        if (choice) void answerPane(terminalId, choice)
+        if (choice === undefined) return
+        if (onChoose) onChoose(choice)
+        else void answerPane(terminalId, choice)
       }}
       className={className}
       tabbable={tabbable}

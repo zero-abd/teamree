@@ -3,6 +3,7 @@
 // show worktrees of a repository they have no part in. Metadata only; nothing here reads a scrollback.
 
 import type { PeerPane, PeerPresence, PeerProject, PeerWorktree, Terminal, Worktree } from '../../../shared/entities'
+import { activityOf } from '../../../shared/paneActivity'
 import { MAX_PEER_PATHS, PEER_REPORT_CHARS, PEER_TASK_CHARS } from '../../../shared/presenceExtras'
 import type { TaskStage } from '../../../shared/tasks'
 import { pathsWithin } from '../../store/teammateCache'
@@ -16,6 +17,8 @@ export type PresenceSource = {
   terminals: (worktreeId: string) => readonly Terminal[]
   /** What git last said about a worktree; absent until it has been read. */
   details?: (worktreeId: string) => TaskGitDetails | undefined
+  /** Whether the owner muted a pane to teammates' keystrokes. */
+  muted?: (terminalId: string) => boolean
 }
 
 export type PresenceProject = {
@@ -54,7 +57,7 @@ export function presenceFor(
       projectKey: project.projectKey,
       worktrees: options.source.worktrees(project.projectId).map((worktree) => {
         const terminals = options.source.terminals(worktree.id)
-        const described = describeWorktree(worktree, terminals, at)
+        const described = describeWorktree(worktree, terminals, at, options.source.muted)
         return options.taskDetails === true
           ? withTaskDetails(described, worktree, terminals, options.source.details?.(worktree.id))
           : described
@@ -66,13 +69,18 @@ export function presenceFor(
 }
 
 // Read off the terminals, never the layout, so a teammate hears nothing of a file pane.
-function describeWorktree(worktree: Worktree, terminals: readonly Terminal[], at: number): PeerWorktree {
+function describeWorktree(
+  worktree: Worktree,
+  terminals: readonly Terminal[],
+  at: number,
+  muted: PresenceSource['muted']
+): PeerWorktree {
   return {
     id: worktree.id,
     name: worktree.name,
     branch: worktree.branch,
     state: worktree.state,
-    panes: terminals.map((terminal) => describePane(terminal, at))
+    panes: terminals.map((terminal) => describePane(terminal, at, muted?.(terminal.id) === true))
   }
 }
 
@@ -122,7 +130,7 @@ function firstSentence(summary: string): string {
   return (end === null ? text : text.slice(0, end.index + (end[0] === '\n' ? 0 : 1))).slice(0, PEER_REPORT_CHARS)
 }
 
-function describePane(terminal: Terminal, at: number): PeerPane {
+function describePane(terminal: Terminal, at: number, muted: boolean): PeerPane {
   const pane: PeerPane = {
     id: terminal.id,
     title: terminal.title,
@@ -139,5 +147,11 @@ function describePane(terminal: Terminal, at: number): PeerPane {
   if (terminal.ordinal !== undefined) pane.ordinal = terminal.ordinal
   if (terminal.agent !== undefined) pane.agent = terminal.agent
   if (terminal.exitCode !== undefined) pane.exitCode = terminal.exitCode
+  // The same reading as the owner's own row; the menu's labels and keys are this app's table, not the screen's text.
+  if (activityOf(terminal) === 'waiting') {
+    pane.asking = true
+    if (terminal.screenMenu !== undefined) pane.menu = terminal.screenMenu
+  }
+  if (muted) pane.muted = true
   return pane
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Project, Terminal, Worktree } from '@shared/entities'
+import type { Project, TeammatePresence, TeammateWorktree, Terminal, Worktree } from '@shared/entities'
 import { dashboardRows, toneCounts, type DashboardRow } from './dashboardRows'
 
 const projects: Project[] = [
@@ -203,5 +203,58 @@ describe('toneCounts', () => {
   // between them rather than reflowing under the reader.
   it('reports a zero for a state nothing is in, including with no panes at all', () => {
     expect(toneCounts([])).toEqual({ failed: 0, waiting: 0, working: 0, quiet: 0, idle: 0, done: 0 })
+  })
+})
+
+describe('a teammate’s asking pane', () => {
+  const theirs = (panes: TeammateWorktree['panes'], live = true): TeammatePresence => ({
+    state: 'read',
+    projectId: 'p1',
+    readAt: NOW,
+    teammates: [{ handle: 'sam', publicKey: 'sam-key', connected: live, heardAt: NOW }],
+    worktrees: [
+      {
+        id: 'peer:sam:w1',
+        name: 'billing',
+        branch: 'billing',
+        state: 'ready',
+        panes,
+        handle: 'sam',
+        publicKey: 'sam-key',
+        heardAt: NOW,
+        live
+      }
+    ]
+  })
+  const peerPane = (id: string, overrides = {}) => ({
+    id,
+    title: 'claude',
+    shell: '/bin/zsh',
+    agent: 'claude' as const,
+    running: true,
+    busy: false,
+    quietForMs: 0,
+    ...overrides
+  })
+  const menu = { prompt: '1a2b3c4d', choices: [{ label: 'Yes', keys: ['\r'] }] }
+
+  it('is listed with the asking panes, whose it is and its answers; their other panes are not', () => {
+    const rows = dashboardRows({
+      terminals: [terminal({ id: 'mine', worktreeId: 'wt1', busy: true, agent: 'claude' })],
+      worktrees: [worktree({ id: 'wt1' })],
+      projects,
+      now: NOW,
+      teammates: {
+        p1: theirs([peerPane('peer:sam:t1', { asking: true, menu }), peerPane('peer:sam:t2', { busy: true })])
+      }
+    })
+    expect(rows.map((row) => row.terminalId)).toEqual(['peer:sam:t1', 'mine'])
+    expect(rows[0]).toMatchObject({
+      activity: 'waiting',
+      choices: menu.choices,
+      projectName: 'atlas',
+      teammate: { projectId: 'p1', handle: 'sam', answering: '1a2b3c4d' }
+    })
+    expect(rows[0]?.worktreeName).toContain('sam')
   })
 })

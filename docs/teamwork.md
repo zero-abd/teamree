@@ -358,7 +358,11 @@ Per-pane mute overrides all of it in the owner's favour.
 ### What presence carries
 
 Per worktree: its name, branch and state, and per pane the title, shell, label,
-agent, whether it is running or busy, its size and how long it has been quiet.
+agent, whether it is running, busy or asking, its size and how long it has been
+quiet, and whether its owner muted it. An asking pane also carries its answers
+as this app's labels and keypresses with a fingerprint of the dialog, never the
+dialog's text. A teammate's answer is a keystroke like any other: held for the
+owner's consent, then written only while that dialog is still on screen.
 While **Settings › Teamwork › Share Task Details** is on (the default), each
 worktree also carries:
 

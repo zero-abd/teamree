@@ -15,7 +15,7 @@ import {
   type DotTone
 } from '../sidebar/agentRows'
 import { AnswerButtons } from '../sidebar/AnswerButtons'
-import { usePaneEvidence } from '../sidebar/usePaneEvidence'
+import { usePaneEvidence, useWatchEvidence } from '../sidebar/usePaneEvidence'
 import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -23,7 +23,7 @@ import { PageFrame } from '../workspace/PageFrame'
 import { Segments } from '../files/FileBar'
 import { useTaskTreeStore } from '../state/taskTreeStore'
 import { useUsageReads } from '../state/usageStore'
-import { dashboardRows, toneCounts } from './dashboardRows'
+import { dashboardRows, toneCounts, type DashboardRow } from './dashboardRows'
 import { TaskBoard, useChangedLines } from './TaskBoard'
 import { taskRows } from './taskRows'
 
@@ -38,16 +38,29 @@ export function Dashboard(): React.JSX.Element {
   const statuses = useWorkspaceStore((state) => state.statuses)
   const mergePreviews = useWorkspaceStore((state) => state.mergePreviews)
   const landings = useWorkspaceStore((state) => state.landings)
+  const teammates = useWorkspaceStore((state) => state.teammates)
+  const watches = useWorkspaceStore((state) => state.watches)
+  const toggleWatchedPane = useWorkspaceStore((state) => state.toggleWatchedPane)
+  const answerTeammatePane = useWorkspaceStore((state) => state.answerTeammatePane)
   const mode = useTaskTreeStore((state) => state.boardMode)
   const setMode = useTaskTreeStore((state) => state.setBoardMode)
 
   const now = useNow()
   const paneList = useMemo(() => Object.values(terminals), [terminals])
   const evidence = usePaneEvidence(paneList, terminals)
+  const watchEvidence = useWatchEvidence()
   const rows = useMemo(
-    () => dashboardRows({ terminals: paneList, worktrees, projects, layouts, now, evidence }),
-    [paneList, worktrees, projects, layouts, now, evidence]
+    () => dashboardRows({ terminals: paneList, worktrees, projects, layouts, now, evidence, teammates, watchEvidence }),
+    [paneList, worktrees, projects, layouts, now, evidence, teammates, watchEvidence]
   )
+  const openRow = (row: DashboardRow): void => {
+    const theirs = row.teammate
+    if (theirs === undefined) return void revealPane(row.worktreeId, row.terminalId)
+    // Their pane opens in the workspace, which this page covers.
+    toggleDashboard()
+    const open = watches.some((watch) => watch.projectId === theirs.projectId && watch.paneId === theirs.terminalId)
+    if (!open) toggleWatchedPane(theirs.projectId, theirs)
+  }
   const counts = useMemo(() => toneCounts(rows), [rows])
   const changes = useChangedLines(mode === 'tasks' ? worktrees : [])
   useUsageReads(mode === 'tasks' ? {} : null)
@@ -194,6 +207,7 @@ export function Dashboard(): React.JSX.Element {
             const isUnread = unread.has(row.terminalId)
             const needsYou = state === 'waiting' || state === 'failed'
             const where = [row.worktreeName, row.branch, row.projectName].filter(Boolean).join(' · ')
+            const theirs = row.teammate
             return (
               <li key={row.terminalId} className="board-item">
                 <button
@@ -202,7 +216,7 @@ export function Dashboard(): React.JSX.Element {
                   title={`${row.label} in ${where} · ${TONE_LABEL[state]}${
                     isUnread ? ' · unread' : ''
                   } · last output ${agoLabel(row.quietFor)}${row.evidence ? `\nlast printed: ${row.evidence}` : ''}`}
-                  onClick={() => void revealPane(row.worktreeId, row.terminalId)}
+                  onClick={() => openRow(row)}
                 >
                   <span className="board-row__what">
                     <PaneGlyph agent={row.agent} />
@@ -216,7 +230,14 @@ export function Dashboard(): React.JSX.Element {
                   <span className="board-row__since">{sinceLabel(row.quietFor)}</span>
                 </button>
                 {row.choices === undefined ? null : (
-                  <AnswerButtons terminalId={row.terminalId} choices={row.choices} className="board-item__answers" />
+                  <AnswerButtons
+                    terminalId={row.terminalId}
+                    choices={row.choices}
+                    className="board-item__answers"
+                    {...(theirs === undefined
+                      ? {}
+                      : { onChoose: (choice) => void answerTeammatePane(theirs.projectId, theirs, choice) })}
+                  />
                 )}
               </li>
             )

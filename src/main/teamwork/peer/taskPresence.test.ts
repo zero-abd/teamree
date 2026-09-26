@@ -155,4 +155,23 @@ describe('a snapshot from another build', () => {
     expect(kept?.stage).toBeUndefined()
     expect(kept?.ahead).toBeUndefined()
   })
+
+  it('reads a pane’s asking, menu and mute, and drops a malformed menu alone', () => {
+    const pane = { id: 't1', title: 'claude', shell: '/bin/zsh', running: true, busy: false, quietForMs: 0 }
+    const menu = {
+      prompt: '1a2b3c4d',
+      choices: [
+        { label: 'Yes', keys: ['\r'] },
+        { label: 'No…', keys: null }
+      ]
+    }
+    const read = (panes: unknown[]) =>
+      parsePeerPresence(
+        { ...v1, projects: [{ projectKey: 'k', worktrees: [{ ...v1.projects[0]!.worktrees[0]!, panes }] }] },
+        'k'
+      )?.projects[0]?.worktrees[0]?.panes
+    expect(read([{ ...pane, asking: true, menu, muted: true }])).toEqual([{ ...pane, asking: true, menu, muted: true }])
+    const bad = { prompt: 'x', choices: [{ label: 'Yes', keys: ['k'.repeat(500)] }] }
+    expect(read([{ ...pane, asking: true, menu: bad }])).toEqual([{ ...pane, asking: true }])
+  })
 })
