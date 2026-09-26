@@ -202,7 +202,7 @@
   background: transparent;
   color: inherit;
   cursor: pointer;
-  opacity: 0;
+  opacity: var(--control-rest);
 }
 
 .pane__close svg {
@@ -215,6 +215,7 @@
 }
 
 .pane:hover .pane__close,
+.pane--focused .pane__close,
 .pane__close:focus-visible {
   opacity: 1;
 }

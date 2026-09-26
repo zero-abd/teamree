@@ -65,10 +65,13 @@ export function Sidebar({
   const teamwork = useWorkspaceStore((state) => state.teamwork)
   const teammates = useWorkspaceStore((state) => state.teammates)
   const cli = useWorkspaceStore((state) => state.cli)
+  // What the `!` on Settings is about, named after the row that fixes it.
+  const cliFlag = offerCliInstall(cli) ? `CLI: ${cliActionLabel(cli)}` : null
   const dashboardOpen = useWorkspaceStore((state) => state.dashboardOpen)
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen)
   const helpOpen = useWorkspaceStore((state) => state.helpOpen)
   const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
+  const openSettings = useWorkspaceStore((state) => state.openSettings)
   const appearanceOpen = useWorkspaceStore((state) => state.appearanceOpen)
   const showAppearance = useWorkspaceStore((state) => state.showAppearance)
   const toggleHelp = useWorkspaceStore((state) => state.toggleHelp)
@@ -252,20 +255,21 @@ export function Sidebar({
               type="button"
               className={`rail__link${settingsOpen ? ' rail__link--current' : ''}`}
               aria-current={settingsOpen ? 'page' : undefined}
-              title="Settings"
-              onClick={toggleSettings}
+              title={cliFlag === null ? 'Settings' : `Settings · CLI: ${cliTitle(cli)}`}
+              aria-label={cliFlag === null ? undefined : `Settings, ${cliFlag}`}
+              onClick={() => (cliFlag === null || settingsOpen ? toggleSettings() : openSettings('cli'))}
             >
               <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
                 <circle cx="7" cy="7" r="2.1" />
                 <path d="M7 1.5v1.7M7 10.8v1.7M12.1 7h-1.7M3.6 7H1.9M10.6 3.4 9.4 4.6M4.6 9.4l-1.2 1.2M10.6 10.6 9.4 9.4M4.6 4.6 3.4 3.4" />
               </svg>
               <span>Settings</span>
-              {/* The CLI link is wrong and Settings › CLI fixes it. In ink: colour is for agents' state. */}
-              {offerCliInstall(cli) ? (
-                <span className="rail__badge" role="img" aria-label={cliActionLabel(cli)} title={cliTitle(cli)}>
+              {/* The CLI link is wrong and Settings › CLI fixes it; pressing Settings goes there. In ink: colour is for agents' state. */}
+              {cliFlag === null ? null : (
+                <span className="rail__badge" role="img" aria-label={cliFlag}>
                   !
                 </span>
-              ) : null}
+              )}
             </button>
           </li>
           <li>

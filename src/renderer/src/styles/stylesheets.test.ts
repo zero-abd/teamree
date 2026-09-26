@@ -389,20 +389,12 @@ describe('stylesheets', () => {
       expect(declarationOf(ruleFor('sidebar.css', '.gitchip--dirty'), 'color')).toBe('var(--fg-secondary)')
     })
 
-    it('hides the open worktree’s git facts until the row is hovered or focused', () => {
-      const hidden = ruleFor('sidebar.css', '.worktree--active:not(:hover, :focus-within) .worktree__git')
-      expect(declarationOf(hidden, 'display')).toBe('none')
-    })
-
-    // The hidden ⋯ held 24px of every row; it takes room only while it shows.
-    // The row under the pointer is the one being read: its title's cut must not move when the ⋯ shows.
-    it('lays the ⋯ and the facts over the title’s tail instead of taking its width', () => {
+    // The ⋯ is always drawn, so its room is always kept: nothing on the row moves when it is hovered.
+    it('keeps the ⋯ its own room on the title line, and moves nothing on hover', () => {
       expect(declarationOf(ruleFor('sidebar.css', '.worktree__action'), 'position')).toBe('absolute')
-      const lit =
-        ".worktree:is(:hover, :has(.worktree__open:focus-visible, .worktree__action:focus-visible, .worktree__action[aria-expanded='true']))"
-      expect(declarationOf(ruleFor('sidebar.css', `${lit} .worktree__end`), 'translate')).toBeDefined()
-      expect(declarationOf(ruleFor('sidebar.css', '.worktree--active .worktree__end .worktree__git'), 'position')).toBe(
-        'absolute'
+      const room = ruleFor('sidebar.css', '.worktree__row:has(> .worktree__action) .worktree__title')
+      expect(declarationOf(room, 'padding-right')).toBe(
+        declarationOf(ruleFor('sidebar.css', '.worktree__action'), 'width')
       )
       const reflowing: string[] = []
       postcss.parse(readFileSync(path.join(here, 'sidebar.css'), 'utf8')).walkRules((rule) => {
@@ -557,6 +549,50 @@ describe('stylesheets', () => {
     expect(declarationOf(panel, 'box-shadow')).toBe('var(--shadow-pop)')
     expect(declarationOf(narrow('.panel__resizer'), 'display')).toBe('none')
     expect(declarationOf(narrow('.workspace__body'), 'position')).toBe('relative')
+  })
+
+  // Most people never hover, so a control drawn only under the pointer is one they never find.
+  it.each([
+    ['workspace.css', '.tab__rename'],
+    ['workspace.css', '.tab__close'],
+    ['panes.css', '.pane__close'],
+    ['sidebar.css', '.worktree__action'],
+    ['sidebar.css', '.project__more'],
+    ['workspace.css', '.change__discard'],
+    ['review.css', '.patch__plus'],
+    ['rightPanel.css', '.tree__reveal'],
+    ['files.css', '.column__close']
+  ])('draws %s %s faintly at rest, not invisibly', (sheet, selector) => {
+    const opacities: string[] = []
+    postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkRules((rule) => {
+      if (!rule.selectors.includes(selector)) return
+      rule.walkDecls('opacity', (decl) => {
+        opacities.push(decl.value)
+      })
+    })
+    expect(opacities).toEqual(['var(--control-rest)'])
+  })
+
+  it('draws resting controls at full strength where nothing can hover', () => {
+    let value: string | undefined
+    postcss.parse(readFileSync(path.join(here, 'tokens.css'), 'utf8')).walkAtRules('media', (media) => {
+      if (media.params !== '(hover: none)') return
+      media.walkDecls('--control-rest', (decl) => {
+        value = decl.value
+      })
+    })
+    expect(customProperties('tokens.css').get('--control-rest')).toBeDefined()
+    expect(value).toBe('1')
+  })
+
+  // The row you are on showed less than the others: its ↑ and Δ only on hover.
+  it('keeps the open worktree’s git chips on its row', () => {
+    const hiding: string[] = []
+    postcss.parse(readFileSync(path.join(here, 'sidebar.css'), 'utf8')).walkRules((rule) => {
+      if (rule.selector.includes('.worktree--active') && rule.selector.includes('.worktree__git'))
+        hiding.push(rule.selector)
+    })
+    expect(hiding).toEqual([])
   })
 })
 

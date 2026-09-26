@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { hasCheckout } from '@shared/entities'
 import { FileGlyph, UnsavedDot } from '../files/FileBar'
 import { usePaneDrag, useTabDrag } from '../panes/paneDrag'
-import { hasTerminal } from '../panes/paneLayout'
+import { collectTerminalIds, hasTerminal } from '../panes/paneLayout'
 import { usePaneMenu } from './paneMenu'
 import { paneTabs, paneTabTitle } from './paneTabs'
 import { useStartMenuItems } from './startMenu'
@@ -31,6 +31,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   })
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === state.activeWorktreeId))
   const splitFocusedPane = useWorkspaceStore((state) => state.splitFocusedPane)
+  const toggleExpandedPane = useWorkspaceStore((state) => state.toggleExpandedPane)
   const layout = useWorkspaceStore((state) =>
     state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
   )
@@ -241,6 +242,24 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
           panes too, where there is nothing to split yet. */}
       {activeWorktreeId === null || !panesShown ? null : (
         <div className="tabs__actions">
+          <button
+            type="button"
+            className="tabs__action"
+            title={expanded === null ? 'Maximize' : 'Restore'}
+            aria-label={expanded === null ? 'Maximize' : 'Restore'}
+            disabled={expanded === null && collectTerminalIds(layout?.root ?? null).length < 2}
+            onClick={toggleExpandedPane}
+          >
+            <svg viewBox="0 0 12 12" aria-hidden="true">
+              <path
+                d={
+                  expanded === null
+                    ? 'M7 1.5 H10.5 V5 M10.5 1.5 L7 5 M5 10.5 H1.5 V7 M1.5 10.5 L5 7'
+                    : 'M10.5 5 H7 V1.5 M7 5 L10.5 1.5 M1.5 7 H5 V10.5 M5 7 L1.5 10.5'
+                }
+              />
+            </svg>
+          </button>
           <button
             type="button"
             className="tabs__action"

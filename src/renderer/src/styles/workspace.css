@@ -228,7 +228,7 @@
   background: transparent;
   color: var(--fg-muted);
   cursor: pointer;
-  opacity: 0;
+  opacity: var(--control-rest);
 }
 
 .tab__rename svg,
@@ -243,6 +243,8 @@
 
 .tab:hover .tab__rename,
 .tab:hover .tab__close,
+.tab--active .tab__rename,
+.tab--active .tab__close,
 .tab__rename:focus-visible,
 .tab__close:focus-visible {
   opacity: 1;
@@ -861,7 +863,6 @@
   padding-left: 0;
 }
 
-/* Out of sight until the row is pointed at or tabbed to; the right-click menu offers the same. */
 .change__discard {
   flex: none;
   margin-inline-end: var(--s3);
@@ -873,10 +874,11 @@
   font-family: var(--font-ui);
   font-size: var(--text-xs);
   cursor: pointer;
-  opacity: 0;
+  opacity: var(--control-rest);
 }
 
 .changes__item:hover .change__discard,
+.changes__item--selected .change__discard,
 .change__discard:focus-visible {
   opacity: 1;
 }

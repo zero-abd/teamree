@@ -229,6 +229,17 @@ describe('the page itself', () => {
     expect(useWorkspaceStore.getState().settingsSection).toBeNull()
   })
 
+  // Opened from the rail's `!`: the row it is about is lit for a moment, so it is found on a long page.
+  it('lights the section it was opened at', () => {
+    Element.prototype.scrollIntoView = vi.fn()
+    const animate = vi.fn()
+    Element.prototype.animate = animate
+    seed({ settingsSection: 'cli' })
+    render(<SettingsView />)
+    expect(animate).toHaveBeenCalledOnce()
+    expect(animate.mock.instances[0]).toBe(screen.getByRole('region', { name: 'CLI' }).querySelector('.settings-group'))
+  })
+
   it('scrolls nowhere when opened plainly', () => {
     const scrollIntoView = vi.fn()
     Element.prototype.scrollIntoView = scrollIntoView

@@ -126,6 +126,15 @@
   --motion-fast: 110ms;
   --motion-base: 170ms;
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+
+  /* A row's or tab's own controls at rest: seen without hovering, full on hover or focus. */
+  --control-rest: 0.45;
+}
+
+@media (hover: none) {
+  :root {
+    --control-rest: 1;
+  }
 }
 
 /* The Light preset as `theme.ts` resolves it: the first frame of a light window, since main
