@@ -11,7 +11,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { createExampleRepo } from '../../examples/init-example-repo.mjs'
-import { withoutSystemCa } from '../child-env.mjs'
+import { childEnv } from '../child-env.mjs'
 import { readRoster } from './identity.mjs'
 import { connectToRuntime } from './peer-client.mjs'
 
@@ -127,7 +127,7 @@ async function startPeer({ root, origin, handle, log }) {
   // holding its socket. Detached, the child leads a group the whole tree is in.
   const child = spawn('npx', ['tsx', RUNTIME_HOST], {
     env: {
-      ...withoutSystemCa(process.env),
+      ...childEnv(process.env),
       TEAMREE_USER_DATA_DIR: userDataDir,
       TEAMREE_TEST_VERSION: `0.0.0-${handle}`,
       // A home each: git and npm read it too, and teardown has to cover
@@ -543,7 +543,7 @@ async function startRelay(log) {
   const child = spawn(process.execPath, [RELAY_ENTRY], {
     cwd: join(REPO_ROOT, 'relay'),
     env: {
-      ...withoutSystemCa(process.env),
+      ...childEnv(process.env),
       RELAY_HOST: '127.0.0.1',
       RELAY_PORT: '0',
       // Wide enough that nothing here trips it, tight enough that a hanging

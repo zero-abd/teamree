@@ -18,7 +18,7 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createInterface } from 'node:readline/promises'
-import { withoutSystemCa } from './child-env.mjs'
+import { childEnv } from './child-env.mjs'
 import { resolveMacSigning } from './mac-signing.mjs'
 import { findPackagedApp } from './packaged-app.mjs'
 import { isDistributable, readSignatureKind } from './verify-signing.mjs'
@@ -392,7 +392,7 @@ function runGate(gate) {
   const result = spawnSync('npm', gate.args, {
     stdio: 'inherit',
     cwd: gate.cwd ? join(REPO_ROOT, gate.cwd) : REPO_ROOT,
-    env: withoutSystemCa(process.env)
+    env: childEnv(process.env)
   })
   const seconds = ((Date.now() - started) / 1000).toFixed(0)
   if (result.status === 0) {
@@ -448,7 +448,7 @@ function verifyInsideTheImage(dmg) {
     const verified = spawnSync(process.execPath, [verifier, join(mount, 'teamree.app')], {
       stdio: 'inherit',
       cwd: REPO_ROOT,
-      env: withoutSystemCa(process.env)
+      env: childEnv(process.env)
     })
     return verified.status === 0
   } finally {

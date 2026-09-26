@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 // @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
-import { withoutSystemCa } from '../scripts/child-env.mjs'
+import { childEnv } from '../scripts/child-env.mjs'
 import type {
   Project,
   Terminal,
@@ -50,9 +50,7 @@ beforeAll(async () => {
   repoPath = join(root, 'demo-repo')
   userDataDir = join(root, 'userdata')
   mkdirSync(userDataDir, { recursive: true })
-  env = { ...withoutSystemCa(process.env), TEAMREE_USER_DATA_DIR: userDataDir }
-  // Run from a teamree pane, the suite would otherwise make children of that pane's worktree.
-  for (const name of Object.values(PANE_IDENTITY_ENV)) delete env[name]
+  env = { ...childEnv(process.env), TEAMREE_USER_DATA_DIR: userDataDir }
 
   execFileSync('git', ['init', '-b', 'main', repoPath])
   // On the repository itself: the app commits through its own CLI with the machine's identity, which a

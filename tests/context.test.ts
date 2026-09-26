@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 // @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
-import { withoutSystemCa } from '../scripts/child-env.mjs'
+import { childEnv } from '../scripts/child-env.mjs'
 import type { Project, Worktree } from '../src/shared/entities'
 import type { WorktreeClaims } from '../src/shared/ledgerMethods'
 import type { ProjectContext } from '../src/shared/memory'
@@ -65,10 +65,7 @@ beforeAll(async () => {
   repoPath = join(root, 'repo')
   userDataDir = join(root, 'userdata')
   mkdirSync(userDataDir, { recursive: true })
-  env = { ...withoutSystemCa(process.env), TEAMREE_USER_DATA_DIR: userDataDir }
-  // A pane's identity would name a worktree of another runtime.
-  delete env.TEAMREE_WORKTREE_ID
-  delete env.TEAMREE_TERMINAL_ID
+  env = { ...childEnv(process.env), TEAMREE_USER_DATA_DIR: userDataDir }
 
   execFileSync('git', ['init', '-b', 'main', repoPath])
   git(['config', 'user.email', 'test@teamree.local'], repoPath)

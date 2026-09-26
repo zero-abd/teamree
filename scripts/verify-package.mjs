@@ -18,7 +18,7 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { withoutSystemCa } from './child-env.mjs'
+import { childEnv } from './child-env.mjs'
 import { electronSandboxArgs } from './electron-sandbox.mjs'
 import { packagedAppCandidates } from './packaged-app.mjs'
 
@@ -117,7 +117,7 @@ if (process.platform !== 'win32' && !(statSync(relayLauncher).mode & 0o111)) {
     spawnSync(isCmd ? process.env.ComSpec || 'cmd.exe' : relayLauncher, isCmd ? ['/c', relayLauncher, ...args] : args, {
       encoding: 'utf8',
       timeout: STEP_TIMEOUT_MS,
-      env: withoutSystemCa(process.env)
+      env: childEnv(process.env)
     })
 
   const target = join(mkdtempSync(join(tmpdir(), 'teamree-verify-relay-')), 'relay')
@@ -325,7 +325,7 @@ ok(`fixture repository at ${repo}`)
 const child = spawn(app.binary, [`--user-data-dir=${userData}`, '--use-mock-keychain', ...electronSandboxArgs()], {
   // The checkout goes under the same scratch, so nothing lands in the folder the real app lists.
   env: {
-    ...withoutSystemCa(process.env),
+    ...childEnv(process.env),
     TEAMREE_BACKGROUND_LAUNCH: '1',
     TEAMREE_WORKTREES_ROOT: join(scratch, 'worktrees')
   },
@@ -394,7 +394,7 @@ function cli(...args) {
     {
       encoding: 'utf8',
       timeout: STEP_TIMEOUT_MS,
-      env: { ...withoutSystemCa(process.env), TEAMREE_USER_DATA_DIR: userData }
+      env: { ...childEnv(process.env), TEAMREE_USER_DATA_DIR: userData }
     }
   )
   if (result.error) {
@@ -414,7 +414,7 @@ function cliQuiet(...args) {
   spawnSync(isCmd ? process.env.ComSpec || 'cmd.exe' : app.launcher, isCmd ? ['/c', app.launcher, ...args] : args, {
     encoding: 'utf8',
     timeout: STEP_TIMEOUT_MS,
-    env: { ...withoutSystemCa(process.env), TEAMREE_USER_DATA_DIR: userData }
+    env: { ...childEnv(process.env), TEAMREE_USER_DATA_DIR: userData }
   })
 }
 
