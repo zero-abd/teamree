@@ -320,6 +320,13 @@ export function resumeSessionCommand(command: string, agent: AgentKind, sessionI
   return spliceSelector(command, agent, argv)
 }
 
+/** The command resuming exactly this session, or null when the agent cannot resume by id. */
+export function resumeByIdCommand(command: string, agent: AgentKind, sessionId: string): string | null {
+  const resume = AGENTS[agent].resume
+  if (resume === undefined || !isUsableSessionId(sessionId)) return null
+  return spliceSelector(command, agent, resume(sessionId))
+}
+
 /**
  * The command for a pane with nothing to resume: every selector cut out and a
  * fresh id pinned — not the old one, which a CLI may refuse having seen it.

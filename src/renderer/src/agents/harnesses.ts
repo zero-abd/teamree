@@ -123,3 +123,11 @@ export const HARNESSES: Readonly<Record<AgentKind, Harness>> = {
 export function harnessName(kind: AgentKind): string {
   return (HARNESSES[kind] as Harness | undefined)?.name ?? kind
 }
+
+/** The agents whose past conversations `agent.conversations` can list. */
+const WITH_HISTORY: ReadonlySet<AgentKind> = new Set(['claude', 'codex'])
+
+/** Whether any installed agent has conversations a worktree could resume. */
+export function canResumeConversations(agents: readonly { kind: AgentKind }[]): boolean {
+  return agents.some((agent) => WITH_HISTORY.has(agent.kind))
+}

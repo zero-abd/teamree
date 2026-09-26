@@ -99,6 +99,7 @@ function mount(
     mergePreview?: WorktreeMergePreview
     landing?: WorktreeLanding
     onKeep?: () => void
+    onResume?: () => void
     terminals?: Terminal[]
     evidence?: Record<string, string | null>
     watchers?: Record<string, PaneAttention>
@@ -116,6 +117,7 @@ function mount(
         mergePreview={overrides.mergePreview}
         {...(overrides.landing === undefined ? {} : { landing: overrides.landing })}
         {...(overrides.onKeep === undefined ? {} : { onKeep: overrides.onKeep })}
+        {...(overrides.onResume === undefined ? {} : { onResume: overrides.onResume })}
         terminals={overrides.terminals ?? []}
         evidence={overrides.evidence ?? {}}
         watchers={overrides.watchers ?? {}}
@@ -1051,5 +1053,14 @@ describe('a worktree whose work has landed', () => {
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Keep This Run…' }))
     expect(onKeep).toHaveBeenCalled()
+  })
+
+  it('offers Resume Conversation… when it is given one', () => {
+    const onResume = vi.fn()
+    mount({ onResume })
+    fireEvent.contextMenu(row())
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Resume Conversation…' }))
+    expect(onResume).toHaveBeenCalled()
   })
 })

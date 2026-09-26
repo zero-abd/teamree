@@ -124,6 +124,8 @@ describe('dispatcher', () => {
       // Local: a switch that turns on a process on this machine.
       'addons.install',
       'addons.status',
+      // Local: the owner's own transcripts, never a teammate's to read.
+      'agent.conversations',
       'agent.list',
       // Local: what this machine's agent CLIs trust.
       'agents.setTrust',

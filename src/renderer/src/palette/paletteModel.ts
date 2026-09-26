@@ -13,7 +13,7 @@ import {
 import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
 import { APPEARANCE_MODES, BUILT_IN_THEMES, type AppearanceMode } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from '../settings/AppearanceSettings'
-import { harnessName } from '../agents/harnesses'
+import { canResumeConversations, harnessName } from '../agents/harnesses'
 import { runName, siblingRuns } from '../compare/siblingRuns'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { MENU_ORDER, menuLabel } from '../menu/menuBar'
@@ -47,6 +47,7 @@ export type PaletteAction =
 
 /** What the sidebar row's menu does to the worktree on screen. */
 type WorktreeAction =
+  | 'resume-conversation'
   | 'rename-worktree'
   | 'reveal-worktree'
   | 'copy-worktree-path'
@@ -196,6 +197,15 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
   const rows: ActionRow[] = active.missing
     ? remove
     : [
+        ...(canResumeConversations(context.agents)
+          ? [
+              {
+                id: 'resume-conversation' as const,
+                label: 'Resume Conversation…',
+                keywords: 'resume conversation session history past agent continue'
+              }
+            ]
+          : []),
         { id: 'rename-worktree', label: 'Rename Worktree…', keywords: 'rename name title worktree' },
         { id: 'reveal-worktree', label: 'Reveal in Finder', keywords: 'reveal finder show folder directory checkout' },
         { id: 'copy-worktree-path', label: 'Copy Path', keywords: 'copy path clipboard worktree checkout directory' },

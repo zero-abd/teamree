@@ -377,7 +377,14 @@ describe('the menu the + opens', () => {
 
   it('lists a terminal, a markdown page, the agents the runtime found, and the agent settings', () => {
     onePane()
-    expect(rows(open())).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Codex', 'Agent Settings…'])
+    expect(rows(open())).toEqual([
+      'New Terminal',
+      'New Markdown',
+      'Claude Code',
+      'Codex',
+      'Resume Conversation…',
+      'Agent Settings…'
+    ])
   })
 
   it('names the terminal chord on its row', () => {
@@ -388,7 +395,13 @@ describe('the menu the + opens', () => {
 
   it('lists no agent the runtime did not find', () => {
     onePane({ agents: [claude] })
-    expect(rows(open())).toEqual(['New Terminal', 'New Markdown', 'Claude Code', 'Agent Settings…'])
+    expect(rows(open())).toEqual([
+      'New Terminal',
+      'New Markdown',
+      'Claude Code',
+      'Resume Conversation…',
+      'Agent Settings…'
+    ])
   })
 
   it('opens a markdown page in the worktree the strip belongs to', () => {

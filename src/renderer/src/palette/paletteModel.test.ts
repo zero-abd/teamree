@@ -601,6 +601,23 @@ describe('what the palette offers for the worktree on screen', () => {
     expect(none.some((label) => /(Create|Open) Pull Request|Merge into/.test(label))).toBe(false)
   })
 
+  it('offers Resume Conversation… when Claude Code or Codex is installed', () => {
+    expect(labels()).not.toContain('Resume Conversation…')
+    expect(labels({ agents: [agent('gemini')] })).not.toContain('Resume Conversation…')
+    const items = buildPaletteItems(
+      context({ worktrees: [worktree({ id: 'w1' })], activeWorktreeId: 'w1', agents: [agent('codex')] })
+    )
+    expect(items.find((item) => item.label === 'Resume Conversation…')).toMatchObject({
+      kind: 'action',
+      id: 'resume-conversation',
+      here: true
+    })
+    expect(filterPalette(items, 'resume')[0]?.label).toBe('Resume Conversation…')
+    expect(labels({ agents: [agent('claude')], worktrees: [worktree({ id: 'w1', missing: true })] })).not.toContain(
+      'Resume Conversation…'
+    )
+  })
+
   it('offers only removal for a checkout gone from disk, and nothing with no worktree open', () => {
     const missing = labels({ worktrees: [worktree({ id: 'w1', missing: true })] })
     expect(missing).toEqual(expect.arrayContaining(['Remove Worktree from teamree', 'Delete Worktree…']))
@@ -715,6 +732,7 @@ describe('the first screen, before anything is typed', () => {
     expect(groups[0]?.items.map((item) => item.id)).toEqual(['w2', 'w1'])
     expect(groups[1]?.items.map((item) => item.label)).toEqual([
       'Start Claude Code Here',
+      'Resume Conversation…',
       'Rename Worktree…',
       'Reveal in Finder',
       'Copy Path',
@@ -723,7 +741,7 @@ describe('the first screen, before anything is typed', () => {
       'Delete Worktree…'
     ])
     // The header names the worktree once; its rows do not repeat it.
-    expect(groups[1]?.items.map(trailing)).toEqual(['', '', '', '', '', '', ''])
+    expect(groups[1]?.items.map(trailing)).toEqual(['', '', '', '', '', '', '', ''])
     expect(groups[2]?.items.some((item) => item.id === 'new-terminal')).toBe(true)
   })
 

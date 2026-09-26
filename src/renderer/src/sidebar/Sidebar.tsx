@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useRef } from 'react'
 import { hasCheckout, teammatesHeard, type Worktree } from '@shared/entities'
+import { canResumeConversations } from '../agents/harnesses'
 import { cliActionLabel, cliTitle, offerCliInstall } from '../dialogs/cliInstallModel'
 import { attentionByPane } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
@@ -79,6 +80,7 @@ export function Sidebar({
   const agents = useWorkspaceStore((state) => state.agents)
   const restoring = useWorkspaceStore((state) => state.restoring)
   const kindOf = useMemo(() => agentWords(agents), [agents])
+  const resumable = canResumeConversations(agents)
   const collapsedTasks = useTaskTreeStore((state) => state.collapsedTasks)
   const setTaskCollapsed = useTaskTreeStore((state) => state.setTaskCollapsed)
   const stages = useMemo(
@@ -337,6 +339,9 @@ export function Sidebar({
                   {...(worktree.parentId === undefined
                     ? {}
                     : { onMoveToTop: () => void moveWorktree(worktree.id, null) })}
+                  {...(resumable
+                    ? { onResume: () => openDialog({ kind: 'resume-conversation', worktreeId: worktree.id }) }
+                    : {})}
                   status={statuses[worktree.id]}
                   mergePreview={mergePreviews[worktree.id]}
                   {...(landings[worktree.id] === undefined ? {} : { landing: landings[worktree.id] })}

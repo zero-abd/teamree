@@ -54,6 +54,7 @@ export function registerPlaceholderHandlers(registry: MethodRegistry): void {
   placeholder(registry, 'layout.get', Params.layoutGet)
   placeholder(registry, 'layout.set', Params.layoutSet)
   placeholder(registry, 'agent.list', Params.agentList)
+  placeholder(registry, 'agent.conversations', Params.agentConversations)
 
   registerTaskPlaceholderHandlers(registry)
 }

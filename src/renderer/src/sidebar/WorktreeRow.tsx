@@ -85,6 +85,8 @@ type WorktreeRowProps = {
   onMoveUnder?: () => void
   /** Move to Top Level; given only to a child. */
   onMoveToTop?: () => void
+  /** Resume Conversation…; absent leaves the item out. */
+  onResume?: () => void
 }
 
 export function WorktreeRow({
@@ -118,7 +120,8 @@ export function WorktreeRow({
   task,
   onNewChild,
   onMoveUnder,
-  onMoveToTop
+  onMoveToTop,
+  onResume
 }: WorktreeRowProps): React.JSX.Element {
   const creating = worktree.state === 'creating'
   const failed = worktree.state === 'failed'
@@ -182,6 +185,7 @@ export function WorktreeRow({
     ...(onNewChild !== undefined && ready ? [{ label: 'New Child Task…', onChoose: onNewChild }] : []),
     ...(onMoveUnder !== undefined && ready ? [{ label: 'Move Under…', onChoose: onMoveUnder }] : []),
     ...(onMoveToTop !== undefined && ready ? [{ label: 'Move to Top Level', onChoose: onMoveToTop }] : []),
+    ...(onResume !== undefined && ready ? [{ label: 'Resume Conversation…', onChoose: onResume }] : []),
     { label: 'Rename…', onChoose: () => setRenaming(true), separated: merged },
     { label: 'Reveal in Finder', onChoose: onReveal },
     { label: 'Copy Path', onChoose: onCopyPath },

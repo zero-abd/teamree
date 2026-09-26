@@ -782,6 +782,20 @@ export type AgentKind =
   | 'vibe'
   | 'qwen'
 
+/** One past conversation in a worktree's checkout, read from the agent's own store. Local only. */
+export type AgentConversation = {
+  agent: AgentKind
+  /** What the agent's resume flag takes. */
+  sessionId: string
+  /** The name the conversation was given, when it was given one. */
+  title?: string
+  /** The first line of the first prompt, truncated. */
+  prompt: string
+  updatedAt: number
+  /** Prompts and replies, not tool calls. */
+  messages: number
+}
+
 /**
  * The hook events an agent reports through this app's own CLI, under the agent's
  * own names. The set is what `agent-hooks.ts` subscribes to; the hook line is generated, so nothing else arrives.

@@ -345,6 +345,9 @@ export function CommandPalette({
       case 'keep-run':
         if (active) store.openDialog({ kind: 'confirm-keep', worktreeId: active.id })
         break
+      case 'resume-conversation':
+        if (active) store.openDialog({ kind: 'resume-conversation', worktreeId: active.id })
+        break
       case 'discard-file':
         if (active && change) store.openDialog({ kind: 'confirm-discard', worktreeId: active.id, path: change.path })
         break

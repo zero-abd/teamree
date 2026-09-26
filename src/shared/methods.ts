@@ -4,6 +4,7 @@
 
 import { z } from 'zod'
 import type {
+  AgentConversation,
   ClosedPane,
   RemovedWorktree,
   BranchList,
@@ -426,6 +427,8 @@ export const Params = {
 
   /** Coding agents found on PATH, so a pane can start one without being told. */
   agentList: z.object({}),
+  /** A worktree's past Claude Code and Codex conversations, newest first, at most 20. Local only. */
+  agentConversations: z.object({ worktreeId: z.string().min(1) }),
 
   /** Where this app's CLI is, what is at its link path, and whether a shell would find it. */
   cliStatus: z.object({}),
@@ -639,6 +642,8 @@ export const Params = {
      * resume. Ignored for a command that runs no known agent.
      */
     prompt: z.string().min(1).max(MAX_AGENT_ARGS_CHARS).optional(),
+    /** Resumes this conversation of the command's agent (`agent.conversations`) instead of starting one. */
+    resume: agentSessionId.optional(),
     cwd: z.string().min(1).optional(),
     cols: z.number().int().positive().optional(),
     rows: z.number().int().positive().optional(),
@@ -873,6 +878,7 @@ export type MethodContract = TaskMethodContract & {
   'worktree.rename': { params: z.infer<typeof Params.worktreeRename>; result: Worktree }
 
   'agent.list': { params: z.infer<typeof Params.agentList>; result: InstalledAgent[] }
+  'agent.conversations': { params: z.infer<typeof Params.agentConversations>; result: AgentConversation[] }
 
   'cli.status': { params: z.infer<typeof Params.cliStatus>; result: CliStatus }
   'cli.install': { params: z.infer<typeof Params.cliInstall>; result: CliInstall }

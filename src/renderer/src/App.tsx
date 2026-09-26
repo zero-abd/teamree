@@ -7,6 +7,7 @@ import { MAC_CONTENT_INSET_PX, TITLEBAR_HEIGHT_PX } from '@shared/windowChrome'
 import { CloneProjectDialog } from './dialogs/CloneProjectDialog'
 import { JoinTeamDialog } from './dialogs/JoinTeamDialog'
 import { OpenBranchDialog } from './dialogs/OpenBranchDialog'
+import { ResumeConversationDialog } from './dialogs/ResumeConversationDialog'
 import { TaskComposerDialog } from './dialogs/TaskComposerDialog'
 import { detectPlatform, resolvePlatformModifier } from './keyboard/platformModifier'
 import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
@@ -210,6 +211,7 @@ export function App(): React.JSX.Element {
       {dialog?.kind === 'open-branch' ? (
         <OpenBranchDialog projectId={dialog.projectId} pullRequests={dialog.pullRequests === true} />
       ) : null}
+      {dialog?.kind === 'resume-conversation' ? <ResumeConversationDialog worktreeId={dialog.worktreeId} /> : null}
 
       {/* Last, so it is on top of whatever else is open. A question about bytes
           that are about to run as this user outranks anything this user

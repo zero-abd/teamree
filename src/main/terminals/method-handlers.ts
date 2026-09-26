@@ -5,9 +5,10 @@
 import type { z } from 'zod'
 import { Params } from '../../shared/methods'
 import type { ParamsOf, ResultOf, TerminalEvent } from '../../shared/methods'
-import { TerminalServiceError } from './service-error'
+import { notFound, TerminalServiceError } from './service-error'
 import { ErrorCode } from '../../shared/protocol'
 import { findInstalledAgents } from './agent-discovery'
+import { listConversations } from './conversation-list'
 import { TerminalSessionManager } from './session-manager'
 import type { StreamChannel, TerminalSessionManagerOptions } from './session-manager'
 
@@ -30,6 +31,7 @@ export type TerminalMethodName =
   | 'layout.get'
   | 'layout.set'
   | 'agent.list'
+  | 'agent.conversations'
 
 /** Per-call identity, as the dispatcher passes it to every handler. */
 export type TerminalCallContext = { readonly connectionId: string }
@@ -57,7 +59,8 @@ export const terminalMethodSchemas = {
   'terminal.reopen': Params.terminalReopen,
   'layout.get': Params.layoutGet,
   'layout.set': Params.layoutSet,
-  'agent.list': Params.agentList
+  'agent.list': Params.agentList,
+  'agent.conversations': Params.agentConversations
 } as const
 
 /** The runtime's subscription hub, reduced to the one call this service makes. */
@@ -103,6 +106,11 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
     'terminal.list': async (params) => manager.list(params.worktreeId),
     // Probed, not cached: an agent installed without a restart still appears.
     'agent.list': async () => findInstalledAgents(),
+    'agent.conversations': async (params) => {
+      const cwd = options.resolveWorktreeCwd?.(params.worktreeId)
+      if (cwd === undefined) throw notFound(`no such worktree: ${params.worktreeId}`)
+      return listConversations(cwd)
+    },
     'terminal.create': async (params) => manager.create(params),
     'terminal.write': async (params) => {
       if (params.answering !== undefined) {
@@ -198,6 +206,11 @@ export function registerTerminalHandlers(registry: MethodRegistry, service: Term
   registry.register('layout.get', service.schemas['layout.get'], service.handlers['layout.get'])
   registry.register('layout.set', service.schemas['layout.set'], service.handlers['layout.set'])
   registry.register('agent.list', service.schemas['agent.list'], service.handlers['agent.list'])
+  registry.register(
+    'agent.conversations',
+    service.schemas['agent.conversations'],
+    service.handlers['agent.conversations']
+  )
 }
 
 export type { StreamChannel, TerminalEvent }
