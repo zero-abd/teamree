@@ -15,6 +15,7 @@ import { backgroundFetchProjects, BaseFetcher } from '../../git/baseFetch'
 import { startSetupCommand } from '../../git/worktreeSetup'
 import { agentMidTurn } from '../../git/worktreeNest'
 import { findProgram } from '../../git/worktreeLanding'
+import { registerSearchHandler } from '../../git/searchHandler'
 import { loginShellPath } from '../../terminals/shell-environment'
 import { writeShellIntegration } from '../../terminals/shell-integration'
 import { childPromptFor } from '../../tasks/childPrompt'
@@ -237,6 +238,9 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   // Copies kept by Remove and Discard last a fortnight; nobody waits on the sweep.
   void git.pruneTrash().catch((error: unknown) => console.error('[git]', error))
   registerGitHandlers(registry, git)
+  registerSearchHandler(registry, git, {
+    rg: () => findProgram('rg', [process.env.PATH]) ?? findProgram('rg', [loginShellPath()])
+  })
   // Git transitions a worktree on a background task long after the call returned.
   publishGitEvents(git, workspaceEvents)
   // Committing and pushing change what status answers without moving any record.

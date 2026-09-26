@@ -53,6 +53,7 @@ const EXPECTED = [
   'worktree keep',
   'worktree clean',
   'worktree wait',
+  'worktree search',
   'terminal list',
   'terminal create',
   'terminal read',

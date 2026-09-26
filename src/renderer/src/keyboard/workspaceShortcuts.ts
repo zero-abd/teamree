@@ -36,6 +36,7 @@ export type WorkspaceCommand =
   | 'open-palette'
   | 'go-to-file'
   | 'find-in-pane'
+  | 'search-in-files'
   | 'open-dashboard'
   | 'open-appearance'
   | 'toggle-diff-wrap'
@@ -102,6 +103,7 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // ⌘P as in every editor; this window has nothing to print.
   { command: 'go-to-file', chord: { key: 'p' }, title: 'Go to File…' },
   { command: 'find-in-pane', chord: { key: 'f' }, title: 'Find in Pane' },
+  { command: 'search-in-files', chord: { key: 'f', shift: true }, title: 'Search in Files…' },
   // Named for the screen it opens.
   { command: 'open-dashboard', chord: { key: 'e' }, title: 'All Panes' },
   // ⌘, opens the settings page; `menuBar.ts` labels it Settings… in the application menu.

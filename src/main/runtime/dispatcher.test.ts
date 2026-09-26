@@ -293,6 +293,8 @@ describe('dispatcher', () => {
       'worktree.restore',
       // Local: runs a command on this machine, as pressed.
       'worktree.runSetup',
+      // Local: reads this machine's checkouts.
+      'worktree.search',
       // Local: approves and runs a command on this machine.
       'worktree.setup',
       // Local: reads this machine's checkout.

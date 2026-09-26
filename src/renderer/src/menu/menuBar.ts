@@ -96,6 +96,7 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'find-in-pane': { section: 'edit' },
 
   'open-palette': { section: 'view' },
+  'search-in-files': { section: 'view' },
   // Between the palette and the board, because all three answer "show me
   // something else" — and these two are the answer for the case the palette is
   // three presses too slow for, which is moving one row at a time.

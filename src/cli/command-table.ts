@@ -17,6 +17,7 @@ import { teamCommands } from './commands/team.js'
 import { terminalCommands } from './commands/terminal.js'
 import { whoamiCommands } from './commands/whoami.js'
 import { worktreeCommands } from './commands/worktree.js'
+import { worktreeSearchCommands } from './commands/worktreeSearch.js'
 
 export const COMMANDS: readonly CommandSpec[] = [
   ...statusCommands,
@@ -24,6 +25,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   ...quitCommands,
   ...projectCommands,
   ...worktreeCommands,
+  ...worktreeSearchCommands,
   ...terminalCommands,
   ...teamCommands,
   ...agentCommands,

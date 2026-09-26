@@ -158,7 +158,7 @@ describe('the rows that are also commands', () => {
     expect(reason('New Task')).toBeNull()
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'save' } })
-    expect(labels()).toEqual(['Save', 'Save All'])
+    expect(labels()).toEqual(['Save', 'Save All', 'Search in Files: “save”'])
     expect(trailingOf('Save')).toBe('')
     expect(row('Save').getAttribute('aria-disabled')).toBe('true')
     fireEvent.click(rows()[0] as HTMLElement)
@@ -488,8 +488,8 @@ describe('the first screen', () => {
   it('collapses to one ranked list once something is typed', () => {
     mount()
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'copy' } })
-    expect(headers()).toEqual([])
-    expect(labels()).toEqual(['Copy Path', 'Copy Branch'])
+    expect(headers()).toEqual(['Contents'])
+    expect(labels()).toEqual(['Copy Path', 'Copy Branch', 'Search in Files: “copy”'])
   })
 })
 
@@ -510,7 +510,11 @@ describe('a query that finds nothing', () => {
 
   it('offers a New Task and an Open Branch from it instead of a dead end', async () => {
     await typed('rate limits')
-    expect(labels()).toEqual(['New Task: “rate limits”', 'Open Branch: “rate limits”'])
+    expect(labels()).toEqual([
+      'New Task: “rate limits”',
+      'Open Branch: “rate limits”',
+      'Search in Files: “rate limits”'
+    ])
     expect(screen.queryByText(/Nothing matches/)).toBeNull()
   })
 

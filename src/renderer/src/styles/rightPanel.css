@@ -555,6 +555,243 @@
   user-select: text;
 }
 
+/* Search ------------------------------------------------------------------ */
+
+.search {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.search__form {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--line);
+}
+
+.search__field {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+}
+
+.search__field:focus-within {
+  box-shadow: var(--ring);
+}
+
+.search__input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--s1) var(--s2);
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.search__input:focus-visible {
+  outline: none;
+}
+
+.search__include {
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+}
+
+.search__include:focus-visible {
+  box-shadow: var(--ring);
+}
+
+.search__toggle {
+  flex: none;
+  min-width: 20px;
+  height: 18px;
+  margin-right: 2px;
+  padding: 0 3px;
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.search__toggle:hover,
+.search__toggle:focus-visible {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.search__toggle--on {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
+.search__scope {
+  display: flex;
+  align-self: flex-start;
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  overflow: hidden;
+}
+
+.search__segment {
+  padding: 2px var(--s2);
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.search__segment + .search__segment {
+  border-left: 1px solid var(--line);
+}
+
+.search__segment:hover,
+.search__segment:focus-visible {
+  color: var(--fg);
+}
+
+.search__segment--on {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.search__status {
+  flex: none;
+  margin: 0;
+  padding: var(--s1) var(--s3);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.search__results {
+  flex: 1;
+  margin: 0;
+  padding: 0 0 var(--s2);
+  min-height: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.search__task {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3) 2px;
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.search__taskName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search__file,
+.search__hit {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--fg-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.search__file {
+  padding: 2px var(--s2) 2px var(--s3);
+  color: var(--fg);
+}
+
+.search__hit {
+  padding: 1px var(--s2) 1px calc(var(--s3) + 14px);
+}
+
+.search__file:hover,
+.search__file:focus-visible,
+.search__hit:hover,
+.search__hit:focus-visible {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.search__hit--current {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+.search__fileName {
+  flex: none;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search__dir {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search__count {
+  flex: none;
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.search__line {
+  flex: none;
+  min-width: 3ch;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-align: right;
+}
+
+.search__text {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.search__match {
+  border-radius: 2px;
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
 /* A narrow window lays the open panel over the panes' right edge, as the
    Appearance sheet does, rather than taking a column the agent needs. */
 @media (width < 1200px) {

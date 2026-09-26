@@ -65,6 +65,7 @@ import type {
 import { MAX_AGENT_ARGS_CHARS } from './agentLaunch'
 import { MAX_FILE_PANE_BYTES } from './filePane'
 import { TaskParams, type TaskMethodContract, type TaskWorkspaceEvent } from './taskMethods'
+import { SearchParams, type SearchMethodContract } from './search'
 import type { NoteShareResult, SharedNote, SharedNoteSummary } from './sharedNote'
 import { SharedNotePayload, ShareNoteRequest } from './sharedNoteSchema'
 import { APPEARANCE_MODES, THEME_TOKENS, type Appearance, type AppearanceMode } from './theme'
@@ -817,225 +818,228 @@ export const Params = {
 
   unsubscribe: z.object({ subscription: z.string().min(1) }),
 
-  ...TaskParams
+  ...TaskParams,
+
+  ...SearchParams
 } as const
 
 /** Maps every method name to its params schema and its result type. */
-export type MethodContract = TaskMethodContract & {
-  'status.get': { params: z.infer<typeof Params.statusGet>; result: RuntimeStatus }
-  /** The reply is sent before teardown, so `quitting` is a promise; the endpoint going is the receipt. */
-  'app.quit': { params: z.infer<typeof Params.appQuit>; result: { quitting: true; pid: number } }
+export type MethodContract = TaskMethodContract &
+  SearchMethodContract & {
+    'status.get': { params: z.infer<typeof Params.statusGet>; result: RuntimeStatus }
+    /** The reply is sent before teardown, so `quitting` is a promise; the endpoint going is the receipt. */
+    'app.quit': { params: z.infer<typeof Params.appQuit>; result: { quitting: true; pid: number } }
 
-  'project.list': { params: z.infer<typeof Params.projectList>; result: Project[] }
-  'project.add': { params: z.infer<typeof Params.projectAdd>; result: Project }
-  'project.remove': { params: z.infer<typeof Params.projectRemove>; result: { removed: true } }
-  'project.trashPreview': {
-    params: z.infer<typeof Params.projectTrashPreview>
-    result: { uncommitted: number; unpushed: number; worktrees: number }
-  }
-  'project.trash': { params: z.infer<typeof Params.projectTrash>; result: { trashed: true } }
-  'project.clone': { params: z.infer<typeof Params.projectClone>; result: Project }
-  /** Null when no clone of that URL is running. */
-  'project.cloneProgress': { params: z.infer<typeof Params.projectCloneProgress>; result: CloneProgress | null }
-  'project.cancelClone': { params: z.infer<typeof Params.projectCancelClone>; result: { cancelled: boolean } }
-  /** Answers with the project as stored, so a caller sees what was kept. */
-  'project.setPaths': { params: z.infer<typeof Params.projectSetPaths>; result: Project }
-  'project.saveSettings': {
-    params: z.infer<typeof Params.projectSaveSettings>
-    result: { file: string; project: Project }
-  }
-
-  'worktree.list': { params: z.infer<typeof Params.worktreeList>; result: Worktree[] }
-  'worktree.get': { params: z.infer<typeof Params.worktreeGet>; result: Worktree }
-  'worktree.create': { params: z.infer<typeof Params.worktreeCreate>; result: Worktree }
-  // `checkoutLeftAt`: the row was dropped but the directory was not (git never
-  // heard of the checkout, or refused to read it). Last thing that knows where.
-  // `trashId`: the copy kept first, which `worktree.removed` lists.
-  'worktree.remove': {
-    params: z.infer<typeof Params.worktreeRemove>
-    result: { removed: true; checkoutLeftAt?: string; trashId?: string }
-  }
-  'worktree.forget': {
-    params: z.infer<typeof Params.worktreeForget>
-    result: { forgotten: true; checkoutLeftAt?: string }
-  }
-  'worktree.status': { params: z.infer<typeof Params.worktreeStatus>; result: WorktreeStatus }
-  'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }
-  'worktree.branches': { params: z.infer<typeof Params.worktreeBranches>; result: BranchList }
-  'worktree.setup': { params: z.infer<typeof Params.worktreeSetup>; result: Worktree }
-  'worktree.setupCheck': { params: z.infer<typeof Params.worktreeSetupCheck>; result: WorktreeSetupCheck }
-  'worktree.runSetup': { params: z.infer<typeof Params.worktreeRunSetup>; result: Worktree }
-  'worktree.pullRequests': { params: z.infer<typeof Params.worktreePullRequests>; result: PullRequestList }
-  'worktree.issues': { params: z.infer<typeof Params.worktreeIssues>; result: IssueList }
-  'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }
-  'worktree.diff': { params: z.infer<typeof Params.worktreeDiff>; result: WorktreeDiff }
-  'worktree.files': { params: z.infer<typeof Params.worktreeFiles>; result: WorktreeFiles }
-  'worktree.findFiles': { params: z.infer<typeof Params.worktreeFindFiles>; result: WorktreeFileMatches }
-  'worktree.commit': { params: z.infer<typeof Params.worktreeCommit>; result: WorktreeCommit }
-  'worktree.stageHunk': { params: z.infer<typeof Params.worktreeStageHunk>; result: WorktreeHunkStage }
-  'worktree.unstageHunk': { params: z.infer<typeof Params.worktreeUnstageHunk>; result: WorktreeHunkStage }
-  'worktree.unstagePath': { params: z.infer<typeof Params.worktreeUnstagePath>; result: WorktreeUnstage }
-  'worktree.discardPath': { params: z.infer<typeof Params.worktreeDiscardPath>; result: WorktreeDiscard }
-  'worktree.discardHunk': { params: z.infer<typeof Params.worktreeDiscardHunk>; result: WorktreeDiscard }
-  'worktree.undoDiscard': { params: z.infer<typeof Params.worktreeUndoDiscard>; result: { restored: true } }
-  'worktree.removed': { params: z.infer<typeof Params.worktreeRemoved>; result: RemovedWorktree[] }
-  'worktree.restore': { params: z.infer<typeof Params.worktreeRestore>; result: Worktree }
-  'worktree.cleanMerged': { params: z.infer<typeof Params.worktreeCleanMerged>; result: WorktreeCleanup }
-  'worktree.push': { params: z.infer<typeof Params.worktreePush>; result: WorktreePush }
-  'worktree.log': { params: z.infer<typeof Params.worktreeLog>; result: WorktreeLog }
-  'worktree.showCommit': { params: z.infer<typeof Params.worktreeShowCommit>; result: WorktreeCommitPatch }
-  'worktree.compare': { params: z.infer<typeof Params.worktreeCompare>; result: WorktreeCompare }
-  'worktree.mergePreview': {
-    params: z.infer<typeof Params.worktreeMergePreview>
-    result: WorktreeMergePreview
-  }
-  'worktree.update': { params: z.infer<typeof Params.worktreeUpdate>; result: WorktreeUpdate }
-  'worktree.abortUpdate': { params: z.infer<typeof Params.worktreeAbortUpdate>; result: WorktreeUpdateAbort }
-  'worktree.landing': { params: z.infer<typeof Params.worktreeLanding>; result: WorktreeLanding }
-  'worktree.createPullRequest': {
-    params: z.infer<typeof Params.worktreeCreatePullRequest>
-    result: WorktreePullRequest
-  }
-  'worktree.mergeIntoBase': { params: z.infer<typeof Params.worktreeMergeIntoBase>; result: WorktreeMerge }
-  'worktree.keep': { params: z.infer<typeof Params.worktreeKeep>; result: WorktreeKeep }
-
-  'worktree.rename': { params: z.infer<typeof Params.worktreeRename>; result: Worktree }
-
-  'agent.list': { params: z.infer<typeof Params.agentList>; result: InstalledAgent[] }
-  'agent.conversations': { params: z.infer<typeof Params.agentConversations>; result: AgentConversation[] }
-
-  'cli.status': { params: z.infer<typeof Params.cliStatus>; result: CliStatus }
-  'cli.install': { params: z.infer<typeof Params.cliInstall>; result: CliInstall }
-  'cli.dismissPrompt': { params: z.infer<typeof Params.cliDismissPrompt>; result: CliStatus }
-
-  /** What Open in offers, editors first in this app's own order of preference. */
-  'editor.list': {
-    params: z.infer<typeof Params.editorList>
-    result: { editors: { command: string; label: string; kind?: 'editor' | 'terminal' | 'finder' }[] }
-  }
-  /** A refusal is a result, not an error: a menu item told why can say so. */
-  'editor.open': {
-    params: z.infer<typeof Params.editorOpen>
-    result: { opened: true; editor: string } | { opened: false; reason: string }
-  }
-
-  'update.state': { params: z.infer<typeof Params.updateState>; result: UpdateState }
-  'update.check': { params: z.infer<typeof Params.updateCheck>; result: UpdateState }
-  'update.setAutomatic': { params: z.infer<typeof Params.updateSetAutomatic>; result: UpdateState }
-  /** Answers with the address that was opened, so a caller can say what it was. */
-  'update.download': { params: z.infer<typeof Params.updateDownload>; result: { opened: string } }
-  'update.fetchInstaller': { params: z.infer<typeof Params.updateFetchInstaller>; result: UpdateState }
-  'update.openInstaller': { params: z.infer<typeof Params.updateOpenInstaller>; result: { opened: string } }
-  'update.restart': {
-    params: z.infer<typeof Params.updateRestart>
-    result: { restarting: string } | { blocked: string }
-  }
-
-  'members.list': { params: z.infer<typeof Params.membersList>; result: MemberList }
-  'members.join': { params: z.infer<typeof Params.membersJoin>; result: MemberList }
-
-  'teamwork.relay': { params: z.infer<typeof Params.teamworkRelay>; result: RelaySetting }
-  'teamwork.setRelay': { params: z.infer<typeof Params.teamworkSetRelay>; result: RelaySetting }
-  'teamwork.setOrigin': { params: z.infer<typeof Params.teamworkSetOrigin>; result: TeamworkOrigin }
-  'teamwork.publishPlan': { params: z.infer<typeof Params.teamworkPublishPlan>; result: TeamworkPublishPlan }
-  'teamwork.publish': { params: z.infer<typeof Params.teamworkPublish>; result: TeamworkPublish }
-  'teamwork.publishProgress': {
-    params: z.infer<typeof Params.teamworkPublishProgress>
-    /** Null when this project has never had a publish in this run of the app. */
-    result: TeamworkPublishProgress | null
-  }
-  'teamwork.cancelPublish': {
-    params: z.infer<typeof Params.teamworkCancelPublish>
-    /** False when there was nothing running to stop. */
-    result: { cancelled: boolean }
-  }
-  'teamwork.status': { params: z.infer<typeof Params.teamworkStatus>; result: TeamworkStatus }
-  'teamwork.presence': { params: z.infer<typeof Params.teamworkPresence>; result: TeammatePresence }
-  'teamwork.watch': {
-    params: z.infer<typeof Params.teamworkWatch>
-    result: {
-      subscription: string
-      /** The owner's pty size, to letterbox to. Never negotiated by the reader. */
-      cols: number
-      rows: number
-      /** Whose pane it is, so the view is never ambiguous about that. */
-      handle: string
+    'project.list': { params: z.infer<typeof Params.projectList>; result: Project[] }
+    'project.add': { params: z.infer<typeof Params.projectAdd>; result: Project }
+    'project.remove': { params: z.infer<typeof Params.projectRemove>; result: { removed: true } }
+    'project.trashPreview': {
+      params: z.infer<typeof Params.projectTrashPreview>
+      result: { uncommitted: number; unpushed: number; worktrees: number }
     }
+    'project.trash': { params: z.infer<typeof Params.projectTrash>; result: { trashed: true } }
+    'project.clone': { params: z.infer<typeof Params.projectClone>; result: Project }
+    /** Null when no clone of that URL is running. */
+    'project.cloneProgress': { params: z.infer<typeof Params.projectCloneProgress>; result: CloneProgress | null }
+    'project.cancelClone': { params: z.infer<typeof Params.projectCancelClone>; result: { cancelled: boolean } }
+    /** Answers with the project as stored, so a caller sees what was kept. */
+    'project.setPaths': { params: z.infer<typeof Params.projectSetPaths>; result: Project }
+    'project.saveSettings': {
+      params: z.infer<typeof Params.projectSaveSettings>
+      result: { file: string; project: Project }
+    }
+
+    'worktree.list': { params: z.infer<typeof Params.worktreeList>; result: Worktree[] }
+    'worktree.get': { params: z.infer<typeof Params.worktreeGet>; result: Worktree }
+    'worktree.create': { params: z.infer<typeof Params.worktreeCreate>; result: Worktree }
+    // `checkoutLeftAt`: the row was dropped but the directory was not (git never
+    // heard of the checkout, or refused to read it). Last thing that knows where.
+    // `trashId`: the copy kept first, which `worktree.removed` lists.
+    'worktree.remove': {
+      params: z.infer<typeof Params.worktreeRemove>
+      result: { removed: true; checkoutLeftAt?: string; trashId?: string }
+    }
+    'worktree.forget': {
+      params: z.infer<typeof Params.worktreeForget>
+      result: { forgotten: true; checkoutLeftAt?: string }
+    }
+    'worktree.status': { params: z.infer<typeof Params.worktreeStatus>; result: WorktreeStatus }
+    'worktree.startPoints': { params: z.infer<typeof Params.worktreeStartPoints>; result: StartPointList }
+    'worktree.branches': { params: z.infer<typeof Params.worktreeBranches>; result: BranchList }
+    'worktree.setup': { params: z.infer<typeof Params.worktreeSetup>; result: Worktree }
+    'worktree.setupCheck': { params: z.infer<typeof Params.worktreeSetupCheck>; result: WorktreeSetupCheck }
+    'worktree.runSetup': { params: z.infer<typeof Params.worktreeRunSetup>; result: Worktree }
+    'worktree.pullRequests': { params: z.infer<typeof Params.worktreePullRequests>; result: PullRequestList }
+    'worktree.issues': { params: z.infer<typeof Params.worktreeIssues>; result: IssueList }
+    'worktree.changes': { params: z.infer<typeof Params.worktreeChanges>; result: WorktreeChanges }
+    'worktree.diff': { params: z.infer<typeof Params.worktreeDiff>; result: WorktreeDiff }
+    'worktree.files': { params: z.infer<typeof Params.worktreeFiles>; result: WorktreeFiles }
+    'worktree.findFiles': { params: z.infer<typeof Params.worktreeFindFiles>; result: WorktreeFileMatches }
+    'worktree.commit': { params: z.infer<typeof Params.worktreeCommit>; result: WorktreeCommit }
+    'worktree.stageHunk': { params: z.infer<typeof Params.worktreeStageHunk>; result: WorktreeHunkStage }
+    'worktree.unstageHunk': { params: z.infer<typeof Params.worktreeUnstageHunk>; result: WorktreeHunkStage }
+    'worktree.unstagePath': { params: z.infer<typeof Params.worktreeUnstagePath>; result: WorktreeUnstage }
+    'worktree.discardPath': { params: z.infer<typeof Params.worktreeDiscardPath>; result: WorktreeDiscard }
+    'worktree.discardHunk': { params: z.infer<typeof Params.worktreeDiscardHunk>; result: WorktreeDiscard }
+    'worktree.undoDiscard': { params: z.infer<typeof Params.worktreeUndoDiscard>; result: { restored: true } }
+    'worktree.removed': { params: z.infer<typeof Params.worktreeRemoved>; result: RemovedWorktree[] }
+    'worktree.restore': { params: z.infer<typeof Params.worktreeRestore>; result: Worktree }
+    'worktree.cleanMerged': { params: z.infer<typeof Params.worktreeCleanMerged>; result: WorktreeCleanup }
+    'worktree.push': { params: z.infer<typeof Params.worktreePush>; result: WorktreePush }
+    'worktree.log': { params: z.infer<typeof Params.worktreeLog>; result: WorktreeLog }
+    'worktree.showCommit': { params: z.infer<typeof Params.worktreeShowCommit>; result: WorktreeCommitPatch }
+    'worktree.compare': { params: z.infer<typeof Params.worktreeCompare>; result: WorktreeCompare }
+    'worktree.mergePreview': {
+      params: z.infer<typeof Params.worktreeMergePreview>
+      result: WorktreeMergePreview
+    }
+    'worktree.update': { params: z.infer<typeof Params.worktreeUpdate>; result: WorktreeUpdate }
+    'worktree.abortUpdate': { params: z.infer<typeof Params.worktreeAbortUpdate>; result: WorktreeUpdateAbort }
+    'worktree.landing': { params: z.infer<typeof Params.worktreeLanding>; result: WorktreeLanding }
+    'worktree.createPullRequest': {
+      params: z.infer<typeof Params.worktreeCreatePullRequest>
+      result: WorktreePullRequest
+    }
+    'worktree.mergeIntoBase': { params: z.infer<typeof Params.worktreeMergeIntoBase>; result: WorktreeMerge }
+    'worktree.keep': { params: z.infer<typeof Params.worktreeKeep>; result: WorktreeKeep }
+
+    'worktree.rename': { params: z.infer<typeof Params.worktreeRename>; result: Worktree }
+
+    'agent.list': { params: z.infer<typeof Params.agentList>; result: InstalledAgent[] }
+    'agent.conversations': { params: z.infer<typeof Params.agentConversations>; result: AgentConversation[] }
+
+    'cli.status': { params: z.infer<typeof Params.cliStatus>; result: CliStatus }
+    'cli.install': { params: z.infer<typeof Params.cliInstall>; result: CliInstall }
+    'cli.dismissPrompt': { params: z.infer<typeof Params.cliDismissPrompt>; result: CliStatus }
+
+    /** What Open in offers, editors first in this app's own order of preference. */
+    'editor.list': {
+      params: z.infer<typeof Params.editorList>
+      result: { editors: { command: string; label: string; kind?: 'editor' | 'terminal' | 'finder' }[] }
+    }
+    /** A refusal is a result, not an error: a menu item told why can say so. */
+    'editor.open': {
+      params: z.infer<typeof Params.editorOpen>
+      result: { opened: true; editor: string } | { opened: false; reason: string }
+    }
+
+    'update.state': { params: z.infer<typeof Params.updateState>; result: UpdateState }
+    'update.check': { params: z.infer<typeof Params.updateCheck>; result: UpdateState }
+    'update.setAutomatic': { params: z.infer<typeof Params.updateSetAutomatic>; result: UpdateState }
+    /** Answers with the address that was opened, so a caller can say what it was. */
+    'update.download': { params: z.infer<typeof Params.updateDownload>; result: { opened: string } }
+    'update.fetchInstaller': { params: z.infer<typeof Params.updateFetchInstaller>; result: UpdateState }
+    'update.openInstaller': { params: z.infer<typeof Params.updateOpenInstaller>; result: { opened: string } }
+    'update.restart': {
+      params: z.infer<typeof Params.updateRestart>
+      result: { restarting: string } | { blocked: string }
+    }
+
+    'members.list': { params: z.infer<typeof Params.membersList>; result: MemberList }
+    'members.join': { params: z.infer<typeof Params.membersJoin>; result: MemberList }
+
+    'teamwork.relay': { params: z.infer<typeof Params.teamworkRelay>; result: RelaySetting }
+    'teamwork.setRelay': { params: z.infer<typeof Params.teamworkSetRelay>; result: RelaySetting }
+    'teamwork.setOrigin': { params: z.infer<typeof Params.teamworkSetOrigin>; result: TeamworkOrigin }
+    'teamwork.publishPlan': { params: z.infer<typeof Params.teamworkPublishPlan>; result: TeamworkPublishPlan }
+    'teamwork.publish': { params: z.infer<typeof Params.teamworkPublish>; result: TeamworkPublish }
+    'teamwork.publishProgress': {
+      params: z.infer<typeof Params.teamworkPublishProgress>
+      /** Null when this project has never had a publish in this run of the app. */
+      result: TeamworkPublishProgress | null
+    }
+    'teamwork.cancelPublish': {
+      params: z.infer<typeof Params.teamworkCancelPublish>
+      /** False when there was nothing running to stop. */
+      result: { cancelled: boolean }
+    }
+    'teamwork.status': { params: z.infer<typeof Params.teamworkStatus>; result: TeamworkStatus }
+    'teamwork.presence': { params: z.infer<typeof Params.teamworkPresence>; result: TeammatePresence }
+    'teamwork.watch': {
+      params: z.infer<typeof Params.teamworkWatch>
+      result: {
+        subscription: string
+        /** The owner's pty size, to letterbox to. Never negotiated by the reader. */
+        cols: number
+        rows: number
+        /** Whose pane it is, so the view is never ambiguous about that. */
+        handle: string
+      }
+    }
+    'teamwork.type': { params: z.infer<typeof Params.teamworkType>; result: { written: true } }
+    'teamwork.watchers': { params: z.infer<typeof Params.teamworkWatchers>; result: PaneWatchers }
+    'teamwork.requests': { params: z.infer<typeof Params.teamworkRequests>; result: PaneConsent }
+    /** Answers with the pane's project, so the caller sees the queue it just shortened. */
+    'teamwork.decide': { params: z.infer<typeof Params.teamworkDecide>; result: PaneConsent }
+    'teamwork.revoke': { params: z.infer<typeof Params.teamworkRevoke>; result: PaneConsent }
+    /** Answers with the pane's project, so the caller sees the mute it just set. */
+    'teamwork.mute': { params: z.infer<typeof Params.teamworkMute>; result: PaneWatchers }
+    'teamwork.writeLog': { params: z.infer<typeof Params.teamworkWriteLog>; result: RemoteWriteLog }
+
+    'peer.presence': { params: z.infer<typeof Params.peerPresence>; result: PeerPresence }
+    'peer.subscribe': { params: z.infer<typeof Params.peerSubscribe>; result: { subscription: string } }
+    'teamwork.shareNote': { params: z.infer<typeof Params.teamworkShareNote>; result: NoteShareResult }
+    'teamwork.sharedNotes': { params: z.infer<typeof Params.teamworkSharedNotes>; result: SharedNoteSummary[] }
+    'teamwork.viewNote': { params: z.infer<typeof Params.teamworkViewNote>; result: SharedNote }
+    'teamwork.closeNote': { params: z.infer<typeof Params.teamworkCloseNote>; result: { closed: boolean } }
+    'peer.shareNote': { params: z.infer<typeof Params.peerShareNote>; result: { received: true } }
+
+    'terminal.list': { params: z.infer<typeof Params.terminalList>; result: Terminal[] }
+    'terminal.create': { params: z.infer<typeof Params.terminalCreate>; result: Terminal }
+    'terminal.write': { params: z.infer<typeof Params.terminalWrite>; result: { written: true } }
+    'terminal.resize': { params: z.infer<typeof Params.terminalResize>; result: Terminal }
+    'terminal.close': { params: z.infer<typeof Params.terminalClose>; result: { closed: true } }
+    'terminal.rename': { params: z.infer<typeof Params.terminalRename>; result: Terminal }
+    /**
+     * `end` places the snapshot in the stream, so a subscriber can drop the chunks it already holds;
+     * `widest` is the widest the pane has been, so a replay is never drawn narrower than it was written;
+     * `exited` is set once the process has gone, for a view mounting after the exit event.
+     */
+    'terminal.read': {
+      params: z.infer<typeof Params.terminalRead>
+      result: { data: string; end?: number; widest?: number; exited?: boolean }
+    }
+    'terminal.subscribe': { params: z.infer<typeof Params.terminalSubscribe>; result: { subscription: string } }
+    'terminal.closed': { params: z.infer<typeof Params.terminalClosed>; result: ClosedPane[] }
+    'terminal.reopen': { params: z.infer<typeof Params.terminalReopen>; result: Terminal }
+    'terminal.split': { params: z.infer<typeof Params.terminalSplit>; result: { terminal: Terminal; layout: Layout } }
+    /** The same pane running its program again: same id, leaf, directory; agent started over, not resumed. */
+    'terminal.relaunch': { params: z.infer<typeof Params.terminalRelaunch>; result: Terminal }
+    /** A grant URL to draw and the path to reveal; null when the file is not there. */
+    'terminal.pastedImage': {
+      params: z.infer<typeof Params.terminalPastedImage>
+      result: { url: string; path: string } | null
+    }
+    /** Answers with the pane, now carrying what its agent just said. */
+    'terminal.agentEvent': { params: z.infer<typeof Params.terminalAgentEvent>; result: Terminal }
+    /** Answers with the pane, carrying the subagent the event was about. */
+    'terminal.subagentEvent': { params: z.infer<typeof Params.terminalSubagentEvent>; result: Terminal }
+    'terminal.subagentTranscript': {
+      params: z.infer<typeof Params.terminalSubagentTranscript>
+      result: SubagentTranscript
+    }
+
+    /** Whether a new worktree gets the agent CLIs' trust of its main checkout. Per machine. */
+    'agents.trust': { params: z.infer<typeof Params.agentsTrust>; result: { trustNewWorktrees: boolean } }
+    'agents.setTrust': { params: z.infer<typeof Params.agentsSetTrust>; result: { trustNewWorktrees: boolean } }
+
+    /** How this installation is painted. Per machine, not per project. */
+    'appearance.get': { params: z.infer<typeof Params.appearanceGet>; result: Appearance }
+    'appearance.set': { params: z.infer<typeof Params.appearanceSet>; result: Appearance }
+
+    'file.read': { params: z.infer<typeof Params.fileRead>; result: FileContent }
+    'file.write': { params: z.infer<typeof Params.fileWrite>; result: FileWritten }
+
+    'layout.get': { params: z.infer<typeof Params.layoutGet>; result: Layout }
+    'layout.set': { params: z.infer<typeof Params.layoutSet>; result: Layout }
+
+    'system.resources': { params: z.infer<typeof Params.systemResources>; result: SystemResources }
+    'system.kill': { params: z.infer<typeof Params.systemKill>; result: ProcessKill }
+
+    'workspace.subscribe': { params: z.infer<typeof Params.workspaceSubscribe>; result: { subscription: string } }
+
+    unsubscribe: { params: z.infer<typeof Params.unsubscribe>; result: { unsubscribed: true } }
   }
-  'teamwork.type': { params: z.infer<typeof Params.teamworkType>; result: { written: true } }
-  'teamwork.watchers': { params: z.infer<typeof Params.teamworkWatchers>; result: PaneWatchers }
-  'teamwork.requests': { params: z.infer<typeof Params.teamworkRequests>; result: PaneConsent }
-  /** Answers with the pane's project, so the caller sees the queue it just shortened. */
-  'teamwork.decide': { params: z.infer<typeof Params.teamworkDecide>; result: PaneConsent }
-  'teamwork.revoke': { params: z.infer<typeof Params.teamworkRevoke>; result: PaneConsent }
-  /** Answers with the pane's project, so the caller sees the mute it just set. */
-  'teamwork.mute': { params: z.infer<typeof Params.teamworkMute>; result: PaneWatchers }
-  'teamwork.writeLog': { params: z.infer<typeof Params.teamworkWriteLog>; result: RemoteWriteLog }
-
-  'peer.presence': { params: z.infer<typeof Params.peerPresence>; result: PeerPresence }
-  'peer.subscribe': { params: z.infer<typeof Params.peerSubscribe>; result: { subscription: string } }
-  'teamwork.shareNote': { params: z.infer<typeof Params.teamworkShareNote>; result: NoteShareResult }
-  'teamwork.sharedNotes': { params: z.infer<typeof Params.teamworkSharedNotes>; result: SharedNoteSummary[] }
-  'teamwork.viewNote': { params: z.infer<typeof Params.teamworkViewNote>; result: SharedNote }
-  'teamwork.closeNote': { params: z.infer<typeof Params.teamworkCloseNote>; result: { closed: boolean } }
-  'peer.shareNote': { params: z.infer<typeof Params.peerShareNote>; result: { received: true } }
-
-  'terminal.list': { params: z.infer<typeof Params.terminalList>; result: Terminal[] }
-  'terminal.create': { params: z.infer<typeof Params.terminalCreate>; result: Terminal }
-  'terminal.write': { params: z.infer<typeof Params.terminalWrite>; result: { written: true } }
-  'terminal.resize': { params: z.infer<typeof Params.terminalResize>; result: Terminal }
-  'terminal.close': { params: z.infer<typeof Params.terminalClose>; result: { closed: true } }
-  'terminal.rename': { params: z.infer<typeof Params.terminalRename>; result: Terminal }
-  /**
-   * `end` places the snapshot in the stream, so a subscriber can drop the chunks it already holds;
-   * `widest` is the widest the pane has been, so a replay is never drawn narrower than it was written;
-   * `exited` is set once the process has gone, for a view mounting after the exit event.
-   */
-  'terminal.read': {
-    params: z.infer<typeof Params.terminalRead>
-    result: { data: string; end?: number; widest?: number; exited?: boolean }
-  }
-  'terminal.subscribe': { params: z.infer<typeof Params.terminalSubscribe>; result: { subscription: string } }
-  'terminal.closed': { params: z.infer<typeof Params.terminalClosed>; result: ClosedPane[] }
-  'terminal.reopen': { params: z.infer<typeof Params.terminalReopen>; result: Terminal }
-  'terminal.split': { params: z.infer<typeof Params.terminalSplit>; result: { terminal: Terminal; layout: Layout } }
-  /** The same pane running its program again: same id, leaf, directory; agent started over, not resumed. */
-  'terminal.relaunch': { params: z.infer<typeof Params.terminalRelaunch>; result: Terminal }
-  /** A grant URL to draw and the path to reveal; null when the file is not there. */
-  'terminal.pastedImage': {
-    params: z.infer<typeof Params.terminalPastedImage>
-    result: { url: string; path: string } | null
-  }
-  /** Answers with the pane, now carrying what its agent just said. */
-  'terminal.agentEvent': { params: z.infer<typeof Params.terminalAgentEvent>; result: Terminal }
-  /** Answers with the pane, carrying the subagent the event was about. */
-  'terminal.subagentEvent': { params: z.infer<typeof Params.terminalSubagentEvent>; result: Terminal }
-  'terminal.subagentTranscript': {
-    params: z.infer<typeof Params.terminalSubagentTranscript>
-    result: SubagentTranscript
-  }
-
-  /** Whether a new worktree gets the agent CLIs' trust of its main checkout. Per machine. */
-  'agents.trust': { params: z.infer<typeof Params.agentsTrust>; result: { trustNewWorktrees: boolean } }
-  'agents.setTrust': { params: z.infer<typeof Params.agentsSetTrust>; result: { trustNewWorktrees: boolean } }
-
-  /** How this installation is painted. Per machine, not per project. */
-  'appearance.get': { params: z.infer<typeof Params.appearanceGet>; result: Appearance }
-  'appearance.set': { params: z.infer<typeof Params.appearanceSet>; result: Appearance }
-
-  'file.read': { params: z.infer<typeof Params.fileRead>; result: FileContent }
-  'file.write': { params: z.infer<typeof Params.fileWrite>; result: FileWritten }
-
-  'layout.get': { params: z.infer<typeof Params.layoutGet>; result: Layout }
-  'layout.set': { params: z.infer<typeof Params.layoutSet>; result: Layout }
-
-  'system.resources': { params: z.infer<typeof Params.systemResources>; result: SystemResources }
-  'system.kill': { params: z.infer<typeof Params.systemKill>; result: ProcessKill }
-
-  'workspace.subscribe': { params: z.infer<typeof Params.workspaceSubscribe>; result: { subscription: string } }
-
-  unsubscribe: { params: z.infer<typeof Params.unsubscribe>; result: { unsubscribed: true } }
-}
 
 export type MethodName = keyof MethodContract
 export type ParamsOf<M extends MethodName> = MethodContract[M]['params']
