@@ -135,6 +135,7 @@ import {
   readStoredAgentNotices,
   readStoredDefaultAgent,
   readStoredDiffLayout,
+  readStoredDiffOptions,
   readStoredEditorCommands,
   readStoredKeepAwake,
   readStoredPermissionModes,
@@ -152,6 +153,7 @@ import {
   writeStoredAgentNotices,
   writeStoredDefaultAgent,
   writeStoredDiffLayout,
+  writeStoredDiffOptions,
   writeStoredEditorCommands,
   writeStoredKeepAwake,
   writeStoredPermissionModes,
@@ -165,7 +167,7 @@ import type { ProjectAddRefusal, ResultOf } from '@shared/methods'
 import { parsePastedInvitation, type Invitation } from '@shared/invitation'
 import { descendantsOf } from '@shared/taskTree'
 import { joinTeam, type JoinStage, type JoinTarget } from '../teamwork/joinTeam'
-import type { DiffLayout } from './preferences'
+import type { DiffLayout, DiffOptions } from './preferences'
 import { createLocalEditFence, createWorkspaceRefresher, refreshTargets, type RefreshTargets } from './workspaceRefresh'
 import { readStoredSession, sessionChanged, writeStoredSession } from './storedSession'
 import { readSystemTone } from '../theme/systemTone'
@@ -524,6 +526,7 @@ type WorkspaceState = {
   editors: ResultOf<'editor.list'>['editors'] | null
   /** Whether the patch in the changes panel is laid out inline or side by side. */
   diffLayout: DiffLayout
+  diffOptions: DiffOptions
   /** The agent kind the composer offers first, and what each kind is launched with. See `preferences.ts`. */
   defaultAgent: string
   agentArgs: Record<string, string>
@@ -819,6 +822,8 @@ type WorkspaceState = {
   setKeepAwake: (mode: KeepAwakeMode) => void
   /** Sets whether a patch is read down one column or across two, and remembers it. */
   setDiffLayout: (layout: DiffLayout) => void
+  /** Flips one diff option, and remembers it. */
+  toggleDiffOption: (option: keyof DiffOptions) => void
   /** Sets one project's preferred start point, or clears it when given null. */
   setStartPointDefault: (projectId: string, ref: string | null) => void
   /** Sets the agent the composer offers first; `NO_DEFAULT_AGENT` clears it. */
@@ -1620,6 +1625,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     editors: null,
     paneSeenAt: readPaneSeen(storage),
     diffLayout: readStoredDiffLayout(storage),
+    diffOptions: readStoredDiffOptions(storage),
     defaultAgent: readStoredDefaultAgent(storage),
     agentArgs: readStoredAgentArgs(storage),
     permissionModes: readStoredPermissionModes(storage),
@@ -3635,6 +3641,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     setDiffLayout(layout) {
       set({ diffLayout: layout })
       writeStoredDiffLayout(storage, layout)
+    },
+
+    toggleDiffOption(option) {
+      const diffOptions = { ...get().diffOptions, [option]: !get().diffOptions[option] }
+      set({ diffOptions })
+      writeStoredDiffOptions(storage, diffOptions)
     },
 
     setStartPointDefault(projectId, ref) {

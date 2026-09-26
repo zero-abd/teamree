@@ -16,6 +16,7 @@ import { APPEARANCE_MODE_LABEL } from '../settings/AppearanceSettings'
 import { canResumeConversations, harnessName } from '../agents/harnesses'
 import { runName, siblingRuns } from '../compare/siblingRuns'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
+import type { DiffOptions } from '../state/preferences'
 import { MENU_ORDER, menuLabel, type PanelState } from '../menu/menuBar'
 import { agoLabel } from '../sidebar/agentRows'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
@@ -121,6 +122,7 @@ export type PaletteContext = {
   /** Which way the panel toggles read; absent reads as shown. */
   sidebarVisible?: boolean
   rightPanelOpen?: boolean
+  diffOptions?: DiffOptions
 }
 
 /**
@@ -425,6 +427,8 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'open-settings': 'settings preferences options config cli path relay start point font size updates editor',
   // Both spellings; not "settings", which is the other page.
   'open-appearance': 'appearance theme colour color dark black contrast accent ground swatch',
+  'toggle-diff-wrap': 'wrap unwrap diff lines long soft word patch review',
+  'toggle-diff-whitespace': 'whitespace ignore hide show spaces indent diff patch review -w',
   'add-project': 'add open project repository repo folder directory',
   'clone-repository': 'clone project repository repo git url remote github',
   'review-changes': 'review all changes diff viewed comment agent files branch base whole task',

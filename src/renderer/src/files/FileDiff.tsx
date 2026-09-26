@@ -9,6 +9,7 @@ import type { DiffLayout } from '../state/preferences'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, type PaneSearchState } from '../terminal/paneSearchModel'
 import { TerminalSearchBar } from '../terminal/TerminalSearchBar'
+import { withoutWhitespace } from '../workspace/lineDiff'
 import { fitLayout, PatchView, type PatchPlace, type PatchViewProps } from '../workspace/PatchView'
 import { Segments } from './FileBar'
 import { DIFF_MATCH_LIMIT, findInPatches, stepMatch, type DiffMatch } from './diffFind'
@@ -110,8 +111,22 @@ export function DiffTools({ diff, view = 'Code' }: { diff: FileDiff; view?: stri
   )
 }
 
-/** Inline and Side by side as icons; the second is off where two columns would not fit. `onChoose` defaults to the preference. */
-export function LayoutTools({
+/** The layouts, then Wrap and Hide Whitespace. `onChoose` defaults to the preference. */
+export function LayoutTools(props: {
+  layout: DiffLayout
+  bodyWidth: number | null
+  onChoose?: (layout: DiffLayout) => void
+}): React.JSX.Element {
+  return (
+    <>
+      <LayoutSegments {...props} />
+      <DiffOptionTools />
+    </>
+  )
+}
+
+/** Inline and Side by side as icons; the second is off where two columns would not fit. */
+function LayoutSegments({
   layout,
   bodyWidth,
   onChoose
@@ -147,6 +162,40 @@ export function LayoutTools({
       >
         <svg viewBox="0 0 12 12" aria-hidden="true">
           <path d="M1.5 3.5 H5 M7 3.5 H10.5 M1.5 6 H5 M7 6 H10.5 M1.5 8.5 H5 M7 8.5 H10.5" />
+        </svg>
+      </button>
+    </Segments>
+  )
+}
+
+/** Wrap and Hide Whitespace, remembered for every diff. */
+function DiffOptionTools(): React.JSX.Element {
+  const options = useWorkspaceStore((state) => state.diffOptions)
+  const toggle = useWorkspaceStore((state) => state.toggleDiffOption)
+  return (
+    <Segments label="Diff options">
+      <button
+        type="button"
+        className="file__icon"
+        aria-label="Wrap"
+        title="Wrap"
+        aria-pressed={options.wrap}
+        onClick={() => toggle('wrap')}
+      >
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M1.5 3 H10.5 M1.5 6 H9 A1.5 1.5 0 0 1 9 9 H6 M7.2 7.8 L6 9 L7.2 10.2 M1.5 9 H3.5" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className="file__icon"
+        aria-label="Hide Whitespace"
+        title="Hide Whitespace"
+        aria-pressed={options.hideWhitespace}
+        onClick={() => toggle('hideWhitespace')}
+      >
+        <svg viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M2 5.5 V8.5 H10 V5.5" />
         </svg>
       </button>
     </Segments>
@@ -313,13 +362,18 @@ function useDiffFind(
   searchToken: number
 ): DiffFind {
   const open = searchToken > 0
+  const hideWhitespace = useWorkspaceStore((state) => state.diffOptions.hideWhitespace)
   const [search, dispatch] = useReducer(paneSearchReducer, EMPTY_PANE_SEARCH)
   const [index, setIndex] = useState(0)
   // Set by whatever moves to a match, and spent by the paint that finds its row drawn.
   const scrollPending = useRef(false)
+  // Parsed as the patch is drawn, so a match's hunk and line are the ones on screen.
   const halves = useMemo(
-    () => [staged, working].flatMap((patch) => (patch === null ? [] : [parsePatch(patch)])),
-    [staged, working]
+    () =>
+      [staged, working].flatMap((patch) =>
+        patch === null ? [] : [hideWhitespace ? withoutWhitespace(parsePatch(patch)) : parsePatch(patch)]
+      ),
+    [staged, working, hideWhitespace]
   )
   const matches = useMemo(
     () => (open ? findInPatches(halves, search.query, search.options) : []),

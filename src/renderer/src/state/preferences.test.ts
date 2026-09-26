@@ -10,6 +10,7 @@ import {
   readStoredAgentArgs,
   readStoredDefaultAgent,
   readStoredDiffLayout,
+  readStoredDiffOptions,
   readStoredKeepAwake,
   readStoredEditorCommands,
   readStoredStartPoints,
@@ -28,6 +29,7 @@ import {
   writeStoredAgentArgs,
   writeStoredDefaultAgent,
   writeStoredDiffLayout,
+  writeStoredDiffOptions,
   writeStoredKeepAwake,
   writeStoredEditorCommands,
   writeStoredStartPoints,
@@ -372,5 +374,32 @@ describe('how a pane draws and reads keys', () => {
     expect(readStoredTerminalOptions(refusingStorage)).toEqual(TERMINAL_OPTIONS_DEFAULT)
     expect(() => writeStoredTerminalOptions(refusingStorage, TERMINAL_OPTIONS_DEFAULT)).not.toThrow()
     expect(readStoredTerminalOptions(undefined)).toEqual(TERMINAL_OPTIONS_DEFAULT)
+  })
+})
+
+describe('how a diff wraps and treats whitespace', () => {
+  it('comes back as it was chosen', () => {
+    const storage = memoryStorage()
+    writeStoredDiffOptions(storage, { wrap: true, hideWhitespace: false })
+    expect(readStoredDiffOptions(storage)).toEqual({ wrap: true, hideWhitespace: false })
+    writeStoredDiffOptions(storage, { wrap: false, hideWhitespace: true })
+    expect(readStoredDiffOptions(storage)).toEqual({ wrap: false, hideWhitespace: true })
+  })
+
+  it('is off until chosen, and off for anything unreadable', () => {
+    expect(readStoredDiffOptions(memoryStorage())).toEqual({ wrap: false, hideWhitespace: false })
+    expect(readStoredDiffOptions(memoryStorage({ 'teamree.diff.options': '{' }))).toEqual({
+      wrap: false,
+      hideWhitespace: false
+    })
+    expect(readStoredDiffOptions(memoryStorage({ 'teamree.diff.options': '{"wrap":"yes"}' }))).toEqual({
+      wrap: false,
+      hideWhitespace: false
+    })
+  })
+
+  it('survives a storage that refuses, in both directions', () => {
+    expect(readStoredDiffOptions(refusingStorage)).toEqual({ wrap: false, hideWhitespace: false })
+    expect(() => writeStoredDiffOptions(refusingStorage, { wrap: true, hideWhitespace: true })).not.toThrow()
   })
 })

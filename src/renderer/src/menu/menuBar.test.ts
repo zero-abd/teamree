@@ -123,6 +123,17 @@ describe('the menu bar is built from the table the keyboard reads', () => {
     expect(menuLabel('push-worktree')).toBe('Push')
   })
 
+  it('says what the diff toggles do next', () => {
+    const label = (state: CommandState, command: string): string | undefined =>
+      menuBarSpec(state).find((item) => item.command === command)?.label
+    expect(label(WORKING, 'toggle-diff-wrap')).toBe('Wrap Diff Lines')
+    expect(label(WORKING, 'toggle-diff-whitespace')).toBe('Hide Whitespace Changes')
+    const on = { ...WORKING, diffOptions: { wrap: true, hideWhitespace: true } }
+    expect(label(on, 'toggle-diff-wrap')).toBe('Unwrap Diff Lines')
+    expect(label(on, 'toggle-diff-whitespace')).toBe('Show Whitespace Changes')
+    expect(menuBarSpec(on).find((item) => item.command === 'toggle-diff-wrap')?.section).toBe('view')
+  })
+
   // Menu order, not table order: "New Task, New Terminal, Close Pane".
   it('puts the items of a menu in the order they are read', () => {
     const sectionOrder = (section: string): string[] =>
@@ -161,7 +172,9 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'focus-right-panel',
       'focus-next-region',
       'focus-previous-region',
-      'open-appearance'
+      'open-appearance',
+      'toggle-diff-wrap',
+      'toggle-diff-whitespace'
     ])
     expect(sectionOrder('window')).toEqual([
       'split-right',
@@ -244,6 +257,8 @@ describe('what the menu bar says can be done', () => {
       'go-to-file': false,
       'open-dashboard': true,
       'open-appearance': true,
+      'toggle-diff-wrap': true,
+      'toggle-diff-whitespace': true,
       'open-settings': true,
       'add-project': true,
       'clone-repository': true,

@@ -109,7 +109,8 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
     chooseProjectFolder: vi.fn(),
     showRightPanelTab: vi.fn(),
     pushActiveWorktree: vi.fn(async () => {}),
-    setTerminalFontSize: vi.fn()
+    setTerminalFontSize: vi.fn(),
+    toggleDiffOption: vi.fn()
   } as unknown as CommandActions & Record<string, ReturnType<typeof vi.fn>>
 }
 
@@ -391,6 +392,8 @@ describe('running a command', () => {
       ['find-in-pane', 'openPaneSearch', []],
       ['open-dashboard', 'toggleDashboard', []],
       ['open-appearance', 'showAppearance', [true]],
+      ['toggle-diff-wrap', 'toggleDiffOption', ['wrap']],
+      ['toggle-diff-whitespace', 'toggleDiffOption', ['hideWhitespace']],
       ['add-project', 'chooseProjectFolder', []],
       ['clone-repository', 'openDialog', [{ kind: 'clone-project' }]],
       ['open-settings', 'toggleSettings', []],
@@ -466,6 +469,8 @@ describe('running a command', () => {
           'open-palette',
           'open-dashboard',
           'open-appearance',
+          'toggle-diff-wrap',
+          'toggle-diff-whitespace',
           'open-settings',
           'open-help',
           'add-project',

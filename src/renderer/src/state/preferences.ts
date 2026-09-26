@@ -83,6 +83,7 @@ const PERMISSION_MODES_KEY = 'teamree.agent.permissionModes'
 /** The default-agent preference when none has been set: no agent is preferred. */
 export const NO_DEFAULT_AGENT = ''
 const DIFF_LAYOUT_KEY = 'teamree.diff.layout'
+const DIFF_OPTIONS_KEY = 'teamree.diff.options'
 
 export function clampTerminalFontSize(size: number): number {
   if (!Number.isFinite(size)) return TERMINAL_FONT_DEFAULT_PX
@@ -291,6 +292,29 @@ export function writeStoredDiffLayout(storage: Pick<Storage, 'setItem'> | undefi
     storage?.setItem(DIFF_LAYOUT_KEY, layout)
   } catch {
     // As above: the choice holds for this window and is forgotten on the next.
+  }
+}
+
+/** Whether diffs wrap long lines, and whether they hide changes that are only whitespace. */
+export type DiffOptions = { wrap: boolean; hideWhitespace: boolean }
+
+export const DIFF_OPTIONS_DEFAULT: DiffOptions = { wrap: false, hideWhitespace: false }
+
+export function readStoredDiffOptions(storage: Pick<Storage, 'getItem'> | undefined): DiffOptions {
+  try {
+    const raw: unknown = JSON.parse(storage?.getItem(DIFF_OPTIONS_KEY) ?? '{}')
+    const stored = typeof raw === 'object' && raw !== null ? (raw as Record<string, unknown>) : {}
+    return { wrap: stored.wrap === true, hideWhitespace: stored.hideWhitespace === true }
+  } catch {
+    return DIFF_OPTIONS_DEFAULT
+  }
+}
+
+export function writeStoredDiffOptions(storage: Pick<Storage, 'setItem'> | undefined, options: DiffOptions): void {
+  try {
+    storage?.setItem(DIFF_OPTIONS_KEY, JSON.stringify(options))
+  } catch {
+    // The choice holds for this window only.
   }
 }
 

@@ -1,4 +1,4 @@
-/* Review All, the viewed boxes, and the comment written under picked lines. */
+/* Review All, the viewed boxes, the comment written under picked lines, and the word and wrap rules every patch shares. */
 
 /* In a review every file's header sticks, and each hunk's sticks under it. */
 .patch--review .patch__fileHead {
@@ -239,4 +239,32 @@
 
 .cm-commentGutter .cm-gutterElement:hover {
   opacity: 1;
+}
+
+/* The words a changed pair of lines differs in; text at full strength, since the tint dims syntax colours. */
+.patch__row--removed .patch__word,
+.patch__side--removed .patch__word {
+  background: color-mix(in srgb, var(--danger) 30%, transparent);
+  color: var(--fg);
+}
+
+.patch__row--added .patch__word,
+.patch__side--added .patch__word {
+  background: color-mix(in srgb, var(--success) 30%, transparent);
+  color: var(--fg);
+}
+
+/* Wrap: the patch is the scroller's width, and a long line breaks inside its own column. */
+.patch--wrap {
+  width: 100%;
+}
+
+.patch--wrap .patch__row {
+  white-space: pre-wrap;
+}
+
+.patch--wrap .patch__text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }

@@ -12,7 +12,12 @@ import { focusedTreeProject } from '../sidebar/treeKeys'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
 import { focusedRegion, regionAfter, requestRegionFocus } from '../shell/regions'
 import { numberedTab, tabAfter } from '../workspace/paneTabs'
-import { TERMINAL_FONT_DEFAULT_PX, TERMINAL_FONT_MAX_PX, TERMINAL_FONT_MIN_PX } from '../state/preferences'
+import {
+  TERMINAL_FONT_DEFAULT_PX,
+  TERMINAL_FONT_MAX_PX,
+  TERMINAL_FONT_MIN_PX,
+  type DiffOptions
+} from '../state/preferences'
 import type { DialogState } from '../state/workspaceStore'
 import type { WorkspaceCommand } from './workspaceShortcuts'
 
@@ -45,6 +50,8 @@ export type CommandState = {
   /** Absent reads as shown, for both. */
   sidebarVisible?: boolean
   rightPanelOpen?: boolean
+  /** Absent reads as both off. */
+  diffOptions?: DiffOptions
   /** What ⌘⇧T could bring back, by worktree; absent reads as nothing. */
   closedPanes?: Readonly<Record<string, readonly ClosedPane[]>>
   closedFiles?: Readonly<Record<string, readonly unknown[]>>
@@ -79,6 +86,7 @@ export type CommandActions = {
   pushActiveWorktree: () => Promise<void>
   openReview: (worktreeId: string) => void
   setTerminalFontSize: (size: number) => void
+  toggleDiffOption: (option: keyof DiffOptions) => void
 }
 
 export type Workspace = CommandState & CommandActions
@@ -269,6 +277,8 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
       return unless(fontSize(state) !== TERMINAL_FONT_DEFAULT_PX, 'already actual size')
     case 'open-palette':
     case 'open-appearance':
+    case 'toggle-diff-wrap':
+    case 'toggle-diff-whitespace':
     case 'open-settings':
     case 'add-project':
     case 'clone-repository':
@@ -402,6 +412,12 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       break
     case 'open-appearance':
       store.showAppearance(true)
+      break
+    case 'toggle-diff-wrap':
+      store.toggleDiffOption('wrap')
+      break
+    case 'toggle-diff-whitespace':
+      store.toggleDiffOption('hideWhitespace')
       break
     case 'add-project':
       void store.chooseProjectFolder()
