@@ -9,7 +9,7 @@ import {
   type MemoryNote,
   type ProjectContext
 } from '../../shared/memory'
-import { matchesGlob } from './globs'
+import { matchesGlob } from '../../shared/globs'
 import type { LedgerWorktree } from './ledgerStore'
 import type { RankedOverlap } from './ranking'
 

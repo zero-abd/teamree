@@ -1191,3 +1191,129 @@
   border-radius: var(--r1);
   background: var(--bg-input);
 }
+
+/* Context: claims and notes from the ledger. Shrinks and scrolls like the list, never pushing it out. */
+.context {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  padding-bottom: var(--s3);
+}
+
+.context__add {
+  margin-left: auto;
+  padding: 0 var(--s2);
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.context__add:hover {
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+
+.context__list {
+  margin: 0;
+  padding: 0 0 var(--s1);
+  list-style: none;
+}
+
+.context__row {
+  padding: 2px var(--s4);
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  font-size: var(--text-sm);
+}
+
+.context__row:hover {
+  background: var(--bg-hover);
+}
+
+.context__mark {
+  width: 11px;
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  text-align: center;
+}
+
+.context__row--question .context__mark {
+  color: var(--info);
+}
+
+.context__glob,
+.context__paths {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.context__glob {
+  flex: 1;
+  color: var(--fg-secondary);
+}
+
+.context__text {
+  min-width: 0;
+  flex: 1;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.context__paths {
+  flex: 0 1 auto;
+  max-width: 45%;
+  color: var(--fg-muted);
+}
+
+.context__resolve,
+.context__x {
+  flex: none;
+  padding: 0 var(--s2);
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  opacity: var(--control-rest);
+}
+
+.context__row:hover .context__resolve,
+.context__row:hover .context__x,
+.context__resolve:focus-visible,
+.context__x:focus-visible {
+  opacity: 1;
+}
+
+.context__resolve:hover,
+.context__x:hover {
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+
+.context__sibling {
+  margin-top: var(--s1);
+}
+
+.context__name {
+  margin: 0;
+  padding: var(--s1) var(--s4) 0;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.context__field {
+  width: calc(100% - 2 * var(--s4));
+  margin: var(--s1) var(--s4);
+  flex: none;
+}

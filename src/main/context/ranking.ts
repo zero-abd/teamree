@@ -2,7 +2,7 @@
 // a merge-tree conflict over a plain overlap, and hot files barely at all.
 
 import { basename } from 'node:path'
-import { matchesAny } from './globs'
+import { matchesAny } from '../../shared/globs'
 import type { LedgerWorktree } from './ledgerStore'
 
 /** Files nearly every change touches; an overlap on these alone is noise. */

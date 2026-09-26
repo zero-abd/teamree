@@ -5,7 +5,13 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { PROVIDER_TIMEOUT_MS, type MemoryEvent } from '../../shared/contextProvider'
 import type { Project, Worktree } from '../../shared/entities'
-import { MAX_CLAIM_GLOBS, type EditCheck, type EditOverlapKind, type WorktreeClaims } from '../../shared/ledgerMethods'
+import {
+  MAX_CLAIM_GLOBS,
+  type EditCheck,
+  type EditOverlapKind,
+  type ProjectMemory,
+  type WorktreeClaims
+} from '../../shared/ledgerMethods'
 import {
   LEDGER_BUDGET_TOKENS,
   clampContextBudget,
@@ -24,7 +30,7 @@ import { notFound } from '../runtime/runtimeError'
 import { buildBundle } from './bundle'
 import { editOverlaps, editWarning, repoRelative } from './editCheck'
 import { isAncestor, landingConflicts, mergeConflicts, readTouches } from './gitReads'
-import { normalizeGlob } from './globs'
+import { normalizeGlob } from '../../shared/globs'
 import {
   LedgerStore,
   MAX_NOTES,
@@ -222,6 +228,20 @@ export class ContextLedger {
     row.claims = gone === undefined ? [] : row.claims.filter((glob) => !gone.has(glob))
     this.#changed(store)
     return { worktreeId: row.id, globs: [...row.claims] }
+  }
+
+  async list(projectId: string): Promise<ProjectMemory> {
+    const store = await this.#store(projectId)
+    return {
+      projectId,
+      revision: store.document.revision,
+      worktrees: this.#live(store).map((row) => ({
+        worktreeId: row.id,
+        claims: [...row.claims],
+        touched: [...row.touched]
+      })),
+      notes: store.document.notes.map((note) => ({ ...note }))
+    }
   }
 
   /** Other worktrees sharing this one's files, worth telling an agent about. */

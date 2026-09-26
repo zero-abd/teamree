@@ -1377,3 +1377,10 @@
 .worktree__line {
   margin: 0 var(--s2) var(--s1) 28px;
 }
+
+/* Holds claims: quiet, since a claim is a note to other agents, not something to act on. */
+.worktree__claims {
+  padding: 0 2px;
+  background: none;
+  color: var(--fg-muted);
+}

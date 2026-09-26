@@ -37,6 +37,7 @@ export function registerContextHandlers(registry: MethodRegistry, git: GitServic
   registry.register('memory.conflicts', Params.memoryConflicts, ({ worktreeId }) => ledger.conflicts(worktreeId))
   registry.register('memory.claim', Params.memoryClaim, (params) => ledger.claim(params))
   registry.register('memory.unclaim', Params.memoryUnclaim, (params) => ledger.unclaim(params))
+  registry.register('memory.list', Params.memoryList, ({ projectId }) => ledger.list(projectId))
   registry.register('memory.check', Params.memoryCheck, ({ worktreeId, terminalId, path, hook }) => {
     const owner =
       worktreeId ?? registry.context.store.listTerminals().find((terminal) => terminal.id === terminalId)?.worktreeId

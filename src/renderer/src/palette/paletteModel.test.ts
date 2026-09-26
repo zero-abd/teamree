@@ -965,6 +965,20 @@ describe('starting a task from an issue', () => {
   })
 })
 
+describe('showing decisions', () => {
+  it('offers Show Decisions, reached by claims and notes too', () => {
+    const item = buildPaletteItems(context()).find((entry) => entry.id === 'show-decisions')
+    expect(item?.label).toBe('Show Decisions')
+    expect(item?.search).toMatch(/claims/)
+    expect(item).not.toHaveProperty('unavailable')
+  })
+
+  it('says there is no project to show', () => {
+    const items = buildPaletteItems(context({ projects: [] }))
+    expect(items.find((item) => item.id === 'show-decisions')).toMatchObject({ unavailable: 'no project' })
+  })
+})
+
 describe('a query that finds nothing to run', () => {
   const items = (overrides: Partial<Parameters<typeof buildPaletteItems>[0]> = {}): PaletteItem[] =>
     buildPaletteItems(

@@ -1585,6 +1585,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'memory.conflicts': () => [],
     'memory.claim': ({ worktreeId, globs }) => ({ worktreeId, globs }),
     'memory.unclaim': ({ worktreeId }) => ({ worktreeId, globs: [] }),
+    'memory.list': ({ projectId }) => ({ projectId, revision: 0, worktrees: [], notes: [] }),
     'memory.check': ({ worktreeId, path }) => ({ worktreeId: worktreeId ?? '', path, siblings: [], text: '' }),
     'worktree.overlaps': ({ projectId }) => ({ projectId, overlaps: [], readAt: Date.now() }),
     'worktree.usage': () => [],

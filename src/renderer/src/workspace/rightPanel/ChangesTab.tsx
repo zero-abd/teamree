@@ -16,6 +16,7 @@ import { headerActions, landLabel, landNote, landOffer, pushOffer, type HeaderAc
 import type { PaneNode, Terminal, Worktree, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 import { fileColumnIn, isCommitLeaf, shownTabId } from '@shared/filePane'
 import { TokensLine } from './TokensLine'
+import { ContextSection } from './ContextSection'
 
 export function ChangesTab(): React.JSX.Element | null {
   const worktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
@@ -475,6 +476,8 @@ export function ChangesTab(): React.JSX.Element | null {
           ) : null}
         </section>
       ) : null}
+
+      <ContextSection worktreeId={worktreeId} />
 
       {log?.unavailable !== undefined ? (
         <p className="commits__unknown" title={log.unavailable}>
