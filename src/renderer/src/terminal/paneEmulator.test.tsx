@@ -66,6 +66,12 @@ vi.mock('@xterm/xterm', () => {
       return { dispose: () => {} }
     }
 
+    onWriteParsed(): { dispose: () => void } {
+      return { dispose: () => {} }
+    }
+
+    buffer = { active: { baseY: 0, getLine: () => undefined } }
+
     attachCustomKeyEventHandler(): void {}
     registerLinkProvider(): { dispose: () => void } {
       return { dispose: () => {} }

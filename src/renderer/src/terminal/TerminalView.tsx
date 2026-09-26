@@ -28,8 +28,10 @@ import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere } from './handsHere'
 import { paneFileLinks, type FileLinkHost } from './paneFileLinks'
-import { paneImageLinks, pastedImageLookup, type ShownImage } from './paneImageLinks'
+import { paneImageLinks, pastedImageLookup, type PastedImage, type ShownImage } from './paneImageLinks'
 import { PastedImagePeek, PastedImageViewer, type ImagePeek } from './PastedImageViews'
+import { PastedImageStrip } from './PastedImageStrip'
+import { watchPromptImages } from './promptImages'
 import { frameWrites, paneWebgl, syncScrollbarPerFrame } from './paneFrames'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOptions } from './paneSearchModel'
 import { TerminalSearchBar } from './TerminalSearchBar'
@@ -83,6 +85,7 @@ export function TerminalView({
   const [search, dispatch] = useReducer(paneSearchReducer, EMPTY_PANE_SEARCH)
   const [peek, setPeek] = useState<ImagePeek | null>(null)
   const [viewing, setViewing] = useState<ShownImage | null>(null)
+  const [promptImages, setPromptImages] = useState<ShownImage[]>([])
 
   const watchers = useWorkspaceStore((state) => state.watchers)
   const attention = useMemo(() => paneAttention(watchers, terminalId), [watchers, terminalId])
@@ -120,6 +123,7 @@ export function TerminalView({
     searchRef.current = emulator.search
     fitRef.current = fit
     decorationsRef.current = readSearchDecorations(document.documentElement)
+    const promptWatch = watchPromptImages(term, emulator.findImage, setPromptImages)
 
     let mounted = true
     const hasBox = (): boolean => mounted && host.clientWidth > 0 && host.clientHeight > 0
@@ -201,6 +205,7 @@ export function TerminalView({
       forgetDeferred(scheduleFit)
       observer.disconnect()
       document.removeEventListener('visibilitychange', onVisible)
+      promptWatch.dispose()
       termRef.current = null
       searchRef.current = null
       fitRef.current = null
@@ -321,6 +326,16 @@ export function TerminalView({
           onClose={onCloseSearch}
         />
       ) : null}
+      {/* Ahead of the surface for Tab, which the terminal keeps; drawn below it. */}
+      <PastedImageStrip
+        key={terminalId}
+        terminalId={terminalId}
+        images={promptImages}
+        onOpen={(image) => {
+          setPeek(null)
+          setViewing(image)
+        }}
+      />
       <div className="terminal-surface" ref={hostRef} onFocus={onFocus} onMouseDown={onFocus} />
       {peek === null ? null : <PastedImagePeek peek={peek} />}
       {viewing === null ? null : <PastedImageViewer image={viewing} onClose={() => setViewing(null)} />}
@@ -343,6 +358,7 @@ type PaneEmulator = {
   fit: FitAddon
   search: SearchAddon
   gpu: { retry: () => void }
+  findImage: (index: number) => Promise<PastedImage | null>
   view: EmulatorView
   dispose: () => void
 }
@@ -406,8 +422,9 @@ function openEmulator(
   // `http:` and `https:`, the set the main process hands the OS.
   term.loadAddon(paneLinkAddon())
   const fileLinks = paneFileLinks(term, fileLinkHost(terminalId, modifier))
+  const findImage = pastedImageLookup((index) => runtimeClient.call('terminal.pastedImage', { terminalId, index }))
   const imageLinks = paneImageLinks(term, {
-    find: pastedImageLookup((index) => runtimeClient.call('terminal.pastedImage', { terminalId, index })),
+    find: findImage,
     hover: (image, event) => emulator.view.peekImage({ ...image, x: event.clientX, y: event.clientY }),
     leave: () => emulator.view.peekImage(null),
     open: (image) => emulator.view.openImage(image)
@@ -428,6 +445,7 @@ function openEmulator(
     fit,
     search,
     gpu,
+    findImage,
     view: {
       isAppChord: () => false,
       copyOnSelect: () => false,

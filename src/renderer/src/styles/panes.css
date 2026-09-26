@@ -230,6 +230,7 @@
    read. */
 .terminal-frame {
   display: flex;
+  flex-direction: column;
   position: relative;
   flex: 1;
   min-width: 0;
@@ -483,4 +484,142 @@ body.is-dragging-pane * {
   max-width: 240px;
   max-height: 180px;
   border-radius: var(--r1);
+}
+
+/* Images in the prompt being written. A row, not an overlay, so no text is covered: the pty is
+   refit when it appears and goes, at a paste and a submit, when Claude Code redraws anyway. */
+.image-strip {
+  display: flex;
+  order: 1;
+  flex: none;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+  padding: var(--s1) var(--s2) var(--s1) var(--s3);
+  border-top: 1px solid var(--line);
+  background: var(--bg-raised);
+  font-size: var(--text-xs);
+}
+
+.image-strip__list {
+  display: flex;
+  flex: 1;
+  gap: var(--s2);
+  min-width: 0;
+  margin: 0;
+  padding: 2px;
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.image-strip__item {
+  position: relative;
+  flex: none;
+}
+
+.image-strip__thumb {
+  display: block;
+  height: 52px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: var(--bg-panel);
+  cursor: zoom-in;
+}
+
+.image-strip__thumb img {
+  display: block;
+  height: 100%;
+  min-width: 32px;
+  max-width: 104px;
+  object-fit: cover;
+}
+
+.image-strip__n {
+  position: absolute;
+  bottom: 3px;
+  left: 3px;
+  padding: 0 4px;
+  border-radius: var(--r1);
+  background: rgb(0 0 0 / 68%);
+  color: #fff;
+  font-family: var(--font-mono);
+  line-height: 15px;
+  opacity: 0;
+}
+
+.image-strip__item:hover .image-strip__n,
+.image-strip__thumb:focus-visible .image-strip__n {
+  opacity: 1;
+}
+
+.image-strip__remove,
+.image-strip__minimize {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  cursor: pointer;
+}
+
+.image-strip__remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 68%);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 45%);
+  color: #fff;
+}
+
+.image-strip__remove:hover {
+  background: var(--danger);
+}
+
+.image-strip__minimize {
+  flex: none;
+  align-self: flex-start;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+}
+
+.image-strip__minimize:hover {
+  background: var(--bg-press);
+  color: var(--fg);
+}
+
+.image-strip__remove svg,
+.image-strip__minimize svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.image-strip--minimized {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.image-strip__chip {
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-secondary);
+  font: inherit;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.image-strip__chip:hover {
+  background: var(--bg-press);
+  color: var(--fg);
 }
