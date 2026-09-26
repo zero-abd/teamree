@@ -231,6 +231,7 @@ kbd {
 /* An asking pane's answers, wherever a row offers them. */
 .answers {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--s1);
 }

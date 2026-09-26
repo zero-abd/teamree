@@ -590,6 +590,22 @@ describe('stylesheets', () => {
     expect(opacities).toEqual(['var(--control-rest)'])
   })
 
+  // Answering is the most urgent thing on the row; under the pointer only, it also covered the question.
+  it.each([
+    ['sidebar.css', '.pane-item__answers'],
+    ['dashboard.css', '.board-item__answers']
+  ])('draws %s %s at rest, in flow, never over the question', (sheet, selector) => {
+    const hiding: string[] = []
+    postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkRules((rule) => {
+      if (!rule.selectors.some((each) => each.includes(selector))) return
+      rule.walkDecls((decl) => {
+        if (/^(visibility|opacity|display|position)$/.test(decl.prop) && /hidden|^0$|none|absolute/.test(decl.value))
+          hiding.push(`${rule.selector} { ${decl.prop}: ${decl.value} }`)
+      })
+    })
+    expect(hiding).toEqual([])
+  })
+
   it('draws resting controls at full strength where nothing can hover', () => {
     let value: string | undefined
     postcss.parse(readFileSync(path.join(here, 'tokens.css'), 'utf8')).walkAtRules('media', (media) => {

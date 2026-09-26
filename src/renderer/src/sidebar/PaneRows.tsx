@@ -35,6 +35,8 @@ type PaneRowsProps = {
   tree?: boolean
   /** Their tree level, one under their worktree's. */
   level?: number
+  /** An asking row's answers folded to one `Answer…` that opens the pane: another worktree is open and asks too. */
+  answerChip?: boolean
 }
 
 export function PaneRows({
@@ -45,10 +47,15 @@ export function PaneRows({
   now,
   onFocusTerminal,
   tree = false,
-  level = 3
+  level = 3,
+  answerChip = false
 }: PaneRowsProps): React.JSX.Element {
   const item = tree ? ({ role: 'treeitem', 'aria-level': level, tabIndex: -1 } as const) : {}
   const [reading, setReading] = useState<{ terminalId: string; subagent: Subagent } | null>(null)
+  // The row holding the focus; in the tree, only its answers join the Tab order.
+  const [focused, setFocused] = useState<string | null>(null)
+  const goToPane = (terminalId: string): void =>
+    void Promise.resolve(onFocusTerminal(terminalId)).then(() => requestRegionFocus('panes'))
   return (
     <ul className="panes" role={tree ? 'group' : undefined}>
       {rows.map((row) => {
@@ -58,8 +65,17 @@ export function PaneRows({
         const hands = typing.length > 0 ? typedBy(typing) : watchedBy(attention.watchers)
         const isUnread = unread.has(row.terminalId)
         const named = row.label !== worktreeName
+        const tabbable = !tree || focused === row.terminalId
         return (
-          <li key={row.terminalId} role={tree ? 'none' : undefined} className="pane-item">
+          <li
+            key={row.terminalId}
+            role={tree ? 'none' : undefined}
+            className="pane-item"
+            onFocus={() => setFocused(row.terminalId)}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setFocused(null)
+            }}
+          >
             <button
               type="button"
               {...item}
@@ -77,7 +93,7 @@ export function PaneRows({
               onKeyDown={(event) => {
                 if (event.key !== 'Enter' || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
                 event.preventDefault()
-                void Promise.resolve(onFocusTerminal(row.terminalId)).then(() => requestRegionFocus('panes'))
+                goToPane(row.terminalId)
               }}
             >
               <span className="pane-row__head">
@@ -104,8 +120,24 @@ export function PaneRows({
                 <PaneSince tone={dotTone(row.activity, row.agent)} quietFor={row.quietFor} />
               </span>
             </button>
-            {row.choices === undefined ? null : (
-              <AnswerButtons terminalId={row.terminalId} choices={row.choices} className="pane-item__answers" />
+            {row.choices === undefined ? null : answerChip ? (
+              <span className="pane-item__answers">
+                <button
+                  type="button"
+                  className="button button--tiny answers__choice"
+                  tabIndex={tabbable ? undefined : -1}
+                  onClick={() => goToPane(row.terminalId)}
+                >
+                  Answer…
+                </button>
+              </span>
+            ) : (
+              <AnswerButtons
+                terminalId={row.terminalId}
+                choices={row.choices}
+                className="pane-item__answers"
+                tabbable={tabbable}
+              />
             )}
             {row.subagents === undefined || row.subagents.length === 0 ? null : (
               <SubagentRows

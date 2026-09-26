@@ -24,7 +24,7 @@ import { useTreeKeys } from './treeKeys'
 import { moveWorktree } from './nestDrag'
 import { worktreesByProject } from './worktreeOrder'
 import { WorktreeRow, type TaskFold } from './WorktreeRow'
-import { agentRows, worktreeTone, type DotTone } from './agentRows'
+import { activityOf, agentRows, worktreeTone, type DotTone } from './agentRows'
 import { flattenTask, taskForest, taskTally, treeTone, type TaskNode } from './taskTree'
 import { isDoneStage, taskStages } from '../dashboard/taskRows'
 import { useTaskTreeStore } from '../state/taskTreeStore'
@@ -133,6 +133,10 @@ export function Sidebar({
   }, [collapsed, matching, paneList])
 
   const evidence = usePaneEvidence(onScreen, terminals)
+  // With more than one pane asking, only the open worktree's spell their answers out.
+  const askingPanes = onScreen.filter(
+    (terminal) => terminal.screenMenu !== undefined && activityOf(terminal) === 'waiting'
+  ).length
   // Asked once for the whole sidebar: a question about the window, not a row.
   const unread = useUnreadPanes()
   const watching = useWorkspaceStore((state) => state.watchers)
@@ -368,6 +372,7 @@ export function Sidebar({
                   now={now}
                   onFocusTerminal={(terminalId) => revealPane(worktree.id, terminalId)}
                   active={worktree.id === activeWorktreeId}
+                  answerChip={askingPanes > 1 && worktree.id !== activeWorktreeId}
                   onOpen={() => void openWorktree(worktree.id)}
                   onRetry={() => retryWorktree(worktree.id)}
                   onRemove={() => void removeWorktree(worktree.id)}

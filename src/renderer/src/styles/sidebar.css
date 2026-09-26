@@ -1008,31 +1008,14 @@
   color: var(--fg-secondary);
 }
 
-/* An asking pane's answers, laid over the tail of its row while the row is pointed at or focused. */
-.pane-item {
-  position: relative;
-}
-
+/* An asking pane's answers, at rest on a line of their own under the question, starting under its text. */
 .pane-item__answers {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  padding-left: var(--s4);
-  visibility: hidden;
-  background:
-    linear-gradient(to right, transparent, var(--bg-hover) var(--s4)),
-    linear-gradient(to right, transparent, var(--bg-rail) var(--s4));
+  padding: 1px var(--s2) var(--s1) calc(var(--s2) * 2 + 14px);
 }
 
 /* A row's height, not a toolbar's. */
 .pane-item__answers .answers__choice {
   padding-block: 0;
-}
-
-.pane-item:hover .pane-item__answers,
-.pane-item:focus-within .pane-item__answers {
-  visibility: visible;
 }
 
 .pane-row__label {

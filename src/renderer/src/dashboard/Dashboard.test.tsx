@@ -11,6 +11,7 @@
 // person is most likely to be in when it matters.
 
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConsentRequest, PaneConsent, Project, Terminal, Worktree } from '@shared/entities'
 
@@ -330,6 +331,36 @@ describe('answers on the board', () => {
     expect(groups).toHaveLength(1)
     expect([...groups[0]!.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Trust', 'Exit'])
     expect(groups[0]!.closest('li')?.querySelector('.board-row__state')?.textContent).toBe('asking')
+  })
+
+  // The same buttons as the sidebar's asking rows, reached with Tab from the row.
+  it('names each answer in a word, and reaches them with Tab from the row', async () => {
+    const user = userEvent.setup()
+    seed({
+      terminals: {
+        asks: {
+          ...PANE,
+          id: 'asks',
+          agent: 'claude',
+          screenSays: 'waiting',
+          screenMenu: {
+            prompt: 'p',
+            choices: [
+              { label: 'Yes', keys: ['\r'] },
+              { label: 'Yes, Always', keys: ['2'] },
+              { label: 'No…', keys: null }
+            ]
+          }
+        }
+      }
+    })
+    render(<Dashboard />)
+    const group = screen.getByRole('group', { name: 'Answer' })
+    expect([...group.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Yes', 'Always', 'No…'])
+    const row = group.closest('li')?.querySelector<HTMLElement>('.board-row')
+    row?.focus()
+    await user.tab()
+    expect(document.activeElement?.textContent).toBe('Yes')
   })
 })
 
