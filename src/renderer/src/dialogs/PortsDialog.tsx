@@ -11,13 +11,17 @@ export function PortsDialog(): React.JSX.Element {
   const terminals = useWorkspaceStore((state) => state.terminals)
   const worktrees = useWorkspaceStore((state) => state.worktrees)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
+  const stopRun = useWorkspaceStore((state) => state.stopRun)
   const all = Object.values(terminals)
   const entries = listPorts(all)
   const clashes = portClashes(all)
   const nameOf = (worktreeId: string): string => worktrees.find((entry) => entry.id === worktreeId)?.name ?? worktreeId
 
+  // A Run pane stops as its own Stop does; any other pane loses only the listening process.
   const stop = (entry: PortEntry): void => {
-    void runtimeClient.call('system.kill', { pid: entry.pid }).catch(() => undefined)
+    const run = terminals[entry.terminalId]?.run
+    if (run !== undefined) void stopRun(entry.worktreeId, run)
+    else void runtimeClient.call('system.kill', { pid: entry.pid }).catch(() => undefined)
   }
 
   return (

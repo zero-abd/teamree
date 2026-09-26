@@ -99,11 +99,21 @@ describe('the Ports dialog', () => {
     opened.mockRestore()
   })
 
-  it('stops the process that holds the port', () => {
+  it('stops the process that holds the port in any other pane', () => {
     seed([pane('t1', 'w1', 5173, 11)])
     render(<PortsDialog />)
     fireEvent.click(within(portRow(':5173', 'api-fix')).getByRole('button', { name: 'Stop' }))
     expect(call).toHaveBeenCalledWith('system.kill', { pid: 11 })
+  })
+
+  it('stops a Run Dev pane as its own Stop does', () => {
+    const stopRun = vi.fn(async () => {})
+    seed([{ ...pane('t1', 'w1', 5173, 11), run: 'dev' }])
+    useWorkspaceStore.setState({ stopRun })
+    render(<PortsDialog />)
+    fireEvent.click(within(portRow(':5173', 'api-fix')).getByRole('button', { name: 'Stop' }))
+    expect(stopRun).toHaveBeenCalledWith('w1', 'dev')
+    expect(call).not.toHaveBeenCalledWith('system.kill', expect.anything())
   })
 
   it('notes a port two worktrees hold', () => {

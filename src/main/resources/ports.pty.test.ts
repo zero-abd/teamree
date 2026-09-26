@@ -42,6 +42,10 @@ describePty('ports in a pane', () => {
       { port: Number(printed), pid: expect.any(Number), command: expect.stringMatching(/node/i) }
     ])
 
+    // Every snapshot carries them, or a resize's answer would wipe the row's chip.
+    const resized = await service.handlers['terminal.resize']({ terminalId: pane.id, cols: 100, rows: 30 })
+    expect(resized.ports?.map((entry) => entry.port)).toEqual([Number(printed)])
+
     await waitUntil(() => manager.list(WORKTREE)[0]?.ports === undefined, 'the port to go', 8_000)
   }, 20_000)
 })
