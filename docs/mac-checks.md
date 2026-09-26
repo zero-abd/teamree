@@ -76,10 +76,10 @@ The command itself, from a clean tree on `main`:
 ```sh
 rm -rf dist
 npm run release:dry-run      # every gate, nothing created
-npm run release              # the same, and then tags v0.3.1 and publishes
+npm run release              # the same, and then tags v0.4.0 and publishes
 ```
 
-Both default to the tag matching `package.json`, which is `v0.3.1`. The run
+Both default to the tag matching `package.json`, which is `v0.4.0`. The run
 prints the notes it is about to carry before it asks you to type the tag.
 
 One thing that is not a failure, so that it is not a surprise: the packaged app
