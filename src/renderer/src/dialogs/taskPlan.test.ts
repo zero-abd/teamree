@@ -62,6 +62,19 @@ describe('the plan the dialog submits', () => {
     ])
   })
 
+  it('carries each agent’s permission flags, and none for Default or a harness without modes', () => {
+    const gemini: InstalledAgent = { kind: 'gemini', command: 'gemini', binary: '/opt/bin/gemini' }
+    const creates = taskCreates('Rewrite the pager', [claude, codex, gemini], '', {
+      claude: 'bypass',
+      codex: 'default',
+      gemini: 'bypass'
+    })
+    expect(creates.map((create) => create.permissionArgs)).toEqual(['--dangerously-skip-permissions', undefined, undefined])
+    expect(taskCreates('Rewrite the pager', [codex], '', { codex: 'auto' })[0]?.permissionArgs).toBe(
+      '--sandbox workspace-write --ask-for-approval on-request'
+    )
+  })
+
   it('asks for the branch named by hand, one per run when there are several', () => {
     expect(taskCreates('Rewrite the pager', [claude], 'ada/pager')).toEqual([
       { name: 'Rewrite the pager', agentCommand: 'claude', task: 'Rewrite the pager', branch: 'ada/pager' }

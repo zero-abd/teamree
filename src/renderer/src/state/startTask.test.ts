@@ -250,3 +250,34 @@ it(
     }
   }
 )
+
+// The mode's flags go on the command itself; what Settings always passes stays in `agentArgs`, after them.
+it('launches the agent in the permission mode the composer chose', { timeout: 20_000 }, async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const stop = store.startWatching()
+  const call = vi.spyOn(runtimeClient, 'call')
+  try {
+    const projectId = useWorkspaceStore.getState().projects[0]!.id
+    const claude = (await runtimeClient.call('agent.list', {})).find((agent) => agent.kind === 'claude')!
+    useWorkspaceStore.setState({ agentArgs: { claude: '--model opus' } })
+
+    store.startTask({ projectId, creates: taskCreates('Skip the prompts', [claude], '', { claude: 'bypass' }) })
+
+    await until(
+      () => call.mock.calls.some(([method]) => method === 'terminal.create'),
+      'the agent to be started'
+    )
+    const pane = call.mock.calls.find(([method]) => method === 'terminal.create')![1]
+    expect(pane).toEqual(
+      expect.objectContaining({
+        command: `${claude.command} --dangerously-skip-permissions`,
+        agentArgs: '--model opus'
+      })
+    )
+  } finally {
+    call.mockRestore()
+    useWorkspaceStore.setState({ agentArgs: {} })
+    stop()
+  }
+})

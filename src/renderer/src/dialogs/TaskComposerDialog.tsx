@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { MAX_AGENT_ARGS_CHARS } from '@shared/agentLaunch'
+import { permissionModesFor } from '@shared/permissionMode'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { AgentSteppers } from './AgentSteppers'
 import { BranchField } from './BranchField'
@@ -19,7 +20,8 @@ import {
   taskCreates,
   taskName,
   taskPlanNote,
-  type AgentCounts
+  type AgentCounts,
+  type AgentModes
 } from './taskPlan'
 import { useStartPoints } from './useStartPoints'
 
@@ -32,10 +34,14 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   const defaultAgent = useWorkspaceStore((state) => state.defaultAgent)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
   const worktrees = useWorkspaceStore((state) => state.worktrees)
+  const permissionModes = useWorkspaceStore((state) => state.permissionModes)
+  const rememberPermissionModes = useWorkspaceStore((state) => state.rememberPermissionModes)
 
   const [projectId, setProjectId] = useState(openedFor)
   const [task, setTask] = useState('')
   const [agentCounts, setAgentCounts] = useState<AgentCounts | null>(null)
+  // Picked in this dialog; the rest follow what the project last started with.
+  const [modeEdits, setModeEdits] = useState<AgentModes>({})
   const [startPoint, setStartPoint] = useState<StartPointValue>({ text: '', option: null })
   const [touched, setTouched] = useState(false)
   // A branch typed by hand, kept while the task is edited; null follows the task.
@@ -67,6 +73,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   // Null until the user steps something, so the preselection never overwrites an early choice.
   const counts = agentCounts ?? defaultAgentCounts(agents, defaultAgent)
   const selection = fanOut(agents, counts)
+  const modes: AgentModes = { ...permissionModes[projectId], ...modeEdits }
 
   // Taken names: local branches the listing carries, and branches of worktrees the app already has.
   const existing = [
@@ -76,7 +83,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
     ...worktrees.filter((worktree) => worktree.projectId === projectId).map((worktree) => worktree.branch)
   ]
   const hasTask = task.trim().length > 0
-  const creates = taskCreates(task, selection, branchEdit?.trim() ?? '')
+  const creates = taskCreates(task, selection, branchEdit?.trim() ?? '', modes)
   const planned = hasTask ? plannedBranches(creates, existing) : []
   // One run shows its exact branch, suffix included; several show the stem their names share.
   const derived = !hasTask
@@ -92,6 +99,12 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
 
   const submit = (): void => {
     if (!canSubmit) return
+    const used = Object.fromEntries(
+      selection
+        .filter((agent) => permissionModesFor(agent.kind).length > 0)
+        .map((agent) => [agent.kind, modes[agent.kind] ?? 'default'])
+    )
+    rememberPermissionModes(projectId, used)
     startTask({ projectId, startedFrom, creates })
   }
 
@@ -134,7 +147,13 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
           ) : null}
         </label>
 
-        <AgentSteppers agents={agents} counts={counts} onChange={setAgentCounts} />
+        <AgentSteppers
+          agents={agents}
+          counts={counts}
+          onChange={setAgentCounts}
+          modes={modes}
+          onMode={(kind, mode) => setModeEdits({ ...modeEdits, [kind]: mode })}
+        />
 
         <div className="form__where">
           <label className="field">

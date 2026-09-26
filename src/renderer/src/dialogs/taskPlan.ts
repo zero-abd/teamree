@@ -3,6 +3,7 @@
 
 import { allocateBranchName, branchCollides, isValidBranchName, taskNamesForAgents } from '@shared/branchName'
 import type { InstalledAgent } from '@shared/entities'
+import { permissionArgs, type PermissionMode } from '@shared/permissionMode'
 import { harnessName } from '../agents/harnesses'
 
 /** How many runs of one agent a single task may ask for. */
@@ -19,11 +20,16 @@ export function agentByKind(agents: readonly InstalledAgent[], kind: string): In
 /** How many of each agent to start, keyed by agent kind. */
 export type AgentCounts = Readonly<Record<string, number>>
 
+/** The permission mode each agent starts in, keyed by agent kind; absent is Default. */
+export type AgentModes = Readonly<Record<string, PermissionMode>>
+
 /** One worktree to create, and what to run in it. */
 export type TaskCreate = {
   name: string
   /** Absent means the worktree alone. */
   agentCommand?: string
+  /** The chosen permission mode's flags; absent for Default. */
+  permissionArgs?: string
   /** The description as typed: the agent's first prompt, and the worktree's record of what it is for. */
   task: string
   /** A branch named by hand; absent, the runtime makes one from `name`. */
@@ -107,16 +113,24 @@ export function fanOut(agents: readonly InstalledAgent[], counts: AgentCounts): 
  * One create per selected agent, named by the shared suffix rule; an empty selection is the worktree alone.
  * A `branch` named by hand is suffixed the same way, `pager-codex`, so several runs never ask for one branch.
  */
-export function taskCreates(task: string, selection: readonly InstalledAgent[], branch = ''): TaskCreate[] {
+export function taskCreates(
+  task: string,
+  selection: readonly InstalledAgent[],
+  branch = '',
+  modes: AgentModes = {}
+): TaskCreate[] {
   const commands = selection.map((agent) => agent.command)
   const text = task.trim()
   const branches = branch === '' ? [] : taskNamesForAgents(branch, commands).map((each) => each.replaceAll(' ', '-'))
   return taskNamesForAgents(taskName(text), commands).map((name, index) => {
     const agentCommand = commands[index]
+    const kind = selection[index]?.kind
+    const flags = kind === undefined ? '' : permissionArgs(kind, modes[kind] ?? 'default')
     const named = branches[index]
     return {
       name,
       ...(agentCommand === undefined ? {} : { agentCommand }),
+      ...(flags === '' ? {} : { permissionArgs: flags }),
       task: text,
       ...(named === undefined ? {} : { branch: named })
     }
