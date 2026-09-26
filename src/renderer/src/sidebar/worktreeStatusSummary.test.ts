@@ -47,6 +47,12 @@ describe('summarizeWorktreeStatus', () => {
     expect(summarizeWorktreeStatus(status({ behind: 1 }))?.description).toBe('1 behind')
   })
 
+  // Zeros read from no checkout are not a clean tree.
+  it('says a missing checkout is missing, never clean or in sync', () => {
+    const summary = summarizeWorktreeStatus(status({ missing: true }))
+    expect([summary?.description, summary?.tone]).toEqual(['missing', 'conflict'])
+  })
+
   it('describes divergence in reading order', () => {
     expect(summarizeWorktreeStatus(status({ ahead: 2, behind: 3, unstaged: 1 }))?.description).toBe(
       '2 ahead · 3 behind · 1 uncommitted'

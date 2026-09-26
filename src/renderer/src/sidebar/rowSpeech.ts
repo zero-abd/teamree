@@ -41,12 +41,13 @@ export function rowSpeech(facts: RowFacts): string {
   const summary = summarizeWorktreeStatus(facts.status, facts.child === true)
   const counts = summary?.description.split(' · ').filter((part) => part !== 'clean, in sync') ?? []
   const ports = facts.ports ?? []
+  const missing = facts.lifecycle === 'missing' || facts.status?.missing === true
   return [
-    facts.lifecycle,
+    missing ? 'checkout missing' : facts.lifecycle,
     facts.tone ? stateWord(facts.tone, facts.question ?? null) + (facts.from ? ` in ${facts.from}` : '') : null,
     facts.unread ? 'unread' : null,
     facts.branch === undefined ? null : `branch ${facts.branch}`,
-    ...counts,
+    ...(missing ? [] : counts),
     facts.ignored ? `${facts.ignored} ignored` : null,
     facts.landed ?? (facts.merge === undefined ? null : mergeWords(facts.merge)),
     facts.pull === undefined ? null : pullWords(facts.pull),

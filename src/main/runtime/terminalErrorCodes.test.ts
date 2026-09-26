@@ -99,6 +99,14 @@ describe('terminal error codes on the wire', () => {
     expect(error.code).toBe(ErrorCode.NotFound)
   })
 
+  it('says the checkout is missing when the worktree folder is gone, rather than naming a cwd', async () => {
+    const { dispatch, checkout } = await harness()
+    await rm(checkout, { recursive: true, force: true })
+
+    const error = await errorFrom(dispatch, 'terminal.create', { worktreeId: WORKTREE, command: 'claude' })
+    expect([error.code, error.message]).toEqual([ErrorCode.NotFound, 'Checkout missing'])
+  })
+
   it('reports a pane tree that is not one as invalid_params', async () => {
     const { dispatch } = await harness()
 

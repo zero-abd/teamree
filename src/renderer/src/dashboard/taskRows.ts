@@ -17,7 +17,7 @@ import { worktreeDisplay } from '../sidebar/worktreeDisplay'
 import { worktreesByProject } from '../sidebar/worktreeOrder'
 
 export type StageFacts = {
-  worktree: Pick<Worktree, 'state' | 'report'>
+  worktree: Pick<Worktree, 'state' | 'report' | 'missing'>
   /** Its panes rolled into one dot, `worktreeTone`. */
   tone: DotTone | null
   status?: Pick<WorktreeStatus, 'staged' | 'unstaged' | 'untracked' | 'conflicted'>
@@ -29,6 +29,8 @@ export type StageFacts = {
 /** A pane asking or working outranks a report or a landing: an agent asked again after `done` is asking. */
 export function taskStage({ worktree, tone, status, ahead, landed }: StageFacts): TaskStage {
   if (worktree.state === 'failed') return 'failed'
+  // Nothing on disk to be clean, ready or working in.
+  if (worktree.missing === true) return 'missing'
   if (worktree.state === 'creating' || tone === 'working') return 'working'
   if (tone === 'waiting') return 'asking'
   if (landed) return 'landed'

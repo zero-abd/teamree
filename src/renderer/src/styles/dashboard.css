@@ -46,7 +46,8 @@
   color: var(--fg);
 }
 
-.board-filter__number--failed {
+.board-filter__number--failed,
+.board-filter__number--missing {
   color: var(--danger);
 }
 
@@ -255,7 +256,8 @@
   color: var(--warning);
 }
 
-.task-row--failed .task-row__stage {
+.task-row--failed .task-row__stage,
+.task-row--missing .task-row__stage {
   color: var(--danger);
 }
 

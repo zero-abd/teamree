@@ -18,6 +18,7 @@ import { headerActions, landLabel, landNote, landOffer, pushOffer, type HeaderAc
 import { PullRequestChecks } from './PullRequestChecks'
 import type { PaneNode, Worktree, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 import { fileColumnIn, isCommitLeaf, shownTabId } from '@shared/filePane'
+import { CheckoutMissing } from '../CheckoutMissing'
 import { askerOf, conflictHeadline, updateSides } from './conflictState'
 import { TokensLine } from './TokensLine'
 import { ContextSection } from './ContextSection'
@@ -74,8 +75,20 @@ export function ChangesTab(): React.JSX.Element | null {
   const [menu, setMenu] = useState<{ path: string; at: RowMenuAnchor } | null>(null)
   const [moreAt, setMoreAt] = useState<{ at: RowMenuAnchor; opener: HTMLElement } | null>(null)
   const { message, from, setMessage } = useCommitMessage(worktreeId)
+  const checkoutPath = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId)?.path)
+  const missing = useWorkspaceStore((state) =>
+    state.worktrees.some((entry) => entry.id === worktreeId && entry.missing === true)
+  )
 
   if (!worktreeId) return null
+  // No list is coming, and zeros from no checkout are not a clean tree.
+  if (missing || status?.missing === true) {
+    return (
+      <section className="changes" aria-label="Changes in this worktree">
+        <CheckoutMissing worktree={{ id: worktreeId, path: checkoutPath ?? '' }} />
+      </section>
+    )
+  }
 
   const sides = updateSides(worktrees, projects, worktreeId)
 
@@ -149,7 +162,7 @@ export function ChangesTab(): React.JSX.Element | null {
 
   return (
     <section className="changes" aria-label="Changes in this worktree">
-      {status && !status.missing ? (
+      {status ? (
         <div className="changes__head">
           <span className="changes__ref" title={`↑ ${status.upstream ?? log?.baseRef ?? ''}  ↓ ${log?.baseRef ?? ''}`}>
             <span className="changes__branch">{status.branch}</span>
@@ -198,7 +211,7 @@ export function ChangesTab(): React.JSX.Element | null {
           )}
         </div>
       ) : null}
-      {status && !status.missing && landing?.pullRequest !== undefined && landing.pullRequest.state !== 'merged' ? (
+      {status && landing?.pullRequest !== undefined && landing.pullRequest.state !== 'merged' ? (
         <PullRequestChecks worktreeId={worktreeId} pull={landing.pullRequest} />
       ) : null}
       {worktreeId === null

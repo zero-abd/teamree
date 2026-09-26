@@ -1236,6 +1236,38 @@ textarea.changes__message {
   white-space: nowrap;
 }
 
+/* A checkout gone from disk: across the top of the worktree, and in place of the Changes list. */
+.checkout-missing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-raised);
+}
+
+.checkout-missing__label {
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.checkout-missing__path {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.checkout-missing__actions {
+  display: flex;
+  gap: var(--s2);
+}
+
 .setup-ask__field {
   padding: 0 var(--s1);
   border: 1px solid var(--line);

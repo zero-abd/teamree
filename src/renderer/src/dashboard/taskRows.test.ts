@@ -70,7 +70,8 @@ describe('a task’s stage, derived and never set', () => {
     ['landed', facts({ landed: true, worktree: { state: 'ready', report: done('succeeded') } })],
     ['failed', facts({ tone: 'failed' })],
     ['failed', facts({ worktree: { state: 'failed' } })],
-    ['working', facts({ worktree: { state: 'creating' } })]
+    ['working', facts({ worktree: { state: 'creating' } })],
+    ['missing', facts({ tone: 'quiet', ahead: 2, status: clean, worktree: { state: 'ready', missing: true } })]
   ] as const)('is %s', (stage, input) => {
     expect(taskStage(input)).toBe(stage)
   })

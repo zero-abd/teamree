@@ -131,7 +131,8 @@ describe('what a worktree row says', () => {
 
   it('says a row that is not a checkout yet, or any more', () => {
     expect(rowSpeech({ lifecycle: 'creating' })).toBe('creating')
-    expect(rowSpeech({ lifecycle: 'missing' })).toBe('missing')
+    expect(rowSpeech({ lifecycle: 'missing' })).toBe('checkout missing')
+    expect(rowSpeech({ status: status({ missing: true }) })).toBe('checkout missing')
     expect(rowSpeech({ lifecycle: 'failed', report: null })).toBe('failed')
   })
 })

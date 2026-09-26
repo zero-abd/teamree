@@ -287,6 +287,7 @@ describe('dispatcher', () => {
       'worktree.keep',
       'worktree.landing',
       'worktree.list',
+      'worktree.locate',
       'worktree.log',
       'worktree.mergeIntoBase',
       'worktree.mergePreview',
@@ -296,6 +297,7 @@ describe('dispatcher', () => {
       // Local: runs this machine's gh, with its credentials.
       'worktree.pullRequests',
       'worktree.push',
+      'worktree.recreate',
       'worktree.remove',
       'worktree.removed',
       'worktree.rename',

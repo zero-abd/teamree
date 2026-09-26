@@ -621,6 +621,10 @@ type WorkspaceState = {
   loadRemovedWorktrees: () => Promise<void>
   /** Checks a removed worktree out again with its uncommitted work, and opens it. */
   restoreWorktree: (projectId: string, removedId: string) => Promise<void>
+  /** A missing checkout's branch, checked out again where it was. */
+  recreateCheckout: (worktreeId: string) => Promise<void>
+  /** A missing checkout's record pointed at the folder picked for it. */
+  locateCheckout: (worktreeId: string) => Promise<void>
   undo: (target: UndoTarget) => Promise<void>
 
   openWorktree: (worktreeId: string) => Promise<void>
@@ -1717,6 +1721,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     set((state) => ({ worktrees: state.worktrees.filter((entry) => entry.id !== worktreeId) }))
   }
 
+  /** A checkout back on disk: its record, and a fresh status in place of the missing one. */
+  const putCheckout = (worktree: Worktree): void => {
+    set((state) => ({ worktrees: state.worktrees.map((entry) => (entry.id === worktree.id ? worktree : entry)) }))
+    refresher.request(refreshTargets({ statuses: [worktree.id] }))
+  }
+
   const putBack = (worktree: Worktree, removedId: string): void => {
     set((state) => ({
       worktrees: [...state.worktrees.filter((entry) => entry.id !== worktree.id), worktree],
@@ -2249,6 +2259,32 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         await get().openWorktree(worktree.id)
       } catch (error) {
         failed('Could not restore the worktree')(error)
+      }
+    },
+
+    async recreateCheckout(worktreeId) {
+      try {
+        putCheckout(await runtimeClient.call('worktree.recreate', { worktreeId }))
+      } catch (error) {
+        failed('Could not restore the checkout')(error)
+      }
+    },
+
+    async locateCheckout(worktreeId) {
+      const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
+      if (worktree === undefined || picking) return
+      picking = true
+      let picked: string | null
+      try {
+        picked = await window.teamree.chooseFolder(parentFolder(worktree.path))
+      } finally {
+        picking = false
+      }
+      if (picked === null) return
+      try {
+        putCheckout(await runtimeClient.call('worktree.locate', { worktreeId, path: picked }))
+      } catch (error) {
+        failed('Could not use that folder')(error)
       }
     },
 
@@ -4384,3 +4420,9 @@ function keptFor<T>(byWorktree: Record<string, T>, live: Set<string>): Record<st
 }
 
 export type { Worktree, WorktreeStatus, Project, Terminal, Layout }
+
+/** The folder holding `path`, where a moved checkout's picker starts. */
+function parentFolder(path: string): string {
+  const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+  return cut <= 0 ? path : path.slice(0, cut)
+}
