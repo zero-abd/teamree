@@ -93,20 +93,7 @@ it('opens an agent pane at the measured size too', async () => {
   call.mockRestore()
 })
 
-it('opens nothing, and says so, when no pane would have room', async () => {
-  const worktreeId = await openedWorktree()
-  measurement.size = 'full'
-
-  const call = vi.spyOn(runtimeClient, 'call')
-  await useWorkspaceStore.getState().createTerminal(worktreeId)
-  await useWorkspaceStore.getState().startAgent('claude')
-
-  expect(createCalls(call as unknown as Calls)).toEqual([])
-  expect(useWorkspaceStore.getState().notices.at(-1)?.text).toBe('No room for another pane')
-  call.mockRestore()
-})
-
-it('refuses a split that would leave a pane under the minimum, in the direction asked for only', async () => {
+it('splits only in a direction that leaves every pane its minimum; else opens a new pane', async () => {
   const worktreeId = await openedWorktree()
   measurement.grid = { area: { width: 600, height: 800 }, minPane: MIN_PANE, cell: { width: 8, height: 17 } }
   const focused = useWorkspaceStore.getState().layouts[worktreeId]!.focusedTerminalId!
@@ -118,12 +105,13 @@ it('refuses a split that would leave a pane under the minimum, in the direction 
   }))
 
   const call = vi.spyOn(runtimeClient, 'call')
-  await useWorkspaceStore.getState().splitFocusedPane('row')
-  expect(call.mock.calls.filter(([method]) => method === 'terminal.split')).toEqual([])
-  expect(useWorkspaceStore.getState().notices.at(-1)?.text).toBe('No room for another pane')
-
   await useWorkspaceStore.getState().splitFocusedPane('column')
   expect(call.mock.calls.filter(([method]) => method === 'terminal.split')).toHaveLength(1)
+
+  // Beside the new half, 600px across leaves neither side its 337px.
+  await useWorkspaceStore.getState().splitFocusedPane('row')
+  expect(call.mock.calls.filter(([method]) => method === 'terminal.split')).toHaveLength(1)
+  expect(createCalls(call as unknown as Calls)).toHaveLength(1)
   call.mockRestore()
   measurement.grid = undefined
 })

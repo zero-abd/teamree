@@ -15,6 +15,7 @@ import { SettingsView } from '../settings/SettingsView'
 import { TeamworkView } from '../teamwork/TeamworkView'
 import { measureCell, minPaneBox } from '../terminal/paneMetrics'
 import { WatchedPaneView } from '../terminal/WatchedPaneView'
+import { CoveredPanes } from './CoveredPanes'
 import { RightPanel } from './rightPanel/RightPanel'
 import { SetupAsk } from './SetupAsk'
 import { SetupOffer } from './SetupOffer'
@@ -229,6 +230,7 @@ function WorkspaceView({
           )}
         </div>
 
+        <CoveredPanes grid={grid} root={drawnRoot} worktree={worktree} />
         <RightPanel />
       </div>
     </main>

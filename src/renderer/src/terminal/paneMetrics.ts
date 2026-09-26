@@ -41,6 +41,12 @@ export function roomForNewPane(root: PaneNode | null, cell: Box, area: Box): New
   return size === undefined ? 'full' : { ...size, area, minPane, cell }
 }
 
+/** A pane opened zoomed, alone on `area`: what a pane with no room anywhere gets instead of a refusal. */
+export function zoomedPaneSize(area: Box, cell: Box): PaneSize {
+  const probe: PaneNode = { kind: 'leaf', terminalId: PROBE_ID }
+  return paneCellsIn(probe, PROBE_ID, area, cell) ?? { cols: MIN_PANE_CELLS.cols, rows: MIN_PANE_CELLS.rows }
+}
+
 /**
  * One cell of pane text as xterm will draw it, measured the way xterm measures the character.
  * Undefined when there is nothing to measure; callers then send no size.
