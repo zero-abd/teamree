@@ -29,6 +29,7 @@ import type {
   Worktree,
   WorktreeChange,
   WorktreeChanges,
+  WorktreeCleanup,
   WorktreeCommitSummary,
   WorktreeKeep,
   WorktreeLanding,
@@ -207,6 +208,8 @@ export type DialogState =
   | { kind: 'confirm-merge'; worktreeId: string }
   /** Keeping one run of a task and removing the others; `refused` once the runtime has refused one unforced. */
   | { kind: 'confirm-keep'; worktreeId: string; refused?: true }
+  /** Clean Up Merged: a project's landed worktrees, as a checklist. */
+  | { kind: 'clean-up'; projectId: string }
   /** An invitation link, opened or pasted, asking where to join from. */
   | { kind: 'join-team'; invitation: Invitation }
   /** A worktree on an existing branch; `pullRequests` lists open pull requests instead of branches. */
@@ -255,9 +258,10 @@ export type Notice = {
   action?: { label: string; url: string } | { label: string; hide: keyof Sides } | { label: string; undo: UndoTarget }
 }
 
-/** What an Undo puts back: a removed worktree, or one discard's paths. */
+/** What an Undo puts back: removed worktrees (`removedIds` parents first), or one discard's paths. */
 export type UndoTarget =
   | { kind: 'remove'; projectId: string; removedId: string }
+  | { kind: 'remove-many'; projectId: string; removedIds: string[] }
   | { kind: 'discard'; worktreeId: string; trashId: string }
 
 /** The last push of one worktree, as the Changes tab shows it. A failure is one clause, and git's words. */
@@ -542,6 +546,8 @@ type WorkspaceState = {
   removeWorktree: (worktreeId: string) => Promise<void>
   /** The answer to that question; unforced, a refusal asks again. */
   confirmRemoveWorktree: (worktreeId: string, force: boolean) => Promise<void>
+  /** Removes those of `worktreeIds` that have landed, in one call, with one Undo for all. */
+  confirmCleanUp: (projectId: string, worktreeIds: readonly string[]) => Promise<void>
   /** Asks first, after any unsaved files; nothing is forgotten until `confirmForget`. */
   removeFromTeamree: (target: RemoveTarget) => Promise<void>
   /** Forgets it in the runtime, then here; the disk is left alone. */
@@ -1404,6 +1410,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     set((state) => ({ worktrees: state.worktrees.filter((entry) => entry.id !== worktreeId) }))
   }
 
+  const putBack = (worktree: Worktree, removedId: string): void => {
+    set((state) => ({
+      worktrees: [...state.worktrees.filter((entry) => entry.id !== worktree.id), worktree],
+      removedWorktrees: state.removedWorktrees.filter((entry) => entry.id !== removedId)
+    }))
+  }
+
   const forgetProject = (projectId: string): void => {
     for (const worktree of get().worktrees) if (worktree.projectId === projectId) forgetWorktree(worktree.id)
     set((state) => ({ projects: state.projects.filter((entry) => entry.id !== projectId) }))
@@ -1889,6 +1902,29 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
+    async confirmCleanUp(projectId, worktreeIds) {
+      set({ dialog: null })
+      let cleanup: WorktreeCleanup
+      try {
+        cleanup = await runtimeClient.call('worktree.cleanMerged', { projectId, worktreeIds: [...worktreeIds] })
+      } catch (error) {
+        failed('Could not clean up')(error)
+        return
+      }
+      for (const { worktree } of cleanup.removed) forgetWorktree(worktree.id)
+      const [first] = cleanup.kept
+      if (cleanup.removed.length === 0) {
+        if (first !== undefined) notify(`Nothing removed: ${first.reason}`)
+        return
+      }
+      const count = cleanup.removed.length
+      const kept = cleanup.kept.length > 0 ? ` · ${cleanup.kept.length} kept` : ''
+      // Parents first on the way back, so each child finds its parent.
+      const removedIds = cleanup.removed.flatMap((entry) => (entry.trashId === undefined ? [] : [entry.trashId]))
+      const undo: UndoTarget = { kind: 'remove-many', projectId, removedIds: removedIds.reverse() }
+      notify(`Removed ${count} worktree${count === 1 ? '' : 's'}${kept}`, 'info', { label: 'Undo', undo })
+    },
+
     async loadRemovedWorktrees() {
       // Silent: the lists that read it are menus, and an empty one says as much.
       const removed = await runtimeClient.call('worktree.removed', {}).catch(() => null)
@@ -1898,10 +1934,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     async restoreWorktree(projectId, removedId) {
       try {
         const worktree = await runtimeClient.call('worktree.restore', { projectId, removedId })
-        set((state) => ({
-          worktrees: [...state.worktrees.filter((entry) => entry.id !== worktree.id), worktree],
-          removedWorktrees: state.removedWorktrees.filter((entry) => entry.id !== removedId)
-        }))
+        putBack(worktree, removedId)
         await get().openWorktree(worktree.id)
       } catch (error) {
         failed('Could not restore the worktree')(error)
@@ -1911,6 +1944,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     async undo(target) {
       if (target.kind === 'remove') {
         await get().restoreWorktree(target.projectId, target.removedId)
+        return
+      }
+      if (target.kind === 'remove-many') {
+        let missed = 0
+        for (const removedId of target.removedIds) {
+          try {
+            putBack(await runtimeClient.call('worktree.restore', { projectId: target.projectId, removedId }), removedId)
+          } catch {
+            missed += 1
+          }
+        }
+        if (missed > 0) notify(`Could not restore ${missed} worktree${missed === 1 ? '' : 's'}`)
         return
       }
       try {

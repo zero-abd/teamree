@@ -44,6 +44,8 @@ export type PaletteAction =
   | `compare:${string}`
   /** A removed worktree to check out again, by its `RemovedWorktree.id`. */
   | `restore:${string}`
+  /** Clean Up Merged… for a project, by its id. */
+  | `clean-up:${string}`
 
 /** What the sidebar row's menu does to the worktree on screen. */
 type WorktreeAction =
@@ -110,6 +112,8 @@ export type PaletteContext = {
   land?: LandOffer | null
   /** Removed worktrees that can be restored, newest first. */
   removed?: readonly RemovedWorktree[]
+  /** Projects with a merged worktree; absent reads as every project. */
+  merged?: ReadonlySet<string>
   /** Which way the panel toggles read; absent reads as shown. */
   sidebarVisible?: boolean
   rightPanelOpen?: boolean
@@ -152,6 +156,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
   const rows: ActionRow[] = [
     ...commandActions(context),
     ...restoreActions(context),
+    ...cleanUpActions(context),
     ...ACTIONS,
     ...updateActions(context),
     ...appearanceActions(context)
@@ -281,6 +286,17 @@ function restoreActions(context: PaletteContext): ActionRow[] {
     label: `Restore Worktree: ${worktreeLabel(worktreeDisplay(removed))}`,
     keywords: `restore undo removed deleted worktree bring back ${removed.branch}`,
     hint: agoLabel(now - removed.removedAt)
+  }))
+}
+
+/** Clean Up Merged… per project, its name as the hint. */
+function cleanUpActions(context: PaletteContext): ActionRow[] {
+  return context.projects.map((project) => ({
+    id: `clean-up:${project.id}` as const,
+    label: 'Clean Up Merged…',
+    keywords: 'clean up remove delete merged landed finished worktrees prune tidy',
+    hint: project.name,
+    ...(context.merged === undefined || context.merged.has(project.id) ? {} : { unavailable: 'nothing merged' })
   }))
 }
 

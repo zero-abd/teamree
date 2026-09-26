@@ -22,6 +22,7 @@ import { ConfirmRemoveDialog } from './dialogs/ConfirmRemoveDialog'
 import { ConfirmForgetDialog } from './dialogs/ConfirmForgetDialog'
 import { ConfirmTrashProjectDialog } from './dialogs/ConfirmTrashProjectDialog'
 import { ConfirmMergeDialog } from './dialogs/ConfirmMergeDialog'
+import { ConfirmCleanUpDialog } from './dialogs/ConfirmCleanUpDialog'
 import { ConfirmKeepDialog } from './dialogs/ConfirmKeepDialog'
 import { ConfirmRebaseDialog } from './dialogs/ConfirmRebaseDialog'
 import { MoveUnderDialog } from './dialogs/MoveUnderDialog'
@@ -185,6 +186,7 @@ export function App(): React.JSX.Element {
       {dialog?.kind === 'confirm-rebase' ? (
         <ConfirmRebaseDialog worktreeId={dialog.worktreeId} parentId={dialog.parentId} />
       ) : null}
+      {dialog?.kind === 'clean-up' ? <ConfirmCleanUpDialog projectId={dialog.projectId} /> : null}
       {dialog?.kind === 'confirm-close-pane' ? <ConfirmClosePaneDialog terminalId={dialog.terminalId} /> : null}
       {dialog?.kind === 'confirm-close-file' ? <ConfirmCloseFileDialog terminalId={dialog.terminalId} /> : null}
       {dialog?.kind === 'confirm-unsaved' ? <ConfirmUnsavedDialog paneIds={dialog.paneIds} /> : null}

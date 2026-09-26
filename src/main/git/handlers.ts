@@ -50,6 +50,7 @@ export const GIT_METHODS = [
   'worktree.createPullRequest',
   'worktree.mergeIntoBase',
   'worktree.keep',
+  'worktree.cleanMerged',
   'worktree.startPoints',
   'worktree.branches',
   'worktree.pullRequests',
@@ -115,6 +116,7 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'worktree.createPullRequest': (params) => service.worktreeCreatePullRequest(params),
     'worktree.mergeIntoBase': (params) => service.worktreeMergeIntoBase(params),
     'worktree.keep': (params) => service.keepWorktree(params),
+    'worktree.cleanMerged': (params) => service.cleanMerged(params),
     'worktree.startPoints': (params) =>
       service.listStartPoints(params.projectId, params.limit === undefined ? {} : { limit: params.limit }),
     'worktree.branches': (params) => service.listBranches(params),
@@ -171,6 +173,7 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   )
   registry.register('worktree.mergeIntoBase', Params.worktreeMergeIntoBase, handlers['worktree.mergeIntoBase'])
   registry.register('worktree.keep', Params.worktreeKeep, handlers['worktree.keep'])
+  registry.register('worktree.cleanMerged', Params.worktreeCleanMerged, handlers['worktree.cleanMerged'])
   registry.register('worktree.startPoints', Params.worktreeStartPoints, handlers['worktree.startPoints'])
   registry.register('worktree.branches', Params.worktreeBranches, handlers['worktree.branches'])
   registry.register('worktree.pullRequests', Params.worktreePullRequests, handlers['worktree.pullRequests'])

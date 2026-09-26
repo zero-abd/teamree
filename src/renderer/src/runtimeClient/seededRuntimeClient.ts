@@ -1020,6 +1020,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
     // Nothing the seeded runtime removes is kept.
     'worktree.removed': () => [],
+    // No git here: nothing has landed.
+    'worktree.cleanMerged': ({ projectId, dryRun }) => ({ projectId, dryRun: dryRun === true, removed: [], kept: [] }),
     'worktree.restore': () => {
       throw new Error('the seeded runtime keeps no removed worktrees')
     },

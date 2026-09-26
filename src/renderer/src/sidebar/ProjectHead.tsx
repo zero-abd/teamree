@@ -43,6 +43,10 @@ export function ProjectHead({
   const restoreWorktree = useWorkspaceStore((state) => state.restoreWorktree)
   // A row dropped here goes to the top level.
   const drop = useNestDrop({ projectId: project.id }, false)
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
+  const anyMerged = useWorkspaceStore((state) =>
+    state.worktrees.some((worktree) => worktree.projectId === project.id && state.landings[worktree.id]?.merged)
+  )
   const openMenu = (anchor: RowMenuAnchor): void => {
     setMenuAt(anchor)
     void loadRemovedWorktrees()
@@ -59,6 +63,9 @@ export function ProjectHead({
     { label: 'Open Branch…', onChoose: () => onOpenBranch(false) },
     { label: 'Check Out Pull Request…', onChoose: () => onOpenBranch(true) },
     ...(removed.length === 0 ? [] : [{ label: 'Recently Removed', items: removed, onChoose: () => {} }]),
+    ...(anyMerged
+      ? [{ label: 'Clean Up Merged…', onChoose: () => openDialog({ kind: 'clean-up', projectId: project.id }) }]
+      : []),
     { label: 'Remove from teamree', onChoose: onForget, separated: true },
     { label: 'Move to Trash…', onChoose: onTrash, danger: true }
   ]

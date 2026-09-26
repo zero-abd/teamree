@@ -563,6 +563,45 @@ describe('landing a worktree', () => {
     expect(calls).toContainEqual(['worktree.keep', { worktreeId: 'wt_1', force: true }])
     expect(result.out).toContain('Kept fix; removed 1 other run. Its branch is still there.')
   })
+
+  it('cleans up merged worktrees, and --dry-run only says what would go', async () => {
+    const calls: [string, unknown][] = []
+    const cli = await harness((method, params) => {
+      calls.push([method, params])
+      if (method === 'project.list') return PROJECTS
+      if (method === 'worktree.cleanMerged') {
+        const dryRun = (params as { dryRun?: boolean }).dryRun === true
+        return {
+          projectId: 'p_api',
+          dryRun,
+          removed: [{ worktree: WORKTREES[0], ...(dryRun ? {} : { trashId: 'wt_1/1' }) }],
+          kept: [{ worktree: WORKTREES[1], reason: 'Uncommitted changes' }]
+        }
+      }
+      throw new StubError('unknown_method', method)
+    })
+
+    const planned = await cli.run(['worktree', 'clean', '--merged', '--dry-run', '--project', 'api'])
+    expect(planned.code).toBe(ExitCode.Success)
+    expect(calls).toEqual([
+      ['project.list', {}],
+      ['worktree.cleanMerged', { projectId: 'p_api', dryRun: true }]
+    ])
+    expect(planned.out).toMatch(/fix-login\s+feature\/fix-login\s+would remove/)
+    expect(planned.out).toMatch(/dupe\s+feature\/dupe\s+kept: Uncommitted changes/)
+
+    const done = await cli.run(['worktree', 'clean', '--merged', '--project', 'api'])
+    expect(calls.at(-1)).toEqual(['worktree.cleanMerged', { projectId: 'p_api' }])
+    expect(done.out).toMatch(/fix-login\s+feature\/fix-login\s+removed/)
+    expect(done.out).toContain('teamree worktree restore')
+  })
+
+  it('refuses clean without --merged, the only kind there is', async () => {
+    const cli = await harness()
+    const result = await cli.run(['worktree', 'clean', '--project', 'api'])
+    expect(result.code).toBe(ExitCode.Usage)
+    expect(result.err).toContain('--merged')
+  })
 })
 
 describe('selectors and flags reach the runtime', () => {
@@ -1122,7 +1161,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(74)
+    expect(data.commands.length).toBe(75)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })
