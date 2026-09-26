@@ -10,10 +10,10 @@
 //   after 0s child tests ./child.script "Write the limiter tests"
 //   after 0s supervise 2              wait on children: answer their asks, until 2 are done
 //   on "[teamree] ask" reply "postgres"
-//   actions also: note <to> "<text>", say "<text>", screen <file>, work 2s
+//   actions also: note <to> "<text>", say "<text>", write <file> "<text>", screen <file>, work 2s
 
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, resolve } from 'node:path'
 
 const scriptPath = process.env.TEAMREE_STAND_IN_SCRIPT
@@ -21,7 +21,8 @@ const cli = process.env.TEAMREE_STAND_IN_CLI || process.env.TEAMREE_CLI
 const pane = process.env.TEAMREE_TERMINAL_ID
 const self = process.argv[1]
 
-const out = (text = '') => process.stdout.write(`${String(text).replace(/\r?\n/g, '\r\n')}\r\n`)
+// Each line starts by clearing the idle `> ` it may be drawn over.
+const out = (text = '') => process.stdout.write(`\r\x1b[K${String(text).replace(/\r?\n/g, '\r\n')}\r\n`)
 
 /** Words, with "double quoted" runs kept whole. */
 function words(line) {
@@ -72,9 +73,10 @@ const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 
 /** One tool call as an agent draws it, with teamree's answer under it. */
 function called(args, result) {
-  out(`⏺ teamree ${args.map((word) => (/\s/.test(word) ? `"${word}"` : word)).join(' ')}`)
+  const shown = args.map((word, at) => (args[at - 1] === '--agent' ? 'claude' : word))
+  out(`⏺ teamree ${shown.map((word) => (/\s/.test(word) ? `"${word}"` : word)).join(' ')}`)
   const said = (result.status === 0 ? result.stdout : result.stderr || result.stdout).trim()
-  for (const line of said.split('\n').filter(Boolean)) out(`  ⎿ ${line}`)
+  for (const line of said.split('\n').filter(Boolean).slice(0, 3)) out(`  ⎿ ${line.slice(0, 100)}`)
 }
 
 async function act(action, trigger = '') {
@@ -86,6 +88,10 @@ async function act(action, trigger = '') {
   switch (verb) {
     case 'say':
       out(`⏺ ${rest.join(' ')}`)
+      return
+    case 'write':
+      writeFileSync(rest[0] ?? 'stand-in.txt', `${rest[1] ?? ''}\n`)
+      out(`⏺ Wrote ${rest[0]}`)
       return
     case 'screen':
       out(readFileSync(fromScript(rest[0] ?? ''), 'utf8'))
