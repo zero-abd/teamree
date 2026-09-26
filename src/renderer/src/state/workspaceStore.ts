@@ -2354,8 +2354,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       try {
         await runtimeClient.call('terminal.close', { terminalId })
       } catch (error) {
-        failed('Could not close the terminal')(error)
-        return
+        // No terminal behind the leaf: taking the leaf away is the whole close.
+        if ((error as { code?: string } | null)?.code !== 'not_found') {
+          failed('Could not close the terminal')(error)
+          return
+        }
       }
 
       // Re-read: the close was awaited, and the layout can have moved under it.
