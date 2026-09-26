@@ -159,7 +159,7 @@ describe('the search tab', () => {
     const search = await type('limit')
     act(() => search.emit(HITS))
 
-    fireEvent.click(screen.getByTitle('src/limits.ts:4'))
+    fireEvent.click(await screen.findByTitle('src/limits.ts:4'))
     await waitFor(() => expect(openFileAt).toHaveBeenCalledWith('w1', 'src/limits.ts', 4, 14))
     expect(openWorktree).toHaveBeenCalledWith('w1')
   })
@@ -178,11 +178,53 @@ describe('the search tab', () => {
     expect(openWorktree).not.toHaveBeenCalled()
   })
 
+  it('shows a match deep in a long line, marked, with the whole line on hover', async () => {
+    render(<RightPanel />)
+    const search = await type('limit')
+    const text = `export function fn_0_0_40(x: number) { return clamp(x, 0, 99) + ${'y'.repeat(20)}limit(x, 40) }`
+    const at = text.indexOf('limit')
+    act(() =>
+      search.emit({
+        type: 'hits',
+        files: [
+          { worktreeId: 'w2', path: 'src/fns.ts', lines: [{ line: 7, column: at + 1, text, ranges: [[at, at + 5]] }] }
+        ]
+      })
+    )
+    const row = await screen.findByTitle('src/fns.ts:7')
+    const snippet = row.querySelector('.search__text') as HTMLElement
+    expect(snippet.textContent?.startsWith('…')).toBe(true)
+    expect(snippet.textContent?.indexOf('limit')).toBe(25)
+    expect(snippet.querySelector('mark')?.textContent).toBe('limit')
+    expect(snippet.title).toBe(text)
+  })
+
+  it('draws streamed batches once per frame, and all of them when the search ends', async () => {
+    render(<RightPanel />)
+    const search = await type('limit')
+    const drawn: number[] = []
+    const stop = useSearchStore.subscribe((state, before) => {
+      if (state.files !== before.files) drawn.push(state.files.length)
+    })
+    act(() => {
+      search.emit({ type: 'hits', files: [LIMITS] })
+      search.emit({ type: 'hits', files: [MIDDLEWARE] })
+    })
+    expect(drawn).toEqual([])
+    await waitFor(() => expect(drawn).toEqual([2]))
+    act(() => {
+      search.emit({ type: 'hits', files: [{ ...LIMITS, path: 'src/late.ts' }] })
+      search.emit({ type: 'done', matches: 4, truncated: false, timedOut: false, elapsedMs: 1, engine: 'rg' })
+    })
+    expect(drawn).toEqual([2, 3])
+    stop()
+  })
+
   it('folds a file’s hits under its header', async () => {
     render(<RightPanel />)
     const search = await type('limit')
     act(() => search.emit(HITS))
-    fireEvent.click(screen.getByRole('button', { name: /middleware\.ts/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /middleware\.ts/ }))
     expect(screen.queryByTitle('src/middleware.ts:2')).toBeNull()
   })
 

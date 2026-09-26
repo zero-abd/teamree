@@ -694,6 +694,12 @@
   list-style: none;
 }
 
+/* Off-screen rows skip layout and paint, so 2,000 hits land in one short frame. */
+.search__results > li {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 17px;
+}
+
 .search__task {
   display: flex;
   align-items: center;

@@ -1,13 +1,13 @@
 // Content search over this task or every task of its project. Results stream in grouped by task and
 // file; ↑/↓ walk the hits, Enter or a click opens the file at the line.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { Worktree } from '@shared/entities'
 import type { SearchFileGroup } from './searchModel'
 import type { SearchLine } from '@shared/search'
 import { useWorkspaceStore } from '../../state/workspaceStore'
 import { directoryOf, fileNameOf } from './ChangesTab'
-import { fileKey, groupSearchResults, searchRows, splitAtRanges, stepHit } from './searchModel'
+import { fileKey, groupSearchResults, hitWindow, searchRows, stepHit } from './searchModel'
 import { searchSignature, useSearchStore, type SearchForm } from './searchStore'
 
 /** How long the field waits after a keystroke before searching. */
@@ -234,17 +234,7 @@ export function SearchTab({ worktree }: { worktree: Worktree }): React.JSX.Eleme
                 onClick={() => open(row.file, row.hit)}
               >
                 <span className="search__line">{row.hit.line}</span>
-                <span className="search__text">
-                  {splitAtRanges(row.hit.text, row.hit.ranges).map((part, index) =>
-                    part.match ? (
-                      <mark key={index} className="search__match">
-                        {part.text}
-                      </mark>
-                    ) : (
-                      <span key={index}>{part.text}</span>
-                    )
-                  )}
-                </span>
+                <HitText hit={row.hit} />
               </button>
             </li>
           )
@@ -253,6 +243,22 @@ export function SearchTab({ worktree }: { worktree: Worktree }): React.JSX.Eleme
     </section>
   )
 }
+
+const HitText = memo(function HitText({ hit }: { hit: SearchLine }): React.JSX.Element {
+  return (
+    <span className="search__text" title={hit.text.trim()}>
+      {hitWindow(hit.text, hit.ranges).map((part, index) =>
+        part.match ? (
+          <mark key={index} className="search__match">
+            {part.text}
+          </mark>
+        ) : (
+          <span key={index}>{part.text}</span>
+        )
+      )}
+    </span>
+  )
+})
 
 /** One line under the form: progress, the count, or what went wrong. */
 export function statusLine(state: {
