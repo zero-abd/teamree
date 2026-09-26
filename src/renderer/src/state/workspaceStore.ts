@@ -196,6 +196,7 @@ import {
 } from '../workspace/rightPanel/rightPanelState'
 import { panelCost, panelYields, sidebarCost, type Sides } from '../workspace/roomForPanes'
 import { useMessageStore } from './messages'
+import { rowVisibility } from './rowVisibility'
 
 export type DialogState =
   /** A picked or dropped folder the runtime would not add as it was. */
@@ -961,6 +962,11 @@ const pullNoticeKey = (projectId: string): string => `teamwork-pull:${projectId}
 /** The status-bar notice for a pane refused for want of room. */
 const NO_ROOM = 'No room for another pane'
 
+/** How often a worktree that changed out of view is read anyway, for the board, the palette and the menus. */
+export const UNREAD_READ_MS = 30_000
+/** At most this many of them per beat. */
+const UNREAD_READS_AT_ONCE = 10
+
 /** A title short enough to leave room for its notice's button. */
 const shortened = (title: string): string => (title.length > 32 ? `${title.slice(0, 31).trimEnd()}…` : title)
 
@@ -1079,8 +1085,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     set({ projects: await runtimeClient.call('project.list', {}) })
   }
 
-  /** Returns the worktrees whose git status is worth re-reading. */
-  const refreshWorktrees = async (): Promise<string[]> => {
+  /** Re-reads the list, dropping whatever belonged to a worktree that has gone. */
+  const refreshWorktrees = async (): Promise<void> => {
     const worktrees = await runtimeClient.call('worktree.list', {})
     const live = new Set(worktrees.map((worktree) => worktree.id))
 
@@ -1107,8 +1113,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     // A worktree that only just became ready has panes now but no layout here.
     const missing = get().openWorktreeIds.filter((id) => !(id in get().layouts))
     if (missing.length > 0) refresher.request(refreshTargets({ layouts: missing }))
-
-    return worktrees.filter(hasCheckout).map((worktree) => worktree.id)
   }
 
   const refreshTerminals = async (): Promise<void> => {
@@ -1201,6 +1205,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     return { ...layout, focusedTerminalId: focused }
   }
 
+  /** Worktrees that changed while out of view: read as they come into view, or on the slow beat. */
+  const unread = new Set<string>()
+
   const refreshStatuses = async (worktreeIds: string[]): Promise<void> => {
     if (worktreeIds.length === 0) return
     const statuses = await Promise.all(
@@ -1216,6 +1223,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         if (status) {
           next[status.worktreeId] = status
           delete unreadableSince[worktreeId]
+          unread.delete(worktreeId)
           return
         }
         // Kept from the first failure, so the row can say how long it has been unable to confirm itself.
@@ -1302,12 +1310,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }))
   }
 
-  /** Each project's base against its upstream: one git read each, and one unreadable project costs nobody else. */
-  const refreshBases = async (): Promise<void> => {
+  /** These projects' bases against their upstreams: one git read each, and one unreadable project costs nobody else. */
+  const refreshBases = async (projectIds: string[]): Promise<void> => {
+    if (projectIds.length === 0) return
     const read = await Promise.all(
-      get().projects.map((project) => runtimeClient.call('project.base', { projectId: project.id }).catch(() => null))
+      projectIds.map((projectId) => runtimeClient.call('project.base', { projectId }).catch(() => null))
     )
-    set({ bases: Object.fromEntries(read.flatMap((base) => (base === null ? [] : [[base.projectId, base]]))) })
+    set((state) => {
+      const live = new Set(state.projects.map((project) => project.id))
+      const bases = Object.fromEntries(Object.entries(state.bases).filter(([projectId]) => live.has(projectId)))
+      for (const base of read) if (base !== null) bases[base.projectId] = base
+      return { bases }
+    })
   }
 
   const markExited = (exits: RefreshTargets['exits']): void => {
@@ -1328,18 +1342,35 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   }
 
   /**
-   * The worktrees whose git numbers are being shown: open tabs plus rendered sidebar rows. The
-   * invalidation names no worktree, so without this one file change costs two git processes per ready
-   * worktree, up to once a second. Honest only as long as coming into view is a read: see `readOnScreen`.
+   * The worktrees whose git numbers can be seen: open tabs, sidebar rows in the viewport (every expanded
+   * row where nothing observes them), and every task while the board is up. Honest only as long as
+   * coming into view is a read: see `readOnScreen` and `unread`.
    */
   const onScreenWorktreeIds = (): Set<string> => {
-    const { openWorktreeIds, sidebarVisible, collapsedProjects, worktrees } = get()
+    const { openWorktreeIds, sidebarVisible, collapsedProjects, worktrees, dashboardOpen } = get()
     const shown = new Set(openWorktreeIds)
+    if (dashboardOpen) {
+      for (const worktree of worktrees) shown.add(worktree.id)
+      return shown
+    }
     if (!sidebarVisible) return shown
+    const visible = rowVisibility.visible()
     for (const worktree of worktrees) {
-      if (!collapsedProjects[worktree.projectId]) shown.add(worktree.id)
+      if (visible === undefined ? !collapsedProjects[worktree.projectId] : visible.has(worktree.id)) {
+        shown.add(worktree.id)
+      }
     }
     return shown
+  }
+
+  /** The tab in front, then the other tabs, then the rest as given. */
+  const inReadOrder = (worktreeIds: Iterable<string>): string[] => {
+    const { activeWorktreeId, openWorktreeIds } = get()
+    const rank = (worktreeId: string): number => {
+      if (worktreeId === activeWorktreeId) return 0
+      return openWorktreeIds.includes(worktreeId) ? 1 : 2
+    }
+    return [...worktreeIds].sort((a, b) => rank(a) - rank(b))
   }
 
   const applyRefresh = async (targets: RefreshTargets): Promise<void> => {
@@ -1347,10 +1378,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     if (targets.exits.length > 0) markExited(targets.exits)
 
     const stale = new Set(targets.statuses)
+    const edited = new Set(targets.edits)
     // Status has a change stream of its own; a terminal starting or exiting is still a command
-    // boundary worth one read for the open tabs.
+    // boundary worth one status read for the open tabs.
     if (targets.terminals || targets.exits.length > 0) {
-      for (const worktreeId of get().openWorktreeIds) stale.add(worktreeId)
+      for (const worktreeId of get().openWorktreeIds) edited.add(worktreeId)
     }
 
     const reads: Promise<unknown>[] = []
@@ -1362,31 +1394,45 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     if (targets.memory) reads.push(useLedger.getState().refresh(get().projects.map((project) => project.id)))
     if (targets.updates) reads.push(get().loadUpdate())
     for (const worktreeId of targets.layouts) reads.push(refreshLayout(worktreeId))
-    if (targets.worktrees) {
+    // Files on screen are re-read only for a change that can have touched an open tab.
+    const { openWorktreeIds } = get()
+    if (targets.allStatuses || [...stale, ...edited].some((worktreeId) => openWorktreeIds.includes(worktreeId))) {
       set((state) => ({ worktreeFilesEpoch: state.worktreeFilesEpoch + 1 }))
-      reads.push(
-        refreshWorktrees().then((ready) => {
-          for (const worktreeId of ready) stale.add(worktreeId)
-        })
-      )
     }
+    if (targets.worktrees) reads.push(refreshWorktrees())
 
     await Promise.all(reads)
+    if (targets.allStatuses) {
+      for (const worktree of get().worktrees) if (hasCheckout(worktree)) stale.add(worktree.id)
+    }
     // Last, so a status is never asked for a worktree the list just dropped, nor one nothing is showing.
     const live = new Set(get().worktrees.map((worktree) => worktree.id))
     const onScreen = onScreenWorktreeIds()
-    const readable = [...stale].filter((worktreeId) => live.has(worktreeId) && onScreen.has(worktreeId))
-    await refreshStatuses(readable)
-    // After the statuses: a row without chips has nowhere for a merge badge.
-    await Promise.all([
-      refreshMergePreviews(readable),
-      refreshLandings(readable),
-      ...(targets.worktrees || targets.projects ? [refreshBases()] : [])
-    ])
+    for (const worktreeId of [...stale, ...edited]) {
+      if (live.has(worktreeId) && !onScreen.has(worktreeId)) unread.add(worktreeId)
+    }
+    const readable = inReadOrder([...stale].filter((worktreeId) => live.has(worktreeId) && onScreen.has(worktreeId)))
+    const statusOnly = [...edited].filter(
+      (worktreeId) => live.has(worktreeId) && onScreen.has(worktreeId) && !stale.has(worktreeId)
+    )
+    // A project's base moves only with a change that names its worktrees, never with files alone.
+    const baseMoved =
+      targets.projects || targets.allStatuses
+        ? get().projects.map((project) => project.id)
+        : get()
+            .worktrees.filter((worktree) => stale.has(worktree.id))
+            .map((worktree) => worktree.projectId)
+    await Promise.all([readGit(readable, inReadOrder(statusOnly)), refreshBases([...new Set(baseMoved)])])
 
     // The panel rides the same signal as the chips, so an edit in a shell moves both at once.
     const { activeWorktreeId } = get()
-    if (!changesOnScreen(get()) || !activeWorktreeId || !readable.includes(activeWorktreeId)) return
+    if (
+      !changesOnScreen(get()) ||
+      !activeWorktreeId ||
+      !(readable.includes(activeWorktreeId) || statusOnly.includes(activeWorktreeId))
+    ) {
+      return
+    }
     await Promise.all([
       refreshChanges(activeWorktreeId),
       refreshLog(activeWorktreeId),
@@ -1455,22 +1501,51 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     })
   }
 
+  /** Status for all of them, then merge previews and landings for `full`: a row without chips has nowhere for a badge. */
+  const readGit = async (full: string[], statusOnly: string[] = []): Promise<void> => {
+    await refreshStatuses([...full, ...statusOnly])
+    await Promise.all([refreshMergePreviews(full), refreshLandings(full)])
+  }
+
   const refresher = createWorkspaceRefresher({
     run: applyRefresh,
     onError: failed('Could not refresh the workspace')
   })
 
+  /** Of these, the ready worktrees that changed out of view or were never read. */
+  const unreadOf = (worktreeIds: Iterable<string>): string[] => {
+    const wanted = new Set(worktreeIds)
+    const { statuses } = get()
+    // Ready ones only: no git in a checkout still being built.
+    return get()
+      .worktrees.filter(
+        (worktree) =>
+          hasCheckout(worktree) &&
+          wanted.has(worktree.id) &&
+          (unread.has(worktree.id) || statuses[worktree.id] === undefined)
+      )
+      .map((worktree) => worktree.id)
+  }
+
   /**
-   * Reads the rows on screen when what is on screen changes: a row hidden while its numbers moved must
-   * be read as it appears. Every way a row can appear comes through here or through `openWorktree`.
+   * Reads the rows on screen that missed a change, when what is on screen changes. Every way a row can
+   * appear comes through here, through a row scrolling into view, or through `openWorktree`.
    */
   const readOnScreen = (): void => {
-    const shown = onScreenWorktreeIds()
-    // Ready ones only, as `refreshWorktrees` picks them: no git in a checkout still being built.
-    const worth = get()
-      .worktrees.filter((worktree) => hasCheckout(worktree) && shown.has(worktree.id))
-      .map((worktree) => worktree.id)
+    const worth = unreadOf(onScreenWorktreeIds())
     if (worth.length > 0) refresher.request(refreshTargets({ statuses: worth }))
+  }
+  rowVisibility.onShown((worktreeIds) => {
+    const worth = unreadOf(worktreeIds)
+    if (worth.length > 0) refresher.request(refreshTargets({ statuses: worth }))
+  })
+
+  /** The slow beat: a few of the worktrees that changed out of view, read without coming into view. */
+  const readUnread = async (): Promise<void> => {
+    const live = new Set(get().worktrees.map((worktree) => worktree.id))
+    for (const worktreeId of unread) if (!live.has(worktreeId)) unread.delete(worktreeId)
+    const worth = unreadOf(unread).slice(0, UNREAD_READS_AT_ONCE)
+    if (worth.length > 0) await readGit(worth)
   }
 
   /**
@@ -1851,7 +1926,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // A read out of the runtime's memory; whatever its own check finds arrives on the stream.
         void get().loadUpdate()
 
-        refresher.request(refreshTargets({ projects: true, worktrees: true, terminals: true }))
+        refresher.request(refreshTargets({ projects: true, worktrees: true, allStatuses: true, terminals: true }))
         await refresher.flush()
         // After the projects exist: teamwork is read per project.
         refresher.request(refreshTargets({ teammates: true, overlaps: true, memory: true }))
@@ -1897,7 +1972,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         refresher.push(event)
       })
       void useMessageStore.getState().load()
+      const beat = setInterval(() => void readUnread().catch(() => undefined), UNREAD_READ_MS)
       return () => {
+        clearInterval(beat)
         watch.close()
         refresher.cancelPending()
       }
@@ -3895,6 +3972,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         settingsOpen: false,
         helpOpen: false
       }))
+      // The board lists every task, so what changed out of view is on it.
+      if (get().dashboardOpen) readOnScreen()
     },
 
     toggleSettings() {

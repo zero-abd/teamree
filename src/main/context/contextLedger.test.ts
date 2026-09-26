@@ -4,7 +4,7 @@
 import { mkdtemp, rm, utimes } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Project, Worktree } from '../../shared/entities'
 import { createTempRepo, type TempRepo } from '../git/testRepository'
 import { ContextLedger } from './contextLedger'
@@ -579,6 +579,50 @@ describe('before an agent edits a file', () => {
     })
     expect((await ledger.check({ worktreeId: 'a', path: at(a) })).siblings).toHaveLength(1)
     expect((await ledger.inspect('p1')).worktrees.find((row) => row.id === 'a')?.warnings).toEqual([])
+  })
+
+  it('re-reads only the worktrees a pass is scoped to, keeping the others as they were', async () => {
+    const a = await addWorktree('a', 'Add rate limits')
+    const b = await addWorktree('b', 'Fix login redirect')
+    await ledger.refresh()
+    await edit(a, 'line two from a')
+    await edit(b, 'line two from b')
+
+    const before = ledger.stats().gitRuns
+    await ledger.refresh(undefined, ['a'])
+    const rows = async (): Promise<Record<string, string[]>> =>
+      Object.fromEntries((await ledger.inspect('p1')).worktrees.map((row) => [row.id, row.touched]))
+    expect(await rows()).toEqual({ a: ['src/shared.ts'], b: [] })
+    expect(ledger.stats().gitRuns - before).toBeLessThanOrEqual(4)
+
+    await ledger.refresh()
+    expect(await rows()).toEqual({ a: ['src/shared.ts'], b: ['src/shared.ts'] })
+  })
+
+  it('gathers the worktrees scheduled before a pass into that one pass', async () => {
+    await ledger.close()
+    ledger = new ContextLedger({
+      dataDir,
+      runner: repo.runner,
+      snapshot: () => ({ projects: [project], worktrees }),
+      refreshDelayMs: 5,
+      minPassIntervalMs: 0
+    })
+    const a = await addWorktree('a', 'Add rate limits')
+    const b = await addWorktree('b', 'Fix login redirect')
+    const c = await addWorktree('c', 'Tidy the docs')
+    await ledger.refresh()
+    for (const worktree of [a, b, c]) await edit(worktree, `line two from ${worktree.id}`)
+
+    ledger.schedule(['a'])
+    ledger.schedule(['b'])
+    await vi.waitFor(async () => expect(ledger.stats().passes).toBe(2))
+    const touched = (await ledger.inspect('p1')).worktrees.map((row) => [row.id, row.touched.length])
+    expect(touched).toEqual([
+      ['a', 1],
+      ['b', 1],
+      ['c', 0]
+    ])
   })
 
   it('says it again when a plain overlap becomes a conflict', async () => {

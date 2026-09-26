@@ -52,6 +52,7 @@ import { registerSettingsHandlers } from './taskPlaceholderHandlers'
 import { registerUnsubscribeHandler } from './unsubscribeHandler'
 import { registerWorkspaceSubscribeHandler } from './workspaceSubscribeHandler'
 import {
+  projectWorktreeIds,
   publishGitEvents,
   publishGitWrites,
   publishTerminalEvents,
@@ -328,7 +329,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     runner: createGitRunner(),
     projects: () => backgroundFetchProjects(git.snapshot()),
     onMoved: (projectId) => {
-      workspaceEvents.emit({ type: 'worktrees' })
+      workspaceEvents.emit({ type: 'worktrees', worktreeIds: projectWorktreeIds(git, projectId) })
       void teamwork.refresh(projectId, { fetch: false }).catch(() => undefined)
     },
     ...(options.online === undefined ? {} : { online: options.online })

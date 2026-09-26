@@ -88,6 +88,29 @@ describe('coalescing', () => {
     ])
   })
 
+  it('unions the worktrees a burst names, and keeps paths only while every event carries them', () => {
+    const clock = manualClock()
+    const delivered: WorkspaceEvent[] = []
+    const stream = createCoalescedStream((event) => delivered.push(event), { schedule: clock.schedule })
+
+    stream.push({ type: 'worktrees', worktreeIds: ['a'], paths: ['src/a.ts'] })
+    stream.push({ type: 'worktrees', worktreeIds: ['b', 'a'], paths: ['src/b.ts'] })
+    clock.tick()
+    stream.push({ type: 'worktrees', worktreeIds: ['a'], paths: ['src/a.ts'] })
+    stream.push({ type: 'worktrees', worktreeIds: ['c'] })
+    clock.tick()
+    stream.push({ type: 'worktrees', worktreeIds: ['a'] })
+    stream.push({ type: 'worktrees' })
+    stream.push({ type: 'worktrees', worktreeIds: ['b'] })
+    clock.tick()
+
+    expect(delivered).toEqual([
+      { type: 'worktrees', worktreeIds: ['a', 'b'], paths: ['src/a.ts', 'src/b.ts'] },
+      { type: 'worktrees', worktreeIds: ['a', 'c'] },
+      { type: 'worktrees' }
+    ])
+  })
+
   it('opens a new window for the next burst', () => {
     const clock = manualClock()
     const delivered: WorkspaceEvent[] = []

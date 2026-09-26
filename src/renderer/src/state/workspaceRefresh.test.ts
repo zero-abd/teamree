@@ -23,7 +23,7 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0
 describe('targetsForEvent', () => {
   it('maps each collection event to exactly its own collection', () => {
     expect(targetsForEvent({ type: 'projects' })).toEqual(refreshTargets({ projects: true }))
-    expect(targetsForEvent({ type: 'worktrees' })).toEqual(refreshTargets({ worktrees: true }))
+    expect(targetsForEvent({ type: 'worktrees' })).toEqual(refreshTargets({ worktrees: true, allStatuses: true }))
     expect(targetsForEvent({ type: 'terminals' })).toEqual(refreshTargets({ terminals: true }))
   })
 
@@ -35,6 +35,16 @@ describe('targetsForEvent', () => {
     expect(mergeTargets(refreshTargets({ overlaps: true }), NOTHING_TO_REFRESH).overlaps).toBe(true)
     expect(isEmptyRefresh(refreshTargets({ memory: true }))).toBe(false)
     expect(mergeTargets(NOTHING_TO_REFRESH, refreshTargets({ memory: true })).memory).toBe(true)
+  })
+
+  it('reads git only for the worktrees a worktrees event names', () => {
+    expect(targetsForEvent({ type: 'worktrees', worktreeIds: ['wt_a'] })).toEqual(
+      refreshTargets({ worktrees: true, statuses: ['wt_a'] })
+    )
+    // Files alone: no record, commit or ref moved, so the status is all there is to read.
+    expect(targetsForEvent({ type: 'worktrees', worktreeIds: ['wt_a'], paths: ['src/a.ts'] })).toEqual(
+      refreshTargets({ edits: ['wt_a'] })
+    )
   })
 
   it('scopes a layout event to the worktree it names', () => {
@@ -57,6 +67,16 @@ describe('mergeTargets', () => {
     expect(merged.worktrees).toBe(true)
     expect(merged.terminals).toBe(true)
     expect(merged.layouts).toEqual(['wt_a', 'wt_b'])
+  })
+
+  it('keeps a sweep of every worktree once any batch asked for one', () => {
+    const merged = mergeTargets(
+      refreshTargets({ edits: ['wt_a'] }),
+      mergeTargets(refreshTargets({ worktrees: true, allStatuses: true }), refreshTargets({ edits: ['wt_b', 'wt_a'] }))
+    )
+    expect(merged.allStatuses).toBe(true)
+    expect(merged.edits).toEqual(['wt_a', 'wt_b'])
+    expect(isEmptyRefresh(refreshTargets({ edits: ['wt_a'] }))).toBe(false)
   })
 
   it('keeps one exit per terminal, taking the later code', () => {

@@ -51,6 +51,17 @@ export function coalesceKey(event: WorkspaceEvent): string {
   }
 }
 
+/** Two `worktrees` events as one: scoped only while both are, with paths only while both carry them. */
+export function mergeWorktreesEvents(
+  a: Extract<WorkspaceEvent, { type: 'worktrees' }>,
+  b: Extract<WorkspaceEvent, { type: 'worktrees' }>
+): WorkspaceEvent {
+  if (a.worktreeIds === undefined || b.worktreeIds === undefined) return { type: 'worktrees' }
+  const worktreeIds = [...new Set([...a.worktreeIds, ...b.worktreeIds])]
+  if (a.paths === undefined || b.paths === undefined) return { type: 'worktrees', worktreeIds }
+  return { type: 'worktrees', worktreeIds, paths: [...new Set([...a.paths, ...b.paths])] }
+}
+
 export type CoalescedStream = {
   push: (event: WorkspaceEvent) => void
   /** Drops anything pending and its timer. The subscription is over. */
@@ -86,7 +97,12 @@ export function createCoalescedStream(
   return {
     push: (event) => {
       // Re-setting a key keeps its position and takes the newer payload.
-      pending.set(coalesceKey(event), event)
+      const key = coalesceKey(event)
+      const earlier = pending.get(key)
+      pending.set(
+        key,
+        earlier?.type === 'worktrees' && event.type === 'worktrees' ? mergeWorktreesEvents(earlier, event) : event
+      )
       // The window runs from the first event of a burst, so a continuous stream still delivers.
       if (!cancelScheduled) cancelScheduled = schedule(flush, windowMs)
     },

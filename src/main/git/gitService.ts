@@ -212,6 +212,8 @@ export class GitService {
   readonly #startPointLimit: number | undefined
   readonly #creating = new Map<string, AbortController>()
   readonly #settling = new Map<string, Promise<Worktree>>()
+  /** The status read in flight per worktree, and the one queued behind it. */
+  readonly #statusReads = new Map<string, { current: Promise<WorktreeStatus>; next?: Promise<WorktreeStatus> }>()
   // One chain per project, so two creates never both read a store neither has
   // written to yet. See `createWorktree`.
   readonly #reservations = new Map<string, Promise<void>>()
@@ -1046,7 +1048,36 @@ export class GitService {
     }
   }
 
-  async worktreeStatus(params: ParamsOf<'worktree.status'>): Promise<WorktreeStatus> {
+  /**
+   * At most one `git status` in flight per worktree. A caller arriving mid-read waits for one more
+   * read after it, shared with every other caller that arrives meanwhile, so nobody gets an answer older than its ask.
+   */
+  worktreeStatus(params: ParamsOf<'worktree.status'>): Promise<WorktreeStatus> {
+    const id = params.worktreeId
+    const reads = this.#statusReads.get(id)
+    if (reads?.next !== undefined) return reads.next
+    if (reads !== undefined) {
+      const next = reads.current.catch(() => undefined).then(() => this.#startStatusRead(params))
+      reads.next = next
+      return next
+    }
+    return this.#startStatusRead(params)
+  }
+
+  #startStatusRead(params: ParamsOf<'worktree.status'>): Promise<WorktreeStatus> {
+    const id = params.worktreeId
+    const current = this.#readStatus(params)
+    this.#statusReads.set(id, { current })
+    const done = (): void => {
+      const reads = this.#statusReads.get(id)
+      if (reads?.current !== current) return
+      if (reads.next === undefined) this.#statusReads.delete(id)
+    }
+    current.then(done, done)
+    return current
+  }
+
+  async #readStatus(params: ParamsOf<'worktree.status'>): Promise<WorktreeStatus> {
     const worktree = this.#requireWorktree(params.worktreeId)
     if (worktree.state !== 'ready') {
       throw new GitServiceError(

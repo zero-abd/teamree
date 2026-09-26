@@ -1104,7 +1104,11 @@ export type ResultOf<M extends MethodName> = MethodContract[M]['result']
  */
 export type WorkspaceEvent =
   | { type: 'projects' }
-  | { type: 'worktrees' }
+  /**
+   * `worktreeIds` names the worktrees whose status can have moved; absent, all of them. `paths`, when
+   * present, are the checkout files that changed and nothing else did: no commit, ref or index.
+   */
+  | { type: 'worktrees'; worktreeIds?: string[]; paths?: string[] }
   | { type: 'terminals' }
   /**
    * A project's roster changed on disk. Carries no project id: events are

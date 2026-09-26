@@ -61,14 +61,15 @@ export function registerContextHandlers(registry: MethodRegistry, git: GitServic
   })
 
   bus.on((event) => {
-    if (event.type === 'worktrees' || event.type === 'projects') ledger.schedule()
+    if (event.type === 'worktrees') ledger.schedule(event.worktreeIds)
+    if (event.type === 'projects') ledger.schedule()
   })
   // Wrapped rather than replaced: the terminal handler stays the one that records the event.
   const agentEvent = registry.lookup('terminal.agentEvent')
   if (agentEvent !== undefined) {
     registry.register('terminal.agentEvent', Params.terminalAgentEvent, async (params, call) => {
       const terminal = (await agentEvent.handler(params as never, call)) as Terminal
-      if (params.event === 'Stop' || params.event === 'Notification') ledger.schedule()
+      if (params.event === 'Stop' || params.event === 'Notification') ledger.schedule([terminal.worktreeId])
       return terminal
     })
   }
