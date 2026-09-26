@@ -21,6 +21,7 @@ import {
 } from '../keyboard/platformModifier'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { openInBrowser } from '../shell/openInBrowser'
+import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
 import { agoLabel, typedBy, watchedBy } from '../sidebar/agentRows'
 import { hasBeenTyped, paneAttention, typingNow, type PaneAttention } from '../state/paneAttention'
 import type { TerminalOptions } from '../state/preferences'
@@ -35,6 +36,17 @@ import { watchPromptImages } from './promptImages'
 import { frameWrites, paneWebgl, syncScrollbarPerFrame } from './paneFrames'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOptions } from './paneSearchModel'
 import { TerminalSearchBar } from './TerminalSearchBar'
+import {
+  holdRightClickFromProgram,
+  menuAnchor,
+  pasteFromClipboard,
+  reportsMouse,
+  rightClickOpensMenu,
+  runTerminalMenuAction,
+  terminalMenuEntries,
+  type Pointed,
+  type TerminalMenuEntry
+} from './terminalMenu'
 import { showPane } from './shownPanes'
 import { deferWhileLayoutMoves, forgetDeferred } from '../shell/layoutMotion'
 import { TERMINAL_LINE_HEIGHT } from './paneMetrics'
@@ -86,6 +98,10 @@ export function TerminalView({
   const [peek, setPeek] = useState<ImagePeek | null>(null)
   const [viewing, setViewing] = useState<ShownImage | null>(null)
   const [promptImages, setPromptImages] = useState<ShownImage[]>([])
+  const [menu, setMenu] = useState<TerminalMenu | null>(null)
+  const emulatorRef = useRef<PaneEmulator | null>(null)
+  const onFocusRef = useRef(onFocus)
+  onFocusRef.current = onFocus
 
   const watchers = useWorkspaceStore((state) => state.watchers)
   const attention = useMemo(() => paneAttention(watchers, terminalId), [watchers, terminalId])
@@ -120,6 +136,7 @@ export function TerminalView({
     // A pane that moved in the tree gets its emulator back, which reflows to the new width.
     if (term.element && term.element.parentElement !== host) host.appendChild(term.element)
     termRef.current = term
+    emulatorRef.current = emulator
     searchRef.current = emulator.search
     fitRef.current = fit
     decorationsRef.current = readSearchDecorations(document.documentElement)
@@ -198,15 +215,23 @@ export function TerminalView({
       if (document.visibilityState === 'visible') gpu.retry()
     }
     document.addEventListener('visibilitychange', onVisible)
+    const releaseRightClick = holdRightClickFromProgram(
+      host,
+      () => reportsMouse(term),
+      modifierRef.current,
+      () => onFocusRef.current()
+    )
 
     return () => {
       mounted = false
+      releaseRightClick()
       if (frame) cancelAnimationFrame(frame)
       forgetDeferred(scheduleFit)
       observer.disconnect()
       document.removeEventListener('visibilitychange', onVisible)
       promptWatch.dispose()
       termRef.current = null
+      emulatorRef.current = null
       searchRef.current = null
       fitRef.current = null
       parkEmulator(terminalId, emulator)
@@ -292,6 +317,45 @@ export function TerminalView({
     if (focusedRef.current) termRef.current?.focus()
   }, [searchOpen])
 
+  const openMenu = (event: React.MouseEvent<HTMLElement>): void => {
+    const emulator = emulatorRef.current
+    event.preventDefault()
+    if (emulator === null || !rightClickOpensMenu(event, reportsMouse(emulator.term), modifierRef.current)) return
+    const { pointed, term } = emulator
+    const entries = terminalMenuEntries(
+      { readOnly: false, hasSelection: term.hasSelection(), pointed },
+      modifierRef.current
+    )
+    setMenu({ anchor: menuAnchor(event), entries, pointed })
+  }
+
+  const closeMenu = useCallback(() => {
+    setMenu(null)
+    if (focusedRef.current) termRef.current?.focus()
+  }, [])
+
+  const chooseFromMenu = (entry: TerminalMenuEntry, pointed: Pointed | null): void => {
+    const emulator = emulatorRef.current
+    if (emulator === null) return
+    const store = useWorkspaceStore.getState()
+    runTerminalMenuAction(entry.action, pointed, {
+      term: emulator.term,
+      clipboard: { copy: copyText, read: pasteText },
+      byHand: emulator.markHands,
+      openLink: openPaneLink,
+      copyLink: (uri) => void store.copyToClipboard(uri, 'the link'),
+      reveal: (absolute, path) => void store.revealInFinder(absolute, path),
+      find: () => {
+        store.focusPane(terminalId)
+        store.openPaneSearch()
+      },
+      split: (direction) => {
+        store.focusPane(terminalId)
+        void store.splitFocusedPane(direction)
+      }
+    })
+  }
+
   // The bar floats over the terminal: a row of its own would refit the PTY
   // and make the running program redraw itself just to be searched.
   return (
@@ -336,12 +400,29 @@ export function TerminalView({
           setViewing(image)
         }}
       />
-      <div className="terminal-surface" ref={hostRef} onFocus={onFocus} onMouseDown={onFocus} />
+      <div
+        className="terminal-surface"
+        ref={hostRef}
+        onFocus={onFocus}
+        onMouseDown={onFocus}
+        onContextMenu={openMenu}
+      />
+      {menu === null ? null : (
+        <RowMenu
+          label="Terminal"
+          anchor={menu.anchor}
+          onClose={closeMenu}
+          items={menu.entries.map((entry) => ({ ...entry, onChoose: () => chooseFromMenu(entry, menu.pointed) }))}
+        />
+      )}
       {peek === null ? null : <PastedImagePeek peek={peek} />}
       {viewing === null ? null : <PastedImageViewer image={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }
+
+/** A raised right-click menu: its rows, and what was under the pointer when it opened. */
+type TerminalMenu = { anchor: RowMenuAnchor; entries: TerminalMenuEntry[]; pointed: Pointed | null }
 
 /** What the mounted view lends its emulator; replaced on every mount, since a remount brings new refs. */
 type EmulatorView = {
@@ -360,6 +441,10 @@ type PaneEmulator = {
   gpu: { retry: () => void }
   findImage: (index: number) => Promise<PastedImage | null>
   view: EmulatorView
+  /** The link or path under the pointer, for the right-click menu. */
+  pointed: Pointed | null
+  /** Vouches for a paste from the menu. See `handsHere.ts`. */
+  markHands: () => void
   dispose: () => void
 }
 
@@ -412,16 +497,23 @@ function openEmulator(
     // OSC 8 hyperlinks (`gh`, `npm`) come from xterm's own provider. Without
     // this xterm asks in a `confirm()` and calls `window.open()` with no URL,
     // which the main process denies. See PANE_LINK_HANDLER.
-    linkHandler: PANE_LINK_HANDLER
+    linkHandler: {
+      ...PANE_LINK_HANDLER,
+      hover: (_event, uri) => point({ kind: 'link', uri }),
+      leave: () => point(null)
+    }
   })
+  const point = (target: Pointed | null): void => {
+    emulator.pointed = target
+  }
 
   const fit = new FitAddon()
   term.loadAddon(fit)
 
   // Bare URLs in the output are inert until this addon; it matches only
   // `http:` and `https:`, the set the main process hands the OS.
-  term.loadAddon(paneLinkAddon())
-  const fileLinks = paneFileLinks(term, fileLinkHost(terminalId, modifier))
+  term.loadAddon(paneLinkAddon(point))
+  const fileLinks = paneFileLinks(term, fileLinkHost(terminalId, modifier, point))
   const findImage = pastedImageLookup((index) => runtimeClient.call('terminal.pastedImage', { terminalId, index }))
   const imageLinks = paneImageLinks(term, {
     find: findImage,
@@ -453,6 +545,8 @@ function openEmulator(
       peekImage: () => {},
       openImage: () => {}
     },
+    pointed: null,
+    markHands: () => hands.mark(),
     dispose: () => {
       alive = false
       subscription?.close()
@@ -689,8 +783,13 @@ export const PANE_LINK_HANDLER: ILinkHandler = {
 }
 
 /** A pane's paths are read from its own directory and must be a file git lists in its worktree. */
-function fileLinkHost(terminalId: string, modifier: PlatformModifier): FileLinkHost {
+function fileLinkHost(
+  terminalId: string,
+  modifier: PlatformModifier,
+  point: (target: Pointed | null) => void
+): FileLinkHost {
   return {
+    point,
     place: () => {
       const state = useWorkspaceStore.getState()
       const terminal = state.terminals[terminalId]
@@ -724,9 +823,12 @@ function fileListed(worktreeId: string, path: string): Promise<boolean> {
   return answer
 }
 
-/** The addon that turns a bare URL in the scrollback into something clickable. */
-export function paneLinkAddon(): WebLinksAddon {
-  return new WebLinksAddon((_event, uri) => openPaneLink(uri))
+/** The addon that turns a bare URL in the scrollback into something clickable; `point` hears the pointer on and off one. */
+export function paneLinkAddon(point?: (target: Pointed | null) => void): WebLinksAddon {
+  return new WebLinksAddon((_event, uri) => openPaneLink(uri), {
+    hover: (_event, uri) => point?.({ kind: 'link', uri }),
+    leave: () => point?.(null)
+  })
 }
 
 /** Everything the key handler below is allowed to touch. */
@@ -761,18 +863,7 @@ export function paneKeyHandler(keys: PaneKeys): (event: KeyboardEvent) => boolea
     if (event.type !== 'keydown') return false
     if (intent === 'copy') clipboard.copy(keys.term.getSelection())
     else if (intent === 'interrupt') keys.send(INTERRUPT)
-    else {
-      void clipboard.read().then((text) => {
-        if (text === '') return
-        try {
-          // Through the emulator: `paste` adds the bracketed-paste markers the program asked for.
-          keys.byHand?.()
-          keys.term.paste(text)
-        } catch {
-          // The clipboard read takes a turn of the loop; the pane may have closed underneath it.
-        }
-      })
-    }
+    else pasteFromClipboard(keys.term, clipboard, keys.byHand)
     return false
   }
 }

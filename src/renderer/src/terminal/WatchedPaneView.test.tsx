@@ -4,7 +4,7 @@
 // owner's size (resizing the slot moves only the scale), gaps are admitted, and an ended watch stays
 // ended. xterm is replaced by a recorder of which bytes the view put in the pane.
 
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PeerPane, TeammatePresence } from '@shared/entities'
 import type { WatchedPaneEvent } from '@shared/methods'
@@ -81,6 +81,18 @@ vi.mock('@xterm/xterm', () => {
     }
 
     loadAddon(): void {}
+
+    modes = { mouseTrackingMode: 'none' }
+    selectedAll = 0
+    hasSelection(): boolean {
+      return false
+    }
+    getSelection(): string {
+      return ''
+    }
+    selectAll(): void {
+      this.selectedAll += 1
+    }
 
     dispose(): void {
       this.disposed = true
@@ -399,6 +411,21 @@ describe('a slot in the window, like any other pane', () => {
       pane().dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
     })
     expect(onFocus).toHaveBeenCalled()
+  })
+
+  it('offers only Copy and Select All on a right-click: nothing in the menu types on their machine', async () => {
+    const watch = armWatch()
+    mount()
+    await watch.resolve()
+    fireEvent.contextMenu(pane().querySelector('.watch__surface')!, { clientX: 20, clientY: 30 })
+    const items = within(screen.getByRole('menu')).getAllByRole('menuitem')
+    expect(items.map((item) => item.textContent)).toEqual([
+      expect.stringMatching(/^Copy/),
+      expect.stringMatching(/^Select All/)
+    ])
+    fireEvent.click(items[1]!)
+    expect((fakeTerms[0] as unknown as { selectedAll: number }).selectedAll).toBe(1)
+    expect(call).not.toHaveBeenCalledWith('teamwork.type', expect.anything())
   })
 
   it('declines the app’s own chords rather than sending them to the owner', async () => {

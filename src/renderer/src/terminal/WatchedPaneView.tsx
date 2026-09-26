@@ -2,16 +2,27 @@
 // is a request the owner's machine may refuse or hold, only a person's own keystrokes
 // are sent (`handsHere.ts`), and the size is the owner's — letterboxed, never resized.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { Terminal as XTerm } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import { teammatesHeard, type TeammatePresence } from '@shared/entities'
 import type { WatchedPaneEvent } from '@shared/methods'
+import { copyText } from '../clipboard/clipboard'
+import { detectPlatform, resolvePlatformModifier } from '../keyboard/platformModifier'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { paneNames } from '../sidebar/agentRows'
+import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere, type HandsHere } from './handsHere'
+import {
+  holdRightClickFromProgram,
+  menuAnchor,
+  reportsMouse,
+  rightClickOpensMenu,
+  terminalMenuEntries,
+  type TerminalMenuEntry
+} from './terminalMenu'
 import { readTerminalColors } from './terminalTheme'
 
 /** Written into the pane itself, because that is where the fact belongs. */
@@ -97,6 +108,16 @@ export function WatchedPaneView({
   const termRef = useRef<XTerm | null>(null)
   const refitRef = useRef<(() => void) | null>(null)
   const openedAtRef = useRef(0)
+  const [menu, setMenu] = useState<{ anchor: RowMenuAnchor; entries: TerminalMenuEntry[] } | null>(null)
+  const modifier = useMemo(
+    () =>
+      resolvePlatformModifier(
+        detectPlatform(window.teamree?.platform, typeof navigator === 'undefined' ? undefined : navigator.userAgent)
+      ),
+    []
+  )
+  const onFocusRef = useRef(onFocus)
+  onFocusRef.current = onFocus
 
   useEffect(() => {
     const host = hostRef.current
@@ -113,6 +134,13 @@ export function WatchedPaneView({
     let subscription: { close: () => void } | null = null
     let observer: ResizeObserver | null = null
     let hands: HandsHere | null = null
+    // A right-click with the bypass key is the menu's, never a mouse report typed onto their machine.
+    const releaseRightClick = holdRightClickFromProgram(
+      host,
+      () => term !== null && reportsMouse(term),
+      modifier,
+      () => onFocusRef.current()
+    )
 
     /** Fits the owner's picture into this window. Only ever shrinks: blown up it would be a different thing. */
     const letterbox = (): void => {
@@ -317,6 +345,7 @@ export function WatchedPaneView({
 
     return () => {
       alive = false
+      releaseRightClick()
       if (heldTimer !== undefined) clearTimeout(heldTimer)
       termRef.current = null
       refitRef.current = null
@@ -327,7 +356,7 @@ export function WatchedPaneView({
       webgl?.dispose()
       term?.dispose()
     }
-  }, [handle, paneId, projectId])
+  }, [handle, paneId, projectId, modifier])
 
   // Follows the owner's pane when it changes shape. Keyed on presence because the
   // stream has no resize event; resizing in place keeps the scrollback.
@@ -374,6 +403,27 @@ export function WatchedPaneView({
     else termRef.current?.blur()
   }, [focused, paneId])
 
+  const openMenu = (event: React.MouseEvent<HTMLElement>): void => {
+    const term = termRef.current
+    event.preventDefault()
+    if (term === null || !rightClickOpensMenu(event, reportsMouse(term), modifier)) return
+    const entries = terminalMenuEntries({ readOnly: true, hasSelection: term.hasSelection(), pointed: null }, modifier)
+    setMenu({ anchor: menuAnchor(event), entries })
+  }
+
+  const closeMenu = useCallback(() => {
+    setMenu(null)
+    if (focusedRef.current) termRef.current?.focus()
+  }, [])
+
+  // A read-only menu: Copy and Select All.
+  const chooseFromMenu = (entry: TerminalMenuEntry): void => {
+    const term = termRef.current
+    if (term === null) return
+    if (entry.action === 'copy') copyText(term.getSelection())
+    else if (entry.action === 'select-all') term.selectAll()
+  }
+
   // On the bar and as its title, so a narrow slot cannot ellipsise the fact away.
   const promise = `what you type runs on ${handle}’s machine, as ${handle}, once they allow it, with your name on it`
 
@@ -418,10 +468,18 @@ export function WatchedPaneView({
       </header>
 
       <div className="watch__frame" ref={frameRef}>
-        <div className="watch__surface" ref={hostRef} />
+        <div className="watch__surface" ref={hostRef} onContextMenu={openMenu} />
         {state.phase === 'opening' ? <p className="watch__note">Opening {handle}’s pane…</p> : null}
         {state.phase === 'ended' ? <p className="watch__note watch__note--ended">{state.reason}</p> : null}
       </div>
+      {menu === null ? null : (
+        <RowMenu
+          label={`${handle}’s pane`}
+          anchor={menu.anchor}
+          onClose={closeMenu}
+          items={menu.entries.map((entry) => ({ ...entry, onChoose: () => chooseFromMenu(entry) }))}
+        />
+      )}
     </section>
   )
 }

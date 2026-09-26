@@ -8,11 +8,8 @@ import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortc
 import { openAsArtifact } from '../markdown/openAsArtifact'
 import { collectTerminalIds, paneStopIndex, paneStops, reorderPanes } from '../panes/paneLayout'
 import { useOpenIn } from '../sidebar/openIn'
-import { RowMenu, type RowMenuAnchor, type RowMenuItem } from '../sidebar/RowMenu'
+import { anchorAtPointer, RowMenu, type RowMenuAnchor, type RowMenuItem } from '../sidebar/RowMenu'
 import { useWorkspaceStore } from '../state/workspaceStore'
-
-/** About the widest row with its chord; nearer the window's right edge than this, the menu hangs leftwards. */
-const MENU_WIDTH_PX = 240
 
 type Opened = {
   terminalId: string
@@ -39,9 +36,7 @@ export function usePaneMenu(modifier: PlatformModifier): PaneMenu {
     (terminalId: string, name: string, element: HTMLElement, at?: { x: number; y: number }) => {
       void loadEditors()
       const box = element.getBoundingClientRect()
-      const x = at?.x ?? box.left
-      const y = at?.y ?? box.bottom
-      const anchor: RowMenuAnchor = x + MENU_WIDTH_PX > window.innerWidth ? { x, y, align: 'right' } : { x, y }
+      const anchor = anchorAtPointer(at?.x ?? box.left, at?.y ?? box.bottom)
       setOpened({ terminalId, name, anchor, returnTo: document.activeElement })
     },
     [loadEditors]

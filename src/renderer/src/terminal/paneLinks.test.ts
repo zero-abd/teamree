@@ -136,6 +136,7 @@ describe('a path printed in a pane', () => {
     write: (data: string) => Promise<void>
     links: (row: number) => Promise<ILink[]>
     opened: unknown[]
+    pointed: unknown[]
   } {
     const host = document.createElement('div')
     document.body.appendChild(host)
@@ -147,16 +148,19 @@ describe('a path printed in a pane', () => {
       return register(provider)
     }
     term.open(host)
-    term.loadAddon(paneLinkAddon())
+    const pointed: unknown[] = []
+    term.loadAddon(paneLinkAddon((target) => pointed.push(target)))
     const opened: unknown[] = []
     paneFileLinks(term, {
       place: () => ({ worktreeId: 'w1', root: '/w', cwd: '/w' }),
       exists: async (_worktreeId, path) => ['src/math.ts', 'docs/NOTES.md'].includes(path),
       open: (...args) => opened.push(args),
-      holds: (event) => event.metaKey
+      holds: (event) => event.metaKey,
+      point: (target) => pointed.push(target)
     })
     return {
       opened,
+      pointed,
       write: (data) => new Promise<void>((resolve) => term.write(data, () => setTimeout(resolve, 0))),
       links: async (row) =>
         (
@@ -203,5 +207,23 @@ describe('a path printed in a pane', () => {
     expect(view.opened).toEqual([])
     path?.activate(new MouseEvent('click', { metaKey: true }), path.text)
     expect(view.opened).toEqual([['w1', 'src/math.ts', 7, undefined]])
+  })
+
+  // What a right-click then offers: Open Link over the URL, Reveal in Finder over the path.
+  it('says which link or path the pointer is on, and when it leaves', async () => {
+    const view = filePane()
+    await view.write('Added src/math.ts, see https://example.com/x\r\n')
+    const [url, path] = await view.links(1)
+    const move = new MouseEvent('mousemove')
+    url?.hover?.(move, url.text)
+    url?.leave?.(move, url.text)
+    path?.hover?.(move, path.text)
+    path?.leave?.(move, path.text)
+    expect(view.pointed).toEqual([
+      { kind: 'link', uri: 'https://example.com/x' },
+      null,
+      { kind: 'path', path: 'src/math.ts', absolute: '/w/src/math.ts' },
+      null
+    ])
   })
 })
