@@ -4,6 +4,7 @@
 import { accessSync, constants, statSync } from 'node:fs'
 import path from 'node:path'
 import type { WorktreeIssue, WorktreeLanding, WorktreeMerge, WorktreePullRequest } from '../../shared/entities'
+import { closesIssue } from '../../shared/issueClosing'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
@@ -232,7 +233,8 @@ async function closingTitleAndBody(
   const title = only?.subject || options.name || options.branch
   const summary = only === undefined ? commits.map((commit) => `- ${commit.subject}`).join('\n') : only.body
   const closes = `Closes #${issue}`
-  return ['--title', title, '--body', summary === '' ? closes : `${summary}\n\n${closes}`]
+  const body = summary === '' ? closes : closesIssue(summary, issue) ? summary : `${summary}\n\n${closes}`
+  return ['--title', title, '--body', body]
 }
 
 export type MergeOptions = {

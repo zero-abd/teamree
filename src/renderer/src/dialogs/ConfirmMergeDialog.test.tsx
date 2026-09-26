@@ -24,6 +24,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { useReviewStore } = await import('../review/reviewStore')
 const { ConfirmMergeDialog } = await import('./ConfirmMergeDialog')
+const { useCommitDrafts } = await import('../workspace/rightPanel/commitMessage')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -71,6 +72,7 @@ beforeEach(() => {
     return new Promise(() => {})
   })
   useReviewStore.setState({ scope: { w1: 'uncommitted' }, jump: {} })
+  useCommitDrafts.setState({ drafts: {} })
   useWorkspaceStore.setState(
     {
       ...INITIAL,
@@ -207,6 +209,68 @@ describe('a worktree with uncommitted work', () => {
 
     await waitFor(() => expect(call).toHaveBeenCalledWith('worktree.mergeIntoBase', { worktreeId: 'w1' }))
     expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Everything', all: true })
+  })
+
+  const box = (): HTMLTextAreaElement => screen.getByRole('textbox', { name: 'Commit message' }) as HTMLTextAreaElement
+  const answering = (method: unknown, params: unknown): Promise<unknown> => {
+    if (method === 'worktree.commit') return Promise.resolve(commit)
+    if (method === 'worktree.mergeIntoBase') return Promise.resolve(plan)
+    if (method === 'worktree.changes' && (params as { base?: boolean }).base === true) return Promise.resolve(branch)
+    return new Promise(() => {})
+  }
+
+  it('starts with the done report, selected, and merges it on Enter with no typing', async () => {
+    call.mockImplementation(answering)
+    useWorkspaceStore.setState({
+      worktrees: [
+        {
+          ...worktree,
+          task: 'Fix the typo',
+          report: { outcome: 'succeeded', summary: 'Fixed the README typo.', paths: [], at: 0 }
+        }
+      ]
+    })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+
+    expect(box().value).toBe('Fixed the README typo.')
+    expect(box().selectionStart).toBe(0)
+    expect(box().selectionEnd).toBe('Fixed the README typo.'.length)
+    expect(screen.getByText('from report')).toBeTruthy()
+    expect((screen.getByRole('button', { name: 'Commit & Merge' }) as HTMLButtonElement).disabled).toBe(false)
+    expect(call).not.toHaveBeenCalledWith('worktree.commit', expect.anything())
+
+    fireEvent.keyDown(box(), { key: 'Enter' })
+    await waitFor(() => expect(call).toHaveBeenCalledWith('worktree.mergeIntoBase', { worktreeId: 'w1' }))
+    expect(call).toHaveBeenCalledWith('worktree.commit', {
+      worktreeId: 'w1',
+      message: 'Fixed the README typo.',
+      all: true
+    })
+  })
+
+  it('starts with the task’s first line when there is no report', () => {
+    useWorkspaceStore.setState({ worktrees: [{ ...worktree, task: 'Fix the typo\n\nIn the README.' }] })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    expect(box().value).toBe('Fix the typo')
+    expect(screen.getByText('from task')).toBeTruthy()
+  })
+
+  it('shows what was typed in the Changes box, not the report', () => {
+    useWorkspaceStore.setState({
+      worktrees: [{ ...worktree, report: { outcome: 'succeeded', summary: 'Fixed it.', paths: [], at: 0 } }]
+    })
+    useCommitDrafts.getState().setDraft('w1', { text: 'Typo in README', seed: 'Fixed it.' })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    expect(box().value).toBe('Typo in README')
+    expect(screen.queryByText('from report')).toBeNull()
+  })
+
+  it('clears the suggestion with ✕, which asks for a message again', () => {
+    useWorkspaceStore.setState({ worktrees: [{ ...worktree, task: 'Fix the typo' }] })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear message' }))
+    expect(box().value).toBe('')
+    expect(screen.getByText('Needs a commit message')).toBeTruthy()
   })
 
   it('says why Merge waits on the checkout it lands in', async () => {

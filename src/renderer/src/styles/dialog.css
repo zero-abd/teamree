@@ -103,6 +103,13 @@
   line-height: 1.45;
 }
 
+.field__input--message {
+  max-height: 12lh;
+  field-sizing: content;
+  resize: none;
+  line-height: 1.4;
+}
+
 .field__input--mono {
   font-family: var(--font-mono);
   font-size: var(--text-sm);

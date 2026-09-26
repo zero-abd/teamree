@@ -12,6 +12,8 @@ import { openOverlap, useOverlapChip } from '../../sidebar/useOverlapChip'
 import { openInBrowser } from '../../shell/openInBrowser'
 import { commitScope, useWorkspaceStore } from '../../state/workspaceStore'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
+import { CommitFrom } from './CommitFrom'
+import { useCommitMessage } from './commitMessage'
 import { headerActions, landLabel, landNote, landOffer, pushOffer, type HeaderAction } from './landOffer'
 import type { PaneNode, Terminal, Worktree, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 import { fileColumnIn, isCommitLeaf, shownTabId } from '@shared/filePane'
@@ -65,13 +67,9 @@ export function ChangesTab(): React.JSX.Element | null {
   const reviewBranch = useReviewStore((state) => state.reviewBranch)
   const [menu, setMenu] = useState<{ path: string; at: RowMenuAnchor } | null>(null)
   const [moreAt, setMoreAt] = useState<{ at: RowMenuAnchor; opener: HTMLElement } | null>(null)
-  // Per worktree: the panel is not remounted on tab change, and a message could land on the wrong diff.
-  const [drafts, setDrafts] = useState<Record<string, string>>({})
-  const message = draftFor(drafts, worktreeId)
+  const { message, from, setMessage } = useCommitMessage(worktreeId)
 
   if (!worktreeId) return null
-
-  const setMessage = (next: string): void => setDrafts((current) => withDraft(current, worktreeId, next))
 
   const listed = changes?.changes ?? []
   // Conflicts get a list of their own; they cannot be ticked into a commit.
@@ -415,17 +413,18 @@ export function ChangesTab(): React.JSX.Element | null {
             <span className="changes__allCount">
               {counted(scope === 'all' && checkedCount > 0 ? uncommitted : checkedCount)}/{counted(uncommitted)}
             </span>
+            <CommitFrom from={from} onClear={() => setMessage('')} />
           </div>
-          <input
+          <textarea
             className="changes__message"
-            type="text"
+            rows={1}
             value={message}
             placeholder="Commit message"
             aria-label="Commit message"
             disabled={committing}
             onChange={(event) => setMessage(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key !== 'Enter') return
+              if (event.key !== 'Enter' || event.shiftKey) return
               event.preventDefault()
               commit()
             }}
@@ -657,19 +656,6 @@ const PUSH_LABEL = { push: ['Push', 'Pushing…'], publish: ['Publish Branch', '
 export function canDiscard(change: WorktreeChange): boolean {
   if (!change.unstaged || change.kind === 'conflicted') return false
   return !(change.kind === 'added' && !change.staged)
-}
-
-/** The commit message for one worktree, kept when looking at another. */
-export function draftFor(drafts: Record<string, string>, worktreeId: string | null): string {
-  return worktreeId === null ? '' : (drafts[worktreeId] ?? '')
-}
-
-/** The same map with one worktree's message replaced; emptying it drops it. */
-export function withDraft(drafts: Record<string, string>, worktreeId: string, message: string): Record<string, string> {
-  const next = { ...drafts }
-  if (message === '') delete next[worktreeId]
-  else next[worktreeId] = message
-  return next
 }
 
 /** What an empty changes list means; "No changes" is wrong when the base could not be compared. */
