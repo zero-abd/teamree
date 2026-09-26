@@ -118,8 +118,9 @@ export function PaneRows({
             {reading?.terminalId !== row.terminalId ? null : (
               <SubagentTranscriptDialog
                 terminalId={row.terminalId}
-                // The row's copy while listed, so the status keeps up; the last one seen once it is not.
-                subagent={row.subagents?.find((subagent) => subagent.id === reading.subagent.id) ?? reading.subagent}
+                // The row's copy while it runs; the last one seen once it ends.
+                subagent={listed(row.subagents, reading.subagent.id) ?? reading.subagent}
+                running={listed(row.subagents, reading.subagent.id) !== undefined}
                 now={now}
                 onClose={() => setReading(null)}
               />
@@ -161,4 +162,8 @@ export function paneTitle(
   }
   if (attention.muted) lines.push('muted for teammates')
   return lines.join('\n')
+}
+
+function listed(subagents: readonly Subagent[] | undefined, id: string): Subagent | undefined {
+  return subagents?.find((subagent) => subagent.id === id)
 }

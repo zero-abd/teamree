@@ -33,7 +33,6 @@ const NOW = 1_000_000
 
 const subagent = (overrides: Partial<Subagent> & { id: string }): Subagent => ({
   description: overrides.id,
-  status: 'running',
   startedAt: NOW - 200_000,
   ...overrides
 })
@@ -85,16 +84,16 @@ describe('PaneRows with subagents', () => {
     )
   }
 
-  it('draws each subagent under the pane with its status and time, a level deeper', () => {
+  it('draws each running subagent under the pane with its time, a level deeper', () => {
     mount([
       subagent({ id: 'a', description: 'Simplify the status line' }),
-      subagent({ id: 'b', description: 'Research', parentId: 'a', status: 'failed', endedAt: NOW - 150_000 })
+      subagent({ id: 'b', description: 'Research', parentId: 'a', startedAt: NOW - 50_000 })
     ])
     const [first, second] = screen.getAllByRole('treeitem').filter((row) => row.classList.contains('subagent-row'))
     expect(first?.textContent).toBe('Simplify the status line3m 20s')
     expect(first?.getAttribute('aria-level')).toBe('4')
     expect(second?.getAttribute('aria-level')).toBe('5')
-    expect(second?.querySelector('.activity--failed')).not.toBeNull()
+    expect(second?.querySelector('.activity--working')).not.toBeNull()
     expect(second?.textContent).toContain('50s')
   })
 
@@ -112,7 +111,7 @@ describe('PaneRows with subagents', () => {
         { kind: 'tool', text: 'Bash npm test' }
       ]
     })
-    mount([subagent({ id: 'a', description: 'Hunt', status: 'done', endedAt: NOW })])
+    mount([subagent({ id: 'a', description: 'Hunt' })])
     await act(async () => {
       fireEvent.click(screen.getByText('Hunt'))
     })

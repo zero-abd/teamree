@@ -1106,9 +1106,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.subagent-row--running .subagent-row__label {
   color: var(--fg-secondary);
 }
 

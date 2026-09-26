@@ -1,13 +1,13 @@
 // Subagents read off a store laid out as Claude Code 2.1.282 writes it, and told by hooks.
 
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { canSpawnPty, waitUntil, writeFakeAgent } from './pty-test-support'
 import type { TerminalRecord } from './session-restore'
 import { TerminalSessionManager, type SessionRepository } from './session-manager'
-import { FINISHED_SHOWN, SubagentTracker, transcriptLines } from './subagents'
+import { SubagentTracker, transcriptLines } from './subagents'
 
 const SESSION = '60b42195-d46f-4114-8a14-1854ee57a6fa'
 const ELSEWHERE = '11111111-2222-3333-4444-555555555555'
@@ -73,34 +73,69 @@ function transcript(file: string, lines: readonly object[]): void {
 const main = (sessionId = SESSION): string => path.join(project, `${sessionId}.jsonl`)
 
 describe('SubagentTracker', () => {
-  it('finds subagents started before the app, with the end each one recorded', async () => {
-    subagent('aaa1', { agentType: 'general-purpose', description: 'Redesign dialog', requestShape: 'background' })
-    subagent('aaa2', { agentType: 'Explore', description: 'Search code', requestShape: 'background' })
-    subagent('aaa3', {
+  it('lists only the subagents still running; finished, failed and killed ones are hidden', async () => {
+    subagent('aaa1', { description: 'Finished', requestShape: 'background' })
+    subagent('aaa2', { description: 'Failed', requestShape: 'background' })
+    subagent('aaa3', { description: 'Killed', requestShape: 'background' })
+    subagent('aaa4', { description: 'Inline, failed', toolUseId: 'toolu_fg', requestShape: 'foreground' })
+    subagent('aaa5', {
       agentType: 'general-purpose',
-      description: 'Nested research',
-      parentAgentId: 'aaa1',
+      description: 'Still going',
       requestShape: 'background',
-      worktreePath: '/repo/.claude/worktrees/agent-aaa3',
-      worktreeBranch: 'worktree-agent-aaa3'
+      worktreePath: '/repo/.claude/worktrees/agent-aaa5',
+      worktreeBranch: 'worktree-agent-aaa5'
     })
-    transcript(main(), [{ type: 'user', message: { content: 'hello' } }, notification('aaa1', 'completed')])
-    // A nested agent's end is in its parent's transcript, not the session's.
-    transcript(path.join(project, SESSION, 'subagents', 'agent-aaa1.jsonl'), [notification('aaa3', 'failed')])
+    transcript(main(), [
+      notification('aaa1', 'completed'),
+      notification('aaa2', 'failed'),
+      notification('aaa3', 'killed'),
+      {
+        type: 'user',
+        timestamp: new Date().toISOString(),
+        message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_fg', is_error: true, content: 'boom' }] }
+      }
+    ])
 
-    const subagents = tracker(60_000)
+    const subagents = tracker()
     await follow(subagents)
 
-    const shown = subagents.list('term_1') ?? []
-    expect(shown.map(({ id, description, status }) => ({ id, description, status }))).toEqual([
-      { id: 'aaa1', description: 'Redesign dialog', status: 'done' },
-      // Nothing says it ended, and it has been silent since before the pane started.
-      { id: 'aaa2', description: 'Search code', status: 'stopped' },
-      { id: 'aaa3', description: 'Nested research', status: 'failed' }
+    expect(subagents.list('term_1')).toEqual([
+      expect.objectContaining({
+        id: 'aaa5',
+        description: 'Still going',
+        agentType: 'general-purpose',
+        branch: 'worktree-agent-aaa5'
+      })
     ])
-    expect(shown[2]).toMatchObject({ parentId: 'aaa1', branch: 'worktree-agent-aaa3', agentType: 'general-purpose' })
-    expect(shown.every((agent) => agent.endedAt !== undefined)).toBe(true)
     expect(changes).toEqual(['term_1'])
+  })
+
+  it('hides a nested subagent whose parent agent has ended, and keeps one whose parent it never saw', async () => {
+    subagent('nnn1', { description: 'Parent', requestShape: 'background' })
+    subagent('nnn2', { description: 'Child', parentAgentId: 'nnn1', requestShape: 'background' })
+    subagent('nnn3', { description: 'Grandchild', parentAgentId: 'nnn2', requestShape: 'background' })
+    subagent('nnn4', { description: 'Orphan', parentAgentId: 'elsewhere', requestShape: 'background' })
+    transcript(main(), [notification('nnn1', 'completed')])
+
+    const subagents = tracker()
+    await follow(subagents)
+
+    expect(subagents.list('term_1')?.map((agent) => agent.id)).toEqual(['nnn4'])
+  })
+
+  it('hides, on a resumed pane, what ended or went silent before it', async () => {
+    subagent('rrr1', { description: 'Ended while away', requestShape: 'background' })
+    subagent('rrr2', { description: 'Silent since', requestShape: 'background' })
+    const before = tracker()
+    await follow(before)
+    before.hook('term_1', { event: 'SubagentStart', at: Date.now(), sessionId: SESSION, agentId: 'rrr1' })
+    expect(before.list('term_1')?.map((agent) => agent.id).sort()).toEqual(['rrr1', 'rrr2'])
+
+    transcript(main(), [notification('rrr1', 'completed')])
+    // The pane's agent resumed a minute on: its files are older than it.
+    const resumed = tracker(60_000)
+    await follow(resumed)
+    expect(resumed.list('term_1')).toBeUndefined()
   })
 
   it('never reads a session the pane did not run, even in the same directory', async () => {
@@ -131,53 +166,28 @@ describe('SubagentTracker', () => {
       await follow(subagents)
       subagents.noteSession('term_1', ELSEWHERE, path.join(store, `${ELSEWHERE}.jsonl`))
       await subagents.refresh('term_1')
-      expect(subagents.list('term_1')).toEqual([expect.objectContaining({ id: 'ccc1', status: 'running' })])
+      expect(subagents.list('term_1')).toEqual([expect.objectContaining({ id: 'ccc1' })])
     } finally {
       rmSync(store, { recursive: true, force: true })
     }
   })
 
-  it('shows a subagent the moment its start hook fires, and done when it stops', async () => {
+  it('shows a subagent the moment its start hook fires, and drops it when it stops', async () => {
     const subagents = tracker()
     await follow(subagents)
     const at = Date.now()
     subagents.hook('term_1', { event: 'SubagentStart', at, sessionId: SESSION, agentId: 'ddd1', agentType: 'Explore' })
     expect(subagents.list('term_1')).toEqual([
-      { id: 'ddd1', description: 'Explore', agentType: 'Explore', status: 'running', startedAt: at }
+      { id: 'ddd1', description: 'Explore', agentType: 'Explore', startedAt: at }
     ])
 
     // The meta file brings the description.
     subagent('ddd1', { agentType: 'Explore', description: 'Find the sidebar', requestShape: 'background' })
     await subagents.refresh('term_1')
-    expect(subagents.list('term_1')?.[0]).toMatchObject({ description: 'Find the sidebar', status: 'running' })
+    expect(subagents.list('term_1')?.[0]).toMatchObject({ description: 'Find the sidebar' })
 
     subagents.hook('term_1', { event: 'SubagentStop', at: at + 1000, sessionId: SESSION, agentId: 'ddd1' })
-    expect(subagents.list('term_1')?.[0]).toMatchObject({ status: 'done', endedAt: at + 1000 })
-  })
-
-  it('takes a failure off disk over the stop hook that could not say so', async () => {
-    subagent('eee1', { description: 'Flaky', requestShape: 'background' })
-    const subagents = tracker()
-    await follow(subagents)
-    const at = Date.now()
-    subagents.hook('term_1', { event: 'SubagentStop', at, sessionId: SESSION, agentId: 'eee1' })
-    transcript(main(), [notification('eee1', 'failed', new Date(at + 100))])
-    await subagents.refresh('term_1')
-    expect(subagents.list('term_1')?.[0]).toMatchObject({ status: 'failed' })
-  })
-
-  it('reads a foreground agent’s end from its tool result', async () => {
-    subagent('fff1', { description: 'Inline', toolUseId: 'toolu_fg', requestShape: 'foreground' })
-    transcript(main(), [
-      {
-        type: 'user',
-        timestamp: new Date().toISOString(),
-        message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_fg', is_error: true, content: 'boom' }] }
-      }
-    ])
-    const subagents = tracker()
-    await follow(subagents)
-    expect(subagents.list('term_1')?.[0]).toMatchObject({ status: 'failed' })
+    expect(subagents.list('term_1')).toBeUndefined()
   })
 
   it('reads only what was appended, and says when a subagent changes', async () => {
@@ -185,12 +195,12 @@ describe('SubagentTracker', () => {
     transcript(main(), [{ type: 'user', message: { content: 'x'.repeat(10_000) } }])
     const subagents = tracker()
     await follow(subagents)
-    expect(subagents.list('term_1')?.[0]?.status).toBe('running')
+    expect(subagents.list('term_1')?.map((agent) => agent.id)).toEqual(['ggg1'])
     changes.length = 0
 
     transcript(main(), [notification('ggg1', 'killed')])
     await subagents.refresh('term_1')
-    expect(subagents.list('term_1')?.[0]?.status).toBe('stopped')
+    expect(subagents.list('term_1')).toBeUndefined()
     expect(changes).toEqual(['term_1'])
 
     changes.length = 0
@@ -198,30 +208,14 @@ describe('SubagentTracker', () => {
     expect(changes).toEqual([])
   })
 
-  it('stops what was running once the pane’s agent is gone', async () => {
+  it('drops what was running once the pane’s agent is gone', async () => {
     subagent('hhh1', { description: 'Cut short', requestShape: 'background' })
     const subagents = tracker()
     await follow(subagents)
-    expect(subagents.list('term_1')?.[0]?.status).toBe('running')
+    expect(subagents.list('term_1')?.map((agent) => agent.id)).toEqual(['hhh1'])
     live = false
     await subagents.refresh('term_1')
-    expect(subagents.list('term_1')?.[0]?.status).toBe('stopped')
-  })
-
-  it('keeps every running subagent and only the latest finished', async () => {
-    const lines: object[] = []
-    for (let index = 0; index < FINISHED_SHOWN + 3; index += 1) {
-      subagent(`iii${index}`, { description: `Done ${index}`, requestShape: 'background' })
-      lines.push(notification(`iii${index}`, 'completed', new Date(Date.now() + index * 10)))
-    }
-    subagent('iiirun', { description: 'Still going', requestShape: 'background' })
-    transcript(main(), lines)
-    const subagents = tracker()
-    await follow(subagents)
-    const shown = subagents.list('term_1') ?? []
-    expect(shown).toHaveLength(FINISHED_SHOWN + 1)
-    expect(shown.some((agent) => agent.id === 'iiirun')).toBe(true)
-    expect(shown.some((agent) => agent.id === 'iii0')).toBe(false)
+    expect(subagents.list('term_1')).toBeUndefined()
   })
 
   it('forgets a pane it no longer follows', async () => {
@@ -275,9 +269,13 @@ describe('transcriptLines', () => {
 const describePty = canSpawnPty() ? describe : describe.skip
 
 describePty('a restored Claude pane', () => {
-  it('carries the subagents its session started before the app did', async () => {
-    subagent('lll1', { agentType: 'general-purpose', description: 'Before the restart', requestShape: 'background' })
+  it('carries the running subagents its session started before the app did, not the finished ones', async () => {
+    subagent('lll1', { agentType: 'general-purpose', description: 'Finished before the restart' })
+    subagent('lll2', { agentType: 'general-purpose', description: 'Still going', requestShape: 'background' })
     transcript(main(), [notification('lll1', 'completed')])
+    // Written after the restored pane's agent started.
+    const later = new Date(Date.now() + 60_000)
+    utimesSync(path.join(project, SESSION, 'subagents', 'agent-lll2.jsonl'), later, later)
     const checkout = mkdtempSync(path.join(os.tmpdir(), 'teamree-subagents-checkout-'))
     try {
       const launch = await writeFakeAgent(checkout)
@@ -313,7 +311,7 @@ describePty('a restored Claude pane', () => {
           return manager.list()[0]?.subagents !== undefined
         }, 'the subagents to be read')
         expect(manager.list()[0]?.subagents).toEqual([
-          expect.objectContaining({ id: 'lll1', description: 'Before the restart', status: 'done' })
+          expect.objectContaining({ id: 'lll2', description: 'Still going' })
         ])
       } finally {
         await manager.shutdown()

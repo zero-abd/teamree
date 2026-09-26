@@ -558,14 +558,11 @@ export type Terminal = {
    * for a terminal opened now; clears the moment the user types into the pane.
    */
   restored?: RestoredAs
-  /** Subagents its Claude Code session started; see `src/main/terminals/subagents.ts`. */
+  /** Running subagents its Claude Code session started; see `src/main/terminals/subagents.ts`. */
   subagents?: Subagent[]
 }
 
-/** How a subagent stands: `stopped` is killed, or gone with its session without saying it finished. */
-export type SubagentStatus = 'running' | 'done' | 'failed' | 'stopped'
-
-/** One subagent of a pane's session, from its hooks and its files under the agent's store. */
+/** One running subagent of a pane's session, from its hooks and its files under the agent's store. */
 export type Subagent = {
   /** The agent's own id, e.g. `a62396c4dbccd099c`. */
   id: string
@@ -574,10 +571,7 @@ export type Subagent = {
   agentType?: string
   /** The subagent that started this one. */
   parentId?: string
-  status: SubagentStatus
   startedAt: number
-  /** Set whenever `status` is not `running`. */
-  endedAt?: number
   /** The worktree it was isolated in, and its branch. */
   worktreePath?: string
   branch?: string
