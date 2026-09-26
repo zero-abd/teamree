@@ -426,6 +426,10 @@
   background: var(--line-strong);
 }
 
+.setup__mark--elsewhere {
+  box-shadow: inset 0 0 0 1.5px var(--success);
+}
+
 .setup__label {
   font-size: var(--text-sm);
   font-weight: 600;
@@ -483,7 +487,7 @@
 .welcome__shortcuts kbd {
   padding: 0 4px;
   border-bottom-width: 1px;
-  font-size: 10px;
+  font-size: var(--text-xs);
 }
 
 /* An open worktree with no panes: its name, its branch, and the `+` menu's rows as buttons. */

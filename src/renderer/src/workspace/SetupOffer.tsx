@@ -1,14 +1,21 @@
-// The setup command a lockfile suggests, offered in the style of SetupAsk. Use saves it for
-// new worktrees; Run starts it in this one. Nothing runs unless Run is pressed.
+// The setup command a lockfile suggests, offered in the style of SetupAsk on a project's first two
+// worktrees. Use saves it for new worktrees; Run starts it in this one. Nothing runs unless Run is pressed.
 
 import { useEffect, useState } from 'react'
 import type { Project, Worktree, WorktreeSetupCheck } from '@shared/entities'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { readDismissed, setupOfferFor, writeDismissed } from './setupOfferModel'
+import {
+  offeredOn,
+  readDismissed,
+  readOfferedOn,
+  setupOfferFor,
+  writeDismissed,
+  writeOfferedOn
+} from './setupOfferModel'
 
 const storage = typeof window === 'undefined' ? undefined : window.localStorage
-// Not now on a worktree's Run lasts until the app quits.
+// Not Now on a worktree's Run lasts until the app quits.
 const skipped = new Set<string>()
 
 export function SetupOffer({ project, worktree }: { project: Project; worktree: Worktree }): React.JSX.Element | null {
@@ -16,6 +23,7 @@ export function SetupOffer({ project, worktree }: { project: Project; worktree: 
   const showNotice = useWorkspaceStore((state) => state.showNotice)
   const [check, setCheck] = useState<WorktreeSetupCheck>({})
   const [dismissed, setDismissed] = useState(() => readDismissed(storage))
+  const [offered, setOffered] = useState(() => readOfferedOn(storage))
   const [, setSkips] = useState(0)
   const [draft, setDraft] = useState<string | null>(null)
 
@@ -35,13 +43,20 @@ export function SetupOffer({ project, worktree }: { project: Project; worktree: 
     }
   }, [worktree.id, checkable])
 
-  const offer = setupOfferFor({
+  const found = setupOfferFor({
     project,
     worktree,
     check,
     dismissed: dismissed.includes(project.id),
     skipped: skipped.has(worktree.id)
   })
+  const record = found?.kind === 'project' ? offeredOn(offered, project.id, worktree.id) : offered
+  useEffect(() => {
+    if (record === null || record === offered) return
+    writeOfferedOn(storage, record)
+    setOffered(record)
+  }, [record, offered])
+  const offer = record === null ? null : found
   if (offer === null) return null
 
   const skip = (): void => {
@@ -69,7 +84,7 @@ export function SetupOffer({ project, worktree }: { project: Project; worktree: 
           Run
         </button>
         <button type="button" className="button button--small" onClick={skip}>
-          Not now
+          Not Now
         </button>
       </section>
     )
@@ -119,7 +134,7 @@ export function SetupOffer({ project, worktree }: { project: Project; worktree: 
         </button>
       ) : null}
       <button type="button" className="button button--small" onClick={notNow}>
-        Not now
+        Not Now
       </button>
     </section>
   )

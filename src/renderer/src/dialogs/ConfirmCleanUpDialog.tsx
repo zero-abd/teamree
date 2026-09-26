@@ -52,11 +52,11 @@ export function ConfirmCleanUpDialog({ projectId }: { projectId: string }): Reac
 
   return (
     <Confirm
-      title={`Remove merged worktrees${project === undefined ? '' : ` from ${project.name}`}?`}
+      title={`Delete merged worktrees${project === undefined ? '' : ` from ${project.name}`}?`}
       titleHint={project?.path}
       {...(plan !== null && rows.length === 0 ? { body: 'Nothing to clean up' } : {})}
       cancel="Cancel"
-      confirm={chosen.length === 0 ? 'Remove' : `Remove ${chosen.length}`}
+      confirm={chosen.length === 0 ? 'Delete' : `Delete ${chosen.length}`}
       confirmDisabled={chosen.length === 0}
       deleteConfirms
       onCancel={closeDialog}

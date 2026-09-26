@@ -71,7 +71,7 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'new-terminal', chord: { key: 't' }, title: 'New Terminal' },
   // Shifted, because ⌘M is the platform's minimise.
   { command: 'new-markdown', chord: { key: 'm', shift: true }, title: 'New Markdown' },
-  { command: 'new-worktree', chord: { key: 'n' }, title: 'New Task' },
+  { command: 'new-worktree', chord: { key: 'n' }, title: 'New Task…' },
   { command: 'new-child-task', chord: { key: 'n', shift: true }, title: 'New Child Task…' },
   { command: 'toggle-sidebar', chord: { key: 'b' }, title: 'Show/Hide Sidebar' },
   // J: the side-panel key in the editors people run in these panes.
@@ -116,7 +116,7 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'toggle-diff-wrap', title: 'Wrap Diff Lines' },
   { command: 'toggle-diff-whitespace', title: 'Hide Whitespace Changes' },
   // The picker straight away; cloning is the other way in.
-  { command: 'add-project', title: 'Add Project…' },
+  { command: 'add-project', title: 'Open Folder…' },
   { command: 'clone-repository', title: 'Clone Repository…' },
   // No chords: ⌘⇧P is a palette everywhere else. Commit opens the panel with the message box,
   // hence the ellipsis.

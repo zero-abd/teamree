@@ -8,7 +8,12 @@ import { NO_DEFAULT_AGENT } from '../state/preferences'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { offersDefaultAgent, setupRows, type SetupAction, type SetupRow, type SetupRowId } from './setupModel'
 
-const STATE_LABEL: Record<SetupRow['state'], string> = { done: 'Done', todo: 'Needs action', waiting: 'Checking' }
+const STATE_LABEL: Record<SetupRow['state'], string> = {
+  done: 'Done',
+  todo: 'Needs action',
+  waiting: 'Checking',
+  elsewhere: 'Another copy'
+}
 
 export function SetupRows({ omit }: { omit?: SetupRowId }): React.JSX.Element {
   const agents = useWorkspaceStore((state) => state.agents)

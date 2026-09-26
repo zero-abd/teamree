@@ -21,8 +21,8 @@ export type SetupAction =
 export type SetupRow = {
   id: SetupRowId
   label: string
-  /** `waiting` until the probe behind the row has answered. */
-  state: 'done' | 'todo' | 'waiting'
+  /** `waiting` until the probe behind the row has answered; `elsewhere` works, through another copy. */
+  state: 'done' | 'todo' | 'waiting' | 'elsewhere'
   /** What was found, in a few words; null when the chips say it. */
   value: string | null
   /** The agents found, each with its version. */
@@ -106,9 +106,10 @@ function cliRow(status: CliStatus | null): SetupRow {
       actions: [{ id: 'install-cli', label: `${panel.action}…` }]
     })
   }
-  // A working link to another copy that this copy leaves alone still runs a teamree.
-  const working = status.state === 'linked' || (status.state === 'elsewhere' && !status.dangling)
-  return row('cli', 'Command Line', { state: working ? 'done' : 'todo', value: panel.headline, actions: [] })
+  // A working link to another copy that this copy leaves alone still runs a teamree, just not this one.
+  const state =
+    status.state === 'linked' ? 'done' : status.state === 'elsewhere' && !status.dangling ? 'elsewhere' : 'todo'
+  return row('cli', 'Command Line', { state, value: panel.headline, actions: [] })
 }
 
 function projectRow(projects: SetupFacts['projects']): SetupRow {
@@ -119,7 +120,7 @@ function projectRow(projects: SetupFacts['projects']): SetupRow {
       actions: [
         { id: 'new-project', label: 'New Project…' },
         { id: 'open-folder', label: 'Open Folder…' },
-        { id: 'clone', label: 'Clone…' }
+        { id: 'clone', label: 'Clone Repository…' }
       ]
     })
   }

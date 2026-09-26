@@ -2,6 +2,7 @@
 // them from here. A conflict is resolved in that child's own merge, not here.
 
 import { useEffect, useId, useRef } from 'react'
+import { STAGE_WORD } from '../../dashboard/taskRows'
 import { firstSentence } from '../../state/messages'
 import { useOverlaps } from '../../state/overlapStore'
 import { useWorkspaceStore } from '../../state/workspaceStore'
@@ -76,7 +77,7 @@ export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.J
                 )
               }
             >
-              {`Clean Up ${landed.length} Landed`}
+              {`Delete ${landed.length} Merged`}
             </button>
           ) : null}
           <button
@@ -122,11 +123,11 @@ export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.J
               {row.title}
             </button>
             <span id={`${speechId}-${row.worktreeId}`} hidden>
-              {childRowSpeech(row, into)}
+              {childRowSpeech({ ...row, stage: STAGE_WORD[row.stage] }, into)}
             </span>
             {/* Drawn only: the name's description says it in words. */}
             <span className="child__facts" aria-hidden="true">
-              <span className={`child__stage child__stage--${row.stage}`}>{row.stage}</span>
+              <span className={`child__stage child__stage--${row.stage}`}>{STAGE_WORD[row.stage]}</span>
               <ChildFacts row={row} into={into} />
             </span>
             {mergeable(row) ? (

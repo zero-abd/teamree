@@ -41,7 +41,7 @@ describe('paneSearchReducer', () => {
     const next = paneSearchReducer(state, { type: 'query', value: 'erro' })
     expect(next.current).toBe(0)
     expect(next.total).toBe(0)
-    expect(matchLabel(next)).toBe('No results')
+    expect(matchLabel(next)).toBe('No matches')
   })
 
   it('drops the tally when an option is toggled, because the result set moves with it', () => {
@@ -97,7 +97,7 @@ describe('matchLabel', () => {
   })
 
   it('distinguishes a term that is present from one that is not', () => {
-    expect(matchLabel(withResults('nothing', -1, 0))).toBe('No results')
+    expect(matchLabel(withResults('nothing', -1, 0))).toBe('No matches')
   })
 
   it('counts without a position when the addon has not picked a match yet', () => {

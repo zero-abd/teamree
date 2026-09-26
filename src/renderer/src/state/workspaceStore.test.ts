@@ -355,7 +355,7 @@ it('offers the review page the push came back with', async () => {
 
   await useWorkspaceStore.getState().pushActiveWorktree()
 
-  expect(useWorkspaceStore.getState().notices.at(-1)?.action).toEqual({ label: 'Open review', url })
+  expect(useWorkspaceStore.getState().notices.at(-1)?.action).toEqual({ label: 'Open Review', url })
   call.mockRestore()
 })
 

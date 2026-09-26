@@ -499,7 +499,7 @@ describe('every command the menu has is a row in the palette', () => {
       .filter((item) => item.kind === 'action')
       .map((item) => item.label)
     expect(labels).toEqual(
-      expect.arrayContaining(['Show Changes', 'Show Files', 'Add Project…', 'Clone Repository…', 'Check for Updates'])
+      expect.arrayContaining(['Show Changes', 'Show Files', 'Open Folder…', 'Clone Repository…', 'Check for Updates'])
     )
   })
 
@@ -1002,10 +1002,10 @@ describe('landing from the palette', () => {
 
   it.each([
     ['merge', { kind: 'merge', into: 'main' }, 'Merge into main…'],
-    ['merge', { kind: 'merge', into: 'Rework auth' }, 'Merge into Rework auth…'],
+    ['merge', { kind: 'merge', into: 'Rework auth', parent: true }, 'Merge into Parent…'],
     ['land', { kind: 'merge', into: 'main' }, 'Merge into main…'],
     ['pull request', { kind: 'create-pr' }, 'Create Pull Request…'],
-    ['create pr', { kind: 'create-pr', uncommitted: 2 }, 'Commit & Create PR…'],
+    ['create pr', { kind: 'create-pr', uncommitted: 2 }, 'Commit & Create Pull Request…'],
     ['merge', { kind: 'merge', into: 'main', uncommitted: 2 }, 'Commit & Merge into main…']
   ] as const)('answers %s with the land on screen first', (query, land, label) => {
     const [first] = found(query, { land })

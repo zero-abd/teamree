@@ -112,10 +112,10 @@ describe('setupRows', () => {
     expect(labels(row(setupRows(facts({ cli: other })), 'cli'))).toEqual(['Repair…'])
   })
 
-  it('never offers Repair on a separate profile, and counts a working link to another copy as done', () => {
+  it('never offers Repair on a separate profile, and marks a working link to another copy apart from done', () => {
     const working = cli({ state: 'elsewhere', resolved: '/Applications/teamree.app/cli/teamree', copy: 'profile' })
     expect(row(setupRows(facts({ cli: working })), 'cli')).toMatchObject({
-      state: 'done',
+      state: 'elsewhere',
       value: 'Linked to another copy',
       actions: []
     })
@@ -148,7 +148,7 @@ describe('setupRows', () => {
   it('offers the three ways to a project until there is one', () => {
     const none = row(setupRows(facts()), 'project')
     expect(none).toMatchObject({ state: 'todo', value: 'None' })
-    expect(labels(none)).toEqual(['New Project…', 'Open Folder…', 'Clone…'])
+    expect(labels(none)).toEqual(['New Project…', 'Open Folder…', 'Clone Repository…'])
 
     expect(row(setupRows(facts({ projects: [{ name: 'pager' }] })), 'project')).toMatchObject({
       state: 'done',

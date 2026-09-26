@@ -60,7 +60,7 @@ export function paneSearchReducer(state: PaneSearchState, action: PaneSearchActi
 /** What the counter reads; empty for an untouched field. */
 export function matchLabel(state: PaneSearchState, limit = SEARCH_HIGHLIGHT_LIMIT): string {
   if (state.query === '') return ''
-  if (state.total === 0) return 'No results'
+  if (state.total === 0) return 'No matches'
   const total = state.total >= limit ? `${limit}+` : String(state.total)
   return state.current === 0 ? `${total} matches` : `${state.current} of ${total}`
 }

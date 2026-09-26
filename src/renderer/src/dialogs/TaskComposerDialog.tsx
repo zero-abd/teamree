@@ -22,7 +22,6 @@ import {
   defaultAgentCounts,
   fanOut,
   plannedBranches,
-  submitLabel,
   taskCreates,
   taskName,
   taskPlanNote,
@@ -295,7 +294,7 @@ export function TaskComposerDialog({
             Cancel
           </button>
           <button type="submit" className="button button--primary" disabled={!canSubmit}>
-            {submitLabel(selection)}
+            Start Task
           </button>
         </footer>
       </form>

@@ -87,7 +87,7 @@ describe('Clean Up Merged', () => {
     expect(box('dirty').checked).toBe(false)
     expect(screen.getByText('Uncommitted changes')).toBeTruthy()
     expect(screen.getByText('3 ignored')).toBeTruthy()
-    expect(confirmButton().textContent).toBe('Remove 3')
+    expect(confirmButton().textContent).toBe('Delete 3')
   })
 
   it('unchecks the parent with its child, and checks the child with its parent', async () => {
@@ -95,7 +95,7 @@ describe('Clean Up Merged', () => {
 
     fireEvent.click(box('child'))
     expect([box('parent').checked, box('child').checked]).toEqual([false, false])
-    expect(confirmButton().textContent).toBe('Remove 1')
+    expect(confirmButton().textContent).toBe('Delete 1')
 
     fireEvent.click(box('parent'))
     expect([box('parent').checked, box('child').checked]).toEqual([true, true])
@@ -108,7 +108,7 @@ describe('Clean Up Merged', () => {
     expect([box('child').disabled, box('parent').disabled]).toEqual([true, true])
     expect(screen.getByText('Unsaved files')).toBeTruthy()
     expect(screen.getByText('Child stays')).toBeTruthy()
-    expect(confirmButton().textContent).toBe('Remove 1')
+    expect(confirmButton().textContent).toBe('Delete 1')
   })
 
   it('removes the checked ones', async () => {

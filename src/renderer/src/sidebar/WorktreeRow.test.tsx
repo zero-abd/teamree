@@ -1017,6 +1017,7 @@ describe('a worktree whose work has landed', () => {
 
     const chip = screen.getByText('Merged')
     expect(chip.classList.contains('chip')).toBe(true)
+    expect(chip.getAttribute('title')).toBe('Merged into main')
     expect(screen.queryByRole('img', { name: /merge cleanly/ })).toBeNull()
   })
 
@@ -1024,19 +1025,21 @@ describe('a worktree whose work has landed', () => {
     mount({ status: status({ ahead: 1, behind: 1 }), landing: landing({ notPushed: true }) })
 
     expect(screen.getByText('Merged · not pushed').classList.contains('chip')).toBe(true)
-    // Landed: its count against origin/main would only repeat the chip.
+    // Merged: its count against origin/main would only repeat the chip.
     expect(document.querySelector('.gitchip')).toBeNull()
   })
 
-  it('says Landed for a child whose work is in its parent', () => {
+  it('says Merged for a child too, naming where on hover', () => {
     mount({
       worktree: worktree({ parentId: 'w0', baseRef: 'rework-auth' }),
       status: status(),
       landing: landing({ base: 'rework-auth', host: null, parent: { worktreeId: 'w0', name: 'Rework auth' } })
     })
 
-    expect(screen.getByText('Landed').classList.contains('chip')).toBe(true)
-    expect(screen.queryByText('Merged')).toBeNull()
+    const chip = screen.getByText('Merged')
+    expect(chip.classList.contains('chip')).toBe(true)
+    expect(chip.getAttribute('title')).toBe('Merged into Rework auth')
+    expect(screen.queryByText('Landed')).toBeNull()
   })
 
   it('leads its menu with Delete Worktree…', () => {

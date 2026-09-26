@@ -173,7 +173,7 @@
 .appearance__preview-pane {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--s1);
   padding: 6px 4px;
 }
 

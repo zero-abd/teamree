@@ -156,7 +156,7 @@ describe('the rows that are also commands', () => {
     expect(labels()).not.toContain('Split Pane Right')
     expect(labels()).toContain('New Terminal')
     expect(reason('Split Pane Right')).toBe('no pane focused')
-    expect(reason('New Task')).toBeNull()
+    expect(reason('New Task…')).toBeNull()
 
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'save' } })
     expect(labels()).toEqual(['Save', 'Save All', 'Search in Files: “save”'])
@@ -352,15 +352,15 @@ describe('going to a file', () => {
     const files = rows().filter((row) => row.querySelector('.palette__trailing')?.textContent?.startsWith('src/'))
     expect(files.length).toBeLessThanOrEqual(5)
     expect(rows().length).toBeGreaterThan(0)
-    // No longer "Nothing matches" for a file name.
-    expect(screen.queryByText(/Nothing matches/)).toBeNull()
+    // No longer "No matches" for a file name.
+    expect(screen.queryByText('No matches')).toBeNull()
   })
 
   it('says nothing matches only once the runtime has answered', async () => {
     mount('files')
     type('zzz')
-    expect(screen.queryByText(/Nothing matches/)).toBeNull()
-    await waitFor(() => expect(screen.getByText(/Nothing matches/)).toBeTruthy())
+    expect(screen.queryByText('No matches')).toBeNull()
+    await waitFor(() => expect(screen.getByText('No matches')).toBeTruthy())
   })
 })
 
@@ -513,7 +513,7 @@ describe('the first screen', () => {
     expect(labels().slice(0, 2)).toEqual(['Fix the ruler', 'Rewrite the pager'])
     expect(trailingOf('Rewrite the pager')).toBe('pager · current')
     expect(trailingOf('Copy Path')).toBe('')
-    expect(trailingOf('New Task')).toBe('⌘N')
+    expect(trailingOf('New Task…')).toBe('⌘N')
   })
 
   it('leads with a command once it has been run from here, after a reopen too', () => {
@@ -534,7 +534,7 @@ describe('the first screen', () => {
     expect(labels()).toEqual([
       'Copy Path',
       'Copy Branch',
-      'Open Setting: Copy on select',
+      'Open Setting: Copy on Select',
       'Open Setting: Copy into every new worktree',
       'Search in Files: “copy”'
     ])
@@ -572,7 +572,7 @@ describe('a query that finds nothing', () => {
       'Open Branch: “rate limits”',
       'Search in Files: “rate limits”'
     ])
-    expect(screen.queryByText(/Nothing matches/)).toBeNull()
+    expect(screen.queryByText('No matches')).toBeNull()
   })
 
   it('opens New Task with the query as the task, and leaves Recent alone', async () => {

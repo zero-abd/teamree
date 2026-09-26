@@ -243,9 +243,9 @@ describe('cliLine', () => {
 
 describe('the filter', () => {
   it('keeps a label holding the words anywhere, whatever their case', () => {
-    expect(labelMatches('Copy on select', 'SELECT')).toBe(true)
-    expect(labelMatches('Copy on select', '  on sel ')).toBe(true)
-    expect(labelMatches('Copy on select', 'paste')).toBe(false)
+    expect(labelMatches('Copy on Select', 'SELECT')).toBe(true)
+    expect(labelMatches('Copy on Select', '  on sel ')).toBe(true)
+    expect(labelMatches('Copy on Select', 'paste')).toBe(false)
   })
 
   it('keeps everything while empty', () => {

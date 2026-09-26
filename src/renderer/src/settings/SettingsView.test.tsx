@@ -451,7 +451,7 @@ describe('updates', () => {
     render(<SettingsView />)
     expect(screen.getByText('teamree 0.0.0-dev (not a release)')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Check for Updates' })).toBeNull()
-    expect(screen.queryByRole('checkbox', { name: 'Check automatically' })).toBeNull()
+    expect(screen.queryByRole('checkbox', { name: 'Check Automatically' })).toBeNull()
   })
 
   it('checks on request, and says when the last one was', () => {
@@ -470,7 +470,7 @@ describe('updates', () => {
 
   it('turns the automatic check off through the store', () => {
     render(<SettingsView />)
-    const check = screen.getByLabelText('Check automatically')
+    const check = screen.getByLabelText('Check Automatically')
     expect((check as HTMLInputElement).checked).toBe(true)
     fireEvent.click(check)
     expect(setAutomaticUpdates).toHaveBeenCalledWith(false)
@@ -575,7 +575,7 @@ describe('panes', () => {
     render(<SettingsView />)
     fireEvent.click(screen.getByLabelText('Option as Meta'))
     expect(setTerminalOptions).toHaveBeenCalledWith({ optionIsMeta: true })
-    fireEvent.click(screen.getByLabelText('Copy on select'))
+    fireEvent.click(screen.getByLabelText('Copy on Select'))
     expect(setTerminalOptions).toHaveBeenCalledWith({ copyOnSelect: true })
   })
 
@@ -693,15 +693,15 @@ describe('the filter', () => {
     render(<SettingsView />)
     type('on sel')
     const label = document.querySelector('label[for="settings-copy-on-select"]') as HTMLElement
-    expect(label.querySelector('mark')?.textContent).toBe('on sel')
-    expect(label.textContent).toBe('Copy on select')
+    expect(label.querySelector('mark')?.textContent).toBe('on Sel')
+    expect(label.textContent).toBe('Copy on Select')
   })
 
   it('keeps a whole section whose title matches', () => {
     render(<SettingsView />)
     type('updates')
     expect(screen.getByRole('heading', { name: 'Updates' })).toBeTruthy()
-    expect(screen.getByRole('checkbox', { name: 'Check automatically' })).toBeTruthy()
+    expect(screen.getByRole('checkbox', { name: 'Check Automatically' })).toBeTruthy()
     expect(nav()).toEqual(['Updates'])
   })
 

@@ -51,6 +51,12 @@ const { Welcome } = await import('../workspace/Welcome')
 const { HelpView } = await import('../help/HelpView')
 const { SettingsView } = await import('../settings/SettingsView')
 const { Dashboard } = await import('../dashboard/Dashboard')
+const { WORKSPACE_SHORTCUTS } = await import('../keyboard/workspaceShortcuts')
+const { AddProjectButton } = await import('../sidebar/AddProjectButton')
+const { mergedChip } = await import('../sidebar/mergeBadge')
+const { STAGE_WORD } = await import('../dashboard/taskRows')
+const { landLabel, landOffer } = await import('../workspace/rightPanel/landOffer')
+const { setupRows } = await import('../workspace/setupModel')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -746,6 +752,12 @@ describe('buttons and titles', () => {
     })
     render(<SettingsView />)
     expect(casingFaults(document.body)).toEqual([])
+    // A toggle is named like a button; a field keeps its label in sentence case.
+    const toggles = [...document.querySelectorAll('input[type="checkbox"]')].map(
+      (box) => box.closest('label')?.textContent?.trim() ?? box.getAttribute('aria-label') ?? ''
+    )
+    expect(toggles.length).toBeGreaterThan(0)
+    expect(toggles.filter((label) => !titleCased(label))).toEqual([])
   })
 
   it('are Title Case on All Panes, its title the one the sidebar names', () => {
@@ -839,5 +851,75 @@ describe('buttons and titles', () => {
       expect(casingFaults(document.body), String(input.path)).toEqual([])
       view.unmount()
     }
+  })
+})
+
+describe('one verb for one action', () => {
+  // Words the app once mixed for the same action or state, each with the one it settled on.
+  const DRIFT: readonly (readonly [RegExp, string])[] = [
+    [/\bLand(ed)?\b/, 'Merge, Merged'],
+    [/^Add Project/, 'Open Folder…'],
+    [/^Clone…$/, 'Clone Repository…'],
+    [/^Create Worktree$/, 'Start Task'],
+    [/^New Task$/, 'New Task…'],
+    [/^Recently Removed$/, 'Recently Deleted'],
+    [/\bCreate PR\b|^Create pull request$/, 'Create Pull Request…'],
+    [/^Not now$/, 'Not Now'],
+    [/^(Nothing matches|No results?|No match)\b/, 'No matches']
+  ]
+  const drifted = (labels: readonly string[]): string[] =>
+    labels.flatMap((label) => DRIFT.filter(([word]) => word.test(label)).map(([, settled]) => `${label} → ${settled}`))
+
+  it('names adding a project, starting a task and landing work the same in every place that offers it', () => {
+    const titles = WORKSPACE_SHORTCUTS.map((shortcut) => shortcut.title)
+    expect(titles).toEqual(expect.arrayContaining(['New Task…', 'Open Folder…', 'Clone Repository…']))
+
+    seed({ projects: [], newProject: vi.fn(), chooseProjectFolder: vi.fn() })
+    const welcome = render(<Welcome modifier={resolvePlatformModifier('darwin')} project={undefined} />)
+    const doors = [...document.querySelectorAll('.welcome__actions button')].map((button) => button.textContent ?? '')
+    welcome.unmount()
+    render(<AddProjectButton />)
+    fireEvent.click(document.querySelector('button[aria-label="Add project"]') as HTMLButtonElement)
+    const plus = [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent ?? '')
+    expect(doors).toEqual(['New Project…', 'Open Folder…', 'Clone Repository…'])
+    expect(plus).toEqual(doors)
+    const setup = setupRows({
+      agents: [],
+      agentsProbed: true,
+      notices: 'notify',
+      noticeTest: null,
+      platform: 'darwin',
+      cli: null,
+      projects: []
+    }).flatMap((row) => row.actions.map((action) => action.label))
+    expect(setup).toEqual(expect.arrayContaining(doors))
+
+    const landing = {
+      worktreeId: 'w1',
+      branch: 'rewrite-the-pager--tests',
+      base: 'rewrite-the-pager',
+      host: null,
+      published: false,
+      unmerged: 1,
+      merged: false,
+      readAt: 0,
+      parent: { worktreeId: 'w0', name: 'Rewrite the pager' }
+    }
+    const status = { ...pushStatus(), ahead: 1 }
+    const offer = landOffer(landing, status)
+    if (offer === null || offer.kind === 'merged') throw new Error('no merge offered')
+    const pullRequest = landLabel({ kind: 'create-pr', uncommitted: 2 })
+    const words = [...titles, ...doors, ...plus, ...setup, landLabel(offer), pullRequest, STAGE_WORD.landed]
+    expect(drifted(words)).toEqual([])
+    expect(landLabel(offer)).toBe('Merge into Parent…')
+    expect(pullRequest).toBe('Commit & Create Pull Request…')
+  })
+
+  it('says Merged for a child and a top-level branch alike, on the row, the board and Changes', () => {
+    const top = { worktreeId: 'w1', branch: 'b', base: 'main', host: null, published: false, unmerged: 0, readAt: 0 }
+    const child = { ...top, parent: { worktreeId: 'w0', name: 'Rewrite the pager' } }
+    expect(mergedChip({ ...top, merged: true })).toEqual({ label: 'Merged', title: 'Merged into main' })
+    expect(mergedChip({ ...child, merged: true })).toEqual({ label: 'Merged', title: 'Merged into Rewrite the pager' })
+    expect(STAGE_WORD.landed).toBe('merged')
   })
 })

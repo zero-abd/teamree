@@ -589,7 +589,7 @@
 
 /* Files another task changes too. Blue, since amber is an agent asking; red once a merge would stop. */
 .overlap {
-  gap: 3px;
+  gap: var(--s1);
   white-space: nowrap;
 }
 

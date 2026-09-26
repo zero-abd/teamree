@@ -372,11 +372,13 @@ export function Sidebar({
         <div className="sidebar__head">
           <h2 className="sidebar__head-title">Projects</h2>
           <div className="sidebar__head-actions">
-            <CompactToggle />
+            {projects.length === 0 ? null : <CompactToggle />}
             <AddProjectButton />
           </div>
         </div>
-        <SidebarFilter field={filterField} onLeave={leaveFilter} onSubmit={openFirstShown} />
+        {projects.length === 0 ? null : (
+          <SidebarFilter field={filterField} onLeave={leaveFilter} onSubmit={openFirstShown} />
+        )}
 
         {/* One Tab stop; the arrows walk the rows. The other controls in it are the mouse's, each
             reachable by key elsewhere: the row menu, ⌘N, the rail. */}

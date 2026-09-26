@@ -335,7 +335,7 @@ describe('the window’s own commands in the menu bar', () => {
     expect(appMenu.map((item) => item.label ?? item.role)).toContain('Settings…')
 
     // In the order the window published them.
-    expect(labelsOf(template, 'File')).toEqual(['New Task', 'New Terminal', 'Close Pane'])
+    expect(labelsOf(template, 'File')).toEqual(['New Task…', 'New Terminal', 'Close Pane'])
     expect(labelsOf(template, 'Edit').slice(-2)).toEqual(['—', 'Find in Pane'])
     expect(labelsOf(template, 'View').slice(0, 3)).toEqual([shipped('open-palette'), shipped('open-appearance'), '—'])
     expect(shipped('open-palette')).toBe('Go to Worktree or Command')
@@ -408,7 +408,7 @@ describe('the window’s own commands in the menu bar', () => {
   it('names the command back when an item is chosen', () => {
     const choose = vi.fn()
     const template = applicationMenuTemplate({ platform: 'darwin', commands: published(choose) })
-    const item = items(template).find((entry) => entry.label === 'New Task')
+    const item = items(template).find((entry) => entry.label === 'New Task…')
 
     item?.click?.(undefined as never, undefined, undefined as never)
     expect(choose).toHaveBeenCalledExactlyOnceWith('new-worktree')
@@ -441,7 +441,7 @@ describe('the window’s own commands in the menu bar', () => {
   it('folds the application items into File where there is no app menu', () => {
     const template = applicationMenuTemplate({ platform: 'win32', commands: published() })
     expect(labelsOf(template, menuName('win32', 'File'))).toEqual([
-      'New Task',
+      'New Task…',
       'New Terminal',
       'Close Pane',
       'Settings…',

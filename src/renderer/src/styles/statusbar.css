@@ -87,7 +87,7 @@
 .statusbar kbd {
   padding: 0 4px;
   border-bottom-width: 1px;
-  font-size: 10px;
+  font-size: var(--text-xs);
 }
 
 @keyframes pulse {

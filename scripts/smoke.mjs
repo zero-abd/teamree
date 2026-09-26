@@ -258,13 +258,13 @@ async function checkMenuBar(ask) {
 
   // Waited for: the window publishes its menus on mount.
   const arrived = await waitFor(
-    async () => named('New Task') !== undefined,
+    async () => named('New Task\u2026') !== undefined,
     'the window\u2019s commands never reached the menu bar'
   )
   if (!arrived) return
 
   for (const [label, accelerator] of [
-    ['New Task', 'CommandOrControl+N'],
+    ['New Task\u2026', 'CommandOrControl+N'],
     ['Close Pane', 'CommandOrControl+W'],
     // \u2318, opens the settings page, not the theme editor (own item under View, no chord).
     ['Settings\u2026', 'CommandOrControl+,'],

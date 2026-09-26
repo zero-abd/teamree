@@ -27,7 +27,7 @@ import { useTaskTreeStore } from '../state/taskTreeStore'
 import { useUsageReads } from '../state/usageStore'
 import { dashboardRows, toneCounts, type DashboardRow } from './dashboardRows'
 import { TaskBoard, useChangedLines } from './TaskBoard'
-import { taskRows } from './taskRows'
+import { STAGE_WORD, taskRows } from './taskRows'
 
 export function Dashboard(): React.JSX.Element {
   const terminals = useWorkspaceStore((state) => state.terminals)
@@ -121,10 +121,10 @@ export function Dashboard(): React.JSX.Element {
   return (
     <PageFrame
       label="Every pane"
-      title="All Panes"
+      title={mode === 'tasks' ? 'Tasks' : 'All Panes'}
       lede={
         mode === 'tasks'
-          ? `${shownTasks.length} task${shownTasks.length === 1 ? '' : 's'}`
+          ? String(shownTasks.length)
           : shown.length === 0
             ? 'No panes'
             : `${shown.length} pane${shown.length === 1 ? '' : 's'} across ${worktreeCount(shown)} worktree${
@@ -146,7 +146,7 @@ export function Dashboard(): React.JSX.Element {
               {STAGES_BY_ATTENTION.filter((stage) => stageCounts[stage] > 0).map((stage) => (
                 <li key={stage} className="board-filter board-filter--count">
                   <span className={`board-filter__number board-filter__number--${stage}`}>{stageCounts[stage]}</span>{' '}
-                  {stage}
+                  {STAGE_WORD[stage]}
                 </li>
               ))}
             </ul>

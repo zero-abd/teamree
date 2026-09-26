@@ -292,7 +292,7 @@ export function CommandPalette({
     () => (filesWanted ? rankFiles(found?.paths ?? NO_PATHS, recent, query, fileLimit).map(fileItem) : []),
     [filesWanted, found, recent, query, fileLimit]
   )
-  // "Nothing matches" and the rows that start something from the query wait for the runtime's answer.
+  // "No matches" and the rows that start something from the query wait for the runtime's answer.
   const settled = !filesWanted || wanted === '' || found?.query === wanted
   // Grouped only before anything is typed.
   const groups = useMemo((): PaletteGroup[] => {
@@ -548,7 +548,7 @@ export function CommandPalette({
 
         {matches.length === 0 ? (
           wanted !== '' && settled ? (
-            <p className="palette__empty">Nothing matches “{wanted}”</p>
+            <p className="palette__empty">No matches</p>
           ) : null
         ) : (
           <ul className="palette__list" role="listbox" aria-label="Results" ref={list}>

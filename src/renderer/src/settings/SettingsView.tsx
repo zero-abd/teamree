@@ -203,13 +203,13 @@ function useSectionRows(machine: RuntimeSettings | null): Record<Exclude<Section
       { label: 'Font', words: [options.fontFamily] },
       { label: 'Cursor', words: [...CURSOR_STYLES.map((style) => style.label), 'Blink'] },
       { label: 'Option as Meta', words: [] },
-      { label: 'Copy on select', words: [] },
+      { label: 'Copy on Select', words: [] },
       { label: 'Scrollback lines', words: [String(options.scrollback)] }
     ],
     notices: [{ label: 'When an agent stops or asks', words: NOTICE_CHOICES.map((choice) => choice.label) }],
     teamwork: [{ label: 'Share Task Details', words: [] }],
     appearance: [{ label: 'Theme', words: [themeValue, ...THEME_WORDS] }],
-    updates: [{ label: 'Check automatically', words: [] }],
+    updates: [{ label: 'Check Automatically', words: [] }],
     cli: [{ label: 'teamree command', words: [] }]
   }
 }
@@ -535,7 +535,7 @@ function UpdatesSection(): React.JSX.Element {
         ) : null}
         {shown.whole && step?.problem ? <p className="settings-error">{step.problem}</p> : null}
 
-        {panel.offersCheck && shown.row('Check automatically') ? (
+        {panel.offersCheck && shown.row('Check Automatically') ? (
           <label className="settings-check">
             <input
               type="checkbox"
@@ -544,7 +544,7 @@ function UpdatesSection(): React.JSX.Element {
             />
             {/* Half a minute after startup, then every six hours; a label is not the place for a schedule. */}
             <span>
-              <Marked text="Check automatically" />
+              <Marked text="Check Automatically" />
             </span>
           </label>
         ) : null}
@@ -929,10 +929,10 @@ function PanesSection(): React.JSX.Element {
           </div>
         ) : null}
 
-        {shown.row('Copy on select') ? (
+        {shown.row('Copy on Select') ? (
           <div className="settings-field">
             <label className="settings-field__label" htmlFor="settings-copy-on-select">
-              <Marked text="Copy on select" />
+              <Marked text="Copy on Select" />
             </label>
             <input
               id="settings-copy-on-select"

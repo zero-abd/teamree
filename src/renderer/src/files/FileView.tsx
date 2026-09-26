@@ -267,7 +267,7 @@ export function FileView({
               </p>
               <div className="file__actions">
                 <button type="button" onClick={openDefault}>
-                  Open in default app
+                  Open in Default App
                 </button>
                 <button type="button" onClick={reveal}>
                   Reveal in Finder

@@ -148,7 +148,7 @@ describe('the search tab', () => {
       'limits.tssrc/1',
       '4export const limit = 3'
     ])
-    expect(screen.getByRole('status').textContent).toBe('3 results in 2 files')
+    expect(screen.getByRole('status').textContent).toBe('3 matches in 2 files')
     const marks = results.querySelectorAll('mark')
     expect([...marks].map((mark) => mark.textContent)).toEqual(['limit', 'limit', 'limit'])
   })
@@ -257,10 +257,10 @@ describe('the status line', () => {
   it('says how many, capped or timed out, or what failed', () => {
     expect(statusLine({ ...base, query: '' })).toBeNull()
     expect(statusLine({ ...base, running: true })).toBe('Searching…')
-    expect(statusLine(base)).toBe('No results')
-    expect(statusLine({ ...base, matches: 1, files: 1 })).toBe('1 result in 1 file')
-    expect(statusLine({ ...base, matches: 2000, files: 40, truncated: true })).toBe('2,000+ results in 40 files')
-    expect(statusLine({ ...base, matches: 3, files: 2, timedOut: true })).toBe('3 results in 2 files · timed out')
+    expect(statusLine(base)).toBe('No matches')
+    expect(statusLine({ ...base, matches: 1, files: 1 })).toBe('1 match in 1 file')
+    expect(statusLine({ ...base, matches: 2000, files: 40, truncated: true })).toBe('2,000+ matches in 40 files')
+    expect(statusLine({ ...base, matches: 3, files: 2, timedOut: true })).toBe('3 matches in 2 files · timed out')
     expect(statusLine({ ...base, error: 'Unmatched ( or \\(' })).toBe('Unmatched ( or \\(')
   })
 })

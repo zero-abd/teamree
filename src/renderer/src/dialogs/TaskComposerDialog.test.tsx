@@ -102,7 +102,7 @@ const startPoint = (): HTMLInputElement => screen.getByRole('combobox', { name: 
 const branch = (): HTMLInputElement => screen.getByRole('textbox', { name: 'Branch' })
 const branchHint = (): string =>
   document.getElementById(branch().getAttribute('aria-describedby') ?? '')?.textContent ?? ''
-const submit = (): HTMLButtonElement => screen.getByRole('button', { name: /Start Task|Create Worktree/ })
+const submit = (): HTMLButtonElement => screen.getByRole('button', { name: 'Start Task' })
 const more = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `One more ${command}` })
 const fewer = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `One fewer ${command}` })
 const bothAgents = [
@@ -412,14 +412,12 @@ describe('what it submits', () => {
     expect(startTask).toHaveBeenCalledWith(expect.objectContaining({ startedFrom: 'feature/pager' }))
   })
 
-  // The claim on the button is a promise about what happens next, and on a
-  // machine with no agent on PATH "Start Task" would be one the user only
-  // discovers was false afterwards.
-  it('promises only a worktree when no agent will run, and omits the command', async () => {
+  // One label for the one action; the note says no agent will run.
+  it('says Start Task when no agent will run, and omits the command', async () => {
     seed({ agents: [] })
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
-    expect(screen.getByRole('button', { name: 'Create Worktree' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Start Task' })).toBeTruthy()
     expect(screen.getByText('No coding agent on your login shell’s PATH')).toBeTruthy()
     expect(screen.queryByRole('group', { name: 'Agents' })).toBeNull()
     submit().click()
@@ -451,7 +449,7 @@ describe('what it submits', () => {
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     fireEvent.click(fewer('Claude Code'))
     expect(screen.getByText('1 worktree · no agent')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Create Worktree' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Start Task' })).toBeTruthy()
     submit().click()
     expect(startTask.mock.calls[0]?.[0].creates).toEqual([{ name: 'Rewrite the pager', task: 'Rewrite the pager' }])
   })

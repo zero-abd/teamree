@@ -1,4 +1,4 @@
-// The projects header's +: a two-item menu, Open Folder… straight to the OS picker, or Clone….
+// The projects header's +: the welcome's three ways to a project, as a menu.
 
 import { useRef, useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -6,6 +6,7 @@ import { RowMenu, type RowMenuAnchor } from './RowMenu'
 
 export function AddProjectButton(): React.JSX.Element {
   const chooseProjectFolder = useWorkspaceStore((state) => state.chooseProjectFolder)
+  const newProject = useWorkspaceStore((state) => state.newProject)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const button = useRef<HTMLButtonElement | null>(null)
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
@@ -44,8 +45,9 @@ export function AddProjectButton(): React.JSX.Element {
         <RowMenu
           label="Add project"
           items={[
+            { label: 'New Project…', onChoose: () => void newProject() },
             { label: 'Open Folder…', onChoose: () => void chooseProjectFolder() },
-            { label: 'Clone…', onChoose: () => openDialog({ kind: 'clone-project' }) }
+            { label: 'Clone Repository…', onChoose: () => openDialog({ kind: 'clone-project' }) }
           ]}
           anchor={menuAt}
           onClose={close}

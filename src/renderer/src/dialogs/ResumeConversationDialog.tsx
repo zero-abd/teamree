@@ -94,7 +94,7 @@ export function ResumeConversationDialog({ worktreeId }: { worktreeId: string })
         {listing.phase === 'loading' ? <p className="palette__empty">Reading…</p> : null}
         {listing.phase === 'error' ? <p className="palette__empty">{listing.message}</p> : null}
         {listing.phase === 'ready' && rows.length === 0 ? (
-          <p className="palette__empty">{wanted === '' ? 'No past conversations' : 'No match'}</p>
+          <p className="palette__empty">{wanted === '' ? 'No past conversations' : 'No matches'}</p>
         ) : null}
         {rows.length === 0 ? null : (
           <ul className="palette__list" role="listbox" aria-label="Conversations">

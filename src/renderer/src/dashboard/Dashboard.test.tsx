@@ -462,6 +462,8 @@ describe('the Tasks view', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Tasks' }))
     expect(useTaskTreeStore.getState().boardMode).toBe('tasks')
     expect(rows()).toEqual(['atlas', 'Write the migration', 'Update the tests'])
+    expect(document.querySelector('.page__title')?.textContent).toBe('Tasks')
+    expect(document.querySelector('.page__lede')?.textContent).toBe('3')
   })
 
   it('shows each task’s stage and indents children', () => {
@@ -487,7 +489,7 @@ describe('the Tasks view', () => {
     expect(openWorktree).not.toHaveBeenCalled()
   })
 
-  it('says not pushed under landed while the landing is only in the local main', () => {
+  it('says merged, and not pushed under it while the merge is only in the local main', () => {
     const landing = {
       worktreeId: 'w1',
       branch: 'atlas',
@@ -500,7 +502,7 @@ describe('the Tasks view', () => {
     useWorkspaceStore.setState({ landings: { w1: { ...landing, merged: true, notPushed: true } } })
     useTaskTreeStore.setState({ boardMode: 'tasks' })
     render(<Dashboard />)
-    expect(document.querySelector('.task-row__stage')?.textContent).toBe('landednot pushed')
+    expect(document.querySelector('.task-row__stage')?.textContent).toBe('mergednot pushed')
     expect(document.querySelector('.task-row__unpushed')?.textContent).toBe('not pushed')
   })
 

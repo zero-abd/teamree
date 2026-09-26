@@ -7,6 +7,7 @@ import { ReviewBar } from '../../review/ReviewBar'
 import { isViewedRow } from '../../review/reviewModel'
 import { useReviewStore } from '../../review/reviewStore'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
+import { mergedChip } from '../../sidebar/mergeBadge'
 import { overlapLines } from '../../sidebar/overlapChip'
 import { openOverlap, useOverlapChip } from '../../sidebar/useOverlapChip'
 import { openInBrowser } from '../../shell/openInBrowser'
@@ -14,7 +15,7 @@ import { commitScope, useWorkspaceStore } from '../../state/workspaceStore'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
 import { CommitFrom } from './CommitFrom'
 import { useCommitMessage } from './commitMessage'
-import { headerActions, landLabel, landNote, landOffer, pushOffer, type HeaderAction } from './landOffer'
+import { headerActions, landLabel, landNote, landOffer, landTitle, pushOffer, type HeaderAction } from './landOffer'
 import { PullRequestChecks } from './PullRequestChecks'
 import type { PaneNode, Worktree, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
 import { fileColumnIn, isCommitLeaf, shownTabId } from '@shared/filePane'
@@ -129,7 +130,7 @@ export function ChangesTab(): React.JSX.Element | null {
     if (action.kind === 'land') {
       return action.offer.kind === 'create-pr' && openingPullRequest ? 'Creating…' : landLabel(action.offer)
     }
-    if (action.offer.kind === 'review') return 'Open review'
+    if (action.offer.kind === 'review') return 'Open Review'
     return PUSH_LABEL[action.offer.kind][push?.phase === 'pushing' ? 1 : 0]
   }
   const busy = (action: HeaderAction): boolean =>
@@ -172,7 +173,9 @@ export function ChangesTab(): React.JSX.Element | null {
           <TokensLine worktreeId={worktreeId} />
           {land?.kind === 'merged' ? (
             <>
-              <span className="chip changes__merged">{landing?.notPushed ? 'Merged · not pushed' : 'Merged'}</span>
+              <span className="chip changes__merged" title={mergedChip(landing).title}>
+                {mergedChip(landing).label}
+              </span>
               <button type="button" className="button button--small" onClick={() => void removeWorktree(worktreeId)}>
                 Delete Worktree…
               </button>
@@ -183,7 +186,7 @@ export function ChangesTab(): React.JSX.Element | null {
               type="button"
               className={`button button--small${header.primary ? ' button--primary' : ''}`}
               disabled={busy(shown) || blockedBy(shown) !== undefined}
-              title={shown.kind === 'land' ? landNote(shown.offer) : undefined}
+              title={shown.kind === 'land' ? landTitle(shown.offer) : undefined}
               onClick={() => act(shown)}
             >
               {labelOf(shown)}

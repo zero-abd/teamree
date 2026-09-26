@@ -156,7 +156,7 @@ describe('when there is nothing open', () => {
     expect([...actions.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
       'New Project…',
       'Open Folder…',
-      'Clone…'
+      'Clone Repository…'
     ])
     const create = screen.getByRole('button', { name: 'New Project…' })
     expect(create.className).toContain('button--primary')
@@ -165,9 +165,9 @@ describe('when there is nothing open', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open Folder…' }))
     expect(chooseProjectFolder).toHaveBeenCalledOnce()
     expect(openDialog).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Clone…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clone Repository…' }))
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'clone-project' })
-    expect(screen.queryByRole('button', { name: 'New Task' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'New Task…' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'New Terminal' })).toBeNull()
   })
 
@@ -176,11 +176,11 @@ describe('when there is nothing open', () => {
     seed({ projects: [project], agents: [{ kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }] })
     mount()
     const actions = document.querySelector('.welcome__actions') as HTMLElement
-    expect([...actions.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['New Task'])
-    expect(screen.getByRole('button', { name: 'New Task' }).className).toContain('button--primary')
+    expect([...actions.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['New Task…'])
+    expect(screen.getByRole('button', { name: 'New Task…' }).className).toContain('button--primary')
     expect(screen.queryByRole('button', { name: 'Open Folder…' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Clone…' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'New Task' }))
+    expect(screen.queryByRole('button', { name: 'Clone Repository…' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'New Task…' }))
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p1' })
     expect(screen.queryByRole('button', { name: /^Start / })).toBeNull()
     expect(screen.queryByRole('button', { name: 'New Terminal' })).toBeNull()
@@ -189,7 +189,7 @@ describe('when there is nothing open', () => {
   it('starts the new task in the project added last', () => {
     seed({ projects: [project, { ...project, id: 'p2', name: 'ledger', path: '/repos/ledger' }] })
     mount()
-    fireEvent.click(screen.getByRole('button', { name: 'New Task' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New Task…' }))
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p2' })
   })
 
@@ -199,7 +199,7 @@ describe('when there is nothing open', () => {
     mount()
     const keys = [...document.querySelectorAll('.welcome kbd')].map((node) => node.textContent)
     expect(keys).toEqual(['⌘K', '⌘B'])
-    expect(screen.getByRole('button', { name: 'New Task' }).title).toBe('New Task · ⌘N')
+    expect(screen.getByRole('button', { name: 'New Task…' }).title).toBe('New Task · ⌘N')
     cleanup()
     seed({ projects: [] })
     mount()
@@ -263,7 +263,7 @@ describe('a worktree with no panes in it', () => {
     cleanup()
     openEmpty({ branch: 'feature/pager' })
     expect(screen.getByText('feature/pager')).toBeTruthy()
-    for (const name of ['Open Folder…', 'New Task', 'Star on GitHub']) {
+    for (const name of ['Open Folder…', 'New Task…', 'Star on GitHub']) {
       expect(screen.queryByRole('button', { name })).toBeNull()
     }
     expect(document.querySelector('.brand__mark')).toBeNull()
@@ -576,7 +576,7 @@ describe('a teammate’s pane beside your own', () => {
   it('stays where it is with no worktree open at all', () => {
     seed({ projects: [project], watches: [watch('priya', 'priya:t7')] })
     mount()
-    expect(screen.getByRole('button', { name: 'New Task' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New Task…' })).toBeTruthy()
     expect(screen.getByTestId('watched-priya-priya:t7')).toBeTruthy()
   })
 })
