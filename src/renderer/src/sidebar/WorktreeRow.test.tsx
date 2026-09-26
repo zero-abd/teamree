@@ -330,6 +330,7 @@ describe('a worktree that is ready', () => {
     expect(within(meta).getByText('ada/pager')).toBeTruthy()
     expect(meta.querySelector('.gitchips')).not.toBeNull()
     expect(document.querySelector('.worktree__title .gitchips')).toBeNull()
+    expect(screen.getByRole('treeitem', { description: 'branch ada/pager, 1 uncommitted' })).toBe(openButton())
   })
 
   it('draws a clean merge as a mark, with the sentence on hover', () => {

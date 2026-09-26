@@ -13,6 +13,8 @@ export type RowFacts = {
   /** The child task a folded row's tone comes from. */
   from?: string
   unread?: boolean
+  /** Drawn only when it says more than the name. */
+  branch?: string
   status?: WorktreeStatus
   /** Behind counts against the parent. */
   child?: boolean
@@ -42,6 +44,7 @@ export function rowSpeech(facts: RowFacts): string {
     facts.lifecycle,
     facts.tone ? stateWord(facts.tone, facts.question ?? null) + (facts.from ? ` in ${facts.from}` : '') : null,
     facts.unread ? 'unread' : null,
+    facts.branch === undefined ? null : `branch ${facts.branch}`,
     ...counts,
     facts.ignored ? `${facts.ignored} ignored` : null,
     facts.landed ?? (facts.merge === undefined ? null : mergeWords(facts.merge)),

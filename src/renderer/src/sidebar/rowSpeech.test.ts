@@ -56,6 +56,9 @@ describe('what a worktree row says', () => {
     expect(rowSpeech({ status: status({ ahead: 2, unstaged: 1, untracked: 2 }) })).toBe('2 ahead, 3 uncommitted')
     expect(rowSpeech({ status: status({ conflicted: 1 }) })).toBe('1 conflicted')
     expect(rowSpeech({ status: status({ ahead: 1 }), ignored: 4 })).toBe('1 ahead, 4 ignored')
+    expect(rowSpeech({ tone: 'working', branch: 'ada/pager', status: status({ ahead: 1 }) })).toBe(
+      'working, branch ada/pager, 1 ahead'
+    )
   })
 
   it('names what a merge would conflict on, by file', () => {

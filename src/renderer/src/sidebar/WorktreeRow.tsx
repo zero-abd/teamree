@@ -308,6 +308,7 @@ export function WorktreeRow({
     question: ask === undefined ? (rows.find((row) => row.activity === 'waiting')?.evidence ?? null) : ask.text,
     ...(rolled?.from === undefined ? {} : { from: rolled.from }),
     unread: unreadHere,
+    ...(display.branch === undefined ? {} : { branch: display.branch }),
     ...(ready && status !== undefined
       ? { status, child: worktree.parentId !== undefined, ignored: status.ignored ?? 0 }
       : {}),
