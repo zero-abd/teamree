@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupSearchResults, mergeHits, searchRows, splitAtRanges, stepHit } from './searchModel'
+import { groupSearchResults, hitWindow, mergeHits, searchRows, splitAtRanges, stepHit } from './searchModel'
 
 const hit = (line: number, text = `line ${line}`) => ({ line, column: 1, text, ranges: [] as [number, number][] })
 
@@ -65,5 +65,63 @@ describe('the search model', () => {
       { text: ' b ', match: false },
       { text: 'limit', match: true }
     ])
+  })
+})
+
+describe('a hit’s window', () => {
+  const shown = (parts: { text: string; match: boolean }[]): string =>
+    parts.map((part) => (part.match ? `[${part.text}]` : part.text)).join('')
+
+  it('keeps a match at the start whole, with the indentation dropped', () => {
+    expect(shown(hitWindow('limit(x)', [[0, 5]]))).toBe('[limit](x)')
+    expect(shown(hitWindow('\t\t  return limit(x)', [[11, 16]]))).toBe('return [limit](x)')
+  })
+
+  it('starts a few columns before a match deep in the line, marked with an ellipsis', () => {
+    const text = `${'a'.repeat(80)}limit${'b'.repeat(80)}`
+    const parts = hitWindow(text, [[80, 85]], 24, 40)
+    expect(shown(parts)).toBe(`…${'a'.repeat(24)}[limit]${'b'.repeat(9)}…`)
+  })
+
+  it('shows a match at the end with no trailing ellipsis', () => {
+    expect(shown(hitWindow(`${'x'.repeat(100)}limit`, [[100, 105]], 24, 40))).toBe(`…${'x'.repeat(24)}[limit]`)
+  })
+
+  it('marks every match in the window and clips one the edge cuts', () => {
+    const text = `${'-'.repeat(30)}ab-ab-ab${'-'.repeat(40)}ab`
+    const parts = hitWindow(
+      text,
+      [
+        [30, 32],
+        [33, 35],
+        [36, 38],
+        [78, 80]
+      ],
+      4,
+      13
+    )
+    expect(shown(parts)).toBe('…----[ab]-[ab]-[a]…')
+  })
+
+  it('bounds a minified line to the window', () => {
+    const text = `${'x;'.repeat(5000)}limit${'y;'.repeat(5000)}`
+    const parts = hitWindow(text, [[10000, 10005]])
+    const drawn = parts.map((part) => part.text).join('')
+    expect(drawn.length).toBeLessThanOrEqual(160)
+    expect(parts.filter((part) => part.match).map((part) => part.text)).toEqual(['limit'])
+  })
+
+  it('counts wide characters twice and never splits a character', () => {
+    expect(shown(hitWindow(`${'日本'.repeat(20)}limit`, [[40, 45]], 24, 40))).toBe(`…${'日本'.repeat(6)}[limit]`)
+    const emoji = `${'😀'.repeat(30)}limit`
+    const parts = hitWindow(emoji, [[60, 65]], 5, 40)
+    expect(shown(parts)).toBe('…😀😀[limit]')
+    const accents = `${'e\u0301'.repeat(30)}limit`
+    expect(shown(hitWindow(accents, [[60, 65]], 3, 40))).toBe(`…${'e\u0301'.repeat(3)}[limit]`)
+  })
+
+  it('draws a tab as a space and a line with no marked match from its start', () => {
+    expect(shown(hitWindow('a\tlimit', [[2, 7]]))).toBe('a [limit]')
+    expect(shown(hitWindow('    plain line', []))).toBe('plain line')
   })
 })

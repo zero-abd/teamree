@@ -42,6 +42,8 @@ const EMPTY_FORM: SearchForm = {
 
 let current: Subscription | null = null
 let generation = 0
+let pending: SearchFileHits[] = []
+let frame: number | null = null
 
 /** The request a form and target make, as one string. */
 export function searchSignature(form: SearchForm, target: { worktreeId: string; projectId: string }): string {
@@ -89,8 +91,13 @@ export const useSearchStore = create<SearchState>((set, get) => ({
         },
         (event) => {
           if (mine !== generation) return
-          if (event.type === 'hits') set((state) => ({ files: mergeHits(state.files, event.files) }))
-          else set({ summary: event, running: false })
+          if (event.type === 'hits') {
+            pending.push(...event.files)
+            frame ??= requestAnimationFrame(flushPending)
+            return
+          }
+          flushPending()
+          set({ summary: event, running: false })
         }
       )
       .then(
@@ -107,11 +114,25 @@ export const useSearchStore = create<SearchState>((set, get) => ({
 
   cancel: () => {
     generation += 1
+    dropPending()
     if (current !== null) closeQuietly(current)
     current = null
     if (get().running) set({ running: false, answered: null })
   }
 }))
+
+// Hits stream in faster than frames; one merge and render per frame keeps the renderer responsive.
+function flushPending(): void {
+  const batch = pending
+  dropPending()
+  if (batch.length > 0) useSearchStore.setState((state) => ({ files: mergeHits(state.files, batch) }))
+}
+
+function dropPending(): void {
+  if (frame !== null) cancelAnimationFrame(frame)
+  frame = null
+  pending = []
+}
 
 // The runtime may have ended the stream already; a close that fails has nothing left to stop.
 function closeQuietly(subscription: Subscription): void {
