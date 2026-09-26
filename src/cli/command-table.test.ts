@@ -162,7 +162,7 @@ describe('parseCommand', () => {
   })
 
   it('rejects a missing required flag', () => {
-    expect(() => parseCommand(spec('worktree create'), ['--name', 'fix'])).toThrow(/--project is required/)
+    expect(() => parseCommand(spec('worktree create'), ['--project', 'api'])).toThrow(/--name is required/)
   })
 
   it('rejects a missing positional', () => {
@@ -219,7 +219,7 @@ describe('help rendering', () => {
     expect(text).toContain('--project <project>')
     expect(text).toContain('(required)')
     expect(text).toContain('Examples:')
-    expect(usageLine(spec('worktree create'))).toBe('teamree worktree create --project <project> --name <name> [flags]')
+    expect(usageLine(spec('worktree create'))).toBe('teamree worktree create --name <name> [flags]')
     expect(usageLine(spec('terminal close'))).toBe('teamree terminal close <terminal>')
   })
 

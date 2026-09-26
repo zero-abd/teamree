@@ -379,7 +379,7 @@ describe('text output', () => {
   it('renders a table with a header', async () => {
     const cli = await harness()
     const result = await cli.run(['worktree', 'list'])
-    expect(result.out.split('\n')[0]).toMatch(/^ID\s+NAME\s+BRANCH\s+STATE\s+PATH$/)
+    expect(result.out.split('\n')[0]).toMatch(/^ID\s+NAME\s+BRANCH\s+STATE\s+PARENT\s+PATH$/)
     expect(result.out).toContain('feature/fix-login')
   })
 
