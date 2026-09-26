@@ -52,7 +52,10 @@ it('reads the changed paths only once the panel is open, and opens a picked path
   await store.openWorktree(worktreeId)
 
   const call = vi.spyOn(runtimeClient, 'call')
-  const changesCalls = (): number => call.mock.calls.filter(([method]) => method === 'worktree.changes').length
+  const changesCalls = (base = false): number =>
+    call.mock.calls.filter(
+      ([method, params]) => method === 'worktree.changes' && ((params as { base?: boolean }).base === true) === base
+    ).length
   const diffCalls = (): number => call.mock.calls.filter(([method]) => method === 'worktree.diff').length
 
   // Closed, it costs nothing: no `git status` per refresh for a panel nobody is looking at.
@@ -62,6 +65,7 @@ it('reads the changed paths only once the panel is open, and opens a picked path
   useWorkspaceStore.getState().toggleChanges()
   await vi.waitFor(() => expect(useWorkspaceStore.getState().changes[worktreeId]).toBeDefined())
   expect(changesCalls()).toBe(1)
+  expect(changesCalls(true)).toBe(1)
   const listed = useWorkspaceStore.getState().changes[worktreeId]
   expect(listed?.changes.length).toBeGreaterThan(0)
 
