@@ -2,11 +2,13 @@
 // `<userData>/handoffs.json`, so an offer and its answer both outlive a restart.
 
 import { z } from 'zod'
+import { MAX_AGENT_ARGS_CHARS } from '../../shared/agentLaunch'
 import type { Project, Worktree } from '../../shared/entities'
 import { Params, type ParamsOf } from '../../shared/methods'
-import { MAX_HANDOFF_NOTE_CHARS, MAX_HANDOFFS } from '../../shared/presenceExtras'
+import { MAX_HANDOFF_BRIEF_CHARS, MAX_HANDOFF_NOTE_CHARS, MAX_HANDOFFS } from '../../shared/presenceExtras'
 import type { MemoryNote } from '../../shared/memory'
-import type { PeerHandoff } from '../../shared/tasks'
+import type { PeerHandoff, WorktreeOverlaps, WorktreeReport } from '../../shared/tasks'
+import { GitServiceError } from '../git/errors'
 import type { GitRunner } from '../git/gitProcess'
 import { assertRefShape } from '../git/repository'
 import type { MethodRegistry } from '../runtime/methodRegistry'
@@ -31,6 +33,7 @@ const OutgoingSchema = z.object({
   worktreeName: z.string(),
   branch: z.string().min(1),
   note: z.string().max(MAX_HANDOFF_NOTE_CHARS),
+  brief: z.string().max(MAX_HANDOFF_BRIEF_CHARS).optional(),
   at: z.number(),
   projectId: z.string().min(1),
   worktreeId: z.string().min(1),
@@ -70,7 +73,11 @@ export class HandoffBook {
     const kept = this.#outgoing.filter(
       (held) => !(held.worktreeId === entry.worktreeId && held.takenAt === undefined) && held.id !== entry.id
     )
-    kept.push({ ...entry, note: entry.note.slice(0, MAX_HANDOFF_NOTE_CHARS) })
+    kept.push({
+      ...entry,
+      note: entry.note.slice(0, MAX_HANDOFF_NOTE_CHARS),
+      ...(entry.brief === undefined ? {} : { brief: entry.brief.slice(0, MAX_HANDOFF_BRIEF_CHARS) })
+    })
     const mine = kept.filter((held) => held.projectId === entry.projectId)
     for (let excess = mine.length - MAX_HANDOFFS; excess > 0; excess -= 1) {
       const drop = mine.find((held) => held.takenAt !== undefined) ?? mine[0]
@@ -91,15 +98,21 @@ export class HandoffBook {
   sendTo(projectIds: readonly string[], handle: string): PeerHandoff[] {
     return this.#outgoing
       .filter((held) => held.to === handle && held.takenAt === undefined && projectIds.includes(held.projectId))
-      .map(({ id, to, from, worktreeName, branch, note, at }) => ({
+      .map(({ id, to, from, worktreeName, branch, note, brief, at }) => ({
         id,
         to,
         ...(from === undefined ? {} : { from }),
         worktreeName,
         branch,
         note,
+        ...(brief === undefined ? {} : { brief }),
         at
       }))
+  }
+
+  /** Worktrees whose offer was taken: the work lives on the teammate's machine now. */
+  handedAway(): Set<string> {
+    return new Set(this.#outgoing.filter((held) => held.takenAt !== undefined).map((held) => held.worktreeId))
   }
 
   /** Marks the offers to `handle` among `ids` as taken; whether any was. */
@@ -151,6 +164,10 @@ export type HandoffPorts = {
   project: (projectId: string) => Project | undefined
   /** Push as the Changes tab does: publishes a branch that tracks nothing, refuses with no remote. */
   push: (worktreeId: string) => Promise<unknown>
+  /** Commits every change, as the Changes tab's commit with everything staged. */
+  commit: (worktreeId: string, message: string) => Promise<unknown>
+  /** Interrupts the worktree's running agent panes; how many there were. */
+  stopAgents: (worktreeId: string) => Promise<number>
   runner: GitRunner
   create: (params: ParamsOf<'worktree.create'>) => Promise<Worktree>
   /** The worktree once its create has finished, ready or failed. */
@@ -166,14 +183,22 @@ export type HandoffPorts = {
 export function registerHandoffHandlers(registry: MethodRegistry, ports: HandoffPorts): void {
   registry.register('teamwork.handoffs', Params.teamworkHandoffs, (params) => ports.peers.handoffs(params))
 
-  registry.register('teamwork.handOff', Params.teamworkHandOff, async ({ worktreeId, to, note }) => {
-    const worktree = ports.worktree(worktreeId)
-    if (!worktree) throw notFound(`no worktree with id ${worktreeId}`)
-    // Before the push: nothing leaves this machine for someone who is not on the roster.
-    ports.peers.handoffTarget(worktree.projectId, to)
-    await ports.push(worktree.id)
-    return ports.peers.offerHandoff({ worktree, to, note })
-  })
+  registry.register(
+    'teamwork.handOff',
+    Params.teamworkHandOff,
+    async ({ worktreeId, to, note, commit, stopAgents }) => {
+      const worktree = ports.worktree(worktreeId)
+      if (!worktree) throw notFound(`no worktree with id ${worktreeId}`)
+      // Before the push: nothing leaves this machine for someone who is not on the roster.
+      ports.peers.handoffTarget(worktree.projectId, to)
+      // Stopped first, so nothing the agent writes lands after the commit that carries the work.
+      if (stopAgents === true) await ports.stopAgents(worktree.id)
+      if (commit !== undefined) await commitAll(ports, worktree.id, commit)
+      await ports.push(worktree.id)
+      const brief = await briefFor(ports, worktree)
+      return ports.peers.offerHandoff({ worktree, to, note, ...(brief === '' ? {} : { brief }) })
+    }
+  )
 
   registry.register('teamwork.take', Params.teamworkTake, async ({ projectId, id, agent }) => {
     const handoff = ports.peers.incomingHandoff(projectId, id)
@@ -192,7 +217,9 @@ export function registerHandoffHandlers(registry: MethodRegistry, ports: Handoff
       void ports
         .settled(worktree.id)
         .then((ready) => {
-          if (ready.state === 'ready') ports.startAgent(ready.id, agent, note === '' ? undefined : note)
+          if (ready.state !== 'ready') return
+          const from = handoff.from === undefined ? {} : { from: handoff.from }
+          ports.startAgent(ready.id, agent, continuationPrompt({ ...from, note, brief: handoff.brief }))
         })
         .catch(ports.onError)
     }
@@ -207,42 +234,122 @@ export function registerHandoffHandlers(registry: MethodRegistry, ports: Handoff
   registry.register('teamwork.handoffDraft', Params.teamworkHandoffDraft, async ({ worktreeId }) => {
     const worktree = ports.worktree(worktreeId)
     if (!worktree) throw notFound(`no worktree with id ${worktreeId}`)
-    // Each source is a nicety: one that cannot be read leaves its part out.
-    const [notes, commits] = await Promise.all([
-      ports.notes(worktree).catch(() => []),
-      ports.commits(worktreeId).catch(() => [])
-    ])
-    const mine = notes.filter((note) => note.worktreeId === worktreeId)
+    // The ledger is a nicety: unreadable, the draft is the task alone.
+    const notes = await ports.notes(worktree).catch(() => [])
+    const decisions = notes.filter((note) => note.worktreeId === worktreeId && note.kind === 'decision')
     return {
-      note: handoffDraft({
-        task: worktree.task,
-        decisions: mine.filter((note) => note.kind === 'decision').map((note) => note.text),
-        questions: mine.filter((note) => note.kind === 'question' && note.open === true).map((note) => note.text),
-        commits: commits.slice(0, DRAFT_COMMITS)
-      })
+      note: handoffDraft({ task: worktree.task, decisions: decisions.map((note) => note.text) })
     }
+  })
+
+  // A copy handed away and taken is the teammate's work now; its overlaps are with itself.
+  const overlaps = registry.lookup('worktree.overlaps')
+  if (overlaps !== undefined) {
+    registry.register('worktree.overlaps', Params.worktreeOverlaps, async (params, call) => {
+      const read = (await overlaps.handler(params as never, call)) as WorktreeOverlaps
+      const handed = new Set(
+        ports.peers
+          .handoffs({ projectId: params.projectId })
+          .outgoing.flatMap((held) => (held.takenAt === undefined || !held.worktreeId ? [] : [held.worktreeId]))
+      )
+      if (handed.size === 0) return read
+      const kept = read.overlaps.filter(
+        (overlap) =>
+          !handed.has(overlap.worktreeId) &&
+          !('worktreeId' in overlap.with && handed.has(overlap.with.worktreeId ?? ''))
+      )
+      return { ...read, overlaps: kept }
+    })
+  }
+}
+
+const BRIEF_FILES = 20
+
+/** The task, then what the ledger decided; clipped to the note's bound. */
+export function handoffDraft(sources: { task: string | undefined; decisions: readonly string[] }): string {
+  return [...(sources.task?.trim() ? [sources.task.trim()] : []), ...list('Decided', sources.decisions)]
+    .join('\n\n')
+    .slice(0, MAX_HANDOFF_NOTE_CHARS)
+}
+
+/** What the receiver's agent is told besides the note: the task's first line, commits, files, report, open questions. */
+export function handoffBrief(sources: {
+  task: string | undefined
+  base: string
+  commits: readonly string[]
+  files: readonly string[]
+  report?: Pick<WorktreeReport, 'outcome' | 'summary'>
+  questions: readonly string[]
+}): string {
+  const task = sources.task?.trim().split('\n')[0]?.trim()
+  const shown = sources.files.slice(0, BRIEF_FILES)
+  const more = sources.files.length - shown.length
+  return [
+    ...(task ? [`Task: ${task}`] : []),
+    ...list(`Commits since ${sources.base}`, sources.commits),
+    ...list(`Files changed (${sources.files.length})`, more > 0 ? [...shown, `+${more} more`] : shown),
+    ...(sources.report?.summary.trim() ? [`Report (${sources.report.outcome}): ${sources.report.summary.trim()}`] : []),
+    ...list('Open questions', sources.questions)
+  ]
+    .join('\n\n')
+    .slice(0, MAX_HANDOFF_BRIEF_CHARS)
+}
+
+/** The receiver's first prompt: who handed it over, their note, then the brief; within one command line. */
+export function continuationPrompt(handoff: { from?: string; note: string; brief: string | undefined }): string {
+  const who = handoff.from ?? 'A teammate'
+  const note = handoff.note.trim()
+  return [
+    `${who} handed this task over. Their work is committed on this branch; continue from it.`,
+    ...(note === '' ? [] : [`Note from ${handoff.from ?? 'them'}:\n${note}`]),
+    ...(handoff.brief?.trim() ? [handoff.brief.trim()] : [])
+  ]
+    .join('\n\n')
+    .slice(0, MAX_AGENT_ARGS_CHARS)
+}
+
+function list(title: string, lines: readonly string[]): string[] {
+  return lines.length === 0 ? [] : [`${title}:\n${lines.map((line) => `- ${line}`).join('\n')}`]
+}
+
+/** A clean worktree has nothing to carry: that refusal is not a failed hand-off. */
+async function commitAll(ports: HandoffPorts, worktreeId: string, message: string): Promise<void> {
+  try {
+    await ports.commit(worktreeId, message)
+  } catch (error) {
+    if (!(error instanceof GitServiceError && error.message === 'nothing to commit')) throw error
+  }
+}
+
+/** Read after the push, so it names the commit that carried the work; a source that fails is left out. */
+async function briefFor(ports: HandoffPorts, worktree: Worktree): Promise<string> {
+  const [commits, files, notes] = await Promise.all([
+    ports.commits(worktree.id).catch(() => []),
+    changedFiles(ports.runner, worktree).catch(() => []),
+    ports.notes(worktree).catch(() => [])
+  ])
+  const questions = notes.filter(
+    (note) => note.worktreeId === worktree.id && note.kind === 'question' && note.open === true
+  )
+  return handoffBrief({
+    task: worktree.task,
+    base: worktree.startedFrom,
+    commits,
+    files,
+    ...(worktree.report === undefined ? {} : { report: worktree.report }),
+    questions: questions.map((note) => note.text)
   })
 }
 
-const DRAFT_COMMITS = 5
-
-/** The task, then what the ledger decided and left open, then the latest commits; clipped to the note's bound. */
-export function handoffDraft(sources: {
-  task: string | undefined
-  decisions: readonly string[]
-  questions: readonly string[]
-  commits: readonly string[]
-}): string {
-  const list = (title: string, lines: readonly string[]): string[] =>
-    lines.length === 0 ? [] : [`${title}:\n${lines.map((line) => `- ${line}`).join('\n')}`]
-  return [
-    ...(sources.task?.trim() ? [sources.task.trim()] : []),
-    ...list('Decided', sources.decisions),
-    ...list('Open', sources.questions),
-    ...list('Commits', sources.commits)
-  ]
-    .join('\n\n')
-    .slice(0, MAX_HANDOFF_NOTE_CHARS)
+async function changedFiles(runner: GitRunner, worktree: Worktree): Promise<string[]> {
+  assertRefShape(worktree.startedFrom, 'base')
+  const { stdout } = await runner.run({
+    args: ['diff', '--name-only', `${worktree.startedFrom}...HEAD`, '--'],
+    cwd: worktree.path,
+    readOnly: true,
+    timeoutMs: 60_000
+  })
+  return stdout.split('\n').filter((line) => line !== '')
 }
 
 /** Brings the sender's branch to `origin/<branch>` here, so Open Branch's checkout finds it. */

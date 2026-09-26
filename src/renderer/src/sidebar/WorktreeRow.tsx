@@ -114,6 +114,8 @@ type WorktreeRowProps = {
   onHandOff?: () => void
   /** `Handed to ana` or `Taken by ana`, for its latest offer. */
   handoff?: string | null
+  /** Once taken: deletes this copy, asking first as Delete Worktree… does. */
+  onRemoveCopy?: () => void
   /** One line: name, dot and chips; no branch line, pane rows or report. */
   compact?: boolean
   /** Shown without matching the filter: a match's parent, or the open row. */
@@ -158,6 +160,7 @@ export function WorktreeRow({
   overlap,
   onHandOff,
   handoff = null,
+  onRemoveCopy,
   compact = false,
   context = false
 }: WorktreeRowProps): React.JSX.Element {
@@ -257,7 +260,10 @@ export function WorktreeRow({
     ...(onMoveUnder !== undefined && ready ? [{ label: 'Move Under…', onChoose: onMoveUnder }] : []),
     ...(onMoveToTop !== undefined && ready ? [{ label: 'Move to Top Level', onChoose: onMoveToTop }] : []),
     ...(onResume !== undefined && ready ? [{ label: 'Resume Conversation…', onChoose: onResume }] : []),
-    ...(onHandOff !== undefined && ready ? [{ label: 'Hand Off…', onChoose: onHandOff }] : []),
+    ...(onHandOff !== undefined && ready && onRemoveCopy === undefined
+      ? [{ label: 'Hand Off…', onChoose: onHandOff }]
+      : []),
+    ...(onRemoveCopy === undefined ? [] : [{ label: 'Remove My Copy…', onChoose: onRemoveCopy }]),
     { label: 'Rename…', onChoose: () => setRenaming(true), separated: merged },
     { label: 'Reveal in Finder', onChoose: onReveal },
     { label: 'Copy Path', onChoose: onCopyPath },
@@ -406,6 +412,19 @@ export function WorktreeRow({
       {overlap === undefined || !ready ? null : <OverlapMark chip={overlap.chip} onOpen={overlap.onOpen} />}
       {ready ? <RunChip terminals={terminals} worktreeId={worktree.id} /> : null}
       {handoff === null ? null : <span className="chip worktree__handoff">{handoff}</span>}
+      {onRemoveCopy === undefined ? null : (
+        // Inside the row's button, so a span, as the issue chip is.
+        <span
+          className="chip worktree__handoff worktree__remove-copy"
+          role="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            onRemoveCopy()
+          }}
+        >
+          Remove My Copy
+        </span>
+      )}
       {claims === '' || !ready ? null : (
         <span
           className="chip worktree__claims"

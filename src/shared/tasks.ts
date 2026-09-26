@@ -86,6 +86,8 @@ export type PeerHandoff = {
   worktreeName: string
   branch: string
   note: string
+  /** What the sender's machine knew at hand-off: commits, files changed, report, open questions. */
+  brief?: string
   at: number
   /** Outgoing only, never sent: the sender's own worktree. */
   worktreeId?: string

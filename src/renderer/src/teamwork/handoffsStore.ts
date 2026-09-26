@@ -28,9 +28,18 @@ export function handoffPopups(
 
 /** What a worktree's row says about its latest offer, if it made one. */
 export function handoffLine(outgoing: readonly PeerHandoff[], worktreeId: string): string | null {
-  const latest = outgoing.filter((handoff) => handoff.worktreeId === worktreeId).sort((a, b) => b.at - a.at)[0]
+  const latest = latestOffer(outgoing, worktreeId)
   if (latest === undefined) return null
   return latest.takenAt === undefined ? `Handed to ${latest.to}` : `Taken by ${latest.to}`
+}
+
+/** Whether a worktree's latest offer was taken: the work goes on elsewhere and this copy is left over. */
+export function handedAway(outgoing: readonly PeerHandoff[], worktreeId: string): boolean {
+  return latestOffer(outgoing, worktreeId)?.takenAt !== undefined
+}
+
+function latestOffer(outgoing: readonly PeerHandoff[], worktreeId: string): PeerHandoff | undefined {
+  return outgoing.filter((handoff) => handoff.worktreeId === worktreeId).sort((a, b) => b.at - a.at)[0]
 }
 
 const without = (read: TeamworkHandoffs | undefined, id: string): TeamworkHandoffs => ({

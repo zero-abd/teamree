@@ -454,6 +454,16 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     worktree: (worktreeId) => registry.context.store.getWorktree(worktreeId),
     project: (projectId) => registry.context.store.getProject(projectId),
     push: (worktreeId) => git.worktreePush({ worktreeId }),
+    commit: async (worktreeId, message) => {
+      await git.worktreeCommit({ worktreeId, message, all: true })
+      workspaceEvents.emit({ type: 'worktrees', worktreeIds: [worktreeId] })
+    },
+    stopAgents: async (worktreeId) => {
+      const agents = terminals.manager.list(worktreeId).filter((pane) => pane.running && pane.agent !== undefined)
+      await Promise.all(agents.map((pane) => terminals.manager.interrupt(pane.id)))
+      if (agents.length > 0) workspaceEvents.emit({ type: 'terminals' })
+      return agents.length
+    },
     runner: createGitRunner(),
     create: (params) => git.createWorktree(params),
     settled: (worktreeId) => settledWorktree(git, worktreeId),

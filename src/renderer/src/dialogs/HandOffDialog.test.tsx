@@ -1,11 +1,11 @@
 /** @vitest-environment jsdom */
 
-// Hand Off…: roster teammates to choose from, a note prefilled from the runtime's draft,
-// and the runtime's refusal said in the dialog.
+// Hand Off…: roster teammates to choose from, a note prefilled from the runtime's draft, the
+// uncommitted work committed or left out, the agent stopped or not, and the runtime's refusal said.
 
 import { fireEvent, render, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TeammatePresence, Worktree } from '@shared/entities'
+import type { TeammatePresence, Terminal, Worktree, WorktreeStatus } from '@shared/entities'
 
 const call = vi.fn()
 
@@ -59,6 +59,9 @@ beforeEach(() => {
   useWorkspaceStore.setState({ worktrees: [WORKTREE], teammates: { p1: PRESENCE } })
 })
 
+const DIRTY = { staged: 0, unstaged: 1, untracked: 0, ahead: 0, behind: 0 } as WorktreeStatus
+const CLAUDE = { id: 't1', worktreeId: 'wt_auth', running: true, agent: 'claude' } as Terminal
+
 describe('Hand Off…', () => {
   it('offers the roster, the connected teammate first chosen, and prefills the note', async () => {
     const view = render(<HandOffDialog worktreeId="wt_auth" />)
@@ -82,6 +85,63 @@ describe('Hand Off…', () => {
       to: 'ana',
       note: 'Just the tests left.'
     })
+  })
+
+  it('commits uncommitted work as WIP under a message from the task, unless left out', async () => {
+    useWorkspaceStore.setState({ statuses: { wt_auth: DIRTY } })
+    const view = render(<HandOffDialog worktreeId="wt_auth" />)
+    const include = view.getByRole('checkbox', { name: 'Commit 1 File as WIP' }) as HTMLInputElement
+    expect(include.checked).toBe(true)
+    expect((view.getByRole('textbox', { name: 'Commit message' }) as HTMLTextAreaElement).value).toBe(
+      'WIP: Rework auth session'
+    )
+    fireEvent.click(view.getByRole('button', { name: 'Hand Off' }))
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith(
+        'teamwork.handOff',
+        expect.objectContaining({ commit: 'WIP: Rework auth session' })
+      )
+    )
+
+    call.mockClear()
+    fireEvent.click(include)
+    expect(view.queryByRole('textbox', { name: 'Commit message' })).toBeNull()
+    expect(view.getByText('1 uncommitted file stays here')).toBeTruthy()
+  })
+
+  it('sends no commit when the note is all there is', async () => {
+    useWorkspaceStore.setState({ statuses: { wt_auth: DIRTY } })
+    const view = render(<HandOffDialog worktreeId="wt_auth" />)
+    fireEvent.click(view.getByRole('checkbox', { name: 'Commit 1 File as WIP' }))
+    fireEvent.click(view.getByRole('button', { name: 'Hand Off' }))
+    await waitFor(() => expect(call).toHaveBeenCalledWith('teamwork.handOff', expect.anything()))
+    const sent = call.mock.calls.find(([method]) => method === 'teamwork.handOff')?.[1] as Record<string, unknown>
+    expect(sent.commit).toBeUndefined()
+  })
+
+  it('offers to stop the running agent, on by default', async () => {
+    useWorkspaceStore.setState({ terminals: { t1: CLAUDE } })
+    const view = render(<HandOffDialog worktreeId="wt_auth" />)
+    const stop = view.getByRole('checkbox', { name: 'Stop Claude Code in This Task' }) as HTMLInputElement
+    expect(stop.checked).toBe(true)
+    fireEvent.click(view.getByRole('button', { name: 'Hand Off' }))
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith('teamwork.handOff', expect.objectContaining({ stopAgents: true }))
+    )
+
+    view.unmount()
+    call.mockClear()
+    const again = render(<HandOffDialog worktreeId="wt_auth" />)
+    fireEvent.click(again.getByRole('checkbox', { name: 'Stop Claude Code in This Task' }))
+    fireEvent.click(again.getByRole('button', { name: 'Hand Off' }))
+    await waitFor(() => expect(call).toHaveBeenCalledWith('teamwork.handOff', expect.anything()))
+    const sent = call.mock.calls.find(([method]) => method === 'teamwork.handOff')?.[1] as Record<string, unknown>
+    expect(sent.stopAgents).toBeUndefined()
+  })
+
+  it('asks nothing of a clean worktree with no agent running', () => {
+    const view = render(<HandOffDialog worktreeId="wt_auth" />)
+    expect(view.queryAllByRole('checkbox')).toEqual([])
   })
 
   it('says the refusal and stays open', async () => {

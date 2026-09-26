@@ -121,7 +121,11 @@ export const TaskParams = {
   teamworkHandOff: z.object({
     worktreeId: Id,
     to: z.string().min(1).max(160),
-    note: z.string().max(MAX_HANDOFF_NOTE_CHARS)
+    note: z.string().max(MAX_HANDOFF_NOTE_CHARS),
+    /** Commits everything uncommitted under this message before the push; omitted leaves it here. */
+    commit: z.string().min(1).max(MAX_HANDOFF_NOTE_CHARS).optional(),
+    /** Interrupts the worktree's agent panes before the commit, so nothing lands after it. */
+    stopAgents: z.boolean().optional()
   }),
   teamworkHandoffs: z.object({ projectId: Id }),
   teamworkTake: z.object({ projectId: Id, id: Id, agent: z.string().min(1).max(64).optional() }),
