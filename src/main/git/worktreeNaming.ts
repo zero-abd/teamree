@@ -6,7 +6,9 @@ import path from 'node:path'
 import { ErrorCode } from '../../shared/protocol'
 import { describeError, GitServiceError } from './errors'
 import { pathKey } from './pathIdentity'
-import { slugifyBranchName, taskNamesForAgents } from '../../shared/branchName'
+import { branchCollides, slugifyBranchName, taskNamesForAgents } from '../../shared/branchName'
+
+export { allocateBranchName, branchCollides } from '../../shared/branchName'
 
 /** The slug rule lives in shared so the create dialog previews exactly what gets created. */
 export const slugify = slugifyBranchName
@@ -22,30 +24,6 @@ export { taskNamesForAgents }
  * extension, which kills both the checkout and git's loose ref under refs/heads.
  */
 export { isWindowsDeviceName } from '../../shared/windowsNames'
-
-/**
- * git stores branches as files, so `feature` and `feature/login` cannot both
- * exist. Case-insensitive because loose refs live on case-insensitive filesystems.
- */
-export function branchCollides(candidate: string, taken: ReadonlySet<string>): boolean {
-  const lower = candidate.toLowerCase()
-  if (taken.has(lower)) return true
-  for (const name of taken) {
-    if (name.startsWith(`${lower}/`) || lower.startsWith(`${name}/`)) return true
-  }
-  return false
-}
-
-export function allocateBranchName(taskName: string, existingBranches: readonly string[]): string {
-  const taken = new Set(existingBranches.map((branch) => branch.toLowerCase()))
-  const base = slugify(taskName)
-  if (!branchCollides(base, taken)) return base
-  for (let suffix = 2; suffix < 1000; suffix += 1) {
-    const candidate = `${base}-${suffix}`
-    if (!branchCollides(candidate, taken)) return candidate
-  }
-  return `${base}-${Date.now().toString(36)}`
-}
 
 /** `<parent-branch>--<slug>`: `--` because `a/b` cannot coexist with `a`. Deduped as `allocateBranchName` does. */
 export function allocateChildBranchName(parentBranch: string, taskName: string, existing: readonly string[]): string {

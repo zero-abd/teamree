@@ -183,32 +183,51 @@ button.picker__chevron:hover {
   font-family: var(--font-mono);
 }
 
-.combo__branch {
-  padding: 0;
-  border: 0;
-  border-bottom: 1px dashed var(--line-strong);
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: text;
+/* Project and Start from side by side: where the task starts. */
+.form__where {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s4);
 }
 
-.combo__branch:hover {
-  color: var(--fg);
+/* The new branch: the task's own name, tagged auto, until typed over. */
+.branch {
+  position: relative;
 }
 
-.combo__branchInput {
-  padding: 0 var(--s1);
-  border: 1px solid var(--accent-line);
-  border-radius: var(--r1);
-  background: var(--bg-input);
-  color: var(--fg);
-  font: inherit;
+.branch__input {
+  height: var(--control-h);
+  padding-right: 56px;
+  font-size: var(--text-base);
 }
 
-.combo__branchInput:focus {
-  outline: none;
-  box-shadow: var(--ring);
+.branch__auto,
+.branch__reset {
+  position: absolute;
+  top: 50%;
+  right: var(--s2);
+  transform: translateY(-50%);
+}
+
+.branch__auto {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  pointer-events: none;
+}
+
+.branch__input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.branch__hint {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.branch__hint--problem {
+  color: var(--danger);
+  font-family: inherit;
 }
 
 /* One row per installed agent, each with a count: the table is the whole
@@ -280,12 +299,6 @@ button.picker__chevron:hover {
 
 /* Project, and whatever joins it: short choices that belong on one line, and
    stack when the modal is narrower than they are. */
-.form__row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: var(--s4);
-}
-
 /* The destination field and its folder picker, on one line. */
 .clone__destination {
   display: flex;

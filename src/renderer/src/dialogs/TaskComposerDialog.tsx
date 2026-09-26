@@ -5,13 +5,16 @@ import { useEffect, useState } from 'react'
 import { MAX_AGENT_ARGS_CHARS } from '@shared/agentLaunch'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { AgentSteppers } from './AgentSteppers'
+import { BranchField } from './BranchField'
 import { branchNameFromTask } from './branchNameFromTask'
 import { Modal } from './Modal'
 import { Select } from './Select'
 import { StartPointPicker, type StartPointValue } from './StartPointPicker'
 import {
+  branchProblem,
   defaultAgentCounts,
   fanOut,
+  plannedBranches,
   submitLabel,
   taskCreates,
   taskName,
@@ -28,13 +31,14 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   const startPointDefaults = useWorkspaceStore((state) => state.startPointDefaults)
   const defaultAgent = useWorkspaceStore((state) => state.defaultAgent)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
+  const worktrees = useWorkspaceStore((state) => state.worktrees)
 
   const [projectId, setProjectId] = useState(openedFor)
   const [task, setTask] = useState('')
   const [agentCounts, setAgentCounts] = useState<AgentCounts | null>(null)
   const [startPoint, setStartPoint] = useState<StartPointValue>({ text: '', option: null })
   const [touched, setTouched] = useState(false)
-  // A branch renamed by hand, kept while the task is edited; null is the task's own.
+  // A branch typed by hand, kept while the task is edited; null follows the task.
   const [branchEdit, setBranchEdit] = useState<string | null>(null)
 
   const project = projects.find((entry) => entry.id === projectId)
@@ -64,16 +68,31 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
   const counts = agentCounts ?? defaultAgentCounts(agents, defaultAgent)
   const selection = fanOut(agents, counts)
 
-  // Empty until there is text: the fallback slug "worktree" would promise an unrelated branch name.
-  const branchName = branchEdit ?? (task.trim() ? branchNameFromTask(taskName(task)) : '')
+  // Taken names: local branches the listing carries, and branches of worktrees the app already has.
+  const existing = [
+    ...(startPoints.phase === 'ready' ? startPoints.list.options : [])
+      .filter((option) => option.kind === 'localBranch')
+      .map((option) => option.refName ?? option.ref),
+    ...worktrees.filter((worktree) => worktree.projectId === projectId).map((worktree) => worktree.branch)
+  ]
+  const hasTask = task.trim().length > 0
+  const creates = taskCreates(task, selection, branchEdit?.trim() ?? '')
+  const planned = hasTask ? plannedBranches(creates, existing) : []
+  // One run shows its exact branch, suffix included; several show the stem their names share.
+  const derived = !hasTask
+    ? ''
+    : creates.length > 1
+      ? branchNameFromTask(taskName(task))
+      : (plannedBranches(taskCreates(task, selection), existing)[0] ?? '')
+  const problem = branchProblem(creates, existing)
   const startedFrom = startPoint.text.trim()
   // Bounded by the agent's command line; a paste past it is refused, not cut.
   const tooLong = task.trim().length > MAX_AGENT_ARGS_CHARS
-  const canSubmit = task.trim().length > 0 && !tooLong && startedFrom.length > 0
+  const canSubmit = hasTask && !tooLong && startedFrom.length > 0 && problem === null
 
   const submit = (): void => {
     if (!canSubmit) return
-    startTask({ projectId, startedFrom, creates: taskCreates(task, selection, branchEdit ?? '') })
+    startTask({ projectId, startedFrom, creates })
   }
 
   return (
@@ -81,6 +100,12 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
       <form
         className="form"
         onSubmit={(event) => {
+          event.preventDefault()
+          submit()
+        }}
+        onKeyDown={(event) => {
+          // The task box has already taken its own Enter.
+          if (event.defaultPrevented || event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return
           event.preventDefault()
           submit()
         }}
@@ -111,7 +136,7 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
 
         <AgentSteppers agents={agents} counts={counts} onChange={setAgentCounts} />
 
-        <div className="form__row">
+        <div className="form__where">
           <label className="field">
             <span className="field__label">Project</span>
             <Select
@@ -130,19 +155,18 @@ export function TaskComposerDialog({ projectId: openedFor }: { projectId: string
               ))}
             </Select>
           </label>
+          <StartPointPicker
+            state={startPoints}
+            onReload={reload}
+            value={startPoint}
+            onChange={(value) => {
+              setTouched(true)
+              setStartPoint(value)
+            }}
+          />
         </div>
 
-        <StartPointPicker
-          state={startPoints}
-          onReload={reload}
-          value={startPoint}
-          onChange={(value) => {
-            setTouched(true)
-            setStartPoint(value)
-          }}
-          branchName={branchName}
-          onBranchName={(name) => setBranchEdit(name === '' ? null : name)}
-        />
+        <BranchField edit={branchEdit} derived={derived} planned={planned} problem={problem} onEdit={setBranchEdit} />
 
         <footer className="modal__actions">
           <p className="form__note">{taskPlanNote(agents, agentsProbed, selection)}</p>

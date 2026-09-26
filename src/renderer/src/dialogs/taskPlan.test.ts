@@ -3,11 +3,13 @@ import type { InstalledAgent } from '@shared/entities'
 import {
   agentByKind,
   agentCount,
+  branchProblem,
   defaultAgentCounts,
   defaultAgentKind,
   fanOut,
   MAX_PER_AGENT,
   NO_AGENT,
+  plannedBranches,
   submitLabel,
   taskCreates,
   taskName,
@@ -170,5 +172,30 @@ describe('what the dialog promises', () => {
   // The probe having answered says nothing about the answer being non-empty.
   it('does not promise a worktree count on a machine that has none', () => {
     expect(taskPlanNote([], true, [])).not.toContain('worktree')
+  })
+})
+
+describe('plannedBranches', () => {
+  it('takes the suffix the runtime would, counting the runs before it as taken', () => {
+    const creates = taskCreates('Fix login', [claude, claude])
+    expect(plannedBranches(creates, ['fix-login-claude'])).toEqual(['fix-login-claude-2', 'fix-login-claude-2-2'])
+  })
+
+  it('keeps a hand-named branch as typed', () => {
+    expect(plannedBranches(taskCreates('Fix login', [claude], 'ada/login'), ['ada/login'])).toEqual(['ada/login'])
+  })
+})
+
+describe('branchProblem', () => {
+  it('never faults a name the runtime picks', () => {
+    expect(branchProblem(taskCreates('Fix login', [claude]), ['fix-login'])).toBeNull()
+  })
+
+  it('names what git would refuse, then what is taken', () => {
+    expect(branchProblem(taskCreates('x', [claude], 'a..b'), [])).toBe('Not a valid branch name')
+    expect(branchProblem(taskCreates('x', [claude], '-x'), [])).toBe('Not a valid branch name')
+    expect(branchProblem(taskCreates('x', [claude], 'Main'), ['main'])).toBe('Branch exists')
+    expect(branchProblem(taskCreates('x', [claude], 'feature'), ['feature/login'])).toBe('Branch exists')
+    expect(branchProblem(taskCreates('x', [claude, codex], 'pager'), ['pager'])).toBeNull()
   })
 })
