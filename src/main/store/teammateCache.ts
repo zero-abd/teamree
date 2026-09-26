@@ -5,6 +5,7 @@
 import { rename, stat } from 'node:fs/promises'
 import { z } from 'zod'
 import type { PeerPane, PeerWorktree } from '../../shared/entities'
+import { PEER_REPORT_CHARS, PEER_TASK_CHARS, PeerWorktreeExtrasOnRead } from '../../shared/presenceExtras'
 import { AgentKindOnRead } from '../terminals/agent-command'
 import { openJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
 import type { StoreProblem } from './workspaceStore'
@@ -22,6 +23,10 @@ export const MAX_CACHED_TEXT = 160
 export const MAX_CACHE_AGE_MS = 14 * 24 * 60 * 60 * 1000
 /** Read before the file is: nothing this app wrote comes close. */
 export const MAX_CACHE_BYTES = 2_000_000
+/** What a write may come to: under the read limit, so the file written is always one that reads back. */
+export const CACHE_BUDGET_BYTES = 1_500_000
+/** Characters of changed paths kept per worktree; 200 long paths must not make one row the whole file. */
+export const MAX_CACHED_PATH_CHARS = 32_768
 
 /** One teammate's worktrees in one repository, as this machine last heard them. */
 export type CachedTeammate = {
@@ -61,13 +66,15 @@ const PaneSchema = z.object({
   quietForMs: z.number().nonnegative()
 })
 
-const WorktreeSchema = z.object({
-  id: z.string().min(1),
-  name: z.string(),
-  branch: z.string(),
-  state: z.enum(['creating', 'ready', 'removing', 'failed']),
-  panes: z.array(PaneSchema)
-})
+const WorktreeSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string(),
+    branch: z.string(),
+    state: z.enum(['creating', 'ready', 'removing', 'failed']),
+    panes: z.array(PaneSchema)
+  })
+  .extend(PeerWorktreeExtrasOnRead)
 
 const TeammateSchema = z.object({
   publicKey: z.string().min(1),
@@ -112,12 +119,36 @@ export function boundTeammate(entry: CachedTeammate): CachedTeammate {
 
 function boundWorktree(worktree: PeerWorktree): PeerWorktree {
   return {
-    ...worktree,
+    ...boundTaskDetails(worktree),
     id: clip(worktree.id),
     name: clip(worktree.name),
     branch: clip(worktree.branch),
     panes: worktree.panes.slice(0, MAX_CACHED_PANES).map(boundPane)
   }
+}
+
+/** Presence v2's fields held to this file's numbers; an absent field stays absent. */
+export function boundTaskDetails(worktree: PeerWorktree): PeerWorktree {
+  const bounded = { ...worktree }
+  if (worktree.task !== undefined) bounded.task = worktree.task.slice(0, PEER_TASK_CHARS)
+  if (worktree.parentId !== undefined) bounded.parentId = clip(worktree.parentId)
+  if (worktree.paths !== undefined) bounded.paths = pathsWithin(worktree.paths)
+  if (worktree.report !== undefined) {
+    bounded.report = { ...worktree.report, summary: worktree.report.summary.slice(0, PEER_REPORT_CHARS) }
+  }
+  return bounded
+}
+
+/** Paths in order until `MAX_CACHED_PATH_CHARS`; a path is kept whole or not at all. */
+export function pathsWithin(paths: readonly string[]): string[] {
+  const kept: string[] = []
+  let chars = 0
+  for (const path of paths) {
+    chars += path.length
+    if (chars > MAX_CACHED_PATH_CHARS) break
+    kept.push(path)
+  }
+  return kept
 }
 
 function boundPane(pane: PeerPane): PeerPane {
@@ -138,6 +169,7 @@ export type TeammateCacheOptions = {
 /** The cache as a file, read once at startup and written back coalesced. */
 export class TeammateCacheStore implements TeammateCache {
   readonly #entries = new Map<string, CachedTeammate>()
+  readonly #sizes = new WeakMap<CachedTeammate, number>()
   readonly #onProblem: (problem: StoreProblem) => void
   readonly #now: () => number
 
@@ -208,13 +240,43 @@ export class TeammateCacheStore implements TeammateCache {
     }
   }
 
-  /** Age first, then count: the oldest snapshot is the least worth keeping. */
+  /** Age, then count, then bytes: the oldest snapshot is the least worth keeping. */
   #prune(): void {
     const cutoff = this.#now() - MAX_CACHE_AGE_MS
     for (const [key, entry] of [...this.#entries]) if (entry.heardAt < cutoff) this.#entries.delete(key)
-    if (this.#entries.size <= MAX_CACHED_PEERS) return
+    if (this.#entries.size > MAX_CACHED_PEERS) {
+      const oldestFirst = [...this.#entries].sort((a, b) => a[1].heardAt - b[1].heardAt)
+      for (const [key] of oldestFirst.slice(0, this.#entries.size - MAX_CACHED_PEERS)) this.#entries.delete(key)
+    }
+    this.#fitBudget()
+  }
+
+  /** Oldest first: their paths and notes go, then whole entries, until the file fits `CACHE_BUDGET_BYTES`. */
+  #fitBudget(): void {
     const oldestFirst = [...this.#entries].sort((a, b) => a[1].heardAt - b[1].heardAt)
-    for (const [key] of oldestFirst.slice(0, this.#entries.size - MAX_CACHED_PEERS)) this.#entries.delete(key)
+    let total = oldestFirst.reduce((sum, [, entry]) => sum + this.#sizeOf(entry), 0)
+    for (const [key, entry] of oldestFirst) {
+      if (total <= CACHE_BUDGET_BYTES) return
+      const slim = { ...entry, worktrees: entry.worktrees.map(({ paths: _paths, memory: _memory, ...rest }) => rest) }
+      total -= this.#sizeOf(entry) - this.#sizeOf(slim)
+      this.#entries.set(key, slim)
+    }
+    for (const [key] of oldestFirst) {
+      if (total <= CACHE_BUDGET_BYTES) return
+      const entry = this.#entries.get(key)
+      if (entry !== undefined) total -= this.#sizeOf(entry)
+      this.#entries.delete(key)
+    }
+  }
+
+  /** Bytes an entry adds to the file as `writeJsonFileAtomically` indents it. Kept per object: entries are replaced, never edited. */
+  #sizeOf(entry: CachedTeammate): number {
+    let size = this.#sizes.get(entry)
+    if (size === undefined) {
+      size = Buffer.byteLength(JSON.stringify({ teammates: [entry] }, null, 2))
+      this.#sizes.set(entry, size)
+    }
+    return size
   }
 
   #persist(): void {

@@ -20,6 +20,7 @@ export {
 } from './writeLog'
 export { presenceFor } from './presence'
 export type { PresenceProject, PresenceSource } from './presence'
+export { taskGitReader } from './presenceDetails'
 export { normaliseRemote, projectKeyFor, readProjectKey } from './projectKey'
 export {
   openRelayConnection,

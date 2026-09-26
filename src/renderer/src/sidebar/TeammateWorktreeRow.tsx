@@ -20,13 +20,14 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
     <li
       className={`worktree worktree--teammate worktree--${row.state}${row.staleness ? ' worktree--stale' : ''}`}
       role="none"
+      style={row.depth > 0 ? ({ '--depth': row.depth } as React.CSSProperties) : undefined}
     >
       <div className="worktree__row worktree__row--teammate" title={teammateTitle(row)}>
         {/* A row of the sidebar tree, focusable so the arrows pass through it to the panes it holds. */}
         <div
           className="worktree__open worktree__open--teammate"
           role="treeitem"
-          aria-level={2}
+          aria-level={2 + row.depth}
           aria-expanded={row.panes.length > 0 ? true : undefined}
           tabIndex={-1}
         >
@@ -38,6 +39,8 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
             {/* First on the line, because it is the fact that changes what
                 every other fact on the row means. */}
             <span className="worktree__owner">{row.handle}</span>
+            {row.stage === undefined ? null : <span className="worktree__stage">{row.stage}</span>}
+            {row.report === undefined ? null : <span className="worktree__report">{row.report}</span>}
             {row.branch === undefined ? null : <span className="worktree__branch">{row.branch}</span>}
             {/* The age, never the bare word "offline": what is known is how old
                 this picture is, and the sentence behind it says their machine
@@ -64,7 +67,7 @@ export function TeammateWorktreeRow({ row, watchingPaneIds, onWatch }: TeammateW
                 <button
                   type="button"
                   role="treeitem"
-                  aria-level={3}
+                  aria-level={3 + row.depth}
                   tabIndex={-1}
                   className={`pane-row pane-row--teammate pane-row--watchable${watching ? ' pane-row--watching' : ''}`}
                   title={

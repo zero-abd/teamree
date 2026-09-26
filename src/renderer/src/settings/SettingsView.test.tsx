@@ -8,9 +8,13 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CliStatus, InstalledAgent, PaneConsent, Project, RelaySetting, UpdateState } from '@shared/entities'
 
+const runtimeCall = vi.hoisted(() => ({
+  answer: (_method: string, _params: unknown): Promise<unknown> => new Promise(() => {})
+}))
+
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
-    call: () => new Promise(() => {}),
+    call: (method: string, params: unknown) => runtimeCall.answer(method, params),
     watchPane: () => new Promise(() => {}),
     subscribeTerminal: () => new Promise(() => {}),
     watchWorkspace: () => ({ close: () => {} }),
@@ -259,6 +263,38 @@ describe('the page itself', () => {
   })
 })
 
+describe('Teamwork', () => {
+  it('turns Share Task Details off through the runtime, and says why when it cannot', async () => {
+    const sent: unknown[] = []
+    let refuse = false
+    runtimeCall.answer = (method, params) => {
+      if (method === 'settings.get')
+        return Promise.resolve({ shareTaskDetails: true, showCost: false, jacMemoryAddon: false })
+      if (method !== 'settings.set') return new Promise(() => {})
+      sent.push(params)
+      if (refuse) return Promise.reject(new Error('the workspace file is read-only'))
+      return Promise.resolve({ shareTaskDetails: false, showCost: false, jacMemoryAddon: false })
+    }
+    try {
+      render(<SettingsView />)
+      const box = (await screen.findByRole('checkbox', { name: 'Share Task Details' })) as HTMLInputElement
+      await vi.waitFor(() => expect(box.disabled).toBe(false))
+      expect(box.checked).toBe(true)
+
+      fireEvent.click(box)
+      await vi.waitFor(() => expect(box.checked).toBe(false))
+      expect(sent).toEqual([{ shareTaskDetails: false }])
+
+      refuse = true
+      fireEvent.click(box)
+      expect(await screen.findByText('the workspace file is read-only')).toBeTruthy()
+      expect(box.checked).toBe(false)
+    } finally {
+      runtimeCall.answer = () => new Promise(() => {})
+    }
+  })
+})
+
 describe('the section list', () => {
   const nav = (): HTMLElement => screen.getByRole('navigation', { name: 'Sections' })
   const item = (name: string): HTMLElement => within(nav()).getByRole('button', { name })
@@ -284,7 +320,7 @@ describe('the section list', () => {
       within(nav())
         .getAllByRole('button')
         .map((button) => button.textContent)
-    ).toEqual(['Agents', 'Projects', 'Panes', 'Notifications', 'Appearance', 'Updates', 'CLI'])
+    ).toEqual(['Agents', 'Projects', 'Panes', 'Notifications', 'Teamwork', 'Appearance', 'Updates', 'CLI'])
     unmount()
 
     seed({ agents: [] })
@@ -318,10 +354,10 @@ describe('the section list', () => {
   it('highlights the section scrolled into view', () => {
     render(<SettingsView />)
     const body = screen.getByTestId('settings-body')
-    layOut({ projects: -400, panes: -200, notices: 10, appearance: 300, updates: 600, cli: 900 })
+    layOut({ projects: -400, panes: -200, notices: 10, teamwork: 150, appearance: 300, updates: 600, cli: 900 })
     fireEvent.scroll(body)
     expect(current()).toEqual(['Notifications'])
-    layOut({ projects: -900, panes: -700, notices: -500, appearance: -300, updates: -100, cli: 200 })
+    layOut({ projects: -900, panes: -700, notices: -500, teamwork: -400, appearance: -300, updates: -100, cli: 200 })
     fireEvent.scroll(body)
     expect(current()).toEqual(['Updates'])
   })
@@ -660,7 +696,7 @@ describe('the filter', () => {
     render(<SettingsView />)
     type('cursor')
     type('')
-    expect(nav()).toEqual(['Projects', 'Panes', 'Notifications', 'Appearance', 'Updates', 'CLI'])
+    expect(nav()).toEqual(['Projects', 'Panes', 'Notifications', 'Teamwork', 'Appearance', 'Updates', 'CLI'])
   })
 
   // Escape empties a filter before it closes the page.

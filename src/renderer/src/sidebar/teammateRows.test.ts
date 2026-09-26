@@ -190,3 +190,57 @@ describe('a teammate never heard from', () => {
     expect(unheardTeammates(undefined)).toEqual([])
   })
 })
+
+describe('a teammate’s task and its tree', () => {
+  it('titles the row with the task and says the stage, with the report once done', () => {
+    const [row] = teammateRows(
+      [
+        theirWorktree({
+          task: 'Compact the search index nightly',
+          stage: 'done',
+          report: { outcome: 'succeeded', summary: 'Compaction runs at 2am.' }
+        })
+      ],
+      NOW
+    )
+    expect(row?.name).toBe('Compact the search index nightly')
+    expect(row?.stage).toBe('done')
+    expect(row?.report).toBe('Compaction runs at 2am.')
+  })
+
+  it('keeps the report quiet while the task is still going', () => {
+    const [row] = teammateRows(
+      [theirWorktree({ stage: 'working', report: { outcome: 'succeeded', summary: 'Earlier run.' } })],
+      NOW
+    )
+    expect(row?.report).toBeUndefined()
+  })
+
+  it('nests children under their parent, and a missing or circular parent at the top', () => {
+    const rows = teammateRows(
+      // In the runtime's order, by name.
+      [
+        theirWorktree({ id: 'peer:a:parent', name: 'a parent' }),
+        theirWorktree({ id: 'peer:a:child', name: 'b child', parentId: 'peer:a:parent' }),
+        theirWorktree({ id: 'peer:a:grandchild', name: 'c grandchild', parentId: 'peer:a:child' }),
+        theirWorktree({ id: 'peer:a:orphan', name: 'd orphan', parentId: 'peer:a:gone' }),
+        theirWorktree({ id: 'peer:a:loop1', name: 'e loop', parentId: 'peer:a:loop2' }),
+        theirWorktree({ id: 'peer:a:loop2', name: 'f loop', parentId: 'peer:a:loop1' })
+      ],
+      NOW
+    )
+    expect(rows.map((row) => [row.name, row.depth])).toEqual([
+      ['a parent', 0],
+      ['b child', 1],
+      ['c grandchild', 2],
+      ['d orphan', 0],
+      ['e loop', 0],
+      ['f loop', 1]
+    ])
+  })
+
+  it('names the files and commits in the hover', () => {
+    const [row] = teammateRows([theirWorktree({ paths: ['a.ts', 'b.ts'], ahead: 3 })], NOW)
+    expect(teammateTitle(row!)).toContain('2 files · 3 ahead')
+  })
+})

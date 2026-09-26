@@ -355,6 +355,29 @@ for output nobody is reading.
 
 Per-pane mute overrides all of it in the owner's favour.
 
+### What presence carries
+
+Per worktree: its name, branch and state, and per pane the title, shell, label,
+agent, whether it is running or busy, its size and how long it has been quiet.
+While **Settings › Teamwork › Share Task Details** is on (the default), each
+worktree also carries:
+
+| Field      | What                                          | Bound          |
+| ---------- | --------------------------------------------- | -------------- |
+| `task`     | the task's first line                         | 200 characters |
+| `parentId` | the worktree it is a child of                 | an id          |
+| `paths`    | changed paths, repo-relative                  | 200 paths      |
+| `ahead`    | commits ahead of its base                     | a number       |
+| `stage`    | working, asking, stopped, ready, done, failed | one word       |
+| `report`   | outcome and the summary's first sentence      | 300 characters |
+
+Paths, never what is in them, and never a byte a pane printed:
+`tests/security/presenceCarriesNoContents.test.ts` holds that against real git.
+Off, only the fields in the first sentence cross. Receivers bound every field
+again and drop a malformed one alone; a build older than the fields ignores
+them. The local cache keeps what it heard under 1.5 MB, shedding the paths of
+the teammate heard from longest ago first.
+
 ### Offline is stale, not absent
 
 When a peer drops, **their worktrees stay in the sidebar, marked stale**, with

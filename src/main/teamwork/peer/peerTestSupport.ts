@@ -320,6 +320,10 @@ export type PeerRuntimeOptions = {
   runner?: GitRunner
   /** Lets a test drive the cache directly, and flush it before a restart. */
   cache?: TeammateCache
+  /** Settings › Teamwork › Share Task Details, as the workspace answers it. */
+  shareTaskDetails?: () => boolean
+  /** Stands in for git's changed paths and commits ahead. */
+  readTaskGit?: PeerServiceOptions['readTaskGit']
   /** Standing permissions this machine already holds at start, as a real runtime reads them from the workspace. */
   consent?: ConsentStore
   /** Panes this machine already has silenced when it starts; the mutes' half of `consent`. */
@@ -426,6 +430,8 @@ export async function createPeerRuntime(options: PeerRuntimeOptions): Promise<Pe
     env: options.env ?? {},
     ...(options.runner ? { runner: options.runner } : {}),
     ...(options.cache ? { cache: options.cache } : {}),
+    ...(options.shareTaskDetails ? { shareTaskDetails: options.shareTaskDetails } : {}),
+    ...(options.readTaskGit ? { readTaskGit: options.readTaskGit } : {}),
     ...(options.consent ? { consent: options.consent } : {}),
     ...(options.mutes ? { mutes: options.mutes } : {}),
     ...(options.watchWake ? { watchWake: options.watchWake } : {}),

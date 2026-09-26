@@ -51,6 +51,12 @@ const ALLOWED = [
     why: 'TEAMREE_SKIP_RELAY_TESTS=1: the scenario stops after the local act.'
   },
   {
+    file: 'tests/teamwork/task-details.test.ts',
+    suite: 'teammates see the task',
+    when: relayOptOut,
+    why: 'TEAMREE_SKIP_RELAY_TESTS=1: task details are proven here only against a fake relay.'
+  },
+  {
     file: 'tests/teamwork/two-peers.test.ts',
     test: 'puts the two of them on a real relay and waits until they have met',
     when: relayOptOut,
