@@ -10,6 +10,7 @@ import { AnswerButtons } from './AnswerButtons'
 import { PaneSince } from './PaneRows'
 import { teammateTitle, type TeammatePaneRow, type TeammateWorktreeRowModel } from './teammateRows'
 import { PaneGlyph } from '../agents/glyphs'
+import { paneRowSpeech } from './rowSpeech'
 
 type TeammateWorktreeRowProps = {
   row: TeammateWorktreeRowModel
@@ -101,10 +102,11 @@ export function TeammateWorktreeRow({
                       : `Watch ${row.handle}’s ${pane.label} · ${TONE_LABEL[dotTone(pane.activity, pane.agent)]} · reading only`
                   }
                   aria-selected={watching}
+                  aria-label={paneRowSpeech({ ...pane, label: `${row.handle}’s ${pane.label}` })}
                   onClick={() => onWatch(pane)}
                 >
                   <span className="pane-row__head">
-                    <PaneGlyph agent={pane.agent} />
+                    <PaneGlyph agent={pane.agent} decorative />
                     <span className="pane-row__label">{truncateName(pane.text)}</span>
                     {/* Only ever a line the pane printed while somebody had it open. */}
                     {pane.evidence ? <span className="pane-row__evidence">{pane.evidence}</span> : null}

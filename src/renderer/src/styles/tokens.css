@@ -127,8 +127,8 @@
   --motion-base: 170ms;
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 
-  /* A row's or tab's own controls at rest: seen without hovering, full on hover or focus. */
-  --control-rest: 0.45;
+  /* A row's or tab's own controls at rest: seen without hovering, full on hover or focus; 3:1 on every ground. */
+  --control-rest: 0.8;
 }
 
 @media (hover: none) {

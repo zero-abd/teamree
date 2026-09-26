@@ -16,6 +16,7 @@ import {
 } from '../sidebar/agentRows'
 import { AnswerButtons } from '../sidebar/AnswerButtons'
 import { PullRequestMark } from '../sidebar/PullRequestMark'
+import { boardRowSpeech } from '../sidebar/rowSpeech'
 import { usePaneEvidence, useWatchEvidence } from '../sidebar/usePaneEvidence'
 import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
@@ -217,10 +218,11 @@ export function Dashboard(): React.JSX.Element {
                   title={`${row.label} in ${where} · ${TONE_LABEL[state]}${
                     isUnread ? ' · unread' : ''
                   } · last output ${agoLabel(row.quietFor)}${row.evidence ? `\nlast printed: ${row.evidence}` : ''}`}
+                  aria-label={boardRowSpeech(row, isUnread)}
                   onClick={() => openRow(row)}
                 >
                   <span className="board-row__what">
-                    <PaneGlyph agent={row.agent} />
+                    <PaneGlyph agent={row.agent} decorative />
                     <span className="board-row__label">{truncateName(row.label)}</span>
                   </span>
                   <span className="board-row__worktree">

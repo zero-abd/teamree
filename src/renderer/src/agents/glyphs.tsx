@@ -32,6 +32,12 @@ export function TerminalGlyph(): React.JSX.Element {
 }
 
 /** A pane's mark: its harness when one is known, the terminal otherwise. */
-export function PaneGlyph({ agent }: { agent: AgentKind | undefined }): React.JSX.Element {
-  return agent === undefined ? <TerminalGlyph /> : <AgentGlyph kind={agent} />
+export function PaneGlyph({
+  agent,
+  decorative = false
+}: {
+  agent: AgentKind | undefined
+  decorative?: boolean
+}): React.JSX.Element {
+  return agent === undefined ? <TerminalGlyph /> : <AgentGlyph kind={agent} decorative={decorative} />
 }

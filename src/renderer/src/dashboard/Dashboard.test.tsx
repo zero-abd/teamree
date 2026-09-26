@@ -417,6 +417,17 @@ describe('answers on the board', () => {
   })
 })
 
+// A glyph named `Codex` beside the word Codex read `CodexCodex`.
+describe('what a pane row says', () => {
+  it('is named once: the pane, its worktree, its state and the line it shows', () => {
+    printed.t1 = 'Edited calc.js'
+    seed({ terminals: { t1: { ...PANE, agent: 'codex', title: 'codex' } } })
+    render(<Dashboard />)
+    const row = screen.getByRole('button', { name: 'Codex, atlas, stopped: Edited calc.js, unread' })
+    expect(row.querySelector('.agent-glyph')?.getAttribute('aria-hidden')).toBe('true')
+  })
+})
+
 // The same board, by task: tree order, and a stage nobody sets.
 describe('the Tasks view', () => {
   const openWorktree = vi.fn()
@@ -564,6 +575,24 @@ describe('the Tasks view', () => {
     useTaskTreeStore.setState({ boardMode: 'tasks' })
     render(<Dashboard />)
     expect(chips()).toEqual(['PR #1 ✓', 'PR #2 ✗ 2', ''])
+  })
+
+  it('names each task row in words, column by column', async () => {
+    const { useOverlaps } = await import('../state/overlapStore')
+    useUsageStore.setState({ usage: {} })
+    useOverlaps.setState({
+      byProject: {
+        p1: [{ worktreeId: 'w2', with: { worktreeId: 'w3' }, paths: ['src/db.ts'], conflicts: ['src/db.ts'] }]
+      }
+    })
+    useTaskTreeStore.setState({ boardMode: 'tasks' })
+    render(<Dashboard />)
+    const row = document.querySelectorAll<HTMLElement>('.task-row')[1]!
+    expect(row.getAttribute('aria-label')).toMatch(
+      /^Write the migration, asking, would conflict with Update the tests in db\.ts, Claude Code asking, \S+ old$/
+    )
+    expect(row.querySelector('.overlap')?.closest('[aria-hidden="true"]')).not.toBeNull()
+    useOverlaps.setState({ byProject: {} })
   })
 
   it('opens the worktree from its row', () => {

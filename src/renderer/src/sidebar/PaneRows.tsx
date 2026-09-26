@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import type { Subagent } from '@shared/entities'
 import { PaneGlyph } from '../agents/glyphs'
+import { harnessName } from '../agents/harnesses'
 import { requestRegionFocus } from '../shell/regions'
 import { AnswerButtons } from './AnswerButtons'
+import { paneRowSpeech } from './rowSpeech'
 import { SubagentRows } from './SubagentRows'
 import { SubagentTranscriptDialog } from './SubagentTranscriptDialog'
 import { NO_ATTENTION, typingNow, type PaneAttention } from '../state/paneAttention'
@@ -81,6 +83,14 @@ export function PaneRows({
               {...item}
               className={`pane-row${isUnread ? ' pane-row--unread' : ''}`}
               title={paneTitle(row, attention, typing, isUnread)}
+              aria-label={paneRowSpeech(
+                named || row.agent === undefined ? row : { ...row, label: harnessName(row.agent) },
+                {
+                  unread: isUnread,
+                  hands: typing.length > 0 || attention.watchers.length > 0 ? hands : null,
+                  muted: attention.muted
+                }
+              )}
               onClick={(event) => {
                 const button = event.currentTarget
                 const fromKeyboard = event.detail === 0
@@ -98,7 +108,7 @@ export function PaneRows({
             >
               <span className="pane-row__head">
                 {/* Shortened for the row only: the hover text carries the whole of it. */}
-                <PaneGlyph agent={row.agent} />
+                <PaneGlyph agent={row.agent} decorative />
                 {named ? <span className="pane-row__label">{truncateName(row.text)}</span> : null}
                 {/* Nothing when there is nothing worth quoting: an empty line would read as an answer. */}
                 {row.evidence ? <span className="pane-row__evidence">{row.evidence}</span> : null}

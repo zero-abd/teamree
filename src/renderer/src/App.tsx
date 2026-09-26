@@ -15,6 +15,7 @@ import { useMenuBar } from './menu/useMenuBar'
 import { useUnsavedFiles } from './files/useUnsavedFiles'
 import { useAgentNotices } from './notices/useAgentNotices'
 import { usePullRequestRefresh } from './state/usePullRequestRefresh'
+import { useAnnouncements } from './notices/useAnnouncements'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmCloseFileDialog } from './dialogs/ConfirmCloseFileDialog'
 import { ConfirmUnsavedDialog } from './dialogs/ConfirmUnsavedDialog'
@@ -69,6 +70,7 @@ export function App(): React.JSX.Element {
   // What this window tells the main process about agent notices. See src/renderer/src/notices.
   useAgentNotices()
   usePullRequestRefresh()
+  const spoken = useAnnouncements()
 
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
@@ -151,31 +153,33 @@ export function App(): React.JSX.Element {
       <div className="corner-stack">
         <SharedNotePopups />
         <HandoffPopups />
-        {notices.length > 0 ? (
-          <div className="notices" role="status" aria-live="polite">
-            {notices.map((notice) => (
-              <div className={`notice notice--${notice.tone}`} key={notice.id}>
-                <span className="notice__text">{notice.text}</span>
-                {notice.action === undefined ? null : (
-                  // The verb is the whole button.
-                  <button type="button" className="notice__action" onClick={() => actOn(notice)}>
-                    {notice.action.label}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="notice__close"
-                  aria-label="Dismiss message"
-                  onClick={() => dismissNotice(notice.id)}
-                >
-                  <svg viewBox="0 0 12 12" aria-hidden="true">
-                    <path d="M3 3 L9 9 M9 3 L3 9" />
-                  </svg>
+        {/* Always mounted: a live region added with its first message is often not heard saying it. */}
+        <div className="notices" role="status" aria-live="polite">
+          <span className="notices__spoken" key={spoken.serial}>
+            {spoken.text}
+          </span>
+          {notices.map((notice) => (
+            <div className={`notice notice--${notice.tone}`} key={notice.id}>
+              <span className="notice__text">{notice.text}</span>
+              {notice.action === undefined ? null : (
+                // The verb is the whole button.
+                <button type="button" className="notice__action" onClick={() => actOn(notice)}>
+                  {notice.action.label}
                 </button>
-              </div>
-            ))}
-          </div>
-        ) : null}
+              )}
+              <button
+                type="button"
+                className="notice__close"
+                aria-label="Dismiss message"
+                onClick={() => dismissNotice(notice.id)}
+              >
+                <svg viewBox="0 0 12 12" aria-hidden="true">
+                  <path d="M3 3 L9 9 M9 3 L3 9" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
         <UpdateAvailableCard />
       </div>
 

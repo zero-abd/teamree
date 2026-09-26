@@ -405,6 +405,7 @@ export function ChangesTab(): React.JSX.Element | null {
             <label>
               <input
                 type="checkbox"
+                aria-label="Select all changes"
                 checked={allChecked}
                 ref={(box) => {
                   if (box) box.indeterminate = !allChecked && rows.some((change) => tick(change) !== 'off')

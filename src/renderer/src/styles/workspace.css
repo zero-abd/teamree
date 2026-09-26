@@ -613,6 +613,11 @@
   background: var(--bg-hover);
 }
 
+/* Inside the row: the list scrolls, and clips a ring drawn outside it. */
+.change:focus-visible {
+  outline-offset: -2px;
+}
+
 .change__kind {
   width: 11px;
   flex: none;
@@ -1019,17 +1024,16 @@
   border: 1px solid transparent;
   border-radius: var(--r1);
   background: none;
-  color: var(--fg-secondary);
+  color: var(--fg-muted);
   font-family: var(--font-ui);
   font-size: var(--text-xs);
   cursor: pointer;
-  opacity: var(--control-rest);
 }
 
 .changes__item:hover .change__discard,
 .changes__item--selected .change__discard,
 .change__discard:focus-visible {
-  opacity: 1;
+  color: var(--fg-secondary);
 }
 
 .change__discard:hover {
@@ -1334,17 +1338,16 @@ textarea.changes__message {
   border: 1px solid transparent;
   border-radius: var(--r1);
   background: none;
-  color: var(--fg-secondary);
+  color: var(--fg-muted);
   font-size: var(--text-xs);
   cursor: pointer;
-  opacity: var(--control-rest);
 }
 
 .context__row:hover .context__resolve,
 .context__row:hover .context__x,
 .context__resolve:focus-visible,
 .context__x:focus-visible {
-  opacity: 1;
+  color: var(--fg-secondary);
 }
 
 .context__resolve:hover,

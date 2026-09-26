@@ -9,6 +9,7 @@ import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { dotClass, sinceLabel, TONE_LABEL } from '../sidebar/agentRows'
 import { OverlapMark } from '../sidebar/OverlapMark'
 import { PullRequestMark } from '../sidebar/PullRequestMark'
+import { taskRowSpeech } from '../sidebar/rowSpeech'
 import { useOverlapChips } from '../sidebar/useOverlapChip'
 import { useUsageStore } from '../state/usageStore'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -79,6 +80,7 @@ export function TaskBoard({
         {rows.map((row) => {
           const isUnread = row.panes.some((pane) => unread.has(pane.terminalId))
           const overlap = overlapOf(row.worktreeId)
+          const used = usage[row.worktreeId]
           return (
             <li key={row.worktreeId} className="board-item board-item--task">
               <button
@@ -86,9 +88,15 @@ export function TaskBoard({
                 className={`board-row task-row task-row--${row.stage}${isUnread ? ' board-row--unread' : ''}`}
                 style={row.depth === 0 ? undefined : ({ '--depth': row.depth } as React.CSSProperties)}
                 title={[row.title, row.branch, row.projectName].filter(Boolean).join(' · ')}
+                aria-label={taskRowSpeech({
+                  ...row,
+                  overlap,
+                  tokens: used === undefined ? null : usageLabel(used, showCost),
+                  age: sinceLabel(row.age)
+                })}
                 onClick={() => onOpen(row.worktreeId)}
               >
-                <span className="task-row__task">
+                <span className="task-row__task" aria-hidden="true">
                   <span className="task-row__name">{row.title}</span>
                   {row.tally === undefined ? null : (
                     <span className="chip task-row__tally">{`${row.tally.done}/${row.tally.total} done`}</span>
@@ -116,7 +124,7 @@ export function TaskBoard({
                   {row.removed ? <span className="task-row__removed">−{row.removed}</span> : null}
                   {row.ahead > 0 ? <span className="task-row__ahead">{`↑${row.ahead}`}</span> : null}
                 </span>
-                <TokensCell usage={usage[row.worktreeId]} showCost={showCost} />
+                <TokensCell usage={used} showCost={showCost} />
                 <span className="task-row__age">{sinceLabel(row.age)}</span>
               </button>
             </li>

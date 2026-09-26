@@ -95,7 +95,7 @@ describe('a question for you', () => {
   it('turns the row amber and offers its answers', () => {
     useMessageStore.setState({ messages: [message({})] })
     mount(TESTS)
-    expect(screen.getByRole('img', { name: 'asking' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'asking', hidden: true })).toBeTruthy()
     expect(screen.getByText('Which store for the limiter?')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'postgres' }))
     expect(call).toHaveBeenCalledWith('message.send', {

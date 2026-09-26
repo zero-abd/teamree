@@ -11,6 +11,7 @@ import {
   type WorktreeMergePreview,
   type WorktreeStatus
 } from '@shared/entities'
+import { runPaneOf, runState } from '@shared/runCommands'
 import { usageLines } from '@shared/usage'
 import { AgentGlyph } from '../agents/glyphs'
 import { openInBrowser } from '../shell/openInBrowser'
@@ -23,12 +24,14 @@ import { useUsageStore } from '../state/usageStore'
 import { agentRows, dotClass, TONE_LABEL, worktreeTone, type DotTone } from './agentRows'
 import { AskForYou } from './AskForYou'
 import { PaneRows } from './PaneRows'
+import { listPorts, portUrl } from './portChip'
 import { PortChipView } from './PortChipView'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge } from './mergeBadge'
 import type { OverlapChip, OverlapEntry } from './overlapChip'
 import { OverlapMark } from './OverlapMark'
 import { PullRequestMark } from './PullRequestMark'
+import { rowSpeech } from './rowSpeech'
 import { endNestDrag, NEST_DRAG_TYPE, startNestDrag, useNestDrag, useNestDrop } from './nestDrag'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { WorktreeNameField } from './WorktreeNameField'
@@ -202,6 +205,17 @@ export function WorktreeRow({
     heard === undefined ? undefined : state.worktrees.find((entry) => entry.id === heard.from.worktreeId)
   )
   const runItems = runMenuItems(useRunOffers(worktree.id), useRunActions(worktree.id))
+  const ports = ready
+    ? [
+        ...new Set(
+          listPorts(terminals)
+            .filter((entry) => entry.worktreeId === worktree.id)
+            .map((entry) => entry.port)
+        )
+      ]
+    : []
+  const firstPort = ports[0]
+  const firstOverlap = ready ? overlap?.chip.entries[0] : undefined
 
   // A field removed while focused leaves the focus on `document.body`; after a blur it is already elsewhere.
   useEffect(() => {
@@ -250,6 +264,12 @@ export function WorktreeRow({
       ? []
       : [{ label: `Open Issue #${issue.number}`, onChoose: () => openInBrowser(issue.url) }]),
     ...(onKeep === undefined ? [] : [{ label: 'Keep This Run…', onChoose: onKeep }]),
+    ...(firstPort === undefined
+      ? []
+      : [{ label: `Open localhost:${firstPort}`, onChoose: () => openInBrowser(portUrl(firstPort)) }]),
+    ...(firstOverlap === undefined || overlap === undefined
+      ? []
+      : [{ label: `Open Overlap: ${overlap.chip.label}`, onChoose: () => overlap.onOpen(firstOverlap) }]),
     ...(ready ? runItems.map((item, index) => (index === 0 ? { ...item, separated: true } : item)) : [])
   ]
   // A directory that is not there has nothing to reveal, open or copy; removal is what is left.
@@ -275,8 +295,34 @@ export function WorktreeRow({
   const twoLines = !compact && (display.branch !== undefined || task !== undefined || handoff !== null || pullShown)
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
-  const stateId = `${describedBy}-state`
-  const factsId = `${describedBy}-facts`
+  const testPane = ready ? runPaneOf(terminals, worktree.id, 'test') : undefined
+  const description = rowSpeech({
+    ...(creating
+      ? { lifecycle: 'creating' as const }
+      : failed
+        ? { lifecycle: 'failed' as const }
+        : missing
+          ? { lifecycle: 'missing' as const }
+          : {}),
+    tone,
+    question: ask === undefined ? (rows.find((row) => row.activity === 'waiting')?.evidence ?? null) : ask.text,
+    ...(rolled?.from === undefined ? {} : { from: rolled.from }),
+    unread: unreadHere,
+    ...(ready && status !== undefined
+      ? { status, child: worktree.parentId !== undefined, ignored: status.ignored ?? 0 }
+      : {}),
+    ...(merged ? { landed: landing?.parent === undefined ? ('merged' as const) : ('landed' as const) } : {}),
+    ...(badge === null || mergePreview === undefined ? {} : { merge: mergePreview }),
+    ...(pullRequest === undefined ? {} : { pullRequest: pullRequest.number }),
+    ...(issue === undefined ? {} : { issue: issue.number }),
+    ports,
+    overlap: ready ? (overlap?.chip ?? null) : null,
+    ...(testPane === undefined ? {} : { tests: runState(testPane) }),
+    claims: ready && claims !== '' ? claims.split('\n') : [],
+    ...(task === undefined ? {} : { tally: task.tally }),
+    handoff,
+    report
+  })
 
   const facts = (
     <>
@@ -375,7 +421,8 @@ export function WorktreeRow({
         small facts about the branch share the line below with the branch, so
         four badges cannot squeeze the name; with no branch to show they sit
         beside the dot instead of alone on a line. */}
-      <span className="worktree__title">
+      {/* Hidden while it only draws: the row's name and description say it all in words. */}
+      <span className="worktree__title" aria-hidden={renaming ? undefined : true}>
         {renaming ? (
           <WorktreeNameField name={worktree.name} onRename={onRename} onDone={() => setRenaming(false)} />
         ) : (
@@ -400,14 +447,9 @@ export function WorktreeRow({
           </>
         )}
         <span className="worktree__end">
-          {twoLines ? null : (
-            <span className="worktree__facts" id={factsId}>
-              {facts}
-            </span>
-          )}
+          {twoLines ? null : <span className="worktree__facts">{facts}</span>}
           {tone ? (
             <span
-              id={stateId}
               className={dotClass(tone)}
               role="img"
               title={
@@ -423,7 +465,7 @@ export function WorktreeRow({
         </span>
       </span>
       {twoLines ? (
-        <span className="worktree__meta" id={factsId}>
+        <span className="worktree__meta" aria-hidden="true">
           <span className="worktree__branch">{display.branch ?? ''}</span>
           {facts}
         </span>
@@ -524,11 +566,14 @@ export function WorktreeRow({
             aria-disabled={openable ? undefined : true}
             aria-current={active ? 'true' : undefined}
             aria-label={label}
-            aria-describedby={tone ? `${stateId} ${factsId}` : factsId}
+            aria-describedby={description === '' ? undefined : describedBy}
           >
             {body}
           </button>
         )}
+        <span id={describedBy} hidden>
+          {description}
+        </span>
         {/* The only button on the row besides the row itself, and it opens the
             same menu the right button does. Named for what it opens rather than
             for what it looks like: "More" is what a `⋯` is called by anybody

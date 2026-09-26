@@ -252,6 +252,20 @@
   max-width: 420px;
 }
 
+/* Always mounted for the screen reader; out of the stack's gaps while it holds no card. */
+.notices:not(:has(.notice)) {
+  position: absolute;
+}
+
+.notices__spoken {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .notice {
   display: flex;
   pointer-events: auto;
