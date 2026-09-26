@@ -6,6 +6,7 @@ import type { StartPoint, StartPointList } from '@shared/entities'
 import { useEscapeClaim } from './Modal'
 import {
   badgesOf,
+  countsOf,
   buildPickerModel,
   choiceOf,
   defaultActiveId,
@@ -176,6 +177,9 @@ export function StartPointPicker({ state, onReload, value, onChange }: StartPoin
                           {badge}
                         </span>
                       ))}
+                      {countsOf(row.option) === null ? null : (
+                        <span className="combo__badge">{countsOf(row.option)}</span>
+                      )}
                       <span className="combo__sha">{row.option.shortSha}</span>
                     </Row>
                   ))}

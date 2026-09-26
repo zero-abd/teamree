@@ -58,7 +58,7 @@ export type TaskRowsInput = {
   terminals: readonly Terminal[]
   statuses: Readonly<Record<string, WorktreeStatus>>
   mergePreviews: Readonly<Record<string, Pick<WorktreeMergePreview, 'ahead'>>>
-  landings: Readonly<Record<string, Pick<WorktreeLanding, 'merged' | 'parent'>>>
+  landings: Readonly<Record<string, Pick<WorktreeLanding, 'merged' | 'parent' | 'notPushed'>>>
   /** Uncommitted lines per worktree, where read. */
   changes?: Readonly<Record<string, { changes: readonly Pick<WorktreeChange, 'added' | 'removed'>[] }>>
   now: number
@@ -80,6 +80,8 @@ export type TaskRow = {
   age: number
   /** Direct children done, on a task that has any. */
   tally?: { done: number; total: number }
+  /** Landed in the local base only. */
+  notPushed?: true
 }
 
 /** Each worktree's stage, keyed by id. */
@@ -111,13 +113,15 @@ export function taskRows(input: TaskRowsInput): TaskRow[] {
       const { worktree } = node
       const display = worktreeDisplay(worktree)
       const lines = input.changes?.[worktree.id]?.changes
+      const stage = stages[worktree.id] ?? 'stopped'
       return {
         worktreeId: worktree.id,
         projectName: project.name,
         title: display.title,
         ...(display.branch === undefined ? {} : { branch: display.branch }),
         depth,
-        stage: stages[worktree.id] ?? 'stopped',
+        stage,
+        ...(stage === 'landed' && input.landings[worktree.id]?.notPushed === true ? { notPushed: true as const } : {}),
         panes: agentRows(input.terminals, worktree, input.now).map((pane) => ({
           terminalId: pane.terminalId,
           tone: dotTone(pane.activity, pane.agent),

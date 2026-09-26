@@ -485,6 +485,13 @@ describe('landing the work', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete Worktree…' }))
     expect(useWorkspaceStore.getState().dialog).toMatchObject({ kind: 'confirm-remove', worktreeId: 'w1' })
   })
+
+  it('says not pushed while the merge is only in the local main', () => {
+    landed({ merged: true, unmerged: 0, notPushed: true })
+    render(<ChangesTab />)
+
+    expect(screen.getByText('Merged · not pushed')).toBeTruthy()
+  })
 })
 
 describe('committing', () => {

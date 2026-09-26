@@ -75,7 +75,8 @@ export async function pushWorktree(runner: GitRunner, options: PushOptions): Pro
     throw refused(
       ErrorCode.GitFailed,
       pushFailureLabel(pushed.stderr, reported, remote),
-      said || `could not push ${options.branch}`
+      said || `could not push ${options.branch}`,
+      pushFailureKind(pushed.stderr, reported)
     )
   }
 
@@ -215,8 +216,8 @@ export function pushFailureLabel(stderr: string, reported?: PushRefStatus | null
   return 'Push failed'
 }
 
-function refused(code: ErrorCode, label: string, detail: string): GitServiceError {
-  const data: PushFailureData = { detail }
+function refused(code: ErrorCode, label: string, detail: string, kind?: PushFailureKind): GitServiceError {
+  const data: PushFailureData = kind === undefined ? { detail } : { detail, kind }
   return new GitServiceError(code, label, data)
 }
 

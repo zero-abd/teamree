@@ -20,6 +20,7 @@ import type {
   PaneNode,
   PaneWatchers,
   Project,
+  ProjectBase,
   PushFailureData,
   RelaySetting,
   RemovedWorktree,
@@ -39,6 +40,7 @@ import type {
   WorktreeKeep,
   WorktreeLanding,
   WorktreeLog,
+  WorktreeMerge,
   WorktreeMergePreview,
   WorktreeStatus
 } from '@shared/entities'
@@ -144,6 +146,7 @@ import {
   readStoredEditorCommands,
   readStoredKeepAwake,
   readStoredPermissionModes,
+  readStoredPushOnMerge,
   readStoredStartPoints,
   readStoredTerminalFontSize,
   readStoredTerminalOptions,
@@ -162,6 +165,7 @@ import {
   writeStoredEditorCommands,
   writeStoredKeepAwake,
   writeStoredPermissionModes,
+  writeStoredPushOnMerge,
   writeStoredStartPoints,
   writeStoredTerminalFontSize,
   writeStoredTerminalOptions
@@ -222,6 +226,8 @@ export type DialogState =
   | { kind: 'confirm-discard'; worktreeId: string; path: string; hunk?: PatchHunk }
   /** Merging a worktree's branch into the base branch in the project's own checkout. */
   | { kind: 'confirm-merge'; worktreeId: string }
+  /** Pushing the project checkout's base to origin; `failure` is the push that just did not land. */
+  | { kind: 'push-base'; projectId: string; failure?: PushBaseFailure }
   /** Keeping one run of a task and removing the others; `refused` once the runtime has refused one unforced. */
   | { kind: 'confirm-keep'; worktreeId: string; refused?: true }
   /** Clean Up Merged: a project's landed worktrees, as a checklist. */
@@ -241,6 +247,9 @@ export type DialogState =
   /** Hand Off…: a teammate and a note for them. */
   | { kind: 'hand-off'; worktreeId: string }
   | null
+
+/** A base push that did not land: one line, git's words, and `rejected` when a pull would let it. */
+export type PushBaseFailure = NonNullable<WorktreeMerge['pushError']>
 
 /** Forgetting a project or a worktree, or moving a project's folder to the Trash. */
 export type ConfirmAfterUnsaved =
@@ -420,6 +429,10 @@ type WorkspaceState = {
   mergePreviews: Record<string, WorktreeMergePreview>
   /** Where each ready worktree's branch can land, and whether it has, as last read. */
   landings: Record<string, WorktreeLanding>
+  /** Each project checkout's base against its upstream, as last read. */
+  bases: Record<string, ProjectBase>
+  /** Whether Merge into main… pushes main, per project, as last chosen; absent follows whether main has an upstream. */
+  pushOnMerge: Record<string, boolean>
   /** True while a pull request is being made. */
   openingPullRequest: boolean
 
@@ -752,8 +765,10 @@ type WorkspaceState = {
   typeIntoPane: (terminalId: string, text: string) => Promise<void>
   /** `gh pr create` for a published branch, else the host's page for one in the browser; an open one is opened. */
   createPullRequest: (worktreeId: string) => Promise<void>
-  /** Merges into the base branch in the project's checkout; answers with why not, or null once merged. */
-  mergeIntoBase: (worktreeId: string) => Promise<string | null>
+  /** Merges into the base branch in the project's checkout, then pushes it when `push`; answers with why not, or null once merged. */
+  mergeIntoBase: (worktreeId: string, push?: boolean) => Promise<string | null>
+  /** Pushes a project's base to origin, pulling origin's first when `pull`; answers with why not, or null once pushed. */
+  pushBase: (projectId: string, pull?: boolean) => Promise<PushBaseFailure | null>
   /** Keeps one run of a task, removes the others and opens the one kept. Their branches stay. */
   confirmKeepRun: (worktreeId: string, force: boolean) => Promise<void>
   /** Hides the sidebar and panel for a compare on screen, and shows again what it hid. */
@@ -1287,6 +1302,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }))
   }
 
+  /** Each project's base against its upstream: one git read each, and one unreadable project costs nobody else. */
+  const refreshBases = async (): Promise<void> => {
+    const read = await Promise.all(
+      get().projects.map((project) => runtimeClient.call('project.base', { projectId: project.id }).catch(() => null))
+    )
+    set({ bases: Object.fromEntries(read.flatMap((base) => (base === null ? [] : [[base.projectId, base]]))) })
+  }
+
   const markExited = (exits: RefreshTargets['exits']): void => {
     const stopped = new Set<string>()
     for (const exit of exits) {
@@ -1355,7 +1378,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const readable = [...stale].filter((worktreeId) => live.has(worktreeId) && onScreen.has(worktreeId))
     await refreshStatuses(readable)
     // After the statuses: a row without chips has nowhere for a merge badge.
-    await Promise.all([refreshMergePreviews(readable), refreshLandings(readable)])
+    await Promise.all([
+      refreshMergePreviews(readable),
+      refreshLandings(readable),
+      ...(targets.worktrees || targets.projects ? [refreshBases()] : [])
+    ])
 
     // The panel rides the same signal as the chips, so an edit in a shell moves both at once.
     const { activeWorktreeId } = get()
@@ -1700,6 +1727,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     mergePreviews: {},
     landings: {},
+    bases: {},
+    pushOnMerge: readStoredPushOnMerge(storage),
     openingPullRequest: false,
     members: {},
     membersPending: false,
@@ -3650,16 +3679,54 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
-    async mergeIntoBase(worktreeId) {
+    async mergeIntoBase(worktreeId, push) {
+      let merged: WorktreeMerge
       try {
-        await runtimeClient.call('worktree.mergeIntoBase', { worktreeId })
+        merged = await runtimeClient.call(
+          'worktree.mergeIntoBase',
+          push === undefined ? { worktreeId } : { worktreeId, push }
+        )
       } catch (error) {
         return error instanceof Error ? error.message : String(error)
       }
-      if (get().dialog?.kind === 'confirm-merge') set({ dialog: null })
+      const projectId = get().worktrees.find((worktree) => worktree.id === worktreeId)?.projectId
+      if (push !== undefined && projectId !== undefined) {
+        const pushOnMerge = { ...get().pushOnMerge, [projectId]: push }
+        set({ pushOnMerge })
+        writeStoredPushOnMerge(storage, pushOnMerge)
+      }
+      if (get().dialog?.kind === 'confirm-merge') {
+        // The merge stands; the push that did not land is asked about where it can be retried.
+        const failure = merged.pushError
+        set({
+          dialog: failure === undefined || projectId === undefined ? null : { kind: 'push-base', projectId, failure }
+        })
+      }
       // A child lands in its parent's checkout, which moves too.
       const parentId = get().worktrees.find((worktree) => worktree.id === worktreeId)?.parentId
       refresher.request(refreshTargets({ statuses: parentId === undefined ? [worktreeId] : [worktreeId, parentId] }))
+      return null
+    },
+
+    async pushBase(projectId, pull = false) {
+      let base: ProjectBase
+      try {
+        if (pull) await runtimeClient.call('project.pullBase', { projectId })
+        base = await runtimeClient.call('project.pushBase', { projectId })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        const data = (error as { data?: Partial<PushBaseFailure> } | null)?.data
+        return {
+          message,
+          detail: typeof data?.detail === 'string' ? data.detail : message,
+          ...(data?.kind === undefined ? {} : { kind: data.kind })
+        }
+      }
+      set((state) => ({
+        bases: { ...state.bases, [projectId]: base },
+        ...(state.dialog?.kind === 'push-base' ? { dialog: null } : {})
+      }))
+      notify(`Pushed ${base.branch} to origin`, 'info')
       return null
     },
 

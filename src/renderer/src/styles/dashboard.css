@@ -262,6 +262,12 @@
   color: var(--success);
 }
 
+/* Under its stage: the column is sized for one word. */
+.task-row__unpushed {
+  display: block;
+  color: var(--fg-secondary);
+}
+
 .task-row--failed {
   border-left-color: var(--danger);
 }

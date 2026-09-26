@@ -18,6 +18,9 @@ export const GIT_METHODS = [
   'project.trash',
   'project.setPaths',
   'project.saveSettings',
+  'project.base',
+  'project.pushBase',
+  'project.pullBase',
   'worktree.list',
   'worktree.get',
   'worktree.create',
@@ -89,6 +92,9 @@ export function createGitHandlers(service: GitService): GitHandlers {
     'project.trash': (params) => service.trashProject(params),
     'project.setPaths': (params) => service.setProjectPaths(params),
     'project.saveSettings': (params) => service.saveProjectSettings(params),
+    'project.base': (params) => service.projectBase(params),
+    'project.pushBase': (params) => service.projectPushBase(params),
+    'project.pullBase': (params) => service.projectPullBase(params),
     'worktree.list': (params) => service.listWorktrees(params),
     'worktree.get': (params) => service.getWorktree(params),
     'worktree.create': (params, call) => service.createWorktree(params, { limited: limited(params, call) }),
@@ -149,6 +155,9 @@ export function registerGitHandlers(registry: MethodRegistry, service: GitServic
   registry.register('project.trash', Params.projectTrash, handlers['project.trash'])
   registry.register('project.setPaths', Params.projectSetPaths, handlers['project.setPaths'])
   registry.register('project.saveSettings', Params.projectSaveSettings, handlers['project.saveSettings'])
+  registry.register('project.base', Params.projectBase, handlers['project.base'])
+  registry.register('project.pushBase', Params.projectPushBase, handlers['project.pushBase'])
+  registry.register('project.pullBase', Params.projectPullBase, handlers['project.pullBase'])
   registry.register('worktree.list', Params.worktreeList, handlers['worktree.list'])
   registry.register('worktree.get', Params.worktreeGet, handlers['worktree.get'])
   registry.register('worktree.create', Params.worktreeCreate, handlers['worktree.create'])

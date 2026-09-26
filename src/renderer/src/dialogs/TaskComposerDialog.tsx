@@ -16,6 +16,7 @@ import { issueBranch, issueTask } from './issueModel'
 import { Modal } from './Modal'
 import { Select } from './Select'
 import { StartPointPicker, type StartPointValue } from './StartPointPicker'
+import { landedAhead } from './startPointModel'
 import {
   branchProblem,
   defaultAgentCounts,
@@ -89,7 +90,8 @@ export function TaskComposerDialog({
       })
       return
     }
-    const base = startPoints.list.options.find((option) => option.isBase) ?? null
+    // Landed and not pushed yet: the base would start the task without it.
+    const base = landedAhead(startPoints.list) ?? startPoints.list.options.find((option) => option.isBase) ?? null
     setStartPoint({ text: base?.ref ?? startPoints.list.baseRef, option: base })
   }, [startPoints, touched])
 

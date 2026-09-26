@@ -9,11 +9,14 @@ import { summarizeWorktreeStatus } from './worktreeStatusSummary'
 
 export function GitStatusChips({
   status,
-  child = false
+  child = false,
+  aheadBehind = true
 }: {
   status: WorktreeStatus | undefined
   /** Behind its parent's branch rather than the project's base. */
   child?: boolean
+  /** False once the branch has landed, where its count against the base says nothing. */
+  aheadBehind?: boolean
 }): React.JSX.Element | null {
   const unreadableSince = useWorkspaceStore((state) => (status ? state.unreadableSince[status.worktreeId] : undefined))
   // The age is the one number here that changes while nothing happens.
@@ -31,7 +34,7 @@ export function GitStatusChips({
 
   return (
     <span className="gitchips" role="img" title={description} aria-label={`git status: ${description}`}>
-      {summary.ahead > 0 ? (
+      {aheadBehind && summary.ahead > 0 ? (
         <span className="gitchip">
           <span className="gitchip__glyph" aria-hidden="true">
             ↑
@@ -39,7 +42,7 @@ export function GitStatusChips({
           {summary.ahead}
         </span>
       ) : null}
-      {summary.behind > 0 ? (
+      {aheadBehind && summary.behind > 0 ? (
         <span className="gitchip">
           <span className="gitchip__glyph" aria-hidden="true">
             ↓

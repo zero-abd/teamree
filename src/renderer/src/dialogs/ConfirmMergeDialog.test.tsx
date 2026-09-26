@@ -2,9 +2,9 @@
 
 // Merging a worktree: the commits that go in, how much the branch changes against its base, and a way to read it first.
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Worktree, WorktreeChanges, WorktreeMerge } from '@shared/entities'
+import type { ProjectBase, Worktree, WorktreeChanges, WorktreeLanding, WorktreeMerge } from '@shared/entities'
 import { fileLeavesIn, isReviewLeaf } from '@shared/filePane'
 
 const call = vi.hoisted(() => vi.fn((..._args: unknown[]): Promise<unknown> => new Promise(() => {})))
@@ -237,5 +237,88 @@ describe('a worktree with uncommitted work', () => {
 
     expect((await screen.findByRole('alert')).textContent).toBe('no git identity')
     expect(call).not.toHaveBeenCalledWith('worktree.mergeIntoBase', { worktreeId: 'w1' })
+  })
+})
+
+describe('pushing main after the merge', () => {
+  const landing: WorktreeLanding = {
+    worktreeId: 'w1',
+    branch: 'fix-typo',
+    base: 'main',
+    host: null,
+    published: false,
+    unmerged: 2,
+    merged: false,
+    readAt: 0,
+    remote: true
+  }
+  const base: ProjectBase = { projectId: 'p1', branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0 }
+  const merged =
+    (extra: Partial<WorktreeMerge>): ((method: unknown, params: unknown) => Promise<unknown>) =>
+    (method, params) => {
+      if (method === 'worktree.mergeIntoBase') {
+        return Promise.resolve((params as { dryRun?: boolean }).dryRun ? plan : { ...plan, merged: true, ...extra })
+      }
+      if (method === 'worktree.changes') return Promise.resolve(branch)
+      return new Promise(() => {})
+    }
+  const box = (): HTMLInputElement => screen.getByRole('checkbox', { name: 'Push main to origin' }) as HTMLInputElement
+
+  beforeEach(() => {
+    useWorkspaceStore.setState({ landings: { w1: landing }, bases: { p1: base }, pushOnMerge: {} })
+  })
+
+  it('is on when main tracks origin, and lands and pushes in one step', async () => {
+    call.mockImplementation(merged({ pushed: true }))
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+
+    expect(box().checked).toBe(true)
+    fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
+
+    await waitFor(() => expect(call).toHaveBeenCalledWith('worktree.mergeIntoBase', { worktreeId: 'w1', push: true }))
+    await waitFor(() => expect(useWorkspaceStore.getState().dialog).toBeNull())
+  })
+
+  it('is off when main tracks nothing', () => {
+    useWorkspaceStore.setState({ bases: { p1: { ...base, upstream: undefined } } })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    expect(box().checked).toBe(false)
+  })
+
+  it('remembers an opt-out for the project', async () => {
+    call.mockImplementation(merged({}))
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    fireEvent.click(box())
+    fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
+
+    await waitFor(() => expect(call).toHaveBeenCalledWith('worktree.mergeIntoBase', { worktreeId: 'w1', push: false }))
+    expect(useWorkspaceStore.getState().pushOnMerge).toEqual({ p1: false })
+    cleanup()
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    expect(box().checked).toBe(false)
+  })
+
+  it('is not offered for a child, which lands in its parent', () => {
+    useWorkspaceStore.setState({
+      worktrees: [{ ...worktree, parentId: 'w0' }],
+      landings: { w1: { ...landing, parent: { worktreeId: 'w0', name: 'Rework' } } }
+    })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    expect(screen.queryByRole('checkbox')).toBeNull()
+  })
+
+  it('hands a push that did not land to the push dialog, the merge standing', async () => {
+    const pushError = {
+      message: 'origin/main moved',
+      detail: '! [rejected] main -> main (fetch first)',
+      kind: 'rejected' as const
+    }
+    call.mockImplementation(merged({ pushed: false, pushError }))
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
+
+    await waitFor(() =>
+      expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'push-base', projectId: 'p1', failure: pushError })
+    )
   })
 })

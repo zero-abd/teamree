@@ -334,6 +334,41 @@ describe('the start point somebody set in settings', () => {
   })
 })
 
+describe('a base whose local branch holds landed work', () => {
+  const landed = (localBehind: number): StartPointList => ({
+    baseRef: 'origin/main',
+    options: [
+      point('origin/main', { isBase: true, ahead: localBehind, behind: 2 }),
+      point('main', { kind: 'localBranch', isCurrent: true, ahead: 2, behind: localBehind })
+    ],
+    total: 2,
+    limit: 50,
+    truncated: false
+  })
+
+  it('starts from main when main is ahead of origin, so the landed commits come along', async () => {
+    call.mockImplementation(async () => landed(0))
+    await open()
+    expect(startPoint().value).toBe('main')
+    fireEvent.change(task(), { target: { value: 'Next thing' } })
+    submit().click()
+    expect(startTask).toHaveBeenCalledWith(expect.objectContaining({ startedFrom: 'main' }))
+  })
+
+  it('keeps origin/main when main has also fallen behind it', async () => {
+    call.mockImplementation(async () => landed(3))
+    await open()
+    expect(startPoint().value).toBe('origin/main')
+  })
+
+  it('still yields to the start point set in settings', async () => {
+    call.mockImplementation(async () => landed(0))
+    seed({ startPointDefaults: { p1: 'origin/main' } })
+    await open()
+    expect(startPoint().value).toBe('origin/main')
+  })
+})
+
 describe('what it submits', () => {
   it('carries the task, the project and the ref the picker settled on', async () => {
     await open()

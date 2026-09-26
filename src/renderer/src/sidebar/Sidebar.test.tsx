@@ -214,6 +214,26 @@ describe('a project header', () => {
     expect(within(toggle).getByText('+1')).toBeTruthy()
   })
 
+  it('says main is ahead of origin, and pushes it from there or its menu', () => {
+    seed({ bases: { p1: { projectId: 'p1', branch: 'main', upstream: 'origin/main', ahead: 2, behind: 0 } } })
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Push main, 2 ahead of origin/main' }))
+    expect(openDialog).toHaveBeenLastCalledWith({ kind: 'push-base', projectId: 'p1' })
+    expect(screen.getByText('main ↑2')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'More for pager' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Push main' }))
+    expect(openDialog).toHaveBeenLastCalledWith({ kind: 'push-base', projectId: 'p1' })
+  })
+
+  it('says nothing about main while origin has all of it', () => {
+    seed({ bases: { p1: { projectId: 'p1', branch: 'main', upstream: 'origin/main', ahead: 0, behind: 3 } } })
+    mount()
+    expect(screen.queryByText(/↑/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'More for pager' }))
+    expect(screen.queryByRole('menuitem', { name: 'Push main' })).toBeNull()
+  })
+
   it('collapses, and says whether it is open', () => {
     seed({ worktrees: [worktree()], collapsedProjects: { p1: true } })
     mount()

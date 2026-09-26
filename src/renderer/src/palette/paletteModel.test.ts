@@ -902,6 +902,18 @@ describe('Clean Up Merged in the palette', () => {
   })
 })
 
+describe('Push main in the palette', () => {
+  it('has a row for each project whose main is ahead of origin', () => {
+    const items = buildPaletteItems(
+      context({ unpushed: [{ projectId: 'p2', branch: 'main', upstream: 'origin/main', ahead: 2, behind: 0 }] })
+    )
+    const rows = items.filter((item) => item.id.startsWith('push-base:'))
+
+    expect(rows.map((item) => [item.id, item.label, item.hint])).toEqual([['push-base:p2', 'Push main', 'ledger · ↑2']])
+    expect(filterPalette(items, 'push main').map((item) => item.id)).toContain('push-base:p2')
+  })
+})
+
 describe('Teamwork and shared notes in the palette', () => {
   const note = (shareId: string, over: Partial<SharedNoteSummary> = {}): SharedNoteSummary => ({
     shareId,

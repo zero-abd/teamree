@@ -153,7 +153,7 @@ export function ChangesTab(): React.JSX.Element | null {
           <TokensLine worktreeId={worktreeId} />
           {land?.kind === 'merged' ? (
             <>
-              <span className="chip changes__merged">Merged</span>
+              <span className="chip changes__merged">{landing?.notPushed ? 'Merged · not pushed' : 'Merged'}</span>
               <button type="button" className="button button--small" onClick={() => void removeWorktree(worktreeId)}>
                 Delete Worktree…
               </button>

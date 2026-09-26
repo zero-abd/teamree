@@ -724,6 +724,20 @@ button.picker__chevron:hover {
   margin-right: auto;
 }
 
+.confirm__check {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.confirm__check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .confirm__files {
   display: flex;
   flex-direction: column;

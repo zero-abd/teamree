@@ -412,6 +412,8 @@ export type WorktreeLanding = {
   parent?: { worktreeId: string; name: string }
   /** `origin` exists, so the branch can be published; absent reads as yes. */
   remote?: boolean
+  /** Merged into the local base only: `origin` does not have it yet. */
+  notPushed?: boolean
 }
 
 /** A pull request made with `gh`, or, with `created` false and no number, the host's page to make one. */
@@ -433,6 +435,21 @@ export type WorktreeMerge = {
   merged: boolean
   /** The base branch's tip after the merge. */
   head?: string
+  /** Asked with `push`: whether the base then reached `origin`. */
+  pushed?: boolean
+  /** Why that push did not land; the merge stands. */
+  pushError?: { message: string; detail: string; kind?: PushFailureKind }
+}
+
+/** The project checkout's base branch against its upstream; `ahead` is landed work not pushed yet. */
+export type ProjectBase = {
+  projectId: string
+  /** `main`. */
+  branch: string
+  /** `origin/main`; absent when the branch tracks nothing. */
+  upstream?: string
+  ahead: number
+  behind: number
 }
 
 /** The run kept and the task's other runs removed, their branches left in place. */
@@ -497,7 +514,7 @@ export type WorktreeUpdate = {
 export type WorktreeUpdateAbort = { worktreeId: string; aborted: 'rebase' | 'merge' | null }
 
 /** `data` of a failed `worktree.push`, whose message is one clause: git's whole refusal. */
-export type PushFailureData = { detail: string }
+export type PushFailureData = { detail: string; kind?: PushFailureKind }
 
 /** One commit a worktree made. */
 export type WorktreeCommitSummary = {
@@ -806,6 +823,9 @@ export type StartPoint = {
   isCurrent: boolean
   /** Commit or tag time in Unix seconds, as git's %ct prints it; not milliseconds. */
   updatedAt: number
+  /** The base ref and its local branch, counted against each other while they differ. */
+  ahead?: number
+  behind?: number
 }
 
 export type StartPointList = {

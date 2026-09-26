@@ -523,6 +523,53 @@ describe('landing a worktree', () => {
     expect(result.out).toContain('Merged feature/fix-login into main in /repos/api (fast-forward).')
   })
 
+  it('merges and pushes the base with --push', async () => {
+    const calls: [string, unknown][] = []
+    const cli = await harness((method, params, stub) =>
+      method === 'worktree.mergeIntoBase'
+        ? { ...(landed({}, calls)(method, params, stub) as object), pushed: true }
+        : landed({})(method, params, stub)
+    )
+    const result = await cli.run(['worktree', 'land', 'fix-login', '--merge', '--push'])
+
+    expect(result.code).toBe(ExitCode.Success)
+    expect(calls).toContainEqual(['worktree.mergeIntoBase', { worktreeId: 'wt_1', push: true }])
+    expect(result.out).toContain('(fast-forward). Pushed main to origin.')
+  })
+
+  it('fails with the push reason when the merge landed and the push did not', async () => {
+    const cli = await harness((method, params, stub) =>
+      method === 'worktree.mergeIntoBase'
+        ? {
+            ...(landed({})(method, params, stub) as object),
+            pushed: false,
+            pushError: {
+              message: 'origin/main moved',
+              detail: '! [rejected] main -> main (fetch first)',
+              kind: 'rejected'
+            }
+          }
+        : landed({})(method, params, stub)
+    )
+    const result = await cli.run(['worktree', 'land', 'fix-login', '--push'])
+
+    expect(result.code).toBe(ExitCode.Failure)
+    expect(result.err).toContain('Push failed: origin/main moved')
+  })
+
+  it('pushes a base that already has the branch but not origin', async () => {
+    const calls: [string, unknown][] = []
+    const cli = await harness((method, params, stub) =>
+      method === 'project.pushBase'
+        ? { projectId: 'p_api', branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0 }
+        : landed({ merged: true, unmerged: 0, notPushed: true }, calls)(method, params, stub)
+    )
+    const result = await cli.run(['worktree', 'land', 'fix-login', '--push'])
+
+    expect(result.code).toBe(ExitCode.Success)
+    expect(result.out).toContain('Pushed main to origin.')
+  })
+
   it('opens a pull request on a known host once the branch is published', async () => {
     const calls: [string, unknown][] = []
     const cli = await harness(landed({ host: 'github', published: true }, calls))

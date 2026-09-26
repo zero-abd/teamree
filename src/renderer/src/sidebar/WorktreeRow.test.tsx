@@ -1018,6 +1018,14 @@ describe('a worktree whose work has landed', () => {
     expect(screen.queryByRole('img', { name: /merge cleanly/ })).toBeNull()
   })
 
+  it('says not pushed while the merge is only in the local base', () => {
+    mount({ status: status({ ahead: 1, behind: 1 }), landing: landing({ notPushed: true }) })
+
+    expect(screen.getByText('Merged · not pushed').classList.contains('chip')).toBe(true)
+    // Landed: its count against origin/main would only repeat the chip.
+    expect(document.querySelector('.gitchip')).toBeNull()
+  })
+
   it('says Landed for a child whose work is in its parent', () => {
     mount({
       worktree: worktree({ parentId: 'w0', baseRef: 'rework-auth' }),

@@ -338,6 +338,25 @@
   font-size: var(--text-xs);
 }
 
+/* A landing only this Mac has: sits beside the base ref, and pressing it asks to push. */
+.project__unpushed {
+  flex: none;
+  margin-right: auto;
+  padding: 0 var(--s1);
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--accent-bright);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.project__unpushed:hover {
+  background: var(--bg-hover);
+}
+
 /* The one teamwork control in the project's header: its text is the state,
    its hover is the reason, and pressing it opens the setup. Four tones because
    there are four different things to say, and collapsing them would send

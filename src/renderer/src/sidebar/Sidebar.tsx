@@ -14,7 +14,7 @@ import { Brand, SidebarGlyph } from '../shell/Brand'
 import { AddProjectButton } from './AddProjectButton'
 import { compareTitle, runName, siblingRuns } from '../compare/siblingRuns'
 import { useOpenIn } from './openIn'
-import { ProjectHead } from './ProjectHead'
+import { ProjectHead, UnpushedBase } from './ProjectHead'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
 import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
 import { teamworkControlLabel, teamworkOn, teamworkSummary } from './teamworkSummary'
@@ -546,6 +546,7 @@ export function Sidebar({
                 />
                 <div className="project__meta">
                   <p className="project__base">{project.baseRef}</p>
+                  <UnpushedBase projectId={project.id} />
                   {/* Only where teamwork is on; the rail reaches the setup either way. Named with the
                       project, because the rail has a Teamwork entry too. */}
                   {teamworkOn(teamwork[project.id]) ? (
