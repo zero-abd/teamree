@@ -1348,3 +1348,40 @@
   border-color: var(--line-strong);
   color: var(--fg-secondary);
 }
+
+/* Messages -----------------------------------------------------------------
+   A task's question for you, and the last word a task or its child reported. */
+
+.worktree__ask {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  margin: 0 var(--s2) var(--s2) 28px;
+  padding: var(--s2);
+  border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
+  border-radius: var(--r2);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.worktree__ask-text {
+  overflow: hidden;
+  color: var(--fg);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.worktree__ask .answers {
+  flex-wrap: wrap;
+}
+
+.worktree__ask-field {
+  width: 100%;
+  font-size: var(--text-xs);
+}
+
+.worktree__line {
+  margin: 0 var(--s2) var(--s1) 28px;
+}

@@ -90,6 +90,12 @@ const EXPECTED = [
   'claim',
   'unclaim',
   'note',
+  'msg ask',
+  'msg reply',
+  'msg done',
+  'msg note',
+  'msg inbox',
+  'msg wait',
   'cli status',
   'cli install',
   'whoami',
@@ -102,7 +108,7 @@ describe('the command table', () => {
   })
 
   it('groups the nouns', () => {
-    expect(commandGroups()).toEqual(['project', 'worktree', 'terminal', 'team', 'agent', 'cli'])
+    expect(commandGroups()).toEqual(['project', 'worktree', 'terminal', 'team', 'agent', 'msg', 'cli'])
   })
 
   it('resolves every command from its own words', () => {

@@ -333,7 +333,9 @@ describe('stylesheets', () => {
         '.board-filter__number--waiting',
         '.board-row__state--waiting',
         '.board-filter__number--asking',
-        '.task-row--asking .task-row__stage'
+        '.task-row--asking .task-row__stage',
+        // A task's question for you, under its row.
+        '.worktree__ask'
       ])
       const elsewhere: string[] = []
       for (const name of sheets) {

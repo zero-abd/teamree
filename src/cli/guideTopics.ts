@@ -63,6 +63,7 @@ const MSG = `teamree guide msg: talking to the parent and children.
   teamree msg ask "<question>" [--options a,b]      block until the parent answers
   teamree msg ask --resume <id>                     keep waiting on the same question
   teamree msg reply <id> "<answer>"                 answer a child's question
+  teamree msg note "<text>" [--to siblings]         tell without waiting
   teamree msg wait --kind done,ask --from children  block for children, as a supervisor
 A message to an idle agent is pasted into its prompt; a busy one gets it when it stops.`
 

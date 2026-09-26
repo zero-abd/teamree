@@ -31,7 +31,8 @@ describe('childPromptFor', () => {
     const prefix = childPromptFor(lookup(parent, worktree('child', { parentId: 'rework-auth' })), 'child')
     expect(prefix).toBe(
       '[teamree] Child task of "Rework auth session" (branch rework-auth). It lands there, not main.\n' +
-        'Me: teamree whoami   Commands: teamree guide'
+        'Me: teamree whoami   Commands: teamree guide\n' +
+        'Finished: teamree msg done "<summary>" [--failed]   Stuck: teamree msg ask "<question>"'
     )
     expect(prefix?.split('\n').length).toBeLessThanOrEqual(CHILD_PREFIX_MAX_LINES)
   })

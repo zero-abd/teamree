@@ -8,6 +8,7 @@ import { CliService, createAdministratorRunner, findShippedCli, registerCliHandl
 import { userDataOverride } from '../../launchProfile'
 import { registerContextHandlers, type ContextLedger } from '../../context'
 import { createEditorActions, registerEditorHandlers } from '../../editor'
+import { registerMessageHandlers } from '../../messages'
 import { registerFileHandlers } from '../../files'
 import { createGitRunner, GitService, registerGitHandlers } from '../../git'
 import { backgroundFetchProjects, BaseFetcher } from '../../git/baseFetch'
@@ -235,6 +236,29 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   // Git status has no call behind it; file changes are what keep it honest.
   const worktreeFiles = publishWorktreeFileEvents(git, workspaceEvents)
   const context = registerContextHandlers(registry, git, dataDir)
+  const messages = registerMessageHandlers(registry, {
+    terminals,
+    git,
+    dataDir,
+    // An ask for the person is announced as an agent asking is, its options as the notice's answers.
+    onAsk: (ask) => {
+      const { terminalId, worktreeId } = ask.from
+      if (options.onAgentNotice === undefined || terminalId === undefined || worktreeId === undefined) return
+      options.onAgentNotice({
+        terminalId,
+        worktreeId,
+        worktree: messages.nameOf(ask.from),
+        reason: 'quiet',
+        line: ask.text,
+        answers: (ask.options ?? []).map((label) => ({
+          label,
+          choose: async () => {
+            await messages.send({ from: { you: true }, to: ask.from, kind: 'reply', replyTo: ask.id, text: label })
+          }
+        }))
+      })
+    }
+  })
 
   // A teammate's push moves the base ref only once fetched; the watch above never sees `refs/remotes`.
   const bases = new BaseFetcher({
