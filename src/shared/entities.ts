@@ -397,6 +397,16 @@ export type WorktreeMerge = {
 /** The run kept and the task's other runs removed, their branches left in place. */
 export type WorktreeKeep = { worktree: Worktree; removed: string[] }
 
+/** What Clean Up Merged took, children before their parents; with `dryRun`, what it would take. */
+export type WorktreeCleanup = {
+  projectId: string
+  dryRun: boolean
+  /** `trashId` is the copy `worktree.restore` takes back; `ignored` counts ignored entries that go with it. */
+  removed: { worktree: Worktree; trashId?: string; ignored?: number }[]
+  /** Merged, but staying: uncommitted work, an agent mid-turn, or a child that stays. */
+  kept: { worktree: Worktree; reason: string }[]
+}
+
 /** A commit this app made, reported back so the caller can see what landed. */
 export type WorktreeCommit = {
   worktreeId: string

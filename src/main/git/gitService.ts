@@ -14,6 +14,7 @@ import type {
   PullRequestList,
   Worktree,
   WorktreeChanges,
+  WorktreeCleanup,
   WorktreeCommit,
   WorktreeCommitPatch,
   WorktreeCompare,
@@ -83,6 +84,7 @@ import { pushWorktree } from './worktreePush'
 import { abortWorktreeUpdate, updateWorktree } from './worktreeUpdate'
 import { createGhProbe, createPullRequest, mergeIntoBase, readLanding, type GhProbe } from './worktreeLanding'
 import { keptName } from './worktreeKeep'
+import { landedInBase, planCleanup, type CleanupRead } from './worktreeCleanup'
 import { readBranchChanges, readWorktreeChanges, readWorktreeDiff } from './worktreeChanges'
 import { findWorktreeFiles, readWorktreeFiles } from './worktreeFiles'
 import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
@@ -1329,6 +1331,62 @@ export class GitService {
     const name = keptName(kept, siblings)
     const worktree = name === null ? kept : await this.renameWorktree({ worktreeId: kept.id, name })
     return { worktree, removed }
+  }
+
+  /**
+   * Removes the project's landed worktrees that hold no uncommitted work and no agent mid-turn,
+   * children first, each through `removeWorktree` so each keeps a copy to restore.
+   */
+  async cleanMerged(params: ParamsOf<'worktree.cleanMerged'>): Promise<WorktreeCleanup> {
+    const project = this.#requireProject(params.projectId)
+    const dryRun = params.dryRun === true
+    const worktrees = this.#store.listWorktrees().filter((worktree) => worktree.projectId === project.id)
+    const reads = new Map<string, CleanupRead>()
+    for (const worktree of worktrees) {
+      if (worktree.state !== 'ready') continue
+      const base = worktree.baseRef ?? project.baseRef
+      const landed = await landedInBase(this.#runner, project.path, worktree, base).catch(() => false)
+      if (!landed) continue
+      const status = await this.worktreeStatus({ worktreeId: worktree.id }).catch(() => null)
+      // No checkout, no copy to restore it from: left to a one-at-a-time delete.
+      if (status === null || status.missing) continue
+      const pending = status.staged + status.unstaged + status.untracked + status.conflicted
+      const hold =
+        pending > 0 || status.operation !== undefined
+          ? 'Uncommitted changes'
+          : this.#agentWorking(worktree.id)
+            ? 'Agent working'
+            : undefined
+      reads.set(worktree.id, {
+        landed,
+        ...(hold === undefined ? {} : { hold }),
+        ...(status.ignored ? { ignored: status.ignored } : {})
+      })
+    }
+    const plan = planCleanup(
+      worktrees,
+      reads,
+      params.worktreeIds === undefined ? undefined : new Set(params.worktreeIds)
+    )
+    if (dryRun) return { projectId: project.id, dryRun, ...plan }
+
+    const removed: WorktreeCleanup['removed'] = []
+    const kept = [...plan.kept]
+    for (const entry of plan.removed) {
+      const staying = this.#childrenOf(entry.worktree.id).length
+      if (staying > 0) {
+        kept.push({ worktree: entry.worktree, reason: `${staying} ${staying === 1 ? 'child stays' : 'children stay'}` })
+        continue
+      }
+      try {
+        // Forced for ignored files only: the checkout was just read clean, and anything since is in the copy.
+        const done = await this.removeWorktree({ worktreeId: entry.worktree.id, force: true })
+        removed.push({ ...entry, ...(done.trashId === undefined ? {} : { trashId: done.trashId }) })
+      } catch (error) {
+        kept.push({ worktree: entry.worktree, reason: describeError(error) })
+      }
+    }
+    return { projectId: project.id, dryRun, removed, kept }
   }
 
   #landingOptions(worktreeId: string, what: string): Parameters<typeof readLanding>[1] {

@@ -163,6 +163,9 @@ export function CommandPalette({
           })
         },
         removed: removedWorktrees,
+        merged: new Set(
+          worktrees.filter((worktree) => landings[worktree.id]?.merged).map((worktree) => worktree.projectId)
+        ),
         openIn: targets.map((target) => target.label),
         land: activeWorktreeId === null ? null : landOffer(landings[activeWorktreeId], statuses[activeWorktreeId]),
         appearance: { mode: appearance.mode ?? 'dark', themeId: activeChoice(appearance, systemTone).themeId },
@@ -293,6 +296,10 @@ export function CommandPalette({
     if (item.id.startsWith('restore:')) {
       const removed = removedWorktrees.find((entry) => `restore:${entry.id}` === item.id)
       if (removed) void store.restoreWorktree(removed.projectId, removed.id)
+      return
+    }
+    if (item.id.startsWith('clean-up:')) {
+      store.openDialog({ kind: 'clean-up', projectId: item.id.slice('clean-up:'.length) })
       return
     }
     if (item.id.startsWith('open-in:')) {

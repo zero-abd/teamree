@@ -965,6 +965,40 @@ describe('starting a task in any project from the keyboard', () => {
     expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-trash-project', projectId: 'p2' })
   })
 
+  it('offers Clean Up Merged… only in a project with a merged worktree', () => {
+    const labels = (): (string | null)[] => {
+      fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
+      const menu = screen.getByRole('menu', { name: 'Actions for ledger' })
+      const found = within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+      fireEvent.keyDown(menu, { key: 'Escape' })
+      return found
+    }
+    expect(labels()).not.toContain('Clean Up Merged…')
+
+    act(() => {
+      useWorkspaceStore.setState({
+        landings: {
+          w2: {
+            worktreeId: 'w2',
+            branch: 'balance',
+            base: 'main',
+            host: null,
+            published: false,
+            unmerged: 0,
+            merged: true,
+            readAt: 0
+          }
+        }
+      })
+    })
+    expect(labels()).toContain('Clean Up Merged…')
+    fireEvent.contextMenu(projectRow('ledger'), { clientX: 40, clientY: 60, detail: 1 })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Clean Up Merged…' }))
+    expect(openDialog).toHaveBeenLastCalledWith({ kind: 'clean-up', projectId: 'p2' })
+  })
+
   it("lists the project's recently removed worktrees in its menu, and restores the one chosen", () => {
     const restoreWorktree = vi.fn()
     const loadRemovedWorktrees = vi.fn(async () => {})

@@ -51,6 +51,7 @@ const EXPECTED = [
   'worktree push',
   'worktree land',
   'worktree keep',
+  'worktree clean',
   'worktree wait',
   'terminal list',
   'terminal create',

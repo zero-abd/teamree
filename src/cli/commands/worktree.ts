@@ -873,6 +873,55 @@ export const worktreeCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['worktree', 'clean'],
+    summary: "Remove a project's merged worktrees, children before their parents.",
+    details:
+      'A worktree goes when every commit it made is in its base (a child: its parent), it has no uncommitted ' +
+      'changes and no agent mid-turn, and every child of it goes too. Squash and rebase merges are not seen. ' +
+      'Each removal keeps a copy for teamree worktree restore; branches stay.',
+    flags: [
+      { name: 'merged', kind: 'boolean', description: 'Clean up worktrees whose branch has landed. Required.' },
+      { name: 'dry-run', kind: 'boolean', description: 'List what would go and what stays; remove nothing.' },
+      {
+        name: 'project',
+        kind: 'string',
+        placeholder: '<project|here>',
+        description: "Project id, name, or path. Defaults to this checkout's."
+      }
+    ],
+    examples: ['teamree worktree clean --merged --dry-run', 'teamree worktree clean --merged --project api'],
+    run: async (context) => {
+      if (!readBoolean(context.flags, 'merged')) {
+        throw new CliError({
+          code: 'usage',
+          message: 'clean takes --merged: merged worktrees are the only kind it removes.',
+          exitCode: ExitCode.Usage
+        })
+      }
+      const dryRun = readBoolean(context.flags, 'dry-run')
+      const selector = readString(context.flags, 'project') ?? HERE
+      const project = await resolveProject(context.client, selector, { env: context.env, cwd: context.cwd })
+      const cleanup = await context.client.call('worktree.cleanMerged', {
+        projectId: project.id,
+        ...(dryRun ? { dryRun } : {})
+      })
+      const table = formatTable(
+        ['NAME', 'BRANCH', 'RESULT'],
+        [
+          ...cleanup.removed.map(({ worktree }) => [
+            worktree.name,
+            worktree.branch,
+            dryRun ? 'would remove' : 'removed'
+          ]),
+          ...cleanup.kept.map(({ worktree, reason }) => [worktree.name, worktree.branch, `kept: ${reason}`])
+        ],
+        'Nothing merged to clean up.'
+      )
+      const undo = !dryRun && cleanup.removed.length > 0 ? '\nBring one back with: teamree worktree restore <name>' : ''
+      return { data: cleanup, text: table + undo }
+    }
+  },
+  {
     path: ['worktree', 'log'],
     summary: 'List the commits a worktree has made that its base has not.',
     details: 'Scoped to base..branch, newest first.',

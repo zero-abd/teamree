@@ -815,3 +815,18 @@ describe('opening a branch as it is', () => {
     expect(items.find((item) => item.id === 'open-branch')).toMatchObject({ unavailable: 'no project' })
   })
 })
+
+describe('Clean Up Merged in the palette', () => {
+  it('has one row per project, dimmed where nothing has merged', () => {
+    const items = buildPaletteItems(context({ merged: new Set(['p2']) }))
+    const rows = items.filter((item) => item.id.startsWith('clean-up:'))
+
+    expect(
+      rows.map((item) => [item.id, item.label, item.hint, item.kind === 'action' ? item.unavailable : null])
+    ).toEqual([
+      ['clean-up:p1', 'Clean Up Merged…', 'atlas', 'nothing merged'],
+      ['clean-up:p2', 'Clean Up Merged…', 'ledger', undefined]
+    ])
+    expect(filterPalette(items, 'clean up').map((item) => item.id)).toEqual(['clean-up:p2'])
+  })
+})

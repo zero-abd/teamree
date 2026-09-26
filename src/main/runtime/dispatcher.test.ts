@@ -255,6 +255,7 @@ describe('dispatcher', () => {
       'worktree.abortUpdate',
       'worktree.branches',
       'worktree.changes',
+      'worktree.cleanMerged',
       'worktree.commit',
       'worktree.compare',
       'worktree.create',
