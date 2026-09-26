@@ -211,6 +211,10 @@ export type DialogState =
   | { kind: 'join-team'; invitation: Invitation }
   /** A worktree on an existing branch; `pullRequests` lists open pull requests instead of branches. */
   | { kind: 'open-branch'; projectId: string; pullRequests?: true }
+  /** Move Under…: a picker of the tasks it can go under. */
+  | { kind: 'move-under'; worktreeId: string }
+  /** A move whose dry run needs its commits replayed onto the new parent. */
+  | { kind: 'confirm-rebase'; worktreeId: string; parentId: string }
   | null
 
 /** Forgetting a project or a worktree, or moving a project's folder to the Trash. */
