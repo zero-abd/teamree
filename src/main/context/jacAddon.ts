@@ -3,7 +3,7 @@
 
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { CONTEXT_PROVIDER_ENV, type AddonStatus } from '../../shared/contextProvider'
@@ -25,6 +25,10 @@ export const JAC_ADDON_SPECS: readonly string[] = [
 
 const INSTALL_STEP_TIMEOUT_MS = 10 * 60_000
 const MARKER = 'installed.json'
+/** Every install's commands and output, replaced by the next install. */
+const INSTALL_LOG = 'install.log'
+const MAX_OUTPUT_CHARS = 64_000
+const MAX_REASON_CHARS = 240
 
 export type RunResult = { code: number | null; stdout: string; stderr: string }
 export type Run = (
@@ -53,9 +57,9 @@ export class JacAddon {
   readonly #options: JacAddonOptions
   readonly #env: NodeJS.ProcessEnv
   #installing = false
-  #installProblem: string | undefined
+  #installProblem: { detail: string; output: string } | undefined
   #provider: ProviderProcess | undefined
-  #uv: string | null | undefined
+  #transcript: string[] = []
 
   constructor(options: JacAddonOptions) {
     this.#options = options
@@ -71,7 +75,7 @@ export class JacAddon {
     if (this.#installing) return { ...base, state: 'installing' }
     const installed = this.#installed()
     if (installed === undefined) {
-      if (this.#installProblem !== undefined) return { ...base, state: 'failed', detail: this.#installProblem }
+      if (this.#installProblem !== undefined) return { ...base, state: 'failed', ...this.#installProblem }
       return this.#findUv() === null ? { ...base, needs: 'uv' } : base
     }
     const version = { version: this.#provider?.version ?? installed.version }
@@ -125,13 +129,14 @@ export class JacAddon {
 
   async install(): Promise<AddonStatus> {
     if (this.#installing) return this.status()
-    const uv = this.#findUv(true)
+    this.#installProblem = undefined
+    const uv = this.#findUv()
     if (uv === null) return this.status()
     this.#installing = true
-    this.#installProblem = undefined
+    this.#transcript = []
     this.#options.onChange()
+    const venv = join(this.dir, 'venv')
     try {
-      const venv = join(this.dir, 'venv')
       await mkdir(this.dir, { recursive: true })
       await this.#step(uv, ['venv', '--no-project', '--clear', '--python', '3.12', venv])
       const python = join(venv, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')
@@ -154,8 +159,11 @@ export class JacAddon {
       this.#options.setEnabled(true)
       this.sync()
     } catch (error) {
-      this.#installProblem = error instanceof Error ? error.message : String(error)
+      const output = this.#transcript.join('\n').slice(-MAX_OUTPUT_CHARS)
+      this.#installProblem = { detail: error instanceof Error ? error.message : String(error), output }
+      await rm(venv, { recursive: true, force: true }).catch(() => {})
     } finally {
+      await writeFile(join(this.dir, INSTALL_LOG), `${this.#transcript.join('\n')}\n`).catch(() => {})
       this.#installing = false
       this.#options.onChange()
     }
@@ -171,12 +179,11 @@ export class JacAddon {
   async #step(file: string, args: readonly string[]): Promise<RunResult> {
     const run = this.#options.run ?? runFile
     const result = await run(file, args, { env: this.#env, timeoutMs: INSTALL_STEP_TIMEOUT_MS })
+    const said = [result.stdout.trimEnd(), result.stderr.trimEnd()].filter((text) => text !== '')
+    this.#transcript.push(`$ ${[file, ...args].join(' ')}`, ...said)
     if (result.code === 0) return result
-    const said = `${result.stderr}\n${result.stdout}`
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line !== '')
-    throw new Error(said.find((line) => /error|failed|not found/i.test(line)) ?? said.pop() ?? `exit ${result.code}`)
+    this.#transcript.push(`exit ${result.code ?? 'killed'}`)
+    throw new Error(installReason(`${result.stderr}\n${result.stdout}`) ?? `exit ${result.code ?? 'killed'}`)
   }
 
   #installed(): Installed | undefined {
@@ -197,9 +204,8 @@ export class JacAddon {
     }
   }
 
-  /** Looked up once, and again before an install. A Dock launch has no profile PATH, so uv's own folders too. */
-  #findUv(again = false): string | null {
-    if (this.#uv !== undefined && !again) return this.#uv
+  /** Looked up on every read, so installing or removing uv shows without a restart. A Dock launch has no profile PATH. */
+  #findUv(): string | null {
     const find =
       this.#options.findUv ??
       (() => {
@@ -207,9 +213,35 @@ export class JacAddon {
         const known = [join(home, '.local', 'bin'), join(home, '.cargo', 'bin'), '/opt/homebrew/bin', '/usr/local/bin']
         return findProgram('uv', [this.#env.PATH, known.join(':')])
       })
-    this.#uv = find()
-    return this.#uv
+    return find()
   }
+}
+
+/** uv's error chain unwrapped to one line: its deepest cause, else the first line that says what failed. */
+export function installReason(output: string): string | undefined {
+  const entries: { text: string; chain: boolean; cause: boolean; failed: boolean }[] = []
+  for (const raw of output.split('\n')) {
+    const line = raw.trim()
+    if (line === '') continue
+    const last = entries.at(-1)
+    const glyph = /^(×|├─▶|╰─▶)\s*/.exec(line)
+    if (glyph !== null) {
+      entries.push({ text: line.slice(glyph[0].length), chain: true, cause: glyph[1] !== '×', failed: true })
+    } else if (last?.chain && (line.startsWith('│') || /^\s/.test(raw))) {
+      // miette wraps at the terminal width, even inside a requirement.
+      last.text = `${last.text} ${line.replace(/^│\s*/, '')}`
+    } else {
+      const failed = /error|failed|not found/i.test(line)
+      entries.push({ text: line.replace(/^error:\s*/i, ''), chain: false, cause: false, failed })
+    }
+  }
+  const pick =
+    entries.findLast((entry) => entry.cause) ??
+    entries.find((entry) => entry.chain) ??
+    entries.find((entry) => entry.failed) ??
+    entries.at(-1)
+  if (pick === undefined) return undefined
+  return pick.text.length > MAX_REASON_CHARS ? `${pick.text.slice(0, MAX_REASON_CHARS - 1)}…` : pick.text
 }
 
 function binPath(venv: string): string {

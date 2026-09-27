@@ -7,7 +7,14 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { CONTEXT_PROVIDER_ENV } from '../../shared/contextProvider'
-import { JAC_ADDON_SPEC_ENV, JAC_ADDON_SPECS, JacAddon, type JacAddonOptions, type Run } from './jacAddon'
+import {
+  installReason,
+  JAC_ADDON_SPEC_ENV,
+  JAC_ADDON_SPECS,
+  JacAddon,
+  type JacAddonOptions,
+  type Run
+} from './jacAddon'
 import { ProviderProcess, type ProviderProcessOptions } from './providerProcess'
 
 const STUB = fileURLToPath(new URL('./fixtures/stubProvider.mjs', import.meta.url))
@@ -52,6 +59,18 @@ function fakeUv(calls: string[][], fail?: (args: readonly string[]) => boolean):
     return { code: 0, stdout: args[0] === '--version' ? '0.1.0\n' : '', stderr: '' }
   }
 }
+
+/** What uv 0.12 prints when the tagged source cannot be fetched: miette wraps inside the requirement. */
+const UV_OFFLINE_GIT = `Using Python 3.12.13 environment at: venv
+   Updating https://github.com/zero-abd/teamree (jac-addon-v0.1.0)
+  × Failed to download and build \`teamree-jac @
+  │ git+https://github.com/zero-abd/teamree@jac-addon-v0.1.0#subdirectory=addons/jac-memory\`
+  ├─▶ Git operation failed
+  ├─▶ failed to clone into: uvcache/git-v0/db/9fea7243dd48d34f
+  ├─▶ failed to fetch branch or tag \`jac-addon-v0.1.0\`
+  ╰─▶ Remote Git fetches are not allowed because network connectivity is
+      disabled (i.e., with \`--offline\`)
+`
 
 async function until(test: () => boolean, ms = 5_000): Promise<void> {
   const deadline = Date.now() + ms
@@ -140,12 +159,69 @@ describe('the Jac Graph Memory add-on', () => {
     await rm(path.join(userDataDir, 'addons'), { recursive: true, force: true })
     enabled = false
     const broken = addon({ run: fakeUv([], (args) => args[0] === 'pip') })
-    expect(await broken.install()).toEqual({
+    expect(await broken.install()).toMatchObject({
       id: 'jac-memory',
       state: 'failed',
-      detail: '× No solution found when resolving: teamree-jac'
+      detail: 'No solution found when resolving: teamree-jac'
     })
     expect(enabled).toBe(false)
+  })
+
+  it('notices uv arriving or leaving without a restart', () => {
+    let uv: string | null = null
+    const jac = addon({ findUv: () => uv })
+    expect(jac.status()).toEqual({ id: 'jac-memory', state: 'off', needs: 'uv' })
+    uv = '/fake/uv'
+    expect(jac.status()).toEqual({ id: 'jac-memory', state: 'off' })
+    uv = null
+    expect(jac.status()).toEqual({ id: 'jac-memory', state: 'off', needs: 'uv' })
+  })
+
+  it('a failed install names the root cause, keeps and logs the whole output, removes the half-made venv, and can be retried', async () => {
+    let offline = true
+    const calls: string[][] = []
+    const working = fakeUv(calls)
+    const jac = addon({
+      run: async (file, args, options) => {
+        if (offline && args[0] === 'pip') {
+          calls.push([path.basename(file), ...args])
+          return { code: 1, stdout: '', stderr: UV_OFFLINE_GIT }
+        }
+        return working(file, args, options)
+      }
+    })
+    const failed = await jac.install()
+    expect(failed).toMatchObject({
+      state: 'failed',
+      detail: 'Remote Git fetches are not allowed because network connectivity is disabled (i.e., with `--offline`)'
+    })
+    expect(failed.output).toContain('#subdirectory=addons/jac-memory`')
+    expect(failed.output).toContain(`uv pip install --no-progress`)
+    const log = await readFile(path.join(userDataDir, 'addons/jac/install.log'), 'utf8')
+    expect(log).toContain('Failed to download and build `teamree-jac @')
+    expect(log).toContain(JAC_ADDON_SPECS[0] as string)
+    expect(existsSync(path.join(userDataDir, 'addons/jac/venv'))).toBe(false)
+    expect(jac.status()).toMatchObject({ state: 'failed', output: failed.output })
+
+    offline = false
+    expect((await jac.install()).state).toBe('running')
+    expect(jac.status().output).toBeUndefined()
+  })
+
+  it('reads the wrapped uv error chain as one line', () => {
+    const noRelease = `  × No solution found when resolving dependencies:
+  ╰─▶ Because teamree-jac was not found in the cache and you require
+      teamree-jac==0.1.0, we can conclude that your requirements are
+      unsatisfiable.
+
+hint: Packages were unavailable because the network was disabled.`
+    expect(installReason(noRelease)).toBe(
+      'Because teamree-jac was not found in the cache and you require teamree-jac==0.1.0, we can conclude that your requirements are unsatisfiable.'
+    )
+    expect(installReason('Using CPython 3.12\nerror: No interpreter found for Python 3.12\nexit soon\n')).toBe(
+      'No interpreter found for Python 3.12'
+    )
+    expect(installReason('\n')).toBeUndefined()
   })
 
   it('installs what the environment names instead, for a local checkout', async () => {
