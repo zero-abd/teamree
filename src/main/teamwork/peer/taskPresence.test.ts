@@ -92,6 +92,14 @@ describe('teammates see the task', () => {
     expect(child?.stage).toBe('working')
   })
 
+  it('reads a task whose commits are all in the base as landed once its agent has stopped', async () => {
+    const { rows } = await pair({
+      readTaskGit: (target) =>
+        Promise.resolve(target.id === 'wt_parent' ? { paths: [], ahead: 0, clean: true, merged: true } : undefined)
+    })
+    expect(rows().find((row) => row.name === 'rate limits')?.stage).toBe('landed')
+  })
+
   it('sends v1 only while alice has Share Task Details off, and v2 again once she turns it on', async () => {
     let sharing = false
     const { alice, rows, settle } = await pair({

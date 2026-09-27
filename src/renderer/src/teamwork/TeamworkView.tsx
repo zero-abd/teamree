@@ -1,8 +1,9 @@
-// Setting teamwork up, given the whole main area. What the steps say is
-// `TeamworkSteps`'s business and what they mean is `startTeamwork.ts`'s; this
-// owns the reads, which job this visit is, and the push clock.
+// Teamwork, given the whole main area: the team's home once this machine is on the roster, the setup
+// before. What the steps say is `TeamworkSteps`'s business and what they mean is `startTeamwork.ts`'s;
+// this owns the reads, which job this visit is, and the push clock.
 
 import { useCallback, useEffect, useState } from 'react'
+import { teamworkFacts } from '@shared/entities'
 import { copyText } from '../clipboard/clipboard'
 import { Select } from '../dialogs/Select'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
@@ -11,8 +12,9 @@ import { TerminalView } from '../terminal/TerminalView'
 import { PageFrame } from '../workspace/PageFrame'
 import { SharedNotesList } from './SharedNotesList'
 import { unreadNotes, useSharedNotes } from './sharedNotesStore'
+import { TeamHome } from './TeamHome'
 import { TeamworkSteps } from './TeamworkSteps'
-import type { TeamworkPath } from './startTeamwork'
+import { inviteText, startTeamworkFlow, type TeamworkPath } from './startTeamwork'
 
 /**
  * How often the relay pane's scrollback is read; the pane streams to xterm,
@@ -161,9 +163,103 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   // this visit, and a project that remembered "I am joining" would say it to whoever opened it next.
   const [path, setPath] = useState<TeamworkPath | null>(joinedFrom === undefined ? null : 'join')
 
+  // On the roster is on the team: the question of starting or joining one is behind us.
+  const home = enrolled
+  const flow = startTeamworkFlow({
+    list,
+    relay,
+    status,
+    failedReads: readErrors ?? {},
+    path: path ?? 'start',
+    publish: publishResult,
+    waitingFor: joinedFrom
+  })
+  // A push teamree cannot check is not left to do once a teammate's key has come the other way.
+  const current = flow.steps.find((step) => step.id === flow.currentId)
+  const teammateOnRoster = list?.members.some((member) => !member.isSelf) === true
+  const toDo =
+    current !== undefined &&
+    current.id !== 'connected' &&
+    !(current.id === 'push' && current.mark === 'unchecked' && teammateOnRoster)
+  // Undefined until pressed: open while a step is still to do, folded once nothing is.
+  const [setupShown, setSetupShown] = useState<boolean | undefined>(undefined)
+  const setupOpen = setupShown ?? toDo
+  const origin = teamworkFacts(status)?.origin
+  const invite = inviteText({
+    originUrl: origin?.ok === true ? origin.url : null,
+    projectName: name,
+    handle: list?.self.handle ?? null
+  })
+
+  const steps = (
+    <TeamworkSteps
+      projectPath={project?.path}
+      list={list}
+      relay={relay}
+      status={status}
+      membersPending={membersPending}
+      membersError={membersError}
+      relayPending={relayPending}
+      relayError={relayError}
+      readErrors={readErrors ?? {}}
+      onJoin={(handle) => void joinProject(projectId, handle)}
+      onClearMembersError={clearMembersError}
+      onSetRelay={(url) => void setRelay(projectId, url)}
+      onRetry={(read) => {
+        if (read === 'list') void loadMembers(projectId)
+        else if (read === 'relay') void loadRelay(projectId)
+        else void loadTeamwork(projectId)
+      }}
+      origin={{ pending: originPending, error: originError }}
+      onSetOrigin={(url) => void setOrigin(projectId, url)}
+      pane={pane === undefined ? undefined : { ...pane, running: paneRunning }}
+      onStartRelayPane={(kind, argument) => void startRelayPane(projectId, kind, argument)}
+      onClosePane={() => void closeRelayPane(projectId)}
+      renderRelayPane={renderRelayPane}
+      publish={{
+        plan: publishPlan,
+        pending: publishPending,
+        error: publishError,
+        result: publishResult,
+        progress: publishProgress
+      }}
+      onPublish={() => void publishTeamwork(projectId)}
+      onPullAndPublish={() => void publishTeamwork(projectId, { pull: true })}
+      onPull={() => void pullTeamwork(projectId)}
+      onCancelPublish={() => void cancelPublish(projectId)}
+      now={now}
+      path={home ? (path ?? 'start') : path}
+      onChoosePath={setPath}
+      projectName={name}
+      onCopy={copyText}
+      waitingFor={joinedFrom}
+      onPasteInvitation={(raw) => openInvitation(raw)}
+      inHome={home}
+    />
+  )
+
+  const setup = (
+    <section className="team-home__section team-setup" aria-label="Setup">
+      <h2 className="team-home__head">
+        <button
+          type="button"
+          className="team-setup__toggle"
+          aria-expanded={setupOpen}
+          onClick={() => setSetupShown(!setupOpen)}
+        >
+          <span className="disclosure__caret" aria-hidden="true">
+            {setupOpen ? '▾' : '▸'}
+          </span>
+          Setup
+        </button>
+      </h2>
+      {setupOpen ? steps : null}
+    </section>
+  )
+
   return (
     <PageFrame
-      label={`Set up teamwork in ${name}`}
+      label={home ? `Teamwork in ${name}` : `Set up teamwork in ${name}`}
       title={project === undefined ? 'Teamwork' : `Teamwork · ${project.name}`}
       actions={
         projects.length > 1 ? (
@@ -182,50 +278,24 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
       onClose={closeTeamwork}
       focusKey={projectId}
     >
-      <SharedNotesList projectId={projectId} />
-      <TeamworkSteps
-        projectPath={project?.path}
-        list={list}
-        relay={relay}
-        status={status}
-        membersPending={membersPending}
-        membersError={membersError}
-        relayPending={relayPending}
-        relayError={relayError}
-        readErrors={readErrors ?? {}}
-        onJoin={(handle) => void joinProject(projectId, handle)}
-        onClearMembersError={clearMembersError}
-        onSetRelay={(url) => void setRelay(projectId, url)}
-        onRetry={(read) => {
-          if (read === 'list') void loadMembers(projectId)
-          else if (read === 'relay') void loadRelay(projectId)
-          else void loadTeamwork(projectId)
-        }}
-        origin={{ pending: originPending, error: originError }}
-        onSetOrigin={(url) => void setOrigin(projectId, url)}
-        pane={pane === undefined ? undefined : { ...pane, running: paneRunning }}
-        onStartRelayPane={(kind, argument) => void startRelayPane(projectId, kind, argument)}
-        onClosePane={() => void closeRelayPane(projectId)}
-        renderRelayPane={renderRelayPane}
-        publish={{
-          plan: publishPlan,
-          pending: publishPending,
-          error: publishError,
-          result: publishResult,
-          progress: publishProgress
-        }}
-        onPublish={() => void publishTeamwork(projectId)}
-        onPullAndPublish={() => void publishTeamwork(projectId, { pull: true })}
-        onPull={() => void pullTeamwork(projectId)}
-        onCancelPublish={() => void cancelPublish(projectId)}
-        now={now}
-        path={path}
-        onChoosePath={setPath}
-        projectName={name}
-        onCopy={copyText}
-        waitingFor={joinedFrom}
-        onPasteInvitation={(raw) => openInvitation(raw)}
-      />
+      {home ? (
+        <>
+          {/* First while a step is left to do: that step is the thing to do. */}
+          {toDo ? setup : null}
+          <TeamHome
+            projectId={projectId}
+            invite={invite}
+            onCopy={copyText}
+            onPasteInvitation={(raw) => openInvitation(raw)}
+          />
+          {toDo ? null : setup}
+        </>
+      ) : (
+        <>
+          <SharedNotesList projectId={projectId} />
+          {steps}
+        </>
+      )}
     </PageFrame>
   )
 }

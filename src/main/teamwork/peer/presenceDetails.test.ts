@@ -51,6 +51,26 @@ describe('readTaskGitDetails', () => {
     expect(details).toEqual({ paths: ['src/a.ts'], ahead: 1, clean: true })
   })
 
+  it('says merged once every commit the branch made is in the base, and not for a branch that made none', async () => {
+    const repo = await createTempRepo()
+    repos.push(repo)
+    const startedFrom = (await repo.git(['rev-parse', 'HEAD'])).trim()
+    await repo.git(['checkout', '-b', 'feature'])
+    const fresh = await readTaskGitDetails(repo.runner, { worktreePath: repo.repoPath, baseRef: 'main', startedFrom })
+    expect(fresh.merged).toBeUndefined()
+
+    await repo.write('src/a.ts', 'export {}\n')
+    await repo.commit('one')
+    const ahead = await readTaskGitDetails(repo.runner, { worktreePath: repo.repoPath, baseRef: 'main', startedFrom })
+    expect(ahead.merged).toBeUndefined()
+
+    await repo.git(['checkout', 'main'])
+    await repo.git(['merge', '--ff-only', 'feature'])
+    await repo.git(['checkout', 'feature'])
+    const merged = await readTaskGitDetails(repo.runner, { worktreePath: repo.repoPath, baseRef: 'main', startedFrom })
+    expect(merged).toMatchObject({ ahead: 0, merged: true })
+  })
+
   it('answers no commits for a base ref git cannot see', async () => {
     const repo = await createTempRepo()
     repos.push(repo)

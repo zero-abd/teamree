@@ -5,7 +5,15 @@
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { MemberList, Project, RelaySetting, Terminal, TeamworkPublishPlan, TeamworkStatus } from '@shared/entities'
+import type {
+  MemberList,
+  Project,
+  RelaySetting,
+  Terminal,
+  TeamworkPublishPlan,
+  TeamworkRead,
+  TeamworkStatus
+} from '@shared/entities'
 import type { StepId } from './startTeamwork'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
@@ -720,7 +728,7 @@ describe('joining from an invitation', () => {
       joinedFrom: { p1: 'ana' }
     })
     open()
-    expect(screen.getByText('Join a Team')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Members' })).toBeTruthy()
     expect([...document.querySelectorAll('[data-step]')].map((entry) => entry.getAttribute('data-step'))).toEqual([
       'key',
       'push',
@@ -728,5 +736,61 @@ describe('joining from an invitation', () => {
     ])
     fireEvent.click(step('connected').querySelector('.step__toggle') as HTMLElement)
     expect(within(step('connected')).getByText('Waiting for ana')).toBeTruthy()
+  })
+})
+
+describe('a team that exists, as its home', () => {
+  const BO = 'Ym9ib2JvYm9ib2JvYm9ib2JvYm9ib2JvYm9ib2JvYm8='
+  const team = (): MemberList => ({
+    ...enrolledRoster(),
+    members: [
+      ...enrolledRoster().members,
+      { handle: 'bo', publicKey: BO, addedAt: '2026-03-02', file: '.teamree/members/bo.pub', isSelf: false }
+    ]
+  })
+  const linked = (phase: 'connected' | 'unreachable'): TeamworkStatus => ({
+    ...(working() as TeamworkRead),
+    links: [{ publicKey: BO, handle: 'bo', phase, since: 0, attempts: 1 }]
+  })
+
+  it('opens on the team rather than on the question of starting or joining one', () => {
+    seed({ members: { p1: team() }, relays: { p1: relayOnDisk() }, teamwork: { p1: linked('connected') } })
+    open()
+    expect(screen.queryByRole('button', { name: 'Start a Team' })).toBeNull()
+    for (const name of ['Waiting on You', 'Members', 'Shared Notes', 'Activity']) {
+      expect(screen.getByRole('region', { name })).toBeTruthy()
+    }
+    expect(screen.getByRole('button', { name: 'Copy Invitation' })).toBeTruthy()
+  })
+
+  it('keeps the setup folded once there is nothing left to do, one press away', () => {
+    seed({ members: { p1: team() }, relays: { p1: relayOnDisk() }, teamwork: { p1: linked('connected') } })
+    open()
+    expect(document.querySelector('[data-step]')).toBeNull()
+    const setup = screen.getByRole('button', { name: 'Setup' })
+    expect(setup.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(setup)
+    expect(step('connected')).toBeTruthy()
+  })
+
+  it('stays the home when the relay is down, and says so in one line', () => {
+    seed({ members: { p1: team() }, relays: { p1: relayOnDisk() }, teamwork: { p1: linked('unreachable') } })
+    open()
+    expect(screen.queryByRole('button', { name: 'Start a Team' })).toBeNull()
+    expect(screen.getByText('Relay unreachable')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Members' })).toBeTruthy()
+    // A teammate's key came through origin, so the push this machine cannot check is not the problem.
+    expect(document.querySelector('[data-step]')).toBeNull()
+  })
+
+  it('shows the setup open under the home while a step is still to do', () => {
+    seed({ members: { p1: enrolledRoster() }, relays: { p1: relayOnDisk() }, teamwork: { p1: working() } })
+    open()
+    expect(screen.getByRole('region', { name: 'Members' })).toBeTruthy()
+    expect(pushStep()).toBeTruthy()
+    // First on the page: the step left to do is the thing to do.
+    const setup = screen.getByRole('region', { name: 'Setup' })
+    const members = screen.getByRole('region', { name: 'Members' })
+    expect(setup.compareDocumentPosition(members) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
