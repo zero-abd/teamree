@@ -42,6 +42,7 @@ export function registerPlaceholderHandlers(registry: MethodRegistry): void {
   placeholder(registry, 'terminal.resize', Params.terminalResize)
   placeholder(registry, 'terminal.close', Params.terminalClose)
   placeholder(registry, 'terminal.rename', Params.terminalRename)
+  placeholder(registry, 'terminal.clear', Params.terminalClear)
   placeholder(registry, 'terminal.read', Params.terminalRead)
   placeholder(registry, 'terminal.subscribe', Params.terminalSubscribe)
   placeholder(registry, 'terminal.split', Params.terminalSplit)

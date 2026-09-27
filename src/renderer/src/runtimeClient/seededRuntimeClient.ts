@@ -1541,6 +1541,12 @@ export function createSeededRuntimeClient(): RuntimeClient {
       announce({ type: 'terminals' })
       return terminal.record
     },
+    'terminal.clear': ({ terminalId }) => {
+      const terminal = required(terminals.get(terminalId), 'terminal')
+      terminal.buffer = ''
+      emit(terminal, { type: 'data', data: `\x1b[H\x1b[2J\x1b[3J${prompt(terminal)}${terminal.line}` })
+      return { cleared: true }
+    },
     'terminal.agentEvent': ({ terminalId, event, at, detail }) => {
       const terminal = required(terminals.get(terminalId), 'terminal')
       terminal.record = { ...terminal.record, agentEvent: { event, at, ...(detail === undefined ? {} : { detail }) } }

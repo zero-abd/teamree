@@ -795,6 +795,8 @@ export const Params = {
     terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
     label: z.string().max(MAX_PANE_LABEL_CHARS).nullable()
   }),
+  /** Forgets a pane's output up to its cursor's line: what reads, the next launch and the pane host keep. */
+  terminalClear: z.object({ terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS) }),
   /** Point-in-time scrollback snapshot; for live output use terminal.subscribe. */
   terminalRead: z.object({
     terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
@@ -1112,6 +1114,7 @@ export type MethodContract = TaskMethodContract &
     'terminal.resize': { params: z.infer<typeof Params.terminalResize>; result: Terminal }
     'terminal.close': { params: z.infer<typeof Params.terminalClose>; result: { closed: true } }
     'terminal.rename': { params: z.infer<typeof Params.terminalRename>; result: Terminal }
+    'terminal.clear': { params: z.infer<typeof Params.terminalClear>; result: { cleared: true } }
     /**
      * `end` places the snapshot in the stream, so a subscriber can drop the chunks it already holds;
      * `widest` is the widest the pane has been, so a replay is never drawn narrower than it was written;

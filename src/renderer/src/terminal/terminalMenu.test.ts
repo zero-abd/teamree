@@ -163,9 +163,9 @@ describe('what each row does', () => {
       term: {
         getSelection: () => 'selected text',
         selectAll: () => calls.push('selectAll'),
-        clear: () => calls.push('clear'),
         paste: (text) => calls.push(`paste ${text}`)
       },
+      clear: () => calls.push('clear'),
       clipboard: { copy: (text) => calls.push(`copy ${text}`), read: async () => 'from clipboard' },
       byHand: () => calls.push('byHand'),
       openLink: (uri) => calls.push(`open ${uri}`),
@@ -176,7 +176,7 @@ describe('what each row does', () => {
     }
   }
 
-  it('copies the selection, selects all and clears the emulator', () => {
+  it('copies the selection, selects all and clears the pane', () => {
     const target = host()
     runTerminalMenuAction('copy', null, target)
     runTerminalMenuAction('select-all', null, target)

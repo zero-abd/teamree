@@ -52,7 +52,7 @@ import {
   type Pointed,
   type TerminalMenuEntry
 } from './terminalMenu'
-import { showPane } from './shownPanes'
+import { clearShownPane, showPane } from './shownPanes'
 import { deferWhileLayoutMoves, forgetDeferred } from '../shell/layoutMotion'
 import { readSearchDecorations, readTerminalColors } from './terminalTheme'
 
@@ -344,6 +344,7 @@ export function TerminalView({
     const store = useWorkspaceStore.getState()
     runTerminalMenuAction(entry.action, pointed, {
       term: emulator.term,
+      clear: () => clearShownPane(terminalId),
       clipboard: { copy: copyText, read: pasteText },
       byHand: emulator.markHands,
       openLink: openPaneLink,
@@ -539,7 +540,11 @@ function openEmulator(
   term.loadAddon(search)
 
   term.open(host)
-  const unshow = showPane(terminalId, term)
+  // Cleared by the runtime, in the stream, so every view and watcher of the pane clears with this one.
+  const unshow = showPane(terminalId, {
+    buffer: term.buffer,
+    clear: () => void runtimeClient.call('terminal.clear', { terminalId }).catch(() => term.clear())
+  })
   const gpu = paneWebgl(term)
   const scrollbar = syncScrollbarPerFrame(term)
   const output = frameWrites((data) => term.write(data))

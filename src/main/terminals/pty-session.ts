@@ -89,6 +89,12 @@ export const EXITED_RETENTION_BYTES = 256 * 1024
  */
 export const RESUME_WINDOW_MS = 30_000
 
+/** The longest cursor line a Clear keeps; past it the tail is a full-screen redraw, not a line. */
+const CLEARED_LINE_MAX_BYTES = 4096
+
+/** Home, erase the screen, erase the scrollback: a clear any emulator replays, watchers' included. */
+const CLEAR_SCREEN = '\x1b[H\x1b[2J\x1b[3J'
+
 /** The part of node-pty's IPty a pane uses; a pane host's `RemotePty` serves the same. */
 export type PaneProcess = Pick<IPty, 'pid' | 'onData' | 'onExit' | 'write' | 'resize' | 'kill' | 'process'>
 
@@ -178,7 +184,7 @@ export class PtySession {
   private appended = 0
   private widest: number
   /** The previous run's output, when this pane is one that was brought back. */
-  private readonly record: RecordedScrollback | undefined
+  private record: RecordedScrollback | undefined
   private readonly titles = new TitleSequenceScanner()
   private readonly listeners = new Set<TerminalEventListener>()
   private readonly subscriptions: IDisposable[] = []
@@ -481,6 +487,23 @@ export class PtySession {
     const joined = this.record.text.endsWith('\n') ? this.record.text : `${this.record.text}\r\n`
     const combined = `${joined}${live}`
     return capBytes === undefined ? combined : tailFromLineBoundary(combined, capBytes)
+  }
+
+  /**
+   * Forgets the output above the cursor's line, as the emulator's Clear does, and says so in the stream.
+   * The previous run's record and a pane host's replay go with it.
+   */
+  clear(): void {
+    const tail = this.scrollback.tail(CLEARED_LINE_MAX_BYTES)
+    const newline = tail.lastIndexOf('\n')
+    const line =
+      newline !== -1 ? tail.slice(newline + 1) : this.scrollback.byteLength <= CLEARED_LINE_MAX_BYTES ? tail : ''
+    this.scrollback.clear()
+    this.record = undefined
+    this.recordHeld = false
+    ;(this.pty as { clear?: () => void }).clear?.()
+    const redraw = `${CLEAR_SCREEN}${line}`
+    this.emit({ type: 'data', data: redraw, end: this.append(redraw) })
   }
 
   /** The widest the pane has been: none of its output was written for a wider one. */

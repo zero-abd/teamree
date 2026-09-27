@@ -126,7 +126,9 @@ export function menuAnchor(event: {
 
 /** What the rows act on. */
 export type TerminalMenuHost = {
-  term: Pick<XTerm, 'getSelection' | 'selectAll' | 'clear' | 'paste'>
+  term: Pick<XTerm, 'getSelection' | 'selectAll' | 'paste'>
+  /** Clears the pane for every reader, not only this emulator. */
+  clear: () => void
   clipboard: { copy: (text: string) => void; read: () => Promise<string> }
   /** Vouches for a paste as typing. See `handsHere.ts`. */
   byHand?: () => void
@@ -162,7 +164,7 @@ export function runTerminalMenuAction(
       host.term.selectAll()
       return
     case 'clear':
-      host.term.clear()
+      host.clear()
       return
     case 'find':
       host.find()

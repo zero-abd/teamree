@@ -21,7 +21,7 @@ export function showPane(terminalId: string, term: Shown): () => void {
   }
 }
 
-/** Clears a mounted pane's scrollback and screen, keeping the cursor's line, as the menu's Clear does. */
+/** Clears a mounted pane's scrollback and screen, keeping the cursor's line, for every reader of the pane. */
 export function clearShownPane(terminalId: string): void {
   shown.get(terminalId)?.clear()
 }
