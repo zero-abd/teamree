@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { RowMenu, type RowMenuAnchor } from './RowMenu'
+import { refocus, RowMenu, type MenuClosed, type RowMenuAnchor } from './RowMenu'
 
 export function AddProjectButton(): React.JSX.Element {
   const chooseProjectFolder = useWorkspaceStore((state) => state.chooseProjectFolder)
@@ -20,9 +20,9 @@ export function AddProjectButton(): React.JSX.Element {
     setMenuAt(rect === undefined ? { x: 0, y: 0 } : { x: rect.right, y: rect.bottom + 4, align: 'right' })
   }
 
-  const close = (): void => {
+  const close = (closed?: MenuClosed): void => {
     setMenuAt(null)
-    button.current?.focus()
+    refocus(button.current, closed)
   }
 
   return (

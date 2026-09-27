@@ -2,6 +2,7 @@
 // and when the right-click is the program's instead.
 
 import type { Terminal as XTerm } from '@xterm/xterm'
+import type { IconName } from '../icons/Icon'
 import { formatChord, type PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { anchorAtPointer, type RowMenuAnchor } from '../sidebar/RowMenu'
@@ -31,6 +32,7 @@ export type TerminalMenuAction =
 export type TerminalMenuEntry = {
   action: TerminalMenuAction
   label: string
+  icon?: IconName
   hint?: string
   disabled?: boolean
   separated?: boolean
@@ -44,6 +46,7 @@ export function terminalMenuEntries(context: TerminalMenuContext, modifier: Plat
   const copy: TerminalMenuEntry = {
     action: 'copy',
     label: 'Copy',
+    icon: 'copy',
     hint: clipboard('c'),
     disabled: !context.hasSelection
   }
@@ -57,7 +60,7 @@ export function terminalMenuEntries(context: TerminalMenuContext, modifier: Plat
           { action: 'copy-link', label: 'Copy Link' }
         ]
       : context.pointed?.kind === 'path'
-        ? [{ action: 'reveal-path', label: 'Reveal in Finder' }]
+        ? [{ action: 'reveal-path', label: 'Reveal in Finder', icon: 'reveal' }]
         : []
   return [
     ...pointed,
@@ -65,9 +68,9 @@ export function terminalMenuEntries(context: TerminalMenuContext, modifier: Plat
     { action: 'paste', label: 'Paste', hint: clipboard('v') },
     selectAll,
     { action: 'clear', label: 'Clear', hint: hint('clear-pane') },
-    { action: 'find', label: 'Find…', hint: hint('find-in-pane') },
-    { action: 'split-right', label: 'Split Right', hint: hint('split-right'), separated: true },
-    { action: 'split-down', label: 'Split Down', hint: hint('split-down') }
+    { action: 'find', label: 'Find…', icon: 'search', hint: hint('find-in-pane') },
+    { action: 'split-right', label: 'Split Right', icon: 'split-right', hint: hint('split-right'), separated: true },
+    { action: 'split-down', label: 'Split Down', icon: 'split-down', hint: hint('split-down') }
   ]
 }
 

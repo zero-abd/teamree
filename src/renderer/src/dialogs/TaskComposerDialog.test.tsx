@@ -13,6 +13,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IssueList, StartPoint, StartPointList } from '@shared/entities'
+import { formatChord, windowModifier } from '../keyboard/platformModifier'
 
 const call = vi.fn<(method: string, params: unknown) => Promise<unknown>>()
 
@@ -103,6 +104,8 @@ const branch = (): HTMLInputElement => screen.getByRole('textbox', { name: 'Bran
 const branchHint = (): string =>
   document.getElementById(branch().getAttribute('aria-describedby') ?? '')?.textContent ?? ''
 const submit = (): HTMLButtonElement => screen.getByRole('button', { name: 'Start Task' })
+/** Filled and pressable at all times, so it is refused through `aria-disabled` rather than `disabled`. */
+const blocked = (): boolean => submit().getAttribute('aria-disabled') === 'true'
 const more = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `One more ${command}` })
 const fewer = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `One fewer ${command}` })
 const bothAgents = [
@@ -274,7 +277,7 @@ describe('the branch it will make', () => {
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     expect(branch().value).toBe('rewrite-the-pager-2')
-    expect(submit().disabled).toBe(false)
+    expect(blocked()).toBe(false)
   })
 
   it('refuses a typed name git would reject, or one already taken', async () => {
@@ -283,25 +286,40 @@ describe('the branch it will make', () => {
     fireEvent.change(branch(), { target: { value: 'pager..next' } })
     expect(branchHint()).toBe('Not a valid branch name')
     expect(branch().getAttribute('aria-invalid')).toBe('true')
-    expect(submit().disabled).toBe(true)
+    expect(blocked()).toBe(true)
     fireEvent.change(branch(), { target: { value: 'Feature/Pager' } })
     expect(branchHint()).toBe('Branch exists')
-    expect(submit().disabled).toBe(true)
+    expect(blocked()).toBe(true)
     fireEvent.change(branch(), { target: { value: 'feature/pager-2' } })
-    expect(submit().disabled).toBe(false)
+    expect(blocked()).toBe(false)
   })
 })
 
 describe('what it will not submit', () => {
   it('refuses an empty task, however good the start point is', async () => {
     await open()
-    expect(submit().disabled).toBe(true)
+    expect(blocked()).toBe(true)
+  })
+
+  // The dialog's one primary reads as one while the form is still empty.
+  it('keeps Start Task filled and does nothing when pressed before there is a task', async () => {
+    await open()
+    expect(submit().disabled).toBe(false)
+    expect(submit().classList.contains('button--primary')).toBe(true)
+    submit().click()
+    fireEvent.keyDown(task(), { key: 'Enter', metaKey: true })
+    expect(startTask).not.toHaveBeenCalled()
+  })
+
+  it('shows its chord on Start Task', async () => {
+    await open()
+    expect(submit().querySelector('kbd')?.textContent).toBe(formatChord({ key: 'Enter' }, windowModifier()))
   })
 
   it('refuses a task made only of spaces', async () => {
     await open()
     fireEvent.change(task(), { target: { value: '   ' } })
-    expect(submit().disabled).toBe(true)
+    expect(blocked()).toBe(true)
   })
 
   // Switching project clears the ref on purpose — the old repository's base ref
@@ -310,11 +328,11 @@ describe('what it will not submit', () => {
   it('refuses a task with no start point, after the project changed under it', async () => {
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
-    expect(submit().disabled).toBe(false)
+    expect(blocked()).toBe(false)
     call.mockImplementation(() => new Promise(() => {}))
     fireEvent.change(screen.getByRole('combobox', { name: 'Project' }), { target: { value: 'p2' } })
     expect(startPoint().value).toBe('')
-    expect(submit().disabled).toBe(true)
+    expect(blocked()).toBe(true)
   })
 
   it('takes the new project’s own base ref once its listing lands', async () => {
@@ -463,7 +481,7 @@ describe('what it submits', () => {
   it('refuses a task too long for one command line, and says by how much', async () => {
     await open()
     fireEvent.change(task(), { target: { value: 'x'.repeat(4097) } })
-    expect((screen.getByRole('button', { name: 'Start Task' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(blocked()).toBe(true)
     expect(screen.getByText(/4097 \/ 4096 chars/)).toBeTruthy()
     expect(startTask).not.toHaveBeenCalled()
   })

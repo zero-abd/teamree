@@ -2,6 +2,7 @@
 // Escape and a backdrop click dismiss. Several can be open; see the stack below.
 
 import { createContext, useCallback, useContext, useEffect, useRef } from 'react'
+import { Icon } from '../icons/Icon'
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
 
@@ -75,7 +76,10 @@ export function Modal({ title, hideTitle = false, titleHint, onClose, children }
         return
       }
       if (event.key !== 'Tab' || !panel) return
-      const targets = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((node) => node.offsetParent !== null)
+      // Seen and in the Tab order: the close control is neither end of the loop.
+      const targets = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+        (node) => node.offsetParent !== null && node.tabIndex >= 0
+      )
       const first = targets[0]
       const last = targets[targets.length - 1]
       if (!first || !last) return
@@ -122,6 +126,19 @@ export function Modal({ title, hideTitle = false, titleHint, onClose, children }
         <div className="modal__body">
           <EscapeClaims value={register}>{children}</EscapeClaims>
         </div>
+        {/* After the body, and out of the Tab order, so the focus still opens on the content; Escape is the key. */}
+        {hideTitle ? null : (
+          <button
+            type="button"
+            className="modal__close"
+            title="Close"
+            aria-label="Close"
+            tabIndex={-1}
+            onClick={() => close.current()}
+          >
+            <Icon name="close" />
+          </button>
+        )}
       </div>
     </div>
   )

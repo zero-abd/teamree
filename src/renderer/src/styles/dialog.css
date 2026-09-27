@@ -22,7 +22,11 @@
 }
 
 .modal {
-  width: min(440px, calc(100vw - 48px));
+  /* Fields a hand can hit: a dialog is where people type. */
+  --control-h: 32px;
+
+  position: relative;
+  width: min(460px, calc(100vw - 48px));
   border: 1px solid var(--line-strong);
   border-radius: var(--r3);
   background: var(--bg-raised);
@@ -31,11 +35,13 @@
 }
 
 .modal__head {
-  padding: var(--s5) var(--s5) var(--s3);
+  padding: var(--s5) var(--s5) var(--s4);
 }
 
 .modal__title {
-  font-size: var(--text-lg);
+  /* Clear of the close control. */
+  padding-right: 24px;
+  font-size: var(--text-xl);
   font-weight: 600;
   letter-spacing: -0.01em;
   /* A whole task title may be long; two lines, the rest on hover. */
@@ -52,6 +58,28 @@
 
 .modal__body:first-child {
   padding-top: var(--s5);
+}
+
+.modal__close {
+  position: absolute;
+  top: calc(var(--s5) - 4px);
+  right: calc(var(--s5) - 6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r2);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.modal__close:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
 }
 
 /* The last row of every dialog. 8px between buttons, which is the one gap in
@@ -91,6 +119,7 @@
 
 .field__input {
   width: 100%;
+  min-height: var(--control-h);
   padding: 6px var(--s3);
   border: 1px solid var(--line-strong);
   border-radius: var(--r2);
@@ -457,6 +486,11 @@ button.picker__chevron:hover {
 .form__under-left {
   color: var(--fg-muted);
   font-size: var(--text-xs);
+}
+
+/* On a black ground the scrim alone does not part the dialog from what is under it. */
+:root[data-tone='dark'] .modal-layer {
+  backdrop-filter: blur(2px);
 }
 
 @keyframes scrim-in {

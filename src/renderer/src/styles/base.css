@@ -163,12 +163,12 @@ kbd {
     color var(--motion-fast) var(--ease);
 }
 
-.button:hover:not(:disabled) {
+.button:hover:not(:disabled, [aria-disabled='true']) {
   background: var(--bg-press);
   border-color: var(--accent-line);
 }
 
-.button:active:not(:disabled) {
+.button:active:not(:disabled, [aria-disabled='true']) {
   transform: translateY(0.5px);
 }
 
@@ -187,9 +187,27 @@ kbd {
   font-weight: 600;
 }
 
-.button--primary:hover:not(:disabled) {
+.button--primary:hover:not(:disabled, [aria-disabled='true']) {
   background: var(--accent-bright);
   border-color: var(--accent-bright);
+}
+
+/* Still filled, so a dialog shows its primary before the form can go. */
+.button--primary[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The chord on a button, as a cap in the button's own colour. */
+.button__kbd {
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--r1);
+  color: inherit;
+  background: color-mix(in srgb, currentcolor 14%, transparent);
+  font-family: inherit;
+  font-size: var(--text-xs);
+  font-weight: 500;
 }
 
 .button--ghost {

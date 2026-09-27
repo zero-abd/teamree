@@ -15,6 +15,9 @@ import { slugifyBranchName } from '@shared/branchName'
 import { runPaneOf, runState } from '@shared/runCommands'
 import { usageLines } from '@shared/usage'
 import { AgentGlyph } from '../agents/glyphs'
+import { Icon } from '../icons/Icon'
+import { windowModifier } from '../keyboard/platformModifier'
+import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import { openInBrowser } from '../shell/openInBrowser'
 import { useLedger } from '../state/ledgerStore'
 import { askForYou, childDone, firstSentence, useMessageStore, waitedOn } from '../state/messages'
@@ -38,7 +41,7 @@ import { FoldedChips } from './FoldedChips'
 import { summarizeWorktreeStatus } from './worktreeStatusSummary'
 import { rowSpeech } from './rowSpeech'
 import { endNestDrag, NEST_DRAG_TYPE, startNestDrag, useNestDrag, useNestDrop } from './nestDrag'
-import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
+import { refocus, RowMenu, type MenuClosed, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { WorktreeNameField } from './WorktreeNameField'
 import { RunChip, runMenuItems, TEST_CHIP, useRunActions, useRunOffers } from '../workspace/runButtons'
 import { useChildren } from '../workspace/rightPanel/childrenStore'
@@ -243,10 +246,10 @@ export function WorktreeRow({
     setMenuAt(at)
   }
 
-  const closeMenu = (): void => {
+  const closeMenu = (closed?: MenuClosed): void => {
     setMenuAt(null)
     // A menu that leaves the focus on `document.body` costs a keyboard user their place.
-    ;(opener.current ?? openControl.current)?.focus()
+    refocus(opener.current ?? openControl.current, closed)
   }
 
   /** Under the row, for a menu nobody pointed at. */
@@ -262,20 +265,33 @@ export function WorktreeRow({
   ]
   if (merged) remove.reverse()
   const rest: RowMenuItem[] = [
-    ...(failed && worktree.retryable ? [{ label: 'Retry', onChoose: onRetry }] : []),
-    ...(onNewChild !== undefined && ready ? [{ label: 'New Child Task…', onChoose: onNewChild }] : []),
+    ...(failed && worktree.retryable
+      ? [{ label: 'Retry', icon: <Icon name="restart" size={14} />, onChoose: onRetry }]
+      : []),
+    ...(onNewChild !== undefined && ready
+      ? [
+          {
+            label: 'New Child Task…',
+            icon: <Icon name="new-task" size={14} />,
+            hint: shortcutHint('new-child-task', windowModifier()),
+            onChoose: onNewChild
+          }
+        ]
+      : []),
     ...(onMoveUnder !== undefined && ready ? [{ label: 'Move Under…', onChoose: onMoveUnder }] : []),
     ...(onMoveToTop !== undefined && ready ? [{ label: 'Move to Top Level', onChoose: onMoveToTop }] : []),
-    ...(onResume !== undefined && ready ? [{ label: 'Resume Conversation…', onChoose: onResume }] : []),
+    ...(onResume !== undefined && ready
+      ? [{ label: 'Resume Conversation…', icon: <Icon name="history" size={14} />, onChoose: onResume }]
+      : []),
     ...(onHandOff !== undefined && ready && onRemoveCopy === undefined
       ? [{ label: 'Hand Off…', onChoose: onHandOff }]
       : []),
     ...(onRemoveCopy === undefined ? [] : [{ label: 'Remove My Copy…', onChoose: onRemoveCopy }]),
-    { label: 'Rename…', onChoose: () => setRenaming(true), separated: merged },
-    { label: 'Reveal in Finder', onChoose: onReveal },
-    { label: 'Copy Path', onChoose: onCopyPath },
+    { label: 'Rename…', icon: <Icon name="rename" size={14} />, onChoose: () => setRenaming(true), separated: merged },
+    { label: 'Reveal in Finder', icon: <Icon name="reveal" size={14} />, onChoose: onReveal },
+    { label: 'Copy Path', icon: <Icon name="copy" size={14} />, onChoose: onCopyPath },
     { label: 'Copy Branch', onChoose: onCopyBranch },
-    { label: 'Open in', onChoose: () => {}, items: openIn },
+    { label: 'Open in', icon: <Icon name="folder-open" size={14} />, onChoose: () => {}, items: openIn },
     ...(compareWith.length === 0 ? [] : [{ label: 'Compare with', onChoose: () => {}, items: compareWith }]),
     ...(issue === undefined
       ? []
@@ -608,7 +624,7 @@ export function WorktreeRow({
         dragged ? ' worktree--dragging' : ''
       }${drop.target === null ? '' : drop.target.allowed ? ' worktree--drop' : ' worktree--no-drop'}${
         context ? ' worktree--context' : ''
-      }`}
+      }${menuAt === null ? '' : ' worktree--menu-open'}`}
       data-worktree-id={worktree.id}
       style={depth === 0 ? undefined : ({ '--depth': depth } as React.CSSProperties)}
       role="none"

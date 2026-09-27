@@ -7,7 +7,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { agoLabel } from './agentRows'
 import { baseFreshness } from './baseFreshness'
 import { useNestDrop } from './nestDrag'
-import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
+import { refocus, RowMenu, type MenuClosed, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { worktreeDisplay, worktreeLabel } from './worktreeDisplay'
 import { DropHint } from './WorktreeRow'
 
@@ -95,9 +95,9 @@ export function ProjectHead({
     return rect === undefined ? { x: 0, y: 0 } : { x: rect.left + 12, y: rect.bottom }
   }
 
-  const closeMenu = (): void => {
+  const closeMenu = (closed?: MenuClosed): void => {
     setMenuAt(null)
-    opener.current?.focus()
+    refocus(opener.current, closed)
   }
 
   return (

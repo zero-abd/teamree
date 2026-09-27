@@ -496,7 +496,7 @@ async function checkWorktreeSurfaces(ask) {
   if (menuOpen) {
     const items = JSON.parse(
       await ask(
-        `JSON.stringify([...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((node) => node.textContent.trim()))`
+        `JSON.stringify([...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((node) => node.querySelector('.row-menu__label')?.textContent.trim()))`
       )
     )
     // Last: the destructive item is where nobody arrives by momentum.

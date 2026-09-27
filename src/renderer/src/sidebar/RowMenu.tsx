@@ -16,10 +16,20 @@ export type RowMenuItem = {
   disabled?: boolean
   /** A chord at the row's end, for a row the keyboard already has a way to. */
   hint?: string
-  /** A mark before the label. Every row of a menu has one, or none does. */
+  /** A mark before the label; a menu with any keeps the slot on every row. */
   icon?: React.ReactNode
   /** A submenu, opened by hover, click or the right arrow; `onChoose` is then unused. */
   items?: readonly RowMenuItem[]
+}
+
+/** Whether a pointer closed the menu, which decides if the focus going back shows its ring. */
+export type MenuClosed = { pointer: boolean }
+
+/** Puts the focus back on what opened a menu, with no keyboard ring after a pointer choice. */
+export function refocus(target: HTMLElement | null | undefined, closed?: MenuClosed): void {
+  // Standard, but missing from TypeScript's DOM types; Chromium 142 ignores it and already drops the ring after a press.
+  const options: FocusOptions & { focusVisible?: boolean } = closed?.pointer === true ? { focusVisible: false } : {}
+  target?.focus(options)
 }
 
 /** Where the menu goes, in viewport coordinates; `right` hangs it off `x` leftwards. */
@@ -39,7 +49,7 @@ type RowMenuProps = {
   items: readonly RowMenuItem[]
   anchor: RowMenuAnchor
   /** Closing is the caller's, because the focus that goes back is too. */
-  onClose: () => void
+  onClose: (closed: MenuClosed) => void
   /** The control that opened it, whose press is a toggle rather than a dismissal. */
   opener?: HTMLElement | null
 }
@@ -65,7 +75,7 @@ export function RowMenu({ label, items, anchor, onClose, opener }: RowMenuProps)
     const dismiss = (event: PointerEvent): void => {
       if (menu.current?.contains(event.target as Node) === true) return
       if (opener?.contains(event.target as Node) === true) return
-      onClose()
+      onClose({ pointer: true })
     }
     document.addEventListener('pointerdown', dismiss, true)
     return () => document.removeEventListener('pointerdown', dismiss, true)
@@ -78,7 +88,7 @@ export function RowMenu({ label, items, anchor, onClose, opener }: RowMenuProps)
     if (element !== null && overflow > 0) element.style.top = `${Math.max(4, anchor.y - overflow - 4)}px`
   }, [anchor.y])
 
-  const choose = (item: RowMenuItem, index: number): void => {
+  const choose = (item: RowMenuItem, index: number, pointer: boolean): void => {
     if (item.disabled === true) return
     if (item.items !== undefined) {
       setActive(index)
@@ -86,7 +96,7 @@ export function RowMenu({ label, items, anchor, onClose, opener }: RowMenuProps)
       return
     }
     // Closed first, so the focus put back on the row is not taken by whatever the item opens.
-    onClose()
+    onClose({ pointer })
     item.onChoose()
   }
 
@@ -124,23 +134,24 @@ export function RowMenu({ label, items, anchor, onClose, opener }: RowMenuProps)
       case ' ': {
         event.preventDefault()
         const item = inSub ? children[sub.at] : items[active]
-        if (item) choose(item, active)
+        if (item) choose(item, active, false)
         return
       }
       case 'Escape':
         event.preventDefault()
         if (inSub) setSub(null)
-        else onClose()
+        else onClose({ pointer: false })
         return
       case 'Tab':
         // Tab closes rather than moving through the items.
         event.preventDefault()
-        onClose()
+        onClose({ pointer: false })
         return
       default:
     }
   }
 
+  const iconSlot = items.some((item) => item.icon !== undefined)
   return (
     <div
       className="row-menu"
@@ -160,10 +171,11 @@ export function RowMenu({ label, items, anchor, onClose, opener }: RowMenuProps)
           item={item}
           focusable={index === active && (sub === null || sub.at < 0)}
           expanded={sub?.index === index}
+          iconSlot={iconSlot}
           ref={(node) => {
             entries.current[index] = node
           }}
-          onChoose={() => choose(item, index)}
+          onChoose={() => choose(item, index, true)}
           onHover={() => {
             setActive(index)
             setSub(item.items === undefined ? null : { index, at: -1 })
@@ -183,10 +195,11 @@ export function RowMenu({ label, items, anchor, onClose, opener }: RowMenuProps)
               item={child}
               focusable={at === sub.at}
               expanded={false}
+              iconSlot={children.some((entry) => entry.icon !== undefined)}
               ref={(node) => {
                 subEntries.current[at] = node
               }}
-              onChoose={() => choose(child, at)}
+              onChoose={() => choose(child, at, true)}
               onHover={() => setSub({ index: sub.index, at })}
             />
           ))}
@@ -210,6 +223,7 @@ function MenuEntry({
   item,
   focusable,
   expanded,
+  iconSlot,
   ref,
   onChoose,
   onHover
@@ -217,6 +231,7 @@ function MenuEntry({
   item: RowMenuItem
   focusable: boolean
   expanded: boolean
+  iconSlot: boolean
   ref: React.Ref<HTMLDivElement>
   onChoose: () => void
   onHover: () => void
@@ -235,7 +250,7 @@ function MenuEntry({
       onClick={onChoose}
       onMouseEnter={onHover}
     >
-      {item.icon === undefined ? null : (
+      {!iconSlot ? null : (
         <span className="row-menu__icon" aria-hidden="true">
           {item.icon}
         </span>

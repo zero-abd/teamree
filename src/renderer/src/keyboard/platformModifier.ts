@@ -52,6 +52,13 @@ export function detectPlatform(bridgePlatform?: string, userAgent?: string): str
   return 'unknown'
 }
 
+/** This window's modifier, read the way `App` reads it, for parts not handed one. */
+export function windowModifier(): PlatformModifier {
+  return resolvePlatformModifier(
+    detectPlatform(window.teamree?.platform, typeof navigator === 'undefined' ? undefined : navigator.userAgent)
+  )
+}
+
 export type ModifierState = {
   metaKey: boolean
   ctrlKey: boolean

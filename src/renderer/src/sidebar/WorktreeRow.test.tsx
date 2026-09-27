@@ -17,6 +17,8 @@ import type {
 } from '@shared/entities'
 // @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
 import { pressWorktreeRow, worktreeRowIsOpen } from '../../../../scripts/smoke-probes.mjs'
+import { windowModifier } from '../keyboard/platformModifier'
+import { shortcutHint } from '../keyboard/workspaceShortcuts'
 import type { PaneAttention } from '../state/paneAttention'
 import { overlapChip, type OverlapChip, type OverlapEntry } from './overlapChip'
 
@@ -106,6 +108,7 @@ function mount(
     onHandOff?: () => void
     handoff?: string
     onRemoveCopy?: () => void
+    onNewChild?: () => void
     terminals?: Terminal[]
     evidence?: Record<string, string | null>
     watchers?: Record<string, PaneAttention>
@@ -128,6 +131,7 @@ function mount(
         {...(overrides.onHandOff === undefined ? {} : { onHandOff: overrides.onHandOff })}
         {...(overrides.handoff === undefined ? {} : { handoff: overrides.handoff })}
         {...(overrides.onRemoveCopy === undefined ? {} : { onRemoveCopy: overrides.onRemoveCopy })}
+        {...(overrides.onNewChild === undefined ? {} : { onNewChild: overrides.onNewChild })}
         terminals={overrides.terminals ?? []}
         evidence={overrides.evidence ?? {}}
         watchers={overrides.watchers ?? {}}
@@ -747,6 +751,60 @@ describe('the row menu', () => {
 
     expect(handlers.onReveal).toHaveBeenCalledOnce()
     expect(handlers.onCopyBranch).toHaveBeenCalledOnce()
+  })
+})
+
+// Which row a menu is about, and what the menu leaves behind when it goes.
+describe('the row a menu belongs to', () => {
+  it('is outlined while its menu is open, and not after', () => {
+    mount()
+    fireEvent.contextMenu(row())
+    expect(row().classList.contains('worktree--menu-open')).toBe(true)
+
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+    expect(row().classList.contains('worktree--menu-open')).toBe(false)
+  })
+
+  it('takes the focus back without a keyboard ring when the item was clicked', () => {
+    mount()
+    openButton().focus()
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    fireEvent.contextMenu(row())
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Copy Path' }))
+
+    expect(document.activeElement).toBe(openButton())
+    expect(focus).toHaveBeenLastCalledWith({ focusVisible: false })
+    focus.mockRestore()
+  })
+
+  it('keeps the ring when the item was chosen from the keyboard', () => {
+    mount()
+    openButton().focus()
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    fireEvent.keyDown(row(), { key: 'ContextMenu' })
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    expect(document.activeElement).toBe(openButton())
+    expect(focus.mock.lastCall?.[0]).not.toEqual({ focusVisible: false })
+    focus.mockRestore()
+  })
+
+  it('marks every item with an icon slot, and draws one where it helps', () => {
+    mount()
+    fireEvent.contextMenu(row())
+    const items = screen.getAllByRole('menuitem')
+    expect(items.every((item) => item.querySelector('.row-menu__icon') !== null)).toBe(true)
+    for (const name of ['Rename…', 'Reveal in Finder', 'Copy Path']) {
+      expect(screen.getByRole('menuitem', { name }).querySelector('.row-menu__icon svg')).not.toBeNull()
+    }
+  })
+
+  it('writes the chord from the shortcut table beside an item that has one', () => {
+    mount({ onNewChild: vi.fn() })
+    fireEvent.contextMenu(row())
+    const hint = screen.getByRole('menuitem', { name: 'New Child Task…' }).querySelector('.row-menu__hint')
+    expect(hint?.textContent).toBe(shortcutHint('new-child-task', windowModifier()))
+    expect(hint?.textContent).not.toBe('')
   })
 })
 

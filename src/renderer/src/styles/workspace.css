@@ -73,10 +73,10 @@
   background: var(--bg-rail);
 }
 
-/* The list scrolls; the three buttons beside it do not. They are the only way
-   to split or open a pane with a pointer, so a twentieth tab must not push
-   them off the end of the strip. Stretched to the strip's height so a tab's
-   mark can reach the bottom edge; each tab centres its own contents. */
+/* The list scrolls; the buttons beside it do not. They are the only way to
+   split or open a pane with a pointer, so a twentieth tab must not push them
+   off the end of the strip. Stretched to the strip's height so a tab's mark
+   can reach the bottom edge; each tab centres its own contents. */
 .tabs__list {
   display: flex;
   align-items: stretch;
@@ -91,9 +91,17 @@
   display: none;
 }
 
+/* Pinned to the strip's end, so the layout group sits at one x however many tabs are open. */
 .tabs__actions {
   display: flex;
   flex: none;
+  align-items: center;
+  gap: var(--s2);
+  margin-left: auto;
+}
+
+.tabs__layout {
+  display: flex;
   gap: 1px;
 }
 
@@ -148,10 +156,7 @@
   background: var(--success);
 }
 
-/* A 16px icon box in a 24px button: the glyphs are drawn a unit and a half in
-   from the edge of their 12-unit viewBox, so the mark itself is 12px and sits
-   centred in the box, as the sidebar's toggle and the pane bar's close draw
-   theirs. */
+/* A 16px icon in a 24px button. */
 .tabs__action {
   display: flex;
   align-items: center;
@@ -169,11 +174,6 @@
 .tabs__action svg {
   width: 16px;
   height: 16px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.1;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .tabs__action:hover,
@@ -271,9 +271,12 @@
 
 .tab__rename,
 .tab__close {
+  display: flex;
   flex: none;
-  width: 16px;
-  height: 16px;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   padding: 0;
   border: 0;
   border-radius: var(--r1);
@@ -285,12 +288,8 @@
 
 .tab__rename svg,
 .tab__close svg {
-  width: 9px;
-  height: 9px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
+  width: 14px;
+  height: 14px;
 }
 
 .tab:hover .tab__rename,

@@ -9,6 +9,7 @@ import '@xterm/xterm/css/xterm.css'
 import { teammatesHeard, type TeammatePresence } from '@shared/entities'
 import type { WatchedPaneEvent } from '@shared/methods'
 import { copyText } from '../clipboard/clipboard'
+import { Icon } from '../icons/Icon'
 import { detectPlatform, resolvePlatformModifier } from '../keyboard/platformModifier'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { paneNames } from '../sidebar/agentRows'
@@ -480,7 +481,11 @@ export function WatchedPaneView({
           label={`${handle}’s pane`}
           anchor={menu.anchor}
           onClose={closeMenu}
-          items={menu.entries.map((entry) => ({ ...entry, onChoose: () => chooseFromMenu(entry) }))}
+          items={menu.entries.map((entry) => ({
+            ...entry,
+            icon: entry.icon && <Icon name={entry.icon} size={14} />,
+            onChoose: () => chooseFromMenu(entry)
+          }))}
         />
       )}
     </section>
