@@ -4,6 +4,16 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  ANY_PROJECT,
+  CONFIRMATIONS_DEFAULT,
+  editorFor,
+  NOTICE_EVENTS_DEFAULT,
+  readStoredConfirmations,
+  readStoredNoticeEvents,
+  TERMINAL_LINE_HEIGHT_MAX,
+  TERMINAL_LINE_HEIGHT_MIN,
+  writeStoredConfirmations,
+  writeStoredNoticeEvents,
   clampTerminalFontSize,
   DIFF_LAYOUT_DEFAULT,
   NO_DEFAULT_AGENT,
@@ -338,6 +348,17 @@ describe('how a pane draws and reads keys', () => {
     expect(readStoredTerminalOptions(storage).copyOnSelect).toBe(true)
   })
 
+  it('remembers the line height, held between its bounds in steps of 0.05', () => {
+    expect(TERMINAL_OPTIONS_DEFAULT.lineHeight).toBe(1.25)
+    const storage = memoryStorage()
+    writeStoredTerminalOptions(storage, { ...TERMINAL_OPTIONS_DEFAULT, lineHeight: 1.43 })
+    expect(readStoredTerminalOptions(storage).lineHeight).toBe(1.45)
+    writeStoredTerminalOptions(storage, { ...TERMINAL_OPTIONS_DEFAULT, lineHeight: 0.2 })
+    expect(readStoredTerminalOptions(storage).lineHeight).toBe(TERMINAL_LINE_HEIGHT_MIN)
+    writeStoredTerminalOptions(storage, { ...TERMINAL_OPTIONS_DEFAULT, lineHeight: 9 })
+    expect(readStoredTerminalOptions(storage).lineHeight).toBe(TERMINAL_LINE_HEIGHT_MAX)
+  })
+
   it('remembers the scrollback, held between its bounds', () => {
     const storage = memoryStorage()
     writeStoredTerminalOptions(storage, { ...TERMINAL_OPTIONS_DEFAULT, scrollback: 20_000 })
@@ -401,5 +422,61 @@ describe('how a diff wraps and treats whitespace', () => {
   it('survives a storage that refuses, in both directions', () => {
     expect(readStoredDiffOptions(refusingStorage)).toEqual({ wrap: false, hideWhitespace: false })
     expect(() => writeStoredDiffOptions(refusingStorage, { wrap: true, hideWhitespace: true })).not.toThrow()
+  })
+})
+
+describe('which events notify', () => {
+  it('notifies for every event until one is turned off', () => {
+    expect(readStoredNoticeEvents(memoryStorage())).toEqual(NOTICE_EVENTS_DEFAULT)
+    expect(NOTICE_EVENTS_DEFAULT).toEqual({ finished: true, asking: true, teammates: true })
+  })
+
+  it('remembers each event on its own, and defaults a bad one alone', () => {
+    const storage = memoryStorage()
+    writeStoredNoticeEvents(storage, { finished: false, asking: true, teammates: false })
+    expect(readStoredNoticeEvents(storage)).toEqual({ finished: false, asking: true, teammates: false })
+    const raw = JSON.stringify({ finished: 'no', asking: false })
+    expect(readStoredNoticeEvents(memoryStorage({ 'teamree.notices.events': raw }))).toEqual({
+      finished: true,
+      asking: false,
+      teammates: true
+    })
+  })
+
+  it('survives a storage that refuses, in both directions', () => {
+    expect(readStoredNoticeEvents(refusingStorage)).toEqual(NOTICE_EVENTS_DEFAULT)
+    expect(() => writeStoredNoticeEvents(refusingStorage, NOTICE_EVENTS_DEFAULT)).not.toThrow()
+  })
+})
+
+describe('what is asked before it happens', () => {
+  it('asks before deleting a worktree and before stopping an agent until told not to', () => {
+    expect(readStoredConfirmations(memoryStorage())).toEqual(CONFIRMATIONS_DEFAULT)
+    expect(CONFIRMATIONS_DEFAULT).toEqual({ removeWorktree: true, stopAgent: true })
+  })
+
+  it('remembers each on its own', () => {
+    const storage = memoryStorage()
+    writeStoredConfirmations(storage, { removeWorktree: false, stopAgent: true })
+    expect(readStoredConfirmations(storage)).toEqual({ removeWorktree: false, stopAgent: true })
+    const raw = JSON.stringify({ removeWorktree: 0, stopAgent: false })
+    expect(readStoredConfirmations(memoryStorage({ 'teamree.confirm': raw }))).toEqual({
+      removeWorktree: true,
+      stopAgent: false
+    })
+  })
+
+  it('survives a storage that refuses, in both directions', () => {
+    expect(readStoredConfirmations(refusingStorage)).toEqual(CONFIRMATIONS_DEFAULT)
+    expect(() => writeStoredConfirmations(refusingStorage, CONFIRMATIONS_DEFAULT)).not.toThrow()
+  })
+})
+
+describe('the editor every project opens in', () => {
+  it('is the project’s own pick, else the one set for every project, else none', () => {
+    const both = withEditorCommand(withEditorCommand({}, ANY_PROJECT, 'zed'), 'p1', 'code')
+    expect(editorFor(both, 'p1')).toBe('code')
+    expect(editorFor(both, 'p2')).toBe('zed')
+    expect(editorFor({}, 'p2')).toBeUndefined()
   })
 })

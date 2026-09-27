@@ -5,7 +5,7 @@
 // close on Escape.
 
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CliStatus, InstalledAgent, PaneConsent, Project, RelaySetting, UpdateState } from '@shared/entities'
 import { DEFAULT_RUNTIME_SETTINGS } from '@shared/settings'
 
@@ -129,6 +129,9 @@ const saveProjectSettings = vi.fn()
 const setDiffLayout = vi.fn()
 const toggleDiffOption = vi.fn()
 const setKeepAwake = vi.fn()
+const setConfirmation = vi.fn()
+const setNoticeEvent = vi.fn()
+const setAgentNotices = vi.fn()
 
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
@@ -166,6 +169,9 @@ function seed(overrides: Record<string, unknown> = {}): void {
       setDiffLayout,
       toggleDiffOption,
       setKeepAwake,
+      setConfirmation,
+      setNoticeEvent,
+      setAgentNotices,
       ...overrides
     },
     true
@@ -208,7 +214,10 @@ beforeEach(() => {
     saveProjectSettings,
     setDiffLayout,
     toggleDiffOption,
-    setKeepAwake
+    setKeepAwake,
+    setConfirmation,
+    setNoticeEvent,
+    setAgentNotices
   ]) {
     mock.mockReset()
   }
@@ -655,6 +664,143 @@ describe('general', () => {
   })
 })
 
+/** Answers the page's runtime settings reads and writes, keeping what was sent; `refuse` fails the next write. */
+function runtimeSettings(initial: Record<string, unknown> = {}): { sent: unknown[]; refuse: (reason: string) => void } {
+  const sent: unknown[] = []
+  let refusal: string | null = null
+  let current = { ...DEFAULT_RUNTIME_SETTINGS, shellFallback: '/bin/zsh', ...initial }
+  runtimeCall.answer = (method, params) => {
+    if (method === 'settings.get') return Promise.resolve(current)
+    if (method !== 'settings.set') return new Promise(() => {})
+    sent.push(params)
+    if (refusal !== null) {
+      const reason = refusal
+      refusal = null
+      return Promise.reject(new Error(reason))
+    }
+    current = { ...current, ...(params as object) }
+    return Promise.resolve(current)
+  }
+  return { sent, refuse: (reason) => (refusal = reason) }
+}
+
+describe('what this Mac does for every project', () => {
+  afterEach(() => {
+    runtimeCall.answer = () => new Promise(() => {})
+  })
+
+  it('opens every project in the default editor unless the project names its own', () => {
+    seed({
+      editors: [
+        { command: 'com.microsoft.VSCode', label: 'VS Code', kind: 'editor' },
+        { command: 'dev.zed.Zed', label: 'Zed', kind: 'editor' }
+      ],
+      editorCommands: { '*': 'dev.zed.Zed' }
+    })
+    render(<SettingsView />)
+    const machine = screen.getByLabelText('Default editor') as HTMLSelectElement
+    expect(machine.value).toBe('dev.zed.Zed')
+    expect([...machine.options].map((option) => option.text)[0]).toBe('First found (VS Code)')
+    fireEvent.change(machine, { target: { value: 'com.microsoft.VSCode' } })
+    expect(setEditorCommand).toHaveBeenCalledWith('*', 'com.microsoft.VSCode')
+
+    const project = screen.getByLabelText('Open checkouts in') as HTMLSelectElement
+    expect(project.value).toBe('')
+    expect(project.options[0]?.text).toBe('Default (Zed)')
+  })
+
+  it('asks before deleting a worktree until told not to', () => {
+    render(<SettingsView />)
+    const box = screen.getByRole('checkbox', { name: 'Ask Before Deleting Worktrees' }) as HTMLInputElement
+    expect(box.checked).toBe(true)
+    fireEvent.click(box)
+    expect(setConfirmation).toHaveBeenCalledWith('removeWorktree', false)
+  })
+
+  it('fetches every project’s base as often as picked', async () => {
+    const { sent } = runtimeSettings()
+    render(<SettingsView />)
+    const every = screen.getByLabelText('Fetch every') as HTMLSelectElement
+    await vi.waitFor(() => expect(every.value).toBe('5'))
+    expect([...every.options].map((option) => option.text)).toEqual([
+      '1 minute',
+      '5 minutes',
+      '15 minutes',
+      '30 minutes',
+      '1 hour'
+    ])
+    fireEvent.change(every, { target: { value: '15' } })
+    await vi.waitFor(() => expect(sent).toEqual([{ fetchMinutes: 15 }]))
+  })
+})
+
+describe('the shell and line height of new panes', () => {
+  afterEach(() => {
+    runtimeCall.answer = () => new Promise(() => {})
+  })
+
+  it('starts new panes in the shell named, showing the login shell while none is', async () => {
+    const { sent, refuse } = runtimeSettings()
+    render(<SettingsView />)
+    const field = screen.getByLabelText('Shell') as HTMLInputElement
+    await vi.waitFor(() => expect(field.placeholder).toBe('/bin/zsh'))
+
+    refuse('fish is not a full path')
+    fireEvent.change(field, { target: { value: 'fish' } })
+    fireEvent.blur(field)
+    expect(await screen.findByText('fish is not a full path')).toBeTruthy()
+
+    fireEvent.change(field, { target: { value: '/bin/bash' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    await vi.waitFor(() => expect(sent).toEqual([{ shell: 'fish' }, { shell: '/bin/bash' }]))
+    await vi.waitFor(() => expect(screen.queryByText('fish is not a full path')).toBeNull())
+  })
+
+  it('takes a line height on Enter, and leaves the bounds to the store', () => {
+    render(<SettingsView />)
+    const field = screen.getByLabelText('Line height') as HTMLInputElement
+    expect(field.value).toBe('1.25')
+    fireEvent.change(field, { target: { value: '1.4' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    expect(setTerminalOptions).toHaveBeenCalledWith({ lineHeight: 1.4 })
+  })
+
+  it('asks before stopping a working agent until told not to', () => {
+    render(<SettingsView />)
+    const box = screen.getByRole('checkbox', { name: 'Ask Before Stopping Agents' }) as HTMLInputElement
+    expect(box.checked).toBe(true)
+    fireEvent.click(box)
+    expect(setConfirmation).toHaveBeenCalledWith('stopAgent', false)
+  })
+})
+
+describe('notifications', () => {
+  it('sets how, and which events notify', () => {
+    render(<SettingsView />)
+    const how = screen.getByLabelText('Notify') as HTMLSelectElement
+    expect([...how.options].map((option) => option.text)).toEqual(['Never', 'Silently', 'With Sound'])
+    fireEvent.change(how, { target: { value: 'sound' } })
+    expect(setAgentNotices).toHaveBeenCalledWith('sound')
+
+    for (const [label, event] of [
+      ['Agent Finishes', 'finished'],
+      ['Agent Asks', 'asking'],
+      ['Teammate Shares a Note', 'teammates']
+    ] as const) {
+      const box = screen.getByRole('checkbox', { name: label }) as HTMLInputElement
+      expect(box.checked).toBe(true)
+      fireEvent.click(box)
+      expect(setNoticeEvent).toHaveBeenCalledWith(event, false)
+    }
+  })
+
+  it('leaves the events alone while nothing notifies', () => {
+    seed({ agentNotices: 'off' })
+    render(<SettingsView />)
+    expect((screen.getByRole('checkbox', { name: 'Agent Asks' }) as HTMLInputElement).disabled).toBe(true)
+  })
+})
+
 describe('git', () => {
   it('sets how diffs open: layout, wrapping and whitespace', () => {
     seed({ diffLayout: 'inline', diffOptions: { wrap: false, hideWhitespace: true } })
@@ -779,10 +925,10 @@ describe('the filter', () => {
     render(<SettingsView />)
     type('sound')
     expect(nav()).toEqual(['Notifications'])
-    expect(screen.getByLabelText('When an agent stops or asks').hasAttribute('data-match')).toBe(true)
+    expect(screen.getByLabelText('Notify').hasAttribute('data-match')).toBe(true)
 
     type('cursor')
-    expect(nav()).toEqual(['Projects', 'Panes'])
+    expect(nav()).toEqual(['General', 'Projects', 'Panes'])
     expect(screen.getByLabelText('Open checkouts in').hasAttribute('data-match')).toBe(true)
     expect(screen.getByLabelText('Cursor').hasAttribute('data-match')).toBe(false)
   })

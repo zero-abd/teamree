@@ -144,11 +144,13 @@ import {
   clampTerminalFontSize,
   readStoredAgentArgs,
   readStoredAgentNotices,
+  readStoredConfirmations,
   readStoredDefaultAgent,
   readStoredDiffLayout,
   readStoredDiffOptions,
   readStoredEditorCommands,
   readStoredKeepAwake,
+  readStoredNoticeEvents,
   readStoredPermissionModes,
   readStoredPushOnMerge,
   readStoredStartPoints,
@@ -156,6 +158,8 @@ import {
   readStoredTerminalOptions,
   sanitizeTerminalOptions,
   type AgentNoticePreference,
+  type Confirmations,
+  type NoticeEvents,
   type TerminalOptions,
   type KeepAwakeMode,
   withAgentArgs,
@@ -163,11 +167,13 @@ import {
   withStartPoint,
   writeStoredAgentArgs,
   writeStoredAgentNotices,
+  writeStoredConfirmations,
   writeStoredDefaultAgent,
   writeStoredDiffLayout,
   writeStoredDiffOptions,
   writeStoredEditorCommands,
   writeStoredKeepAwake,
+  writeStoredNoticeEvents,
   writeStoredPermissionModes,
   writeStoredPushOnMerge,
   writeStoredStartPoints,
@@ -589,6 +595,10 @@ type WorkspaceState = {
   startPointDefaults: Record<string, string>
   /** Whether an agent stopping while you are elsewhere may say so. The reader is the main process, via `useAgentNotices`. */
   agentNotices: AgentNoticePreference
+  /** Which events notify, under `agentNotices`. */
+  noticeEvents: NoticeEvents
+  /** The questions asked before deleting a worktree or stopping an agent. */
+  confirmations: Confirmations
   /** Whether this Mac may sleep. Held here for the reason `agentNotices` is; `useKeepAwake` publishes it. */
   keepAwake: KeepAwakeMode
   /** Each project's editor: a bundle id from `editors` or a program name. Absent means the first editor found. */
@@ -938,6 +948,10 @@ type WorkspaceState = {
   setTerminalOptions: (patch: Partial<TerminalOptions>) => void
   /** Sets what an agent going quiet may do, and remembers it. */
   setAgentNotices: (preference: AgentNoticePreference) => void
+  /** Turns one event's notification on or off, and remembers it. */
+  setNoticeEvent: (event: keyof NoticeEvents, on: boolean) => void
+  /** Turns one question on or off, and remembers it. */
+  setConfirmation: (kind: keyof Confirmations, on: boolean) => void
   /** Sets whether this Mac may sleep, and remembers it. */
   setKeepAwake: (mode: KeepAwakeMode) => void
   /** Sets whether a patch is read down one column or across two, and remembers it. */
@@ -1249,7 +1263,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
    * lets the runtime's default stand, as it does for a pane the CLI opens.
    */
   const paneRoomFor = (worktreeId: string): NewPane | 'full' | undefined =>
-    newPaneRoom(get().terminalFontSize, get().terminalOptions.fontFamily, get().layouts[worktreeId]?.root ?? null)
+    newPaneRoom(get().terminalFontSize, get().terminalOptions, get().layouts[worktreeId]?.root ?? null)
   const paneSizeFor = (worktreeId: string): Partial<NewPane> => {
     const room = paneRoomFor(worktreeId)
     return room === undefined || room === 'full' ? {} : room
@@ -1258,7 +1272,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   const roomOrZoom = (worktreeId: string): { room: Partial<NewPane>; zoomed: boolean } => {
     const room = paneRoomFor(worktreeId)
     if (room !== 'full') return { room: room ?? {}, zoomed: false }
-    const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+    const grid = paneGrid(get().terminalFontSize, get().terminalOptions)
     return { room: grid ? { ...zoomedPaneSize(grid.area, grid.cell), ...grid } : {}, zoomed: true }
   }
   /** Folds a panel laid over the panes, or one folded for room that would come back over them, before a pane opens. */
@@ -1269,7 +1283,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   /** Says `NO_ROOM`, replacing the last one, with the side to hide when hiding it `fits` the pane. */
   const refuseForRoom = (fits: (grid: { minPane: Box; cell: Box }, area: Box) => boolean): void => {
     set((state) => ({ notices: state.notices.filter((notice) => notice.text !== NO_ROOM) }))
-    const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+    const grid = paneGrid(get().terminalFontSize, get().terminalOptions)
     const { rightPanelOpen, rightPanelWidth, sidebarVisible, sidebarWidth } = get()
     const widened = (by: number): boolean =>
       grid !== undefined && fits(grid, { width: grid.area.width + by, height: grid.area.height })
@@ -1287,7 +1301,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   }
   /** `after` if it leaves every pane its floor; null, said, when it does not. */
   const withRoom = (before: PaneNode | null, after: PaneNode): PaneNode | null => {
-    const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+    const grid = paneGrid(get().terminalFontSize, get().terminalOptions)
     if (!grid || leavesRoom(before, after, grid.area, grid.minPane)) return after
     refuseForRoom(({ minPane }, area) => leavesRoom(before, after, area, minPane))
     return null
@@ -1793,7 +1807,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const placed = mode === 'split' ? added : fileColumn(added, asPreview)
       const beside =
         inTree !== null ? splitPaneWith(layout.root, inTree, 'row', placed) : appendPane(layout.root, placed)
-      const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+      const grid = paneGrid(get().terminalFontSize, get().terminalOptions)
       const isAgent = (id: string): boolean => get().terminals[id]?.agent !== undefined
       if (grid === undefined) root = beside
       else if (isFileColumn(placed)) root = placeFileColumn(layout.root, placed, grid.area, grid.minPane, isAgent)
@@ -1868,7 +1882,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   /** The question closing this pane needs first, or null: see `closePaneWarning`. */
   const closeQuestion = (paneId: string): 'confirm-close-pane' | 'confirm-close-file' | null => {
     if (isFilePaneId(paneId)) return get().editedFiles[paneId] ? 'confirm-close-file' : null
-    return closePaneWarning(get().terminals[paneId]) === null ? null : 'confirm-close-pane'
+    const terminal = get().terminals[paneId]
+    if (terminal?.agent !== undefined && !get().confirmations.stopAgent) return null
+    return closePaneWarning(terminal) === null ? null : 'confirm-close-pane'
   }
 
   /** True when `paneId` is in the open worktree's file column and that column is folded to its tab. */
@@ -1876,7 +1892,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const { activeWorktreeId, foldedColumns } = get()
     const root = activeLayout()?.root ?? null
     if (!activeWorktreeId || !foldedColumns[activeWorktreeId] || !hasTerminal(fileColumnIn(root), paneId)) return false
-    const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+    const grid = paneGrid(get().terminalFontSize, get().terminalOptions)
     return grid !== undefined && foldsColumn(root, grid.area, grid.minPane)
   }
   // The pane a folded tab was zoomed from, for the keyboard to go back to when the zoom ends.
@@ -2015,6 +2031,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     terminalOptions: readStoredTerminalOptions(storage),
     startPointDefaults: readStoredStartPoints(storage),
     agentNotices: readStoredAgentNotices(storage),
+    noticeEvents: readStoredNoticeEvents(storage),
+    confirmations: readStoredConfirmations(storage),
     keepAwake: readStoredKeepAwake(storage),
     editorCommands: readStoredEditorCommands(storage),
     editors: null,
@@ -2241,6 +2259,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const edited = editedIn(worktreeId)
       if (edited.length > 0) {
         set({ dialog: { kind: 'confirm-unsaved', paneIds: edited, after: { remove: worktreeId } } })
+        return
+      }
+      // Unforced, so a checkout with anything in it is refused and the question comes back.
+      if (!get().confirmations.removeWorktree && descendantsOf(get().worktrees, worktreeId).length === 0) {
+        await get().confirmRemoveWorktree(worktreeId, false)
         return
       }
       set({ dialog: { kind: 'confirm-remove', worktreeId, intent: 'remove' } })
@@ -2560,7 +2583,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const layout = activeLayout()
       const terminalId = layout?.focusedTerminalId
       if (!layout || !terminalId) return
-      const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+      const grid = paneGrid(get().terminalFontSize, get().terminalOptions)
       const plan = (area: Box, min: Box) => planSplit(layout.root, terminalId, direction, SPLIT_PROBE_ID, area, min)
       // Where the person put it, beside a narrower or folded file column, or nowhere.
       const planned = grid
@@ -3087,7 +3110,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       })
       // Its old share would starve the panes that fit beside it now.
       const layout = get().layouts[worktreeId]
-      const grid = paneGrid(get().terminalFontSize, get().terminalOptions.fontFamily)
+      const grid = paneGrid(get().terminalFontSize, get().terminalOptions)
       const root = layout && grid ? unfoldedRoot(layout.root, grid.area, grid.minPane) : undefined
       if (layout && root !== undefined && root !== layout.root) persistLayout({ ...layout, root })
     },
@@ -4310,6 +4333,18 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     setAgentNotices(preference) {
       set({ agentNotices: preference })
       writeStoredAgentNotices(storage, preference)
+    },
+
+    setNoticeEvent(event, on) {
+      const noticeEvents = { ...get().noticeEvents, [event]: on }
+      set({ noticeEvents })
+      writeStoredNoticeEvents(storage, noticeEvents)
+    },
+
+    setConfirmation(kind, on) {
+      const confirmations = { ...get().confirmations, [kind]: on }
+      set({ confirmations })
+      writeStoredConfirmations(storage, confirmations)
     },
 
     setKeepAwake(mode) {

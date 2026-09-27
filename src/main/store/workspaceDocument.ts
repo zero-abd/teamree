@@ -175,7 +175,9 @@ const SettingsSchema = z.object({
   warnAgentsAboutOverlaps: z.boolean().optional().catch(undefined),
   keepPanesRunning: z.boolean().optional().catch(undefined),
   worktreesRoot: z.string().min(1).optional().catch(undefined),
-  branchPrefix: z.string().min(1).optional().catch(undefined)
+  branchPrefix: z.string().min(1).optional().catch(undefined),
+  shell: z.string().min(1).optional().catch(undefined),
+  fetchMinutes: z.number().int().min(1).max(1440).optional().catch(undefined)
 })
 
 export type SettingsRecord = Partial<RuntimeSettings>

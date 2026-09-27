@@ -6,6 +6,7 @@ import { ErrorCode, type ErrorResponse, type SuccessResponse } from '../../../sh
 import { DEFAULT_RUNTIME_SETTINGS } from '../../../shared/settings'
 import type { WorkspaceEvent } from '../../../shared/methods'
 import { WorkspaceStore } from '../../store/workspaceStore'
+import { resolveLoginShell } from '../../terminals/shell-environment'
 import { createDispatcher, type Dispatcher } from '../dispatcher'
 import { MethodRegistry } from '../methodRegistry'
 import { createRuntimeContext } from '../runtimeContext'
@@ -69,7 +70,10 @@ describe('task, memory and add-on methods before their branches land', () => {
   })
 
   it('keeps settings, defaulting Share Task Details on and the rest off', async () => {
-    const fallback = { worktreesRootFallback: join(homedir(), '.teamree', 'worktrees') }
+    const fallback = {
+      worktreesRootFallback: join(homedir(), '.teamree', 'worktrees'),
+      shellFallback: resolveLoginShell()
+    }
     expect(await result('settings.get', {})).toEqual({ ...DEFAULT_RUNTIME_SETTINGS, ...fallback })
     expect(await result('settings.set', { showCost: true })).toEqual({
       ...DEFAULT_RUNTIME_SETTINGS,
@@ -101,5 +105,27 @@ describe('task, memory and add-on methods before their branches land', () => {
     expect(spaced.error.code).toBe(ErrorCode.InvalidParams)
     expect(store.runtimeSettings().branchPrefix).toBeUndefined()
     await store.flush()
+  })
+
+  it('keeps a shell that runs and a fetch interval, across a restart, and clears the shell on empty', async () => {
+    expect(await result('settings.set', { shell: '/bin/sh', fetchMinutes: 15 })).toMatchObject({
+      shell: '/bin/sh',
+      fetchMinutes: 15
+    })
+    await store.flush()
+    const reopened = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    expect(reopened.runtimeSettings()).toMatchObject({ shell: '/bin/sh', fetchMinutes: 15 })
+
+    const cleared = (await result('settings.set', { shell: '' })) as Record<string, unknown>
+    expect(cleared.shell).toBeUndefined()
+    await store.flush()
+  })
+
+  it('refuses a shell that is not a full path to a program', async () => {
+    for (const shell of ['zsh', join(directory, 'missing'), directory]) {
+      const response = (await dispatch({ id: 's', method: 'settings.set', params: { shell } }, call)) as ErrorResponse
+      expect(response.error.code, shell).toBe(ErrorCode.InvalidParams)
+    }
+    expect(store.runtimeSettings().shell).toBeUndefined()
   })
 })

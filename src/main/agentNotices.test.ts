@@ -145,6 +145,16 @@ describe('what the window publishes', () => {
     })
   })
 
+  it('takes which events notify, and only flags', () => {
+    expect(
+      readNoticeSettings({
+        preference: 'notify',
+        focusedPaneId: null,
+        events: { finished: false, asking: 'yes', teammates: true, other: false }
+      })
+    ).toEqual({ preference: 'notify', focusedPaneId: null, events: { finished: false, teammates: true } })
+  })
+
   it('drops a preference that is not one of the three', () => {
     expect(readNoticeSettings({ preference: 'loud', focusedPaneId: null })).toBeNull()
   })
@@ -344,6 +354,19 @@ describe('what a stopped agent is allowed to do to the window', () => {
     off.publish({ preference: 'off', focusedPaneId: null })
     off.channel.announce({ title: 'ana shared a note', body: 'Plan' })
     expect(off.shown).toEqual([])
+  })
+
+  it('raises only the events the window asked for, and counts every stop on the badge', () => {
+    const { channel, publish, shown, host } = install(false)
+    publish({ preference: 'notify', focusedPaneId: null, events: { finished: false, asking: true, teammates: false } })
+
+    channel.deliver(stopped)
+    channel.deliver({ ...stopped, terminalId: 'term_asking', asking: true })
+    channel.announce({ title: 'ana shared a note', body: 'Plan' })
+
+    expect(shown.map((spec) => spec.body)).toEqual([stopped.line])
+    expect(shown).toHaveLength(1)
+    expect(host.setBadge).toHaveBeenLastCalledWith(2)
   })
 
   it('drops the click once the window that published is gone', () => {

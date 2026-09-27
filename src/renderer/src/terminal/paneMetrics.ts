@@ -5,8 +5,8 @@
 import type { PaneNode } from '@shared/entities'
 import { MIN_PANE_CELLS, PANE_CHROME, paneCellsIn, placePaneWithin } from '@shared/paneRoom'
 
-/** The line height every pane's emulator is built with. Stated once. */
-export const TERMINAL_LINE_HEIGHT = 1.25
+/** What a cell is measured from: the panes' face and line height. */
+export type TerminalFace = { fontFamily: string; lineHeight: number }
 
 export type PaneSize = { cols: number; rows: number }
 
@@ -51,16 +51,16 @@ export function zoomedPaneSize(area: Box, cell: Box): PaneSize {
  * One cell of pane text as xterm will draw it, measured the way xterm measures the character.
  * Undefined when there is nothing to measure; callers then send no size.
  */
-export function measureCell(fontSize: number, fontFamily: string, doc: Document | undefined): Box | undefined {
-  const char = measureChar(fontSize, fontFamily, doc)
-  return char && cellFromChar(char, doc?.defaultView?.devicePixelRatio || 1)
+export function measureCell(fontSize: number, face: TerminalFace, doc: Document | undefined): Box | undefined {
+  const char = measureChar(fontSize, face.fontFamily, doc)
+  return char && cellFromChar(char, doc?.defaultView?.devicePixelRatio || 1, face.lineHeight)
 }
 
 /** xterm's cell for a character: the WebGL renderer floors the width to device pixels and rounds the line. */
-export function cellFromChar(char: Box, dpr: number): Box {
+export function cellFromChar(char: Box, dpr: number, lineHeight = 1.25): Box {
   return {
     width: Math.floor(char.width * dpr) / dpr,
-    height: Math.floor(Math.ceil(char.height * dpr) * TERMINAL_LINE_HEIGHT) / dpr
+    height: Math.floor(Math.ceil(char.height * dpr) * lineHeight) / dpr
   }
 }
 
@@ -99,11 +99,11 @@ function measureChar(fontSize: number, fontFamily: string, doc: Document | undef
 /** The pane grid's content box and the least pane in it, as drawn now; nothing before there is a grid. */
 export function paneGrid(
   fontSize: number,
-  fontFamily: string,
+  face: TerminalFace,
   doc: Document | undefined = globalThis.document
 ): { area: Box; minPane: Box; cell: Box } | undefined {
   const grid = doc?.querySelector<HTMLElement>(PANE_GRID_SELECTOR)
-  const cell = measureCell(fontSize, fontFamily, doc)
+  const cell = measureCell(fontSize, face, doc)
   const area = grid && contentBox(grid)
   return area && cell ? { area, minPane: minPaneBox(cell), cell } : undefined
 }
@@ -122,10 +122,10 @@ export function contentBox(element: HTMLElement): Box | undefined {
 /** `roomForNewPane` on the window's grid, or nothing when the window cannot answer; the runtime's default stands. */
 export function newPaneRoom(
   fontSize: number,
-  fontFamily: string,
+  face: TerminalFace,
   root: PaneNode | null,
   doc: Document | undefined = globalThis.document
 ): NewPane | 'full' | undefined {
-  const grid = paneGrid(fontSize, fontFamily, doc)
+  const grid = paneGrid(fontSize, face, doc)
   return grid && roomForNewPane(root, grid.cell, grid.area)
 }

@@ -177,6 +177,34 @@ describe('BaseFetcher', () => {
     await fetcher.fetchNow()
     expect(fetches).toHaveLength(1)
   })
+
+  it('reads the interval for each wait, and moves the wait under way when it changes', () => {
+    const timers: { run: () => void; delayMs: number }[] = []
+    let minutes = 5
+    const { runner } = fakeRunner(() => ok)
+    const fetcher = new BaseFetcher({
+      runner,
+      projects: () => [project],
+      onMoved: () => {},
+      intervalMs: () => minutes * 60_000,
+      schedule: (run, delayMs) => {
+        const timer = { run, delayMs }
+        timers.push(timer)
+        return () => timers.splice(timers.indexOf(timer), 1)
+      }
+    })
+    fetcher.start()
+    timers.shift()?.run()
+    expect(timers.map((timer) => timer.delayMs)).toEqual([5 * 60_000])
+
+    fetcher.reschedule()
+    expect(timers.map((timer) => timer.delayMs)).toEqual([5 * 60_000])
+
+    minutes = 30
+    fetcher.reschedule()
+    expect(timers.map((timer) => timer.delayMs)).toEqual([30 * 60_000])
+    fetcher.stop()
+  })
 })
 
 describe('BaseFetcher state', () => {

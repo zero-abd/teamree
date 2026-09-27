@@ -95,6 +95,7 @@ describe('handoff, template, settings and add-on params', () => {
     })
     accepts(Params.settingsSet, {})
     accepts(Params.settingsSet, { shareTaskDetails: false, showCost: true, jacMemoryAddon: true })
+    accepts(Params.settingsSet, { shell: '/bin/zsh', fetchMinutes: 15 })
     accepts(Params.addonsInstall, { id: 'jac-memory' })
   })
 
@@ -103,6 +104,8 @@ describe('handoff, template, settings and add-on params', () => {
     rejects(Params.projectSaveTemplate, { projectId: 'p', name: '../evil', agents: {}, prompt: 'x' })
     rejects(Params.projectSaveTemplate, { projectId: 'p', name: 'r', agents: { claude: 99 }, prompt: 'x' })
     rejects(Params.settingsSet, { showCost: 'on' })
+    rejects(Params.settingsSet, { fetchMinutes: 0 })
+    rejects(Params.settingsSet, { fetchMinutes: 2.5 })
     rejects(Params.addonsInstall, { id: 'python' })
   })
 })

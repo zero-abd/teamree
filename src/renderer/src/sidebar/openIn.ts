@@ -1,8 +1,9 @@
-// The Open in submenu: the project's editor first, then the other editors, terminals and Finder
+// The Open in submenu: the project's editor (or the default one) first, then the other editors, terminals and Finder
 // found. A file goes to editors only; the main process never hands one to a terminal, which would run it.
 
 import { useCallback } from 'react'
 import type { ResultOf } from '@shared/methods'
+import { editorFor } from '../state/preferences'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { RowMenuItem } from './RowMenu'
 
@@ -17,7 +18,7 @@ export function useOpenIn(): (projectId: string, path: string, what: string, fil
   const openInEditor = useWorkspaceStore((state) => state.openInEditor)
   return useCallback(
     (projectId, path, what, file) => {
-      const targets = openInTargets(editorCommands[projectId], editors)
+      const targets = openInTargets(editorFor(editorCommands, projectId), editors)
       const offered = file ? targets.filter((target) => target.kind === 'editor') : targets
       return (offered.length > 0 ? offered : [EDITOR]).map((target) => ({
         label: target.label,

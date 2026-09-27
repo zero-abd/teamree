@@ -29,12 +29,19 @@ export const AGENT_NOTICE_PREFERENCES: readonly AgentNoticePreference[] = ['off'
 /** What the window last said: what it wants, and which pane has the focus (`null` for none or a teammate's). */
 export type NoticeSettings = {
   preference: AgentNoticePreference
+  /** Which events may notify; one left out may. */
+  events?: Partial<Record<NoticeEvent, boolean>>
   focusedPaneId: string | null
   /** What the window calls each of its panes, by terminal id. */
   names?: Readonly<Record<string, string>>
   /** The worktree in front, for a quick note attached to it. */
   activeWorktreeId?: string | null
 }
+
+/** What happened: an agent finished, an agent asks, or a teammate shared a note. */
+export type NoticeEvent = 'finished' | 'asking' | 'teammates'
+
+const NOTICE_EVENTS: readonly NoticeEvent[] = ['finished', 'asking', 'teammates']
 
 /** Until the window says otherwise, which it does on its first render. */
 export const DEFAULT_NOTICE_SETTINGS: NoticeSettings = { preference: 'notify', focusedPaneId: null }
@@ -54,13 +61,23 @@ export function readNoticeSettings(value: unknown): NoticeSettings | null {
   const focused = settings.focusedPaneId
   if (focused !== null && typeof focused !== 'string') return null
   const names = readNames(settings.names)
+  const events = readEvents(settings.events)
   const active = settings.activeWorktreeId
   return {
     preference: settings.preference,
+    ...(events === undefined ? {} : { events }),
     focusedPaneId: focused,
     ...(names === undefined ? {} : { names }),
     ...(typeof active === 'string' || active === null ? { activeWorktreeId: active } : {})
   }
+}
+
+function readEvents(value: unknown): Partial<Record<NoticeEvent, boolean>> | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const flags = value as Record<string, unknown>
+  const events: Partial<Record<NoticeEvent, boolean>> = {}
+  for (const event of NOTICE_EVENTS) if (typeof flags[event] === 'boolean') events[event] = flags[event]
+  return events
 }
 
 function readNames(value: unknown): Record<string, string> | undefined {
@@ -83,6 +100,8 @@ export type AgentNotice = {
   worktree: string
   reason: AgentNoticeReason
   line: string | null
+  /** True when it stopped on a question rather than finished. */
+  asking?: boolean
   /** The answers its menu offers that need no typing; `choose` rejects once the screen no longer offers it. */
   answers?: readonly NoticeAnswer[]
 }
@@ -96,8 +115,14 @@ export const NOTICE_ACTIONS = 2
  * Whether this pane stopping is worth interrupting somebody for. Not when they
  * are already looking at it: the window focused *and* this pane focused in it.
  */
-export function shouldNotify(input: { settings: NoticeSettings; windowFocused: boolean; terminalId: string }): boolean {
+export function shouldNotify(input: {
+  settings: NoticeSettings
+  windowFocused: boolean
+  terminalId: string
+  event?: NoticeEvent
+}): boolean {
   if (input.settings.preference === 'off') return false
+  if (input.event !== undefined && input.settings.events?.[input.event] === false) return false
   return !(input.windowFocused && input.settings.focusedPaneId === input.terminalId)
 }
 
@@ -236,7 +261,8 @@ export function installAgentNotices(ipc: IpcMain, host: AgentNoticeHost): AgentN
     deliver(notice) {
       const windowFocused = host.windowFocused()
       badge({ kind: 'settled', terminalId: notice.terminalId, windowFocused })
-      if (!shouldNotify({ settings, windowFocused, terminalId: notice.terminalId })) return
+      const event = notice.asking === true ? 'asking' : 'finished'
+      if (!shouldNotify({ settings, windowFocused, terminalId: notice.terminalId, event })) return
       const pane = settings.names?.[notice.terminalId]
       const activate = (): void => {
         host.focusWindow()
@@ -257,7 +283,7 @@ export function installAgentNotices(ipc: IpcMain, host: AgentNoticeHost): AgentN
       })
     },
     announce(spec) {
-      if (settings.preference === 'off' || host.windowFocused()) return
+      if (settings.preference === 'off' || settings.events?.teammates === false || host.windowFocused()) return
       host.show({ ...spec, silent: noticeIsSilent(settings.preference), onActivate: host.focusWindow })
     },
     window() {

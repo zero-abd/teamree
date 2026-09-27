@@ -156,14 +156,16 @@ describe('the emulator options a pane is built with', () => {
         cursorBlink: false,
         optionIsMeta: true,
         copyOnSelect: true,
-        scrollback: 20_000
+        scrollback: 20_000,
+        lineHeight: 1.5
       })
     ).toEqual({
       fontFamily: 'Iosevka',
       cursorStyle: 'block',
       cursorBlink: false,
       macOptionIsMeta: true,
-      scrollback: 20_000
+      scrollback: 20_000,
+      lineHeight: 1.5
     })
   })
 })
@@ -181,7 +183,8 @@ describe('changing a running pane', () => {
       cursorBlink: false,
       optionIsMeta: true,
       copyOnSelect: true,
-      scrollback: 20_000
+      scrollback: 20_000,
+      lineHeight: 1.25
     })
 
     expect(term.options).toMatchObject({
@@ -200,6 +203,12 @@ describe('changing a running pane', () => {
   it('asks for no refit when the font did not move', () => {
     const { term } = openTerm(emulatorOptions(TERMINAL_OPTIONS_DEFAULT))
     expect(applyEmulatorOptions(term, { ...TERMINAL_OPTIONS_DEFAULT, cursorStyle: 'block' })).toBe(false)
+  })
+
+  it('asks for a refit when the line height moved, which changes the cell too', () => {
+    const { term } = openTerm(emulatorOptions(TERMINAL_OPTIONS_DEFAULT))
+    expect(applyEmulatorOptions(term, { ...TERMINAL_OPTIONS_DEFAULT, lineHeight: 1.5 })).toBe(true)
+    expect(term.options.lineHeight).toBe(1.5)
   })
 })
 

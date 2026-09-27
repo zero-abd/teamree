@@ -171,6 +171,8 @@ export type TerminalSessionManagerOptions = {
   conversationEvidence?: (question: ConversationQuestion) => ConversationEvidence
   /** Where the login shell says the agents keep their stores (`loginShellStores`); absent, only the app's environment. */
   profileStores?: () => ProfileStores
+  /** The shell a pane starts in when its caller names none; absent or undefined, the login shell. */
+  defaultShell?: () => string | undefined
   /** The window's tone, read as each pane starts; absent, panes are not told one. */
   colorTone?: () => Tone
   /** Where a Claude pane's subagents are read from, and how often; tests point them at a tree they built. */
@@ -204,6 +206,8 @@ export type AgentSettled = {
   reason: 'quiet' | 'exit'
   /** The pane's last line worth quoting, or null when there is not one. */
   line: string | null
+  /** True when it stopped on a question rather than finished. */
+  asking: boolean
   /** The answers its asking screen offers, when it asks through a menu. */
   menu?: ScreenMenu
 }
@@ -999,7 +1003,7 @@ export class TerminalSessionManager {
     if (!isDirectory(cwd))
       throw notFound(params.cwd === undefined ? 'Checkout missing' : `cwd is not a directory: ${cwd}`)
 
-    const shell = params.shell ?? resolveLoginShell()
+    const shell = params.shell ?? this.options.defaultShell?.() ?? resolveLoginShell()
     // A known agent gets a session id pinned now, after the caller's arguments
     // go on, so `agent-command.ts` decides about the line that will actually
     // run. A restore's command is already settled and is not rewritten.
@@ -1182,13 +1186,15 @@ export class TerminalSessionManager {
     // The resume finishing is not work finishing; an exit still is.
     if (resuming && reason === 'quiet') return
     const menu = session.snapshot().screenMenu
+    const question = session.question
     settled({
       terminalId: session.id,
       worktreeId: session.worktreeId,
       agent,
       reason,
       // An asking pane is announced by its question, as its sidebar row and board row quote it.
-      line: session.question ?? evidenceLine(session.read(SETTLED_TAIL_BYTES)),
+      line: question ?? evidenceLine(session.read(SETTLED_TAIL_BYTES)),
+      asking: reason === 'quiet' && (question !== undefined || menu !== undefined),
       ...(menu === undefined ? {} : { menu })
     })
   }

@@ -157,7 +157,7 @@ function dropAt(source: DragSource, x: number, y: number): Drop | null {
   const root = layout?.root
   if (!root) return null
   const under = document.elementFromPoint(x, y)
-  const grid = paneGrid(state.terminalFontSize, state.terminalOptions.fontFamily)
+  const grid = paneGrid(state.terminalFontSize, state.terminalOptions)
   const drop = (target: DropTarget, mark: Rect, line: boolean): Drop | null => {
     const next = arranged(root, source, target)
     if (next === root) return null

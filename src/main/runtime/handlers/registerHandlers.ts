@@ -39,6 +39,7 @@ import type { AgentNotice, NoticeAnswer } from '../../agentNotices'
 import type { Worktree } from '../../../shared/entities'
 import type { ScreenMenu } from '../../../shared/screenOpinion'
 import type { SharedNoteSummary } from '../../../shared/sharedNote'
+import { DEFAULT_FETCH_MINUTES } from '../../../shared/settings'
 import type { Terminal } from '../../../shared/entities'
 import { paletteTone, resolvePalette, type Appearance, type Tone } from '../../../shared/theme'
 import { registerAgentTrustHandlers, trustCheckoutFor } from './agentTrustHandlers'
@@ -163,6 +164,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     resolveWorktreeTask: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.task,
     taskDone: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.report !== undefined,
     profileStores: () => loginShellStores(),
+    defaultShell: () => registry.context.store.runtimeSettings().shell,
     layouts: registry.context.store,
     sessions: registry.context.store,
     colorTone: () =>
@@ -203,6 +205,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
               worktree: worktree.name,
               reason: settled.reason,
               line: settled.line,
+              asking: settled.asking,
               answers: noticeAnswers(settled.menu, (data, prompt) =>
                 terminals.manager.answer(settled.terminalId, data, prompt)
               )
@@ -328,6 +331,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
         worktree: messages.nameOf(ask.from),
         reason: 'quiet',
         line: ask.text,
+        asking: true,
         answers: (ask.options ?? []).map((label) => ({
           label,
           choose: async () => {
@@ -350,7 +354,11 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
       void teamwork.refresh(projectId, { fetch: false }).catch(() => undefined)
     },
     onState: (projectId, state) => git.recordFetch(projectId, state),
+    intervalMs: () => (registry.context.store.runtimeSettings().fetchMinutes ?? DEFAULT_FETCH_MINUTES) * 60_000,
     ...(options.online === undefined ? {} : { online: options.online })
+  })
+  workspaceEvents.on((event) => {
+    if (event.type === 'settings') bases.reschedule()
   })
   registerFetchHandler(registry, git, bases)
 

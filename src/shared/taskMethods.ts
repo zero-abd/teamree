@@ -158,7 +158,10 @@ export const TaskParams = {
     /** Takes a `worktreesRoot` inside a repository. */
     allowInsideRepository: z.boolean().optional(),
     /** Empty clears it. */
-    branchPrefix: z.string().max(64).optional()
+    branchPrefix: z.string().max(64).optional(),
+    /** A full path to a program; empty clears it. */
+    shell: z.string().max(4096).optional(),
+    fetchMinutes: z.number().int().min(1).max(1440).optional()
   }),
 
   addonsStatus: z.object({}),

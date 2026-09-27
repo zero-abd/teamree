@@ -32,6 +32,7 @@ const { useAgentNotices } = await import('./useAgentNotices')
 
 type Settings = {
   preference: string
+  events?: Record<string, boolean>
   focusedPaneId: string | null
   names?: Record<string, string>
   activeWorktreeId?: string | null
@@ -111,7 +112,13 @@ describe('what the window tells the main process', () => {
     render(<Harness />)
 
     expect(publish).toHaveBeenCalledTimes(1)
-    expect(latest()).toEqual({ preference: 'notify', focusedPaneId: 't1', names: {}, activeWorktreeId: 'w1' })
+    expect(latest()).toEqual({
+      preference: 'notify',
+      events: { finished: true, asking: true, teammates: true },
+      focusedPaneId: 't1',
+      names: {},
+      activeWorktreeId: 'w1'
+    })
   })
 
   // What a notification calls a pane is what the board calls it.
@@ -171,6 +178,15 @@ describe('what the window tells the main process', () => {
     useWorkspaceStore.getState().setAgentNotices('sound')
 
     expect(latest()?.preference).toBe('sound')
+  })
+
+  it('says again when an event is turned off', () => {
+    seed()
+    render(<Harness />)
+
+    useWorkspaceStore.getState().setNoticeEvent('finished', false)
+
+    expect(latest()?.events).toEqual({ finished: false, asking: true, teammates: true })
   })
 
   // The store changes many times a second while a pane is printing, and none of

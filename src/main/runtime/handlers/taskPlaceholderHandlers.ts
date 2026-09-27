@@ -5,7 +5,10 @@ import { isValidBranchPrefix } from '../../../shared/branchName'
 import { emptyProjectContext } from '../../../shared/memory'
 import { Params } from '../../../shared/methods'
 import { ErrorCode } from '../../../shared/protocol'
+import { accessSync, constants, statSync } from 'node:fs'
+import { isAbsolute } from 'node:path'
 import { checkWorktreesRoot, defaultWorktreesRoot } from '../../git/worktreesRoot'
+import { resolveLoginShell } from '../../terminals/shell-environment'
 import type { MethodRegistry } from '../methodRegistry'
 import { notFound, RuntimeError } from '../runtimeError'
 
@@ -46,7 +49,11 @@ export function registerTaskPlaceholderHandlers(registry: MethodRegistry): void 
 /** Per-machine settings, in the workspace file; `worktreesRoot` is where worktrees go with none set. */
 export function registerSettingsHandlers(registry: MethodRegistry, worktreesRoot = defaultWorktreesRoot()): void {
   const { store, workspaceEvents } = registry.context
-  const answer = () => ({ ...store.runtimeSettings(), worktreesRootFallback: worktreesRoot })
+  const answer = () => ({
+    ...store.runtimeSettings(),
+    worktreesRootFallback: worktreesRoot,
+    shellFallback: resolveLoginShell()
+  })
   registry.register('settings.get', Params.settingsGet, answer)
   registry.register('settings.set', Params.settingsSet, async ({ allowInsideRepository, ...changes }) => {
     if (changes.branchPrefix !== undefined) {
@@ -62,7 +69,21 @@ export function registerSettingsHandlers(registry: MethodRegistry, worktreesRoot
         allowInsideRepository === true
       )
     } else if (changes.worktreesRoot !== undefined) changes.worktreesRoot = ''
+    if (changes.shell !== undefined) changes.shell = checkShell(changes.shell.trim())
     if (store.setRuntimeSettings(changes)) workspaceEvents.emit({ type: 'settings' })
     return answer()
   })
+}
+
+/** A pane's shell: empty, or a full path to a file this user may run. */
+function checkShell(shell: string): string {
+  if (shell === '') return shell
+  if (!isAbsolute(shell)) throw new RuntimeError(ErrorCode.InvalidParams, `"${shell}" is not a full path`)
+  try {
+    if (!statSync(shell).isFile()) throw new Error('not a file')
+    accessSync(shell, constants.X_OK)
+  } catch {
+    throw new RuntimeError(ErrorCode.InvalidParams, `${shell} is not a program this user can run`)
+  }
+  return shell
 }
