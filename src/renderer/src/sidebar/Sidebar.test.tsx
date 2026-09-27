@@ -587,8 +587,8 @@ describe('the rail reaches the window-level surfaces', () => {
     expect(showAppearance).toHaveBeenLastCalledWith(false)
   })
 
-  // The welcome's three ways in, one control: a menu under the +, not a dialog of buttons.
-  it('offers New Project…, Open Folder… and Clone Repository… under the projects +', () => {
+  // The welcome's ways in, one control: a menu under the +, not a dialog of buttons.
+  it('offers New Project…, Open Folder…, Clone Repository… and Join a Team… under the projects +', () => {
     const chooseProjectFolder = vi.fn(() => Promise.resolve())
     const newProject = vi.fn(() => Promise.resolve())
     seed({ chooseProjectFolder, newProject })
@@ -599,7 +599,7 @@ describe('the rail reaches the window-level surfaces', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map((item) => item.textContent)
-    ).toEqual(['New Project…', 'Open Folder…', 'Clone Repository…'])
+    ).toEqual(['New Project…', 'Open Folder…', 'Clone Repository…', 'Join a Team…'])
     act(() => within(menu).getByRole('menuitem', { name: 'Open Folder…' }).click())
     expect(chooseProjectFolder).toHaveBeenCalledOnce()
     expect(screen.queryByRole('menu')).toBeNull()
@@ -611,6 +611,10 @@ describe('the rail reaches the window-level surfaces', () => {
     act(() => screen.getByRole('button', { name: 'Add project' }).click())
     act(() => screen.getByRole('menuitem', { name: 'Clone Repository…' }).click())
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'clone-project' })
+
+    act(() => screen.getByRole('button', { name: 'Add project' }).click())
+    act(() => screen.getByRole('menuitem', { name: 'Join a Team…' }).click())
+    expect(openDialog).toHaveBeenLastCalledWith({ kind: 'join-invitation' })
   })
 
   it('marks settings as the page you are on while it has the area', () => {

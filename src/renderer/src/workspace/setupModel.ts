@@ -17,6 +17,7 @@ export type SetupAction =
   | 'new-project'
   | 'open-folder'
   | 'clone'
+  | 'join'
 
 export type SetupRow = {
   id: SetupRowId
@@ -120,7 +121,8 @@ function projectRow(projects: SetupFacts['projects']): SetupRow {
       actions: [
         { id: 'new-project', label: 'New Project…' },
         { id: 'open-folder', label: 'Open Folder…' },
-        { id: 'clone', label: 'Clone Repository…' }
+        { id: 'clone', label: 'Clone Repository…' },
+        { id: 'join', label: 'Join a Team…' }
       ]
     })
   }

@@ -1,4 +1,4 @@
-// The projects header's +: the welcome's three ways to a project, as a menu.
+// The projects header's +: the welcome's ways to a project, as a menu.
 
 import { useRef, useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -47,7 +47,8 @@ export function AddProjectButton(): React.JSX.Element {
           items={[
             { label: 'New Project…', onChoose: () => void newProject() },
             { label: 'Open Folder…', onChoose: () => void chooseProjectFolder() },
-            { label: 'Clone Repository…', onChoose: () => openDialog({ kind: 'clone-project' }) }
+            { label: 'Clone Repository…', onChoose: () => openDialog({ kind: 'clone-project' }) },
+            { label: 'Join a Team…', onChoose: () => openDialog({ kind: 'join-invitation' }) }
           ]}
           anchor={menuAt}
           onClose={close}

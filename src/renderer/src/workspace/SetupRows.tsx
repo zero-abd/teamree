@@ -68,6 +68,9 @@ export function SetupRows({ omit }: { omit?: SetupRowId }): React.JSX.Element {
       case 'clone':
         store.openDialog({ kind: 'clone-project' })
         break
+      case 'join':
+        store.openDialog({ kind: 'join-invitation' })
+        break
     }
   }
 
