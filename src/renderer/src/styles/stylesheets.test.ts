@@ -54,6 +54,14 @@ describe('stylesheets', () => {
     expect(declarationOf(ruleFor('workspace.css', '.change__stat'), 'color')).toBe('var(--fg-secondary)')
   })
 
+  // One tab was squeezed to its glyph while the others kept their names.
+  it('shrinks a pane tab no further than six characters of its name, then cuts the name short', () => {
+    expect(declarationOf(ruleFor('workspace.css', '.tab'), 'min-width')).toMatch(/\b6ch\b/)
+    const name = ruleFor('workspace.css', '.tab__name')
+    expect(declarationOf(name, 'text-overflow')).toBe('ellipsis')
+    expect(declarationOf(name, 'white-space')).toBe('nowrap')
+  })
+
   it('dims behind a dialog without blurring the window', () => {
     expect(declarationOf(ruleFor('dialog.css', '.modal-layer'), 'backdrop-filter')).toBeUndefined()
   })

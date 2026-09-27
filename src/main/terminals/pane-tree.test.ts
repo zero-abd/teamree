@@ -50,9 +50,20 @@ describe('splitPane', () => {
     expect(terminalIdsIn(threePanes)).toEqual(['a', 'b', 'c'])
     expect(threePanes.kind).toBe('split')
     if (threePanes.kind !== 'split') return
-    // 'b' gave away half of its half.
-    expect(threePanes.sizes).toEqual([0.5, 0.25, 0.25])
+    // The row evens out rather than 'b' giving away half of its half.
+    expect(threePanes.sizes).toEqual([1 / 3, 1 / 3, 1 / 3])
     expectWellFormed(threePanes)
+  })
+
+  it('gives quarters after three row splits, whichever pane is split', () => {
+    let root: PaneNode = leafPane('a')
+    root = splitPane(root, 'a', 'row', 'b')
+    root = splitPane(root, 'a', 'row', 'c')
+    root = splitPane(root, 'a', 'row', 'd')
+
+    expect(terminalIdsIn(root)).toEqual(['a', 'd', 'c', 'b'])
+    expect(root).toMatchObject({ direction: 'row', sizes: [0.25, 0.25, 0.25, 0.25] })
+    expectWellFormed(root)
   })
 
   it('nests when the direction differs, taking only the target pane', () => {
@@ -138,7 +149,7 @@ describe('removePane', () => {
     expect(terminalIdsIn(remaining)).toEqual(['b', 'c'])
     expect(remaining?.kind).toBe('split')
     if (remaining?.kind !== 'split') return
-    // b and c were 0.25 each; equal shares survive as equal shares.
+    // b and c were a third each; equal shares survive as equal shares.
     expect(remaining.sizes).toEqual([0.5, 0.5])
     expectWellFormed(remaining)
   })
@@ -426,6 +437,31 @@ describe('the file column', () => {
       sizes: [0.5, 0.5],
       children: [leafPane('t'), { ...column(['file:a']), sizes: [1] }]
     })
+  })
+
+  it('evens only the row it adds to, leaving the file column its share', () => {
+    const files = column(['file:a'])
+    const root: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.3, 0.3, 0.4],
+      children: [
+        leafPane('a'),
+        { kind: 'split', direction: 'column', sizes: [0.5, 0.5], children: [leafPane('b'), leafPane('c')] },
+        files
+      ]
+    }
+    const split = splitPane(root, 'a', 'row', 'd')
+
+    expect(split.kind === 'split' ? split.sizes.map((size) => size.toFixed(6)) : []).toEqual([
+      '0.200000',
+      '0.200000',
+      '0.200000',
+      '0.400000'
+    ])
+    expect(terminalIdsIn(split)).toEqual(['a', 'd', 'b', 'c', 'file:a'])
+    const inner = splitPane(root, 'b', 'row', 'd')
+    expect(inner).toMatchObject({ sizes: [0.3, 0.3, 0.4] })
   })
 
   it('takes a terminal split from a tab beside itself, not among its tabs', () => {

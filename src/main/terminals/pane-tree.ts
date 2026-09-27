@@ -33,8 +33,8 @@ export function containsTerminal(root: PaneNode | null, terminalId: string): boo
 }
 
 /**
- * Divides the pane holding `targetTerminalId`, giving the new terminal half of
- * it. A target not in the tree degrades to appending at the root.
+ * Divides the pane holding `targetTerminalId`: along its split's direction the new pane joins that
+ * split and it evens out, else it takes half the target. A target not in the tree appends at the root.
  */
 export function splitPane(
   root: PaneNode | null,
@@ -278,6 +278,7 @@ function splitWithin(
   const children: PaneNode[] = []
   const sizes: number[] = []
   const currentSizes = normaliseSizes(node.sizes, node.children.length)
+  let joined = false
 
   node.children.forEach((child, index) => {
     const slot = currentSizes[index] ?? 0
@@ -286,6 +287,7 @@ function splitWithin(
       if (node.direction === direction) {
         children.push(child, leafPane(newTerminalId))
         sizes.push(slot / 2, slot / 2)
+        joined = true
       } else {
         children.push({
           kind: 'split',
@@ -308,5 +310,12 @@ function splitWithin(
     sizes.push(slot)
   })
 
-  return { kind: 'split', direction: node.direction, sizes, children }
+  return { kind: 'split', direction: node.direction, sizes: joined ? evened(children, sizes) : sizes, children }
+}
+
+/** Equal shares for a split's panes; the file column keeps the share it had. */
+function evened(children: readonly PaneNode[], sizes: readonly number[]): number[] {
+  const kept = children.reduce((sum, child, index) => sum + (isFileColumn(child) ? (sizes[index] ?? 0) : 0), 0)
+  const share = (1 - kept) / children.filter((child) => !isFileColumn(child)).length
+  return children.map((child, index) => (isFileColumn(child) ? (sizes[index] ?? 0) : share))
 }

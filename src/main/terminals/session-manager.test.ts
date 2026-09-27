@@ -2,14 +2,16 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { Layout, Terminal } from '../../shared/entities'
+import type { Layout, PaneNode, Terminal } from '../../shared/entities'
 import { fileLeaf } from '../../shared/filePane'
+import { paneRects } from '../../shared/paneRoom'
 import { ErrorCode } from '../../shared/protocol'
 import type { TerminalEvent } from '../../shared/methods'
 import { findShippedCli } from '../cli/shippedCli'
 import { createTerminalService, registerTerminalHandlers } from './method-handlers'
 import { TerminalSessionManager } from './session-manager'
 import type { MethodRegistry, StreamChannel, TerminalService } from './method-handlers'
+import { terminalIdsIn } from './pane-tree'
 import { isProcessAlive } from './process-tree'
 import { canSpawnPty, printThenExit, waitUntil, writeFakeAgent, writeProcessTreeProbe } from './pty-test-support'
 import type { TerminalRecord } from './session-restore'
@@ -961,5 +963,57 @@ describe('splitting beside a file pane', () => {
     } finally {
       await manager.shutdown()
     }
+  })
+})
+
+describe('splitting with too little room beside the pane', () => {
+  // 40x8 cells of 8x16 with the pane's chrome: 337 wide, 164 high.
+  const CELL = { width: 8, height: 16 }
+  const file = (id: string): PaneNode => fileLeaf(id, `${id}.md`)
+
+  async function splitIn(
+    root: PaneNode,
+    area: { width: number; height: number }
+  ): Promise<{ root: PaneNode; id: string }> {
+    const layouts = new Map<string, Layout>([['w1', { worktreeId: 'w1', root, focusedTerminalId: 'file:1' }]])
+    const manager = new TerminalSessionManager({
+      layouts: {
+        getLayout: (id) => layouts.get(id),
+        putLayout: (layout) => {
+          layouts.set(layout.worktreeId, layout)
+          return layout
+        },
+        listLayouts: () => [...layouts.values()]
+      },
+      resolveWorktreeCwd: () => process.cwd()
+    })
+    try {
+      const { terminal, layout } = manager.split({ terminalId: 'file:1', direction: 'row', area, cell: CELL })
+      return { root: layout.root!, id: terminal.id }
+    } finally {
+      await manager.shutdown()
+    }
+  }
+
+  it('opens the pane where there is room rather than below the minimum', async () => {
+    const area = { width: 1000, height: 800 }
+    const row: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [file('file:1'), file('file:2')]
+    }
+    const { root, id } = await splitIn(row, area)
+
+    for (const rect of paneRects(root, area)) {
+      expect(rect.width, rect.id).toBeGreaterThanOrEqual(337)
+      expect(rect.height, rect.id).toBeGreaterThanOrEqual(164)
+    }
+    expect(terminalIdsIn(root)).toContain(id)
+  })
+
+  it('still opens it with no room anywhere, for the window to show zoomed', async () => {
+    const { root, id } = await splitIn(file('file:1'), { width: 400, height: 300 })
+    expect(terminalIdsIn(root)).toEqual(['file:1', id])
   })
 })

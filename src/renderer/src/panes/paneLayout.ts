@@ -120,9 +120,8 @@ export function splitChildBases(sizes: readonly number[], gutterPx = GUTTER_PX):
 }
 
 /**
- * Splits the pane holding `terminalId` in two. Splitting along the axis the
- * parent already uses extends that parent instead of nesting another level,
- * which keeps deep layouts flat enough to resize sensibly.
+ * Splits the pane holding `terminalId`, as the runtime does: along the axis the parent already uses,
+ * the new pane joins the parent and it evens out (the file column keeps its share); across it, halves.
  */
 export function splitPane(
   root: PaneNode | null,
@@ -130,16 +129,17 @@ export function splitPane(
   direction: 'row' | 'column',
   newTerminalId: string
 ): PaneNode {
-  return splitPaneWith(root, terminalId, direction, leaf(newTerminalId))
+  return splitPaneWith(root, terminalId, direction, leaf(newTerminalId), false, true)
 }
 
-/** `splitPane` for a leaf built by the caller, which is how a file pane arrives; `before` puts it first. */
+/** `splitPane` for a leaf built by the caller, which is how a file pane arrives; `before` puts it first, `even` evens the parent. */
 export function splitPaneWith(
   root: PaneNode | null,
   terminalId: string,
   direction: 'row' | 'column',
   added: PaneNode,
-  before = false
+  before = false,
+  even = false
 ): PaneNode {
   if (!root) return added
   // The file column splits as one pane: a tab's split goes beside the column.
@@ -158,15 +158,23 @@ export function splitPaneWith(
     children.splice(before ? index : index + 1, 0, added)
     const nextSizes = [...sizes]
     nextSizes.splice(index, 1, share / 2, share / 2)
-    return { kind: 'split', direction: root.direction, sizes: normalizeSizes(nextSizes, children.length), children }
+    const shares = normalizeSizes(nextSizes, children.length)
+    return { kind: 'split', direction: root.direction, sizes: even ? evened(children, shares) : shares, children }
   }
 
   return {
     kind: 'split',
     direction: root.direction,
     sizes: normalizeSizes(root.sizes, root.children.length),
-    children: root.children.map((child) => splitPaneWith(child, terminalId, direction, added, before))
+    children: root.children.map((child) => splitPaneWith(child, terminalId, direction, added, before, even))
   }
+}
+
+/** Equal shares for a split's panes; the file column keeps the share it had. */
+function evened(children: readonly PaneNode[], sizes: readonly number[]): number[] {
+  const kept = children.reduce((sum, child, index) => sum + (isFileColumn(child) ? (sizes[index] ?? 0) : 0), 0)
+  const share = (1 - kept) / children.filter((child) => !isFileColumn(child)).length
+  return children.map((child, index) => (isFileColumn(child) ? (sizes[index] ?? 0) : share))
 }
 
 /**

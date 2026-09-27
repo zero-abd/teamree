@@ -18,7 +18,15 @@ import type {
 import type { ScreenMenu } from '../../shared/screenOpinion'
 import { fileLeavesIn } from '../../shared/filePane'
 import { evidenceLine } from '../../shared/outputEvidence'
-import { paneCellsIn, placePane, placePaneWithin, type Box } from '../../shared/paneRoom'
+import {
+  leavesRoom,
+  MIN_PANE_CELLS,
+  PANE_CHROME,
+  paneCellsIn,
+  placePane,
+  placePaneWithin,
+  type Box
+} from '../../shared/paneRoom'
 import type { ParamsOf, TerminalEvent } from '../../shared/methods'
 import {
   detectAgent,
@@ -280,19 +288,25 @@ export class TerminalSessionManager {
     return session.snapshot()
   }
 
-  /** Starts a terminal in half of an existing pane, at the size that half is drawn at. */
+  /**
+   * Starts a terminal beside an existing pane, at the size it is drawn at. Where that would leave a pane
+   * under the minimum it goes where there is room; with none anywhere it goes beside, for the window to zoom.
+   */
   split(params: ParamsOf<'terminal.split'>): { terminal: Terminal; layout: Layout } {
     this.noteGrid(params)
     const target = this.sessions.get(params.terminalId)
     const worktreeId = target?.worktreeId ?? this.worktreeOfPane(params.terminalId)
     const layout = this.layoutFor(worktreeId)
+    const min = this.minPane ?? (this.cell && minPaneFor(this.cell))
+    const placed = (id: string): PaneNode => {
+      const beside = splitPane(layout.root, params.terminalId, params.direction, id)
+      if (!min || leavesRoom(layout.root, beside, this.paneArea, min)) return beside
+      return normalisePane(placePaneWithin(layout.root, leafPane(id), this.paneArea, min) ?? beside)
+    }
     const size =
       params.cols !== undefined && params.rows !== undefined
         ? { cols: params.cols, rows: params.rows }
-        : (this.cellsOnGrid(
-            splitPane(layout.root, params.terminalId, params.direction, PROBE_PANE_ID),
-            PROBE_PANE_ID
-          ) ??
+        : (this.cellsOnGrid(placed(PROBE_PANE_ID), PROBE_PANE_ID) ??
           (target && halved(target.snapshot(), params.direction)))
     const command = params.command === undefined ? {} : { command: params.command }
     // Beside a file pane there is no session to copy: the shell opens in the worktree.
@@ -303,11 +317,7 @@ export class TerminalSessionManager {
       ...command
     })
 
-    const saved = this.saveLayout({
-      worktreeId,
-      root: splitPane(layout.root, params.terminalId, params.direction, session.id),
-      focusedTerminalId: session.id
-    })
+    const saved = this.saveLayout({ worktreeId, root: placed(session.id), focusedTerminalId: session.id })
     return { terminal: session.snapshot(), layout: saved }
   }
 
@@ -1289,6 +1299,14 @@ class InMemorySessionRepository implements SessionRepository {
 
   removeTerminal(terminalId: string): boolean {
     return this.records.delete(terminalId)
+  }
+}
+
+/** A pane of `MIN_PANE_CELLS` in pixels, chrome included, for a window that reported a cell and no floor. */
+function minPaneFor(cell: Box): Box {
+  return {
+    width: MIN_PANE_CELLS.cols * cell.width + PANE_CHROME.width,
+    height: MIN_PANE_CELLS.rows * cell.height + PANE_CHROME.height
   }
 }
 
