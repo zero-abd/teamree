@@ -81,6 +81,7 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'clone-repository': { section: 'file' },
   'join-team': { section: 'file' },
   'go-to-file': { section: 'file' },
+  'go-to-line': { section: 'file' },
   'close-pane': { section: 'file' },
   'reopen-closed-pane': { section: 'file' },
   'save-file': { section: 'file' },

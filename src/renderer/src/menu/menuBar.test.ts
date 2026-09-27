@@ -150,6 +150,7 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'clone-repository',
       'join-team',
       'go-to-file',
+      'go-to-line',
       'close-pane',
       'reopen-closed-pane',
       'save-file',
@@ -260,6 +261,7 @@ describe('what the menu bar says can be done', () => {
       'focus-previous-region': true,
       'open-palette': true,
       'go-to-file': false,
+      'go-to-line': false,
       'search-in-files': false,
       'open-dashboard': true,
       'open-appearance': true,
@@ -281,6 +283,7 @@ describe('what the menu bar says can be done', () => {
     // All but the walks (one pane, one worktree, nothing asking: nowhere to go), the git commands (no status read yet),
     // Actual Size (already there), the saves (nothing edited) and the reopen (nothing closed).
     const nowhere = [
+      'go-to-line',
       'reopen-closed-pane',
       'save-file',
       'save-all',

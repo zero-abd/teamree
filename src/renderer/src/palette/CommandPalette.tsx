@@ -9,7 +9,7 @@ import { AgentGlyph } from '../agents/glyphs'
 import { hasResumable } from '../agents/harnesses'
 import { Modal } from '../dialogs/Modal'
 import { holdsModifier, type PlatformModifier } from '../keyboard/platformModifier'
-import { projectForNewTask, runWorkspaceCommand, whyUnavailable } from '../keyboard/workspaceCommands'
+import { focusedCodeFile, projectForNewTask, runWorkspaceCommand, whyUnavailable } from '../keyboard/workspaceCommands'
 import { commandNamed, shortcutHint } from '../keyboard/workspaceShortcuts'
 import { compareTitle } from '../compare/siblingRuns'
 import { dotClass, TONE_LABEL } from '../sidebar/agentRows'
@@ -40,6 +40,7 @@ import {
 } from './paletteModel'
 import { useSearchStore } from '../workspace/rightPanel/searchStore'
 import { useFileMatches } from './useFileMatches'
+import { lineQuery } from './lineQuery'
 import { runOffers } from '../workspace/runButtons'
 import type { RunKind } from '@shared/entities'
 import { useFocusedChange } from './useFocusedChange'
@@ -48,15 +49,22 @@ const NO_PATHS: readonly string[] = []
 
 const storage = typeof window === 'undefined' ? undefined : window.localStorage
 
+/** A file row named with the line it opens at. */
+const atLine = (item: PaletteItem, line: number | undefined): PaletteItem =>
+  line === undefined ? item : { ...item, label: `${item.label}:${line}` }
+
 const dimmed = (item: PaletteItem): item is Extract<PaletteItem, { kind: 'action' }> & { unavailable: string } =>
   item.kind === 'action' && item.unavailable !== undefined
 
 export function CommandPalette({
   modifier,
-  mode = 'all'
+  mode = 'all',
+  query: typed = ''
 }: {
   modifier: PlatformModifier
   mode?: 'all' | 'files'
+  /** What is already typed when it opens. */
+  query?: string
 }): React.JSX.Element {
   const worktrees = useWorkspaceStore((state) => state.worktrees)
   const projects = useWorkspaceStore((state) => state.projects)
@@ -73,7 +81,7 @@ export function CommandPalette({
   const diffOptions = useWorkspaceStore((state) => state.diffOptions)
   const rightPanelTab = useWorkspaceStore((state) => state.rightPanelTab)
 
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(typed)
   const [selected, setSelected] = useState(0)
   const [recentCommands] = useState(() => readStoredRecent(storage))
 
@@ -286,14 +294,23 @@ export function CommandPalette({
   const wanted = query.trim()
   const filesWanted = filesOf !== null && (mode === 'files' || wanted.length >= FILES_IN_COMMANDS_MIN_QUERY)
   const fileLimit = mode === 'files' ? FILE_MODE_LIMIT : FILES_IN_COMMANDS
-  const found = useFileMatches(filesWanted ? filesOf : null, query, fileLimit)
+  // A pasted `path:line` matches on its path; `:line` alone is a line of the code file in front.
+  const place = useMemo(() => lineQuery(query), [query])
+  const lineOnly = place.path === '' && wanted.startsWith(':')
+  const codeFile = useWorkspaceStore(focusedCodeFile)
+  const found = useFileMatches(filesWanted && !lineOnly ? filesOf : null, place.path, fileLimit)
 
-  const files = useMemo(
-    () => (filesWanted ? rankFiles(found?.paths ?? NO_PATHS, recent, query, fileLimit).map(fileItem) : []),
-    [filesWanted, found, recent, query, fileLimit]
-  )
+  const files = useMemo(() => {
+    if (!filesWanted) return []
+    const paths = lineOnly
+      ? codeFile === null
+        ? []
+        : [codeFile]
+      : rankFiles(found?.paths ?? NO_PATHS, recent, place.path, fileLimit)
+    return paths.map((path) => atLine(fileItem(path), place.line))
+  }, [filesWanted, lineOnly, codeFile, found, recent, place, fileLimit])
   // "No matches" and the rows that start something from the query wait for the runtime's answer.
-  const settled = !filesWanted || wanted === '' || found?.query === wanted
+  const settled = !filesWanted || wanted === '' || lineOnly || found?.query === place.path
   // Grouped only before anything is typed.
   const groups = useMemo((): PaletteGroup[] => {
     if (mode === 'files') return [{ title: null, items: files }]
@@ -342,9 +359,13 @@ export function CommandPalette({
     if (item.kind === 'action' || item.kind === 'agent')
       writeStoredRecent(storage, withRecent(recentCommands, paletteKey(item)))
 
-    // The tree's click, or a split beside the focused pane with the modifier held.
+    // The preview tab, as the tree's click, or a split beside the focused pane with the modifier held.
     if (item.kind === 'file') {
-      if (filesOf !== null) store.openFilePane(filesOf, item.id, split ? 'split' : undefined)
+      if (filesOf === null) return
+      const { line, column } = place
+      const how = split ? 'split' : 'preview'
+      if (line === undefined) store.openFilePane(filesOf, item.id, how)
+      else store.openFilePane(filesOf, item.id, how, { line, ...(column === undefined ? {} : { column }) })
       return
     }
 

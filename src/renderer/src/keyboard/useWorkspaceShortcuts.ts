@@ -13,7 +13,10 @@ export function useWorkspaceShortcuts(modifier: PlatformModifier): (event: Keybo
   const isAppChord = useCallback(
     (event: KeyboardEvent) => {
       const pressed = toModifierState(event)
-      return commandForEvent(pressed, modifier) !== null || paneNumberForEvent(pressed, modifier) !== null
+      const command = commandForEvent(pressed, modifier)
+      // Only ever run over a code file, so a terminal keeps ⌃G, its shell's cancel.
+      if (command === 'go-to-line') return false
+      return command !== null || paneNumberForEvent(pressed, modifier) !== null
     },
     [modifier]
   )

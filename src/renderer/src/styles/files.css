@@ -364,18 +364,51 @@
   border-color: var(--accent-line);
 }
 
-.column__tabs {
+.column__bar {
   display: flex;
   flex: none;
   height: 26px;
-  overflow-x: auto;
-  scrollbar-width: none;
   border-bottom: 1px solid var(--line);
   background: var(--bg-raised);
 }
 
-.column__tabs[hidden] {
+.column__bar[hidden] {
   display: none;
+}
+
+/* Positioned, so a tab's offsetLeft is measured from the strip it scrolls in. */
+.column__tabs {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.column__more {
+  flex: none;
+  padding: 0 var(--s2);
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.column__mark {
+  display: flex;
+  width: 6px;
+  align-items: center;
+}
+
+.column__more:hover,
+.column__more[aria-expanded='true'] {
+  background: var(--bg-hover);
+  color: var(--fg);
 }
 
 .column__tab {

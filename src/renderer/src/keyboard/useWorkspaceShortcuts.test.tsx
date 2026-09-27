@@ -192,6 +192,34 @@ describe('the tab chords', () => {
   })
 })
 
+describe('⌃G', () => {
+  const file: Layout = {
+    worktreeId: 'w1',
+    root: { kind: 'leaf', terminalId: 'file:a', pane: 'file', path: 'src/app.ts' },
+    focusedTerminalId: 'file:a'
+  }
+  const press = (): KeyboardEvent => {
+    const event = new KeyboardEvent('keydown', { key: 'g', ctrlKey: true, bubbles: true, cancelable: true })
+    window.dispatchEvent(event)
+    return event
+  }
+
+  it('goes to a line in a focused code file', () => {
+    seed({ worktrees: [{ id: 'w1', projectId: 'p1', state: 'ready' }], layouts: { w1: file } })
+    expect(press().defaultPrevented).toBe(true)
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'palette', mode: 'files', query: ':' })
+  })
+
+  // The shell's cancel and emacs's quit: a terminal keeps it.
+  it('is left to a terminal', () => {
+    seed({})
+    render(<ChordHarness />)
+    expect(press().defaultPrevented).toBe(false)
+    expect(openDialog).not.toHaveBeenCalled()
+    expect(isAppChord?.(new KeyboardEvent('keydown', { key: 'g', ctrlKey: true }))).toBe(false)
+  })
+})
+
 describe('a question waiting on the owner', () => {
   it('takes the keyboard, exactly as a dialog of this window\u2019s own does', () => {
     seed({ consent: question() })

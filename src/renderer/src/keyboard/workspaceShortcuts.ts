@@ -36,6 +36,7 @@ export type WorkspaceCommand =
   | 'previous-needing'
   | 'open-palette'
   | 'go-to-file'
+  | 'go-to-line'
   | 'find-in-pane'
   | 'clear-pane'
   | 'search-in-files'
@@ -107,6 +108,8 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'open-palette', chord: { key: 'k' }, title: 'Go to Worktree or Command' },
   // ⌘P as in every editor; this window has nothing to print.
   { command: 'go-to-file', chord: { key: 'p' }, title: 'Go to File…' },
+  // Control, as Mac editors bind it; claimed only over a code file, so a terminal keeps its ⌃G.
+  { command: 'go-to-line', chord: { key: 'g', ctrl: true }, title: 'Go to Line…' },
   { command: 'find-in-pane', chord: { key: 'f' }, title: 'Find in Pane' },
   // Terminal's Clear Scrollback chord; ⌘K is the palette.
   { command: 'clear-pane', chord: { key: 'k', alt: true }, title: 'Clear Pane' },

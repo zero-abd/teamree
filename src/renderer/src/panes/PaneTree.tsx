@@ -2,6 +2,7 @@
 // the gutters between its own children, so nesting is unbounded and a drag
 // only ever touches the two panes either side of the handle it grabbed.
 
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { PaneNode, Terminal } from '@shared/entities'
 import {
   fileTabName,
@@ -16,6 +17,7 @@ import { minExtent, type Box } from '@shared/paneRoom'
 import { runState } from '@shared/runCommands'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { paneNamesById } from '../sidebar/agentRows'
+import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
 import type { WorktreeNameSource } from '../sidebar/worktreeDisplay'
 import { TerminalView } from '../terminal/TerminalView'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -120,50 +122,121 @@ function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColu
   const shown = shownTabId(node)
   const tabs = node.children.filter(isFileLeaf)
   const focused = tabs.some((tab) => tab.terminalId === callbacks.focusedTerminalId)
+  const strip = useRef<HTMLDivElement | null>(null)
+  const [outside, setOutside] = useState(0)
+  const [listing, setListing] = useState<{ anchor: RowMenuAnchor; opener: HTMLElement } | null>(null)
+  const count = useCallback(() => setOutside(tabsOutOfView(strip.current)), [])
+  const shownTab = useCallback(
+    () =>
+      shown === undefined
+        ? null
+        : (strip.current?.querySelector<HTMLElement>(`[data-pane-id="${CSS.escape(shown)}"]`) ?? null),
+    [shown]
+  )
+
+  // However a tab comes to be shown (a click, ⌃PageDown, ⌘P, a link), it is scrolled into sight, and kept
+  // there as the strip or the tab changes width (an unsaved dot, a narrower window).
+  useLayoutEffect(() => {
+    const reveal = (): void => {
+      const element = strip.current
+      const tab = shownTab()
+      if (element && tab) bringIntoView(element, tab)
+      count()
+    }
+    reveal()
+    const element = strip.current
+    const tab = shownTab()
+    if (element === null) return
+    const observer = new ResizeObserver(reveal)
+    observer.observe(element)
+    if (tab !== null) observer.observe(tab)
+    return () => observer.disconnect()
+  }, [shownTab, tabs.length, count])
+
+  const names = tabs.map(fileTabName)
+  const closeListing = (): void => {
+    listing?.opener.focus()
+    setListing(null)
+  }
   return (
     <div className={`column${focused ? ' column--focused' : ''}`}>
       {/* One file is named, dotted and closed by its tab in the window's strip. */}
-      <div className="column__tabs" role="tablist" aria-label="Open files" hidden={tabs.length < 2}>
-        {tabs.map((tab) => {
-          const name = fileTabName(tab)
-          const on = tab.terminalId === shown
-          const preview = node.preview === tab.terminalId
-          return (
-            <div
-              key={tab.terminalId}
-              className={`column__tab${on ? ' column__tab--shown' : ''}${
-                dragged === tab.terminalId ? ' column__tab--dragged' : ''
-              }`}
-              data-pane-id={tab.terminalId}
-              onPointerDown={(event) => startDrag(event, { kind: 'tab', id: tab.terminalId, label: name })}
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={on}
-                className={`column__name${preview ? ' column__name--preview' : ''}`}
-                title={tab.path}
-                onClick={() => callbacks.onFocus(tab.terminalId)}
-                onDoubleClick={() => pin(tab.terminalId)}
+      <div className="column__bar" hidden={tabs.length < 2}>
+        <div className="column__tabs" role="tablist" aria-label="Open files" ref={strip} onScroll={count}>
+          {tabs.map((tab) => {
+            const name = fileTabName(tab)
+            const on = tab.terminalId === shown
+            const preview = node.preview === tab.terminalId
+            return (
+              <div
+                key={tab.terminalId}
+                className={`column__tab${on ? ' column__tab--shown' : ''}${
+                  dragged === tab.terminalId ? ' column__tab--dragged' : ''
+                }`}
+                data-pane-id={tab.terminalId}
+                onPointerDown={(event) => startDrag(event, { kind: 'tab', id: tab.terminalId, label: name })}
               >
-                {name}
-              </button>
-              {unsaved[tab.terminalId] ? <UnsavedDot /> : null}
-              <button
-                type="button"
-                className="column__close"
-                title="Close"
-                aria-label={`Close ${name}`}
-                onClick={() => callbacks.onClose(tab.terminalId)}
-              >
-                <svg viewBox="0 0 12 12" aria-hidden="true">
-                  <path d="M3 3 L9 9 M9 3 L3 9" />
-                </svg>
-              </button>
-            </div>
-          )
-        })}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  className={`column__name${preview ? ' column__name--preview' : ''}`}
+                  title={tab.path}
+                  onClick={() => callbacks.onFocus(tab.terminalId)}
+                  onDoubleClick={() => pin(tab.terminalId)}
+                >
+                  {name}
+                </button>
+                {unsaved[tab.terminalId] ? <UnsavedDot /> : null}
+                <button
+                  type="button"
+                  className="column__close"
+                  title="Close"
+                  aria-label={`Close ${name}`}
+                  onClick={() => callbacks.onClose(tab.terminalId)}
+                >
+                  <svg viewBox="0 0 12 12" aria-hidden="true">
+                    <path d="M3 3 L9 9 M9 3 L3 9" />
+                  </svg>
+                </button>
+              </div>
+            )
+          })}
+        </div>
+        {outside === 0 ? null : (
+          <button
+            type="button"
+            className="column__more"
+            aria-label="All open files"
+            aria-haspopup="menu"
+            aria-expanded={listing !== null}
+            onClick={(event) => {
+              if (listing !== null) return closeListing()
+              const box = event.currentTarget.getBoundingClientRect()
+              setListing({ anchor: { x: box.right, y: box.bottom + 4, align: 'right' }, opener: event.currentTarget })
+            }}
+          >
+            +{outside}
+          </button>
+        )}
       </div>
+      {listing === null ? null : (
+        <RowMenu
+          label="Open files"
+          anchor={listing.anchor}
+          opener={listing.opener}
+          onClose={closeListing}
+          items={tabs.map((tab, at) => {
+            const name = names[at] ?? tab.path
+            return {
+              // A second file of the same name goes by its path, so every row reads apart.
+              label: names.indexOf(name) === names.lastIndexOf(name) ? name : tab.path,
+              icon: <span className="column__mark">{unsaved[tab.terminalId] ? <UnsavedDot /> : null}</span>,
+              onChoose: () => callbacks.onFocus(tab.terminalId)
+            }
+          })}
+        />
+      )}
       {tabs.map((tab) => (
         <div key={tab.terminalId} className="column__page" hidden={tab.terminalId !== shown}>
           <FileLeaf leaf={tab} tabbed {...callbacks} />
@@ -171,6 +244,23 @@ function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColu
       ))}
     </div>
   )
+}
+
+/** Scrolls the strip the least that shows all of `tab`. */
+function bringIntoView(strip: HTMLElement, tab: HTMLElement): void {
+  const end = tab.offsetLeft + tab.offsetWidth
+  if (tab.offsetLeft < strip.scrollLeft) strip.scrollLeft = tab.offsetLeft
+  else if (end > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = end - strip.clientWidth
+}
+
+/** How many tabs are not wholly in sight; none while they all fit. */
+function tabsOutOfView(strip: HTMLElement | null): number {
+  if (strip === null || strip.scrollWidth <= strip.clientWidth) return 0
+  const from = strip.scrollLeft
+  const to = from + strip.clientWidth
+  return [...strip.querySelectorAll<HTMLElement>('.column__tab')].filter(
+    (tab) => tab.offsetLeft < from || tab.offsetLeft + tab.offsetWidth > to
+  ).length
 }
 
 /** The worktree's panes named in the order they were opened, as `paneTabs` and the sidebar name them. */

@@ -609,6 +609,7 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'previous-needing': 'previous needing you asking failed finished unread attention question answer back',
   'open-palette': 'go to worktree command palette search anything',
   'go-to-file': 'go to file open quick find path',
+  'go-to-line': 'go to line number jump row column',
   'search-in-files': 'search find in files contents text grep across tasks worktrees usages references',
   'open-dashboard': 'all panes agents dashboard overview attention waiting failed working everywhere',
   'toggle-sidebar': 'toggle sidebar hide show projects',

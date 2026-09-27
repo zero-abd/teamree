@@ -18,7 +18,7 @@
 // a resize observer, none of which this component decides anything about.
 
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaneNode, Terminal } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
@@ -43,6 +43,7 @@ vi.mock('../files/FileView', () => ({
 }))
 
 const { PaneTree } = await import('./PaneTree')
+const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { shownRoot } = await import('./paneLayout')
 
 const terminal = (id: string, overrides: Partial<Terminal> = {}): Terminal => ({
@@ -70,8 +71,8 @@ function mount(
   terminals: Terminal[],
   focusedTerminalId: string | null = null,
   foldedColumn = false
-): void {
-  render(
+): ReturnType<typeof render> {
+  return render(
     <PaneTree
       node={node}
       path={[]}
@@ -547,5 +548,107 @@ describe('the file column', () => {
     mount(row(leaf('t1'), column), [terminal('t1')], 't1', true)
     expect(screen.getByTestId('surface-t1')).toBeTruthy()
     expect(screen.queryAllByRole('separator')).toHaveLength(0)
+  })
+})
+
+describe('sixteen open files', () => {
+  const many = (shown: number): PaneNode => ({
+    kind: 'split',
+    direction: 'column',
+    sizes: Array.from({ length: 16 }, () => 1 / 16),
+    children: Array.from({ length: 16 }, (_, at) => ({
+      kind: 'leaf' as const,
+      terminalId: `file:${at}`,
+      pane: 'file' as const,
+      path: `src/lib/mod${at}.ts`
+    })),
+    tabs: true,
+    shown: `file:${shown}`
+  })
+  const scrolled = new WeakMap<Element, number>()
+  const stubbed = ['offsetLeft', 'offsetWidth', 'clientWidth', 'scrollWidth', 'scrollLeft'] as const
+  const saved = stubbed.map((name) => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as const)
+
+  // jsdom has no layout: each tab is 100 px wide in a 300 px strip.
+  beforeEach(() => {
+    const index = (element: HTMLElement): number => Number(element.dataset.paneId?.slice('file:'.length) ?? 0)
+    const isStrip = (element: HTMLElement): boolean => element.classList.contains('column__tabs')
+    const define = (name: string, get: (element: HTMLElement) => number): void => {
+      Object.defineProperty(HTMLElement.prototype, name, {
+        configurable: true,
+        get(this: HTMLElement) {
+          return get(this)
+        },
+        set(this: HTMLElement, value: number) {
+          scrolled.set(this, value)
+        }
+      })
+    }
+    define('offsetLeft', (element) => index(element) * 100)
+    define('offsetWidth', () => 100)
+    define('clientWidth', (element) => (isStrip(element) ? 300 : 0))
+    define('scrollWidth', (element) => (isStrip(element) ? 1600 : 0))
+    define('scrollLeft', (element) => scrolled.get(element) ?? 0)
+    useWorkspaceStore.setState({ unsavedFiles: { 'file:3': true } })
+  })
+
+  afterEach(() => {
+    for (const [name, descriptor] of saved) {
+      if (descriptor === undefined) delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name]
+      else Object.defineProperty(HTMLElement.prototype, name, descriptor)
+    }
+    useWorkspaceStore.setState({ unsavedFiles: {} })
+  })
+
+  const strip = (): HTMLElement => document.querySelector('.column__tabs') as HTMLElement
+  const draw = (shown: number): React.JSX.Element => (
+    <PaneTree
+      node={row(leaf('t1'), many(shown))}
+      path={[]}
+      worktreeId="w1"
+      terminals={{ t1: terminal('t1') }}
+      focusedTerminalId="t1"
+      onFocus={onFocus}
+      onClose={onClose}
+      onRelaunch={onRelaunch}
+      onResize={onResize}
+      isAppChord={() => false}
+      modifier={resolvePlatformModifier('darwin')}
+      searchTerminalId={null}
+      searchToken={0}
+      onCloseSearch={() => {}}
+    />
+  )
+
+  it('scrolls the shown tab into view whenever it changes', () => {
+    const view = render(draw(0))
+    expect(strip().scrollLeft).toBe(0)
+    view.rerender(draw(15))
+    expect(strip().scrollLeft).toBe(1300)
+    view.rerender(draw(2))
+    expect(strip().scrollLeft).toBe(200)
+    view.rerender(draw(3))
+    expect(strip().scrollLeft).toBe(200)
+  })
+
+  it('counts the files out of view on a button that lists every one, unsaved marked', () => {
+    render(draw(0))
+    const more = screen.getByRole('button', { name: 'All open files' })
+    expect(more.textContent).toBe('+13')
+    fireEvent.click(more)
+    const items = screen.getAllByRole('menuitem')
+    expect(items.map((item) => item.textContent)).toEqual(Array.from({ length: 16 }, (_, at) => `mod${at}.ts`))
+    expect(items[3]!.querySelector('.file__unsaved')).not.toBeNull()
+    expect(items[4]!.querySelector('.file__unsaved')).toBeNull()
+    fireEvent.click(items[15]!)
+    expect(onFocus).toHaveBeenCalledWith('file:15')
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it('has no button while every tab fits', () => {
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get: () => 300 })
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 1600 })
+    render(draw(0))
+    expect(screen.queryByRole('button', { name: 'All open files' })).toBeNull()
   })
 })

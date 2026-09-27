@@ -57,6 +57,8 @@ describe('reading a published menu', () => {
       // And the file column's tabs, paged.
       'Control+PageDown',
       'Control+PageUp',
+      // Go to Line, as Mac editors bind it.
+      'Control+G',
       // Going to what needs you: ⌃⌘ on the up and down arrows, which no text field reads.
       'CommandOrControl+Control+Down',
       'CommandOrControl+Control+Up',
@@ -80,8 +82,9 @@ describe('reading a published menu', () => {
       'CommandOrControl+F4',
       'CommandOrControl+Space',
       'CommandOrControl+UpDown',
-      // Tab is Control's alone, and Control takes nothing else.
+      // Tab, the page keys and G are Control's alone, and Control takes nothing else.
       'Control+D',
+      'Control+Shift+G',
       'Control+Q',
       'Control+Alt+Tab',
       'Control+Shift+PageDown',

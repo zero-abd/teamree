@@ -7,7 +7,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Layout, PaneNode, Terminal, Worktree, WorktreeFiles } from '@shared/entities'
-import { fileLeaf } from '@shared/filePane'
+import { fileColumn, fileLeaf } from '@shared/filePane'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 import { collectTerminalIds, leaf } from '../panes/paneLayout'
 
@@ -94,7 +94,8 @@ const actions = {
   revealInFinder: vi.fn(async () => {}),
   openInEditor: vi.fn(async () => {}),
   setEditorCommand: vi.fn(),
-  loadEditors: vi.fn(async () => {})
+  loadEditors: vi.fn(async () => {}),
+  pinFilePane: vi.fn()
 }
 
 const README = fileLeaf('file:readme', 'README.md')
@@ -290,6 +291,22 @@ describe('the rows that depend on the pane', () => {
     expect(collectTerminalIds(right(root))).toEqual(['t1', 't3', 't2'])
     expect(collectTerminalIds(left(root))).toEqual(['t2', 't1', 't3'])
     expect(rightFocus).toBe('t2')
+  })
+})
+
+describe('a preview tab', () => {
+  it('is kept open from its menu, and a kept one is not offered it', () => {
+    seed(row(leaf('t1'), fileColumn(README, true)))
+    render(<TerminalTabs modifier={MAC} />)
+    const menu = rightClickTab('README.md')
+    expect(labels(menu)[0]).toBe('Keep Open')
+    choose(menu, 'Keep Open')
+    expect(actions.pinFilePane).toHaveBeenCalledExactlyOnceWith('file:readme')
+
+    cleanup()
+    seed(row(leaf('t1'), fileColumn(README)))
+    render(<TerminalTabs modifier={MAC} />)
+    expect(labels(rightClickTab('README.md'))).not.toContain('Keep Open')
   })
 })
 
