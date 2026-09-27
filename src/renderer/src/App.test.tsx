@@ -30,8 +30,14 @@ vi.mock('./runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const marker = (name: string) => () => <div data-testid={name} />
+const faults = vi.hoisted(() => ({ sidebar: false }))
 
-vi.mock('./sidebar/Sidebar', () => ({ Sidebar: marker('sidebar') }))
+vi.mock('./sidebar/Sidebar', () => ({
+  Sidebar: () => {
+    if (faults.sidebar) throw new Error('the sidebar broke')
+    return <div data-testid="sidebar" />
+  }
+}))
 vi.mock('./workspace/WorkspaceArea', () => ({ WorkspaceArea: marker('workspace') }))
 vi.mock('./shell/StatusBar', () => ({ StatusBar: marker('statusbar') }))
 vi.mock('./shell/SidebarResizer', () => ({ SidebarResizer: marker('resizer') }))
@@ -187,6 +193,21 @@ describe('the notice layer', () => {
     expect(within(dialog).getByRole('button', { name: 'Clear Lock' })).toBeTruthy()
   })
 
+  it('copies the details an error notice carries', () => {
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    seed({
+      notices: [
+        { id: 1, text: 'Something went wrong', tone: 'error', action: { label: 'Copy Details', copy: 'Error: boom' } }
+      ]
+    })
+    render(<App />)
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Details' }))
+    expect(writeText).toHaveBeenCalledWith('Error: boom')
+    expect(dismissNotice).not.toHaveBeenCalled()
+    Reflect.deleteProperty(navigator, 'clipboard')
+  })
+
   it('offers nothing to do when the notice carries no action', () => {
     seed({ notices: [{ id: 1, text: 'Pushed work to origin', tone: 'info' }] })
     render(<App />)
@@ -289,6 +310,19 @@ describe('the shell itself', () => {
     expect(startWatching.mock.invocationCallOrder[0]).toBeLessThan(bootstrap.mock.invocationCallOrder[0] as number)
     unmount()
     expect(stop).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the workspace when the sidebar throws, and says so in its place', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    faults.sidebar = true
+    try {
+      render(<App />)
+      expect(screen.getByTestId('workspace')).toBeTruthy()
+      expect(screen.getByRole('alert').textContent).toContain('Something went wrong')
+    } finally {
+      faults.sidebar = false
+      vi.mocked(console.error).mockRestore()
+    }
   })
 
   it('hides the sidebar without hiding the workspace', () => {

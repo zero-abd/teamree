@@ -238,8 +238,11 @@ function isDirectoryOnDisk(path: string): boolean {
  * Starts the program and forgets it. Detached, so quitting teamree does not
  * close it; output ignored, since a pipe nobody reads eventually blocks it.
  */
-function startDetached(binary: string, args: readonly string[]): void {
-  spawn(binary, [...args], { detached: true, stdio: 'ignore' }).unref()
+export function startDetached(binary: string, args: readonly string[]): void {
+  const child = spawn(binary, [...args], { detached: true, stdio: 'ignore' })
+  // A program gone since it was found fails here, after the open has answered.
+  child.on('error', (error) => console.warn('[editor]', error.message))
+  child.unref()
 }
 
 function describe(error: unknown): string {

@@ -17,6 +17,9 @@ import { useUnsavedFiles } from './files/useUnsavedFiles'
 import { useAgentNotices } from './notices/useAgentNotices'
 import { usePullRequestRefresh } from './state/usePullRequestRefresh'
 import { useAnnouncements } from './notices/useAnnouncements'
+import { copyText } from './clipboard/clipboard'
+import { RegionBoundary } from './errors/RegionBoundary'
+import { useMainErrors } from './errors/useMainErrors'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmCloseFileDialog } from './dialogs/ConfirmCloseFileDialog'
 import { ConfirmUnsavedDialog } from './dialogs/ConfirmUnsavedDialog'
@@ -73,11 +76,13 @@ export function App(): React.JSX.Element {
   // What this window tells the main process about agent notices. See src/renderer/src/notices.
   useAgentNotices()
   usePullRequestRefresh()
+  useMainErrors()
   const spoken = useAnnouncements()
 
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
   const dialog = useWorkspaceStore((state) => state.dialog)
+  const closeDialog = useWorkspaceStore((state) => state.closeDialog)
   // Outside `dialog`: a teammate raised it, it has its own deadline, and nothing else may close it.
   const consent = useWorkspaceStore((state) => state.consent)
   const asking = firstQuestion(consent)
@@ -90,6 +95,10 @@ export function App(): React.JSX.Element {
     if (action === undefined) return
     if ('url' in action) {
       openInBrowser(action.url)
+      return
+    }
+    if ('copy' in action) {
+      copyText(action.copy)
       return
     }
     dismissNotice(notice.id)
@@ -141,12 +150,16 @@ export function App(): React.JSX.Element {
     >
       {sidebarVisible ? (
         <>
-          <Sidebar searchHint={shortcutHint('open-palette', modifier)} />
+          <RegionBoundary region="sidebar">
+            <Sidebar searchHint={shortcutHint('open-palette', modifier)} />
+          </RegionBoundary>
           <SidebarResizer />
         </>
       ) : null}
 
-      <WorkspaceArea modifier={modifier} isAppChord={isAppChord} />
+      <RegionBoundary region="workspace">
+        <WorkspaceArea modifier={modifier} isAppChord={isAppChord} />
+      </RegionBoundary>
       {appearanceOpen ? <AppearanceSheet /> : null}
       <RegionFocus />
 
@@ -192,72 +205,74 @@ export function App(): React.JSX.Element {
           modal, which means a keystroke question as well as a dialog. */}
       <FirstRunCliOffer />
 
-      {dialog?.kind === 'palette' ? (
-        <CommandPalette key={dialog.mode ?? 'all'} modifier={modifier} mode={dialog.mode ?? 'all'} />
-      ) : null}
-      {dialog?.kind === 'confirm-remove' ? <ConfirmRemoveDialog worktreeId={dialog.worktreeId} /> : null}
-      {dialog?.kind === 'confirm-forget' ? <ConfirmForgetDialog target={dialog.target} /> : null}
-      {dialog?.kind === 'confirm-trash-project' ? <ConfirmTrashProjectDialog projectId={dialog.projectId} /> : null}
-      {dialog?.kind === 'confirm-merge' ? <ConfirmMergeDialog worktreeId={dialog.worktreeId} /> : null}
-      {dialog?.kind === 'create-pr' ? <CreatePullRequestDialog worktreeId={dialog.worktreeId} /> : null}
-      {dialog?.kind === 'push-base' ? (
-        <PushBaseDialog
-          key={dialog.projectId}
-          projectId={dialog.projectId}
-          {...(dialog.failure === undefined ? {} : { failure: dialog.failure })}
-        />
-      ) : null}
-      {dialog?.kind === 'confirm-keep' ? <ConfirmKeepDialog worktreeId={dialog.worktreeId} /> : null}
-      {dialog?.kind === 'move-under' ? <MoveUnderDialog worktreeId={dialog.worktreeId} /> : null}
-      {dialog?.kind === 'hand-off' ? <HandOffDialog worktreeId={dialog.worktreeId} /> : null}
-      {dialog?.kind === 'confirm-rebase' ? (
-        <ConfirmRebaseDialog worktreeId={dialog.worktreeId} parentId={dialog.parentId} />
-      ) : null}
-      {dialog?.kind === 'clean-up' ? <ConfirmCleanUpDialog projectId={dialog.projectId} /> : null}
-      {dialog?.kind === 'confirm-close-pane' ? <ConfirmClosePaneDialog terminalId={dialog.terminalId} /> : null}
-      {dialog?.kind === 'confirm-close-file' ? <ConfirmCloseFileDialog terminalId={dialog.terminalId} /> : null}
-      {dialog?.kind === 'confirm-unsaved' ? <ConfirmUnsavedDialog paneIds={dialog.paneIds} /> : null}
-      {dialog?.kind === 'clear-lock' ? (
-        <ClearLockDialog worktreeId={dialog.worktreeId} lockPath={dialog.lockPath} />
-      ) : null}
-      {dialog?.kind === 'confirm-discard' ? (
-        <ConfirmDiscardDialog
-          worktreeId={dialog.worktreeId}
-          path={dialog.path}
-          {...(dialog.hunk ? { hunk: dialog.hunk } : {})}
-        />
-      ) : null}
-      {dialog?.kind === 'project-refused' ? (
-        <ProjectRefusedDialog folder={dialog.folder} refusal={dialog.refusal} />
-      ) : null}
-      {dialog?.kind === 'clone-project' ? <CloneProjectDialog /> : null}
-      {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
-      {dialog?.kind === 'decisions' ? <DecisionsDialog projectId={dialog.projectId} /> : null}
-      {dialog?.kind === 'ports' ? <PortsDialog /> : null}
-      {dialog?.kind === 'setup' ? <SetupDialog /> : null}
-      {dialog?.kind === 'new-task' ? (
-        <TaskComposerDialog
-          projectId={dialog.projectId}
-          {...(dialog.parentId === undefined ? {} : { parentId: dialog.parentId })}
-          fromIssue={dialog.fromIssue === true}
-          {...(dialog.task === undefined ? {} : { task: dialog.task })}
-        />
-      ) : null}
-      {dialog?.kind === 'join-invitation' ? <JoinInvitationDialog /> : null}
-      {dialog?.kind === 'join-team' ? <JoinTeamDialog invitation={dialog.invitation} /> : null}
-      {dialog?.kind === 'open-branch' ? (
-        <OpenBranchDialog
-          projectId={dialog.projectId}
-          pullRequests={dialog.pullRequests === true}
-          {...(dialog.query === undefined ? {} : { query: dialog.query })}
-        />
-      ) : null}
-      {dialog?.kind === 'resume-conversation' ? (
-        <ResumeConversationDialog
-          worktreeId={dialog.worktreeId}
-          {...(dialog.terminalId === undefined ? {} : { terminalId: dialog.terminalId })}
-        />
-      ) : null}
+      <RegionBoundary region="dialog" resetKey={dialog?.kind ?? ''} onDismiss={closeDialog}>
+        {dialog?.kind === 'palette' ? (
+          <CommandPalette key={dialog.mode ?? 'all'} modifier={modifier} mode={dialog.mode ?? 'all'} />
+        ) : null}
+        {dialog?.kind === 'confirm-remove' ? <ConfirmRemoveDialog worktreeId={dialog.worktreeId} /> : null}
+        {dialog?.kind === 'confirm-forget' ? <ConfirmForgetDialog target={dialog.target} /> : null}
+        {dialog?.kind === 'confirm-trash-project' ? <ConfirmTrashProjectDialog projectId={dialog.projectId} /> : null}
+        {dialog?.kind === 'confirm-merge' ? <ConfirmMergeDialog worktreeId={dialog.worktreeId} /> : null}
+        {dialog?.kind === 'create-pr' ? <CreatePullRequestDialog worktreeId={dialog.worktreeId} /> : null}
+        {dialog?.kind === 'push-base' ? (
+          <PushBaseDialog
+            key={dialog.projectId}
+            projectId={dialog.projectId}
+            {...(dialog.failure === undefined ? {} : { failure: dialog.failure })}
+          />
+        ) : null}
+        {dialog?.kind === 'confirm-keep' ? <ConfirmKeepDialog worktreeId={dialog.worktreeId} /> : null}
+        {dialog?.kind === 'move-under' ? <MoveUnderDialog worktreeId={dialog.worktreeId} /> : null}
+        {dialog?.kind === 'hand-off' ? <HandOffDialog worktreeId={dialog.worktreeId} /> : null}
+        {dialog?.kind === 'confirm-rebase' ? (
+          <ConfirmRebaseDialog worktreeId={dialog.worktreeId} parentId={dialog.parentId} />
+        ) : null}
+        {dialog?.kind === 'clean-up' ? <ConfirmCleanUpDialog projectId={dialog.projectId} /> : null}
+        {dialog?.kind === 'confirm-close-pane' ? <ConfirmClosePaneDialog terminalId={dialog.terminalId} /> : null}
+        {dialog?.kind === 'confirm-close-file' ? <ConfirmCloseFileDialog terminalId={dialog.terminalId} /> : null}
+        {dialog?.kind === 'confirm-unsaved' ? <ConfirmUnsavedDialog paneIds={dialog.paneIds} /> : null}
+        {dialog?.kind === 'clear-lock' ? (
+          <ClearLockDialog worktreeId={dialog.worktreeId} lockPath={dialog.lockPath} />
+        ) : null}
+        {dialog?.kind === 'confirm-discard' ? (
+          <ConfirmDiscardDialog
+            worktreeId={dialog.worktreeId}
+            path={dialog.path}
+            {...(dialog.hunk ? { hunk: dialog.hunk } : {})}
+          />
+        ) : null}
+        {dialog?.kind === 'project-refused' ? (
+          <ProjectRefusedDialog folder={dialog.folder} refusal={dialog.refusal} />
+        ) : null}
+        {dialog?.kind === 'clone-project' ? <CloneProjectDialog /> : null}
+        {dialog?.kind === 'install-cli' ? <InstallCliDialog /> : null}
+        {dialog?.kind === 'decisions' ? <DecisionsDialog projectId={dialog.projectId} /> : null}
+        {dialog?.kind === 'ports' ? <PortsDialog /> : null}
+        {dialog?.kind === 'setup' ? <SetupDialog /> : null}
+        {dialog?.kind === 'new-task' ? (
+          <TaskComposerDialog
+            projectId={dialog.projectId}
+            {...(dialog.parentId === undefined ? {} : { parentId: dialog.parentId })}
+            fromIssue={dialog.fromIssue === true}
+            {...(dialog.task === undefined ? {} : { task: dialog.task })}
+          />
+        ) : null}
+        {dialog?.kind === 'join-invitation' ? <JoinInvitationDialog /> : null}
+        {dialog?.kind === 'join-team' ? <JoinTeamDialog invitation={dialog.invitation} /> : null}
+        {dialog?.kind === 'open-branch' ? (
+          <OpenBranchDialog
+            projectId={dialog.projectId}
+            pullRequests={dialog.pullRequests === true}
+            {...(dialog.query === undefined ? {} : { query: dialog.query })}
+          />
+        ) : null}
+        {dialog?.kind === 'resume-conversation' ? (
+          <ResumeConversationDialog
+            worktreeId={dialog.worktreeId}
+            {...(dialog.terminalId === undefined ? {} : { terminalId: dialog.terminalId })}
+          />
+        ) : null}
+      </RegionBoundary>
 
       {/* Last, so it is on top of whatever else is open. A question about bytes
           that are about to run as this user outranks anything this user
