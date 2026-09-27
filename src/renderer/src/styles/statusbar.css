@@ -1,5 +1,5 @@
 /* The bottom rail. One line, tabular figures; the git line opens the changes
-   panel, the two icons open small panels upward, the attention count goes to a pane. */
+   panel, keep-awake and memory open small panels upward, the attention count goes to a pane. */
 
 .statusbar {
   display: flex;
@@ -151,6 +151,32 @@
 }
 
 .statusbar__failed {
+  color: var(--danger);
+}
+
+/* Keep awake: the legible accent while it holds the machine awake, muted while off. */
+.statusbar__awake--holding {
+  color: var(--accent-bright);
+}
+
+.statusbar__awake--off {
+  color: var(--fg-muted);
+}
+
+/* The live memory total. A floor on its width so 9.9 to 10.0 GB does not push the rail. */
+.statusbar__memory {
+  display: inline-block;
+  min-width: 6ch;
+  text-align: right;
+}
+
+/* Amber is for asking, so past 8 GB the figure only steps up from secondary ink. */
+.statusbar__memory--high {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.statusbar__memory--heavy {
   color: var(--danger);
 }
 

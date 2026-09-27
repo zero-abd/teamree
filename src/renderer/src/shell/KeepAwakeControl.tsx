@@ -1,4 +1,5 @@
-// The rail's sleep control, its icon filled while it holds the machine awake, and the three ways to change it.
+// The rail's sleep control: the cup and the mode in a word, tinted while it holds the machine awake, and the
+// three ways to change it.
 
 import { useCallback, useRef, useState } from 'react'
 import { KEEP_AWAKE_MODES, type KeepAwakeMode } from '../state/preferences'
@@ -7,12 +8,12 @@ import { anyAgentBusy, holdsAwake } from './keepAwake'
 import { StatusPopover } from './StatusPopover'
 import { Icon } from '../icons/Icon'
 
-const MODE_NAME: Record<KeepAwakeMode, string> = { on: 'On', agent: 'Agent', off: 'Off' }
+const MODE_NAME: Record<KeepAwakeMode, string> = { on: 'On', agent: 'Agents', off: 'Off' }
 
 /** Under six words, and only where the name alone does not say it. */
 const MODE_NOTE: Record<KeepAwakeMode, string> = {
-  on: 'while the app runs',
-  agent: 'while an agent is busy',
+  on: 'while teamree runs',
+  agent: 'while agents work',
   off: 'the system decides'
 }
 
@@ -51,16 +52,17 @@ export function KeepAwakeControl(): React.JSX.Element {
       <button
         ref={button}
         type="button"
-        className={`statusbar__item statusbar__button${open ? ' statusbar__button--on' : ''}`}
+        className={`statusbar__item statusbar__button statusbar__awake${tone(mode, holding)}${
+          open ? ' statusbar__button--on' : ''
+        }`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`Keep awake, ${MODE_NAME[mode].toLowerCase()}`}
-        title={`Keep awake · ${MODE_NAME[mode]}`}
+        aria-label={`Keep awake, ${MODE_NAME[mode]}`}
+        title={`Keep awake · ${MODE_NOTE[mode]}`}
         onClick={() => (open ? close() : setOpen(true))}
       >
         <Icon name={holding ? 'keep-awake-on' : 'keep-awake'} size={14} />
-        <span className="statusbar__muted">awake</span>
-        {MODE_NAME[mode].toLowerCase()}
+        {MODE_NAME[mode]}
       </button>
       {open ? (
         <StatusPopover label="Keep awake" anchor={button.current} onClose={close}>
@@ -86,4 +88,9 @@ export function KeepAwakeControl(): React.JSX.Element {
       ) : null}
     </>
   )
+}
+
+function tone(mode: KeepAwakeMode, holding: boolean): string {
+  if (holding) return ' statusbar__awake--holding'
+  return mode === 'off' ? ' statusbar__awake--off' : ''
 }
