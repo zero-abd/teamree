@@ -139,6 +139,12 @@ describe('presenceFor', () => {
     expect(exited && ('asking' in exited || 'menu' in exited)).toBe(false)
   })
 
+  it('says which Run button started a pane, so its exit reads as the run ended', () => {
+    const [dev, shell] = panesOf([{ ...terminal('t1'), run: 'dev', running: false, exitCode: 129 }, terminal('t2')])
+    expect(dev).toMatchObject({ run: 'dev', exitCode: 129 })
+    expect(shell && 'run' in shell).toBe(false)
+  })
+
   it('says which panes the owner muted', () => {
     const panes = panesOf([terminal('t1'), terminal('t2')], (terminalId) => terminalId === 't1')
     expect(panes.map((pane) => pane.muted)).toEqual([true, undefined])

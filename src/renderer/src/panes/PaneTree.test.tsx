@@ -154,6 +154,13 @@ describe('one pane', () => {
     expect(screen.getByText('exited 137')).toBeTruthy()
   })
 
+  it('says a Run pane the quit hung up was stopped, not the code', () => {
+    mount(leaf('t1'), [terminal('t1', { run: 'dev', running: false, exitCode: 129 })])
+    expect(screen.getByText('stopped')).toBeTruthy()
+    expect(screen.queryByText(/exited/)).toBeNull()
+    expect(screen.getByRole('button', { name: 'Run Again' })).toBeTruthy()
+  })
+
   it('says it exited even when nothing reported a code', () => {
     mount(leaf('t1'), [terminal('t1', { running: false })])
     expect(screen.getByText('exited')).toBeTruthy()

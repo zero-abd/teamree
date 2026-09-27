@@ -31,8 +31,8 @@ export type AgentRow = {
   subagents?: readonly Subagent[]
 }
 
-/** What a dot is coloured: `idle` is a quiet pane with no agent, drawn grey; a stopped agent is hollow. */
-export type DotTone = AgentActivity | 'idle'
+/** What a dot is coloured: `idle` is a quiet pane with no agent, drawn grey; a stopped agent or run is hollow. */
+export type DotTone = Exclude<AgentActivity, 'stopped'> | 'idle'
 
 /** The one word for each tone, wherever a dot is explained: rows, hovers, tabs and the board's legend. */
 export const TONE_LABEL: Record<DotTone, string> = {
@@ -48,6 +48,7 @@ export const TONE_LABEL: Record<DotTone, string> = {
 export const TONES_BY_ATTENTION: readonly DotTone[] = ['failed', 'waiting', 'working', 'quiet', 'idle', 'done']
 
 export function dotTone(activity: AgentActivity, agent: AgentKind | undefined): DotTone {
+  if (activity === 'stopped') return 'quiet'
   return activity === 'quiet' && agent === undefined ? 'idle' : activity
 }
 
@@ -279,14 +280,16 @@ export function worktreeActivity(rows: readonly AgentRow[]): AgentActivity | nul
   if (rows.some((row) => row.activity === 'waiting')) return 'waiting'
   if (rows.some((row) => row.activity === 'working')) return 'working'
   if (rows.some((row) => row.activity === 'quiet')) return 'quiet'
+  if (rows.some((row) => row.activity === 'stopped')) return 'stopped'
   return 'done'
 }
 
-/** The collapsed row's dot: idle unless one of its quiet panes runs an agent. */
+/** The collapsed row's dot: idle unless one of its quiet panes runs an agent or a run was stopped. */
 export function worktreeTone(rows: readonly AgentRow[]): DotTone | null {
   const overall = worktreeActivity(rows)
-  if (overall !== 'quiet') return overall
-  return rows.some((row) => row.activity === 'quiet' && row.agent !== undefined) ? 'quiet' : 'idle'
+  if (overall !== 'quiet') return overall === null ? null : dotTone(overall, undefined)
+  const hollow = rows.some((row) => (row.activity === 'quiet' && row.agent !== undefined) || row.activity === 'stopped')
+  return hollow ? 'quiet' : 'idle'
 }
 
 /** How many panes there are, by the one rule every count follows: terminals the runtime lists, file panes aside. */

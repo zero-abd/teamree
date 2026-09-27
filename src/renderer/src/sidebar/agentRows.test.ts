@@ -50,8 +50,10 @@ const row = (overrides: Partial<AgentRow> = {}): AgentRow => ({
 })
 
 describe('activityOf', () => {
-  it('reads a Run pane somebody stopped as done, and a failing test run as failed', () => {
-    expect(activityOf(terminal({ id: 't', run: 'dev', running: false, exitCode: 130 }))).toBe('done')
+  it('reads a Run pane stopped or hung up as stopped, and a failing test run as failed', () => {
+    expect(activityOf(terminal({ id: 't', run: 'dev', running: false, exitCode: 130 }))).toBe('stopped')
+    expect(activityOf(terminal({ id: 't', run: 'dev', running: false, exitCode: 129 }))).toBe('stopped')
+    expect(activityOf(terminal({ id: 't', run: 'test', running: false, exitCode: 0 }))).toBe('done')
     expect(activityOf(terminal({ id: 't', run: 'test', running: false, exitCode: 1 }))).toBe('failed')
     expect(activityOf(terminal({ id: 't', running: false, exitCode: 130 }))).toBe('failed')
   })
@@ -149,6 +151,11 @@ describe('dotTone', () => {
     expect(dotTone('quiet', 'claude')).toBe('quiet')
   })
 
+  it('draws a stopped run hollow, as a stopped agent', () => {
+    expect(dotTone('stopped', undefined)).toBe('quiet')
+    expect(TONE_LABEL[dotTone('stopped', undefined)]).toBe('stopped')
+  })
+
   it('leaves every other state as it is', () => {
     for (const activity of ['waiting', 'working', 'done', 'failed'] as const) {
       expect(dotTone(activity, undefined)).toBe(activity)
@@ -174,6 +181,11 @@ describe('worktreeTone', () => {
 
   it('is quiet when a quiet pane runs an agent', () => {
     expect(worktreeTone([row({ activity: 'quiet' }), row({ activity: 'quiet', agent: 'claude' })])).toBe('quiet')
+  })
+
+  it('is stopped, not finished, when a Run pane was stopped', () => {
+    expect(worktreeTone([row({ activity: 'stopped' }), row({ activity: 'done' })])).toBe('quiet')
+    expect(worktreeTone([row({ activity: 'stopped' }), row({ activity: 'working' })])).toBe('working')
   })
 
   it('follows worktreeActivity otherwise', () => {

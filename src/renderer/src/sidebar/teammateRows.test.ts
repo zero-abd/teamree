@@ -51,6 +51,15 @@ describe('a teammate’s rows', () => {
     expect(TONE_LABEL[row!.tone!]).toBe('failed')
   })
 
+  it('reads their Run pane that a quit hung up as stopped, not failed', () => {
+    const [row] = teammateRows(
+      [theirWorktree({ panes: [pane({ id: 'p1', label: 'dev', run: 'dev', running: false, exitCode: 129 })] })],
+      NOW
+    )
+    expect(row?.panes[0]?.activity).toBe('stopped')
+    expect(TONE_LABEL[row!.tone!]).toBe('stopped')
+  })
+
   it('names an unnamed pane from its title and shell', () => {
     const [row] = teammateRows(
       [

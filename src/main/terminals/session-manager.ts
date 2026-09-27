@@ -62,6 +62,7 @@ import {
 import { conversationOnDisk, type ConversationEvidence, type ConversationQuestion } from './agent-conversations'
 import {
   endedRunCommand,
+  HUNG_UP,
   restorableRecords,
   restoreLaunch,
   stoppedLaunch,
@@ -825,6 +826,9 @@ export class TerminalSessionManager {
     this.subagents.close()
     const sessions = [...this.sessions.values()]
     this.sessions.clear()
+    // Cleared first, so no exit the teardown causes is recorded as the run's result.
+    for (const session of sessions)
+      if (session.run !== undefined && session.isRunning) this.noteRunEnded(session.id, HUNG_UP)
     for (const terminalId of [...this.streams.keys()]) this.endStreamsFor(terminalId)
     this.ownSubscriptions.clear()
     await Promise.all(sessions.map((session) => session.close(QUIT_KILL_GRACE_MS)))
@@ -1139,7 +1143,7 @@ export class TerminalSessionManager {
     this.records.putTerminal(next)
   }
 
-  /** Written at the exit, so a relaunch can say how the run ended; a run the quit ends is not. */
+  /** Written at the exit, so a relaunch can say how the run ended; `shutdown` writes a run the quit ends. */
   private noteRunEnded(terminalId: string, exitCode: number): void {
     const stored = this.records.listTerminals().find((record) => record.id === terminalId)
     if (stored !== undefined && stored.exitCode !== exitCode) this.records.putTerminal({ ...stored, exitCode })

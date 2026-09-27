@@ -17,6 +17,8 @@ export type AgentActivity =
   | 'done'
   /** Exited with a non-zero status, or on a signal. */
   | 'failed'
+  /** A Run pane ended by Stop, a hang-up or the app's quit. */
+  | 'stopped'
 
 /**
  * The facts an activity is read from. Narrower than `Terminal` so a teammate's
@@ -80,8 +82,7 @@ export function agentSays(event: AgentEvent | undefined): AgentActivity | null {
  */
 export function activityOf(terminal: PaneActivitySource): AgentActivity {
   if (!terminal.running) {
-    // A Run pane somebody stopped ended as asked.
-    if (terminal.run !== undefined && runState(terminal) === 'stopped') return 'done'
+    if (terminal.run !== undefined && runState(terminal) === 'stopped') return 'stopped'
     if (terminal.exitCode !== 0) return 'failed'
     // Declining a trust prompt also exits 0; only an agent that took a turn finished one.
     return terminal.tookTurn === false ? 'quiet' : 'done'

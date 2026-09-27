@@ -147,6 +147,7 @@ function describePane(terminal: Terminal, at: number, muted: boolean): PeerPane 
   if (terminal.ordinal !== undefined) pane.ordinal = terminal.ordinal
   if (terminal.agent !== undefined) pane.agent = terminal.agent
   if (terminal.exitCode !== undefined) pane.exitCode = terminal.exitCode
+  if (terminal.run !== undefined) pane.run = terminal.run
   // The same reading as the owner's own row; the menu's labels and keys are this app's table, not the screen's text.
   if (activityOf(terminal) === 'waiting') {
     pane.asking = true

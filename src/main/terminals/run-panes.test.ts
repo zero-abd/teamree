@@ -192,6 +192,8 @@ describePty('run panes across a relaunch', () => {
       })
       await waitUntil(async () => (await server.starts()) === 1, 'the server to start')
       await first.manager.shutdown()
+      // The quit ended it: recorded as hung up, whatever the process said on its way out.
+      expect(saved.listTerminals()[0]?.exitCode).toBe(129)
 
       const second = launch(saved)
       expect(second.manager.restoreSessions().restored).toBe(1)
