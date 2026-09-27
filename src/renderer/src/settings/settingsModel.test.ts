@@ -308,9 +308,10 @@ describe('the Jac Graph Memory row', () => {
   const at = (status: Partial<AddonStatus>): AddonStatus => ({ id: 'jac-memory', state: 'off', ...status })
 
   it('offers Install until installed, and the box after', () => {
-    expect(addonLine(null, false)).toEqual({ state: 'Reading…', action: null, on: null, problem: null })
-    expect(addonLine(at({}), false)).toEqual({ state: 'Off', action: 'install', on: null, problem: null })
-    expect(addonLine(at({ needs: 'uv' }), false)).toEqual({ state: 'Needs uv', action: 'uv', on: null, problem: null })
+    const none = { on: null, problem: null, details: null }
+    expect(addonLine(null, false)).toEqual({ ...none, state: 'Reading…', action: null })
+    expect(addonLine(at({}), false)).toEqual({ ...none, state: 'Off', action: 'install' })
+    expect(addonLine(at({ needs: 'uv' }), false)).toEqual({ ...none, state: 'Needs uv', action: 'uv' })
     expect(addonLine(at({ version: '0.1.0' }), false)).toMatchObject({ state: 'Off', action: null, on: false })
     expect(addonLine(at({ state: 'installing' }), false)).toMatchObject({ state: 'Installing…', on: null })
   })
@@ -325,12 +326,15 @@ describe('the Jac Graph Memory row', () => {
       state: 'Failed',
       action: null,
       on: true,
-      problem: 'timeout'
+      problem: 'timeout',
+      details: null
     })
-    expect(addonLine(at({ state: 'failed', detail: 'No solution found' }), false)).toMatchObject({
-      action: 'install',
+    expect(addonLine(at({ state: 'failed', detail: 'No solution found', output: '$ uv pip…' }), false)).toEqual({
+      state: 'Failed',
+      action: 'retry',
       on: null,
-      problem: 'No solution found'
+      problem: 'No solution found',
+      details: '$ uv pip…'
     })
   })
 })

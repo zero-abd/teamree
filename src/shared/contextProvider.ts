@@ -142,4 +142,6 @@ export type AddonStatus = {
   detail?: string
   needs?: 'uv'
   version?: string
+  /** The failed install's whole output, for Copy Details. */
+  output?: string
 }

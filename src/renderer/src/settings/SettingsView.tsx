@@ -12,6 +12,7 @@ import { effectiveProjectSettings, settingSource, startPointOf } from '@shared/p
 import { AgentGlyph } from '../agents/glyphs'
 import { Icon } from '../icons/Icon'
 import { harnessName } from '../agents/harnesses'
+import { copyText } from '../clipboard/clipboard'
 import { cliActionLabel, cliOutcome, offerCliInstall } from '../dialogs/cliInstallModel'
 import { Select } from '../dialogs/Select'
 import { paneNumberRows, shortcutGroups } from '../help/helpTopics'
@@ -756,7 +757,7 @@ const UV_INSTALL_DOCUMENT = 'https://docs.astral.sh/uv/getting-started/installat
 /** Optional helpers that run outside the app; each is off until installed and turned on. */
 function AddonsSection(): React.JSX.Element {
   const machine = useContext(MachineContext)
-  const { status, problem, install } = useAddonStatus()
+  const { status, problem, install, check } = useAddonStatus()
   const line = addonLine(status, machine.settings?.jacMemoryAddon ?? false)
   const shown = useShown()
   return (
@@ -769,21 +770,40 @@ function AddonsSection(): React.JSX.Element {
             htmlFor={line.on === null ? undefined : 'settings-jac-memory'}
             below={
               line.problem === null && problem === null ? null : (
-                <p className="settings-error">{line.problem ?? problem}</p>
+                <p className="settings-error">
+                  {line.problem ?? problem}
+                  {line.details === null ? null : (
+                    <>
+                      {' '}
+                      <button
+                        type="button"
+                        className="button button--small"
+                        onClick={() => copyText(line.details ?? '')}
+                      >
+                        Copy Details
+                      </button>
+                    </>
+                  )}
+                </p>
               )
             }
           >
             <div className="settings-actions" data-testid="addon-jac-memory">
               <span className="settings-aside">{line.state}</span>
-              {line.action === 'install' ? (
+              {line.action === 'install' || line.action === 'retry' ? (
                 <button type="button" className="button button--small" onClick={install}>
-                  Install
+                  {line.action === 'retry' ? 'Retry' : 'Install'}
                 </button>
               ) : null}
               {line.action === 'uv' ? (
-                <a className="button button--small" href={UV_INSTALL_DOCUMENT} target="_blank" rel="noreferrer">
-                  Get uv
-                </a>
+                <>
+                  <a className="button button--small" href={UV_INSTALL_DOCUMENT} target="_blank" rel="noreferrer">
+                    Get uv
+                  </a>
+                  <button type="button" className="button button--small" onClick={check}>
+                    Check Again
+                  </button>
+                </>
               ) : null}
               {line.on === null ? null : (
                 <Switch

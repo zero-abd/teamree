@@ -251,14 +251,16 @@ export function firstMatch(query: string): SettingEntry | null {
 /** The add-on's row: a state word, at most one button, and the on/off box once it is installed. */
 export type AddonLine = {
   state: string
-  action: 'install' | 'uv' | null
+  action: 'install' | 'retry' | 'uv' | null
   /** Null until installed. */
   on: boolean | null
   problem: string | null
+  /** The failed install's whole output, for Copy Details. */
+  details: string | null
 }
 
 export function addonLine(status: AddonStatus | null, enabled: boolean): AddonLine {
-  const line: AddonLine = { state: 'Reading…', action: null, on: null, problem: null }
+  const line: AddonLine = { state: 'Reading…', action: null, on: null, problem: null, details: null }
   if (status === null) return line
   const installed = status.version !== undefined
   switch (status.state) {
@@ -267,9 +269,10 @@ export function addonLine(status: AddonStatus | null, enabled: boolean): AddonLi
     case 'failed':
       return {
         state: 'Failed',
-        action: installed ? null : 'install',
+        action: installed ? null : 'retry',
         on: installed ? enabled : null,
-        problem: status.detail ?? null
+        problem: status.detail ?? null,
+        details: status.output ?? null
       }
     case 'running':
       return {

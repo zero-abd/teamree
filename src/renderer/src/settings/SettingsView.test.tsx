@@ -402,6 +402,66 @@ describe('Add-ons', () => {
     }
   })
 
+  it('checks for uv again on Check Again and on window focus, without a restart', async () => {
+    let status: object = { id: 'jac-memory', state: 'off', needs: 'uv' }
+    let reads = 0
+    runtimeCall.answer = (method) => {
+      if (method === 'addons.status') {
+        reads += 1
+        return Promise.resolve([status])
+      }
+      return new Promise(() => {})
+    }
+    try {
+      renderAt('addons')
+      await within(row()).findByText('Needs uv')
+      status = { id: 'jac-memory', state: 'off' }
+      fireEvent.click(within(row()).getByRole('button', { name: 'Check Again' }))
+      await within(row()).findByRole('button', { name: 'Install' })
+
+      status = { id: 'jac-memory', state: 'off', needs: 'uv' }
+      const before = reads
+      act(() => {
+        window.dispatchEvent(new Event('focus'))
+      })
+      await within(row()).findByText('Needs uv')
+      expect(reads).toBe(before + 1)
+    } finally {
+      runtimeCall.answer = () => new Promise(() => {})
+    }
+  })
+
+  it('a failed install offers Retry and Copy Details with the whole output', async () => {
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    const sent: unknown[] = []
+    runtimeCall.answer = (method, params) => {
+      if (method === 'addons.status') {
+        return Promise.resolve([
+          { id: 'jac-memory', state: 'failed', detail: 'network is unreachable', output: '$ uv pip install\n× Failed' }
+        ])
+      }
+      if (method === 'addons.install') {
+        sent.push(params)
+        return new Promise(() => {})
+      }
+      return new Promise(() => {})
+    }
+    try {
+      renderAt('addons')
+      expect(await screen.findByText('network is unreachable')).toBeTruthy()
+      expect(within(row()).queryByRole('button', { name: 'Install' })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Copy Details' }))
+      expect(writeText).toHaveBeenCalledWith('$ uv pip install\n× Failed')
+      fireEvent.click(within(row()).getByRole('button', { name: 'Retry' }))
+      expect(sent).toEqual([{ id: 'jac-memory' }])
+      await within(row()).findByText('Installing…')
+    } finally {
+      Reflect.deleteProperty(navigator, 'clipboard')
+      runtimeCall.answer = () => new Promise(() => {})
+    }
+  })
+
   it('shows Failed and why', async () => {
     runtimeCall.answer = (method) => {
       if (method === 'settings.get') return Promise.resolve({ ...DEFAULT_RUNTIME_SETTINGS, jacMemoryAddon: true })
