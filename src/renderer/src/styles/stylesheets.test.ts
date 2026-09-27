@@ -662,6 +662,19 @@ describe('stylesheets', () => {
       expect(animation).toContain('var(--motion-base)')
       const from = keyframeFrom('appearance.css', animation.split(' ')[0] ?? '')
       expect(declarationOf(from, 'transform')).toBe('translateX(100%)')
+      expect(declarationOf(from, 'opacity')).toBe('0')
+    })
+
+    it('keeps the closed rail’s width for the panes when a narrow window lays the panel over them', () => {
+      const kept = ruleFor('rightPanel.css', '.workspace__body:has(> .panel:not(.panel--closed))')
+      expect(declarationOf(kept, 'padding-right')).toBe(
+        declarationOf(ruleFor('rightPanel.css', '.panel--closed'), 'width')
+      )
+    })
+
+    // A sheet mid-slide hangs past the window's edge; with the shell a scroller, a focus scrolled the app to it.
+    it('clips the shell, so nothing sliding in can scroll the window', () => {
+      expect(declarationOf(ruleFor('shell.css', '.shell'), 'overflow')).toBe('clip')
     })
 
     // A width with the same number of tracks either side interpolates; `1fr` alone against three does not.

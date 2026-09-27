@@ -644,6 +644,7 @@ export function Sidebar({
           type="button"
           className={`rail__link rail__link--icon${appearanceOpen ? ' rail__link--current' : ''}`}
           aria-pressed={appearanceOpen}
+          aria-controls="appearance-sheet"
           aria-label="Appearance"
           title="Appearance"
           onClick={() => showAppearance(!appearanceOpen)}

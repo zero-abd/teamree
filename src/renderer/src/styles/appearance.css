@@ -20,6 +20,7 @@
 @keyframes sheet-in {
   from {
     transform: translateX(100%);
+    opacity: 0;
   }
 }
 

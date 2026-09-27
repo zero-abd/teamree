@@ -18,6 +18,8 @@
     'sidebar seam workspace'
     'status status status';
   height: 100%;
+  /* Not a scroller: a sheet sliding in from past the edge must not give the window anything to scroll. */
+  overflow: clip;
   background: var(--bg-window);
   transition: grid-template-columns var(--motion-base) var(--ease);
 }
