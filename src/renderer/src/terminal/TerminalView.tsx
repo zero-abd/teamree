@@ -53,7 +53,6 @@ import {
 } from './terminalMenu'
 import { showPane } from './shownPanes'
 import { deferWhileLayoutMoves, forgetDeferred } from '../shell/layoutMotion'
-import { TERMINAL_LINE_HEIGHT } from './paneMetrics'
 import { readSearchDecorations, readTerminalColors } from './terminalTheme'
 
 type TerminalViewProps = {
@@ -497,7 +496,6 @@ function openEmulator(
     convertEol: false,
     cursorInactiveStyle: 'none',
     fontSize,
-    lineHeight: TERMINAL_LINE_HEIGHT,
     letterSpacing: 0,
     ...emulatorOptions(options),
     ...readTerminalColors(document.documentElement),
@@ -776,14 +774,15 @@ export function emulatorOptions(options: TerminalOptions): ITerminalOptions {
     cursorStyle: options.cursorStyle,
     cursorBlink: options.cursorBlink,
     macOptionIsMeta: options.optionIsMeta,
-    scrollback: options.scrollback
+    scrollback: options.scrollback,
+    lineHeight: options.lineHeight
   }
 }
 
-/** Writes only what changed into a running emulator; true when the font moved and the pane needs a refit. */
+/** Writes only what changed into a running emulator; true when the cell moved and the pane needs a refit. */
 export function applyEmulatorOptions(term: Pick<XTerm, 'options'>, options: TerminalOptions): boolean {
   const next = emulatorOptions(options)
-  const fontMoved = term.options.fontFamily !== next.fontFamily
+  const fontMoved = term.options.fontFamily !== next.fontFamily || term.options.lineHeight !== next.lineHeight
   for (const [key, value] of Object.entries(next) as [keyof ITerminalOptions, unknown][]) {
     if (term.options[key] !== value) Object.assign(term.options, { [key]: value })
   }

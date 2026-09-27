@@ -112,7 +112,8 @@ export type BaseFetcherOptions = {
   fetch?: (project: BaseFetchProject, signal: AbortSignal) => Promise<BaseFetchOutcome>
   /** False skips the cycle; `net.isOnline` in the app. */
   online?: () => boolean
-  intervalMs?: number
+  /** Read before each wait, so a changed setting takes effect with `reschedule`. */
+  intervalMs?: number | (() => number)
   focusFloorMs?: number
   now?: () => number
   schedule?: (run: () => void, delayMs: number) => () => void
@@ -140,6 +141,8 @@ export class BaseFetcher {
   #running: Promise<void> | null = null
   #tail: Promise<unknown> = Promise.resolve()
   #cancelTimer: (() => void) | undefined
+  #tick: (() => void) | undefined
+  #waitingMs: number | undefined
   #cancelWatch: (() => void) | undefined
   #cancelReconnect: (() => void) | undefined
   #wasOffline = false
@@ -156,9 +159,10 @@ export class BaseFetcher {
     if (this.#stopped || this.#cancelTimer) return
     const schedule = this.#options.schedule ?? scheduleWithTimeout
     const tick = (): void => {
-      this.#cancelTimer = schedule(tick, this.#options.intervalMs ?? DEFAULT_INTERVAL_MS)
+      this.#wait(tick)
       void this.fetchNow()
     }
+    this.#tick = tick
     // Soon after launch as well: the window may open in the background and never be focused.
     this.#cancelTimer = schedule(tick, FIRST_FETCH_DELAY_MS)
     const online = this.#options.online
@@ -171,6 +175,24 @@ export class BaseFetcher {
       this.#wasOffline = !up
     }
     this.#cancelWatch = schedule(watch, ONLINE_POLL_MS)
+  }
+
+  /** Starts the next timed wait again when the interval has changed since it began. */
+  reschedule(): void {
+    if (this.#stopped || this.#tick === undefined || this.#waitingMs === undefined) return
+    if (this.#interval() === this.#waitingMs) return
+    this.#cancelTimer?.()
+    this.#wait(this.#tick)
+  }
+
+  #interval(): number {
+    const interval = this.#options.intervalMs
+    return typeof interval === 'function' ? interval() : (interval ?? DEFAULT_INTERVAL_MS)
+  }
+
+  #wait(tick: () => void): void {
+    this.#waitingMs = this.#interval()
+    this.#cancelTimer = (this.#options.schedule ?? scheduleWithTimeout)(tick, this.#waitingMs)
   }
 
   stop(): void {

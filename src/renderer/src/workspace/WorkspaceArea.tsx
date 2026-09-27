@@ -139,10 +139,11 @@ function WorkspaceView({
 
   const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
   const fontFamily = useWorkspaceStore((state) => state.terminalOptions.fontFamily)
+  const lineHeight = useWorkspaceStore((state) => state.terminalOptions.lineHeight)
   const minPane = useMemo(() => {
-    const cell = measureCell(fontSize, fontFamily, globalThis.document)
+    const cell = measureCell(fontSize, { fontFamily, lineHeight }, globalThis.document)
     return cell && minPaneBox(cell)
-  }, [fontSize, fontFamily])
+  }, [fontSize, fontFamily, lineHeight])
 
   // Read with the other hooks, above the early returns.
   const paneRoot = useMemo(

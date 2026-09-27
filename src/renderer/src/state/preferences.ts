@@ -118,6 +118,8 @@ export const TERMINAL_CURSOR_STYLES: readonly TerminalCursorStyle[] = ['bar', 'b
 
 export const TERMINAL_SCROLLBACK_MIN = 1_000
 export const TERMINAL_SCROLLBACK_MAX = 100_000
+export const TERMINAL_LINE_HEIGHT_MIN = 1
+export const TERMINAL_LINE_HEIGHT_MAX = 2
 
 /** How every pane draws and reads keys, apart from its text size. */
 export type TerminalOptions = {
@@ -129,6 +131,8 @@ export type TerminalOptions = {
   optionIsMeta: boolean
   copyOnSelect: boolean
   scrollback: number
+  /** A multiple of the font's own line, in steps of 0.05. */
+  lineHeight: number
 }
 
 export const TERMINAL_OPTIONS_DEFAULT: TerminalOptions = {
@@ -137,7 +141,8 @@ export const TERMINAL_OPTIONS_DEFAULT: TerminalOptions = {
   cursorBlink: true,
   optionIsMeta: false,
   copyOnSelect: false,
-  scrollback: 5_000
+  scrollback: 5_000,
+  lineHeight: 1.25
 }
 
 /** Each field checked on its own, so one bad value costs that field its default and no other. */
@@ -149,7 +154,7 @@ export function sanitizeTerminalOptions(raw: unknown): TerminalOptions {
     return typeof stored === 'boolean' ? stored : fallback[key]
   }
   const font = typeof value.fontFamily === 'string' ? value.fontFamily.trim() : ''
-  const scrollback = value.scrollback
+  const { scrollback, lineHeight } = value
   return {
     fontFamily: font.length > 0 ? font : fallback.fontFamily,
     cursorStyle: TERMINAL_CURSOR_STYLES.find((style) => style === value.cursorStyle) ?? fallback.cursorStyle,
@@ -159,8 +164,74 @@ export function sanitizeTerminalOptions(raw: unknown): TerminalOptions {
     scrollback:
       typeof scrollback === 'number' && Number.isFinite(scrollback)
         ? Math.min(Math.max(Math.round(scrollback), TERMINAL_SCROLLBACK_MIN), TERMINAL_SCROLLBACK_MAX)
-        : fallback.scrollback
+        : fallback.scrollback,
+    lineHeight:
+      typeof lineHeight === 'number' && Number.isFinite(lineHeight)
+        ? Math.min(Math.max(Math.round(lineHeight * 20) / 20, TERMINAL_LINE_HEIGHT_MIN), TERMINAL_LINE_HEIGHT_MAX)
+        : fallback.lineHeight
   }
+}
+
+/** Reads a stored object of flags, each one falling back to its default on its own. */
+function readFlags<T extends Record<string, boolean>>(
+  storage: Pick<Storage, 'getItem'> | undefined,
+  key: string,
+  fallback: T
+): T {
+  try {
+    const raw = storage?.getItem(key)
+    const parsed: unknown = raw === null || raw === undefined ? null : JSON.parse(raw)
+    const value = parsed !== null && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {}
+    const flags = { ...fallback }
+    for (const name of Object.keys(fallback) as (keyof T)[]) {
+      const stored = value[name as string]
+      if (typeof stored === 'boolean') flags[name] = stored as T[keyof T]
+    }
+    return flags
+  } catch {
+    return fallback
+  }
+}
+
+function writeJson(storage: Pick<Storage, 'setItem'> | undefined, key: string, value: unknown): void {
+  try {
+    storage?.setItem(key, JSON.stringify(value))
+  } catch {
+    // As above: the choice holds for this window and is forgotten on the next.
+  }
+}
+
+const NOTICE_EVENTS_KEY = 'teamree.notices.events'
+
+/** Which events raise a notification, under the one preference for how. */
+export type NoticeEvents = { finished: boolean; asking: boolean; teammates: boolean }
+
+export const NOTICE_EVENTS_DEFAULT: NoticeEvents = { finished: true, asking: true, teammates: true }
+
+export function readStoredNoticeEvents(storage: Pick<Storage, 'getItem'> | undefined): NoticeEvents {
+  return readFlags(storage, NOTICE_EVENTS_KEY, NOTICE_EVENTS_DEFAULT)
+}
+
+export function writeStoredNoticeEvents(storage: Pick<Storage, 'setItem'> | undefined, events: NoticeEvents): void {
+  writeJson(storage, NOTICE_EVENTS_KEY, events)
+}
+
+const CONFIRMATIONS_KEY = 'teamree.confirm'
+
+/** The questions that can be turned off: deleting a clean worktree, and closing a working agent's pane. */
+export type Confirmations = { removeWorktree: boolean; stopAgent: boolean }
+
+export const CONFIRMATIONS_DEFAULT: Confirmations = { removeWorktree: true, stopAgent: true }
+
+export function readStoredConfirmations(storage: Pick<Storage, 'getItem'> | undefined): Confirmations {
+  return readFlags(storage, CONFIRMATIONS_KEY, CONFIRMATIONS_DEFAULT)
+}
+
+export function writeStoredConfirmations(
+  storage: Pick<Storage, 'setItem'> | undefined,
+  confirmations: Confirmations
+): void {
+  writeJson(storage, CONFIRMATIONS_KEY, confirmations)
 }
 
 export function readStoredTerminalOptions(storage: Pick<Storage, 'getItem'> | undefined): TerminalOptions {
@@ -281,6 +352,14 @@ export function writeStoredEditorCommands(
   } catch {
     // As above: the choice holds for this window and is forgotten on the next.
   }
+}
+
+/** The key in the editor map for every project that names none of its own. */
+export const ANY_PROJECT = '*'
+
+/** The editor a project's checkouts open in: its own, else the one for every project. */
+export function editorFor(commands: Readonly<Record<string, string>>, projectId: string): string | undefined {
+  return commands[projectId] ?? commands[ANY_PROJECT]
 }
 
 /** The map with one project's editor set, or removed when blank: absence is the only spelling of "use PATH" the main process checks. */

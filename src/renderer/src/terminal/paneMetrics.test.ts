@@ -17,6 +17,8 @@ function leaf(terminalId: string): PaneNode {
   return { kind: 'leaf', terminalId }
 }
 
+const FACE = { fontFamily: 'monospace', lineHeight: 1.25 }
+
 describe('where the next pane lands', () => {
   const area = { width: 1000, height: 800 }
 
@@ -76,6 +78,11 @@ describe('a cell as xterm draws it', () => {
     expect(cellFromChar({ width: 5.41845703125, height: 10 }, 2)).toEqual({ width: 5, height: 12.5 })
     expect(cellFromChar({ width: 7.82666015625, height: 15 }, 1)).toEqual({ width: 7, height: 18 })
   })
+
+  it('takes the line height the panes are set to', () => {
+    expect(cellFromChar({ width: 7.82666015625, height: 15 }, 2, 1)).toEqual({ width: 7.5, height: 15 })
+    expect(cellFromChar({ width: 7.82666015625, height: 15 }, 2, 1.5)).toEqual({ width: 7.5, height: 22.5 })
+  })
 })
 
 describe('with no window to measure', () => {
@@ -84,11 +91,11 @@ describe('with no window to measure', () => {
   // throw in a headless renderer test, a bootstrap before the grid exists, or
   // the first paint.
   it('measures no cell without a document', () => {
-    expect(measureCell(13, 'monospace', undefined)).toBeUndefined()
+    expect(measureCell(13, FACE, undefined)).toBeUndefined()
   })
 
   it('offers no size without a document', () => {
-    expect(newPaneRoom(13, 'monospace', null, undefined)).toBeUndefined()
+    expect(newPaneRoom(13, FACE, null, undefined)).toBeUndefined()
   })
 })
 

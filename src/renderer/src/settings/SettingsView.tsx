@@ -7,7 +7,7 @@ import { branchPrefixFor } from '@shared/branchName'
 import type { Project, RunKind } from '@shared/entities'
 import type { ParamsOf } from '@shared/methods'
 import { RUN_KINDS } from '@shared/runCommands'
-import type { RuntimeSettings } from '@shared/settings'
+import { DEFAULT_FETCH_MINUTES, type RuntimeSettings } from '@shared/settings'
 import { effectiveProjectSettings, settingSource, startPointOf } from '@shared/projectSettings'
 import { AgentGlyph } from '../agents/glyphs'
 import { harnessName } from '../agents/harnesses'
@@ -17,7 +17,10 @@ import { paneNumberRows, shortcutGroups } from '../help/helpTopics'
 import { formatChord, resolvePlatformModifier, type PlatformModifier } from '../keyboard/platformModifier'
 import { menuLabel } from '../menu/menuBar'
 import {
+  ANY_PROJECT,
   NO_DEFAULT_AGENT,
+  TERMINAL_LINE_HEIGHT_MAX,
+  TERMINAL_LINE_HEIGHT_MIN,
   TERMINAL_FONT_MAX_PX,
   TERMINAL_FONT_MIN_PX,
   TERMINAL_SCROLLBACK_MAX,
@@ -25,6 +28,7 @@ import {
   type AgentNoticePreference,
   type DiffLayout,
   type KeepAwakeMode,
+  type NoticeEvents,
   type TerminalCursorStyle
 } from '../state/preferences'
 import { NoticeTest } from '../notices/NoticeTest'
@@ -118,9 +122,23 @@ const CURSOR_STYLES: readonly { value: TerminalCursorStyle; label: string }[] = 
 ]
 
 const NOTICE_CHOICES: readonly { value: AgentNoticePreference; label: string }[] = [
-  { value: 'off', label: 'Nothing' },
-  { value: 'notify', label: 'Notify' },
-  { value: 'sound', label: 'Notify with sound' }
+  { value: 'off', label: 'Never' },
+  { value: 'notify', label: 'Silently' },
+  { value: 'sound', label: 'With Sound' }
+]
+
+const NOTICE_EVENTS: readonly { event: keyof NoticeEvents; label: string }[] = [
+  { event: 'finished', label: 'Agent Finishes' },
+  { event: 'asking', label: 'Agent Asks' },
+  { event: 'teammates', label: 'Teammate Shares a Note' }
+]
+
+const FETCH_CHOICES: readonly { value: string; label: string }[] = [
+  { value: '1', label: '1 minute' },
+  { value: '5', label: '5 minutes' },
+  { value: '15', label: '15 minutes' },
+  { value: '30', label: '30 minutes' },
+  { value: '60', label: '1 hour' }
 ]
 
 const KEEP_AWAKE_CHOICES: readonly { value: KeepAwakeMode; label: string }[] = [
@@ -170,13 +188,35 @@ function useThemeValue(): string {
   return `${theme} · ${APPEARANCE_MODE_LABEL[appearance.mode ?? 'dark']}`
 }
 
-/** The editors the picker offers, and its first option's label. */
-function editorChoices(found: readonly { command: string; label: string; kind?: string }[] | null): {
+type EditorPicker = {
   editors: readonly { command: string; label: string }[]
-  firstFound: string
-} {
+  /** The first option: what an unset picker falls back to. */
+  first: string
+  stored: string
+  /** What the filter reads: every option, and a program typed under Other…. */
+  words: string[]
+}
+
+/** The editor picker for a project, or for every project under `ANY_PROJECT`. */
+function editorPicker(
+  key: string,
+  commands: Readonly<Record<string, string>>,
+  found: readonly { command: string; label: string; kind?: string }[] | null
+): EditorPicker {
   const editors = (found ?? []).filter((editor) => (editor.kind ?? 'editor') === 'editor')
-  return { editors, firstFound: editors[0] === undefined ? 'First found' : `First found (${editors[0].label})` }
+  const labelOf = (command: string): string =>
+    editors.find((editor) => editor.command === command)?.label ?? command.split('/').filter(Boolean).pop() ?? command
+  const inherited = key === ANY_PROJECT ? undefined : commands[ANY_PROJECT]
+  const first =
+    inherited !== undefined
+      ? `Default (${labelOf(inherited)})`
+      : editors[0] === undefined
+        ? 'First found'
+        : `First found (${editors[0].label})`
+  const stored = commands[key] ?? ''
+  // A program typed in under Other… is on screen; a picked editor's command is not.
+  const typed = editors.some((editor) => editor.command === stored) ? '' : stored
+  return { editors, first, stored, words: [first, ...editors.map((editor) => editor.label), 'Other…', typed] }
 }
 
 /** A project's rows as the filter reads them, from the same values its controls show. */
@@ -185,11 +225,7 @@ function useProjectRows(machine: RuntimeSettings | null): (project: Project) => 
   const editorCommands = useWorkspaceStore((state) => state.editorCommands)
   const found = useWorkspaceStore((state) => state.editors)
   const relays = useWorkspaceStore((state) => state.relays)
-  const { editors, firstFound } = editorChoices(found)
   return (project) => {
-    const editor = editorCommands[project.id] ?? ''
-    // A program typed in under Other… is on screen; a picked editor's command is not.
-    const typed = editors.some((option) => option.command === editor) ? '' : editor
     const applied = effectiveProjectSettings(project)
     return [
       { label: 'Start new worktrees from', words: [startPointOf(project, startPoints[project.id])] },
@@ -200,10 +236,7 @@ function useProjectRows(machine: RuntimeSettings | null): (project: Project) => 
       { label: 'Copy into every new worktree', words: applied.copiedPaths ?? [] },
       { label: 'Setup command', words: [applied.setupCommand ?? ''] },
       ...RUN_KINDS.map((kind) => ({ label: RUN_SETTING[kind], words: [applied.runCommands?.[kind] ?? ''] })),
-      {
-        label: 'Open checkouts in',
-        words: [firstFound, ...editors.map((option) => option.label), 'Other…', typed]
-      },
+      { label: 'Open checkouts in', words: editorPicker(project.id, editorCommands, found).words },
       { label: 'Relay', words: [relayPanel(relays[project.id]).headline] }
     ]
   }
@@ -220,13 +253,17 @@ function useSectionRows(
   const agents = useAgentRows()
   const themeValue = useThemeValue()
   const shortcuts = useShortcutRows(modifier)
+  const editorCommands = useWorkspaceStore((state) => state.editorCommands)
+  const found = useWorkspaceStore((state) => state.editors)
   return {
     general: [
       { label: 'Worktrees in', words: [machineRoot(machine)] },
       { label: 'Branch prefix', words: [machine?.branchPrefix ?? ''] },
       ...(offersMenuBar() ? [{ label: 'Show in Menu Bar', words: [] }] : []),
       { label: 'Show Cost', words: [] },
-      { label: 'Keep Awake', words: KEEP_AWAKE_CHOICES.map((choice) => choice.label) }
+      { label: 'Keep Awake', words: KEEP_AWAKE_CHOICES.map((choice) => choice.label) },
+      { label: 'Default editor', words: editorPicker(ANY_PROJECT, editorCommands, found).words },
+      { label: 'Ask Before Deleting Worktrees', words: [] }
     ],
     agents: [
       {
@@ -238,6 +275,7 @@ function useSectionRows(
       { label: 'Warn Agents About Overlaps', words: [] }
     ],
     git: [
+      { label: 'Fetch every', words: FETCH_CHOICES.map((choice) => choice.label) },
       { label: 'Diff layout', words: DIFF_LAYOUTS.map((layout) => layout.label) },
       { label: 'Wrap Diff Lines', words: [] },
       { label: 'Hide Whitespace Changes', words: [] }
@@ -245,13 +283,19 @@ function useSectionRows(
     panes: [
       { label: 'Terminal text size', words: [`${fontSize}px`] },
       { label: 'Font', words: [options.fontFamily] },
+      { label: 'Line height', words: [String(options.lineHeight)] },
       { label: 'Cursor', words: [...CURSOR_STYLES.map((style) => style.label), 'Blink'] },
       { label: 'Option as Meta', words: [] },
       { label: 'Copy on Select', words: [] },
       { label: 'Scrollback lines', words: [String(options.scrollback)] },
+      { label: 'Shell', words: [machine?.shell ?? ''] },
+      { label: 'Ask Before Stopping Agents', words: [] },
       { label: 'Keep Agents Running When teamree Quits', words: [] }
     ],
-    notices: [{ label: 'When an agent stops or asks', words: NOTICE_CHOICES.map((choice) => choice.label) }],
+    notices: [
+      { label: 'Notify', words: NOTICE_CHOICES.map((choice) => choice.label) },
+      ...NOTICE_EVENTS.map((entry) => ({ label: entry.label, words: [] }))
+    ],
     teamwork: [{ label: 'Share Task Details', words: [] }],
     appearance: [{ label: 'Theme', words: [themeValue, ...THEME_WORDS] }],
     shortcuts: shortcuts.map((row) => ({ label: row.label, words: [row.chord] })),
@@ -631,6 +675,8 @@ function GeneralSection(): React.JSX.Element {
   const settings = machine.settings
   const keepAwake = useWorkspaceStore((state) => state.keepAwake)
   const setKeepAwake = useWorkspaceStore((state) => state.setKeepAwake)
+  const confirmations = useWorkspaceStore((state) => state.confirmations)
+  const setConfirmation = useWorkspaceStore((state) => state.setConfirmation)
   const show = useShown()
 
   return (
@@ -684,6 +730,15 @@ function GeneralSection(): React.JSX.Element {
             value={keepAwake}
             choices={KEEP_AWAKE_CHOICES}
             onChange={setKeepAwake}
+          />
+        ) : null}
+        {show.row('Default editor') ? <EditorCommand editorKey={ANY_PROJECT} label="Default editor" /> : null}
+        {show.row('Ask Before Deleting Worktrees') ? (
+          <CheckField
+            id="settings-confirm-remove"
+            label="Ask Before Deleting Worktrees"
+            checked={confirmations.removeWorktree}
+            onChange={(on) => setConfirmation('removeWorktree', on)}
           />
         ) : null}
         {machine.problem === null ? null : <p className="settings-error">{machine.problem}</p>}
@@ -809,10 +864,12 @@ function BranchPrefix({
   )
 }
 
-/** What an agent that has stopped may do when you are not looking at the window. */
+/** How this window says something happened while you were elsewhere, and for which events. */
 function NoticesSection(): React.JSX.Element {
   const agentNotices = useWorkspaceStore((state) => state.agentNotices)
   const setAgentNotices = useWorkspaceStore((state) => state.setAgentNotices)
+  const events = useWorkspaceStore((state) => state.noticeEvents)
+  const setNoticeEvent = useWorkspaceStore((state) => state.setNoticeEvent)
   const shown = useShown()
 
   return (
@@ -821,30 +878,28 @@ function NoticesSection(): React.JSX.Element {
         <Marked text="Notifications" />
       </h2>
       <div className="settings-group">
-        <div className="settings-field">
-          <label className="settings-field__label" htmlFor="settings-agent-notices">
-            <Marked text="When an agent stops or asks" />
-          </label>
-          <div className="settings-field__row">
-            <Select
-              id="settings-agent-notices"
-              value={agentNotices}
-              onChange={(event) => setAgentNotices(event.target.value as AgentNoticePreference)}
-              {...hitMark(
-                shown,
-                NOTICE_CHOICES.map((choice) => choice.label)
-              )}
-            >
-              {NOTICE_CHOICES.map((choice) => (
-                <option key={choice.value} value={choice.value}>
-                  {choice.label}
-                </option>
-              ))}
-            </Select>
+        {shown.row('Notify') ? (
+          <ChoiceField
+            id="settings-agent-notices"
+            label="Notify"
+            value={agentNotices}
+            choices={NOTICE_CHOICES}
+            onChange={setAgentNotices}
+          >
             {/* Keyed so a result from another setting does not linger. */}
             <NoticeTest key={agentNotices} />
-          </div>
-        </div>
+          </ChoiceField>
+        ) : null}
+        {NOTICE_EVENTS.filter((entry) => shown.row(entry.label)).map((entry) => (
+          <CheckField
+            key={entry.event}
+            id={`settings-notice-${entry.event}`}
+            label={entry.label}
+            checked={events[entry.event]}
+            disabled={agentNotices === 'off'}
+            onChange={(on) => setNoticeEvent(entry.event, on)}
+          />
+        ))}
       </div>
     </section>
   )
@@ -883,6 +938,12 @@ function PanesSection(): React.JSX.Element {
     const lines = Number.parseInt(value, 10)
     if (Number.isFinite(lines)) setOptions({ scrollback: lines })
   })
+  const lineHeight = useDraft(String(options.lineHeight), (value) => {
+    const height = Number.parseFloat(value)
+    if (Number.isFinite(height)) setOptions({ lineHeight: height })
+  })
+  const stopAgent = useWorkspaceStore((state) => state.confirmations.stopAgent)
+  const setConfirmation = useWorkspaceStore((state) => state.setConfirmation)
   const shown = useShown()
   const runtime = useRuntimeSettings()
 
@@ -936,6 +997,24 @@ function PanesSection(): React.JSX.Element {
             >
               ~/repo $ git status 0O 1lI {'{}'} =&gt; !=
             </div>
+          </div>
+        ) : null}
+
+        {shown.row('Line height') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-line-height">
+              <Marked text="Line height" />
+            </label>
+            <input
+              id="settings-line-height"
+              className="settings-field__input settings-field__input--number"
+              type="number"
+              min={TERMINAL_LINE_HEIGHT_MIN}
+              max={TERMINAL_LINE_HEIGHT_MAX}
+              step={0.05}
+              {...lineHeight}
+              {...hitMark(shown, [String(options.lineHeight)])}
+            />
           </div>
         ) : null}
 
@@ -1010,6 +1089,17 @@ function PanesSection(): React.JSX.Element {
           </div>
         ) : null}
 
+        {shown.row('Shell') ? <ShellField /> : null}
+
+        {shown.row('Ask Before Stopping Agents') ? (
+          <CheckField
+            id="settings-confirm-stop-agent"
+            label="Ask Before Stopping Agents"
+            checked={stopAgent}
+            onChange={(on) => setConfirmation('stopAgent', on)}
+          />
+        ) : null}
+
         {shown.row('Keep Agents Running When teamree Quits') ? (
           <div className="settings-field">
             <label className="settings-field__label" htmlFor="settings-keep-panes">
@@ -1031,12 +1121,42 @@ function PanesSection(): React.JSX.Element {
   )
 }
 
+/** The program new panes start in; empty, the login shell, which the placeholder names. */
+function ShellField(): React.JSX.Element {
+  const machine = useContext(MachineContext)
+  const shown = useShown()
+  const [problem, setProblem] = useState<string | null>(null)
+  const own = machine.settings?.shell ?? ''
+  const draft = useDraft(own, (shell) => {
+    setProblem(null)
+    machine.save({ shell }).catch((error: unknown) => setProblem(reasonFor(error)))
+  })
+  return (
+    <div className="settings-field">
+      <label className="settings-field__label" htmlFor="settings-shell">
+        <Marked text="Shell" />
+      </label>
+      <input
+        id="settings-shell"
+        className="settings-field__input settings-field__input--command"
+        type="text"
+        placeholder={machine.settings?.shellFallback ?? ''}
+        aria-invalid={problem !== null}
+        {...hitMark(shown, [own])}
+        {...draft}
+      />
+      {problem === null ? null : <p className="settings-error">{problem}</p>}
+    </div>
+  )
+}
+
 /** How reviews open: the defaults the diff toolbar changes too. */
 function GitSection(): React.JSX.Element {
   const layout = useWorkspaceStore((state) => state.diffLayout)
   const setDiffLayout = useWorkspaceStore((state) => state.setDiffLayout)
   const options = useWorkspaceStore((state) => state.diffOptions)
   const toggleDiffOption = useWorkspaceStore((state) => state.toggleDiffOption)
+  const machine = useContext(MachineContext)
   const shown = useShown()
 
   return (
@@ -1045,6 +1165,15 @@ function GitSection(): React.JSX.Element {
         <Marked text="Git" />
       </h2>
       <div className="settings-group">
+        {shown.row('Fetch every') ? (
+          <ChoiceField
+            id="settings-fetch-every"
+            label="Fetch every"
+            value={String(machine.settings?.fetchMinutes ?? DEFAULT_FETCH_MINUTES)}
+            choices={FETCH_CHOICES}
+            onChange={(minutes) => machine.change({ fetchMinutes: Number(minutes) })}
+          />
+        ) : null}
         {shown.row('Diff layout') ? (
           <ChoiceField
             id="settings-diff-layout"
@@ -1147,35 +1276,48 @@ function ChoiceField<T extends string>({
   label,
   value,
   choices,
-  onChange
+  onChange,
+  children
 }: {
   id: string
   label: string
   value: T
   choices: readonly { value: T; label: string }[]
   onChange: (value: T) => void
+  /** Beside the picker, e.g. a button that tries the setting. */
+  children?: React.ReactNode
 }): React.JSX.Element {
   const shown = useShown()
+  const picker = (
+    <Select
+      id={id}
+      value={value}
+      onChange={(event) => onChange(event.target.value as T)}
+      {...hitMark(
+        shown,
+        choices.map((choice) => choice.label)
+      )}
+    >
+      {choices.map((choice) => (
+        <option key={choice.value} value={choice.value}>
+          {choice.label}
+        </option>
+      ))}
+    </Select>
+  )
   return (
     <div className="settings-field">
       <label className="settings-field__label" htmlFor={id}>
         <Marked text={label} />
       </label>
-      <Select
-        id={id}
-        value={value}
-        onChange={(event) => onChange(event.target.value as T)}
-        {...hitMark(
-          shown,
-          choices.map((choice) => choice.label)
-        )}
-      >
-        {choices.map((choice) => (
-          <option key={choice.value} value={choice.value}>
-            {choice.label}
-          </option>
-        ))}
-      </Select>
+      {children === undefined ? (
+        picker
+      ) : (
+        <div className="settings-field__row">
+          {picker}
+          {children}
+        </div>
+      )}
     </div>
   )
 }
@@ -1447,7 +1589,7 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
       <ProjectWorktrees project={project} />
       {shown.row('Fetch in Background') ? <FetchInBackground project={project} /> : null}
       <CarriedPaths project={project} />
-      {shown.row('Open checkouts in') ? <EditorCommand project={project} /> : null}
+      {shown.row('Open checkouts in') ? <EditorCommand editorKey={project.id} label="Open checkouts in" /> : null}
       {shown.row('Relay') ? <RelayBlock project={project} /> : null}
     </article>
   )
@@ -1810,13 +1952,14 @@ function PathList({
 const OTHER_EDITOR = 'other'
 
 /**
- * Which editor this project's checkouts open in: one found, or a program named in the field.
- * A program name, not a command line: it is spawned without a shell, the checkout as one argument.
+ * Which editor a project's checkouts open in (`ANY_PROJECT`: every project naming none): one found, or a
+ * program named in the field. A program name, not a command line: it is spawned without a shell.
  */
-function EditorCommand({ project }: { project: Project }): React.JSX.Element {
-  const stored = useWorkspaceStore((state) => state.editorCommands[project.id] ?? '')
+function EditorCommand({ editorKey, label }: { editorKey: string; label: string }): React.JSX.Element {
+  const commands = useWorkspaceStore((state) => state.editorCommands)
   const found = useWorkspaceStore((state) => state.editors)
   const setEditorCommand = useWorkspaceStore((state) => state.setEditorCommand)
+  const { editors, first, stored, words } = editorPicker(editorKey, commands, found)
   const [draft, setDraft] = useState(stored)
   const [typing, setTyping] = useState(false)
   const shown = useShown()
@@ -1825,22 +1968,21 @@ function EditorCommand({ project }: { project: Project }): React.JSX.Element {
     setDraft(stored)
   }, [stored])
 
-  const { editors, firstFound } = editorChoices(found)
   const named = stored.length > 0 && !editors.some((editor) => editor.command === stored)
   const other = typing || named
 
   const commit = (): void => {
     const next = draft.trim()
     if (next === stored) return
-    setEditorCommand(project.id, next.length === 0 ? null : next)
+    setEditorCommand(editorKey, next.length === 0 ? null : next)
   }
 
-  const id = `settings-editor-${project.id}`
+  const id = `settings-editor-${editorKey === ANY_PROJECT ? 'default' : editorKey}`
 
   return (
     <div className="settings-field">
       <label className="settings-field__label" htmlFor={id}>
-        <Marked text="Open checkouts in" />
+        <Marked text={label} />
       </label>
       <div className="settings-field__row">
         <Select
@@ -1850,11 +1992,11 @@ function EditorCommand({ project }: { project: Project }): React.JSX.Element {
             const value = event.target.value
             setTyping(value === OTHER_EDITOR)
             if (value === OTHER_EDITOR) setDraft(named ? stored : '')
-            else setEditorCommand(project.id, value.length === 0 ? null : value)
+            else setEditorCommand(editorKey, value.length === 0 ? null : value)
           }}
-          {...hitMark(shown, [firstFound, ...editors.map((editor) => editor.label), 'Other…'])}
+          {...hitMark(shown, words.slice(0, -1))}
         >
-          <option value="">{firstFound}</option>
+          <option value="">{first}</option>
           {editors.map((editor) => (
             <option key={editor.command} value={editor.command}>
               {editor.label}

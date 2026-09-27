@@ -22,7 +22,16 @@ export type RuntimeSettings = {
   branchPrefix?: string
   /** Where new worktrees go with no folder set: the launch's `TEAMREE_WORKTREES_ROOT`, else the default. Read only. */
   worktreesRootFallback?: string
+  /** Settings › Panes › Shell: the program new panes start; absent is the login shell. */
+  shell?: string
+  /** The login shell a pane starts with no Shell set. Read only. */
+  shellFallback?: string
+  /** Settings › Git › Fetch every: minutes between background fetches of each project's base; absent is 5. */
+  fetchMinutes?: number
 }
+
+/** Minutes between background fetches when none are set. */
+export const DEFAULT_FETCH_MINUTES = 5
 
 export const DEFAULT_RUNTIME_SETTINGS: RuntimeSettings = {
   shareTaskDetails: true,

@@ -146,3 +146,53 @@ it('closes a quiet shell without asking anybody anything', async () => {
   expect(useWorkspaceStore.getState().dialog).toBeNull()
   expect(collectTerminalIds(useWorkspaceStore.getState().layouts[worktreeId]!.root)).not.toContain(terminalId)
 })
+
+it('closes a working agent without asking once that question is turned off, and still asks for a busy shell', async () => {
+  const { worktreeId, terminalId } = await workingPane('claude')
+  useWorkspaceStore.getState().setConfirmation('stopAgent', false)
+  try {
+    await useWorkspaceStore.getState().closeTerminal(terminalId)
+    expect(useWorkspaceStore.getState().dialog).toBeNull()
+    expect(collectTerminalIds(useWorkspaceStore.getState().layouts[worktreeId]!.root)).not.toContain(terminalId)
+
+    const shell = await workingPane(undefined)
+    await useWorkspaceStore.getState().closeTerminal(shell.terminalId)
+    expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-close-pane', terminalId: shell.terminalId })
+  } finally {
+    useWorkspaceStore.getState().setConfirmation('stopAgent', true)
+    useWorkspaceStore.setState({ dialog: null })
+  }
+})
+
+it('deletes a worktree without the question once it is turned off, leaving the refusal to the runtime', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const worktree = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!
+  useWorkspaceStore.setState({ dialog: null })
+  store.setConfirmation('removeWorktree', false)
+  const call = vi.spyOn(runtimeClient, 'call')
+  try {
+    await useWorkspaceStore.getState().removeWorktree(worktree.id)
+    const removal = call.mock.calls.find(([method]) => method === 'worktree.remove')
+    expect(removal?.[1]).toMatchObject({ worktreeId: worktree.id })
+    expect(removal?.[1]).not.toHaveProperty('force')
+  } finally {
+    call.mockRestore()
+    store.setConfirmation('removeWorktree', true)
+    useWorkspaceStore.setState({ dialog: null })
+  }
+})
+
+it('asks before deleting a worktree by default', async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const worktree = useWorkspaceStore.getState().worktrees.find((entry) => entry.state === 'ready')!
+  useWorkspaceStore.setState({ dialog: null })
+  await useWorkspaceStore.getState().removeWorktree(worktree.id)
+  expect(useWorkspaceStore.getState().dialog).toEqual({
+    kind: 'confirm-remove',
+    worktreeId: worktree.id,
+    intent: 'remove'
+  })
+  useWorkspaceStore.setState({ dialog: null })
+})

@@ -58,6 +58,7 @@ type MenuBarItem = {
  */
 type NoticeSettings = {
   preference: string
+  events: Record<string, boolean>
   focusedPaneId: string | null
   names: Record<string, string>
   activeWorktreeId: string | null

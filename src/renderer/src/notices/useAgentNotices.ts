@@ -57,6 +57,7 @@ export function useAgentNotices(): void {
       }
       const settings = {
         preference: state.agentNotices,
+        events: state.noticeEvents,
         focusedPaneId: focusedOwnPaneId(state),
         names: named.names,
         activeWorktreeId: state.activeWorktreeId

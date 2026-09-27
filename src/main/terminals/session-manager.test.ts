@@ -52,6 +52,21 @@ afterEach(async () => {
 
 describePty('terminal handlers', () => {
   it(
+    'starts a new pane in the shell Settings names, unless the caller names one',
+    async () => {
+      const service = createTerminalService({
+        resolveWorktreeCwd: () => process.cwd(),
+        defaultShell: () => '/bin/sh'
+      })
+      services.push(service)
+      expect((await newTerminal(service)).shell).toBe('/bin/sh')
+      const named = await service.handlers['terminal.create']({ worktreeId: WORKTREE, shell: '/bin/bash' })
+      expect(named.shell).toBe('/bin/bash')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'creates a terminal and gives it the whole layout',
     async () => {
       const service = newService()
