@@ -1,10 +1,6 @@
-// Every stylesheet has to parse: CSS has no compiler in front of it, and a rule that lost its body in a
-// merge once passed every gate until the renderer build.
+// Rules for every stylesheet at once: they parse, take sizes, faces and colours from the tokens, and the
+// tokens match the default presets. Each sheet's own pins live in `tests/<sheet>.test.ts`.
 
-import { readdirSync, readFileSync } from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import postcss from 'postcss'
 import { describe, expect, it } from 'vitest'
 import { contrastRatio, mix, parseColor, type Rgb } from '@shared/color'
 import {
@@ -15,13 +11,18 @@ import {
   themeTone,
   type Appearance
 } from '@shared/theme'
-import { GUTTER_PX } from '../panes/paneLayout'
-import { PANEL_OVERLAY_QUERY } from '../workspace/roomForPanes'
-
-const here = path.dirname(fileURLToPath(import.meta.url))
-const sheets = readdirSync(here)
-  .filter((name) => name.endsWith('.css'))
-  .sort()
+import postcss from 'postcss'
+import {
+  customProperties,
+  declarationOf,
+  LIGHT_SCHEME,
+  paletteOf,
+  parse,
+  rgbOf,
+  ruleFor,
+  ruleListing,
+  sheets
+} from './tests/css'
 
 describe('stylesheets', () => {
   // If this ever finds nothing, the check has silently stopped checking.
@@ -29,16 +30,14 @@ describe('stylesheets', () => {
     expect(sheets.length).toBeGreaterThan(5)
   })
 
+  // CSS has no compiler in front of it: a rule that lost its body in a merge once passed every gate until the build.
   it.each(sheets)('%s parses', (name) => {
-    const css = readFileSync(path.join(here, name), 'utf8')
-    expect(() => postcss.parse(css, { from: name })).not.toThrow()
+    expect(() => parse(name)).not.toThrow()
   })
 
-  // The shape that got through: a selector that declares nothing.
   it.each(sheets)('%s has no rule with an empty body', (name) => {
-    const css = readFileSync(path.join(here, name), 'utf8')
     const empty: string[] = []
-    postcss.parse(css, { from: name }).walkRules((rule) => {
+    parse(name).walkRules((rule) => {
       if (rule.nodes.length === 0) empty.push(rule.selector)
     })
     expect(empty).toEqual([])
@@ -48,98 +47,33 @@ describe('stylesheets', () => {
   it('leaves every icon’s size and stroke to the icon set', () => {
     const overrides: string[] = []
     for (const name of sheets) {
-      postcss
-        .parse(readFileSync(path.join(here, name), 'utf8'), { from: name })
-        .walkDecls(/^(width|height|stroke-width)$/, (decl) => {
-          const selector = (decl.parent as postcss.Rule).selector
-          if (/\bsvg\b|\[data-icon\]/.test(selector) && !selector.includes('resources__spark'))
-            overrides.push(`${name} ${selector} ${decl.prop}`)
-        })
+      parse(name).walkDecls(/^(width|height|stroke-width)$/, (decl) => {
+        const selector = (decl.parent as postcss.Rule).selector
+        if (/\bsvg\b|\[data-icon\]/.test(selector) && !selector.includes('resources__spark'))
+          overrides.push(`${name} ${selector} ${decl.prop}`)
+      })
     }
     expect(overrides).toEqual([])
   })
 
-  // A notice under the modal scrim is painted and covered; the two z-indexes live in two files.
-  it('stacks the notices above the modal layer, so no dialog can hide its own error', () => {
-    expect(zIndexOf('.corner-stack')).toBeGreaterThan(zIndexOf('.modal-layer'))
-  })
-
-  // Red is for the confirm; a row's Discard is one pointer move from the row being read.
-  it('draws a changed file’s Discard and line counts in grey, never red', () => {
-    expect(declarationOf(ruleFor('workspace.css', '.change__discard'), 'color')).toBe('var(--fg-muted)')
-    expect(declarationOf(ruleFor('workspace.css', '.change__stat'), 'color')).toBe('var(--fg-secondary)')
-  })
-
-  // One tab was squeezed to its glyph while the others kept their names.
-  it('shrinks a pane tab no further than six characters of its name, then cuts the name short', () => {
-    expect(declarationOf(ruleFor('workspace.css', '.tab'), 'min-width')).toMatch(/\b6ch\b/)
-    const name = ruleFor('workspace.css', '.tab__name')
-    expect(declarationOf(name, 'text-overflow')).toBe('ellipsis')
-    expect(declarationOf(name, 'white-space')).toBe('nowrap')
-  })
-
-  it('dims behind a dialog without blurring the window', () => {
-    expect(declarationOf(ruleFor('dialog.css', '.modal-layer'), 'backdrop-filter')).toBeUndefined()
-  })
-
-  // One stack in the bottom-right corner, so the update card and a notice never overlap.
-  it('puts the update card in the notices’ stack rather than a corner of its own', () => {
-    const stack = ruleFor('shell.css', '.corner-stack')
-    expect(declarationOf(stack, 'position')).toBe('fixed')
-    expect(declarationOf(stack, 'right')).toBeDefined()
-    expect(declarationOf(stack, 'left')).toBeUndefined()
-    expect(declarationOf(ruleFor('shell.css', '.notices'), 'position')).toBeUndefined()
-    expect(declarationOf(ruleFor('updates.css', '.update-card'), 'position')).toBeUndefined()
-  })
-
-  // Red on pink read as the failed tone; inline code is text on the raised ground, like a code block.
-  it('draws inline code in a markdown page in neutral ink', () => {
-    const rule = ruleFor('markdown.css', '.md-editor code')
-    expect(declarationOf(rule, 'color')).toBe('var(--fg)')
-    expect(declarationOf(rule, 'background')).toBe('var(--bg-raised)')
-  })
-
-  // `text-overflow: ellipsis` cuts mid-word; a one-line clamp ends on a word.
-  it('ends a quoted line under a pane row on a word, not in the middle of one', () => {
-    const rule = ruleFor('sidebar.css', '.pane-row__evidence')
-    expect(declarationOf(rule, '-webkit-line-clamp')).toBe('1')
-    expect(declarationOf(rule, 'white-space')).not.toBe('nowrap')
-  })
-
-  // One chip radius and size everywhere.
-  it('draws every chip from one rule', () => {
-    const chip = ruleFor('base.css', '.chip')
-    expect(declarationOf(chip, 'border-radius')).toBe('var(--r1)')
-    expect(declarationOf(chip, 'font-size')).toBe('var(--text-xs)')
-    for (const [sheet, selector] of [
-      ['sidebar.css', '.worktree__tag'],
-      ['sidebar.css', '.worktree__merge'],
-      ['panes.css', '.pane__exit'],
-      ['panes.css', '.pane__restored--agent']
-    ] as const) {
-      const rule = ruleFor(sheet, selector)
-      expect(declarationOf(rule, 'border-radius'), selector).toBeUndefined()
-      expect(declarationOf(rule, 'font-size'), selector).toBeUndefined()
-    }
-  })
-
   describe('one type scale', () => {
-    it('reads no smaller than 11px, with rows at 13px', () => {
+    it('reads no smaller than 11px: meta 11, labels 12, body 13, heading 15, title 19, page 26, code 13', () => {
       const tokens = customProperties('tokens.css')
       expect(tokens.get('--text-xs')).toBe('11px')
       expect(tokens.get('--text-sm')).toBe('12px')
       expect(tokens.get('--text-base')).toBe('13px')
       expect(tokens.get('--text-lg')).toBe('15px')
-      expect(tokens.get('--text-xl')).toBe('18px')
-      expect(declarationOf(ruleFor('sidebar.css', '.worktree__name'), 'font-size')).toBe('var(--text-base)')
+      expect(tokens.get('--text-xl')).toBe('19px')
+      expect(tokens.get('--text-2xl')).toBe('26px')
+      expect(tokens.get('--text-code')).toBe('13px')
     })
 
     // Only markdown headings and inline code size themselves, relative to the page.
     it('takes every font size from a token', () => {
       const literal: string[] = []
       for (const name of sheets) {
-        postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls('font-size', (decl) => {
-          if (!/^(var\(--text-(xs|sm|base|lg|xl|code)\)|inherit|[\d.]+em)$/.test(decl.value))
+        parse(name).walkDecls('font-size', (decl) => {
+          if (!/^(var\(--text-(xs|sm|base|lg|xl|2xl|code)\)|inherit|[\d.]+em)$/.test(decl.value))
             literal.push(`${name} ${(decl.parent as postcss.Rule).selector}`)
         })
       }
@@ -149,7 +83,7 @@ describe('stylesheets', () => {
     it('sets text in the UI face or the mono face only', () => {
       const other: string[] = []
       for (const name of sheets) {
-        postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls('font-family', (decl) => {
+        parse(name).walkDecls('font-family', (decl) => {
           const selector = (decl.parent as postcss.Rule).selector
           if (selector === '.md-bar__mark--italic') return
           if (!/^(var\(--font-(ui|mono)\)|inherit)$/.test(decl.value)) other.push(`${name} ${selector}`)
@@ -166,351 +100,60 @@ describe('stylesheets', () => {
       expect(declarationOf(reset as postcss.Rule, 'letter-spacing')).toBe('inherit')
     })
 
-    it('labels the project list in sentence case', () => {
-      const title = ruleFor('sidebar.css', '.sidebar__head-title')
-      expect(declarationOf(title, 'text-transform')).toBeUndefined()
-      expect(declarationOf(title, 'font-size')).toBe('var(--text-sm)')
+    it('keeps the ramp’s tokens to the 4px grid and the named radii', () => {
+      const tokens = customProperties('tokens.css')
+      expect(['--s1', '--s2', '--s3', '--s4', '--s5', '--s6', '--s7', '--s8'].map((s) => tokens.get(s))).toEqual([
+        '4px',
+        '8px',
+        '12px',
+        '16px',
+        '24px',
+        '32px',
+        '40px',
+        '48px'
+      ])
+      expect(['--r1', '--r2', '--r3', '--r4'].map((r) => tokens.get(r))).toEqual(['4px', '7px', '10px', '14px'])
+      expect(['--control-sm', '--control-md', '--control-lg'].map((c) => tokens.get(c))).toEqual([
+        '26px',
+        '32px',
+        '38px'
+      ])
     })
   })
 
-  // One activity dot, on sidebar, strip, board and pane bar.
-  it('has one activity dot, and no second dot on the pane bar', () => {
-    expect(ruleFor('sidebar.css', '.activity')).toBeTruthy()
-    expect(findRule('panes.css', '.pane__dot')).toBeUndefined()
-  })
-
-  // The strip has one vertical centre, and the active mark sits on its own bottom edge.
-  describe('the tab strip is one row', () => {
-    it('centres the tabs, the pane buttons and the sidebar control on one height', () => {
-      expect(declarationOf(ruleFor('workspace.css', '.tabs'), 'align-items')).toBe('center')
-      expect(declarationOf(ruleFor('workspace.css', '.tabs__list'), 'align-self')).toBe('stretch')
-      expect(declarationOf(ruleFor('workspace.css', '.tab'), 'align-items')).toBe('center')
-      expect(declarationOf(ruleFor('workspace.css', '.tabs__actions'), 'align-self')).toBeUndefined()
-    })
-
-    it('marks the active tab on the strip’s bottom edge', () => {
-      const active = ruleFor('workspace.css', '.tab--active')
-      expect(declarationOf(active, 'box-shadow')).toMatch(/^inset 0 -2px 0 /)
-      expect(declarationOf(ruleFor('workspace.css', '.tab'), 'border-bottom')).toBeUndefined()
-    })
-
-    // The head and the sidebar's header are the window's top row; two heights would be a step in the frame.
-    it('has the workspace’s head as tall as the sidebar’s header, so the two read as one bar', () => {
-      expect(declarationOf(ruleFor('workspace.css', '.workspace__head'), 'height')).toBe(
-        declarationOf(ruleFor('shell.css', '.sidebar__brand'), 'height')
-      )
-      expect(declarationOf(ruleFor('workspace.css', '.workspace__head'), '-webkit-app-region')).toBe('drag')
-      expect(declarationOf(ruleFor('workspace.css', '.tabs'), '-webkit-app-region')).toBeUndefined()
-    })
-  })
-
-  // Chrome steps off the ground: rail, tab strip, panel and raised each on their own token.
-  describe('surfaces', () => {
-    it.each([
-      ['shell.css', '.shell', 'var(--bg-window)'],
-      ['workspace.css', '.workspace', 'var(--bg-pane)'],
-      ['panes.css', '.pane', 'var(--bg-pane)'],
-      ['panes.css', '.pane--terminal', 'var(--term-bg)'],
-      ['sidebar.css', '.sidebar', 'var(--bg-rail)'],
-      ['statusbar.css', '.statusbar', 'var(--bg-rail)'],
-      ['workspace.css', '.tabs', 'var(--bg-tabstrip)'],
-      ['workspace.css', '.tabs--active', 'var(--bg-tabstrip-active)'],
-      ['workspace.css', '.workspace__head', 'var(--bg-tabstrip)'],
-      ['rightPanel.css', '.panel', 'var(--bg-panel)'],
-      ['dialog.css', '.modal', 'var(--bg-raised)']
-    ])('%s paints %s in %s', (sheet, selector, token) => {
-      expect(declarationOf(ruleFor(sheet, selector), 'background')).toBe(token)
-    })
-
-    it.each([
-      ['sidebar.css', '.worktree--active'],
-      ['sidebar.css', '.rail__link--current'],
-      ['workspace.css', '.changes__item--selected'],
-      ['workspace.css', '.commit--selected'],
-      ['rightPanel.css', '.panel__tab--current'],
-      ['rightPanel.css', '.search__hit--current'],
-      ['dialog.css', '.palette__row--selected'],
-      ['dialog.css', '.combo__row.is-active']
-    ])('fills the selected row %s %s with the selected surface', (sheet, selector) => {
-      expect(declarationOf(ruleFor(sheet, selector), 'background')).toBe('var(--bg-selected)')
-    })
-  })
-
-  // Panes sit edge to edge, split by one hairline; the tab strip names them, so they carry no card or title.
-  describe('flush panes', () => {
-    it('draws no card, corner or gutter round a pane or a group of tabs', () => {
-      for (const [sheet, selector] of [
-        ['panes.css', '.pane'],
-        ['panes.css', '.group']
-      ] as const) {
-        const rule = ruleFor(sheet, selector)
-        expect(declarationOf(rule, 'border'), selector).toBeUndefined()
-        expect(declarationOf(rule, 'border-radius'), selector).toBeUndefined()
-      }
-      expect(declarationOf(ruleFor('workspace.css', '.workspace__panes'), 'padding')).toBeUndefined()
-    })
-
-    it('divides panes with a 1px line on a handle at least 6px wide', () => {
-      expect(declarationOf(ruleFor('panes.css', '.gutter--row::before'), 'width')).toBe('1px')
-      expect(declarationOf(ruleFor('panes.css', '.gutter--column::before'), 'height')).toBe('1px')
-      const reach = (selector: string, prop: string): number =>
-        -Number.parseFloat(declarationOf(ruleFor('panes.css', selector), prop) ?? '0')
-      expect(GUTTER_PX + 2 * reach('.gutter--row::after', 'left')).toBeGreaterThanOrEqual(6)
-      expect(reach('.gutter--row::after', 'left')).toBe(reach('.gutter--row::after', 'right'))
-      expect(GUTTER_PX + 2 * reach('.gutter--column::after', 'top')).toBeGreaterThanOrEqual(6)
-      expect(reach('.gutter--column::after', 'top')).toBe(reach('.gutter--column::after', 'bottom'))
-      // Above the panes either side, or their text layers take the pointer first.
-      expect(Number(declarationOf(ruleFor('panes.css', '.gutter'), 'z-index'))).toBeGreaterThan(11)
-    })
-
-    // Every group marks the tab it shows; the one holding the keys in the accent, the rest quietly.
-    it('marks the group holding the focus by an accent line under its shown tab, not a frame', () => {
-      expect(declarationOf(ruleFor('workspace.css', '.tab--active'), 'box-shadow')).toBe(
-        'inset 0 -2px 0 var(--line-strong)'
-      )
-      expect(declarationOf(ruleFor('workspace.css', '.tabs--active .tab--active'), 'box-shadow')).toBe(
-        'inset 0 -2px 0 var(--accent)'
-      )
-      expect(findRule('panes.css', '.pane--focused')).toBeUndefined()
-      expect(findRule('panes.css', '.group--active')).toBeUndefined()
-    })
-
-    // Under border-box the addon counted the padding as room and printed past the slider.
-    it('hands the fit addon a text box without the surface’s padding', () => {
-      expect(declarationOf(ruleFor('panes.css', '.terminal-surface'), 'box-sizing')).toBe('content-box')
-    })
-
-    it('draws the terminal’s scrollbar as a rounded slider', () => {
-      expect(
-        declarationOf(ruleFor('panes.css', '.terminal-surface .xterm .scrollbar > .slider'), 'border-radius')
-      ).toBe('99px')
-    })
-
-    // A row across the panes refit them; a floating card covered the prompt line and sat over the scrim.
-    it('asks for the setup command in the status rail, under any dialog', () => {
-      const ask = ruleFor('statusbar.css', '.setup-ask')
-      expect(declarationOf(ask, 'position')).toBeUndefined()
-      expect(declarationOf(ask, 'box-shadow')).toBeUndefined()
-      expect(declarationOf(ask, 'min-width')).toBe('0')
-      expect(declarationOf(ruleFor('statusbar.css', '.statusbar'), 'z-index')).toBeUndefined()
-    })
-  })
-
-  // Settings, Help, Teamwork and All Panes share one head and one column, so their edges line up.
-  describe('one page frame', () => {
-    it('measures the head and the body with one column', () => {
-      const column = ruleFor('page.css', '.page__column')
-      expect(declarationOf(column, 'max-width')).toBeDefined()
-      expect(declarationOf(column, 'margin')).toBe('0 auto')
-      const head = declarationOf(ruleFor('page.css', '.page__head'), 'padding')
-      const body = declarationOf(ruleFor('page.css', '.page__body'), 'padding')
-      expect(head?.split(' ')[1]).toBe(body?.split(' ')[1])
-    })
-
-    it('lets no page draw its own head, close or column', () => {
-      for (const [sheet, selector] of [
-        ['settings.css', '.settings__head'],
-        ['settings.css', '.settings__close'],
-        ['settings.css', '.settings__column'],
-        ['help.css', '.help__head'],
-        ['help.css', '.help__close'],
-        ['dashboard.css', '.board__head'],
-        ['dashboard.css', '.board__close'],
-        ['members.css', '.teamwork-view__head'],
-        ['members.css', '.teamwork-view__column']
-      ] as const) {
-        expect(findRule(sheet, selector), selector).toBeUndefined()
-      }
-    })
-
-    // A border on the current entry reads as a focus ring; the ring is keyboard focus's alone.
-    it('fills the current rail entry the way the current worktree is filled', () => {
-      const current = ruleFor('sidebar.css', '.rail__link--current')
-      expect(declarationOf(current, 'border-color')).toBeUndefined()
-      expect(declarationOf(current, 'background')).toBe(
-        declarationOf(ruleFor('sidebar.css', '.worktree--active'), 'background')
-      )
-    })
-  })
-
-  // The title line filled and a bar outside it made two frames, and half the box looked selected.
-  it('marks the open worktree with one fill and one line around its whole box', () => {
-    const active = ruleFor('sidebar.css', '.worktree--active')
-    expect(declarationOf(active, 'border-color')).toBe('var(--accent-line)')
-    expect(findRule('sidebar.css', '.worktree--active::before')).toBeUndefined()
-    expect(findRule('sidebar.css', '.worktree--active .worktree__row')).toBeUndefined()
-  })
-
-  // A weight made names jump in width and the list look randomly bold.
-  it('marks an unread worktree by ink and a dot after its name, never by weight', () => {
-    const unread = ruleListing('sidebar.css', '.worktree__name--unread') as postcss.Rule
-    expect(declarationOf(unread, 'font-weight')).toBeUndefined()
-    expect(declarationOf(unread, 'color')).toBe('var(--fg)')
-    expect(declarationOf(ruleFor('sidebar.css', '.worktree__name'), 'color')).toBe('var(--fg-secondary)')
-    expect(declarationOf(ruleFor('sidebar.css', '.worktree__name--unread::after'), 'background')).toBe(
-      'var(--accent-bright)'
+  // A group's strip is one token high; the head and the sidebar's header are the window's top row, one bar.
+  it('sizes every group’s strip from one token, and the head as tall as the sidebar’s header', () => {
+    expect(customProperties('tokens.css').get('--strip-h')).toBe('36px')
+    expect(declarationOf(ruleFor('workspace.css', '.tabs'), 'height')).toBe('var(--strip-h)')
+    expect(declarationOf(ruleFor('workspace.css', '.workspace__head'), 'height')).toBe(
+      declarationOf(ruleFor('shell.css', '.sidebar__brand'), 'height')
     )
   })
 
-  // A page holds the main area, so its rail entry is the one selected thing in the sidebar.
-  it('leaves the open worktree its line, no fill, while a page is open', () => {
-    const page = ruleFor('sidebar.css', '.sidebar--page .worktree--active')
-    expect(declarationOf(page, 'background')).toBe('none')
-    expect(declarationOf(page, 'border-color')).toBeUndefined()
-  })
-
-  // A quoted line in the terminal face read as log noise beside the names.
-  it('sets a row’s secondary lines in the UI face and keeps mono for refs', () => {
-    for (const selector of ['.pane-row__evidence', '.worktree__report', '.pane-row__label']) {
-      const rule = ruleListing('sidebar.css', selector) as postcss.Rule
-      expect(declarationOf(rule, 'font-family'), selector).toBeUndefined()
-      expect(declarationOf(rule, 'font-size'), selector).toBe('var(--text-sm)')
-    }
-    expect(declarationOf(ruleListing('sidebar.css', '.worktree__report') as postcss.Rule, 'color')).toBe(
-      'var(--fg-secondary)'
-    )
-    expect(declarationOf(ruleFor('sidebar.css', '.worktree__branch'), 'font-family')).toBe('var(--font-mono)')
-  })
-
-  // One card per worktree, its panes inside: a line and a corner from the tokens, a gap between cards.
-  it('draws each worktree as a box of its own', () => {
-    const box = ruleFor('sidebar.css', '.worktree')
-    expect(declarationOf(box, 'border')).toBe('1px solid var(--line)')
-    expect(declarationOf(box, 'border-radius')).toBe('var(--r2)')
-    expect(declarationOf(box, 'padding')).toMatch(/^var\(--s\d\)$/)
-    expect(declarationOf(ruleFor('sidebar.css', '.project__worktrees'), 'gap')).toMatch(/^var\(--s\d\)$/)
-  })
-
-  // Drawn outside, the ring of a 23px row covers the rows above and below it.
-  it('draws the focus ring of a sidebar row inside the row', () => {
-    for (const selector of [
-      '.pane-row:focus-visible',
-      '.worktree__open:focus-visible',
-      '.project__toggle:focus-visible'
-    ]) {
-      const rule = ruleListing('sidebar.css', selector)
-      expect(rule && declarationOf(rule, 'outline-offset'), selector).toBe('-2px')
-    }
-  })
-
-  // A menu writes its chords as the menu bar does: plain text at the right, no keycaps.
-  // A 52px gutter left 266px of text in a 370px column.
-  it('narrows the page gutter with its column', () => {
-    const gutter = declarationOf(ruleFor('markdown.css', '.md-editor'), '--page-gutter') ?? ''
-    const at = (width: number): number => {
-      const parts = /^clamp\((\d+)px, ([\d.]+)cqi - ([\d.]+)px, (\d+)px\)$/.exec(gutter)
-      expect(parts, `--page-gutter: ${gutter}`).not.toBeNull()
-      const [low, per, less, high] = parts!.slice(1).map(Number) as [number, number, number, number]
-      return Math.min(high, Math.max(low, (per * width) / 100 - less))
-    }
-    expect(at(370)).toBeLessThanOrEqual(16)
-    expect(at(479)).toBeLessThanOrEqual(16)
-    expect(at(760)).toBeCloseTo(52, 0)
-    expect(at(600)).toBeLessThan(52)
-  })
-
-  // The editor's own `pre-wrap` split a one-line import in two.
-  it('scrolls a code block sideways rather than wrapping it', () => {
-    expect(declarationOf(ruleFor('markdown.css', '.md-editor .md-code pre'), 'white-space')).toBe('pre')
-    expect(declarationOf(ruleFor('markdown.css', '.md-code pre'), 'overflow-x')).toBe('auto')
-  })
-
-  it('draws a menu chord as plain text', () => {
-    const hint = ruleFor('sidebar.css', '.row-menu__hint')
-    expect(declarationOf(hint, 'border')).toBe('0')
-    expect(declarationOf(hint, 'background')).toBe('none')
-    expect(declarationOf(hint, 'padding')).toBe('0')
-  })
-
-  // The frame pads the body on the same edge as the head; no content class pads itself.
-  describe('one dialog frame', () => {
-    it('puts the body on the title’s edge', () => {
-      const head = declarationOf(ruleFor('dialog.css', '.modal__head'), 'padding')
-      const body = declarationOf(ruleFor('dialog.css', '.modal__body'), 'padding')
-      expect(head?.split(' ')[1]).toBe('var(--s5)')
-      expect(body).toBe('0 var(--s5) var(--s5)')
-    })
-
-    it('lets no dialog content pad or size itself', () => {
-      for (const [sheet, selector] of [
-        ['dialog.css', '.confirm'],
-        ['dialog.css', '.consent'],
-        ['dialog.css', '.form'],
-        ['dialog.css', '.palette'],
-        ['cli.css', '.cli-install']
-      ] as const) {
-        const rule = ruleFor(sheet, selector)
-        expect(declarationOf(rule, 'padding'), selector).toBeUndefined()
-        expect(declarationOf(rule, 'width'), selector).toBeUndefined()
+  describe('motion', () => {
+    it('moves at 70, 120, 180 and 280 ms, on the standard, enter, exit and spring curves', () => {
+      const tokens = customProperties('tokens.css')
+      expect(['--motion-instant', '--motion-fast', '--motion-base', '--motion-slow'].map((t) => tokens.get(t))).toEqual(
+        ['70ms', '120ms', '180ms', '280ms']
+      )
+      expect(tokens.get('--ease')).toBe(tokens.get('--ease-standard'))
+      for (const curve of ['--ease-enter', '--ease-exit', '--ease-spring']) {
+        expect(tokens.get(curve), curve).toMatch(/^cubic-bezier\(/)
       }
     })
 
-    // A dialog whose height changes (a mode switch, a list filling) must not move under the pointer.
-    it('anchors every dialog’s top edge, as the palette’s', () => {
-      const layer = ruleFor('dialog.css', '.modal-layer')
-      expect(declarationOf(layer, 'place-items')).toBe('start center')
-      expect(declarationOf(layer, 'padding-block')?.split(' ')[0]).toBe('12vh')
-      expect(findRule('dialog.css', '.modal-layer:has(.palette)')).toBeUndefined()
-    })
-
-    it('ends every dialog in one right-aligned row with an 8px gap', () => {
-      const actions = ruleFor('dialog.css', '.modal__actions')
-      expect(declarationOf(actions, 'justify-content')).toBe('flex-end')
-      expect(declarationOf(actions, 'gap')).toBe('8px')
-      expect(findRule('dialog.css', '.confirm__actions')).toBeUndefined()
-      expect(findRule('dialog.css', '.form__actions')).toBeUndefined()
-      expect(findRule('dialog.css', '.consent__actions')).toBeUndefined()
-    })
-
-    // A fieldset's legend is a label too; its default inset put "Agents" off the other labels' edge.
-    it('sizes and insets every field label alike', () => {
-      expect(declarationOf(ruleFor('dialog.css', '.field__label'), 'padding')).toBe('0')
-      const overrides: string[] = []
-      postcss.parse(readFileSync(path.join(here, 'dialog.css'), 'utf8')).walkRules((rule) => {
-        if (rule.selector !== '.field__label' && rule.selector.includes('field__label')) overrides.push(rule.selector)
+    // Final states only: no pulse, shimmer, slide or scale for anyone who asked for less motion.
+    it('stills every animation and transition under reduced motion', () => {
+      let rule: postcss.Rule | undefined
+      parse('tokens.css').walkAtRules('media', (media) => {
+        if (media.params !== '(prefers-reduced-motion: reduce)') return
+        media.walkRules((each) => {
+          rule = each
+        })
       })
-      expect(overrides).toEqual([])
+      expect(rule && declarationOf(rule, 'animation-duration')).toBe('0.001ms')
+      expect(rule && declarationOf(rule, 'transition-duration')).toBe('0.001ms')
     })
-
-    it('draws every picker at one height and size, the ref face changing only the family', () => {
-      const picker = ruleFor('dialog.css', '.picker__input')
-      expect(declarationOf(picker, 'height')).toBeDefined()
-      expect(declarationOf(picker, 'font-size')).toBe('var(--text-base)')
-      const ref = ruleFor('dialog.css', '.picker__input--ref')
-      expect(declarationOf(ref, 'font-family')).toBe('var(--font-mono)')
-      expect(declarationOf(ref, 'font-size')).toBeUndefined()
-    })
-
-    it('draws a stepper that cannot step like every other disabled button', () => {
-      for (const property of ['border-color', 'background', 'color']) {
-        expect(declarationOf(ruleFor('dialog.css', '.agents__step:disabled'), property)).toBe(
-          declarationOf(ruleFor('base.css', '.button:disabled'), property)
-        )
-      }
-    })
-
-    // A dimmed accent reads as a pressable primary; disabled is one neutral look whatever the variant.
-    it('greys a disabled button out rather than dimming its colour', () => {
-      const disabled = ruleFor('base.css', '.button:disabled')
-      expect(declarationOf(disabled, 'opacity')).toBeUndefined()
-      expect(declarationOf(disabled, 'color')).toBe('var(--fg-muted)')
-      expect(declarationOf(disabled, 'background')).toBe('transparent')
-    })
-
-    it('keeps the Changes header one height in every state', () => {
-      const head = ruleFor('rightPanel.css', '.changes__head')
-      expect(declarationOf(head, 'height')).toBe('38px')
-      expect(declarationOf(head, 'flex-wrap')).toBeUndefined()
-      // A failed push is a line of its own under the header, not squeezed into it.
-      expect(findRule('rightPanel.css', '.changes__pushError')).toBeUndefined()
-      expect(declarationOf(ruleFor('rightPanel.css', '.changes__pushFailed'), 'flex')).toBe('none')
-    })
-  })
-
-  // The chosen swatch's ring is 4px wide; with no room above it, it cut into the Accent label.
-  it('leaves the accent swatches room for their selection ring', () => {
-    expect(declarationOf(ruleFor('appearance.css', '.appearance__legend'), 'margin-bottom')).toBe('var(--s2)')
-    expect(declarationOf(ruleFor('appearance.css', '.appearance__accents'), 'padding-block')).toBe('4px')
   })
 
   // Amber means an agent is asking, so nothing else may be drawn in it.
@@ -529,11 +172,14 @@ describe('stylesheets', () => {
         '.worktree__ask',
         // A teammate's agent asking: the head's cue and their group's row.
         '.project__cue--asking',
-        '.teammate__doing--asking'
+        '.teammate__doing--asking',
+        // The status pill and the notice of an agent that is asking.
+        '.status--asking',
+        '.toast--asking::before'
       ])
       const elsewhere: string[] = []
       for (const name of sheets) {
-        postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls((decl) => {
+        parse(name).walkDecls((decl) => {
           if (!/var\(\s*--warning\s*\)/.test(decl.value)) return
           const selector = (decl.parent as postcss.Rule).selector
           if (!asking.has(selector)) elsewhere.push(`${name}: ${selector}`)
@@ -546,224 +192,41 @@ describe('stylesheets', () => {
     it('lets nothing but the state colour a dot', () => {
       const dotRules: string[] = []
       for (const name of sheets) {
-        postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkRules((rule) => {
+        parse(name).walkRules((rule) => {
           if (/unread/.test(rule.selector) && /\.activity\b/.test(rule.selector))
             dotRules.push(`${name}: ${rule.selector}`)
         })
       }
       expect(dotRules).toEqual([])
     })
-
-    it('draws working as the one violet dot, and asking as the one that moves', () => {
-      const violet: string[] = []
-      postcss.parse(readFileSync(path.join(here, 'sidebar.css'), 'utf8')).walkRules(/\.activity/, (rule) => {
-        rule.walkDecls('background', (decl) => {
-          if (/--accent/.test(decl.value)) violet.push(rule.selector)
-        })
-      })
-      expect(violet).toEqual(['.activity--working'])
-      const moving: string[] = []
-      postcss.parse(readFileSync(path.join(here, 'sidebar.css'), 'utf8')).walkDecls('animation', (decl) => {
-        const rule = decl.parent as postcss.Rule
-        if (rule.parent?.type === 'root' && /\.activity/.test(rule.selector)) moving.push(rule.selector)
-      })
-      expect(moving).toEqual(['.activity--waiting'])
-    })
-
-    // Amber is the asking agent's, so an overlap is blue and a conflict red.
-    it('draws an overlap in the info tone and a conflicting one in the danger tone', () => {
-      expect(declarationOf(ruleFor('sidebar.css', '.overlap--overlap'), 'color')).toBe('var(--info)')
-      expect(declarationOf(ruleFor('sidebar.css', '.overlap--conflict'), 'color')).toBe('var(--danger)')
-      expect(declarationOf(ruleFor('rightPanel.css', '.changes__overlap--conflict'), 'color')).toBe('var(--danger)')
-    })
-
-    it('marks a folder holding changes in the file letter’s ink', () => {
-      expect(declarationOf(ruleFor('rightPanel.css', '.tree__under'), 'background')).toBe(
-        declarationOf(ruleFor('workspace.css', '.change__kind'), 'color')
-      )
-    })
-
-    it('draws a pull request’s checks red, green or ink, never amber, straight on the ground', () => {
-      expect(declarationOf(ruleFor('sidebar.css', '.prchip'), 'background')).toBe('transparent')
-      for (const [sheet, prefix] of [
-        ['sidebar.css', '.prchip'],
-        ['rightPanel.css', '.prcheck']
-      ] as const) {
-        expect(declarationOf(ruleFor(sheet, `${prefix}--fail`), 'color')).toBe('var(--danger)')
-        expect(declarationOf(ruleFor(sheet, `${prefix}--pass`), 'color')).toBe('var(--success)')
-        expect(declarationOf(ruleFor(sheet, `${prefix}--pending`), 'color')).toBe('var(--fg-secondary)')
-      }
-    })
-
-    it('draws the Settings mark, the change count and both merge marks in ink', () => {
-      expect(declarationOf(ruleFor('sidebar.css', '.rail__badge'), 'background')).toBeUndefined()
-      expect(declarationOf(ruleFor('sidebar.css', '.rail__badge'), 'color')).toMatch(/^var\(--fg/)
-      expect(declarationOf(ruleFor('sidebar.css', '.worktree__merge--clean'), 'color')).toMatch(/^var\(--fg/)
-      expect(declarationOf(ruleFor('sidebar.css', '.worktree__merge--conflicts'), 'color')).toMatch(/^var\(--fg/)
-      expect(declarationOf(ruleFor('sidebar.css', '.worktree__merge--conflicts'), 'background')).toBeUndefined()
-      expect(declarationOf(ruleFor('sidebar.css', '.gitchip--dirty'), 'color')).toBe('var(--fg-secondary)')
-    })
-
-    // The ⋯ is always drawn, so its room is always kept: nothing on the row moves when it is hovered.
-    it('keeps the ⋯ its own room on the title line, and moves nothing on hover', () => {
-      // A column of its own, and a row that clips rather than paint its dot under it.
-      const action = ruleFor('sidebar.css', '.worktree__action')
-      expect(declarationOf(action, 'position')).toBeUndefined()
-      expect(declarationOf(action, 'flex')).toBe('none')
-      expect(declarationOf(ruleFor('sidebar.css', '.worktree__open'), 'overflow')).toBe('hidden')
-      const reflowing: string[] = []
-      postcss.parse(readFileSync(path.join(here, 'sidebar.css'), 'utf8')).walkRules((rule) => {
-        if (!/:hover|focus/.test(rule.selector) || !/\.worktree__(row|open|title|name|end)$/.test(rule.selector)) return
-        rule.walkDecls(/^(padding|margin|width|gap|display)/, (decl) => {
-          reflowing.push(`${rule.selector} { ${decl.prop} }`)
-        })
-      })
-      expect(reflowing).toEqual([])
-    })
-
-    // Compact at 208px left a parent named `C` (#399): chips fold before the name gives way.
-    it('keeps a row’s name readable beside its chips', () => {
-      const name = ruleFor('sidebar.css', '.worktree__name')
-      expect(declarationOf(name, 'min-width')).toBe('min(10ch, 70%)')
-      expect(declarationOf(name, 'flex')).toBe('0 1000 auto')
-      expect(declarationOf(ruleFor('sidebar.css', '.worktree__facts'), 'overflow')).toBe('hidden')
-    })
-
-    // A long project name drew the New Task button over "from m…" (#488); the smoke measures it at 208 and 272px.
-    it('cuts a project’s name and base before its actions, and the base before the name', () => {
-      const text = ruleFor('sidebar.css', '.project__text')
-      expect(declarationOf(text, 'flex')).toBe('1 1 0')
-      expect(declarationOf(text, 'min-width')).toBe('min(10ch, 100%)')
-      expect(declarationOf(text, 'overflow')).toBe('clip')
-      // The base wraps onto the clipped line below its floor rather than squeeze the name.
-      expect(declarationOf(text, 'flex-wrap')).toBe('wrap')
-      // Its own floor: a nowrap base's intrinsic width is the whole ref, which would wrap it every time.
-      expect(declarationOf(ruleFor('sidebar.css', '.project__meta'), 'min-width')).toBe('8ch')
-      expect(declarationOf(ruleFor('sidebar.css', '.project__base'), 'text-overflow')).toBe('ellipsis')
-      // The actions never shrink; past the name's floor they take a line of their own.
-      expect(declarationOf(ruleFor('sidebar.css', '.project__head'), 'flex-wrap')).toBe('wrap')
-      expect(declarationOf(ruleFor('sidebar.css', '.project__actions'), 'flex')).toBe('none')
-      expect(declarationOf(ruleFor('sidebar.css', '.project__actions > .button--icon'), 'flex')).toBe('none')
-    })
-
-    // On a narrow nested row the counts and the tally ran past the row's edge (#293).
-    it('wraps a row’s facts under its branch rather than past the row’s edge', () => {
-      expect(declarationOf(ruleFor('sidebar.css', '.worktree__meta'), 'flex-wrap')).toBe('wrap')
-      // A zero basis: a long branch never pushes the facts onto a line of their own.
-      expect(declarationOf(ruleFor('sidebar.css', '.worktree__branch'), 'flex')).toBe('1 1 0')
-      // A floor, or chips squeezed it to `readm…`.
-      expect(declarationOf(ruleFor('sidebar.css', '.worktree__branch'), 'min-width')).toBe('min(16ch, 100%)')
-      expect(declarationOf(ruleFor('sidebar.css', '.worktree__tally'), 'margin-left')).toBe('auto')
-    })
-
-    // With the branch left out, `long notes index` folded both its chips into `+2`.
-    it('wraps a title line’s chips under the name, except on a compact row', () => {
-      expect(declarationOf(ruleFor('sidebar.css', '.worktree__title'), 'flex-wrap')).toBe('wrap')
-      expect(declarationOf(ruleFor('sidebar.css', '.sidebar--compact .worktree__title'), 'flex-wrap')).toBe('nowrap')
-    })
-
-    // Closed, the panel is a 30px strip with a 1px border; a count on its edge was clipped.
-    it('keeps a closed rail’s counts at least 2px inside the rail', () => {
-      const px = (value: string | undefined): number => Number.parseFloat(value ?? 'NaN')
-      const inner = px(declarationOf(ruleFor('rightPanel.css', '.panel--closed'), 'width')) - 1
-      const tab = px(declarationOf(ruleFor('rightPanel.css', '.panel__rail--edge .panel__tab'), 'width'))
-      expect((inner - tab) / 2).toBeGreaterThanOrEqual(2)
-    })
-
-    // Over the glyph's corner, the pill covered the icon and the digit sat above the pill.
-    it('stacks a closed rail’s count under its glyph, the digit centred in the pill', () => {
-      const tab = ruleFor('rightPanel.css', '.panel__rail--edge .panel__tab')
-      const count = ruleFor('rightPanel.css', '.panel__rail--edge .panel__count')
-      expect(declarationOf(tab, 'flex-direction')).toBe('column')
-      expect(declarationOf(count, 'position')).toBeUndefined()
-      expect(declarationOf(count, 'line-height')).toBe(declarationOf(count, 'height'))
-    })
-  })
-
-  // Sheets and side panels move in about a sixth of a second; ambient motion is the asking dot alone.
-  describe('motion', () => {
-    it('slides the Appearance sheet in from the right', () => {
-      const animation = declarationOf(ruleFor('appearance.css', '.appearance-sheet'), 'animation') ?? ''
-      expect(animation).toContain('var(--motion-base)')
-      const from = keyframeFrom('appearance.css', animation.split(' ')[0] ?? '')
-      expect(declarationOf(from, 'transform')).toBe('translateX(100%)')
-      expect(declarationOf(from, 'opacity')).toBe('0')
-    })
-
-    it('keeps the closed rail’s width for the panes when a narrow window lays the panel over them', () => {
-      const kept = ruleFor('rightPanel.css', '.workspace__body:has(> .panel:not(.panel--closed))')
-      expect(declarationOf(kept, 'padding-right')).toBe(
-        declarationOf(ruleFor('rightPanel.css', '.panel--closed'), 'width')
-      )
-    })
-
-    // A sheet mid-slide hangs past the window's edge; with the shell a scroller, a focus scrolled the app to it.
-    it('clips the shell, so nothing sliding in can scroll the window', () => {
-      expect(declarationOf(ruleFor('shell.css', '.shell'), 'overflow')).toBe('clip')
-    })
-
-    // A width with the same number of tracks either side interpolates; `1fr` alone against three does not.
-    it('animates the sidebar’s column and the right panel’s width', () => {
-      expect(declarationOf(ruleFor('shell.css', '.shell'), 'transition')).toBe(
-        'grid-template-columns var(--motion-base) var(--ease)'
-      )
-      const tracks = (selector: string): number =>
-        (declarationOf(ruleFor('shell.css', selector), 'grid-template-columns') ?? '').split(/ (?![^(]*\))/).length
-      expect(tracks('.shell--collapsed')).toBe(tracks('.shell'))
-      expect(declarationOf(ruleFor('rightPanel.css', '.panel'), 'transition')).toBe(
-        'width var(--motion-base) var(--ease)'
-      )
-    })
-
-    it('follows a dragged edge without easing behind it', () => {
-      const rule = ruleListing('base.css', 'body.is-resizing .shell')
-      expect(rule?.selectors).toContain('body.is-resizing .panel')
-      expect(rule && declarationOf(rule, 'transition')).toBe('none')
-    })
-
-    // A page is a `.workspace` too, so one fade covers opening a page and coming back from it.
-    it('fades a page, the panes, and a zoom in or out, quickly', () => {
-      for (const [sheet, selector] of [
-        ['workspace.css', '.workspace'],
-        ['workspace.css', '.workspace__panes'],
-        ['workspace.css', '.workspace__panes--zoomed']
-      ] as const) {
-        expect(declarationOf(ruleFor(sheet, selector), 'animation'), selector).toMatch(/ var\(--motion-fast\) /)
-      }
-      // A zoom restarts the fade only if the name changes with it.
-      const name = (selector: string): string | undefined =>
-        declarationOf(ruleFor('workspace.css', selector), 'animation')?.split(' ')[0]
-      expect(name('.workspace__panes--zoomed')).not.toBe(name('.workspace__panes'))
-    })
   })
 
   /** Properties the shell writes onto elements itself: two from `windowChrome.ts`, one a dragged width. */
   const SET_BY_THE_SHELL = new Set(['--sidebar-width', '--titlebar-h', '--titlebar-inset'])
 
-  // A `var()` naming an undeclared property silently does nothing, and is what a merge leaves behind,
-  // so the whole set is checked at once.
   // The raw accent is a fill: as an ink it measures 2.6:1 on the Light preset's panel.
   it('prints accent-coloured text in accent-bright, never in the raw accent', () => {
     const raw: string[] = []
     for (const name of sheets) {
-      postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls('color', (decl) => {
+      parse(name).walkDecls('color', (decl) => {
         if (/var\(\s*--accent\s*\)/.test(decl.value)) raw.push(`${name}: ${(decl.parent as postcss.Rule).selector}`)
       })
     }
     expect(raw).toEqual([])
   })
 
+  // A `var()` naming an undeclared property silently does nothing, and is what a merge leaves behind.
   it('names no custom property that nothing declares', () => {
     const declared = new Set<string>()
     for (const name of sheets) {
-      postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls(/^--/, (decl) => {
+      parse(name).walkDecls(/^--/, (decl) => {
         declared.add(decl.prop)
       })
     }
 
     const dangling: string[] = []
     for (const name of sheets) {
-      postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls((decl) => {
+      parse(name).walkDecls((decl) => {
         for (const [, property] of decl.value.matchAll(/var\(\s*(--[\w-]+)/g)) {
           if (property === undefined) continue
           if (declared.has(property) || SET_BY_THE_SHELL.has(property)) continue
@@ -774,9 +237,24 @@ describe('stylesheets', () => {
     expect(dangling).toEqual([])
   })
 
+  // Colours come from the palette: a literal in a sheet is a colour no theme can reach.
+  it('writes no colour literal outside the tokens', () => {
+    const literal: string[] = []
+    for (const name of sheets) {
+      if (name === 'tokens.css') continue
+      parse(name).walkDecls((decl) => {
+        if (decl.prop.startsWith('--')) return
+        const bare = decl.value.replace(/var\([^)]*\)/g, '')
+        if (/#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(|\b(white|black)\b/i.test(bare))
+          literal.push(`${name}: ${(decl.parent as postcss.Rule).selector} ${decl.prop}`)
+      })
+    }
+    expect(literal).toEqual(DRAWN_ON_PURPOSE)
+  })
+
   // The palette is literal here (first frame before scripts) and derived in src/shared/theme.ts; the two
   // must match or the window changes shade a tick after opening.
-  describe('tokens.css against the default theme', () => {
+  describe('tokens.css against the default presets', () => {
     const declared = customProperties('tokens.css')
     const resolved = resolvePalette(DEFAULT_APPEARANCE)
 
@@ -784,7 +262,7 @@ describe('stylesheets', () => {
       expect(declared.get(`--${token}`)).toBe(resolved[token])
     })
 
-    it.each(THEME_TOKENS)('--%s under a light system is the value the Light preset resolves to', (token) => {
+    it.each(THEME_TOKENS)('--%s under a light system is the value the default light preset resolves to', (token) => {
       expect(customProperties('tokens.css', LIGHT_SCHEME).get(`--${token}`)).toBe(
         resolvePalette(DEFAULT_APPEARANCE, 'light')[token]
       )
@@ -799,169 +277,24 @@ describe('stylesheets', () => {
     })
   })
 
-  describe('the file tree, the changes list and the diff', () => {
-    const themeIds = BUILT_IN_THEMES.map((theme) => theme.id)
-
-    it.each([
-      [
-        'rightPanel.css',
-        '.tree__reveal',
-        ['.tree__item:hover .tree__reveal', '.tree__item:focus-within .tree__reveal']
-      ],
-      [
-        'workspace.css',
-        '.change__icon',
-        [
-          '.changes__item:hover .change__icon',
-          '.changes__item:focus-within .change__icon',
-          '.changes__item--selected .change__icon'
-        ]
-      ]
-    ])('keeps %s %s out of sight until its row is hovered, focused or selected', (sheet, selector, shownBy) => {
-      expect(declarationOf(ruleFor(sheet, selector), 'opacity')).toBe('var(--row-action-rest)')
-      for (const shown of shownBy) {
-        const rule = ruleListing(sheet, shown)
-        expect(rule && declarationOf(rule, 'opacity'), shown).toBe('1')
-      }
-    })
-
-    it('shows a row’s own actions at rest where nothing can hover', () => {
-      expect(customProperties('tokens.css').get('--row-action-rest')).toBe('0')
-      expect(customProperties('tokens.css', '(hover: none)').get('--row-action-rest')).toBe('1')
-    })
-
-    // Amber stays the asking agent's, so a modified file is blue.
-    it.each([
-      ['modified', 'var(--info)'],
-      ['renamed', 'var(--info)'],
-      ['added', 'var(--success)'],
-      ['untracked', 'var(--success)'],
-      ['deleted', 'var(--danger)'],
-      ['conflicted', 'var(--danger)']
-    ])('names a %s file in %s, the colour of its letter', (kind, colour) => {
-      const name = ruleListing('rightPanel.css', `.tree__name--${kind}`)
-      const letter = ruleListing('workspace.css', `.change__kind--${kind}`)
-      expect(name && declarationOf(name, 'color')).toBe(colour)
-      expect(letter && declarationOf(letter, 'color')).toBe(colour)
-    })
-
-    it.each(themeIds)('draws each git status at 3:1 or better on the panel in %s', (id) => {
+  it.each(BUILT_IN_THEMES.map((theme) => theme.id))(
+    'draws each git status at 3:1 or better on the panel in %s',
+    (id) => {
       const palette = paletteOf(id)
       for (const tone of ['info', 'success', 'danger'] as const) {
         expect(contrastRatio(rgbOf(palette[tone]), rgbOf(palette['bg-panel'])), tone).toBeGreaterThanOrEqual(3)
       }
-    })
-
-    it('sets diff code at 13 px on 20 px lines, in the app’s monospace', () => {
-      expect(customProperties('tokens.css').get('--text-code')).toBe('13px')
-      const patch = ruleFor('workspace.css', '.patch')
-      expect(declarationOf(patch, 'font-size')).toBe('var(--text-code)')
-      expect(declarationOf(patch, 'line-height')).toBe('20px')
-      expect(declarationOf(patch, 'font-family')).toBe('var(--font-mono)')
-    })
-
-    // A changed word's fill sits on its line's fill, and the line's on the pane every patch is drawn in.
-    it.each(themeIds)('fills changed lines and words so they stand out, and their text still reads, in %s', (id) => {
-      const palette = paletteOf(id)
-      const amountOf = (sheet: string, selector: string): number => {
-        const rule = ruleListing(sheet, selector)
-        return Number(/(\d+)%/.exec((rule && declarationOf(rule, 'background')) ?? '')?.[1]) / 100
-      }
-      for (const [tone, side] of [
-        ['success', 'added'],
-        ['danger', 'removed']
-      ] as const) {
-        const line = amountOf('workspace.css', `.patch__row--${side}`)
-        const word = amountOf('review.css', `.patch__row--${side} .patch__word`)
-        expect(line, side).toBeGreaterThanOrEqual(0.2)
-        expect(word, side).toBeGreaterThanOrEqual(0.35)
-        const lineFill = mix(rgbOf(palette['bg-pane']), rgbOf(palette[tone]), line)
-        const wordFill = mix(lineFill, rgbOf(palette[tone]), word)
-        expect(contrastRatio(rgbOf(palette['fg-secondary']), lineFill), `${side} line`).toBeGreaterThanOrEqual(4.5)
-        expect(contrastRatio(rgbOf(palette.fg), wordFill), `${side} word`).toBeGreaterThanOrEqual(4.5)
-      }
-    })
-  })
-
-  // A ring round the inner button left the checkbox and the counts outside it, inside the selected fill.
-  it('rings a focused changed file as the whole row, not its inner button', () => {
-    expect(declarationOf(ruleFor('workspace.css', '.changes__item .change:focus-visible'), 'outline')).toBe('none')
-    const row = ruleFor('workspace.css', '.changes__item:has(.change:focus-visible)')
-    expect(declarationOf(row, 'box-shadow')).toContain('inset')
-  })
-
-  // At 1024 px a 340 px column left the agent 38 columns; a narrow window lays the panel over the panes.
-  it('lays the open right panel over the panes in a narrow window, like the Appearance sheet', () => {
-    const narrow = (selector: string): postcss.Rule => {
-      const rule = ruleFor('rightPanel.css', selector)
-      expect((rule.parent as postcss.AtRule | undefined)?.params, selector).toBe(PANEL_OVERLAY_QUERY)
-      return rule
     }
-    const panel = narrow('.panel:not(.panel--closed)')
-    expect(declarationOf(panel, 'position')).toBe('absolute')
-    expect(declarationOf(panel, 'right')).toBe('0')
-    expect(declarationOf(panel, 'box-shadow')).toBe('var(--shadow-pop)')
-    expect(declarationOf(narrow('.panel__resizer'), 'display')).toBe('none')
-    expect(declarationOf(narrow('.workspace__body'), 'position')).toBe('relative')
+  )
+
+  it('shows a row’s own actions at rest where nothing can hover', () => {
+    expect(customProperties('tokens.css').get('--row-action-rest')).toBe('0')
+    expect(customProperties('tokens.css', '(hover: none)').get('--row-action-rest')).toBe('1')
   })
 
-  // Most people never hover, so a control drawn only under the pointer is one they never find.
-  it.each([
-    ['workspace.css', '.tab__rename'],
-    ['workspace.css', '.tab__close'],
-    ['panes.css', '.pane__close'],
-    ['review.css', '.patch__plus']
-  ])('draws %s %s faintly at rest, not invisibly', (sheet, selector) => {
-    const opacities: string[] = []
-    postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkRules((rule) => {
-      if (!rule.selectors.includes(selector)) return
-      rule.walkDecls('opacity', (decl) => {
-        opacities.push(decl.value)
-      })
-    })
-    expect(opacities).toEqual(['var(--control-rest)'])
-  })
-
-  // Twelve identical marks down the list said nothing; the open row keeps its own. Right-click
-  // and the menu key reach every row's menu.
-  it.each([
-    ['.worktree__action', '.worktree--active > .worktree__row > .worktree__action'],
-    ['.project__more', null]
-  ])('keeps %s out of sight at rest, but for the open row', (selector, active) => {
-    expect(declarationOf(ruleFor('sidebar.css', selector), 'opacity')).toBe('var(--row-action-rest)')
-    if (active !== null) expect(declarationOf(ruleFor('sidebar.css', active), 'opacity')).toBe('var(--control-rest)')
-  })
-
-  // Answering is the most urgent thing on the row; under the pointer only, it also covered the question.
-  it.each([
-    ['sidebar.css', '.pane-item__answers'],
-    ['dashboard.css', '.board-item__answers']
-  ])('draws %s %s at rest, in flow, never over the question', (sheet, selector) => {
-    const hiding: string[] = []
-    postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkRules((rule) => {
-      if (!rule.selectors.some((each) => each.includes(selector))) return
-      rule.walkDecls((decl) => {
-        if (/^(visibility|opacity|display|position)$/.test(decl.prop) && /hidden|^0$|none|absolute/.test(decl.value))
-          hiding.push(`${rule.selector} { ${decl.prop}: ${decl.value} }`)
-      })
-    })
-    expect(hiding).toEqual([])
-  })
-
-  // Faded text failed 4.5:1 (Discard… at 2.4:1); a word rests in the muted ink, which the theme tests hold to 4.5:1.
-  it.each([
-    ['workspace.css', '.change__discard'],
-    ['workspace.css', '.context__resolve']
-  ])('rests the text control %s %s at full opacity, in the muted ink', (sheet, selector) => {
-    const faded: string[] = []
-    postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkRules((rule) => {
-      if (!rule.selectors.some((each) => each.includes(selector) && !each.includes(':disabled'))) return
-      rule.walkDecls('opacity', (decl) => {
-        faded.push(`${rule.selector} { opacity: ${decl.value} }`)
-      })
-    })
-    expect(faded).toEqual([])
-    expect(declarationOf(ruleListing(sheet, selector) as postcss.Rule, 'color')).toBe('var(--fg-muted)')
+  it('draws resting controls at full strength where nothing can hover', () => {
+    expect(customProperties('tokens.css').get('--control-rest')).toBe('0.8')
+    expect(customProperties('tokens.css', '(hover: none)').get('--control-rest')).toBe('1')
   })
 
   // WCAG's 3:1 for a control's shape: the muted ink at the resting opacity, on each ground a resting control sits on.
@@ -979,150 +312,20 @@ describe('stylesheets', () => {
       expect(contrastRatio(seen, under), `${ground} at ${rest}`).toBeGreaterThanOrEqual(3)
     }
   })
-
-  // A 1px ring inside the row read as no ring on the On Branch rows; the shared one is 2px.
-  it('rings a focused changed file as thickly as every other control', () => {
-    expect(declarationOf(ruleFor('base.css', ':focus-visible'), 'outline')).toMatch(/^2px /)
-    expect(declarationOf(ruleFor('workspace.css', '.changes__item:has(.change:focus-visible)'), 'box-shadow')).toBe(
-      'inset 0 0 0 2px var(--accent-bright)'
-    )
-  })
-
-  it('mutes a row shown only for context by its ink, never by fading it', () => {
-    const faded: string[] = []
-    postcss.parse(readFileSync(path.join(here, 'sidebar.css'), 'utf8')).walkRules((rule) => {
-      if (!rule.selector.includes('.worktree--context')) return
-      rule.walkDecls('opacity', (decl) => {
-        faded.push(`${rule.selector} { opacity: ${decl.value} }`)
-      })
-    })
-    expect(faded).toEqual([])
-    expect(declarationOf(ruleFor('sidebar.css', '.worktree--context .worktree__name'), 'color')).toBe('var(--fg-muted)')
-  })
-
-  it('rings the sidebar filter field as its chips are ringed', () => {
-    expect(declarationOf(ruleFor('sidebar.css', '.sidebar__filter-field:focus-visible'), 'box-shadow')).toBe(
-      'var(--ring)'
-    )
-  })
-
-  // Spoken, never drawn; and while it holds no notice the region takes no room in the corner stack.
-  it('keeps the spoken line out of sight, and the empty notice region out of the stack', () => {
-    const spoken = ruleFor('shell.css', '.notices__spoken')
-    expect(declarationOf(spoken, 'position')).toBe('absolute')
-    expect(declarationOf(spoken, 'clip-path')).toBe('inset(50%)')
-    expect(declarationOf(ruleFor('shell.css', '.notices:not(:has(.notice))'), 'position')).toBe('absolute')
-  })
-
-  it('draws resting controls at full strength where nothing can hover', () => {
-    let value: string | undefined
-    postcss.parse(readFileSync(path.join(here, 'tokens.css'), 'utf8')).walkAtRules('media', (media) => {
-      if (media.params !== '(hover: none)') return
-      media.walkDecls('--control-rest', (decl) => {
-        value = decl.value
-      })
-    })
-    expect(customProperties('tokens.css').get('--control-rest')).toBeDefined()
-    expect(value).toBe('1')
-  })
-
-  // The row you are on showed less than the others: its ↑ and Δ only on hover.
-  it('keeps the open worktree’s git chips on its row', () => {
-    const hiding: string[] = []
-    postcss.parse(readFileSync(path.join(here, 'sidebar.css'), 'utf8')).walkRules((rule) => {
-      if (rule.selector.includes('.worktree--active') && rule.selector.includes('.worktree__git'))
-        hiding.push(rule.selector)
-    })
-    expect(hiding).toEqual([])
-  })
 })
 
-const LIGHT_SCHEME = '(prefers-color-scheme: light)'
-
-/** A built-in theme's palette, in the tone it is made for. */
-function paletteOf(id: string): Record<string, string> {
-  const appearance: Appearance =
-    themeTone(id) === 'dark'
-      ? { ...DEFAULT_APPEARANCE, mode: 'dark', themeId: id }
-      : { ...DEFAULT_APPEARANCE, mode: 'light', light: { themeId: id, ground: null, accent: null, overrides: {} } }
-  return resolvePalette(appearance)
-}
-
-function rgbOf(colour: string | undefined): Rgb {
-  return parseColor(colour ?? '') as Rgb
-}
-
-/** Every custom property `:root` declares in one stylesheet, at the top level or inside one `@media`. */
-function customProperties(name: string, media?: string): Map<string, string> {
-  const found = new Map<string, string>()
-  postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkRules(':root', (rule) => {
-    const parent = rule.parent
-    const within = parent?.type === 'atrule' ? (parent as postcss.AtRule).params : undefined
-    if (within !== media) return
-    rule.walkDecls(/^--/, (decl) => {
-      found.set(decl.prop, decl.value.trim())
-    })
-  })
-  return found
-}
-
-/** The `from` step of a named `@keyframes` in one stylesheet. */
-function keyframeFrom(sheet: string, name: string): postcss.Rule {
-  let found: postcss.Rule | undefined
-  postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkAtRules('keyframes', (rule) => {
-    if (rule.params !== name) return
-    rule.walkRules('from', (step) => {
-      found = step
-    })
-  })
-  expect(found, `${sheet} should have @keyframes ${name} with a from step`).toBeTruthy()
-  return found as postcss.Rule
-}
-
-/** The `z-index` one selector is given, across every stylesheet. */
-function zIndexOf(selector: string): number {
-  const found: number[] = []
-  for (const name of sheets) {
-    postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkRules(selector, (rule) => {
-      rule.walkDecls('z-index', (decl) => {
-        found.push(Number(decl.value))
-      })
-    })
-  }
-  // No z-index, or two, would make the comparison pass quietly.
-  expect(found, `${selector} should declare exactly one z-index`).toHaveLength(1)
-  return found[0] ?? Number.NaN
-}
-
-/** The one rule with exactly this selector in the named sheet, or nothing. */
-function findRule(sheet: string, selector: string): postcss.Rule | undefined {
-  let found: postcss.Rule | undefined
-  postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkRules((rule) => {
-    if (rule.selector === selector) found = rule
-  })
-  return found
-}
-
-/** The rule whose selector list includes `selector`, alone or among others. */
-function ruleListing(sheet: string, selector: string): postcss.Rule | undefined {
-  let found: postcss.Rule | undefined
-  postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkRules((rule) => {
-    if (rule.selectors.includes(selector)) found = rule
-  })
-  return found
-}
-
-/** Like `findRule`, but a missing rule is a failed test rather than a silent pass. */
-function ruleFor(sheet: string, selector: string): postcss.Rule {
-  const rule = findRule(sheet, selector)
-  expect(rule, `${sheet} should have a rule for ${selector}`).toBeTruthy()
-  return rule as postcss.Rule
-}
-
-function declarationOf(rule: postcss.Rule, prop: string): string | undefined {
-  let value: string | undefined
-  rule.walkDecls(prop, (decl) => {
-    value = decl.value
-  })
-  return value
-}
+// Colours no theme should move: over a pasted image, the app icon's own tile, initials on a teammate's
+// colour, and a mask's alpha.
+const DRAWN_ON_PURPOSE = [
+  'panes.css: .image-strip__n background',
+  'panes.css: .image-strip__n color',
+  'panes.css: .image-strip__remove background',
+  'panes.css: .image-strip__remove box-shadow',
+  'panes.css: .image-strip__remove color',
+  'shell.css: .brand__tile border',
+  'shell.css: .brand__tile background',
+  'shell.css: .brand__mark color',
+  'sidebar.css: .avatar color',
+  'sidebar.css: .avatar--away color',
+  'updates.css: .update-card__notes--clipped mask-image'
+]

@@ -95,7 +95,7 @@ kbd {
   white-space: nowrap;
 }
 
-/* Buttons ---------------------------------------------------------------- */
+/* Controls --------------------------------------------------------------- */
 
 /* The app's one select (`dialogs/Select.tsx`): sized to its longest option, so it never reads as a text field. */
 .select {
@@ -109,15 +109,20 @@ kbd {
 .select__input {
   height: var(--control-h);
   max-width: 100%;
-  padding: 0 26px 0 var(--s2);
+  padding: 0 30px 0 10px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r2);
   background: var(--bg-input);
   color: var(--fg);
   font-family: var(--font-ui);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   appearance: none;
   cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease);
+}
+
+.select__input:hover {
+  border-color: color-mix(in srgb, var(--line-strong), var(--fg) 20%);
 }
 
 /* An open list is drawn by the platform on a ground this page never painted. */
@@ -128,7 +133,7 @@ kbd {
 
 .select__input:focus-visible {
   outline: none;
-  border-color: var(--accent-line);
+  border-color: var(--accent);
   box-shadow: var(--ring);
 }
 
@@ -136,39 +141,117 @@ kbd {
   display: grid;
   position: absolute;
   top: 50%;
-  right: var(--s2);
+  right: 10px;
   place-items: center;
   color: var(--fg-muted);
   transform: translateY(-50%);
   pointer-events: none;
 }
 
+/* A text field, one line or several: 32px, the strong edge, the field ground. */
+.input,
+.textarea {
+  width: 100%;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r2);
+  background: var(--bg-input);
+  color: var(--fg);
+  font-size: var(--text-base);
+  transition:
+    border-color var(--motion-fast) var(--ease),
+    box-shadow var(--motion-fast) var(--ease);
+}
+
+.input {
+  height: var(--control-md);
+  padding: 0 10px;
+}
+
+.textarea {
+  min-height: 80px;
+  padding: 9px 10px;
+  line-height: var(--leading);
+  resize: none;
+}
+
+.input--mono {
+  font-family: var(--font-mono);
+}
+
+.input:hover,
+.textarea:hover {
+  border-color: color-mix(in srgb, var(--line-strong), var(--fg) 20%);
+}
+
+.input:focus-visible,
+.textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--fg-faint);
+}
+
+.input[aria-invalid='true'],
+.textarea[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.input:disabled,
+.textarea:disabled {
+  opacity: 0.48;
+}
+
+/* Buttons ---------------------------------------------------------------- */
+
+/* Unmarked, a button is the secondary: raised, behind the strong edge. */
 .button {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
-  gap: var(--s2);
-  padding: 5px 11px;
+  gap: 6px;
+  height: var(--control-md);
+  padding: 0 12px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r2);
   background: var(--bg-raised);
   color: var(--fg);
   font: inherit;
   font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 16px;
+  white-space: nowrap;
   cursor: pointer;
   transition:
+    transform var(--motion-instant) var(--ease),
     background var(--motion-fast) var(--ease),
     border-color var(--motion-fast) var(--ease),
     color var(--motion-fast) var(--ease);
 }
 
+.button--secondary {
+  border-color: var(--line-strong);
+  background: var(--bg-raised);
+}
+
+/* The hover and press washes over whatever ground the variant has. */
 .button:hover:not(:disabled, [aria-disabled='true']) {
-  background: var(--bg-press);
-  border-color: var(--accent-line);
+  background-image: linear-gradient(var(--bg-hover), var(--bg-hover));
 }
 
 .button:active:not(:disabled, [aria-disabled='true']) {
-  transform: translateY(0.5px);
+  background-image: linear-gradient(var(--bg-press), var(--bg-press));
+  transform: translateY(1px);
+}
+
+.button:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
 }
 
 /* One look for every button that cannot be pressed, whatever it would be when it can. */
@@ -180,24 +263,115 @@ kbd {
 }
 
 .button--primary {
-  background: var(--accent);
   border-color: var(--accent);
+  background: var(--accent);
   color: var(--on-accent);
-  font-weight: 600;
 }
 
 .button--primary:hover:not(:disabled, [aria-disabled='true']) {
-  background: var(--accent-bright);
-  border-color: var(--accent-bright);
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.button--primary:active:not(:disabled, [aria-disabled='true']) {
+  border-color: var(--accent-press);
+  background: var(--accent-press);
 }
 
 /* Still filled, so a dialog shows its primary before the form can go. */
+.button--primary:disabled,
 .button--primary[aria-disabled='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
   opacity: 0.45;
   cursor: default;
 }
 
-/* The chord on a button, as a cap in the button's own colour. */
+.button--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--fg-secondary);
+}
+
+.button--ghost:disabled {
+  border-color: transparent;
+}
+
+.button--ghost:hover:not(:disabled, [aria-disabled='true']) {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.button--ghost:active:not(:disabled, [aria-disabled='true']) {
+  background: var(--bg-press);
+}
+
+.button--danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: var(--on-accent);
+}
+
+.button--danger:hover:not(:disabled, [aria-disabled='true']) {
+  border-color: color-mix(in srgb, var(--danger), var(--fg) 12%);
+  background: color-mix(in srgb, var(--danger), var(--fg) 12%);
+}
+
+/* A toggle that is on. */
+.button--on {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+.button--small {
+  height: var(--control-sm);
+  padding: 0 9px;
+  border-radius: var(--r1);
+}
+
+.button--tiny {
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--r1);
+  font-size: var(--text-xs);
+}
+
+.button--lg {
+  height: var(--control-lg);
+  padding: 0 16px;
+  border-radius: var(--r2);
+  font-size: var(--text-base);
+}
+
+/* The one or two actions a screen exists for, when that screen is otherwise empty. */
+.button--lead {
+  height: var(--control-lg);
+  padding: 0 var(--s5);
+  font-size: var(--text-base);
+}
+
+/* A spinner in place of the leading icon; the width holds, and the button takes no second press. */
+.button--loading {
+  pointer-events: none;
+}
+
+.button--loading > [data-icon]:first-child {
+  display: none;
+}
+
+.button--loading::before {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid currentcolor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  content: '';
+  animation: spin 0.8s linear infinite;
+}
+
+/* The chord on a button, in the button's own colour. */
 .button__kbd {
   padding: 0 4px;
   border: 0;
@@ -209,40 +383,25 @@ kbd {
   font-weight: 500;
 }
 
-.button--ghost {
+/* Ghost at rest, the hover wash under the pointer: every strip `+` and row action. */
+.button--icon {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: var(--r1);
   background: transparent;
-  border-color: transparent;
-  color: var(--fg-secondary);
+  color: var(--fg-muted);
 }
 
-.button--ghost:disabled {
-  border-color: transparent;
-}
-
-.button--ghost:hover:not(:disabled) {
+.button--icon:hover:not(:disabled, [aria-disabled='true']) {
   background: var(--bg-hover);
-  border-color: var(--line);
   color: var(--fg);
 }
 
-/* The one or two actions a screen exists for, when that screen is otherwise
-   empty. Bigger than a toolbar button because it is not in a toolbar: it is
-   the answer to "what do I do here", and it has to look like one. */
-.button--lead {
-  padding: 9px var(--s5);
-  border-radius: var(--r2);
-  font-size: var(--text-base);
-  font-weight: 600;
-}
-
-.button--small {
-  padding: 3px 9px;
-  font-size: var(--text-sm);
-}
-
-.button--tiny {
-  padding: 1px 7px;
-  font-size: var(--text-xs);
+.button--icon.button--small {
+  width: var(--control-sm);
+  height: var(--control-sm);
 }
 
 /* An asking pane's answers, wherever a row offers them. */
@@ -257,33 +416,536 @@ kbd {
   white-space: nowrap;
 }
 
-/* A chip: one or two words about a row, beside the thing they are about —
-   `creating`, `exited 1`, `2 conflicts`, `resumed`, `shell`. One rule for the
-   shape and the size, wherever the chip is, so the same kind of fact reads the
-   same way on a worktree row, a pane bar and a board row. A surface adds its
-   own class for the colour and nothing else: the radius and the type size are
-   what make five chips one kind of thing, and they used to be chosen five
-   times — 3px, 99px and 999px between them. */
+/* On and off: 32 by 18, a 14px thumb that springs across. */
+.switch {
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 18px;
+  margin: 0;
+  border-radius: var(--r-pill);
+  background: var(--line-strong);
+  cursor: pointer;
+  transition: background var(--motion-base) var(--ease);
+  appearance: none;
+}
+
+.switch::before {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--fg);
+  box-shadow: var(--shadow-1);
+  content: '';
+  transition: transform var(--motion-base) var(--ease-spring);
+}
+
+.switch:checked {
+  background: var(--accent);
+}
+
+.switch:checked::before {
+  transform: translateX(14px);
+}
+
+/* The thumb is the lightest thing in either tone: the ink on a dark ground, the pane on a light one. */
+:root[data-tone='light'] .switch::before {
+  background: var(--bg-pane);
+}
+
+.switch:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.switch:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* One of a few: a sunken well, the choice raised out of it. */
+.segmented {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-sunken);
+}
+
+.segmented__item {
+  display: grid;
+  place-items: center;
+  min-width: 60px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+.segmented__item:hover {
+  color: var(--fg);
+}
+
+.segmented__item[aria-pressed='true'] {
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-1);
+  color: var(--fg);
+}
+
+.segmented__item:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* A count with a minus and a plus. */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.stepper__button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: var(--bg-raised);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.stepper__button:hover:not(:disabled) {
+  background-image: linear-gradient(var(--bg-hover), var(--bg-hover));
+}
+
+.stepper__button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.stepper__value {
+  min-width: 16px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* A chip: one or two words about a row, beside the thing they are about. One rule for the shape and size;
+   a surface adds its own class for the colour and nothing else. */
 .chip {
   display: inline-flex;
   flex: none;
   align-items: center;
-  padding: 0 5px;
-  border-radius: var(--r1);
-  background: var(--bg-press);
-  color: var(--fg-muted);
+  gap: 5px;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--bg-hover);
+  color: var(--fg-secondary);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-  line-height: 15px;
+  font-weight: 600;
+  line-height: 18px;
   white-space: nowrap;
 }
 
-.button--icon {
-  width: 22px;
-  height: 22px;
-  padding: 0;
+/* A count or a new thing, in the accent's wash. */
+.badge {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
+/* A state, named: the ground stays neutral and the dot carries the hue. */
+.status-pill {
+  border-color: transparent;
+  background: var(--bg-hover);
+  color: var(--fg-secondary);
+}
+
+.status-dot {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+.status--starting {
+  color: var(--accent-bright);
+}
+
+.status--working {
+  color: var(--working);
+}
+
+.status--asking {
+  color: var(--warning);
+}
+
+.status--ready {
+  color: var(--success);
+}
+
+.status--ended,
+.status--restored {
+  color: var(--stopped);
+}
+
+.status--failed {
+  color: var(--danger);
+}
+
+/* A key, as the palette, a menu, Help and the welcome write one. */
+.kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--bg-raised);
+  box-shadow: inset 0 -1px 0 var(--line);
+  color: var(--fg-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  line-height: 1;
+}
+
+.kbd-group {
+  display: inline-flex;
+  gap: 3px;
+}
+
+/* Cards: for coherent objects only, never general grouping. */
+.card {
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-1);
+}
+
+.card--elevated {
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-2);
+}
+
+.card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 14px var(--s4) 10px;
+}
+
+.card__title {
+  font-size: var(--text-base);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.card__body {
+  padding: var(--s4);
+}
+
+.card__header + .card__body {
+  padding-top: 0;
+}
+
+.section-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-bottom: 10px;
+}
+
+.section-head__title {
+  font-size: var(--text-lg);
+  font-weight: 650;
+  line-height: 20px;
+  letter-spacing: -0.015em;
+}
+
+.section-head__summary {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+/* A row in a list: icon, label, meta at the far end. */
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
   border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-secondary);
+  font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
+}
+
+.list-row:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.list-row[aria-selected='true'],
+.list-row[aria-current='page'] {
+  background: var(--bg-selected);
+  color: var(--fg);
+}
+
+.list-row__label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row__meta {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.list-row:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: -2px;
+}
+
+/* Tabs that switch a panel: content-wide, an underline for the current one, the count inline. */
+.tablist {
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+  height: 38px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tablist__tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--motion-fast) var(--ease);
+}
+
+.tablist__tab:hover {
+  color: var(--fg);
+}
+
+.tablist__tab[aria-selected='true'] {
+  color: var(--fg);
+}
+
+.tablist__tab[aria-selected='true']::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  content: '';
+}
+
+.tablist__count {
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* What a hidden label says, after a beat: the inverted ground, never repeating a visible label. */
+.tooltip {
+  position: fixed;
+  z-index: 90;
+  max-width: 280px;
+  padding: 6px 8px;
+  border-radius: var(--r1);
+  background: var(--fg);
+  box-shadow: var(--shadow-2);
+  color: var(--bg-pane);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 16px;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+/* A notice: the tone is a 2px edge inside the left border, never a fill. */
+.toast {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  width: 340px;
+  max-width: 100%;
+  padding: 12px 12px 12px 15px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r3);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+  animation: toast-in var(--motion-slow) var(--ease-enter);
+}
+
+.toast::before {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--stopped);
+  content: '';
+}
+
+.toast--info::before {
+  background: var(--info);
+}
+
+.toast--asking::before {
+  background: var(--warning);
+}
+
+.toast--success::before {
+  background: var(--success);
+}
+
+.toast--error::before {
+  background: var(--danger);
+}
+
+.toast__icon {
+  display: grid;
+  place-items: start center;
+  padding-top: 1px;
+  color: var(--fg-secondary);
+}
+
+.toast__title {
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.toast__text {
+  margin-top: 2px;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.toast__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* Nothing here yet: the mark, a title, one primary. */
+.empty-state {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: 280px;
+  padding: var(--s6);
+  text-align: center;
+}
+
+.empty-state__inner {
+  max-width: 360px;
+}
+
+.empty-state__motif {
+  display: grid;
+  position: relative;
+  place-items: center;
+  width: 84px;
+  height: 74px;
+  margin: 0 auto 18px;
+  border-radius: 18px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent), transparent 94%) 0 49.5%,
+    color-mix(in srgb, var(--accent), transparent 97%) 50.5% 100%
+  );
+  box-shadow: inset 0 0 32px color-mix(in srgb, var(--accent), transparent 94%);
+  color: var(--fg-faint);
+}
+
+.empty-state__motif::after {
+  position: absolute;
+  inset: 9px 50% 9px auto;
+  width: 1px;
+  background: linear-gradient(transparent, var(--accent-line), transparent);
+  content: '';
+}
+
+.empty-state__title {
+  font-size: var(--text-xl);
+  font-weight: 680;
+  line-height: 24px;
+  letter-spacing: -0.025em;
+}
+
+.empty-state__hint {
+  margin-top: 5px;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.empty-state__actions {
+  display: flex;
+  justify-content: center;
+  gap: var(--s2);
+  margin-top: 18px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
 }
 
 /* Scrollbars ------------------------------------------------------------- */

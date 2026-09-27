@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Project, Worktree } from '../../shared/entities'
 import type { TerminalRecord } from '../terminals/session-restore'
-import { DEFAULT_APPEARANCE } from '../../shared/theme'
+import { DEFAULT_APPEARANCE, type Appearance } from '../../shared/theme'
 import { describeStoreProblem, WorkspaceStore, type StoreProblem } from './workspaceStore'
 
 const project: Project = { id: 'p1', name: 'teamree', path: '/repos/teamree', baseRef: 'origin/main' }
@@ -362,13 +362,13 @@ describe('workspace store', () => {
       const onDisk = async (): Promise<{ appearance: { themeId: string }; settings: Record<string, unknown> }> =>
         JSON.parse(await readFile(filePath, 'utf8'))
 
-      it('moves an untouched Absolute Black to Charcoal once, and writes that down', async () => {
+      it('moves an untouched Absolute Black on to the current default once, and writes that down', async () => {
         await stored({ themeId: 'black', ground: null, accent: null, overrides: {}, mode: 'system' })
         const store = await WorkspaceStore.open(filePath)
-        expect(store.getAppearance()).toEqual({ ...DEFAULT_APPEARANCE, themeId: 'charcoal' })
+        expect(store.getAppearance()).toEqual(DEFAULT_APPEARANCE)
         await store.flush()
         const written = await onDisk()
-        expect(written.appearance.themeId).toBe('charcoal')
+        expect(written.appearance.themeId).toBe('studio')
         expect(written.settings.themeMigratedToCharcoal).toBe(true)
       })
 
@@ -412,10 +412,80 @@ describe('workspace store', () => {
       })
     })
 
-    it('opens on Charcoal until somebody chooses otherwise', async () => {
+    // Charcoal and Light were the defaults before Studio: an untouched one moves once, a later pick stays.
+    describe('moving the previous defaults to Studio', () => {
+      const stored = async (appearance: unknown, settings: unknown = {}): Promise<void> => {
+        await mkdir(join(directory, 'state'), { recursive: true })
+        await writeFile(filePath, JSON.stringify({ version: 1, appearance, settings }), 'utf8')
+      }
+      const onDisk = async (): Promise<{ appearance: Appearance; settings: Record<string, unknown> }> =>
+        JSON.parse(await readFile(filePath, 'utf8'))
+      const pristine = (themeId: string): { themeId: string; ground: null; accent: null; overrides: {} } => ({
+        themeId,
+        ground: null,
+        accent: null,
+        overrides: {}
+      })
+
+      it('moves an untouched Charcoal and Light to Studio and Studio Light once, and writes that down', async () => {
+        await stored(
+          { ...pristine('charcoal'), mode: 'system', light: pristine('light') },
+          { themeMigratedToCharcoal: true }
+        )
+        const store = await WorkspaceStore.open(filePath)
+        expect(store.getAppearance()).toEqual({ ...DEFAULT_APPEARANCE, light: pristine('studio-light') })
+        await store.flush()
+        const written = await onDisk()
+        expect(written.appearance.themeId).toBe('studio')
+        expect(written.appearance.light?.themeId).toBe('studio-light')
+        expect(written.settings.themeMigratedToStudio).toBe(true)
+      })
+
+      it('keeps Charcoal when it is picked again afterwards', async () => {
+        await stored(pristine('charcoal'), { themeMigratedToCharcoal: true })
+        const first = await WorkspaceStore.open(filePath)
+        first.setAppearance({ ...first.getAppearance(), themeId: 'charcoal' })
+        await first.flush()
+        expect((await WorkspaceStore.open(filePath)).getAppearance().themeId).toBe('charcoal')
+      })
+
+      it('keeps Charcoal picked on an installation that started on Studio', async () => {
+        const fresh = await WorkspaceStore.open(filePath)
+        fresh.setAppearance({ ...DEFAULT_APPEARANCE, themeId: 'charcoal', light: pristine('light') })
+        await fresh.flush()
+        const reopened = (await WorkspaceStore.open(filePath)).getAppearance()
+        expect(reopened.themeId).toBe('charcoal')
+        expect(reopened.light?.themeId).toBe('light')
+      })
+
+      // Absolute Black with Charcoal's move behind it was picked, not inherited.
+      it('leaves an edited Charcoal, another preset and an Absolute Black picked after Charcoal alone', async () => {
+        const edited = { themeId: 'charcoal', ground: null, accent: '#e070c0', overrides: {} }
+        await stored(edited, { themeMigratedToCharcoal: true })
+        const editedStore = await WorkspaceStore.open(filePath)
+        await editedStore.flush()
+        expect(editedStore.getAppearance()).toEqual(edited)
+
+        await stored({ ...pristine('midnight'), light: { ...pristine('light'), overrides: { line: '#333333' } } })
+        const midnight = await WorkspaceStore.open(filePath)
+        await midnight.flush()
+        expect(midnight.getAppearance().themeId).toBe('midnight')
+        expect(midnight.getAppearance().light?.themeId).toBe('light')
+
+        await stored(pristine('black'), { themeMigratedToCharcoal: true })
+        expect((await WorkspaceStore.open(filePath)).getAppearance().themeId).toBe('black')
+      })
+
+      it('moves nothing once it has moved', async () => {
+        await stored(pristine('charcoal'), { themeMigratedToCharcoal: true, themeMigratedToStudio: true })
+        expect((await WorkspaceStore.open(filePath)).getAppearance().themeId).toBe('charcoal')
+      })
+    })
+
+    it('opens on Studio until somebody chooses otherwise', async () => {
       const store = await WorkspaceStore.open(filePath)
       expect(store.getAppearance()).toEqual(DEFAULT_APPEARANCE)
-      expect(store.getAppearance().themeId).toBe('charcoal')
+      expect(store.getAppearance().themeId).toBe('studio')
     })
 
     it('is still there after the app is closed and opened again', async () => {
@@ -451,7 +521,7 @@ describe('workspace store', () => {
 
       const store = await WorkspaceStore.open(path)
       expect(store.getAppearance()).toEqual({
-        themeId: 'charcoal',
+        themeId: 'studio',
         ground: null,
         accent: '#3bb8c4',
         overrides: { 'bg-panel': '#123456' }

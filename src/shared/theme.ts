@@ -53,7 +53,18 @@ export const THEME_TOKENS = [
   'term-bright-blue',
   'term-bright-magenta',
   'term-bright-cyan',
-  'term-bright-white'
+  'term-bright-white',
+  'bg-tabstrip-active',
+  'bg-elevated',
+  'bg-sunken',
+  'bg-worktree',
+  'bg-code',
+  'line-subtle',
+  'fg-faint',
+  'accent-hover',
+  'accent-press',
+  'working',
+  'stopped'
 ] as const
 
 export type ThemeToken = (typeof THEME_TOKENS)[number]
@@ -109,11 +120,14 @@ const HUES: Hues = {
   cyan: '#4fb6b2'
 }
 
-/** The accent every preset starts from, and the wordmark's dot. */
+/** The accent the older presets start from, and the wordmark's dot. */
 export const DEFAULT_ACCENT = '#8b8cf7'
+
+const STUDIO_ACCENT = '#6d5bf2'
 
 /** The accents offered as one press in the editor, each clear of the asking, done and failed hues. */
 export const ACCENT_PRESETS: readonly { name: string; value: string }[] = [
+  { name: 'Studio Violet', value: STUDIO_ACCENT },
   { name: 'Violet', value: DEFAULT_ACCENT },
   { name: 'Sky', value: '#5aa9e6' },
   { name: 'Teal', value: '#3bb8c4' },
@@ -164,6 +178,166 @@ function hueApart(a: number, b: number): number {
 }
 
 export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
+  {
+    id: 'studio',
+    name: 'Studio',
+    seed: {
+      ground: '#0b0d12',
+      surface: '#eef1ff',
+      ink: '#f1f3f8',
+      accent: STUDIO_ACCENT,
+      hues: {
+        red: '#ef6a73',
+        green: '#48c78e',
+        yellow: '#e8a84c',
+        blue: '#58a6e7',
+        magenta: '#b68cff',
+        cyan: '#48b8c7'
+      },
+      mutedContrast: 4.5,
+      lineWeight: 1,
+      secondaryContrast: 5.5
+    },
+    // Drawn, not derived. bg-tabstrip and bg-panel sit one step above the drawing to clear the step rule.
+    tokens: {
+      'bg-window': '#0b0d12',
+      'bg-pane': '#0b0d12',
+      'bg-rail': '#11141b',
+      'bg-tabstrip': '#111419',
+      'bg-panel': '#11141b',
+      'bg-raised': '#171b24',
+      'bg-input': '#0d1016',
+      'bg-hover': 'rgb(236 239 255 / 6%)',
+      'bg-press': 'rgb(236 239 255 / 10%)',
+      'bg-selected': 'rgb(116 103 255 / 15%)',
+      scrim: 'rgb(2 3 7 / 74%)',
+      line: '#272c38',
+      'line-strong': '#3b4251',
+      fg: '#f1f3f8',
+      'fg-secondary': '#aeb4c0',
+      'fg-muted': '#7f8795',
+      accent: STUDIO_ACCENT,
+      'accent-bright': '#958bff',
+      'accent-soft': 'rgb(116 103 255 / 15%)',
+      'accent-line': 'rgb(149 139 255 / 58%)',
+      'on-accent': '#ffffff',
+      success: '#48c78e',
+      warning: '#e8a84c',
+      danger: '#ef6a73',
+      info: '#58a6e7',
+      'term-bg': '#0b0d12',
+      'term-fg': '#dfe3eb',
+      'term-cursor': '#958bff',
+      'term-selection': '#302b69',
+      'term-black': '#303642',
+      'term-red': '#ef6a73',
+      'term-green': '#48c78e',
+      'term-yellow': '#e8a84c',
+      'term-blue': '#58a6e7',
+      'term-magenta': '#b68cff',
+      'term-cyan': '#48b8c7',
+      'term-white': '#c5cad4',
+      'term-bright-black': '#737b89',
+      'term-bright-red': '#f38d94',
+      'term-bright-green': '#75d7ad',
+      'term-bright-yellow': '#efbf78',
+      'term-bright-blue': '#80bced',
+      'term-bright-magenta': '#c9aaff',
+      'term-bright-cyan': '#76ccd6',
+      'term-bright-white': '#f1f3f8',
+      'bg-tabstrip-active': '#141821',
+      'bg-elevated': '#1c202a',
+      'bg-sunken': '#080a0f',
+      'bg-worktree': '#151923',
+      'bg-code': '#0a0c11',
+      'line-subtle': '#1b202a',
+      'fg-faint': '#5e6674',
+      'accent-hover': '#6754e8',
+      'accent-press': '#5f4bd2',
+      working: '#49a8f2',
+      stopped: '#7f8795'
+    }
+  },
+  {
+    id: 'studio-light',
+    name: 'Studio Light',
+    seed: {
+      ground: '#f4f5f8',
+      surface: '#1f2637',
+      ink: '#171a22',
+      accent: '#5848df',
+      hues: {
+        red: '#bd3848',
+        green: '#177a50',
+        yellow: '#9b5f08',
+        blue: '#17689e',
+        magenta: '#744db0',
+        cyan: '#14747e'
+      },
+      mutedContrast: 4.5,
+      lineWeight: 1,
+      secondaryContrast: 5.5
+    },
+    tokens: {
+      'bg-window': '#f4f5f8',
+      'bg-pane': '#ffffff',
+      'bg-rail': '#eef0f4',
+      'bg-tabstrip': '#f7f8fa',
+      'bg-panel': '#f3f4f7',
+      'bg-raised': '#ffffff',
+      'bg-input': '#ffffff',
+      'bg-hover': 'rgb(31 38 55 / 5%)',
+      'bg-press': 'rgb(31 38 55 / 9%)',
+      'bg-selected': 'rgb(85 70 230 / 11%)',
+      scrim: 'rgb(16 20 30 / 40%)',
+      line: '#d9dde5',
+      'line-strong': '#b8bec9',
+      fg: '#171a22',
+      'fg-secondary': '#505866',
+      'fg-muted': '#626b79',
+      accent: '#5848df',
+      'accent-bright': '#4c3bd5',
+      'accent-soft': 'rgb(88 72 223 / 11%)',
+      'accent-line': 'rgb(76 59 213 / 42%)',
+      'on-accent': '#ffffff',
+      success: '#177a50',
+      warning: '#9b5f08',
+      danger: '#bd3848',
+      info: '#17689e',
+      'term-bg': '#ffffff',
+      'term-fg': '#20242d',
+      'term-cursor': '#5848df',
+      'term-selection': '#dcd8ff',
+      'term-black': '#2b303a',
+      'term-red': '#bd3848',
+      'term-green': '#177a50',
+      'term-yellow': '#9b5f08',
+      'term-blue': '#17689e',
+      'term-magenta': '#744db0',
+      'term-cyan': '#14747e',
+      'term-white': '#6b7280',
+      // Lifted from the drawn #737b89, which measures 4.4:1 on white.
+      'term-bright-black': '#707785',
+      'term-bright-red': '#9e2c3a',
+      'term-bright-green': '#11633f',
+      'term-bright-yellow': '#7b4b06',
+      'term-bright-blue': '#11557f',
+      'term-bright-magenta': '#5d3d8d',
+      'term-bright-cyan': '#105d65',
+      'term-bright-white': '#171a22',
+      'bg-tabstrip-active': '#ffffff',
+      'bg-elevated': '#ffffff',
+      'bg-sunken': '#e9ebf0',
+      'bg-worktree': '#f8f9fb',
+      'bg-code': '#fafbfc',
+      'line-subtle': '#e8eaf0',
+      'fg-faint': '#8b93a1',
+      'accent-hover': '#4f3ed5',
+      'accent-press': '#4232bd',
+      working: '#176da8',
+      stopped: '#626b79'
+    }
+  },
   {
     id: 'charcoal',
     name: 'Charcoal',
@@ -276,8 +450,8 @@ export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
   }
 ]
 
-export const DEFAULT_THEME_ID = 'charcoal'
-export const DEFAULT_LIGHT_THEME_ID = 'light'
+export const DEFAULT_THEME_ID = 'studio'
+export const DEFAULT_LIGHT_THEME_ID = 'studio-light'
 
 export function themeById(id: string): BuiltInTheme {
   return BUILT_IN_THEMES.find((theme) => theme.id === id) ?? (BUILT_IN_THEMES[0] as BuiltInTheme)
@@ -422,8 +596,67 @@ export function resolvePalette(appearance: Appearance, system: Tone = 'dark'): P
   const base = preset.seed
   const seed: ThemeSeed = { ...base, ground: clean.ground ?? base.ground, accent: clean.accent ?? base.accent }
   const built = buildPalette(seed)
-  const shipped = clean.ground === null ? { ...built, ...preset.tokens } : built
-  return guard(applyOverrides(shipped, clean.overrides), seed)
+  const literal = clean.ground === null ? drawn(preset, clean.accent !== null) : {}
+  const edited = applyOverrides({ ...built, ...literal }, clean.overrides)
+  // A role nobody set follows its surface as edited, so an older preset's raised card and its menus stay one.
+  const followed = { ...edited }
+  for (const token of Object.keys(FOLLOWERS) as FollowerToken[]) {
+    if (literal[token] === undefined && clean.overrides[token] === undefined) followed[token] = FOLLOWERS[token](edited)
+  }
+  return guard(followed, seed)
+}
+
+// Everything a drawn preset derives from its accent, dropped when another accent is chosen.
+const ACCENT_ROLES: readonly ThemeToken[] = [
+  'accent',
+  'accent-bright',
+  'accent-soft',
+  'accent-line',
+  'accent-hover',
+  'accent-press',
+  'on-accent',
+  'bg-selected',
+  'term-cursor',
+  'term-selection'
+]
+
+function drawn(preset: BuiltInTheme, ownAccent: boolean): Partial<Record<ThemeToken, string>> {
+  const tokens = { ...preset.tokens }
+  if (ownAccent) for (const token of ACCENT_ROLES) delete tokens[token]
+  return tokens
+}
+
+type FollowerToken =
+  | 'bg-tabstrip-active'
+  | 'bg-elevated'
+  | 'bg-sunken'
+  | 'bg-worktree'
+  | 'bg-code'
+  | 'line-subtle'
+  | 'fg-faint'
+  | 'accent-hover'
+  | 'accent-press'
+  | 'working'
+  | 'stopped'
+
+// The roles added with Studio, for a preset that does not draw them: each from a role it already has.
+const FOLLOWERS: Record<FollowerToken, (palette: Omit<Palette, FollowerToken>) => string> = {
+  'bg-tabstrip-active': (palette) => palette['bg-raised'],
+  'bg-elevated': (palette) => palette['bg-raised'],
+  'bg-sunken': (palette) => palette['bg-input'],
+  'bg-worktree': (palette) => palette['bg-raised'],
+  'bg-code': (palette) => palette['bg-input'],
+  'line-subtle': (palette) => blend(palette['bg-raised'], palette.line, 0.5),
+  'fg-faint': (palette) => blend(palette['fg-muted'], palette['bg-window'], 0.3),
+  'accent-hover': (palette) => blend(palette.accent, '#000000', 0.06),
+  'accent-press': (palette) => blend(palette.accent, '#000000', 0.13),
+  working: (palette) => palette.info,
+  stopped: (palette) => palette['fg-muted']
+}
+
+function blend(a: string, b: string, amount: number): string {
+  const [x, y] = [parseColor(a), parseColor(b)]
+  return x === null || y === null ? a : toHex(mix(x, y, amount))
 }
 
 // How far each surface climbs from the ground towards the surface colour. Tuned
@@ -487,7 +720,7 @@ export function buildPalette(seed: ThemeSeed): Palette {
   const magenta = termHue(seed.hues.magenta)
   const cyan = termHue(seed.hues.cyan)
 
-  return {
+  const base: Omit<Palette, FollowerToken> = {
     'bg-window': toHex(ground),
     'bg-pane': toHex(ground),
     'bg-rail': toHex(rail),
@@ -539,6 +772,10 @@ export function buildPalette(seed: ThemeSeed): Palette {
     'term-bright-cyan': toHex(bright(cyan)),
     'term-bright-white': toHex(ink)
   }
+  const followers = Object.fromEntries(
+    (Object.keys(FOLLOWERS) as FollowerToken[]).map((token) => [token, FOLLOWERS[token](base)])
+  ) as Record<FollowerToken, string>
+  return { ...base, ...followers }
 }
 
 /** The editor's own values, laid over the derived ones. */
@@ -567,6 +804,8 @@ function guard(palette: Palette, seed: ThemeSeed): Palette {
     ['warning', 'bg-raised', floor],
     ['danger', 'bg-raised', floor],
     ['info', 'bg-raised', floor],
+    ['working', 'bg-raised', floor],
+    ['stopped', 'bg-raised', floor],
     ['term-fg', 'term-bg', 7],
     ['term-red', 'term-bg', floor],
     ['term-green', 'term-bg', floor],

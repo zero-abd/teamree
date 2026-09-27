@@ -1,7 +1,7 @@
 // The rows of `setupModel`, each with its buttons, for Setup…; the welcome's version keeps only rows that need action.
 
 import { useEffect, useState } from 'react'
-import { Select } from '../dialogs/Select'
+import { Select } from '../ui/Select'
 import { HARNESSES } from '../agents/harnesses'
 import type { NoticeTestResult } from '../notices/noticeTestModel'
 import { NO_DEFAULT_AGENT } from '../state/preferences'

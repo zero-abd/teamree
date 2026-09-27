@@ -6,31 +6,31 @@ import type { ITerminalOptions, ITheme } from '@xterm/xterm'
 import { contrastRatio, parseColor } from '@shared/color'
 
 const FALLBACK: ITheme = {
-  background: '#101114',
-  foreground: '#e4e7ee',
-  cursor: '#9e9ef8',
-  cursorAccent: '#101114',
-  selectionBackground: '#353658',
-  scrollbarSliderBackground: '#595b65',
-  scrollbarSliderHoverBackground: '#96979b',
-  scrollbarSliderActiveBackground: '#96979b',
-  overviewRulerBorder: '#101114',
-  black: '#2f3034',
-  red: '#e8615a',
-  green: '#57c38a',
-  yellow: '#d6a24a',
-  blue: '#5aa9e6',
-  magenta: '#a98bf0',
-  cyan: '#4fb6b2',
-  white: '#bec0c7',
-  brightBlack: '#7a7c80',
-  brightRed: '#ed847e',
-  brightGreen: '#7cd0a4',
-  brightYellow: '#dfb672',
-  brightBlue: '#7ebcec',
-  brightMagenta: '#bca5f3',
-  brightCyan: '#76c6c3',
-  brightWhite: '#e4e7ee'
+  background: '#0b0d12',
+  foreground: '#dfe3eb',
+  cursor: '#958bff',
+  cursorAccent: '#0b0d12',
+  selectionBackground: '#302b69',
+  scrollbarSliderBackground: '#3b4251',
+  scrollbarSliderHoverBackground: '#7f8795',
+  scrollbarSliderActiveBackground: '#7f8795',
+  overviewRulerBorder: '#0b0d12',
+  black: '#303642',
+  red: '#ef6a73',
+  green: '#48c78e',
+  yellow: '#e8a84c',
+  blue: '#58a6e7',
+  magenta: '#b68cff',
+  cyan: '#48b8c7',
+  white: '#c5cad4',
+  brightBlack: '#737b89',
+  brightRed: '#f38d94',
+  brightGreen: '#75d7ad',
+  brightYellow: '#efbf78',
+  brightBlue: '#80bced',
+  brightMagenta: '#c9aaff',
+  brightCyan: '#76ccd6',
+  brightWhite: '#f1f3f8'
 }
 
 const VARIABLE_BY_KEY: Partial<Record<keyof ITheme, string>> = {
@@ -104,12 +104,12 @@ const SEARCH_VARIABLE_BY_KEY: Record<keyof Required<SearchDecorations>, string> 
 }
 
 const SEARCH_FALLBACK: Required<SearchDecorations> = {
-  matchBackground: '#353658',
-  matchBorder: '#7a7c80',
-  matchOverviewRuler: '#7a7c80',
-  activeMatchBackground: '#353658',
-  activeMatchBorder: '#9e9ef8',
-  activeMatchColorOverviewRuler: '#9e9ef8'
+  matchBackground: '#302b69',
+  matchBorder: '#737b89',
+  matchOverviewRuler: '#737b89',
+  activeMatchBackground: '#302b69',
+  activeMatchBorder: '#958bff',
+  activeMatchColorOverviewRuler: '#958bff'
 }
 
 export function readSearchDecorations(root: Element | null): SearchDecorations {

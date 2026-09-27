@@ -14,7 +14,8 @@ import { Icon } from '../icons/Icon'
 import { harnessName } from '../agents/harnesses'
 import { copyText } from '../clipboard/clipboard'
 import { cliActionLabel, cliOutcome, offerCliInstall } from '../dialogs/cliInstallModel'
-import { Select } from '../dialogs/Select'
+import { Select } from '../ui/Select'
+import { Switch } from '../ui/Switch'
 import { paneNumberRows, shortcutGroups } from '../help/helpTopics'
 import { formatChord, resolvePlatformModifier, type PlatformModifier } from '../keyboard/platformModifier'
 import { menuLabel } from '../menu/menuBar'
@@ -692,31 +693,6 @@ function Field({
       <div className="settings-field__control">{children}</div>
       {below ? <div className="settings-field__below">{below}</div> : null}
     </div>
-  )
-}
-
-/** An on/off setting's control. */
-function Switch({
-  id,
-  checked,
-  disabled = false,
-  onChange
-}: {
-  id?: string
-  checked: boolean
-  disabled?: boolean
-  onChange: (checked: boolean) => void
-}): React.JSX.Element {
-  return (
-    <input
-      id={id}
-      className="switch"
-      type="checkbox"
-      role="switch"
-      checked={checked}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.checked)}
-    />
   )
 }
 
