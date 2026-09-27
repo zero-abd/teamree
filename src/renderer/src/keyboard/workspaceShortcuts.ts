@@ -2,7 +2,7 @@
 // the status bar are derived from it, so a rebind cannot leave a stale label.
 
 import type { Chord, ModifierState, PlatformModifier } from './platformModifier'
-import { formatChord, holdsModifier, matchesChord } from './platformModifier'
+import { chordKeys, formatChord, holdsModifier, matchesChord } from './platformModifier'
 
 export type WorkspaceCommand =
   | 'split-right'
@@ -186,4 +186,10 @@ export function commandNamed(value: string): WorkspaceCommand | null {
 export function shortcutHint(command: WorkspaceCommand, modifier: PlatformModifier): string {
   const shortcut = WORKSPACE_SHORTCUTS.find((entry) => entry.command === command)
   return shortcut?.chord ? formatChord(shortcut.chord, modifier) : ''
+}
+
+/** The command's chord as key caps; empty when it has none. */
+export function shortcutKeys(command: WorkspaceCommand, modifier: PlatformModifier): string[] {
+  const shortcut = WORKSPACE_SHORTCUTS.find((entry) => entry.command === command)
+  return shortcut?.chord ? chordKeys(shortcut.chord, modifier) : []
 }

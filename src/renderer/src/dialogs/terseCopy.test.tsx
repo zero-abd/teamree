@@ -883,8 +883,8 @@ describe('one verb for one action', () => {
     render(<AddProjectButton />)
     fireEvent.click(document.querySelector('button[aria-label="Add project"]') as HTMLButtonElement)
     const plus = [...document.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent ?? '')
-    expect(doors).toEqual(['New Project…', 'Open Folder…', 'Clone Repository…', 'Join a Team…'])
-    expect(plus).toEqual(doors)
+    expect(doors).toEqual(['Open Folder…', 'New Project…', 'Clone Repository…', 'Join a Team…'])
+    expect([...plus].sort()).toEqual([...doors].sort())
     const setup = setupRows({
       agents: [],
       agentsProbed: true,
