@@ -176,11 +176,12 @@ function currentBusyAgents(): BusyAgents {
   // A pane the pane host keeps is not ended by the quit.
   const kept = new Set(runtime.panesKeptOnQuit())
   const ending = runtime.terminals().filter((terminal) => !kept.has(terminal.id))
-  return busyAgents(ending, (terminal) => {
+  const busy = busyAgents(ending, (terminal) => {
     const worktree = store.getWorktree(terminal.worktreeId)?.name
     const pane = names[terminal.id] ?? (terminal.label?.trim() || terminal.title)
     return worktree === undefined || worktree === pane ? pane : `${worktree} — ${pane}`
   })
+  return { ...busy, kept: kept.size }
 }
 
 /** Asks about working agents; false keeps the app, and Restart When Idle quits again once they are idle. */

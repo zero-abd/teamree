@@ -7,11 +7,13 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { build } from 'esbuild'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { PaneHostStatus } from '../../shared/entities'
 import type { Response } from '../../shared/protocol'
 import { createQuitSequence } from '../quitSequence'
 import { startRuntime, WORKSPACE_FILE_NAME, type Runtime } from '../runtime/startRuntime'
 import { WorkspaceStore } from '../store/workspaceStore'
 import { canSpawnPty } from '../terminals/pty-test-support'
+import { peekHost, stopHost } from './hosting'
 import { paneHostPaths } from './protocol'
 
 const spies = vi.hoisted(() => ({ childSpawn: vi.fn(), ptySpawn: vi.fn(), connect: vi.fn() }))
@@ -149,25 +151,7 @@ describePty('Keep Agents Running When teamree Quits', () => {
 
   it('on: the pane runs in the host, and survives the quit', async () => {
     const { userDataDir, base } = await profile(true)
-    const entry = join(base, 'paneHost.cjs')
-    await build({
-      entryPoints: [join(ROOT, 'src/main/paneHost.ts')],
-      outfile: entry,
-      bundle: true,
-      platform: 'node',
-      format: 'cjs',
-      external: ['node-pty'],
-      logLevel: 'silent'
-    })
-    vi.stubEnv('NODE_PATH', join(ROOT, 'node_modules'))
-    cleanups.push(() => void vi.unstubAllEnvs())
-    cleanups.push(() => rm(dirname(paneHostPaths(userDataDir).socket), { recursive: true, force: true }))
-    // A failure part way must not leave the host behind; its ptys hang up with it.
-    cleanups.push(() => {
-      const log = paneHostPaths(userDataDir).log
-      const hostPid = existsSync(log) ? Number(/listening, pid (\d+)/.exec(readFileSync(log, 'utf8'))?.[1]) : 0
-      if (hostPid > 0 && alive(hostPid)) process.kill(hostPid, 'SIGKILL')
-    })
+    const entry = await hostEntry(base, userDataDir)
 
     const runtime = await launch(userDataDir, entry)
     expect(runtime.panesKeptOnQuit()).toEqual([TERMINAL])
@@ -188,20 +172,120 @@ describePty('Keep Agents Running When teamree Quits', () => {
     while (alive(pid) && Date.now() < gone) await new Promise((r) => setTimeout(r, 20))
     expect(alive(pid)).toBe(false)
   })
+
+  it('turned on with a pane open: says it ends with the app, moves it when idle, and the host is seen and stopped without the app', async () => {
+    const { userDataDir, base } = await profile(false)
+    const entry = await hostEntry(base, userDataDir)
+    const runtime = await launch(userDataDir, entry)
+    const status = () => call(runtime, 'paneHost.status', {}) as Promise<PaneHostStatus>
+    expect(await status()).toEqual({ running: false, panes: 0, inProcess: 1, shells: 0 })
+    const before = await panePid(runtime)
+
+    await call(runtime, 'settings.set', { keepPanesRunning: true })
+    await until(async () => (await status()).shells === 1, 'the host, and the idle shell offered to it')
+    expect(await status()).toMatchObject({ running: true, panes: 0, inProcess: 1 })
+    expect(runtime.panesKeptOnQuit()).toEqual([])
+
+    // A shell running something is not idle; a working agent is never restarted either.
+    await call(runtime, 'terminal.write', { terminalId: TERMINAL, data: 'sleep 30\n' })
+    await until(async () => (await status()).shells === 0, 'the busy shell to stop being offered')
+    await expect(call(runtime, 'paneHost.keepShells', { terminalId: TERMINAL })).rejects.toThrow(/idle shell/)
+    await call(runtime, 'terminal.write', { terminalId: TERMINAL, data: '\x03' })
+    await until(async () => (await status()).shells === 1, 'the shell back at its prompt')
+
+    expect(await call(runtime, 'paneHost.keepShells', {})).toEqual({ moved: [TERMINAL] })
+    expect(runtime.panesKeptOnQuit()).toEqual([TERMINAL])
+    expect(alive(before)).toBe(false)
+    const hosted = await panePid(runtime)
+    expect(hosted).toBeGreaterThan(0)
+    expect(hosted).not.toBe(before)
+    expect(await status()).toMatchObject({ running: true, panes: 1, inProcess: 0, shells: 0 })
+
+    await quit(runtime)
+    expect(alive(hosted), 'the moved pane died with the quit').toBe(true)
+
+    // No app now: `teamree host` reads and stops the host itself.
+    const hostPid = loggedHostPid(userDataDir)
+    expect(await peekHost(userDataDir, 'test')).toEqual({ pid: hostPid, panes: 1 })
+    expect(await stopHost(userDataDir, 'test')).toEqual({ pid: hostPid, panes: 1 })
+    expect(alive(hostPid)).toBe(false)
+    await until(() => !alive(hosted), 'the moved pane to end')
+    expect(await peekHost(userDataDir, 'test')).toBeNull()
+  })
+
+  it('Stop Host in the app ends the hosted panes, which the app sees exit, and new panes go to a fresh host', async () => {
+    const { userDataDir, base } = await profile(true)
+    const entry = await hostEntry(base, userDataDir)
+    const runtime = await launch(userDataDir, entry)
+    const pid = await panePid(runtime)
+    const hostPid = loggedHostPid(userDataDir)
+    expect(await call(runtime, 'paneHost.status', {})).toMatchObject({ running: true, pid: hostPid, panes: 1 })
+
+    expect(await call(runtime, 'paneHost.stop', {})).toEqual({ stopped: true, pid: hostPid, panes: 1 })
+    expect(alive(hostPid)).toBe(false)
+    await until(() => !alive(pid), 'the hosted pane to end')
+    await until(
+      () => runtime.terminals().find((terminal) => terminal.id === TERMINAL)?.running === false,
+      'the pane to show it exited'
+    )
+    // Still on: new panes go to a fresh host.
+    const fresh = (await call(runtime, 'paneHost.status', {})) as PaneHostStatus
+    expect(fresh).toMatchObject({ running: true, panes: 0 })
+    expect(fresh.pid).not.toBe(hostPid)
+  })
 })
+
+/** Builds the host entry for a profile, and kills whatever host it left behind. */
+async function hostEntry(base: string, userDataDir: string): Promise<string> {
+  const entry = join(base, 'paneHost.cjs')
+  await build({
+    entryPoints: [join(ROOT, 'src/main/paneHost.ts')],
+    outfile: entry,
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    external: ['node-pty'],
+    logLevel: 'silent'
+  })
+  vi.stubEnv('NODE_PATH', join(ROOT, 'node_modules'))
+  cleanups.push(() => void vi.unstubAllEnvs())
+  cleanups.push(() => rm(dirname(paneHostPaths(userDataDir).socket), { recursive: true, force: true }))
+  // A failure part way must not leave the host behind; its ptys hang up with it.
+  cleanups.push(() => {
+    const hostPid = loggedHostPid(userDataDir)
+    if (hostPid > 0 && alive(hostPid)) process.kill(hostPid, 'SIGKILL')
+  })
+  return entry
+}
+
+function loggedHostPid(userDataDir: string): number {
+  const log = paneHostPaths(userDataDir).log
+  if (!existsSync(log)) return 0
+  const pids = [...readFileSync(log, 'utf8').matchAll(/listening, pid (\d+)/g)]
+  return Number(pids.at(-1)?.[1] ?? 0)
+}
+
+async function call(runtime: Runtime, method: string, params: object): Promise<unknown> {
+  const response = (await runtime.dispatch({ id: method, method, params }, { connectionId: 'test' })) as Response
+  if (!response.ok) throw new Error(`${method}: ${response.error.message}`)
+  return response.result
+}
+
+async function until(check: () => Promise<boolean> | boolean, what: string, ms = 10_000): Promise<void> {
+  const deadline = Date.now() + ms
+  while (!(await check())) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`)
+    await new Promise((r) => setTimeout(r, 25))
+  }
+}
 
 /** Asks the pane's shell for its pid, through the same methods the window uses. */
 async function panePid(runtime: Runtime): Promise<number> {
-  const call = async (method: string, params: object): Promise<unknown> => {
-    const response = (await runtime.dispatch({ id: method, method, params }, { connectionId: 'test' })) as Response
-    if (!response.ok) throw new Error(`${method}: ${response.error.message}`)
-    return response.result
-  }
   const marker = `pid-${Math.random().toString(36).slice(2, 8)}`
-  await call('terminal.write', { terminalId: TERMINAL, data: `echo ${marker}-$$\n` })
+  await call(runtime, 'terminal.write', { terminalId: TERMINAL, data: `echo ${marker}-$$\n` })
   const deadline = Date.now() + 10_000
   while (Date.now() < deadline) {
-    const { data } = (await call('terminal.read', { terminalId: TERMINAL })) as { data: string }
+    const { data } = (await call(runtime, 'terminal.read', { terminalId: TERMINAL })) as { data: string }
     const found = new RegExp(`${marker}-(\\d+)`).exec(data)
     if (found) return Number(found[1])
     await new Promise((r) => setTimeout(r, 25))

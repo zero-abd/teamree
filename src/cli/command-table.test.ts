@@ -22,6 +22,8 @@ const EXPECTED = [
   'status',
   'resources',
   'quit',
+  'host status',
+  'host stop',
   'project list',
   'project add',
   'project clone',
@@ -117,7 +119,7 @@ describe('the command table', () => {
   })
 
   it('groups the nouns', () => {
-    expect(commandGroups()).toEqual(['project', 'worktree', 'terminal', 'team', 'agent', 'msg', 'cli'])
+    expect(commandGroups()).toEqual(['host', 'project', 'worktree', 'terminal', 'team', 'agent', 'msg', 'cli'])
   })
 
   it('resolves every command from its own words', () => {

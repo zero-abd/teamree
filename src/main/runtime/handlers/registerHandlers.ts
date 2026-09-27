@@ -45,6 +45,7 @@ import { paletteTone, resolvePalette, type Appearance, type Tone } from '../../.
 import { registerAgentTrustHandlers, trustCheckoutFor } from './agentTrustHandlers'
 import { registerAppearanceHandlers } from './appearanceHandlers'
 import { registerFetchHandler } from './fetchHandler'
+import { registerPaneHostHandlers } from './paneHostHandlers'
 import { registerPastedImageHandler } from './pastedImageHandler'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerQuitHandler } from './quitHandler'
@@ -131,6 +132,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   registerQuitHandler(registry, {
     ...(options.requestQuit === undefined ? {} : { requestQuit: options.requestQuit }),
     ...(options.unsavedFiles === undefined ? {} : { unsavedFiles: options.unsavedFiles }),
+    kept: () => terminals.manager.keptOnQuit().length,
     busyAgents: () => {
       // A pane the pane host keeps is not ended by the quit.
       const kept = new Set(terminals.manager.keptOnQuit())
@@ -233,6 +235,10 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   portWatcher.poke()
   // Not a terminal method: the app's own processes are on the answer too.
   registerResourcesHandlers(registry, { panes: () => terminals.manager.paneProcesses() })
+  registerPaneHostHandlers(registry, {
+    ...(options.paneHost === undefined ? {} : { paneHost: options.paneHost }),
+    manager: terminals.manager
+  })
   registerPastedImageHandler(registry, {
     pane: (terminalId) => {
       const record = registry.context.store.listTerminals().find((entry) => entry.id === terminalId)

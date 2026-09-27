@@ -15,6 +15,8 @@ export type QuitHandlerOptions = {
   unsavedFiles?: () => readonly string[]
   /** `2 agents are working`, or null when none is. */
   busyAgents?: () => string | null
+  /** Panes the quit leaves running in the pane host. */
+  kept?: () => number
   /** Defers the quit past the reply. Swappable for the tests, which cannot wait. */
   defer?: (run: () => void) => void
 }
@@ -36,7 +38,8 @@ export function registerQuitHandler(registry: MethodRegistry, options: QuitHandl
     }
     const busy = force ? null : (options.busyAgents?.() ?? null)
     if (busy !== null) throw conflict(`${busy}. Pass --force to quit anyway.`)
+    const kept = options.kept?.() ?? 0
     defer(() => requestQuit(force))
-    return { quitting: true as const, pid: registry.context.pid }
+    return { quitting: true as const, pid: registry.context.pid, ...(kept === 0 ? {} : { kept }) }
   })
 }

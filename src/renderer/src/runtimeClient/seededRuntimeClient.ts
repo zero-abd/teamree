@@ -1422,6 +1422,15 @@ export function createSeededRuntimeClient(): RuntimeClient {
     // item and says this when chosen, which is what the real refusal looks like.
     'editor.list': () => ({ editors: [] }),
     'editor.open': () => ({ opened: false, reason: 'The demonstration workspace cannot start an editor.' }),
+    // No pane host behind the demonstration: every pane is in this window.
+    'paneHost.status': () => ({
+      running: false,
+      panes: 0,
+      inProcess: [...terminals.values()].filter((entry) => entry.record.running).length,
+      shells: 0
+    }),
+    'paneHost.stop': () => ({ stopped: false, panes: 0 }),
+    'paneHost.keepShells': () => ({ moved: [] }),
     // Enough of a tree that the panel has rows; kill does what the real one does.
     'system.resources': () => {
       const open = [...terminals.values()].filter((entry) => entry.record.running)

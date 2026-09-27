@@ -4,7 +4,8 @@
 import type { Terminal } from '../shared/entities'
 import { activityOf } from '../shared/paneActivity'
 
-export type BusyAgents = { working: number; asking: number; names: string[] }
+/** `kept`: panes the quit leaves running in the pane host. */
+export type BusyAgents = { working: number; asking: number; names: string[]; kept?: number }
 
 /** Agent panes mid-turn or asking, named by `nameOf`, in the order given. */
 export function busyAgents(terminals: readonly Terminal[], nameOf: (terminal: Terminal) => string): BusyAgents {
@@ -46,7 +47,15 @@ export function quitQuestion(kind: 'quit' | 'restart', busy: BusyAgents): QuitQu
   const named = busy.names.slice(0, MOST_NAMED)
   if (busy.names.length > MOST_NAMED) named.push(`+${busy.names.length - MOST_NAMED} more`)
   const buttons = kind === 'quit' ? ['Quit Anyway', 'Cancel'] : ['Restart When Idle', 'Restart Now', 'Cancel']
-  return { message: busyLine(busy), detail: named.join('\n'), buttons, defaultId: 0, cancelId: buttons.length - 1 }
+  const kept = busy.kept ?? 0
+  const keeps = kept === 0 ? '' : `\n\n${kept === 1 ? '1 pane keeps' : `${kept} panes keep`} running`
+  return {
+    message: busyLine(busy),
+    detail: named.join('\n') + keeps,
+    buttons,
+    defaultId: 0,
+    cancelId: buttons.length - 1
+  }
 }
 
 /**

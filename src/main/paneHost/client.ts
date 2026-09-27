@@ -251,6 +251,12 @@ export class PaneHostClient {
     await this.#closed
   }
 
+  /** Has the host end every pty and exit; unlike `shutdown`, each pane here hears its exit. */
+  async stop(): Promise<void> {
+    this.send({ type: 'shutdown', v })
+    await this.#closed
+  }
+
   /** Has the host kill every pty and exit. */
   async shutdown(): Promise<void> {
     this.#closing = true

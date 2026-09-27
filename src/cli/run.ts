@@ -4,7 +4,7 @@
 import { readBoolean, readNumber, readString } from './argv.js'
 import { parseCommand, resolveCommand } from './command-table.js'
 import { commandName, type CommandSpec } from './command-spec.js'
-import { defaultDiscoveryHost, requireRuntime, type DiscoveryHost } from './discovery.js'
+import { defaultDiscoveryHost, findRuntime, requireRuntime, userDataDir, type DiscoveryHost } from './discovery.js'
 import { asCliError, CliError, ExitCode, UsageError } from './exit.js'
 import { helpOutput } from './help.js'
 import { emitFailure, emitSuccess, processStreams, type Streams } from './output.js'
@@ -98,14 +98,18 @@ export async function runCli(argv: readonly string[], options: CliOptions = {}):
       profile === undefined ? base : { ...base, env: { ...base.env, TEAMREE_USER_DATA_DIR: profile } }
 
     try {
-      const discovered = spec.offline
+      const found = spec.appOptional === true && override === undefined ? findRuntime(host) : undefined
+      const connected = !spec.offline && found?.ok !== false
+      const discovered = !connected
         ? { endpoint: '', source: 'none' }
         : override === undefined
-          ? requireRuntime(host)
+          ? found?.ok
+            ? found
+            : requireRuntime(host)
           : { endpoint: override, source: '--endpoint' }
 
       const connect = options.connect ?? connectRuntime
-      const client = spec.offline ? OFFLINE_CLIENT : await connect({ endpoint: discovered.endpoint, timeoutMs })
+      const client = connected ? await connect({ endpoint: discovered.endpoint, timeoutMs }) : OFFLINE_CLIENT
       try {
         const output = await spec.run({
           args: parsed.positionals,
@@ -115,6 +119,8 @@ export async function runCli(argv: readonly string[], options: CliOptions = {}):
           cwd,
           env,
           endpointSource: discovered.source,
+          profile: userDataDir(host),
+          connected,
           streams,
           // A person piping `--prompt -` is read to the end; a hook's JSON is
           // read inside the agent's turn and so is bounded: see `stdin.ts`.
@@ -137,7 +143,7 @@ export async function runCli(argv: readonly string[], options: CliOptions = {}):
   }
 }
 
-/** Handed to an `offline` command, which by its declaration never calls. */
+/** Handed to an `offline` command, which by its declaration never calls, and to an `appOptional` one with no app. */
 const OFFLINE_CLIENT: RuntimeClient = {
   endpoint: '',
   call: () => Promise.reject(new Error('offline command called the runtime')),

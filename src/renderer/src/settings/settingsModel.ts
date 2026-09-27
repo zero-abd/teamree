@@ -2,7 +2,7 @@
 // comes from (an env var beating the file is the case nobody works out), and what the filter reads.
 
 import type { AddonStatus } from '@shared/contextProvider'
-import type { AgentKind, CliStatus, InstalledAgent, RelaySetting, UpdateState } from '@shared/entities'
+import type { AgentKind, CliStatus, InstalledAgent, PaneHostStatus, RelaySetting, UpdateState } from '@shared/entities'
 import { HARNESSES } from '../agents/harnesses'
 import type { IconName } from '../icons/Icon'
 import { cliPanel, leavesLinkAlone } from '../dialogs/cliInstallModel'
@@ -283,6 +283,24 @@ export function addonLine(status: AddonStatus | null, enabled: boolean): AddonLi
     default:
       if (status.needs === 'uv') return { ...line, state: 'Needs uv', action: 'uv' }
       return installed ? { ...line, state: 'Off', on: enabled } : { ...line, state: 'Off', action: 'install' }
+  }
+}
+
+/** Under Keep Agents Running: the panes that still end with the app, the shells that could move, and the host. */
+export type PaneHostLines = { ending: string | null; move: string | null; host: string | null }
+
+export function paneHostLines(status: PaneHostStatus | null, keeping: boolean): PaneHostLines {
+  if (status === null) return { ending: null, move: null, host: null }
+  const { inProcess, shells, panes } = status
+  return {
+    ending:
+      keeping && inProcess > 0
+        ? `${
+            inProcess === 1 ? '1 open pane ends' : `${inProcess} open panes end`
+          } when teamree quits; new panes keep running`
+        : null,
+    move: keeping && shells > 0 ? (shells === 1 ? 'Keep Shell Running' : `Keep ${shells} Shells Running`) : null,
+    host: status.running ? `Host running · ${panes === 1 ? '1 pane' : `${panes} panes`}` : null
   }
 }
 

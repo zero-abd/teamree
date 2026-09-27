@@ -1,6 +1,7 @@
 // One pane: one PTY, its retained output, its title, and its subscribers.
 // The session owns the only reference to the node-pty handle.
 
+import { basename } from 'node:path'
 import type { RestoredAs } from '../../shared/paneRestore'
 import { spawn } from 'node-pty'
 import type { IDisposable, IPty, IPtyForkOptions } from 'node-pty'
@@ -151,6 +152,8 @@ export type PtySessionInit = {
 }
 
 export type TerminalEventListener = (event: TerminalEvent) => void
+
+const SHELL_NAMES = new Set(['sh', 'bash', 'zsh', 'fish', 'dash', 'ksh', 'tcsh', 'csh', 'nu', 'pwsh'])
 
 export class PtySession {
   readonly id: string
@@ -359,6 +362,19 @@ export class PtySession {
 
   get isRunning(): boolean {
     return this.running
+  }
+
+  /** Whether a shell is in the foreground, not a program it started. By name: macOS's `/bin/sh` runs as `bash`. */
+  get atShellPrompt(): boolean {
+    if (!this.running || this.draining !== undefined) return false
+    try {
+      const name: unknown = this.pty.process
+      if (typeof name !== 'string') return false
+      const bare = basename(name).replace(/^-/, '')
+      return SHELL_NAMES.has(bare) || bare === basename(this.shell)
+    } catch {
+      return false
+    }
   }
 
   /** What the screen is asking; see `screenQuestion` and, for a dialog without a known hint, `menuQuestion`. */
