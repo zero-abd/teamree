@@ -46,7 +46,7 @@ export function Avatar({
       style={{ '--avatar-hue': avatarHue(handle) } as React.CSSProperties}
       {...(decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': label })}
     >
-      {avatarInitials(handle)}
+      {size === 'xs' ? avatarInitials(handle).slice(0, 1) : avatarInitials(handle)}
       {presence === 'unknown' ? null : <span className="avatar__presence" />}
     </span>
   )

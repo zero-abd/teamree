@@ -63,4 +63,11 @@ describe('Avatar', () => {
     expect(face.getAttribute('aria-label')).toBeNull()
     expect(face.classList.contains('avatar--away')).toBe(true)
   })
+
+  // Two letters at the smallest text size do not fit the smallest face.
+  it('draws one letter on the smallest face', () => {
+    const { container } = render(<Avatar handle="Mate Tester" size="xs" />)
+    expect(container.querySelector('.avatar')?.textContent).toBe('M')
+    expect(container.querySelector('.avatar')?.getAttribute('aria-label')).toBe('Mate Tester')
+  })
 })

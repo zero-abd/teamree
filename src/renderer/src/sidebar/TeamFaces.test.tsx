@@ -115,7 +115,7 @@ describe('TeamCueButtons', () => {
     )
     const asking = screen.getByRole('button', { name: 'bo asking' })
     // The face says who, so the words can be short.
-    expect(asking.textContent).toBe('Boasking')
+    expect(asking.textContent).toBe('Basking')
     fireEvent.click(asking)
     fireEvent.click(screen.getByRole('button', { name: 'handoff' }))
     expect(onAsking).toHaveBeenCalled()
