@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { InstallerStep } from './updateNotice'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { Icon } from '../icons/Icon'
 
 /** Restart to Update, or Download, progress, Open Installer: the card's and the Settings row's one button. */
 export function InstallerButton({ step, className }: { step: InstallerStep; className: string }): React.JSX.Element {
@@ -34,12 +35,7 @@ export function InstallerButton({ step, className }: { step: InstallerStep; clas
         if (run !== null) void run()
       }}
     >
-      {restart ? (
-        <svg className="installer-button__icon" viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" />
-          <path d="M12.5 1.8v2.8H9.7" />
-        </svg>
-      ) : null}
+      {restart ? <Icon name="restart" size={14} className="installer-button__icon" /> : null}
       {restarting ? 'Restarting…' : step.label}
     </button>
   )

@@ -146,9 +146,7 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
           }}
         />
         <button type="button" className="panel__tool" aria-label="Reload" title="Reload" onClick={reload}>
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M10 6 A4 4 0 1 1 8.6 3 M8.6 1 V3.2 H6.4" />
-          </svg>
+          <Icon name="reload" size={14} />
         </button>
       </div>
 
@@ -209,13 +207,11 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
                     onContextMenu={(event) => showMenu(row.path, row.kind !== 'dir', event)}
                   >
                     {row.kind === 'dir' ? (
-                      <svg
+                      <Icon
+                        name="chevron-right"
+                        size={14}
                         className={`chevron${row.expanded ? ' chevron--open' : ''}`}
-                        viewBox="0 0 12 12"
-                        aria-hidden="true"
-                      >
-                        <path d="M4.5 2.5 L8.5 6 L4.5 9.5" />
-                      </svg>
+                      />
                     ) : (
                       <span className="tree__leaf" aria-hidden="true" />
                     )}

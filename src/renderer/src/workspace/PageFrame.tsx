@@ -4,6 +4,7 @@
 import { useEffect, useRef, type ReactNode, type Ref } from 'react'
 import { modalOnScreen } from '../dialogs/modalLayer'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { Icon } from '../icons/Icon'
 
 type PageFrameProps = {
   /** The landmark's name. */
@@ -70,9 +71,7 @@ export function PageFrame({
               aria-label="Back to the panes"
               onClick={onClose}
             >
-              <svg viewBox="0 0 12 12" aria-hidden="true">
-                <path d="M3 3 L9 9 M9 3 L3 9" />
-              </svg>
+              <Icon name="close" size={14} />
             </button>
           </div>
           {actions === undefined ? null : <div className="page__actions">{actions}</div>}

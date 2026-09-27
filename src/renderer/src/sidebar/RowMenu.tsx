@@ -3,6 +3,7 @@
 // `role="menuitem"`, not buttons, which would activate on Enter and choose twice.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Icon } from '../icons/Icon'
 
 export type RowMenuItem = {
   /** What the item says. A label, never a sentence — this is a menu. */
@@ -261,11 +262,7 @@ function MenuEntry({
           {item.hint}
         </kbd>
       )}
-      {parent ? (
-        <svg className="row-menu__more" viewBox="0 0 8 8" aria-hidden="true">
-          <path d="M3 1.5 5.5 4 3 6.5" />
-        </svg>
-      ) : null}
+      {parent ? <Icon name="chevron-right" size={14} className="row-menu__more" /> : null}
     </div>
   )
 }

@@ -63,6 +63,7 @@ import { HandoffPopups } from './teamwork/HandoffPopups'
 import { WorktreeAsks } from './workspace/WorktreeAsks'
 import { UpdateAvailableCard } from './updates/UpdateAvailableCard'
 import { WorkspaceArea } from './workspace/WorkspaceArea'
+import { Icon } from './icons/Icon'
 
 export function App(): React.JSX.Element {
   const platform = useMemo(
@@ -192,9 +193,7 @@ export function App(): React.JSX.Element {
                 aria-label="Dismiss message"
                 onClick={() => dismissNotice(notice.id)}
               >
-                <svg viewBox="0 0 12 12" aria-hidden="true">
-                  <path d="M3 3 L9 9 M9 3 L3 9" />
-                </svg>
+                <Icon name="close" size={14} />
               </button>
             </div>
           ))}

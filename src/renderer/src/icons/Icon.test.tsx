@@ -16,6 +16,15 @@ describe('the icon set', () => {
     expect(svg.childElementCount).toBeGreaterThan(0)
   })
 
+  it('is named for screen readers when given a label', () => {
+    const { container } = render(<Icon name="agent" label="Kiro" data-agent="kiro" />)
+    const svg = container.querySelector('svg') as SVGSVGElement
+    expect(svg.getAttribute('role')).toBe('img')
+    expect(svg.getAttribute('aria-label')).toBe('Kiro')
+    expect(svg.hasAttribute('aria-hidden')).toBe(false)
+    expect(svg.getAttribute('data-agent')).toBe('kiro')
+  })
+
   it('draws at the size asked', () => {
     const { container } = render(<Icon name="close" size={14} />)
     expect(container.querySelector('svg')?.getAttribute('width')).toBe('14')

@@ -143,16 +143,6 @@ kbd {
   pointer-events: none;
 }
 
-.select__chevron svg {
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .button {
   display: inline-flex;
   align-items: center;
@@ -296,15 +286,6 @@ kbd {
   border-radius: var(--r1);
 }
 
-.button--icon svg {
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-}
-
 /* Scrollbars ------------------------------------------------------------- */
 
 ::-webkit-scrollbar {
@@ -329,13 +310,20 @@ kbd {
   background: transparent;
 }
 
-/* A harness's mark, filled in the text colour. The menu's icons are stroked, so it says so twice. */
-.agent-glyph,
-.row-menu__icon svg.agent-glyph,
-.worktree-start__icon svg.agent-glyph {
+[data-icon] {
+  flex: none;
+}
+
+/* A harness's mark, filled in the text colour; the set's shell and unknown-agent marks stay outlines. */
+.agent-glyph {
   flex: none;
   width: 14px;
   height: 14px;
   fill: currentcolor;
   stroke: none;
+}
+
+.agent-glyph[data-icon] {
+  fill: none;
+  stroke: currentcolor;
 }

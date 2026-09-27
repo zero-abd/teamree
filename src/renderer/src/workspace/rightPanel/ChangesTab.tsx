@@ -207,11 +207,7 @@ export function ChangesTab(): React.JSX.Element | null {
                 setMoreAt(moreAt === null ? { at, opener: event.currentTarget } : null)
               }}
             >
-              <svg viewBox="0 0 12 12" aria-hidden="true">
-                <circle cx="2.5" cy="6" r="1" />
-                <circle cx="6" cy="6" r="1" />
-                <circle cx="9.5" cy="6" r="1" />
-              </svg>
+              <Icon name="more" size={14} />
             </button>
           )}
         </div>

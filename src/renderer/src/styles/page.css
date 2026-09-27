@@ -80,15 +80,6 @@
   color: var(--fg);
 }
 
-.page__close svg {
-  width: 11px;
-  height: 11px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-}
-
 .page__body {
   display: flex;
   flex: 1 1 auto;

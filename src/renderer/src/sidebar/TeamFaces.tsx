@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { Avatar } from '../teamwork/Avatar'
 import { dotClass, TONE_LABEL } from './agentRows'
 import { activityWords, presenceWords, type TeamCues, type TeammateGlance } from './teamGlance'
+import { Icon } from '../icons/Icon'
 
 /** Faces drawn before the rest fold into `+N`. */
 export const MAX_FACES = 4
@@ -144,9 +145,7 @@ export function TeamCueButtons({
           title={cues.handoffs.label}
           onClick={onHandoff}
         >
-          <svg viewBox="0 0 14 14" aria-hidden="true">
-            <path d="M2 8.5h2.8l.9 1.6h2.6l.9-1.6H12M2 8.5V11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8.5M7 2v5M4.8 4.8 7 7l2.2-2.2" />
-          </svg>
+          <Icon name="handoff" size={14} />
           {cues.handoffs.count > 1 ? <span className="project__cue-text">{cues.handoffs.count}</span> : null}
         </button>
       )}

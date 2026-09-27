@@ -10,6 +10,7 @@ import { openInBrowser } from '../shell/openInBrowser'
 import { InstallerButton } from './InstallerButton'
 import { releaseNotesHtml } from './releaseNotes'
 import { INSTALL_DOCUMENT, installerStep, updateNotice } from './updateNotice'
+import { Icon } from '../icons/Icon'
 
 const LATER_KEY = 'teamree.updates.later'
 /** The version whose card was shrunk to a pill. */
@@ -125,9 +126,7 @@ export function UpdateAvailableCard(): React.JSX.Element | null {
           title="Minimize"
           onClick={() => minimize(true)}
         >
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M2.5 6h7" />
-          </svg>
+          <Icon name="minimize" size={14} />
         </button>
       </div>
       {notice.detail === null ? null : <p className="update-card__detail">{notice.detail}</p>}

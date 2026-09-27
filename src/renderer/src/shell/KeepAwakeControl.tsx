@@ -5,6 +5,7 @@ import { KEEP_AWAKE_MODES, type KeepAwakeMode } from '../state/preferences'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { anyAgentBusy, holdsAwake } from './keepAwake'
 import { StatusPopover } from './StatusPopover'
+import { Icon } from '../icons/Icon'
 
 const MODE_NAME: Record<KeepAwakeMode, string> = { on: 'On', agent: 'Agent', off: 'Off' }
 
@@ -50,22 +51,14 @@ export function KeepAwakeControl(): React.JSX.Element {
       <button
         ref={button}
         type="button"
-        className={`statusbar__item statusbar__button${open ? ' statusbar__button--on' : ''}${
-          holding ? ' statusbar__icon--on' : ''
-        }`}
+        className={`statusbar__item statusbar__button${open ? ' statusbar__button--on' : ''}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={`Keep awake, ${MODE_NAME[mode].toLowerCase()}`}
         title={`Keep awake · ${MODE_NAME[mode]}`}
         onClick={() => (open ? close() : setOpen(true))}
       >
-        <svg className="statusbar__icon" viewBox="0 0 14 14" aria-hidden="true">
-          <path
-            className="statusbar__icon-fill"
-            d="M2.5 5.5 H10 V9 A2.5 2.5 0 0 1 7.5 11.5 H5 A2.5 2.5 0 0 1 2.5 9 Z"
-          />
-          <path d="M10 6.5 H11 A1.5 1.5 0 0 1 11 9.5 H10 M5 1.5 V3.5 M7.5 1.5 V3.5" />
-        </svg>
+        <Icon name={holding ? 'keep-awake-on' : 'keep-awake'} size={14} />
       </button>
       {open ? (
         <StatusPopover label="Keep awake" anchor={button.current} onClose={close}>

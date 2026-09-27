@@ -15,6 +15,7 @@ import {
   type ResourceHistory
 } from './resourceSamples'
 import { StatusPopover } from './StatusPopover'
+import { Icon } from '../icons/Icon'
 
 export const OPEN_INTERVAL_MS = 2_000
 export const CLOSED_INTERVAL_MS = 10_000
@@ -133,9 +134,7 @@ export function ResourcesControl(): React.JSX.Element {
         title="Resources"
         onClick={() => (open ? close() : setOpen(true))}
       >
-        <svg className="statusbar__icon" viewBox="0 0 14 14" aria-hidden="true">
-          <path d="M3.5 3.5 H10.5 V10.5 H3.5 Z M5.5 1 V3.5 M8.5 1 V3.5 M5.5 10.5 V13 M8.5 10.5 V13 M1 5.5 H3.5 M1 8.5 H3.5 M10.5 5.5 H13 M10.5 8.5 H13" />
-        </svg>
+        <Icon name="resources" size={14} />
         {railMemory}
       </button>
       {open ? (

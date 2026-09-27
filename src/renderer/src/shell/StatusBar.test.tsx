@@ -355,7 +355,7 @@ describe('keep awake', () => {
   })
 
   const filled = (): boolean =>
-    screen.getByRole('button', { name: /Keep awake/ }).classList.contains('statusbar__icon--on')
+    screen.getByRole('button', { name: /Keep awake/ }).querySelector('[data-icon="keep-awake-on"]') !== null
 
   it('is filled only while it holds the machine awake', () => {
     seed({ keepAwake: 'off', terminals: { a: pane('a', 'w1', { agent: 'claude', busy: true }) } })

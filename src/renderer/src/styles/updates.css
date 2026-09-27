@@ -137,17 +137,6 @@
   white-space: nowrap;
 }
 
-.installer-button__icon {
-  width: 13px;
-  height: 13px;
-  flex: none;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .installer-button--restart[aria-busy='true'] {
   border-color: var(--accent);
   background: var(--accent);

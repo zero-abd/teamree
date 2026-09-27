@@ -4,6 +4,7 @@
 import { useEffect, useRef } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { AppearanceSettings } from './AppearanceSettings'
+import { Icon } from '../icons/Icon'
 
 export function AppearanceSheet(): React.JSX.Element {
   const showAppearance = useWorkspaceStore((state) => state.showAppearance)
@@ -34,9 +35,7 @@ export function AppearanceSheet(): React.JSX.Element {
           aria-label="Close Appearance"
           onClick={() => showAppearance(false)}
         >
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M3 3 L9 9 M9 3 L3 9" />
-          </svg>
+          <Icon name="close" size={14} />
         </button>
       </header>
       <div className="appearance-sheet__body">

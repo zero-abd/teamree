@@ -102,7 +102,7 @@ export function FormatBar({
         onClick={() => setTurning(!turning)}
       >
         {kindLabel(kind)}
-        <BlockIcon name="chevron" />
+        <BlockIcon name="chevron" size={14} />
       </button>
       <span className="md-bar__rule" />
       {MARKS.map((mark) => (

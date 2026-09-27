@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { refocus, RowMenu, type MenuClosed, type RowMenuAnchor } from './RowMenu'
+import { Icon } from '../icons/Icon'
 
 export function AddProjectButton(): React.JSX.Element {
   const chooseProjectFolder = useWorkspaceStore((state) => state.chooseProjectFolder)
@@ -37,9 +38,7 @@ export function AddProjectButton(): React.JSX.Element {
         ref={button}
         onClick={toggle}
       >
-        <svg viewBox="0 0 14 14" aria-hidden="true">
-          <path d="M7 2.5 L7 11.5 M2.5 7 L11.5 7" />
-        </svg>
+        <Icon name="plus" size={14} />
       </button>
       {menuAt === null ? null : (
         <RowMenu

@@ -104,16 +104,6 @@
   padding: 4px 0;
 }
 
-.panel__tab svg {
-  width: 13px;
-  height: 13px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .panel__tab:hover,
 .panel__tab:focus-visible {
   background: var(--bg-hover);
@@ -167,16 +157,6 @@
   margin-left: 0;
 }
 
-.panel__fold svg {
-  width: 11px;
-  height: 11px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .panel__fold:hover,
 .panel__fold:focus-visible {
   background: var(--bg-hover);
@@ -214,16 +194,6 @@
   background: transparent;
   color: var(--fg-muted);
   cursor: pointer;
-}
-
-.panel__tool svg {
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .panel__tool:hover,
@@ -438,12 +408,6 @@
   align-items: center;
   justify-content: center;
   padding-inline: var(--s2);
-}
-
-.changes__more svg {
-  width: 12px;
-  height: 12px;
-  fill: currentcolor;
 }
 
 .changes__ref {

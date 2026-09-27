@@ -10,7 +10,7 @@ import { attentionByPane } from '../state/paneAttention'
 import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { Brand, SidebarGlyph } from '../shell/Brand'
+import { Brand } from '../shell/Brand'
 import { AddProjectButton } from './AddProjectButton'
 import { compareTitle, runName, siblingRuns } from '../compare/siblingRuns'
 import { useOpenIn } from './openIn'
@@ -40,6 +40,7 @@ import { unreadNotes, useSharedNotes } from '../teamwork/sharedNotesStore'
 import { useSidebarView } from '../state/sidebarViewStore'
 import { filterProject, keepFlat, narrows, type RowFacts } from './sidebarFilter'
 import { CompactToggle, SidebarFilter } from './SidebarView'
+import { Icon } from '../icons/Icon'
 
 export function Sidebar({
   searchHint
@@ -238,7 +239,7 @@ export function Sidebar({
           aria-label="Hide sidebar"
           onClick={toggleSidebar}
         >
-          <SidebarGlyph />
+          <Icon name="sidebar-toggle" />
         </button>
       </header>
 
@@ -252,10 +253,7 @@ export function Sidebar({
           aria-label="Search worktrees and commands"
           onClick={() => openDialog({ kind: 'palette' })}
         >
-          <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
-            <circle cx="6.2" cy="6.2" r="3.7" />
-            <path d="M9 9 L11.5 11.5" />
-          </svg>
+          <Icon name="search" />
           <span className="rail__search-text">Search</span>
           <kbd>{searchHint}</kbd>
         </button>
@@ -273,12 +271,7 @@ export function Sidebar({
                 else openDialog({ kind: 'join-invitation' })
               }}
             >
-              <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
-                <circle cx="5" cy="4.6" r="2.1" />
-                <circle cx="10.2" cy="5.4" r="1.6" />
-                <path d="M1.6 11.4c0-2 1.5-3.2 3.4-3.2s3.4 1.2 3.4 3.2" />
-                <path d="M9.3 8.4c1.7 0 3.1 1 3.1 2.6" />
-              </svg>
+              <Icon name="team" />
               <span>Teamwork</span>{' '}
               {notesUnread > 0 ? (
                 <span className="rail__badge" role="img" aria-label={`${notesUnread} unread`}>
@@ -295,12 +288,7 @@ export function Sidebar({
               title="All Panes, by what needs you"
               onClick={toggleDashboard}
             >
-              <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
-                <rect x="2" y="2" width="4.2" height="4.2" rx="1" />
-                <rect x="7.8" y="2" width="4.2" height="4.2" rx="1" />
-                <rect x="2" y="7.8" width="4.2" height="4.2" rx="1" />
-                <rect x="7.8" y="7.8" width="4.2" height="4.2" rx="1" />
-              </svg>
+              <Icon name="all-panes" />
               <span>All Panes</span>
             </button>
           </li>
@@ -590,13 +578,11 @@ export function Sidebar({
                             toggleDone(project.id)
                           }}
                         >
-                          <svg
+                          <Icon
+                            name="chevron-right"
+                            size={14}
                             className={`chevron${doneOpen ? ' chevron--open' : ''}`}
-                            viewBox="0 0 12 12"
-                            aria-hidden="true"
-                          >
-                            <path d="M4.5 2.5 L8.5 6 L4.5 9.5" />
-                          </svg>
+                          />
                           {`${folded} done`}
                         </button>
                       </li>
@@ -625,10 +611,7 @@ export function Sidebar({
           aria-label={cliFlag === null ? undefined : `Settings, ${cliFlag}`}
           onClick={() => (cliFlag === null || settingsOpen ? toggleSettings() : openSettings('cli'))}
         >
-          <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
-            <circle cx="7" cy="7" r="2.1" />
-            <path d="M7 1.5v1.7M7 10.8v1.7M12.1 7h-1.7M3.6 7H1.9M10.6 3.4 9.4 4.6M4.6 9.4l-1.2 1.2M10.6 10.6 9.4 9.4M4.6 4.6 3.4 3.4" />
-          </svg>
+          <Icon name="settings" />
           <span>Settings</span>
           {/* The CLI link is wrong and Settings › CLI fixes it; pressing Settings goes there. In ink: colour is for agents' state. */}
           {cliFlag === null ? null : (
@@ -645,12 +628,7 @@ export function Sidebar({
           title="Appearance"
           onClick={() => showAppearance(!appearanceOpen)}
         >
-          <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
-            <path d="M7 1.6a5.4 5.4 0 1 0 0 10.8c.9 0 1.3-.6 1.3-1.2 0-.8-.7-1.1-.7-1.8 0-.5.4-.9 1-.9h1.1a2.7 2.7 0 0 0 2.7-2.8c0-2.6-2.4-4.1-5.4-4.1Z" />
-            <circle cx="4.5" cy="6" r="0.9" />
-            <circle cx="7" cy="4.2" r="0.9" />
-            <circle cx="9.6" cy="6" r="0.9" />
-          </svg>
+          <Icon name="appearance" />
         </button>
         <button
           type="button"
@@ -660,11 +638,7 @@ export function Sidebar({
           title="Help"
           onClick={toggleHelp}
         >
-          <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
-            <circle cx="7" cy="7" r="5.4" />
-            <path d="M5.4 5.5a1.7 1.7 0 1 1 2.2 1.7c-.4.2-.6.5-.6.9v.4" />
-            <circle cx="7" cy="10.2" r="0.7" />
-          </svg>
+          <Icon name="help" />
         </button>
       </nav>
     </div>

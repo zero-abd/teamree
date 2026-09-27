@@ -1,3 +1,4 @@
+import { Icon } from '../icons/Icon'
 export function PaneCloseButton({ name, onClose }: { name: string; onClose: () => void }): React.JSX.Element {
   return (
     <button
@@ -7,9 +8,7 @@ export function PaneCloseButton({ name, onClose }: { name: string; onClose: () =
       aria-label={`Close pane ${name}`}
       onClick={onClose}
     >
-      <svg viewBox="0 0 12 12" aria-hidden="true">
-        <path d="M3 3 L9 9 M9 3 L3 9" />
-      </svg>
+      <Icon name="close" size={14} />
     </button>
   )
 }

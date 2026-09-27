@@ -10,6 +10,7 @@ import { useNestDrop } from './nestDrag'
 import { refocus, RowMenu, type MenuClosed, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { worktreeDisplay, worktreeLabel } from './worktreeDisplay'
 import { DropHint } from './WorktreeRow'
+import { Icon } from '../icons/Icon'
 
 type ProjectHeadProps = {
   project: Project
@@ -135,9 +136,7 @@ export function ProjectHead({
           }
         }}
       >
-        <svg className={`chevron${collapsed ? '' : ' chevron--open'}`} viewBox="0 0 12 12" aria-hidden="true">
-          <path d="M4.5 2.5 L8.5 6 L4.5 9.5" />
-        </svg>
+        <Icon name="chevron-right" size={14} className={`chevron${collapsed ? '' : ' chevron--open'}`} />
         <span className="project__name">{project.name}</span>
         {collapsed ? <span className="project__count">{count}</span> : null}
         {collapsed && theirs > 0 ? (
@@ -158,10 +157,7 @@ export function ProjectHead({
         onClick={onNewTask}
       >
         {/* A pencil on a page, not a plus: the plus above adds a project. */}
-        <svg viewBox="0 0 14 14" aria-hidden="true">
-          <path d="M6.5 2.5h-3a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-3" />
-          <path d="M10.3 2.2a1.1 1.1 0 0 1 1.5 1.5L7.2 8.3 5.5 8.8 6 7.1Z" />
-        </svg>
+        <Icon name="new-task" size={14} />
       </button>
       <button
         type="button"
@@ -176,11 +172,7 @@ export function ProjectHead({
           openMenu({ x: rect.right - 8, y: rect.bottom + 2 }, event.currentTarget)
         }}
       >
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          <circle cx="2.5" cy="6" r="1" />
-          <circle cx="6" cy="6" r="1" />
-          <circle cx="9.5" cy="6" r="1" />
-        </svg>
+        <Icon name="more" size={14} />
       </button>
       {drop.target === null ? null : (
         <DropHint text={drop.target.allowed ? drop.target.hint : drop.target.reason} refused={!drop.target.allowed} />

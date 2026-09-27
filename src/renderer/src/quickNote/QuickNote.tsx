@@ -2,6 +2,7 @@
 // and a panel left empty goes away when it loses the focus.
 
 import { useEffect, useState } from 'react'
+import { Icon } from '../icons/Icon'
 
 export type QuickNoteBridge = {
   context: () => Promise<{
@@ -90,9 +91,7 @@ export function QuickNote({ bridge }: { bridge: QuickNoteBridge }): React.JSX.El
             ))}
           </select>
           <span className="select__chevron">
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M3 4.5 6 7.5 9 4.5" />
-            </svg>
+            <Icon name="chevron-down" size={14} />
           </span>
         </span>
         {worktree ? (
