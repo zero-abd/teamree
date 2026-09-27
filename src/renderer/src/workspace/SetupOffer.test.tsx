@@ -88,6 +88,14 @@ describe('setupOfferFor', () => {
     expect(setupOfferFor({ ...base, check, project: saved, worktree: worktree({ setupTerminalId: 't1' }) })).toBeNull()
     expect(setupOfferFor({ ...base, check, project: saved, worktree: worktree({ setupAsk: 'npm ci' }) })).toBeNull()
   })
+
+  // Not Now on the suggestion came back on every worktree as Run of the same detected command.
+  it('offers nothing more once the project’s suggestion got Not Now and no command was saved', () => {
+    const check = { command: 'npm ci', missing: 'node_modules' }
+    expect(setupOfferFor({ ...base, check, project: project(), worktree: worktree(), dismissed: true })).toBeNull()
+    const bare = project({ suggestedSetup: undefined })
+    expect(setupOfferFor({ ...base, check, project: bare, worktree: worktree() })?.kind).toBe('worktree')
+  })
 })
 
 describe('offeredOn', () => {

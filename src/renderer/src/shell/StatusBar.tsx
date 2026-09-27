@@ -1,5 +1,5 @@
 // The bottom rail: state that is off screen. The runtime only when it is not ready, keep-awake and memory
-// as icons, the branch, the git line, the pane count, and how many panes anywhere are asking or failed.
+// as icons, the branch, the git line, setup questions, the pane count, and how many panes are asking or failed.
 
 import { useMemo } from 'react'
 import type { WorktreeStatus } from '@shared/entities'
@@ -12,6 +12,7 @@ import { formatReadAge, summarizeWorktreeStatus } from '../sidebar/worktreeStatu
 import { RUNTIME_IS_SEEDED } from '../runtimeClient/currentRuntimeClient'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { WorktreeAsks } from '../workspace/WorktreeAsks'
 import { requestRegionFocus } from './regions'
 import { useKeepAwake } from './keepAwake'
 import { KeepAwakeControl } from './KeepAwakeControl'
@@ -128,6 +129,8 @@ export function StatusBar(): React.JSX.Element {
       ) : null}
 
       <span className="statusbar__spacer" />
+
+      <WorktreeAsks />
 
       {RUNTIME_IS_SEEDED ? <span className="statusbar__badge">seeded data</span> : null}
 

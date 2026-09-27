@@ -285,12 +285,13 @@ describe('stylesheets', () => {
       ).toBe('99px')
     })
 
-    // A full-width row pushed every pane down and refit them when it came and went.
-    it('asks for the setup command in a card, not a row across the panes', () => {
-      const ask = ruleFor('workspace.css', '.setup-ask')
-      expect(declarationOf(ask, 'border-bottom')).toBeUndefined()
-      expect(declarationOf(ask, 'border-radius')).toBe(declarationOf(ruleFor('shell.css', '.notice'), 'border-radius'))
-      expect(declarationOf(ask, 'pointer-events')).toBe('auto')
+    // A row across the panes refit them; a floating card covered the prompt line and sat over the scrim.
+    it('asks for the setup command in the status rail, under any dialog', () => {
+      const ask = ruleFor('statusbar.css', '.setup-ask')
+      expect(declarationOf(ask, 'position')).toBeUndefined()
+      expect(declarationOf(ask, 'box-shadow')).toBeUndefined()
+      expect(declarationOf(ask, 'min-width')).toBe('0')
+      expect(declarationOf(ruleFor('statusbar.css', '.statusbar'), 'z-index')).toBeUndefined()
     })
   })
 

@@ -80,10 +80,10 @@ export function SetupOffer({ project, worktree }: { project: Project; worktree: 
       <section className="setup-ask" aria-label="Setup">
         <span className="setup-ask__label">no {offer.missing}</span>
         <code className="setup-ask__command">{offer.command}</code>
-        <button type="button" className="button button--primary button--small" onClick={run}>
+        <button type="button" className="button button--primary button--tiny" onClick={run}>
           Run
         </button>
-        <button type="button" className="button button--small" onClick={skip}>
+        <button type="button" className="button button--tiny" onClick={skip}>
           Not Now
         </button>
       </section>
@@ -123,17 +123,17 @@ export function SetupOffer({ project, worktree }: { project: Project; worktree: 
       )}
       <button
         type="button"
-        className="button button--primary button--small"
+        className="button button--primary button--tiny"
         onClick={() => save(draft ?? offer.command)}
       >
         Use
       </button>
       {draft === null ? (
-        <button type="button" className="button button--small" onClick={() => setDraft(offer.command)}>
+        <button type="button" className="button button--tiny" onClick={() => setDraft(offer.command)}>
           Edit…
         </button>
       ) : null}
-      <button type="button" className="button button--small" onClick={notNow}>
+      <button type="button" className="button button--tiny" onClick={notNow}>
         Not Now
       </button>
     </section>

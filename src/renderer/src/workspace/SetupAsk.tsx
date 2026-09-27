@@ -15,10 +15,10 @@ export function SetupAsk({
     <section className="setup-ask" aria-label={label === 'setup' ? 'Setup' : `Run ${label}`}>
       <span className="setup-ask__label">{label}</span>
       <code className="setup-ask__command">{command}</code>
-      <button type="button" className="button button--primary button--small" onClick={() => onAnswer(true)}>
+      <button type="button" className="button button--primary button--tiny" onClick={() => onAnswer(true)}>
         Run
       </button>
-      <button type="button" className="button button--small" onClick={() => onAnswer(false)}>
+      <button type="button" className="button button--tiny" onClick={() => onAnswer(false)}>
         Skip
       </button>
     </section>
