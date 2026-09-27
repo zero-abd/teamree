@@ -39,7 +39,7 @@ import { agentWords, worktreeDisplay, worktreeLabel } from './worktreeDisplay'
 import { unreadNotes, useSharedNotes } from '../teamwork/sharedNotesStore'
 import { useSidebarView } from '../state/sidebarViewStore'
 import { filterProject, keepFlat, narrows, type RowFacts } from './sidebarFilter'
-import { CompactToggle, SidebarFilter } from './SidebarView'
+import { CompactToggle, FilterToggle, HideDoneToggle, SidebarFilter } from './SidebarView'
 import { Icon } from '../icons/Icon'
 
 export function Sidebar({
@@ -129,6 +129,7 @@ export function Sidebar({
   const view = useMemo(() => ({ query, quick, compact, openDone }), [query, quick, compact, openDone])
   const toggleDone = useSidebarView((state) => state.toggleDone)
   const revealSeq = useSidebarView((state) => state.revealSeq)
+  const askFilter = useSidebarView((state) => state.askFilter)
   const narrowing = narrows(view)
 
   // Which editors are on this machine, asked once from the one thing always
@@ -303,13 +304,19 @@ export function Sidebar({
           const typing = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement
           if (event.key !== '/' || typing || event.metaKey || event.ctrlKey || event.altKey) return
           event.preventDefault()
-          filterField.current?.focus()
+          askFilter()
         }}
       >
         <div className="sidebar__head">
           <h2 className="sidebar__head-title">Projects</h2>
           <div className="sidebar__head-actions">
-            {projects.length === 0 ? null : <CompactToggle />}
+            {projects.length === 0 ? null : (
+              <>
+                <FilterToggle />
+                <HideDoneToggle />
+                <CompactToggle />
+              </>
+            )}
             <AddProjectButton />
           </div>
         </div>
@@ -496,42 +503,54 @@ export function Sidebar({
                   }
                   onForget={() => void removeFromTeamree({ projectId: project.id })}
                   onTrash={() => void trashProject(project.id)}
+                  meta={
+                    <div className="project__meta">
+                      <p className="project__base">{`from ${project.baseRef}`}</p>
+                      <BaseFreshness project={project} />
+                      <UnpushedBase projectId={project.id} />
+                      <span className="project__team">
+                        <TeamCueButtons
+                          cues={cues}
+                          onAsking={() => {
+                            if (cues.asking === null) return
+                            revealTeamRow(
+                              project.id,
+                              dataSelector('teammate-pane', cues.asking.paneId),
+                              cues.asking.handle
+                            )
+                          }}
+                          onHandoff={() => revealTeamRow(project.id, '[data-handoff]')}
+                        />
+                        {/* Only where teamwork is on; the rail reaches the setup either way. Named with the
+                            project, because the rail has a Teamwork entry too. */}
+                        {teamworkOn(teamwork[project.id]) ? (
+                          <TeamFaces
+                            glance={glance}
+                            onReveal={(handle) =>
+                              revealTeamRow(project.id, dataSelector('teammate-head', handle), handle)
+                            }
+                            onMore={() => openTeamwork(project.id)}
+                          />
+                        ) : null}
+                        {/* With faces drawn, the control speaks only when something is wrong. */}
+                        {teamworkOn(teamwork[project.id]) && !(glance.length > 0 && summary?.tone === 'live') ? (
+                          <button
+                            type="button"
+                            className={`project__teamwork${summary ? ` project__teamwork--${summary.tone}` : ''}`}
+                            tabIndex={-1}
+                            aria-label={`${teamworkControlLabel(summary)} in ${project.name}`}
+                            title={summary ? summary.detail : `Teamwork in ${project.name}`}
+                            onClick={() => openTeamwork(project.id)}
+                          >
+                            {glance.length > 0 && summary
+                              ? (summary.short ?? summary.label)
+                              : teamworkControlLabel(summary)}
+                          </button>
+                        ) : null}
+                      </span>
+                    </div>
+                  }
                 />
-                <div className="project__meta">
-                  <p className="project__base">{`from ${project.baseRef}`}</p>
-                  <BaseFreshness project={project} />
-                  <UnpushedBase projectId={project.id} />
-                  <TeamCueButtons
-                    cues={cues}
-                    onAsking={() => {
-                      if (cues.asking === null) return
-                      revealTeamRow(project.id, dataSelector('teammate-pane', cues.asking.paneId), cues.asking.handle)
-                    }}
-                    onHandoff={() => revealTeamRow(project.id, '[data-handoff]')}
-                  />
-                  {/* Only where teamwork is on; the rail reaches the setup either way. Named with the
-                      project, because the rail has a Teamwork entry too. */}
-                  {teamworkOn(teamwork[project.id]) ? (
-                    <TeamFaces
-                      glance={glance}
-                      onReveal={(handle) => revealTeamRow(project.id, dataSelector('teammate-head', handle), handle)}
-                      onMore={() => openTeamwork(project.id)}
-                    />
-                  ) : null}
-                  {/* With faces drawn, the control speaks only when something is wrong. */}
-                  {teamworkOn(teamwork[project.id]) && !(glance.length > 0 && summary?.tone === 'live') ? (
-                    <button
-                      type="button"
-                      className={`project__teamwork${summary ? ` project__teamwork--${summary.tone}` : ''}`}
-                      tabIndex={-1}
-                      aria-label={`${teamworkControlLabel(summary)} in ${project.name}`}
-                      title={summary ? summary.detail : `Teamwork in ${project.name}`}
-                      onClick={() => openTeamwork(project.id)}
-                    >
-                      {glance.length > 0 && summary ? (summary.short ?? summary.label) : teamworkControlLabel(summary)}
-                    </button>
-                  ) : null}
-                </div>
 
                 {isCollapsed ? null : (
                   <ul className="project__worktrees" role="group">

@@ -545,12 +545,25 @@ export function WorktreeRow({
 
   const body = (
     <>
-      {/* The task name gets a line of its own but for the activity dot. The
-        small facts about the branch share the line below with the branch, so
-        four badges cannot squeeze the name; with no branch to show they sit
-        beside the dot instead of alone on a line. */}
+      {/* The small facts about the branch share the line below with the branch, so four badges
+        cannot squeeze the name; with no branch to show they sit at the title line's end. */}
       {/* Hidden while it only draws: the row's name and description say it all in words. */}
       <span className="worktree__title" aria-hidden={renaming ? undefined : true}>
+        {/* In the gutter before the name, so the dots make one column to scan down. */}
+        {tone ? (
+          <span
+            className={dotClass(tone)}
+            role="img"
+            title={
+              rolled?.from === undefined
+                ? `${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${TONE_LABEL[tone]}${
+                    unreadHere ? ' · unread' : ''
+                  }`
+                : `${TONE_LABEL[tone]} · ${rolled.from}`
+            }
+            aria-label={TONE_LABEL[tone]}
+          />
+        ) : null}
         {renaming ? (
           <WorktreeNameField name={worktree.name} onRename={onRename} onDone={() => setRenaming(false)} />
         ) : (
@@ -577,20 +590,6 @@ export function WorktreeRow({
         )}
         <span className="worktree__end">
           {twoLines ? null : <FoldedChips chips={chips} most={compact ? COMPACT_CHIPS : chips.length} label={label} />}
-          {tone ? (
-            <span
-              className={dotClass(tone)}
-              role="img"
-              title={
-                rolled?.from === undefined
-                  ? `${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${TONE_LABEL[tone]}${
-                      unreadHere ? ' · unread' : ''
-                    }`
-                  : `${TONE_LABEL[tone]} · ${rolled.from}`
-              }
-              aria-label={TONE_LABEL[tone]}
-            />
-          ) : null}
         </span>
       </span>
       {twoLines ? (

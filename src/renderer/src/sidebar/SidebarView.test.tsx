@@ -3,7 +3,7 @@
 // The sidebar at a hundred rows: a filter field, quick-filter chips, Compact, and done rows folded
 // per project. Every choice is this window's and survives a relaunch.
 
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Project, TeammatePresence, Terminal, Worktree } from '@shared/entities'
 
@@ -97,6 +97,7 @@ const names = (): string[] =>
 
 const field = (): HTMLInputElement => screen.getByRole('searchbox', { name: 'Filter worktrees' })
 const chip = (name: string): HTMLElement => screen.getByRole('button', { name })
+const openFilter = (): void => void fireEvent.click(screen.getByRole('button', { name: 'Filter' }))
 
 beforeEach(() => {
   localStorage.clear()
@@ -134,6 +135,7 @@ const mount = (): void => void render(<Sidebar searchHint="⌘K" />)
 describe('the filter field', () => {
   it('keeps matching rows and their parents, and leaves out projects with none', () => {
     mount()
+    openFilter()
     fireEvent.change(field(), { target: { value: 'cart' } })
     expect(names()).toEqual(['checkout', 'cart'])
     expect(document.querySelector('[data-project-id="p2"]')).toBeNull()
@@ -142,6 +144,7 @@ describe('the filter field', () => {
 
   it('matches a branch and an issue number', () => {
     mount()
+    openFilter()
     fireEvent.change(field(), { target: { value: 'ui/gh' } })
     expect(names()).toEqual(['ghost'])
     fireEvent.change(field(), { target: { value: '#412' } })
@@ -150,6 +153,7 @@ describe('the filter field', () => {
 
   it('says so when nothing matches', () => {
     mount()
+    openFilter()
     fireEvent.change(field(), { target: { value: 'zzz' } })
     expect(names()).toEqual([])
     expect(screen.getByText('No matches')).toBeTruthy()
@@ -172,8 +176,38 @@ describe('the filter field', () => {
     expect(document.activeElement).toBe(field())
   })
 
+  it('takes no room until Filter is pressed', () => {
+    mount()
+    expect(screen.queryByRole('searchbox', { name: 'Filter worktrees' })).toBeNull()
+    expect(screen.queryByRole('group', { name: 'Quick filters' })).toBeNull()
+    openFilter()
+    expect(document.activeElement).toBe(field())
+    expect(screen.getByRole('group', { name: 'Quick filters' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Filter' }).getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('goes away on Escape once empty, and back to the list', () => {
+    mount()
+    openFilter()
+    fireEvent.change(field(), { target: { value: 'ghost' } })
+    fireEvent.keyDown(field(), { key: 'Escape' })
+    expect(field().value).toBe('')
+    fireEvent.keyDown(field(), { key: 'Escape' })
+    expect(screen.queryByRole('searchbox', { name: 'Filter worktrees' })).toBeNull()
+    expect(document.activeElement?.getAttribute('role')).toBe('treeitem')
+  })
+
+  it('stays in sight while it holds text, and opens with it after a relaunch', () => {
+    localStorage.setItem('teamree.sidebar.view', JSON.stringify({ query: 'ghost' }))
+    useSidebarView.setState({ query: 'ghost' })
+    mount()
+    expect(field().value).toBe('ghost')
+    expect(names()).toEqual(['ghost'])
+  })
+
   it('is remembered for this window', () => {
     mount()
+    openFilter()
     fireEvent.change(field(), { target: { value: 'ghost' } })
     expect(JSON.parse(localStorage.getItem('teamree.sidebar.view') ?? '{}').query).toBe('ghost')
   })
@@ -182,6 +216,7 @@ describe('the filter field', () => {
 describe('the chips', () => {
   it('Working keeps the rows with a pane at work', () => {
     mount()
+    openFilter()
     fireEvent.click(chip('Working'))
     expect(chip('Working').getAttribute('aria-pressed')).toBe('true')
     expect(names()).toEqual(['ghost'])
@@ -189,6 +224,7 @@ describe('the chips', () => {
 
   it('Changed keeps the rows with uncommitted work', () => {
     mount()
+    openFilter()
     fireEvent.click(chip('Changed'))
     expect(names()).toEqual(['checkout', 'cart'])
   })
@@ -198,6 +234,7 @@ describe('the chips', () => {
       worktrees: [...state.worktrees, worktree('broken', { state: 'failed', error: 'git exited with code 1: no' })]
     }))
     mount()
+    openFilter()
     fireEvent.click(chip('Needs You'))
     expect(names()).toEqual(['broken'])
   })
@@ -221,6 +258,7 @@ describe('the chips', () => {
       ]
     })
     mount()
+    openFilter()
     fireEvent.click(chip('Needs You'))
     expect(names()).toEqual(['ghost', 'shipped'])
   })
@@ -228,8 +266,30 @@ describe('the chips', () => {
   it('Mine leaves teammates’ rows out', () => {
     mount()
     expect(screen.getByText('ana task')).toBeTruthy()
+    openFilter()
     fireEvent.click(chip('Mine'))
     expect(screen.queryByText('ana task')).toBeNull()
+  })
+
+  it('sit on one row under the field, and a lit one stays in sight once the field is put away', () => {
+    mount()
+    openFilter()
+    const row = screen.getByRole('group', { name: 'Quick filters' })
+    expect(
+      within(row)
+        .getAllByRole('button')
+        .map((button) => button.textContent)
+    ).toEqual(['Needs You', 'Working', 'Mine', 'Changed'])
+    fireEvent.click(chip('Working'))
+    fireEvent.keyDown(field(), { key: 'Escape' })
+    expect(screen.queryByRole('searchbox', { name: 'Filter worktrees' })).toBeNull()
+    expect(chip('Working').getAttribute('aria-pressed')).toBe('true')
+    expect(names()).toEqual(['ghost'])
+  })
+
+  it('Hide Done is beside Compact, with the list’s other ways of drawing', () => {
+    mount()
+    expect(screen.getByRole('button', { name: 'Hide Done' }).closest('.sidebar__head')).not.toBeNull()
   })
 
   it('Hide Done folds done and landed rows into a count per project, which unfolds', () => {

@@ -5,7 +5,9 @@
 // three different sentences for having nothing to show.
 
 import { act, cleanup, createEvent, fireEvent, render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   Project,
   TeammatePresence,
@@ -313,12 +315,17 @@ describe('a project header', () => {
     expect(openTeamwork).toHaveBeenCalledWith('p1')
   })
 
-  it('lays where new tasks start and the teamwork control out as the one row under the name', () => {
+  // A second line under every project pushed the first worktree down the window.
+  it('lays the name, where new tasks start and the teamwork control out on one row', () => {
     seed({ teamwork: { p1: read() } })
     mount()
     const meta = document.querySelector('.project__meta') as HTMLElement
+    expect(meta.parentElement).toBe(document.querySelector('.project__head'))
+    expect(meta.previousElementSibling).toBe(screen.getByRole('treeitem', { name: 'pager' }))
     expect(meta.firstElementChild?.textContent).toBe('from origin/main')
-    expect(meta.lastElementChild).toBe(screen.getByRole('button', { name: 'Teamwork · no key in pager' }))
+    expect(meta.lastElementChild?.lastElementChild).toBe(
+      screen.getByRole('button', { name: 'Teamwork · no key in pager' })
+    )
     expect(meta.children).toHaveLength(2)
   })
 
@@ -1702,5 +1709,52 @@ describe('the team at a glance', () => {
     const row = screen.getByRole('treeitem', { name: /refund-flow/ })
     expect(within(row).getByRole('button', { name: 'Take' })).toBeTruthy()
     expect(within(row).getByRole('button', { name: 'Dismiss' })).toBeTruthy()
+  })
+})
+
+// One column to scan for state, and one mark for the open row; the row's `⋯` shows where the pointer or focus is.
+describe('a worktree row, read at a glance', () => {
+  const sheet = document.createElement('style')
+  sheet.textContent = readFileSync(path.join(import.meta.dirname, '../styles/sidebar.css'), 'utf8')
+  beforeAll(() => {
+    document.head.append(sheet)
+  })
+  afterAll(() => {
+    sheet.remove()
+  })
+  const pane = (id: string, worktreeId: string): Terminal => ({
+    id,
+    worktreeId,
+    title: 'claude',
+    agent: 'claude',
+    cwd: '/repos/pager-wt/rewrite',
+    shell: '/bin/zsh',
+    cols: 80,
+    rows: 24,
+    running: true,
+    busy: true,
+    lastOutputAt: NOW
+  })
+  const row = (id: string): HTMLElement => document.querySelector(`[data-worktree-id="${id}"]`) as HTMLElement
+
+  it('draws the state dot before the name, and nothing after the counts', () => {
+    seed({ worktrees: [worktree()], terminals: { t1: pane('t1', 'w1') } })
+    mount()
+    const title = row('w1').querySelector('.worktree__title') as HTMLElement
+    expect(title.firstElementChild?.className).toContain('activity')
+    expect(title.querySelector('.worktree__end .activity')).toBeNull()
+  })
+
+  it('hides the row menu’s ⋯ at rest except on the open row', () => {
+    seed({
+      worktrees: [worktree(), worktree({ id: 'w2', name: 'Second' })],
+      terminals: { t1: pane('t1', 'w1') },
+      activeWorktreeId: 'w1'
+    })
+    mount()
+    const action = (id: string): string =>
+      getComputedStyle(row(id).querySelector('.worktree__action') as HTMLElement).opacity
+    expect(action('w2')).toBe('var(--row-action-rest)')
+    expect(action('w1')).toBe('var(--control-rest)')
   })
 })

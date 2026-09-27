@@ -27,6 +27,8 @@ type ProjectHeadProps = {
   onForget: () => void
   /** Move to Trash…: the folder goes to the macOS Trash. */
   onTrash: () => void
+  /** Where new tasks start and what the team is doing, on the name's own row. */
+  meta?: React.ReactNode
 }
 
 export function ProjectHead({
@@ -39,7 +41,8 @@ export function ProjectHead({
   onNewTaskFromIssue,
   onOpenBranch,
   onForget,
-  onTrash
+  onTrash,
+  meta
 }: ProjectHeadProps): React.JSX.Element {
   const row = useRef<HTMLButtonElement | null>(null)
   const opener = useRef<HTMLElement | null>(null)
@@ -148,6 +151,7 @@ export function ProjectHead({
           </span>
         ) : null}
       </button>
+      {meta}
       <button
         type="button"
         className="button button--ghost button--icon"

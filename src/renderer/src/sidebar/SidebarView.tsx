@@ -1,10 +1,14 @@
-// The projects list's view controls: the filter field with its chips, and the Compact toggle.
+// The projects list's view controls: the filter field with its chips, and the Filter, Hide Done and Compact toggles.
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useSidebarView } from '../state/sidebarViewStore'
 import { QUICK_FILTERS } from './sidebarFilter'
 import { Icon } from '../icons/Icon'
 
+/** The chips under the field: which rows. Hide Done is how rows are drawn, so it sits with Compact. */
+const CHIPS = QUICK_FILTERS.filter((chip) => chip.id !== 'hide-done')
+
+/** Drawn while asked for or holding text, and the chip row while any chip is lit. */
 export function SidebarFilter({
   field,
   onLeave,
@@ -15,48 +19,68 @@ export function SidebarFilter({
   onLeave: () => void
   /** Return: open the first row shown. */
   onSubmit: () => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const query = useSidebarView((state) => state.query)
   const quick = useSidebarView((state) => state.quick)
   const setQuery = useSidebarView((state) => state.setQuery)
   const toggleQuick = useSidebarView((state) => state.toggleQuick)
   const filterAsked = useSidebarView((state) => state.filterAsked)
   const filterTaken = useSidebarView((state) => state.filterTaken)
+  const closeFilter = useSidebarView((state) => state.closeFilter)
+  const fieldShown = useSidebarView((state) => state.filterOpen) || query !== ''
+  const lit = CHIPS.some((chip) => quick.includes(chip.id))
+  const block = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    if (!filterAsked) return
+    if (!filterAsked || !fieldShown) return
     field.current?.focus()
     field.current?.select()
     filterTaken()
-  }, [field, filterAsked, filterTaken])
+  }, [field, filterAsked, filterTaken, fieldShown])
 
+  if (!fieldShown && !lit) return null
   return (
-    <div className="sidebar__filter">
-      <input
-        ref={field}
-        type="search"
-        className="sidebar__filter-field"
-        placeholder="Filter"
-        aria-label="Filter worktrees"
-        spellCheck={false}
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            event.preventDefault()
-            if (query !== '') setQuery('')
-            else onLeave()
-          } else if (event.key === 'ArrowDown') {
-            event.preventDefault()
-            onLeave()
-          } else if (event.key === 'Enter') {
-            event.preventDefault()
-            onSubmit()
-          }
-        }}
-      />
+    <div
+      className="sidebar__filter"
+      ref={block}
+      onBlur={(event) => {
+        // An empty field goes once the focus leaves it; its own toggle closes it itself.
+        const to = event.relatedTarget
+        if (query !== '' || (to instanceof Node && block.current?.contains(to))) return
+        if (to instanceof HTMLElement && to.dataset.filterToggle !== undefined) return
+        closeFilter()
+      }}
+    >
+      {fieldShown ? (
+        <input
+          ref={field}
+          type="search"
+          className="sidebar__filter-field"
+          placeholder="Filter"
+          aria-label="Filter worktrees"
+          spellCheck={false}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault()
+              if (query !== '') setQuery('')
+              else {
+                onLeave()
+                closeFilter()
+              }
+            } else if (event.key === 'ArrowDown') {
+              event.preventDefault()
+              onLeave()
+            } else if (event.key === 'Enter') {
+              event.preventDefault()
+              onSubmit()
+            }
+          }}
+        />
+      ) : null}
       <div className="sidebar__chips" role="group" aria-label="Quick filters">
-        {QUICK_FILTERS.map((chip) => (
+        {CHIPS.map((chip) => (
           <button
             key={chip.id}
             type="button"
@@ -69,6 +93,42 @@ export function SidebarFilter({
         ))}
       </div>
     </div>
+  )
+}
+
+export function FilterToggle(): React.JSX.Element {
+  const shown = useSidebarView((state) => state.filterOpen || state.query !== '')
+  const askFilter = useSidebarView((state) => state.askFilter)
+  const closeFilter = useSidebarView((state) => state.closeFilter)
+  return (
+    <button
+      type="button"
+      className="button button--ghost button--icon"
+      title="Filter"
+      aria-label="Filter"
+      aria-expanded={shown}
+      data-filter-toggle=""
+      onClick={() => (shown ? closeFilter() : askFilter())}
+    >
+      <Icon name="filter" size={14} />
+    </button>
+  )
+}
+
+export function HideDoneToggle(): React.JSX.Element {
+  const on = useSidebarView((state) => state.quick.includes('hide-done'))
+  const toggleQuick = useSidebarView((state) => state.toggleQuick)
+  return (
+    <button
+      type="button"
+      className="button button--ghost button--icon"
+      title="Hide Done"
+      aria-label="Hide Done"
+      aria-pressed={on}
+      onClick={() => toggleQuick('hide-done')}
+    >
+      <Icon name="check" size={14} />
+    </button>
   )
 }
 

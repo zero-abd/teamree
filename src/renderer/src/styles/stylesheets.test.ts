@@ -226,7 +226,7 @@ describe('stylesheets', () => {
     })
 
     it.each([
-      ['sidebar.css', '.worktree--active .worktree__row'],
+      ['sidebar.css', '.worktree--active'],
       ['sidebar.css', '.rail__link--current'],
       ['workspace.css', '.changes__item--selected'],
       ['workspace.css', '.commit--selected'],
@@ -322,25 +322,52 @@ describe('stylesheets', () => {
     })
 
     // A border on the current entry reads as a focus ring; the ring is keyboard focus's alone.
-    it('marks the current rail entry the way the current worktree is marked', () => {
+    it('fills the current rail entry the way the current worktree is filled', () => {
       const current = ruleFor('sidebar.css', '.rail__link--current')
       expect(declarationOf(current, 'border-color')).toBeUndefined()
       expect(declarationOf(current, 'background')).toBe(
-        declarationOf(ruleFor('sidebar.css', '.worktree--active .worktree__row'), 'background')
-      )
-      expect(declarationOf(ruleFor('sidebar.css', '.rail__link--current::before'), 'background')).toBe(
-        declarationOf(ruleFor('sidebar.css', '.worktree--active::before'), 'background')
+        declarationOf(ruleFor('sidebar.css', '.worktree--active'), 'background')
       )
     })
   })
 
-  // A page holds the main area, so its rail entry is the one selected thing in the sidebar.
-  it('leaves the open worktree a faint tick, no fill, while a page is open', () => {
-    expect(declarationOf(ruleFor('sidebar.css', '.sidebar--page .worktree--active .worktree__row'), 'background')).toBe(
-      'none'
+  // The title line filled and a bar outside it made two frames, and half the box looked selected.
+  it('marks the open worktree with one fill and one line around its whole box', () => {
+    const active = ruleFor('sidebar.css', '.worktree--active')
+    expect(declarationOf(active, 'border-color')).toBe('var(--accent-line)')
+    expect(findRule('sidebar.css', '.worktree--active::before')).toBeUndefined()
+    expect(findRule('sidebar.css', '.worktree--active .worktree__row')).toBeUndefined()
+  })
+
+  // A weight made names jump in width and the list look randomly bold.
+  it('marks an unread worktree by ink and a dot after its name, never by weight', () => {
+    const unread = ruleListing('sidebar.css', '.worktree__name--unread') as postcss.Rule
+    expect(declarationOf(unread, 'font-weight')).toBeUndefined()
+    expect(declarationOf(unread, 'color')).toBe('var(--fg)')
+    expect(declarationOf(ruleFor('sidebar.css', '.worktree__name'), 'color')).toBe('var(--fg-secondary)')
+    expect(declarationOf(ruleFor('sidebar.css', '.worktree__name--unread::after'), 'background')).toBe(
+      'var(--accent-bright)'
     )
-    const tick = ruleFor('sidebar.css', '.sidebar--page .worktree--active::before')
-    expect(Number(declarationOf(tick, 'opacity'))).toBeLessThan(0.5)
+  })
+
+  // A page holds the main area, so its rail entry is the one selected thing in the sidebar.
+  it('leaves the open worktree its line, no fill, while a page is open', () => {
+    const page = ruleFor('sidebar.css', '.sidebar--page .worktree--active')
+    expect(declarationOf(page, 'background')).toBe('none')
+    expect(declarationOf(page, 'border-color')).toBeUndefined()
+  })
+
+  // A quoted line in the terminal face read as log noise beside the names.
+  it('sets a row’s secondary lines in the UI face and keeps mono for refs', () => {
+    for (const selector of ['.pane-row__evidence', '.worktree__report', '.pane-row__label']) {
+      const rule = ruleListing('sidebar.css', selector) as postcss.Rule
+      expect(declarationOf(rule, 'font-family'), selector).toBeUndefined()
+      expect(declarationOf(rule, 'font-size'), selector).toBe('var(--text-sm)')
+    }
+    expect(declarationOf(ruleListing('sidebar.css', '.worktree__report') as postcss.Rule, 'color')).toBe(
+      'var(--fg-secondary)'
+    )
+    expect(declarationOf(ruleFor('sidebar.css', '.worktree__branch'), 'font-family')).toBe('var(--font-mono)')
   })
 
   // One card per worktree, its panes inside: a line and a corner from the tokens, a gap between cards.
@@ -843,8 +870,6 @@ describe('stylesheets', () => {
     ['workspace.css', '.tab__rename'],
     ['workspace.css', '.tab__close'],
     ['panes.css', '.pane__close'],
-    ['sidebar.css', '.worktree__action'],
-    ['sidebar.css', '.project__more'],
     ['review.css', '.patch__plus'],
     ['files.css', '.column__close']
   ])('draws %s %s faintly at rest, not invisibly', (sheet, selector) => {
@@ -856,6 +881,16 @@ describe('stylesheets', () => {
       })
     })
     expect(opacities).toEqual(['var(--control-rest)'])
+  })
+
+  // Twelve identical marks down the list said nothing; the open row keeps its own. Right-click
+  // and the menu key reach every row's menu.
+  it.each([
+    ['.worktree__action', '.worktree--active > .worktree__row > .worktree__action'],
+    ['.project__more', null]
+  ])('keeps %s out of sight at rest, but for the open row', (selector, active) => {
+    expect(declarationOf(ruleFor('sidebar.css', selector), 'opacity')).toBe('var(--row-action-rest)')
+    if (active !== null) expect(declarationOf(ruleFor('sidebar.css', active), 'opacity')).toBe('var(--control-rest)')
   })
 
   // Answering is the most urgent thing on the row; under the pointer only, it also covered the question.

@@ -332,7 +332,7 @@ describe('a worktree that is ready', () => {
   })
 
   // A chip alone on a second line reads as loose; with no branch there is no second line.
-  it('keeps its chips on the first line, just left of the dot, when the branch is left out', () => {
+  it('keeps its chips at the first line’s end, the dot before the name, when the branch is left out', () => {
     mount({
       worktree: worktree({ name: 'perf', branch: 'perf' }),
       status: status({ unstaged: 1 }),
@@ -343,8 +343,8 @@ describe('a worktree that is ready', () => {
     const chips = head.querySelector('.gitchips') as HTMLElement
     expect(chips).not.toBeNull()
     const end = head.lastElementChild as HTMLElement
-    expect(chips.closest('.worktree__facts')?.nextElementSibling).toBe(end.lastElementChild)
-    expect(end.lastElementChild?.classList.contains('activity')).toBe(true)
+    expect(chips.closest('.worktree__facts')).toBe(end.lastElementChild)
+    expect(head.firstElementChild?.classList.contains('activity')).toBe(true)
   })
 
   it('says a child is behind its parent, not behind main', () => {
@@ -973,7 +973,7 @@ describe('panes that have printed since they were read', () => {
     expect(pane.className).toContain('pane-row--unread')
     expect(pane.title).toContain('unread')
     expect(screen.getByText('Rewrite the pager').className).toContain('worktree__name--unread')
-    // One dot, the worktree's, saying the state alone; unread is the names' weight.
+    // The state dot says the state alone; unread is the name's ink and a mark after it.
     expect(document.querySelectorAll('.pip')).toHaveLength(0)
     const dots = document.querySelectorAll('.activity')
     expect(dots).toHaveLength(1)
@@ -1003,6 +1003,17 @@ describe('panes that have printed since they were read', () => {
       expect(stopped.className).not.toBe(working.className)
       expect(stopped.background).not.toBe(working.background)
       expect(working.background).toBe('var(--accent-bright)')
+    })
+
+    // A weight change made names jump in width and the list look randomly bold.
+    it('keeps an unread name the weight of a read one', () => {
+      mount({ terminals: [terminal({ id: 't1', agent: 'claude' })], unread: ['t1'] })
+      const unread = getComputedStyle(screen.getByText('Rewrite the pager')).fontWeight
+      const pane = getComputedStyle(document.querySelector('.pane-row--unread .pane-row__label') as Element).fontWeight
+      cleanup()
+      mount({ terminals: [terminal({ id: 't1', agent: 'claude' })] })
+      expect(unread).toBe(getComputedStyle(screen.getByText('Rewrite the pager')).fontWeight)
+      expect(pane).not.toBe('600')
     })
 
     it('draws asking one way, read or unread', () => {
