@@ -1,4 +1,4 @@
-// The front door, with no worktree open: the mark, then the three ways to a project and what setup found, or
+// The front door, with no worktree open: the mark, then the ways to a project (joining a team's too) and what setup found, or
 // New Task once there is one (the sidebar's + adds more; its chord is on its tooltip), and the chords. No headline.
 
 import type { Project } from '@shared/entities'
@@ -47,6 +47,13 @@ export function Welcome({
             </button>
             <button type="button" className="button button--lead" onClick={() => openDialog({ kind: 'clone-project' })}>
               Clone Repository…
+            </button>
+            <button
+              type="button"
+              className="button button--lead"
+              onClick={() => openDialog({ kind: 'join-invitation' })}
+            >
+              Join a Team…
             </button>
           </>
         ) : (

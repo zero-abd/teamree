@@ -143,8 +143,8 @@ describe('when there is nothing open', () => {
     expect(screen.queryByRole('button', { name: 'Open Folder…' })).toBeNull()
   })
 
-  // First run: the two ways to a project, side by side; no task button until there is one.
-  it('welcomes a first run with the mark and the three ways to add a project', () => {
+  // First run: the ways to a project, side by side, and joining one from an invitation; no task button until there is one.
+  it('welcomes a first run with the mark, the three ways to add a project and Join a Team…', () => {
     const chooseProjectFolder = vi.fn(() => Promise.resolve())
     const newProject = vi.fn(() => Promise.resolve())
     seed({ projects: [], chooseProjectFolder, newProject })
@@ -156,7 +156,8 @@ describe('when there is nothing open', () => {
     expect([...actions.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
       'New Project…',
       'Open Folder…',
-      'Clone Repository…'
+      'Clone Repository…',
+      'Join a Team…'
     ])
     const create = screen.getByRole('button', { name: 'New Project…' })
     expect(create.className).toContain('button--primary')
@@ -167,6 +168,8 @@ describe('when there is nothing open', () => {
     expect(openDialog).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Clone Repository…' }))
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'clone-project' })
+    fireEvent.click(screen.getByRole('button', { name: 'Join a Team…' }))
+    expect(openDialog).toHaveBeenLastCalledWith({ kind: 'join-invitation' })
     expect(screen.queryByRole('button', { name: 'New Task…' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'New Terminal' })).toBeNull()
   })

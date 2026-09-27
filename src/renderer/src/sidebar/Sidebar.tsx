@@ -184,7 +184,7 @@ export function Sidebar({
   const watchEvidence = useWatchEvidence()
 
   // Teamwork is per repository, so the app-level entry picks the one whose
-  // worktree is open, else the first. Undefined only before any has been added.
+  // worktree is open, else the first. Undefined before any has been added, when it joins one.
   const active = worktrees.find((entry) => entry.id === activeWorktreeId)
   const railProject = projects.find((project) => project.id === active?.projectId) ?? projects[0]
   const notesUnread = useSharedNotes((state) => unreadNotes(state))
@@ -263,11 +263,11 @@ export function Sidebar({
               type="button"
               className={`rail__link${teamworkProjectId !== null ? ' rail__link--current' : ''}`}
               aria-current={teamworkProjectId !== null ? 'page' : undefined}
-              disabled={railProject === undefined}
-              title={railProject === undefined ? 'No projects yet' : `Teamwork in ${railProject.name}`}
+              title={railProject === undefined ? 'Join a Team…' : `Teamwork in ${railProject.name}`}
               onClick={() => {
                 if (teamworkProjectId !== null) closeTeamwork()
                 else if (railProject) openTeamwork(railProject.id)
+                else openDialog({ kind: 'join-invitation' })
               }}
             >
               <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">

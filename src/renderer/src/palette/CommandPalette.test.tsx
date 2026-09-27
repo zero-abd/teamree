@@ -12,6 +12,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InstalledAgent, Project, Worktree } from '@shared/entities'
+import { formatInvitation } from '@shared/invitation'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 const call = vi.hoisted(() => vi.fn((..._args: unknown[]): Promise<unknown> => new Promise(() => {})))
@@ -538,6 +539,29 @@ describe('the first screen', () => {
       'Open Setting: Copy into every new worktree',
       'Search in Files: “copy”'
     ])
+  })
+})
+
+describe('joining from the palette', () => {
+  const link = formatInvitation({ origin: 'git@github.com:ana/ledger.git', project: 'ledger', from: 'ana' }, 'page')
+
+  it('opens the Join sheet for a pasted invitation with no project, and leaves Recent alone', () => {
+    const openInvitation = vi.fn(() => null)
+    seed({ projects: [], worktrees: [], activeWorktreeId: null, openInvitation })
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: link } })
+    expect(rows()[0]?.textContent).toContain('Join ledger from ana')
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
+    expect(openInvitation).toHaveBeenCalledExactlyOnceWith(link, true)
+    expect(localStorage.getItem('teamree.palette.recent')).toBeNull()
+  })
+
+  it('opens Join a Team… from its row', () => {
+    seed({ projects: [], worktrees: [], activeWorktreeId: null })
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'join' } })
+    fireEvent.click(rows()[0] as HTMLElement)
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'join-invitation' })
   })
 })
 

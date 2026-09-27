@@ -285,6 +285,7 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
     case 'open-settings':
     case 'add-project':
     case 'clone-repository':
+    case 'join-team':
     case 'open-help':
     case 'open-setup':
     case 'focus-sidebar':
@@ -436,6 +437,9 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       break
     case 'clone-repository':
       store.openDialog({ kind: 'clone-project' })
+      break
+    case 'join-team':
+      store.openDialog({ kind: 'join-invitation' })
       break
     case 'open-settings':
       store.toggleSettings()

@@ -61,7 +61,7 @@ describe('the welcome’s setup rows', () => {
     expect(agents.dataset.state).toBe('done')
 
     const actions = [...document.querySelectorAll('.welcome__actions .button')].map((button) => button.textContent)
-    expect(actions).toEqual(['New Project…', 'Open Folder…', 'Clone Repository…'])
+    expect(actions).toEqual(['New Project…', 'Open Folder…', 'Clone Repository…', 'Join a Team…'])
     // The buttons above are the project row; it is not said twice.
     expect(document.querySelector('[data-setup="project"]')).toBeNull()
   })

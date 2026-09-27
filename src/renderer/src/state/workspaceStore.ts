@@ -206,6 +206,8 @@ export type DialogState =
   /** A picked or dropped folder the runtime would not add as it was. */
   | { kind: 'project-refused'; folder: string; refusal: ProjectAddRefusal }
   | { kind: 'clone-project' }
+  /** Join a Team…: the field an invitation is pasted into. */
+  | { kind: 'join-invitation' }
   | { kind: 'install-cli' }
   | { kind: 'ports' }
   /** Help's Setup…: the welcome's rows, with a project already added. */

@@ -33,8 +33,14 @@ export const INVITATION_VERSION = '1'
  */
 const PREFIX = 'teamree://join?'
 
-/** The same literal, for finding it inside a message whatever its case. */
-const PREFIX_PATTERN = /teamree:\/\/join\?/i
+/**
+ * The join page, for chat apps that only make https clickable. The fields ride in
+ * the fragment, which a browser never sends, so the site learns nothing.
+ */
+const PAGE_PREFIX = 'https://teamree.us/join#'
+
+/** Either form, found inside a message whatever its case. */
+const PREFIX_PATTERN = /teamree:\/\/join\?|https:\/\/(?:www\.)?teamree\.us\/join#/i
 
 /**
  * What a chat client, a shell or a person leaves on the end. Safe to peel
@@ -45,7 +51,8 @@ const TRAILING = /[>)"'`\].,;:!?]+$/
 /** Everything a terminal obeys rather than prints, including DEL. */
 const CONTROL = /[\u0000-\u001F\u007F]/
 
-export function formatInvitation(invitation: Invitation): string {
+/** `page` writes the https form, which opens the app from the join page. */
+export function formatInvitation(invitation: Invitation, form: 'app' | 'page' = 'app'): string {
   const query = new URLSearchParams({
     v: INVITATION_VERSION,
     origin: invitation.origin,
@@ -53,7 +60,7 @@ export function formatInvitation(invitation: Invitation): string {
     project: invitation.project,
     from: invitation.from
   })
-  return `${PREFIX}${terminate(query.toString())}`
+  return `${form === 'page' ? PAGE_PREFIX : PREFIX}${terminate(query.toString())}`
 }
 
 /**
@@ -174,10 +181,11 @@ export function parseInvitation(raw: string): InvitationParse {
 function findInvitation(raw: string): string | undefined {
   // Against the original, not a lowercased copy: `İ` lowercases to two
   // characters and would shift every index after it.
-  const at = PREFIX_PATTERN.exec(raw)?.index ?? -1
-  if (at === -1) return undefined
-  const token = (raw.slice(at).split(/\s/)[0] as string).replace(TRAILING, '')
-  return token.length > PREFIX.length ? token : undefined
+  const match = PREFIX_PATTERN.exec(raw)
+  if (match === null) return undefined
+  const token = (raw.slice(match.index).split(/\s/)[0] as string).replace(TRAILING, '')
+  const fields = token.slice(match[0].length)
+  return fields === '' ? undefined : `${PREFIX}${fields}`
 }
 
 /**

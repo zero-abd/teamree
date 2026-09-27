@@ -145,10 +145,10 @@ describe('setupRows', () => {
     expect(labels(linux)).toEqual(['Send Test'])
   })
 
-  it('offers the three ways to a project until there is one', () => {
+  it('offers the ways to a project, joining a team’s too, until there is one', () => {
     const none = row(setupRows(facts()), 'project')
     expect(none).toMatchObject({ state: 'todo', value: 'None' })
-    expect(labels(none)).toEqual(['New Project…', 'Open Folder…', 'Clone Repository…'])
+    expect(labels(none)).toEqual(['New Project…', 'Open Folder…', 'Clone Repository…', 'Join a Team…'])
 
     expect(row(setupRows(facts({ projects: [{ name: 'pager' }] })), 'project')).toMatchObject({
       state: 'done',

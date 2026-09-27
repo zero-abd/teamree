@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { formatInvitation, parseInvitation } from '@shared/invitation'
+import { formatInvitation, parseInvitation, parsePastedInvitation } from '@shared/invitation'
 import { joinTeam, type JoinCall } from './joinTeam'
 // @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
 import { startTwoPeers } from '../../../../scripts/teamwork/two-peers.mjs'
@@ -27,8 +27,11 @@ afterAll(async () => {
 }, 60_000)
 
 describe('joining from a link', () => {
-  it('clones, adds the project, writes the key and pushes it to the origin', async () => {
-    const parsed = parseInvitation(formatInvitation({ origin: peers.origin, project: 'ledger', from: 'ana' }))
+  // What Join a Team… does on a fresh install: the page link, pasted from a chat message.
+  it('from no project, clones, adds the project, writes the key and pushes it to the origin', async () => {
+    expect(await peers.joiner.call('project.list')).toEqual([])
+    const page = formatInvitation({ origin: peers.origin, project: 'ledger', from: 'ana' }, 'page')
+    const parsed = parsePastedInvitation(`Join ledger on teamree: ${page}`)
     if (!parsed.ok) throw new Error(parsed.reason)
     const into = join(peers.joiner.home, 'joined')
     const stages: string[] = []
@@ -39,6 +42,8 @@ describe('joining from a link', () => {
     if (!outcome.ok) throw new Error(`${outcome.stage}: ${outcome.error}`)
     expect(stages).toEqual(['clone', 'read', 'key', 'push'])
     expect(outcome.project.path).toContain('joined')
+    const listed = (await peers.joiner.call('project.list')) as Array<{ id: string }>
+    expect(listed.map((project) => project.id)).toEqual([outcome.project.id])
     const pushed = execFileSync('git', ['--git-dir', peers.origin, 'ls-tree', '-r', '--name-only', 'HEAD'], {
       encoding: 'utf8'
     })

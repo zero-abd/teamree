@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CliStatus, InstalledAgent, Project, Terminal, UpdateState, Worktree } from '@shared/entities'
+import { formatInvitation } from '@shared/invitation'
 import type { SharedNoteSummary } from '@shared/sharedNote'
 import { menuBarSpec } from '../menu/menuBar'
 import {
@@ -1082,6 +1083,31 @@ describe('showing decisions', () => {
   it('says there is no project to show', () => {
     const items = buildPaletteItems(context({ projects: [] }))
     expect(items.find((item) => item.id === 'show-decisions')).toMatchObject({ unavailable: 'no project' })
+  })
+})
+
+describe('an invitation pasted into the palette', () => {
+  const invitation = { origin: 'git@github.com:ana/ledger.git', project: 'ledger', from: 'ana' }
+  const none = buildPaletteItems(context({ projects: [], whyUnavailable: () => 'no project' }))
+
+  it('offers to join from either form of the link, with no project and ahead of anything else', () => {
+    for (const link of [formatInvitation(invitation), formatInvitation(invitation, 'page')]) {
+      const [group] = queryGroups(none, `  come join: ${link} `, [])
+      expect(group?.items.map((item) => [item.id, item.label])).toEqual([
+        [`join:come join: ${link}`, 'Join ledger from ana']
+      ])
+    }
+  })
+
+  it('offers nothing to join for text that is not an invitation', () => {
+    const [group] = queryGroups(none, 'teamree://join?v=1&project=ledger', [])
+    expect(group?.items.map((item) => item.label)).toEqual([])
+  })
+
+  it('offers Join a Team… to paste into, with no project too', () => {
+    const items = buildPaletteItems(context({ projects: [] }))
+    expect(filterPalette(items, 'join')[0]).toMatchObject({ id: 'join-team', label: 'Join a Team…' })
+    expect(filterPalette(items, 'invitation')[0]).toMatchObject({ id: 'join-team' })
   })
 })
 

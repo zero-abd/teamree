@@ -1082,7 +1082,7 @@ describe('the page as a whole', () => {
   // There is no invitation in this protocol, which is why the person setting it up has to write one.
   it('writes the invitation out as one line and a link, and offers to copy it', () => {
     const shown = text(render({ list: enrolled(), relay: relayOnDisk() }))
-    expect(shown).toContain('Join pager on teamree: teamree://join?v=1&')
+    expect(shown).toContain('Join pager on teamree: https://teamree.us/join#v=1&')
     expect(shown).toContain('Copy Invitation')
   })
 
