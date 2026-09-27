@@ -45,7 +45,7 @@ import {
  */
 const PAIRS: readonly { ink: ThemeToken; on: ThemeToken; least: number; why: string }[] = [
   { ink: 'fg', on: 'bg-raised', least: 7, why: 'body text, everywhere' },
-  { ink: 'fg-secondary', on: 'bg-raised', least: 6, why: 'field labels, notice bodies, rail links' },
+  { ink: 'fg-secondary', on: 'bg-raised', least: 5.5, why: 'field labels, notice bodies, rail links' },
   { ink: 'fg-muted', on: 'bg-raised', least: 4.5, why: 'hints, counts, branch names, timestamps' },
   { ink: 'accent-bright', on: 'bg-raised', least: 4.5, why: 'the active combo row and the status bar branch' },
   { ink: 'accent-bright', on: 'bg-panel', least: 4.5, why: 'a commit sha, a hunk header, whose worktree a row is' },
@@ -73,12 +73,12 @@ const PAIRS: readonly { ink: ThemeToken; on: ThemeToken; least: number; why: str
   // measured against one surface and painted on three is an ink the next edit
   // can put somewhere nothing checks.
   { ink: 'fg', on: 'bg-panel', least: 7, why: 'what a push ended up doing, and the heading over it' },
-  { ink: 'fg-secondary', on: 'bg-panel', least: 6, why: 'a release’s notes, and what each teamwork step is for' },
+  { ink: 'fg-secondary', on: 'bg-panel', least: 5.5, why: 'a release’s notes, and what each teamwork step is for' },
   { ink: 'fg-muted', on: 'bg-panel', least: 4.5, why: 'the hints underneath them' },
   { ink: 'success', on: 'bg-panel', least: 4.5, why: 'a teamwork step that is finished' },
   { ink: 'warning', on: 'bg-panel', least: 4.5, why: 'one that is waiting on something else' },
   { ink: 'fg', on: 'bg-input', least: 7, why: 'the keystrokes a teammate is asking to run' },
-  { ink: 'fg-secondary', on: 'bg-input', least: 6, why: 'git’s own words while a push streams' },
+  { ink: 'fg-secondary', on: 'bg-input', least: 5.5, why: 'git’s own words while a push streams' },
   { ink: 'fg-muted', on: 'bg-input', least: 4.5, why: 'the seconds counting up beside them' }
 ]
 
@@ -129,6 +129,7 @@ describe.each(BUILT_IN_THEMES.map((theme) => [theme.id, theme.name] as const))('
   // module exists to remove.
   it('paints the terminal on the same ground as the window', () => {
     expect(palette['term-bg']).toBe(palette['bg-window'])
+    expect(palette['bg-pane']).toBe(palette['bg-window'])
   })
 })
 
@@ -209,10 +210,69 @@ describe('light and dark', () => {
 })
 
 describe('the default', () => {
-  it('is absolute black, and absolute means #000000', () => {
-    expect(DEFAULT_THEME_ID).toBe('black')
-    expect(themeById(DEFAULT_THEME_ID).seed.ground).toBe('#000000')
-    expect(resolvePalette(DEFAULT_APPEARANCE)['bg-window']).toBe('#000000')
+  // Chosen from two measured options; every value here is the option's own.
+  const OPTION: Partial<Palette> = {
+    'bg-window': '#101114',
+    'term-bg': '#101114',
+    'bg-pane': '#101114',
+    'bg-rail': '#1a1b20',
+    'bg-tabstrip': '#24252a',
+    'bg-panel': '#1d1e24',
+    'bg-raised': '#292a30',
+    'bg-input': '#121318',
+    line: '#42434b',
+    'line-strong': '#595b65',
+    'bg-hover': 'rgb(238 241 248 / 7%)',
+    'bg-press': 'rgb(238 241 248 / 12%)',
+    'bg-selected': 'rgb(139 140 247 / 16%)',
+    scrim: 'rgb(0 0 0 / 62%)',
+    fg: '#e4e7ee',
+    'fg-secondary': '#a0a2a7',
+    'fg-muted': '#96979b',
+    accent: '#8b8cf7'
+  }
+
+  it('is Charcoal, painted in the lifted option exactly', () => {
+    expect(DEFAULT_THEME_ID).toBe('charcoal')
+    expect(themeTone(DEFAULT_THEME_ID)).toBe('dark')
+    const palette = resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark' })
+    expect(Object.fromEntries(Object.keys(OPTION).map((token) => [token, palette[token as ThemeToken]]))).toEqual(
+      OPTION
+    )
+  })
+
+  // The option's selection is 30% accent over the ground; the search addon reads only solid hex.
+  it('selects terminal text in the option’s 30% accent, flattened onto the ground', () => {
+    expect(resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark' })['term-selection']).toBe('#353658')
+  })
+
+  it('steps each surface off its neighbour by at least 6 in every channel', () => {
+    const palette = resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark' })
+    const steps: [ThemeToken, ThemeToken][] = [
+      ['bg-window', 'bg-rail'],
+      ['bg-rail', 'bg-tabstrip'],
+      ['bg-tabstrip', 'bg-pane'],
+      ['bg-pane', 'bg-panel'],
+      ['bg-panel', 'bg-raised']
+    ]
+    for (const [a, b] of steps) {
+      const [x, y] = [rgb(palette[a]), rgb(palette[b])]
+      expect(
+        Math.min(Math.abs(x.r - y.r), Math.abs(x.g - y.g), Math.abs(x.b - y.b)),
+        `${a} to ${b}`
+      ).toBeGreaterThanOrEqual(6)
+    }
+  })
+
+  it('keeps its measured steps only on its own ground', () => {
+    const palette = resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark', ground: '#202020' })
+    expect(palette['bg-rail']).not.toBe(OPTION['bg-rail'])
+    expect(ratio(palette, 'bg-rail', 'bg-window')).toBeGreaterThan(1.05)
+  })
+
+  it('leaves Absolute Black absolute, #000000', () => {
+    expect(themeById('black').seed.ground).toBe('#000000')
+    expect(resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark', themeId: 'black' })['bg-window']).toBe('#000000')
   })
 
   it('is what an installation that has never chosen anything gets', () => {

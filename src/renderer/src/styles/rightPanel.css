@@ -121,7 +121,7 @@
 }
 
 .panel__tab--current {
-  background: var(--accent-soft);
+  background: var(--bg-selected);
   color: var(--fg);
 }
 
@@ -889,7 +889,7 @@
 }
 
 .search__hit--current {
-  background: var(--accent-soft);
+  background: var(--bg-selected);
   color: var(--fg);
 }
 

@@ -503,6 +503,7 @@ function openEmulator(
     fontSize,
     letterSpacing: 0,
     ...emulatorOptions(options),
+    ...SLIM_SCROLLBAR,
     ...readTerminalColors(document.documentElement),
     // OSC 8 hyperlinks (`gh`, `npm`) come from xterm's own provider. Without
     // this xterm asks in a `confirm()` and calls `window.open()` with no URL,
@@ -771,6 +772,9 @@ export function clearIntoScrollback(term: Pick<XTerm, 'options' | 'write'>, sepa
     term.options.scrollOnEraseInDisplay = false
   })
 }
+
+/** xterm sizes its scrollbar, and what the fit addon keeps clear for it, from the overview ruler's width. */
+export const SLIM_SCROLLBAR = { overviewRuler: { width: 6 } } satisfies ITerminalOptions
 
 /** The preferences xterm reads, in its own names. */
 export function emulatorOptions(options: TerminalOptions): ITerminalOptions {

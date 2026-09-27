@@ -40,6 +40,18 @@ describe('what the emulator is handed', () => {
     expect(unmapped).toEqual([])
   })
 
+  it('draws the scrollbar slider in the strong hairline, the muted ink under the pointer', () => {
+    const theme = readTerminalTheme(rootWith({ '--line-strong': '#123456', '--fg-muted': '#654321' }))
+    expect(theme.scrollbarSliderBackground).toBe('#123456')
+    expect(theme.scrollbarSliderHoverBackground).toBe('#654321')
+    expect(theme.scrollbarSliderActiveBackground).toBe('#654321')
+  })
+
+  it('draws the ruler under the slider with no edge of its own', () => {
+    expect(readTerminalTheme(rootWith({ '--term-bg': '#0a0b0c' })).overviewRulerBorder).toBe('#0a0b0c')
+    expect(readTerminalTheme(null).overviewRulerBorder).toBe(readTerminalTheme(null).background)
+  })
+
   it('reads the search decorations off the same element', () => {
     const decorations = readSearchDecorations(rootWith({ '--term-selection': '#123456' }))
     expect(decorations.matchBackground).toBe('#123456')
@@ -61,6 +73,9 @@ describe('the colours used when there is no element to read', () => {
     expect(theme.red).toBe(palette['term-red'])
     expect(theme.brightBlack).toBe(palette['term-bright-black'])
     expect(theme.brightWhite).toBe(palette['term-bright-white'])
+    expect(theme.selectionBackground).toBe(palette['term-selection'])
+    expect(theme.scrollbarSliderBackground).toBe(palette['line-strong'])
+    expect(theme.scrollbarSliderHoverBackground).toBe(palette['fg-muted'])
   })
 
   it('carries the same selection and active-match colours the theme does', () => {

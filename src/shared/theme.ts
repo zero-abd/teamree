@@ -10,12 +10,15 @@ import { contrastRatio, ensureContrast, mix, opaqueHex, parseColor, toHex, withA
  */
 export const THEME_TOKENS = [
   'bg-window',
+  'bg-pane',
   'bg-rail',
+  'bg-tabstrip',
   'bg-panel',
   'bg-raised',
   'bg-input',
   'bg-hover',
   'bg-press',
+  'bg-selected',
   'scrim',
   'line',
   'line-strong',
@@ -81,12 +84,18 @@ export type ThemeSeed = {
   mutedContrast: number
   /** Multiplies the hairline ramp, so a theme can draw its lines harder. */
   lineWeight: number
+  /** What secondary text must clear against a raised card; 6.5 when absent. */
+  secondaryContrast?: number
+  /** How much accent a terminal selection mixes into the ground; 0.34 when absent. */
+  selection?: number
 }
 
 export type BuiltInTheme = {
   id: string
   name: string
   seed: ThemeSeed
+  /** Literal values laid over the derived ones while the preset's own ground is on screen. */
+  tokens?: Readonly<Partial<Record<ThemeToken, string>>>
 }
 
 // One set of hues for every preset: they are meanings (red failed, green merged)
@@ -155,6 +164,36 @@ function hueApart(a: number, b: number): number {
 }
 
 export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
+  {
+    id: 'charcoal',
+    name: 'Charcoal',
+    seed: {
+      ground: '#101114',
+      surface: '#eef1f8',
+      ink: '#e4e7ee',
+      accent: DEFAULT_ACCENT,
+      hues: HUES,
+      mutedContrast: 4.5,
+      lineWeight: 1,
+      secondaryContrast: 5.5,
+      selection: 0.3
+    },
+    // Measured steps rather than one ramp: the tab strip sits above the rail, the panel between.
+    tokens: {
+      'bg-rail': '#1a1b20',
+      'bg-tabstrip': '#24252a',
+      'bg-panel': '#1d1e24',
+      'bg-raised': '#292a30',
+      'bg-input': '#121318',
+      'bg-hover': 'rgb(238 241 248 / 7%)',
+      'bg-press': 'rgb(238 241 248 / 12%)',
+      scrim: 'rgb(0 0 0 / 62%)',
+      line: '#42434b',
+      'line-strong': '#595b65',
+      'fg-secondary': '#a0a2a7',
+      'fg-muted': '#96979b'
+    }
+  },
   {
     id: 'black',
     name: 'Absolute Black',
@@ -237,7 +276,7 @@ export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
   }
 ]
 
-export const DEFAULT_THEME_ID = 'black'
+export const DEFAULT_THEME_ID = 'charcoal'
 export const DEFAULT_LIGHT_THEME_ID = 'light'
 
 export function themeById(id: string): BuiltInTheme {
@@ -379,9 +418,12 @@ function hexOrNull(value: unknown): string | null {
 /** The whole pipeline: the slot on screen, its preset, then the two choices, then the literal edits. */
 export function resolvePalette(appearance: Appearance, system: Tone = 'dark'): Palette {
   const clean = activeChoice(sanitizeAppearance(appearance), system)
-  const base = themeById(clean.themeId).seed
+  const preset = themeById(clean.themeId)
+  const base = preset.seed
   const seed: ThemeSeed = { ...base, ground: clean.ground ?? base.ground, accent: clean.accent ?? base.accent }
-  return guard(applyOverrides(buildPalette(seed), clean.overrides), seed)
+  const built = buildPalette(seed)
+  const shipped = clean.ground === null ? { ...built, ...preset.tokens } : built
+  return guard(applyOverrides(shipped, clean.overrides), seed)
 }
 
 // How far each surface climbs from the ground towards the surface colour. Tuned
@@ -413,7 +455,7 @@ export function buildPalette(seed: ThemeSeed): Palette {
   const ink = ensureContrast(parseColor(seed.ink) ?? white(), ground, 11)
   // Measured against the lightest surface each lands on (a raised card), not the
   // ground: a palette tuned to the window would fail exactly where dialogs are.
-  const secondary = ensureContrast(mix(ink, ground, 0.3), raised, Math.max(seed.mutedContrast, 6.5))
+  const secondary = ensureContrast(mix(ink, ground, 0.3), raised, secondaryFloor(seed))
   const muted = ensureContrast(mix(ink, ground, 0.5), raised, seed.mutedContrast)
 
   const accent = parseColor(seed.accent) ?? (parseColor(DEFAULT_ACCENT) as Rgb)
@@ -447,12 +489,15 @@ export function buildPalette(seed: ThemeSeed): Palette {
 
   return {
     'bg-window': toHex(ground),
+    'bg-pane': toHex(ground),
     'bg-rail': toHex(rail),
+    'bg-tabstrip': toHex(rail),
     'bg-panel': toHex(panel),
     'bg-raised': toHex(raised),
     'bg-input': toHex(input),
     'bg-hover': withAlpha(surface, 0.05),
     'bg-press': withAlpha(surface, 0.09),
+    'bg-selected': withAlpha(accent, 0.16),
     scrim: darkGround ? withAlpha(mix(ground, black(), 0.5), 0.66) : withAlpha(mix(surface, black(), 0.5), 0.22),
     line: toHex(line),
     'line-strong': toHex(lineStrong),
@@ -474,7 +519,7 @@ export function buildPalette(seed: ThemeSeed): Palette {
     'term-cursor': toHex(accentBright),
     // Solid, not translucent: the search addon parses this itself and understands
     // nothing but `#rrggbb`; alpha would quietly fall back to another theme's colour.
-    'term-selection': toHex(mix(termBg, accent, 0.34)),
+    'term-selection': toHex(mix(termBg, accent, seed.selection ?? 0.34)),
     // On a light ground black is ink, not a shade of the ground.
     'term-black': toHex(darkGround ? mix(termBg, surface, 0.14) : mix(ink, ground, 0.08)),
     'term-red': toHex(red),
@@ -514,7 +559,7 @@ function guard(palette: Palette, seed: ThemeSeed): Palette {
   const floor = Math.max(seed.mutedContrast, 4.5)
   const pairs: readonly [ThemeToken, ThemeToken, number][] = [
     ['fg', 'bg-raised', 7],
-    ['fg-secondary', 'bg-raised', Math.max(floor, 6.5)],
+    ['fg-secondary', 'bg-raised', Math.max(floor, secondaryFloor(seed))],
     ['fg-muted', 'bg-raised', floor],
     ['accent-bright', 'bg-raised', 4.5],
     ['on-accent', 'accent', 4.5],
@@ -557,6 +602,10 @@ function guard(palette: Palette, seed: ThemeSeed): Palette {
   const accentInk = parseColor(next['accent-bright'])
   if (chip !== null && accentInk !== null) next['accent-bright'] = toHex(ensureContrast(accentInk, chip, 4.5))
   return next
+}
+
+function secondaryFloor(seed: ThemeSeed): number {
+  return Math.max(seed.mutedContrast, seed.secondaryContrast ?? 6.5)
 }
 
 function isDark(color: Rgb): boolean {

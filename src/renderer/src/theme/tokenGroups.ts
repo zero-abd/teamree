@@ -12,13 +12,16 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
   {
     title: 'Surfaces',
     tokens: [
-      { token: 'bg-window', label: 'Window', about: 'Ground and terminal background' },
-      { token: 'bg-rail', label: 'Rail', about: 'Sidebar, pane strip, status bar' },
-      { token: 'bg-panel', label: 'Panel', about: 'Pane headers, tab strips, changes list' },
+      { token: 'bg-window', label: 'Window', about: 'Ground behind everything' },
+      { token: 'bg-pane', label: 'Pane', about: 'Editor, diff and page ground' },
+      { token: 'bg-rail', label: 'Rail', about: 'Sidebar, status bar' },
+      { token: 'bg-tabstrip', label: 'Tab strip', about: 'Pane tabs, file tabs' },
+      { token: 'bg-panel', label: 'Panel', about: 'Right panel, pane bars' },
       { token: 'bg-raised', label: 'Raised', about: 'Dialogs, palette, buttons, pop-ups' },
       { token: 'bg-input', label: 'Field', about: 'Text field fill' },
       { token: 'bg-hover', label: 'Hover', about: 'Row under the pointer' },
       { token: 'bg-press', label: 'Press', about: 'Row while held' },
+      { token: 'bg-selected', label: 'Selected', about: 'Current row, tab, palette entry' },
       { token: 'scrim', label: 'Scrim', about: 'Behind an open dialog' }
     ]
   },
@@ -42,7 +45,7 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
     tokens: [
       { token: 'accent', label: 'Accent', about: 'Active marker, primary button, wordmark dot' },
       { token: 'accent-bright', label: 'Accent text', about: 'Accent as text' },
-      { token: 'accent-soft', label: 'Accent wash', about: 'Selected row tint' },
+      { token: 'accent-soft', label: 'Accent wash', about: 'Pressed toggles, drop targets' },
       { token: 'accent-line', label: 'Accent line', about: 'Focused field border, focus ring' },
       { token: 'on-accent', label: 'On accent', about: 'Label on an accent button' }
     ]

@@ -101,7 +101,7 @@
    that are not reading the accessibility tree. */
 /* Marked like the current worktree row, fill and left bar; a border here read as a focus ring. */
 .rail__link--current {
-  background: var(--accent-soft);
+  background: var(--bg-selected);
   color: var(--fg);
 }
 
@@ -688,7 +688,7 @@
 }
 
 .worktree--active .worktree__row {
-  background: var(--accent-soft);
+  background: var(--bg-selected);
 }
 
 /* The row a menu is open for, so the menu reads as about it. */

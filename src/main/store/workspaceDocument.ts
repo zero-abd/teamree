@@ -177,7 +177,8 @@ const SettingsSchema = z.object({
   worktreesRoot: z.string().min(1).optional().catch(undefined),
   branchPrefix: z.string().min(1).optional().catch(undefined),
   shell: z.string().min(1).optional().catch(undefined),
-  fetchMinutes: z.number().int().min(1).max(1440).optional().catch(undefined)
+  fetchMinutes: z.number().int().min(1).max(1440).optional().catch(undefined),
+  themeMigratedToCharcoal: z.boolean().optional().catch(undefined)
 })
 
 export type SettingsRecord = Partial<RuntimeSettings>

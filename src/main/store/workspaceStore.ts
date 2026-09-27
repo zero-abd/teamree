@@ -8,7 +8,13 @@ import type { Layout, Project, Worktree } from '../../shared/entities'
 import type { ClosedTerminalRecord, TerminalRecord } from '../terminals/session-restore'
 import { samePath } from '../git/pathIdentity'
 import { openJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
-import { DEFAULT_APPEARANCE, sanitizeAppearance, type Appearance } from '../../shared/theme'
+import {
+  DEFAULT_APPEARANCE,
+  DEFAULT_THEME_ID,
+  isPristine,
+  sanitizeAppearance,
+  type Appearance
+} from '../../shared/theme'
 import type { RuntimeSettings } from '../../shared/settings'
 import {
   emptyWorkspaceDocument,
@@ -129,6 +135,16 @@ export class WorkspaceStore {
     this.agents = document.agents
     this.settings = document.settings
     this.quickNote = document.quickNote
+    this.moveOldDefaultTheme()
+  }
+
+  // Absolute Black was the default until Charcoal: an untouched one was never chosen, so it moves once.
+  private moveOldDefaultTheme(): void {
+    if (this.settings.themeMigratedToCharcoal === true) return
+    if (this.appearance.themeId !== 'black' || !isPristine(this.appearance)) return
+    this.appearance = { ...this.appearance, themeId: DEFAULT_THEME_ID }
+    this.settings = { ...this.settings, themeMigratedToCharcoal: true }
+    this.persist()
   }
 
   /**
@@ -306,6 +322,9 @@ export class WorkspaceStore {
   /** Replaces the whole choice, sanitised here: the last place before the bytes hit the disk. */
   setAppearance(appearance: unknown): Appearance {
     this.appearance = sanitizeAppearance(appearance)
+    // A theme written from here on is a choice, Absolute Black included.
+    if (this.settings.themeMigratedToCharcoal !== true)
+      this.settings = { ...this.settings, themeMigratedToCharcoal: true }
     this.persist()
     return this.appearance
   }

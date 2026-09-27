@@ -1,6 +1,7 @@
 /* Split tree. Every split is a flex box whose children carry an inline basis
    computed from the layout's fractions; the gutters are siblings, which is why
-   the basis maths can subtract them up front. */
+   the basis maths can subtract them up front. Panes sit flush on the pane
+   ground, so a gutter reads as its 1px line. */
 
 .split {
   display: flex;
@@ -31,6 +32,8 @@
   user-select: none;
   flex: 0 0 5px;
   position: relative;
+  /* Over the text layers xterm stacks in the panes either side, which reach 11. */
+  z-index: 12;
   border-radius: 99px;
   background: transparent;
   transition: background var(--motion-fast) var(--ease);
@@ -64,6 +67,26 @@
   height: 1px;
 }
 
+/* The handle reaches a pixel into each pane: 7px to grab, 1px to see. */
+.gutter::after {
+  content: '';
+  position: absolute;
+}
+
+.gutter--row::after {
+  top: 0;
+  right: -1px;
+  bottom: 0;
+  left: -1px;
+}
+
+.gutter--column::after {
+  top: -1px;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+}
+
 .gutter:hover::before,
 .gutter:focus-visible::before {
   background: var(--accent);
@@ -87,19 +110,35 @@
 
 .pane {
   display: flex;
+  position: relative;
   flex-direction: column;
   flex: 1;
   min-width: 0;
   min-height: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--term-bg);
+  background: var(--bg-pane);
   overflow: hidden;
-  transition: border-color var(--motion-fast) var(--ease);
 }
 
-.pane--focused {
-  border-color: var(--accent-line);
+.pane--terminal {
+  background: var(--term-bg);
+}
+
+/* Which pane of a split has the keys: a line on its top edge. A lone pane's tab says so. */
+.workspace__panes .split .pane--focused::after {
+  content: '';
+  position: absolute;
+  z-index: 12;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* A file column with tabs marks its shown tab instead. */
+.column__tabs:not([hidden]) ~ .column__page .pane--focused::after {
+  content: none;
 }
 
 .pane__bar,
@@ -111,32 +150,17 @@
   height: 24px;
   padding: 0 var(--s2) 0 var(--s3);
   border-bottom: 1px solid var(--line);
-  background: var(--bg-raised);
+  background: var(--bg-panel);
   color: var(--fg-muted);
   font-size: var(--text-sm);
 }
 
 .pane--focused .pane__bar {
-  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg-raised);
   color: var(--fg-secondary);
 }
 
-/* A terminal's focus is its tab's; in a split, its bar's top edge as well, never a whole frame. */
-.pane--terminal .pane__bar,
 .pane__notice {
   height: 22px;
-}
-
-.pane--terminal.pane--focused {
-  border-color: var(--line);
-}
-
-.pane--terminal.pane--focused:has(> .pane__bar) {
-  border-top-color: var(--accent);
-}
-
-.pane--terminal.pane--focused .pane__bar {
-  background: var(--bg-raised);
 }
 
 .pane__title {
@@ -176,15 +200,8 @@
   color: var(--fg);
 }
 
-.pane--exited .pane__title {
-  color: var(--fg-muted);
-}
-
-/* A watched pane's size — theirs, which a reader never changes, and the one
-   bar that still prints one. A local pane's grid is on its name's hover. Dimmed
-   with a colour rather than with opacity, so it lands on the palette's own
-   floor instead of underneath it — the bar is already the quietest text in the
-   window, and a fraction of that is nothing at all. */
+/* A watched pane's size — theirs, which a reader never changes. Dimmed with a
+   colour rather than with opacity, so it lands on the palette's own floor. */
 .pane__meta {
   margin-left: auto;
   color: var(--fg-muted);
@@ -288,11 +305,19 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: var(--s2) var(--s2) var(--s2) var(--s3);
+  /* Within PANE_CHROME, so a pane opened at its estimated size is never wider than it is drawn. */
+  padding: var(--s1) var(--s2) var(--s2) var(--s3);
+  /* The fit addon takes this box's computed width and height as the room for text; border-box counted the padding. */
+  box-sizing: content-box;
 }
 
 .terminal-surface .xterm {
   height: 100%;
+}
+
+/* xterm's own scrollbar, sized by SLIM_SCROLLBAR and coloured by the theme; it shows while scrolling or hovered. */
+.terminal-surface .xterm .scrollbar > .slider {
+  border-radius: 99px;
 }
 
 .terminal-surface .xterm-viewport {

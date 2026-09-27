@@ -15,7 +15,8 @@ import {
   copyOnSelect,
   emulatorOptions,
   EXIT_RESET,
-  paneKeyIntent
+  paneKeyIntent,
+  SLIM_SCROLLBAR
 } from './TerminalView'
 
 const APPLE = resolvePlatformModifier('darwin')
@@ -209,6 +210,17 @@ describe('changing a running pane', () => {
     const { term } = openTerm(emulatorOptions(TERMINAL_OPTIONS_DEFAULT))
     expect(applyEmulatorOptions(term, { ...TERMINAL_OPTIONS_DEFAULT, lineHeight: 1.5 })).toBe(true)
     expect(term.options.lineHeight).toBe(1.5)
+  })
+})
+
+// xterm's default is a 14px block beside the text.
+describe('the scrollbar a pane is built with', () => {
+  it('is 6px wide, and the columns give up no more than that to it', () => {
+    const { term } = openTerm(SLIM_SCROLLBAR)
+    const bar = term.element?.querySelector<HTMLElement>('.scrollbar.vertical')
+    expect(bar?.style.width).toBe('6px')
+    expect(term.options.overviewRuler?.width).toBe(6)
+    term.dispose()
   })
 })
 

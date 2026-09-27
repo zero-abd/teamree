@@ -28,6 +28,8 @@ export type RuntimeSettings = {
   shellFallback?: string
   /** Settings › Git › Fetch every: minutes between background fetches of each project's base; absent is 5. */
   fetchMinutes?: number
+  /** The stored dark theme is a choice, not the old Absolute Black default; set by the store, never by `settings.set`. */
+  themeMigratedToCharcoal?: boolean
 }
 
 /** Minutes between background fetches when none are set. */

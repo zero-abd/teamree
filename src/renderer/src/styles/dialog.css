@@ -407,7 +407,7 @@ button.picker__chevron:hover {
 
 .agents__mode--current,
 .agents__mode--current:hover {
-  background: var(--accent-soft);
+  background: var(--bg-selected);
   color: var(--fg);
 }
 
@@ -562,7 +562,7 @@ button.picker__chevron:hover {
 }
 
 .combo__row.is-active {
-  background: var(--accent-soft);
+  background: var(--bg-selected);
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
@@ -693,7 +693,7 @@ button.picker__chevron:hover {
 }
 
 .palette__row--selected {
-  background: var(--accent-soft);
+  background: var(--bg-selected);
 }
 
 .palette__row--dimmed {

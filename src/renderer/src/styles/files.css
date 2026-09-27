@@ -353,15 +353,8 @@
   flex: 1;
   min-width: 0;
   min-height: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--term-bg);
+  background: var(--bg-pane);
   overflow: hidden;
-  transition: border-color var(--motion-fast) var(--ease);
-}
-
-.column--focused {
-  border-color: var(--accent-line);
 }
 
 .column__bar {
@@ -369,7 +362,7 @@
   flex: none;
   height: 26px;
   border-bottom: 1px solid var(--line);
-  background: var(--bg-raised);
+  background: var(--bg-tabstrip);
 }
 
 .column__bar[hidden] {
@@ -427,7 +420,7 @@
 }
 
 .column__tab--shown {
-  background: var(--term-bg);
+  background: var(--bg-pane);
   color: var(--fg-secondary);
 }
 
@@ -498,11 +491,6 @@
 
 .column__page[hidden] {
   display: none;
-}
-
-.column .pane {
-  border: 0;
-  border-radius: 0;
 }
 
 /* Share's one-line confirm, in place of the button. */

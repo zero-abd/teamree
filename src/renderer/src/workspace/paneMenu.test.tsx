@@ -356,8 +356,12 @@ describe('a file tab', () => {
 })
 
 describe('a pane header', () => {
-  const mount = (root: PaneNode): void => {
+  const mount = (root: PaneNode, ended?: string): void => {
     seed(root)
+    if (ended !== undefined) {
+      const terminals = useWorkspaceStore.getState().terminals
+      useWorkspaceStore.setState({ terminals: { ...terminals, [ended]: { ...terminals[ended]!, running: false } } })
+    }
     const layout = useWorkspaceStore.getState().layouts.w1!
     render(
       <PaneTree
@@ -379,10 +383,11 @@ describe('a pane header', () => {
     )
   }
 
-  it('opens the same menu on a terminal pane, acting on that pane', () => {
-    mount(row(leaf('t1'), leaf('t2')))
-    const header = screen.getByRole('region', { name: 'Claude Code' }).querySelector('header')!
-    fireEvent.contextMenu(header, { clientX: 300, clientY: 60 })
+  // A live terminal pane has no strip of its own: its tab carries the menu, and its notice once it ends.
+  it('opens the same menu on an ended terminal pane’s notice, acting on that pane', () => {
+    mount(row(leaf('t1'), leaf('t2')), 't2')
+    const notice = screen.getByRole('region', { name: 'Claude Code' }).querySelector('.pane__notice')!
+    fireEvent.contextMenu(notice, { clientX: 300, clientY: 60 })
     const menu = screen.getByRole('menu', { name: 'Actions for Claude Code' })
     expect(labels(menu)).toContain('Copy Output')
     choose(menu, 'Copy Output')

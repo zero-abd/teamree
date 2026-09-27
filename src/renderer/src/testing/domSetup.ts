@@ -28,6 +28,11 @@ if (typeof window !== 'undefined') {
     globalThis.CSS = { ...globalThis.CSS, escape } as typeof globalThis.CSS
   }
 
+  // jsdom has no canvas; a pane's emulator draws its scrollbar's overview ruler on a 2D one.
+  HTMLCanvasElement.prototype.getContext = function getContext(id: string) {
+    return id === '2d' ? new Proxy({}, { get: () => () => undefined }) : null
+  } as typeof HTMLCanvasElement.prototype.getContext
+
   if (typeof window.matchMedia !== 'function') {
     // A dark system, so a test that does not ask about tone gets the palette it always has.
     window.matchMedia = (query: string): MediaQueryList =>

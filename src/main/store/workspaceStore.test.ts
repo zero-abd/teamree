@@ -353,10 +353,69 @@ describe('workspace store', () => {
   })
   // In this file because the main process needs it before a window exists.
   describe('how this installation is painted', () => {
-    it('opens on absolute black until somebody chooses otherwise', async () => {
+    // Absolute Black was the default before Charcoal: kept only because nobody changed it, it moves once.
+    describe('moving the old default to Charcoal', () => {
+      const stored = async (appearance: unknown, settings: unknown = {}): Promise<void> => {
+        await mkdir(join(directory, 'state'), { recursive: true })
+        await writeFile(filePath, JSON.stringify({ version: 1, appearance, settings }), 'utf8')
+      }
+      const onDisk = async (): Promise<{ appearance: { themeId: string }; settings: Record<string, unknown> }> =>
+        JSON.parse(await readFile(filePath, 'utf8'))
+
+      it('moves an untouched Absolute Black to Charcoal once, and writes that down', async () => {
+        await stored({ themeId: 'black', ground: null, accent: null, overrides: {}, mode: 'system' })
+        const store = await WorkspaceStore.open(filePath)
+        expect(store.getAppearance()).toEqual({ ...DEFAULT_APPEARANCE, themeId: 'charcoal' })
+        await store.flush()
+        const written = await onDisk()
+        expect(written.appearance.themeId).toBe('charcoal')
+        expect(written.settings.themeMigratedToCharcoal).toBe(true)
+      })
+
+      it('keeps Absolute Black when it is picked again afterwards', async () => {
+        await stored({ themeId: 'black', ground: null, accent: null, overrides: {} })
+        const first = await WorkspaceStore.open(filePath)
+        first.setAppearance({ ...first.getAppearance(), themeId: 'black' })
+        await first.flush()
+        expect((await WorkspaceStore.open(filePath)).getAppearance().themeId).toBe('black')
+      })
+
+      it('keeps Absolute Black picked on an installation that started on Charcoal', async () => {
+        const fresh = await WorkspaceStore.open(filePath)
+        fresh.setAppearance({ ...DEFAULT_APPEARANCE, themeId: 'black' })
+        await fresh.flush()
+        expect((await WorkspaceStore.open(filePath)).getAppearance().themeId).toBe('black')
+      })
+
+      it('leaves a light slot, another preset and an edited Absolute Black alone', async () => {
+        const light = { themeId: 'paper', ground: null, accent: '#5aa9e6', overrides: {} }
+        await stored({ themeId: 'black', ground: null, accent: null, overrides: {}, mode: 'light', light })
+        // Each store is flushed before the next file is written: its own write would otherwise land on top.
+        const litStore = await WorkspaceStore.open(filePath)
+        await litStore.flush()
+        expect(litStore.getAppearance().mode).toBe('light')
+        expect(litStore.getAppearance().light).toEqual(light)
+
+        await stored({ themeId: 'midnight', ground: null, accent: null, overrides: {} })
+        const midnight = await WorkspaceStore.open(filePath)
+        await midnight.flush()
+        expect(midnight.getAppearance().themeId).toBe('midnight')
+
+        const edited = { themeId: 'black', ground: null, accent: '#e070c0', overrides: { line: '#333333' } }
+        await stored(edited)
+        expect((await WorkspaceStore.open(filePath)).getAppearance()).toEqual(edited)
+      })
+
+      it('moves nothing once it has moved', async () => {
+        await stored({ themeId: 'black', ground: null, accent: null, overrides: {} }, { themeMigratedToCharcoal: true })
+        expect((await WorkspaceStore.open(filePath)).getAppearance().themeId).toBe('black')
+      })
+    })
+
+    it('opens on Charcoal until somebody chooses otherwise', async () => {
       const store = await WorkspaceStore.open(filePath)
       expect(store.getAppearance()).toEqual(DEFAULT_APPEARANCE)
-      expect(store.getAppearance().themeId).toBe('black')
+      expect(store.getAppearance().themeId).toBe('charcoal')
     })
 
     it('is still there after the app is closed and opened again', async () => {
@@ -392,7 +451,7 @@ describe('workspace store', () => {
 
       const store = await WorkspaceStore.open(path)
       expect(store.getAppearance()).toEqual({
-        themeId: 'black',
+        themeId: 'charcoal',
         ground: null,
         accent: '#3bb8c4',
         overrides: { 'bg-panel': '#123456' }
