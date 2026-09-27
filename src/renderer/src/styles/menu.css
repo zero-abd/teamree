@@ -1,0 +1,105 @@
+/* The row's menu. Fixed rather than absolute: the sidebar scrolls and clips,
+   and a menu that scrolled with the row it was opened on would be a menu that
+   could be scrolled off the row it is about. */
+.row-menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 180px;
+  padding: var(--s1);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  animation: menu-in var(--motion-fast) var(--ease);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+.row-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 5px var(--s2);
+  border-radius: var(--r1);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.row-menu__icon {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  width: 14px;
+  color: var(--fg-muted);
+}
+
+.row-menu__label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The chord, at the far end and quieter than the row, the way a menu bar
+   writes its own. */
+.row-menu__hint {
+  margin-left: var(--s4);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: var(--text-xs);
+}
+
+.row-menu__item:hover,
+.row-menu__item:focus-visible,
+.row-menu__item--open {
+  background: var(--bg-press);
+  outline: none;
+}
+
+/* The one in front, marked as its tab is: a line of the accent. */
+.row-menu__item[aria-current='true'] {
+  box-shadow: inset 2px 0 0 var(--accent);
+  font-weight: 600;
+}
+
+.row-menu__more {
+  flex: none;
+  margin-left: var(--s4);
+  color: var(--fg-muted);
+}
+
+/* The rule that keeps the destructive item from being the one under the
+   pointer's momentum. */
+.row-menu__item--separated {
+  margin-top: var(--s1);
+  padding-top: calc(var(--s1) + 4px);
+  border-top: 1px solid var(--line);
+}
+
+.row-menu__item--danger {
+  color: var(--danger);
+}
+
+.row-menu__item--disabled,
+.row-menu__item--disabled .row-menu__hint {
+  color: var(--fg-muted);
+  cursor: default;
+}
+
+.row-menu__item--disabled:hover {
+  background: none;
+}
+
+.row-menu__item--danger:hover,
+.row-menu__item--danger:focus-visible {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}

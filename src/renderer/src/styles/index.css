@@ -4,8 +4,12 @@
 @import './tokens.css';
 @import './base.css';
 @import './shell.css';
+@import './notices.css';
 @import './sidebar.css';
+@import './menu.css';
 @import './workspace.css';
+@import './welcome.css';
+@import './changes.css';
 @import './rightPanel.css';
 @import './page.css';
 @import './dashboard.css';
@@ -18,6 +22,7 @@
 @import './review.css';
 @import './watch.css';
 @import './dialog.css';
+@import './palette.css';
 @import './appearance.css';
 @import './members.css';
 @import './cli.css';
