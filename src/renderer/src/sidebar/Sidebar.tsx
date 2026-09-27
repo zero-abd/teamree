@@ -15,7 +15,10 @@ import { AddProjectButton } from './AddProjectButton'
 import { compareTitle, runName, siblingRuns } from '../compare/siblingRuns'
 import { useOpenIn } from './openIn'
 import { BaseFreshness, ProjectHead, UnpushedBase } from './ProjectHead'
-import { TeammateWorktreeRow } from './TeammateWorktreeRow'
+import { HandoffRows, TeammateGroups } from './TeammateGroups'
+import { TeamCueButtons, TeamFaces } from './TeamFaces'
+import { teamCues, teamGlance, theirOverlap } from './teamGlance'
+import { dataSelector, revealTeamRow } from './teamFold'
 import { teammateRows, unheardTeammates, unheardTitle, withoutHandedCopies } from './teammateRows'
 import { teamworkControlLabel, teamworkOn, teamworkSummary } from './teamworkSummary'
 import { usePaneEvidence, useWatchEvidence } from './usePaneEvidence'
@@ -350,16 +353,19 @@ export function Sidebar({
             const summary = teamworkSummary(teamwork[project.id], now)
             const doneOpen = openDone.includes(project.id)
             // Under the same project: the same repository, checked out elsewhere.
-            const heard = keepFlat(
-              teammateRows(
-                withoutHandedCopies(
-                  teammatesHeard(teammates[project.id])?.worktrees ?? [],
-                  handoffs[project.id]?.outgoing ?? [],
-                  new Set(rows.map((mine) => mine.id))
-                ),
-                now,
-                watchEvidence
+            const allTheirs = teammateRows(
+              withoutHandedCopies(
+                teammatesHeard(teammates[project.id])?.worktrees ?? [],
+                handoffs[project.id]?.outgoing ?? [],
+                new Set(rows.map((mine) => mine.id))
               ),
+              now,
+              watchEvidence
+            )
+            const glance = teamGlance(teamwork[project.id], teammates[project.id], allTheirs, now)
+            const cues = teamCues(glance, handoffs[project.id]?.incoming.length ?? 0)
+            const heard = keepFlat(
+              allTheirs,
               (row) => ({
                 name: row.name,
                 ...(row.branch === undefined ? {} : { branch: row.branch }),
@@ -507,9 +513,25 @@ export function Sidebar({
                   <p className="project__base">{project.baseRef}</p>
                   <BaseFreshness project={project} />
                   <UnpushedBase projectId={project.id} />
+                  <TeamCueButtons
+                    cues={cues}
+                    onAsking={() => {
+                      if (cues.asking === null) return
+                      revealTeamRow(project.id, dataSelector('teammate-pane', cues.asking.paneId), cues.asking.handle)
+                    }}
+                    onHandoff={() => revealTeamRow(project.id, '[data-handoff]')}
+                  />
                   {/* Only where teamwork is on; the rail reaches the setup either way. Named with the
                       project, because the rail has a Teamwork entry too. */}
                   {teamworkOn(teamwork[project.id]) ? (
+                    <TeamFaces
+                      glance={glance}
+                      onReveal={(handle) => revealTeamRow(project.id, dataSelector('teammate-head', handle), handle)}
+                      onMore={() => openTeamwork(project.id)}
+                    />
+                  ) : null}
+                  {/* With faces drawn, the control speaks only when something is wrong. */}
+                  {teamworkOn(teamwork[project.id]) && !(glance.length > 0 && summary?.tone === 'live') ? (
                     <button
                       type="button"
                       className={`project__teamwork${summary ? ` project__teamwork--${summary.tone}` : ''}`}
@@ -518,13 +540,14 @@ export function Sidebar({
                       title={summary ? summary.detail : `Teamwork in ${project.name}`}
                       onClick={() => openTeamwork(project.id)}
                     >
-                      {teamworkControlLabel(summary)}
+                      {glance.length > 0 && summary ? (summary.short ?? summary.label) : teamworkControlLabel(summary)}
                     </button>
                   ) : null}
                 </div>
 
                 {isCollapsed ? null : (
                   <ul className="project__worktrees" role="group">
+                    {narrowing ? null : <HandoffRows projectId={project.id} />}
                     {taskForest(shown).map((node) => {
                       if (node.children.length === 0) return drawRow(node, 0)
                       // A task and its child tasks share one box.
@@ -538,15 +561,19 @@ export function Sidebar({
                         </li>
                       )
                     })}
-                    {theirs.map((row) => (
-                      <TeammateWorktreeRow
-                        key={row.id}
-                        row={row}
-                        watchingPaneIds={watchingIn(watches, project.id)}
-                        onWatch={(pane) => toggleWatchedPane(project.id, pane)}
-                        onAnswer={(pane, choice) => void answerTeammatePane(project.id, pane, choice)}
-                      />
-                    ))}
+                    <TeammateGroups
+                      projectId={project.id}
+                      glance={glance}
+                      rows={theirs}
+                      narrowing={narrowing}
+                      watchingPaneIds={watchingIn(watches, project.id)}
+                      onWatch={(pane) => toggleWatchedPane(project.id, pane)}
+                      onAnswer={(pane, choice) => void answerTeammatePane(project.id, pane, choice)}
+                      overlapOf={(rowId) => {
+                        const overlap = theirOverlap(rowId, overlaps[project.id], titleOf)
+                        return overlap && { ...overlap, onOpen: () => void openWorktree(overlap.worktreeId) }
+                      }}
+                    />
                     {folded > 0 ? (
                       <li className="project__fold" role="none">
                         <button

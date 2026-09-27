@@ -1,7 +1,6 @@
-// One of a teammate's worktrees, under the same project as your own. The
-// handle is on the row and the row is a `<div>`, not a disabled button: it only opens its first pane.
-// Panes can be watched, and an asking one answered through its owner's consent; an away teammate's
-// row stays put and says how old it is.
+// One of a teammate's worktrees, under their group in the same project as your own. Their face is on
+// the row and the row is a `<div>`, not a disabled button: it only opens its first pane. Panes can be
+// watched, and an asking one answered through its owner's consent; an away teammate's row stays, dimmed.
 
 import { useState } from 'react'
 import type { ScreenChoice } from '@shared/screenOpinion'
@@ -10,6 +9,8 @@ import { AnswerButtons } from './AnswerButtons'
 import { PaneSince } from './PaneRows'
 import { teammateTitle, type TeammatePaneRow, type TeammateWorktreeRowModel } from './teammateRows'
 import { PaneGlyph } from '../agents/glyphs'
+import { Avatar } from '../teamwork/Avatar'
+import type { TheirOverlap } from './teamGlance'
 import { paneRowSpeech } from './rowSpeech'
 
 type TeammateWorktreeRowProps = {
@@ -19,18 +20,23 @@ type TeammateWorktreeRowProps = {
   onWatch: (pane: TeammatePaneRow) => void
   /** An answer to an asking pane, which their machine holds for their consent. */
   onAnswer: (pane: TeammatePaneRow, choice: ScreenChoice) => void
+  /** Your worktrees changing the same files; pressing it opens yours. */
+  overlap?: TheirOverlap & { onOpen: () => void }
 }
 
 export function TeammateWorktreeRow({
   row,
   watchingPaneIds,
   onWatch,
-  onAnswer
+  onAnswer,
+  overlap
 }: TeammateWorktreeRowProps): React.JSX.Element {
   const { tone } = row
   const first = row.panes[0]
   // As on your own rows: Tab from a focused pane row reaches its answers, and the tree stays one Tab stop otherwise.
   const [focused, setFocused] = useState<string | null>(null)
+  // One under the teammate's group.
+  const level = 3 + row.depth
   return (
     <li
       className={`worktree worktree--teammate worktree--${row.state}${row.staleness ? ' worktree--stale' : ''}`}
@@ -42,7 +48,7 @@ export function TeammateWorktreeRow({
         <div
           className="worktree__open worktree__open--teammate"
           role="treeitem"
-          aria-level={2 + row.depth}
+          aria-level={level}
           aria-expanded={row.panes.length > 0 ? true : undefined}
           tabIndex={-1}
           onClick={() => {
@@ -50,28 +56,29 @@ export function TeammateWorktreeRow({
           }}
         >
           <span className="worktree__title">
+            <Avatar handle={row.handle} size="xs" decorative />
             <span className="worktree__name">{row.name}</span>
             {tone ? <span className={dotClass(tone)} title={TONE_LABEL[tone]} aria-label={TONE_LABEL[tone]} /> : null}
           </span>
           <span className="worktree__meta">
-            {/* First on the line, because it is the fact that changes what
-                every other fact on the row means. */}
-            <span className="worktree__owner">{row.handle}</span>
             {row.stage === undefined ? null : <span className="worktree__stage">{row.stage}</span>}
             {row.report === undefined ? null : <span className="worktree__report">{row.report}</span>}
             {row.branch === undefined ? null : <span className="worktree__branch">{row.branch}</span>}
-            {/* The age, never the bare word "offline": what is known is how old
-                this picture is, and the sentence behind it says their machine
-                is away rather than anything at all about the worktree. The
-                badge names which age it is, because the number is the age of
-                the picture and not of the absence, and the two are not the
-                same for a teammate whose worktrees had been static for hours
-                before their machine went. */}
-            {row.staleness ? (
-              <span className="worktree__stale" title={row.staleness.detail} aria-label={row.staleness.detail}>
-                {row.staleness.badge}
-              </span>
-            ) : null}
+            {overlap === undefined ? null : (
+              <button
+                type="button"
+                className={`chip overlap overlap--${overlap.tone} overlap--open worktree__their-overlap`}
+                tabIndex={-1}
+                title={overlap.title}
+                aria-label={`Overlaps ${overlap.label}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  overlap.onOpen()
+                }}
+              >
+                {`⚠ ${overlap.label}`}
+              </button>
+            )}
           </span>
         </div>
       </div>
@@ -93,7 +100,8 @@ export function TeammateWorktreeRow({
                 <button
                   type="button"
                   role="treeitem"
-                  aria-level={3 + row.depth}
+                  aria-level={level + 1}
+                  data-teammate-pane={pane.terminalId}
                   tabIndex={-1}
                   className={`pane-row pane-row--teammate pane-row--watchable${watching ? ' pane-row--watching' : ''}`}
                   title={

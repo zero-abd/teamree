@@ -125,10 +125,10 @@ describe('whose worktree this is', () => {
     expect(box.querySelectorAll(':scope > .panes .pane-row')).toHaveLength(1)
   })
 
-  it('carries the handle on the row itself, not only on hover', () => {
+  it('carries their face on the row itself, not only on hover', () => {
     mount()
     const item = document.querySelector('.worktree') as HTMLElement
-    expect(within(item).getByText('priya')).toBeTruthy()
+    expect(item.querySelector('.avatar')?.textContent).toBe('Pr')
     expect(within(item).getByText('Fix the relay budget')).toBeTruthy()
     expect(within(item).getByText('priya/relay-budget')).toBeTruthy()
   })
@@ -236,30 +236,28 @@ describe('a pane of theirs', () => {
 
 describe('a teammate who has gone away', () => {
   // A worktree disappearing reads as a worktree deleted.
-  it('stays on the list and says how old the picture is', () => {
+  it('stays on the list, dimmed; its group says they are away', () => {
     mount(theirs({ live: false, heardAt: NOW - 240_000 }))
-    // `heardAt` moves when a snapshot changes, not on contact: the age of the picture, not of the
-    // absence. See `teammateStaleness`.
-    expect(screen.getByText('away · picture 4m old')).toBeTruthy()
+    expect(document.querySelector('.worktree--stale')).toBeTruthy()
     expect(screen.getByText('Fix the relay budget')).toBeTruthy()
   })
 
   // Nothing is known about the worktree, and the sentence must not imply otherwise.
   it('says their machine is not connected, never anything about the worktree', () => {
     mount(theirs({ live: false, heardAt: NOW - 240_000 }))
-    const detail = screen.getByLabelText(/not connected/).getAttribute('aria-label') ?? ''
-    expect(detail).toBe('priya’s machine is not connected · showing what it had 4m ago')
+    const title = document.querySelector('.worktree__row')?.getAttribute('title') ?? ''
+    expect(title.split('\n')[1]).toBe('priya’s machine is not connected · showing what it had 4m ago')
   })
 
   // A badge that blinked on every relay restart would train a reader to ignore it.
   it('says nothing during the grace a reconnection takes', () => {
     mount(theirs({ live: false, heardAt: NOW - 5_000 }))
-    expect(screen.queryByText(/away/)).toBeNull()
+    expect(document.querySelector('.worktree--stale')).toBeNull()
   })
 
   it('says nothing at all while the link is up', () => {
     mount(theirs({ heardAt: NOW - 600_000 }))
-    expect(screen.queryByText(/away/)).toBeNull()
+    expect(document.querySelector('.worktree--stale')).toBeNull()
   })
 
   // The owner's measured silence plus the time it has sat here: the only arithmetic that trusts no other clock.
@@ -302,6 +300,44 @@ describe('what the teammate is doing', () => {
     const levels = [...document.querySelectorAll('.worktree__open--teammate')].map((item) =>
       item.getAttribute('aria-level')
     )
-    expect(levels).toEqual(['2', '3'])
+    expect(levels).toEqual(['3', '4'])
+  })
+})
+
+describe('under its teammate’s group', () => {
+  it('sits one level under the group, and its panes one under it', () => {
+    mount()
+    const row = screen.getByRole('treeitem', { name: /Fix the relay budget/ })
+    expect(row.getAttribute('aria-level')).toBe('3')
+    expect(watchButton().getAttribute('aria-level')).toBe('4')
+    expect(watchButton().dataset.teammatePane).toBe('priya:t7')
+  })
+
+  it('says which of your worktrees change the same files, and opens yours', () => {
+    const onOpen = vi.fn()
+    const [row] = teammateRows([theirs()], NOW, {})
+    render(
+      <ul>
+        <TeammateWorktreeRow
+          row={row!}
+          watchingPaneIds={[]}
+          onWatch={onWatch}
+          onAnswer={onAnswer}
+          overlap={{
+            tone: 'conflict',
+            label: 'receipt-email',
+            title: 'receipt-email · conflict: src/cart.js',
+            worktreeId: 'w1',
+            onOpen
+          }}
+        />
+      </ul>
+    )
+    const chip = screen.getByRole('button', { name: 'Overlaps receipt-email' })
+    expect(chip.textContent).toBe('⚠ receipt-email')
+    expect(chip.classList.contains('overlap--conflict')).toBe(true)
+    fireEvent.click(chip)
+    expect(onOpen).toHaveBeenCalled()
+    expect(onWatch).not.toHaveBeenCalled()
   })
 })

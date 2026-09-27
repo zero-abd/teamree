@@ -38,6 +38,8 @@ export type TeamworkSummary = {
   label: string
   /** The whole of it, for the title attribute. */
   detail: string
+  /** A shorter label, beside the team's faces. */
+  short?: string
 }
 
 /**
@@ -107,6 +109,7 @@ export function teamworkSummary(status: TeamworkStatus | undefined, now: number)
     return {
       tone: 'problem',
       label: 'relay unreachable',
+      short: 'relay down',
       detail: `Cannot reach ${relayLabel(status)}`
     }
   }
