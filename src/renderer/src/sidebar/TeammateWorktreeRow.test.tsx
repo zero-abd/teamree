@@ -271,7 +271,7 @@ describe('a teammate who has gone away', () => {
 })
 
 describe('what the teammate is doing', () => {
-  it('shows the task as the title and the stage and report on the line', () => {
+  it('shows the name its owner gave it as the title, and the stage and report on the line', () => {
     mount(
       theirs({
         task: 'Fix the relay budget for bursts',
@@ -279,7 +279,7 @@ describe('what the teammate is doing', () => {
         report: { outcome: 'succeeded', summary: 'Budget holds under load.' }
       })
     )
-    expect(document.querySelector('.worktree__name')?.textContent).toBe('Fix the relay budget for bursts')
+    expect(document.querySelector('.worktree__name')?.textContent).toBe('Fix the relay budget')
     expect(document.querySelector('.worktree__stage')?.textContent).toBe('done')
     expect(document.querySelector('.worktree__report')?.textContent).toBe('Budget holds under load.')
   })

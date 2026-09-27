@@ -260,10 +260,47 @@ describe('a teammate never heard from', () => {
 })
 
 describe('a teammate’s task and its tree', () => {
+  it('titles the row as its owner does: the name they gave it, the task on hover', () => {
+    const [row] = teammateRows(
+      [theirWorktree({ name: 'mate checkout', branch: 'mate-checkout', task: 'Rework the checkout flow' })],
+      NOW
+    )
+    expect(row?.name).toBe('mate checkout')
+    expect(row?.branch).toBe('mate-checkout')
+    expect(teammateTitle(row!)).toContain('Rework the checkout flow')
+  })
+
+  it('tells two same-prompt tasks apart by name, and same-named ones by branch', () => {
+    const task = 'Charge through the payment API in src/pay'
+    const rows = teammateRows(
+      [
+        theirWorktree({ id: 'peer:a:1', name: 'mate checkout', branch: 'mate-checkout', task: 'Rework it' }),
+        theirWorktree({ id: 'peer:a:2', name: 'mate checkout flow', branch: 'mate-checkout-flow', task: 'Rework it' }),
+        theirWorktree({ id: 'peer:a:3', name: 'payment', branch: 'payment', task }),
+        theirWorktree({ id: 'peer:a:4', name: 'payment', branch: 'mate-checkout--payment', task }),
+        theirWorktree({ id: 'peer:b:5', handle: 'sam', name: 'solo', branch: 'solo' })
+      ],
+      NOW
+    )
+    expect(rows.map((row) => [row.name, row.branch])).toEqual([
+      ['mate checkout', 'mate-checkout'],
+      ['mate checkout flow', 'mate-checkout-flow'],
+      ['payment', 'payment'],
+      ['payment', 'mate-checkout--payment'],
+      ['solo', undefined]
+    ])
+  })
+
+  it('names an older peer’s worktree, which sends no task, by its name', () => {
+    const [row] = teammateRows([theirWorktree({ name: 'index compaction', task: undefined })], NOW)
+    expect(row?.name).toBe('index compaction')
+  })
+
   it('titles the row with the task and says the stage, with the report once done', () => {
     const [row] = teammateRows(
       [
         theirWorktree({
+          name: 'Compact the search index nightly',
           task: 'Compact the search index nightly',
           stage: 'done',
           report: { outcome: 'succeeded', summary: 'Compaction runs at 2am.' }

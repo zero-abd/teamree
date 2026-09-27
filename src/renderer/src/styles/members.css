@@ -1116,6 +1116,18 @@
   white-space: nowrap;
 }
 
+.team-worktree__branch {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
 .team-worktree__word {
   color: var(--fg-muted);
   font-size: var(--text-xs);

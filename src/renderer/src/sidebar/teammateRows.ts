@@ -22,8 +22,10 @@ export type TeammateWorktreeRowModel = {
   /** Already namespaced by the runtime; unique across every teammate. */
   id: string
   handle: string
-  /** The task's first line when they share task details, else the name. */
+  /** What its owner's sidebar calls it; see `worktreeDisplay`. */
   name: string
+  /** Their task's first line, for the hover, when it is not the name. */
+  task?: string
   /** Steps under the top of its teammate's tree. */
   depth: number
   stage?: TaskStage
@@ -32,7 +34,7 @@ export type TeammateWorktreeRowModel = {
   /** Changed paths and commits ahead, for the hover. */
   paths?: number
   ahead?: number
-  /** Absent when it only repeats the name; see `worktreeDisplay`. */
+  /** Absent when it only repeats the name, unless another of theirs shares the name; see `worktreeDisplay`. */
   branch?: string
   state: TeammateWorktree['state']
   panes: TeammatePaneRow[]
@@ -56,8 +58,10 @@ export function teammateRows(
   /** The last line each watched pane said, by namespaced pane id. Only open panes have one: a teammate's pane does not stream until opened. */
   evidence: Readonly<Record<string, string | null>> = {}
 ): TeammateWorktreeRowModel[] {
+  const twins = twinNames(worktrees.map((worktree) => `${worktree.handle}\n${worktreeDisplay(worktree).title}`))
   return inTreeOrder(worktrees).map(({ worktree, depth }) => {
     const display = worktreeDisplay(worktree)
+    const branch = twins.has(`${worktree.handle}\n${display.title}`) ? worktree.branch : display.branch
     const heardAgoMs = Math.max(0, now - worktree.heardAt)
     // Named together, as the owner's own sidebar names them: twins are told apart by each other.
     const names = paneNames(worktree.panes, worktree)
@@ -67,7 +71,8 @@ export function teammateRows(
     return {
       id: worktree.id,
       handle: worktree.handle,
-      name: worktree.task ?? display.title,
+      name: display.title,
+      ...(worktree.task === undefined || worktree.task === display.title ? {} : { task: worktree.task }),
       depth,
       ...(worktree.stage === undefined ? {} : { stage: worktree.stage }),
       ...(worktree.report !== undefined && (worktree.stage === 'done' || worktree.stage === 'failed')
@@ -75,7 +80,7 @@ export function teammateRows(
         : {}),
       ...(worktree.paths === undefined ? {} : { paths: worktree.paths.length }),
       ...(worktree.ahead === undefined ? {} : { ahead: worktree.ahead }),
-      ...(display.branch === undefined ? {} : { branch: display.branch }),
+      ...(branch === undefined ? {} : { branch }),
       state: worktree.state,
       panes,
       tone: worktreeTone(panes),
@@ -84,6 +89,12 @@ export function teammateRows(
       staleness: teammateStaleness({ live: worktree.live, heardAt: worktree.heardAt, handle: worktree.handle, now })
     }
   })
+}
+
+/** The names that occur more than once. */
+export function twinNames(names: readonly string[]): Set<string> {
+  const seen = new Set<string>()
+  return new Set(names.filter((name) => seen.has(name) || !seen.add(name)))
 }
 
 /** Leaves out a teammate's copy of a worktree they took from here while the handed copy is still here. */
@@ -148,7 +159,7 @@ export function teammateTitle(row: TeammateWorktreeRowModel): string {
   const panes = `${row.panes.length} pane${row.panes.length === 1 ? '' : 's'}`
   const files = row.paths === undefined ? undefined : `${row.paths} file${row.paths === 1 ? '' : 's'}`
   const ahead = row.ahead ? `${row.ahead} ahead` : undefined
-  const head = [row.name, `${row.handle}’s worktree on their machine`, row.branch, panes, files, ahead]
+  const head = [row.name, row.task, `${row.handle}’s worktree on their machine`, row.branch, panes, files, ahead]
     .filter(Boolean)
     .join(' · ')
   return row.staleness ? `${head}\n${row.staleness.detail}` : head

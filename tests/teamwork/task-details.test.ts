@@ -68,7 +68,7 @@ describe.skipIf(!RELAY_BUILT)('teammates see the task', () => {
   it('shows bo ana’s task line and the paths she changed, never their contents', async () => {
     await until(async () => (await anasRow())?.paths?.includes('src/limiter.js') === true, 'ana’s paths to reach bo')
     const row = await anasRow()
-    expect(row?.task).toBe('Add rate limits to the API')
+    expect(row).toMatchObject({ name: 'rate limits', branch: worktree.branch, task: 'Add rate limits to the API' })
     expect(JSON.stringify(row)).not.toContain('export const limit')
   }, 60_000)
 

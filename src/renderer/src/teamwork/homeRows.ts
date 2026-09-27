@@ -11,7 +11,8 @@ import {
 import type { SharedNoteSummary } from '@shared/sharedNote'
 import type { PeerHandoff, TaskStage, TeamworkHandoffs } from '@shared/tasks'
 import { agoLabel, TONE_LABEL, type DotTone } from '../sidebar/agentRows'
-import { teammateRows, type TeammatePaneRow } from '../sidebar/teammateRows'
+import { teammateRows, twinNames, type TeammatePaneRow } from '../sidebar/teammateRows'
+import { worktreeDisplay } from '../sidebar/worktreeDisplay'
 import type { TeamMemory } from './teamMemory'
 
 export type { TeamMemory } from './teamMemory'
@@ -21,6 +22,8 @@ export type MemberPresence = 'you' | 'online' | 'away' | 'unseen'
 export type MemberWorktree = {
   id: string
   name: string
+  /** Only where another of the same person's worktrees has this name. */
+  branch?: string
   /** What its agents are doing, in the sidebar's words; null for a worktree with nothing running. */
   word: string | null
   tone: DotTone | null
@@ -77,11 +80,13 @@ export function teamMembers(input: {
       const link = links.find((entry) => entry.publicKey === person.publicKey)
       const online = standing?.connected ?? link?.phase === 'connected'
       const lastSeenAt = online ? null : (input.memory.lastOnline.get(person.publicKey) ?? standing?.heardAt ?? null)
-      const worktrees = rows
-        .filter((row) => row.handle === person.handle)
+      const theirs = rows.filter((row) => row.handle === person.handle)
+      const twins = twinNames(theirs.map((row) => row.name))
+      const worktrees = theirs
         .map((row) => ({
           id: row.id,
           name: row.name,
+          ...(twins.has(row.name) && row.branch !== undefined ? { branch: row.branch } : {}),
           word: stageWord(row.stage, row.tone),
           tone: row.tone,
           ...(pickPane(row.panes) === undefined ? {} : { pane: pickPane(row.panes) }),
@@ -227,7 +232,7 @@ export function teamActivity(input: {
   for (const worktree of teammatesHeard(input.presence)?.worktrees ?? []) {
     const at = input.memory.landedAt.get(worktree.id)
     if (at === undefined || worktree.stage !== 'landed') continue
-    const name = worktree.task ?? worktree.name
+    const name = worktreeDisplay(worktree).title
     items.push({
       key: `merged:${worktree.id}`,
       handle: worktree.handle,

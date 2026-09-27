@@ -151,9 +151,7 @@ describe('the members', () => {
     expect(rows.map((row) => row.querySelector('.team-member__handle')?.textContent)).toEqual(['ana', 'bo'])
     expect(rows[0]?.textContent).toContain('you')
     expect(rows[1]?.textContent).toContain('online')
-    expect(
-      within(rows[1] as HTMLElement).getByRole('button', { name: /Fix cart totals rounding/ }).textContent
-    ).toContain('working')
+    expect(within(rows[1] as HTMLElement).getByRole('button', { name: /cart totals/ }).textContent).toContain('working')
   })
 
   it('says when an away teammate was last seen', () => {
@@ -166,7 +164,7 @@ describe('the members', () => {
 
   it('opens a teammate’s worktree by watching its first pane, off this page', () => {
     home()
-    fireEvent.click(within(region('Members')).getByRole('button', { name: /Fix cart totals rounding/ }))
+    fireEvent.click(within(region('Members')).getByRole('button', { name: /cart totals/ }))
     expect(closeTeamwork).toHaveBeenCalled()
     expect(toggleWatchedPane).toHaveBeenCalledWith(
       'p1',

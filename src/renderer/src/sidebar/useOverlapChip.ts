@@ -7,7 +7,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { overlapChip, type OverlapChip, type OverlapEntry } from './overlapChip'
 import { worktreeDisplay } from './worktreeDisplay'
 
-/** A local worktree by its task; a teammate's by handle, then task; a base as `parent` or its ref. */
+/** A worktree as its owner names it, a teammate's after their handle; a base as `parent` or its ref. */
 export function overlapNamer(
   worktrees: readonly Worktree[],
   theirs: readonly TeammateWorktree[]
@@ -16,7 +16,7 @@ export function overlapNamer(
     if ('base' in other) return other.worktreeId === undefined ? other.base : 'parent'
     if ('handle' in other) {
       const row = theirs.find((worktree) => worktree.id === other.worktreeId)
-      return `${other.handle} · ${(row?.task ?? row?.name ?? '').split('\n')[0]}`
+      return `${other.handle} · ${row === undefined ? '' : worktreeDisplay(row).title}`
     }
     const worktree = worktrees.find((row) => row.id === other.worktreeId)
     return worktree === undefined ? other.worktreeId : worktreeDisplay(worktree).title

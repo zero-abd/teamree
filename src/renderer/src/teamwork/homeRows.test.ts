@@ -147,8 +147,8 @@ describe('who is on the team', () => {
       now: NOW
     })
     expect(bo?.worktrees.map((worktree) => [worktree.name, worktree.word])).toEqual([
-      ['Fix cart totals rounding', 'working'],
-      ['Retry payments', 'merged']
+      ['cart totals', 'working'],
+      ['payment retry', 'merged']
     ])
     expect(bo?.worktrees[0]?.pane?.terminalId).toBe('peer:bo:t_1')
     expect(bo?.worktrees[1]?.pane).toBeUndefined()
@@ -158,9 +158,9 @@ describe('who is on the team', () => {
     const [, bo] = teamMembers({
       list: roster(),
       presence: presence([
-        theirs({ id: 'peer:bo:wt_0', task: 'Landed one', stage: 'landed', panes: [] }),
-        theirs({ id: 'peer:bo:wt_1', task: 'Working one' }),
-        theirs({ id: 'peer:bo:wt_2', task: 'Asking one', stage: 'asking' })
+        theirs({ id: 'peer:bo:wt_0', name: 'Landed one', stage: 'landed', panes: [] }),
+        theirs({ id: 'peer:bo:wt_1', name: 'Working one' }),
+        theirs({ id: 'peer:bo:wt_2', name: 'Asking one', stage: 'asking' })
       ]),
       status: undefined,
       own: [],
@@ -168,6 +168,26 @@ describe('who is on the team', () => {
       now: NOW
     })
     expect(bo?.worktrees.map((worktree) => worktree.name)).toEqual(['Asking one', 'Working one', 'Landed one'])
+  })
+
+  it('names their worktrees as they do, with the branch where two share a name', () => {
+    const [, bo] = teamMembers({
+      list: roster(),
+      presence: presence([
+        theirs({ id: 'peer:bo:wt_1', name: 'payment', branch: 'checkout--payment' }),
+        theirs({ id: 'peer:bo:wt_2', name: 'payment', branch: 'checkout-flow--payment' }),
+        theirs({ id: 'peer:bo:wt_3', name: 'mate checkout', branch: 'mate-checkout' })
+      ]),
+      status: undefined,
+      own: [],
+      memory: empty(),
+      now: NOW
+    })
+    expect(bo?.worktrees.map((worktree) => [worktree.name, worktree.branch])).toEqual([
+      ['payment', 'checkout--payment'],
+      ['payment', 'checkout-flow--payment'],
+      ['mate checkout', undefined]
+    ])
   })
 
   it('opens the pane that is doing something rather than one that has ended', () => {
@@ -281,7 +301,7 @@ describe('what is waiting on you', () => {
     expect(item?.kind).toBe('asking')
     if (item?.kind === 'asking') {
       expect(item.handle).toBe('bo')
-      expect(item.worktree).toBe('Fix cart totals rounding')
+      expect(item.worktree).toBe('cart totals')
       expect(item.pane.choices?.map((choice) => choice.label)).toEqual(['Yes'])
     }
   })
@@ -349,7 +369,7 @@ describe('the team’s recent activity', () => {
       projectId: 'p1'
     })
     expect(items.map((item) => item.text)).toEqual([
-      'bo merged Fix cart totals rounding',
+      'bo merged cart totals',
       'bo handed you refunds',
       'bo shared Release checklist',
       'bo took search',
