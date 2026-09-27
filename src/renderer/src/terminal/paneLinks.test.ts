@@ -57,6 +57,21 @@ describe('what is printed as a link', () => {
     expect(shown('• Edited src/math.ts (+2 -1)')).toEqual(['src/math.ts'])
   })
 
+  it('a path through dot folders, without the full stop after it', () => {
+    expect(shown('failed at .github/workflows/ci.yml:12')).toEqual(['.github/workflows/ci.yml 12'])
+    expect(shown('copy ./.env.example first')).toEqual(['./.env.example'])
+    expect(shown('in ~/.config/x and src/.eslintrc.json.')).toEqual(['~/.config/x', 'src/.eslintrc.json'])
+    expect(shown('see .github/workflows/ci.yml.')).toEqual(['.github/workflows/ci.yml'])
+    expect(shown('from ../.github/a.yml')).toEqual(['../.github/a.yml'])
+  })
+
+  it('leaves the full stops of a sentence alone', () => {
+    expect(shown('That is the end.')).toEqual([])
+    expect(shown('...')).toEqual([])
+    expect(shown('wait... then .../x and ../')).toEqual([])
+    expect(shown('Done. Next up')).toEqual([])
+  })
+
   it('leaves version numbers, bare words and a URL’s own path alone', () => {
     expect(shown('bumped to 1.2.3 and then some')).toEqual([])
     expect(shown('see https://example.com/src/math.ts')).toEqual(['https://example.com/src/math.ts'])
@@ -221,6 +236,17 @@ describe('a pane with links in it', () => {
     expect(view.files).toEqual([
       [{ worktreeId: 'w1', path: 'src/math.ts', absolute: '/w/src/math.ts' }, 12, 5],
       [{ worktreeId: 'w1', path: 'src/b.ts', absolute: '/w/src/b.ts' }, 3, 4]
+    ])
+  })
+
+  it('underlines and opens a path through a dot folder', async () => {
+    const view = pane({ '.github/workflows': ['ci.yml'] })
+    await view.write('at .github/workflows/ci.yml:12.\r\n')
+    expect((await view.links(1)).map((link) => link.text)).toEqual(['.github/workflows/ci.yml:12'])
+    view.press(5, 0, { metaKey: true })
+    await settle()
+    expect(view.files).toEqual([
+      [{ worktreeId: 'w1', path: '.github/workflows/ci.yml', absolute: '/w/.github/workflows/ci.yml' }, 12, undefined]
     ])
   })
 

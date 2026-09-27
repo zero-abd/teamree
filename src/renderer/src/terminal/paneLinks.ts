@@ -13,8 +13,9 @@ export type PrintedLink =
 type PrintedPath = Extract<PrintedLink, { kind: 'path' }>
 
 const URL_SPAN = /\b(?:https?|file):\/\/[^\s<>"'`│┃║]+/giu
+// A segment may start with one dot (`.github`) but not two, so an ellipsis is never a name.
 const PATH_SPAN =
-  /(?<![\w/.:@~$%+-])((?:~\/|\.{1,2}\/|\/)?(?:[\w@+-][\w.@+-]*\/)*[\w@+-][\w.@+-]*)(?::(\d+)(?::(\d+))?|\((\d+)(?:,\s?(\d+))?\))?/gu
+  /(?<![\w/.:@~$%+-])((?:~\/|\.{1,2}\/|\/)?(?:\.?[\w@+-][\w.@+-]*\/)*\.?[\w@+-][\w.@+-]*)(?::(\d+)(?::(\d+))?|\((\d+)(?:,\s?(\d+))?\))?/gu
 const CLOSERS: Record<string, string> = { ')': '(', ']': '[', '}': '{', '>': '<' }
 
 /** The URLs and file-like paths in `text`: a path needs a slash or a lettered extension and is never inside a URL. */
