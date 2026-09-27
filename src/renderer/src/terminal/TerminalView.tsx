@@ -35,6 +35,8 @@ import { PastedImagePeek, PastedImageViewer, type ImagePeek } from './PastedImag
 import { PastedImageStrip } from './PastedImageStrip'
 import { watchPromptImages } from './promptImages'
 import { removePromptImage, type NotRemoved } from './promptEdit'
+import { macEditBytes } from './macEditKeys'
+import { wideEmoji } from './paneUnicode'
 import { frameWrites, paneWebgl, syncScrollbarPerFrame } from './paneFrames'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOptions } from './paneSearchModel'
 import { TerminalSearchBar } from './TerminalSearchBar'
@@ -514,6 +516,7 @@ function openEmulator(
 
   const fit = new FitAddon()
   term.loadAddon(fit)
+  wideEmoji(term)
 
   // Bare URLs in the output are inert until this addon; it matches only
   // `http:` and `https:`, the set the main process hands the OS.
@@ -865,7 +868,7 @@ export type PaneKeys = {
   /** Chords the app owns. Refused here, and answered by the window handler. */
   isAppChord: (event: KeyboardEvent) => boolean
   /** The emulator: what is selected, and where a paste goes in. */
-  term: Pick<XTerm, 'hasSelection' | 'getSelection' | 'paste'>
+  term: Pick<XTerm, 'hasSelection' | 'getSelection' | 'paste' | 'options'>
   modifier: PlatformModifier
   /** Bytes to the pty. */
   send: (data: string) => void
@@ -877,14 +880,24 @@ export type PaneKeys = {
 
 /**
  * The pane's answer to one keypress, as xterm's custom key handler wants it:
- * `true` to let the emulator have it, `false` to keep it. App chords first, then
- * the clipboard pair, then the emulator. On macOS the Edit menu claims these
- * accelerators before the page; the branch it loses is in `src/main/appMenu.ts`.
+ * `true` to let the emulator have it, `false` to keep it. App chords first, then the
+ * Mac editing keys (`macEditKeys.ts`), the clipboard pair, then the emulator. On macOS
+ * the Edit menu claims these accelerators before the page; the branch it loses is in `src/main/appMenu.ts`.
  */
 export function paneKeyHandler(keys: PaneKeys): (event: KeyboardEvent) => boolean {
   const clipboard = keys.clipboard ?? { copy: copyText, read: pasteText }
   return (event) => {
     if (keys.isAppChord(event)) return false
+    const edit =
+      keys.modifier.eventFlag === 'metaKey' ? macEditBytes(event, keys.term.options.macOptionIsMeta === true) : null
+    if (edit !== null) {
+      if (event.type === 'keydown') {
+        // Or the textarea acts on it too: a line break, a caret move, a deletion.
+        event.preventDefault()
+        keys.send(edit)
+      }
+      return false
+    }
     const intent = paneKeyIntent(event, keys.modifier, keys.term.hasSelection())
     if (intent === 'emulator') return true
     // One press raises keydown, keypress and keyup. Act on the keydown alone;

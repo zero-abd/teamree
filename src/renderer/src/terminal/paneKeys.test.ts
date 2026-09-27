@@ -16,23 +16,31 @@
 import { describe, expect, it } from 'vitest'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
+import { commandForEvent } from '../keyboard/workspaceShortcuts'
 import { paneKeyHandler } from './TerminalView'
 
 const APPLE = resolvePlatformModifier('darwin')
 
 /** A pane, with the two ends of it in view. */
-function pane(options: { clipboard?: string; isAppChord?: (event: KeyboardEvent) => boolean } = {}): {
+/** The legacy codes xterm reads for the named keys pressed below. */
+const KEY_CODES: Record<string, number> = { Enter: 13, Backspace: 8, Delete: 46, ArrowLeft: 37, ArrowRight: 39 }
+
+type Held = { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean }
+
+function pane(
+  options: { clipboard?: string; isAppChord?: (event: KeyboardEvent) => boolean; optionIsMeta?: boolean } = {}
+): {
   term: XTerm
   /** Everything the emulator sent towards the pty. */
   sent: string[]
   /** Everything handed to the system clipboard. */
   copied: string[]
-  press: (key: string, modifiers?: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean }) => void
+  press: (key: string, modifiers?: Held) => KeyboardEvent
   write: (data: string) => Promise<void>
 } {
   const host = document.createElement('div')
   document.body.appendChild(host)
-  const term = new XTerm({ allowProposedApi: true, cols: 80, rows: 24 })
+  const term = new XTerm({ allowProposedApi: true, cols: 80, rows: 24, macOptionIsMeta: options.optionIsMeta })
   term.open(host)
 
   const sent: string[] = []
@@ -65,8 +73,9 @@ function pane(options: { clipboard?: string; isAppChord?: (event: KeyboardEvent)
       // its initialiser. Without this the emulator's own Ctrl+C is a keypress
       // it cannot name, which would make the last test below pass for the
       // wrong reason.
-      Object.defineProperty(event, 'keyCode', { value: key.toUpperCase().charCodeAt(0) })
+      Object.defineProperty(event, 'keyCode', { value: KEY_CODES[key] ?? key.toUpperCase().charCodeAt(0) })
       term.textarea?.dispatchEvent(event)
+      return event
     },
     write: (data) =>
       new Promise<void>((resolve) => {
@@ -148,5 +157,77 @@ describe('the chord that is two commands', () => {
 
     expect(sent).toEqual(['\u0003'])
     expect(copied).toEqual([])
+  })
+})
+
+describe('the Mac editing keys', () => {
+  // The gap audit's raw-reader keystrokes, less ⌥⌫, which stays the emulator's ESC DEL.
+  it('sends line, word and kill sequences a shell and an agent prompt read', () => {
+    const { press, sent } = pane()
+
+    press('a')
+    press('Enter', { shiftKey: true })
+    press('1')
+    press('ArrowLeft', { metaKey: true })
+    press('2')
+    press('ArrowLeft', { altKey: true })
+    press('3')
+    press('Backspace', { metaKey: true })
+    press('4')
+
+    expect(sent.join('')).toBe('a\u001b\r1\u00012\u001bb3\u00154')
+  })
+
+  it('sends line end, word right and kill to end', () => {
+    const { press, sent } = pane()
+
+    press('ArrowRight', { metaKey: true })
+    press('ArrowRight', { altKey: true })
+    press('Delete', { metaKey: true })
+
+    expect(sent).toEqual(['\u0005', '\u001bf', '\u000b'])
+  })
+
+  it('keeps the textarea from also acting on a translated key', () => {
+    const { press, sent } = pane()
+
+    const event = press('Enter', { shiftKey: true })
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(sent).toEqual(['\u001b\r'])
+  })
+
+  it('leaves ⌥←/⌥→ to the emulator when Option is Meta', () => {
+    const { press, sent } = pane({ optionIsMeta: true })
+
+    press('ArrowLeft', { altKey: true })
+
+    expect(sent).toEqual(['\u001b[1;3D'])
+  })
+
+  it('still submits on a bare Return', () => {
+    const { press, sent } = pane()
+
+    press('Enter')
+
+    expect(sent).toEqual(['\r'])
+  })
+
+  it('leaves ⌘K to the palette and ⌘⇧↩ to Maximize Pane', () => {
+    const { press, sent } = pane({ isAppChord: (event) => commandForEvent(event, APPLE) !== null })
+
+    press('k', { metaKey: true })
+    press('Enter', { metaKey: true, shiftKey: true })
+
+    expect(sent).toEqual([])
+  })
+
+  // ⌘A is the Edit menu's Select All, performed before the page sees the key.
+  it('sends nothing for ⌘A', () => {
+    const { press, sent } = pane()
+
+    press('a', { metaKey: true })
+
+    expect(sent).toEqual([])
   })
 })

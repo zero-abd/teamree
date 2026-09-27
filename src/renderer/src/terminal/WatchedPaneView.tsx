@@ -24,6 +24,7 @@ import {
   type TerminalMenuEntry
 } from './terminalMenu'
 import { readTerminalColors } from './terminalTheme'
+import { wideEmoji } from './paneUnicode'
 
 /** Written into the pane itself, because that is where the fact belongs. */
 const DIM = '\u001b[38;5;244m'
@@ -304,6 +305,8 @@ export function WatchedPaneView({
           cols: showing.cols,
           rows: showing.rows
         })
+        // The owner's pane counts widths the same way, so their cursor lands where this one draws it.
+        wideEmoji(term)
         term.open(host)
         // App chords reach the window handler, not the far end. Deliberately nothing
         // more: no `paneKeyHandler` clipboard chords (the interrupt half would be a

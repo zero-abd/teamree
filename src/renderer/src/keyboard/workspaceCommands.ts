@@ -13,6 +13,7 @@ import { worktreeOrder } from '../sidebar/worktreeOrder'
 import { useSidebarView } from '../state/sidebarViewStore'
 import { focusedRegion, regionAfter, requestRegionFocus } from '../shell/regions'
 import { numberedTab, tabAfter } from '../workspace/paneTabs'
+import { clearShownPane } from '../terminal/shownPanes'
 import {
   TERMINAL_FONT_DEFAULT_PX,
   TERMINAL_FONT_MAX_PX,
@@ -190,6 +191,11 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
       const focused = ownFocusedPane(state)
       if (focused === null) return 'no pane focused'
       return unless(!isFilePaneId(focused) || state.diffPanes?.[focused] !== undefined, 'editor has its own')
+    }
+    case 'clear-pane': {
+      const focused = ownFocusedPane(state)
+      if (focused === null) return 'no pane focused'
+      return unless(!isFilePaneId(focused), 'not a terminal')
     }
     case 'close-pane':
       // Either kind: closing a teammate's pane is how a watch stops.
@@ -417,6 +423,11 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
     case 'find-in-pane':
       store.openPaneSearch()
       break
+    case 'clear-pane': {
+      const focused = ownFocusedPane(store)
+      if (focused) clearShownPane(focused)
+      break
+    }
     case 'search-in-files':
       store.openSearch()
       break

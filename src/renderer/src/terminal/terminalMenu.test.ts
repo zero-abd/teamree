@@ -35,7 +35,7 @@ describe('the rows', () => {
       'Copy ⌘C (off)',
       'Paste ⌘V',
       'Select All ⌘A',
-      'Clear',
+      'Clear ⌘⌥K',
       'Find… ⌘F',
       '— Split Right ⌘D',
       'Split Down ⌘⇧D'
@@ -73,7 +73,7 @@ describe('the rows', () => {
       'Copy (off)',
       'Paste',
       'Select All',
-      'Clear',
+      'Clear Ctrl+Alt+K',
       'Find… Ctrl+F',
       '— Split Right Ctrl+D',
       'Split Down Ctrl+Shift+D'

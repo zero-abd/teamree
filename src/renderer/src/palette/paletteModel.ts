@@ -593,6 +593,7 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'save-file': 'save file write disk edits',
   'save-all': 'save all files write disk edits',
   'find-in-pane': 'find search pane scrollback text',
+  'clear-pane': 'clear pane terminal screen scrollback reset cls',
   'split-right': 'split pane right vertical column',
   'split-down': 'split pane down horizontal row',
   'focus-previous-pane': 'focus previous pane back left',

@@ -95,6 +95,8 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
 
   // Find is in Edit on this platform and has been since before the app existed.
   'find-in-pane': { section: 'edit' },
+  // Where Terminal keeps its Clear items.
+  'clear-pane': { section: 'edit' },
 
   'open-palette': { section: 'view' },
   'search-in-files': { section: 'view' },

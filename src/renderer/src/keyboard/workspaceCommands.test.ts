@@ -7,6 +7,9 @@ import type { CommandActions, CommandState, Workspace } from './workspaceCommand
 import { isCommandAvailable, paneNumberTarget, runWorkspaceCommand, whyUnavailable } from './workspaceCommands'
 import { WORKSPACE_SHORTCUTS, type WorkspaceCommand } from './workspaceShortcuts'
 import { onRegionRequest, type Region } from '../shell/regions'
+import { showPane } from '../terminal/shownPanes'
+import { resolvePlatformModifier } from './platformModifier'
+import { commandForEvent } from './workspaceShortcuts'
 
 const EMPTY: CommandState = {
   consent: {},
@@ -722,5 +725,48 @@ describe('saving', () => {
     const all = workspace(EDITED)
     runWorkspaceCommand('save-all', all)
     expect(all.saveFiles).toHaveBeenCalledExactlyOnceWith(['file:a', 'file:b'])
+  })
+})
+
+// ⌘K is the palette, so Clear takes Terminal's Clear Scrollback chord.
+describe('Clear Pane', () => {
+  const mac = resolvePlatformModifier('darwin')
+  const press = (key: string, held: { altKey?: boolean } = {}): Parameters<typeof commandForEvent>[0] => ({
+    key,
+    metaKey: true,
+    ctrlKey: false,
+    shiftKey: false,
+    altKey: held.altKey ?? false
+  })
+
+  it('is ⌥⌘K, and ⌘K stays the palette', () => {
+    expect(commandForEvent(press('k', { altKey: true }), mac)).toBe('clear-pane')
+    expect(commandForEvent(press('k'), mac)).toBe('open-palette')
+  })
+
+  it('is offered on a terminal of your own only', () => {
+    expect(isCommandAvailable('clear-pane', EMPTY)).toBe(false)
+    expect(isCommandAvailable('clear-pane', WORKING)).toBe(true)
+    expect(isCommandAvailable('clear-pane', { ...WORKING, focusedWatchId: 'watch:p1:priya:t7' })).toBe(false)
+    const layouts = {
+      w1: { worktreeId: 'w1', root: { kind: 'leaf' as const, terminalId: 'file:1' }, focusedTerminalId: 'file:1' }
+    }
+    expect(isCommandAvailable('clear-pane', { ...WORKING, layouts })).toBe(false)
+  })
+
+  it('clears the focused pane’s emulator and no other', () => {
+    const cleared: string[] = []
+    const shown = (id: string): Parameters<typeof showPane>[1] => ({
+      buffer: { active: { length: 0, getLine: () => undefined } },
+      clear: () => cleared.push(id)
+    })
+    const unshow = [showPane('t1', shown('t1')), showPane('t2', shown('t2'))]
+    const store = workspace(TWO_PANES)
+
+    runWorkspaceCommand('clear-pane', store)
+
+    expect(cleared).toEqual(['t1'])
+    expect(callCount(store)).toBe(0)
+    for (const undo of unshow) undo()
   })
 })

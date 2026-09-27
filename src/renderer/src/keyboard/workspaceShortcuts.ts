@@ -37,6 +37,7 @@ export type WorkspaceCommand =
   | 'open-palette'
   | 'go-to-file'
   | 'find-in-pane'
+  | 'clear-pane'
   | 'search-in-files'
   | 'open-dashboard'
   | 'open-appearance'
@@ -107,6 +108,8 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // ⌘P as in every editor; this window has nothing to print.
   { command: 'go-to-file', chord: { key: 'p' }, title: 'Go to File…' },
   { command: 'find-in-pane', chord: { key: 'f' }, title: 'Find in Pane' },
+  // Terminal's Clear Scrollback chord; ⌘K is the palette.
+  { command: 'clear-pane', chord: { key: 'k', alt: true }, title: 'Clear Pane' },
   { command: 'search-in-files', chord: { key: 'f', shift: true }, title: 'Search in Files…' },
   // Named for the screen it opens.
   { command: 'open-dashboard', chord: { key: 'e' }, title: 'All Panes' },

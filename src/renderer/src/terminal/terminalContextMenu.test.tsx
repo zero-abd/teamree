@@ -89,6 +89,7 @@ vi.mock('@xterm/xterm', () => {
     loadAddon(addon: { activate?: (term: unknown) => void }): void {
       addon.activate?.(this)
     }
+    unicode = { activeVersion: '6', register: (): void => {} }
     focus(): void {}
     blur(): void {}
     dispose(): void {}
