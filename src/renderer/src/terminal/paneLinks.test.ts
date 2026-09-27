@@ -239,7 +239,9 @@ describe('a pane with links in it', () => {
     expect((await view.links(1)).map((link) => link.text)).toEqual(['~/w/src/math.ts:7'])
     view.press(2, 0, { metaKey: true })
     await settle()
-    expect(view.files).toEqual([[{ worktreeId: 'w1', path: 'src/math.ts', absolute: '/u/w/src/math.ts' }, 7, undefined]])
+    expect(view.files).toEqual([
+      [{ worktreeId: 'w1', path: 'src/math.ts', absolute: '/u/w/src/math.ts' }, 7, undefined]
+    ])
 
     const watched = pane(undefined, { ...home, place: () => null })
     await watched.write('~/w/src/math.ts\r\n')
