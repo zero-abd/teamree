@@ -130,7 +130,8 @@ describe('stylesheets', () => {
       const literal: string[] = []
       for (const name of sheets) {
         postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls('font-size', (decl) => {
-          if (/\d(px|rem|pt)\b/.test(decl.value)) literal.push(`${name} ${(decl.parent as postcss.Rule).selector}`)
+          if (!/^(var\(--text-(xs|sm|base|lg|xl|code)\)|inherit|[\d.]+em)$/.test(decl.value))
+            literal.push(`${name} ${(decl.parent as postcss.Rule).selector}`)
         })
       }
       expect(literal).toEqual([])
