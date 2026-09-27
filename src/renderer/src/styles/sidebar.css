@@ -706,6 +706,7 @@
   align-items: flex-start;
   gap: 0;
   min-width: 0;
+  overflow: hidden;
   padding: 3px var(--s2) 3px calc(28px + var(--depth, 0) * 14px);
   border: 0;
   border-radius: var(--r2);
@@ -735,9 +736,10 @@
   row-gap: 2px;
 }
 
+/* Gives way before the chips down to its floor, then the chips fold; most of the line on the narrowest row. */
 .worktree__name {
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: 0 1000 auto;
+  min-width: min(10ch, 70%);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -787,18 +789,53 @@
 .worktree__end {
   position: relative;
   display: inline-flex;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   align-self: stretch;
   align-items: center;
   gap: var(--s2);
   margin-left: auto;
 }
 
+/* Clips while `FoldedChips` measures, so an overflow is a chip to fold rather than one under the `⋯`. */
 .worktree__facts {
   display: inline-flex;
-  flex: none;
+  flex: 0 1 auto;
   align-items: center;
   gap: var(--s2);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.worktree__facts:empty {
+  display: none;
+}
+
+.chip-fold {
+  color: var(--fg-secondary);
+  cursor: pointer;
+}
+
+.chip-fold:hover {
+  color: var(--accent-bright);
+}
+
+.chip-fold__pop {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s1);
+  padding: var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+}
+
+.chip-fold__pop > * {
+  margin-left: 0;
 }
 
 .worktree__git {
@@ -854,15 +891,11 @@
   color: var(--danger);
 }
 
-/* On the title line after the dot, in room the line always keeps, so nothing moves on hover. */
-.worktree__row:has(> .worktree__action) .worktree__title {
-  padding-right: 18px;
-}
-
+/* Its own column on the title line, drawn at rest too, so nothing moves on hover and nothing runs under it. */
 .worktree__action {
-  position: absolute;
-  top: 5px;
-  right: var(--s2);
+  flex: none;
+  align-self: flex-start;
+  margin: 3px 0 0 calc(-1 * var(--s2));
   width: 18px;
   height: 18px;
   padding: 0;

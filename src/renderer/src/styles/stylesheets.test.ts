@@ -429,11 +429,11 @@ describe('stylesheets', () => {
 
     // The ⋯ is always drawn, so its room is always kept: nothing on the row moves when it is hovered.
     it('keeps the ⋯ its own room on the title line, and moves nothing on hover', () => {
-      expect(declarationOf(ruleFor('sidebar.css', '.worktree__action'), 'position')).toBe('absolute')
-      const room = ruleFor('sidebar.css', '.worktree__row:has(> .worktree__action) .worktree__title')
-      expect(declarationOf(room, 'padding-right')).toBe(
-        declarationOf(ruleFor('sidebar.css', '.worktree__action'), 'width')
-      )
+      // A column of its own, and a row that clips rather than paint its dot under it.
+      const action = ruleFor('sidebar.css', '.worktree__action')
+      expect(declarationOf(action, 'position')).toBeUndefined()
+      expect(declarationOf(action, 'flex')).toBe('none')
+      expect(declarationOf(ruleFor('sidebar.css', '.worktree__open'), 'overflow')).toBe('hidden')
       const reflowing: string[] = []
       postcss.parse(readFileSync(path.join(here, 'sidebar.css'), 'utf8')).walkRules((rule) => {
         if (!/:hover|focus/.test(rule.selector) || !/\.worktree__(row|open|title|name|end)$/.test(rule.selector)) return
@@ -442,6 +442,14 @@ describe('stylesheets', () => {
         })
       })
       expect(reflowing).toEqual([])
+    })
+
+    // Compact at 208px left a parent named `C` (#399): chips fold before the name gives way.
+    it('keeps a row’s name readable beside its chips', () => {
+      const name = ruleFor('sidebar.css', '.worktree__name')
+      expect(declarationOf(name, 'min-width')).toBe('min(10ch, 70%)')
+      expect(declarationOf(name, 'flex')).toBe('0 1000 auto')
+      expect(declarationOf(ruleFor('sidebar.css', '.worktree__facts'), 'overflow')).toBe('hidden')
     })
 
     // On a narrow nested row the counts and the tally ran past the row's edge (#293).
