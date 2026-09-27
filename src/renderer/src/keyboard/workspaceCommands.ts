@@ -11,6 +11,7 @@ import { collectTerminalIds, paneStops } from '../panes/paneLayout'
 import { focusedTreeProject } from '../sidebar/treeKeys'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
 import { useSidebarView } from '../state/sidebarViewStore'
+import { useSettingsFind } from '../settings/settingsFind'
 import { focusedRegion, regionAfter, requestRegionFocus } from '../shell/regions'
 import { numberedTab, tabAfter } from '../workspace/paneTabs'
 import { clearShownPane } from '../terminal/shownPanes'
@@ -55,6 +56,8 @@ export type CommandState = {
   /** Absent reads as shown, for both. */
   sidebarVisible?: boolean
   rightPanelOpen?: boolean
+  /** Settings covers the panes; the find chord searches it instead. */
+  settingsOpen?: boolean
   /** Absent reads as both off. */
   diffOptions?: DiffOptions
   /** What ⌘⇧T could bring back, by worktree; absent reads as nothing. */
@@ -222,6 +225,7 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
     case 'split-down':
       return unless(ownFocusedPane(state) !== null, 'no pane focused')
     case 'find-in-pane': {
+      if (state.settingsOpen) return null
       // A file pane's own text has its editor's find, which takes the chord while this item is greyed.
       const focused = ownFocusedPane(state)
       if (focused === null) return 'no pane focused'
@@ -478,7 +482,8 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       store.openDialog({ kind: 'palette', mode: 'files', query: ':' })
       break
     case 'find-in-pane':
-      store.openPaneSearch()
+      if (store.settingsOpen) useSettingsFind.getState().ask()
+      else store.openPaneSearch()
       break
     case 'clear-pane': {
       const focused = ownFocusedPane(store)

@@ -18,6 +18,8 @@ type PageFrameProps = {
   bodyTestId?: string
   /** The page takes the focus on open and whenever this changes; `false` leaves the focus to the page. */
   focusKey?: string | false
+  /** A full-height column left of the head and body, for a page with its own navigation. */
+  side?: ReactNode
   children: ReactNode
 }
 
@@ -31,6 +33,7 @@ export function PageFrame({
   bodyRef,
   bodyTestId,
   focusKey = '',
+  side,
   children
 }: PageFrameProps): React.JSX.Element {
   // Capture phase, so a focused pane cannot eat Escape first.
@@ -56,7 +59,13 @@ export function PageFrame({
   }, [focusKey])
 
   return (
-    <main className="workspace page" aria-label={label} tabIndex={-1} ref={region}>
+    <main
+      className={side === undefined ? 'workspace page' : 'workspace page page--side'}
+      aria-label={label}
+      tabIndex={-1}
+      ref={region}
+    >
+      {side === undefined ? null : <div className="page__side">{side}</div>}
       <header className="page__head">
         <div className="page__column">
           <div className="page__head-row">

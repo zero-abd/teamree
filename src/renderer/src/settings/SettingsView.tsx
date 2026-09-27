@@ -1,5 +1,5 @@
-// The settings page: machine-level facts (PATH, updates, text size, checkouts), so it takes the main
-// area rather than a drawer. Colours and relays are read here and set where they already live.
+// The settings page: machine-level facts (PATH, updates, text size, checkouts), so it takes the window,
+// one section at a time beside its own section list. Colours and relays are read here and set where they live.
 
 import { createContext, Fragment, useContext, useEffect, useRef, useState } from 'react'
 import { agentLaunchCommand } from '@shared/agentLaunch'
@@ -10,8 +10,9 @@ import { RUN_KINDS } from '@shared/runCommands'
 import { DEFAULT_FETCH_MINUTES, type RuntimeSettings } from '@shared/settings'
 import { effectiveProjectSettings, settingSource, startPointOf } from '@shared/projectSettings'
 import { AgentGlyph } from '../agents/glyphs'
+import { Icon } from '../icons/Icon'
 import { harnessName } from '../agents/harnesses'
-import { cliOutcome } from '../dialogs/cliInstallModel'
+import { cliActionLabel, cliOutcome, offerCliInstall } from '../dialogs/cliInstallModel'
 import { Select } from '../dialogs/Select'
 import { paneNumberRows, shortcutGroups } from '../help/helpTopics'
 import { formatChord, resolvePlatformModifier, type PlatformModifier } from '../keyboard/platformModifier'
@@ -42,6 +43,7 @@ import { activeChoice, BUILT_IN_THEMES, themeById } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from './AppearanceSettings'
 import { useAddonStatus } from './addonStatus'
 import { useRuntimeSettings, type RuntimeSettingsState } from './runtimeSettings'
+import { useSettingsFind } from './settingsFind'
 import { useUsageStore } from '../state/usageStore'
 import {
   addonLine,
@@ -307,9 +309,6 @@ function useSectionRows(
   }
 }
 
-/** A heading this close to the top of the scrolling body counts as the section in view. */
-const IN_VIEW_PX = 48
-
 export function SettingsView({
   modifier = resolvePlatformModifier(window.teamree?.platform)
 }: {
@@ -322,6 +321,7 @@ export function SettingsView({
   const loadAgentTrust = useWorkspaceStore((state) => state.loadAgentTrust)
   const agents = useAgentRows()
   const [query, setQuery] = useState('')
+  const filtering = query.trim() !== ''
   const machine = useRuntimeSettings()
   const sectionRows = useSectionRows(machine.settings, modifier)
   const projectRows = useProjectRows(machine.settings)
@@ -341,40 +341,38 @@ export function SettingsView({
   }, [loadCli, loadUpdate, loadAgentTrust])
 
   const body = useRef<HTMLDivElement>(null)
-  const [current, setActive] = useState<SectionId | null>(null)
+  const search = useRef<HTMLInputElement>(null)
+  const [current, setCurrent] = useState<SectionId>('general')
   const active = sections.some((entry) => entry.id === current) ? current : (sections[0]?.id ?? null)
-  // A section picked near the end cannot scroll to the top, so it stays current at the bottom.
-  const picked = useRef<SectionId | null>(null)
+  // Without a filter one section is on screen; with one, every section holding a match.
+  const onScreen = filtering ? sections : sections.filter((entry) => entry.id === active)
 
-  const goTo = (id: SectionId): void => {
-    const heading = document.getElementById(`settings-${id}`)
-    if (heading === null) return
-    heading.scrollIntoView({ block: 'start' })
-    heading.focus({ preventScroll: true })
-    picked.current = id
-    setActive(id)
+  // What to do with a section's heading once it is drawn; `visit` re-runs it for the section already shown.
+  const arrival = useRef<{ id: SectionId; focus: boolean; ring: boolean } | null>(null)
+  const [visit, setVisit] = useState(0)
+  const goTo = (id: SectionId, how: { focus?: boolean; ring?: boolean } = {}): void => {
+    arrival.current = { id, focus: how.focus ?? true, ring: how.ring ?? false }
+    setCurrent(id)
+    setVisit((count) => count + 1)
   }
-
-  const ids = sections.map((entry) => entry.id).join(' ')
   useEffect(() => {
-    const scroller = body.current
-    if (scroller === null) return
-    const order = ids.split(' ') as SectionId[]
-    const onScroll = (): void => {
-      if (!atBottom(scroller)) picked.current = null
-      setActive(sectionInView(scroller, order, picked.current))
-    }
-    scroller.addEventListener('scroll', onScroll, { passive: true })
-    return () => scroller.removeEventListener('scroll', onScroll)
-  }, [ids])
+    const want = arrival.current
+    if (want === null) return
+    arrival.current = null
+    const heading = document.getElementById(`settings-${want.id}`)
+    if (heading === null) return
+    if (filtering) heading.scrollIntoView?.({ block: 'start' })
+    else if (body.current !== null) body.current.scrollTop = 0
+    if (want.focus) heading.focus({ preventScroll: true })
+    if (want.ring) flash(want.id)
+  }, [visit])
 
-  // Opened at a section — the strip's "Agent settings…" — the page scrolls
-  // there once and forgets the request, so the next plain open starts at the top.
+  // Opened at a section — the strip's "Agent settings…", the rail's `!` — it is shown and lit once.
   const section = useWorkspaceStore((state) => state.settingsSection)
   useEffect(() => {
     if (section === null) return
-    goTo(section)
-    flash(section)
+    setQuery('')
+    goTo(section, { ring: true })
     useWorkspaceStore.setState({ settingsSection: null })
   }, [section])
 
@@ -388,46 +386,53 @@ export function SettingsView({
     useWorkspaceStore.setState({ settingsQuery: null })
   }, [asked])
 
-  // Each new filter starts at its first section, so a match below the fold is not missed.
-  const first = sections[0]?.id
+  // Each new filter starts at the top, so a match below the fold is not missed.
   useEffect(() => {
-    if (query.trim() === '' || first === undefined) return
-    document.getElementById(`settings-${first}`)?.scrollIntoView?.({ block: 'start' })
-    setActive(first)
-    if (ring.current !== null) flash(ring.current)
+    if (body.current !== null) body.current.scrollTop = 0
+    if (ring.current !== null && filtering) flash(ring.current)
     ring.current = null
   }, [query])
 
+  // The find chord, while this page covers the panes.
+  const find = useSettingsFind((state) => state.asked)
+  const seen = useRef(find)
+  useEffect(() => {
+    if (find === seen.current) return
+    seen.current = find
+    search.current?.focus()
+    search.current?.select()
+  }, [find])
+
+  const side = (
+    <SettingsSide
+      sections={sections}
+      active={filtering ? null : active}
+      goTo={goTo}
+      query={query}
+      setQuery={setQuery}
+      searchRef={search}
+      findKey={formatChord({ key: 'f' }, modifier)}
+    />
+  )
+
   return (
-    <PageFrame label="Settings" title="Settings" onClose={toggleSettings} bodyRef={body} bodyTestId="settings-body">
-      <div className="settings__layout">
-        <div className="settings__side">
-          <input
-            type="search"
-            className="settings-filter"
-            aria-label="Filter settings"
-            placeholder="Filter"
-            value={query}
-            autoComplete="off"
-            spellCheck={false}
-            data-own-escape={query === '' ? undefined : true}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') setQuery('')
-            }}
-          />
-          <SectionList sections={sections} active={active} goTo={goTo} />
-        </div>
-        <div className="settings__content">
-          {sections.length === 0 ? <p className="settings-note">No matches</p> : null}
-          <MachineContext.Provider value={machine}>
-            {sections.map((entry) => (
-              <ShownContext.Provider key={entry.id} value={shownUnder(entry.label, query, rowsOf(entry.id))}>
-                <SectionBody id={entry.id} projects={projects} modifier={modifier} />
-              </ShownContext.Provider>
-            ))}
-          </MachineContext.Provider>
-        </div>
+    <PageFrame
+      label="Settings"
+      title="Settings"
+      onClose={toggleSettings}
+      bodyRef={body}
+      bodyTestId="settings-body"
+      side={side}
+    >
+      <div className={filtering ? 'settings__content settings__content--found' : 'settings__content'}>
+        {sections.length === 0 ? <p className="settings-note">No matches</p> : null}
+        <MachineContext.Provider value={machine}>
+          {onScreen.map((entry) => (
+            <ShownContext.Provider key={entry.id} value={shownUnder(entry.label, query, rowsOf(entry.id))}>
+              <SectionBody id={entry.id} projects={projects} modifier={modifier} />
+            </ShownContext.Provider>
+          ))}
+        </MachineContext.Provider>
       </div>
     </PageFrame>
   )
@@ -470,11 +475,7 @@ function SectionBody({
   }
 }
 
-function atBottom(scroller: HTMLElement): boolean {
-  return scroller.scrollTop > 0 && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
-}
-
-/** Rings a section's rows for a moment, so the one asked for is found on a long page. */
+/** Rings a section's first group for a moment, so the one asked for is found. */
 function flash(id: SectionId): void {
   const group = document
     .getElementById(`settings-${id}`)
@@ -486,36 +487,34 @@ function flash(id: SectionId): void {
   })
 }
 
-/** The last section whose heading has reached the top; at the bottom, the one picked or the last. */
-function sectionInView(scroller: HTMLElement, order: readonly SectionId[], picked: SectionId | null): SectionId {
-  const top = scroller.getBoundingClientRect().top
-  const offset = (id: SectionId): number | null => {
-    const heading = document.getElementById(`settings-${id}`)
-    return heading === null ? null : heading.getBoundingClientRect().top - top
-  }
-  if (atBottom(scroller)) {
-    const at = picked === null ? null : offset(picked)
-    return picked !== null && at !== null && at >= 0 ? picked : (order.at(-1) ?? 'agents')
-  }
-  let current: SectionId = order[0] ?? 'agents'
-  for (const id of order) {
-    const at = offset(id)
-    if (at !== null && at <= IN_VIEW_PX) current = id
-  }
-  return current
-}
+type SectionEntry = (typeof SETTINGS_SECTIONS)[number]
 
-function SectionList({
+/** The search and the grouped section list, the full height of the page. */
+function SettingsSide({
   sections,
   active,
-  goTo
+  goTo,
+  query,
+  setQuery,
+  searchRef,
+  findKey
 }: {
-  sections: readonly { id: SectionId; label: string }[]
+  sections: readonly SectionEntry[]
   active: SectionId | null
-  goTo: (id: SectionId) => void
+  goTo: (id: SectionId, how?: { focus?: boolean }) => void
+  query: string
+  setQuery: (query: string) => void
+  searchRef: React.Ref<HTMLInputElement>
+  findKey: string
 }): React.JSX.Element {
-  const onKeyDown = (event: React.KeyboardEvent<HTMLUListElement>): void => {
-    const buttons = [...event.currentTarget.querySelectorAll('button')]
+  const cli = useWorkspaceStore((state) => state.cli)
+  // The sidebar's `!` on Settings, on the row that fixes it.
+  const cliFlag = offerCliInstall(cli) ? `CLI: ${cliActionLabel(cli)}` : null
+  const groups = [...new Set(sections.map((entry) => entry.group))]
+
+  // Arrows walk the list and show each section on the way, the focus staying in the list.
+  const onKeyDown = (event: React.KeyboardEvent<HTMLElement>): void => {
+    const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('button[data-section]')]
     const at = buttons.indexOf(event.target as HTMLButtonElement)
     const next =
       event.key === 'ArrowDown'
@@ -527,28 +526,183 @@ function SectionList({
             : event.key === 'End'
               ? buttons.length - 1
               : null
-    if (next === null || at < 0) return
+    const target = next === null ? undefined : buttons[next]
+    if (target === undefined || at < 0) return
     event.preventDefault()
-    buttons[next]?.focus()
+    target.focus()
+    goTo(target.dataset.section as SectionId, { focus: false })
   }
 
   return (
-    <nav className="settings-nav" aria-label="Sections">
-      <ul className="settings-nav__list" onKeyDown={onKeyDown}>
-        {sections.map((entry) => (
-          <li key={entry.id}>
-            <button
-              type="button"
-              className="settings-nav__item"
-              aria-current={entry.id === active ? 'true' : undefined}
-              onClick={() => goTo(entry.id)}
-            >
-              {entry.label}
-            </button>
-          </li>
+    <div className="settings-side">
+      <label className="settings-search">
+        <Icon name="search" size={14} className="settings-search__icon" />
+        <input
+          ref={searchRef}
+          type="search"
+          className="settings-search__input"
+          aria-label="Filter settings"
+          placeholder="Search"
+          value={query}
+          autoComplete="off"
+          spellCheck={false}
+          data-own-escape={query === '' ? undefined : true}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') setQuery('')
+          }}
+        />
+        {query === '' ? (
+          <kbd className="settings-search__key" aria-hidden="true">
+            {findKey}
+          </kbd>
+        ) : null}
+      </label>
+      <nav className="settings-nav" aria-label="Sections" onKeyDown={onKeyDown}>
+        {groups.map((group) => (
+          <div key={group}>
+            <p className="settings-nav__heading" id={`settings-group-${group}`}>
+              {group}
+            </p>
+            <ul className="settings-nav__list" aria-labelledby={`settings-group-${group}`}>
+              {sections
+                .filter((entry) => entry.group === group)
+                .map((entry) => (
+                  <li key={entry.id}>
+                    <button
+                      type="button"
+                      className="settings-nav__item"
+                      data-section={entry.id}
+                      title={entry.label}
+                      aria-current={entry.id === active ? 'true' : undefined}
+                      onClick={() => goTo(entry.id)}
+                    >
+                      <Icon name={entry.icon} className="settings-nav__icon" />
+                      <span className="settings-nav__label">{entry.label}</span>
+                      {entry.id === 'cli' && cliFlag !== null ? (
+                        <span className="settings-nav__badge" role="img" aria-label={cliFlag}>
+                          !
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                ))}
+            </ul>
+          </div>
         ))}
-      </ul>
-    </nav>
+      </nav>
+    </div>
+  )
+}
+
+/** A section's heading: the page's title for it, and where Settings › that section lands the focus. */
+function SectionTitle({ id, text }: { id: SectionId; text: string }): React.JSX.Element {
+  return (
+    <h2 className="settings-section__title" id={`settings-${id}`} tabIndex={-1}>
+      <Marked text={text} />
+    </h2>
+  )
+}
+
+/** One card of rows, with an optional small title; hidden by the stylesheet when the filter empties it. */
+function Group({ title, children }: { title?: string; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className="settings-card">
+      {title === undefined ? null : <h3 className="settings-card__title">{title}</h3>}
+      <div className="settings-group">{children}</div>
+    </div>
+  )
+}
+
+/**
+ * One row: the label (and at most a one-line hint) on the left, the control right-aligned in the control column.
+ * `wide` gives the control the rest of the row, for a path or a value with buttons.
+ */
+function Field({
+  label,
+  htmlFor,
+  heading = false,
+  hint,
+  source,
+  wide = false,
+  below,
+  children
+}: {
+  label: string
+  /** The control the label names; a row whose control is a value and buttons has none. */
+  htmlFor?: string
+  heading?: boolean
+  hint?: string
+  /** Where the value comes from, under the label. */
+  source?: React.ReactNode
+  wide?: boolean
+  /** Across the whole row under both, e.g. the command a field builds. */
+  below?: React.ReactNode
+  children: React.ReactNode
+}): React.JSX.Element {
+  const text = <Marked text={label} />
+  return (
+    <div className={wide ? 'settings-field settings-field--wide' : 'settings-field'}>
+      <div className="settings-field__text">
+        {htmlFor !== undefined ? (
+          <label className="settings-field__label" htmlFor={htmlFor}>
+            {text}
+          </label>
+        ) : heading ? (
+          <h4 className="settings-field__label">{text}</h4>
+        ) : (
+          <span className="settings-field__label">{text}</span>
+        )}
+        {hint === undefined ? null : <span className="settings-field__hint">{hint}</span>}
+        {source}
+      </div>
+      <div className="settings-field__control">{children}</div>
+      {below ? <div className="settings-field__below">{below}</div> : null}
+    </div>
+  )
+}
+
+/** An on/off setting's control. */
+function Switch({
+  id,
+  checked,
+  disabled = false,
+  onChange
+}: {
+  id?: string
+  checked: boolean
+  disabled?: boolean
+  onChange: (checked: boolean) => void
+}): React.JSX.Element {
+  return (
+    <input
+      id={id}
+      className="switch"
+      type="checkbox"
+      role="switch"
+      checked={checked}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.checked)}
+    />
+  )
+}
+
+/** A path on one line, cut in the middle so its last two parts stay; the whole path on hover. */
+function PathText({ path, className = '' }: { path: string; className?: string }): React.JSX.Element {
+  const parts = path.split('/')
+  const tail = parts.length > 3 ? parts.slice(-2).join('/') : path
+  const head = path.slice(0, path.length - tail.length)
+  return (
+    <code className={`settings-path ${className}`.trim()} title={path}>
+      {head === '' ? null : (
+        <span className="settings-path__head">
+          <Marked text={head} />
+        </span>
+      )}
+      <span className="settings-path__tail">
+        <Marked text={tail} />
+      </span>
+    </code>
   )
 }
 
@@ -564,10 +718,8 @@ function CliSection(): React.JSX.Element {
 
   return (
     <section className="settings-section" aria-labelledby="settings-cli">
-      <h2 className="settings-section__title" id="settings-cli" tabIndex={-1}>
-        <Marked text="CLI" />
-      </h2>
-      <div className="settings-group">
+      <SectionTitle id="cli" text="CLI" />
+      <Group>
         <div className="settings-row">
           <p className="settings-fact settings-fact--mono">
             <BreakAtSlashes text={line.state} />
@@ -594,7 +746,7 @@ function CliSection(): React.JSX.Element {
         {/* Beside the button that caused it: that is where the retry happens. */}
         {error ? <p className="settings-error">{error}</p> : null}
         {install && error === null ? <p className="settings-done">{cliOutcome(install)}</p> : null}
-      </div>
+      </Group>
     </section>
   )
 }
@@ -609,15 +761,18 @@ function AddonsSection(): React.JSX.Element {
   const shown = useShown()
   return (
     <section className="settings-section" aria-labelledby="settings-addons">
-      <h2 className="settings-section__title" id="settings-addons" tabIndex={-1}>
-        <Marked text="Add-ons" />
-      </h2>
-      <div className="settings-group">
+      <SectionTitle id="addons" text="Add-ons" />
+      <Group>
         {shown.row('Jac Graph Memory') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-jac-memory">
-              <Marked text="Jac Graph Memory" />
-            </label>
+          <Field
+            label="Jac Graph Memory"
+            htmlFor={line.on === null ? undefined : 'settings-jac-memory'}
+            below={
+              line.problem === null && problem === null ? null : (
+                <p className="settings-error">{line.problem ?? problem}</p>
+              )
+            }
+          >
             <div className="settings-actions" data-testid="addon-jac-memory">
               <span className="settings-aside">{line.state}</span>
               {line.action === 'install' ? (
@@ -631,22 +786,17 @@ function AddonsSection(): React.JSX.Element {
                 </a>
               ) : null}
               {line.on === null ? null : (
-                <input
+                <Switch
                   id="settings-jac-memory"
-                  className="settings-field__check"
-                  type="checkbox"
                   checked={line.on}
                   disabled={machine.settings === null}
-                  onChange={(event) => machine.change({ jacMemoryAddon: event.target.checked })}
+                  onChange={(jacMemoryAddon) => machine.change({ jacMemoryAddon })}
                 />
               )}
             </div>
-            {line.problem === null && problem === null ? null : (
-              <p className="settings-error">{line.problem ?? problem}</p>
-            )}
-          </div>
+          </Field>
         ) : null}
-      </div>
+      </Group>
     </section>
   )
 }
@@ -665,10 +815,8 @@ function UpdatesSection(): React.JSX.Element {
 
   return (
     <section className="settings-section" aria-labelledby="settings-updates">
-      <h2 className="settings-section__title" id="settings-updates" tabIndex={-1}>
-        <Marked text="Updates" />
-      </h2>
-      <div className="settings-group">
+      <SectionTitle id="updates" text="Updates" />
+      <Group>
         {shown.whole ? (
           <div className="settings-row">
             <p className="settings-fact">{panel.headline}</p>
@@ -716,7 +864,7 @@ function UpdatesSection(): React.JSX.Element {
         {shown.whole && !panel.offersCheck && panel.problem ? (
           <p className="settings-warning">{panel.problem}</p>
         ) : null}
-      </div>
+      </Group>
     </section>
   )
 }
@@ -738,10 +886,8 @@ function GeneralSection(): React.JSX.Element {
 
   return (
     <section className="settings-section" aria-labelledby="settings-general">
-      <h2 className="settings-section__title" id="settings-general" tabIndex={-1}>
-        <Marked text="General" />
-      </h2>
-      <div className="settings-group">
+      <SectionTitle id="general" text="General" />
+      <Group title="Worktrees">
         {show.row('Worktrees in') ? (
           <WorktreesIn
             own={settings?.worktreesRoot}
@@ -757,6 +903,26 @@ function GeneralSection(): React.JSX.Element {
             own={settings?.branchPrefix ?? ''}
             inherited=""
             save={(branchPrefix) => machine.save({ branchPrefix })}
+          />
+        ) : null}
+        {show.row('Ask Before Deleting Worktrees') ? (
+          <CheckField
+            id="settings-confirm-remove"
+            label="Ask Before Deleting Worktrees"
+            checked={confirmations.removeWorktree}
+            onChange={(on) => setConfirmation('removeWorktree', on)}
+          />
+        ) : null}
+      </Group>
+      <Group title="This Mac">
+        {show.row('Default editor') ? <EditorCommand editorKey={ANY_PROJECT} label="Default editor" /> : null}
+        {show.row('Keep Awake') ? (
+          <ChoiceField
+            id="settings-keep-awake"
+            label="Keep Awake"
+            value={keepAwake}
+            choices={KEEP_AWAKE_CHOICES}
+            onChange={setKeepAwake}
           />
         ) : null}
         {offersMenuBar() && show.row('Show in Menu Bar') ? (
@@ -780,26 +946,8 @@ function GeneralSection(): React.JSX.Element {
             }}
           />
         ) : null}
-        {show.row('Keep Awake') ? (
-          <ChoiceField
-            id="settings-keep-awake"
-            label="Keep Awake"
-            value={keepAwake}
-            choices={KEEP_AWAKE_CHOICES}
-            onChange={setKeepAwake}
-          />
-        ) : null}
-        {show.row('Default editor') ? <EditorCommand editorKey={ANY_PROJECT} label="Default editor" /> : null}
-        {show.row('Ask Before Deleting Worktrees') ? (
-          <CheckField
-            id="settings-confirm-remove"
-            label="Ask Before Deleting Worktrees"
-            checked={confirmations.removeWorktree}
-            onChange={(on) => setConfirmation('removeWorktree', on)}
-          />
-        ) : null}
-        {machine.problem === null ? null : <p className="settings-error">{machine.problem}</p>}
-      </div>
+      </Group>
+      {machine.problem === null ? null : <p className="settings-error">{machine.problem}</p>}
     </section>
   )
 }
@@ -840,45 +988,47 @@ function WorktreesIn({
   }
 
   return (
-    <div className="settings-field">
-      <span className="settings-field__label">
-        <Marked text="Worktrees in" />
-      </span>
-      <div className="settings-field__row">
-        <code className="settings-value settings-value--mono settings-value--path">
-          <Marked text={applied} />
-        </code>
-        <button type="button" className="button button--small" disabled={applied === ''} onClick={() => void choose()}>
-          Choose…
+    <Field
+      label="Worktrees in"
+      wide
+      below={
+        problem === null ? null : (
+          <p className="settings-error">
+            {problem.message}
+            {problem.inside ? (
+              <>
+                {' '}
+                <button
+                  type="button"
+                  className="button button--small"
+                  onClick={() => void attempt(problem.folder, true)}
+                >
+                  Use Anyway
+                </button>
+              </>
+            ) : null}
+          </p>
+        )
+      }
+    >
+      <PathText path={applied} />
+      <button
+        type="button"
+        className="button button--small"
+        disabled={applied === ''}
+        onClick={() => void revealInFinder(applied, 'the worktrees folder')}
+      >
+        Reveal
+      </button>
+      <button type="button" className="button button--small" disabled={applied === ''} onClick={() => void choose()}>
+        Choose…
+      </button>
+      {own === undefined ? null : (
+        <button type="button" className="button button--small button--ghost" onClick={() => void attempt('')}>
+          Reset
         </button>
-        <button
-          type="button"
-          className="button button--small"
-          disabled={applied === ''}
-          onClick={() => void revealInFinder(applied, 'the worktrees folder')}
-        >
-          Reveal
-        </button>
-        {own === undefined ? null : (
-          <button type="button" className="button button--small" onClick={() => void attempt('')}>
-            Reset
-          </button>
-        )}
-      </div>
-      {problem === null ? null : (
-        <p className="settings-error">
-          {problem.message}
-          {problem.inside ? (
-            <>
-              {' '}
-              <button type="button" className="button button--small" onClick={() => void attempt(problem.folder, true)}>
-                Use Anyway
-              </button>
-            </>
-          ) : null}
-        </p>
       )}
-    </div>
+    </Field>
   )
 }
 
@@ -901,23 +1051,21 @@ function BranchPrefix({
     save(prefix).catch((error: unknown) => setProblem(reasonFor(error)))
   })
   return (
-    <div className="settings-field">
-      <label className="settings-field__label" htmlFor={id}>
-        <Marked text="Branch prefix" />
-      </label>
+    <Field
+      label="Branch prefix"
+      htmlFor={id}
+      below={problem === null ? null : <p className="settings-error">{problem}</p>}
+    >
       <input
         id={id}
-        className={`settings-field__input settings-field__input--short${
-          inherited ? ' settings-field__input--command' : ''
-        }`}
+        className={`settings-input${inherited ? ' settings-input--command' : ''}`}
         type="text"
         placeholder={inherited || 'None'}
         aria-invalid={problem !== null}
         {...hitMark(shown, [own])}
         {...draft}
       />
-      {problem === null ? null : <p className="settings-error">{problem}</p>}
-    </div>
+    </Field>
   )
 }
 
@@ -931,10 +1079,8 @@ function NoticesSection(): React.JSX.Element {
 
   return (
     <section className="settings-section" aria-labelledby="settings-notices">
-      <h2 className="settings-section__title" id="settings-notices" tabIndex={-1}>
-        <Marked text="Notifications" />
-      </h2>
-      <div className="settings-group">
+      <SectionTitle id="notices" text="Notifications" />
+      <Group>
         {shown.row('Notify') ? (
           <ChoiceField
             id="settings-agent-notices"
@@ -947,6 +1093,8 @@ function NoticesSection(): React.JSX.Element {
             <NoticeTest key={agentNotices} />
           </ChoiceField>
         ) : null}
+      </Group>
+      <Group title="Events">
         {NOTICE_EVENTS.filter((entry) => shown.row(entry.label)).map((entry) => (
           <CheckField
             key={entry.event}
@@ -957,7 +1105,7 @@ function NoticesSection(): React.JSX.Element {
             onChange={(on) => setNoticeEvent(entry.event, on)}
           />
         ))}
-      </div>
+      </Group>
     </section>
   )
 }
@@ -967,10 +1115,8 @@ function TeamworkSection(): React.JSX.Element {
   const { settings, problem, change } = useRuntimeSettings()
   return (
     <section className="settings-section" aria-labelledby="settings-teamwork">
-      <h2 className="settings-section__title" id="settings-teamwork" tabIndex={-1}>
-        <Marked text="Teamwork" />
-      </h2>
-      <div className="settings-group">
+      <SectionTitle id="teamwork" text="Teamwork" />
+      <Group>
         <CheckField
           id="settings-share-task-details"
           label="Share Task Details"
@@ -979,7 +1125,7 @@ function TeamworkSection(): React.JSX.Element {
           onChange={(shareTaskDetails) => change({ shareTaskDetails })}
         />
         {problem === null ? null : <p className="settings-error">{problem}</p>}
-      </div>
+      </Group>
     </section>
   )
 }
@@ -1006,15 +1152,10 @@ function PanesSection(): React.JSX.Element {
 
   return (
     <section className="settings-section" aria-labelledby="settings-panes">
-      <h2 className="settings-section__title" id="settings-panes" tabIndex={-1}>
-        <Marked text="Panes" />
-      </h2>
-      <div className="settings-group">
+      <SectionTitle id="panes" text="Panes" />
+      <Group title="Terminal">
         {shown.row('Terminal text size') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-font-size">
-              <Marked text="Terminal text size" />
-            </label>
+          <Field label="Terminal text size" htmlFor="settings-font-size">
             <div className="settings-size">
               <input
                 id="settings-font-size"
@@ -1031,40 +1172,39 @@ function PanesSection(): React.JSX.Element {
                 <Marked text={`${terminalFontSize}px`} />
               </output>
             </div>
-          </div>
+          </Field>
         ) : null}
 
         {shown.row('Font') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-font">
-              <Marked text="Font" />
-            </label>
+          <Field
+            label="Font"
+            htmlFor="settings-font"
+            below={
+              // The draft, not the stored value: the point is to see a face before keeping it.
+              <div
+                className="settings-font-preview"
+                data-testid="settings-font-preview"
+                style={{ fontFamily: font.value, fontSize: terminalFontSize }}
+              >
+                ~/repo $ git status 0O 1lI {'{}'} =&gt; !=
+              </div>
+            }
+          >
             <input
               id="settings-font"
-              className="settings-field__input"
+              className="settings-input"
               type="text"
               {...font}
               {...hitMark(shown, [options.fontFamily])}
             />
-            {/* The draft, not the stored value: the point is to see a face before keeping it. */}
-            <div
-              className="settings-font-preview"
-              data-testid="settings-font-preview"
-              style={{ fontFamily: font.value, fontSize: terminalFontSize }}
-            >
-              ~/repo $ git status 0O 1lI {'{}'} =&gt; !=
-            </div>
-          </div>
+          </Field>
         ) : null}
 
         {shown.row('Line height') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-line-height">
-              <Marked text="Line height" />
-            </label>
+          <Field label="Line height" htmlFor="settings-line-height">
             <input
               id="settings-line-height"
-              className="settings-field__input settings-field__input--number"
+              className="settings-input settings-input--number"
               type="number"
               min={TERMINAL_LINE_HEIGHT_MIN}
               max={TERMINAL_LINE_HEIGHT_MAX}
@@ -1072,44 +1212,54 @@ function PanesSection(): React.JSX.Element {
               {...lineHeight}
               {...hitMark(shown, [String(options.lineHeight)])}
             />
-          </div>
+          </Field>
         ) : null}
 
         {shown.row('Cursor') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-cursor">
-              <Marked text="Cursor" />
+          <Field label="Cursor" htmlFor="settings-cursor">
+            <Select
+              id="settings-cursor"
+              value={options.cursorStyle}
+              onChange={(event) => setOptions({ cursorStyle: event.target.value as TerminalCursorStyle })}
+              {...hitMark(
+                shown,
+                CURSOR_STYLES.map((style) => style.label)
+              )}
+            >
+              {CURSOR_STYLES.map((style) => (
+                <option key={style.value} value={style.value}>
+                  {style.label}
+                </option>
+              ))}
+            </Select>
+            <label className="settings-inline">
+              <span>
+                <Marked text="Blink" />
+              </span>
+              <Switch checked={options.cursorBlink} onChange={(cursorBlink) => setOptions({ cursorBlink })} />
             </label>
-            <div className="settings-field__row">
-              <Select
-                id="settings-cursor"
-                value={options.cursorStyle}
-                onChange={(event) => setOptions({ cursorStyle: event.target.value as TerminalCursorStyle })}
-                {...hitMark(
-                  shown,
-                  CURSOR_STYLES.map((style) => style.label)
-                )}
-              >
-                {CURSOR_STYLES.map((style) => (
-                  <option key={style.value} value={style.value}>
-                    {style.label}
-                  </option>
-                ))}
-              </Select>
-              <label className="settings-check">
-                <input
-                  type="checkbox"
-                  checked={options.cursorBlink}
-                  onChange={(event) => setOptions({ cursorBlink: event.target.checked })}
-                />
-                <span>
-                  <Marked text="Blink" />
-                </span>
-              </label>
-            </div>
-          </div>
+          </Field>
         ) : null}
 
+        {shown.row('Scrollback lines') ? (
+          <Field label="Scrollback lines" htmlFor="settings-scrollback">
+            <input
+              id="settings-scrollback"
+              className="settings-input settings-input--number"
+              type="number"
+              min={TERMINAL_SCROLLBACK_MIN}
+              max={TERMINAL_SCROLLBACK_MAX}
+              step={1000}
+              {...scrollback}
+              {...hitMark(shown, [String(options.scrollback)])}
+            />
+          </Field>
+        ) : null}
+
+        {shown.row('Shell') ? <ShellField /> : null}
+      </Group>
+
+      <Group title="Keys">
         {shown.row('Option as Meta') ? (
           <CheckField
             id="settings-option-meta"
@@ -1127,27 +1277,9 @@ function PanesSection(): React.JSX.Element {
             onChange={(copyOnSelect) => setOptions({ copyOnSelect })}
           />
         ) : null}
+      </Group>
 
-        {shown.row('Scrollback lines') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-scrollback">
-              <Marked text="Scrollback lines" />
-            </label>
-            <input
-              id="settings-scrollback"
-              className="settings-field__input settings-field__input--number"
-              type="number"
-              min={TERMINAL_SCROLLBACK_MIN}
-              max={TERMINAL_SCROLLBACK_MAX}
-              step={1000}
-              {...scrollback}
-              {...hitMark(shown, [String(options.scrollback)])}
-            />
-          </div>
-        ) : null}
-
-        {shown.row('Shell') ? <ShellField /> : null}
-
+      <Group title="Agents">
         {shown.row('Ask Before Stopping Agents') ? (
           <CheckField
             id="settings-confirm-stop-agent"
@@ -1158,22 +1290,16 @@ function PanesSection(): React.JSX.Element {
         ) : null}
 
         {shown.row('Keep Agents Running When teamree Quits') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-keep-panes">
-              <Marked text="Keep Agents Running When teamree Quits" />
-            </label>
-            <input
-              id="settings-keep-panes"
-              className="settings-field__check"
-              type="checkbox"
-              checked={runtime.settings?.keepPanesRunning ?? false}
-              disabled={runtime.settings === null}
-              onChange={(event) => runtime.change({ keepPanesRunning: event.target.checked })}
-            />
-          </div>
+          <CheckField
+            id="settings-keep-panes"
+            label="Keep Agents Running When teamree Quits"
+            checked={runtime.settings?.keepPanesRunning ?? false}
+            disabled={runtime.settings === null}
+            onChange={(keepPanesRunning) => runtime.change({ keepPanesRunning })}
+          />
         ) : null}
-        {runtime.problem === null ? null : <p className="settings-error">{runtime.problem}</p>}
-      </div>
+      </Group>
+      {runtime.problem === null ? null : <p className="settings-error">{runtime.problem}</p>}
     </section>
   )
 }
@@ -1189,21 +1315,21 @@ function ShellField(): React.JSX.Element {
     machine.save({ shell }).catch((error: unknown) => setProblem(reasonFor(error)))
   })
   return (
-    <div className="settings-field">
-      <label className="settings-field__label" htmlFor="settings-shell">
-        <Marked text="Shell" />
-      </label>
+    <Field
+      label="Shell"
+      htmlFor="settings-shell"
+      below={problem === null ? null : <p className="settings-error">{problem}</p>}
+    >
       <input
         id="settings-shell"
-        className="settings-field__input settings-field__input--command"
+        className="settings-input settings-input--command"
         type="text"
         placeholder={machine.settings?.shellFallback ?? ''}
         aria-invalid={problem !== null}
         {...hitMark(shown, [own])}
         {...draft}
       />
-      {problem === null ? null : <p className="settings-error">{problem}</p>}
-    </div>
+    </Field>
   )
 }
 
@@ -1218,10 +1344,8 @@ function GitSection(): React.JSX.Element {
 
   return (
     <section className="settings-section" aria-labelledby="settings-git">
-      <h2 className="settings-section__title" id="settings-git" tabIndex={-1}>
-        <Marked text="Git" />
-      </h2>
-      <div className="settings-group">
+      <SectionTitle id="git" text="Git" />
+      <Group title="Fetch">
         {shown.row('Fetch every') ? (
           <ChoiceField
             id="settings-fetch-every"
@@ -1231,6 +1355,8 @@ function GitSection(): React.JSX.Element {
             onChange={(minutes) => machine.change({ fetchMinutes: Number(minutes) })}
           />
         ) : null}
+      </Group>
+      <Group title="Diffs">
         {shown.row('Diff layout') ? (
           <ChoiceField
             id="settings-diff-layout"
@@ -1256,7 +1382,7 @@ function GitSection(): React.JSX.Element {
             onChange={() => toggleDiffOption('hideWhitespace')}
           />
         ) : null}
-      </div>
+      </Group>
     </section>
   )
 }
@@ -1269,14 +1395,12 @@ function ShortcutsSection({ modifier }: { modifier: PlatformModifier }): React.J
 
   return (
     <section className="settings-section" aria-labelledby="settings-shortcuts">
-      <h2 className="settings-section__title" id="settings-shortcuts" tabIndex={-1}>
-        <Marked text="Shortcuts" />
-      </h2>
+      <SectionTitle id="shortcuts" text="Shortcuts" />
       {groups.map((group) => {
         const kept = rows.filter((row) => row.group === group && shown.row(row.label))
         return kept.length === 0 ? null : (
-          <Fragment key={group}>
-            <h3 className="settings-subhead">{group}</h3>
+          <div className="settings-card" key={group}>
+            <h3 className="settings-card__title">{group}</h3>
             <ul className="settings-group settings-keys" aria-label={group}>
               {kept.map((row) => (
                 <li className="settings-key" key={row.label}>
@@ -1289,14 +1413,14 @@ function ShortcutsSection({ modifier }: { modifier: PlatformModifier }): React.J
                 </li>
               ))}
             </ul>
-          </Fragment>
+          </div>
         )
       })}
     </section>
   )
 }
 
-/** A label and its checkbox: the page's one shape for an on/off setting. */
+/** A label and its switch: the page's one shape for an on/off setting. */
 function CheckField({
   id,
   label,
@@ -1311,19 +1435,9 @@ function CheckField({
   onChange: (checked: boolean) => void
 }): React.JSX.Element {
   return (
-    <div className="settings-field">
-      <label className="settings-field__label" htmlFor={id}>
-        <Marked text={label} />
-      </label>
-      <input
-        id={id}
-        className="settings-field__check"
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-      />
-    </div>
+    <Field label={label} htmlFor={id}>
+      <Switch id={id} checked={checked} disabled={disabled} onChange={onChange} />
+    </Field>
   )
 }
 
@@ -1345,37 +1459,25 @@ function ChoiceField<T extends string>({
   children?: React.ReactNode
 }): React.JSX.Element {
   const shown = useShown()
-  const picker = (
-    <Select
-      id={id}
-      value={value}
-      onChange={(event) => onChange(event.target.value as T)}
-      {...hitMark(
-        shown,
-        choices.map((choice) => choice.label)
-      )}
-    >
-      {choices.map((choice) => (
-        <option key={choice.value} value={choice.value}>
-          {choice.label}
-        </option>
-      ))}
-    </Select>
-  )
   return (
-    <div className="settings-field">
-      <label className="settings-field__label" htmlFor={id}>
-        <Marked text={label} />
-      </label>
-      {children === undefined ? (
-        picker
-      ) : (
-        <div className="settings-field__row">
-          {picker}
-          {children}
-        </div>
-      )}
-    </div>
+    <Field label={label} htmlFor={id}>
+      {children}
+      <Select
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value as T)}
+        {...hitMark(
+          shown,
+          choices.map((choice) => choice.label)
+        )}
+      >
+        {choices.map((choice) => (
+          <option key={choice.value} value={choice.value}>
+            {choice.label}
+          </option>
+        ))}
+      </Select>
+    </Field>
   )
 }
 
@@ -1432,15 +1534,10 @@ function AgentsSection(): React.JSX.Element | null {
 
   return (
     <section className="settings-section" aria-labelledby="settings-agents">
-      <h2 className="settings-section__title" id="settings-agents" tabIndex={-1}>
-        <Marked text="Agents" />
-      </h2>
-      <div className="settings-group">
+      <SectionTitle id="agents" text="Agents" />
+      <Group title="Launch">
         {shown.row('Default agent') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-default-agent">
-              <Marked text="Default agent" />
-            </label>
+          <Field label="Default agent" htmlFor="settings-default-agent">
             <Select
               id="settings-default-agent"
               value={defaultAgent}
@@ -1455,7 +1552,7 @@ function AgentsSection(): React.JSX.Element | null {
                 </option>
               ))}
             </Select>
-          </div>
+          </Field>
         ) : null}
 
         {rows
@@ -1463,7 +1560,9 @@ function AgentsSection(): React.JSX.Element | null {
           .map((row) => (
             <AgentArguments key={row.kind} agent={row} />
           ))}
+      </Group>
 
+      <Group title="Worktrees">
         {shown.row('Trust New Worktrees') ? (
           <CheckField
             id="settings-trust-worktrees"
@@ -1482,8 +1581,8 @@ function AgentsSection(): React.JSX.Element | null {
             onChange={(warnAgentsAboutOverlaps) => runtime.change({ warnAgentsAboutOverlaps })}
           />
         ) : null}
-        {runtime.problem === null ? null : <p className="settings-error">{runtime.problem}</p>}
-      </div>
+      </Group>
+      {runtime.problem === null ? null : <p className="settings-error">{runtime.problem}</p>}
     </section>
   )
 }
@@ -1513,33 +1612,37 @@ function AgentArguments({ agent }: { agent: AgentRow }): React.JSX.Element {
 
   return (
     <div className="settings-field">
-      <label className="settings-field__label settings-agent" htmlFor={id}>
-        <AgentGlyph kind={agent.kind} decorative />
-        <Marked text={harnessName(agent.kind)} />
-      </label>
-      <input
-        id={id}
-        className="settings-field__input settings-field__input--command"
-        type="text"
-        value={draft}
-        placeholder={agent.command ?? ''}
-        title="Extra arguments"
-        autoComplete="off"
-        spellCheck={false}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.preventDefault()
-            commit()
-          }
-        }}
-        {...hitMark(shown, [stored])}
-      />
+      <div className="settings-field__text">
+        <label className="settings-field__label settings-agent" htmlFor={id}>
+          <AgentGlyph kind={agent.kind} decorative />
+          <Marked text={harnessName(agent.kind)} />
+        </label>
+      </div>
+      <div className="settings-field__control">
+        <input
+          id={id}
+          className="settings-input settings-input--command"
+          type="text"
+          value={draft}
+          placeholder={agent.command ?? ''}
+          title="Extra arguments"
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              commit()
+            }
+          }}
+          {...hitMark(shown, [stored])}
+        />
+      </div>
       {agent.command === null ? (
-        <p className="settings-launch settings-launch--missing">Not found</p>
+        <p className="settings-field__below settings-launch settings-launch--missing">Not found</p>
       ) : draft.trim() === '' ? null : (
-        <code className="settings-launch">
+        <code className="settings-field__below settings-launch">
           <Marked text={agentLaunchCommand(agent.command, draft)} />
         </code>
       )}
@@ -1555,58 +1658,70 @@ function AppearanceSection(): React.JSX.Element {
 
   return (
     <section className="settings-section" aria-labelledby="settings-appearance">
-      <h2 className="settings-section__title" id="settings-appearance" tabIndex={-1}>
-        <Marked text="Appearance" />
-      </h2>
-      <div className="settings-group">
-        <div className="settings-field">
-          <span className="settings-field__label">
-            <Marked text="Theme" />
-          </span>
-          <div className="settings-field__row">
-            <p className="settings-value">
-              <Marked text={value} />
-            </p>
-            <button
-              type="button"
-              className="button button--small"
-              onClick={() => showAppearance(true)}
-              {...hitMark(shown, THEME_WORDS)}
-            >
-              Change…
-            </button>
-          </div>
-        </div>
-      </div>
+      <SectionTitle id="appearance" text="Appearance" />
+      <Group>
+        <Field label="Theme" wide>
+          <p className="settings-value">
+            <Marked text={value} />
+          </p>
+          <button
+            type="button"
+            className="button button--small"
+            onClick={() => showAppearance(true)}
+            {...hitMark(shown, THEME_WORDS)}
+          >
+            Change…
+          </button>
+        </Field>
+      </Group>
     </section>
   )
 }
 
+/** One project at a time, picked above its settings; under a filter, every project holding a match. */
 function ProjectsSection({ projects }: { projects: readonly Project[] }): React.JSX.Element {
   const shown = useShown()
   const projectRows = useProjectRows(useContext(MachineContext).settings)
+  const [picked, pick] = useState<string | null>(null)
+  const filtering = shown.query.trim() !== ''
   const named = (project: Project): Shown => {
     const own = shownUnder(project.name, shown.query, projectRows(project))
     return shown.whole ? { ...own, whole: true, row: () => true } : own
   }
+  const current = projects.find((project) => project.id === picked) ?? projects[0]
+  const listed = filtering
+    ? projects.filter(
+        (project) => named(project).whole || projectRows(project).some((row) => rowMatches(row, shown.query))
+      )
+    : projects.filter((project) => project === current)
   return (
     <section className="settings-section" aria-labelledby="settings-projects">
-      <h2 className="settings-section__title" id="settings-projects" tabIndex={-1}>
-        <Marked text="Projects" />
-      </h2>
+      <SectionTitle id="projects" text="Projects" />
       {projects.length === 0 ? (
-        <div className="settings-group">
+        <Group>
           <p className="settings-note">No repositories yet</p>
+        </Group>
+      ) : null}
+      {!filtering && projects.length > 1 ? (
+        <div className="settings-picker" role="group" aria-label="Project">
+          {projects.map((project) => (
+            <button
+              key={project.id}
+              type="button"
+              className="settings-picker__item"
+              aria-pressed={project === current}
+              onClick={() => pick(project.id)}
+            >
+              {project.name}
+            </button>
+          ))}
         </div>
-      ) : (
-        projects
-          .filter((project) => named(project).whole || projectRows(project).some((row) => rowMatches(row, shown.query)))
-          .map((project) => (
-            <ShownContext.Provider key={project.id} value={named(project)}>
-              <ProjectBlock project={project} />
-            </ShownContext.Provider>
-          ))
-      )}
+      ) : null}
+      {listed.map((project) => (
+        <ShownContext.Provider key={project.id} value={named(project)}>
+          <ProjectBlock project={project} />
+        </ShownContext.Provider>
+      ))}
     </section>
   )
 }
@@ -1617,15 +1732,13 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
   const shown = useShown()
 
   return (
-    <article className="settings-group settings-project">
-      <div className="settings-row">
+    <article className="settings-project">
+      <header className="settings-project__head">
         <div className="settings-project__identity">
           <h3 className="settings-project__name">
             <Marked text={project.name} />
           </h3>
-          <p className="settings-project__path">
-            <BreakAtSlashes text={project.path} />
-          </p>
+          <PathText path={project.path} className="settings-project__path" />
         </div>
         <div className="settings-actions">
           <button type="button" className="button button--small" onClick={() => void saveProjectSettings(project.id)}>
@@ -1639,15 +1752,21 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
             Reveal in Finder
           </button>
         </div>
-      </div>
+      </header>
       {project.repositoryProblem === undefined ? null : <p className="settings-warning">{project.repositoryProblem}</p>}
 
-      {shown.row('Start new worktrees from') ? <StartPoint project={project} /> : null}
-      <ProjectWorktrees project={project} />
-      {shown.row('Fetch in Background') ? <FetchInBackground project={project} /> : null}
-      <CarriedPaths project={project} />
-      {shown.row('Open checkouts in') ? <EditorCommand editorKey={project.id} label="Open checkouts in" /> : null}
-      {shown.row('Relay') ? <RelayBlock project={project} /> : null}
+      <Group title="Worktrees">
+        {shown.row('Start new worktrees from') ? <StartPoint project={project} /> : null}
+        <ProjectWorktrees project={project} />
+        {shown.row('Fetch in Background') ? <FetchInBackground project={project} /> : null}
+      </Group>
+      <Group title="Files & commands">
+        <CarriedPaths project={project} />
+      </Group>
+      <Group title="Open">
+        {shown.row('Open checkouts in') ? <EditorCommand editorKey={project.id} label="Open checkouts in" /> : null}
+        {shown.row('Relay') ? <RelayBlock project={project} /> : null}
+      </Group>
     </article>
   )
 }
@@ -1718,65 +1837,59 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
   const id = `settings-start-point-${project.id}`
 
   return (
-    <div className="settings-field">
+    <Field
+      label="Start new worktrees from"
+      htmlFor={draft === null ? undefined : id}
+      source={
+        <SettingSource
+          local={stored || undefined}
+          repository={shared}
+          onReset={() => setStartPointDefault(project.id, null)}
+        />
+      }
+    >
       {draft === null ? (
-        <span className="settings-field__label">
-          <Marked text="Start new worktrees from" />
-        </span>
-      ) : (
-        <label className="settings-field__label" htmlFor={id}>
-          Start new worktrees from
-        </label>
-      )}
-      <div className="settings-field__row">
-        {draft === null ? (
-          <>
-            <code className="settings-value settings-value--mono">
-              <Marked text={applied} />
-            </code>
-            <button type="button" className="button button--small" onClick={() => setDraft(applied)}>
-              Change
+        <>
+          <code className="settings-value settings-value--mono">
+            <Marked text={applied} />
+          </code>
+          {stored.length === 0 || shared !== undefined ? null : (
+            <button
+              type="button"
+              className="button button--small"
+              onClick={() => setStartPointDefault(project.id, null)}
+            >
+              Use {project.baseRef}
             </button>
-            {stored.length === 0 || shared !== undefined ? null : (
-              <button
-                type="button"
-                className="button button--small"
-                onClick={() => setStartPointDefault(project.id, null)}
-              >
-                Use {project.baseRef}
-              </button>
-            )}
-          </>
-        ) : (
-          <input
-            id={id}
-            className="settings-field__input"
-            type="text"
-            value={draft}
-            autoComplete="off"
-            spellCheck={false}
-            autoFocus
-            data-own-escape
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={commit}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                commit()
-              } else if (event.key === 'Escape') {
-                event.preventDefault()
-                setDraft(null)
-              }
-            }}
-          />
-        )}
-      </div>
-      <SettingSource
-        local={stored || undefined}
-        repository={shared}
-        onReset={() => setStartPointDefault(project.id, null)}
-      />
-    </div>
+          )}
+          <button type="button" className="button button--small" onClick={() => setDraft(applied)}>
+            Change
+          </button>
+        </>
+      ) : (
+        <input
+          id={id}
+          className="settings-input"
+          type="text"
+          value={draft}
+          autoComplete="off"
+          spellCheck={false}
+          autoFocus
+          data-own-escape
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault()
+              commit()
+            } else if (event.key === 'Escape') {
+              event.preventDefault()
+              setDraft(null)
+            }
+          }}
+        />
+      )}
+    </Field>
   )
 }
 
@@ -1801,7 +1914,7 @@ function SettingSource({
         {source === 'local' ? 'This Mac' : 'Repository'}
       </span>
       {source === 'local' ? (
-        <button type="button" className="button button--small" onClick={onReset}>
+        <button type="button" className="settings-source__reset" onClick={onReset}>
           Reset
         </button>
       ) : null}
@@ -1914,13 +2027,14 @@ function CommandField({
   }
 
   return (
-    <div className="settings-field">
-      <label className="settings-field__label" htmlFor={id}>
-        <Marked text={label} />
-      </label>
+    <Field
+      label={label}
+      htmlFor={id}
+      source={<SettingSource local={local} repository={shared} onReset={() => save('')} />}
+    >
       <input
         id={id}
-        className="settings-field__input"
+        className="settings-input"
         type="text"
         value={draft}
         placeholder={detected === undefined ? 'None' : `None · ${detected} detected`}
@@ -1937,8 +2051,7 @@ function CommandField({
           }
         }}
       />
-      <SettingSource local={local} repository={shared} onReset={() => save('')} />
-    </div>
+    </Field>
   )
 }
 
@@ -1983,14 +2096,16 @@ function PathList({
   const fieldId = `settings-${id}-paths-${project.id}`
 
   return (
-    <div className="settings-field">
-      <label className="settings-field__label" htmlFor={fieldId}>
-        <Marked text={label} />
-      </label>
+    <Field
+      label={label}
+      htmlFor={fieldId}
+      hint="One per line"
+      source={<SettingSource local={paths} repository={repository} onReset={() => save([])} />}
+    >
       <textarea
         id={fieldId}
-        className="settings-field__input settings-field__input--lines"
-        rows={3}
+        className="settings-input settings-input--lines"
+        rows={2}
         value={draft}
         placeholder="None"
         title={`One per line, e.g. ${examples}`}
@@ -2000,8 +2115,7 @@ function PathList({
         onChange={(event) => setDraft(event.target.value)}
         onBlur={commit}
       />
-      <SettingSource local={paths} repository={repository} onReset={() => save([])} />
-    </div>
+    </Field>
   )
 }
 
@@ -2037,11 +2151,8 @@ function EditorCommand({ editorKey, label }: { editorKey: string; label: string 
   const id = `settings-editor-${editorKey === ANY_PROJECT ? 'default' : editorKey}`
 
   return (
-    <div className="settings-field">
-      <label className="settings-field__label" htmlFor={id}>
-        <Marked text={label} />
-      </label>
-      <div className="settings-field__row">
+    <Field label={label} htmlFor={id}>
+      <div className="settings-stack">
         <Select
           id={id}
           value={other ? OTHER_EDITOR : stored}
@@ -2063,7 +2174,7 @@ function EditorCommand({ editorKey, label }: { editorKey: string; label: string 
         </Select>
         {other ? (
           <input
-            className="settings-field__input"
+            className="settings-input"
             type="text"
             aria-label="Editor command"
             value={draft}
@@ -2082,7 +2193,7 @@ function EditorCommand({ editorKey, label }: { editorKey: string; label: string 
           />
         ) : null}
       </div>
-    </div>
+    </Field>
   )
 }
 
@@ -2102,21 +2213,26 @@ function RelayBlock({ project }: { project: Project }): React.JSX.Element {
   const panel = relayPanel(relay)
 
   return (
-    <div className="settings-field settings-relay">
-      <h4 className="settings-field__label">
-        <Marked text="Relay" />
-      </h4>
-      <p className={panel.empty ? 'settings-fact settings-fact--none' : 'settings-fact'}>
+    <Field
+      label="Relay"
+      heading
+      wide
+      below={
+        panel.detail || panel.override ? (
+          <>
+            {panel.detail ? <p className="settings-note">{panel.detail}</p> : null}
+            {panel.override ? <p className="settings-warning">{panel.override}</p> : null}
+          </>
+        ) : null
+      }
+    >
+      <p className={panel.empty ? 'settings-fact settings-fact--none' : 'settings-fact settings-fact--value'}>
         <Marked text={panel.headline} />
       </p>
-      {panel.detail ? <p className="settings-note">{panel.detail}</p> : null}
-      {panel.override ? <p className="settings-warning">{panel.override}</p> : null}
-      <div className="settings-actions">
-        <button type="button" className="button button--small" onClick={() => openTeamwork(project.id)}>
-          Open Teamwork
-        </button>
-      </div>
-    </div>
+      <button type="button" className="button button--small" onClick={() => openTeamwork(project.id)}>
+        Open Teamwork
+      </button>
+    </Field>
   )
 }
 

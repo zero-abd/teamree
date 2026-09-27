@@ -236,6 +236,9 @@ async function checkWindowSurfaces(ask) {
     }
     await waitFor(() => heading(title), `pressing ${label} did not put the ${title} surface on screen`)
     await checkContrast(ask, title)
+    // Settings has the window to itself, so the next surface is reached from the panes, as a person would.
+    await press('Back to the panes')
+    await waitFor(() => ask(`!document.querySelector('.page__close')`), `closing ${title} left it on screen`)
   }
 }
 

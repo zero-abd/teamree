@@ -4,6 +4,7 @@
 import type { AddonStatus } from '@shared/contextProvider'
 import type { AgentKind, CliStatus, InstalledAgent, RelaySetting, UpdateState } from '@shared/entities'
 import { HARNESSES } from '../agents/harnesses'
+import type { IconName } from '../icons/Icon'
 import { cliPanel, leavesLinkAlone } from '../dialogs/cliInstallModel'
 import { sinceLabel } from '../sidebar/agentRows'
 import { couldNotCheck } from '../updates/updateNotice'
@@ -139,21 +140,21 @@ export function cliLine(status: CliStatus | null): CliLine {
   }
 }
 
-/** The page's sections in order. */
+/** The page's sections in order, each under its group in the section list. */
 export const SETTINGS_SECTIONS = [
-  { id: 'general', label: 'General' },
-  { id: 'agents', label: 'Agents' },
-  { id: 'projects', label: 'Projects' },
-  { id: 'git', label: 'Git' },
-  { id: 'panes', label: 'Panes' },
-  { id: 'notices', label: 'Notifications' },
-  { id: 'teamwork', label: 'Teamwork' },
-  { id: 'appearance', label: 'Appearance' },
-  { id: 'shortcuts', label: 'Shortcuts' },
-  { id: 'addons', label: 'Add-ons' },
-  { id: 'updates', label: 'Updates' },
-  { id: 'cli', label: 'CLI' }
-] as const
+  { id: 'general', label: 'General', group: 'Workspace', icon: 'settings' },
+  { id: 'agents', label: 'Agents', group: 'Workspace', icon: 'agent' },
+  { id: 'projects', label: 'Projects', group: 'Workspace', icon: 'folder' },
+  { id: 'git', label: 'Git', group: 'Workspace', icon: 'branch' },
+  { id: 'panes', label: 'Panes', group: 'Workspace', icon: 'split-right' },
+  { id: 'notices', label: 'Notifications', group: 'App', icon: 'bell' },
+  { id: 'teamwork', label: 'Teamwork', group: 'App', icon: 'team' },
+  { id: 'appearance', label: 'Appearance', group: 'App', icon: 'appearance' },
+  { id: 'shortcuts', label: 'Shortcuts', group: 'App', icon: 'keyboard' },
+  { id: 'addons', label: 'Add-ons', group: 'System', icon: 'plug' },
+  { id: 'updates', label: 'Updates', group: 'System', icon: 'download' },
+  { id: 'cli', label: 'CLI', group: 'System', icon: 'terminal' }
+] as const satisfies readonly { id: string; label: string; group: string; icon: IconName }[]
 
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id']
 

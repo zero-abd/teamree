@@ -10,6 +10,7 @@ import { onRegionRequest, type Region } from '../shell/regions'
 import { showPane } from '../terminal/shownPanes'
 import { resolvePlatformModifier } from './platformModifier'
 import { commandForEvent } from './workspaceShortcuts'
+import { useSettingsFind } from '../settings/settingsFind'
 
 const EMPTY: CommandState = {
   consent: {},
@@ -450,6 +451,19 @@ describe('running a command', () => {
       expect(store[method], command).toHaveBeenCalledExactlyOnceWith(...args)
       // Nothing else moved.
       expect(callCount(store), command).toBe(1)
+    }
+  })
+
+  // Settings covers the panes, so the find chord searches the settings instead.
+  it('finds in Settings while it is open, with or without a pane behind it', () => {
+    for (const state of [EMPTY, WORKING]) {
+      const open = { ...state, settingsOpen: true }
+      expect(isCommandAvailable('find-in-pane', open)).toBe(true)
+      const store = workspace(open)
+      const before = useSettingsFind.getState().asked
+      runWorkspaceCommand('find-in-pane', store)
+      expect(useSettingsFind.getState().asked).toBe(before + 1)
+      expect(callCount(store)).toBe(0)
     }
   })
 

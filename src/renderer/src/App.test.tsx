@@ -351,4 +351,18 @@ describe('the shell itself', () => {
     const { container } = render(<App />)
     expect(container.firstElementChild?.classList.contains('shell--collapsed')).toBe(true)
   })
+
+  // Settings has its own section list, so it takes the window; the sidebar is back once it closes.
+  it('gives the whole window to Settings, and keeps the sidebar for every other page', () => {
+    seed({ settingsOpen: true })
+    const { container, unmount } = render(<App />)
+    expect(screen.queryByTestId('sidebar')).toBeNull()
+    expect(container.firstElementChild?.classList.contains('shell--collapsed')).toBe(true)
+    expect(useWorkspaceStore.getState().sidebarVisible).toBe(true)
+    unmount()
+
+    seed({ settingsOpen: true, dashboardOpen: true })
+    render(<App />)
+    expect(screen.getByTestId('sidebar')).toBeTruthy()
+  })
 })
