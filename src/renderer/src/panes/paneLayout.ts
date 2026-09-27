@@ -200,15 +200,15 @@ export function placeFileColumn(
   return tries.find((tree) => leavesRoom(root, tree, box, min)) ?? null
 }
 
-/** The leaf `id` and `added` split along `direction`, `added` after it with `share`; flattened as the runtime stores it. */
+/** The group holding `id` and `added` split along `direction`, `added` after it with `share`; flattened as the runtime stores it. */
 function inPlaceOf(root: PaneNode, id: string, direction: 'row' | 'column', added: PaneNode, share: number): PaneNode {
   const walk = (node: PaneNode): PaneNode => {
-    if (node.kind === 'leaf') {
-      return node.terminalId === id
+    if (node.kind === 'leaf' || isFileColumn(node)) {
+      return hasTerminal(node, id)
         ? { kind: 'split', direction, sizes: [1 - share, share], children: [node, added] }
         : node
     }
-    return isFileColumn(node) ? node : { ...node, children: node.children.map(walk) }
+    return { ...node, children: node.children.map(walk) }
   }
   return flatten(walk(root))
 }

@@ -748,6 +748,10 @@ async function checkGroupStrips(ask, call, worktreeId) {
   const down = await call('terminal.split', { terminalId: right.result.terminal.id, direction: 'column' })
   if (down.ok !== true) return failures.push(`could not split a pane down: ${JSON.stringify(down.error ?? down)}`)
   await expect(start + 2, 'a pane split down under it')
+  // Back as they were: more panes than fit fold the right panel away, and the checks after this need it.
+  for (const pane of [down.result.terminal.id, right.result.terminal.id])
+    await call('terminal.close', { terminalId: pane })
+  await expect(start, 'the panes closed again')
 }
 
 /** Appearance opens over the panes: the workspace, the window's scroll and the pty's size hold still. */

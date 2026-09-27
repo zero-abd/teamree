@@ -369,6 +369,19 @@ describe('where a new file column goes', () => {
     expect(rectOf(placed, 'f').height).toBe(box.height)
   })
 
+  it('goes beside a group of terminal tabs, never among them', () => {
+    const tabs: PaneNode = {
+      kind: 'split',
+      direction: 'column',
+      sizes: [0.5, 0.5],
+      children: [leaf('a'), leaf('b')],
+      tabs: true,
+      shown: 'b'
+    }
+    const placed = placeFileColumn(tabs, column, box, min, isAgent)
+    expect(placed).toMatchObject({ kind: 'split', direction: 'row', children: [tabs, column] })
+  })
+
   it('goes beside the largest pane, not the first', () => {
     const root = split('row', [0.3, 0.7], leaf('zsh'), leaf('claude'))
     const placed = placeFileColumn(root, column, { width: 1600, height: 800 }, min, isAgent)
