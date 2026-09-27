@@ -560,7 +560,7 @@
   background: transparent;
   color: var(--fg);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
