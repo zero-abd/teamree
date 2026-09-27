@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createQuitSequence } from './quitSequence'
+import { EventEmitter } from 'node:events'
+import { createQuitSequence, quitOnSignals } from './quitSequence'
 
 /** A teardown that finishes when the test says so, and says whether it ran. */
 function pendingStop(): { stop: () => Promise<void>; calls: () => number; finish: () => void; fail: () => void } {
@@ -204,5 +205,30 @@ describe('asking the window about unsaved files first', () => {
     createQuitSequence({ stop, quit, mayQuit: async () => true })({ preventDefault: vi.fn() })
     await vi.waitFor(() => expect(quit).toHaveBeenCalledTimes(1))
     expect(stop).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('signals', () => {
+  const signals = ['SIGTERM', 'SIGINT', 'SIGHUP'] as const
+
+  function wired(): { target: EventEmitter; quit: ReturnType<typeof vi.fn>; app: EventEmitter } {
+    const target = new EventEmitter()
+    const app = new EventEmitter()
+    const quit = vi.fn()
+    quitOnSignals(target, quit, (run) => app.once('quit', run))
+    return { target, quit, app }
+  }
+
+  it('quits on each of them while the app is running', () => {
+    const { target, quit } = wired()
+    for (const signal of signals) target.emit(signal)
+    expect(quit).toHaveBeenCalledTimes(3)
+  })
+
+  it('leaves them to the OS once the app has quit, so a process stuck after quit still dies to SIGTERM', () => {
+    const { target, quit, app } = wired()
+    app.emit('quit')
+    for (const signal of signals) expect(target.listenerCount(signal)).toBe(0)
+    expect(quit).not.toHaveBeenCalled()
   })
 })

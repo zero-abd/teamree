@@ -35,7 +35,7 @@ import { installNativeAppearance, windowBackground } from './nativeAppearance'
 import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
 import { APP_VERSION } from './appVersion'
 import { askAboutAgents, busyAgents, whenIdle, type BusyAgents } from './quitAgents'
-import { createQuitSequence } from './quitSequence'
+import { createQuitSequence, quitOnSignals } from './quitSequence'
 import { installUnsavedFiles, type UnsavedFiles } from './unsavedFiles'
 import { registerOpenPathHandler } from './reveal/openPath'
 import { registerRevealHandler } from './reveal/revealPath'
@@ -290,7 +290,7 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
   const launched = app.whenReady().then(async () => {
     // Electron turns these into a graceful quit, which would wait on a question nobody is there to
     // answer. After `ready`, because Electron installs its own handlers just before it.
-    for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) process.on(signal, quitWithoutAsking)
+    quitOnSignals(process, quitWithoutAsking, (run) => app.once('quit', run))
     // Before any window, or Electron's default menu binds Cmd+W to Close
     // Window ahead of the renderer (see appMenu.ts). Installed again once the
     // window has published its commands.
@@ -461,7 +461,7 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
     })
     // macOS only: the app already outlives its last window there, and the status item is how it is reached.
     if (runtime && process.platform === 'darwin') {
-      installMenuBarExtra({
+      const stopMenuBarExtra = installMenuBarExtra({
         runtime,
         notices,
         openWindow,
@@ -473,6 +473,8 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
         preload: PRELOAD,
         background: isBackgroundLaunch(process.env)
       })
+      // An open status item menu runs a nested AppKit loop no quit or exit ends; destroying the tray closes it.
+      app.once('quit', stopMenuBarExtra)
     }
   })
   // Almost nothing awaits `launched`; without this a failed launch is an unhandled rejection.

@@ -114,3 +114,22 @@ async function within(
     clearTimeout(expiry)
   }
 }
+
+const QUIT_SIGNALS = ['SIGTERM', 'SIGINT', 'SIGHUP'] as const
+
+/** The part of `process` that {@link quitOnSignals} listens on. */
+export type SignalSource = {
+  on: (signal: NodeJS.Signals, listener: () => void) => unknown
+  removeListener: (signal: NodeJS.Signals, listener: () => void) => unknown
+}
+
+/**
+ * Quits on SIGTERM, SIGINT and SIGHUP until `onQuit` runs, then leaves them to the OS: no JS runs
+ * after the app's `quit`, so a listener still installed would swallow every later signal.
+ */
+export function quitOnSignals(source: SignalSource, quit: () => void, onQuit: (run: () => void) => void): void {
+  for (const signal of QUIT_SIGNALS) source.on(signal, quit)
+  onQuit(() => {
+    for (const signal of QUIT_SIGNALS) source.removeListener(signal, quit)
+  })
+}

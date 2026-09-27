@@ -56,16 +56,24 @@ const plan = displayPlan(electron, [
 if (plan.note) console.log(`run-smoke: ${plan.note}`)
 if (plan.advice) console.error(`run-smoke: ${plan.advice}`)
 
+// A quit that never ends is a failure, not a hung gate. SIGKILL: a stuck app may ignore SIGTERM.
+const QUIT_DEADLINE_MS = 180_000
 // Worktrees under the throwaway root, not `~/.teamree/worktrees/smoke/` where the real app lists them.
 const result = spawnSync(plan.command, plan.args, {
   stdio: 'inherit',
-  env: smokeEnv(process.env, join(smokeRoot, 'worktrees'))
+  env: smokeEnv(process.env, join(smokeRoot, 'worktrees')),
+  timeout: QUIT_DEADLINE_MS,
+  killSignal: 'SIGKILL'
 })
 
 rmSync(peerBundle, { recursive: true, force: true })
 rmSync(smokeRoot, { recursive: true, force: true })
 rmSync(smokeRoot, { recursive: true, force: true })
 
+if (result.error?.code === 'ETIMEDOUT') {
+  console.error(`run-smoke: Electron had not exited after ${QUIT_DEADLINE_MS}ms, so it was killed`)
+  process.exit(1)
+}
 if (result.error) {
   console.error(`run-smoke: could not launch Electron: ${result.error.message}`)
   process.exit(1)
