@@ -34,6 +34,24 @@ export function formatBytes(bytes: number): string {
   return `${trim(megabytes, megabytes < 10 ? 1 : 0)} MB`
 }
 
+const GB = 1024 * MB
+
+/** The rail's total: GB to one decimal at any size, so the figure holds its width between samples. */
+export function formatRailMemory(bytes: number): string {
+  return `${(bytes / GB).toFixed(1)} GB`
+}
+
+/** Past these the rail's figure steps up to full ink, then to the danger tone. */
+export const HIGH_MEMORY_BYTES = 8 * GB
+export const HEAVY_MEMORY_BYTES = 16 * GB
+
+export type MemoryLevel = 'calm' | 'high' | 'heavy'
+
+export function memoryLevel(bytes: number): MemoryLevel {
+  if (bytes >= HEAVY_MEMORY_BYTES) return 'heavy'
+  return bytes >= HIGH_MEMORY_BYTES ? 'high' : 'calm'
+}
+
 function trim(value: number, decimals: number): string {
   return String(Number(value.toFixed(decimals)))
 }

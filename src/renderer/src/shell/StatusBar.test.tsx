@@ -4,7 +4,7 @@
 // memory, the git line, the pane count, and how many panes anywhere are asking or failed.
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Project, SystemResources, Terminal, Worktree, WorktreeStatus } from '@shared/entities'
 
 const MB = 1024 * 1024
@@ -36,12 +36,14 @@ const resources: SystemResources = {
 
 const calls: Array<{ method: string; params: unknown }> = []
 let answer: SystemResources = resources
+/** A `ps` that never answers, for the overlap check. */
+let pending = false
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
     call: (method: string, params: unknown) => {
       calls.push({ method, params })
-      if (method === 'system.resources') return Promise.resolve(answer)
+      if (method === 'system.resources') return pending ? new Promise(() => {}) : Promise.resolve(answer)
       if (method === 'system.kill') return Promise.resolve({ signalled: true, pid: 601, group: false })
       return new Promise(() => {})
     },
@@ -126,6 +128,7 @@ beforeEach(() => {
   revealPane.mockClear()
   calls.length = 0
   answer = resources
+  pending = false
   seed()
 })
 
@@ -349,18 +352,48 @@ describe('the runtime', () => {
 })
 
 describe('keep awake', () => {
-  it('is an icon, a word and the mode, follows the agents by default, and offers the three modes upward', () => {
+  it('is the cup and the mode in a word, follows the agents by default, and offers the three modes upward', () => {
     mount()
-    const button = screen.getByRole('button', { name: 'Keep awake, agent' })
-    expect(button.querySelector('.statusbar__muted')?.textContent).toBe('awake')
-    expect(button.textContent).toBe('awakeagent')
-    expect(button.getAttribute('title')).toBe('Keep awake · Agent')
+    const button = screen.getByRole('button', { name: 'Keep awake, Agents' })
+    expect(button.textContent).toBe('Agents')
+    expect(button.getAttribute('title')).toBe('Keep awake · while agents work')
     expect(button.querySelector('svg')).toBeTruthy()
     expect(button.querySelector('.statusbar__dot')).toBeNull()
     fireEvent.click(button)
     const radios = screen.getAllByRole('radio')
     expect(radios.map((radio) => radio.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false'])
     expect(screen.getByRole('dialog', { name: 'Keep awake' })).toBeTruthy()
+  })
+
+  it.each([
+    ['on', 'On'],
+    ['off', 'Off']
+  ])('says %s as %s', (keepAwake, word) => {
+    seed({ keepAwake })
+    mount()
+    expect(screen.getByRole('button', { name: `Keep awake, ${word}` }).textContent).toBe(word)
+  })
+
+  it('is tinted while it holds the machine awake and dimmed while off', () => {
+    const tone = (): string => {
+      const button = screen.getByRole('button', { name: /Keep awake/ })
+      if (button.classList.contains('statusbar__awake--holding')) return 'holding'
+      if (button.classList.contains('statusbar__awake--off')) return 'off'
+      return 'plain'
+    }
+    seed({ keepAwake: 'off' })
+    const off = render(<StatusBar />)
+    expect(tone()).toBe('off')
+    off.unmount()
+
+    seed({ keepAwake: 'agent' })
+    const idle = render(<StatusBar />)
+    expect(tone()).toBe('plain')
+    idle.unmount()
+
+    seed({ keepAwake: 'agent', terminals: { a: pane('a', 'w1', { agent: 'claude', busy: true }) } })
+    mount()
+    expect(tone()).toBe('holding')
   })
 
   it('changes the mode and remembers it', () => {
@@ -422,21 +455,33 @@ describe('resources', () => {
     })
   }
 
-  it('is an icon and a word, the total beside them once the app holds more than 2 GB', async () => {
-    mount()
-    await flush()
-    const button = screen.getByRole('button', { name: /Resources/ })
-    expect(button.textContent).toBe('mem')
-    expect(button.querySelector('svg')).toBeTruthy()
-    cleanup()
+  const GB = 1024 * MB
+  const memory = (): HTMLElement => screen.getByRole('button', { name: /^Memory/ })
 
-    answer = { ...resources, rss: 2.5 * 1024 * MB }
+  it('is the live total in GB, and says what it counts on the hover', async () => {
     mount()
     await flush()
-    expect(screen.getByRole('button', { name: /Resources/ }).textContent).toBe('mem2.5 GB')
+    const button = memory()
+    expect(button.textContent).toBe('0.5 GB')
+    expect(button.getAttribute('aria-label')).toBe('Memory, 0.5 GB')
+    expect(button.getAttribute('title')).toBe('Memory · teamree + agents + shells')
+    expect(button.querySelector('svg')).toBeNull()
   })
 
-  it('shows the total on the button while the popover is open, and the tree in the popover', async () => {
+  it.each([
+    [7.9, 'calm'],
+    [8.2, 'high'],
+    [17, 'heavy']
+  ])('at %s GB is %s', async (gigabytes, level) => {
+    answer = { ...resources, rss: gigabytes * GB }
+    mount()
+    await flush()
+    const figure = memory().querySelector('.statusbar__memory')
+    expect(figure?.classList.contains('statusbar__memory--high')).toBe(level === 'high')
+    expect(figure?.classList.contains('statusbar__memory--heavy')).toBe(level === 'heavy')
+  })
+
+  it('shows the tree in the popover, cpu included', async () => {
     seed({
       terminals: {
         t_1: {
@@ -456,10 +501,10 @@ describe('resources', () => {
     })
     mount()
     await flush()
-    const button = screen.getByRole('button', { name: /Resources/ })
+    const button = memory()
     fireEvent.click(button)
     await flush()
-    expect(button.textContent).toBe('mem560 MB')
+    expect(button.textContent).toBe('0.5 GB')
     const popover = screen.getByRole('dialog', { name: 'Resources' })
     expect(popover.textContent).toContain('105.2%')
     expect(popover.textContent).toContain('Rewrite the pager')
@@ -469,10 +514,66 @@ describe('resources', () => {
     expect(popover.textContent).toMatch(/teamree.*497 MB/)
   })
 
+  describe('the cadence', () => {
+    const sampled = (): number => calls.filter((call) => call.method === 'system.resources').length
+    const advance = async (ms: number): Promise<void> => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms)
+      })
+    }
+    const visibility = (state: DocumentVisibilityState): void => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+      document.dispatchEvent(new Event('visibilitychange'))
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    })
+
+    afterEach(() => {
+      visibility('visible')
+      vi.useRealTimers()
+    })
+
+    it('samples every two seconds with the popover closed, and the figure follows', async () => {
+      mount()
+      await flush()
+      expect(sampled()).toBe(1)
+      await advance(1_900)
+      expect(sampled()).toBe(1)
+      answer = { ...resources, rss: 2.4 * GB }
+      await advance(100)
+      expect(sampled()).toBe(2)
+      expect(memory().textContent).toBe('2.4 GB')
+      await advance(2_000)
+      expect(sampled()).toBe(3)
+    })
+
+    it('stops while the window is hidden and samples at once when it shows again', async () => {
+      mount()
+      await flush()
+      act(() => visibility('hidden'))
+      await advance(20_000)
+      expect(sampled()).toBe(1)
+      act(() => visibility('visible'))
+      await flush()
+      expect(sampled()).toBe(2)
+      await advance(2_000)
+      expect(sampled()).toBe(3)
+    })
+
+    it('does not stack a second sample on one still running', async () => {
+      pending = true
+      mount()
+      await advance(10_000)
+      expect(sampled()).toBe(1)
+    })
+  })
+
   it('opens a pane to its processes and kills one only on the second press', async () => {
     mount()
     await flush()
-    fireEvent.click(screen.getByRole('button', { name: /Resources/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Memory/ }))
     await flush()
     fireEvent.click(screen.getByRole('button', { name: /Show processes of t_1/ }))
     const row = screen.getByText('node').closest('li')
@@ -491,7 +592,7 @@ describe('resources', () => {
   it('never offers to kill the app itself', async () => {
     mount()
     await flush()
-    fireEvent.click(screen.getByRole('button', { name: /Resources/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Memory/ }))
     await flush()
     expect(screen.queryByRole('button', { name: 'Kill 500' })).toBeNull()
   })
@@ -499,7 +600,7 @@ describe('resources', () => {
   it('samples again on Refresh', async () => {
     mount()
     await flush()
-    fireEvent.click(screen.getByRole('button', { name: /Resources/ }))
+    fireEvent.click(screen.getByRole('button', { name: /^Memory/ }))
     await flush()
     const before = calls.filter((call) => call.method === 'system.resources').length
     fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))

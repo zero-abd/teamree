@@ -4,7 +4,15 @@
 
 import { describe, expect, it } from 'vitest'
 import type { SystemResources, Terminal, Worktree } from '@shared/entities'
-import { formatBytes, formatCpu, groupByWorktree, recordSample, SPARKLINE_SAMPLES } from './resourceSamples'
+import {
+  formatBytes,
+  formatCpu,
+  formatRailMemory,
+  groupByWorktree,
+  memoryLevel,
+  recordSample,
+  SPARKLINE_SAMPLES
+} from './resourceSamples'
 
 const MB = 1024 * 1024
 
@@ -61,9 +69,30 @@ describe('formatting', () => {
     expect(formatBytes(0)).toBe('0 MB')
   })
 
+  // One decimal in GB whatever the size, so the rail's figure keeps its width from tick to tick.
+  it('says the rail total in GB to one decimal', () => {
+    expect(formatRailMemory(2.44 * 1024 * MB)).toBe('2.4 GB')
+    expect(formatRailMemory(560 * MB)).toBe('0.5 GB')
+    expect(formatRailMemory(2 * 1024 * MB)).toBe('2.0 GB')
+    expect(formatRailMemory(0)).toBe('0.0 GB')
+    expect(formatRailMemory(12.96 * 1024 * MB)).toBe('13.0 GB')
+  })
+
   it('says cpu to one decimal', () => {
     expect(formatCpu(0)).toBe('0.0%')
     expect(formatCpu(102.94)).toBe('102.9%')
+  })
+})
+
+describe('memoryLevel', () => {
+  const GB = 1024 * MB
+
+  it('is calm below 8 GB, high from 8 GB and heavy from 16 GB', () => {
+    expect(memoryLevel(0)).toBe('calm')
+    expect(memoryLevel(8 * GB - 1)).toBe('calm')
+    expect(memoryLevel(8 * GB)).toBe('high')
+    expect(memoryLevel(16 * GB - 1)).toBe('high')
+    expect(memoryLevel(16 * GB)).toBe('heavy')
   })
 })
 

@@ -1,5 +1,5 @@
-// What everything this app spawned costs: an icon and `mem` on the rail (the total too past 2 GB or while open),
-// and per-pane CPU and memory in the panel with a Kill per row. Sampled slowly while closed, every 2s open.
+// What everything this app spawned costs: the memory total live on the rail, per-pane CPU and memory in the
+// panel with a Kill per row. One sample every 2s while the window shows, none while it is hidden.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ResourceProcess, SystemResources } from '@shared/entities'
@@ -9,18 +9,17 @@ import {
   APP_ROW,
   formatBytes,
   formatCpu,
+  formatRailMemory,
   groupByWorktree,
+  memoryLevel,
   recordSample,
   SPARKLINE_SAMPLES,
   type ResourceHistory
 } from './resourceSamples'
 import { StatusPopover } from './StatusPopover'
-import { Icon } from '../icons/Icon'
 
-export const OPEN_INTERVAL_MS = 2_000
-export const CLOSED_INTERVAL_MS = 10_000
-/** Below this the rail shows the icon alone: a number that is always there stops being read. */
-const RAIL_MEMORY_BYTES = 2 * 1024 * 1024 * 1024
+/** Between one answer and the next request, so a slow `ps` never has a second one stacked on it. */
+export const SAMPLE_INTERVAL_MS = 2_000
 /** How long a `Kill` stays armed before it goes back to being a `Kill`. */
 const CONFIRM_MS = 4_000
 
@@ -50,10 +49,31 @@ export function ResourcesControl(): React.JSX.Element {
 
   useEffect(() => {
     if (!ready) return
-    void refresh()
-    const timer = setInterval(() => void refresh(), open ? OPEN_INTERVAL_MS : CLOSED_INTERVAL_MS)
-    return () => clearInterval(timer)
-  }, [open, ready, refresh])
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let running = false
+    let stopped = false
+    const hidden = (): boolean => document.visibilityState === 'hidden'
+    const tick = async (): Promise<void> => {
+      timer = null
+      running = true
+      await refresh()
+      running = false
+      if (!stopped && !hidden()) timer = setTimeout(() => void tick(), SAMPLE_INTERVAL_MS)
+    }
+    const onVisibility = (): void => {
+      if (hidden()) {
+        if (timer !== null) clearTimeout(timer)
+        timer = null
+      } else if (timer === null && !running) void tick()
+    }
+    if (!hidden()) void tick()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      stopped = true
+      if (timer !== null) clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [ready, refresh])
 
   useEffect(
     () => () => {
@@ -120,7 +140,7 @@ export function ResourcesControl(): React.JSX.Element {
   )
 
   const groups = sample ? groupByWorktree(sample, worktrees, terminals) : []
-  const railMemory = sample !== null && (open || sample.rss >= RAIL_MEMORY_BYTES) ? formatBytes(sample.rss) : null
+  const total = sample === null ? null : formatRailMemory(sample.rss)
 
   return (
     <>
@@ -130,13 +150,13 @@ export function ResourcesControl(): React.JSX.Element {
         className={`statusbar__item statusbar__button${open ? ' statusbar__button--on' : ''}`}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`Resources${sample ? `, ${formatBytes(sample.rss)}` : ''}`}
-        title="Resources"
+        aria-label={total === null ? 'Memory' : `Memory, ${total}`}
+        title="Memory · teamree + agents + shells"
         onClick={() => (open ? close() : setOpen(true))}
       >
-        <Icon name="resources" size={14} />
-        <span className="statusbar__muted">mem</span>
-        {railMemory}
+        <span className={`statusbar__memory statusbar__memory--${sample === null ? 'calm' : memoryLevel(sample.rss)}`}>
+          {total ?? '… GB'}
+        </span>
       </button>
       {open ? (
         <StatusPopover label="Resources" anchor={button.current} onClose={close}>
