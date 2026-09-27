@@ -99,6 +99,8 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
     showPane: vi.fn(),
     toggleExpandedPane: vi.fn(),
     stepWorktree: vi.fn(),
+    stepHistory: vi.fn(),
+    openQuickNote: vi.fn(),
     revealPane: vi.fn(async () => {}),
     openPaneSearch: vi.fn(),
     openSearch: vi.fn(),
@@ -129,6 +131,17 @@ function callCount(store: Record<string, unknown>): number {
       (value): value is { mock: { calls: unknown[] } } => typeof value === 'function' && 'mock' in (value as object)
     )
     .reduce((total, fn) => total + fn.mock.calls.length, 0)
+}
+
+/** Visited w1, w2, w3 and gone back to w2: somewhere to go either way. */
+const MIDWAY_THROUGH_HISTORY: CommandState = {
+  ...WORKING,
+  worktrees: ['w1', 'w2', 'w3'].map((id) => ({ id, projectId: 'p1' })),
+  activeWorktreeId: 'w2',
+  visits: {
+    visits: ['w1', 'w2', 'w3'].map((worktreeId, at) => ({ worktreeId, paneId: null, at })),
+    index: 1
+  }
 }
 
 describe('what a window can be asked to do', () => {
@@ -255,6 +268,20 @@ describe('what a window can be asked to do', () => {
 })
 
 describe('why a command is unavailable', () => {
+  it('offers Go Back and Go Forward only where the history has a live worktree that way', () => {
+    expect(isCommandAvailable('worktree-back', MIDWAY_THROUGH_HISTORY)).toBe(true)
+    expect(isCommandAvailable('worktree-forward', MIDWAY_THROUGH_HISTORY)).toBe(true)
+    expect(whyUnavailable('worktree-back', WORKING)).toBe('nothing back')
+    const w1Gone = { ...MIDWAY_THROUGH_HISTORY, worktrees: MIDWAY_THROUGH_HISTORY.worktrees.slice(1) }
+    expect(isCommandAvailable('worktree-back', w1Gone)).toBe(false)
+    expect(whyUnavailable('worktree-forward', { ...w1Gone, worktrees: [] })).toBe('nothing forward')
+  })
+
+  it('offers Quick Note wherever there is a project to note in', () => {
+    expect(isCommandAvailable('quick-note', EMPTY)).toBe(false)
+    expect(isCommandAvailable('quick-note', { ...EMPTY, projects: [{ id: 'p1' }] })).toBe(true)
+  })
+
   it('names the reason in a few words, and nothing when it would run', () => {
     expect(whyUnavailable('save-file', WORKING)).toBe('nothing unsaved')
     expect(whyUnavailable('split-right', EMPTY)).toBe('no pane focused')
@@ -391,6 +418,9 @@ describe('running a command', () => {
       // One method with a direction argument, so the two chords undo each other.
       ['previous-worktree', 'stepWorktree', [-1]],
       ['next-worktree', 'stepWorktree', [1]],
+      ['worktree-back', 'stepHistory', [-1]],
+      ['worktree-forward', 'stepHistory', [1]],
+      ['quick-note', 'openQuickNote', []],
       ['open-palette', 'openDialog', [{ kind: 'palette' }]],
       ['go-to-file', 'openDialog', [{ kind: 'palette', mode: 'files' }]],
       ['find-in-pane', 'openPaneSearch', []],
@@ -411,7 +441,10 @@ describe('running a command', () => {
       // Only the walks need somewhere to go; the git pair has its own case below.
       const paneWalk = /^(focus|select)-(next|previous)-pane$/.test(command)
       const worktreeWalk = command === 'previous-worktree' || command === 'next-worktree'
-      const store = workspace(paneWalk ? TWO_PANES : worktreeWalk ? TWO_WORKTREES : WORKING)
+      const history = command === 'worktree-back' || command === 'worktree-forward'
+      const store = workspace(
+        paneWalk ? TWO_PANES : worktreeWalk ? TWO_WORKTREES : history ? MIDWAY_THROUGH_HISTORY : WORKING
+      )
       runWorkspaceCommand(command, store)
       expect(store[method], command).toHaveBeenCalledExactlyOnceWith(...args)
       // Nothing else moved.

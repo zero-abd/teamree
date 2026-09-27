@@ -32,6 +32,7 @@ const INVITATION_OPEN_CHANNEL = 'teamree:invitation:open'
 const QUICK_NOTE_CONTEXT_CHANNEL = 'teamree:quick-note:context'
 const QUICK_NOTE_SAVE_CHANNEL = 'teamree:quick-note:save'
 const QUICK_NOTE_CLOSE_CHANNEL = 'teamree:quick-note:close'
+const QUICK_NOTE_OPEN_CHANNEL = 'teamree:quick-note:open'
 // src/main/crashGuard/index.ts
 const MAIN_ERROR_CHANNEL = 'teamree:errors:main'
 const ERROR_REPORT_CHANNEL = 'teamree:errors:report'
@@ -221,8 +222,11 @@ const invitations = {
   }
 } as const
 
-/** The Quick Note panel's end; the main process answers only that panel. */
+/** The Quick Note panel's end; the main process answers only that panel, and `open` only a window. */
 const quickNote = {
+  open(): void {
+    ipcRenderer.send(QUICK_NOTE_OPEN_CHANNEL)
+  },
   context(): Promise<QuickNoteContext> {
     return ipcRenderer.invoke(QUICK_NOTE_CONTEXT_CHANNEL)
   },

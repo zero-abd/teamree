@@ -550,15 +550,53 @@ describe('the first screen', () => {
     expect(trailingOf('New Task…')).toBe('⌘N')
   })
 
-  it('leads with a command once it has been run from here, after a reopen too', () => {
+  it('heads Commands with a command once it has been run from here, after a reopen too', () => {
     const { unmount } = render(<CommandPalette modifier={MAC} mode="all" />)
     fireEvent.click(row('Install Command Line Tool'))
     unmount()
 
     mount()
-    expect(headers()[0]).toBe('Recent')
-    expect(labels()[0]).toBe('Install Command Line Tool')
+    const commands = labels().indexOf('Install Command Line Tool')
+    expect(rows()[commands]?.closest('li')?.querySelector('.palette__group')?.textContent).toBe('Commands')
     expect(labels().filter((label) => label === 'Install Command Line Tool')).toHaveLength(1)
+  })
+
+  it('opens on the worktree last left, with how long ago, so Enter goes back to it', () => {
+    void useWorkspaceStore.getState().openWorktree('w2')
+    void useWorkspaceStore.getState().openWorktree('w1')
+    mount()
+    expect(headers()[0]).toBe('Recent')
+    expect(labels()[0]).toBe('Fix the ruler')
+    expect(rows()[0]?.querySelector('.palette__age')?.textContent).toBe('now')
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
+    expect(useWorkspaceStore.getState().activeWorktreeId).toBe('w2')
+  })
+
+  it('lists the agents running in other worktrees, and goes to one', () => {
+    const revealPane = vi.fn(async () => {})
+    useWorkspaceStore.setState({
+      revealPane,
+      terminals: {
+        t9: {
+          id: 't9',
+          worktreeId: 'w2',
+          title: 'claude',
+          cwd: '/',
+          shell: '/bin/zsh',
+          cols: 80,
+          rows: 24,
+          running: true,
+          busy: true,
+          agent: 'claude',
+          lastOutputAt: Date.now()
+        }
+      }
+    })
+    mount()
+    expect(headers()).toContain('Panes')
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'claude' } })
+    fireEvent.click(row('Claude Code · Fix the ruler'))
+    expect(revealPane).toHaveBeenCalledExactlyOnceWith('w2', 't9')
   })
 
   it('collapses to one ranked list once something is typed', () => {

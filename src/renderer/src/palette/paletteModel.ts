@@ -15,6 +15,7 @@ import {
   type WorktreeStatus
 } from '@shared/entities'
 import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
+import { activityOf } from '@shared/paneActivity'
 import { parseInvitation } from '@shared/invitation'
 import type { SharedNoteSummary } from '@shared/sharedNote'
 import { APPEARANCE_MODES, BUILT_IN_THEMES, type AppearanceMode } from '@shared/theme'
@@ -25,7 +26,18 @@ import { runName, siblingRuns } from '../compare/siblingRuns'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import type { DiffOptions } from '../state/preferences'
 import { MENU_ORDER, menuLabel, type PanelState } from '../menu/menuBar'
-import { agentRows, agoLabel, TONE_LABEL, worktreeTone, type DotTone } from '../sidebar/agentRows'
+import {
+  agentRows,
+  agoLabel,
+  dotTone,
+  paneAgent,
+  paneLabel,
+  paneNamesById,
+  sinceLabel,
+  TONE_LABEL,
+  worktreeTone,
+  type DotTone
+} from '../sidebar/agentRows'
 import { baseFreshness } from '../sidebar/baseFreshness'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { automaticUpdatesLabel } from '../updates/updateNotice'
@@ -110,6 +122,23 @@ export type PaletteItem =
       search: string
       agent?: AgentKind
       tone?: DotTone
+      /** When it was last on screen, and how long ago, for one visited before and not on screen now. */
+      visitedAt?: number
+      age?: string
+    }
+  /** Go to an agent or command pane of any worktree; `id` is the terminal, `activeAt` its last output or look. */
+  | {
+      kind: 'pane'
+      id: string
+      worktreeId: string
+      label: string
+      hint: string
+      detail: string
+      search: string
+      agent?: AgentKind
+      tone: DotTone
+      activeAt: number
+      age?: string
     }
   /** Run something; `unavailable` says why it would do nothing now (hidden unless it is all a query finds); `here` acts on the worktree on screen. */
   | {
@@ -179,6 +208,14 @@ export type PaletteContext = {
   runs?: readonly RunOffer[]
   /** Received notes as the lists show them, deleted ones left out. */
   sharedNotes?: readonly SharedNoteSummary[]
+  /** When each worktree was last on screen, by id; see `visitHistory.ts`. */
+  visited?: Readonly<Record<string, number>>
+  /** When each pane was last looked at, by terminal id. */
+  paneSeenAt?: Readonly<Record<string, number>>
+  /** The pane in front, left out of Panes. */
+  focusedPaneId?: string | null
+  /** The clock the ages are read against; absent, no ages. */
+  now?: number
 }
 
 /**
@@ -200,12 +237,14 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     const agent = display.agent?.kind
     // The clock only feeds `quietFor`, which no tone reads.
     const tone = hasCheckout(worktree) ? worktreeTone(agentRows(terminals, worktree.id, 0)) : null
+    const visitedAt = open(worktree) ? undefined : context.visited?.[worktree.id]
     return {
       kind: 'worktree',
       id: worktree.id,
       label,
       ...(agent === undefined ? {} : { agent }),
       ...(tone === null ? {} : { tone }),
+      ...(visitedAt === undefined ? {} : { visitedAt, ...ageOf(visitedAt, context.now) }),
       hint: display.branch ?? '',
       detail: [
         project,
@@ -257,7 +296,54 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     }
   })
 
-  return [...worktrees, ...agentItems(context), ...worktreeActions(context), ...actions]
+  return [...worktrees, ...paneItems(context), ...agentItems(context), ...worktreeActions(context), ...actions]
+}
+
+function ageOf(at: number, now: number | undefined): { age?: string } {
+  return now === undefined ? {} : { age: sinceLabel(Math.max(0, now - at)) }
+}
+
+/** An agent, a named pane or a program other than the shell: plain prompts are left to the sidebar. */
+function isWorthListing(terminal: Terminal): boolean {
+  return (
+    paneAgent(terminal) !== undefined ||
+    (terminal.label?.trim() ?? '') !== '' ||
+    paneLabel(terminal) !== paneLabel({ title: '', shell: terminal.shell })
+  )
+}
+
+/** Every worktree's agent and command panes, the latest active first, as `Claude Code · pagination`. */
+function paneItems(context: PaletteContext): PaletteItem[] {
+  const projectName = new Map(context.projects.map((project) => [project.id, project.name]))
+  const terminals = context.terminals ?? []
+  return context.worktrees
+    .flatMap((worktree) => {
+      const mine = terminals.filter((terminal) => terminal.worktreeId === worktree.id)
+      const names = paneNamesById(mine)
+      const where = worktreeLabel(worktreeDisplay(worktree))
+      const project = projectName.get(worktree.projectId) ?? ''
+      return mine
+        .filter((terminal) => terminal.id !== context.focusedPaneId && isWorthListing(terminal))
+        .map((terminal): PaletteItem => {
+          const name = names[terminal.id] ?? paneLabel(terminal)
+          const agent = paneAgent(terminal)
+          const activeAt = Math.max(terminal.lastOutputAt, context.paneSeenAt?.[terminal.id] ?? 0)
+          return {
+            kind: 'pane',
+            id: terminal.id,
+            worktreeId: worktree.id,
+            label: `${name} · ${where}`,
+            hint: '',
+            detail: project,
+            search: `${name} ${where} ${terminal.title} ${agent === undefined ? '' : harnessName(agent)} ${project}`,
+            ...(agent === undefined ? {} : { agent }),
+            tone: dotTone(activityOf(terminal), agent),
+            activeAt,
+            ...ageOf(activeAt, context.now)
+          }
+        })
+    })
+    .sort((left, right) => (right.kind === 'pane' ? right.activeAt : 0) - (left.kind === 'pane' ? left.activeAt : 0))
 }
 
 type ActionRow = { id: PaletteAction; label: string; keywords: string; hint?: string; unavailable?: string }
@@ -605,6 +691,9 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'expand-pane': 'maximize maximise expand pane full zoom',
   'previous-worktree': 'previous worktree up back',
   'next-worktree': 'next worktree down forward',
+  'worktree-back': 'back previous last recent history return toggle worktree where was',
+  'worktree-forward': 'forward next history worktree redo',
+  'quick-note': 'quick note jot remember follow up todo write menu bar',
   'next-needing': 'next needing you asking failed finished unread attention question answer',
   'previous-needing': 'previous needing you asking failed finished unread attention question answer back',
   'open-palette': 'go to worktree command palette search anything',
@@ -818,34 +907,45 @@ export const paletteKey = (item: PaletteItem): string => `${item.kind}:${item.id
 /** The one column after a label: nothing for a dimmed row, a worktree's project and state, else the hint. */
 export function trailing(item: PaletteItem): string {
   if (isDimmed(item)) return ''
-  return item.kind === 'worktree' ? item.detail : item.hint
+  return item.kind === 'worktree' || item.kind === 'pane' ? item.detail : item.hint
 }
 
 /** Rows under one header; a null title draws none. */
 export type PaletteGroup = { title: string | null; items: PaletteItem[] }
 
+/** How many panes the first screen lists; typing finds the rest. */
+export const PANES_SHOWN = 6
+
 /**
- * The list before anything is typed: Recent, Worktrees, the worktree on screen under `here`, then
- * Commands, each row once, none that would do nothing and no setting; empty groups left out.
+ * The list before anything is typed: the worktrees last visited, the panes last active, the other worktrees,
+ * the worktree on screen under `here`, then Commands led by `recent`; each row once, none that would do nothing, no setting.
  */
 export function paletteGroups(items: readonly PaletteItem[], recent: readonly string[], here: string): PaletteGroup[] {
   const byKey = new Map(items.map((item) => [paletteKey(item), item]))
-  const first = recent
+  const visited = items
+    .filter((item) => item.kind === 'worktree' && item.visitedAt !== undefined)
+    .sort((left, right) => visitedAt(right) - visitedAt(left))
+    .slice(0, RECENT_KEPT)
+  const panes = items.filter((item) => item.kind === 'pane').slice(0, PANES_SHOWN)
+  const commands = recent
     .map((key) => byKey.get(key))
     .filter((item): item is PaletteItem => item !== undefined && !isDimmed(item))
   const rest = filterPalette(
-    items.filter((item) => !first.includes(item) && !isSetting(item)),
+    items.filter((item) => !visited.includes(item) && !commands.includes(item) && !isSetting(item)),
     ''
   )
   const onScreen = (item: PaletteItem): boolean =>
     item.kind === 'agent' || (item.kind === 'action' && item.here === true)
   return [
-    { title: 'Recent', items: first },
+    { title: 'Recent', items: visited },
+    { title: 'Panes', items: panes },
     { title: 'Worktrees', items: rest.filter((item) => item.kind === 'worktree') },
     { title: here, items: rest.filter(onScreen) },
-    { title: 'Commands', items: rest.filter((item) => item.kind === 'action' && !onScreen(item)) }
+    { title: 'Commands', items: [...commands, ...rest.filter((item) => item.kind === 'action' && !onScreen(item))] }
   ].filter((group) => group.items.length > 0)
 }
+
+const visitedAt = (item: PaletteItem): number => (item.kind === 'worktree' ? (item.visitedAt ?? 0) : 0)
 
 export const RECENT_KEPT = 5
 const RECENT_KEY = 'teamree.palette.recent'

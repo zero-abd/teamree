@@ -45,16 +45,16 @@ describe('the regions', () => {
     expect(regionOf(document.body)).toBeNull()
   })
 
-  it('land on the tree’s one stop, the shown tab, the focused pane’s input and the panel’s tab', () => {
-    expect(id(regionLanding('sidebar'))).toBe('w2')
+  it('land on the open worktree’s row, the shown tab, the focused pane’s input and the panel’s tab', () => {
+    expect(id(regionLanding('sidebar'))).toBe('w1')
     expect(id(regionLanding('strip'))).toBe('t2')
     expect(id(regionLanding('panes'))).toBe('x2')
     expect(id(regionLanding('panel'))).toBe('files')
   })
 
-  it('fall back to the open worktree, then to the first control', () => {
-    document.getElementById('w2')?.setAttribute('tabindex', '-1')
-    expect(id(regionLanding('sidebar'))).toBe('w1')
+  it('fall back to the tree’s one stop, then to the first control', () => {
+    document.getElementById('w1')?.removeAttribute('aria-current')
+    expect(id(regionLanding('sidebar'))).toBe('w2')
     draw('<div data-region="sidebar"><button id="search">Search</button><p>No projects yet</p></div>')
     expect(id(regionLanding('sidebar'))).toBe('search')
   })

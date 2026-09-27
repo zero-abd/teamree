@@ -144,6 +144,7 @@ describe('the menu bar is built from the table the keyboard reads', () => {
     expect(sectionOrder('file')).toEqual([
       'new-worktree',
       'new-child-task',
+      'quick-note',
       'new-terminal',
       'new-markdown',
       'add-project',
@@ -165,6 +166,8 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'search-in-files',
       'previous-worktree',
       'next-worktree',
+      'worktree-back',
+      'worktree-forward',
       'next-needing',
       'previous-needing',
       'open-dashboard',
@@ -220,6 +223,41 @@ describe('the tab walk', () => {
   })
 })
 
+describe('getting back to where you were', () => {
+  it('goes back and forward on ⌘⌥← and ⌘⌥→ in View, beside the sidebar walk', () => {
+    const spec = menuBarSpec(WORKING)
+    expect(spec.find((item) => item.command === 'worktree-back')).toMatchObject({
+      label: 'Go Back',
+      accelerator: 'CommandOrControl+Alt+Left',
+      section: 'view'
+    })
+    expect(spec.find((item) => item.command === 'worktree-forward')).toMatchObject({
+      label: 'Go Forward',
+      accelerator: 'CommandOrControl+Alt+Right',
+      section: 'view'
+    })
+  })
+
+  it('greys both with nowhere to go', () => {
+    const spec = menuBarSpec(WORKING)
+    expect(spec.find((item) => item.command === 'worktree-back')?.enabled).toBe(false)
+    expect(spec.find((item) => item.command === 'worktree-forward')?.enabled).toBe(false)
+  })
+
+  it('focuses the sidebar on ⌘⇧E', () => {
+    expect(menuBarSpec(WORKING).find((item) => item.command === 'focus-sidebar')?.accelerator).toBe(
+      'CommandOrControl+Shift+E'
+    )
+  })
+
+  it('opens Quick Note… from File on ⌘⌥N, once there is a project to note in', () => {
+    const item = menuBarSpec(WORKING).find((entry) => entry.command === 'quick-note')
+    expect(item).toMatchObject({ label: 'Quick Note…', accelerator: 'CommandOrControl+Alt+N', section: 'file' })
+    expect(item?.enabled).toBe(true)
+    expect(menuBarSpec(EMPTY).find((entry) => entry.command === 'quick-note')?.enabled).toBe(false)
+  })
+})
+
 describe('what the menu bar says can be done', () => {
   // Nothing offered that cannot work: a first launch greys what has nothing to act on.
   it('greys the pane commands in a window with no panes', () => {
@@ -242,12 +280,15 @@ describe('what the menu bar says can be done', () => {
       'expand-pane': false,
       'previous-worktree': false,
       'next-worktree': false,
+      'worktree-back': false,
+      'worktree-forward': false,
       'next-needing': false,
       'previous-needing': false,
       'new-terminal': false,
       'new-markdown': false,
       'new-worktree': false,
       'new-child-task': false,
+      'quick-note': false,
       'review-changes': false,
       'commit-changes': false,
       'push-worktree': false,
@@ -296,6 +337,8 @@ describe('what the menu bar says can be done', () => {
       'previous-file-tab',
       'previous-worktree',
       'next-worktree',
+      'worktree-back',
+      'worktree-forward',
       'review-changes',
       'next-needing',
       'previous-needing',

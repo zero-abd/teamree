@@ -138,7 +138,9 @@ export function installMenuBarExtra(host: MenuBarExtraHost): () => void {
       store.setQuickNoteProject(project.id)
       runtime.context.workspaceEvents.emit({ type: 'worktrees' })
       return saved
-    }
+    },
+    fromWindow: (event) =>
+      event.senderFrame === event.sender.mainFrame && BrowserWindow.fromWebContents(event.sender) !== null
   })
 
   const stopSetting = followMenuBarSetting({

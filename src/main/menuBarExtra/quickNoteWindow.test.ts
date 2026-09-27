@@ -4,6 +4,7 @@ import {
   installQuickNote,
   QUICK_NOTE_CLOSE_CHANNEL,
   QUICK_NOTE_CONTEXT_CHANNEL,
+  QUICK_NOTE_OPEN_CHANNEL,
   QUICK_NOTE_SAVE_CHANNEL,
   QUICK_NOTE_SIZE,
   quickNotePlacement,
@@ -47,6 +48,9 @@ function fakeIpc() {
   }
 }
 
+/** The app's own window, as the host recognises it. */
+const WINDOW = { window: true }
+
 function harness(save: (note: unknown) => Promise<string> = async () => '/repo/NOTES.md') {
   const log: string[] = []
   const panels: (QuickNotePanel & { webContents: object; gone: boolean })[] = []
@@ -69,7 +73,8 @@ function harness(save: (note: unknown) => Promise<string> = async () => '/repo/N
       return panel
     },
     context: () => ({ projects: [{ id: 'p1', name: 'teamree' }], projectId: 'p1', worktree: null }),
-    save
+    save,
+    fromWindow: (event) => (event.sender as unknown) === WINDOW
   })
   return { log, panels, bridge, quickNote }
 }
@@ -124,6 +129,18 @@ describe('installQuickNote', () => {
       problem: 'Nothing to save.'
     })
     expect(log.at(-1)).not.toBe('close')
+  })
+
+  it('opens from the window’s menu, chord or palette, and from nothing else', () => {
+    const { bridge, panels, log } = harness()
+    bridge.send(QUICK_NOTE_OPEN_CHANNEL, {})
+    expect(log).toEqual([])
+    bridge.send(QUICK_NOTE_OPEN_CHANNEL, WINDOW)
+    expect(log).toEqual(['create'])
+    bridge.send(QUICK_NOTE_OPEN_CHANNEL, panels[0]?.webContents)
+    expect(log).toEqual(['create'])
+    bridge.send(QUICK_NOTE_OPEN_CHANNEL, WINDOW)
+    expect(log).toEqual(['create', 'show', 'focus'])
   })
 
   it('closes on the panel’s own Esc only, and takes its handlers away when stopped', () => {
