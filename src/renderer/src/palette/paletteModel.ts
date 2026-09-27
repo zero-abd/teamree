@@ -861,8 +861,9 @@ export function filterPalette(items: readonly PaletteItem[], query: string): Pal
 }
 
 /**
- * A typed query as one ranked list, files under their own header, a pasted invitation's Join first. When
- * nothing in it would run, it ends on New Task and Open Branch from the query; `files` is null while the runtime is still asked.
+ * A typed query as ranked rows under a header per kind, the kind of the best match first and files after, a
+ * pasted invitation's Join first. When nothing in it would run, it ends on New Task and Open Branch from the
+ * query; `files` is null while the runtime is still asked.
  */
 export function queryGroups(
   items: readonly PaletteItem[],
@@ -872,12 +873,22 @@ export function queryGroups(
   const join = joinFrom(query.trim())
   const found = filterPalette(items, query)
   const stuck = join === null && files !== null && files.length === 0 && found.every(isDimmed)
-  const named: PaletteGroup[] = files !== null && files.length > 0 ? [{ title: 'Files', items: [...files] }] : []
   const listed = stuck ? [...found, ...startFrom(items, query.trim())] : found
-  return [
-    { title: null, items: join === null ? listed : [join, ...listed.filter((item) => !isDimmed(item))] },
-    ...named
-  ]
+  const ranked = join === null ? listed : [join, ...listed.filter((item) => !isDimmed(item))]
+  const byKind = new Map<string, PaletteItem[]>()
+  for (const item of [...ranked, ...(files ?? [])]) {
+    const title = KIND_TITLE[item.kind]
+    byKind.set(title, [...(byKind.get(title) ?? []), item])
+  }
+  return [...byKind].map(([title, rows]) => ({ title, items: rows }))
+}
+
+const KIND_TITLE: Record<PaletteItem['kind'], string> = {
+  worktree: 'Worktrees',
+  pane: 'Panes',
+  file: 'Files',
+  action: 'Commands',
+  agent: 'Commands'
 }
 
 /** Join <project> from <sender> for a query holding an invitation link, else null. */

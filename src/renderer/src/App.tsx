@@ -15,9 +15,8 @@ import { useWorkspaceShortcuts } from './keyboard/useWorkspaceShortcuts'
 import { useMenuBar } from './menu/useMenuBar'
 import { useUnsavedFiles } from './files/useUnsavedFiles'
 import { useAgentNotices } from './notices/useAgentNotices'
+import { NoticeStack } from './notices/NoticeStack'
 import { usePullRequestRefresh } from './state/usePullRequestRefresh'
-import { useAnnouncements } from './notices/useAnnouncements'
-import { copyText } from './clipboard/clipboard'
 import { RegionBoundary } from './errors/RegionBoundary'
 import { useMainErrors } from './errors/useMainErrors'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
@@ -48,21 +47,16 @@ import { firstQuestion } from './dialogs/modalLayer'
 import { RemoteKeystrokesDialog } from './dialogs/RemoteKeystrokesDialog'
 import { CommandPalette } from './palette/CommandPalette'
 import { Sidebar } from './sidebar/Sidebar'
-import { openInBrowser } from './shell/openInBrowser'
 import { RegionFocus } from './shell/RegionFocus'
 import { shellClassName } from './shell/shellClass'
 import { FolderDrop } from './shell/FolderDrop'
 import { watchLayoutMotion } from './shell/layoutMotion'
 import { SidebarResizer } from './shell/SidebarResizer'
 import { StatusBar } from './shell/StatusBar'
-import { useWorkspaceStore, type Notice } from './state/workspaceStore'
+import { useWorkspaceStore } from './state/workspaceStore'
 import { watchSystemTone } from './theme/systemTone'
 import { applyPalette } from './theme/applyPalette'
-import { SharedNotePopups } from './teamwork/SharedNotePopups'
-import { HandoffPopups } from './teamwork/HandoffPopups'
-import { UpdateAvailableCard } from './updates/UpdateAvailableCard'
 import { WorkspaceArea } from './workspace/WorkspaceArea'
-import { Icon } from './icons/Icon'
 
 export function App(): React.JSX.Element {
   const platform = useMemo(
@@ -78,7 +72,6 @@ export function App(): React.JSX.Element {
   useAgentNotices()
   usePullRequestRefresh()
   useMainErrors()
-  const spoken = useAnnouncements()
 
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
   // Settings brings its own section list, so it has the window to itself; the sidebar comes back as it was.
@@ -91,25 +84,6 @@ export function App(): React.JSX.Element {
   // Outside `dialog`: a teammate raised it, it has its own deadline, and nothing else may close it.
   const consent = useWorkspaceStore((state) => state.consent)
   const asking = firstQuestion(consent)
-  const notices = useWorkspaceStore((state) => state.notices)
-  const dismissNotice = useWorkspaceStore((state) => state.dismissNotice)
-  const hideRegion = useWorkspaceStore((state) => state.hideRegion)
-  const undo = useWorkspaceStore((state) => state.undo)
-  const actOn = (notice: Notice): void => {
-    const action = notice.action
-    if (action === undefined) return
-    if ('url' in action) {
-      openInBrowser(action.url)
-      return
-    }
-    if ('copy' in action) {
-      copyText(action.copy)
-      return
-    }
-    dismissNotice(notice.id)
-    if ('undo' in action) void undo(action.undo)
-    else hideRegion(action.hide)
-  }
   const appearance = useWorkspaceStore((state) => state.appearance)
   const appearanceOpen = useWorkspaceStore((state) => state.appearanceOpen)
   const systemTone = useWorkspaceStore((state) => state.systemTone)
@@ -170,38 +144,7 @@ export function App(): React.JSX.Element {
 
       <StatusBar />
 
-      {/* Bottom right above the status bar: notices stack above the update card, never over it. */}
-      <div className="corner-stack">
-        <SharedNotePopups />
-        <HandoffPopups />
-        {/* Always mounted: a live region added with its first message is often not heard saying it. */}
-        <div className="notices" role="status" aria-live="polite">
-          <span className="notices__spoken" key={spoken.serial}>
-            {spoken.text}
-          </span>
-          {notices.map((notice) => (
-            <div className={`notice notice--${notice.tone}`} key={notice.id}>
-              <span className="notice__text">{notice.text}</span>
-              {notice.action === undefined ? null : (
-                // The verb is the whole button.
-                <button type="button" className="notice__action" onClick={() => actOn(notice)}>
-                  {notice.action.label}
-                </button>
-              )}
-              {notice.lock === undefined ? null : <LockActions lock={notice.lock} />}
-              <button
-                type="button"
-                className="notice__close"
-                aria-label="Dismiss message"
-                onClick={() => dismissNotice(notice.id)}
-              >
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-          ))}
-        </div>
-        <UpdateAvailableCard />
-      </div>
+      <NoticeStack />
 
       {/* Nothing is focused and nothing is blocked: the window is usable
           whether or not anybody answers this. It stands aside for anything
@@ -289,28 +232,5 @@ export function App(): React.JSX.Element {
       {/* A folder dropped anywhere on the window becomes a project. */}
       <FolderDrop />
     </div>
-  )
-}
-
-/** A held lock's notice: Retry, and Clear Lock once the runtime found it stale with no git running. */
-function LockActions({ lock }: { lock: NonNullable<Notice['lock']> }): React.JSX.Element {
-  const retryLocked = useWorkspaceStore((state) => state.retryLocked)
-  const askClearLock = useWorkspaceStore((state) => state.askClearLock)
-  return (
-    <>
-      <button type="button" className="notice__action" onClick={() => void retryLocked(lock.worktreeId)}>
-        Retry
-      </button>
-      {lock.clearable ? (
-        <button
-          type="button"
-          className="notice__action"
-          title={lock.lockPath}
-          onClick={() => askClearLock(lock.worktreeId, lock.lockPath)}
-        >
-          Clear Lock…
-        </button>
-      ) : null}
-    </>
   )
 }

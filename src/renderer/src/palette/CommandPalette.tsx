@@ -35,7 +35,6 @@ import {
   rankFiles,
   readStoredRecent,
   searchContentsItem,
-  trailing,
   withRecent,
   writeStoredRecent,
   type PaletteGroup,
@@ -47,6 +46,9 @@ import { lineQuery } from './lineQuery'
 import { runOffers } from '../workspace/runButtons'
 import type { RunKind } from '@shared/entities'
 import { useFocusedChange } from './useFocusedChange'
+import { highlight, rowIcon, rowStatus } from './paletteRow'
+import { Icon } from '../icons/Icon'
+import { EmptyState } from '../workspace/EmptyState'
 
 const NO_PATHS: readonly string[] = []
 
@@ -585,42 +587,55 @@ export function CommandPalette({
     }
   }
 
+  // Caps only on a command row, and only for its chord.
+  const chordOf = (item: PaletteItem, meta: string): boolean => {
+    if (item.kind !== 'action' || meta === '') return false
+    if (item.id.startsWith('new-task:')) return true
+    const command = commandNamed(item.id)
+    return command ? shortcutHint(command, modifier) === meta : false
+  }
+
   return (
     <Modal title={mode === 'files' ? 'Go to File' : 'Go to'} hideTitle onClose={closeDialog}>
       <div className="palette">
         <div className="palette__field">
-          <input
-            className="palette__input"
-            type="text"
-            value={query}
-            placeholder={mode === 'files' ? 'File name or path…' : 'Worktree, branch, file, or a command…'}
-            aria-label={mode === 'files' ? 'Search files' : 'Search worktrees, files and commands'}
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(event) => {
-              setQuery(event.target.value)
-              setSelected(0)
-            }}
-            onKeyDown={onKeyDown}
-          />
-          {/* A placeholder after the typed `:`, which hides the real one. */}
-          {lineCount === undefined ? null : (
-            <span className="palette__ghost" aria-hidden="true">
-              <span className="palette__ghost-typed">{query}</span>
-              {`1–${lineCount}`}
-            </span>
-          )}
+          <Icon name="search" className="palette__search" />
+          <div className="palette__entry">
+            <input
+              className="palette__input"
+              type="text"
+              value={query}
+              placeholder={mode === 'files' ? 'File name or path…' : 'Worktree, branch, file, or a command…'}
+              aria-label={mode === 'files' ? 'Search files' : 'Search worktrees, files and commands'}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => {
+                setQuery(event.target.value)
+                setSelected(0)
+              }}
+              onKeyDown={onKeyDown}
+            />
+            {/* A placeholder after the typed `:`, which hides the real one. */}
+            {lineCount === undefined ? null : (
+              <span className="palette__ghost" aria-hidden="true">
+                <span className="palette__ghost-typed">{query}</span>
+                {`1–${lineCount}`}
+              </span>
+            )}
+          </div>
         </div>
 
         {matches.length === 0 ? (
           wanted !== '' && settled ? (
-            <p className="palette__empty">No matches</p>
+            <EmptyState title="No matches" compact />
           ) : null
         ) : (
           <ul className="palette__list" role="listbox" aria-label="Results" ref={list}>
             {groups.map((group) =>
               group.items.map((item, at) => {
                 const index = matches.indexOf(item)
+                const icon = rowIcon(item)
+                const status = rowStatus(item)
                 return (
                   <li key={paletteKey(item)}>
                     {at === 0 && group.title !== null ? (
@@ -648,17 +663,32 @@ export function CommandPalette({
                       onMouseMove={() => setSelected(index)}
                       onClick={(event) => run(item, holdsModifier(event, modifier))}
                     >
-                      {(item.kind === 'worktree' || item.kind === 'pane') && item.agent !== undefined ? (
-                        <AgentGlyph kind={item.agent} />
-                      ) : null}
-                      <span className="palette__label">{item.label}</span>
+                      <span className="palette__icon" aria-hidden="true">
+                        {'agent' in icon ? <AgentGlyph kind={icon.agent} decorative /> : <Icon name={icon.icon} />}
+                      </span>
+                      <span className="palette__label">
+                        {highlight(item.label, mode === 'files' ? place.path : query).map((part, piece) =>
+                          part.match ? (
+                            <mark className="palette__match" key={piece}>
+                              {part.text}
+                            </mark>
+                          ) : (
+                            part.text
+                          )
+                        )}
+                      </span>
                       {(item.kind === 'worktree' || item.kind === 'pane') && item.age !== undefined ? (
                         <span className="palette__age">{item.age}</span>
                       ) : null}
-                      <span className="palette__trailing">{trailing(item)}</span>
-                      {(item.kind === 'worktree' || item.kind === 'pane') && item.tone !== undefined ? (
-                        <span className={dotClass(item.tone)} role="img" aria-label={TONE_LABEL[item.tone]} />
-                      ) : null}
+                      {status.tone === null ? null : (
+                        <span className={`palette__status palette__status--${status.tone}`}>
+                          <span className={dotClass(status.tone)} role="img" aria-label={TONE_LABEL[status.tone]} />
+                          {status.word === null ? null : <span aria-hidden="true">{status.word}</span>}
+                        </span>
+                      )}
+                      <span className="palette__trailing">
+                        {chordOf(item, status.meta) ? <kbd className="kbd">{status.meta}</kbd> : status.meta}
+                      </span>
                     </button>
                   </li>
                 )
@@ -666,6 +696,18 @@ export function CommandPalette({
             )}
           </ul>
         )}
+
+        <footer className="palette__footer" aria-hidden="true">
+          <span>
+            <kbd className="kbd">↑↓</kbd> move
+          </span>
+          <span>
+            <kbd className="kbd">↵</kbd> open
+          </span>
+          <span>
+            <kbd className="kbd">esc</kbd> close
+          </span>
+        </footer>
       </div>
     </Modal>
   )

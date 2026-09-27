@@ -125,7 +125,8 @@ describe('the notice layer', () => {
     render(<App />)
     const layer = screen.getByRole('status')
     expect(layer.getAttribute('aria-live')).toBe('polite')
-    expect(within(layer).getByText('git push was rejected: fetch first')).toBeTruthy()
+    expect(within(layer).getByText('git push was rejected')).toBeTruthy()
+    expect(within(layer).getByText('fetch first')).toBeTruthy()
   })
 
   it('shows every notice, and dismisses the one that was pressed', () => {
