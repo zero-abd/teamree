@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+// @ts-expect-error -- untyped .mjs, deliberately outside the TypeScript build.
+import { SIDEBAR_WIDTHS_CHECKED } from '../../../../scripts/smoke-probes.mjs'
 import {
   clampSidebarWidth,
   readStoredSidebarWidth,
@@ -7,6 +9,11 @@ import {
   SIDEBAR_MIN_PX,
   writeStoredSidebarWidth
 } from './sidebarWidth'
+
+// The smoke checks the project head at these two; a new floor must move the check with it.
+it('has the smoke check the project head at the narrowest and the default sidebar', () => {
+  expect(SIDEBAR_WIDTHS_CHECKED).toEqual([SIDEBAR_MIN_PX, SIDEBAR_DEFAULT_PX])
+})
 
 describe('clampSidebarWidth', () => {
   it('keeps a sensible width as it is', () => {

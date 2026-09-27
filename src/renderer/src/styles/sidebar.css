@@ -269,17 +269,40 @@
   border-top: 1px solid var(--line);
 }
 
-/* One line: the name, where new tasks start and the team, then the actions. */
+/* Two columns: the name and where new tasks start, which give way; then the team and the actions, which
+   never do. Actions that would leave the name under 10ch drop to a second line. */
 .project__head {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
-  gap: var(--s1);
+  gap: 0 var(--s1);
   padding-right: var(--s2);
 }
 
-.project__head > .button--icon {
-  margin-top: 2px;
+/* The base keeps the name's line while its floor fits; past that it wraps onto the line this clips. */
+.project__text {
+  display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  column-gap: var(--s1);
+  min-width: min(10ch, 100%);
+  height: 26px;
+  overflow: clip;
+}
+
+.project__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s1);
+  max-width: 100%;
+  height: 26px;
+  margin-left: auto;
+}
+
+.project__actions > .button--icon {
+  flex: none;
 }
 
 .project__toggle {
@@ -341,7 +364,7 @@
   font-weight: 500;
 }
 
-/* Whole, or the team wraps to the next line; cut only where it alone is too long. */
+/* Whole where it fits beside the name; else cut, and past the meta's floor it wraps out of sight. */
 .project__base {
   flex: 1 1 auto;
   min-width: 8ch;
@@ -457,23 +480,25 @@
   color: var(--accent-bright);
 }
 
-/* Beside the name: what the project is on the left, what the team is doing on the right. The base ref
-   gives way first, down to 8ch; past that the team drops to a tight line under it rather than being cut. */
+/* Beside the name, what the project starts from; it gives way before the name does. */
 .project__meta {
   display: flex;
   flex: 1 1 0;
-  flex-wrap: wrap;
   align-items: center;
   column-gap: var(--s2);
-  min-width: 0;
+  min-width: 8ch;
+  overflow: hidden;
 }
 
+/* Only a team wider than the whole head is cut: the cues' words first. */
 .project__team {
   display: flex;
-  flex: none;
+  flex: 0 1 auto;
   align-items: center;
   gap: var(--s2);
-  margin-left: auto;
+  min-width: 0;
+  overflow: clip;
+  overflow-clip-margin: 2px;
 }
 
 .project__team:empty {
@@ -1560,7 +1585,8 @@
 }
 
 .worktree--no-drop > .worktree__row > *,
-.project__head--no-drop > button {
+.project__head--no-drop .project__toggle,
+.project__head--no-drop .project__actions > button {
   opacity: 0.4;
 }
 

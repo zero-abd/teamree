@@ -621,6 +621,23 @@ describe('stylesheets', () => {
       expect(declarationOf(ruleFor('sidebar.css', '.worktree__facts'), 'overflow')).toBe('hidden')
     })
 
+    // A long project name drew the New Task button over "from m…" (#488); the smoke measures it at 208 and 272px.
+    it('cuts a project’s name and base before its actions, and the base before the name', () => {
+      const text = ruleFor('sidebar.css', '.project__text')
+      expect(declarationOf(text, 'flex')).toBe('1 1 0')
+      expect(declarationOf(text, 'min-width')).toBe('min(10ch, 100%)')
+      expect(declarationOf(text, 'overflow')).toBe('clip')
+      // The base wraps onto the clipped line below its floor rather than squeeze the name.
+      expect(declarationOf(text, 'flex-wrap')).toBe('wrap')
+      // Its own floor: a nowrap base's intrinsic width is the whole ref, which would wrap it every time.
+      expect(declarationOf(ruleFor('sidebar.css', '.project__meta'), 'min-width')).toBe('8ch')
+      expect(declarationOf(ruleFor('sidebar.css', '.project__base'), 'text-overflow')).toBe('ellipsis')
+      // The actions never shrink; past the name's floor they take a line of their own.
+      expect(declarationOf(ruleFor('sidebar.css', '.project__head'), 'flex-wrap')).toBe('wrap')
+      expect(declarationOf(ruleFor('sidebar.css', '.project__actions'), 'flex')).toBe('none')
+      expect(declarationOf(ruleFor('sidebar.css', '.project__actions > .button--icon'), 'flex')).toBe('none')
+    })
+
     // On a narrow nested row the counts and the tally ran past the row's edge (#293).
     it('wraps a row’s facts under its branch rather than past the row’s edge', () => {
       expect(declarationOf(ruleFor('sidebar.css', '.worktree__meta'), 'flex-wrap')).toBe('wrap')
