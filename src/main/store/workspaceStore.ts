@@ -28,6 +28,7 @@ import {
 export type UpdateSettings = {
   automatic: boolean
   lastCheckedAt: number | null
+  lastSucceededAt: number | null
   lastSeenVersion: string | null
 }
 
@@ -314,6 +315,7 @@ export class WorkspaceStore {
     return {
       automatic: this.updates.automatic ?? true,
       lastCheckedAt: this.updates.lastCheckedAt ?? null,
+      lastSucceededAt: this.updates.lastSucceededAt ?? null,
       lastSeenVersion: this.updates.lastSeenVersion ?? null
     }
   }
@@ -365,8 +367,8 @@ export class WorkspaceStore {
   }
 
   /** The rate limit's clock, on disk so an hour of restarts is one check. */
-  recordUpdateCheck(at: number): void {
-    this.updates = { ...this.updates, lastCheckedAt: at }
+  recordUpdateCheck(at: number, succeeded: boolean): void {
+    this.updates = { ...this.updates, lastCheckedAt: at, ...(succeeded ? { lastSucceededAt: at } : {}) }
     this.persist()
   }
 

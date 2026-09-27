@@ -22,7 +22,11 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 // Each has its own coverage; none of them decides which placeholder is right.
-vi.mock('../panes/PaneTree', () => ({ PaneTree: () => <div data-testid="panes" /> }))
+vi.mock('../panes/PaneTree', () => ({
+  PaneTree: ({ onResumeConversation }: { onResumeConversation?: unknown }) => (
+    <div data-testid="panes" data-resume={onResumeConversation === undefined ? 'no' : 'yes'} />
+  )
+}))
 // The viewer is tested in its own file; this decides which panes exist and where.
 vi.mock('../terminal/WatchedPaneView', () => ({
   WatchedPaneView: ({ handle, paneId }: { handle: string; paneId: string }) => (
@@ -446,6 +450,39 @@ describe('a worktree whose checkout is missing', () => {
     seed({ projects: [project], worktrees: [worktree()], activeWorktreeId: 'w1' })
     mount()
     expect(screen.queryByText('Checkout missing')).toBeNull()
+  })
+})
+
+// A pane stopped by the last quit offers Resume Conversation… only when the picker would list something.
+describe('a restored agent pane', () => {
+  const claude: InstalledAgent = { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }
+  const past: AgentConversation = { agent: 'claude', sessionId: 's1', prompt: 'fix it', updatedAt: 1, messages: 2 }
+  const open = (state: Record<string, unknown>): void => {
+    seed({
+      projects: [project],
+      worktrees: [worktree()],
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout() },
+      agents: [claude],
+      terminals: {
+        t1: { id: 't1', worktreeId: 'w1', title: 'claude', running: false, restored: 'stopped', agent: 'claude' }
+      },
+      loadConversations: vi.fn(),
+      ...state
+    })
+    mount()
+  }
+
+  it('offers no resume when there is nothing to resume', () => {
+    open({ conversations: { w1: [] } })
+    expect(screen.getByTestId('panes').dataset.resume).toBe('no')
+  })
+
+  it('offers it when there is, and asks which there are', () => {
+    const loadConversations = vi.fn()
+    open({ conversations: { w1: [past] }, loadConversations })
+    expect(screen.getByTestId('panes').dataset.resume).toBe('yes')
+    expect(loadConversations).toHaveBeenCalledWith('w1')
   })
 })
 

@@ -65,7 +65,7 @@ describe('the Join sheet', () => {
     expect(screen.getByRole('heading', { name: 'Join pantry (from ana)' })).toBeTruthy()
     const destination = screen.getByLabelText('Destination') as HTMLInputElement
     expect(destination.value).toMatch(/code\/pantry$/)
-    expect(screen.getByRole('button', { name: 'Choose…' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Change…' })).toBeTruthy()
     await waitFor(() => expect(call).toHaveBeenCalledWith('teamwork.status', { projectId: 'p1' }))
     expect(screen.queryByRole('button', { name: 'Use Existing Checkout' })).toBeNull()
 

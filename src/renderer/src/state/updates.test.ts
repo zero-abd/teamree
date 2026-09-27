@@ -78,7 +78,17 @@ it('reports a check that could not be made, because this one was asked for', asy
 
   await useWorkspaceStore.getState().checkForUpdates()
 
-  expect(notices()[0]).toContain('403')
+  expect(notices()).toEqual(['Couldn’t check · GitHub answered 403'])
+})
+
+it('leaves a failed check to the Settings row that asked, with no toast repeating it', async () => {
+  reset()
+  call.mockResolvedValue(state({ problem: 'fetch failed' }))
+
+  await useWorkspaceStore.getState().checkForUpdates({ inline: true })
+
+  expect(notices()).toEqual([])
+  expect(useWorkspaceStore.getState().update?.problem).toBe('fetch failed')
 })
 
 // The read the window makes at startup and whenever the check has news. A

@@ -343,6 +343,16 @@ describe('the brief and the receiver’s first prompt', () => {
     )
     expect(continuationPrompt({ note: 'x'.repeat(4_096), brief: 'y'.repeat(2_048) })).toHaveLength(MAX_AGENT_ARGS_CHARS)
   })
+
+  it('leaves out of the note the task line the brief already carries', () => {
+    const brief = 'Task: Refactor the notes index'
+    expect(continuationPrompt({ from: 'abd', note: 'Refactor the notes index', brief })).toBe(
+      'abd handed this task over. Their work is committed on this branch; continue from it.\n\n' + brief
+    )
+    expect(
+      continuationPrompt({ from: 'abd', note: 'Refactor the notes index\n\nDecided:\n- Keep the old keys', brief })
+    ).toContain('Note from abd:\nDecided:\n- Keep the old keys\n\nTask: Refactor the notes index')
+  })
 })
 
 describe('Take', () => {

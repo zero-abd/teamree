@@ -5,13 +5,14 @@ import type { AgentKind, CliStatus, InstalledAgent, RelaySetting, UpdateState } 
 import { HARNESSES } from '../agents/harnesses'
 import { cliPanel, leavesLinkAlone } from '../dialogs/cliInstallModel'
 import { sinceLabel } from '../sidebar/agentRows'
+import { couldNotCheck } from '../updates/updateNotice'
 
 export type UpdatePanel = {
   /** Which version this is, as a label; a non-release build says so here since it has no button. */
   headline: string
   /** Whether to show a check button: a non-release build has nothing published to compare with. */
   offersCheck: boolean
-  /** When the last check was, in words. Null when none has ever run. */
+  /** When a check last got an answer, in words. Null when none has. */
   lastChecked: string | null
   /** Why the last check produced no answer, or null when it did. */
   problem: string | null
@@ -28,7 +29,10 @@ export function updatePanel(update: UpdateState | null, now: number): UpdatePane
     }
   }
 
-  const lastChecked = update.checkedAt === null ? null : checkedLabel(update.checkedAt, now)
+  // An older runtime says only when it last tried; that counts when the try got an answer.
+  const answeredAt =
+    update.succeededAt !== undefined ? update.succeededAt : update.problem === null ? update.checkedAt : null
+  const lastChecked = answeredAt === null ? null : checkedLabel(answeredAt, now)
 
   if (!update.checkable) {
     return {
@@ -43,7 +47,7 @@ export function updatePanel(update: UpdateState | null, now: number): UpdatePane
     headline: `teamree ${update.current}`,
     offersCheck: true,
     lastChecked,
-    problem: update.problem
+    problem: update.problem === null ? null : couldNotCheck(update.problem)
   }
 }
 

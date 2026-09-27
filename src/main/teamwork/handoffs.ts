@@ -298,7 +298,10 @@ export function handoffBrief(sources: {
 /** The receiver's first prompt: who handed it over, their note, then the brief; within one command line. */
 export function continuationPrompt(handoff: { from?: string; note: string; brief: string | undefined }): string {
   const who = handoff.from ?? 'A teammate'
-  const note = handoff.note.trim()
+  // The drafted note opens with the task, which the brief already carries.
+  const task = /^Task: (.*)$/m.exec(handoff.brief ?? '')?.[1]?.trim()
+  const [first = '', ...rest] = handoff.note.trim().split('\n')
+  const note = task !== undefined && first.trim() === task ? rest.join('\n').trim() : handoff.note.trim()
   return [
     `${who} handed this task over. Their work is committed on this branch; continue from it.`,
     ...(note === '' ? [] : [`Note from ${handoff.from ?? 'them'}:\n${note}`]),

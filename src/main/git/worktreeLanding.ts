@@ -40,30 +40,45 @@ export type GhProbe = {
 export function createGhProbe(locate: () => string | null, now: () => number = Date.now): GhProbe {
   let signIn: { runner: GitRunner | null; at: number } | null = null
   const pulls = new Map<string, { pull: PullRequest | undefined; at: number }>()
+  // Reads that overlap share one gh call.
+  let signingIn: Promise<GitRunner | null> | null = null
+  const reading = new Map<string, Promise<PullRequest | undefined>>()
+  const askSignIn = async (cwd: string): Promise<GitRunner | null> => {
+    const binary = locate()
+    const runner = binary === null ? null : createGitRunner(binary)
+    const status = await runner
+      ?.tryRun({ args: ['auth', 'status', '--hostname', 'github.com'], cwd, env: GH_ENV, timeoutMs: 15_000 })
+      .catch(() => null)
+    signIn = { runner: status?.exitCode === 0 ? runner : null, at: now() }
+    return signIn.runner
+  }
+  const readPull = async (gh: GitRunner, cwd: string, branch: string): Promise<PullRequest | undefined> => {
+    const read = await gh
+      .tryRun({ args: ['pr', 'view', branch, '--json', PULL_REQUEST_FIELDS], cwd, env: GH_ENV, timeoutMs: 30_000 })
+      .catch(() => null)
+    const pull = read?.exitCode === 0 ? parsePullRequest(read.stdout) : undefined
+    // A failed read is not "no pull request"; only an answer is kept.
+    if (read !== null) pulls.set(branch, { pull, at: now() })
+    return pull
+  }
   return {
     async signedIn(cwd) {
       if (signIn !== null && now() - signIn.at < SIGN_IN_TTL_MS) return signIn.runner
-      const binary = locate()
-      const runner = binary === null ? null : createGitRunner(binary)
-      const status = await runner
-        ?.tryRun({ args: ['auth', 'status', '--hostname', 'github.com'], cwd, env: GH_ENV, timeoutMs: 15_000 })
-        .catch(() => null)
-      signIn = { runner: status?.exitCode === 0 ? runner : null, at: now() }
-      return signIn.runner
+      signingIn ??= askSignIn(cwd).finally(() => {
+        signingIn = null
+      })
+      return signingIn
     },
     async pullRequest(gh, cwd, branch) {
       const cached = pulls.get(branch)
       if (cached !== undefined && now() - cached.at < PULL_REQUEST_TTL_MS) return cached.pull
-      const read = await gh
-        .tryRun({ args: ['pr', 'view', branch, '--json', PULL_REQUEST_FIELDS], cwd, env: GH_ENV, timeoutMs: 30_000 })
-        .catch(() => null)
-      const pull = read?.exitCode === 0 ? parsePullRequest(read.stdout) : undefined
-      // A failed read is not "no pull request"; only an answer is kept.
-      if (read !== null) pulls.set(branch, { pull, at: now() })
-      return pull
+      const pending = reading.get(branch) ?? readPull(gh, cwd, branch).finally(() => reading.delete(branch))
+      reading.set(branch, pending)
+      return pending
     },
     forget(branch) {
       pulls.delete(branch)
+      reading.delete(branch)
     }
   }
 }

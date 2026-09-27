@@ -8,7 +8,7 @@ import { useOverlaps } from '../../state/overlapStore'
 import { useWorkspaceStore } from '../../state/workspaceStore'
 import { childRowSpeech } from '../../sidebar/rowSpeech'
 import { worktreeDisplay, worktreeLabel } from '../../sidebar/worktreeDisplay'
-import { childRows, mergeable, readyToMerge, type ChildRow } from './childrenModel'
+import { childRows, heldBack, mergeable, readyToMerge, type ChildRow } from './childrenModel'
 import { useChildren } from './childrenStore'
 
 /** The worktree's direct children as the panel lists them. */
@@ -39,6 +39,7 @@ export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.J
   const rows = useChildRows(worktreeId)
   const merging = useChildren((state) => state.merging[worktreeId])
   const lastStop = useChildren((state) => state.stopped[worktreeId])
+  const lastSkipped = useChildren((state) => state.skipped[worktreeId])
   const reveal = useChildren((state) => state.reveal === worktreeId)
   const mergeChildren = useChildren((state) => state.mergeChildren)
   const section = useRef<HTMLElement | null>(null)
@@ -59,6 +60,9 @@ export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.J
   const stopped = rows.find((row) => row.worktreeId === lastStop?.worktreeId)
   // Landed since, through its own merge: nothing is stopped any more.
   const stop = stopped?.landed === true ? undefined : lastStop
+  const skipped = busy
+    ? []
+    : (lastSkipped ?? []).filter((held) => rows.some((row) => row.worktreeId === held.worktreeId && !row.landed))
 
   return (
     <section className="children" aria-label="Children" ref={section}>
@@ -88,7 +92,8 @@ export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.J
             onClick={() =>
               void mergeChildren(
                 worktreeId,
-                ready.map((row) => row.worktreeId)
+                ready.map((row) => row.worktreeId),
+                heldBack(rows)
               )
             }
           >
@@ -110,6 +115,18 @@ export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.J
           </button>
         </p>
       )}
+      {skipped.map((held) => (
+        <p key={held.worktreeId} className="children__stop" role="status">
+          {`Skipped ${held.title}: conflicts with ${held.clashesWith}`}
+          <button
+            type="button"
+            className="button button--small"
+            onClick={() => openDialog({ kind: 'confirm-merge', worktreeId: held.worktreeId })}
+          >
+            Resolve…
+          </button>
+        </p>
+      ))}
       <ul className="children__list">
         {rows.map((row) => (
           <li key={row.worktreeId} className="child" aria-label={row.title}>

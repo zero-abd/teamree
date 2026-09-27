@@ -239,6 +239,22 @@ describe('worktree landing', () => {
 })
 
 describe('pull requests', () => {
+  it('asks gh once when two reads of the same branch overlap', async () => {
+    const context = await setup({ gh: 'signed-in' })
+    await lookLikeGitHub(context.repo)
+    const worktree = await worktreeWithCommit(context)
+    await context.service.worktreePush({ worktreeId: worktree.id })
+
+    await Promise.all([
+      context.service.worktreeLanding({ worktreeId: worktree.id }),
+      context.service.worktreeLanding({ worktreeId: worktree.id })
+    ])
+
+    const calls = await ghCalls(context.repo)
+    expect(calls.filter((call) => call.startsWith('auth status'))).toHaveLength(1)
+    expect(calls.filter((call) => call.startsWith('pr view'))).toHaveLength(1)
+  })
+
   it('opens one with gh when gh is signed in, then reads it back as open', async () => {
     const context = await setup({ gh: 'signed-in' })
     await lookLikeGitHub(context.repo)

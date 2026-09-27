@@ -83,6 +83,20 @@ describe('what the page says about updates', () => {
   it('has no last check to report before one has ever run', () => {
     expect(updatePanel(update(), NOW).lastChecked).toBeNull()
   })
+
+  it('says a failed check could not check, tersely, and keeps the last answer’s time', () => {
+    const failed = update({ checkedAt: NOW - 1_000, succeededAt: NOW - 90 * 60_000, problem: 'fetch failed' })
+    expect(updatePanel(failed, NOW)).toMatchObject({
+      lastChecked: 'Checked 1h ago',
+      problem: 'Couldn’t check · offline'
+    })
+    expect(updatePanel(update({ checkedAt: NOW, problem: 'getaddrinfo ENOTFOUND api.github.com' }), NOW)).toMatchObject(
+      { lastChecked: null, problem: 'Couldn’t check · offline' }
+    )
+    expect(
+      updatePanel(update({ checkedAt: NOW, problem: 'GitHub answered 403 for stable releases' }), NOW).problem
+    ).toBe('Couldn’t check · GitHub answered 403')
+  })
 })
 
 describe('what the page says about a relay', () => {

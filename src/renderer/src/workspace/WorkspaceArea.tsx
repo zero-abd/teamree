@@ -2,7 +2,8 @@
 // panes. Those sit outside the worktree's tree because every navigation here replaces what is under
 // it, and unmounting a watched pane closes and reopens its subscription.
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { hasResumable } from '../agents/harnesses'
 import { Dashboard } from '../dashboard/Dashboard'
 import { HelpView } from '../help/HelpView'
 import type { PlatformModifier } from '../keyboard/platformModifier'
@@ -124,6 +125,17 @@ function WorkspaceView({
   const settingsOpen = useWorkspaceStore((state) => state.settingsOpen)
   const helpOpen = useWorkspaceStore((state) => state.helpOpen)
   const restoring = useWorkspaceStore((state) => state.restoring)
+  const agents = useWorkspaceStore((state) => state.agents)
+  const conversations = useWorkspaceStore((state) =>
+    activeWorktreeId === null ? undefined : state.conversations[activeWorktreeId]
+  )
+  const loadConversations = useWorkspaceStore((state) => state.loadConversations)
+  const stoppedHere = Object.values(terminals).some(
+    (terminal) => terminal.worktreeId === activeWorktreeId && terminal.restored === 'stopped'
+  )
+  useEffect(() => {
+    if (stoppedHere && activeWorktreeId !== null) void loadConversations(activeWorktreeId)
+  }, [stoppedHere, activeWorktreeId, loadConversations])
 
   const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
   const fontFamily = useWorkspaceStore((state) => state.terminalOptions.fontFamily)
@@ -225,7 +237,7 @@ function WorkspaceView({
               onFocus={focusPane}
               onClose={onClose}
               onRelaunch={onRelaunch}
-              onResumeConversation={onResumeConversation}
+              onResumeConversation={hasResumable(conversations, agents) ? onResumeConversation : undefined}
               onResize={onResize}
               isAppChord={isAppChord}
               modifier={modifier}

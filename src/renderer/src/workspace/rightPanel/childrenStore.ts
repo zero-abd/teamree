@@ -4,6 +4,7 @@
 import { create } from 'zustand'
 import { runtimeClient } from '../../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../../state/workspaceStore'
+import type { HeldBack } from './childrenModel'
 import { commitSuggestion, shownDraft, useCommitDrafts } from './commitMessage'
 
 export type ChildStop = { worktreeId: string; error: string; conflicts: string[] }
@@ -12,10 +13,12 @@ type ChildrenState = {
   /** The child being merged, per parent. */
   merging: Record<string, string>
   stopped: Record<string, ChildStop>
+  /** What the parent's last Merge All Ready left out for a clash. */
+  skipped: Record<string, HeldBack[]>
   /** A parent whose Children section should scroll into view. */
   reveal: string | null
   /** True once every child named has landed. */
-  mergeChildren: (parentId: string, childIds: readonly string[]) => Promise<boolean>
+  mergeChildren: (parentId: string, childIds: readonly string[], held?: readonly HeldBack[]) => Promise<boolean>
   /** Opens the parent on its Changes tab, at its Children. */
   showChildren: (parentId: string) => Promise<void>
   revealed: () => void
@@ -24,11 +27,15 @@ type ChildrenState = {
 export const useChildren = create<ChildrenState>((set, get) => ({
   merging: {},
   stopped: {},
+  skipped: {},
   reveal: null,
 
-  async mergeChildren(parentId, childIds) {
+  async mergeChildren(parentId, childIds, held = []) {
     if (get().merging[parentId] !== undefined) return false
-    set((state) => ({ stopped: without(state.stopped, parentId) }))
+    set((state) => ({
+      stopped: without(state.stopped, parentId),
+      skipped: held.length === 0 ? without(state.skipped, parentId) : { ...state.skipped, [parentId]: [...held] }
+    }))
     for (const childId of childIds) {
       set((state) => ({ merging: { ...state.merging, [parentId]: childId } }))
       const why = await landChild(childId)

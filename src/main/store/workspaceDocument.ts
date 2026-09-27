@@ -153,6 +153,7 @@ export type AskedQuestion = keyof AskedQuestions
 const UpdatesSchema = z.object({
   automatic: z.boolean().optional(),
   lastCheckedAt: z.number().optional(),
+  lastSucceededAt: z.number().optional(),
   /** Bounded because every other field on disk that came off a wire is. */
   lastSeenVersion: z.string().min(1).max(64).optional()
 })

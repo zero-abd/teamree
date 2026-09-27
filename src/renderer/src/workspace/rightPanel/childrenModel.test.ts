@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
-import { childRows, mergeable, readyToMerge, type ChildrenInput } from './childrenModel'
+import { childRows, heldBack, mergeable, readyToMerge, type ChildrenInput } from './childrenModel'
 
 const worktree = (id: string, extra: Partial<Worktree> = {}): Worktree => ({
   id,
@@ -128,6 +128,7 @@ describe('childRows', () => {
     expect(rows[0]?.siblingConflicts).toEqual([{ worktreeId: 'pay', title: 'payment', paths: ['money.js'] }])
     expect(rows[1]?.siblingConflicts).toEqual([{ worktreeId: 'cart', title: 'cart totals', paths: ['money.js'] }])
     expect(readyToMerge(rows).map((row) => row.worktreeId)).toEqual(['cart'])
+    expect(heldBack(rows)).toEqual([{ worktreeId: 'pay', title: 'payment', clashesWith: 'cart totals' }])
   })
 
   it('never offers a child whose checkout is missing', () => {

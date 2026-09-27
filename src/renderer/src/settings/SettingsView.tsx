@@ -511,12 +511,16 @@ function UpdatesSection(): React.JSX.Element {
             <p className="settings-fact">{panel.headline}</p>
             {panel.offersCheck ? (
               <div className="settings-actions">
-                {panel.lastChecked ? <span className="settings-aside">{panel.lastChecked}</span> : null}
+                {panel.lastChecked || panel.problem ? (
+                  <span className="settings-aside">
+                    {[panel.problem, panel.lastChecked].filter(Boolean).join(' · ')}
+                  </span>
+                ) : null}
                 <button
                   type="button"
                   className="button button--small"
                   disabled={update?.checking ?? false}
-                  onClick={() => void checkForUpdates()}
+                  onClick={() => void checkForUpdates({ inline: true })}
                 >
                   {update?.checking ? 'Checking…' : 'Check for Updates'}
                 </button>
@@ -549,8 +553,10 @@ function UpdatesSection(): React.JSX.Element {
           </label>
         ) : null}
 
-        {/* Kept beside the button that tried rather than raised as a notice. */}
-        {shown.whole && panel.problem ? <p className="settings-warning">{panel.problem}</p> : null}
+        {/* A checkable build says its failure beside the button instead. */}
+        {shown.whole && !panel.offersCheck && panel.problem ? (
+          <p className="settings-warning">{panel.problem}</p>
+        ) : null}
       </div>
     </section>
   )

@@ -44,7 +44,7 @@ beforeEach(async () => {
   const project = await service.addProject({ path: repo.repoPath })
   parent = await ready({ projectId: project.id, name: 'Checkout' })
   useWorkspaceStore.setState({ ...INITIAL, worktrees: [parent], projects: [project] }, true)
-  useChildren.setState({ merging: {}, stopped: {}, reveal: null })
+  useChildren.setState({ merging: {}, stopped: {}, skipped: {}, reveal: null })
   useCommitDrafts.setState({ drafts: {} })
 })
 
@@ -125,5 +125,14 @@ describe('landing children', () => {
     await useChildren.getState().mergeChildren(parent.id, [search.id])
 
     expect(useChildren.getState().stopped[parent.id]).toBeUndefined()
+  })
+
+  it('keeps what a run left out for a clash, until the next run', async () => {
+    const held = [{ worktreeId: 'pay', title: 'Payment', clashesWith: 'Cart totals' }]
+    await useChildren.getState().mergeChildren(parent.id, [], held)
+    expect(useChildren.getState().skipped[parent.id]).toEqual(held)
+
+    await useChildren.getState().mergeChildren(parent.id, [])
+    expect(useChildren.getState().skipped[parent.id]).toBeUndefined()
   })
 })

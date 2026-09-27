@@ -79,7 +79,14 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
     }
   }, [worktreeId])
 
-  const into = landing?.parent?.name ?? plan?.into ?? landing?.base ?? 'main'
+  // The parent's stored name may be a task's clipped first line; its title is whole.
+  const parent = worktrees.find((entry) => entry.id === landing?.parent?.worktreeId)
+  const into =
+    (parent === undefined ? undefined : worktreeLabel(worktreeDisplay(parent))) ??
+    landing?.parent?.name ??
+    plan?.into ??
+    landing?.base ??
+    'main'
   const name = worktree === undefined ? 'this worktree' : `"${worktreeLabel(worktreeDisplay(worktree))}"`
   const dirty = plan?.dirty ?? []
   const commits = (plan?.commits ?? []).map((commit) => `${commit.shortSha} ${commit.subject}`)
@@ -157,10 +164,12 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
 
   const sides = updateSides(worktrees, projects, worktreeId)
   const title = `Merge ${name} into ${into}?`
+  const hint = plan?.checkout === undefined ? title : `${title}\n${plan.checkout}`
   if (status?.operation !== undefined) {
     return (
       <Confirm
         title={title}
+        titleHint={title}
         body={conflictHeadline(status.operation, sides, status.conflicted)}
         cancel="Cancel"
         confirm="Show Conflicts"
@@ -176,7 +185,7 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
     return (
       <Confirm
         title={title}
-        titleHint={plan?.checkout}
+        titleHint={hint}
         cancel="Cancel"
         confirm={worktree?.parentId === undefined ? `Update from ${into}` : 'Update from Parent'}
         tone="primary"
@@ -218,7 +227,7 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   return (
     <Confirm
       title={title}
-      titleHint={plan?.checkout}
+      titleHint={hint}
       cancel="Cancel"
       confirm={merging ? 'Merging…' : commitFirst ? 'Commit & Merge' : 'Merge'}
       tone="primary"
