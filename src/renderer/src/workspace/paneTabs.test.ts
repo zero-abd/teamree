@@ -268,36 +268,30 @@ describe('file tabs', () => {
       text: 'app.ts',
       activity: null,
       kind: 'file',
-      files: ['file:1'],
       preview: true
     })
     expect(paneTabTitle(tab!)).toBe('app.ts')
   })
 
-  it('calls a column of several files Files, jumping to the shown one', () => {
+  it('gives every tab of a group its own tab, terminals and files in the group’s order', () => {
     const file = (id: string, path: string): PaneNode => ({ kind: 'leaf', terminalId: id, pane: 'file', path })
-    const column: PaneNode = {
+    const group: PaneNode = {
       kind: 'split',
       direction: 'column',
       sizes: [0.25, 0.25, 0.25, 0.25],
-      children: [file('file:1', 'a.ts'), file('file:2', 'src/app.ts'), file('file:3', 'b.ts'), file('file:4', 'c.ts')],
+      children: [file('file:1', 'a.ts'), leaf('b'), file('file:2', 'src/app.ts'), file('file:3', 'b.ts')],
       tabs: true,
       shown: 'file:2'
     }
-    const root: PaneNode = { kind: 'split', direction: 'row', sizes: [0.5, 0.5], children: [leaf('a'), column] }
-    const tabs = paneTabs(root, { a: terminal({ id: 'a', title: 'zsh' }) })
-    expect(tabs).toHaveLength(2)
-    expect(tabs[1]).toEqual({
-      terminalId: 'file:2',
-      agent: undefined,
-      label: 'Files 4',
-      text: 'Files',
-      activity: null,
-      kind: 'file',
-      files: ['file:1', 'file:2', 'file:3', 'file:4'],
-      names: ['a.ts', 'app.ts', 'b.ts', 'c.ts']
-    })
-    expect(paneTabTitle(tabs[1]!)).toBe('a.ts, app.ts, b.ts, c.ts')
+    const root: PaneNode = { kind: 'split', direction: 'row', sizes: [0.5, 0.5], children: [leaf('a'), group] }
+    const tabs = paneTabs(root, { a: terminal({ id: 'a', title: 'zsh' }), b: terminal({ id: 'b', title: 'npm test' }) })
+    expect(tabs.map((tab) => [tab.terminalId, tab.label])).toEqual([
+      ['a', 'zsh'],
+      ['file:1', 'a.ts'],
+      ['b', 'npm test'],
+      ['file:2', 'app.ts'],
+      ['file:3', 'b.ts']
+    ])
   })
 
   // `startTask` labels the agent's pane with the stored name, cut to "Add a subtract function to claude".

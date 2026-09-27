@@ -106,6 +106,9 @@
 
   /* One height for a select and the fields beside it, in Settings and in dialogs. */
   --control-h: 28px;
+  /* A group's strip of tabs, and the focused group's, a tone lighter than the rest. */
+  --group-strip-h: 36px;
+  --bg-tabstrip-active: var(--bg-raised);
 
   /* Two rings, not one: a gap of the surface the control sits on, then the
      accent. A single accent ring drawn tight against a control's own border is

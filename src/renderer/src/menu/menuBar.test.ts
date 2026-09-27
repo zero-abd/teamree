@@ -214,6 +214,10 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'select-next-pane',
       'previous-file-tab',
       'next-file-tab',
+      'move-tab-previous',
+      'move-tab-next',
+      'split-tab-right',
+      'split-tab-down',
       'expand-pane'
     ])
     expect(sectionOrder('text')).toEqual(['actual-size', 'bigger-text', 'smaller-text'])
@@ -299,6 +303,10 @@ describe('what the menu bar says can be done', () => {
       'select-previous-pane': false,
       'next-file-tab': false,
       'previous-file-tab': false,
+      'move-tab-next': false,
+      'move-tab-previous': false,
+      'split-tab-right': false,
+      'split-tab-down': false,
       'expand-pane': false,
       'previous-worktree': false,
       'next-worktree': false,
@@ -358,6 +366,10 @@ describe('what the menu bar says can be done', () => {
       'select-previous-pane',
       'next-file-tab',
       'previous-file-tab',
+      'move-tab-next',
+      'move-tab-previous',
+      'split-tab-right',
+      'split-tab-down',
       'previous-worktree',
       'next-worktree',
       'worktree-back',

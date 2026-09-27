@@ -68,7 +68,7 @@ function mount(
   node: PaneNode,
   terminals: Terminal[],
   focusedTerminalId: string | null = null,
-  foldedColumn = false
+  foldedColumn: PaneNode | null = null
 ): ReturnType<typeof render> {
   return render(
     <PaneTree
@@ -133,14 +133,15 @@ describe('one pane', () => {
     expect(screen.getByRole('region', { name: 'terminal' })).toBeTruthy()
   })
 
-  // The tab above it already says its name and draws its dot.
-  it('draws no bar, no name and no dot of its own when it is the only pane', () => {
+  // The tab above it says its name, draws its dot and closes it.
+  it('draws no bar, no name and no dot of its own when it is the only pane, its tab does', () => {
     mount(leaf('t1'), [terminal('t1', { title: 'claude', busy: true })])
-    expect(screen.getByRole('region', { name: 'claude' })).toBeTruthy()
-    expect(document.querySelector('.pane__bar')).toBeNull()
-    expect(document.querySelector('.activity')).toBeNull()
-    expect(screen.queryByText('claude')).toBeNull()
-    expect(screen.queryByRole('button', { name: /Close pane/ })).toBeNull()
+    const pane = screen.getByRole('region', { name: 'claude' })
+    expect(pane.querySelector('.pane__bar, .activity')).toBeNull()
+    expect(within(pane).queryByText('claude')).toBeNull()
+    expect(within(pane).queryByRole('button', { name: /Close pane/ })).toBeNull()
+    expect(screen.getByRole('tab', { name: 'claude' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Close pane claude' })).toBeTruthy()
   })
 
   it('says nothing about exiting while the shell is alive', () => {
@@ -172,14 +173,25 @@ describe('one pane', () => {
     expect(screen.getByText('exited 0')).toBeTruthy()
   })
 
-  // Every pane has its tab: a title strip repeating it was the same name twice, and its close twice.
+  // Every pane has its tab, on its own group's strip right above it.
   it('draws no bar, name, dot or close of its own in a split either', () => {
     mount(row(leaf('t1'), leaf('t2')), [terminal('t1', { busy: true, cols: 132, rows: 43 }), terminal('t2')])
-    expect(screen.getAllByRole('region')).toHaveLength(2)
-    expect(document.querySelectorAll('.pane__bar, .pane__title, .pane__notice, .activity')).toHaveLength(0)
-    expect(screen.queryByText('t1')).toBeNull()
+    const panes = screen.getAllByRole('region')
+    expect(panes).toHaveLength(2)
+    for (const pane of panes) {
+      expect(pane.querySelectorAll('.pane__bar, .pane__title, .pane__notice, .activity')).toHaveLength(0)
+      expect(within(pane).queryByRole('button', { name: /Close pane/ })).toBeNull()
+    }
     expect(screen.queryByText(/132×43/)).toBeNull()
-    expect(screen.queryByRole('button', { name: /Close pane/ })).toBeNull()
+    const strips = screen.getAllByRole('tablist')
+    expect(
+      strips.map((strip) =>
+        within(strip)
+          .getAllByRole('tab')
+          .map((tab) => tab.textContent)
+      )
+    ).toEqual([['t1'], ['t2']])
+    expect(panes[0]!.closest('.group')?.contains(strips[0]!)).toBe(true)
   })
 
   it('says a split pane exited, and offers to run it again, without naming it', () => {
@@ -531,21 +543,21 @@ describe('the file column', () => {
 
   it('draws its files as tabs, only the shown one open, the preview set apart', () => {
     mount(row(leaf('t1'), column), [terminal('t1')], 't1')
-    const tabs = within(screen.getByRole('tablist', { name: 'Open files' })).getAllByRole('tab')
+    const tabs = within(screen.getAllByRole('tablist')[1]!).getAllByRole('tab')
     expect(tabs.map((tab) => [tab.textContent, tab.getAttribute('aria-selected')])).toEqual([
       ['NOTES.md', 'false'],
       ['app.ts', 'true']
     ])
-    expect(tabs[1]!.className).toContain('column__name--preview')
+    expect(tabs[1]!.querySelector('.tab__name--preview')).not.toBeNull()
     expect(screen.getByTestId('page-file:1').closest('[hidden]')).not.toBeNull()
     expect(screen.getByTestId('viewer-file:2').closest('[hidden]')).toBeNull()
     expect(document.querySelectorAll('.gutter')).toHaveLength(1)
   })
 
-  it('draws no tab row for one file, which the window tab names', () => {
+  it('names one file on its own strip, over it', () => {
     const one: PaneNode = { ...column, children: [file('file:2', 'src/app.ts')], sizes: [1] }
     mount(row(leaf('t1'), one), [terminal('t1')], 't1')
-    expect(screen.queryByRole('tablist', { name: 'Open files' })).toBeNull()
+    expect(within(screen.getAllByRole('tablist')[1]!).getByRole('tab').textContent).toBe('app.ts')
     expect(screen.getByTestId('viewer-file:2').closest('[hidden]')).toBeNull()
   })
 
@@ -553,13 +565,13 @@ describe('the file column', () => {
     mount(row(leaf('t1'), column), [terminal('t1')], 't1')
     fireEvent.click(screen.getByRole('tab', { name: 'NOTES.md' }))
     expect(onFocus).toHaveBeenCalledWith('file:1')
-    fireEvent.click(screen.getByRole('button', { name: 'Close NOTES.md' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Close pane NOTES.md' }))
     expect(onClose).toHaveBeenCalledWith('file:1')
   })
 
   it('folded, is left out and its share goes to its siblings, a drag still addressing the whole split', () => {
-    mount(row(leaf('t1'), leaf('t2'), column), [terminal('t1'), terminal('t2')], 't1', true)
-    expect(screen.queryByRole('tablist', { name: 'Open files' })).toBeNull()
+    mount(row(leaf('t1'), leaf('t2'), column), [terminal('t1'), terminal('t2')], 't1', column)
+    expect(screen.getAllByRole('tablist')).toHaveLength(2)
     expect(screen.queryByTestId('viewer-file:2')).toBeNull()
     expect(screen.getAllByRole('separator')).toHaveLength(1)
     giveSplitsWidth()
@@ -573,7 +585,7 @@ describe('the file column', () => {
   })
 
   it('folded beside one pane, leaves that pane the whole split', () => {
-    mount(row(leaf('t1'), column), [terminal('t1')], 't1', true)
+    mount(row(leaf('t1'), column), [terminal('t1')], 't1', column)
     expect(screen.getByTestId('surface-t1')).toBeTruthy()
     expect(screen.queryAllByRole('separator')).toHaveLength(0)
   })
@@ -600,7 +612,7 @@ describe('sixteen open files', () => {
   // jsdom has no layout: each tab is 100 px wide in a 300 px strip.
   beforeEach(() => {
     const index = (element: HTMLElement): number => Number(element.dataset.paneId?.slice('file:'.length) ?? 0)
-    const isStrip = (element: HTMLElement): boolean => element.classList.contains('column__tabs')
+    const isStrip = (element: HTMLElement): boolean => element.classList.contains('tabs__list')
     const define = (name: string, get: (element: HTMLElement) => number): void => {
       Object.defineProperty(HTMLElement.prototype, name, {
         configurable: true,
@@ -628,7 +640,7 @@ describe('sixteen open files', () => {
     useWorkspaceStore.setState({ unsavedFiles: {} })
   })
 
-  const strip = (): HTMLElement => document.querySelector('.column__tabs') as HTMLElement
+  const strip = (): HTMLElement => document.querySelectorAll<HTMLElement>('.tabs__list')[1]!
   const draw = (shown: number): React.JSX.Element => (
     <PaneTree
       node={row(leaf('t1'), many(shown))}
@@ -661,7 +673,7 @@ describe('sixteen open files', () => {
 
   it('counts the files out of view on a button that lists every one, unsaved marked', () => {
     render(draw(0))
-    const more = screen.getByRole('button', { name: 'All open files' })
+    const more = screen.getByRole('button', { name: 'All tabs' })
     expect(more.textContent).toBe('+13')
     fireEvent.click(more)
     const items = screen.getAllByRole('menuitem')
@@ -682,12 +694,12 @@ describe('sixteen open files', () => {
     strip().scrollLeft = 50
     fireEvent.scroll(strip())
     expect(cut()).toEqual([0, 3, 4])
-    expect(screen.getByRole('button', { name: 'All open files' }).textContent).toBe('+14')
+    expect(screen.getByRole('button', { name: 'All tabs' }).textContent).toBe('+14')
   })
 
   it('marks the shown file in the list, and starts the keyboard on it', () => {
     render(draw(5))
-    fireEvent.click(screen.getByRole('button', { name: 'All open files' }))
+    fireEvent.click(screen.getByRole('button', { name: 'All tabs' }))
     const items = screen.getAllByRole('menuitem')
     expect(items.filter((item) => item.getAttribute('aria-current') === 'true')).toEqual([items[5]])
     expect(document.activeElement).toBe(items[5])
@@ -696,7 +708,7 @@ describe('sixteen open files', () => {
   it('scrolls a tab in from the right to a tab edge, so the first tab on the strip is whole', () => {
     const view = render(draw(0))
     const wide = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
-      return this.classList.contains('column__tabs') ? 250 : 0
+      return this.classList.contains('tabs__list') ? 250 : 0
     })
     try {
       view.rerender(draw(4))
@@ -710,6 +722,6 @@ describe('sixteen open files', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get: () => 300 })
     Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 1600 })
     render(draw(0))
-    expect(screen.queryByRole('button', { name: 'All open files' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'All tabs' })).toBeNull()
   })
 })

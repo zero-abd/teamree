@@ -71,7 +71,12 @@ export function SplitFrame({
   }
 
   return (
-    <div className={`split split--${direction}${className ? ` ${className}` : ''}`} ref={containerRef}>
+    <div
+      className={`split split--${direction}${draft === null ? '' : ' split--dragging'}${
+        className ? ` ${className}` : ''
+      }`}
+      ref={containerRef}
+    >
       {cells.map((cell, index) => (
         <Fragment key={cell.key}>
           <div className="split__cell" style={{ flexBasis: bases[index] }}>

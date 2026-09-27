@@ -62,6 +62,11 @@ describe('reading a published menu', () => {
       // Going to what needs you: ⌃⌘ on the up and down arrows, which no text field reads.
       'CommandOrControl+Control+Down',
       'CommandOrControl+Control+Up',
+      // A tab to the pane beside, or out on its own: ⌃⌘ on the arrow it goes by.
+      'CommandOrControl+Control+Left',
+      'CommandOrControl+Control+Right',
+      'CommandOrControl+Control+Shift+Right',
+      'CommandOrControl+Control+Shift+Down',
       // The region walk, on F6 alone.
       'F6',
       'Shift+F6',
@@ -89,7 +94,7 @@ describe('reading a published menu', () => {
       'Control+Alt+Tab',
       'Control+Shift+PageDown',
       'CommandOrControl+Control+D',
-      'CommandOrControl+Control+Left',
+      'CommandOrControl+Control+Alt+Left',
       // F6 is the one bare key, and takes only shift.
       'F5',
       'Alt+F6',

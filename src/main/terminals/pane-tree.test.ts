@@ -4,10 +4,13 @@ import { fileLeaf } from '../../shared/filePane'
 import {
   appendPane,
   containsTerminal,
+  insertBeside,
+  joinGroup,
   leafPane,
   normalisePane,
   normaliseSizes,
   parsePaneNode,
+  placeOf,
   removePane,
   splitPane,
   terminalIdsIn
@@ -424,7 +427,7 @@ describe('the file column', () => {
     expect(parsePaneNode(bad)).toEqual(leafPane('t'))
   })
 
-  it('keeps its last tab, and forgets the shown and preview tabs it lost', () => {
+  it('keeps its last tab, shows the one at the lost tab’s place and forgets the preview it lost', () => {
     const root: PaneNode = {
       kind: 'split',
       direction: 'row',
@@ -435,7 +438,7 @@ describe('the file column', () => {
       kind: 'split',
       direction: 'row',
       sizes: [0.5, 0.5],
-      children: [leafPane('t'), { ...column(['file:a']), sizes: [1] }]
+      children: [leafPane('t'), { ...column(['file:a']), sizes: [1], shown: 'file:a' }]
     })
   })
 
@@ -473,5 +476,95 @@ describe('the file column', () => {
       children: [column(['file:a', 'file:b']), leafPane('t')]
     })
     expect(appendPane(column(['file:a']), 't', 'column')).toMatchObject({ children: [{ tabs: true }, leafPane('t')] })
+  })
+})
+
+describe('tab groups', () => {
+  const group = (children: PaneNode[], shown?: string): PaneNode => ({
+    kind: 'split',
+    direction: 'column',
+    sizes: children.map(() => 1 / children.length),
+    children,
+    tabs: true,
+    ...(shown === undefined ? {} : { shown })
+  })
+
+  it('come back from the parser whole, terminals and files together, the shown tab kept', () => {
+    const mixed: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [group([leafPane('a'), leafPane('b')], 'b'), group([leafPane('c'), fileLeaf('file:x', 'x.ts')], 'c')]
+    }
+    expect(parsePaneNode(JSON.parse(JSON.stringify(mixed)))).toEqual(mixed)
+  })
+
+  it('migrate a layout saved before groups unchanged: a lone pane, a split, a file column', () => {
+    const saved: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.25, 0.25, 0.5],
+      children: [
+        leafPane('a'),
+        { kind: 'split', direction: 'column', sizes: [0.5, 0.5], children: [leafPane('b'), leafPane('c')] },
+        group([fileLeaf('file:x', 'x.ts'), fileLeaf('file:y', 'y.md')], 'file:y')
+      ]
+    }
+    expect(parsePaneNode(JSON.parse(JSON.stringify(saved)))).toEqual(saved)
+    expect(parsePaneNode(leafPane('a'))).toEqual(leafPane('a'))
+  })
+
+  it('are never nested: a group holding a split is read as the split', () => {
+    const nested = group([
+      leafPane('a'),
+      { kind: 'split', direction: 'row', sizes: [1, 1], children: [leafPane('b'), leafPane('c')] }
+    ])
+    expect(parsePaneNode(nested)).not.toHaveProperty('tabs')
+  })
+
+  it('of one terminal are that pane', () => {
+    expect(normalisePane(group([leafPane('a')]))).toEqual(leafPane('a'))
+    const root: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [leafPane('x'), group([leafPane('a'), leafPane('b')], 'a')]
+    }
+    expect(removePane(root, 'a')).toEqual({
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [leafPane('x'), leafPane('b')]
+    })
+  })
+
+  it('take a new pane as a tab after the shown one, a lone pane becoming a group', () => {
+    expect(joinGroup(leafPane('a'), 'a', 'n')).toEqual(group([leafPane('a'), leafPane('n')], 'n'))
+    const root: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.3, 0.7],
+      children: [leafPane('x'), group([leafPane('a'), leafPane('b'), leafPane('c')], 'b')]
+    }
+    expect(joinGroup(root, 'c', 'n')).toEqual({
+      ...root,
+      children: [leafPane('x'), group([leafPane('a'), leafPane('b'), leafPane('n'), leafPane('c')], 'n')]
+    })
+    expect(joinGroup(root, 'missing', 'n')).toEqual(appendPane(root, 'n'))
+  })
+
+  it('get a closed tab back among the tabs it left', () => {
+    const root: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [leafPane('x'), group([leafPane('a'), leafPane('b')], 'b')]
+    }
+    const place = placeOf(root, 'b')
+    const closed = removePane(root, 'b')
+    expect(insertBeside(closed, place!, 'b')).toEqual({
+      ...root,
+      children: [leafPane('x'), group([leafPane('a'), leafPane('b')], 'b')]
+    })
   })
 })

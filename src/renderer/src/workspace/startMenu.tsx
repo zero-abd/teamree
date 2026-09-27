@@ -1,5 +1,5 @@
 // What can start in a worktree: fixed rows, then the agents the runtime's probe found, in its order.
-// The strip's `+` shows them as a menu, an empty worktree as buttons.
+// A strip's `+` shows them as a menu, an empty worktree as buttons.
 
 import type { InstalledAgent } from '@shared/entities'
 import { AgentGlyph } from '../agents/glyphs'
@@ -100,11 +100,12 @@ export function startMenuItems(
   return items
 }
 
-/** The rows bound to the store, for the worktree given; none without one. */
+/** The rows bound to the store, for the worktree given; none without one. `tabOf` opens them as tabs of that pane's group. */
 export function useStartMenuItems(
   worktreeId: string | null,
   modifier: PlatformModifier,
-  panesOnly = false
+  panesOnly = false,
+  tabOf?: string
 ): RowMenuItem[] {
   const agents = useWorkspaceStore((state) => state.agents)
   const conversations = useWorkspaceStore((state) =>
@@ -120,9 +121,9 @@ export function useStartMenuItems(
     agents,
     modifier,
     {
-      newTerminal: () => void createTerminal(worktreeId),
+      newTerminal: () => void createTerminal(worktreeId, tabOf),
       newMarkdown: () => newMarkdown(worktreeId),
-      startAgent: (command) => void startAgent(command),
+      startAgent: (command) => void startAgent(command, tabOf),
       resumeConversation: () => openDialog({ kind: 'resume-conversation', worktreeId }),
       openAgentSettings: () => openSettings('agents')
     },

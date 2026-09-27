@@ -1,44 +1,38 @@
-// The strip along the top of the workspace: the open worktree's panes (what and how is `paneTabs`),
-// plus the actions a tab reaches. It is the window's top edge and drag region on this side while panes
-// are under it; over a page it is drawn only to hold Show sidebar. The end buttons split and start (`+`
-// opens a menu of what can start here) whenever a worktree is open, and a tab is where a pane gets renamed.
+// The workspace's head and its strips of tabs. The head is the window's top edge on this side: the worktree's
+// name, and the runs, maximize and splits, which act on the worktree and the focused pane. Each group of tabs
+// under it has its own strip, directly above its pane: its tabs, `+N` for any out of sight, and `+`.
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { hasCheckout } from '@shared/entities'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { hasCheckout, type Terminal } from '@shared/entities'
 import { UnsavedDot } from '../files/FileBar'
 import { usePaneDrag, useTabDrag } from '../panes/paneDrag'
-import { collectTerminalIds, hasTerminal } from '../panes/paneLayout'
+import { shownOf, type PaneGroup } from '../panes/paneGroups'
+import { collectTerminalIds } from '../panes/paneLayout'
 import { usePaneMenu } from './paneMenu'
-import { paneTabs, paneTabTitle } from './paneTabs'
+import { paneTabs, paneTabTitle, type PaneTab } from './paneTabs'
 import { RunButtons } from './runButtons'
 import { useStartMenuItems } from './startMenu'
 import { PaneGlyph } from '../agents/glyphs'
 import { Icon } from '../icons/Icon'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { dotClass, dotTone } from '../sidebar/agentRows'
+import { worktreeDisplay, type WorktreeNameSource } from '../sidebar/worktreeDisplay'
 import { refocus, RowMenu, type MenuClosed, type RowMenuAnchor } from '../sidebar/RowMenu'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
-/** Between the `+` and the menu that hangs from it. */
+/** Between a button and the menu that hangs from it. */
 const MENU_GAP_PX = 4
 
-export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): React.JSX.Element | null {
-  const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
-  // Refused only for a worktree known to have no checkout yet.
-  const noCheckout = useWorkspaceStore((state) => {
-    const worktree = state.worktrees.find((entry) => entry.id === state.activeWorktreeId)
-    return worktree !== undefined && !hasCheckout(worktree)
-  })
+/** Within the 120–180 ms the rest of the chrome moves in. */
+const TAB_MOTION_MS = 150
+
+/** Over the panes, the worktree's name and its buttons; over a page with the sidebar away, only Show sidebar. */
+export function WorkspaceHead({ modifier }: { modifier: PlatformModifier }): React.JSX.Element | null {
+  const worktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === state.activeWorktreeId))
-  const splitFocusedPane = useWorkspaceStore((state) => state.splitFocusedPane)
-  const toggleExpandedPane = useWorkspaceStore((state) => state.toggleExpandedPane)
-  const layout = useWorkspaceStore((state) =>
-    state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
-  )
-  const terminals = useWorkspaceStore((state) => state.terminals)
+  const project = useWorkspaceStore((state) => state.projects.find((entry) => entry.id === worktree?.projectId))
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
-  const toggleSidebar = useWorkspaceStore((state) => state.toggleSidebar)
   // Same precedence `WorkspaceArea` applies.
   const panesShown = useWorkspaceStore(
     (state) => !state.dashboardOpen && state.teamworkProjectId === null && !state.settingsOpen && !state.helpOpen
@@ -47,11 +41,65 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   const settingsShown = useWorkspaceStore(
     (state) => state.settingsOpen && !state.dashboardOpen && state.teamworkProjectId === null
   )
-  // A teammate's pane holding focus marks no tab here, as `WorkspaceArea` marks no focused border.
-  const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
-  const focusPane = useWorkspaceStore((state) => state.focusPane)
-  const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
-  const closePanes = useWorkspaceStore((state) => state.closePanes)
+
+  // A page's own head is the top edge while it is open.
+  if (!panesShown && (sidebarVisible || settingsShown)) return null
+  const display = worktree === undefined ? undefined : worktreeDisplay(worktree)
+
+  return (
+    <div className="workspace__head" data-region="strip">
+      <SidebarToggle />
+      {display === undefined || !panesShown ? null : (
+        <>
+          <span className="workspace__name">{display.title}</span>
+          <span className="workspace__where">
+            {[project?.name, worktree?.branch].filter((part) => part !== undefined && part !== '').join(' · ')}
+          </span>
+        </>
+      )}
+      {worktreeId === null || !panesShown ? null : <HeadActions worktreeId={worktreeId} modifier={modifier} />}
+    </div>
+  )
+}
+
+/** Show sidebar, first in the strip so that on macOS it comes right after the window buttons. */
+function SidebarToggle(): React.JSX.Element | null {
+  const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
+  const toggleSidebar = useWorkspaceStore((state) => state.toggleSidebar)
+  return sidebarVisible ? null : (
+    <button
+      type="button"
+      className="shell__toggle"
+      title="Show sidebar"
+      aria-label="Show sidebar"
+      onClick={toggleSidebar}
+    >
+      <Icon name="sidebar-toggle" />
+    </button>
+  )
+}
+
+/** One group's strip: its tabs, `+N` for any out of sight, and `+` for a new tab here. */
+export function GroupStrip({
+  group,
+  terminals,
+  worktree,
+  active,
+  modifier,
+  onFocus,
+  onClose
+}: {
+  group: PaneGroup
+  terminals: Readonly<Record<string, Terminal>>
+  /** What names the worktree; its agent pane goes by its title. */
+  worktree: WorktreeNameSource | undefined
+  /** It holds the focused pane. */
+  active: boolean
+  modifier: PlatformModifier
+  onFocus: (paneId: string) => void
+  onClose: (paneId: string) => void
+}): React.JSX.Element {
+  const worktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const renamePane = useWorkspaceStore((state) => state.renamePane)
   const pinFilePane = useWorkspaceStore((state) => state.pinFilePane)
   const unsavedFiles = useWorkspaceStore((state) => state.unsavedFiles)
@@ -62,6 +110,291 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   const paneMenu = usePaneMenu(modifier)
   const startDrag = useTabDrag()
   const dragged = usePaneDrag((state) => state.drag?.source.id)
+  // The sidebar's reading, so the strip and the row agree.
+  const unread = useUnreadPanes()
+
+  const tabs = paneTabs(group, terminals, worktree)
+  const shown = shownOf(group)
+
+  const list = useRef<HTMLDivElement | null>(null)
+  const [outside, setOutside] = useState(0)
+  const [listing, setListing] = useState<{ anchor: RowMenuAnchor; opener: HTMLElement } | null>(null)
+  const count = useCallback(() => setOutside(cutTabsOutOfView(list.current)), [])
+  const ids = tabs.map((tab) => tab.terminalId).join(' ')
+
+  // However a tab comes to be shown (a click, a chord, a link), it is scrolled into sight, and kept there as
+  // the strip or the tab changes width.
+  useLayoutEffect(() => {
+    const element = list.current
+    if (element === null) return
+    const reveal = (): void => {
+      const tab = element.querySelector<HTMLElement>(':scope > .tab--active')
+      if (tab) bringIntoView(element, tab)
+      count()
+    }
+    reveal()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(reveal)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [shown, ids, count])
+  useTabMotion(list, ids)
+
+  const closeListing = (): void => {
+    listing?.opener.focus()
+    setListing(null)
+  }
+  const naming = active && namingMarkdown !== null && namingMarkdown === worktreeId
+
+  return (
+    <div className={`tabs${active ? ' tabs--active' : ''}`} data-region="strip">
+      <div
+        ref={list}
+        className="tabs__list"
+        role="tablist"
+        aria-label="Tabs"
+        onScroll={count}
+        onWheel={(event) => {
+          // A mouse wheel only scrolls vertically, and the list has no vertical to scroll.
+          if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY
+        }}
+      >
+        {tabs.map((tab) => (
+          <Tab
+            key={tab.terminalId}
+            tab={tab}
+            shown={tab.terminalId === shown}
+            unread={unread.has(tab.terminalId)}
+            unsaved={unsavedFiles[tab.terminalId] === true}
+            dragged={dragged === tab.terminalId}
+            renaming={renaming === tab.terminalId}
+            onPress={(event) => startDrag(event, { id: tab.terminalId, label: tab.label })}
+            onMenu={(event) => paneMenu.onContextMenu(tab.terminalId, tab.label, event)}
+            onKey={(event) => paneMenu.onKeyDown(tab.terminalId, tab.label, event)}
+            onFocus={() => onFocus(tab.terminalId)}
+            onPin={() => pinFilePane(tab.terminalId)}
+            onRename={() => setRenaming(tab.terminalId)}
+            onRenamed={(name) => {
+              setRenaming(null)
+              // Enter on the untouched field is not a rename: storing `claude 1` would freeze a made-up number.
+              if (name.trim() !== tab.label) void renamePane(tab.terminalId, name)
+            }}
+            onCancelRename={() => setRenaming(null)}
+            onClose={() => onClose(tab.terminalId)}
+          />
+        ))}
+        {/* NOTES.md is already open: the next file's name, asked where the focus is. */}
+        {naming ? (
+          <div className="tab">
+            <RenameField
+              name=""
+              label="File name"
+              placeholder="name.md"
+              onCommit={(name) => nameMarkdown(name)}
+              onCancel={() => nameMarkdown(null)}
+            />
+          </div>
+        ) : null}
+      </div>
+      {outside === 0 ? null : (
+        <button
+          type="button"
+          className="tabs__more"
+          aria-label="All tabs"
+          aria-haspopup="menu"
+          aria-expanded={listing !== null}
+          onClick={(event) => {
+            if (listing !== null) return closeListing()
+            const box = event.currentTarget.getBoundingClientRect()
+            setListing({
+              anchor: { x: box.right, y: box.bottom + MENU_GAP_PX, align: 'right' },
+              opener: event.currentTarget
+            })
+          }}
+        >
+          +{outside}
+        </button>
+      )}
+      {listing === null ? null : (
+        <RowMenu
+          label="All tabs"
+          anchor={listing.anchor}
+          opener={listing.opener}
+          onClose={closeListing}
+          items={tabs.map((tab) => ({
+            label: tab.label,
+            icon: <span className="tabs__mark">{unsavedFiles[tab.terminalId] ? <UnsavedDot /> : null}</span>,
+            current: tab.terminalId === shown,
+            onChoose: () => onFocus(tab.terminalId)
+          }))}
+        />
+      )}
+      {worktreeId === null ? null : <NewTab worktreeId={worktreeId} group={shown} modifier={modifier} />}
+      {paneMenu.menu}
+    </div>
+  )
+}
+
+type TabProps = {
+  tab: PaneTab
+  shown: boolean
+  unread: boolean
+  unsaved: boolean
+  dragged: boolean
+  renaming: boolean
+  onPress: (event: React.PointerEvent<HTMLElement>) => void
+  onMenu: (event: React.MouseEvent<HTMLElement>) => void
+  onKey: (event: React.KeyboardEvent<HTMLElement>) => void
+  onFocus: () => void
+  onPin: () => void
+  onRename: () => void
+  onRenamed: (name: string) => void
+  onCancelRename: () => void
+  onClose: () => void
+}
+
+function Tab({ tab, shown, unread, unsaved, dragged, renaming, ...on }: TabProps): React.JSX.Element {
+  const isFile = tab.kind === 'file'
+  return (
+    <div
+      className={`tab${shown ? ' tab--active' : ''}${unread ? ' tab--unread' : ''}${dragged ? ' tab--dragged' : ''}`}
+      data-pane-id={tab.terminalId}
+      onPointerDown={(event) => {
+        if (!renaming) on.onPress(event)
+      }}
+      onContextMenu={(event) => {
+        if (!renaming) on.onMenu(event)
+      }}
+    >
+      {renaming ? (
+        // The shown name, not the stored label, which is empty for app-named panes.
+        <RenameField name={tab.label} onCommit={on.onRenamed} onCancel={on.onCancelRename} />
+      ) : (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={shown}
+          aria-label={tab.label}
+          className="tab__main"
+          title={unsaved ? `${tab.label} · unsaved` : unread ? `${paneTabTitle(tab)} · unread` : paneTabTitle(tab)}
+          onClick={on.onFocus}
+          onKeyDown={on.onKey}
+          onDoubleClick={() => {
+            if (!isFile) on.onRename()
+            else if (tab.preview) on.onPin()
+          }}
+        >
+          {/* The sidebar's dot, borrowed rather than reinvented: the same reading of the same PTY. */}
+          {isFile ? (
+            <Icon name="file" size={14} className="file__glyph" />
+          ) : (
+            <span
+              className={dotClass(tab.activity === null ? null : dotTone(tab.activity, tab.agent))}
+              aria-hidden="true"
+            />
+          )}
+          {isFile ? null : <PaneGlyph agent={tab.agent} />}
+          {tab.text === '' ? null : (
+            <span className={`tab__name${tab.preview ? ' tab__name--preview' : ''}`}>{tab.text}</span>
+          )}
+          {unsaved ? <UnsavedDot /> : null}
+        </button>
+      )}
+      {/* A button besides double-click: F2 is a brightness key on a Mac keyboard. A file pane is named by its file. */}
+      {isFile ? null : (
+        <button
+          type="button"
+          className="tab__rename"
+          title={`Rename pane ${tab.label}`}
+          aria-label={`Rename pane ${tab.label}`}
+          onClick={on.onRename}
+        >
+          <Icon name="rename" size={14} />
+        </button>
+      )}
+      {/* The pane's own close: it kills the process, since a hidden-but-running pane has no leaf. */}
+      <button
+        type="button"
+        className="tab__close"
+        title={`Close pane ${tab.label}`}
+        aria-label={`Close pane ${tab.label}`}
+        onClick={on.onClose}
+      >
+        <Icon name="close" size={14} />
+      </button>
+    </div>
+  )
+}
+
+/** The runs, maximize and the splits, pinned to the head's end; with no panes yet, `+` too. */
+function HeadActions({ worktreeId, modifier }: { worktreeId: string; modifier: PlatformModifier }): React.JSX.Element {
+  // Refused only for a worktree known to have no checkout yet.
+  const noCheckout = useWorkspaceStore((state) => {
+    const worktree = state.worktrees.find((entry) => entry.id === worktreeId)
+    return worktree !== undefined && !hasCheckout(worktree)
+  })
+  const root = useWorkspaceStore((state) => state.layouts[worktreeId]?.root ?? null)
+  const expanded = useWorkspaceStore((state) => state.expandedTerminalId)
+  const splitFocusedPane = useWorkspaceStore((state) => state.splitFocusedPane)
+  const toggleExpandedPane = useWorkspaceStore((state) => state.toggleExpandedPane)
+  const empty = root === null
+
+  return (
+    <div className="tabs__actions">
+      {noCheckout ? null : <RunButtons worktreeId={worktreeId} />}
+      <div className="tabs__layout">
+        <button
+          type="button"
+          className="tabs__action"
+          title={expanded === null ? 'Maximize' : 'Restore'}
+          aria-label={expanded === null ? 'Maximize' : 'Restore'}
+          disabled={expanded === null && collectTerminalIds(root).length < 2}
+          onClick={toggleExpandedPane}
+        >
+          <Icon name={expanded === null ? 'maximize' : 'restore'} />
+        </button>
+        <button
+          type="button"
+          className="tabs__action"
+          title="Split right"
+          aria-label="Split right"
+          disabled={empty}
+          onClick={() => void splitFocusedPane('row')}
+        >
+          <Icon name="split-right" />
+        </button>
+        <button
+          type="button"
+          className="tabs__action"
+          title="Split down"
+          aria-label="Split down"
+          disabled={empty}
+          onClick={() => void splitFocusedPane('column')}
+        >
+          <Icon name="split-down" />
+        </button>
+        {empty ? <NewTab worktreeId={worktreeId} group={null} modifier={modifier} /> : null}
+      </div>
+    </div>
+  )
+}
+
+/** `+` and the menu of what can start: a tab of `group`, or a pane where there is room without one. */
+function NewTab({
+  worktreeId,
+  group,
+  modifier
+}: {
+  worktreeId: string
+  group: string | null
+  modifier: PlatformModifier
+}): React.JSX.Element {
+  const noCheckout = useWorkspaceStore((state) => {
+    const worktree = state.worktrees.find((entry) => entry.id === worktreeId)
+    return worktree !== undefined && !hasCheckout(worktree)
+  })
+  const loadConversations = useWorkspaceStore((state) => state.loadConversations)
+  const startItems = useStartMenuItems(worktreeId, modifier, false, group ?? undefined)
   const plus = useRef<HTMLButtonElement | null>(null)
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
   // Back on the `+`, so a keyboard user who opened the menu is where they were.
@@ -69,247 +402,90 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
     setMenuAt(null)
     refocus(plus.current, closed)
   }, [])
-  // The sidebar's reading, so the strip and the row agree.
-  const unread = useUnreadPanes()
-  const startItems = useStartMenuItems(activeWorktreeId, modifier)
-  const loadConversations = useWorkspaceStore((state) => state.loadConversations)
-
-  const tabs = panesShown ? paneTabs(layout?.root ?? null, terminals, worktree) : []
-
-  // A zoomed pane is the selected tab, whatever else holds the focus.
-  const expanded = useWorkspaceStore((state) => state.expandedTerminalId)
-  const focusedTerminalId =
-    focusedWatchId !== null
-      ? null
-      : expanded !== null && hasTerminal(layout?.root ?? null, expanded)
-        ? expanded
-        : layout?.focusedTerminalId
-
-  // The list scrolls under a fixed end; the tab being worked in is never the one scrolled away.
-  const list = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    const strip = list.current
-    const tab = strip?.querySelector<HTMLElement>('.tab--active')
-    if (!strip || !tab) return
-    const box = strip.getBoundingClientRect()
-    const at = tab.getBoundingClientRect()
-    if (at.left < box.left) strip.scrollLeft += at.left - box.left
-    else if (at.right > box.right) strip.scrollLeft += at.right - box.right
-  }, [focusedTerminalId, tabs.length])
-
-  // A page's head is the top edge then.
-  if (!panesShown && (sidebarVisible || settingsShown)) return null
 
   return (
-    <div className="tabs" data-region="strip">
-      {/* First in the strip, so that on macOS it is what comes right after the
-          window buttons. The same command as the chord and the menu item. */}
-      {sidebarVisible ? null : (
-        <button
-          type="button"
-          className="shell__toggle"
-          title="Show sidebar"
-          aria-label="Show sidebar"
-          onClick={toggleSidebar}
-        >
-          <Icon name="sidebar-toggle" />
-        </button>
+    <>
+      <button
+        ref={plus}
+        type="button"
+        className="tabs__action tabs__new"
+        title="New tab"
+        aria-label="New tab"
+        aria-haspopup="menu"
+        aria-expanded={menuAt !== null}
+        disabled={noCheckout}
+        onClick={() => {
+          if (menuAt !== null) {
+            closeMenu()
+            return
+          }
+          void loadConversations(worktreeId)
+          const rect = plus.current?.getBoundingClientRect()
+          if (rect) setMenuAt({ x: rect.right, y: rect.bottom + MENU_GAP_PX, align: 'right' })
+        }}
+      >
+        <Icon name="plus" />
+      </button>
+      {menuAt === null ? null : (
+        <RowMenu label="New tab" anchor={menuAt} opener={plus.current} onClose={closeMenu} items={startItems} />
       )}
-
-      {/* An empty list is no list: a `role="tablist"` with nothing in it would
-          announce a region that has nothing to announce. */}
-      {tabs.length === 0 ? null : (
-        <div
-          ref={list}
-          className="tabs__list"
-          role="tablist"
-          aria-label="Terminals in this worktree"
-          onWheel={(event) => {
-            // A mouse wheel only scrolls vertically, and the list has no vertical to scroll.
-            if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.currentTarget.scrollLeft += event.deltaY
-          }}
-        >
-          {tabs.map((tab) => {
-            const isUnread = unread.has(tab.terminalId)
-            const isFile = tab.kind === 'file'
-            const files = tab.files ?? [tab.terminalId]
-            const active = files.includes(focusedTerminalId ?? '')
-            const unsaved = isFile && files.some((id) => unsavedFiles[id] === true)
-            return (
-              <div
-                className={`tab${active ? ' tab--active' : ''}${isUnread ? ' tab--unread' : ''}${
-                  dragged === tab.terminalId ? ' tab--dragged' : ''
-                }`}
-                key={tab.terminalId}
-                data-pane-id={tab.terminalId}
-                onPointerDown={(event) => {
-                  if (renaming !== tab.terminalId)
-                    startDrag(event, { kind: 'stop', id: tab.terminalId, label: tab.label })
-                }}
-                onContextMenu={(event) => {
-                  if (renaming !== tab.terminalId) paneMenu.onContextMenu(tab.terminalId, tab.label, event)
-                }}
-              >
-                {renaming === tab.terminalId ? (
-                  <RenameField
-                    // The shown name, not the stored label, which is empty for app-named panes.
-                    name={tab.label}
-                    onCommit={(name) => {
-                      setRenaming(null)
-                      // Enter on the untouched field is not a rename: storing `claude 1` would freeze a made-up number.
-                      if (name.trim() === tab.label) return
-                      void renamePane(tab.terminalId, name)
-                    }}
-                    onCancel={() => setRenaming(null)}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={active}
-                    aria-label={tab.label}
-                    className="tab__main"
-                    title={
-                      unsaved
-                        ? `${tab.label} · unsaved`
-                        : isUnread
-                          ? `${paneTabTitle(tab)} · unread`
-                          : paneTabTitle(tab)
-                    }
-                    onClick={() => focusPane(tab.terminalId)}
-                    onKeyDown={(event) => paneMenu.onKeyDown(tab.terminalId, tab.label, event)}
-                    onDoubleClick={() => {
-                      if (!isFile) setRenaming(tab.terminalId)
-                      else if (tab.preview) pinFilePane(tab.terminalId)
-                    }}
-                  >
-                    {/* The sidebar's dot, borrowed rather than reinvented, exactly as
-                      the dashboard borrows it: this is the same reading of the same
-                      PTY, and a second dot would be a second vocabulary for four
-                      states the app can only honestly describe one way. */}
-                    {isFile ? (
-                      <Icon name="file" size={14} className="file__glyph" />
-                    ) : (
-                      <span
-                        className={dotClass(tab.activity === null ? null : dotTone(tab.activity, tab.agent))}
-                        aria-hidden="true"
-                      />
-                    )}
-                    {isFile ? null : <PaneGlyph agent={tab.agent} />}
-                    {tab.text === '' ? null : (
-                      <span className={`tab__name${tab.preview ? ' tab__name--preview' : ''}`}>{tab.text}</span>
-                    )}
-                    {files.length > 1 ? <span className="tab__more">{files.length}</span> : null}
-                    {unsaved ? <UnsavedDot /> : null}
-                  </button>
-                )}
-                {/* A button besides double-click: F2 is a brightness key on a Mac keyboard. A file pane is named by its file. */}
-                {isFile ? null : (
-                  <button
-                    type="button"
-                    className="tab__rename"
-                    title={`Rename pane ${tab.label}`}
-                    aria-label={`Rename pane ${tab.label}`}
-                    onClick={() => setRenaming(tab.terminalId)}
-                  >
-                    <Icon name="rename" size={14} />
-                  </button>
-                )}
-                {/* The pane's own close: it kills the process, since a hidden-but-running pane has no leaf. */}
-                <button
-                  type="button"
-                  className="tab__close"
-                  title={files.length > 1 ? `Close ${files.length} files` : `Close pane ${tab.label}`}
-                  aria-label={files.length > 1 ? `Close ${files.length} files` : `Close pane ${tab.label}`}
-                  onClick={() => void (files.length > 1 ? closePanes(files) : closeTerminal(tab.terminalId))}
-                >
-                  <Icon name="close" size={14} />
-                </button>
-              </div>
-            )
-          })}
-          {/* NOTES.md is already open: the next file's name, asked where its tab will be. */}
-          {namingMarkdown === activeWorktreeId && activeWorktreeId !== null ? (
-            <div className="tab">
-              <RenameField
-                name=""
-                label="File name"
-                placeholder="name.md"
-                onCommit={(name) => nameMarkdown(name)}
-                onCancel={() => nameMarkdown(null)}
-              />
-            </div>
-          ) : null}
-        </div>
-      )}
-
-      {/* Pinned to the strip's end: runs, then the layout group last, so neither moves as tabs open.
-          The palette and the menu bar carry the words and chords. Kept with no panes too. */}
-      {activeWorktreeId === null || !panesShown ? null : (
-        <div className="tabs__actions">
-          {noCheckout ? null : <RunButtons worktreeId={activeWorktreeId} />}
-          <div className="tabs__layout">
-            <button
-              type="button"
-              className="tabs__action"
-              title={expanded === null ? 'Maximize' : 'Restore'}
-              aria-label={expanded === null ? 'Maximize' : 'Restore'}
-              disabled={expanded === null && collectTerminalIds(layout?.root ?? null).length < 2}
-              onClick={toggleExpandedPane}
-            >
-              <Icon name={expanded === null ? 'maximize' : 'restore'} />
-            </button>
-            <button
-              type="button"
-              className="tabs__action"
-              title="Split right"
-              aria-label="Split right"
-              disabled={tabs.length === 0}
-              onClick={() => void splitFocusedPane('row')}
-            >
-              <Icon name="split-right" />
-            </button>
-            <button
-              type="button"
-              className="tabs__action"
-              title="Split down"
-              aria-label="Split down"
-              disabled={tabs.length === 0}
-              onClick={() => void splitFocusedPane('column')}
-            >
-              <Icon name="split-down" />
-            </button>
-            <button
-              ref={plus}
-              type="button"
-              className="tabs__action"
-              title="New pane"
-              aria-label="New pane"
-              aria-haspopup="menu"
-              aria-expanded={menuAt !== null}
-              disabled={noCheckout}
-              onClick={() => {
-                if (menuAt !== null) {
-                  closeMenu()
-                  return
-                }
-                if (activeWorktreeId !== null) void loadConversations(activeWorktreeId)
-                const rect = plus.current?.getBoundingClientRect()
-                if (rect) setMenuAt({ x: rect.right, y: rect.bottom + MENU_GAP_PX, align: 'right' })
-              }}
-            >
-              <Icon name="plus" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {menuAt === null || activeWorktreeId === null ? null : (
-        <RowMenu label="New pane" anchor={menuAt} opener={plus.current} onClose={closeMenu} items={startItems} />
-      )}
-      {paneMenu.menu}
-    </div>
+    </>
   )
+}
+
+/** Tabs slide to their new places when the order changes, and a tab that arrives fades in; not with reduced motion. */
+function useTabMotion(list: React.RefObject<HTMLDivElement | null>, ids: string): void {
+  const places = useRef<Map<string, number> | null>(null)
+  useLayoutEffect(() => {
+    const element = list.current
+    if (element === null) return
+    const before = places.current
+    const after = new Map<string, number>()
+    const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+    for (const tab of element.querySelectorAll<HTMLElement>(':scope > .tab[data-pane-id]')) {
+      const id = tab.dataset.paneId ?? ''
+      after.set(id, tab.offsetLeft)
+      const was = before?.get(id)
+      if (before === null || still || typeof tab.animate !== 'function') continue
+      const frames =
+        was === undefined
+          ? [
+              { opacity: 0, transform: 'translateY(3px)' },
+              { opacity: 1, transform: 'none' }
+            ]
+          : was === tab.offsetLeft
+            ? null
+            : [{ transform: `translateX(${was - tab.offsetLeft}px)` }, { transform: 'none' }]
+      if (frames) tab.animate(frames, { duration: TAB_MOTION_MS, easing: 'cubic-bezier(0.2, 0, 0, 1)' })
+    }
+    places.current = after
+  }, [list, ids])
+}
+
+/** Scrolls the strip the least that shows all of `tab`, to a tab's left edge so the strip starts on a whole one. */
+function bringIntoView(strip: HTMLElement, tab: HTMLElement): void {
+  const end = tab.offsetLeft + tab.offsetWidth
+  if (tab.offsetLeft < strip.scrollLeft) strip.scrollLeft = tab.offsetLeft
+  else if (end > strip.scrollLeft + strip.clientWidth) {
+    const least = end - strip.clientWidth
+    const edge = [...strip.querySelectorAll<HTMLElement>(':scope > .tab')].find((each) => each.offsetLeft >= least)
+    strip.scrollLeft = Math.min(edge?.offsetLeft ?? least, tab.offsetLeft)
+  }
+}
+
+/** Marks `data-cut` on every tab not wholly in sight, so no half name shows, and counts them. */
+function cutTabsOutOfView(strip: HTMLElement | null): number {
+  if (strip === null) return 0
+  const fits = strip.scrollWidth <= strip.clientWidth
+  const from = strip.scrollLeft
+  const to = from + strip.clientWidth
+  let cut = 0
+  for (const tab of strip.querySelectorAll<HTMLElement>(':scope > .tab[data-pane-id]')) {
+    const outside = !fits && (tab.offsetLeft < from || tab.offsetLeft + tab.offsetWidth > to)
+    tab.toggleAttribute('data-cut', outside)
+    if (outside) cut += 1
+  }
+  return cut
 }
 
 /** The rename field; blur commits like Enter, and Escape sets the flag the following blur reads. */

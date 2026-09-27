@@ -2,12 +2,14 @@
 // Raised by right-click, ⇧F10, the context-menu key or a file pane's `⋯`; the chords are the shortcut table's.
 
 import { useCallback, useState } from 'react'
+import type { PaneNode } from '@shared/entities'
 import { fileColumnIn, fileLeavesIn, fileViewerFor, isCommitLeaf, isCompareLeaf } from '@shared/filePane'
 import { Icon } from '../icons/Icon'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { openAsArtifact } from '../markdown/openAsArtifact'
-import { collectTerminalIds, paneStopIndex, paneStops, reorderPanes } from '../panes/paneLayout'
+import { moveTabBy, splitTabOut } from '../panes/paneGroups'
+import { collectTerminalIds } from '../panes/paneLayout'
 import { useOpenIn } from '../sidebar/openIn'
 import {
   anchorAtPointer,
@@ -126,15 +128,16 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
     hint: hint('expand-pane'),
     onChoose: () => store.expandPane(terminalId)
   }
-  // One place along the strip, as a drag along it would.
-  const place = paneStopIndex(root, terminalId)
-  const move = (label: string, step: 1 | -1): RowMenuItem => ({
-    label,
-    onChoose: () => store.arrangePanes((tree) => reorderPanes(tree, terminalId, place + step), terminalId)
-  })
+  // To the group beside, or out of this one into a group of its own, as a drag would; only where that moves it.
+  const move = (label: string, command: WorkspaceCommand, to: (tree: PaneNode) => PaneNode): RowMenuItem[] =>
+    root !== null && to(root) !== root
+      ? [{ label, hint: hint(command), onChoose: () => store.arrangePanes(to, terminalId) }]
+      : []
   const moves = [
-    ...(place > 0 ? [move('Move Pane Left', -1)] : []),
-    ...(place !== -1 && place < paneStops(root).length - 1 ? [move('Move Pane Right', 1)] : [])
+    ...move('Move to Previous Pane', 'move-tab-previous', (tree) => moveTabBy(tree, terminalId, -1)),
+    ...move('Move to Next Pane', 'move-tab-next', (tree) => moveTabBy(tree, terminalId, 1)),
+    ...move('Split Tab Right', 'split-tab-right', (tree) => splitTabOut(tree, terminalId, 'row')),
+    ...move('Split Tab Down', 'split-tab-down', (tree) => splitTabOut(tree, terminalId, 'column'))
   ]
   const closing: RowMenuItem[] = [
     {

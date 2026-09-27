@@ -38,7 +38,7 @@ vi.mock('../dashboard/Dashboard', () => ({ Dashboard: () => <div data-testid="da
 // Tested elsewhere; this checks only that they take the area.
 vi.mock('../settings/SettingsView', () => ({ SettingsView: () => <div data-testid="settings" /> }))
 vi.mock('../help/HelpView', () => ({ HelpView: () => <div data-testid="help" /> }))
-vi.mock('./TerminalTabs', () => ({ TerminalTabs: () => null }))
+vi.mock('./TerminalTabs', () => ({ WorkspaceHead: () => null, GroupStrip: () => null }))
 // jsdom has no browser; the welcome must use the one path that does.
 vi.mock('../shell/openInBrowser', () => ({ openInBrowser: vi.fn() }))
 
@@ -360,9 +360,9 @@ describe('a worktree with no panes in it', () => {
   it('starts the agent chosen, or a terminal, in this worktree', () => {
     openEmpty()
     fireEvent.click(screen.getByRole('button', { name: 'Codex' }))
-    expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex')
+    expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex', undefined)
     fireEvent.click(screen.getByRole('button', { name: 'New Terminal' }))
-    expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1')
+    expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1', undefined)
   })
 
   // An agent closed here whose conversation can be picked up: resuming it is what the page is for now.

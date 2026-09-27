@@ -824,7 +824,10 @@ export type PaneNode =
       direction: 'row' | 'column'
       sizes: number[]
       children: PaneNode[]
-      /** File leaves drawn one at a time under a tab row: the file column. Never flattened or dissolved. */
+      /**
+       * A tab group: leaves drawn one at a time under their own tab row, never flattened. The first holding a
+       * file is the file column; one of a lone terminal is that pane. Older clients wrote files only.
+       */
       tabs?: true
       /** The tab on show; the first when absent. */
       shown?: string

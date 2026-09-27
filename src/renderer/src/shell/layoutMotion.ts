@@ -1,5 +1,5 @@
-// The sidebar's column and the right panel's width slide. A terminal refits once when they stop,
-// not every frame: a pty resized per frame makes a full-screen agent redraw per frame.
+// The sidebar's column, the right panel's width and a split's cells slide. A terminal refits once
+// when they stop, not every frame: a pty resized per frame makes a full-screen agent redraw per frame.
 
 /** Longest a slide is waited on; an element removed mid-transition never sends its end. */
 const MOTION_CEILING_MS = 400
@@ -13,6 +13,7 @@ function isLayoutSlide(event: Event): boolean {
   const target = event.target
   if (!(target instanceof Element)) return false
   if (property === 'grid-template-columns') return target.classList.contains('shell')
+  if (property === 'flex-basis') return target.classList.contains('split__cell')
   return property === 'width' && target.classList.contains('panel')
 }
 

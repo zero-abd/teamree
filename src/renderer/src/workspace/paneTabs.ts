@@ -1,8 +1,9 @@
-// What the strip along the top says: one entry per pane of the worktree on screen, the file column as one.
+// What a group's strip says: one tab per pane, terminal or file, in the tree's order.
 // A tab owns no visibility, so it is a name and a jump target; names and states are the sidebar's.
 
 import type { AgentKind, PaneNode, Terminal } from '@shared/entities'
-import { fileLeavesIn, fileTabName, isFileColumn, isFileLeaf, shownTabId, type FileColumn } from '@shared/filePane'
+import { fileTabName, isFileColumn, isFileLeaf } from '@shared/filePane'
+import { collectLeaves } from '../panes/paneLayout'
 import {
   activityOf,
   dotTone,
@@ -18,51 +19,42 @@ export type PaneTab = {
   terminalId: string
   agent: AgentKind | undefined
   label: string
-  /** What the tab draws beside the glyph: the label, or `Files` for a column of several. */
+  /** What the tab draws beside the glyph. */
   text: string
   /** Null until the terminal's record has arrived; the leaf is on the board either way. */
   activity: AgentActivity | null
   /** A file pane is named after its file and has no activity to read. */
   kind?: 'file'
-  /** The file column's tabs, when this tab is the column; `terminalId` is the shown one. */
-  files?: string[]
-  /** A column of one file that the next preview open replaces. */
+  /** A file tab that the next preview open replaces. */
   preview?: true
-  /** Each file's name, for a column of several. */
-  names?: string[]
 }
 
-/** The tabs for one worktree in split-tree order; a leaf without its record yet still gets a tab. */
+/** The tabs of `root`, a tree or one group, in tree order; a leaf without its record yet still gets a tab. */
 export function paneTabs(
   root: PaneNode | null,
   terminals: Readonly<Record<string, Terminal>>,
   worktree?: WorktreeNameSource
 ): PaneTab[] {
-  const leaves = stripLeaves(root)
-  const worktreeId = leaves
-    .map((node) => (node.kind === 'leaf' ? terminals[node.terminalId]?.worktreeId : undefined))
-    .find((id) => id !== undefined)
+  const leaves = collectLeaves(root)
+  const worktreeId = leaves.map((node) => terminals[node.terminalId]?.worktreeId).find((id) => id !== undefined)
   // Named with the worktree's other panes, in the order they were opened, as the sidebar names them.
   const names = paneNamesById(
     Object.values(terminals).filter((terminal) => terminal.worktreeId === worktreeId),
     worktree
   )
+  const previews = new Set(previewsIn(root))
   return leaves.map((node) => {
-    if (isFileColumn(node)) {
-      const files = fileLeavesIn(node)
-      const shown = files.find((file) => file.terminalId === shownTabId(node)) ?? files[0]
-      const ids = files.map((file) => file.terminalId)
-      const tab = { terminalId: shown?.terminalId ?? '', agent: undefined, activity: null, kind: 'file' as const }
-      // One file is named on this tab alone; several keep their names on the column's own tabs.
-      if (files.length > 1)
-        return { ...tab, label: `Files ${files.length}`, text: 'Files', files: ids, names: files.map(fileTabName) }
-      const label = shown === undefined ? '' : fileTabName(shown)
-      const preview = shown !== undefined && node.preview === shown.terminalId
-      return { ...tab, label, text: label, files: ids, ...(preview ? { preview: true as const } : {}) }
-    }
     if (isFileLeaf(node)) {
       const label = fileTabName(node)
-      return { terminalId: node.terminalId, agent: undefined, label, text: label, activity: null, kind: 'file' }
+      const tab = {
+        terminalId: node.terminalId,
+        agent: undefined,
+        label,
+        text: label,
+        activity: null,
+        kind: 'file' as const
+      }
+      return previews.has(node.terminalId) ? { ...tab, preview: true as const } : tab
     }
     const record = terminals[node.terminalId]
     const pane = record ?? UNARRIVED
@@ -72,11 +64,10 @@ export function paneTabs(
   })
 }
 
-/** The strip's panes in tree order: leaves, and the file column whole. */
-function stripLeaves(node: PaneNode | null): Array<Extract<PaneNode, { kind: 'leaf' }> | FileColumn> {
-  if (node === null) return []
-  if (node.kind === 'leaf' || isFileColumn(node)) return [node]
-  return node.children.flatMap(stripLeaves)
+function previewsIn(node: PaneNode | null): string[] {
+  if (node === null || node.kind === 'leaf') return []
+  if (isFileColumn(node)) return node.preview === undefined ? [] : [node.preview]
+  return node.children.flatMap(previewsIn)
 }
 
 /** The tab ⌘`n` shows among `ids` in strip order: the Nth for 1–8, the last for 9. */
@@ -97,6 +88,5 @@ const UNARRIVED: PaneNameSource = { title: 'terminal', shell: '' }
 
 /** A tab's tooltip: its name, plus its dot's `TONE_LABEL` word when the state is known. */
 export function paneTabTitle(tab: PaneTab): string {
-  if (tab.names !== undefined) return tab.names.join(', ')
   return tab.activity === null ? tab.label : `${tab.label} · ${TONE_LABEL[dotTone(tab.activity, tab.agent)]}`
 }

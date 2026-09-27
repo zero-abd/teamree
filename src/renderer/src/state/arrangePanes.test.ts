@@ -17,7 +17,8 @@ vi.mock('../terminal/paneMetrics', async (importOriginal) => {
 })
 
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
-import { collectTerminalIds, leaf, movePane, reorderPanes } from '../panes/paneLayout'
+import { moveTab } from '../panes/paneGroups'
+import { collectTerminalIds, leaf, movePane } from '../panes/paneLayout'
 import { useWorkspaceStore } from './workspaceStore'
 
 /** The open worktree with its panes as three in a row, the first focused. */
@@ -35,11 +36,11 @@ async function threeInARow(): Promise<{ worktreeId: string; ids: string[] }> {
   return { worktreeId, ids }
 }
 
-it('shows and saves the new order, focused on the pane that moved, and the runtime keeps it', async () => {
+it('shows and saves the new arrangement, focused on the tab that moved, and the runtime keeps it', async () => {
   const { worktreeId, ids } = await threeInARow()
   const [a, b, c] = ids as [string, string, string]
 
-  useWorkspaceStore.getState().arrangePanes((root) => reorderPanes(root, c, 0), c)
+  useWorkspaceStore.getState().arrangePanes((root) => moveTab(root, c, a, 0), c)
 
   const layout = useWorkspaceStore.getState().layouts[worktreeId]!
   expect(collectTerminalIds(layout.root)).toEqual([c, a, b])

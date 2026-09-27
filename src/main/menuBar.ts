@@ -25,7 +25,7 @@ export type MenuBarItem = {
  * F6 alone walks the regions.
  */
 const ACCELERATOR =
-  /^(CommandOrControl(\+Alt)?(\+Shift)?\+([^+\s]|Up|Down|Left|Right|Enter)|CommandOrControl\+Control\+(Up|Down)|Control(\+Shift)?\+Tab|Control\+(Page(Up|Down)|G)|(Shift\+)?F6)$/
+  /^(CommandOrControl(\+Alt)?(\+Shift)?\+([^+\s]|Up|Down|Left|Right|Enter)|CommandOrControl\+Control(\+Shift)?\+(Up|Down|Left|Right)|Control(\+Shift)?\+Tab|Control\+(Page(Up|Down)|G)|(Shift\+)?F6)$/
 
 /** Quit, Hide and Minimize: an item of ours above the platform's would take the key. */
 const PLATFORM_KEYS = /^CommandOrControl\+[QHM]$/i

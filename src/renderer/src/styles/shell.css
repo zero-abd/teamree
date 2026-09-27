@@ -44,19 +44,18 @@
 
 /* macOS keeps drawing the window buttons over the top-left of our content, so
    whichever strip is at the left edge starts past them: the sidebar's header
-   while the sidebar is there, the pane strip once it is not. The inset comes
+   while the sidebar is there, the workspace's head once it is not. The inset comes
    from the same constant that places the buttons; see
    src/shared/windowChrome.ts. */
 .shell--mac .sidebar__brand,
-.shell--mac.shell--collapsed .tabs {
+.shell--mac.shell--collapsed .workspace__head {
   padding-left: var(--titlebar-inset, 84px);
 }
 
 /* A drag region swallows clicks on anything inside it, so anything interactive
    in either strip has to opt back out. */
 .sidebar__brand button,
-.tabs button,
-.tabs input {
+.workspace__head button {
   -webkit-app-region: no-drag;
 }
 

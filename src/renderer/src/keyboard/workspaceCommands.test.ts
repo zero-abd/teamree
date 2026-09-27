@@ -11,6 +11,7 @@ import { showPane } from '../terminal/shownPanes'
 import { resolvePlatformModifier } from './platformModifier'
 import { commandForEvent } from './workspaceShortcuts'
 import { useSettingsFind } from '../settings/settingsFind'
+import { collectTerminalIds } from '../panes/paneLayout'
 
 const EMPTY: CommandState = {
   consent: {},
@@ -405,7 +406,7 @@ describe('running a command', () => {
       ['split-right', 'splitFocusedPane', ['row']],
       ['split-down', 'splitFocusedPane', ['column']],
       ['close-pane', 'closeTerminal', ['t1']],
-      ['new-terminal', 'createTerminal', ['w1']],
+      ['new-terminal', 'createTerminal', ['w1', 't1']],
       ['new-markdown', 'newMarkdown', ['w1']],
       ['new-worktree', 'openDialog', [{ kind: 'new-task', projectId: 'p1' }]],
       ['new-child-task', 'openDialog', [{ kind: 'new-task', projectId: 'p1', parentId: 'w1' }]],
@@ -652,11 +653,31 @@ describe('the file column by key', () => {
     return showPane.mock.calls[0]?.[0]
   }
 
-  it('is one stop for ⌃Tab and the numbers, landing on its shown file', () => {
-    expect(shown('select-next-pane', COLUMN)).toBe('f2')
-    expect(shown('select-next-pane', focusedOn(COLUMN, 'f2'))).toBe('t1')
-    expect(paneNumberTarget(2, COLUMN)).toBe('f2')
-    expect(paneNumberTarget(3, COLUMN)).toBeNull()
+  it('counts every tab for ⌃Tab and the numbers, group by group', () => {
+    expect(shown('select-next-pane', COLUMN)).toBe('f1')
+    expect(shown('select-next-pane', focusedOn(COLUMN, 'f2'))).toBe('f3')
+    expect(paneNumberTarget(2, COLUMN)).toBe('f1')
+    expect(paneNumberTarget(4, COLUMN)).toBe('f3')
+    expect(paneNumberTarget(5, COLUMN)).toBeNull()
+  })
+
+  it('moves the focused tab to the pane beside, or out into one of its own, only where it can go', () => {
+    for (const command of ['move-tab-next', 'move-tab-previous', 'split-tab-right', 'split-tab-down'] as const) {
+      expect(isCommandAvailable(command, WORKING), command).toBe(false)
+    }
+    const onF2 = focusedOn(COLUMN, 'f2')
+    expect(isCommandAvailable('move-tab-previous', onF2)).toBe(true)
+    expect(isCommandAvailable('move-tab-next', onF2)).toBe(true)
+    const moved = (command: WorkspaceCommand): string => {
+      const arrangePanes = vi.fn()
+      runWorkspaceCommand(command, { ...workspace(onF2), arrangePanes })
+      const [arrange, focus] = arrangePanes.mock.calls[0] as [(root: PaneNode) => PaneNode, string]
+      expect(focus).toBe('f2')
+      return JSON.stringify(collectTerminalIds(arrange(onF2.layouts['w1']!.root!)))
+    }
+    expect(moved('move-tab-previous')).toBe('["t1","f2","f1","f3"]')
+    expect(moved('move-tab-next')).toBe('["t1","f1","f3","f2"]')
+    expect(moved('split-tab-down')).toBe('["t1","f1","f3","f2"]')
   })
 
   it('steps through its own tabs, wrapping, only while one of them has the focus', () => {

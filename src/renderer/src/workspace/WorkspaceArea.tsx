@@ -7,7 +7,7 @@ import { hasResumable } from '../agents/harnesses'
 import { Dashboard } from '../dashboard/Dashboard'
 import { HelpView } from '../help/HelpView'
 import type { PlatformModifier } from '../keyboard/platformModifier'
-import { isFileColumn } from '@shared/filePane'
+import { fileColumnIn, isFileColumn } from '@shared/filePane'
 import { shownRoot, withoutColumn } from '../panes/paneLayout'
 import { PaneDragLayer } from '../panes/PaneDragLayer'
 import { PaneTree } from '../panes/PaneTree'
@@ -21,7 +21,7 @@ import { CoveredPanes } from './CoveredPanes'
 import { RightPanel } from './rightPanel/RightPanel'
 import { useMarkPanesSeen } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { TerminalTabs } from './TerminalTabs'
+import { WorkspaceHead } from './TerminalTabs'
 import { useFoldedColumn, useRoomForPanes } from './useRoomForPanes'
 import { Welcome } from './Welcome'
 import { WorktreeStart } from './WorktreeStart'
@@ -71,7 +71,7 @@ export function WorkspaceArea({
   )
 }
 
-/** The strip, then whatever the area shows under it; the strip is the window's drag edge on this side. */
+/** The head, then whatever the area shows under it; the head is the window's drag edge on this side. */
 function WorkspaceMain({
   modifier,
   isAppChord
@@ -81,7 +81,7 @@ function WorkspaceMain({
 }): React.JSX.Element {
   return (
     <div className="workspace-column" data-region="panes">
-      <TerminalTabs modifier={modifier} />
+      <WorkspaceHead modifier={modifier} />
       <WorkspaceView modifier={modifier} isAppChord={isAppChord} />
       <PaneDragLayer />
     </div>
@@ -236,7 +236,7 @@ function WorkspaceView({
               searchToken={paneSearch?.token ?? 0}
               onCloseSearch={closePaneSearch}
               minPane={minPane}
-              foldedColumn={foldedColumn}
+              foldedColumn={foldedColumn ? fileColumnIn(paneRoot) : null}
             />
           ) : (
             <WorktreeStart worktree={worktree} modifier={modifier} />

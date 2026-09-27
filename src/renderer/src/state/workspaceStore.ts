@@ -67,8 +67,7 @@ import {
   isSharedNoteLeaf,
   sharedNoteLeaf,
   newFilePaneId,
-  reviewLeaf,
-  shownTabId
+  reviewLeaf
 } from '@shared/filePane'
 import { closePaneWarning } from '../dialogs/closePaneModel'
 import { openInBrowser } from '../shell/openInBrowser'
@@ -94,7 +93,6 @@ import {
   closePane,
   collectTerminalIds,
   hasTerminal,
-  neighbourTerminalId,
   pinTab,
   placeFileColumn,
   setSizesAt,
@@ -118,6 +116,7 @@ import {
   type WatchedPane
 } from '../panes/watchedPanes'
 import { tabAfter } from '../workspace/paneTabs'
+import { focusAfterClose } from '../panes/paneGroups'
 import { awaitWorktreeReady } from './awaitWorktreeReady'
 import {
   relayLauncherCommand,
@@ -711,7 +710,8 @@ type WorkspaceState = {
     terminalId: string,
     options?: { task?: boolean; resume?: string; fresh?: boolean }
   ) => Promise<void>
-  createTerminal: (worktreeId: string) => Promise<void>
+  /** A new shell: a tab of the group holding `tabOf`, else a pane where there is room. */
+  createTerminal: (worktreeId: string, tabOf?: string) => Promise<void>
   /**
    * Opens `path` as a tab of the file column, or focuses the tab already on it; `diff` shows its diff,
    * `split` puts it to the right of the focused pane instead, `preview` replaces the preview tab, `diff-preview` both.
@@ -837,7 +837,7 @@ type WorkspaceState = {
   /** Hides the sidebar and panel for a compare on screen, and shows again what it hid. */
   foldForCompare: (on: boolean) => void
   /** Opens a pane already running one of the agents found on this machine. */
-  startAgent: (command: string) => Promise<void>
+  startAgent: (command: string, tabOf?: string) => Promise<void>
   /** Opens the worktree with a pane resuming that conversation of that agent. */
   resumeConversation: (worktreeId: string, agent: AgentKind, sessionId: string) => Promise<void>
 
@@ -1294,6 +1294,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     const grid = paneGrid(get().terminalFontSize, get().terminalOptions)
     return { room: grid ? { ...zoomedPaneSize(grid.area, grid.cell), ...grid } : {}, zoomed: true }
   }
+  /** A tab of the group holding `member`: it takes no room, and the runtime sizes it as that group from the grid. */
+  const asTab = (member: string): { room: Partial<NewPane> & { tabOf: string }; zoomed: false } => {
+    const grid = paneGrid(get().terminalFontSize, get().terminalOptions)
+    return { room: { ...grid, tabOf: member }, zoomed: false }
+  }
   /** Folds a panel laid over the panes, or one folded for room that would come back over them, before a pane opens. */
   const yieldPanel = (): void => {
     const { rightPanelOpen, roomHid } = get()
@@ -1712,9 +1717,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   }
 
   /** A pane running `command` in the worktree, resuming `resume` or starting on `prompt` when given. */
-  const launchAgent = async (worktreeId: string, command: string, resume?: string, prompt?: string): Promise<void> => {
+  const launchAgent = async (
+    worktreeId: string,
+    command: string,
+    resume?: string,
+    prompt?: string,
+    tabOf?: string
+  ): Promise<void> => {
     yieldPanel()
-    const { room, zoomed } = roomOrZoom(worktreeId)
+    const { room, zoomed } = tabOf === undefined ? roomOrZoom(worktreeId) : asTab(tabOf)
     try {
       // Straight through terminal.create: the runtime pins the session id, so a pane started here resumes like any other.
       const agentArgs = extraArgsFor(command)
@@ -2689,11 +2700,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         const layout = get().layouts[activeWorktreeId]
         if (!layout) return
         const root = closePane(layout.root, terminalId)
-        // Within the column, focus goes to the tab it shows next.
-        const column = fileLeavesIn(fileColumnIn(layout.root)).some((leaf) => leaf.terminalId === terminalId)
-          ? fileColumnIn(root)
-          : null
-        const nextFocus = (column && shownTabId(column)) ?? neighbourTerminalId(layout.root, terminalId)
+        const nextFocus = focusAfterClose(layout.root, terminalId)
         persistLayout({
           worktreeId: activeWorktreeId,
           root,
@@ -2724,7 +2731,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // Shown, not saved: the runtime already took the leaf out and wrote the layout. Writing this window's
       // version back would replace the tree with one missing any pane opened elsewhere in the meantime,
       // leaving that pane running with no leaf and no way back to it.
-      const nextFocus = neighbourTerminalId(layout.root, terminalId)
+      const nextFocus = focusAfterClose(layout.root, terminalId)
       const root = closePane(layout.root, terminalId)
       showLayout({
         worktreeId: activeWorktreeId,
@@ -3113,10 +3120,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (get().editingMarkdown !== editing) set({ editingMarkdown: editing })
     },
 
-    async createTerminal(worktreeId) {
+    async createTerminal(worktreeId, tabOf) {
       if (get().expandedTerminalId !== null) restoreZoom()
       yieldPanel()
-      const { room, zoomed } = roomOrZoom(worktreeId)
+      const { room, zoomed } = tabOf === undefined ? roomOrZoom(worktreeId) : asTab(tabOf)
       try {
         const terminal = await runtimeClient.call('terminal.create', { worktreeId, ...room })
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
@@ -3389,9 +3396,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
-    async startAgent(command) {
+    async startAgent(command, tabOf) {
       const worktreeId = get().activeWorktreeId
-      if (worktreeId) await launchAgent(worktreeId, command)
+      if (worktreeId) await launchAgent(worktreeId, command, undefined, undefined, tabOf)
     },
 
     async resumeConversation(worktreeId, agent, sessionId) {

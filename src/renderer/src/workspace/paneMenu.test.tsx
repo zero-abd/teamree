@@ -43,7 +43,6 @@ vi.mock('../files/FileView', () => ({
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
-const { TerminalTabs } = await import('./TerminalTabs')
 const { PaneTree } = await import('../panes/PaneTree')
 const { FilesTab } = await import('./rightPanel/FilesTab')
 
@@ -124,6 +123,31 @@ function seed(root: PaneNode, overrides: Record<string, unknown> = {}): void {
   )
 }
 
+/** The tree for the open layout, as the workspace draws it: each group's strip over its panes. */
+function Tree(): React.JSX.Element {
+  const state = useWorkspaceStore()
+  const layout = state.layouts.w1!
+  return (
+    <PaneTree
+      node={layout.root!}
+      path={[]}
+      worktreeId="w1"
+      worktree={state.worktrees.find((entry) => entry.id === 'w1')}
+      terminals={state.terminals}
+      focusedTerminalId={layout.focusedTerminalId}
+      onFocus={state.focusPane}
+      onClose={(id) => void state.closeTerminal(id)}
+      onRelaunch={vi.fn()}
+      onResize={vi.fn()}
+      isAppChord={() => false}
+      modifier={MAC}
+      searchTerminalId={null}
+      searchToken={0}
+      onCloseSearch={vi.fn()}
+    />
+  )
+}
+
 const rows = (menu: HTMLElement): { label: string; hint: string | null }[] =>
   within(menu)
     .getAllByRole('menuitem')
@@ -153,7 +177,7 @@ afterEach(cleanup)
 describe('a terminal tab', () => {
   beforeEach(() => {
     seed(row(leaf('t1'), leaf('t2')))
-    render(<TerminalTabs modifier={MAC} />)
+    render(<Tree />)
   })
 
   it('offers the pane actions, each chord from the shortcut table', () => {
@@ -162,7 +186,7 @@ describe('a terminal tab', () => {
       { label: 'Split Right', hint: '⌘D' },
       { label: 'Split Down', hint: '⌘⇧D' },
       { label: 'Maximize', hint: '⌘⇧↩' },
-      { label: 'Move Pane Left', hint: null },
+      { label: 'Move to Previous Pane', hint: '⌃⌘←' },
       { label: 'Copy Output', hint: null },
       { label: 'Close', hint: '⌘W' },
       { label: 'Close Others', hint: null }
@@ -220,14 +244,14 @@ describe('the rows that depend on the pane', () => {
       },
       expandedTerminalId: 't1'
     })
-    render(<TerminalTabs modifier={MAC} />)
+    render(<Tree />)
     const menu = rightClickTab('npm test')
     expect(labels(menu)).toEqual([
       'Rename…',
       'Split Right',
       'Split Down',
       'Restore',
-      'Move Pane Right',
+      'Move to Next Pane',
       'Run Again',
       'Copy Output',
       'Close',
@@ -245,7 +269,7 @@ describe('the rows that depend on the pane', () => {
       terminals: { t2: terminal({ id: 't2', agent: 'claude', running: false, exitCode: 0, restored: 'stopped' }) },
       openDialog: vi.fn()
     })
-    render(<TerminalTabs modifier={MAC} />)
+    render(<Tree />)
     // A task's agent pane goes by the worktree's name.
     const menu = rightClickTab('rewrite')
     expect(labels(menu)).toContain('Resume Conversation…')
@@ -272,7 +296,7 @@ describe('the rows that depend on the pane', () => {
       worktrees: [{ ...worktree, task: 'Make the pager stream' }],
       terminals: { t2: terminal({ id: 't2', agent: 'claude', running: false, exitCode: 0 }) }
     })
-    render(<TerminalTabs modifier={MAC} />)
+    render(<Tree />)
     const menu = rightClickTab('rewrite')
     const offered = labels(menu)
     expect(offered.slice(offered.indexOf('Resume'), offered.indexOf('Resume') + 4)).toEqual([
@@ -289,12 +313,12 @@ describe('the rows that depend on the pane', () => {
 
   it('leaves Close Others and the moves out when there are no others', () => {
     seed(leaf('t1'))
-    render(<TerminalTabs modifier={MAC} />)
+    render(<Tree />)
     expect(labels(rightClickTab('npm test'))).not.toContain('Close Others')
-    expect(labels(rightClickTab('npm test'))).not.toContain('Move Pane Right')
+    expect(labels(rightClickTab('npm test'))).not.toContain('Move to Next Pane')
   })
 
-  it('moves the pane one place along the strip, and focuses it', () => {
+  it('moves the tab into the pane beside, and focuses it', () => {
     seed(row(leaf('t1'), leaf('t2'), leaf('t3')), {
       terminals: {
         t1: terminal({ id: 't1', title: 'npm test' }),
@@ -302,16 +326,18 @@ describe('the rows that depend on the pane', () => {
         t3: terminal({ id: 't3', title: 'vim' })
       }
     })
-    render(<TerminalTabs modifier={MAC} />)
+    render(<Tree />)
     const menu = rightClickTab('Claude Code')
-    expect(labels(menu)).toEqual(expect.arrayContaining(['Move Pane Left', 'Move Pane Right']))
-    choose(menu, 'Move Pane Right')
-    choose(rightClickTab('Claude Code'), 'Move Pane Left')
+    expect(labels(menu)).toEqual(expect.arrayContaining(['Move to Previous Pane', 'Move to Next Pane']))
+    expect(labels(menu)).not.toContain('Split Tab Right')
+    choose(menu, 'Move to Next Pane')
+    choose(rightClickTab('Claude Code'), 'Move to Previous Pane')
     type Call = [(root: PaneNode) => PaneNode, string]
     const [[right, rightFocus], [left]] = actions.arrangePanes.mock.calls as unknown as [Call, Call]
     const root = useWorkspaceStore.getState().layouts.w1!.root!
     expect(collectTerminalIds(right(root))).toEqual(['t1', 't3', 't2'])
-    expect(collectTerminalIds(left(root))).toEqual(['t2', 't1', 't3'])
+    expect(collectTerminalIds(left(root))).toEqual(['t1', 't2', 't3'])
+    expect(left(root)).toMatchObject({ children: [{ tabs: true, shown: 't2' }, { terminalId: 't3' }] })
     expect(rightFocus).toBe('t2')
   })
 })
@@ -319,7 +345,7 @@ describe('the rows that depend on the pane', () => {
 describe('a preview tab', () => {
   it('is kept open from its menu, and a kept one is not offered it', () => {
     seed(row(leaf('t1'), fileColumn(README, true)))
-    render(<TerminalTabs modifier={MAC} />)
+    render(<Tree />)
     const menu = rightClickTab('README.md')
     expect(labels(menu)[0]).toBe('Keep Open')
     choose(menu, 'Keep Open')
@@ -327,7 +353,7 @@ describe('a preview tab', () => {
 
     cleanup()
     seed(row(leaf('t1'), fileColumn(README)))
-    render(<TerminalTabs modifier={MAC} />)
+    render(<Tree />)
     expect(labels(rightClickTab('README.md'))).not.toContain('Keep Open')
   })
 })
@@ -335,7 +361,7 @@ describe('a preview tab', () => {
 describe('a file tab', () => {
   beforeEach(() => {
     seed(row(leaf('t1'), README))
-    render(<TerminalTabs modifier={MAC} />)
+    render(<Tree />)
   })
 
   it('offers what can be done to a file, and nothing a terminal has', () => {
@@ -345,7 +371,7 @@ describe('a file tab', () => {
       'Open in',
       'Open as Artifact',
       'Maximize',
-      'Move Pane Left',
+      'Move to Previous Pane',
       'Close',
       'Close Others'
     ])
@@ -424,7 +450,7 @@ describe('a pane header', () => {
       'Reveal in Finder',
       'Open in',
       'Maximize',
-      'Move Pane Left',
+      'Move to Previous Pane',
       'Close',
       'Close Others'
     ])

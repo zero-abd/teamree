@@ -767,7 +767,9 @@ export const Params = {
     /** The least a pane may be given in `area`, chrome included (`MIN_PANE_CELLS`). */
     minPane: z.object({ width: z.number().positive(), height: z.number().positive() }).optional(),
     /** One terminal cell in CSS pixels, so a later pane with no size can be sized on `area`. */
-    cell: z.object({ width: z.number().positive(), height: z.number().positive() }).optional()
+    cell: z.object({ width: z.number().positive(), height: z.number().positive() }).optional(),
+    /** Opens the pane as a tab of the group holding this pane, shown; a pane not in the tree is ignored. */
+    tabOf: z.string().min(1).optional()
   }),
   terminalWrite: z.object({
     terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),

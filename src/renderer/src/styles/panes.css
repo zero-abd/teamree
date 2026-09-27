@@ -106,6 +106,50 @@
   outline: none;
 }
 
+/* A group gives its room back, or makes room for a new one, by sliding; not while a gutter is dragged. */
+.split__cell {
+  transition: flex-basis var(--motion-base) var(--ease);
+}
+
+.split--dragging > .split__cell {
+  transition: none;
+}
+
+/* Group ------------------------------------------------------------------- */
+
+/* A leaf of the split tree: its own strip of tabs, over the shown tab's pane. */
+.group {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* A group that was not there a moment ago settles in. */
+.group--born {
+  animation: group-in var(--motion-base) var(--ease);
+}
+
+@keyframes group-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+
+.group__body,
+.group__page {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.group__page[hidden] {
+  display: none;
+}
+
 /* Pane -------------------------------------------------------------------- */
 
 .pane {
@@ -121,24 +165,6 @@
 
 .pane--terminal {
   background: var(--term-bg);
-}
-
-/* Which pane of a split has the keys: a line on its top edge. A lone pane's tab says so. */
-.workspace__panes .split .pane--focused::after {
-  content: '';
-  position: absolute;
-  z-index: 12;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 2px;
-  background: var(--accent);
-  pointer-events: none;
-}
-
-/* A file column with tabs marks its shown tab instead. */
-.column__tabs:not([hidden]) ~ .column__page .pane--focused::after {
-  content: none;
 }
 
 .pane__bar,
@@ -493,51 +519,93 @@ body.is-dragging-pane * {
 
 .pane-drag__mark {
   position: absolute;
-  border: 1px solid var(--accent-line);
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--accent-line);
   border-radius: var(--r2);
   background: var(--accent-soft);
+  color: var(--accent-bright);
+  font-size: var(--text-xs);
+  font-weight: 600;
   transition:
     left var(--motion-fast) var(--ease),
     top var(--motion-fast) var(--ease),
     width var(--motion-fast) var(--ease),
-    height var(--motion-fast) var(--ease);
+    height var(--motion-fast) var(--ease),
+    background var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease);
 }
 
+/* Joining a group's tabs: a card in the middle of its pane, not half of it. */
+.pane-drag__mark--tab {
+  border-width: 1px;
+  border-color: var(--line-strong);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+}
+
+.pane-drag__mark--tab .pane-drag__label {
+  display: grid;
+  place-items: center;
+  width: calc(100% - 12px);
+  height: calc(100% - 12px);
+  border: 2px solid var(--accent-line);
+  border-radius: var(--r2);
+  background: var(--accent-soft);
+}
+
+/* The caret between two tabs, sliding from gap to gap. */
 .pane-drag__mark--line {
   border: 0;
-  border-radius: 1px;
+  border-radius: 2px;
   background: var(--accent);
-  transition: none;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+  transition: left 80ms var(--ease);
 }
 
 /* Where the drop will be refused for want of room. */
 .pane-drag__mark--refused {
   border-color: var(--danger);
   background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
 }
 
 .pane-drag__mark--line.pane-drag__mark--refused {
   background: var(--danger);
 }
 
+/* The tab, lifted off its strip and following the pointer. */
 .pane-drag__ghost {
   position: absolute;
   max-width: 200px;
-  padding: 2px var(--s2);
+  padding: 4px var(--s2);
   overflow: hidden;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r1);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r2);
   background: var(--bg-raised);
   box-shadow: var(--shadow-pop);
   color: var(--fg);
   font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
+  transform: rotate(-1deg) scale(1.02);
+  animation: tab-lift 120ms var(--ease);
 }
 
-.tab--dragged,
-.column__tab--dragged {
-  opacity: 0.45;
+@keyframes tab-lift {
+  from {
+    transform: none;
+  }
+}
+
+/* The slot the dragged tab left: a dashed outline until it lands. */
+.tab--dragged {
+  outline: 1px dashed var(--line-strong);
+  outline-offset: -5px;
+}
+
+.tab--dragged > * {
+  visibility: hidden;
 }
 
 /* The thumbnail on a hovered `[Image #N]`. Never takes the pointer: the link under it keeps it. */
