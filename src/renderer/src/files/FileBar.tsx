@@ -85,7 +85,7 @@ function PathLabel({ path, name }: { path: string; name: string }): React.JSX.El
 /** Toggles drawn as one segmented control; each child is a button with `aria-pressed`. */
 export function Segments({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
   return (
-    <div className="file__seg" role="group" aria-label={label}>
+    <div className="segmented file__seg" role="group" aria-label={label}>
       {children}
     </div>
   )

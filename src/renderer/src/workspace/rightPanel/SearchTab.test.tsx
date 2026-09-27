@@ -220,6 +220,14 @@ describe('the search tab', () => {
     stop()
   })
 
+  it('heads each file’s hits with the icon the tree gives that file', async () => {
+    render(<RightPanel />)
+    const search = await type('limit')
+    act(() => search.emit(HITS))
+    const file = await screen.findByRole('button', { name: /middleware\.ts/ })
+    expect(file.querySelector('.search__icon')?.getAttribute('data-icon')).toBe('file-code')
+  })
+
   it('folds a file’s hits under its header', async () => {
     render(<RightPanel />)
     const search = await type('limit')

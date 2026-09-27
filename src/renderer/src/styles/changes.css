@@ -207,9 +207,9 @@
 .patch__fileHead,
 .patch__hunkHead {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--s2);
-  padding: var(--s2) var(--s4);
+  padding: 0 var(--s2) 0 var(--s4);
   cursor: pointer;
   list-style: none;
   white-space: pre;
@@ -237,10 +237,14 @@
 }
 
 .patch__fileHead {
+  box-sizing: border-box;
+  height: 34px;
   background: var(--bg-raised);
   color: var(--fg);
   font-family: var(--font-ui);
   font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .patch__fileHead:hover,
@@ -250,11 +254,13 @@
 
 .patch__fileDir {
   color: var(--fg-muted);
+  font-weight: 400;
 }
 
 .patch__fileNote {
   color: var(--fg-muted);
   font-size: var(--text-xs);
+  font-weight: 500;
 }
 
 /* The one line on screen that says where in the file you are, kept there while
@@ -263,11 +269,12 @@
 .patch__hunkHead {
   top: 0;
   z-index: 1;
-  background: var(--bg-panel);
-  border-top: 1px solid var(--line);
+  box-sizing: border-box;
+  height: 30px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-pane));
+  border-block: 1px solid var(--line-subtle);
   color: var(--accent-bright);
   font-size: var(--text-xs);
-  line-height: 1.55;
 }
 
 /* The verb on a hunk header. Pushed to the far end so the `@@` line reads as
@@ -276,6 +283,8 @@
    louder than the patch. `font-family: inherit` would take the monospace of the
    header, and a word is not code. */
 .patch__stage {
+  flex: none;
+  height: 22px;
   margin-inline-start: auto;
   padding: 0 var(--s2);
   border: 1px solid transparent;
@@ -284,16 +293,30 @@
   color: var(--fg-muted);
   font-family: var(--font-ui);
   font-size: var(--text-xs);
+  font-weight: 600;
+  opacity: var(--row-action-rest);
   cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease),
+    opacity var(--motion-fast) var(--ease);
+}
+
+/* A hunk's verbs arrive with the pointer or the keyboard anywhere in the hunk. */
+.patch__hunk:hover .patch__stage,
+.patch__hunk:focus-within .patch__stage {
+  opacity: 1;
 }
 
 .patch__hunkHead:hover .patch__stage {
-  border-color: var(--line);
+  border-color: var(--line-strong);
+  background: var(--bg-raised);
   color: var(--fg);
 }
 
 .patch__stage:hover {
-  background: var(--bg-hover);
+  background-image: linear-gradient(var(--bg-hover), var(--bg-hover));
 }
 
 .patch__stage:disabled {
@@ -313,13 +336,12 @@
 /* Which half of the patch is underneath, drawn only when both halves are there. */
 .patch__half {
   margin: 0;
-  padding: var(--s2) var(--s4);
-  color: var(--fg-muted);
+  padding: var(--s3) var(--s4) var(--s2);
+  color: var(--fg-secondary);
   font-family: var(--font-ui);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: -0.01em;
 }
 
 .patch__binary,
@@ -375,12 +397,12 @@
 
 .patch__row--added,
 .patch__side--added {
-  background: color-mix(in srgb, var(--success) 20%, transparent);
+  background: color-mix(in srgb, var(--success) 14%, transparent);
 }
 
 .patch__row--removed,
 .patch__side--removed {
-  background: color-mix(in srgb, var(--danger) 20%, transparent);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 
 /* Wide enough for four digits; right-aligned so the digits line up. */
@@ -389,6 +411,8 @@
   flex: none;
   padding: 0 var(--s2);
   color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
   text-align: right;
   user-select: none;
 }
@@ -396,7 +420,8 @@
 .patch__sign {
   width: 1ch;
   flex: none;
-  margin-right: var(--s2);
+  margin: 0 var(--s2) 0 var(--s1);
+  font-weight: 600;
   user-select: none;
 }
 
@@ -458,8 +483,9 @@
   overflow: hidden;
 }
 
+/* No line on this side: a quiet hatch, so the gap reads as absence rather than as a blank line. */
 .patch__side--gap {
-  background: var(--bg-hover);
+  background: repeating-linear-gradient(135deg, transparent 0 5px, var(--line) 5px 6px);
 }
 
 .patch--split .patch__side + .patch__side {

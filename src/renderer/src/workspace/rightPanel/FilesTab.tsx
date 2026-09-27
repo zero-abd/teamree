@@ -130,21 +130,24 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
   return (
     <section className="tree" aria-label="Files in this worktree">
       <div className="panel__toolbar">
-        <input
-          className="tree__find"
-          type="search"
-          value={query}
-          placeholder="Find files"
-          aria-label="Find files"
-          spellCheck={false}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape' && query !== '') {
-              event.preventDefault()
-              setQuery('')
-            }
-          }}
-        />
+        <div className="panel__find">
+          <Icon name="search" size={14} className="panel__findGlyph" />
+          <input
+            className="input tree__find"
+            type="search"
+            value={query}
+            placeholder="Find files"
+            aria-label="Find files"
+            spellCheck={false}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && query !== '') {
+                event.preventDefault()
+                setQuery('')
+              }
+            }}
+          />
+        </div>
         <button type="button" className="panel__tool" aria-label="Reload" title="Reload" onClick={reload}>
           <Icon name="reload" size={14} />
         </button>

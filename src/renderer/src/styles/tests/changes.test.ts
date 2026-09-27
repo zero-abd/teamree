@@ -62,7 +62,7 @@ describe('changes.css', () => {
     expect(declarationOf(patch, 'font-family')).toBe('var(--font-mono)')
   })
 
-  // A changed word's fill sits on its line's fill, and the line's on the pane every patch is drawn in.
+  // A changed line is a 14% wash of its tone and a changed word 30% over it; the sign carries the full colour.
   it.each(BUILT_IN_THEMES.map((theme) => theme.id))(
     'fills changed lines and words so they stand out, and their text still reads, in %s',
     (id) => {
@@ -77,8 +77,8 @@ describe('changes.css', () => {
       ] as const) {
         const line = amountOf(SHEET, `.patch__row--${side}`)
         const word = amountOf('review.css', `.patch__row--${side} .patch__word`)
-        expect(line, side).toBeGreaterThanOrEqual(0.2)
-        expect(word, side).toBeGreaterThanOrEqual(0.35)
+        expect(line, side).toBe(0.14)
+        expect(word, side).toBe(0.3)
         const lineFill = mix(rgbOf(palette['bg-pane']), rgbOf(palette[tone]), line)
         const wordFill = mix(lineFill, rgbOf(palette[tone]), word)
         expect(contrastRatio(rgbOf(palette['fg-secondary']), lineFill), `${side} line`).toBeGreaterThanOrEqual(4.5)
@@ -86,6 +86,27 @@ describe('changes.css', () => {
       }
     }
   )
+
+  it.each([
+    ['added', 'var(--success)'],
+    ['removed', 'var(--danger)']
+  ])('signs an %s line in %s at full strength', (side, colour) => {
+    expect(declarationOf(ruleFor(SHEET, `.patch__sign--${side}`), 'color')).toBe(colour)
+  })
+
+  it('keeps a hunk’s Stage and Discard out of sight until the hunk is hovered or focused', () => {
+    expect(declarationOf(ruleFor(SHEET, '.patch__stage'), 'opacity')).toBe('var(--row-action-rest)')
+    for (const shown of ['.patch__hunk:hover .patch__stage', '.patch__hunk:focus-within .patch__stage']) {
+      const rule = ruleListing(SHEET, shown)
+      expect(rule && declarationOf(rule, 'opacity'), shown).toBe('1')
+    }
+  })
+
+  it('heads the staged and unstaged halves in sentence case', () => {
+    const half = ruleFor(SHEET, '.patch__half')
+    expect(declarationOf(half, 'text-transform')).toBeUndefined()
+    expect(declarationOf(half, 'font-size')).toBe('var(--text-sm)')
+  })
 
   // A ring round the inner button left the checkbox and the counts outside it, inside the selected fill.
   it('rings a focused changed file as the whole row, as thickly as every other control', () => {

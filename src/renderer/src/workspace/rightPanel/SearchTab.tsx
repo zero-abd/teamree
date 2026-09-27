@@ -11,6 +11,13 @@ import { directoryOf, fileNameOf } from './sourceControl'
 import { fileKey, groupSearchResults, hitWindow, searchRows, stepHit } from './searchModel'
 import { searchSignature, useSearchStore, type SearchForm } from './searchStore'
 import { Icon } from '../../icons/Icon'
+import { fileIconFor } from '../../icons/fileIcon'
+import { Segmented } from '../../ui/Segmented'
+
+const SCOPES = [
+  { value: 'task', label: 'This Task' },
+  { value: 'all', label: 'All Tasks' }
+] as const
 
 /** How long the field waits after a keystroke before searching. */
 const SEARCH_DEBOUNCE_MS = 200
@@ -139,6 +146,7 @@ export function SearchTab({ worktree }: { worktree: Worktree }): React.JSX.Eleme
     <section className="search" aria-label="Search in files" onKeyDown={onKeyDown}>
       <div className="search__form">
         <div className="search__field">
+          <Icon name="search" size={14} className="search__glyph" />
           <input
             ref={field}
             className="search__input"
@@ -164,7 +172,7 @@ export function SearchTab({ worktree }: { worktree: Worktree }): React.JSX.Eleme
           {toggle('regex', 'Use Regular Expression', '.*')}
         </div>
         <input
-          className="search__input search__include"
+          className="input input--mono search__include"
           type="text"
           value={include}
           placeholder="src/**, !*.test.ts"
@@ -172,18 +180,8 @@ export function SearchTab({ worktree }: { worktree: Worktree }): React.JSX.Eleme
           spellCheck={false}
           onChange={(event) => setForm({ include: event.target.value })}
         />
-        <div className="search__scope" role="group" aria-label="Scope">
-          {(['task', 'all'] as const).map((value) => (
-            <button
-              type="button"
-              key={value}
-              className={`search__segment${scope === value ? ' search__segment--on' : ''}`}
-              aria-pressed={scope === value}
-              onClick={() => setForm({ scope: value })}
-            >
-              {value === 'task' ? 'This Task' : 'All Tasks'}
-            </button>
-          ))}
+        <div className="search__scope">
+          <Segmented label="Scope" options={SCOPES} value={scope} onChange={(value) => setForm({ scope: value })} />
         </div>
       </div>
 
@@ -216,6 +214,7 @@ export function SearchTab({ worktree }: { worktree: Worktree }): React.JSX.Eleme
                   onClick={() => fold(fileKey(row.file))}
                 >
                   <Icon name="chevron-right" size={14} className={`chevron${row.collapsed ? '' : ' chevron--open'}`} />
+                  <Icon name={fileIconFor(fileNameOf(row.file.path))} size={14} className="search__icon" />
                   <span className="search__fileName">{fileNameOf(row.file.path)}</span>
                   <span className="search__dir">{directoryOf(row.file.path)}</span>
                   <span className="search__count">{row.file.lines.length}</span>

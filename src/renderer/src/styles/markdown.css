@@ -1,7 +1,7 @@
 /* Markdown pane: a page at a reading width, a handle beside each block, and the menus that float over it. */
 
 .pane--markdown {
-  background: var(--bg-window);
+  background: var(--bg-pane);
 }
 
 .md-frame {
@@ -45,6 +45,7 @@
   margin: 0.3em 0;
 }
 
+/* The app's ramp: page, title, heading, then the label weight for the three below. */
 .md-editor h1,
 .md-editor h2,
 .md-editor h3,
@@ -52,42 +53,41 @@
 .md-editor h5,
 .md-editor h6 {
   color: var(--fg);
-  font-weight: 650;
-  line-height: 1.3;
-  letter-spacing: -0.01em;
+  font-weight: 600;
 }
 
 .md-editor h1 {
-  margin: 1.4em 0 0.3em;
-  font-size: 1.875em;
+  margin: 40px 0 12px;
+  font-size: var(--text-2xl);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  line-height: 32px;
+  letter-spacing: -0.035em;
 }
 
 .md-editor h2 {
-  margin: 1.25em 0 0.25em;
-  font-size: 1.5em;
+  margin: 32px 0 8px;
+  font-size: var(--text-xl);
+  font-weight: 680;
+  line-height: 24px;
+  letter-spacing: -0.025em;
 }
 
 .md-editor h3 {
-  margin: 1em 0 0.2em;
-  font-size: 1.25em;
+  margin: 24px 0 4px;
+  font-size: var(--text-lg);
+  font-weight: 650;
+  line-height: 20px;
+  letter-spacing: -0.015em;
 }
 
 .md-editor h4,
 .md-editor h5,
 .md-editor h6 {
-  margin: 1em 0 0.2em;
-  font-size: 1.05em;
-}
-
-/* A page that opens on a heading wears it as its title. */
-.md-editor > h1:first-child {
-  margin-bottom: 0.45em;
-  font-size: 2.5em;
-  font-weight: 750;
-  line-height: 1.15;
-  letter-spacing: -0.025em;
+  margin: 20px 0 4px;
+  color: var(--fg-secondary);
+  font-size: var(--text-base);
+  line-height: 20px;
+  letter-spacing: -0.01em;
 }
 
 /* The caret's empty line says what it can become; an empty page says so without the caret. */
@@ -231,8 +231,8 @@
 .md-editor blockquote {
   margin: 0.5em 0;
   padding: 0.1em 0 0.1em 0.95em;
-  border-left: 3px solid var(--fg-secondary);
-  color: var(--fg);
+  border-left: 2px solid var(--line-strong);
+  color: var(--fg-secondary);
 }
 
 .md-callout {
@@ -308,15 +308,15 @@
 
 .md-code pre {
   margin: 0;
-  padding: 14px 16px;
-  border: 1px solid var(--line);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line-subtle);
   border-radius: var(--r2);
-  background: var(--bg-panel);
+  background: var(--bg-code);
   color: var(--term-fg);
   overflow-x: auto;
   font-family: var(--font-mono);
-  font-size: var(--text-base);
-  line-height: 1.55;
+  font-size: var(--text-code);
+  line-height: 20px;
   tab-size: 2;
 }
 
@@ -469,13 +469,13 @@
   position: relative;
   min-width: 4ch;
   padding: 6px 10px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   vertical-align: top;
   text-align: left;
 }
 
 .md-editor th {
-  background: var(--bg-panel);
+  background: var(--bg-code);
   font-weight: 600;
 }
 
@@ -516,11 +516,11 @@
 
 /* Front matter: its keys and values as rows; a click swaps in the YAML as written. */
 .md-props {
-  margin: 0 0 1em;
+  margin: 0 0 1.25em;
   padding: var(--s2) var(--s3);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-subtle);
   border-radius: var(--r2);
-  background: var(--bg-panel);
+  background: var(--bg-code);
   font-size: var(--text-sm);
 }
 
@@ -571,9 +571,10 @@
   gap: var(--s3);
   margin: 0.5em 0;
   padding: var(--s2) var(--s3);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r2);
-  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-1);
 }
 
 .md-artifact__open {
