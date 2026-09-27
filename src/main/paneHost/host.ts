@@ -236,6 +236,10 @@ export async function startPaneHost(options: PaneHostOptions): Promise<PaneHost>
       case 'kill':
         if (session.exited === undefined) tryIgnoring(() => session.pty.kill(message.signal))
         return
+      case 'clear':
+        session.chunks = []
+        session.held = 0
+        return
       case 'forget':
         if (session.exited === undefined) signalGroup(session.pty, 'SIGHUP')
         forget(session)
@@ -394,6 +398,7 @@ function parse(raw: unknown): Request | undefined {
       return typeof m.signal === 'string' ? { type: 'kill', id, signal: m.signal } : { type: 'kill', id }
     case 'forget':
     case 'foreground':
+    case 'clear':
       return { type: m.type, id }
     default:
       return undefined

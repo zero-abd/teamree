@@ -878,6 +878,7 @@ describe('registerTerminalHandlers', () => {
       'layout.get',
       'layout.set',
       'terminal.agentEvent',
+      'terminal.clear',
       'terminal.close',
       'terminal.closed',
       'terminal.create',

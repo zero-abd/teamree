@@ -552,6 +552,13 @@ export class TerminalSessionManager {
     return this.require(terminalId).read(tailBytes)
   }
 
+  /** Clears a pane for every reader, and on disk now: the next checkpoint could be an interval away. */
+  clear(terminalId: string): void {
+    const session = this.require(terminalId)
+    session.clear()
+    this.scrollback?.put(terminalId, session.recordedOutput(), session.hosted)
+  }
+
   /** A pane's snapshot, placed in its stream, with the widest the pane has been and whether it has exited. */
   readPlaced(terminalId: string, tailBytes?: number): { data: string; end: number; widest: number; exited?: true } {
     const session = this.require(terminalId)

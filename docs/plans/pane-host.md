@@ -52,6 +52,7 @@ message carries a `v` (protocol version).
 | host | `exit {id, exitCode, signal}` | Kept until an app acknowledges it with `forget {id}`. |
 | app | `write {id, data}` / `resize {id, cols, rows}` / `kill {id, signal?}` | As `IPty`. |
 | app | `foreground {id}` → host `foreground {id, name}` | The pty's foreground process, for agent detection. |
+| app | `clear {id}` | Clear Pane: drop the ring so far; the offset keeps counting. |
 | app | `shutdown` | Kill every pty and exit (Quit with the setting off, or `--no-keep`). |
 
 - **Buffer.** Per session a ring of the last 4 MB (`SCROLLBACK_CAP_BYTES`), with a running

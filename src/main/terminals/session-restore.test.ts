@@ -1083,6 +1083,37 @@ describePty('restoring terminals across a restart', () => {
     expect(second.read(opened.id)).toContain('nothing running')
   }, 20_000)
 
+  it('forgets what Clear cleared: in a read, on disk and after a crash, keeping the cursor’s line', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    const first = manager(repositories, checkout, archive, 100)
+    const opened = first.create({ worktreeId: 'wt_1', command: "echo said-before; printf 'cursor-line'; sleep 30" })
+    await waitUntil(() => archive.read(opened.id)?.text.includes('cursor-line') === true, 'a checkpoint of the output')
+    const events: TerminalEvent[] = []
+    first.attachStream(opened.id, { emit: (event) => events.push(event), close: () => {} })
+
+    first.clear(opened.id)
+    await archive.flush()
+
+    expect(first.read(opened.id)).not.toContain('said-before')
+    expect(first.read(opened.id)).toContain('cursor-line')
+    // Every open view and watcher is told in the stream, where the clear happened.
+    expect(events).toEqual([{ type: 'data', data: '\x1b[H\x1b[2J\x1b[3Jcursor-line', end: expect.any(Number) }])
+    // No exit, no shutdown: what a crash comes back to.
+    const reopened = await ScrollbackArchive.open(archive.directory, [opened.id])
+    expect(reopened.read(opened.id)?.text).toBe('cursor-line')
+    const second = manager(repositories, checkout, reopened)
+    expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
+    expect(second.read(opened.id)).not.toContain('said-before')
+
+    // A restored pane's record goes too.
+    second.clear(opened.id)
+    expect(second.read(opened.id)).not.toContain('nothing running')
+    expect(second.read(opened.id)).not.toContain('cursor-line')
+  }, 20_000)
+
   it('stops writing a pane down the moment it stops printing', async () => {
     const { checkout } = await fakeAgent('unused')
     const repositories = createRepositories()

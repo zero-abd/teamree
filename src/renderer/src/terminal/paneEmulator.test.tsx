@@ -165,6 +165,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { TerminalView } = await import('./TerminalView')
+const { clearShownPane } = await import('./shownPanes')
 
 function Pane({ nested }: { nested: boolean }): React.JSX.Element {
   const view = (
@@ -214,6 +215,17 @@ it('moves the emulator into the new pane rather than replaying the stream into a
   expect(document.querySelector('.split .terminal-surface')!.contains(term!.element)).toBe(true)
   expect(call.mock.calls.filter(([method]) => method === 'terminal.read')).toHaveLength(1)
   expect(term!.writes).toEqual(['prompt % '])
+  view.unmount()
+  await settle()
+})
+
+it('clears through the runtime, which clears every view and record of the pane', async () => {
+  const view = render(<Pane nested={false} />)
+  await settle()
+  clearShownPane('t1')
+  await settle()
+
+  expect(call).toHaveBeenCalledWith('terminal.clear', { terminalId: 't1' })
   view.unmount()
   await settle()
 })

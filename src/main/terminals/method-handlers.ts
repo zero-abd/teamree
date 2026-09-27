@@ -19,6 +19,7 @@ export type TerminalMethodName =
   | 'terminal.resize'
   | 'terminal.close'
   | 'terminal.rename'
+  | 'terminal.clear'
   | 'terminal.read'
   | 'terminal.subscribe'
   | 'terminal.split'
@@ -48,6 +49,7 @@ export const terminalMethodSchemas = {
   'terminal.resize': Params.terminalResize,
   'terminal.close': Params.terminalClose,
   'terminal.rename': Params.terminalRename,
+  'terminal.clear': Params.terminalClear,
   'terminal.read': Params.terminalRead,
   'terminal.subscribe': Params.terminalSubscribe,
   'terminal.split': Params.terminalSplit,
@@ -127,6 +129,10 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
       return { closed: true }
     },
     'terminal.rename': async (params) => manager.rename(params.terminalId, params.label),
+    'terminal.clear': async (params) => {
+      manager.clear(params.terminalId)
+      return { cleared: true }
+    },
     'terminal.read': async (params) => manager.readPlaced(params.terminalId, params.tailBytes),
     'terminal.subscribe': async (params, call) => {
       if (!hub) return { subscription: manager.subscribe(params.terminalId) }
@@ -182,6 +188,7 @@ export function registerTerminalHandlers(registry: MethodRegistry, service: Term
   registry.register('terminal.resize', service.schemas['terminal.resize'], service.handlers['terminal.resize'])
   registry.register('terminal.close', service.schemas['terminal.close'], service.handlers['terminal.close'])
   registry.register('terminal.rename', service.schemas['terminal.rename'], service.handlers['terminal.rename'])
+  registry.register('terminal.clear', service.schemas['terminal.clear'], service.handlers['terminal.clear'])
   registry.register('terminal.read', service.schemas['terminal.read'], service.handlers['terminal.read'])
   registry.register('terminal.subscribe', service.schemas['terminal.subscribe'], service.handlers['terminal.subscribe'])
   registry.register('terminal.split', service.schemas['terminal.split'], service.handlers['terminal.split'])

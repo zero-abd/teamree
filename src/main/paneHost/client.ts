@@ -89,6 +89,11 @@ export class RemotePty {
     this.client.send({ type: 'kill', v, id: this.id, ...(signal === undefined ? {} : { signal }) })
   }
 
+  /** Has the host forget the output so far, so the next attach does not replay it. */
+  clear(): void {
+    this.client.send({ type: 'clear', v, id: this.id })
+  }
+
   /** Stops routing this pty's messages here; the pty itself keeps running in the host. */
   release(): void {
     this.#data.clear()

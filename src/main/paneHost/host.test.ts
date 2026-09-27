@@ -269,6 +269,51 @@ describePty('restoreSessions with the pane host', () => {
     await until(() => !alive(pid as number), 'the pane to end')
     await secondHost.release(false)
   })
+
+  it('comes back without what Clear cleared', async () => {
+    const { base, paths } = await scratch()
+    const userDataDir = join(base, 'userData')
+    const hosting = (): PaneHosting =>
+      new PaneHosting({
+        userDataDir,
+        appVersion: 'test',
+        enabled: () => true,
+        entry: 'in-process',
+        startHost: () => void host(paths)
+      })
+    const records = new Map<string, TerminalRecord>()
+    const options = {
+      resolveWorktreeCwd: () => base,
+      sessions: {
+        listTerminals: () => [...records.values()],
+        putTerminal: (record: TerminalRecord) => (records.set(record.id, record), record),
+        removeTerminal: (id: string) => records.delete(id)
+      }
+    }
+
+    const firstHost = hosting()
+    await firstHost.open()
+    const first = new TerminalSessionManager({ ...options, paneHost: firstHost })
+    const terminal = first.create({
+      worktreeId: 'wt',
+      shell: '/bin/sh',
+      command: 'echo said-before; read line; echo "got $line"; exec sleep 30'
+    })
+    await until(() => first.read(terminal.id).includes('said-before'), 'the output')
+    first.clear(terminal.id)
+    await first.shutdown()
+
+    const secondHost = hosting()
+    await secondHost.open()
+    const second = new TerminalSessionManager({ ...options, paneHost: secondHost })
+    expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
+    // Live output comes after the replay on the same socket.
+    second.write(terminal.id, 'after\r')
+    await until(() => second.read(terminal.id).includes('got after'), 'live output after the replay')
+    expect(second.read(terminal.id)).not.toContain('said-before')
+    await second.close(terminal.id)
+    await secondHost.release(false)
+  })
 })
 
 function ticks(text: string): number[] {

@@ -237,6 +237,8 @@ describe('dispatcher', () => {
       'teamwork.writeLog',
       // Local: the agent in a pane reporting on itself through the CLI socket.
       'terminal.agentEvent',
+      // Local: a teammate's view is not this pane's view.
+      'terminal.clear',
       'terminal.close',
       'terminal.closed',
       'terminal.create',

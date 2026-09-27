@@ -57,6 +57,8 @@ export type AppMessage =
   | { type: 'kill'; v: number; id: string; signal?: string }
   | { type: 'forget'; v: number; id: string }
   | { type: 'foreground'; v: number; id: string }
+  /** Drops what the host kept of the output so far; a host that predates it ignores it. */
+  | { type: 'clear'; v: number; id: string }
   | { type: 'shutdown'; v: number }
 
 export type HostMessage =
