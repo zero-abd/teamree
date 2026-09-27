@@ -45,6 +45,8 @@ const storage = typeof window === 'undefined' ? undefined : window.localStorage
 type SidebarViewState = StoredSidebarView & {
   /** Bumped whenever a worktree is picked, from anywhere; the sidebar scrolls the open row into view. */
   revealSeq: number
+  /** The row picked since the filter last changed, shown even where the filter would hide it. */
+  picked: string | null
   /** Set by Filter Sidebar until the field has taken the focus; the sidebar may not be mounted yet. */
   filterAsked: boolean
   /** The field is drawn; it also is while it holds text. */
@@ -53,7 +55,7 @@ type SidebarViewState = StoredSidebarView & {
   toggleQuick: (chip: QuickFilter) => void
   setCompact: (compact: boolean) => void
   toggleDone: (projectId: string) => void
-  reveal: () => void
+  reveal: (worktreeId: string) => void
   askFilter: () => void
   filterTaken: () => void
   /** Puts the field away, and its text with it. */
@@ -65,15 +67,20 @@ export const useSidebarView = create<SidebarViewState>()((set, get) => {
     set(next)
     writeStoredSidebarView(storage, get())
   }
+  const filter = (next: Partial<StoredSidebarView>): void => {
+    set({ picked: null })
+    save(next)
+  }
   return {
     ...readStoredSidebarView(storage),
     revealSeq: 0,
+    picked: null,
     filterAsked: false,
     filterOpen: false,
-    setQuery: (query) => save({ query }),
+    setQuery: (query) => filter({ query }),
     toggleQuick(chip) {
       const { quick } = get()
-      save({ quick: quick.includes(chip) ? quick.filter((entry) => entry !== chip) : [...quick, chip] })
+      filter({ quick: quick.includes(chip) ? quick.filter((entry) => entry !== chip) : [...quick, chip] })
     },
     setCompact: (compact) => save({ compact }),
     toggleDone(projectId) {
@@ -84,12 +91,12 @@ export const useSidebarView = create<SidebarViewState>()((set, get) => {
           : [...openDone, projectId]
       })
     },
-    reveal: () => set((state) => ({ revealSeq: state.revealSeq + 1 })),
+    reveal: (worktreeId) => set((state) => ({ revealSeq: state.revealSeq + 1, picked: worktreeId })),
     askFilter: () => set({ filterAsked: true, filterOpen: true }),
     filterTaken: () => set({ filterAsked: false }),
     closeFilter() {
       set({ filterOpen: false })
-      save({ query: '' })
+      filter({ query: '' })
     }
   }
 })

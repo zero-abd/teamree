@@ -314,10 +314,17 @@ describe('a worktree that is ready', () => {
     expect(within(openButton()).getByText('ada/pager')).toBeTruthy()
   })
 
-  it('names its branch under the name, slugified or not, whole on hover', () => {
+  // `tax rules / tax-rules` on every row says the name twice.
+  it('leaves out a branch that is only its name slugified, and names it on hover', () => {
     mount()
-    const branch = within(openButton()).getByText('rewrite-the-pager')
-    expect(branch.getAttribute('title')).toBe('rewrite-the-pager')
+    expect(document.querySelector('.worktree__branch')).toBeNull()
+    expect(document.querySelector('.worktree__name')?.getAttribute('title')).toContain('rewrite-the-pager')
+  })
+
+  it('names a branch that says more, whole on hover', () => {
+    mount({ worktree: worktree({ branch: 'ada/rewrite-the-pager' }) })
+    const branch = within(openButton()).getByText('ada/rewrite-the-pager')
+    expect(branch.getAttribute('title')).toBe('ada/rewrite-the-pager')
   })
 
   // `perf / perf`: a branch that is the name itself says it twice.
@@ -466,7 +473,7 @@ describe('one of several runs of a task', () => {
     )
     expect(screen.getByRole('button', { name: `More for ${TASK} (Codex)` })).toBeTruthy()
     expect(document.body.innerHTML).not.toMatch(/codex ·|claude ·/u)
-    expect(document.querySelector('.worktree__branch')?.textContent).toBe('add-a-subtract-function-to-codex')
+    expect(document.querySelector('.worktree__branch')).toBeNull()
   })
 
   // Name first, then what state it is in: glued together, "claudeAdd a subtract…ready" is one word.

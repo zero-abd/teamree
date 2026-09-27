@@ -354,6 +354,17 @@ describe('agentRows', () => {
     expect(agentRows([shell], task, 0, { a: 'E' })[0]?.evidence).toBeNull()
   })
 
+  // A row cuts a path at its start, leaving the part everyone shares (`zsh /private/tmp/claude-50…`).
+  it('quotes no line that is only paths', () => {
+    const quoted = (line: string): string | null =>
+      agentRows([terminal({ id: 'a' })], 'wt1', 0, { a: line })[0]?.evidence ?? null
+    expect(quoted('/private/tmp/claude-501/scratch/bin:/usr/bin:/bin')).toBeNull()
+    expect(quoted('/Users/ana/repos/shop/tax-rules')).toBeNull()
+    expect(quoted('~/repos/shop')).toBeNull()
+    expect(quoted('/Users/ana/x: No such file or directory')).toBe('/Users/ana/x: No such file or directory')
+    expect(quoted('ls /tmp')).toBe('ls /tmp')
+  })
+
   it('has no evidence at all when none has been read yet', () => {
     expect(agentRows([terminal({ id: 'a' })], 'wt1', 0)[0]?.evidence).toBeNull()
   })

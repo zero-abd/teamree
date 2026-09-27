@@ -1,4 +1,4 @@
-// What the sidebar's filter field and chips keep: a matching row, the tasks above it, and the open row.
+// What the sidebar's filter field and chips keep: a matching row, the tasks above it, and a row just picked.
 // Pure, so the list drawn and the rows read for status can be the same set.
 
 import type { TaskStage } from '@shared/tasks'
@@ -68,13 +68,13 @@ export function rowMatches(facts: RowFacts, view: Pick<SidebarView, 'query' | 'q
 export type FilteredRows<W> = {
   /** In the order given. */
   rows: W[]
-  /** Shown without matching: a match's parent, or the open row. */
+  /** Shown without matching: a match's parent, or the row just picked. */
   context: Set<string>
   /** Done rows Hide Done folds away in this project; still counted while unfolded. */
   folded: number
 }
 
-/** One project's rows, in task order, with `keep` (the open row) never filtered out. */
+/** One project's rows, in task order, with `keep` (picked since the filter changed) never filtered out. */
 export function filterProject<W extends TreeWorktree>(
   rows: readonly W[],
   factsOf: (row: W) => RowFacts,

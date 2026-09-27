@@ -1,4 +1,4 @@
-// Which sidebar rows the filter field and chips keep: a match, the tasks above it, and the open row.
+// Which sidebar rows the filter field and chips keep: a match, the tasks above it, and a row just picked.
 
 import { describe, expect, it } from 'vitest'
 import type { TaskStage } from '@shared/tasks'
@@ -58,7 +58,7 @@ describe('the filter field', () => {
     expect([...result.context].sort()).toEqual(['mid', 'top'])
   })
 
-  it('always keeps the open row, drawn as not matching', () => {
+  it('always keeps a row just picked, drawn as not matching', () => {
     const result = filterProject([row('a'), row('b')], (entry) => entry, view({ query: 'a-branch' }), {
       keep: 'b',
       doneOpen: false
@@ -121,7 +121,7 @@ describe('the chips', () => {
     expect(result.folded).toBe(2)
   })
 
-  it('Hide Done keeps a done parent of a live child, and the open row', () => {
+  it('Hide Done keeps a done parent of a live child, and a row just picked', () => {
     const tree = [row('parent', { stage: 'done' }), row('child', { parentId: 'parent', stage: 'working' })]
     expect(shown(tree, view({ quick: ['hide-done'] }))).toEqual(['parent', 'child'])
     expect(shown([row('d', { stage: 'landed' })], view({ quick: ['hide-done'] }), 'd')).toEqual(['d'])

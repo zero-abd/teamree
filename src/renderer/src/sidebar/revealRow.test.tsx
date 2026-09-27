@@ -96,4 +96,25 @@ describe('a worktree picked from anywhere', () => {
     expect(rowOf('leaf')).not.toBeNull()
     expect(rowOf('parent')).not.toBeNull()
   })
+
+  // `tax rules` stayed under `ind`: typing a filter hides the open row it does not match, and it stays open.
+  it('is hidden by the next filter that does not match it', () => {
+    useWorkspaceStore.setState({ collapsedProjects: {} })
+    render(<Sidebar searchHint="⌘K" />)
+    act(() => void store().openWorktree('leaf'))
+    act(() => useSidebarView.getState().setQuery('first'))
+    expect(rowOf('leaf')).toBeNull()
+    expect(rowOf('first')).not.toBeNull()
+    expect(store().activeWorktreeId).toBe('leaf')
+    act(() => useSidebarView.getState().setQuery(''))
+    expect(rowOf('leaf')).not.toBeNull()
+  })
+
+  it('is not kept on screen by a filter it does not match when nothing picked it', () => {
+    useWorkspaceStore.setState({ collapsedProjects: {} })
+    useSidebarView.setState({ query: 'first' })
+    render(<Sidebar searchHint="⌘K" />)
+    expect(rowOf('parent')).toBeNull()
+    expect(rowOf('first')).not.toBeNull()
+  })
 })

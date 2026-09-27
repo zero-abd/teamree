@@ -226,8 +226,9 @@ describe('a two-line row', () => {
     expect(meta.querySelector('.worktree__claims')).not.toBeNull()
   })
 
-  it('names its branch on the second line', () => {
+  it('keeps the chips on the second line without a branch that is only the name', () => {
     mount({ compact: false })
-    expect(document.querySelector('.worktree__meta .worktree__branch')?.textContent).toBe('long-refactor')
+    expect(document.querySelector('.worktree__meta .worktree__branch')?.textContent).toBe('')
+    expect(document.querySelector('.worktree__meta .gitchips')).not.toBeNull()
   })
 })

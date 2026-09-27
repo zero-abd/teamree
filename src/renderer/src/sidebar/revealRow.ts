@@ -22,7 +22,7 @@ export function revealRow(
     seen.add(at.id)
     if (tasks.collapsedTasks[at.id]) tasks.setTaskCollapsed(at.id, false)
   }
-  useSidebarView.getState().reveal()
+  useSidebarView.getState().reveal(worktreeId)
 }
 
 function parentOf(worktree: TreeWorktree, worktrees: readonly TreeWorktree[]): TreeWorktree | undefined {

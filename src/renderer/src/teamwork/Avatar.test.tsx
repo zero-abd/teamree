@@ -9,16 +9,13 @@ import { Avatar, AVATAR_HUES, avatarHue, avatarInitials } from './Avatar'
 afterEach(cleanup)
 
 describe('avatarInitials', () => {
-  it('takes the first letters of the first two words', () => {
-    expect(avatarInitials('Mate Tester')).toBe('MT')
-    expect(avatarInitials('ana-lopez')).toBe('AL')
-    expect(avatarInitials('j.doe')).toBe('JD')
-  })
-
-  it('takes two letters of a single word, like a name', () => {
-    expect(avatarInitials('bo')).toBe('Bo')
-    expect(avatarInitials('priya')).toBe('Pr')
+  // `Ma` on one face and `M` on the next read as two people; `Qa` read as a word.
+  it('takes the first letter of the handle, upper-cased', () => {
+    expect(avatarInitials('mate')).toBe('M')
+    expect(avatarInitials('Mate Tester')).toBe('M')
+    expect(avatarInitials('ana-lopez')).toBe('A')
     expect(avatarInitials('x')).toBe('X')
+    expect(avatarInitials('@bo')).toBe('B')
   })
 
   it('never draws nothing', () => {
@@ -42,7 +39,7 @@ describe('Avatar', () => {
   it('draws the initials on their colour, with the presence as a class and in words', () => {
     const { container } = render(<Avatar handle="bo" presence="online" />)
     const face = container.querySelector('.avatar') as HTMLElement
-    expect(face.textContent).toBe('Bo')
+    expect(face.textContent).toBe('B')
     expect(face.classList.contains('avatar--online')).toBe(true)
     expect(face.style.getPropertyValue('--avatar-hue')).toBe(String(avatarHue('bo')))
     expect(face.getAttribute('aria-label')).toBe('bo, online')
@@ -64,10 +61,18 @@ describe('Avatar', () => {
     expect(face.classList.contains('avatar--away')).toBe(true)
   })
 
-  // Two letters at the smallest text size do not fit the smallest face.
-  it('draws one letter on the smallest face', () => {
-    const { container } = render(<Avatar handle="Mate Tester" size="xs" />)
-    expect(container.querySelector('.avatar')?.textContent).toBe('M')
-    expect(container.querySelector('.avatar')?.getAttribute('aria-label')).toBe('Mate Tester')
+  it('draws the same initials at every size', () => {
+    for (const handle of ['mate', 'Mate Tester']) {
+      const { container } = render(
+        <>
+          <Avatar handle={handle} size="xs" />
+          <Avatar handle={handle} />
+          <Avatar handle={handle} size="md" />
+        </>
+      )
+      const faces = [...container.querySelectorAll('.avatar')].map((face) => face.textContent)
+      expect(faces).toEqual(Array(3).fill(avatarInitials(handle)))
+      cleanup()
+    }
   })
 })
