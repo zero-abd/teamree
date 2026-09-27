@@ -300,8 +300,12 @@ export type Notice = {
   id: number
   text: string
   tone: 'error' | 'info'
-  /** One thing to do about the notice: a page to open (`shell/openInBrowser.ts`), a side to hide for room, or an undo. */
-  action?: { label: string; url: string } | { label: string; hide: keyof Sides } | { label: string; undo: UndoTarget }
+  /** One thing to do about the notice: a page to open (`shell/openInBrowser.ts`), a side to hide, an undo, or text to copy. */
+  action?:
+    | { label: string; url: string }
+    | { label: string; hide: keyof Sides }
+    | { label: string; undo: UndoTarget }
+    | { label: string; copy: string }
   /** What the notice is about; a newer notice with the same key replaces it, and success clears it. */
   key?: string
   /** A git write refused by a held `index.lock`: Retry, and Clear Lock when `clearable`. */
@@ -714,7 +718,7 @@ type WorkspaceState = {
   /** Hides a received note and offers Undo; see `useSharedNotes.remove`. */
   deleteSharedNote: (shareId: string, title: string) => void
   /** Says something in the corner; an `info` retires itself. */
-  showNotice: (text: string, tone?: Notice['tone']) => void
+  showNotice: (text: string, tone?: Notice['tone'], action?: Notice['action']) => void
   /** Keeps a preview tab open when the next preview comes. */
   pinFilePane: (paneId: string) => void
   /** Shows a file pane's diff, or its text again. */
@@ -2899,8 +2903,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       notify(`Deleted "${shortened(title)}"`, 'info', { label: 'Undo', undo: { kind: 'shared-note', shareId } })
     },
 
-    showNotice(text, tone = 'info') {
-      notify(text, tone)
+    showNotice(text, tone = 'info', action) {
+      notify(text, tone, action)
     },
 
     openReview(worktreeId) {

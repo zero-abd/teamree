@@ -266,6 +266,20 @@ describe('the Help menu', () => {
     expect(checkForUpdates).toHaveBeenCalledTimes(1)
   })
 
+  it('ends with Show Error Log, which reveals the log', () => {
+    const showErrorLog = vi.fn()
+    const template = applicationMenuTemplate({
+      platform: 'darwin',
+      showErrorLog,
+      links: { version: '1.2.3', systemVersion: '15.2.0', open: () => {} }
+    })
+    expect(labelsOf(template, 'Help').slice(-2)).toEqual(['—', 'Show Error Log'])
+    submenuOf(template, 'Help')
+      .find((item) => item.label === 'Show Error Log')
+      ?.click?.(undefined as never, undefined, undefined as never)
+    expect(showErrorLog).toHaveBeenCalledTimes(1)
+  })
+
   it('opens each one in the browser', () => {
     expect(opened()).toEqual([
       'https://teamree.us',

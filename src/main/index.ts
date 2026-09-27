@@ -1,3 +1,5 @@
+// First: installs the handlers that keep every later throw off Electron's raw error dialog.
+import { attachWindow, installErrorReports, mainErrors, showErrorLog, watchGoneProcesses } from './crashGuard'
 import { join } from 'node:path'
 import {
   app,
@@ -311,12 +313,15 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
             checkForUpdates: () => {
               void runtime?.checkForUpdates().catch((error: unknown) => console.warn('[updates]', error))
             },
+            showErrorLog,
             commands
           })
         )
       )
     }
     installMenu()
+    installErrorReports()
+    watchGoneProcesses(mainWindow)
     protocol.handle(FILE_SCHEME, (request) => serveGrantedFile(fileGrants, request))
 
     // Packaged, macOS draws the bundle's icon in About; unpackaged it would be Electron's.
@@ -444,10 +449,13 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
         onAppearance: (appearance) => followAppearance?.(appearance),
         systemTone: () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light'),
         fetchBases: true,
-        online: () => net.isOnline()
+        online: () => net.isOnline(),
+        onError: (error) => mainErrors.log('runtime', error)
       })
     } catch (error) {
-      console.error('[runtime] failed to start', error)
+      // Without the runtime the window has nothing to show.
+      mainErrors.launchFailed(error)
+      return
     }
 
     followAppearance = installNativeAppearance({
@@ -456,29 +464,35 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
       windows: () => BrowserWindow.getAllWindows()
     })
     createWindow()
+    attachWindow(mainWindow)
     app.on('activate', () => {
       if (mainWindow() === undefined) createWindow()
     })
     // macOS only: the app already outlives its last window there, and the status item is how it is reached.
     if (runtime && process.platform === 'darwin') {
-      const stopMenuBarExtra = installMenuBarExtra({
-        runtime,
-        notices,
-        openWindow,
-        runCommand: (command) => {
-          openWindow()
-          windowCommands.run(command)
-        },
-        quit: () => app.quit(),
-        preload: PRELOAD,
-        background: isBackgroundLaunch(process.env)
-      })
-      // An open status item menu runs a nested AppKit loop no quit or exit ends; destroying the tray closes it.
-      app.once('quit', stopMenuBarExtra)
+      // Optional: a status item this system cannot make leaves the window working.
+      try {
+        const stopMenuBarExtra = installMenuBarExtra({
+          runtime,
+          notices,
+          openWindow,
+          runCommand: (command) => {
+            openWindow()
+            windowCommands.run(command)
+          },
+          quit: () => app.quit(),
+          preload: PRELOAD,
+          background: isBackgroundLaunch(process.env)
+        })
+        // An open status item menu runs a nested AppKit loop no quit or exit ends; destroying the tray closes it.
+        app.once('quit', stopMenuBarExtra)
+      } catch (error) {
+        mainErrors.caught('menu bar extra', error)
+      }
     }
   })
   // Almost nothing awaits `launched`; without this a failed launch is an unhandled rejection.
-  void launched.catch((error: unknown) => console.error('[launch]', error))
+  void launched.catch((error: unknown) => mainErrors.launchFailed(error))
 
   // Quitting waits for the runtime to release its socket and write every pane's
   // output, and for the launch first if that is still in flight: `runtime`
@@ -493,6 +507,7 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
     },
     stop: () => {
       leaving = true
+      mainErrors.leaving()
       return runtime?.stop() ?? Promise.resolve()
     },
     quit: () => app.quit()

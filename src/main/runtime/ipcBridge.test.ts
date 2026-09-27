@@ -64,7 +64,9 @@ describe('the renderer transport names one set of channels', () => {
       // Invitation links: the one that launched the app, taken; each after, sent.
       ...(await channelsNamedIn('src/main/invitationLinks.ts')),
       // The Quick Note panel: its context and save asked, its close sent.
-      ...(await channelsNamedIn('src/main/menuBarExtra/quickNoteWindow.ts'))
+      ...(await channelsNamedIn('src/main/menuBarExtra/quickNoteWindow.ts')),
+      // Main-process errors out to the window, the window's own errors in.
+      ...(await channelsNamedIn('src/main/crashGuard/index.ts'))
     ])
 
     expect([...preload].filter((channel) => !served.has(channel))).toEqual([])

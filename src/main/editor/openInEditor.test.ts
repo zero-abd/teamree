@@ -2,7 +2,7 @@
 // a program; the argv assertion is the load-bearing one.
 
 import { describe, expect, it } from 'vitest'
-import { createEditorActions, findAppsOnMac, KNOWN_APPS, type EditorDeps } from './openInEditor'
+import { createEditorActions, findAppsOnMac, KNOWN_APPS, startDetached, type EditorDeps } from './openInEditor'
 
 const CHECKOUT = '/repos/pager-wt/rewrite-the-pager'
 const FILE = `${CHECKOUT}/src/pager.ts`
@@ -247,5 +247,13 @@ describe('finding apps on a Mac', () => {
       }
     })
     expect([...found.keys()]).toEqual(['com.mitchellh.ghostty'])
+  })
+})
+
+describe('starting a program that is gone', () => {
+  // The spawn fails after `open` has answered, as an event that would otherwise reach the process.
+  it('is not an uncaught error', async () => {
+    startDetached('/nonexistent/teamree-editor', [])
+    await new Promise((resolve) => setTimeout(resolve, 200))
   })
 })

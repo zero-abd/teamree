@@ -357,6 +357,25 @@ describe('how often GitHub is asked', () => {
 })
 
 describe('waking from sleep', () => {
+  // Nothing awaits an automatic check, so a throw inside it would reach the process as an unhandled rejection.
+  it('turns an automatic check that throws into a problem', async () => {
+    let onWake: (() => void) | undefined
+    const watchWake: WakeWatch = async (onWakeCallback) => {
+      onWake = onWakeCallback
+      return () => {}
+    }
+    const { record } = settings({ lastCheckedAt: NOW - AUTOMATIC_CHECK_THROTTLE_MS - 1 })
+    record.recordAttempt = () => {
+      throw new Error('ENOSPC: no space left on device')
+    }
+    const { update, problems } = service({ record, watchWake })
+
+    update.start()
+    await vi.waitFor(() => expect(onWake).toBeDefined())
+    onWake?.()
+    await vi.waitFor(() => expect(problems.some((problem) => problem.includes('ENOSPC'))).toBe(true))
+  })
+
   it('checks once the machine wakes, through the same throttle as the clock', async () => {
     let asks = 0
     let onWake: (() => void) | undefined

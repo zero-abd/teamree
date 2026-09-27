@@ -33,6 +33,8 @@ export type ApplicationMenuOptions = {
   devTools?: boolean
   /** Asks GitHub for a newer release; omitted, the item is not offered. Sits under About, where a Mac user looks. */
   checkForUpdates?: () => void
+  /** Help → Show Error Log; omitted, the item is not offered. */
+  showErrorLog?: () => void
   /** The Help menu's web pages; omitted, they are not offered. */
   links?: {
     version: string
@@ -168,7 +170,10 @@ export function applicationMenuTemplate(options: ApplicationMenuOptions = {}): M
     ? [{ label: 'Check for Updates…', click: options.checkForUpdates }]
     : []
   const shortcuts = inSection('help')
-  const help = [shortcuts, updates, links]
+  const errorLog: MenuItemConstructorOptions[] = options.showErrorLog
+    ? [{ label: 'Show Error Log', click: options.showErrorLog }]
+    : []
+  const help = [shortcuts, updates, links, errorLog]
     .filter((group) => group.length > 0)
     .flatMap((group, index) => (index === 0 ? group : [{ type: 'separator' } as const, ...group]))
   if (help.length > 0) template.push({ label: top('Help'), role: 'help', submenu: help })

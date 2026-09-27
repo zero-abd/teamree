@@ -3,7 +3,7 @@
 // Boots the real `out/main/index.js`: a window of its own had no IPC bridge
 // behind it and passed anyway. Callbacks, not top-level await — Electron does
 // not pump its event loop until this module finishes evaluating.
-import { app, Menu, systemPreferences, Tray } from 'electron'
+import { app, dialog, Menu, systemPreferences, Tray } from 'electron'
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -98,6 +98,10 @@ async function waitFor(probe, failure) {
   }
 }
 
+// Electron's raw "A JavaScript error occurred in the main process" box, recorded rather than shown; none may appear.
+const rawErrorBoxes = []
+dialog.showErrorBox = (title, content) => rawErrorBoxes.push(`${title}: ${content}`)
+
 // The status item as the app makes it, so the quit can run with its menu open.
 let statusItem
 const listen = Tray.prototype.on
@@ -140,9 +144,47 @@ async function run() {
   await checkMenuBar(ask)
   await checkWorktreeSurfaces(ask)
   await checkRendererBoundary(window, ask)
+  await checkMainErrors(ask)
   await checkPeerCrypto()
   checkLocalBoundary()
   await openStatusItemMenu()
+}
+
+/**
+ * A throw and a rejection nothing catches, raised in the main process on purpose: both are logged,
+ * neither reaches Electron's raw dialog, the window says so, and the app keeps answering.
+ */
+async function checkMainErrors(ask) {
+  const log = join(userDataDir, 'logs', 'main-errors.log')
+  const logged = () => (existsSync(log) ? readFileSync(log, 'utf8') : '')
+  setTimeout(() => {
+    throw new Error('smoke: deliberate uncaught exception')
+  })
+  void Promise.reject(new Error('smoke: deliberate unhandled rejection'))
+
+  await waitFor(
+    async () =>
+      ['uncaught exception', 'unhandled rejection'].every((kind) => logged().includes(`smoke: deliberate ${kind}`)),
+    'a deliberate main-process error was not written to logs/main-errors.log'
+  )
+  await waitFor(
+    () =>
+      ask(
+        `[...document.querySelectorAll('.notice')].some((notice) => notice.textContent?.includes('Something went wrong') && notice.textContent.includes('Copy Details'))`
+      ),
+    'a main-process error put no notice in the window'
+  )
+  await waitFor(
+    () => ask('window.teamree.runtime.call("status.get", {}).then((response) => response.ok === true, () => false)'),
+    'the runtime stopped answering after a main-process error'
+  )
+  for (const box of rawErrorBoxes) failures.push(`Electron's raw error dialog was raised: ${box.split('\n')[0]}`)
+
+  const walk = (menu) => (menu?.items ?? []).flatMap((item) => [item, ...(item.submenu ? walk(item.submenu) : [])])
+  if (!walk(Menu.getApplicationMenu()).some((item) => item.label === 'Show Error Log')) {
+    failures.push('Help has no Show Error Log')
+  }
+  if (rawErrorBoxes.length === 0) console.log('smoke: main-process errors logged and noticed, no raw error dialog')
 }
 
 /**

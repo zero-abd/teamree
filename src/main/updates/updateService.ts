@@ -185,18 +185,23 @@ export class UpdateService {
     }, delayMs)
   }
 
+  /** Never rejects: nothing awaits it. */
   async #automaticCheck(): Promise<void> {
-    await this.#recover()
-    // A release seen earlier but not yet fetched is worth one request past the rate limit.
-    const seen = parseVersion(this.#settings.read().lastSeenVersion ?? '')
-    const current = parseVersion(this.#version)
-    const pending =
-      this.#selfInstall !== undefined &&
-      this.#install === null &&
-      seen !== null &&
-      current !== null &&
-      isNewerRelease(seen, current)
-    await this.check({ force: pending })
+    try {
+      await this.#recover()
+      // A release seen earlier but not yet fetched is worth one request past the rate limit.
+      const seen = parseVersion(this.#settings.read().lastSeenVersion ?? '')
+      const current = parseVersion(this.#version)
+      const pending =
+        this.#selfInstall !== undefined &&
+        this.#install === null &&
+        seen !== null &&
+        current !== null &&
+        isNewerRelease(seen, current)
+      await this.check({ force: pending })
+    } catch (error) {
+      this.#onProblem(`the automatic check failed: ${describe(error)}`, error)
+    }
   }
 
   /** Drops the pending check and any download, then starts the install a restart asked for. */

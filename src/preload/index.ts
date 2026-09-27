@@ -32,6 +32,9 @@ const INVITATION_OPEN_CHANNEL = 'teamree:invitation:open'
 const QUICK_NOTE_CONTEXT_CHANNEL = 'teamree:quick-note:context'
 const QUICK_NOTE_SAVE_CHANNEL = 'teamree:quick-note:save'
 const QUICK_NOTE_CLOSE_CHANNEL = 'teamree:quick-note:close'
+// src/main/crashGuard/index.ts
+const MAIN_ERROR_CHANNEL = 'teamree:errors:main'
+const ERROR_REPORT_CHANNEL = 'teamree:errors:report'
 
 /** What the main process answers a reveal with, declared structurally (not imported from src/main). */
 type RevealResult = { revealed: true } | { revealed: false; reason: string }
@@ -231,6 +234,25 @@ const quickNote = {
   }
 } as const
 
+const mainErrorListeners = new Set<(details: string) => void>()
+
+ipcRenderer.on(MAIN_ERROR_CHANNEL, (_event, details: string) => {
+  for (const listener of [...mainErrorListeners]) listener(details)
+})
+
+/** Main-process errors inward, as details to copy; the window's own errors outward, for the log. */
+const errors = {
+  onMainError(listener: (details: string) => void): () => void {
+    mainErrorListeners.add(listener)
+    return () => {
+      mainErrorListeners.delete(listener)
+    }
+  },
+  report(details: string): void {
+    ipcRenderer.send(ERROR_REPORT_CHANNEL, details)
+  }
+} as const
+
 const api = {
   selectProjectFolder(): Promise<string | null> {
     return ipcRenderer.invoke('teamree:select-project-folder')
@@ -269,7 +291,8 @@ const api = {
   keepAwake,
   unsaved,
   invitations,
-  quickNote
+  quickNote,
+  errors
 } as const
 
 export type TeamreeRuntimeBridge = typeof runtime
