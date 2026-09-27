@@ -662,6 +662,7 @@
   color: var(--danger);
 }
 
+.change__kind--modified,
 .change__kind--renamed,
 .change__kind--copied,
 .change__kind--typeChanged {
@@ -669,8 +670,8 @@
 }
 
 /* The name is what you are looking for; the directory is how you tell two of
-   them apart. So the name stays put at the end and the directory is what gets
-   clipped when the panel is narrow. */
+   them apart. So the name comes first, and the directory is what gets clipped
+   when the panel is narrow. */
 .change__path {
   min-width: 0;
   flex: 1;
@@ -678,16 +679,22 @@
   overflow: hidden;
 }
 
+.change__name,
 .change__dir {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--fg-muted);
 }
 
 .change__name {
-  flex: none;
-  white-space: nowrap;
+  flex: 0 1 auto;
+}
+
+.change__dir {
+  flex: 0 100 auto;
+  margin-left: var(--s2);
+  color: var(--fg-muted);
 }
 
 .change__where {
@@ -725,8 +732,8 @@
   width: max-content;
   min-width: 100%;
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  line-height: 1.55;
+  font-size: var(--text-code);
+  line-height: 20px;
 }
 
 .patch__file {
@@ -797,6 +804,8 @@
   background: var(--bg-panel);
   border-top: 1px solid var(--line);
   color: var(--accent-bright);
+  font-size: var(--text-xs);
+  line-height: 1.55;
 }
 
 /* The verb on a hunk header. Pushed to the far end so the `@@` line reads as
@@ -904,12 +913,12 @@
 
 .patch__row--added,
 .patch__side--added {
-  background: color-mix(in srgb, var(--success) 14%, transparent);
+  background: color-mix(in srgb, var(--success) 20%, transparent);
 }
 
 .patch__row--removed,
 .patch__side--removed {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  background: color-mix(in srgb, var(--danger) 20%, transparent);
 }
 
 /* Wide enough for four digits; right-aligned so the digits line up. */
@@ -1066,6 +1075,40 @@
 .changes__item:hover .change__discard:disabled {
   cursor: default;
   opacity: 0.5;
+}
+
+.change__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  align-self: center;
+  width: 20px;
+  height: 20px;
+  margin-inline-end: var(--s3);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-muted);
+  opacity: var(--row-action-rest);
+  cursor: pointer;
+}
+
+.changes__item:hover .change__icon,
+.changes__item:focus-within .change__icon,
+.changes__item--selected .change__icon {
+  opacity: 1;
+}
+
+.change__icon:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.change__icon:disabled {
+  background: none;
+  color: var(--fg-muted);
+  cursor: default;
 }
 
 .changes__commit {

@@ -14,6 +14,7 @@ import { openInBrowser } from '../../shell/openInBrowser'
 import { commitScope, useWorkspaceStore } from '../../state/workspaceStore'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
 import { CommitFrom } from './CommitFrom'
+import { Icon } from '../../icons/Icon'
 import { useCommitMessage } from './commitMessage'
 import { headerActions, landLabel, landNote, landOffer, landTitle, pushOffer, type HeaderAction } from './landOffer'
 import { PullRequestChecks } from './PullRequestChecks'
@@ -261,10 +262,7 @@ export function ChangesTab(): React.JSX.Element | null {
                   <span className="change__kind change__kind--conflicted" aria-label={KIND_LABEL.conflicted}>
                     {KIND_LETTER.conflicted}
                   </span>
-                  <span className="change__path">
-                    <span className="change__dir">{directoryOf(change.path)}</span>
-                    <span className="change__name">{fileNameOf(change.path)}</span>
-                  </span>
+                  <ChangePath path={change.path} />
                   <span className={`change__where${change.markers === 0 ? ' change__where--resolved' : ''}`}>
                     {change.markers === 0 ? 'Resolved' : 'Unresolved'}
                   </span>
@@ -401,10 +399,7 @@ export function ChangesTab(): React.JSX.Element | null {
                   <span className={`change__kind change__kind--${change.kind}`} aria-label={KIND_LABEL[change.kind]}>
                     {KIND_LETTER[change.kind]}
                   </span>
-                  <span className="change__path">
-                    <span className="change__dir">{directoryOf(change.path)}</span>
-                    <span className="change__name">{fileNameOf(change.path)}</span>
-                  </span>
+                  <ChangePath path={change.path} />
                   {isViewedRow(viewed?.[change.path], change) ? (
                     <span className="change__viewed" role="img" aria-label="Viewed" title="Viewed">
                       ✓
@@ -424,12 +419,13 @@ export function ChangesTab(): React.JSX.Element | null {
                 {canDiscard(change) ? (
                   <button
                     type="button"
-                    className="change__discard"
+                    className="change__icon"
                     aria-label={`Discard ${change.path}…`}
+                    title="Discard…"
                     disabled={hunkPending}
                     onClick={() => discard(change.path)}
                   >
-                    Discard…
+                    <Icon name="discard" size={14} />
                   </button>
                 ) : null}
               </li>
@@ -527,10 +523,7 @@ export function ChangesTab(): React.JSX.Element | null {
                   <span className={`change__kind change__kind--${change.kind}`} aria-label={KIND_LABEL[change.kind]}>
                     {KIND_LETTER[change.kind]}
                   </span>
-                  <span className="change__path">
-                    <span className="change__dir">{directoryOf(change.path)}</span>
-                    <span className="change__name">{fileNameOf(change.path)}</span>
-                  </span>
+                  <ChangePath path={change.path} />
                   {change.added === undefined || change.removed === undefined ? null : (
                     <span className="change__stat">
                       +{change.added} −{change.removed}
@@ -701,6 +694,17 @@ export function canDiscard(change: WorktreeChange): boolean {
   return !(change.kind === 'added' && !change.staged)
 }
 
+/** The file name, then its folder in the muted ink; the row's title has the whole path. */
+function ChangePath({ path }: { path: string }): React.JSX.Element {
+  const folder = directoryOf(path)
+  return (
+    <span className="change__path">
+      <span className="change__name">{fileNameOf(path)}</span>
+      {folder === '' ? null : <span className="change__dir">{folder}</span>}
+    </span>
+  )
+}
+
 /** What an empty changes list means; "No changes" is wrong when the base could not be compared. */
 export function emptyChangesLabel(log: WorktreeLog | undefined): string {
   if (log?.unavailable !== undefined) return 'Nothing uncommitted'
@@ -708,10 +712,10 @@ export function emptyChangesLabel(log: WorktreeLog | undefined): string {
   return 'No changes'
 }
 
-/** The path up to the file name, kept dim so the name itself reads first. */
+/** The folder a path sits in, `src/cart` for `src/cart/totals.ts`; empty at the root. */
 export function directoryOf(path: string): string {
   const cut = path.lastIndexOf('/')
-  return cut === -1 ? '' : path.slice(0, cut + 1)
+  return cut === -1 ? '' : path.slice(0, cut)
 }
 
 export function fileNameOf(path: string): string {

@@ -1,9 +1,11 @@
 // The worktree's files one directory at a time, plus find by name. A click previews a file in the file
 // column, a double-click keeps it, ⌘-click splits; the row menu still offers the editor. The tree adds
-// the changes tab's letters and git's ignored dimming.
+// the changes tab's letters and colours, and git's ignored dimming.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Worktree, WorktreeFileMatches } from '@shared/entities'
+import type { Worktree, WorktreeChangeKind, WorktreeFileMatches } from '@shared/entities'
+import { Icon } from '../../icons/Icon'
+import { fileIconFor } from '../../icons/fileIcon'
 import { runtimeClient } from '../../runtimeClient/currentRuntimeClient'
 import { useOpenIn } from '../../sidebar/openIn'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
@@ -165,9 +167,10 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
                   onDoubleClick={() => keep(path)}
                   onContextMenu={(event) => showMenu(path, true, event)}
                 >
-                  <span className="tree__name">
-                    <span className="tree__dir">{directoryOf(path)}</span>
-                    {fileNameOf(path)}
+                  <Icon name={fileIconFor(fileNameOf(path))} size={14} className="tree__icon" />
+                  <span className={nameClass(kind)}>
+                    <span className="tree__file">{fileNameOf(path)}</span>
+                    {directoryOf(path) === '' ? null : <span className="tree__dir">{directoryOf(path)}</span>}
                   </span>
                   {kind === null ? null : (
                     <span className={`tree__status change__kind change__kind--${kind}`}>{KIND_LETTER[kind]}</span>
@@ -216,7 +219,12 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
                     ) : (
                       <span className="tree__leaf" aria-hidden="true" />
                     )}
-                    <span className="tree__name">{row.name}</span>
+                    <Icon
+                      name={row.kind === 'dir' ? (row.expanded ? 'folder-open' : 'folder') : fileIconFor(row.name)}
+                      size={14}
+                      className="tree__icon"
+                    />
+                    <span className={nameClass(kind)}>{row.name}</span>
                     {row.kind === 'symlink' ? <span className="tree__kind">link</span> : null}
                     {row.loading ? <span className="tree__kind">…</span> : null}
                     {kind === null ? null : (
@@ -231,9 +239,7 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
                     title="Reveal in Finder"
                     onClick={() => reveal(row.path)}
                   >
-                    <svg viewBox="0 0 12 12" aria-hidden="true">
-                      <path d="M1 3 H4.5 L6 4.5 H11 V9.5 H1 Z" />
-                    </svg>
+                    <Icon name="reveal" size={14} />
                   </button>
                 </div>
                 {row.kind === 'dir' && row.expanded && row.truncated ? (
@@ -270,6 +276,10 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
       )}
     </section>
   )
+}
+
+function nameClass(kind: WorktreeChangeKind | null): string {
+  return kind === null ? 'tree__name' : `tree__name tree__name--${kind}`
 }
 
 function reasonOf(error: unknown): string {
