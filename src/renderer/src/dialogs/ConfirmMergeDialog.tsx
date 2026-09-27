@@ -203,7 +203,7 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
           <>
             <textarea
               ref={messageBox}
-              className="field__input field__input--message"
+              className="textarea field__message"
               rows={1}
               value={message}
               placeholder="Commit message"
@@ -272,7 +272,7 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
           <Lines lines={uncommitted} total={total} />
           <textarea
             ref={messageBox}
-            className="field__input field__input--message"
+            className="textarea field__message"
             rows={1}
             value={message}
             placeholder="Commit message"

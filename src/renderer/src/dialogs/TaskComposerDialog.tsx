@@ -33,6 +33,7 @@ import {
 } from './taskPlan'
 import { useStartPoints } from './useStartPoints'
 import { worktreeDisplay } from '../sidebar/worktreeDisplay'
+import { Textarea } from '../ui/Input'
 
 export function TaskComposerDialog({
   projectId: openedFor,
@@ -192,8 +193,8 @@ export function TaskComposerDialog({
           <div className="task-field">
             <label className="field field--task">
               <span className="field__label">Task</span>
-              <textarea
-                className="field__input field__input--task"
+              <Textarea
+                className="field__task"
                 value={task}
                 onChange={(event) => setTask(event.target.value)}
                 // Enter submits: this is the field people finish in.
@@ -312,14 +313,14 @@ export function TaskComposerDialog({
         ) : null}
 
         <footer className="modal__actions">
-          <p className="form__note">{taskPlanNote(agents, agentsProbed, selection)}</p>
+          <p className="modal__note">{taskPlanNote(agents, agentsProbed, selection)}</p>
           <button type="button" className="button button--ghost" onClick={closeDialog}>
             Cancel
           </button>
           {/* Filled while it cannot go yet, so the dialog always shows its one primary; `submit` refuses. */}
           <button type="submit" className="button button--primary" aria-disabled={!canSubmit}>
             Start Task
-            <kbd className="button__kbd" aria-hidden="true">
+            <kbd className="modal__chord" aria-hidden="true">
               {formatChord({ key: 'Enter' }, windowModifier())}
             </kbd>
           </button>

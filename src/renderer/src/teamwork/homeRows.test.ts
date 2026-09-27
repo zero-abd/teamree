@@ -11,6 +11,7 @@ import type { SharedNoteSummary } from '@shared/sharedNote'
 import type { PeerHandoff } from '@shared/tasks'
 import {
   activityWhen,
+  onlineCount,
   presenceLabel,
   teamActivity,
   teamLine,
@@ -439,5 +440,19 @@ describe('the one line above the team when it cannot be reached', () => {
 
   it('says a teammate is simply away without calling it a fault', () => {
     expect(teamLine(status([link(BO, 'bo', 'waiting')]))).toBeNull()
+  })
+})
+
+describe('who is online, for the page head', () => {
+  it('counts you once on the roster and every teammate whose presence or link is live', () => {
+    expect(onlineCount({ list: roster(), presence: presence(), status: status([]) })).toBe(2)
+    // No presence heard yet: a connected link stands in.
+    const cyLinked = status([link(CY, 'cy', 'connected')])
+    expect(onlineCount({ list: roster(), presence: undefined, status: cyLinked })).toBe(2)
+  })
+
+  it('leaves you out before this machine is on the roster', () => {
+    expect(onlineCount({ list: { ...roster(), enrolled: false }, presence: presence(), status: undefined })).toBe(1)
+    expect(onlineCount({ list: undefined, presence: undefined, status: undefined })).toBe(0)
   })
 })

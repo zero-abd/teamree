@@ -19,6 +19,7 @@ import {
 } from './startPointModel'
 import { EMPTY_START_POINTS, type StartPointsState } from './useStartPoints'
 import { Icon } from '../icons/Icon'
+import { Input } from '../ui/Input'
 
 /** The text in the box, plus the listed option it stands for, if any. */
 export type StartPointValue = { text: string; option: StartPoint | null }
@@ -104,6 +105,8 @@ export function StartPointPicker({ state, onReload, value, onChange, note }: Sta
   const summaryOption = (open && activeRow?.kind === 'option' ? activeRow.option : null) ?? value.option
   const summaryRef = (open && activeRow ? choiceOf(activeRow).ref : value.text).trim()
   const browsing = open && activeRow !== null
+  // The resolved commit reads inside the box, after the ref, until the line under it has more to say.
+  const shaInBox = !browsing && note == null && value.option !== null && value.option.ref === value.text.trim()
 
   return (
     <div className="field">
@@ -113,10 +116,10 @@ export function StartPointPicker({ state, onReload, value, onChange, note }: Sta
 
       <div className="combo">
         <div className="picker">
-          <input
+          <Input
             id={inputId}
             role="combobox"
-            className="field__input picker__input picker__input--ref"
+            className="picker__input picker__input--ref"
             value={value.text}
             onChange={(event) => retype(event.target.value)}
             onKeyDown={onKeyDown}
@@ -130,6 +133,12 @@ export function StartPointPicker({ state, onReload, value, onChange, note }: Sta
             aria-activedescendant={open && activeId ? prefix + activeId : undefined}
             aria-describedby={statusId}
           />
+          {shaInBox ? (
+            <span className="picker__ghost" aria-hidden="true">
+              <span className="picker__ghost-typed">{value.text}</span>
+              {` · ${value.option?.shortSha ?? ''}`}
+            </span>
+          ) : null}
           <button
             type="button"
             className="picker__chevron"
@@ -147,7 +156,7 @@ export function StartPointPicker({ state, onReload, value, onChange, note }: Sta
           </button>
         </div>
 
-        <p className="field__hint" id={statusId}>
+        <p className={shaInBox ? 'field__hint combo__status--in-box' : 'field__hint'} id={statusId}>
           <StartPointStatus
             state={state}
             onReload={onReload}

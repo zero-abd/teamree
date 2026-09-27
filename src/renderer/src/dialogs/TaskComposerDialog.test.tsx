@@ -113,8 +113,8 @@ const branchHint = (): string =>
 const submit = (): HTMLButtonElement => screen.getByRole('button', { name: 'Start Task' })
 /** Filled and pressable at all times, so it is refused through `aria-disabled` rather than `disabled`. */
 const blocked = (): boolean => submit().getAttribute('aria-disabled') === 'true'
-const more = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `One more ${command}` })
-const fewer = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `One fewer ${command}` })
+const more = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `More ${command}` })
+const fewer = (command: string): HTMLButtonElement => screen.getByRole('button', { name: `Fewer ${command}` })
 const bothAgents = [
   { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' },
   { kind: 'codex', command: 'codex', binary: '/opt/bin/codex' }
@@ -217,7 +217,7 @@ describe('how it reads', () => {
     expect(branch().value).toBe('')
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     expect(branch().value).toBe('rewrite-the-pager')
-    expect(branch().classList.contains('field__input--mono')).toBe(true)
+    expect(branch().classList.contains('input--mono')).toBe(true)
     expect(screen.getByText('auto')).toBeTruthy()
   })
 

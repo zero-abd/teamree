@@ -87,7 +87,7 @@ const rows = (): string[] =>
 describe('Shared Notes on the Teamwork page', () => {
   it('lists this project’s notes newest first, with sender and age, and counts the unread', async () => {
     await mount()
-    const list = screen.getByRole('region', { name: 'Shared Notes' })
+    const list = screen.getByRole('region', { name: 'Shared notes' })
     expect(rows()).toEqual(['Search API plan', 'Old plan'])
     expect(within(list).getByText('1 unread')).toBeTruthy()
     const newest = screen.getAllByRole('listitem')[0] as HTMLElement

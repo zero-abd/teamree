@@ -56,6 +56,7 @@ export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest })
         <p className="consent__who">
           {request.handle} · roster key {request.publicKey.slice(0, 12)}…
         </p>
+        <p className="consent__note">Allowed keystrokes are logged on this machine</p>
 
         {/* Refuse first and plain, not red: it is the answer that changes
             nothing, which is the one a reflex should land on, and red is for
@@ -80,8 +81,6 @@ export function RemoteKeystrokesDialog({ request }: { request: ConsentRequest })
             Always Allow
           </button>
         </div>
-
-        <p className="consent__note">Allowed keystrokes are logged on this machine</p>
       </div>
     </Modal>
   )

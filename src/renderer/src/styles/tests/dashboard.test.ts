@@ -1,7 +1,7 @@
 // All Panes' pins.
 
 import { describe, expect, it } from 'vitest'
-import { findRule, parse } from './css'
+import { declarationOf, findRule, parse, ruleFor } from './css'
 
 const SHEET = 'dashboard.css'
 
@@ -22,5 +22,17 @@ describe('dashboard.css', () => {
       })
     })
     expect(hiding).toEqual([])
+  })
+
+  // A summary to read, not code: the row's own face and ink.
+  it('sets a pane’s last line in the UI face at 12px, in secondary ink', () => {
+    const evidence = ruleFor(SHEET, '.board-row__evidence')
+    expect(declarationOf(evidence, 'font-family')).toBeUndefined()
+    expect(declarationOf(evidence, 'font-size')).toBe('var(--text-sm)')
+    expect(declarationOf(evidence, 'color')).toBe('var(--fg-secondary)')
+  })
+
+  it('names no stage or state in upper case', () => {
+    expect(declarationOf(ruleFor(SHEET, '.task-head'), 'text-transform')).toBeUndefined()
   })
 })

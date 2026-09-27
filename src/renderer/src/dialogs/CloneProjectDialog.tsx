@@ -6,6 +6,7 @@ import { DEFAULT_CLONE_PARENT, repositoryNameFromUrl } from '@shared/cloneDestin
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { Modal } from './Modal'
+import { Input } from '../ui/Input'
 
 const PROGRESS_POLL_MS = 300
 
@@ -91,8 +92,8 @@ export function CloneProjectDialog(): React.JSX.Element {
       <form className="form" onSubmit={(event) => void submit(event)}>
         <label className="field">
           <span className="field__label">Repository URL</span>
-          <input
-            className="field__input field__input--mono"
+          <Input
+            mono
             value={url}
             onChange={(event) => {
               setUrl(event.target.value)
@@ -108,8 +109,8 @@ export function CloneProjectDialog(): React.JSX.Element {
         <div className="clone__destination">
           <label className="field">
             <span className="field__label">Destination</span>
-            <input
-              className="field__input field__input--mono"
+            <Input
+              mono
               value={destination}
               onChange={(event) => {
                 setEditedDestination(event.target.value)

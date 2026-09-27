@@ -163,7 +163,7 @@ describe('a row', () => {
     expect(row.querySelector('.agent-glyph')).not.toBeNull()
   })
 
-  it('colours the state word only when the pane needs somebody', () => {
+  it('draws the state as a pill in its own tone', () => {
     seed({
       terminals: {
         failed: { ...PANE, id: 'failed', title: 'npm test', running: false, exitCode: 1 },
@@ -171,8 +171,9 @@ describe('a row', () => {
       }
     })
     render(<Dashboard />)
-    const classes = [...document.querySelectorAll('.board-row__state')].map((state) => state.className)
-    expect(classes).toEqual(['board-row__state board-row__state--failed', 'board-row__state'])
+    const pills = [...document.querySelectorAll('.board-row__state .status-pill')]
+    expect(pills.map((pill) => pill.classList.contains('status--failed'))).toEqual([true, false])
+    expect(pills.map((pill) => pill.classList.contains('status--ended'))).toEqual([false, true])
   })
 })
 

@@ -14,6 +14,8 @@ import { useOverlapChips } from '../sidebar/useOverlapChip'
 import { useUsageStore } from '../state/usageStore'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { useChildren } from '../workspace/rightPanel/childrenStore'
+import { paneState } from '../teamwork/paneState'
+import { StatusPill } from '../ui/StatusPill'
 import { STAGE_WORD, type TaskRow } from './taskRows'
 
 /** Uncommitted lines for each listed worktree, read again whenever its git status is. */
@@ -77,7 +79,7 @@ export function TaskBoard({
         <span className="task-head__end">Tokens</span>
         <span className="task-head__end">Age</span>
       </div>
-      <ul className="board__list" ref={listRef} onKeyDown={onKeyDown}>
+      <ul className="card board__list" ref={listRef} onKeyDown={onKeyDown}>
         {rows.map((row) => {
           const isUnread = row.panes.some((pane) => unread.has(pane.terminalId))
           const overlap = overlapOf(row.worktreeId)
@@ -116,7 +118,7 @@ export function TaskBoard({
                   )}
                 </span>
                 <span className="task-row__stage">
-                  {STAGE_WORD[row.stage]}
+                  <StatusPill state={paneState(null, row.stage)} label={STAGE_WORD[row.stage]} />
                   {row.notPushed ? <span className="task-row__unpushed">not pushed</span> : null}
                 </span>
                 <span className="task-row__panes">

@@ -14,6 +14,8 @@ import {
   type TeamworkStatus
 } from '@shared/entities'
 import { Confirm } from '../dialogs/Confirm'
+import { Button } from '../ui/Button'
+import { EmptyState } from '../ui/EmptyState'
 import {
   ADD_KEY_BUTTON,
   brokenRelayOverride,
@@ -65,6 +67,7 @@ import {
   type StepMark,
   type TeamworkPath
 } from './startTeamwork'
+import { Input } from '../ui/Input'
 
 export type TeamworkStepsProps = {
   /** Primary checkout, so step 4's commands run where `.teamree` is; undefined leaves the `cd` off. */
@@ -229,7 +232,7 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
   )
 }
 
-/** Which of the two jobs this is: two buttons, the one the repository points at primary, and taken by neither. */
+/** Which of the two jobs this is: the page's empty state, the one the repository points at primary. */
 function PathChoice({
   list,
   relay,
@@ -241,21 +244,21 @@ function PathChoice({
 }): React.JSX.Element {
   const suggestion = suggestedPath(list, relay) ?? { id: 'start', because: null }
   return (
-    <div className="path-choice">
-      <div className="path-choice__buttons">
-        {TEAMWORK_PATHS.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            className={option.id === suggestion.id ? 'button button--primary' : 'button'}
-            onClick={() => onChoose(option.id)}
-          >
-            {option.button}
-          </button>
-        ))}
-      </div>
-      {suggestion.because === null ? null : <p className="path-choice__because">{suggestion.because}</p>}
-    </div>
+    <EmptyState
+      title="Work with your team"
+      hint={suggestion.because ?? undefined}
+      actions={TEAMWORK_PATHS.map((option) => (
+        <Button
+          key={option.id}
+          variant={option.id === suggestion.id ? 'primary' : 'secondary'}
+          size="lg"
+          {...(option.id === 'start' ? { icon: 'team' as const } : {})}
+          onClick={() => onChoose(option.id)}
+        >
+          {option.button}
+        </Button>
+      ))}
+    />
   )
 }
 
@@ -296,8 +299,8 @@ export function PasteInvitation({ onPaste }: { onPaste: (raw: string) => string 
   }
   return (
     <div className="chosen-path__paste">
-      <input
-        className="field__input field__input--mono"
+      <Input
+        mono
         aria-label="Invitation"
         placeholder={INVITATION_PLACEHOLDER}
         autoFocus
@@ -442,8 +445,8 @@ function JoinBody({
       <form className="members__self members__self--join" onSubmit={submit}>
         <label className="field">
           <span className="field__label">Handle</span>
-          <input
-            className="field__input field__input--mono"
+          <Input
+            mono
             value={handle}
             onChange={(event) => {
               setHandle(event.target.value)
@@ -451,7 +454,7 @@ function JoinBody({
               onClearError()
             }}
             placeholder={list.self.handle ?? 'pick a name'}
-            aria-invalid={error !== null}
+            invalid={error !== null}
             autoComplete="off"
             spellCheck={false}
           />
@@ -497,12 +500,12 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
     <form className="origin-fix" onSubmit={submit}>
       <label className="field">
         <span className="field__label">Origin</span>
-        <input
-          className="field__input field__input--mono"
+        <Input
+          mono
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder="git@github.com:org/repo.git"
-          aria-invalid={refusal !== null}
+          invalid={refusal !== null}
           aria-describedby={refusal === null ? undefined : hint}
           autoComplete="off"
           spellCheck={false}
@@ -669,8 +672,8 @@ function RelayDraft({
     <form className="members__relay" onSubmit={submit}>
       <label className="field">
         <span className="field__label">Relay URL</span>
-        <input
-          className="field__input field__input--mono"
+        <Input
+          mono
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder="wss://your-relay.example/v1/relay"

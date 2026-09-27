@@ -5,6 +5,7 @@ import { parsePastedInvitation } from '@shared/invitation'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { INVITATION_PLACEHOLDER } from '../teamwork/startTeamwork'
 import { Modal } from './Modal'
+import { Input } from '../ui/Input'
 
 export function JoinInvitationDialog(): React.JSX.Element {
   const openInvitation = useWorkspaceStore((state) => state.openInvitation)
@@ -20,8 +21,8 @@ export function JoinInvitationDialog(): React.JSX.Element {
   return (
     <Modal title="Join a Team" onClose={closeDialog}>
       <form className="form" onSubmit={submit}>
-        <input
-          className="field__input field__input--mono"
+        <Input
+          mono
           aria-label="Invitation"
           placeholder={INVITATION_PLACEHOLDER}
           value={raw}

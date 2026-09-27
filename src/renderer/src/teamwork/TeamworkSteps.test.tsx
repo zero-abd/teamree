@@ -251,7 +251,7 @@ describe('a refused handle', () => {
   // A corner of the screen is the wrong place for an instruction about the box the cursor is in.
   it('is shown under the handle field, not only somewhere else', () => {
     const markup = render({ membersError: taken })
-    const field = markup.indexOf('field__input')
+    const field = markup.indexOf('class="input')
     const refusal = markup.indexOf('choose another handle')
     expect(refusal).toBeGreaterThan(-1)
     expect(refusal).toBeGreaterThan(field)
@@ -757,10 +757,11 @@ describe('a relay that only the environment names', () => {
 
 /** Each button's label and whether it is the primary, in document order. */
 const buttonsIn = (markup: string): { label: string; primary: boolean }[] =>
-  [...markup.matchAll(/<button[^>]*class="([^"]*)"[^>]*>([^<]*)<\/button>/g)].map(([, classes, label]) => ({
-    label: label ?? '',
-    primary: (classes ?? '').split(' ').includes('button--primary')
-  }))
+  [...markup.matchAll(/<button[^>]*class="([^"]*)"[^>]*>(.*?)<\/button>/g)]
+    // A leading icon is part of the label's button; any other markup inside makes it no plain button.
+    .map(([, classes, label]) => ({ classes, label: (label ?? '').replace(/<svg.*?<\/svg>/g, '') }))
+    .filter(({ label }) => !label.includes('<'))
+    .map(({ classes, label }) => ({ label, primary: (classes ?? '').split(' ').includes('button--primary') }))
 
 describe('the choice before the steps', () => {
   // Five ticks describing two different jobs is what "it worked and it was confusing" meant.
@@ -774,14 +775,15 @@ describe('the choice before the steps', () => {
     expect(markup).not.toContain('step__title')
   })
 
-  // One primary, and no card around either button or around the pair.
-  it('makes the likelier one the primary, inside no box', () => {
+  // One primary, under the page's one empty-state title, and no card around either button.
+  it('makes the likelier one the primary, under one title', () => {
     const markup = render({ path: null })
     expect(buttonsIn(markup)).toEqual([
       { label: 'Start a Team', primary: true },
       { label: 'Join…', primary: false }
     ])
-    expect(markup).not.toMatch(/path-option|<h2/)
+    expect([...markup.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].map(([, title]) => title)).toEqual(['Work with your team'])
+    expect(markup).not.toMatch(/path-option/)
   })
 
   // Marked, never taken: a relay file and a colleague's key are evidence, not intent.

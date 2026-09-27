@@ -33,8 +33,8 @@ export function SharedNotesList({
   const notes = listedNotes({ inbox, deleting }, projectId)
   if (notes.length === 0) {
     return empty === undefined ? null : (
-      <section className="shared-notes" aria-label="Shared Notes">
-        <h2 className="shared-notes__head">Shared Notes</h2>
+      <section className="shared-notes" aria-label="Shared notes">
+        <h2 className="shared-notes__head">Shared notes</h2>
         <p className="team-home__empty">{empty}</p>
       </section>
     )
@@ -51,12 +51,12 @@ export function SharedNotesList({
   }
 
   return (
-    <section className="shared-notes" aria-label="Shared Notes">
+    <section className="shared-notes" aria-label="Shared notes">
       <h2 className="shared-notes__head">
-        Shared Notes
+        Shared notes
         {unread > 0 ? <span className="shared-notes__unread">{unread} unread</span> : null}
       </h2>
-      <ul className="shared-notes__list">
+      <ul className="card shared-notes__list">
         {notes.map((note) => {
           const open = expanded === note.shareId
           const body = bodies[note.shareId]

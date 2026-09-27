@@ -32,7 +32,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { useHandoffs } = await import('./handoffsStore')
 const { useSharedNotes } = await import('./sharedNotesStore')
-const { TeamHome } = await import('./TeamHome')
+const { TeamHome, TeamInviteActions } = await import('./TeamHome')
 const { teamMemory } = await import('./teamMemory')
 
 const INITIAL = useWorkspaceStore.getState()
@@ -125,10 +125,12 @@ function seed(overrides: Record<string, unknown> = {}): void {
   )
 }
 
-const home = (props: Partial<React.ComponentProps<typeof TeamHome>> = {}): void => {
-  render(
-    <TeamHome projectId="p1" invite="Join shop on teamree: https://teamree.us/join#v=1" onCopy={vi.fn()} {...props} />
-  )
+const home = (): void => {
+  render(<TeamHome projectId="p1" />)
+}
+
+const invite = (props: Partial<React.ComponentProps<typeof TeamInviteActions>> = {}): void => {
+  render(<TeamInviteActions invite="Join shop on teamree: https://teamree.us/join#v=1" onCopy={vi.fn()} {...props} />)
 }
 
 const region = (name: string): HTMLElement => screen.getByRole('region', { name })
@@ -193,6 +195,19 @@ describe('the members', () => {
     expect(openWorktree).toHaveBeenCalledWith('wt_a')
   })
 
+  it('draws what each worktree is doing as a pill in that state’s tone', () => {
+    home()
+    const pill = within(region('Members')).getByText('working').closest('.status-pill')
+    expect(pill?.classList.contains('status--working')).toBe(true)
+  })
+
+  it('names the project and the ref new work starts from beside the team', () => {
+    home()
+    const card = within(region('Project'))
+    expect(card.getByText('shop')).toBeTruthy()
+    expect(card.getByText('origin/main')).toBeTruthy()
+  })
+
   it('says in one line that nobody else is on the team yet', () => {
     seed({ members: { p1: roster(false) }, teammates: { p1: presence([]) } })
     home()
@@ -201,12 +216,16 @@ describe('the members', () => {
 })
 
 describe('what is waiting on you', () => {
-  it('offers a handoff to take or dismiss', async () => {
+  it('offers a handoff to take or dismiss, under its own head', async () => {
     useHandoffs.setState({ byProject: { p1: { incoming: [handoff()], outgoing: [] } } })
     call.mockImplementation(async (method: string) => (method === 'teamwork.take' ? { id: 'wt_taken' } : undefined))
     home()
-    const waiting = within(region('Waiting on You'))
-    expect(waiting.getByText(/bo handed you/).textContent).toContain('payment retry')
+    // Nothing is asking, so the offer is the only thing waiting and has the section to itself.
+    expect(screen.queryByRole('region', { name: 'Waiting on you' })).toBeNull()
+    const waiting = within(region('Handed to you'))
+    expect(waiting.getByRole('button', { name: 'Dismiss' })).toBeTruthy()
+    expect(waiting.getByText('payment retry')).toBeTruthy()
+    expect(waiting.getByText(/bo handed this to you/)).toBeTruthy()
     await act(async () => {
       fireEvent.click(waiting.getByRole('button', { name: 'Take' }))
     })
@@ -239,18 +258,28 @@ describe('what is waiting on you', () => {
     })
     seed({ teammates: { p1: presence([asking]) } })
     home()
-    const waiting = within(region('Waiting on You'))
+    const waiting = within(region('Waiting on you'))
+    expect(waiting.getByText('asking').closest('.status-pill')?.classList.contains('status--asking')).toBe(true)
     fireEvent.click(waiting.getByRole('button', { name: 'Yes' }))
     expect(answerTeammatePane).toHaveBeenCalledWith(
       'p1',
       expect.objectContaining({ terminalId: 'peer:bo:t_1' }),
       expect.objectContaining({ label: 'Yes' })
     )
+    // The same answers sit on the member's row, beside the worktree that asks.
+    fireEvent.click(within(region('Members')).getByRole('button', { name: 'No' }))
+    expect(answerTeammatePane).toHaveBeenLastCalledWith(
+      'p1',
+      expect.objectContaining({ terminalId: 'peer:bo:t_1' }),
+      expect.objectContaining({ label: 'No' })
+    )
+    fireEvent.click(within(region('Members')).getByRole('button', { name: 'Open' }))
+    expect(toggleWatchedPane).toHaveBeenCalledWith('p1', expect.objectContaining({ terminalId: 'peer:bo:t_1' }))
   })
 
   it('says in one line when nothing is', () => {
     home()
-    expect(within(region('Waiting on You')).getByText('Nothing waiting')).toBeTruthy()
+    expect(within(region('Waiting on you')).getByText('Nothing waiting')).toBeTruthy()
   })
 })
 
@@ -258,7 +287,7 @@ describe('invite and join', () => {
   it('copies the invitation with one button and opens a pasted one with the other', () => {
     const onCopy = vi.fn()
     const onPasteInvitation = vi.fn(() => null)
-    home({ onCopy, onPasteInvitation })
+    invite({ onCopy, onPasteInvitation })
     fireEvent.click(screen.getByRole('button', { name: 'Copy Invitation' }))
     expect(onCopy).toHaveBeenCalledWith('Join shop on teamree: https://teamree.us/join#v=1')
     fireEvent.click(screen.getByRole('button', { name: 'Paste Invitation…' }))
@@ -269,7 +298,7 @@ describe('invite and join', () => {
   })
 
   it('cannot copy an invitation while there is no origin to name', () => {
-    home({ invite: null })
+    invite({ invite: null })
     expect((screen.getByRole('button', { name: 'Copy Invitation' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
@@ -278,7 +307,7 @@ describe('notes and activity', () => {
   it('says in one line when there are no shared notes and no activity', () => {
     seed({ members: { p1: { ...roster(), members: [] } }, teammates: { p1: presence([]) } })
     home()
-    expect(within(region('Shared Notes')).getByText('No shared notes')).toBeTruthy()
+    expect(within(region('Shared notes')).getByText('No shared notes')).toBeTruthy()
     expect(within(region('Activity')).getByText('No activity yet')).toBeTruthy()
   })
 
