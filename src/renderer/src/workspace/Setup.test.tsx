@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
-// The first-run rows through the in-memory runtime: what was found, the default agent kept, and the
-// same rows again from Help.
+// The first-run setup line through the in-memory runtime, and the full rows from Help: what was found,
+// the default agent kept.
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -50,45 +50,37 @@ afterEach(() => {
   delete (window as unknown as { teamree?: unknown }).teamree
 })
 
-describe('the welcome’s setup rows', () => {
-  it('shows the agents found with their versions, and the ways to a project first', async () => {
+describe('the welcome’s setup line', () => {
+  it('names what works in one quiet line, and gives a row only to what needs action', async () => {
     bridge('sent')
     render(<Welcome modifier={MAC} project={undefined} />)
 
-    const agents = row('agents')
-    expect(await within(agents).findByText('Claude Code 2.1.3')).toBeTruthy()
-    expect(within(agents).getByText('Codex 0.40.0')).toBeTruthy()
-    expect(agents.dataset.state).toBe('done')
-
-    const actions = [...document.querySelectorAll('.welcome__actions .button')].map((button) => button.textContent)
-    expect(actions).toEqual(['New Project…', 'Open Folder…', 'Clone Repository…', 'Join a Team…'])
-    // The buttons above are the project row; it is not said twice.
+    const line = document.querySelector('.welcome__status') as HTMLElement
+    expect(await within(line).findByText('Claude Code')).toBeTruthy()
+    expect(within(line).getByText('Codex')).toBeTruthy()
+    expect(within(line).getByText('Notifications')).toBeTruthy()
+    // The seeded CLI is not on PATH: that one is a row, with its button.
+    expect(await within(row('cli')).findByRole('button', { name: 'Install…' })).toBeTruthy()
+    expect(document.querySelector('[data-setup="agents"]')).toBeNull()
+    expect(document.querySelector('[data-setup="notifications"]')).toBeNull()
     expect(document.querySelector('[data-setup="project"]')).toBeNull()
+    expect(screen.queryByLabelText('Default agent')).toBeNull()
+
+    fireEvent.click(within(line).getByRole('button', { name: 'Setup…' }))
+    expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'setup' })
   })
 
-  it('keeps the default agent chosen here', async () => {
+  it('turns notifications back on from their row when they are off', async () => {
     bridge('sent')
-    render(<Welcome modifier={MAC} project={undefined} />)
-    const picker = await screen.findByLabelText('Default agent')
-
-    fireEvent.change(picker, { target: { value: 'codex' } })
-
-    expect(useWorkspaceStore.getState().defaultAgent).toBe('codex')
-    expect(readStoredDefaultAgent(window.localStorage)).toBe('codex')
-  })
-
-  it('turns the notification row to needs-action when the system blocks the test', async () => {
-    const teamree = bridge('blocked')
+    useWorkspaceStore.getState().setAgentNotices('off')
     render(<Welcome modifier={MAC} project={undefined} />)
     const notices = row('notifications')
-    expect(notices.dataset.state).toBe('done')
 
-    fireEvent.click(within(notices).getByRole('button', { name: 'Send Test' }))
+    fireEvent.click(within(notices).getByRole('button', { name: 'Turn On' }))
 
-    expect(await within(notices).findByText('Blocked by macOS')).toBeTruthy()
-    expect(notices.dataset.state).toBe('todo')
-    fireEvent.click(within(notices).getByRole('button', { name: 'Open Settings' }))
-    expect(teamree.notices.openSettings).toHaveBeenCalledOnce()
+    expect(useWorkspaceStore.getState().agentNotices).toBe('notify')
+    expect(document.querySelector('[data-setup="notifications"]')).toBeNull()
+    expect(within(document.querySelector('.welcome__status') as HTMLElement).getByText('Notifications')).toBeTruthy()
   })
 
   it('makes a new project: a folder, then git init, then the project', async () => {
@@ -123,5 +115,30 @@ describe('Setup…', () => {
     expect(row('project').dataset.state).toBe('done')
     expect(within(row('project')).getByText('pager')).toBeTruthy()
     expect(screen.getByRole('dialog', { name: 'Setup' })).toBeTruthy()
+  })
+
+  it('keeps the default agent chosen there', async () => {
+    bridge('sent')
+    render(<SetupDialog />)
+    const picker = await screen.findByLabelText('Default agent')
+
+    fireEvent.change(picker, { target: { value: 'codex' } })
+
+    expect(useWorkspaceStore.getState().defaultAgent).toBe('codex')
+    expect(readStoredDefaultAgent(window.localStorage)).toBe('codex')
+  })
+
+  it('turns the notification row to needs-action when the system blocks the test', async () => {
+    const teamree = bridge('blocked')
+    render(<SetupDialog />)
+    const notices = row('notifications')
+    expect(notices.dataset.state).toBe('done')
+
+    fireEvent.click(within(notices).getByRole('button', { name: 'Send Test' }))
+
+    expect(await within(notices).findByText('Blocked by macOS')).toBeTruthy()
+    expect(notices.dataset.state).toBe('todo')
+    fireEvent.click(within(notices).getByRole('button', { name: 'Open Settings' }))
+    expect(teamree.notices.openSettings).toHaveBeenCalledOnce()
   })
 })

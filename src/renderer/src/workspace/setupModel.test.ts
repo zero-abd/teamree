@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { CliStatus, InstalledAgent } from '@shared/entities'
-import { offersDefaultAgent, setupRows, type SetupFacts, type SetupRow } from './setupModel'
+import { offersDefaultAgent, setupRows, setupSummary, type SetupFacts, type SetupRow } from './setupModel'
 
 const CLAUDE: InstalledAgent = { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude', version: '2.1.3' }
 const CODEX: InstalledAgent = { kind: 'codex', command: 'codex', binary: '/opt/homebrew/bin/codex', version: '0.40.0' }
@@ -158,5 +158,35 @@ describe('setupRows', () => {
     expect(row(setupRows(facts({ projects: [{ name: 'pager' }, { name: 'api' }] })), 'project').value).toBe(
       '2 projects'
     )
+  })
+})
+
+describe('setupSummary', () => {
+  const summary = (patch: Partial<SetupFacts> = {}) => {
+    const all = facts(patch)
+    return setupSummary(setupRows(all), all.agents)
+  }
+  const linked = cli({ state: 'linked', resolved: cli().source })
+
+  it('says a healthy setup as one line of names, with no row to act on', () => {
+    expect(summary({ cli: linked })).toEqual({
+      needsAction: [],
+      working: ['Claude Code', 'Codex', 'Notifications', 'Command Line']
+    })
+  })
+
+  it('leaves out a working link to another copy and anything still being checked', () => {
+    const elsewhere = cli({ state: 'elsewhere', resolved: '/Applications/teamree.app/cli/teamree', copy: 'profile' })
+    expect(summary({ cli: elsewhere })).toEqual({ needsAction: [], working: ['Claude Code', 'Codex', 'Notifications'] })
+    expect(summary({ agentsProbed: false, agents: [], cli: null })).toEqual({
+      needsAction: [],
+      working: ['Notifications']
+    })
+  })
+
+  it('gives each thing that needs action its row, and never the project row', () => {
+    const { needsAction, working } = summary({ agents: [], notices: 'off' })
+    expect(needsAction.map((each) => each.id)).toEqual(['agents', 'notifications', 'cli'])
+    expect(working).toEqual([])
   })
 })

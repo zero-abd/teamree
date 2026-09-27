@@ -104,12 +104,17 @@ export function matchesChord(
 
 /** Renders a chord the way this platform's users expect to read it. */
 export function formatChord(chord: Chord, modifier: PlatformModifier): string {
+  return chordKeys(chord, modifier).join(modifier.separator)
+}
+
+/** The chord's keys in reading order, one per key cap. */
+export function chordKeys(chord: Chord, modifier: PlatformModifier): string[] {
   const parts = chord.bare ? [] : [chord.ctrl ? modifier.controlLabel : modifier.label]
   if (chord.control && modifier.controlLabel !== modifier.label) parts.unshift(modifier.controlLabel)
   if (chord.alt) parts.push(modifier.altLabel)
   if (chord.shift) parts.push(modifier.shiftLabel)
   parts.push(formatKeyName(chord.key))
-  return parts.join(modifier.separator)
+  return parts
 }
 
 function formatKeyName(key: string): string {
