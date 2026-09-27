@@ -628,6 +628,23 @@ describe('what the palette offers for the worktree on screen', () => {
     expect(labels().some((label) => label.startsWith('Run:'))).toBe(false)
   })
 
+  it('offers Run: <label> for each saved command and prompt, found by its label or text', () => {
+    const saved = [
+      { id: 'c1', label: 'Lint', text: 'npm run lint', kind: 'shell' as const, where: 'new' as const },
+      { id: 'c2', label: 'Review', text: 'Review the diff', kind: 'agent' as const, where: 'current' as const }
+    ]
+    const items = buildPaletteItems(context({ worktrees: [worktree({ id: 'w1' })], activeWorktreeId: 'w1', saved }))
+    expect(
+      items.filter((item) => item.id.startsWith('saved:')).map((item) => [item.id, item.label, item.hint])
+    ).toEqual([
+      ['saved:c1', 'Run: Lint', 'npm run lint'],
+      ['saved:c2', 'Run: Review', 'Review the diff']
+    ])
+    expect(filterPalette(items, 'the diff')[0]?.id).toBe('saved:c2')
+    // Nothing on screen to run it in.
+    expect(buildPaletteItems(context({ saved })).some((item) => item.id.startsWith('saved:'))).toBe(false)
+  })
+
   it('offers Keep This Run… beside the compares, and none for a lone worktree', () => {
     const task = 'Add a sub function to src/math.ts'
     const runs = ['claude', 'codex'].map((agent, at) =>

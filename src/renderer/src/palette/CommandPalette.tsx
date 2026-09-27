@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { hasCheckout } from '@shared/entities'
 import { fileLeavesIn, isFilePaneId, isWorktreeFileLeaf } from '@shared/filePane'
+import { savedCommandsOf } from '@shared/savedCommands'
 import { activeChoice, resolveTone, themeTone, withChoice, type AppearanceMode } from '@shared/theme'
 import { AgentGlyph } from '../agents/glyphs'
 import { hasResumable } from '../agents/harnesses'
@@ -15,6 +16,7 @@ import { compareTitle } from '../compare/siblingRuns'
 import { dotClass, TONE_LABEL } from '../sidebar/agentRows'
 import { useOpenIn } from '../sidebar/openIn'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
+import { useSavedCommandsStore } from '../state/savedCommandsStore'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { lastVisits } from '../state/visitHistory'
 import { requestRegionFocus } from '../shell/regions'
@@ -161,6 +163,18 @@ export function CommandPalette({
     [active, projects, terminals]
   )
 
+  const everywhere = useSavedCommandsStore((state) => state.everywhere)
+  const saved = useMemo(
+    () =>
+      active !== undefined && hasCheckout(active)
+        ? savedCommandsOf(
+            projects.find((project) => project.id === active.projectId),
+            everywhere
+          ).map((offer) => offer.command)
+        : [],
+    [active, projects, everywhere]
+  )
+
   const activeLayout = activeWorktreeId === null ? undefined : layouts[activeWorktreeId]
   const focusedPane = focusedWatchId === null ? (activeLayout?.focusedTerminalId ?? null) : null
   const focusedPath =
@@ -189,6 +203,7 @@ export function CommandPalette({
         terminals: Object.values(terminals),
         resumable,
         runs,
+        saved,
         sharedNotes,
         visited,
         paneSeenAt,
@@ -285,6 +300,7 @@ export function CommandPalette({
       change,
       resumable,
       runs,
+      saved,
       sharedNotes,
       visited,
       focusedPane,
@@ -441,6 +457,10 @@ export function CommandPalette({
       const kind = run[2] as RunKind
       if (run[1] === 'stop-run') void store.stopRun(active.id, kind)
       else void store.runInWorktree(active.id, kind, run[1] === 'restart-run')
+      return
+    }
+    if (item.id.startsWith('saved:') && active !== undefined) {
+      void useSavedCommandsStore.getState().run(active.id, item.id.slice('saved:'.length))
       return
     }
     if (item.id.startsWith('teamwork:')) {

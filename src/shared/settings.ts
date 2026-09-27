@@ -1,6 +1,8 @@
 // Per-machine switches the runtime acts on, read and written with
 // `settings.get` / `settings.set`. Stored only once changed from the default.
 
+import type { SavedCommand } from './entities'
+
 export type RuntimeSettings = {
   /** Settings › Teamwork › Share Task Details: task lines, changed paths and team notes in presence. */
   shareTaskDetails: boolean
@@ -20,6 +22,8 @@ export type RuntimeSettings = {
   worktreesRoot?: string
   /** Settings › General › Branch prefix, `abd/`: leads branch names the runtime picks. */
   branchPrefix?: string
+  /** Saved commands and prompts every project offers, after its own. */
+  savedCommands?: SavedCommand[]
   /** Where new worktrees go with no folder set: the launch's `TEAMREE_WORKTREES_ROOT`, else the default. Read only. */
   worktreesRootFallback?: string
   /** Settings › Panes › Shell: the program new panes start; absent is the login shell. */

@@ -31,6 +31,7 @@ import { ConfirmTrashProjectDialog } from './dialogs/ConfirmTrashProjectDialog'
 import { ConfirmMergeDialog } from './dialogs/ConfirmMergeDialog'
 import { CreatePullRequestDialog } from './dialogs/CreatePullRequestDialog'
 import { PushBaseDialog } from './dialogs/PushBaseDialog'
+import { SavedCommandDialog } from './dialogs/SavedCommandDialog'
 import { ConfirmCleanUpDialog } from './dialogs/ConfirmCleanUpDialog'
 import { ConfirmKeepDialog } from './dialogs/ConfirmKeepDialog'
 import { ClearLockDialog } from './dialogs/ClearLockDialog'
@@ -226,6 +227,12 @@ export function App(): React.JSX.Element {
             key={dialog.projectId}
             projectId={dialog.projectId}
             {...(dialog.failure === undefined ? {} : { failure: dialog.failure })}
+          />
+        ) : null}
+        {dialog?.kind === 'saved-command' ? (
+          <SavedCommandDialog
+            {...(dialog.projectId === undefined ? {} : { projectId: dialog.projectId })}
+            {...(dialog.commandId === undefined ? {} : { commandId: dialog.commandId })}
           />
         ) : null}
         {dialog?.kind === 'confirm-keep' ? <ConfirmKeepDialog worktreeId={dialog.worktreeId} /> : null}

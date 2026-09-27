@@ -70,6 +70,7 @@ import type {
 import { MAX_AGENT_ARGS_CHARS } from './agentLaunch'
 import { MAX_FILE_PANE_BYTES } from './filePane'
 import { TaskParams, type TaskMethodContract, type TaskWorkspaceEvent } from './taskMethods'
+import { SavedCommandList } from './savedCommandSchema'
 import { SearchParams, type SearchMethodContract } from './search'
 import type { NoteShareResult, SharedNote, SharedNoteSummary } from './sharedNote'
 import { SharedNotePayload, ShareNoteRequest } from './sharedNoteSchema'
@@ -249,7 +250,11 @@ export const Params = {
     worktreesRoot: z.string().max(4096).optional(),
     allowInsideRepository: z.boolean().optional(),
     /** Omitted leaves it alone; empty clears it. */
-    branchPrefix: z.string().max(64).optional()
+    branchPrefix: z.string().max(64).optional(),
+    /** This Mac's saved commands for the project, replacing the stored list whole; empty clears it. */
+    savedCommands: SavedCommandList.optional(),
+    /** Approves one of the repository's saved commands by its exact text; any other text is refused. */
+    approveCommand: z.string().min(1).max(MAX_AGENT_ARGS_CHARS).optional()
   }),
 
   worktreeList: z.object({ projectId: z.string().min(1).optional() }),

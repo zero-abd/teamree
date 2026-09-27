@@ -9,6 +9,7 @@ import {
   type ProjectBase,
   type RemovedWorktree,
   type RunKind,
+  type SavedCommand,
   type Terminal,
   type UpdateState,
   type Worktree,
@@ -91,6 +92,8 @@ export type PaletteAction =
   | `run:${RunKind}`
   | `restart-run:${RunKind}`
   | `stop-run:${RunKind}`
+  /** A saved command or prompt, by its id, run in the worktree on screen. */
+  | `saved:${string}`
   /** Settings, opened at one setting by its label. */
   | `setting:${string}`
 
@@ -208,6 +211,8 @@ export type PaletteContext = {
   resumable?: boolean
   /** The run commands of the worktree on screen, each with its pane. */
   runs?: readonly RunOffer[]
+  /** The saved commands and prompts the worktree on screen offers, in menu order. */
+  saved?: readonly SavedCommand[]
   /** Received notes as the lists show them, deleted ones left out. */
   sharedNotes?: readonly SharedNoteSummary[]
   /** When each worktree was last on screen, by id; see `visitHistory.ts`. */
@@ -412,6 +417,12 @@ function worktreeActions(context: PaletteContext): PaletteItem[] {
             ]
           : []),
         ...runRows(context.runs ?? []),
+        ...(context.saved ?? []).map((command) => ({
+          id: `saved:${command.id}` as const,
+          label: `Run: ${command.label}`,
+          keywords: `${command.text} saved command prompt`,
+          hint: command.text
+        })),
         { id: 'rename-worktree', label: 'Rename Worktree…', keywords: 'rename name title worktree' },
         { id: 'reveal-worktree', label: 'Reveal in Finder', keywords: 'reveal finder show folder directory checkout' },
         { id: 'copy-worktree-path', label: 'Copy Path', keywords: 'copy path clipboard worktree checkout directory' },

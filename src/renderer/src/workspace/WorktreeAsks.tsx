@@ -1,6 +1,7 @@
 // The open worktree's setup questions, as cards in the corner stack: a row over the panes refit them
 // each time one came or went.
 
+import { useSavedCommandsStore } from '../state/savedCommandsStore'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { SetupAsk } from './SetupAsk'
 import { SetupOffer } from './SetupOffer'
@@ -11,6 +12,8 @@ export function WorktreeAsks(): React.JSX.Element | null {
   const runAsk = useWorkspaceStore((state) => state.runAsk)
   const answerSetup = useWorkspaceStore((state) => state.answerSetup)
   const answerRunAsk = useWorkspaceStore((state) => state.answerRunAsk)
+  const savedAsk = useSavedCommandsStore((state) => state.ask)
+  const answerSavedAsk = useSavedCommandsStore((state) => state.answer)
   // The pages that take the area from the worktree, as `WorkspaceView` orders them.
   const covered = useWorkspaceStore(
     (state) => state.dashboardOpen || state.teamworkProjectId !== null || state.settingsOpen || state.helpOpen
@@ -23,6 +26,9 @@ export function WorktreeAsks(): React.JSX.Element | null {
       )}
       {runAsk === null || runAsk.worktreeId !== worktree.id ? null : (
         <SetupAsk command={runAsk.command} label={runAsk.kind} onAnswer={(run) => void answerRunAsk(run)} />
+      )}
+      {savedAsk === null || savedAsk.worktreeId !== worktree.id ? null : (
+        <SetupAsk command={savedAsk.text} label="saved" onAnswer={(run) => void answerSavedAsk(run)} />
       )}
       {project === undefined ? null : <SetupOffer key={worktree.id} project={project} worktree={worktree} />}
     </>

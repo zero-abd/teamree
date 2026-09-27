@@ -20,6 +20,7 @@ import {
 import { MAX_MESSAGE_BYTES, MAX_MESSAGE_OPTIONS, MESSAGE_KINDS, type MessageKind, type TaskMessage } from './messages'
 import type { WorktreeNest } from './nesting'
 import { MAX_HANDOFF_NOTE_CHARS } from './presenceExtras'
+import { SavedCommandList } from './savedCommandSchema'
 import type { RuntimeSettings } from './settings'
 import type {
   PeerHandoff,
@@ -161,7 +162,9 @@ export const TaskParams = {
     branchPrefix: z.string().max(64).optional(),
     /** A full path to a program; empty clears it. */
     shell: z.string().max(4096).optional(),
-    fetchMinutes: z.number().int().min(1).max(1440).optional()
+    fetchMinutes: z.number().int().min(1).max(1440).optional(),
+    /** Every project's saved commands, replacing the list whole; empty clears it. */
+    savedCommands: SavedCommandList.optional()
   }),
 
   addonsStatus: z.object({}),

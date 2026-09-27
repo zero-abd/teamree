@@ -505,3 +505,51 @@
 .settings-chip--local {
   color: var(--fg-secondary);
 }
+
+/* Saved commands: one line each, the text cut short, the controls at the end. */
+.saved-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s2);
+}
+
+.saved-list__rows {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  gap: var(--s1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.saved-list__row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+
+.saved-list__label {
+  flex: none;
+  color: var(--fg);
+}
+
+.saved-list__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.saved-list__actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}

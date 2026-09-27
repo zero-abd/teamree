@@ -511,6 +511,25 @@ export class GitService {
       if (prefix === '') delete next.branchPrefix
       else next.branchPrefix = prefix
     }
+    if (params.savedCommands !== undefined) {
+      if (params.savedCommands.length === 0) delete next.savedCommands
+      else {
+        next.savedCommands = params.savedCommands.map((command) => ({
+          ...command,
+          label: command.label.trim(),
+          text: command.text.trim()
+        }))
+      }
+    }
+    if (params.approveCommand !== undefined) {
+      const offered = this.#present(project).repository?.savedCommands ?? []
+      if (!offered.some((command) => command.text === params.approveCommand)) {
+        throw new GitServiceError(ErrorCode.InvalidParams, `${project.name} has no such repository command`)
+      }
+      const approved = new Set([...(next.approvedSavedCommands ?? []), params.approveCommand])
+      // Only texts the file still carries: a changed command must not leave its old approval behind.
+      next.approvedSavedCommands = [...approved].filter((text) => offered.some((command) => command.text === text))
+    }
     this.#store.putProject(next)
     const presented = this.#present(next)
     this.events.emit({ type: 'project.updated', project: presented })

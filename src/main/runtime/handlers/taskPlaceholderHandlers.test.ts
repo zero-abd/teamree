@@ -84,6 +84,15 @@ describe('task, memory and add-on methods before their branches land', () => {
     expect(events).toContainEqual({ type: 'settings' })
   })
 
+  it('keeps the saved commands every project has, and clears them with an empty list', async () => {
+    const lint = { id: 'c1', label: 'Lint', text: 'npm run lint', kind: 'shell', where: 'new' }
+    expect(await result('settings.set', { savedCommands: [lint] })).toMatchObject({ savedCommands: [lint] })
+    expect(store.runtimeSettings().savedCommands).toEqual([lint])
+    const cleared = (await result('settings.set', { savedCommands: [] })) as Record<string, unknown>
+    expect(cleared.savedCommands).toBeUndefined()
+    await store.flush()
+  })
+
   it('keeps a checked worktrees folder and branch prefix, and clears either on empty', async () => {
     const folder = join(directory, 'checkouts')
     expect(await result('settings.set', { worktreesRoot: folder, branchPrefix: 'abd/' })).toMatchObject({

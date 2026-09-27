@@ -360,7 +360,7 @@ export class WorkspaceStore {
     return runtimeSettings(this.settings)
   }
 
-  /** Omitted keys stay as they are; an empty string removes one. False when nothing changed. */
+  /** Omitted keys stay as they are; an empty string or list removes one. False when nothing changed. */
   setRuntimeSettings(changes: Partial<RuntimeSettings>): boolean {
     const current = this.runtimeSettings()
     const changed = Object.entries(changes).filter(
@@ -368,7 +368,8 @@ export class WorkspaceStore {
     )
     if (changed.length === 0) return false
     const next: Record<string, unknown> = { ...this.settings, ...Object.fromEntries(changed) }
-    for (const [key, value] of changed) if (value === '') delete next[key]
+    for (const [key, value] of changed)
+      if (value === '' || (Array.isArray(value) && value.length === 0)) delete next[key]
     this.settings = next as SettingsRecord
     this.persist()
     return true

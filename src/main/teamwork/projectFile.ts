@@ -8,6 +8,7 @@ import { z } from 'zod'
 import type { ProjectRepositorySettings } from '../../shared/entities'
 import { MAX_SETUP_COMMAND_CHARS } from '../../shared/methods'
 import { PROJECT_FILE, PROJECT_FILE_UNREADABLE, projectFileContents } from '../../shared/projectSettings'
+import { SavedCommandList } from '../../shared/savedCommandSchema'
 import { normalizePreparedPaths } from '../git/worktreePreparation'
 
 /** No file is `{}`; a file that cannot be used whole is a problem, never half its fields. */
@@ -22,7 +23,8 @@ const ProjectFileSchema = z.object({
   setupCommand: Command.optional(),
   linkedPaths: PathList.optional(),
   copiedPaths: PathList.optional(),
-  runCommands: z.object({ dev: Command.optional(), test: Command.optional() }).optional()
+  runCommands: z.object({ dev: Command.optional(), test: Command.optional() }).optional(),
+  savedCommands: SavedCommandList.optional()
 })
 
 export async function readProjectFile(root: string): Promise<ProjectFileRead> {
@@ -45,6 +47,7 @@ export async function readProjectFile(root: string): Promise<ProjectFileRead> {
     if (dev !== undefined || test !== undefined) {
       settings.runCommands = { ...(dev === undefined ? {} : { dev }), ...(test === undefined ? {} : { test }) }
     }
+    if (parsed.savedCommands?.length) settings.savedCommands = parsed.savedCommands
     return { settings }
   } catch {
     return { problem: PROJECT_FILE_UNREADABLE }

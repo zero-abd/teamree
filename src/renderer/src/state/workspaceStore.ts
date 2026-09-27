@@ -26,6 +26,7 @@ import type {
   PushFailureData,
   RelaySetting,
   RemovedWorktree,
+  SavedCommand,
   TeammatePresence,
   TeamworkPublish,
   TeamworkPublishPlan,
@@ -209,6 +210,7 @@ import { panelCost, panelYields, sidebarCost, type Sides } from '../workspace/ro
 import { couldNotCheck } from '../updates/updateNotice'
 import { useMessageStore } from './messages'
 import { rowVisibility } from './rowVisibility'
+import { useSavedCommandsStore } from './savedCommandsStore'
 
 export type DialogState =
   /** A picked or dropped folder the runtime would not add as it was. */
@@ -224,6 +226,8 @@ export type DialogState =
   | { kind: 'new-task'; projectId: string; parentId?: string; fromIssue?: true; task?: string }
   /** `files`: ⌘P, only the worktree's files. */
   | { kind: 'palette'; mode?: 'files'; query?: string }
+  /** Adds a saved command, or edits `commandId`; `projectId` offers this project's list as well as every project's. */
+  | { kind: 'saved-command'; projectId?: string; commandId?: string }
   /** Asked before every removal; `refused` once the runtime has refused one unforced. */
   | { kind: 'confirm-remove'; worktreeId: string; intent: RemoveIntent; refused?: true }
   /** Raised only when the pane is doing work a close would kill. See `closePaneModel`. */
@@ -707,7 +711,8 @@ type WorkspaceState = {
   /** Runs an exited pane's program again, in the same pane. */
   /** `task` hands the fresh agent its worktree's task again; `resume` resumes that conversation instead. */
   relaunchTerminal: (terminalId: string, options?: { task?: boolean; resume?: string }) => Promise<void>
-  createTerminal: (worktreeId: string) => Promise<void>
+  /** A shell pane, or one running `run.command` under `run.label`. */
+  createTerminal: (worktreeId: string, run?: { command: string; label: string }) => Promise<void>
   /**
    * Opens `path` as a tab of the file column, or focuses the tab already on it; `diff` shows its diff,
    * `split` puts it to the right of the focused pane instead, `preview` replaces the preview tab, `diff-preview` both.
@@ -833,7 +838,8 @@ type WorkspaceState = {
   /** Hides the sidebar and panel for a compare on screen, and shows again what it hid. */
   foldForCompare: (on: boolean) => void
   /** Opens a pane already running one of the agents found on this machine. */
-  startAgent: (command: string) => Promise<void>
+  /** A pane of the agent behind `command` in the worktree on screen, starting on `prompt` when given. */
+  startAgent: (command: string, prompt?: string) => Promise<void>
   /** Opens the worktree with a pane resuming that conversation of that agent. */
   resumeConversation: (worktreeId: string, agent: AgentKind, sessionId: string) => Promise<void>
 
@@ -990,6 +996,8 @@ type WorkspaceState = {
       setupCommand?: string
       fetchInBackground?: boolean
       runCommands?: { dev?: string; test?: string }
+      savedCommands?: SavedCommand[]
+      approveCommand?: string
     }
   ) => Promise<void>
   /** Sets one project's editor command, or clears it when given null. */
@@ -2130,9 +2138,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     startWatching() {
       const watch = runtimeClient.watchWorkspace((event) => {
         if (event.type === 'messages') void useMessageStore.getState().load()
+        if (event.type === 'settings') void useSavedCommandsStore.getState().load()
         refresher.push(event)
       })
       void useMessageStore.getState().load()
+      void useSavedCommandsStore.getState().load()
       const beat = setInterval(() => void readUnread().catch(() => undefined), UNREAD_READ_MS)
       return () => {
         clearInterval(beat)
@@ -3103,12 +3113,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (get().editingMarkdown !== editing) set({ editingMarkdown: editing })
     },
 
-    async createTerminal(worktreeId) {
+    async createTerminal(worktreeId, run) {
       if (get().expandedTerminalId !== null) restoreZoom()
       yieldPanel()
       const { room, zoomed } = roomOrZoom(worktreeId)
       try {
-        const terminal = await runtimeClient.call('terminal.create', { worktreeId, ...room })
+        const terminal = await runtimeClient.call('terminal.create', { worktreeId, ...run, ...room })
         set((state) => ({ terminals: { ...state.terminals, [terminal.id]: terminal } }))
         // The one focus a layout may bring with it: it was asked for here.
         panesAskedFor.add(terminal.id)
@@ -3379,9 +3389,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
-    async startAgent(command) {
+    async startAgent(command, prompt) {
       const worktreeId = get().activeWorktreeId
-      if (worktreeId) await launchAgent(worktreeId, command)
+      if (worktreeId) await launchAgent(worktreeId, command, undefined, prompt)
     },
 
     async resumeConversation(worktreeId, agent, sessionId) {

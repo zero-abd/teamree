@@ -1153,3 +1153,18 @@ button.picker__chevron:hover {
 .ports__empty {
   color: var(--fg-secondary);
 }
+
+/* Saved command sheet: the label beside its kind, then where it goes beside whose list it is on. */
+.saved-command__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+}
+
+.saved-command__label {
+  flex: 1 1 200px;
+}
+
+.saved-command__delete {
+  margin-right: auto;
+}

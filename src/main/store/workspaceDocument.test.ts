@@ -78,3 +78,40 @@ describe('workspace document: project fields', () => {
     expect(parseWorkspaceDocument({ projects: [project] }).projects).toEqual([project])
   })
 })
+
+describe('workspace document: saved commands', () => {
+  const project = { id: 'proj_1', name: 'api', path: '/tmp/api', baseRef: 'origin/main' }
+  const lint = { id: 'c1', label: 'Lint', text: 'npm run lint', kind: 'shell', where: 'new' }
+  const review = {
+    id: 'c2',
+    label: 'Review',
+    text: 'Review the diff',
+    kind: 'agent',
+    where: 'current',
+    agent: 'claude'
+  }
+
+  it('keeps a project’s commands and approvals, and the list for every project', () => {
+    const stored = { ...project, savedCommands: [lint, review], approvedSavedCommands: ['make db'] }
+    const document = parseWorkspaceDocument({ projects: [stored], settings: { savedCommands: [review] } })
+    expect(document.projects).toEqual([stored])
+    expect(document.settings).toEqual({ savedCommands: [review] })
+  })
+
+  it('drops a mangled command, never the project, the rest of the list or the other settings', () => {
+    const blank = { ...lint, id: 'c3', label: '' }
+    const robot = { ...lint, id: 'c4', kind: 'robot' }
+    const document = parseWorkspaceDocument({
+      projects: [
+        { ...project, savedCommands: [lint, blank, robot] },
+        { ...project, id: 'proj_2', savedCommands: 'lint', approvedSavedCommands: [3] }
+      ],
+      settings: { savedCommands: [5, lint], showCost: true }
+    })
+    expect(document.projects).toEqual([
+      { ...project, savedCommands: [lint] },
+      { ...project, id: 'proj_2' }
+    ])
+    expect(document.settings).toEqual({ savedCommands: [lint], showCost: true })
+  })
+})

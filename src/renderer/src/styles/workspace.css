@@ -156,6 +156,20 @@
   background: var(--success);
 }
 
+/* Saved commands: a play glyph and a chevron, since it opens a menu rather than running one thing. */
+.saved-commands {
+  gap: 0;
+  margin-right: var(--s1);
+}
+
+.saved-commands .saved-commands__chevron {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.4;
+}
+
 /* A 16px icon in a 24px button. */
 .tabs__action {
   display: flex;

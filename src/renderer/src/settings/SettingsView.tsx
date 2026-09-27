@@ -41,6 +41,8 @@ import { PageFrame } from '../workspace/PageFrame'
 import { activeChoice, BUILT_IN_THEMES, themeById } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from './AppearanceSettings'
 import { useRuntimeSettings, type RuntimeSettingsState } from './runtimeSettings'
+import { SavedCommandsSetting } from './SavedCommandsSetting'
+import { SAVED_COMMANDS_SETTING } from '../workspace/SavedCommands'
 import { useUsageStore } from '../state/usageStore'
 import {
   agentRows,
@@ -236,6 +238,7 @@ function useProjectRows(machine: RuntimeSettings | null): (project: Project) => 
       { label: 'Copy into every new worktree', words: applied.copiedPaths ?? [] },
       { label: 'Setup command', words: [applied.setupCommand ?? ''] },
       ...RUN_KINDS.map((kind) => ({ label: RUN_SETTING[kind], words: [applied.runCommands?.[kind] ?? ''] })),
+      { label: SAVED_COMMANDS_SETTING, words: (applied.savedCommands ?? []).map((command) => command.label) },
       { label: 'Open checkouts in', words: editorPicker(project.id, editorCommands, found).words },
       { label: 'Relay', words: [relayPanel(relays[project.id]).headline] }
     ]
@@ -1537,6 +1540,11 @@ function ProjectsSection({ projects }: { projects: readonly Project[] }): React.
       <h2 className="settings-section__title" id="settings-projects" tabIndex={-1}>
         <Marked text="Projects" />
       </h2>
+      {shown.whole || labelMatches(SAVED_COMMANDS_SETTING, shown.query) ? (
+        <div className="settings-group">
+          <SavedCommandsSetting />
+        </div>
+      ) : null}
       {projects.length === 0 ? (
         <div className="settings-group">
           <p className="settings-note">No repositories yet</p>
@@ -1589,6 +1597,7 @@ function ProjectBlock({ project }: { project: Project }): React.JSX.Element {
       <ProjectWorktrees project={project} />
       {shown.row('Fetch in Background') ? <FetchInBackground project={project} /> : null}
       <CarriedPaths project={project} />
+      {shown.row(SAVED_COMMANDS_SETTING) ? <SavedCommandsSetting project={project} /> : null}
       {shown.row('Open checkouts in') ? <EditorCommand editorKey={project.id} label="Open checkouts in" /> : null}
       {shown.row('Relay') ? <RelayBlock project={project} /> : null}
     </article>

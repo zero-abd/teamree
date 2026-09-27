@@ -6,6 +6,8 @@
 import { z } from 'zod'
 import type { Layout, PaneNode, Project, Worktree } from '../../shared/entities'
 import { MAX_PANE_LABEL_CHARS } from '../../shared/methods'
+import { SavedCommandSchema } from '../../shared/savedCommandSchema'
+import { MAX_SAVED_COMMANDS } from '../../shared/savedCommands'
 import { DEFAULT_RUNTIME_SETTINGS, type RuntimeSettings } from '../../shared/settings'
 import { sanitizeAppearance, type Appearance } from '../../shared/theme'
 import { AgentKindOnRead } from '../terminals/agent-command'
@@ -14,6 +16,12 @@ import type { ClosedTerminalRecord, TerminalRecord } from '../terminals/session-
 export const WORKSPACE_DOCUMENT_VERSION = 1
 
 const RunCommandsSchema = z.object({ dev: z.string().min(1).optional(), test: z.string().min(1).optional() })
+
+// A mangled command costs that command, never the list or the project holding it.
+const SavedCommandsOnRead = z.array(z.unknown()).transform((rows) => {
+  const kept = salvage(rows, SavedCommandSchema).slice(0, MAX_SAVED_COMMANDS)
+  return kept.length === 0 ? undefined : kept
+})
 
 const ProjectSchema = z.object({
   id: z.string().min(1),
@@ -31,7 +39,9 @@ const ProjectSchema = z.object({
   // Only `false` is stored; on is the default and deletes the field.
   fetchInBackground: z.literal(false).optional(),
   worktreesRoot: z.string().min(1).optional().catch(undefined),
-  branchPrefix: z.string().min(1).optional().catch(undefined)
+  branchPrefix: z.string().min(1).optional().catch(undefined),
+  savedCommands: SavedCommandsOnRead.optional().catch(undefined),
+  approvedSavedCommands: z.array(z.string().min(1)).optional().catch(undefined)
 })
 
 const WorktreeSchema = z.object({
@@ -178,7 +188,8 @@ const SettingsSchema = z.object({
   branchPrefix: z.string().min(1).optional().catch(undefined),
   shell: z.string().min(1).optional().catch(undefined),
   fetchMinutes: z.number().int().min(1).max(1440).optional().catch(undefined),
-  themeMigratedToCharcoal: z.boolean().optional().catch(undefined)
+  themeMigratedToCharcoal: z.boolean().optional().catch(undefined),
+  savedCommands: SavedCommandsOnRead.optional().catch(undefined)
 })
 
 export type SettingsRecord = Partial<RuntimeSettings>

@@ -55,6 +55,10 @@ export type Project = {
   approvedRunCommands?: RunCommands
   /** What the primary checkout's manifests suggest (`package.json` scripts, a Makefile, go.mod…). Read, never stored. */
   detectedRun?: RunCommands
+  /** This Mac's saved commands and prompts for this project, in menu order. */
+  savedCommands?: SavedCommand[]
+  /** Texts of the repository's saved commands this Mac approved; a changed one asks again. */
+  approvedSavedCommands?: string[]
   /** How fetching `baseRef` last went. Read, never stored. */
   fetch?: BaseFetchState
 }
@@ -76,6 +80,19 @@ export type RunKind = 'dev' | 'test'
 
 export type RunCommands = { dev?: string; test?: string }
 
+/** A command or prompt kept for one click beside the Run buttons, in the palette as `Run: <label>`. */
+export type SavedCommand = {
+  id: string
+  label: string
+  text: string
+  /** `shell` types `text` into a terminal; `agent` gives it to a coding agent as a prompt. */
+  kind: 'shell' | 'agent'
+  /** Shell: a `new` pane or the `current` one. Agent: the running (`current`) agent, a `new` one, or a new `task`. */
+  where: 'new' | 'current' | 'task'
+  /** The agent a `new` agent pane starts; absent is the default one. */
+  agent?: AgentKind
+}
+
 /** What a checkout's lockfile suggests (`command`) and the directory it lacks for it (`missing`). */
 export type WorktreeSetupCheck = { command?: string; missing?: string }
 
@@ -87,6 +104,7 @@ export type ProjectRepositorySettings = {
   /** The ref new worktrees start from, as Settings' "Start new worktrees from" names it. */
   startFrom?: string
   runCommands?: RunCommands
+  savedCommands?: SavedCommand[]
 }
 
 /** A `project.clone` while it runs. */

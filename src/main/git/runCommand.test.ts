@@ -121,3 +121,37 @@ describe('Run Dev and Run Tests', () => {
     })
   })
 })
+
+describe('saved commands', () => {
+  const lint = { id: 'c1', label: ' Lint ', text: '  npm run lint ', kind: 'shell', where: 'new' } as const
+
+  it('keeps this Mac’s list in order, trimmed, and clears it with an empty one', async () => {
+    const repo = await scriptsRepo()
+    const service = newService(repo, [])
+    const { projectId } = await readyWorktree(service, repo)
+    const review = { id: 'c2', label: 'Review', text: 'Review the diff', kind: 'agent', where: 'current' } as const
+
+    const set = await service.setProjectPaths({ projectId, savedCommands: [review, lint] })
+    expect(set.savedCommands).toEqual([review, { ...lint, label: 'Lint', text: 'npm run lint' }])
+    const cleared = await service.setProjectPaths({ projectId, savedCommands: [] })
+    expect(cleared.savedCommands).toBeUndefined()
+  })
+
+  it('reads the repository’s, and approves only a text it carries', async () => {
+    const shared = { id: 'r1', label: 'Migrate', text: 'npm run db:migrate', kind: 'shell', where: 'new' }
+    const repo = await scriptsRepo(JSON.stringify({ savedCommands: [shared] }))
+    const service = newService(repo, [])
+    const { projectId } = await readyWorktree(service, repo)
+    expect(service.listProjects().find((project) => project.id === projectId)?.repository?.savedCommands).toEqual([
+      shared
+    ])
+
+    await expect(service.setProjectPaths({ projectId, approveCommand: 'rm -rf /' })).rejects.toMatchObject({
+      code: ErrorCode.InvalidParams
+    })
+    const approved = await service.setProjectPaths({ projectId, approveCommand: shared.text })
+    expect(approved.approvedSavedCommands).toEqual([shared.text])
+    const again = await service.setProjectPaths({ projectId, approveCommand: shared.text })
+    expect(again.approvedSavedCommands).toEqual([shared.text])
+  })
+})

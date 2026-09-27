@@ -11,6 +11,7 @@ import { collectTerminalIds, hasTerminal } from '../panes/paneLayout'
 import { usePaneMenu } from './paneMenu'
 import { paneTabs, paneTabTitle } from './paneTabs'
 import { RunButtons } from './runButtons'
+import { SavedCommands } from './SavedCommands'
 import { useStartMenuItems } from './startMenu'
 import { PaneGlyph } from '../agents/glyphs'
 import { Icon } from '../icons/Icon'
@@ -242,6 +243,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
       {activeWorktreeId === null || !panesShown ? null : (
         <div className="tabs__actions">
           {noCheckout ? null : <RunButtons worktreeId={activeWorktreeId} />}
+          {noCheckout ? null : <SavedCommands worktreeId={activeWorktreeId} />}
           <div className="tabs__layout">
             <button
               type="button"

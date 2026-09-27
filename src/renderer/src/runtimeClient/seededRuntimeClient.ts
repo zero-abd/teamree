@@ -559,10 +559,15 @@ export function createSeededRuntimeClient(): RuntimeClient {
       fetchInBackground,
       runCommands,
       worktreesRoot,
-      branchPrefix
+      branchPrefix,
+      savedCommands
     }) => {
       const project = required(projects.get(projectId), 'project')
       const next: Project = { ...project }
+      if (savedCommands !== undefined) {
+        if (savedCommands.length === 0) delete next.savedCommands
+        else next.savedCommands = [...savedCommands]
+      }
       if (linkedPaths !== undefined) {
         if (linkedPaths.length === 0) delete next.linkedPaths
         else next.linkedPaths = [...linkedPaths]
