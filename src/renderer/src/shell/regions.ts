@@ -11,7 +11,7 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input, select, textarea, [ta
 /** Where the keyboard lands in each region, most specific first; else its first focusable control. */
 const LANDING: Record<Region, readonly string[]> = {
   sidebar: ['[role="treeitem"][aria-current="true"]', '[role="treeitem"][tabindex="0"]', '[role="treeitem"]'],
-  strip: ['[role="tab"][aria-selected="true"]'],
+  strip: ['.group__strip--active [role="tab"][aria-selected="true"]', '[role="tab"][aria-selected="true"]'],
   // Terminal, then an editor, then a page such as All Panes, which takes the focus itself.
   panes: ['.pane--focused .xterm-helper-textarea', '.pane--focused [contenteditable="true"]', '.page'],
   panel: ['[role="tab"][aria-selected="true"]']

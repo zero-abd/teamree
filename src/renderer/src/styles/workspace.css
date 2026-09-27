@@ -91,6 +91,49 @@
   display: none;
 }
 
+/* A strip inside the window is not its title bar: shorter, and dragging it moves tabs, not the window. */
+.group__strip:not(.group__strip--top) {
+  -webkit-app-region: no-drag;
+  height: var(--group-strip-h);
+}
+
+/* Positioned, so a tab's offsetLeft is measured from the strip it scrolls in. */
+.group__strip .tabs__list {
+  position: relative;
+  flex: 1;
+}
+
+/* Not wholly in sight: left out rather than cut mid-name; the `+N` list reaches it. */
+.tab[data-cut] {
+  visibility: hidden;
+}
+
+.tabs__more {
+  flex: none;
+  height: 24px;
+  padding: 0 var(--s2);
+  border: 0;
+  border-radius: var(--r1);
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.tabs__more:hover,
+.tabs__more[aria-expanded='true'] {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.tabs__mark {
+  display: flex;
+  width: 6px;
+  align-items: center;
+}
+
 /* Pinned to the strip's end, so the layout group sits at one x however many tabs are open. */
 .tabs__actions {
   display: flex;
@@ -196,10 +239,16 @@
 
 /* The mark is a line on the strip's bottom edge, drawn inside the tab's box so
    it lands exactly on the baseline the strip shares with the sidebar's header.
-   A border on the tab's own box used to stop a pixel short of it. */
+   Every group marks the tab it shows; the group holding the keys marks it in
+   the accent, the others in a quiet line. */
 .tab--active {
-  box-shadow: inset 0 -2px 0 var(--accent);
+  box-shadow: inset 0 -2px 0 var(--line-strong);
   color: var(--fg);
+  transition: box-shadow var(--motion-base) var(--ease);
+}
+
+.group__strip--active .tab--active {
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 .tab__main {

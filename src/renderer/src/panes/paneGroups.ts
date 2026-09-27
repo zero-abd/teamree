@@ -47,9 +47,9 @@ export function stripOrder(root: PaneNode | null): string[] {
 }
 
 /** `added` as a tab of the group holding `member`, after its shown tab (or at `index`), and shown. */
-export function addToGroup(root: PaneNode, member: string, added: Leaf, index?: number): PaneNode {
+export function addToGroup(root: PaneNode, member: string, added: PaneNode, index?: number): PaneNode {
   const group = groupOf(root, member)
-  if (group === null) return root
+  if (group === null || added.kind !== 'leaf') return root
   const tabs = groupTabs(group)
   const at = index ?? tabs.findIndex((tab) => tab.terminalId === shownOf(group)) + 1
   tabs.splice(clamp(at, 0, tabs.length), 0, added)
@@ -76,9 +76,9 @@ export function moveTab(root: PaneNode, id: string, target: string, index: numbe
 
 /** Tab `id` let go on `edge` of the group holding `target`: a group of its own there, or last among its tabs. */
 export function dropTab(root: PaneNode, id: string, target: string, edge: DropEdge): PaneNode {
-  if (edge === 'center') return moveTab(root, id, target, Number.MAX_SAFE_INTEGER)
   const from = groupOf(root, id)
   const to = groupOf(root, target)
+  if (edge === 'center') return from === to ? root : moveTab(root, id, target, Number.MAX_SAFE_INTEGER)
   const tab = groupTabs(from).find((each) => each.terminalId === id)
   if (from === null || to === null || tab === undefined) return root
   if (groupTabs(from).length === 1) return movePane(root, id, target, edge)

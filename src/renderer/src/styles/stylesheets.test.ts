@@ -234,10 +234,10 @@ describe('stylesheets', () => {
 
   // Panes sit edge to edge, split by one hairline; the tab strip names them, so they carry no card or title.
   describe('flush panes', () => {
-    it('draws no card, corner or gutter round a pane or the file column', () => {
+    it('draws no card, corner or gutter round a pane or a group of tabs', () => {
       for (const [sheet, selector] of [
         ['panes.css', '.pane'],
-        ['files.css', '.column']
+        ['panes.css', '.group']
       ] as const) {
         const rule = ruleFor(sheet, selector)
         expect(declarationOf(rule, 'border'), selector).toBeUndefined()
@@ -259,12 +259,16 @@ describe('stylesheets', () => {
       expect(Number(declarationOf(ruleFor('panes.css', '.gutter'), 'z-index'))).toBeGreaterThan(11)
     })
 
-    it('marks the focused pane of a split by a 2px accent line on its top edge, not a frame', () => {
-      const mark = ruleFor('panes.css', '.workspace__panes .split .pane--focused::after')
-      expect(declarationOf(mark, 'height')).toBe('2px')
-      expect(declarationOf(mark, 'background')).toBe('var(--accent)')
+    // Every group marks the tab it shows; the one holding the keys in the accent, the rest quietly.
+    it('marks the group holding the focus by an accent line under its shown tab, not a frame', () => {
+      expect(declarationOf(ruleFor('workspace.css', '.tab--active'), 'box-shadow')).toBe(
+        'inset 0 -2px 0 var(--line-strong)'
+      )
+      expect(declarationOf(ruleFor('workspace.css', '.group__strip--active .tab--active'), 'box-shadow')).toBe(
+        'inset 0 -2px 0 var(--accent)'
+      )
       expect(findRule('panes.css', '.pane--focused')).toBeUndefined()
-      expect(findRule('files.css', '.column--focused')).toBeUndefined()
+      expect(findRule('panes.css', '.group--active')).toBeUndefined()
     })
 
     // Under border-box the addon counted the padding as room and printed past the slider.
@@ -902,8 +906,7 @@ describe('stylesheets', () => {
     ['workspace.css', '.tab__rename'],
     ['workspace.css', '.tab__close'],
     ['panes.css', '.pane__close'],
-    ['review.css', '.patch__plus'],
-    ['files.css', '.column__close']
+    ['review.css', '.patch__plus']
   ])('draws %s %s faintly at rest, not invisibly', (sheet, selector) => {
     const opacities: string[] = []
     postcss.parse(readFileSync(path.join(here, sheet), 'utf8'), { from: sheet }).walkRules((rule) => {

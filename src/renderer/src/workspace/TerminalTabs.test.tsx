@@ -22,7 +22,9 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
-const { TerminalTabs } = await import('./TerminalTabs')
+const { GroupStrip, TerminalTabs } = await import('./TerminalTabs')
+const { paneGroups, groupTabIds } = await import('../panes/paneGroups')
+const { shownRoot } = await import('../panes/paneLayout')
 
 const INITIAL = useWorkspaceStore.getState()
 const MAC = resolvePlatformModifier('darwin')
@@ -88,8 +90,36 @@ function seed(overrides: Record<string, unknown> = {}): void {
   )
 }
 
+/** The top strip and, as the pane tree lays them along the top, one strip per group of the tree on screen. */
+function Strips(): React.JSX.Element {
+  const state = useWorkspaceStore()
+  const layout = state.activeWorktreeId === null ? undefined : state.layouts[state.activeWorktreeId]
+  const panesShown = !state.dashboardOpen && state.teamworkProjectId === null && !state.settingsOpen && !state.helpOpen
+  const groups = panesShown ? paneGroups(shownRoot(layout?.root ?? null, state.expandedTerminalId)) : []
+  const worktree = state.worktrees.find((entry) => entry.id === state.activeWorktreeId)
+  const focused = state.focusedWatchId === null ? (layout?.focusedTerminalId ?? null) : null
+  return (
+    <>
+      <TerminalTabs modifier={MAC} />
+      {groups.map((group, at) => (
+        <GroupStrip
+          key={groupTabIds(group)[0]}
+          group={group}
+          terminals={state.terminals}
+          worktree={worktree}
+          edges={{ top: true, left: at === 0, right: at === groups.length - 1 }}
+          active={focused !== null && groupTabIds(group).includes(focused)}
+          modifier={MAC}
+          onFocus={state.focusPane}
+          onClose={(id) => void state.closeTerminal(id)}
+        />
+      ))}
+    </>
+  )
+}
+
 const mount = (): void => {
-  render(<TerminalTabs modifier={MAC} />)
+  render(<Strips />)
 }
 
 /** The names on the strip, in the order it puts them. */
@@ -193,13 +223,12 @@ describe('the worktree the strip belongs to', () => {
 
 describe('which tab is the selected one', () => {
   const selectedNames = (): (string | null)[] =>
-    screen
-      .getAllByRole('tab')
-      .filter((tab) => tab.getAttribute('aria-selected') === 'true')
-      .map((tab) => tab.getAttribute('aria-label'))
+    [...document.querySelectorAll('.group__strip--active [role="tab"][aria-selected="true"]')].map((tab) =>
+      tab.getAttribute('aria-label')
+    )
 
-  // Both the selected tab and the focused border read `layout.focusedTerminalId`.
-  it('selects the tab of the pane holding the focus', () => {
+  // Every group selects the tab it shows; the one holding the focus is the active group, as its pane has the keys.
+  it('marks the group of the pane holding the focus active, its shown tab selected', () => {
     seed({
       activeWorktreeId: 'w1',
       layouts: { w1: layout('w1', row('t1', 't2'), 't2') },
@@ -207,10 +236,11 @@ describe('which tab is the selected one', () => {
     })
     mount()
     expect(selectedNames()).toEqual(['Claude Code'])
+    expect(document.querySelectorAll('.group__strip--active')).toHaveLength(1)
   })
 
-  // A watched pane holding focus selects no tab, as `WorkspaceArea` draws no focused border.
-  it('selects no tab at all while a teammate’s watched pane holds the focus', () => {
+  // A watched pane holding focus marks no group, as `WorkspaceArea` draws no focused pane.
+  it('marks no group at all while a teammate’s watched pane holds the focus', () => {
     seed({
       activeWorktreeId: 'w1',
       layouts: { w1: layout('w1', row('t1', 't2'), 't2') },
@@ -219,7 +249,7 @@ describe('which tab is the selected one', () => {
     })
     mount()
     expect(selectedNames()).toEqual([])
-    // The panes are still listed; it is only the selection that moved away.
+    // The panes are still listed; it is only the focus that moved away.
     expect(tabNames()).toEqual(['npm test', 'Claude Code'])
   })
   // Zoomed, the pane filling the centre is the selected tab, whatever the focus says.
@@ -231,35 +261,8 @@ describe('which tab is the selected one', () => {
       expandedTerminalId: 't1'
     })
     mount()
-    expect(selectedNames()).toEqual(['npm test'])
-  })
-})
-
-describe('a strip with more tabs than fit', () => {
-  it('scrolls the selected tab into view', () => {
-    const ids = ['t1', 't2', 't3', 't4', 't5', 't6']
-    seed({
-      activeWorktreeId: 'w1',
-      layouts: { w1: layout('w1', row(...ids), 't1') },
-      terminals: byId(...ids.map((id) => terminal({ id, title: `job ${id}` })))
-    })
-    // jsdom lays nothing out: the list is 300px wide, each tab 100px, side by side.
-    const rect = vi
-      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-      .mockImplementation(function (this: HTMLElement) {
-        const index = [...(this.parentElement?.children ?? [])].indexOf(this)
-        const [left, right] = this.classList.contains('tabs__list') ? [0, 300] : [index * 100, index * 100 + 100]
-        return { left, right, top: 0, bottom: 38, width: right - left, height: 38, x: left, y: 0 } as DOMRect
-      })
-    try {
-      mount()
-      const list = screen.getByRole('tablist')
-      expect(list.scrollLeft).toBe(0)
-      act(() => useWorkspaceStore.setState({ layouts: { w1: layout('w1', row(...ids), 't6') } }))
-      expect(list.scrollLeft).toBe(300)
-    } finally {
-      rect.mockRestore()
-    }
+    expect(tabNames()).toEqual(['npm test'])
+    expect(screen.getByRole('tab', { name: 'npm test' }).getAttribute('aria-selected')).toBe('true')
   })
 })
 
@@ -322,8 +325,8 @@ describe('the pane buttons at the end of the strip', () => {
   // The `+` is a menu; the chord is still the one-press way to a terminal.
   it('opens the menu rather than a pane when pressed', () => {
     onePane()
-    fireEvent.click(screen.getByRole('button', { name: 'New pane' }))
-    expect(screen.getByRole('menu', { name: 'New pane' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }))
+    expect(screen.getByRole('menu', { name: 'New tab' })).toBeTruthy()
     expect(createTerminal).not.toHaveBeenCalled()
   })
 
@@ -332,7 +335,7 @@ describe('the pane buttons at the end of the strip', () => {
     onePane()
     expect(screen.getByRole('button', { name: 'Split right' }).getAttribute('title')).toBe('Split right')
     expect(screen.getByRole('button', { name: 'Split down' }).getAttribute('title')).toBe('Split down')
-    expect(screen.getByRole('button', { name: 'New pane' }).getAttribute('title')).toBe('New pane')
+    expect(screen.getByRole('button', { name: 'New tab' }).getAttribute('title')).toBe('New tab')
   })
 
   it('carries no words of its own besides the tab names', () => {
@@ -348,7 +351,7 @@ describe('the pane buttons at the end of the strip', () => {
     const strip = document.querySelector('.tabs') as HTMLElement
     const layout = screen.getByRole('button', { name: 'Split right' }).parentElement as HTMLElement
     expect(layout.classList.contains('tabs__layout')).toBe(true)
-    for (const name of ['Maximize', 'Split right', 'Split down', 'New pane']) {
+    for (const name of ['Maximize', 'Split right', 'Split down', 'New tab']) {
       expect(screen.getByRole('button', { name }).parentElement).toBe(layout)
     }
     expect(screen.getByRole('tablist').contains(layout)).toBe(false)
@@ -357,10 +360,10 @@ describe('the pane buttons at the end of the strip', () => {
 
   it('says what each one does, for anything that cannot see the icon', () => {
     onePane()
-    for (const name of ['Split right', 'Split down', 'New pane']) {
+    for (const name of ['Split right', 'Split down', 'New tab']) {
       expect(screen.getByRole('button', { name })).toBeTruthy()
     }
-    expect(screen.getByRole('button', { name: 'New pane' }).getAttribute('aria-haspopup')).toBe('menu')
+    expect(screen.getByRole('button', { name: 'New tab' }).getAttribute('aria-haspopup')).toBe('menu')
   })
 })
 
@@ -419,8 +422,8 @@ describe('the menu the + opens', () => {
   }
 
   const open = (): HTMLElement => {
-    fireEvent.click(screen.getByRole('button', { name: 'New pane' }))
-    return screen.getByRole('menu', { name: 'New pane' })
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }))
+    return screen.getByRole('menu', { name: 'New tab' })
   }
 
   /** The rows, top to bottom, by what a screen reader would call them. */
@@ -470,18 +473,18 @@ describe('the menu the + opens', () => {
     expect(createTerminal).not.toHaveBeenCalled()
   })
 
-  it('opens a terminal in the worktree the strip belongs to', () => {
+  it('opens a terminal as a tab of the strip’s group, in its worktree', () => {
     onePane()
     fireEvent.click(within(open()).getByRole('menuitem', { name: 'New Terminal' }))
-    expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1')
+    expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1', 't1')
     expect(startAgent).not.toHaveBeenCalled()
   })
 
   // The same store action the palette's "Start codex here" row calls.
-  it('starts the chosen agent through the store, and closes', () => {
+  it('starts the chosen agent through the store as a tab of the group, and closes', () => {
     onePane()
     fireEvent.click(within(open()).getByRole('menuitem', { name: 'Codex' }))
-    expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex')
+    expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex', 't1')
     expect(createTerminal).not.toHaveBeenCalled()
     expect(screen.queryByRole('menu')).toBeNull()
   })
@@ -502,7 +505,7 @@ describe('the menu the + opens', () => {
     fireEvent.keyDown(menu, { key: 'ArrowDown' })
     fireEvent.keyDown(menu, { key: 'ArrowDown' })
     fireEvent.keyDown(menu, { key: 'Enter' })
-    expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex')
+    expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex', 't1')
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
@@ -511,7 +514,7 @@ describe('the menu the + opens', () => {
     const menu = open()
     fireEvent.keyDown(menu, { key: 'Escape' })
     expect(screen.queryByRole('menu')).toBeNull()
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New pane' }))
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New tab' }))
     expect(startAgent).not.toHaveBeenCalled()
     expect(createTerminal).not.toHaveBeenCalled()
   })
@@ -519,7 +522,7 @@ describe('the menu the + opens', () => {
   it('closes when the + is pressed again', () => {
     onePane()
     open()
-    const plus = screen.getByRole('button', { name: 'New pane' })
+    const plus = screen.getByRole('button', { name: 'New tab' })
     expect(plus.getAttribute('aria-expanded')).toBe('true')
     fireEvent.pointerDown(plus)
     fireEvent.click(plus)
@@ -667,9 +670,9 @@ describe('when there are no panes to list', () => {
     mount()
     expect((screen.getByRole('button', { name: 'Split right' }) as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: 'Split down' }) as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'New pane' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }))
     expect(
-      within(screen.getByRole('menu', { name: 'New pane' })).getByRole('menuitem', { name: 'Claude Code' })
+      within(screen.getByRole('menu', { name: 'New tab' })).getByRole('menuitem', { name: 'Claude Code' })
     ).toBeTruthy()
   })
 
@@ -690,17 +693,17 @@ describe('when there are no panes to list', () => {
       ]
     })
     mount()
-    expect((screen.getByRole('button', { name: 'New pane' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'New tab' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('has no end buttons with no worktree open, or while settings have the area', () => {
     seed()
     mount()
-    expect(screen.queryByRole('button', { name: 'New pane' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'New tab' })).toBeNull()
     cleanup()
     seed({ activeWorktreeId: 'w1', settingsOpen: true })
     mount()
-    expect(screen.queryByRole('button', { name: 'New pane' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'New tab' })).toBeNull()
   })
 
   // No tablist when empty; the strip itself stays.

@@ -106,6 +106,50 @@
   outline: none;
 }
 
+/* A group gives its room back, or makes room for a new one, by sliding; not while a gutter is dragged. */
+.split__cell {
+  transition: flex-basis var(--motion-base) var(--ease);
+}
+
+.split--dragging > .split__cell {
+  transition: none;
+}
+
+/* Group ------------------------------------------------------------------- */
+
+/* A leaf of the split tree: its own strip of tabs, over the shown tab's pane. */
+.group {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* A group that was not there a moment ago settles in. */
+.group--born {
+  animation: group-in var(--motion-base) var(--ease);
+}
+
+@keyframes group-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+}
+
+.group__body,
+.group__page {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.group__page[hidden] {
+  display: none;
+}
+
 /* Pane -------------------------------------------------------------------- */
 
 .pane {
@@ -121,24 +165,6 @@
 
 .pane--terminal {
   background: var(--term-bg);
-}
-
-/* Which pane of a split has the keys: a line on its top edge. A lone pane's tab says so. */
-.workspace__panes .split .pane--focused::after {
-  content: '';
-  position: absolute;
-  z-index: 12;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 2px;
-  background: var(--accent);
-  pointer-events: none;
-}
-
-/* A file column with tabs marks its shown tab instead. */
-.column__tabs:not([hidden]) ~ .column__page .pane--focused::after {
-  content: none;
 }
 
 .pane__bar,
@@ -535,8 +561,7 @@ body.is-dragging-pane * {
   white-space: nowrap;
 }
 
-.tab--dragged,
-.column__tab--dragged {
+.tab--dragged {
   opacity: 0.45;
 }
 

@@ -35,7 +35,7 @@ export function collectLeaves(node: PaneNode | null): Extract<PaneNode, { kind: 
   return node.children.flatMap(collectLeaves)
 }
 
-/** Leaf ids in reading order with the file column as one stop, its shown tab: the strip's and the walks' order. */
+/** Each group's shown tab in reading order: the order ⌘] walks. */
 export function paneStops(node: PaneNode | null): string[] {
   if (!node) return []
   if (node.kind === 'leaf') return [node.terminalId]
@@ -311,81 +311,26 @@ function mapColumn(root: PaneNode, change: (column: FileColumn) => FileColumn): 
   return children.every((child, index) => child === root.children[index]) ? root : { ...root, children }
 }
 
-/** Where a dragged pane lands on another: beside it on one side, or in its place (`center`, a swap). */
+/** Where a dragged tab lands on a pane: beside it on one side, or among its tabs (`center`). */
 export type DropEdge = 'left' | 'right' | 'top' | 'bottom' | 'center'
 
 /**
- * The pane holding `id` moved to `edge` of the pane holding `targetId`, the file column moving as one.
- * The same tree when either is missing or both are the same pane.
+ * The pane holding `id` moved to `edge` of the pane holding `targetId`, a group moving as one.
+ * The same tree when either is missing, both are the same pane, or the edge is its middle.
  */
 export function movePane(root: PaneNode, id: string, targetId: string, edge: DropEdge): PaneNode {
   const stops = stopsOf(root)
   const from = stops.findIndex((stop) => hasTerminal(stop, id))
   const to = stops.findIndex((stop) => hasTerminal(stop, targetId))
   const moved = stops[from]
-  if (moved === undefined || to === -1 || from === to) return root
-  if (edge === 'center') {
-    return withStops(
-      root,
-      stops.map((stop, at) => (at === from ? (stops[to] ?? stop) : at === to ? moved : stop))
-    )
-  }
+  if (moved === undefined || to === -1 || from === to || edge === 'center') return root
   const rest = collectTerminalIds(moved).reduce<PaneNode | null>((tree, each) => closePane(tree, each), root)
   return rest === null ? root : beside(rest, targetId, edge, moved)
 }
 
-/** The column's tab `id` taken out as a pane of its own at `edge` of `targetId`; the same tree when it cannot be. */
-export function moveTabOut(root: PaneNode, id: string, targetId: string, edge: DropEdge): PaneNode {
-  const tab = fileColumnIn(root)?.children.find((child) => child.kind === 'leaf' && child.terminalId === id)
-  if (tab === undefined || edge === 'center') return root
-  const rest = closePane(root, id)
-  return rest === null || !hasTerminal(rest, targetId) ? root : beside(rest, targetId, edge, tab)
-}
-
-/** The pane holding `id` moved to `index` in the strip's order: panes change places, places keep their sizes. */
-export function reorderPanes(root: PaneNode, id: string, index: number): PaneNode {
-  const stops = stopsOf(root)
-  const from = stops.findIndex((stop) => hasTerminal(stop, id))
-  const to = clamp(index, 0, stops.length - 1)
-  const [moved] = from === -1 ? [] : stops.splice(from, 1)
-  if (moved === undefined || from === to) return root
-  stops.splice(to, 0, moved)
-  return withStops(root, stops)
-}
-
-/** The file pane `id` at `index` among the column's tabs, from inside it or from a pane of its own. */
-export function placeTab(root: PaneNode, id: string, index: number): PaneNode {
-  const column = fileColumnIn(root)
-  const tab = collectLeaves(root).find((each) => each.terminalId === id)
-  if (column === null || !isFileLeaf(tab)) return root
-  const inColumn = column.children.includes(tab)
-  const at = clamp(index, 0, column.children.length - (inColumn ? 1 : 0))
-  if (inColumn && column.children.indexOf(tab) === at) return root
-  const rest = inColumn ? root : closePane(root, id)
-  if (rest === null) return root
-  return mapColumn(rest, (current) => {
-    const tabs = current.children.filter((child) => child !== tab)
-    tabs.splice(at, 0, tab)
-    return withTabs(current, tabs, inColumn ? current.shown : id)
-  })
-}
-
-/** Where the pane holding `id` stands in the strip's order, the column as one; -1 when not in the tree. */
-export function paneStopIndex(root: PaneNode | null, id: string): number {
-  return root === null ? -1 : stopsOf(root).findIndex((stop) => hasTerminal(stop, id))
-}
-
-/** The panes as the strip lists them: leaves, and the file column whole. */
+/** The groups in reading order: leaves, and each tab group whole. */
 function stopsOf(node: PaneNode): PaneNode[] {
   return node.kind === 'leaf' || isFileColumn(node) ? [node] : node.children.flatMap(stopsOf)
-}
-
-/** `root` with its stops, in reading order, replaced by `stops`; the shape and every size stay. */
-function withStops(root: PaneNode, stops: readonly PaneNode[]): PaneNode {
-  let at = 0
-  const walk = (node: PaneNode): PaneNode =>
-    node.kind === 'leaf' || isFileColumn(node) ? (stops[at++] ?? node) : { ...node, children: node.children.map(walk) }
-  return walk(root)
 }
 
 /** `added` on `edge` of the pane holding `targetId`, a group moving as one. */

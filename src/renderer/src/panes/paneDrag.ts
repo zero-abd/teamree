@@ -1,25 +1,22 @@
-// Dragging a tab: along the strip to reorder, onto a pane's edge to move it there, or among the file
-// column's tabs. The drag lives here; `PaneDragLayer` draws where it would land.
+// Dragging a tab: along its strip to reorder, onto another group's strip to move it there, or onto a pane
+// to split it out at that edge or join that group's tabs. The drag lives here; `PaneDragLayer` draws where it lands.
 
 import { useEffect, useRef } from 'react'
 import { create } from 'zustand'
 import type { PaneNode } from '@shared/entities'
-import { fileColumnIn } from '@shared/filePane'
-import { leavesRoom, paneRects } from '@shared/paneRoom'
+import { leavesRoom } from '@shared/paneRoom'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { paneGrid } from '../terminal/paneMetrics'
-import { movePane, moveTabOut, placeTab, reorderPanes, shownRoot, type DropEdge } from './paneLayout'
+import { dropTab, moveTab } from './paneGroups'
+import type { DropEdge } from './paneLayout'
 
 export type Rect = { x: number; y: number; width: number; height: number }
 
-/** A strip entry (a pane, the file column as one) or one of the column's own tabs. */
-export type DragSource = { kind: 'stop' | 'tab'; id: string; label: string }
+/** The tab being dragged. */
+export type DragSource = { id: string; label: string }
 
-/** Indices are where the source ends up, not the gap it was dropped in. */
-export type DropTarget =
-  | { kind: 'strip'; index: number }
-  | { kind: 'pane'; id: string; edge: DropEdge }
-  | { kind: 'tabs'; index: number }
+/** `group` names any tab of the group; `index` is where the tab ends up, not the gap it was dropped in. */
+export type DropTarget = { kind: 'tabs'; group: string; index: number } | { kind: 'pane'; id: string; edge: DropEdge }
 
 /** `refused`: letting go here would leave a pane under its floor, so it will be refused. */
 export type Drop = { target: DropTarget; mark: Rect; line: boolean; refused: boolean }
@@ -69,18 +66,9 @@ export function gapAt(tabs: readonly Rect[], x: number): number {
 
 /** The tree once `source` is let go on `target`; the same tree when that changes nothing. */
 export function arranged(root: PaneNode, source: DragSource, target: DropTarget): PaneNode {
-  switch (target.kind) {
-    case 'strip':
-      return source.kind === 'stop' ? reorderPanes(root, source.id, target.index) : root
-    case 'pane':
-      return (source.kind === 'stop' ? movePane : moveTabOut)(root, source.id, target.id, target.edge)
-    case 'tabs':
-      // The column's own strip entry is the column, not one of its tabs.
-      return source.kind === 'stop' &&
-        fileColumnIn(root)?.children.some((tab) => tab.kind === 'leaf' && tab.terminalId === source.id)
-        ? root
-        : placeTab(root, source.id, target.index)
-  }
+  return target.kind === 'tabs'
+    ? moveTab(root, source.id, target.group, target.index)
+    : dropTab(root, source.id, target.id, target.edge)
 }
 
 /** Press handler for a draggable tab; a press that never travels stays a click. */
@@ -89,7 +77,7 @@ export function useTabDrag(): (event: React.PointerEvent<HTMLElement>, source: D
   useEffect(() => () => cleanup.current?.(), [])
 
   return (event, source) => {
-    if (event.button !== 0 || (event.target as Element).closest('.tab__close, .tab__rename, .column__close, input')) {
+    if (event.button !== 0 || (event.target as Element).closest('.tab__close, .tab__rename, input')) {
       return
     }
     cleanup.current?.()
@@ -164,38 +152,27 @@ function dropAt(source: DragSource, x: number, y: number): Drop | null {
     return { target, mark, line, refused: grid !== undefined && !leavesRoom(root, next, grid.area, grid.minPane) }
   }
 
-  const list = under?.closest<HTMLElement>('.tabs__list, .column__tabs')
+  const group = under?.closest<HTMLElement>('.group')
+  const member = group?.dataset.group
+  if (!group || member === undefined) return null
+  const list = under?.closest<HTMLElement>('.tabs')
   if (list) {
-    const strip = list.classList.contains('tabs__list')
-    const tabs = [...list.querySelectorAll<HTMLElement>(strip ? ':scope > .tab[data-pane-id]' : '.column__tab')]
+    const tabs = [...list.querySelectorAll<HTMLElement>('.tab[data-pane-id]')]
     const boxes = tabs.map((tab) => rectOf(tab))
     const gap = gapAt(boxes, x)
     const from = tabs.findIndex((tab) => tab.dataset.paneId === source.id)
     const index = from !== -1 && gap > from ? gap - 1 : gap
-    const target: DropTarget = { kind: strip ? 'strip' : 'tabs', index }
     const bounds = rectOf(list)
-    const edge = gap === 0 ? boxes[0]?.x : (boxes[gap - 1]?.x ?? 0) + (boxes[gap - 1]?.width ?? 0)
-    const found =
-      edge === undefined
-        ? null
-        : drop(target, { x: edge - LINE_PX / 2, y: bounds.y, width: LINE_PX, height: bounds.height }, true)
-    if (found !== null || strip) return found
+    const last = boxes[gap - 1]
+    const edge = gap === 0 ? (boxes[0]?.x ?? bounds.x) : (last?.x ?? 0) + (last?.width ?? 0)
+    const mark = { x: edge - LINE_PX / 2, y: bounds.y, width: LINE_PX, height: bounds.height }
+    return drop({ kind: 'tabs', group: member, index }, mark, true)
   }
 
-  const panes = under?.closest<HTMLElement>('.workspace__panes')?.firstElementChild
-  if (!(panes instanceof HTMLElement)) return null
-  const area = rectOf(panes)
-  const shown = shownRoot(root, state.expandedTerminalId)
-  const hit = paneRects(shown, area).find(
-    (rect) =>
-      x >= area.x + rect.x &&
-      x < area.x + rect.x + rect.width &&
-      y >= area.y + rect.y &&
-      y < area.y + rect.y + rect.height
-  )
-  if (!hit) return null
-  const pane = { x: area.x + hit.x, y: area.y + hit.y, width: hit.width, height: hit.height }
-  const target: DropTarget = { kind: 'pane', id: hit.id, edge: dropEdge(pane, x, y) }
+  const body = group.querySelector<HTMLElement>(':scope > .group__body')
+  if (!body) return null
+  const pane = rectOf(body)
+  const target: DropTarget = { kind: 'pane', id: member, edge: dropEdge(pane, x, y) }
   return drop(target, edgeArea(pane, target.edge), false)
 }
 

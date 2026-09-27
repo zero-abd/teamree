@@ -25,7 +25,7 @@ describe('dropEdge', () => {
 })
 
 describe('edgeArea', () => {
-  it('shades the half the pane would take, or all of it for a swap', () => {
+  it('shades the half the pane would take, or all of it to join its tabs', () => {
     expect(edgeArea(box, 'left')).toEqual({ x: 100, y: 50, width: 150, height: 600 })
     expect(edgeArea(box, 'right')).toEqual({ x: 250, y: 50, width: 150, height: 600 })
     expect(edgeArea(box, 'top')).toEqual({ x: 100, y: 50, width: 300, height: 300 })
@@ -52,24 +52,27 @@ describe('arranged', () => {
   )
   const root: PaneNode = { kind: 'split', direction: 'row', sizes: [0.5, 0.5], children: [leaf('t'), files] }
 
-  it('reorders the strip, moves a pane to an edge, and takes a tab out', () => {
-    const stop = { kind: 'stop', id: 't', label: 't' } as const
-    expect(collectTerminalIds(arranged(root, stop, { kind: 'strip', index: 1 }))).toEqual(['f1', 'f2', 't'])
-    expect(collectTerminalIds(arranged(root, stop, { kind: 'pane', id: 'f1', edge: 'right' }))).toEqual([
+  it('reorders a group, moves a tab into another, out to an edge, and moves a lone pane whole', () => {
+    const tab = { id: 'f2', label: 'b.ts' }
+    expect(collectTerminalIds(arranged(root, tab, { kind: 'tabs', group: 'f1', index: 0 }))).toEqual(['t', 'f2', 'f1'])
+    expect(collectTerminalIds(arranged(root, tab, { kind: 'tabs', group: 't', index: 0 }))).toEqual(['f2', 't', 'f1'])
+    expect(collectTerminalIds(arranged(root, tab, { kind: 'pane', id: 't', edge: 'left' }))).toEqual(['f2', 't', 'f1'])
+    const lone = { id: 't', label: 't' }
+    expect(collectTerminalIds(arranged(root, lone, { kind: 'pane', id: 'f1', edge: 'right' }))).toEqual([
       'f1',
       'f2',
       't'
     ])
-    const tab = { kind: 'tab', id: 'f2', label: 'b.ts' } as const
-    expect(collectTerminalIds(arranged(root, tab, { kind: 'pane', id: 't', edge: 'left' }))).toEqual(['f2', 't', 'f1'])
-    expect(collectTerminalIds(arranged(root, tab, { kind: 'tabs', index: 0 }))).toEqual(['t', 'f2', 'f1'])
+    expect(collectTerminalIds(arranged(root, lone, { kind: 'pane', id: 'f1', edge: 'center' }))).toEqual([
+      'f1',
+      'f2',
+      't'
+    ])
   })
 
   it('gives the same tree back where the drop means nothing', () => {
-    const tab = { kind: 'tab', id: 'f2', label: 'b.ts' } as const
-    expect(arranged(root, tab, { kind: 'strip', index: 0 })).toBe(root)
-    expect(arranged(root, { kind: 'stop', id: 't', label: 't' }, { kind: 'tabs', index: 0 })).toBe(root)
-    // The column's strip entry names its shown tab, and is the column, not that tab.
-    expect(arranged(root, { kind: 'stop', id: 'f2', label: 'b.ts' }, { kind: 'tabs', index: 0 })).toBe(root)
+    expect(arranged(root, { id: 'f1', label: 'a.ts' }, { kind: 'tabs', group: 'f2', index: 0 })).toBe(root)
+    expect(arranged(root, { id: 'f2', label: 'b.ts' }, { kind: 'pane', id: 'f1', edge: 'center' })).toBe(root)
+    expect(arranged(root, { id: 't', label: 't' }, { kind: 'pane', id: 't', edge: 'left' })).toBe(root)
   })
 })

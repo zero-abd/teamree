@@ -48,7 +48,8 @@
    from the same constant that places the buttons; see
    src/shared/windowChrome.ts. */
 .shell--mac .sidebar__brand,
-.shell--mac.shell--collapsed .tabs {
+.shell--mac.shell--collapsed .tabs:not(.group__strip),
+.shell--mac.shell--collapsed .group__strip--lead {
   padding-left: var(--titlebar-inset, 84px);
 }
 

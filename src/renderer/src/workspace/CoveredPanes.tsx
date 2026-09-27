@@ -6,6 +6,7 @@ import { paneRects } from '@shared/paneRoom'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { contentBox } from '../terminal/paneMetrics'
 import type { WorktreeNameSource } from '../sidebar/worktreeDisplay'
+import { paneStops } from '../panes/paneLayout'
 import { paneTabs } from './paneTabs'
 import { coveredPanes } from './roomForPanes'
 
@@ -44,7 +45,10 @@ export function CoveredPanes({
       const left = gridRect.left - bodyRect.left + body.scrollLeft + Number.parseFloat(style.paddingLeft)
       const top = gridRect.top - bodyRect.top + body.scrollTop + Number.parseFloat(style.paddingTop)
       const edge = body.clientWidth - panel.offsetWidth - left
-      const panes = coveredPanes(paneRects(root, box), edge).map((rect) => ({
+      // One strip per group, named by the tab it shows.
+      const shown = new Set(paneStops(root))
+      const rects = paneRects(root, box).filter((rect) => shown.has(rect.id))
+      const panes = coveredPanes(rects, edge).map((rect) => ({
         id: rect.id,
         top: top + rect.y,
         height: rect.height

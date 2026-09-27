@@ -7,7 +7,7 @@ import { hasResumable } from '../agents/harnesses'
 import { Dashboard } from '../dashboard/Dashboard'
 import { HelpView } from '../help/HelpView'
 import type { PlatformModifier } from '../keyboard/platformModifier'
-import { isFileColumn } from '@shared/filePane'
+import { fileColumnIn, isFileColumn } from '@shared/filePane'
 import { shownRoot, withoutColumn } from '../panes/paneLayout'
 import { PaneDragLayer } from '../panes/PaneDragLayer'
 import { PaneTree } from '../panes/PaneTree'
@@ -236,7 +236,7 @@ function WorkspaceView({
               searchToken={paneSearch?.token ?? 0}
               onCloseSearch={closePaneSearch}
               minPane={minPane}
-              foldedColumn={foldedColumn}
+              foldedColumn={foldedColumn ? fileColumnIn(paneRoot) : null}
             />
           ) : (
             <WorktreeStart worktree={worktree} modifier={modifier} />

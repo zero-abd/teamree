@@ -2,12 +2,13 @@
 // greys items with the same predicate the dispatcher refuses on, so the two cannot disagree.
 // The modal guards live here too: the menu bar is reachable while a modal is up.
 
-import type { ClosedPane, ConsentRequest, Layout, WorktreeStatus } from '@shared/entities'
+import type { ClosedPane, ConsentRequest, Layout, PaneNode, WorktreeStatus } from '@shared/entities'
 import type { RightPanelTab } from '../workspace/rightPanel/rightPanelState'
 import { fileColumnIn, fileLeavesIn, fileViewerFor, isFilePaneId, isWorktreeFileLeaf } from '@shared/filePane'
 import { firstQuestion } from '../dialogs/modalLayer'
 import { stepNeedingYou, type NeedingState } from '../dashboard/needingYou'
-import { collectTerminalIds, paneStops } from '../panes/paneLayout'
+import { groupOf, groupTabIds, moveTabBy, splitTabOut, stripOrder } from '../panes/paneGroups'
+import { collectTerminalIds } from '../panes/paneLayout'
 import { focusedTreeProject } from '../sidebar/treeKeys'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
 import { useSidebarView } from '../state/sidebarViewStore'
@@ -73,7 +74,8 @@ export type CommandActions = {
   closeTerminal: (terminalId: string) => Promise<void>
   reopenClosedPane: () => Promise<void>
   saveFiles: (paneIds: readonly string[]) => Promise<boolean>
-  createTerminal: (worktreeId: string) => Promise<void>
+  createTerminal: (worktreeId: string, tabOf?: string) => Promise<void>
+  arrangePanes: (arrange: (root: PaneNode) => PaneNode, focus: string) => void
   newMarkdown: (worktreeId: string) => void
   closeWatchedPane: (id: string) => void
   focusNextPane: () => void
@@ -149,16 +151,33 @@ export function focusedCodeFile(state: CommandState): string | null {
   return leaf !== undefined && isWorktreeFileLeaf(leaf) && fileViewerFor(leaf.path) === 'code' ? leaf.path : null
 }
 
-/** The strip's tabs, every kind, in the order it draws them (`paneTabs`); the file column is one. */
+/** Every tab, group by group, in the order the strips draw them. */
 function stripTabs(state: CommandState): string[] {
-  return paneStops(activeLayout(state)?.root ?? null)
+  return stripOrder(activeLayout(state)?.root ?? null)
 }
 
-/** The file column's tabs while one of them has the focus, else none. */
-function focusedColumnTabs(state: CommandState): string[] {
+/** The focused pane's group's tabs, else none. */
+function focusedGroupTabs(state: CommandState): string[] {
   const focused = ownFocusedPane(state)
-  const tabs = fileLeavesIn(fileColumnIn(activeLayout(state)?.root ?? null)).map((leaf) => leaf.terminalId)
-  return focused !== null && tabs.includes(focused) ? tabs : []
+  return focused === null ? [] : groupTabIds(groupOf(activeLayout(state)?.root ?? null, focused))
+}
+
+/** The tree the focused tab's move would give, or null when it would change nothing. */
+function movedTab(state: CommandState, command: TabMove): PaneNode | null {
+  const root = activeLayout(state)?.root ?? null
+  const focused = ownFocusedPane(state)
+  if (root === null || focused === null) return null
+  const moved = TAB_MOVES[command](root, focused)
+  return moved === root ? null : moved
+}
+
+type TabMove = 'move-tab-next' | 'move-tab-previous' | 'split-tab-right' | 'split-tab-down'
+
+const TAB_MOVES: Record<TabMove, (root: PaneNode, id: string) => PaneNode> = {
+  'move-tab-next': (root, id) => moveTabBy(root, id, 1),
+  'move-tab-previous': (root, id) => moveTabBy(root, id, -1),
+  'split-tab-right': (root, id) => splitTabOut(root, id, 'row'),
+  'split-tab-down': (root, id) => splitTabOut(root, id, 'column')
 }
 
 /** The tab the strip marks; none while a teammate's pane has the focus. */
@@ -290,7 +309,12 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
       return unless(stripTabs(state).length >= 2, 'one tab')
     case 'next-file-tab':
     case 'previous-file-tab':
-      return unless(focusedColumnTabs(state).length >= 2, 'no other file tab')
+      return unless(focusedGroupTabs(state).length >= 2, 'no other tab')
+    case 'move-tab-next':
+    case 'move-tab-previous':
+    case 'split-tab-right':
+    case 'split-tab-down':
+      return unless(movedTab(state, command) !== null, 'nowhere to move')
     case 'expand-pane':
       // A pane of your own, as `splitFocusedPane` requires; a lone pane can still be maximised.
       return unless(ownFocusedPane(state) !== null, 'no pane focused')
@@ -386,7 +410,8 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       void store.saveFiles(Object.keys(store.editedFiles ?? {}))
       break
     case 'new-terminal':
-      if (store.activeWorktreeId) void store.createTerminal(store.activeWorktreeId)
+      // A tab of the focused pane's group, as its `+` opens one.
+      if (store.activeWorktreeId) void store.createTerminal(store.activeWorktreeId, ownFocusedPane(store) ?? undefined)
       break
     case 'new-markdown':
       if (store.activeWorktreeId) store.newMarkdown(store.activeWorktreeId)
@@ -442,8 +467,16 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
     }
     case 'next-file-tab':
     case 'previous-file-tab': {
-      const next = tabAfter(focusedColumnTabs(store), ownFocusedPane(store), command === 'next-file-tab' ? 1 : -1)
+      const next = tabAfter(focusedGroupTabs(store), ownFocusedPane(store), command === 'next-file-tab' ? 1 : -1)
       if (next) store.showPane(next)
+      break
+    }
+    case 'move-tab-next':
+    case 'move-tab-previous':
+    case 'split-tab-right':
+    case 'split-tab-down': {
+      const focused = ownFocusedPane(store)
+      if (focused) store.arrangePanes((root) => TAB_MOVES[command](root, focused), focused)
       break
     }
     case 'expand-pane':

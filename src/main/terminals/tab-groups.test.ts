@@ -35,7 +35,10 @@ describePty('a tab opened in a group', () => {
       const layout = await service.handlers['layout.get']({ worktreeId: WORKTREE })
       expect(layout.root).toMatchObject({
         kind: 'split',
-        children: [{ tabs: true, shown: tab.id, children: [{ terminalId: a.id }, { terminalId: tab.id }] }, { terminalId: b.id }]
+        children: [
+          { tabs: true, shown: tab.id, children: [{ terminalId: a.id }, { terminalId: tab.id }] },
+          { terminalId: b.id }
+        ]
       })
       expect(layout.focusedTerminalId).toBe(tab.id)
       const sizeOf = async (id: string) =>

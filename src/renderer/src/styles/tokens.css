@@ -106,6 +106,8 @@
 
   /* One height for a select and the fields beside it, in Settings and in dialogs. */
   --control-h: 28px;
+  /* A pane's strip of tabs below the top edge, where the title bar's height would be heavy. */
+  --group-strip-h: 32px;
 
   /* Two rings, not one: a gap of the surface the control sits on, then the
      accent. A single accent ring drawn tight against a control's own border is

@@ -30,6 +30,10 @@ export type WorkspaceCommand =
   | 'select-previous-pane'
   | 'next-file-tab'
   | 'previous-file-tab'
+  | 'move-tab-next'
+  | 'move-tab-previous'
+  | 'split-tab-right'
+  | 'split-tab-down'
   | 'expand-pane'
   | 'previous-worktree'
   | 'next-worktree'
@@ -99,9 +103,14 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // Control on a Mac too, as in Safari and Terminal; the strip's tabs only, where ⌘] also visits teammates' panes.
   { command: 'select-next-pane', chord: { key: 'Tab', ctrl: true }, title: 'Select Next Pane' },
   { command: 'select-previous-pane', chord: { key: 'Tab', ctrl: true, shift: true }, title: 'Select Previous Pane' },
-  // Within the file column, as editors page their tabs.
-  { command: 'next-file-tab', chord: { key: 'PageDown', ctrl: true }, title: 'Next File Tab' },
-  { command: 'previous-file-tab', chord: { key: 'PageUp', ctrl: true }, title: 'Previous File Tab' },
+  // Within the focused pane's tabs, as editors page theirs.
+  { command: 'next-file-tab', chord: { key: 'PageDown', ctrl: true }, title: 'Next Tab' },
+  { command: 'previous-file-tab', chord: { key: 'PageUp', ctrl: true }, title: 'Previous Tab' },
+  // ⌃⌘ and arrows, as ⌃⌘↑/↓ walk what needs you: the arrow says where the tab goes.
+  { command: 'move-tab-next', chord: { key: 'ArrowRight', control: true }, title: 'Move Tab to Next Pane' },
+  { command: 'move-tab-previous', chord: { key: 'ArrowLeft', control: true }, title: 'Move Tab to Previous Pane' },
+  { command: 'split-tab-right', chord: { key: 'ArrowRight', control: true, shift: true }, title: 'Split Tab Right' },
+  { command: 'split-tab-down', chord: { key: 'ArrowDown', control: true, shift: true }, title: 'Split Tab Down' },
   // Shifted, since ⌘↩ is a send key in many pane programs; pressed again it restores. American
   // spelling to match Electron's own `minimize` role in the same menu.
   { command: 'expand-pane', chord: { key: 'Enter', shift: true }, title: 'Maximize Pane' },

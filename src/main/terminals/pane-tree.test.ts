@@ -515,19 +515,37 @@ describe('tab groups', () => {
   })
 
   it('are never nested: a group holding a split is read as the split', () => {
-    const nested = group([leafPane('a'), { kind: 'split', direction: 'row', sizes: [1, 1], children: [leafPane('b'), leafPane('c')] }])
+    const nested = group([
+      leafPane('a'),
+      { kind: 'split', direction: 'row', sizes: [1, 1], children: [leafPane('b'), leafPane('c')] }
+    ])
     expect(parsePaneNode(nested)).not.toHaveProperty('tabs')
   })
 
   it('of one terminal are that pane', () => {
     expect(normalisePane(group([leafPane('a')]))).toEqual(leafPane('a'))
-    const root: PaneNode = { kind: 'split', direction: 'row', sizes: [0.5, 0.5], children: [leafPane('x'), group([leafPane('a'), leafPane('b')], 'a')] }
-    expect(removePane(root, 'a')).toEqual({ kind: 'split', direction: 'row', sizes: [0.5, 0.5], children: [leafPane('x'), leafPane('b')] })
+    const root: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [leafPane('x'), group([leafPane('a'), leafPane('b')], 'a')]
+    }
+    expect(removePane(root, 'a')).toEqual({
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [leafPane('x'), leafPane('b')]
+    })
   })
 
   it('take a new pane as a tab after the shown one, a lone pane becoming a group', () => {
     expect(joinGroup(leafPane('a'), 'a', 'n')).toEqual(group([leafPane('a'), leafPane('n')], 'n'))
-    const root: PaneNode = { kind: 'split', direction: 'row', sizes: [0.3, 0.7], children: [leafPane('x'), group([leafPane('a'), leafPane('b'), leafPane('c')], 'b')] }
+    const root: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.3, 0.7],
+      children: [leafPane('x'), group([leafPane('a'), leafPane('b'), leafPane('c')], 'b')]
+    }
     expect(joinGroup(root, 'c', 'n')).toEqual({
       ...root,
       children: [leafPane('x'), group([leafPane('a'), leafPane('b'), leafPane('n'), leafPane('c')], 'n')]
@@ -536,7 +554,12 @@ describe('tab groups', () => {
   })
 
   it('get a closed tab back among the tabs it left', () => {
-    const root: PaneNode = { kind: 'split', direction: 'row', sizes: [0.5, 0.5], children: [leafPane('x'), group([leafPane('a'), leafPane('b')], 'b')] }
+    const root: PaneNode = {
+      kind: 'split',
+      direction: 'row',
+      sizes: [0.5, 0.5],
+      children: [leafPane('x'), group([leafPane('a'), leafPane('b')], 'b')]
+    }
     const place = placeOf(root, 'b')
     const closed = removePane(root, 'b')
     expect(insertBeside(closed, place!, 'b')).toEqual({

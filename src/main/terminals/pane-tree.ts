@@ -281,12 +281,13 @@ function parseNode(value: unknown, depth: number): PaneNode | null {
 export function joinGroup(root: PaneNode | null, member: string, id: string): PaneNode {
   if (!containsTerminal(root, member)) return appendPane(root, id)
   const join = (node: PaneNode): PaneNode => {
-    const group = node.kind === 'leaf' ? node.terminalId === member : isFileColumn(node) && containsTerminal(node, member)
+    const group =
+      node.kind === 'leaf' ? node.terminalId === member : isFileColumn(node) && containsTerminal(node, member)
     if (group) {
       const tabs = node.kind === 'leaf' ? [node] : node.children
       const shown = node.kind === 'leaf' ? member : (node.shown ?? terminalIdsIn(node)[0])
       const at = tabs.findIndex((tab) => tab.kind === 'leaf' && tab.terminalId === shown) + 1
-      const base = node.kind === 'leaf' ? GROUP : node
+      const base: FileColumn = node.kind === 'leaf' ? GROUP : { ...node, tabs: true }
       return withTabs(base, [...tabs.slice(0, at), leafPane(id), ...tabs.slice(at)], id)
     }
     return node.kind === 'leaf' ? node : { ...node, children: node.children.map(join) }
@@ -302,7 +303,11 @@ export function shownWith(root: PaneNode | null, member: string): string | undef
   if (root.kind === 'leaf') return root.terminalId === member ? member : undefined
   if (isFileColumn(root)) {
     const ids = terminalIdsIn(root)
-    return ids.includes(member) ? (root.shown !== undefined && ids.includes(root.shown) ? root.shown : ids[0]) : undefined
+    return ids.includes(member)
+      ? root.shown !== undefined && ids.includes(root.shown)
+        ? root.shown
+        : ids[0]
+      : undefined
   }
   for (const child of root.children) {
     const found = shownWith(child, member)

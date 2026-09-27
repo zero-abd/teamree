@@ -32,7 +32,6 @@ const { FileView } = await import('./FileView')
 const { editorLines } = await import('./editorLines')
 const { paneTabs } = await import('../workspace/paneTabs')
 const { PaneTree } = await import('../panes/PaneTree')
-const { TerminalTabs } = await import('../workspace/TerminalTabs')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -196,11 +195,36 @@ describe('file tabs in the store', () => {
 })
 
 describe('the strip over a file column', () => {
+  const MAC = resolvePlatformModifier('darwin')
+  /** The open layout's tree, each group under its own strip. */
+  function Tree(): React.JSX.Element {
+    const state = useWorkspaceStore()
+    const shown = state.layouts.w1!
+    return (
+      <PaneTree
+        node={shown.root!}
+        path={[]}
+        worktreeId="w1"
+        terminals={state.terminals}
+        focusedTerminalId={shown.focusedTerminalId}
+        onFocus={state.focusPane}
+        onClose={() => {}}
+        onRelaunch={() => {}}
+        onResize={() => {}}
+        isAppChord={() => false}
+        modifier={MAC}
+        searchTerminalId={null}
+        searchToken={0}
+        onCloseSearch={() => {}}
+      />
+    )
+  }
+
   it('names a column of one file on its tab, which carries the dot, the close and the pin', () => {
     useWorkspaceStore.getState().openFilePane('w1', 'src/app.ts', 'preview')
     const app = fileLeavesIn(layout().root)[0]!.terminalId
     useWorkspaceStore.setState({ unsavedFiles: { [app]: true } })
-    render(<TerminalTabs modifier={resolvePlatformModifier('darwin')} />)
+    render(<Tree />)
     const tab = screen.getByRole('tab', { name: 'app.ts' })
     expect(tab.textContent).toBe('app.ts')
     expect(within(tab).getByTestId('unsaved')).toBeTruthy()
@@ -210,17 +234,21 @@ describe('the strip over a file column', () => {
     expect(fileColumnIn(layout().root)?.preview).toBeUndefined()
   })
 
-  it('shows the column as one tab: Files and a count, a click focusing the shown file', () => {
+  it('gives each file its own tab on the column’s strip, a click focusing it', () => {
     for (const path of ['a.ts', 'src/app.ts', 'b.ts', 'c.ts']) useWorkspaceStore.getState().openFilePane('w1', path)
     const app = fileLeavesIn(layout().root)[1]!.terminalId
-    useWorkspaceStore.getState().focusPane(app)
     useWorkspaceStore.getState().focusPane('t1')
-    render(<TerminalTabs modifier={resolvePlatformModifier('darwin')} />)
-    const tabs = within(screen.getByRole('tablist', { name: 'Terminals in this worktree' })).getAllByRole('tab')
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['terminal', 'Files4'])
-    fireEvent.click(tabs[1]!)
+    render(<Tree />)
+    const strips = screen.getAllByRole('tablist')
+    expect(
+      strips.map((strip) =>
+        within(strip)
+          .getAllByRole('tab')
+          .map((tab) => tab.textContent)
+      )
+    ).toEqual([['terminal'], ['a.ts', 'app.ts', 'b.ts', 'c.ts']])
+    fireEvent.click(within(strips[1]!).getByRole('tab', { name: 'app.ts' }))
     expect(layout().focusedTerminalId).toBe(app)
-    expect(screen.getByRole('button', { name: 'Close 4 files' })).toBeTruthy()
   })
 })
 
@@ -576,25 +604,22 @@ describe('one header for code and markdown', () => {
       loadEditors: async () => {}
     })
     render(
-      <>
-        <TerminalTabs modifier={MAC} />
-        <PaneTree
-          node={root}
-          path={[]}
-          worktreeId="w1"
-          terminals={{}}
-          focusedTerminalId="file:code"
-          onFocus={() => {}}
-          onClose={() => {}}
-          onRelaunch={() => {}}
-          onResize={() => {}}
-          isAppChord={() => false}
-          modifier={MAC}
-          searchTerminalId={null}
-          searchToken={0}
-          onCloseSearch={() => {}}
-        />
-      </>
+      <PaneTree
+        node={root}
+        path={[]}
+        worktreeId="w1"
+        terminals={{}}
+        focusedTerminalId="file:code"
+        onFocus={() => {}}
+        onClose={() => {}}
+        onRelaunch={() => {}}
+        onResize={() => {}}
+        isAppChord={() => false}
+        modifier={MAC}
+        searchTerminalId={null}
+        searchToken={0}
+        onCloseSearch={() => {}}
+      />
     )
   })
 
@@ -606,22 +631,15 @@ describe('one header for code and markdown', () => {
       .filter((item) => item.parentElement === screen.getByRole('menu'))
       .map((item) => item.querySelector('.row-menu__label')?.textContent ?? '')
 
-  it('lays both out alike: path, the dot only when dirty, the view, ⋯, ×; a page adds Share and Source', async () => {
+  it('lays both out alike: path, the view, ⋯; a page adds Share and Source; its tab has the dot and ×', async () => {
     await screen.findByText('a', { selector: '.ProseMirror p' })
-    expect(parts('app.ts')).toEqual(['src/|src/app.ts', 'Code', 'Diff', 'More for app.ts', 'Close pane app.ts'])
-    expect(parts('guide.md')).toEqual([
-      'docs/|docs/guide.md',
-      'Share',
-      'Page',
-      'Source',
-      'Diff',
-      'More for guide.md',
-      'Close pane guide.md'
-    ])
+    expect(parts('app.ts')).toEqual(['src/|src/app.ts', 'Code', 'Diff', 'More for app.ts'])
+    expect(parts('guide.md')).toEqual(['docs/|docs/guide.md', 'Share', 'Page', 'Source', 'Diff', 'More for guide.md'])
 
     act(() => useWorkspaceStore.setState({ unsavedFiles: { 'file:code': true, 'file:md': true } }))
-    expect(parts('app.ts').slice(0, 2)).toEqual(['src/|src/app.ts', 'dot'])
-    expect(parts('guide.md').slice(0, 2)).toEqual(['docs/|docs/guide.md', 'dot'])
+    expect(parts('app.ts').slice(0, 2)).toEqual(['src/|src/app.ts', 'Code'])
+    expect(within(screen.getByRole('tab', { name: 'app.ts' })).getByTestId('unsaved')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close pane guide.md' })).toBeTruthy()
   })
 
   it('draws every toggle as a segment of one group, the layouts only while the diff is open', async () => {
@@ -638,8 +656,7 @@ describe('one header for code and markdown', () => {
       'Side by side',
       'Wrap',
       'Hide Whitespace',
-      'More for app.ts',
-      'Close pane app.ts'
+      'More for app.ts'
     ])
     const toggles = [...bar.querySelectorAll('button[aria-pressed]')]
     expect(toggles.map((button) => button.getAttribute('aria-label') ?? button.textContent)).toEqual([
@@ -654,10 +671,10 @@ describe('one header for code and markdown', () => {
     expect(bar.querySelector('.file__tool--on')).toBeNull()
   })
 
-  it('draws the tab’s dirty dot as the header draws it', () => {
+  it('draws the dirty dot once, on the tab over the pane', () => {
     act(() => useWorkspaceStore.setState({ unsavedFiles: { 'file:md': true } }))
-    const tabDot = within(screen.getByRole('tab', { name: 'guide.md' })).getByTestId('unsaved')
-    expect(header('guide.md').querySelector('.file__unsaved')?.outerHTML).toBe(tabDot.outerHTML)
+    expect(within(screen.getByRole('tab', { name: 'guide.md' })).getByTestId('unsaved')).toBeTruthy()
+    expect(header('guide.md').querySelector('.file__unsaved')).toBeNull()
   })
 
   it('opens the right-click menu from ⋯, Open as artifact in it for a page', async () => {
@@ -746,7 +763,7 @@ describe('a file in the column', () => {
       />
     )
 
-  it('names a file at the root only on the window tab', async () => {
+  it('names a file at the root only on its tab', async () => {
     call.mockImplementation(async (method: string, params: { path: string }) => {
       if (method === 'file.read') return { ...text('a\n'), path: params.path }
       return undefined
@@ -762,7 +779,7 @@ describe('a file in the column', () => {
     expect(bar.querySelector('.file__path')).toBeNull()
   })
 
-  it('leaves the dot and the close to the window tab, and draws no tab row for one file', async () => {
+  it('leaves the dot and the close to its tab, on the strip over it', async () => {
     call.mockImplementation(async (method: string, params: { path: string }) => {
       if (method === 'file.read') return { ...text('a\n'), path: params.path }
       if (method === 'worktree.changes')
@@ -778,8 +795,10 @@ describe('a file in the column', () => {
     drawColumn(root)
     const bar = screen.getByRole('region', { name: 'app.ts' }).querySelector('header')!
     expect(barParts(bar)).toEqual(['src/|src/app.ts', 'Code', 'Diff', 'More for app.ts'])
-    expect(screen.queryByRole('tablist', { name: 'Open files' })).toBeNull()
     expect(within(bar).queryByTestId('unsaved')).toBeNull()
-    expect(screen.queryAllByRole('button', { name: /^Close/ })).toHaveLength(0)
+    expect(within(bar).queryAllByRole('button', { name: /^Close/ })).toHaveLength(0)
+    const tab = screen.getByRole('tab', { name: 'app.ts' })
+    expect(within(tab).getByTestId('unsaved')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: /^Close/ })).toHaveLength(1)
   })
 })

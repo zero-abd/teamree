@@ -360,9 +360,9 @@ describe('a worktree with no panes in it', () => {
   it('starts the agent chosen, or a terminal, in this worktree', () => {
     openEmpty()
     fireEvent.click(screen.getByRole('button', { name: 'Codex' }))
-    expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex')
+    expect(startAgent).toHaveBeenCalledExactlyOnceWith('codex', undefined)
     fireEvent.click(screen.getByRole('button', { name: 'New Terminal' }))
-    expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1')
+    expect(createTerminal).toHaveBeenCalledExactlyOnceWith('w1', undefined)
   })
 
   // An agent closed here whose conversation can be picked up: resuming it is what the page is for now.
