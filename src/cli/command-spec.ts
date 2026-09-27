@@ -24,6 +24,10 @@ export type CommandContext = {
   env: NodeJS.ProcessEnv
   /** Where the endpoint came from; `status` reports it. */
   endpointSource: string
+  /** The profile's user data directory. */
+  profile: string
+  /** False only for an `appOptional` command run with no app, whose `client` refuses every call. */
+  connected: boolean
   /** Everything on stdin, read once and bounded (`stdin.ts`); empty when nothing was piped. */
   stdin: () => Promise<string>
   /**
@@ -48,6 +52,8 @@ export type CommandSpec = {
   silent?: boolean
   /** Answers without the app: no runtime is looked for, and `client` refuses every call. */
   offline?: boolean
+  /** Uses the app when one is running and works without it otherwise; see `CommandContext.connected`. */
+  appOptional?: boolean
   run: (context: CommandContext) => Promise<CommandOutput>
 }
 

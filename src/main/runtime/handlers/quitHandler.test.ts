@@ -44,6 +44,12 @@ describe('app.quit', () => {
     expect(quits).toBe(1)
   })
 
+  it('says how many panes the quit leaves running in the pane host', async () => {
+    registerQuitHandler(registry, { requestQuit: () => {}, kept: () => 3, defer: () => {} })
+    const response = await createDispatcher(registry)({ id: 'q5', method: 'app.quit', params: {} }, call)
+    expect(response).toMatchObject({ ok: true, result: { quitting: true, kept: 3 } })
+  })
+
   it('refuses when there is no app behind the runtime', async () => {
     registerQuitHandler(registry)
     const response = (await createDispatcher(registry)(

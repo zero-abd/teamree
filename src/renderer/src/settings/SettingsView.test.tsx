@@ -887,6 +887,60 @@ describe('the shell and line height of new panes', () => {
   })
 })
 
+describe('Keep Agents Running', () => {
+  afterEach(() => {
+    runtimeCall.answer = () => new Promise(() => {})
+  })
+
+  it('says which open panes still end with the app, moves idle shells, and stops the host', async () => {
+    const asked: string[] = []
+    let status = { running: true, pid: 4540, panes: 1, inProcess: 3, shells: 2 }
+    runtimeCall.answer = (method) => {
+      if (method === 'settings.get') return Promise.resolve({ ...DEFAULT_RUNTIME_SETTINGS, keepPanesRunning: true })
+      if (method === 'paneHost.status') return Promise.resolve(status)
+      if (method === 'paneHost.keepShells') {
+        asked.push(method)
+        status = { ...status, panes: 3, inProcess: 1, shells: 0 }
+        return Promise.resolve({ moved: ['t1', 't2'] })
+      }
+      if (method === 'paneHost.stop') {
+        asked.push(method)
+        status = { running: false, panes: 0, inProcess: 1, shells: 0 } as typeof status
+        return Promise.resolve({ stopped: true, pid: 4540, panes: 3 })
+      }
+      return new Promise(() => {})
+    }
+    renderAt('panes')
+    expect(await screen.findByText('3 open panes end when teamree quits; new panes keep running')).toBeTruthy()
+    expect(screen.getByText('Host running · 1 pane')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep 2 Shells Running' }))
+    expect(await screen.findByText('Host running · 3 panes')).toBeTruthy()
+    expect(screen.getByText('1 open pane ends when teamree quits; new panes keep running')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Shells? Running/ })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop Host' }))
+    await vi.waitFor(() => expect(screen.queryByText(/Host running/)).toBeNull())
+    expect(asked).toEqual(['paneHost.keepShells', 'paneHost.stop'])
+  })
+
+  it('says nothing under the switch while it is off and no host runs', async () => {
+    let read = false
+    runtimeCall.answer = (method) => {
+      if (method === 'settings.get') return Promise.resolve({ ...DEFAULT_RUNTIME_SETTINGS })
+      if (method === 'paneHost.status') {
+        read = true
+        return Promise.resolve({ running: false, panes: 0, inProcess: 3, shells: 0 })
+      }
+      return new Promise(() => {})
+    }
+    renderAt('panes')
+    await vi.waitFor(() => expect(read).toBe(true))
+    expect(screen.queryByText(/open panes? end/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Stop Host' })).toBeNull()
+  })
+})
+
 describe('notifications', () => {
   it('sets how, and which events notify', () => {
     renderAt('notices')

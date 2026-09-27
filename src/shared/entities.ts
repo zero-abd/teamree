@@ -786,6 +786,9 @@ export type SystemResources = {
   app: AppResources
 }
 
+/** The pane host (Keep Agents Running): `panes` live in it; `inProcess` end with the app; `shells` could move. */
+export type PaneHostStatus = { running: boolean; pid?: number; panes: number; inProcess: number; shells: number }
+
 /** What `system.kill` did: the signal went to one process, or to its whole group. */
 export type ProcessKill = {
   signalled: true

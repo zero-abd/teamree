@@ -43,6 +43,7 @@ import { PageFrame } from '../workspace/PageFrame'
 import { activeChoice, BUILT_IN_THEMES, themeById } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from './AppearanceSettings'
 import { useAddonStatus } from './addonStatus'
+import { usePaneHostStatus } from './paneHostStatus'
 import { useRuntimeSettings, type RuntimeSettingsState } from './runtimeSettings'
 import { useSettingsFind } from './settingsFind'
 import { useUsageStore } from '../state/usageStore'
@@ -53,6 +54,7 @@ import {
   describedOnly,
   firstMatch,
   labelMatches,
+  paneHostLines,
   relayPanel,
   rowMatches,
   SETTINGS_SECTIONS,
@@ -1309,18 +1311,51 @@ function PanesSection(): React.JSX.Element {
           />
         ) : null}
 
-        {shown.row('Keep Agents Running When teamree Quits') ? (
-          <CheckField
-            id="settings-keep-panes"
-            label="Keep Agents Running When teamree Quits"
-            checked={runtime.settings?.keepPanesRunning ?? false}
-            disabled={runtime.settings === null}
-            onChange={(keepPanesRunning) => runtime.change({ keepPanesRunning })}
-          />
-        ) : null}
+        {shown.row('Keep Agents Running When teamree Quits') ? <KeepPanesField runtime={runtime} /> : null}
       </Group>
       {runtime.problem === null ? null : <p className="settings-error">{runtime.problem}</p>}
     </section>
+  )
+}
+
+/** The switch, what it does not cover, and the host it leaves running; see `paneHostLines`. */
+function KeepPanesField({ runtime }: { runtime: RuntimeSettingsState }): React.JSX.Element {
+  const host = usePaneHostStatus()
+  const keeping = runtime.settings?.keepPanesRunning ?? false
+  const lines = paneHostLines(host.status, keeping)
+  const below =
+    lines.ending === null && lines.host === null && host.problem === null ? null : (
+      <>
+        {lines.ending === null ? null : (
+          <div className="settings-row">
+            <p className="settings-note">{lines.ending}</p>
+            {lines.move === null ? null : (
+              <button type="button" className="button button--small" disabled={host.pending} onClick={host.keepShells}>
+                {lines.move}
+              </button>
+            )}
+          </div>
+        )}
+        {lines.host === null ? null : (
+          <div className="settings-row">
+            <p className="settings-note">{lines.host}</p>
+            <button type="button" className="button button--small" disabled={host.pending} onClick={host.stop}>
+              Stop Host
+            </button>
+          </div>
+        )}
+        {host.problem === null ? null : <p className="settings-error">{host.problem}</p>}
+      </>
+    )
+  return (
+    <Field label="Keep Agents Running When teamree Quits" htmlFor="settings-keep-panes" below={below}>
+      <Switch
+        id="settings-keep-panes"
+        checked={keeping}
+        disabled={runtime.settings === null}
+        onChange={(keepPanesRunning) => runtime.change({ keepPanesRunning })}
+      />
+    </Field>
   )
 }
 

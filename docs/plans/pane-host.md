@@ -79,6 +79,12 @@ message carries a `v` (protocol version).
 - **A pane closed in the app** sends `kill` then `forget`.
 - **Turning the setting off** while panes run in the host: they stay there until they exit; new
   panes start in process. The host exits when its last session does.
+- **Turning the setting on** while panes run in process: a pty cannot move between processes, so
+  they still end with the app, and Settings › Panes says how many. An idle shell (a shell in the
+  foreground, no agent, no command) can be started again in the host; an agent never is.
+- **Seeing and stopping it.** Settings › Panes shows `Host running · N panes` with Stop Host;
+  `teamree host status` and `teamree host stop` do the same through the app, or straight to the
+  host socket once the app has gone (a second app connection would take the host over).
 
 ## Update and upgrade
 

@@ -79,6 +79,11 @@ describe('quitQuestion', () => {
     })
   })
 
+  it('says what the pane host keeps, apart from the agents the quit ends', () => {
+    expect(quitQuestion('quit', { ...two, kept: 3 })?.detail).toBe('login-bug\napi-refactor\n\n3 panes keep running')
+    expect(quitQuestion('quit', { ...two, kept: 1 })?.detail).toBe('login-bug\napi-refactor\n\n1 pane keeps running')
+  })
+
   it('names six panes and counts the rest', () => {
     const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
     expect(quitQuestion('quit', { working: 8, asking: 0, names })?.detail).toBe('a\nb\nc\nd\ne\nf\n+2 more')

@@ -19,6 +19,7 @@ import type {
   Layout,
   MemberList,
   PaneConsent,
+  PaneHostStatus,
   PaneNode,
   PaneWatchers,
   PeerPresence,
@@ -198,6 +199,12 @@ export const Params = {
    */
   /** `force`: quit even with edited files in the window; they come back as drafts. */
   appQuit: z.object({ force: z.boolean().optional() }),
+
+  paneHostStatus: z.object({}),
+  /** Ends every pane in the pane host, and the host. */
+  paneHostStop: z.object({}),
+  /** Starts idle shell panes again in the pane host; absent `terminalId`, every one. Never an agent. */
+  paneHostKeepShells: z.object({ terminalId: z.string().min(1).optional() }),
 
   projectList: z.object({}),
   /** `init`: a folder that is not a repository gets `git init` and an empty first commit before it is added. */
@@ -921,7 +928,13 @@ export type MethodContract = TaskMethodContract &
   SearchMethodContract & {
     'status.get': { params: z.infer<typeof Params.statusGet>; result: RuntimeStatus }
     /** The reply is sent before teardown, so `quitting` is a promise; the endpoint going is the receipt. */
-    'app.quit': { params: z.infer<typeof Params.appQuit>; result: { quitting: true; pid: number } }
+    'app.quit': { params: z.infer<typeof Params.appQuit>; result: { quitting: true; pid: number; kept?: number } }
+    'paneHost.status': { params: z.infer<typeof Params.paneHostStatus>; result: PaneHostStatus }
+    'paneHost.stop': {
+      params: z.infer<typeof Params.paneHostStop>
+      result: { stopped: boolean; pid?: number; panes: number }
+    }
+    'paneHost.keepShells': { params: z.infer<typeof Params.paneHostKeepShells>; result: { moved: string[] } }
 
     'project.list': { params: z.infer<typeof Params.projectList>; result: Project[] }
     'project.add': { params: z.infer<typeof Params.projectAdd>; result: Project }

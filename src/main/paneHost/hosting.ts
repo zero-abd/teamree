@@ -2,6 +2,7 @@
 // file, no socket, no process. On, it connects to the profile's pane host, starting one if none answers.
 
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { PaneHostClient, type RemotePty, type RemoteSpawnOptions } from './client'
 import { ensurePrivateDir, paneHostPaths, type HostSession, type PaneHostPaths } from './protocol'
@@ -9,6 +10,11 @@ import { ensurePrivateDir, paneHostPaths, type HostSession, type PaneHostPaths }
 /** How long a host just started gets to answer. */
 const START_DEADLINE_MS = 5_000
 const START_POLL_MS = 50
+/** How long a stopped host gets to end its panes and exit. */
+const STOP_DEADLINE_MS = 5_000
+
+/** A running host: its pid, and its live panes when no app of ours is attached to count them. */
+export type HostSighting = { pid: number; panes?: number }
 
 /** What the terminal manager needs of the host; see `TerminalSessionManagerOptions.paneHost`. */
 export type PaneHostPort = {
@@ -23,6 +29,10 @@ export type PaneHostPort = {
   keeps(): boolean
   /** Detaches when `keep`, else stops the host and every pty in it. */
   release(keep: boolean): Promise<void>
+  /** The host this app is attached to, else one left running without it; null when none answers. */
+  status(): Promise<HostSighting | null>
+  /** Ends the host and every pane in it, and waits for it to exit. */
+  stop(): Promise<HostSighting | null>
 }
 
 export type PaneHostingOptions = {
@@ -85,6 +95,26 @@ export class PaneHosting implements PaneHostPort {
     await (keep ? client.detach() : client.shutdown())
   }
 
+  // Both wait for a connect in flight: a second hello would take the host from it.
+  async status(): Promise<HostSighting | null> {
+    await this.#opening
+    const client = this.#client
+    if (client?.connected === true) return { pid: client.hostPid }
+    return peekHost(this.options.userDataDir, this.options.appVersion)
+  }
+
+  async stop(): Promise<HostSighting | null> {
+    await this.#opening
+    const client = this.#client
+    if (client?.connected !== true) return stopHost(this.options.userDataDir, this.options.appVersion)
+    this.#client = undefined
+    await client.stop()
+    await exited(client.hostPid)
+    // Still on, the next pane goes to a fresh host rather than silently into this process.
+    await this.open()
+    return { pid: client.hostPid }
+  }
+
   async #connectOrStart(): Promise<void> {
     const problem = this.options.onProblem ?? ((reason) => console.warn('[pane host]', reason))
     let paths: PaneHostPaths
@@ -134,5 +164,47 @@ export class PaneHosting implements PaneHostPort {
     const child = spawn(execPath, args, { detached: true, stdio: 'ignore', env, cwd: paths.dir })
     child.on('error', () => {})
     child.unref()
+  }
+}
+
+/** A host no app is attached to, read without changing it; null when none answers. Off, nothing is touched. */
+export async function peekHost(userDataDir: string, appVersion: string): Promise<HostSighting | null> {
+  const client = await reach(userDataDir, appVersion)
+  if (client === undefined) return null
+  await client.detach()
+  return sighting(client)
+}
+
+/** Ends a host no app is attached to, with every pane in it, and waits for it to exit. */
+export async function stopHost(userDataDir: string, appVersion: string): Promise<HostSighting | null> {
+  const client = await reach(userDataDir, appVersion)
+  if (client === undefined) return null
+  await client.shutdown()
+  await exited(client.hostPid)
+  return sighting(client)
+}
+
+async function reach(userDataDir: string, appVersion: string): Promise<PaneHostClient | undefined> {
+  const paths = paneHostPaths(userDataDir)
+  if (!existsSync(paths.socket)) return undefined
+  const result = await PaneHostClient.connect({ socket: paths.socket, tokenPath: paths.token, appVersion })
+  return 'client' in result ? result.client : undefined
+}
+
+function sighting(client: PaneHostClient): HostSighting {
+  return { pid: client.hostPid, panes: client.sessions.filter((session) => session.exited === undefined).length }
+}
+
+async function exited(pid: number): Promise<void> {
+  const deadline = Date.now() + STOP_DEADLINE_MS
+  while (Date.now() < deadline && alive(pid)) await new Promise((resolve) => setTimeout(resolve, 25))
+}
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
   }
 }

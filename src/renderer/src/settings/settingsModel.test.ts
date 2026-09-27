@@ -8,13 +8,14 @@
 
 import { describe, expect, it } from 'vitest'
 import type { AddonStatus } from '@shared/contextProvider'
-import type { CliStatus, RelaySetting, UpdateState } from '@shared/entities'
+import type { CliStatus, PaneHostStatus, RelaySetting, UpdateState } from '@shared/entities'
 import {
   addonLine,
   cliLine,
   describedOnly,
   firstMatch,
   labelMatches,
+  paneHostLines,
   relayPanel,
   rowMatches,
   SETTINGS_CATALOG,
@@ -336,5 +337,38 @@ describe('the Jac Graph Memory row', () => {
       problem: 'No solution found',
       details: '$ uv pip…'
     })
+  })
+})
+
+describe('what Keep Agents Running says under its switch', () => {
+  const host = (overrides: Partial<PaneHostStatus> = {}): PaneHostStatus => ({
+    running: false,
+    panes: 0,
+    inProcess: 0,
+    shells: 0,
+    ...overrides
+  })
+
+  it('says which open panes still end with the app, and offers to move the idle shells', () => {
+    expect(paneHostLines(host({ running: true, inProcess: 3, shells: 2 }), true)).toEqual({
+      ending: '3 open panes end when teamree quits; new panes keep running',
+      move: 'Keep 2 Shells Running',
+      host: 'Host running · 0 panes'
+    })
+    expect(paneHostLines(host({ running: true, panes: 1, inProcess: 1, shells: 1 }), true)).toEqual({
+      ending: '1 open pane ends when teamree quits; new panes keep running',
+      move: 'Keep Shell Running',
+      host: 'Host running · 1 pane'
+    })
+  })
+
+  it('says nothing about open panes while the switch is off, but still shows a host left running', () => {
+    expect(paneHostLines(host({ running: true, panes: 2, inProcess: 3 }), false)).toEqual({
+      ending: null,
+      move: null,
+      host: 'Host running · 2 panes'
+    })
+    expect(paneHostLines(host({ inProcess: 3 }), false)).toEqual({ ending: null, move: null, host: null })
+    expect(paneHostLines(null, true)).toEqual({ ending: null, move: null, host: null })
   })
 })

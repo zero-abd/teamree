@@ -302,10 +302,7 @@ export class TerminalSessionManager {
 
   /** The panes a quit now would leave running in the pane host. */
   keptOnQuit(): string[] {
-    if (this.options.paneHost?.keeps() !== true) return []
-    return [...this.sessions.values()]
-      .filter((session) => session.isRunning && session.hosted !== undefined)
-      .map((session) => session.id)
+    return this.options.paneHost?.keeps() === true ? this.hostedPanes() : []
   }
 
   /** Starts a terminal in the largest pane's place (`paneRoom.ts`), on the last grid a window reported. */
@@ -387,7 +384,53 @@ export class TerminalSessionManager {
     if (previous.isRunning) {
       throw conflict(`terminal ${params.terminalId} has not exited; there is nothing to run again`)
     }
+    return this.startAgain(previous, params, command)
+  }
 
+  /** Each idle shell pane (or the one named) started again in the pane host; an agent or a running command never is. */
+  async keepRunning(terminalId?: string): Promise<string[]> {
+    if (this.options.paneHost?.accepting() !== true) throw conflict('the pane host is not running')
+    const idle = this.idleShells()
+    if (terminalId !== undefined && !idle.includes(terminalId)) {
+      throw conflict(`terminal ${terminalId} is not an idle shell outside the pane host`)
+    }
+    const moving = terminalId === undefined ? idle : [terminalId]
+    for (const id of moving) await this.startAgain(this.require(id), { terminalId: id })
+    return moving
+  }
+
+  /** Running panes whose child is in the pane host. */
+  hostedPanes(): string[] {
+    return [...this.sessions.values()]
+      .filter((session) => session.isRunning && session.hosted !== undefined)
+      .map((session) => session.id)
+  }
+
+  /** Running panes whose child is in this process, which end with it. */
+  inProcessPanes(): PtySession[] {
+    return [...this.sessions.values()].filter((session) => session.isRunning && session.hosted === undefined)
+  }
+
+  /** In-process shell panes at their prompt, which `keepRunning` can start again in the host. */
+  idleShells(): string[] {
+    if (this.options.paneHost?.accepting() !== true) return []
+    return this.inProcessPanes()
+      .filter(
+        (session) =>
+          session.agent === undefined &&
+          session.command === undefined &&
+          session.run === undefined &&
+          !session.isBusy &&
+          session.atShellPrompt
+      )
+      .map((session) => session.id)
+  }
+
+  private async startAgain(
+    previous: PtySession,
+    params: ParamsOf<'terminal.relaunch'>,
+    command?: string
+  ): Promise<Terminal> {
     const size = previous.snapshot()
     const stored = this.records.listTerminals().find((record) => record.id === params.terminalId)
     // A Run button's pane runs its command again, `command` when the project's has changed since.

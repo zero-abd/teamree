@@ -1224,7 +1224,7 @@ describe('help', () => {
     const document = soleJsonDocument(result.out)
     const data = document['data'] as { commands: Array<{ name: string }> }
     // Kept in step with EXPECTED in command-table.test.ts, which names them all.
-    expect(data.commands.length).toBe(90)
+    expect(data.commands.length).toBe(92)
     expect(data.commands.map((command) => command.name)).toContain('terminal send')
   })
 })
@@ -1410,15 +1410,15 @@ describe('quitting the app', () => {
 
   /** A stub that answers `app.quit` and then goes, socket and all, as the app does. */
   async function quittingHarness(
-    options: { reply?: boolean; leave?: boolean; pid?: number } = {}
+    options: { reply?: boolean; leave?: boolean; pid?: number; kept?: number } = {}
   ): Promise<Harness & { pid: number }> {
-    const { reply = true, leave = true, pid = exitedPid() } = options
+    const { reply = true, leave = true, pid = exitedPid(), kept } = options
     let stub: StubRuntime | undefined
     const cli = await harness((method, params, context) => {
       if (method === 'status.get') return { ...(defaultHandler(method, params, context) as object), pid }
       if (method !== 'app.quit') return defaultHandler(method, params, context)
       if (leave) setTimeout(() => void stub?.close(), 10)
-      return reply ? { quitting: true, pid } : NO_REPLY
+      return reply ? { quitting: true, pid, ...(kept === undefined ? {} : { kept }) } : NO_REPLY
     })
     stub = cli.stub
     return { ...cli, pid }
@@ -1433,6 +1433,27 @@ describe('quitting the app', () => {
     expect(result.out).toContain('pid')
     expect(result.out).toContain(String(cli.pid))
     expect(existsSync(cli.stub.endpoint)).toBe(false)
+  })
+
+  it('says which panes the quit left running in the pane host, and that nothing else was kept', async () => {
+    const kept = await (await quittingHarness({ kept: 2 })).run(['quit'])
+    expect(kept.code).toBe(ExitCode.Success)
+    expect(kept.out).toMatch(/kept running:\s+2 panes in the pane host/)
+
+    const none = await (await quittingHarness()).run(['quit'])
+    expect(none.out).not.toContain('kept running')
+  })
+
+  it('asks a running app about the pane host rather than connecting to the host beside it', async () => {
+    const cli = await harness((method, params, context) => {
+      if (method === 'paneHost.status') return { running: true, pid: 4540, panes: 2, inProcess: 3, shells: 1 }
+      return defaultHandler(method, params, context)
+    })
+    const result = await cli.run(['host', 'status'])
+    expect(result.code, result.err).toBe(ExitCode.Success)
+    expect(result.out).toMatch(/host:\s+running, pid 4540/)
+    expect(result.out).toMatch(/in app:\s+3/)
+    expect(cli.stub.received.map((entry) => entry.method)).toContain('paneHost.status')
   })
 
   // The quit takes the connection the reply was travelling on, so losing it is
