@@ -16,7 +16,7 @@ import { compareTitle, runName, siblingRuns } from '../compare/siblingRuns'
 import { useOpenIn } from './openIn'
 import { BaseFreshness, ProjectHead, UnpushedBase } from './ProjectHead'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
-import { teammateRows, unheardTeammates, unheardTitle } from './teammateRows'
+import { teammateRows, unheardTeammates, unheardTitle, withoutHandedCopies } from './teammateRows'
 import { teamworkControlLabel, teamworkOn, teamworkSummary } from './teamworkSummary'
 import { usePaneEvidence, useWatchEvidence } from './usePaneEvidence'
 import { treeItems, treeStop, useTreeKeys } from './treeKeys'
@@ -31,7 +31,7 @@ import { askingWorktrees, useMessageStore } from '../state/messages'
 import { useOverlaps } from '../state/overlapStore'
 import { overlapChip } from './overlapChip'
 import { openOverlap, overlapNamer } from './useOverlapChip'
-import { handoffLine, useHandoffs } from '../teamwork/handoffsStore'
+import { handedAway, handoffLine, useHandoffs } from '../teamwork/handoffsStore'
 import { agentWords, worktreeDisplay, worktreeLabel } from './worktreeDisplay'
 import { unreadNotes, useSharedNotes } from '../teamwork/sharedNotesStore'
 import { useSidebarView } from '../state/sidebarViewStore'
@@ -409,7 +409,15 @@ export function Sidebar({
             const doneOpen = openDone.includes(project.id)
             // Under the same project: the same repository, checked out elsewhere.
             const heard = keepFlat(
-              teammateRows(teammatesHeard(teammates[project.id])?.worktrees ?? [], now, watchEvidence),
+              teammateRows(
+                withoutHandedCopies(
+                  teammatesHeard(teammates[project.id])?.worktrees ?? [],
+                  handoffs[project.id]?.outgoing ?? [],
+                  new Set(rows.map((mine) => mine.id))
+                ),
+                now,
+                watchEvidence
+              ),
               (row) => ({
                 name: row.name,
                 ...(row.branch === undefined ? {} : { branch: row.branch }),
@@ -476,6 +484,9 @@ export function Sidebar({
                     ? { onHandOff: () => openDialog({ kind: 'hand-off', worktreeId: worktree.id }) }
                     : {})}
                   handoff={handoffLine(handoffs[project.id]?.outgoing ?? [], worktree.id)}
+                  {...(handedAway(handoffs[project.id]?.outgoing ?? [], worktree.id)
+                    ? { onRemoveCopy: () => void removeWorktree(worktree.id) }
+                    : {})}
                   status={statuses[worktree.id]}
                   mergePreview={mergePreviews[worktree.id]}
                   {...(landings[worktree.id] === undefined ? {} : { landing: landings[worktree.id] })}

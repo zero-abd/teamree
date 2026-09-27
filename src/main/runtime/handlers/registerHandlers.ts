@@ -461,6 +461,23 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     worktree: (worktreeId) => registry.context.store.getWorktree(worktreeId),
     project: (projectId) => registry.context.store.getProject(projectId),
     push: (worktreeId) => git.worktreePush({ worktreeId }),
+    commit: async (worktreeId, message) => {
+      await git.worktreeCommit({ worktreeId, message, all: true })
+      workspaceEvents.emit({ type: 'worktrees', worktreeIds: [worktreeId] })
+    },
+    stopAgents: async (worktreeId) => {
+      const agents = terminals.manager.list(worktreeId).filter((pane) => pane.running && pane.agent !== undefined)
+      // Ctrl-C twice, as a person quits Claude Code or Codex; `interrupt` sends the second and ends one that ignores both.
+      await Promise.all(
+        agents.map(async (pane) => {
+          terminals.manager.write(pane.id, '\x03', false)
+          await new Promise((resolve) => setTimeout(resolve, 200))
+          await terminals.manager.interrupt(pane.id)
+        })
+      )
+      if (agents.length > 0) workspaceEvents.emit({ type: 'terminals' })
+      return agents.length
+    },
     runner: createGitRunner(),
     create: (params) => git.createWorktree(params),
     settled: (worktreeId) => settledWorktree(git, worktreeId),

@@ -11,6 +11,7 @@ export const MAX_PEER_PATHS = 200
 export const PEER_REPORT_CHARS = 300
 export const MAX_HANDOFFS = 20
 export const MAX_HANDOFF_NOTE_CHARS = 4096
+export const MAX_HANDOFF_BRIEF_CHARS = 2048
 
 const onRead = <T extends z.ZodType>(schema: T) => schema.optional().catch(undefined)
 const clipped = (max: number) => z.string().transform((text) => text.slice(0, max))
@@ -65,6 +66,7 @@ const PeerHandoffSchema = z.object({
   worktreeName: clipped(512),
   branch: z.string().min(1).max(512),
   note: z.string().max(MAX_HANDOFF_NOTE_CHARS),
+  brief: clipped(MAX_HANDOFF_BRIEF_CHARS).optional(),
   at: z.number()
 })
 

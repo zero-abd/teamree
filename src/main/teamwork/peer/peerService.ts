@@ -1142,7 +1142,7 @@ export class PeerService {
   }
 
   /** Puts an offer of `worktree` in the presence `to` reads; the branch is already pushed. */
-  offerHandoff(input: { worktree: Worktree; to: string; note: string }): PeerHandoff {
+  offerHandoff(input: { worktree: Worktree; to: string; note: string; brief?: string }): PeerHandoff {
     const { worktree } = input
     const to = this.handoffTarget(worktree.projectId, input.to)
     const from = this.#ownHandleIn(this.#projects.get(worktree.projectId)?.projectKey)
@@ -1153,6 +1153,7 @@ export class PeerService {
       worktreeName: worktree.name,
       branch: worktree.branch,
       note: input.note,
+      ...(input.brief === undefined ? {} : { brief: input.brief }),
       at: this.#scheduler.now(),
       worktreeId: worktree.id
     }
@@ -1843,7 +1844,11 @@ export class PeerService {
             projectKey: fact.disabledReason === null ? fact.projectKey : undefined,
             rosterKeys: fact.rosterKeys
           })),
-      worktrees: (projectId) => this.#options.workspace.listWorktrees(projectId),
+      // A worktree whose handoff was taken is the teammate's now: shown once, on their machine.
+      worktrees: (projectId) => {
+        const handed = this.#handoffs.handedAway()
+        return this.#options.workspace.listWorktrees(projectId).filter((worktree) => !handed.has(worktree.id))
+      },
       terminals: (worktreeId) => this.#options.workspace.listTerminals(worktreeId),
       details: (worktreeId) => this.#taskDetails.get(worktreeId),
       muted: (terminalId) => this.#muted.has(terminalId)

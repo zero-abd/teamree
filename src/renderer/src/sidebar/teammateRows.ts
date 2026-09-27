@@ -3,7 +3,7 @@
 // owner's duration and the receiver adds what has elapsed since, trusting nobody's clock.
 
 import { teammatesHeard, type PeerPane, type TeammatePresence, type TeammateWorktree } from '@shared/entities'
-import type { TaskStage } from '@shared/tasks'
+import type { PeerHandoff, TaskStage } from '@shared/tasks'
 import { activityOf, askingLine, paneNames, paneText, worktreeTone, type AgentRow, type DotTone } from './agentRows'
 import { teammateStaleness, type TeammateStaleness } from './teammateStaleness'
 import { worktreeDisplay } from './worktreeDisplay'
@@ -84,6 +84,18 @@ export function teammateRows(
       staleness: teammateStaleness({ live: worktree.live, heardAt: worktree.heardAt, handle: worktree.handle, now })
     }
   })
+}
+
+/** Leaves out a teammate's copy of a worktree they took from here while the handed copy is still here. */
+export function withoutHandedCopies(
+  worktrees: readonly TeammateWorktree[],
+  outgoing: readonly PeerHandoff[],
+  here: ReadonlySet<string>
+): TeammateWorktree[] {
+  const taken = outgoing.filter((held) => held.takenAt !== undefined && here.has(held.worktreeId ?? ''))
+  return worktrees.filter(
+    (worktree) => !taken.some((held) => held.to === worktree.handle && held.branch === worktree.branch)
+  )
 }
 
 /** Each child after its parent, one step deeper; a missing or circular parent leaves a row at the top. */

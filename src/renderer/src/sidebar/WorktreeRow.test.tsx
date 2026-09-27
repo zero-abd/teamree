@@ -105,6 +105,7 @@ function mount(
     onResume?: () => void
     onHandOff?: () => void
     handoff?: string
+    onRemoveCopy?: () => void
     terminals?: Terminal[]
     evidence?: Record<string, string | null>
     watchers?: Record<string, PaneAttention>
@@ -126,6 +127,7 @@ function mount(
         {...(overrides.onResume === undefined ? {} : { onResume: overrides.onResume })}
         {...(overrides.onHandOff === undefined ? {} : { onHandOff: overrides.onHandOff })}
         {...(overrides.handoff === undefined ? {} : { handoff: overrides.handoff })}
+        {...(overrides.onRemoveCopy === undefined ? {} : { onRemoveCopy: overrides.onRemoveCopy })}
         terminals={overrides.terminals ?? []}
         evidence={overrides.evidence ?? {}}
         watchers={overrides.watchers ?? {}}
@@ -1141,6 +1143,19 @@ describe('a worktree whose work has landed', () => {
 
     fireEvent.click(screen.getByRole('menuitem', { name: 'Hand Off…' }))
     expect(onHandOff).toHaveBeenCalled()
+  })
+
+  it('offers Remove My Copy once it is taken, without opening the row', () => {
+    const onRemoveCopy = vi.fn()
+    mount({ handoff: 'Taken by ana', onRemoveCopy, onHandOff: vi.fn() })
+    fireEvent.click(within(openButton()).getByText('Remove My Copy'))
+    expect(onRemoveCopy).toHaveBeenCalledTimes(1)
+    expect(handlers.onOpen).not.toHaveBeenCalled()
+    // The chip is the pointer's; the menu is how a keyboard gets there.
+    fireEvent.contextMenu(row())
+    expect(screen.queryByRole('menuitem', { name: 'Hand Off…' })).toBeNull()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Remove My Copy…' }))
+    expect(onRemoveCopy).toHaveBeenCalledTimes(2)
   })
 })
 

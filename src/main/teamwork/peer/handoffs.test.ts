@@ -5,6 +5,7 @@ import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { teammatesHeard } from '../../../shared/entities'
 import { ErrorCode } from '../../../shared/protocol'
 import { MAX_HANDOFF_NOTE_CHARS, MAX_HANDOFFS } from '../../../shared/presenceExtras'
 import { loadIdentity } from '../identity'
@@ -121,6 +122,25 @@ describe('handing a worktree to a teammate', () => {
     expect(outgoing?.takenAt).toEqual(expect.any(Number))
     expect(bob.service.handoffs({ projectId: 'p_bob' }).incoming).toEqual([])
     expect(() => bob.service.incomingHandoff('p_bob', offered.id)).toThrow(/gone/)
+  })
+
+  it('carries the brief to the teammate, and once taken the sender stops showing its copy', async () => {
+    const { alice, bob, settle } = await team()
+    const shown = () =>
+      (teammatesHeard(bob.service.presence({ projectId: 'p_bob' }))?.worktrees ?? []).map((held) => held.branch)
+    const offered = alice.service.offerHandoff({
+      worktree: AUTH,
+      to: 'bob',
+      note: 'Finish it.',
+      brief: 'Files changed (1)'
+    })
+    await settle()
+    expect(bob.service.handoffs({ projectId: 'p_bob' }).incoming[0]?.brief).toBe('Files changed (1)')
+    expect(shown()).toEqual(['rework-auth'])
+
+    bob.service.settleHandoff('p_bob', offered.id, 'took')
+    await settle()
+    expect(shown()).toEqual([])
   })
 
   it('forgets a dismissed offer on the teammate’s side only, across a restart', async () => {

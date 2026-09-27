@@ -588,6 +588,14 @@
   color: var(--fg-secondary);
 }
 
+.worktree__remove-copy {
+  cursor: pointer;
+}
+
+.worktree__remove-copy:hover {
+  color: var(--accent-bright);
+}
+
 .worktree__issue:hover {
   color: var(--accent-bright);
 }

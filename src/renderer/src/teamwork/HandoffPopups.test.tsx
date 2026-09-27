@@ -21,7 +21,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
-const { handoffLine, useHandoffs } = await import('./handoffsStore')
+const { handedAway, handoffLine, useHandoffs } = await import('./handoffsStore')
 const { HandoffPopups } = await import('./HandoffPopups')
 
 const INITIAL = useWorkspaceStore.getState()
@@ -101,5 +101,12 @@ describe('the sender’s row', () => {
     expect(handoffLine([mine], 'wt_a')).toBe('Handed to bo')
     expect(handoffLine([{ ...mine, takenAt: 5 }], 'wt_a')).toBe('Taken by bo')
     expect(handoffLine([mine], 'wt_other')).toBeNull()
+  })
+
+  it('is handed away once its latest offer is taken, and not before', () => {
+    const mine = offer('h1', { worktreeId: 'wt_a', to: 'bo' })
+    expect(handedAway([mine], 'wt_a')).toBe(false)
+    expect(handedAway([{ ...mine, takenAt: 5 }], 'wt_a')).toBe(true)
+    expect(handedAway([{ ...mine, takenAt: 5 }, offer('h2', { worktreeId: 'wt_a', at: 9 })], 'wt_a')).toBe(false)
   })
 })

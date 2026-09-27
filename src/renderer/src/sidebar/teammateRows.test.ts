@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { TeammatePresence, TeammatePresenceRead, TeammateWorktree } from '@shared/entities'
 import { TONE_LABEL } from './agentRows'
-import { teammateRows, teammateTitle, unheardTeammates, unheardTitle } from './teammateRows'
+import { teammateRows, teammateTitle, unheardTeammates, unheardTitle, withoutHandedCopies } from './teammateRows'
 
 const NOW = 1_700_000_000_000
 
@@ -283,5 +283,30 @@ describe('a teammate’s task and its tree', () => {
   it('names the files and commits in the hover', () => {
     const [row] = teammateRows([theirWorktree({ paths: ['a.ts', 'b.ts'], ahead: 3 })], NOW)
     expect(teammateTitle(row!)).toContain('2 files · 3 ahead')
+  })
+})
+
+describe('a teammate’s copy of a worktree handed to them', () => {
+  const handed = {
+    id: 'h1',
+    to: 'priya',
+    worktreeName: 'index compaction',
+    branch: 'perf/compaction',
+    note: '',
+    at: 1,
+    worktreeId: 'wt_mine',
+    takenAt: 2
+  }
+
+  it('is left out while the handed copy is still here: one row for one task', () => {
+    const theirs = [theirWorktree(), theirWorktree({ id: 'peer:abc123:wt_2', branch: 'other' })]
+    expect(withoutHandedCopies(theirs, [handed], new Set(['wt_mine'])).map((row) => row.branch)).toEqual(['other'])
+  })
+
+  it('shows again once the copy here is gone, and never for an offer not yet taken or to someone else', () => {
+    const theirs = [theirWorktree()]
+    expect(withoutHandedCopies(theirs, [handed], new Set())).toEqual(theirs)
+    expect(withoutHandedCopies(theirs, [{ ...handed, takenAt: undefined }], new Set(['wt_mine']))).toEqual(theirs)
+    expect(withoutHandedCopies(theirs, [{ ...handed, to: 'sam' }], new Set(['wt_mine']))).toEqual(theirs)
   })
 })

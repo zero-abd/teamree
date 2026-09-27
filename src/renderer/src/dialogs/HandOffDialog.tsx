@@ -1,9 +1,12 @@
-// Hand Off…: a roster teammate and a note for them. Sending pushes the branch, then offers it.
+// Hand Off…: a roster teammate and a note for them. Sending stops the agent and commits the
+// uncommitted work when asked, pushes the branch, then offers it.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { teammatesHeard } from '@shared/entities'
+import { harnessName } from '../agents/harnesses'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { commitSuggestion } from '../workspace/rightPanel/commitMessage'
 import { Modal } from './Modal'
 import { Select } from './Select'
 
@@ -13,9 +16,25 @@ export function HandOffDialog({ worktreeId }: { worktreeId: string }): React.JSX
     worktree === undefined ? undefined : state.teammates[worktree.projectId]
   )
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
+  const status = useWorkspaceStore((state) => state.statuses[worktreeId])
+  const pending = useWorkspaceStore((state) => state.changes[worktreeId]?.total ?? 0)
+  const terminals = useWorkspaceStore((state) => state.terminals)
+  const agents = useMemo(
+    () => [
+      ...new Set(
+        Object.values(terminals).flatMap((pane) =>
+          pane.worktreeId === worktreeId && pane.running && pane.agent !== undefined ? [pane.agent] : []
+        )
+      )
+    ],
+    [terminals, worktreeId]
+  )
   const teammates = teammatesHeard(presence)?.teammates ?? []
   const [to, setTo] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
+  const [include, setInclude] = useState(true)
+  const [message, setMessage] = useState<string | null>(null)
+  const [stop, setStop] = useState(true)
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -36,14 +55,26 @@ export function HandOffDialog({ worktreeId }: { worktreeId: string }): React.JSX
 
   if (worktree === undefined) return null
   const chosen = to ?? (teammates.find((person) => person.connected) ?? teammates[0])?.handle ?? ''
+  const uncommitted = Math.max(pending, status === undefined ? 0 : status.staged + status.unstaged + status.untracked)
+  const files = `${uncommitted} ${uncommitted === 1 ? 'File' : 'Files'}`
+  const shownMessage = message ?? `WIP: ${commitSuggestion(worktree)?.text ?? worktree.name}`
+  const committing = uncommitted > 0 && include
+  const stopping = agents.length > 0 && stop
+  const blocked = chosen === '' || (committing && shownMessage.trim() === '')
 
   const submit = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault()
-    if (sending || chosen === '') return
+    if (sending || blocked) return
     setSending(true)
     setError(null)
     try {
-      await runtimeClient.call('teamwork.handOff', { worktreeId, to: chosen, note: (note ?? '').trim() })
+      await runtimeClient.call('teamwork.handOff', {
+        worktreeId,
+        to: chosen,
+        note: (note ?? '').trim(),
+        ...(committing ? { commit: shownMessage.trim() } : {}),
+        ...(stopping ? { stopAgents: true } : {})
+      })
       closeDialog()
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : String(failure))
@@ -76,6 +107,42 @@ export function HandOffDialog({ worktreeId }: { worktreeId: string }): React.JSX
             disabled={sending}
           />
         </label>
+        {uncommitted === 0 ? null : (
+          <label className="confirm__check">
+            <input
+              type="checkbox"
+              checked={include}
+              disabled={sending}
+              onChange={(event) => setInclude(event.target.checked)}
+            />
+            {`Commit ${files} as WIP`}
+          </label>
+        )}
+        {committing ? (
+          <textarea
+            className="field__input field__input--message"
+            rows={1}
+            value={shownMessage}
+            aria-label="Commit message"
+            disabled={sending}
+            onChange={(event) => setMessage(event.target.value)}
+          />
+        ) : uncommitted === 0 ? null : (
+          <span className="field__hint">{`${uncommitted} uncommitted ${
+            uncommitted === 1 ? 'file stays' : 'files stay'
+          } here`}</span>
+        )}
+        {agents.length === 0 ? null : (
+          <label className="confirm__check">
+            <input
+              type="checkbox"
+              checked={stop}
+              disabled={sending}
+              onChange={(event) => setStop(event.target.checked)}
+            />
+            {`Stop ${agents.length === 1 && agents[0] !== undefined ? harnessName(agents[0]) : 'Agents'} in This Task`}
+          </label>
+        )}
         {error === null ? null : (
           <span className="field__error" role="alert">
             {error}
@@ -85,8 +152,8 @@ export function HandOffDialog({ worktreeId }: { worktreeId: string }): React.JSX
           <button type="button" className="button button--ghost" onClick={closeDialog}>
             Cancel
           </button>
-          <button type="submit" className="button button--primary" disabled={sending || chosen === ''}>
-            {sending ? 'Pushing…' : 'Hand Off'}
+          <button type="submit" className="button button--primary" disabled={sending || blocked}>
+            {sending ? 'Handing Off…' : 'Hand Off'}
           </button>
         </footer>
       </form>
