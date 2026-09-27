@@ -3,6 +3,7 @@
 
 import type { Project, RunKind, Terminal } from '@shared/entities'
 import { RUN_KINDS, RUN_LABEL, runCommandOf, runPaneOf, runState, type RunState } from '@shared/runCommands'
+import { Icon } from '../icons/Icon'
 import type { RowMenuItem } from '../sidebar/RowMenu'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
@@ -36,12 +37,23 @@ export function runMenuItems(offers: readonly RunOffer[], actions: RunActions): 
   return offers.flatMap((offer): RowMenuItem[] => {
     const label = RUN_LABEL[offer.kind]
     if (offer.state !== 'running') {
-      return [{ label: `Run ${label}`, hint: offer.command, onChoose: () => actions.run(offer.kind, false) }]
+      return [
+        {
+          label: `Run ${label}`,
+          icon: <Icon name="play" size={14} />,
+          hint: offer.command,
+          onChoose: () => actions.run(offer.kind, false)
+        }
+      ]
     }
     return [
       { label: `Show ${label}`, onChoose: () => actions.run(offer.kind, false) },
-      { label: `Restart ${label}`, onChoose: () => actions.run(offer.kind, true) },
-      { label: `Stop ${label}`, onChoose: () => actions.stop(offer.kind) }
+      {
+        label: `Restart ${label}`,
+        icon: <Icon name="restart" size={14} />,
+        onChoose: () => actions.run(offer.kind, true)
+      },
+      { label: `Stop ${label}`, icon: <Icon name="stop" size={14} />, onChoose: () => actions.stop(offer.kind) }
     ]
   })
 }
@@ -87,7 +99,7 @@ export function RunButtons({ worktreeId }: { worktreeId: string }): React.JSX.El
               aria-label={`${running ? 'Show' : 'Run'} ${label}`}
               onClick={() => actions.run(offer.kind, false)}
             >
-              {running ? <span className="run-buttons__dot" aria-hidden="true" /> : <PlayGlyph />}
+              {running ? <span className="run-buttons__dot" aria-hidden="true" /> : <Icon name="play" size={14} />}
               {label}
             </button>
             {running ? (
@@ -99,9 +111,7 @@ export function RunButtons({ worktreeId }: { worktreeId: string }): React.JSX.El
                   aria-label={`Restart ${label}`}
                   onClick={() => actions.run(offer.kind, true)}
                 >
-                  <svg viewBox="0 0 12 12" aria-hidden="true">
-                    <path d="M9.8 6 A3.8 3.8 0 1 1 8.7 3.3 M9 1.4 V3.6 H6.8" />
-                  </svg>
+                  <Icon name="restart" />
                 </button>
                 <button
                   type="button"
@@ -110,9 +120,7 @@ export function RunButtons({ worktreeId }: { worktreeId: string }): React.JSX.El
                   aria-label={`Stop ${label}`}
                   onClick={() => actions.stop(offer.kind)}
                 >
-                  <svg viewBox="0 0 12 12" aria-hidden="true">
-                    <path d="M3 3 H9 V9 H3 Z" />
-                  </svg>
+                  <Icon name="stop" />
                 </button>
               </>
             ) : null}
@@ -144,13 +152,5 @@ export function RunChip({
     >
       {text}
     </span>
-  )
-}
-
-function PlayGlyph(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M3.5 2.2 L9.5 6 L3.5 9.8 Z" />
-    </svg>
   )
 }

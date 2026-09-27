@@ -42,6 +42,23 @@ describe('the rows', () => {
     ])
   })
 
+  it('marks copying, finding, splitting and revealing with the icon set', () => {
+    const icons = (context: TerminalMenuContext): Record<string, string | undefined> =>
+      Object.fromEntries(terminalMenuEntries(context, MAC).map((entry) => [entry.label, entry.icon]))
+    expect(icons(plain)).toEqual({
+      Copy: 'copy',
+      Paste: undefined,
+      'Select All': undefined,
+      Clear: undefined,
+      'Find…': 'search',
+      'Split Right': 'split-right',
+      'Split Down': 'split-down'
+    })
+    expect(icons({ ...plain, pointed: { kind: 'path', path: 'a.ts', absolute: '/w/a.ts' } })['Reveal in Finder']).toBe(
+      'reveal'
+    )
+  })
+
   it('turns Copy on over a selection', () => {
     expect(rows({ ...plain, hasSelection: true })[0]).toBe('Copy ⌘C')
   })

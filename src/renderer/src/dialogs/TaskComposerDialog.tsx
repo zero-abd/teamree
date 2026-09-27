@@ -6,6 +6,7 @@ import { MAX_AGENT_ARGS_CHARS } from '@shared/agentLaunch'
 import { branchPrefixFor } from '@shared/branchName'
 import type { WorktreeIssue } from '@shared/entities'
 import { permissionModesFor } from '@shared/permissionMode'
+import { formatChord, windowModifier } from '../keyboard/platformModifier'
 import { useRuntimeSettings } from '../settings/runtimeSettings'
 import { startPointAge } from '../sidebar/baseFreshness'
 import { useNow } from '../state/useNow'
@@ -315,8 +316,12 @@ export function TaskComposerDialog({
           <button type="button" className="button button--ghost" onClick={closeDialog}>
             Cancel
           </button>
-          <button type="submit" className="button button--primary" disabled={!canSubmit}>
+          {/* Filled while it cannot go yet, so the dialog always shows its one primary; `submit` refuses. */}
+          <button type="submit" className="button button--primary" aria-disabled={!canSubmit}>
             Start Task
+            <kbd className="button__kbd" aria-hidden="true">
+              {formatChord({ key: 'Enter' }, windowModifier())}
+            </kbd>
           </button>
         </footer>
       </form>

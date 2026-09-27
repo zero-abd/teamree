@@ -55,6 +55,32 @@ describe('one modal', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 
+  it('has a close control in its corner that the Tab key passes over', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    render(
+      <Modal title="Appearance" onClose={onClose}>
+        <button type="button">Reset</button>
+      </Modal>
+    )
+
+    const close = screen.getByRole('button', { name: 'Close' })
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Reset' }))
+    await user.tab()
+    expect(document.activeElement).not.toBe(close)
+    await user.click(close)
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('draws no close control where it names itself for screen readers only', () => {
+    render(
+      <Modal title="Palette" hideTitle onClose={vi.fn()}>
+        <input aria-label="Search" />
+      </Modal>
+    )
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull()
+  })
+
   // The effect that arms all of this used to depend on the `onClose` it was
   // handed, and a dialog that re-renders on a clock hands it a new function
   // every tick. The consent prompt counts seconds, so its panel was re-armed

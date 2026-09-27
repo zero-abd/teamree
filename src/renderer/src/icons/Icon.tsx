@@ -53,10 +53,62 @@ const GLYPHS = {
       <path d="M2.75 5A6 6 0 1 1 2.5 10.75" />
       <path d="m5.25 8 2 2 3.75-4" />
     </>
-  )
+  ),
+  close: <path d="m4.25 4.25 7.5 7.5m0-7.5-7.5 7.5" />,
+  copy: (
+    <>
+      <rect x="5.25" y="4.75" width="8.5" height="9" rx="1.5" />
+      <path d="M10.75 4.75v-2.5h-8.5v9h3" />
+    </>
+  ),
+  history: (
+    <>
+      <path d="M2.25 5.5V2.25M2.25 5.5H5.5" />
+      <path d="M2.75 5A6 6 0 1 1 2.5 10.5M8 4.75V8l2.5 1.5" />
+    </>
+  ),
+  maximize: <path d="M2.25 5.75v-3.5h3.5m4.5 0h3.5v3.5m0 4.5v3.5h-3.5m-4.5 0h-3.5v-3.5" />,
+  'new-task': (
+    <>
+      <path d="M3.25 1.75h6l3.5 3.5v9H3.25z" />
+      <path d="M9.25 1.75v3.5h3.5" />
+      <path d="m6 11.75.5-2 4.75-4.75 1.75 1.75-4.75 4.75z" />
+    </>
+  ),
+  play: <path d="m4.75 2.75 8 5.25-8 5.25z" fill="currentColor" stroke="none" />,
+  plus: <path d="M8 2.75v10.5M2.75 8h10.5" />,
+  rename: <path d="m3.25 12.75.75-3 6.75-6.75 2.25 2.25L6.25 12zM9.25 4.5l2.25 2.25" />,
+  restart: (
+    <>
+      <path d="M3.25 5.25V2.5m0 2.75H6" />
+      <path d="M3.75 4.5A5.75 5.75 0 1 1 2.5 10.75" />
+    </>
+  ),
+  restore: <path d="M5.75 2.25h8v8h-3.5m0 3.5h-8v-8h8z" />,
+  search: (
+    <>
+      <circle cx="6.75" cy="6.75" r="4.5" />
+      <path d="m10.25 10.25 3.5 3.5" />
+    </>
+  ),
+  'split-down': (
+    <>
+      <rect x="1.75" y="2.25" width="12.5" height="11.5" rx="1.5" />
+      <path d="M1.75 8.25h12.5" />
+    </>
+  ),
+  'split-right': (
+    <>
+      <rect x="1.75" y="2.25" width="12.5" height="11.5" rx="1.5" />
+      <path d="M8.25 2.25v11.5" />
+    </>
+  ),
+  stop: <rect x="3" y="3" width="10" height="10" rx="1.5" fill="currentColor" stroke="none" />
 } satisfies Record<string, React.JSX.Element>
 
 export type IconName = keyof typeof GLYPHS
+
+export const ICON_NAMES = Object.keys(GLYPHS) as IconName[]
 
 /** One glyph, hidden from assistive tech: the control around it carries the name. */
 export function Icon({

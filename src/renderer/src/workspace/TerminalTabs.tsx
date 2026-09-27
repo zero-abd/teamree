@@ -13,9 +13,10 @@ import { paneTabs, paneTabTitle } from './paneTabs'
 import { RunButtons } from './runButtons'
 import { useStartMenuItems } from './startMenu'
 import { PaneGlyph } from '../agents/glyphs'
+import { Icon } from '../icons/Icon'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { dotClass, dotTone } from '../sidebar/agentRows'
-import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
+import { refocus, RowMenu, type MenuClosed, type RowMenuAnchor } from '../sidebar/RowMenu'
 import { SidebarGlyph } from '../shell/Brand'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -61,9 +62,9 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   const plus = useRef<HTMLButtonElement | null>(null)
   const [menuAt, setMenuAt] = useState<RowMenuAnchor | null>(null)
   // Back on the `+`, so a keyboard user who opened the menu is where they were.
-  const closeMenu = useCallback((): void => {
+  const closeMenu = useCallback((closed?: MenuClosed): void => {
     setMenuAt(null)
-    plus.current?.focus()
+    refocus(plus.current, closed)
   }, [])
   // The sidebar's reading, so the strip and the row agree.
   const unread = useUnreadPanes()
@@ -205,9 +206,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                     aria-label={`Rename pane ${tab.label}`}
                     onClick={() => setRenaming(tab.terminalId)}
                   >
-                    <svg viewBox="0 0 12 12" aria-hidden="true">
-                      <path d="M8.2 1.8 L10.2 3.8 L4 10 L1.8 10.2 L2 8 Z" />
-                    </svg>
+                    <Icon name="rename" size={14} />
                   </button>
                 )}
                 {/* The pane's own close: it kills the process, since a hidden-but-running pane has no leaf. */}
@@ -218,9 +217,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                   aria-label={files.length > 1 ? `Close ${files.length} files` : `Close pane ${tab.label}`}
                   onClick={() => void (files.length > 1 ? closePanes(files) : closeTerminal(tab.terminalId))}
                 >
-                  <svg viewBox="0 0 12 12" aria-hidden="true">
-                    <path d="M3 3 L9 9 M9 3 L3 9" />
-                  </svg>
+                  <Icon name="close" size={14} />
                 </button>
               </div>
             )
@@ -240,76 +237,64 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
         </div>
       )}
 
-      {/* Icons at the strip's end: the palette and the menu bar carry the words and chords. Kept with no
-          panes too, where there is nothing to split yet. */}
+      {/* Pinned to the strip's end: runs, then the layout group last, so neither moves as tabs open.
+          The palette and the menu bar carry the words and chords. Kept with no panes too. */}
       {activeWorktreeId === null || !panesShown ? null : (
         <div className="tabs__actions">
           {noCheckout ? null : <RunButtons worktreeId={activeWorktreeId} />}
-          <button
-            type="button"
-            className="tabs__action"
-            title={expanded === null ? 'Maximize' : 'Restore'}
-            aria-label={expanded === null ? 'Maximize' : 'Restore'}
-            disabled={expanded === null && collectTerminalIds(layout?.root ?? null).length < 2}
-            onClick={toggleExpandedPane}
-          >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path
-                d={
-                  expanded === null
-                    ? 'M7 1.5 H10.5 V5 M10.5 1.5 L7 5 M5 10.5 H1.5 V7 M1.5 10.5 L5 7'
-                    : 'M10.5 5 H7 V1.5 M7 5 L10.5 1.5 M1.5 7 H5 V10.5 M5 7 L1.5 10.5'
+          <div className="tabs__layout">
+            <button
+              type="button"
+              className="tabs__action"
+              title={expanded === null ? 'Maximize' : 'Restore'}
+              aria-label={expanded === null ? 'Maximize' : 'Restore'}
+              disabled={expanded === null && collectTerminalIds(layout?.root ?? null).length < 2}
+              onClick={toggleExpandedPane}
+            >
+              <Icon name={expanded === null ? 'maximize' : 'restore'} />
+            </button>
+            <button
+              type="button"
+              className="tabs__action"
+              title="Split right"
+              aria-label="Split right"
+              disabled={tabs.length === 0}
+              onClick={() => void splitFocusedPane('row')}
+            >
+              <Icon name="split-right" />
+            </button>
+            <button
+              type="button"
+              className="tabs__action"
+              title="Split down"
+              aria-label="Split down"
+              disabled={tabs.length === 0}
+              onClick={() => void splitFocusedPane('column')}
+            >
+              <Icon name="split-down" />
+            </button>
+            <button
+              ref={plus}
+              type="button"
+              className="tabs__action"
+              title="New pane"
+              aria-label="New pane"
+              aria-haspopup="menu"
+              aria-expanded={menuAt !== null}
+              disabled={noCheckout}
+              onClick={() => {
+                if (menuAt !== null) {
+                  closeMenu()
+                  return
                 }
-              />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="tabs__action"
-            title="Split right"
-            aria-label="Split right"
-            disabled={tabs.length === 0}
-            onClick={() => void splitFocusedPane('row')}
-          >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M1.5 2 H10.5 V10 H1.5 Z M6 2 V10" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="tabs__action"
-            title="Split down"
-            aria-label="Split down"
-            disabled={tabs.length === 0}
-            onClick={() => void splitFocusedPane('column')}
-          >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M1.5 2 H10.5 V10 H1.5 Z M1.5 6 H10.5" />
-            </svg>
-          </button>
-          <button
-            ref={plus}
-            type="button"
-            className="tabs__action"
-            title="New pane"
-            aria-label="New pane"
-            aria-haspopup="menu"
-            aria-expanded={menuAt !== null}
-            disabled={noCheckout}
-            onClick={() => {
-              if (menuAt !== null) {
-                closeMenu()
-                return
-              }
-              if (activeWorktreeId !== null) void loadConversations(activeWorktreeId)
-              const rect = plus.current?.getBoundingClientRect()
-              if (rect) setMenuAt({ x: rect.right, y: rect.bottom + MENU_GAP_PX, align: 'right' })
-            }}
-          >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M6 2 V10 M2 6 H10" />
-            </svg>
-          </button>
+                if (activeWorktreeId !== null) void loadConversations(activeWorktreeId)
+                const rect = plus.current?.getBoundingClientRect()
+                if (rect) setMenuAt({ x: rect.right, y: rect.bottom + MENU_GAP_PX, align: 'right' })
+              }}
+            >
+              <Icon name="plus" />
+            </button>
+          </div>
         </div>
       )}
 

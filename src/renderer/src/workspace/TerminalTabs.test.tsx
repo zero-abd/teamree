@@ -342,6 +342,19 @@ describe('the pane buttons at the end of the strip', () => {
     expect(words.filter((text) => text.length > 0)).toEqual(['npm test'])
   })
 
+  // Pinned to the strip's end in a group of their own, so a new tab never moves them.
+  it('keeps the layout buttons in their own group at the end, apart from the tabs and the runs', () => {
+    onePane()
+    const strip = document.querySelector('.tabs') as HTMLElement
+    const layout = screen.getByRole('button', { name: 'Split right' }).parentElement as HTMLElement
+    expect(layout.classList.contains('tabs__layout')).toBe(true)
+    for (const name of ['Maximize', 'Split right', 'Split down', 'New pane']) {
+      expect(screen.getByRole('button', { name }).parentElement).toBe(layout)
+    }
+    expect(screen.getByRole('tablist').contains(layout)).toBe(false)
+    expect(strip.querySelector('.tabs__actions')?.lastElementChild).toBe(layout)
+  })
+
   it('says what each one does, for anything that cannot see the icon', () => {
     onePane()
     for (const name of ['Split right', 'Split down', 'New pane']) {

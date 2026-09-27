@@ -13,6 +13,7 @@ import type { PaneTypist } from '@shared/entities'
 import { activityOf } from '@shared/paneActivity'
 import type { TerminalEvent } from '@shared/methods'
 import { copyText, pasteText } from '../clipboard/clipboard'
+import { Icon } from '../icons/Icon'
 import {
   detectPlatform,
   holdsModifier,
@@ -416,7 +417,11 @@ export function TerminalView({
           label="Terminal"
           anchor={menu.anchor}
           onClose={closeMenu}
-          items={menu.entries.map((entry) => ({ ...entry, onChoose: () => chooseFromMenu(entry, menu.pointed) }))}
+          items={menu.entries.map((entry) => ({
+            ...entry,
+            icon: entry.icon && <Icon name={entry.icon} size={14} />,
+            onChoose: () => chooseFromMenu(entry, menu.pointed)
+          }))}
         />
       )}
       {peek === null ? null : <PastedImagePeek peek={peek} />}

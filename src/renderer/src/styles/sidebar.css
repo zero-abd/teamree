@@ -693,6 +693,12 @@
   background: var(--accent-soft);
 }
 
+/* The row a menu is open for, so the menu reads as about it. */
+.worktree--menu-open {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
 /* The active marker rides the rail's left edge rather than indenting text. */
 .worktree--active::before {
   content: '';
@@ -964,6 +970,14 @@
   border-radius: var(--r2);
   background: var(--bg-raised);
   box-shadow: var(--shadow-pop);
+  animation: menu-in var(--motion-fast) var(--ease);
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
 }
 
 .row-menu__item {
@@ -982,6 +996,8 @@
 .row-menu__icon {
   display: flex;
   flex: none;
+  justify-content: center;
+  width: 14px;
   color: var(--fg-muted);
 }
 
@@ -993,6 +1009,10 @@
   stroke-width: 1.1;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.row-menu__icon [data-icon] {
+  stroke-width: 1.5;
 }
 
 .row-menu__label {

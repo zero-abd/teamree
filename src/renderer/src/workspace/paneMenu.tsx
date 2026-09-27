@@ -3,12 +3,20 @@
 
 import { useCallback, useState } from 'react'
 import { fileColumnIn, fileLeavesIn, fileViewerFor, isCommitLeaf, isCompareLeaf } from '@shared/filePane'
+import { Icon } from '../icons/Icon'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { openAsArtifact } from '../markdown/openAsArtifact'
 import { collectTerminalIds, paneStopIndex, paneStops, reorderPanes } from '../panes/paneLayout'
 import { useOpenIn } from '../sidebar/openIn'
-import { anchorAtPointer, RowMenu, type RowMenuAnchor, type RowMenuItem } from '../sidebar/RowMenu'
+import {
+  anchorAtPointer,
+  refocus,
+  RowMenu,
+  type MenuClosed,
+  type RowMenuAnchor,
+  type RowMenuItem
+} from '../sidebar/RowMenu'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { RESUME_CONVERSATION } from './startMenu'
 
@@ -45,10 +53,13 @@ export function usePaneMenu(modifier: PlatformModifier): PaneMenu {
 
   // Back where the keyboard was, so a menu opened from a tab or over a terminal leaves it there.
   const returnTo = opened?.returnTo
-  const close = useCallback(() => {
-    setOpened(null)
-    if (returnTo instanceof HTMLElement && returnTo.isConnected) returnTo.focus()
-  }, [returnTo])
+  const close = useCallback(
+    (closed?: MenuClosed) => {
+      setOpened(null)
+      if (returnTo instanceof HTMLElement && returnTo.isConnected) refocus(returnTo, closed)
+    },
+    [returnTo]
+  )
 
   const items = usePaneMenuItems(opened?.terminalId ?? null, opened?.name ?? '', modifier)
 
@@ -111,6 +122,7 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
   }
   const maximize: RowMenuItem = {
     label: expanded ? 'Restore' : 'Maximize',
+    icon: <Icon name={expanded ? 'restore' : 'maximize'} size={14} />,
     hint: hint('expand-pane'),
     onChoose: () => store.expandPane(terminalId)
   }
@@ -125,7 +137,13 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
     ...(place !== -1 && place < paneStops(root).length - 1 ? [move('Move Pane Right', 1)] : [])
   ]
   const closing: RowMenuItem[] = [
-    { label: 'Close', hint: hint('close-pane'), separated: true, onChoose: () => void store.closeTerminal(terminalId) },
+    {
+      label: 'Close',
+      icon: <Icon name="close" size={14} />,
+      hint: hint('close-pane'),
+      separated: true,
+      onChoose: () => void store.closeTerminal(terminalId)
+    },
     ...(collectTerminalIds(root).length > 1
       ? [{ label: 'Close Others', onChoose: () => void store.closeOtherPanes(terminalId) }]
       : [])
@@ -135,7 +153,11 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
   if (isCommitLeaf(file)) {
     const sha = file.commit
     return [
-      { label: 'Copy SHA', onChoose: () => void store.copyToClipboard(sha, 'the commit id') },
+      {
+        label: 'Copy SHA',
+        icon: <Icon name="copy" size={14} />,
+        onChoose: () => void store.copyToClipboard(sha, 'the commit id')
+      },
       { ...maximize, separated: true },
       ...moves,
       ...closing
@@ -149,11 +171,21 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
       ...(preview ? [{ label: 'Keep Open', onChoose: () => store.pinFilePane(terminalId) }] : []),
       {
         label: 'Copy Path',
+        icon: <Icon name="copy" size={14} />,
         separated: preview,
         onChoose: () => void store.copyToClipboard(absolute, `the path to ${file.path}`)
       },
-      { label: 'Reveal in Finder', onChoose: () => void store.revealInFinder(absolute, file.path) },
-      { label: 'Open in', onChoose: () => {}, items: openIn(worktree.projectId, absolute, file.path, true) },
+      {
+        label: 'Reveal in Finder',
+        icon: <Icon name="reveal" size={14} />,
+        onChoose: () => void store.revealInFinder(absolute, file.path)
+      },
+      {
+        label: 'Open in',
+        icon: <Icon name="folder-open" size={14} />,
+        onChoose: () => {},
+        items: openIn(worktree.projectId, absolute, file.path, true)
+      },
       ...(fileViewerFor(file.path) === 'markdown'
         ? [{ label: 'Open as Artifact', onChoose: () => void openAsArtifact(terminalId, name) }]
         : []),
@@ -169,10 +201,18 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
   const again: RowMenuItem[] = !exited
     ? []
     : terminal.agent === undefined || terminal.run !== undefined
-      ? [{ label: 'Run Again', separated: true, onChoose: () => void store.relaunchTerminal(terminalId) }]
+      ? [
+          {
+            label: 'Run Again',
+            icon: <Icon name="restart" size={14} />,
+            separated: true,
+            onChoose: () => void store.relaunchTerminal(terminalId)
+          }
+        ]
       : [
           {
             label: RESUME_CONVERSATION,
+            icon: <Icon name="history" size={14} />,
             separated: true,
             onChoose: () => store.openDialog({ kind: 'resume-conversation', worktreeId: worktree.id, terminalId })
           },
@@ -184,13 +224,29 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
               ])
         ]
   return [
-    { label: 'Rename…', onChoose: () => store.editPaneName(terminalId) },
-    { label: 'Split Right', hint: hint('split-right'), separated: true, onChoose: () => split('row') },
-    { label: 'Split Down', hint: hint('split-down'), onChoose: () => split('column') },
+    { label: 'Rename…', icon: <Icon name="rename" size={14} />, onChoose: () => store.editPaneName(terminalId) },
+    {
+      label: 'Split Right',
+      icon: <Icon name="split-right" size={14} />,
+      hint: hint('split-right'),
+      separated: true,
+      onChoose: () => split('row')
+    },
+    {
+      label: 'Split Down',
+      icon: <Icon name="split-down" size={14} />,
+      hint: hint('split-down'),
+      onChoose: () => split('column')
+    },
     maximize,
     ...moves,
     ...again,
-    { label: 'Copy Output', separated: !exited, onChoose: () => void store.copyPaneOutput(terminalId, name) },
+    {
+      label: 'Copy Output',
+      icon: <Icon name="copy" size={14} />,
+      separated: !exited,
+      onChoose: () => void store.copyPaneOutput(terminalId, name)
+    },
     ...closing
   ]
 }
