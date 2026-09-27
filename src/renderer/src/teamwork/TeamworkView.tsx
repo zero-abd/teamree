@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { teamworkFacts } from '@shared/entities'
 import { copyText } from '../clipboard/clipboard'
+import { Icon } from '../icons/Icon'
 import { Select } from '../ui/Select'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -249,9 +250,7 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
           aria-expanded={setupOpen}
           onClick={() => setSetupShown(!setupOpen)}
         >
-          <span className="disclosure__caret" aria-hidden="true">
-            {setupOpen ? '▾' : '▸'}
-          </span>
+          <Icon name={setupOpen ? 'chevron-down' : 'chevron-right'} size={14} />
           Setup
         </button>
       </h2>

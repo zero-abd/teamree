@@ -109,7 +109,7 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
               {asking.length === 0 ? (
                 <p className="team-home__empty">Nothing waiting</p>
               ) : (
-                <ul className="team-cards">
+                <ul className="home-cards">
                   {asking.map((item) => (
                     <WaitingRow key={rowKey(item)} item={item} projectId={projectId} now={now} />
                   ))}
@@ -121,7 +121,7 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
           {handed.length === 0 ? null : (
             <section className="team-home__section" aria-label="Handed to you">
               <h2 className="team-home__head">Handed to you</h2>
-              <ul className="team-cards">
+              <ul className="home-cards">
                 {handed.map((item) => (
                   <WaitingRow key={rowKey(item)} item={item} projectId={projectId} now={now} />
                 ))}
@@ -199,15 +199,15 @@ function WaitingRow({
     const { handoff } = item
     const from = handoff.from ?? 'a teammate'
     return (
-      <li className="team-card team-card--handoff" title={handoff.note}>
+      <li className="home-card home-card--handoff" title={handoff.note}>
         <Avatar handle={from} size="md" decorative />
-        <span className="team-card__text">
-          <span className="team-card__title">{handoff.worktreeName}</span>
-          <span className="team-card__line">
-            {from} handed you {handoff.worktreeName} · {agoLabel(Math.max(0, now - handoff.at))}
+        <span className="home-card__text">
+          <span className="home-card__title">{handoff.worktreeName}</span>
+          <span className="home-card__line">
+            {from} handed this to you · {agoLabel(Math.max(0, now - handoff.at))}
           </span>
         </span>
-        <span className="team-card__actions">
+        <span className="home-card__actions">
           <button
             type="button"
             className="button button--primary button--small"
@@ -227,16 +227,16 @@ function WaitingRow({
     )
   }
   return (
-    <li className="team-card team-card--asking">
+    <li className="home-card home-card--asking">
       <Avatar handle={item.handle} size="md" decorative />
-      <span className="team-card__text">
-        <span className="team-card__title">
+      <span className="home-card__text">
+        <span className="home-card__title">
           {item.handle} · {item.worktree}
           <StatusPill tone="asking">asking</StatusPill>
         </span>
-        {item.pane.evidence === null ? null : <span className="team-card__line">{item.pane.evidence}</span>}
+        {item.pane.evidence === null ? null : <span className="home-card__line">{item.pane.evidence}</span>}
       </span>
-      <span className="team-card__actions">
+      <span className="home-card__actions">
         <AnswerButtons
           terminalId={item.pane.terminalId}
           choices={item.pane.choices ?? []}
@@ -280,7 +280,7 @@ function MemberRow({
                 <li key={worktree.id} className="team-member__worktree">
                   <WorktreeButton worktree={worktree} projectId={projectId} handle={member.handle} />
                   {asking && pane !== undefined ? (
-                    <span className="team-card__actions">
+                    <span className="home-card__actions">
                       <AnswerButtons
                         terminalId={pane.terminalId}
                         choices={pane.choices ?? []}

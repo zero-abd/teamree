@@ -97,6 +97,12 @@
   background: var(--bg-raised);
 }
 
+/* A question with nothing under its title: the answers sit straight under the head. */
+.modal__body > :first-child > .modal__actions:first-child {
+  margin-top: calc(-1 * var(--modal-pad));
+  border-top: 0;
+}
+
 /* Four answers is more than a row holds in a narrow window. */
 .modal__actions--wrap {
   flex-wrap: wrap;
@@ -164,6 +170,12 @@
 
 .field__input::placeholder {
   color: var(--fg-faint);
+}
+
+textarea.field__input {
+  padding: 9px 10px;
+  line-height: 1.45;
+  resize: none;
 }
 
 /* The task grows with what is typed, from four lines, so it never needs a grip. */
@@ -416,10 +428,6 @@ button.picker__chevron:hover {
   color: var(--fg-secondary);
 }
 
-.agents__name .agent-glyph {
-  width: 16px;
-  height: 16px;
-}
 
 /* The segmented well: a sunken track, the chosen mode lifted out of it. */
 .agents__modes {

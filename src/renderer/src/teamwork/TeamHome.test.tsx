@@ -224,7 +224,8 @@ describe('what is waiting on you', () => {
     expect(screen.queryByRole('region', { name: 'Waiting on you' })).toBeNull()
     const waiting = within(region('Handed to you'))
     expect(waiting.getByRole('button', { name: 'Dismiss' })).toBeTruthy()
-    expect(waiting.getByText(/bo handed you/).textContent).toContain('payment retry')
+    expect(waiting.getByText('payment retry')).toBeTruthy()
+    expect(waiting.getByText(/bo handed this to you/)).toBeTruthy()
     await act(async () => {
       fireEvent.click(waiting.getByRole('button', { name: 'Take' }))
     })

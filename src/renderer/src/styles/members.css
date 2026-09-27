@@ -778,6 +778,7 @@
 .path-choice__motif .brand__mark {
   position: relative;
   z-index: 1;
+  color: inherit;
   width: 56px;
   height: 56px;
 }
@@ -993,7 +994,7 @@
   font-size: var(--text-sm);
 }
 
-.team-cards,
+.home-cards,
 .team-members,
 .team-activity,
 .team-member__worktrees,
@@ -1005,12 +1006,12 @@
   list-style: none;
 }
 
-.team-cards {
+.home-cards {
   gap: var(--s2);
 }
 
 /* One card per ask or offer: the face, what it is, and its answers on the right. */
-.team-card {
+.home-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -1024,20 +1025,20 @@
 }
 
 /* An ask is the one card with an edge: amber, inset, never a fill. */
-.team-card--asking {
+.home-card--asking {
   box-shadow:
     inset 2px 0 var(--warning),
     var(--shadow-1);
 }
 
-.team-card__text {
+.home-card__text {
   display: flex;
   flex-direction: column;
   gap: 1px;
   min-width: 0;
 }
 
-.team-card__title {
+.home-card__title {
   display: flex;
   align-items: center;
   gap: var(--s2);
@@ -1047,7 +1048,7 @@
   font-weight: 600;
 }
 
-.team-card__line {
+.home-card__line {
   overflow: hidden;
   color: var(--fg-secondary);
   font-size: var(--text-xs);
@@ -1055,11 +1056,11 @@
   white-space: nowrap;
 }
 
-.team-card--asking .team-card__line {
+.home-card--asking .home-card__line {
   font-family: var(--font-mono);
 }
 
-.team-card__actions {
+.home-card__actions {
   display: flex;
   flex: none;
   align-items: center;
@@ -1288,16 +1289,32 @@
   flex: 0 1 280px;
 }
 
+/* Setup, folded under the home once nothing is left to do: a quiet row that opens in place. */
 .team-setup__toggle {
   display: inline-flex;
   align-items: center;
-  gap: var(--s1);
-  padding: 0;
+  gap: 6px;
+  min-height: 28px;
+  margin-left: calc(-1 * var(--s1));
+  padding: 0 var(--s2) 0 var(--s1);
   border: 0;
+  border-radius: var(--r1);
   background: none;
-  color: inherit;
+  color: var(--fg-secondary);
   font: inherit;
   cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.team-setup__toggle:hover,
+.team-setup__toggle[aria-expanded='true'] {
+  color: var(--fg);
+}
+
+.team-setup__toggle:hover {
+  background: var(--bg-hover);
 }
 
 /* Faces on this page: the person's hue as a wash with their initial in it, on a rounded square. */

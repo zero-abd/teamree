@@ -4,8 +4,8 @@
 
 import type { InstalledAgent } from '@shared/entities'
 import { permissionArgs, permissionModesFor, type PermissionMode } from '@shared/permissionMode'
-import { AgentGlyph } from '../agents/glyphs'
 import { harnessName } from '../agents/harnesses'
+import { Icon } from '../icons/Icon'
 import { agentCount, MAX_PER_AGENT, withAgentCount, type AgentCounts, type AgentModes } from './taskPlan'
 
 const MODE_LABEL: Readonly<Record<PermissionMode, string>> = { default: 'Default', auto: 'Auto', bypass: 'Bypass' }
@@ -40,7 +40,7 @@ export function AgentSteppers({
             <span className="agents__name">
               {/* The name beside it says it once; the mark's own label would say it twice. */}
               <span aria-hidden="true" className="agents__mark">
-                <AgentGlyph kind={entry.kind} decorative />
+                <Icon name="agent" />
               </span>
               {harnessName(entry.kind)}
             </span>
