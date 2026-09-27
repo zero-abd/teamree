@@ -64,7 +64,7 @@ export function terminalMenuEntries(context: TerminalMenuContext, modifier: Plat
     { ...copy, separated: pointed.length > 0 },
     { action: 'paste', label: 'Paste', hint: clipboard('v') },
     selectAll,
-    { action: 'clear', label: 'Clear' },
+    { action: 'clear', label: 'Clear', hint: hint('clear-pane') },
     { action: 'find', label: 'Find…', hint: hint('find-in-pane') },
     { action: 'split-right', label: 'Split Right', hint: hint('split-right'), separated: true },
     { action: 'split-down', label: 'Split Down', hint: hint('split-down') }

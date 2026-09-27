@@ -191,7 +191,7 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'expand-pane'
     ])
     expect(sectionOrder('text')).toEqual(['actual-size', 'bigger-text', 'smaller-text'])
-    expect(sectionOrder('edit')).toEqual(['find-in-pane'])
+    expect(sectionOrder('edit')).toEqual(['find-in-pane', 'clear-pane'])
     expect(sectionOrder('help')).toEqual(['open-help', 'open-setup'])
   })
 
@@ -231,6 +231,7 @@ describe('what the menu bar says can be done', () => {
       'save-file': false,
       'save-all': false,
       'find-in-pane': false,
+      'clear-pane': false,
       'focus-next-pane': false,
       'focus-previous-pane': false,
       'select-next-pane': false,

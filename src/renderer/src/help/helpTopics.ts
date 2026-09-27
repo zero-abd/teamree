@@ -31,6 +31,7 @@ const GROUP_OF: Record<WorkspaceCommand, ShortcutGroupId> = {
   'new-terminal': 'panes',
   'new-markdown': 'panes',
   'find-in-pane': 'panes',
+  'clear-pane': 'panes',
   'focus-next-pane': 'panes',
   'focus-previous-pane': 'panes',
   'select-next-pane': 'panes',

@@ -6,7 +6,7 @@ type Buffer = {
   length: number
   getLine: (row: number) => { isWrapped: boolean; translateToString: (trimRight?: boolean) => string } | undefined
 }
-type Shown = { buffer: { active: Buffer } }
+type Shown = { buffer: { active: Buffer }; clear: () => void }
 
 /** An emulator's rows as lines, and whether a full-screen program has the alternate screen. */
 export type PaneScreen = { rows: string[]; alternate: boolean }
@@ -19,6 +19,11 @@ export function showPane(terminalId: string, term: Shown): () => void {
   return () => {
     if (shown.get(terminalId) === term) shown.delete(terminalId)
   }
+}
+
+/** Clears a mounted pane's scrollback and screen, keeping the cursor's line, as the menu's Clear does. */
+export function clearShownPane(terminalId: string): void {
+  shown.get(terminalId)?.clear()
 }
 
 /** The pane's scrollback and screen as text, wrapped rows joined; null when it is not mounted. */

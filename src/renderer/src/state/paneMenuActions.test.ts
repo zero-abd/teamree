@@ -146,7 +146,8 @@ describe('Copy Output', () => {
           length: rows.length,
           getLine: (row) => ({ isWrapped: rows[row]!.isWrapped, translateToString: () => rows[row]!.text })
         }
-      }
+      },
+      clear: () => {}
     })
 
     await useWorkspaceStore.getState().copyPaneOutput(ids[0]!, 'zsh')

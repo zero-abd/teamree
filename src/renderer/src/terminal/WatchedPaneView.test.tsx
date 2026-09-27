@@ -26,6 +26,7 @@ type FakeTerm = {
   focused: boolean
   /** What the view told the emulator to decline, so the app can have it. */
   keyHandler: ((event: KeyboardEvent) => boolean) | null
+  unicode: { activeVersion: string }
 }
 
 const terms = vi.hoisted(() => [] as unknown[])
@@ -81,6 +82,7 @@ vi.mock('@xterm/xterm', () => {
     }
 
     loadAddon(): void {}
+    unicode = { activeVersion: '6' }
 
     modes = { mouseTrackingMode: 'none' }
     selectedAll = 0
@@ -328,6 +330,7 @@ describe('the size is the owner’s', () => {
     expect(fakeTerms).toHaveLength(1)
     expect(fakeTerms[0]?.options.cols).toBe(132)
     expect(fakeTerms[0]?.options.rows).toBe(43)
+    expect(fakeTerms[0]?.unicode.activeVersion).toBe('11')
     expect(screen.getByText('132×43')).toBeTruthy()
   })
 

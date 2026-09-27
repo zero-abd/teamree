@@ -12,6 +12,8 @@ type FakeTerm = {
   writes: string[]
   /** The width each write landed at. */
   widths: number[]
+  /** The width table each write was measured with. */
+  unicodeAt: string[]
   disposed: boolean
   cols: number
 }
@@ -42,10 +44,13 @@ vi.mock('@xterm/xterm', () => {
     }
 
     widths: number[] = []
+    unicodeAt: string[] = []
+    unicode = { activeVersion: '6', register: (): void => {} }
 
     write(text: string, done?: () => void): void {
       this.writes.push(text)
       this.widths.push(this.cols)
+      this.unicodeAt.push(this.unicode.activeVersion)
       if (done) queueMicrotask(done)
     }
 
@@ -281,5 +286,15 @@ it('replays a pane first drawn after it narrowed at the width its output was wri
   expect(term!.widths[term!.writes.indexOf(runtime.snapshot.data)]).toBe(134)
   expect(term!.cols).toBe(48)
   expect(call.mock.calls.filter(([, params]) => (params as { cols?: number }).cols === 134)).toEqual([])
+  view.unmount()
+})
+
+it('measures emoji with the Unicode 11 table from the first write', async () => {
+  const view = render(<Pane nested={false} />)
+  await settle()
+
+  const [term] = fakeTerms
+  expect(term!.writes.length).toBeGreaterThan(0)
+  expect(new Set(term!.unicodeAt)).toEqual(new Set(['11']))
   view.unmount()
 })
