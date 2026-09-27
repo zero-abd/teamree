@@ -1,6 +1,6 @@
-// A short rail of places to go, then projects and their worktrees with each
-// worktree's panes underneath. The rail's search is a button wearing a field's
-// clothes: it opens the palette rather than being a second, weaker search.
+// A short rail of places to go, then projects and their worktrees with each worktree's panes
+// underneath, then a foot with Settings, Appearance and Help. The rail's search is a button
+// wearing a field's clothes: it opens the palette rather than being a second, weaker search.
 
 import { useEffect, useMemo, useRef } from 'react'
 import { hasCheckout, teammatesHeard, type Worktree } from '@shared/entities'
@@ -301,64 +301,6 @@ export function Sidebar({
               <span>All Panes</span>
             </button>
           </li>
-          <li>
-            {/* The theme sheet, beside the panes it colours; also in the View menu and the palette. */}
-            <button
-              type="button"
-              className={`rail__link${appearanceOpen ? ' rail__link--current' : ''}`}
-              aria-pressed={appearanceOpen}
-              title="Themes and colours"
-              onClick={() => showAppearance(!appearanceOpen)}
-            >
-              <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
-                <path d="M7 1.6a5.4 5.4 0 1 0 0 10.8c.9 0 1.3-.6 1.3-1.2 0-.8-.7-1.1-.7-1.8 0-.5.4-.9 1-.9h1.1a2.7 2.7 0 0 0 2.7-2.8c0-2.6-2.4-4.1-5.4-4.1Z" />
-                <circle cx="4.5" cy="6" r="0.9" />
-                <circle cx="7" cy="4.2" r="0.9" />
-                <circle cx="9.6" cy="6" r="0.9" />
-              </svg>
-              <span>Appearance</span>
-            </button>
-          </li>
-          <li>
-            {/* Last two in the rail, and last on purpose: they are the entries
-                somebody goes looking for rather than the ones they work in. */}
-            <button
-              type="button"
-              className={`rail__link${settingsOpen ? ' rail__link--current' : ''}`}
-              aria-current={settingsOpen ? 'page' : undefined}
-              title={cliFlag === null ? 'Settings' : `Settings · CLI: ${cliTitle(cli)}`}
-              aria-label={cliFlag === null ? undefined : `Settings, ${cliFlag}`}
-              onClick={() => (cliFlag === null || settingsOpen ? toggleSettings() : openSettings('cli'))}
-            >
-              <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
-                <circle cx="7" cy="7" r="2.1" />
-                <path d="M7 1.5v1.7M7 10.8v1.7M12.1 7h-1.7M3.6 7H1.9M10.6 3.4 9.4 4.6M4.6 9.4l-1.2 1.2M10.6 10.6 9.4 9.4M4.6 4.6 3.4 3.4" />
-              </svg>
-              <span>Settings</span>
-              {/* The CLI link is wrong and Settings › CLI fixes it; pressing Settings goes there. In ink: colour is for agents' state. */}
-              {cliFlag === null ? null : (
-                <span className="rail__badge" role="img" aria-label={cliFlag}>
-                  !
-                </span>
-              )}
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              className={`rail__link${helpOpen ? ' rail__link--current' : ''}`}
-              aria-current={helpOpen ? 'page' : undefined}
-              title="Shortcuts"
-              onClick={toggleHelp}
-            >
-              <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
-                <circle cx="7" cy="7" r="5.4" />
-                <path d="M5.4 5.5a1.7 1.7 0 1 1 2.2 1.7c-.4.2-.6.5-.6.9v.4" />
-                <circle cx="7" cy="10.2" r="0.7" />
-              </svg>
-              <span>Help</span>
-            </button>
-          </li>
         </ul>
       </nav>
 
@@ -644,6 +586,59 @@ export function Sidebar({
           })}
           {narrowing && sectionsDrawn === 0 ? <p className="sidebar__empty">No matches</p> : null}
         </div>
+      </nav>
+
+      {/* Where people look for them: under the list, which scrolls above it. */}
+      <nav className="sidebar__foot" aria-label="Settings and help">
+        <button
+          type="button"
+          className={`rail__link sidebar__settings${settingsOpen ? ' rail__link--current' : ''}`}
+          aria-current={settingsOpen ? 'page' : undefined}
+          title={cliFlag === null ? 'Settings' : `Settings · CLI: ${cliTitle(cli)}`}
+          aria-label={cliFlag === null ? undefined : `Settings, ${cliFlag}`}
+          onClick={() => (cliFlag === null || settingsOpen ? toggleSettings() : openSettings('cli'))}
+        >
+          <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
+            <circle cx="7" cy="7" r="2.1" />
+            <path d="M7 1.5v1.7M7 10.8v1.7M12.1 7h-1.7M3.6 7H1.9M10.6 3.4 9.4 4.6M4.6 9.4l-1.2 1.2M10.6 10.6 9.4 9.4M4.6 4.6 3.4 3.4" />
+          </svg>
+          <span>Settings</span>
+          {/* The CLI link is wrong and Settings › CLI fixes it; pressing Settings goes there. In ink: colour is for agents' state. */}
+          {cliFlag === null ? null : (
+            <span className="rail__badge" role="img" aria-label={cliFlag}>
+              !
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          className={`rail__link rail__link--icon${appearanceOpen ? ' rail__link--current' : ''}`}
+          aria-pressed={appearanceOpen}
+          aria-label="Appearance"
+          title="Appearance"
+          onClick={() => showAppearance(!appearanceOpen)}
+        >
+          <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
+            <path d="M7 1.6a5.4 5.4 0 1 0 0 10.8c.9 0 1.3-.6 1.3-1.2 0-.8-.7-1.1-.7-1.8 0-.5.4-.9 1-.9h1.1a2.7 2.7 0 0 0 2.7-2.8c0-2.6-2.4-4.1-5.4-4.1Z" />
+            <circle cx="4.5" cy="6" r="0.9" />
+            <circle cx="7" cy="4.2" r="0.9" />
+            <circle cx="9.6" cy="6" r="0.9" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          className={`rail__link rail__link--icon${helpOpen ? ' rail__link--current' : ''}`}
+          aria-current={helpOpen ? 'page' : undefined}
+          aria-label="Help"
+          title="Help"
+          onClick={toggleHelp}
+        >
+          <svg className="rail__icon" viewBox="0 0 14 14" aria-hidden="true">
+            <circle cx="7" cy="7" r="5.4" />
+            <path d="M5.4 5.5a1.7 1.7 0 1 1 2.2 1.7c-.4.2-.6.5-.6.9v.4" />
+            <circle cx="7" cy="10.2" r="0.7" />
+          </svg>
+        </button>
       </nav>
     </div>
   )

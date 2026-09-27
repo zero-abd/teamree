@@ -126,6 +126,33 @@
   stroke-linecap: round;
 }
 
+/* Settings, Appearance and Help, pinned under the list however long it grows. */
+.sidebar__foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 1px;
+  padding: var(--s2) var(--s3);
+  border-top: 1px solid var(--line);
+}
+
+.sidebar__settings {
+  flex: 1;
+  min-width: 0;
+}
+
+.rail__link--icon {
+  flex: none;
+  justify-content: center;
+  width: auto;
+  padding: 5px;
+}
+
+/* Too small a box for the bar; the fill says it. */
+.rail__link--icon.rail__link--current::before {
+  display: none;
+}
+
 /* Everything below the rail: the tree, and whatever sits under it. */
 .sidebar__projects {
   display: flex;
