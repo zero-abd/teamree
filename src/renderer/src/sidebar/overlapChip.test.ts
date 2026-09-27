@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { WorktreeOverlap } from '@shared/tasks'
 import { overlapChip, overlapLines } from './overlapChip'
+import { overlapNamer } from './useOverlapChip'
 
 const names: Record<string, string> = { b: 'Fix login redirect', c: 'Add rate limits', 'peer:ana:w9': 'Tidy auth' }
 const nameOf = (other: WorktreeOverlap['with']): string =>
@@ -160,5 +161,23 @@ describe('the overlap lines in the Changes header', () => {
     ])
     expect(overlapLines(chip)[1]?.entry).toMatchObject({ path: 'src/a.ts', with: { worktreeId: 'b' } })
     expect(overlapLines(null)).toEqual([])
+  })
+})
+
+describe('whom an overlap is with', () => {
+  it('names a teammate’s worktree as they do, not by its prompt', () => {
+    const theirs = {
+      id: 'peer:ana:w9',
+      handle: 'ana',
+      publicKey: 'k',
+      name: 'mate checkout',
+      branch: 'mate-checkout',
+      task: 'Rework the checkout flow',
+      state: 'ready' as const,
+      heardAt: 0,
+      live: true,
+      panes: []
+    }
+    expect(overlapNamer([], [theirs])({ handle: 'ana', worktreeId: 'peer:ana:w9' })).toBe('ana · mate checkout')
   })
 })

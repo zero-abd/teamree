@@ -69,7 +69,7 @@ export function TeamHome({
       .filter((worktree) => worktree.projectId === projectId)
       .map((worktree) => ({
         id: worktree.id,
-        name: worktree.task ?? worktreeDisplay(worktree).title,
+        name: worktreeDisplay(worktree).title,
         tone: worktreeTone(agentRows(panes, worktree.id, now).filter((row) => row.agent !== undefined)),
         ...(worktree.report === undefined
           ? {}
@@ -264,6 +264,7 @@ function WorktreeButton({
         aria-hidden="true"
       />
       <span className="team-worktree__name">{worktree.name}</span>
+      {worktree.branch === undefined ? null : <span className="team-worktree__branch">{worktree.branch}</span>}
       {worktree.word === null ? null : <span className="team-worktree__word">{worktree.word}</span>}
     </button>
   )
