@@ -47,6 +47,8 @@ type SidebarViewState = StoredSidebarView & {
   revealSeq: number
   /** Set by Filter Sidebar until the field has taken the focus; the sidebar may not be mounted yet. */
   filterAsked: boolean
+  /** The field is drawn; it also is while it holds text. */
+  filterOpen: boolean
   setQuery: (query: string) => void
   toggleQuick: (chip: QuickFilter) => void
   setCompact: (compact: boolean) => void
@@ -54,6 +56,8 @@ type SidebarViewState = StoredSidebarView & {
   reveal: () => void
   askFilter: () => void
   filterTaken: () => void
+  /** Puts the field away, and its text with it. */
+  closeFilter: () => void
 }
 
 export const useSidebarView = create<SidebarViewState>()((set, get) => {
@@ -65,6 +69,7 @@ export const useSidebarView = create<SidebarViewState>()((set, get) => {
     ...readStoredSidebarView(storage),
     revealSeq: 0,
     filterAsked: false,
+    filterOpen: false,
     setQuery: (query) => save({ query }),
     toggleQuick(chip) {
       const { quick } = get()
@@ -80,7 +85,11 @@ export const useSidebarView = create<SidebarViewState>()((set, get) => {
       })
     },
     reveal: () => set((state) => ({ revealSeq: state.revealSeq + 1 })),
-    askFilter: () => set({ filterAsked: true }),
-    filterTaken: () => set({ filterAsked: false })
+    askFilter: () => set({ filterAsked: true, filterOpen: true }),
+    filterTaken: () => set({ filterAsked: false }),
+    closeFilter() {
+      set({ filterOpen: false })
+      save({ query: '' })
+    }
   }
 })

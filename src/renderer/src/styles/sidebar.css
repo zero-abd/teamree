@@ -158,7 +158,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--s2);
-  padding: var(--s4) var(--s4) var(--s2);
+  padding: var(--s2) var(--s3) var(--s1) var(--s4);
 }
 
 .sidebar__head-title {
@@ -173,17 +173,17 @@
   gap: 2px;
 }
 
-.sidebar__compact[aria-pressed='true'] {
+.sidebar__head-actions .button--icon:is([aria-pressed='true'], [aria-expanded='true']) {
   background: var(--bg-press);
   color: var(--fg);
 }
 
-/* The filter and its chips: above the list, never scrolled away with it. */
+/* The filter and its chips: above the list, never scrolled away with it, and only while in use. */
 .sidebar__filter {
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: var(--s2);
+  gap: var(--s1);
   padding: 0 var(--s3) var(--s2);
 }
 
@@ -214,6 +214,7 @@
   box-shadow: var(--ring);
 }
 
+/* One row at the default width; only the narrowest sidebar wraps it. */
 .sidebar__chips {
   display: flex;
   flex-wrap: wrap;
@@ -247,6 +248,7 @@
 .sidebar__scroll {
   flex: 1;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding-bottom: var(--s5);
 }
@@ -260,28 +262,34 @@
 /* Project ---------------------------------------------------------------- */
 
 .project {
-  padding: var(--s2) var(--s2) var(--s3);
+  padding: var(--s1) var(--s2) var(--s2);
 }
 
 .project + .project {
   border-top: 1px solid var(--line);
 }
 
+/* One line: the name, where new tasks start and the team, then the actions. */
 .project__head {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--s1);
   padding-right: var(--s2);
 }
 
+.project__head > .button--icon {
+  margin-top: 2px;
+}
+
 .project__toggle {
-  flex: 1;
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
   gap: var(--s2);
   min-width: 0;
-  padding: 3px var(--s2);
+  height: 26px;
+  padding: 0 var(--s2);
   border: 0;
   border-radius: var(--r1);
   background: transparent;
@@ -297,9 +305,9 @@
   background: var(--bg-hover);
 }
 
-/* The project's menu, the same one right-click opens. */
+/* The project's menu, the same one right-click opens; out of sight until the head is pointed at. */
 .project__more {
-  opacity: var(--control-rest);
+  opacity: var(--row-action-rest);
 }
 
 .project__head:hover .project__more,
@@ -319,6 +327,7 @@
 }
 
 .project__name {
+  min-width: 3ch;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -333,9 +342,10 @@
 }
 
 .project__base {
-  flex: none;
-  max-width: 75%;
+  flex: 1 1 0;
+  min-width: 8ch;
   overflow: hidden;
+  line-height: 26px;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--fg-muted);
@@ -347,7 +357,6 @@
 .project__fresh {
   flex: 0 1000 auto;
   min-width: 3ch;
-  margin-right: auto;
   padding: 0 var(--s1);
   overflow: hidden;
   border: 0;
@@ -358,10 +367,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
-}
-
-.project__fresh:has(+ .project__unpushed) {
-  margin-right: 0;
 }
 
 .project__fresh--failed {
@@ -375,7 +380,6 @@
 /* A landing only this Mac has: sits beside the base ref, and pressing it asks to push. */
 .project__unpushed {
   flex: none;
-  margin-right: auto;
   padding: 0 var(--s1);
   border: 0;
   border-radius: var(--r1);
@@ -450,16 +454,27 @@
   color: var(--accent-bright);
 }
 
-/* The base ref and the teamwork control share one line, so the header stays
-   two rows tall however much either has to say: what the project is on the
-   left, what is happening in it on the right. */
+/* Beside the name: what the project is on the left, what the team is doing on the right. The base ref
+   gives way first, down to 8ch; past that the team drops to a tight line under it rather than being cut. */
 .project__meta {
   display: flex;
+  flex: 1 1 0;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--s2);
+  column-gap: var(--s2);
   min-width: 0;
-  padding: 0 var(--s3) var(--s2) 28px;
+}
+
+.project__team {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s2);
+  margin-left: auto;
+}
+
+.project__team:empty {
+  display: none;
 }
 
 .project__worktrees {
@@ -552,7 +567,7 @@
 .worktree__fold {
   position: absolute;
   top: 7px;
-  left: calc(9px + var(--depth, 0) * 14px);
+  left: calc(-1px + var(--depth, 0) * 14px);
   z-index: 1;
   display: grid;
   place-items: center;
@@ -662,12 +677,19 @@
   border-radius: var(--r2);
 }
 
-.worktree:hover .worktree__row {
+.worktree:not(.worktree--active):hover .worktree__row {
   background: var(--bg-hover);
 }
 
-.worktree--active .worktree__row {
+/* The open row: one fill and one line around its whole box, panes and all. */
+.worktree--active {
   background: var(--bg-selected);
+  border-color: var(--accent-line);
+}
+
+/* A child task's row has no border of its own inside the task's box. */
+.task__rows > .worktree--active {
+  box-shadow: inset 0 0 0 1px var(--accent-line);
 }
 
 /* The row a menu is open for, so the menu reads as about it. */
@@ -676,29 +698,13 @@
   box-shadow: 0 0 0 1px var(--line-strong);
 }
 
-/* The active marker rides the rail's left edge rather than indenting text. */
-.worktree--active::before {
-  content: '';
-  position: absolute;
-  top: 6px;
-  bottom: 6px;
-  left: 2px;
-  width: 2px;
-  border-radius: 2px;
-  background: var(--accent);
-}
-
-/* Under a page the rail entry is what is selected; the worktree keeps a faint tick to come back to. */
-.sidebar--page .worktree--active .worktree__row {
+/* Under a page the rail entry is what is selected; the worktree keeps its line to come back to. */
+.sidebar--page .worktree--active {
   background: none;
 }
 
 .sidebar--page .worktree--active:hover .worktree__row {
   background: var(--bg-hover);
-}
-
-.sidebar--page .worktree--active::before {
-  opacity: 0.35;
 }
 
 /* Inside the row: rows are packed, and a ring outside one covers its neighbours' text. */
@@ -753,8 +759,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--fg);
+  color: var(--fg-secondary);
   font-size: var(--text-base);
+  font-weight: 500;
+}
+
+/* The state dot, in the gutter left of the name: 8px across, and the name still starts at 28px. */
+.worktree__title > .activity:first-child {
+  width: 8px;
+  height: 8px;
+  margin-left: -14px;
 }
 
 .worktree__open--renaming {
@@ -790,12 +804,11 @@
 }
 
 .worktree__agent .agent-glyph {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
-/* The facts, when there is no branch line, then the dot: at the row's right edge, so the dots line up
-   into a column that can be read down. */
+/* The facts, when there is no branch line: at the title line's right edge. */
 .worktree__end {
   position: relative;
   display: inline-flex;
@@ -901,7 +914,7 @@
   color: var(--danger);
 }
 
-/* Its own column on the title line, drawn at rest too, so nothing moves on hover and nothing runs under it. */
+/* Its own column on the title line, kept while out of sight, so nothing moves on hover and nothing runs under it. */
 .worktree__action {
   flex: none;
   align-self: flex-start;
@@ -914,11 +927,14 @@
   background: transparent;
   color: var(--fg-muted);
   cursor: pointer;
-  opacity: var(--control-rest);
+  opacity: var(--row-action-rest);
   transition: opacity var(--motion-fast) var(--ease);
 }
 
-.worktree--active > .worktree__row > .worktree__action,
+.worktree--active > .worktree__row > .worktree__action {
+  opacity: var(--control-rest);
+}
+
 .worktree:is(:hover, :has(.worktree__open:focus-visible, .worktree__action:focus-visible, .worktree__action[aria-expanded='true'])) .worktree__action {
   opacity: 1;
 }
@@ -1205,11 +1221,26 @@
   }
 }
 
-/* Printed since this person last looked: the name in weight. Never the dot, a count or a second dot. */
+/* Printed since this person last looked: the name in ink and a mark after it, the pane's label in ink.
+   Never a weight, which made names jump in width. Inside the name, so it follows a short one. */
 .worktree__name--unread,
+.worktree--active:not(.worktree--context) .worktree__name {
+  color: var(--fg);
+}
+
+.worktree__name--unread::after {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: var(--s2);
+  border-radius: 99px;
+  background: var(--accent-bright);
+  vertical-align: 0.15em;
+}
+
 .pane-row--unread .pane-row__label {
   color: var(--fg);
-  font-weight: 600;
 }
 
 /* The glyph starts under the worktree name: 28px, less the row's own padding. */
@@ -1286,10 +1317,9 @@
   max-width: 50%;
 }
 
-/* The last line the pane printed, in the terminal's own typeface: a quotation,
-   not a status. Beside the name, or in its place for the pane named after its
-   worktree, so every row is one line high. A one-line clamp rather than
-   `text-overflow`: it ends on a word, where an ellipsis cuts wherever the box does. */
+/* The last line the pane printed. Beside the name, or in its place for the pane named after its
+   worktree, so every row is one line high. A one-line clamp rather than `text-overflow`: it ends on
+   a word, where an ellipsis cuts wherever the box does. */
 .pane-row__evidence {
   display: -webkit-box;
   flex: 1 1 0;
@@ -1297,7 +1327,6 @@
   overflow: hidden;
   /* A step brighter than the label: the quoted line is what the row exists to show. */
   color: var(--fg-secondary);
-  font-family: var(--font-mono);
   font-size: var(--text-sm);
   line-height: inherit;
   overflow-wrap: anywhere;
@@ -1380,7 +1409,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--fg-muted);
+  color: var(--fg-secondary);
   font-size: var(--text-sm);
 }
 
