@@ -12,6 +12,8 @@ import { createMainErrors, ERROR_LOG_NAME } from './mainErrors'
 export const MAIN_ERROR_CHANNEL = 'teamree:errors:main'
 /** Window to main: an error the window caught or nothing did, for the log. */
 export const ERROR_REPORT_CHANNEL = 'teamree:errors:report'
+/** Window to main: localStorage it just wrote, to be on disk before a crash can take it. */
+export const STORAGE_FLUSH_CHANNEL = 'teamree:storage:flush'
 
 export const mainErrors = createMainErrors({
   logFile: () => join(app.getPath('userData'), 'logs', ERROR_LOG_NAME),
@@ -106,4 +108,9 @@ export function installErrorReports(): void {
     if (event.senderFrame !== event.sender.mainFrame || typeof details !== 'string') return
     mainErrors.log('window error', details)
   })
+}
+
+/** Chromium commits localStorage seconds after a write; a kill -9 in between loses it. */
+export function installStorageFlush(): void {
+  ipcMain.on(STORAGE_FLUSH_CHANNEL, (event: IpcMainEvent) => event.sender.session.flushStorageData())
 }

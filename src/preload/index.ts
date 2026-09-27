@@ -36,6 +36,7 @@ const QUICK_NOTE_OPEN_CHANNEL = 'teamree:quick-note:open'
 // src/main/crashGuard/index.ts
 const MAIN_ERROR_CHANNEL = 'teamree:errors:main'
 const ERROR_REPORT_CHANNEL = 'teamree:errors:report'
+const STORAGE_FLUSH_CHANNEL = 'teamree:storage:flush'
 
 /** What the main process answers a reveal with, declared structurally (not imported from src/main). */
 type RevealResult = { revealed: true } | { revealed: false; reason: string }
@@ -258,6 +259,13 @@ const errors = {
   }
 } as const
 
+const storage = {
+  /** Puts this window's localStorage on disk now rather than when Chromium gets to it. */
+  flush(): void {
+    ipcRenderer.send(STORAGE_FLUSH_CHANNEL)
+  }
+} as const
+
 const api = {
   selectProjectFolder(): Promise<string | null> {
     return ipcRenderer.invoke('teamree:select-project-folder')
@@ -297,7 +305,8 @@ const api = {
   unsaved,
   invitations,
   quickNote,
-  errors
+  errors,
+  storage
 } as const
 
 export type TeamreeRuntimeBridge = typeof runtime

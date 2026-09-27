@@ -1055,6 +1055,9 @@ const storage = typeof window === 'undefined' ? undefined : window.localStorage
 
 /** What the last window in this installation was showing, read once at startup. */
 const lastSession = readStoredSession(storage)
+/** A burst of tab switches is one write to disk. */
+const SESSION_FLUSH_MS = 300
+let sessionFlush: ReturnType<typeof setTimeout> | undefined
 const lastDrafts = [...keptDrafts()]
 const lastPanel = readStoredRightPanel(storage)
 
@@ -4600,6 +4603,11 @@ useWorkspaceStore.subscribe((state, previous) => {
     ...state,
     sidebarVisible: state.sidebarVisible || state.roomHid.sidebar || state.compareHid?.sidebar === true
   })
+  // Chromium commits localStorage seconds late; without this a crash reopens an older tab.
+  clearTimeout(sessionFlush)
+  sessionFlush = setTimeout(() => {
+    if (typeof window !== 'undefined') window.teamree?.storage?.flush()
+  }, SESSION_FLUSH_MS)
 })
 
 /** Every worktree and pane arrived at, however: the palette, the sidebar, a chord, a notification. */

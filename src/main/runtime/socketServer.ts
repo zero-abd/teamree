@@ -75,13 +75,14 @@ export async function startSocketServer(options: SocketServerOptions): Promise<R
     }
     socket.on('close', teardown)
     socket.on('error', (error) => {
-      onError?.(error)
+      if (!isHangUp(error)) onError?.(error)
       socket.destroy()
     })
   })
 
-  server.on('error', (error) => onError?.(error))
   await listenWithStaleRecovery(server, endpoint)
+  // Only once bound: a stale socket's EADDRINUSE is recovered from, not reported.
+  server.on('error', (error) => onError?.(error))
   await restrictEndpoint(server, endpoint)
 
   return {
@@ -153,6 +154,16 @@ export function isEndpointAlive(endpoint: string, timeoutMs = 400): Promise<bool
   })
 }
 
+function errorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null ? (error as { code?: string }).code : undefined
+}
+
 function isAddressInUse(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && (error as { code?: string }).code === 'EADDRINUSE'
+  return errorCode(error) === 'EADDRINUSE'
+}
+
+/** A CLI that exited or was interrupted mid-answer; nothing went wrong here. */
+function isHangUp(error: unknown): boolean {
+  const code = errorCode(error)
+  return code === 'EPIPE' || code === 'ECONNRESET'
 }

@@ -144,3 +144,32 @@ it('writes down what the window is showing as it changes', async () => {
   expect(written.activeWorktreeId).toBe(ready[ready.length - 1]!.id)
   expect(written.sidebarVisible).toBe(false)
 })
+
+// Chromium commits localStorage seconds after the write, so a kill -9 in that gap reopened an older tab.
+it('asks for what it wrote to be put on disk now, once per burst of switches', async () => {
+  const flush = vi.fn()
+  vi.resetModules()
+  vi.stubGlobal('window', { localStorage: storageWith({}), teamree: { storage: { flush } } })
+  const { useWorkspaceStore } = await import('./workspaceStore')
+  await useWorkspaceStore.getState().bootstrap()
+  await vi.waitFor(() => expect(flush).toHaveBeenCalled())
+  flush.mockClear()
+
+  const ready = useWorkspaceStore
+    .getState()
+    .worktrees.filter((worktree) => worktree.state === 'ready')
+    .map((worktree) => worktree.id)
+  vi.useFakeTimers()
+  try {
+    for (const id of ready) useWorkspaceStore.setState({ openWorktreeIds: ready, activeWorktreeId: id })
+    expect(flush).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1000)
+    expect(flush).toHaveBeenCalledTimes(1)
+
+    useWorkspaceStore.setState({ dashboardOpen: !useWorkspaceStore.getState().dashboardOpen })
+    vi.advanceTimersByTime(1000)
+    expect(flush).toHaveBeenCalledTimes(1)
+  } finally {
+    vi.useRealTimers()
+  }
+})
