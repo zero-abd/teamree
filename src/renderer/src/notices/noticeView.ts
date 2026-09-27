@@ -12,12 +12,12 @@ export function noticeParts(text: string): { title: string; detail: string | nul
 
 const TITLE_MAX = 60
 
-export type NoticeLook = 'error' | 'success' | 'info'
+export type NoticeLook = 'error' | 'success' | 'neutral'
 
 /** An error is red; news that can be undone is something done, green; the rest is neutral. */
 export function noticeLook(notice: Pick<Notice, 'tone' | 'action'>): NoticeLook {
   if (notice.tone === 'error') return 'error'
-  return notice.action !== undefined && 'undo' in notice.action ? 'success' : 'info'
+  return notice.action !== undefined && 'undo' in notice.action ? 'success' : 'neutral'
 }
 
-export const NOTICE_ICON: Record<NoticeLook, IconName> = { error: 'alert', success: 'check', info: 'info' }
+export const NOTICE_ICON: Record<NoticeLook, IconName> = { error: 'alert', success: 'check', neutral: 'info' }

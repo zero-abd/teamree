@@ -168,6 +168,17 @@ export function rowIcon(item: PaletteItem): RowIcon {
   }
 }
 
+/** The shared status class for a tone: the hue of its word. */
+export const STATUS_CLASS: Record<DotTone, string> = {
+  working: 'status--working',
+  waiting: 'status--asking',
+  failed: 'status--failed',
+  quiet: 'status--ready',
+  done: 'status--ready',
+  stopped: 'status--ended',
+  idle: 'status--ended'
+}
+
 /** The dot's tone, the state word said beside it (only where the row says one), and the rest of the right column. */
 export function rowStatus(item: PaletteItem): { tone: DotTone | null; word: string | null; meta: string } {
   if (item.kind !== 'worktree' && item.kind !== 'pane') return { tone: null, word: null, meta: trailing(item) }

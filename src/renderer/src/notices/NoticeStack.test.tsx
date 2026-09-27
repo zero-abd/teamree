@@ -142,7 +142,7 @@ describe('the words on a card', () => {
     expect(noticeLook({ tone: 'info', action: { label: 'Undo', undo: { kind: 'shared-note', shareId: 's' } } })).toBe(
       'success'
     )
-    expect(noticeLook({ tone: 'info', action: { label: 'Open Review', url: 'https://x' } })).toBe('info')
-    expect(noticeLook({ tone: 'info' })).toBe('info')
+    expect(noticeLook({ tone: 'info', action: { label: 'Open Review', url: 'https://x' } })).toBe('neutral')
+    expect(noticeLook({ tone: 'info' })).toBe('neutral')
   })
 })

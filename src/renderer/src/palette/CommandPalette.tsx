@@ -46,7 +46,7 @@ import { lineQuery } from './lineQuery'
 import { runOffers } from '../workspace/runButtons'
 import type { RunKind } from '@shared/entities'
 import { useFocusedChange } from './useFocusedChange'
-import { highlight, rowIcon, rowStatus } from './paletteRow'
+import { highlight, rowIcon, rowStatus, STATUS_CLASS } from './paletteRow'
 import { Icon } from '../icons/Icon'
 import { EmptyState } from '../workspace/EmptyState'
 
@@ -681,7 +681,7 @@ export function CommandPalette({
                         <span className="palette__age">{item.age}</span>
                       ) : null}
                       {status.tone === null ? null : (
-                        <span className={`palette__status palette__status--${status.tone}`}>
+                        <span className={`palette__status ${STATUS_CLASS[status.tone]}`}>
                           <span className={dotClass(status.tone)} role="img" aria-label={TONE_LABEL[status.tone]} />
                           {status.word === null ? null : <span aria-hidden="true">{status.word}</span>}
                         </span>
