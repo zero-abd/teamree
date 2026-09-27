@@ -131,7 +131,7 @@ function paneRow(
     agent: pane.agent,
     label,
     text: paneText(pane, label),
-    activity: asking ? 'waiting' : activityOf(pane),
+    activity: asking ? 'waiting' : (pane.activity ?? activityOf(pane)),
     // The owner's measurement plus the time it has sat here: the only arithmetic that believes no other clock.
     quietFor: pane.quietForMs + heardAgoMs,
     // Null until somebody opens the pane; no byte of it has crossed the wire before then.

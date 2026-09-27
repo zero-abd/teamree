@@ -469,7 +469,7 @@ describe('one of several runs of a task', () => {
     expect(document.querySelector('.worktree__branch')?.textContent).toBe('add-a-subtract-function-to-codex')
   })
 
-  // Name first, then what state it is in: glued together, "claudeAdd a subtract…stopped" is one word.
+  // Name first, then what state it is in: glued together, "claudeAdd a subtract…ready" is one word.
   it('is named task, then agent, and described by its state and changes', () => {
     mount({
       worktree: worktree({
@@ -482,7 +482,7 @@ describe('one of several runs of a task', () => {
     })
     const button = screen.getByRole('treeitem', {
       name: 'Add a subtract function to calc (Claude Code)',
-      description: 'stopped, 1 uncommitted'
+      description: 'ready, 1 uncommitted'
     })
     expect(button.classList.contains('worktree__open')).toBe(true)
   })
@@ -521,7 +521,7 @@ describe('one of several runs of a task', () => {
       evidence: { t1: 'Edited calc.js (+1 -0)' }
     })
     const pane = document.querySelector('.pane-row') as HTMLElement
-    expect(pane.getAttribute('aria-label')).toBe('Codex, stopped: Edited calc.js (+1 -0)')
+    expect(pane.getAttribute('aria-label')).toBe('Codex, ready: Edited calc.js (+1 -0)')
     expect(pane.querySelector('.pane-row__label')).toBeNull()
     expect(pane.querySelector('.pane-row__head')?.textContent).toContain('Edited calc.js (+1 -0)')
   })
@@ -993,15 +993,15 @@ describe('panes that have printed since they were read', () => {
     })
     const dot = (): Element => document.querySelector('.activity') as Element
 
-    it('draws a stopped, unread pane apart from a working one', () => {
+    it('draws a ready, unread pane apart from a working one', () => {
       mount({ terminals: [terminal({ id: 't1', agent: 'claude' })], unread: ['t1'] })
-      const stopped = { className: dot().className, background: getComputedStyle(dot()).background }
+      const ready = { className: dot().className, background: getComputedStyle(dot()).background }
       cleanup()
       mount({ terminals: [terminal({ id: 't1', agent: 'claude', busy: true })] })
       const working = { className: dot().className, background: getComputedStyle(dot()).background }
 
-      expect(stopped.className).not.toBe(working.className)
-      expect(stopped.background).not.toBe(working.background)
+      expect(ready.className).not.toBe(working.className)
+      expect(ready.background).not.toBe(working.background)
       expect(working.background).toBe('var(--accent-bright)')
     })
 

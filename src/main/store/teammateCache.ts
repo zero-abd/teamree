@@ -56,6 +56,12 @@ export const PaneOrdinalOnRead = z.number().int().positive().optional().catch(un
 /** Which Run button started a pane; a kind this build does not know reads as none. */
 export const PaneRunOnRead = z.enum(['dev', 'test']).optional().catch(undefined)
 
+/** The owner's reading of a pane; one this build does not know reads as none, and the facts decide. */
+export const PaneActivityOnRead = z
+  .enum(['waiting', 'working', 'quiet', 'done', 'failed', 'stopped'])
+  .optional()
+  .catch(undefined)
+
 const PaneSchema = z.object({
   id: z.string().min(1),
   title: z.string(),
@@ -67,7 +73,8 @@ const PaneSchema = z.object({
   exitCode: z.number().optional(),
   run: PaneRunOnRead,
   busy: z.boolean(),
-  quietForMs: z.number().nonnegative()
+  quietForMs: z.number().nonnegative(),
+  activity: PaneActivityOnRead
 })
 
 const WorktreeSchema = z

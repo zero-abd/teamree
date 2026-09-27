@@ -1191,10 +1191,17 @@
   animation: activity-pulse 1.6s ease-in-out infinite;
 }
 
-/* A stopped agent is hollow: it is not asking, so it must not look like it is. */
+/* An agent at its prompt is hollow: it is not asking, so it must not look like it is. */
 .activity--quiet {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px var(--fg-secondary);
+}
+
+/* Ended without finishing: a square, the stop mark, so it never reads as a live agent's ring. */
+.activity--stopped {
+  border-radius: 1px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--fg-muted);
 }
 
 .activity--idle {

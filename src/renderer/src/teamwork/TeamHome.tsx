@@ -70,7 +70,10 @@ export function TeamHome({
       .map((worktree) => ({
         id: worktree.id,
         name: worktree.task ?? worktreeDisplay(worktree).title,
-        tone: worktreeTone(agentRows(panes, worktree.id, now).filter((row) => row.agent !== undefined))
+        tone: worktreeTone(agentRows(panes, worktree.id, now).filter((row) => row.agent !== undefined)),
+        ...(worktree.report === undefined
+          ? {}
+          : { stage: worktree.report.outcome === 'failed' ? ('failed' as const) : ('done' as const) })
       }))
       .filter((worktree) => worktree.tone !== null)
   }, [now, projectId, terminals, worktrees])

@@ -56,6 +56,7 @@ import {
   MAX_CACHED_TEXT,
   MAX_CACHED_WORKTREES,
   boundTaskDetails,
+  PaneActivityOnRead,
   PaneLabelOnRead,
   PaneOrdinalOnRead,
   PaneRunOnRead,
@@ -2191,6 +2192,7 @@ const PanePayload = z.object({
   rows: z.number().int().positive().optional(),
   quietForMs: z.number().nonnegative(),
   asking: z.boolean().optional().catch(undefined),
+  activity: PaneActivityOnRead,
   menu: PeerMenuOnRead,
   muted: z.boolean().optional().catch(undefined)
 })

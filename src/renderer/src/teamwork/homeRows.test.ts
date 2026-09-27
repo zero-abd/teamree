@@ -203,6 +203,24 @@ describe('who is on the team', () => {
     expect(ana?.worktrees).toEqual([{ id: 'wt_a', name: 'search', word: 'asking', tone: 'waiting', own: true }])
   })
 
+  it('calls your own reported work done, as a teammate’s reads', () => {
+    const [ana] = teamMembers({
+      list: roster(),
+      presence: presence(),
+      status: undefined,
+      own: [
+        { id: 'wt_a', name: 'readme', tone: 'quiet', stage: 'done' },
+        { id: 'wt_b', name: 'search', tone: 'quiet' }
+      ],
+      memory: empty(),
+      now: NOW
+    })
+    expect(ana?.worktrees.map((worktree) => [worktree.name, worktree.word])).toEqual([
+      ['readme', 'done'],
+      ['search', 'ready']
+    ])
+  })
+
   it('still lists the roster before teamwork has heard from anybody', () => {
     const members = teamMembers({
       list: roster(),

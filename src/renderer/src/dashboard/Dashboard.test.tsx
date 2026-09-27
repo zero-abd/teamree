@@ -128,7 +128,7 @@ describe('the legend', () => {
       }
     })
     render(<Dashboard />)
-    expect(filters()).toEqual(['2 stopped', '2 idle'])
+    expect(filters()).toEqual(['2 ready', '2 idle'])
     expect(document.querySelectorAll('.activity')).toHaveLength(0)
   })
 
@@ -136,18 +136,18 @@ describe('the legend', () => {
     seedMixed()
     render(<Dashboard />)
     const states = [...document.querySelectorAll('.board-row__state')].map((state) => state.textContent ?? '')
-    expect(states.sort()).toEqual(['idle', 'stopped', 'working'])
-    expect(filters()).toEqual(['1 working', '1 stopped', '1 idle'])
+    expect(states.sort()).toEqual(['idle', 'ready', 'working'])
+    expect(filters()).toEqual(['1 working', '1 ready', '1 idle'])
   })
 
   it('shows one state’s panes when its count is pressed, and every pane when pressed again', () => {
     seedMixed()
     render(<Dashboard />)
-    const stopped = screen.getByRole('button', { name: '1 stopped' })
-    fireEvent.click(stopped)
-    expect(stopped.getAttribute('aria-pressed')).toBe('true')
-    expect([...document.querySelectorAll('.board-row__state')].map((state) => state.textContent)).toEqual(['stopped'])
-    fireEvent.click(stopped)
+    const ready = screen.getByRole('button', { name: '1 ready' })
+    fireEvent.click(ready)
+    expect(ready.getAttribute('aria-pressed')).toBe('true')
+    expect([...document.querySelectorAll('.board-row__state')].map((state) => state.textContent)).toEqual(['ready'])
+    fireEvent.click(ready)
     expect(document.querySelectorAll('.board-row')).toHaveLength(3)
   })
 })
@@ -423,7 +423,7 @@ describe('what a pane row says', () => {
     printed.t1 = 'Edited calc.js'
     seed({ terminals: { t1: { ...PANE, agent: 'codex', title: 'codex' } } })
     render(<Dashboard />)
-    const row = screen.getByRole('button', { name: 'Codex, atlas, stopped: Edited calc.js, unread' })
+    const row = screen.getByRole('button', { name: 'Codex, atlas, ready: Edited calc.js, unread' })
     expect(row.querySelector('.agent-glyph')?.getAttribute('aria-hidden')).toBe('true')
   })
 })

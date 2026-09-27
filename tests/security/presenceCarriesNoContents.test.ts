@@ -75,7 +75,7 @@ describe('a presence snapshot', () => {
     for (const secret of [COMMITTED, EDITED, UNTRACKED]) expect(wire).not.toContain(secret)
     // A pane crosses as its facts; nothing on it could hold a line of output.
     expect(Object.keys(snapshot.projects[0]?.worktrees[0]?.panes[0] ?? {}).sort()).toEqual(
-      ['agent', 'busy', 'cols', 'id', 'quietForMs', 'rows', 'running', 'shell', 'title'].sort()
+      ['activity', 'agent', 'busy', 'cols', 'id', 'quietForMs', 'rows', 'running', 'shell', 'title'].sort()
     )
   })
 

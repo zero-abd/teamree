@@ -43,13 +43,13 @@ describe('PaneRows', () => {
     const [row] = mount(terminal({ id: 't1', agent: 'claude' }))
     expect(within(row as HTMLElement).queryByRole('img')).toBeNull()
     expect(row?.querySelector('.agent-glyph')?.getAttribute('aria-hidden')).toBe('true')
-    expect(row?.getAttribute('aria-label')).toBe('Claude Code, stopped')
+    expect(row?.getAttribute('aria-label')).toBe('Claude Code, ready')
     expect(row?.querySelector('.pane-row__label')?.textContent).toBe('')
   })
 
   it('keeps the task name as text beside the glyph', () => {
     const [row] = mount(terminal({ id: 't1', agent: 'codex', label: 'auth refactor' }))
-    expect(row?.getAttribute('aria-label')).toBe('auth refactor, stopped')
+    expect(row?.getAttribute('aria-label')).toBe('auth refactor, ready')
     expect(row?.querySelector('[data-agent="codex"]')).not.toBeNull()
     expect(row?.querySelector('.pane-row__label')?.textContent).toBe('auth refactor')
   })
@@ -102,17 +102,17 @@ describe('PaneRows', () => {
   })
 
   it('reads the age in the time slot while nothing needs you', () => {
-    const [working, idle, stopped] = mount(
+    const [working, idle, ready] = mount(
       terminal({ id: 't1', agent: 'claude', busy: true }),
       terminal({ id: 't2', lastBellAt: 1 }),
       terminal({ id: 't3', agent: 'codex' })
     )
-    for (const row of [working, idle, stopped]) {
+    for (const row of [working, idle, ready]) {
       expect(row?.querySelector('.pane-row__since')?.className).toBe('pane-row__since')
       expect(row?.querySelector('.pane-row__since')?.textContent).toBe('now')
     }
     expect(idle?.title).toContain('zsh · idle')
-    expect(stopped?.title).toContain('Codex · stopped')
+    expect(ready?.title).toContain('Codex · ready')
   })
 
   it('reads asking in the time slot, in its tone', () => {

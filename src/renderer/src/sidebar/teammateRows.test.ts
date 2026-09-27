@@ -51,6 +51,24 @@ describe('a teammate’s rows', () => {
     expect(TONE_LABEL[row!.tone!]).toBe('failed')
   })
 
+  it('reads their pane as its owner does, and by the facts from a build that sends no reading', () => {
+    const [row] = teammateRows(
+      [
+        theirWorktree({
+          panes: [
+            pane({ id: 'p1', agent: 'claude', activity: 'working' }),
+            pane({ id: 'p2', agent: 'claude', activity: 'quiet' }),
+            pane({ id: 'p3', agent: 'claude' })
+          ]
+        })
+      ],
+      NOW
+    )
+    expect(row?.panes.map((entry) => entry.activity)).toEqual(['working', 'quiet', 'quiet'])
+    expect(row?.tone).toBe('working')
+    expect(TONE_LABEL[row!.tone!]).toBe('working')
+  })
+
   it('reads their Run pane that a quit hung up as stopped, not failed', () => {
     const [row] = teammateRows(
       [theirWorktree({ panes: [pane({ id: 'p1', label: 'dev', run: 'dev', running: false, exitCode: 129 })] })],
