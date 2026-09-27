@@ -12,7 +12,7 @@ export function highlight(label: string, query: string): LabelPart[] {
   const wanted = query.trim().toLowerCase()
   if (wanted === '') return [{ text: label, match: false }]
   const haystack = label.toLowerCase()
-  const marks = new Array<boolean>(label.length).fill(false)
+  const marks = Array.from({ length: label.length }, () => false)
   const mark = (from: number, length: number): void => {
     for (let index = from; index < from + length; index += 1) marks[index] = true
   }

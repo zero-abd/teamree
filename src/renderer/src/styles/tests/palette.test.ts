@@ -9,7 +9,9 @@ describe('palette.css', () => {
   })
 
   it('floats 600 wide, its field borderless at the heading size', () => {
-    expect(declarationOf(ruleFor('palette.css', '.modal:has(.palette)'), 'width')).toBe('min(600px, calc(100vw - 48px))')
+    expect(declarationOf(ruleFor('palette.css', '.modal:has(.palette)'), 'width')).toBe(
+      'min(600px, calc(100vw - 48px))'
+    )
     const input = ruleFor('palette.css', '.palette__input')
     expect(declarationOf(input, 'border')).toBe('0')
     expect(declarationOf(input, 'font-size')).toBe('var(--text-lg)')

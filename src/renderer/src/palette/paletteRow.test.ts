@@ -41,7 +41,14 @@ describe('the part of a label the query matched', () => {
 })
 
 describe('a row’s icon', () => {
-  const action = (id: string): PaletteItem => ({ kind: 'action', id: id as never, label: id, hint: '', detail: '', search: id })
+  const action = (id: string): PaletteItem => ({
+    kind: 'action',
+    id: id as never,
+    label: id,
+    hint: '',
+    detail: '',
+    search: id
+  })
 
   it('draws a worktree as a folder, a file as a file, and an agent pane as its glyph', () => {
     expect(rowIcon({ kind: 'worktree', id: 'w1', label: 'a', hint: '', detail: '', search: '' })).toEqual({
@@ -63,7 +70,17 @@ describe('a row’s icon', () => {
       })
     ).toEqual({ agent: 'claude' })
     expect(
-      rowIcon({ kind: 'pane', id: 't1', worktreeId: 'w1', label: 'x', hint: '', detail: '', search: '', tone: 'idle', activeAt: 0 })
+      rowIcon({
+        kind: 'pane',
+        id: 't1',
+        worktreeId: 'w1',
+        label: 'x',
+        hint: '',
+        detail: '',
+        search: '',
+        tone: 'idle',
+        activeAt: 0
+      })
     ).toEqual({ icon: 'terminal' })
   })
 

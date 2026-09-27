@@ -672,14 +672,15 @@ export function CommandPalette({
                         {'agent' in icon ? <AgentGlyph kind={icon.agent} decorative /> : <Icon name={icon.icon} />}
                       </span>
                       <span className="palette__label">
-                        {highlight(item.label, echoes(item) ? '' : mode === 'files' ? place.path : query).map((part, piece) =>
-                          part.match ? (
-                            <mark className="palette__match" key={piece}>
-                              {part.text}
-                            </mark>
-                          ) : (
-                            part.text
-                          )
+                        {highlight(item.label, echoes(item) ? '' : mode === 'files' ? place.path : query).map(
+                          (part, piece) =>
+                            part.match ? (
+                              <mark className="palette__match" key={piece}>
+                                {part.text}
+                              </mark>
+                            ) : (
+                              part.text
+                            )
                         )}
                       </span>
                       {(item.kind === 'worktree' || item.kind === 'pane') && item.age !== undefined ? (

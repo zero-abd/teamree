@@ -664,7 +664,11 @@ describe('the welcome’s shortcut list and the menu bar use one set of words', 
 
     const menu = new Map(menuBarSpec(useWorkspaceStore.getState()).map((item) => [item.command, item.label]))
     const rows = [...document.querySelectorAll('.welcome__shortcuts > div')]
-    expect(rows.map((row) => row.getAttribute('data-command'))).toEqual(['open-palette', 'new-worktree', 'toggle-sidebar'])
+    expect(rows.map((row) => row.getAttribute('data-command'))).toEqual([
+      'open-palette',
+      'new-worktree',
+      'toggle-sidebar'
+    ])
     for (const row of rows) {
       const command = commandNamed(row.getAttribute('data-command') ?? '')
       expect(command, row.textContent ?? '').not.toBeNull()

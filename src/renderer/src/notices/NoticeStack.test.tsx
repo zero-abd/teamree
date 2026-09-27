@@ -131,7 +131,10 @@ describe('the words on a card', () => {
   })
 
   it('keeps one title when there is no colon, nothing after it, or the head is a sentence', () => {
-    expect(noticeParts('Copied the path to cart totals')).toEqual({ title: 'Copied the path to cart totals', detail: null })
+    expect(noticeParts('Copied the path to cart totals')).toEqual({
+      title: 'Copied the path to cart totals',
+      detail: null
+    })
     expect(noticeParts('Nothing to say: ')).toEqual({ title: 'Nothing to say: ', detail: null })
     const long = `${'x'.repeat(70)}: why`
     expect(noticeParts(long)).toEqual({ title: long, detail: null })
