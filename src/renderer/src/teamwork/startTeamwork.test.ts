@@ -1136,10 +1136,11 @@ describe('the message to send a teammate', () => {
       }
     )
 
-  it('is one line and a link that opens the Join sheet', () => {
+  // https, because chat apps leave a custom scheme as plain text; the page opens the app.
+  it('is one line and a link a chat app makes clickable', () => {
     const text = invite() ?? ''
     expect(text.split('\n')).toHaveLength(1)
-    expect(text).toMatch(/^Join pager on teamree: teamree:\/\/join\?v=1&/)
+    expect(text).toMatch(/^Join pager on teamree: https:\/\/teamree\.us\/join#v=1&/)
     const parsed = parseInvitation(text)
     expect(parsed.ok && parsed.invitation).toEqual({
       origin: 'https://example.com/ada/pager.git',

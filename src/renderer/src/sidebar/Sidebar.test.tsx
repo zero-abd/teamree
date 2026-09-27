@@ -533,13 +533,15 @@ describe('the rail above the tree', () => {
     }
   })
 
-  // Teamwork is set up per repository; with none added the entry says why.
-  it('says why teamwork cannot be reached before a repository has been added', () => {
+  // Teamwork is set up per repository; with none added, joining one is all it can do.
+  it('joins a team from an invitation before a repository has been added', () => {
     seed({ projects: [] })
     mount()
     const teamwork = screen.getByRole('button', { name: 'Teamwork' }) as HTMLButtonElement
-    expect(teamwork.disabled).toBe(true)
-    expect(teamwork.getAttribute('title')).toBe('No projects yet')
+    expect(teamwork.disabled).toBe(false)
+    expect(teamwork.getAttribute('title')).toBe('Join a Team…')
+    fireEvent.click(teamwork)
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'join-invitation' })
   })
 })
 

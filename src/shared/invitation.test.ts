@@ -109,6 +109,26 @@ describe('finding the link inside whatever it arrived in', () => {
   })
 })
 
+describe('the page link a chat app makes clickable', () => {
+  const page = formatInvitation(ADA, 'page')
+
+  it('is an https link to the join page whose fragment holds the same four facts', () => {
+    expect(page.startsWith('https://teamree.us/join#v=1&')).toBe(true)
+    expect(page).not.toMatch(/\s/)
+    expect(accepted(page)).toEqual(ADA)
+  })
+
+  it('is found inside a message, with its full stop and brackets peeled, and on www', () => {
+    expect(accepted(`Here is the invitation: ${page}.`)).toEqual(ADA)
+    expect(accepted(`see <${page}>`)).toEqual(ADA)
+    expect(accepted(page.replace('https://teamree.us', 'https://www.teamree.us'))).toEqual(ADA)
+  })
+
+  it('is not read off any other site', () => {
+    expect(parseInvitation(page.replace('teamree.us', 'teamree.example')).ok).toBe(false)
+  })
+})
+
 describe('what an invitation is allowed to carry', () => {
   it('refuses a field with a control character in it, naming which field', () => {
     // The format carries a percent-encoded escape fine, and every field is
@@ -221,6 +241,11 @@ describe('what somebody pastes into Paste Invitation…', () => {
       project: 'pager',
       from: 'ada'
     })
+  })
+
+  it('takes the page link', () => {
+    const parsed = parsePastedInvitation(`come join ${formatInvitation(ADA, 'page')}`)
+    expect(parsed.ok && parsed.invitation).toEqual(ADA)
   })
 
   it('refuses text with no clone command and no link', () => {

@@ -45,6 +45,7 @@ export type WorkspaceCommand =
   | 'open-settings'
   | 'add-project'
   | 'clone-repository'
+  | 'join-team'
   | 'review-changes'
   | 'commit-changes'
   | 'push-worktree'
@@ -118,6 +119,7 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // The picker straight away; cloning is the other way in.
   { command: 'add-project', title: 'Open Folder…' },
   { command: 'clone-repository', title: 'Clone Repository…' },
+  { command: 'join-team', title: 'Join a Team…' },
   // No chords: ⌘⇧P is a palette everywhere else. Commit opens the panel with the message box,
   // hence the ellipsis.
   { command: 'review-changes', chord: { key: 'r', shift: true }, title: 'Review Changes' },

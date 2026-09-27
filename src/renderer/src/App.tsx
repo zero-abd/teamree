@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useMemo } from 'react'
 import { resolvePalette } from '@shared/theme'
 import { MAC_CONTENT_INSET_PX, TITLEBAR_HEIGHT_PX } from '@shared/windowChrome'
 import { CloneProjectDialog } from './dialogs/CloneProjectDialog'
+import { JoinInvitationDialog } from './dialogs/JoinInvitationDialog'
 import { JoinTeamDialog } from './dialogs/JoinTeamDialog'
 import { OpenBranchDialog } from './dialogs/OpenBranchDialog'
 import { ResumeConversationDialog } from './dialogs/ResumeConversationDialog'
@@ -242,6 +243,7 @@ export function App(): React.JSX.Element {
           {...(dialog.task === undefined ? {} : { task: dialog.task })}
         />
       ) : null}
+      {dialog?.kind === 'join-invitation' ? <JoinInvitationDialog /> : null}
       {dialog?.kind === 'join-team' ? <JoinTeamDialog invitation={dialog.invitation} /> : null}
       {dialog?.kind === 'open-branch' ? (
         <OpenBranchDialog

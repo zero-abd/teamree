@@ -141,6 +141,9 @@ export const PASTE_RELAY_BUTTON = 'Paste URL…'
 /** The joiner's way in from a message: the link, or the older invitation text. */
 export const PASTE_INVITATION_BUTTON = 'Paste Invitation…'
 
+/** What an invitation looks like, in the fields it is pasted into. */
+export const INVITATION_PLACEHOLDER = 'https://teamree.us/join#…'
+
 /** The one disclosure holding every other way to a relay. */
 export const MORE_RELAYS_BUTTON = 'More'
 
@@ -549,11 +552,14 @@ export function inviteText(input: {
   handle: string | null
 }): string | null {
   if (input.originUrl === null) return null
-  const link = formatInvitation({
-    origin: withoutCredentials(input.originUrl).origin,
-    project: input.projectName,
-    from: input.handle ?? 'a teammate'
-  })
+  const link = formatInvitation(
+    {
+      origin: withoutCredentials(input.originUrl).origin,
+      project: input.projectName,
+      from: input.handle ?? 'a teammate'
+    },
+    'page'
+  )
   return `Join ${input.projectName} on teamree: ${link}`
 }
 

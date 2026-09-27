@@ -687,7 +687,7 @@ describe('the message to send a teammate', () => {
     expect(writeText).toHaveBeenCalledOnce()
     const sent = writeText.mock.calls[0]?.[0] as string
     expect(sent).toMatch(
-      /^Join .* on teamree: teamree:\/\/join\?v=1&origin=https%3A%2F%2Fexample.com%2Fada%2Fpager.git&/
+      /^Join .* on teamree: https:\/\/teamree\.us\/join#v=1&origin=https%3A%2F%2Fexample.com%2Fada%2Fpager.git&/
     )
     expect(sent).not.toContain('relay=')
   })

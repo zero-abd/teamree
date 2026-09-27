@@ -398,6 +398,7 @@ describe('running a command', () => {
       ['toggle-diff-whitespace', 'toggleDiffOption', ['hideWhitespace']],
       ['add-project', 'chooseProjectFolder', []],
       ['clone-repository', 'openDialog', [{ kind: 'clone-project' }]],
+      ['join-team', 'openDialog', [{ kind: 'join-invitation' }]],
       ['open-settings', 'toggleSettings', []],
       ['open-help', 'toggleHelp', []],
       ['open-setup', 'openDialog', [{ kind: 'setup' }]]
@@ -479,6 +480,7 @@ describe('running a command', () => {
           'open-setup',
           'add-project',
           'clone-repository',
+          'join-team',
           'bigger-text',
           'smaller-text'
         ].includes(command)

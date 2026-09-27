@@ -22,6 +22,7 @@ import {
   checkRelayDraft,
   COPY_INVITE_BUTTON,
   formatElapsed,
+  INVITATION_PLACEHOLDER,
   inviteText,
   KEY_GRANT_WARNING,
   memberFilePreview,
@@ -287,7 +288,7 @@ function ChosenPath({
           <input
             className="field__input field__input--mono"
             aria-label="Invitation"
-            placeholder="teamree://join?…"
+            placeholder={INVITATION_PLACEHOLDER}
             autoFocus
             autoComplete="off"
             spellCheck={false}

@@ -328,6 +328,10 @@ export function CommandPalette({
         store.openDialog({ kind: 'new-task', projectId: taskProject, task: item.id.slice('new-task:'.length) })
       return
     }
+    if (item.kind === 'action' && item.id.startsWith('join:')) {
+      store.openInvitation(item.id.slice('join:'.length), true)
+      return
+    }
     if (item.kind === 'action' && item.id.startsWith('open-branch:')) {
       if (projectId !== undefined) {
         store.openDialog({ kind: 'open-branch', projectId, query: item.id.slice('open-branch:'.length) })

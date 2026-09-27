@@ -15,6 +15,7 @@ import {
   type WorktreeStatus
 } from '@shared/entities'
 import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
+import { parseInvitation } from '@shared/invitation'
 import type { SharedNoteSummary } from '@shared/sharedNote'
 import { APPEARANCE_MODES, BUILT_IN_THEMES, type AppearanceMode } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from '../settings/AppearanceSettings'
@@ -72,6 +73,8 @@ export type PaletteAction =
   /** A query that found nothing to run: New Task with it as the task, Open Branch narrowed to it. */
   | `new-task:${string}`
   | `open-branch:${string}`
+  /** A pasted invitation, by the text pasted. */
+  | `join:${string}`
   /** Run Dev or Run Tests in the worktree on screen, restarted, or stopped. */
   | `run:${RunKind}`
   | `restart-run:${RunKind}`
@@ -623,6 +626,7 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'toggle-diff-whitespace': 'whitespace ignore hide show spaces indent diff patch review -w',
   'add-project': 'add open project repository repo folder directory',
   'clone-repository': 'clone project repository repo git url remote github',
+  'join-team': 'join team invitation invite link paste teammate accept teamwork',
   'review-changes': 'review all changes diff viewed comment agent files branch base whole task',
   'commit-changes': 'commit changes diff git stage staged message files review',
   'push-worktree': 'push send remote origin upload publish branch ahead',
@@ -759,18 +763,31 @@ export function filterPalette(items: readonly PaletteItem[], query: string): Pal
 }
 
 /**
- * A typed query as one ranked list, files under their own header. When nothing in it would run, it
- * ends on New Task and Open Branch from the query; `files` is null while the runtime is still asked.
+ * A typed query as one ranked list, files under their own header, a pasted invitation's Join first. When
+ * nothing in it would run, it ends on New Task and Open Branch from the query; `files` is null while the runtime is still asked.
  */
 export function queryGroups(
   items: readonly PaletteItem[],
   query: string,
   files: readonly PaletteItem[] | null
 ): PaletteGroup[] {
+  const join = joinFrom(query.trim())
   const found = filterPalette(items, query)
-  const stuck = files !== null && files.length === 0 && found.every(isDimmed)
+  const stuck = join === null && files !== null && files.length === 0 && found.every(isDimmed)
   const named: PaletteGroup[] = files !== null && files.length > 0 ? [{ title: 'Files', items: [...files] }] : []
-  return [{ title: null, items: stuck ? [...found, ...startFrom(items, query.trim())] : found }, ...named]
+  const listed = stuck ? [...found, ...startFrom(items, query.trim())] : found
+  return [
+    { title: null, items: join === null ? listed : [join, ...listed.filter((item) => !isDimmed(item))] },
+    ...named
+  ]
+}
+
+/** Join <project> from <sender> for a query holding an invitation link, else null. */
+function joinFrom(query: string): PaletteItem | null {
+  const parsed = parseInvitation(query)
+  if (!parsed.ok) return null
+  const label = `Join ${parsed.invitation.project} from ${parsed.invitation.from}`
+  return { kind: 'action', id: `join:${query}`, label, hint: '', detail: '', search: label }
 }
 
 /** New Task and Open Branch with the query carried in, each only where its own row would run. */
