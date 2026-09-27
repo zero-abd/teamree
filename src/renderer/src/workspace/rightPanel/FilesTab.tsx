@@ -10,6 +10,7 @@ import { runtimeClient } from '../../runtimeClient/currentRuntimeClient'
 import { useOpenIn } from '../../sidebar/openIn'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { useWorkspaceStore } from '../../state/workspaceStore'
+import { IconButton } from '../../ui/Button'
 import { KIND_LETTER } from './changeKinds'
 import { directoryOf, fileNameOf } from './sourceControl'
 import {
@@ -148,9 +149,7 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
             }}
           />
         </div>
-        <button type="button" className="panel__tool" aria-label="Reload" title="Reload" onClick={reload}>
-          <Icon name="reload" size={14} />
-        </button>
+        <IconButton icon="reload" label="Reload" onClick={reload} />
       </div>
 
       {found !== null ? (
@@ -231,15 +230,12 @@ export function FilesTab({ worktree }: { worktree: Worktree }): React.JSX.Elemen
                     )}
                     {under > 0 ? <span className="tree__under" title={`${under} changed inside`} /> : null}
                   </button>
-                  <button
-                    type="button"
+                  <IconButton
+                    icon="reveal"
+                    label={`Reveal ${row.name} in Finder`}
                     className="tree__reveal"
-                    aria-label={`Reveal ${row.name} in Finder`}
-                    title="Reveal in Finder"
                     onClick={() => reveal(row.path)}
-                  >
-                    <Icon name="reveal" size={14} />
-                  </button>
+                  />
                 </div>
                 {row.kind === 'dir' && row.expanded && row.truncated ? (
                   <p className="panel__note">First {tree.dirs[row.path]?.entries?.length ?? 0}</p>

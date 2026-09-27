@@ -10,6 +10,7 @@
 @import './workspace.css';
 @import './welcome.css';
 @import './changes.css';
+@import './diff.css';
 @import './rightPanel.css';
 @import './page.css';
 @import './dashboard.css';

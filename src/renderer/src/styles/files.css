@@ -106,11 +106,6 @@
   padding: 0 5px;
 }
 
-.file__more {
-  font-size: var(--text-base);
-  line-height: 1;
-}
-
 .file__notice {
   display: flex;
   align-items: center;

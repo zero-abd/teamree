@@ -1,0 +1,323 @@
+/* The diff every patch view draws: the Changes tab's file, Review All, a commit and a compare. */
+
+/* A patch scrolls sideways rather than wrapping, and deliberately: its meaning
+   is in the columns. A wrapped line turns one change into several rows and
+   pushes the gutters out of line, which is the one edge a diff is read down.
+   Sized to its widest line so that a line's highlight runs the whole width of
+   the patch — without this the green and red stop at the panel edge and scrolling
+   right leaves changed text with no colour on it at all. */
+.patch {
+  /* The syntax palette, which is the terminal's own bright half. Named here
+     rather than in `tokens.css` because these are roles this one surface
+     assigns, not colours the theme adds: every value is a token the palette
+     already resolves, so a theme switch carries the patch with it. */
+  --syntax-keyword: var(--term-bright-magenta);
+  --syntax-string: var(--term-bright-green);
+  --syntax-number: var(--term-bright-yellow);
+  --syntax-comment: var(--fg-muted);
+
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  width: max-content;
+  min-width: 100%;
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  line-height: 20px;
+}
+
+.patch__file {
+  border-bottom: 1px solid var(--line);
+}
+
+/* The disclosure triangle is the platform's and points the wrong way at this
+   size; the row is the control, and its own state is the fold. */
+.patch__fileHead,
+.patch__hunkHead {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: 0 var(--s2) 0 var(--s4);
+  cursor: pointer;
+  list-style: none;
+  white-space: pre;
+  /* The width of the scroller, pinned to its left edge, so the controls stay in view when a long line
+     scrolls the patch sideways. */
+  position: sticky;
+  left: 0;
+  width: 100cqi;
+}
+
+.patch__fileName,
+.patch__hunkAt {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.patch__fileHead::-webkit-details-marker,
+.patch__hunkHead::-webkit-details-marker {
+  display: none;
+}
+
+.patch__fileHead[hidden] {
+  display: none;
+}
+
+.patch__fileHead {
+  box-sizing: border-box;
+  height: 34px;
+  background: var(--bg-raised);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.patch__fileHead:hover,
+.patch__hunkHead:hover {
+  background: var(--bg-hover);
+}
+
+.patch__fileDir {
+  color: var(--fg-muted);
+  font-weight: 400;
+}
+
+.patch__fileNote {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+/* The one line on screen that says where in the file you are, kept there while
+   the hunk scrolls under it. Opaque, because a translucent header over
+   monospace text is two lines of text in the same place. */
+.patch__hunkHead {
+  top: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  height: 30px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-pane));
+  border-block: 1px solid var(--line-subtle);
+  color: var(--accent-bright);
+  font-size: var(--text-xs);
+}
+
+/* The verb on a hunk header. Pushed to the far end so the `@@` line reads as
+   itself and the control is in the same place on every hunk; dim until the
+   header is under the pointer, because a column of buttons down a patch is
+   louder than the patch. `font-family: inherit` would take the monospace of the
+   header, and a word is not code. */
+.patch__stage {
+  flex: none;
+  height: 22px;
+  margin-inline-start: auto;
+  padding: 0 var(--s2);
+  border: 1px solid transparent;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  opacity: var(--row-action-rest);
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease),
+    border-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease),
+    opacity var(--motion-fast) var(--ease);
+}
+
+/* A hunk's verbs arrive with the pointer or the keyboard anywhere in the hunk. */
+.patch__hunk:hover .patch__stage,
+.patch__hunk:focus-within .patch__stage {
+  opacity: 1;
+}
+
+.patch__hunkHead:hover .patch__stage {
+  border-color: var(--line-strong);
+  background: var(--bg-raised);
+  color: var(--fg);
+}
+
+.patch__stage:hover {
+  background-image: linear-gradient(var(--bg-hover), var(--bg-hover));
+}
+
+.patch__stage:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Before Stage, and red only once the header is under the pointer. */
+.patch__discard + .patch__stage {
+  margin-inline-start: var(--s1);
+}
+
+.patch__hunkHead:hover .patch__discard {
+  color: var(--danger);
+}
+
+/* Which half of the patch is underneath, drawn only when both halves are there. */
+.patch__half {
+  margin: 0;
+  padding: var(--s3) var(--s4) var(--s2);
+  color: var(--fg-secondary);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.patch__binary,
+.patch__cut {
+  margin: 0;
+  padding: var(--s2) var(--s4);
+  color: var(--fg-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+/* How much of a cut patch is here, and the way to the rest; pinned like `.patch__more`. */
+.patch__cut {
+  position: sticky;
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100cqi;
+}
+
+.patch__progress {
+  width: 160px;
+  accent-color: var(--accent);
+}
+
+/* A hunk not drawn on open. Pinned like the headers, so a wide patch does not scroll it away. */
+.patch__more {
+  position: sticky;
+  left: 0;
+  display: block;
+  width: 100cqi;
+  padding: var(--s2) var(--s4);
+  border: 0;
+  background: none;
+  color: var(--fg-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.patch__more:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.patch__row {
+  display: flex;
+  align-items: baseline;
+  white-space: pre;
+}
+
+.patch__row--added,
+.patch__side--added {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.patch__row--removed,
+.patch__side--removed {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+/* Wide enough for four digits; right-aligned so the digits line up. */
+.patch__num {
+  width: 3.4em;
+  flex: none;
+  padding: 0 var(--s2);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+}
+
+.patch__sign {
+  width: 1ch;
+  flex: none;
+  margin: 0 var(--s2) 0 var(--s1);
+  font-weight: 600;
+  user-select: none;
+}
+
+.patch__sign--added {
+  color: var(--success);
+}
+
+.patch__sign--removed {
+  color: var(--danger);
+}
+
+.patch__text {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.patch__tok--plain {
+  color: var(--fg-secondary);
+}
+
+.patch__tok--keyword {
+  color: var(--syntax-keyword);
+}
+
+.patch__tok--string {
+  color: var(--syntax-string);
+}
+
+.patch__tok--number {
+  color: var(--syntax-number);
+}
+
+.patch__tok--comment {
+  color: var(--syntax-comment);
+}
+
+/* The file ends here, with no newline after it. */
+.patch__nonl {
+  margin-left: var(--s2);
+  color: var(--fg-muted);
+}
+
+/* Side by side. Two halves of the row, each with its own gutter; a half with
+   no line in it is the gap where the other side added or removed one. */
+/* Two halves of the width on screen, not of the longest line, or the new side starts off screen. */
+.patch--split {
+  width: 100%;
+}
+
+.patch--split .patch__row--split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.patch__side {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* No line on this side: a quiet hatch, so the gap reads as absence rather than as a blank line. Stretched,
+   since an empty cell has no baseline to sit on. */
+.patch__side--gap {
+  align-self: stretch;
+  background: repeating-linear-gradient(135deg, transparent 0 5px, var(--line) 5px 6px);
+}
+
+.patch--split .patch__side + .patch__side {
+  border-left: 1px solid var(--line);
+}

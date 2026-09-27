@@ -126,7 +126,7 @@ describe('the files tab’s rows', () => {
   it('keeps Reveal in Finder on every row as an icon, named for the row', async () => {
     render(<FilesTab worktree={worktree} />)
     const reveal = await screen.findByRole('button', { name: 'Reveal totals.ts in Finder' })
-    expect(reveal.getAttribute('title')).toBe('Reveal in Finder')
+    expect(reveal.getAttribute('title')).toBeNull()
     expect(reveal.querySelector('svg[data-icon="reveal"]')).not.toBeNull()
     fireEvent.click(reveal)
     expect(revealInFinder).toHaveBeenCalledWith(`${worktree.path}/totals.ts`, 'totals.ts')
