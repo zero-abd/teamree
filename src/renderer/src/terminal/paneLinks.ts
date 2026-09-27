@@ -184,6 +184,8 @@ export type PaneLinkHost = {
   /** The pane's worktree and starting directory; null where paths are never links (a teammate's pane). */
   place: () => { worktreeId: string; cwd: string } | null
   worktrees: () => readonly LinkWorktree[]
+  /** What `~/` stands for; without it such paths are never links. */
+  home?: string
   files: FileListings
   openUrl: (uri: string) => void
   openFile: (file: LinkedFile, line?: number, column?: number) => void
@@ -222,9 +224,10 @@ export function paneLinks(term: XTerm, host: PaneLinkHost): PaneLinks {
     return null
   }
   // The pane's directory first, then its worktree's root, which is where agents print paths from.
-  const candidates = (path: string): LinkedFile[] => {
+  const candidates = (printed: string): LinkedFile[] => {
     const place = host.place()
-    if (place === null || path.startsWith('~')) return []
+    const path = place === null ? null : expandHome(printed, host.home)
+    if (place === null || path === null) return []
     const worktrees = host.worktrees()
     const root = worktrees.find((worktree) => worktree.id === place.worktreeId)?.path
     const files: LinkedFile[] = []
@@ -348,6 +351,12 @@ export function paneLinks(term: XTerm, host: PaneLinkHost): PaneLinks {
       term.options.linkHandler = null
     }
   }
+}
+
+/** `~/…` under `home`; null for a `~` path it cannot expand, such as `~user/…`. */
+function expandHome(path: string, home: string | undefined): string | null {
+  if (!path.startsWith('~')) return path
+  return path.startsWith('~/') && home ? `${home}${path.slice(1)}` : null
 }
 
 function dirOf(path: string): string {

@@ -41,13 +41,15 @@ export function taskStage({ worktree, tone, status, ahead, landed, askingYou }: 
   if (worktree.report !== undefined) return worktree.report.outcome === 'succeeded' ? 'done' : 'failed'
   if (tone === 'failed') return 'failed'
   const clean = status !== undefined && status.staged + status.unstaged + status.untracked + status.conflicted === 0
-  return clean && ahead > 0 ? 'ready' : 'stopped'
+  if (clean && ahead > 0) return 'ready'
+  return tone === 'quiet' ? 'idle' : 'stopped'
 }
 
 /** A stage as the board says it: `landed` reads Merged, as the sidebar and Changes chips do. */
 export const STAGE_WORD: Record<TaskStage, string> = {
   working: 'working',
   asking: 'asking',
+  idle: 'idle',
   stopped: 'stopped',
   ready: 'ready',
   done: 'done',
