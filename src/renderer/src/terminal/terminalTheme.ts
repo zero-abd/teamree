@@ -6,20 +6,24 @@ import type { ITerminalOptions, ITheme } from '@xterm/xterm'
 import { contrastRatio, parseColor } from '@shared/color'
 
 const FALLBACK: ITheme = {
-  background: '#000000',
+  background: '#101114',
   foreground: '#e4e7ee',
   cursor: '#9e9ef8',
-  cursorAccent: '#000000',
-  selectionBackground: '#2f3054',
-  black: '#212223',
+  cursorAccent: '#101114',
+  selectionBackground: '#353658',
+  scrollbarSliderBackground: '#595b65',
+  scrollbarSliderHoverBackground: '#96979b',
+  scrollbarSliderActiveBackground: '#96979b',
+  overviewRulerBorder: '#101114',
+  black: '#2f3034',
   red: '#e8615a',
   green: '#57c38a',
   yellow: '#d6a24a',
   blue: '#5aa9e6',
   magenta: '#a98bf0',
   cyan: '#4fb6b2',
-  white: '#bbbdc3',
-  brightBlack: '#737577',
+  white: '#bec0c7',
+  brightBlack: '#7a7c80',
   brightRed: '#ed847e',
   brightGreen: '#7cd0a4',
   brightYellow: '#dfb672',
@@ -35,6 +39,12 @@ const VARIABLE_BY_KEY: Partial<Record<keyof ITheme, string>> = {
   cursor: '--term-cursor',
   cursorAccent: '--term-bg',
   selectionBackground: '--term-selection',
+  // The strong hairline at rest, the muted ink under the pointer: a slider, not a block.
+  scrollbarSliderBackground: '--line-strong',
+  scrollbarSliderHoverBackground: '--fg-muted',
+  scrollbarSliderActiveBackground: '--fg-muted',
+  // The ruler under the slider draws a 1px left edge, which beside a pane divider read as a second one.
+  overviewRulerBorder: '--term-bg',
   black: '--term-black',
   red: '--term-red',
   green: '--term-green',
@@ -94,10 +104,10 @@ const SEARCH_VARIABLE_BY_KEY: Record<keyof Required<SearchDecorations>, string> 
 }
 
 const SEARCH_FALLBACK: Required<SearchDecorations> = {
-  matchBackground: '#2f3054',
-  matchBorder: '#737577',
-  matchOverviewRuler: '#737577',
-  activeMatchBackground: '#2f3054',
+  matchBackground: '#353658',
+  matchBorder: '#7a7c80',
+  matchOverviewRuler: '#7a7c80',
+  activeMatchBackground: '#353658',
   activeMatchBorder: '#9e9ef8',
   activeMatchColorOverviewRuler: '#9e9ef8'
 }

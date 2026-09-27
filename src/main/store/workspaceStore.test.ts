@@ -353,10 +353,10 @@ describe('workspace store', () => {
   })
   // In this file because the main process needs it before a window exists.
   describe('how this installation is painted', () => {
-    it('opens on absolute black until somebody chooses otherwise', async () => {
+    it('opens on Charcoal until somebody chooses otherwise', async () => {
       const store = await WorkspaceStore.open(filePath)
       expect(store.getAppearance()).toEqual(DEFAULT_APPEARANCE)
-      expect(store.getAppearance().themeId).toBe('black')
+      expect(store.getAppearance().themeId).toBe('charcoal')
     })
 
     it('is still there after the app is closed and opened again', async () => {
@@ -392,7 +392,7 @@ describe('workspace store', () => {
 
       const store = await WorkspaceStore.open(path)
       expect(store.getAppearance()).toEqual({
-        themeId: 'black',
+        themeId: 'charcoal',
         ground: null,
         accent: '#3bb8c4',
         overrides: { 'bg-panel': '#123456' }

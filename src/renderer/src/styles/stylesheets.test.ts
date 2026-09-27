@@ -15,6 +15,7 @@ import {
   themeTone,
   type Appearance
 } from '@shared/theme'
+import { GUTTER_PX } from '../panes/paneLayout'
 import { PANEL_OVERLAY_QUERY } from '../workspace/roomForPanes'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -196,6 +197,91 @@ describe('stylesheets', () => {
       expect(declarationOf(ruleFor('workspace.css', '.tabs'), 'height')).toBe(
         declarationOf(ruleFor('shell.css', '.sidebar__brand'), 'height')
       )
+    })
+  })
+
+  // Chrome steps off the ground: rail, tab strip, panel and raised each on their own token.
+  describe('surfaces', () => {
+    it.each([
+      ['shell.css', '.shell', 'var(--bg-window)'],
+      ['workspace.css', '.workspace', 'var(--bg-pane)'],
+      ['panes.css', '.pane', 'var(--bg-pane)'],
+      ['panes.css', '.pane--terminal', 'var(--term-bg)'],
+      ['sidebar.css', '.sidebar', 'var(--bg-rail)'],
+      ['statusbar.css', '.statusbar', 'var(--bg-rail)'],
+      ['workspace.css', '.tabs', 'var(--bg-tabstrip)'],
+      ['rightPanel.css', '.panel', 'var(--bg-panel)'],
+      ['dialog.css', '.modal', 'var(--bg-raised)']
+    ])('%s paints %s in %s', (sheet, selector, token) => {
+      expect(declarationOf(ruleFor(sheet, selector), 'background')).toBe(token)
+    })
+
+    it.each([
+      ['sidebar.css', '.worktree--active .worktree__row'],
+      ['sidebar.css', '.rail__link--current'],
+      ['workspace.css', '.changes__item--selected'],
+      ['workspace.css', '.commit--selected'],
+      ['rightPanel.css', '.panel__tab--current'],
+      ['rightPanel.css', '.search__hit--current'],
+      ['dialog.css', '.palette__row--selected'],
+      ['dialog.css', '.combo__row.is-active']
+    ])('fills the selected row %s %s with the selected surface', (sheet, selector) => {
+      expect(declarationOf(ruleFor(sheet, selector), 'background')).toBe('var(--bg-selected)')
+    })
+  })
+
+  // Panes sit edge to edge, split by one hairline; the tab strip names them, so they carry no card or title.
+  describe('flush panes', () => {
+    it('draws no card, corner or gutter round a pane or the file column', () => {
+      for (const [sheet, selector] of [
+        ['panes.css', '.pane'],
+        ['files.css', '.column']
+      ] as const) {
+        const rule = ruleFor(sheet, selector)
+        expect(declarationOf(rule, 'border'), selector).toBeUndefined()
+        expect(declarationOf(rule, 'border-radius'), selector).toBeUndefined()
+      }
+      expect(declarationOf(ruleFor('workspace.css', '.workspace__panes'), 'padding')).toBeUndefined()
+    })
+
+    it('divides panes with a 1px line on a handle at least 6px wide', () => {
+      expect(declarationOf(ruleFor('panes.css', '.gutter--row::before'), 'width')).toBe('1px')
+      expect(declarationOf(ruleFor('panes.css', '.gutter--column::before'), 'height')).toBe('1px')
+      const reach = (selector: string, prop: string): number =>
+        -Number.parseFloat(declarationOf(ruleFor('panes.css', selector), prop) ?? '0')
+      expect(GUTTER_PX + 2 * reach('.gutter--row::after', 'left')).toBeGreaterThanOrEqual(6)
+      expect(reach('.gutter--row::after', 'left')).toBe(reach('.gutter--row::after', 'right'))
+      expect(GUTTER_PX + 2 * reach('.gutter--column::after', 'top')).toBeGreaterThanOrEqual(6)
+      expect(reach('.gutter--column::after', 'top')).toBe(reach('.gutter--column::after', 'bottom'))
+      // Above the panes either side, or their text layers take the pointer first.
+      expect(Number(declarationOf(ruleFor('panes.css', '.gutter'), 'z-index'))).toBeGreaterThan(11)
+    })
+
+    it('marks the focused pane of a split by a 2px accent line on its top edge, not a frame', () => {
+      const mark = ruleFor('panes.css', '.workspace__panes .split .pane--focused::after')
+      expect(declarationOf(mark, 'height')).toBe('2px')
+      expect(declarationOf(mark, 'background')).toBe('var(--accent)')
+      expect(findRule('panes.css', '.pane--focused')).toBeUndefined()
+      expect(findRule('files.css', '.column--focused')).toBeUndefined()
+    })
+
+    // Under border-box the addon counted the padding as room and printed past the slider.
+    it('hands the fit addon a text box without the surface’s padding', () => {
+      expect(declarationOf(ruleFor('panes.css', '.terminal-surface'), 'box-sizing')).toBe('content-box')
+    })
+
+    it('draws the terminal’s scrollbar as a rounded slider', () => {
+      expect(
+        declarationOf(ruleFor('panes.css', '.terminal-surface .xterm .scrollbar > .slider'), 'border-radius')
+      ).toBe('99px')
+    })
+
+    // A full-width row pushed every pane down and refit them when it came and went.
+    it('asks for the setup command in a card, not a row across the panes', () => {
+      const ask = ruleFor('workspace.css', '.setup-ask')
+      expect(declarationOf(ask, 'border-bottom')).toBeUndefined()
+      expect(declarationOf(ask, 'border-radius')).toBe(declarationOf(ruleFor('shell.css', '.notice'), 'border-radius'))
+      expect(declarationOf(ask, 'pointer-events')).toBe('auto')
     })
   })
 

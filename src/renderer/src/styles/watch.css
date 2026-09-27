@@ -27,7 +27,8 @@
    terminal, and it is a step stronger than the focused border a local pane
    gets, which this pane also gets when it is focused. */
 .pane--watched {
-  border-color: var(--accent-line);
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r2);
   /* The workspace beside it pads its own pane area; this pane is a direct
      child of the window's split and has to keep itself off the edges. The
      gutter supplies the gap on the left, so there is none here. */

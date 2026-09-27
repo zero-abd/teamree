@@ -3,8 +3,8 @@
 
    THE COLOURS HERE ARE A COPY, AND THE ORIGINAL IS `src/shared/theme.ts`.
 
-   Every value in the palette block is the Absolute Black preset as that module
-   resolves it, and `stylesheets.test.ts` recomputes them and fails if the two
+   Every value in the palette block is the default preset, Charcoal, as that
+   module resolves it, and `stylesheets.test.ts` recomputes them and fails if the two
    have drifted. They are written out rather than left to script for one reason:
    this file paints the first frame. The renderer resolves the stored appearance
    and writes it onto the root element as soon as it mounts, but a window whose
@@ -17,29 +17,27 @@
 :root {
   color-scheme: dark;
 
-  /* Surfaces, from the window backdrop up to the things that float.
+  /* Surfaces, from the window backdrop up to the things that float. The panes
+     are the ground; the rail (sidebar and status bar), the tab strip, the right
+     panel and anything raised each sit a measured step off it. */
+  --bg-window: #101114;
+  --bg-pane: #101114;
+  --bg-rail: #1a1b20;
+  --bg-tabstrip: #24252a;
+  --bg-panel: #1d1e24;
+  --bg-raised: #292a30;
+  --bg-input: #121318;
+  --bg-hover: rgb(238 241 248 / 7%);
+  --bg-press: rgb(238 241 248 / 12%);
+  --bg-selected: rgb(139 140 247 / 16%);
+  --scrim: rgb(0 0 0 / 62%);
 
-     The ground is absolute black, and the chrome — the title strip, the
-     sidebar, the status rail — is the first step off it. That is the whole
-     structure of the window: a frame with some light in it around a content
-     area with none, so a pane of terminal output sits on nothing at all. */
-  --bg-window: #000000;
-  --bg-rail: #0b0b0b;
-  --bg-panel: #0d0d0e;
-  --bg-raised: #171718;
-  /* A field cut into black has nowhere darker to go, so it is read from its
-     border. Every input in these stylesheets has one for that reason. */
-  --bg-input: #000000;
-  --bg-hover: rgb(238 241 248 / 5%);
-  --bg-press: rgb(238 241 248 / 9%);
-  --scrim: rgb(0 0 0 / 66%);
-
-  --line: #1d1d1e;
-  --line-strong: #323334;
+  --line: #42434b;
+  --line-strong: #595b65;
 
   --fg: #e4e7ee;
   --fg-secondary: #a0a2a7;
-  --fg-muted: #7f8083;
+  --fg-muted: #96979b;
 
   --accent: #8b8cf7;
   --accent-bright: #9e9ef8;
@@ -51,7 +49,7 @@
 
   --success: #57c38a;
   --warning: #d6a24a;
-  --danger: #e8615a;
+  --danger: #e96861;
   --info: #5aa9e6;
 
   /* Terminal palette, read back by the emulator so both stay in step. The
@@ -61,19 +59,19 @@
      The bright half is here rather than left to the emulator's defaults: xterm
      falls back to its own sixteen when a colour is not supplied, and a theme
      that supplied eight was a theme whose other eight never moved. */
-  --term-bg: #000000;
+  --term-bg: #101114;
   --term-fg: #e4e7ee;
   --term-cursor: #9e9ef8;
-  --term-selection: #2f3054;
-  --term-black: #212223;
+  --term-selection: #353658;
+  --term-black: #2f3034;
   --term-red: #e8615a;
   --term-green: #57c38a;
   --term-yellow: #d6a24a;
   --term-blue: #5aa9e6;
   --term-magenta: #a98bf0;
   --term-cyan: #4fb6b2;
-  --term-white: #bbbdc3;
-  --term-bright-black: #737577;
+  --term-white: #bec0c7;
+  --term-bright-black: #7a7c80;
   --term-bright-red: #ed847e;
   --term-bright-green: #7cd0a4;
   --term-bright-yellow: #dfb672;
@@ -149,12 +147,15 @@
     color-scheme: light;
 
     --bg-window: #ffffff;
+    --bg-pane: #ffffff;
     --bg-rail: #f5f5f6;
+    --bg-tabstrip: #f5f5f6;
     --bg-panel: #f3f3f4;
     --bg-raised: #e9eaec;
     --bg-input: #ffffff;
     --bg-hover: rgb(28 34 51 / 5%);
     --bg-press: rgb(28 34 51 / 9%);
+    --bg-selected: rgb(139 140 247 / 16%);
     --scrim: rgb(14 17 26 / 22%);
     --line: #e4e4e7;
     --line-strong: #cfd1d4;

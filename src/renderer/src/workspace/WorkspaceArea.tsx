@@ -19,8 +19,6 @@ import { WatchedPaneView } from '../terminal/WatchedPaneView'
 import { CheckoutMissing } from './CheckoutMissing'
 import { CoveredPanes } from './CoveredPanes'
 import { RightPanel } from './rightPanel/RightPanel'
-import { SetupAsk } from './SetupAsk'
-import { SetupOffer } from './SetupOffer'
 import { useMarkPanesSeen } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { TerminalTabs } from './TerminalTabs'
@@ -99,7 +97,6 @@ function WorkspaceView({
 }): React.JSX.Element {
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === state.activeWorktreeId))
-  const setupProject = useWorkspaceStore((state) => state.projects.find((entry) => entry.id === worktree?.projectId))
   const layout = useWorkspaceStore((state) =>
     state.activeWorktreeId ? state.layouts[state.activeWorktreeId] : undefined
   )
@@ -115,9 +112,6 @@ function WorkspaceView({
   const applySplitSizes = useWorkspaceStore((state) => state.applySplitSizes)
   const paneSearch = useWorkspaceStore((state) => state.paneSearch)
   const closePaneSearch = useWorkspaceStore((state) => state.closePaneSearch)
-  const answerSetup = useWorkspaceStore((state) => state.answerSetup)
-  const runAsk = useWorkspaceStore((state) => state.runAsk)
-  const answerRunAsk = useWorkspaceStore((state) => state.answerRunAsk)
   const dashboardOpen = useWorkspaceStore((state) => state.dashboardOpen)
   const projects = useWorkspaceStore((state) => state.projects)
   const connection = useWorkspaceStore((state) => state.connection)
@@ -212,13 +206,6 @@ function WorkspaceView({
   return (
     <main className="workspace">
       {worktree.missing === true ? <CheckoutMissing worktree={worktree} /> : null}
-      {worktree.setupAsk === undefined ? null : (
-        <SetupAsk command={worktree.setupAsk} onAnswer={(run) => void answerSetup(worktree.id, run)} />
-      )}
-      {runAsk === null || runAsk.worktreeId !== worktree.id ? null : (
-        <SetupAsk command={runAsk.command} label={runAsk.kind} onAnswer={(run) => void answerRunAsk(run)} />
-      )}
-      {setupProject === undefined ? null : <SetupOffer key={worktree.id} project={setupProject} worktree={worktree} />}
       <div className="workspace__body">
         <div
           className={`workspace__panes${

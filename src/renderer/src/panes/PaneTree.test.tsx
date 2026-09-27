@@ -5,9 +5,7 @@
 // `paneLayout.test.ts` already proves the arithmetic of a drag. What only the
 // rendered tree can settle is whether the arithmetic is aimed at the right
 // pane: a nested split addresses its children by a path, and a path built one
-// level short quietly resizes somebody else's panes. The same goes for the
-// close button — in a tree of four panes there are four of them, and three are
-// wrong.
+// level short quietly resizes somebody else's panes.
 //
 // The other half is what a pane says about itself. A shell that died keeps its
 // scrollback, so without the badge it is indistinguishable from one sitting at
@@ -104,6 +102,9 @@ function giveSplitsWidth(px = 1000): void {
 
 const leaf = (terminalId: string): PaneNode => ({ kind: 'leaf', terminalId })
 
+const regionNames = (): (string | null)[] =>
+  screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'))
+
 const row = (...children: PaneNode[]): PaneNode => ({
   kind: 'split',
   direction: 'row',
@@ -130,7 +131,6 @@ describe('one pane', () => {
   it('still renders, named plainly, for a terminal the store has not got', () => {
     mount(row(leaf('t1'), leaf('t2')), [terminal('t2')])
     expect(screen.getByRole('region', { name: 'terminal' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Close pane terminal' })).toBeTruthy()
   })
 
   // The tab above it already says its name and draws its dot.
@@ -172,21 +172,26 @@ describe('one pane', () => {
     expect(screen.getByText('exited 0')).toBeTruthy()
   })
 
-  // The grid size is a fact about the PTY, not about the work, and it was the
-  // one thing on every bar that nobody acted on. It stays reachable — on the
-  // name's hover — for whoever is checking that a split did what they meant.
-  it('keeps the pane’s size off the bar and on the name’s hover', () => {
-    mount(row(leaf('t1'), leaf('t2')), [terminal('t1', { cols: 132, rows: 43 }), terminal('t2')])
-    expect(screen.queryByText('132×43')).toBeNull()
-    expect(screen.getByText('t1').getAttribute('title')).toBe('t1 · 132×43')
+  // Every pane has its tab: a title strip repeating it was the same name twice, and its close twice.
+  it('draws no bar, name, dot or close of its own in a split either', () => {
+    mount(row(leaf('t1'), leaf('t2')), [terminal('t1', { busy: true, cols: 132, rows: 43 }), terminal('t2')])
+    expect(screen.getAllByRole('region')).toHaveLength(2)
+    expect(document.querySelectorAll('.pane__bar, .pane__title, .pane__notice, .activity')).toHaveLength(0)
+    expect(screen.queryByText('t1')).toBeNull()
+    expect(screen.queryByText(/132×43/)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Close pane/ })).toBeNull()
   })
 
-  // The dot lives on the tab only; a bar under it drawing it again was every dot twice.
-  it('names each of two panes on a bar of its own, with no dot', () => {
-    mount(row(leaf('t1'), leaf('t2')), [terminal('t1', { busy: true }), terminal('t2')])
-    expect(document.querySelectorAll('.pane__bar')).toHaveLength(2)
-    expect(document.querySelectorAll('.activity')).toHaveLength(0)
-    expect(screen.getByText('t1').className).toBe('pane__title')
+  it('says a split pane exited, and offers to run it again, without naming it', () => {
+    mount(row(leaf('t1'), leaf('t2')), [
+      terminal('t1', { title: 'claude', running: false, exitCode: 1 }),
+      terminal('t2')
+    ])
+    const dead = screen.getByRole('region', { name: 'claude' })
+    expect(dead.querySelector('.pane__notice')).toBeTruthy()
+    expect(within(dead).getByText('exited 1')).toBeTruthy()
+    expect(within(dead).getByRole('button', { name: 'New Shell' })).toBeTruthy()
+    expect(within(dead).queryByText('claude')).toBeNull()
   })
 
   it('says a lone pane exited, and offers to run it again, without naming it', () => {
@@ -287,10 +292,8 @@ describe('what a pane is called', () => {
       terminal('t1', { agent: 'codex', title: 'codex', label: 'Race two agents codex' }),
       terminal('t2', { title: 'zsh' })
     ])
-    expect(screen.getByRole('button', { name: 'Close pane Race two agents codex' })).toBeTruthy()
     expect(screen.getByRole('region', { name: 'Race two agents codex' })).toBeTruthy()
-    expect(screen.getByText('Race two agents codex').className).toBe('pane__title')
-    expect(screen.getByRole('button', { name: 'Close pane zsh' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'zsh' })).toBeTruthy()
   })
 
   it('numbers unnamed twins the way the strip does', () => {
@@ -298,8 +301,8 @@ describe('what a pane is called', () => {
       terminal('t1', { agent: 'claude', title: 'node' }),
       terminal('t2', { agent: 'claude', title: 'node' })
     ])
-    expect(screen.getByRole('button', { name: 'Close pane Claude Code' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Close pane Claude Code 2' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Claude Code' })).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Claude Code 2' })).toBeTruthy()
   })
 
   // The shell split off last sits above the older one; each keeps the number it started with.
@@ -308,33 +311,13 @@ describe('what a pane is called', () => {
       terminal('older', { title: '', ordinal: 1 }),
       terminal('newer', { title: '', ordinal: 2 })
     ])
-    expect(screen.getAllByText(/^zsh/).map((title) => title.textContent)).toEqual(['zsh 2', 'zsh'])
+    expect(regionNames()).toEqual(['zsh 2', 'zsh'])
   })
 
   // Records arrive in the order the panes were opened; the sidebar numbers by that order too.
   it('numbers twins by the order they were opened, not by the tree', () => {
     mount(row(leaf('newer'), leaf('older')), [terminal('older', { title: '' }), terminal('newer', { title: '' })])
-    expect(screen.getAllByText(/^zsh/).map((title) => title.textContent)).toEqual(['zsh 2', 'zsh'])
-  })
-})
-
-describe('closing the right pane', () => {
-  // The chord is taught in the menu bar, in Help, in the palette and on the
-  // front door; the hover on a close button is not a fifth place.
-  it('names which pane each button closes, and no chord', () => {
-    mount(row(leaf('t1'), leaf('t2')), [terminal('t1', { title: 'claude' }), terminal('t2')])
-    const button = screen.getByRole('button', { name: 'Close pane claude' })
-    expect(button.getAttribute('title')).toBe('Close pane')
-  })
-
-  it('closes the pane it belongs to, out of four', () => {
-    const tree = row(row(leaf('t1'), leaf('t2')), row(leaf('t3'), leaf('t4')))
-    mount(
-      tree,
-      ['t1', 't2', 't3', 't4'].map((id) => terminal(id, { title: id }))
-    )
-    screen.getByRole('button', { name: 'Close pane t3' }).click()
-    expect(onClose).toHaveBeenCalledExactlyOnceWith('t3')
+    expect(regionNames()).toEqual(['zsh 2', 'zsh'])
   })
 })
 

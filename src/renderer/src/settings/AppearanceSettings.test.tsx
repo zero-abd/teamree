@@ -48,9 +48,10 @@ beforeEach(() => {
 })
 
 describe('picking a theme', () => {
-  it('offers the built-ins with absolute black already chosen', () => {
+  it('offers the built-ins with Charcoal already chosen', () => {
     render(<AppearanceSettings />)
-    expect(screen.getByRole('radio', { name: /Absolute Black/ }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('radio', { name: /Charcoal/ }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('radio', { name: /Absolute Black/ }).getAttribute('aria-checked')).toBe('false')
     expect(screen.getByRole('radio', { name: /Midnight/ }).getAttribute('aria-checked')).toBe('false')
   })
 
@@ -74,17 +75,17 @@ describe('the theme cards', () => {
   const preview = (name: RegExp): HTMLElement =>
     screen.getByRole('radio', { name }).querySelector('.appearance__preview') as HTMLElement
 
-  // Four near-black grounds read as four identical tiles; the sidebar, pane and their hairline tell them apart.
+  // Near-black grounds read as identical tiles; the sidebar, pane and their hairline tell them apart.
   it('draws each dark preset in its own sidebar, pane and accent, so no two look alike', () => {
     render(<AppearanceSettings />)
-    const drawn = [/Absolute Black/, /high contrast/, /Midnight/, /Graphite/].map((name) => {
+    const drawn = [/Charcoal/, /Absolute Black/, /high contrast/, /Midnight/, /Graphite/].map((name) => {
       const tile = preview(name)
       for (const part of ['sidebar', 'pane', 'accent']) {
         expect(tile.querySelector(`.appearance__preview-${part}`), `${String(name)} ${part}`).not.toBeNull()
       }
       return [tile, ...tile.querySelectorAll('*')].map((element) => element.getAttribute('style') ?? '').join('|')
     })
-    expect(new Set(drawn).size).toBe(4)
+    expect(new Set(drawn).size).toBe(5)
   })
 })
 
@@ -131,7 +132,7 @@ describe('the two choices worth making without opening anything', () => {
   it('offers a way back to the preset’s ground once one has been chosen', () => {
     seed({ ...DEFAULT_APPEARANCE, ground: '#101820' })
     render(<AppearanceSettings />)
-    fireEvent.click(screen.getByRole('button', { name: /Back to Absolute Black/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Back to Charcoal/ }))
     expect(lastChange().ground).toBeNull()
   })
 })
@@ -208,9 +209,9 @@ describe('light, dark, or whatever the Mac is', () => {
     seed(DEFAULT_APPEARANCE, 'light')
     render(<AppearanceSettings />)
     expect(preset('Light').getAttribute('aria-checked')).toBe('true')
-    expect(screen.queryByRole('radio', { name: /Absolute Black/ })).toBeNull()
+    expect(screen.queryByRole('radio', { name: /Charcoal/ })).toBeNull()
     fireEvent.click(preset('Paper'))
-    expect(lastChange()).toMatchObject({ themeId: 'black', light: { themeId: 'paper' } })
+    expect(lastChange()).toMatchObject({ themeId: 'charcoal', light: { themeId: 'paper' } })
   })
 
   it('edits the light slot while light, and leaves the dark one alone', () => {

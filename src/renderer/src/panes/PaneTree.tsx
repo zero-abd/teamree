@@ -68,7 +68,7 @@ export function PaneTree({
     return <FileLeaf leaf={node} {...callbacks} />
   }
   if (node.kind === 'leaf') {
-    return <PaneLeaf terminalId={node.terminalId} {...callbacks} names={names} alone={path.length === 0} />
+    return <PaneLeaf terminalId={node.terminalId} {...callbacks} names={names} />
   }
   if (isFileColumn(node)) return <FileColumnPane node={node} {...callbacks} />
   return <PaneSplit node={node} path={path} {...callbacks} names={names} />
@@ -281,16 +281,14 @@ function PaneLeaf({
   names,
   focusedTerminalId,
   onFocus,
-  onClose,
   onRelaunch,
   onResumeConversation,
   isAppChord,
   searchTerminalId,
   searchToken,
   onCloseSearch,
-  modifier,
-  alone
-}: PaneCallbacks & { terminalId: string; alone: boolean }): React.JSX.Element {
+  modifier
+}: PaneCallbacks & { terminalId: string }): React.JSX.Element {
   const menu = usePaneMenu(modifier)
   const terminal = terminals[terminalId]
   const focused = focusedTerminalId === terminalId
@@ -300,10 +298,8 @@ function PaneLeaf({
   const stopped = terminal?.restored === 'stopped'
   // A run ended by Stop or the quit's hang-up: its signal code is not a result.
   const runStopped = exited && terminal.run !== undefined && runState(terminal) === 'stopped'
-  // One name per pane, shared by strip, bar, close button and close question.
+  // One name per pane, shared by strip, region, menu and close question.
   const name = names?.[terminalId] ?? terminal?.title ?? 'terminal'
-  // The grid size is on the name's hover: nobody acts on it.
-  const hover = terminal === undefined ? name : `${name} · ${terminal.cols}×${terminal.rows}`
 
   const status = (
     <>
@@ -343,36 +339,13 @@ function PaneLeaf({
   )
 
   return (
-    <section
-      className={`pane pane--terminal${focused ? ' pane--focused' : ''}${exited ? ' pane--exited' : ''}`}
-      aria-label={name}
-    >
-      {alone ? (
-        // The tab is its name and its dot; what is left to say is how it ended or came back.
-        exited || terminal?.restored !== undefined ? (
-          <div className="pane__notice" onContextMenu={(event) => menu.onContextMenu(terminalId, name, event)}>
-            {status}
-          </div>
-        ) : null
-      ) : (
-        <header className="pane__bar" onContextMenu={(event) => menu.onContextMenu(terminalId, name, event)}>
-          <span className="pane__title" title={hover}>
-            {name}
-          </span>
+    <section className={`pane pane--terminal${focused ? ' pane--focused' : ''}`} aria-label={name}>
+      {/* The tab is its name, dot and close; what is left to say is how it ended or came back. */}
+      {exited || terminal?.restored !== undefined ? (
+        <div className="pane__notice" onContextMenu={(event) => menu.onContextMenu(terminalId, name, event)}>
           {status}
-          <button
-            type="button"
-            className="pane__close"
-            title="Close pane"
-            aria-label={`Close pane ${name}`}
-            onClick={() => onClose(terminalId)}
-          >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M3 3 L9 9 M9 3 L3 9" />
-            </svg>
-          </button>
-        </header>
-      )}
+        </div>
+      ) : null}
       <TerminalView
         terminalId={terminalId}
         focused={focused}
