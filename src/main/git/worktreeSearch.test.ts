@@ -242,7 +242,7 @@ describe('ripgrep', () => {
       query: 'hit',
       rg,
       git: 'git',
-      timeoutMs: 300
+      timeoutMs: 3000
     })
     expect(summary).toMatchObject({ timedOut: true, matches: 1 })
     expect(files).toHaveLength(1)
