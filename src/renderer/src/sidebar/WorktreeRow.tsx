@@ -2,7 +2,7 @@
 // failed, and ready on paper but gone from disk. Everything a row can do besides
 // being opened is in one menu: right-click, the `⋯`, or the context-menu key.
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import {
   hasCheckout,
   type Terminal,
@@ -24,18 +24,22 @@ import { useUsageStore } from '../state/usageStore'
 import { agentRows, dotClass, TONE_LABEL, worktreeTone, type DotTone } from './agentRows'
 import { AskForYou } from './AskForYou'
 import { PaneRows } from './PaneRows'
-import { listPorts, portUrl } from './portChip'
+import { listPorts, portChip, portUrl } from './portChip'
 import { PortChipView } from './PortChipView'
 import { GitStatusChips } from './GitStatusChips'
 import { mergeBadge, mergedChip } from './mergeBadge'
 import type { OverlapChip, OverlapEntry } from './overlapChip'
 import { OverlapMark } from './OverlapMark'
 import { PullRequestMark } from './PullRequestMark'
+import { pullRequestChip } from './pullRequestChip'
+import { COMPACT_CHIPS, type ChipRank, type RowChip } from './rowChips'
+import { FoldedChips } from './FoldedChips'
+import { summarizeWorktreeStatus } from './worktreeStatusSummary'
 import { rowSpeech } from './rowSpeech'
 import { endNestDrag, NEST_DRAG_TYPE, startNestDrag, useNestDrag, useNestDrop } from './nestDrag'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { WorktreeNameField } from './WorktreeNameField'
-import { RunChip, runMenuItems, useRunActions, useRunOffers } from '../workspace/runButtons'
+import { RunChip, runMenuItems, TEST_CHIP, useRunActions, useRunOffers } from '../workspace/runButtons'
 import { useChildren } from '../workspace/rightPanel/childrenStore'
 import { agentName, worktreeDisplay, worktreeLabel, type WorktreeDisplay } from './worktreeDisplay'
 
@@ -348,9 +352,26 @@ export function WorktreeRow({
     report
   })
 
-  const facts = (
-    <>
-      {/* One group, so the open row can hide what its status bar and Changes badge already say. */}
+  const git = ready ? summarizeWorktreeStatus(status, worktree.parentId !== undefined) : null
+  const gitCounts =
+    git !== null &&
+    ((!merged && (git.ahead > 0 || git.behind > 0)) || git.tone !== 'quiet' || (status?.ignored ?? 0) > 0)
+  const pullChip = pullShown ? pullRequestChip(landing?.pullRequest) : null
+  const port = ready ? portChip(terminals, worktree.id, (id) => id) : null
+  const tests = testPane === undefined ? undefined : runState(testPane)
+  const testText = tests === undefined ? undefined : TEST_CHIP[tests]
+  const chips: RowChip<React.ReactNode>[] = []
+  const add = (key: string, rank: ChipRank, text: string, node: React.ReactNode): void => {
+    chips.push({ key, rank, text, node })
+  }
+
+  if (gitCounts || merged || badge !== null) {
+    const words = [gitCounts ? git?.description : '', merged ? mergedChip(landing).label : '', badge?.detail]
+    add(
+      'git',
+      git?.tone === 'conflict' || badge?.tone === 'conflicts' ? 'conflict' : 'rest',
+      words.filter(Boolean).join(' · '),
+      // One group, so the open row can hide what its status bar and Changes badge already say.
       <span className="worktree__git">
         {ready ? (
           <GitStatusChips status={status} child={worktree.parentId !== undefined} aheadBehind={!merged} />
@@ -395,71 +416,122 @@ export function WorktreeRow({
           </span>
         ) : null}
       </span>
-      {issue === undefined ? null : (
-        // Inside the row's button, so a span: a nested link would open the row as well.
-        <span
-          className="chip worktree__issue"
-          role="link"
-          title={issue.url}
-          onClick={(event) => {
-            event.stopPropagation()
-            openInBrowser(issue.url)
-          }}
-        >
-          {`#${issue.number}`}
-        </span>
-      )}
-      {pullShown ? <PullRequestMark pull={landing?.pullRequest} /> : null}
-      {ready ? <PortChipView terminals={terminals} worktreeId={worktree.id} /> : null}
-      {overlap === undefined || !ready ? null : <OverlapMark chip={overlap.chip} onOpen={overlap.onOpen} />}
-      {ready ? <RunChip terminals={terminals} worktreeId={worktree.id} /> : null}
-      {handoff === null ? null : <span className="chip worktree__handoff">{handoff}</span>}
-      {onRemoveCopy === undefined ? null : (
-        // Inside the row's button, so a span, as the issue chip is.
-        <span
-          className="chip worktree__handoff worktree__remove-copy"
-          role="button"
-          onClick={(event) => {
-            event.stopPropagation()
-            onRemoveCopy()
-          }}
-        >
-          Remove My Copy
-        </span>
-      )}
-      {claims === '' || !ready ? null : (
-        <span
-          className="chip worktree__claims"
-          role="img"
-          title={claims}
-          aria-label={`Claims: ${claims.split('\n').join(', ')}`}
-        >
-          ⚑
-        </span>
-      )}
-      {task === undefined ? null : (
-        // Inside the row's button, so a span, as the issue chip is.
-        <span
-          className="chip worktree__tally"
-          role="link"
-          title={task.children.join('\n')}
-          onClick={(event) => {
-            event.stopPropagation()
-            void useChildren.getState().showChildren(worktree.id)
-          }}
-        >
-          {`${task.tally.done}/${task.tally.total} done`}
-        </span>
-      )}
-      {creating ? <span className="chip worktree__tag">creating</span> : null}
-      {failed ? <span className="chip worktree__tag worktree__tag--failed">failed</span> : null}
-      {missing ? (
-        <span className="chip worktree__tag" title={`${worktree.path} is not on disk`}>
-          missing
-        </span>
-      ) : null}
-    </>
-  )
+    )
+  }
+  if (issue !== undefined) {
+    add(
+      'issue',
+      'rest',
+      `Issue #${issue.number}`,
+      // Inside the row's button, so a span: a nested link would open the row as well.
+      <span
+        className="chip worktree__issue"
+        role="link"
+        title={issue.url}
+        onClick={(event) => {
+          event.stopPropagation()
+          openInBrowser(issue.url)
+        }}
+      >
+        {`#${issue.number}`}
+      </span>
+    )
+  }
+  if (pullChip !== null) {
+    add(
+      'pr',
+      pullChip.tone === 'fail' ? 'failing' : 'rest',
+      pullChip.text,
+      <PullRequestMark pull={landing?.pullRequest} />
+    )
+  }
+  if (port !== null) {
+    add(
+      'port',
+      port.clash ? 'conflict' : 'rest',
+      port.label,
+      <PortChipView terminals={terminals} worktreeId={worktree.id} />
+    )
+  }
+  if (overlap !== undefined && ready) {
+    add(
+      'overlap',
+      overlap.chip.tone === 'conflict' ? 'conflict' : 'rest',
+      `⚠ ${overlap.chip.label}`,
+      <OverlapMark chip={overlap.chip} onOpen={overlap.onOpen} />
+    )
+  }
+  if (testText !== undefined) {
+    add(
+      'tests',
+      tests === 'failed' ? 'failing' : 'rest',
+      testText,
+      <RunChip terminals={terminals} worktreeId={worktree.id} />
+    )
+  }
+  if (handoff !== null) add('handoff', 'rest', handoff, <span className="chip worktree__handoff">{handoff}</span>)
+  if (onRemoveCopy !== undefined) {
+    add(
+      'removeCopy',
+      'rest',
+      'Remove My Copy',
+      // Inside the row's button, so a span, as the issue chip is.
+      <span
+        className="chip worktree__handoff worktree__remove-copy"
+        role="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          onRemoveCopy()
+        }}
+      >
+        Remove My Copy
+      </span>
+    )
+  }
+  if (claims !== '' && ready) {
+    const text = `Claims: ${claims.split('\n').join(', ')}`
+    add(
+      'claims',
+      'rest',
+      text,
+      <span className="chip worktree__claims" role="img" title={claims} aria-label={text}>
+        ⚑
+      </span>
+    )
+  }
+  if (task !== undefined) {
+    const tally = `${task.tally.done}/${task.tally.total} done`
+    add(
+      'tally',
+      task.rolled?.tone === 'waiting' && task.rolled.from !== undefined ? 'asking' : 'rest',
+      tally,
+      // Inside the row's button, so a span, as the issue chip is.
+      <span
+        className="chip worktree__tally"
+        role="link"
+        title={task.children.join('\n')}
+        onClick={(event) => {
+          event.stopPropagation()
+          void useChildren.getState().showChildren(worktree.id)
+        }}
+      >
+        {tally}
+      </span>
+    )
+  }
+  if (creating) add('creating', 'rest', 'creating', <span className="chip worktree__tag">creating</span>)
+  if (failed)
+    add('failed', 'failing', 'failed', <span className="chip worktree__tag worktree__tag--failed">failed</span>)
+  if (missing) {
+    add(
+      'missing',
+      'failing',
+      'missing',
+      <span className="chip worktree__tag" title={`${worktree.path} is not on disk`}>
+        missing
+      </span>
+    )
+  }
 
   const body = (
     <>
@@ -493,7 +565,7 @@ export function WorktreeRow({
           </>
         )}
         <span className="worktree__end">
-          {twoLines ? null : <span className="worktree__facts">{facts}</span>}
+          {twoLines ? null : <FoldedChips chips={chips} most={compact ? COMPACT_CHIPS : chips.length} label={label} />}
           {tone ? (
             <span
               className={dotClass(tone)}
@@ -513,7 +585,9 @@ export function WorktreeRow({
       {twoLines ? (
         <span className="worktree__meta" aria-hidden="true">
           <span className="worktree__branch">{display.branch ?? ''}</span>
-          {facts}
+          {chips.map((chip) => (
+            <Fragment key={chip.key}>{chip.node}</Fragment>
+          ))}
         </span>
       ) : null}
     </>

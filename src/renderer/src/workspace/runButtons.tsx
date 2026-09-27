@@ -123,7 +123,7 @@ export function RunButtons({ worktreeId }: { worktreeId: string }): React.JSX.El
   )
 }
 
-const CHIP: Partial<Record<RunState, string>> = { running: 'tests…', passed: '✓ tests', failed: '✗ tests' }
+export const TEST_CHIP: Partial<Record<RunState, string>> = { running: 'tests…', passed: '✓ tests', failed: '✗ tests' }
 
 /** The row's word on its last test run, from the `test` pane's exit code; nothing once it is stopped or closed. */
 export function RunChip({
@@ -135,7 +135,7 @@ export function RunChip({
 }): React.JSX.Element | null {
   const pane = runPaneOf(terminals, worktreeId, 'test')
   const state = pane === undefined ? undefined : runState(pane)
-  const text = state === undefined ? undefined : CHIP[state]
+  const text = state === undefined ? undefined : TEST_CHIP[state]
   if (text === undefined || state === undefined) return null
   return (
     <span
