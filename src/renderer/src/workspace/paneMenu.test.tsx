@@ -296,7 +296,7 @@ describe('the rows that depend on the pane', () => {
       worktrees: [{ ...worktree, task: 'Make the pager stream' }],
       terminals: { t2: terminal({ id: 't2', agent: 'claude', running: false, exitCode: 0 }) }
     })
-    render(<TerminalTabs modifier={MAC} />)
+    render(<Tree />)
     const menu = rightClickTab('rewrite')
     const offered = labels(menu)
     expect(offered.slice(offered.indexOf('Resume'), offered.indexOf('Resume') + 4)).toEqual([

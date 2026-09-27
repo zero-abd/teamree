@@ -622,8 +622,8 @@ async function checkWorktreeSurfaces(ask) {
   // so the check reads the same list, by the kind on each row's glyph — then
   // the way to the agent settings.
   const beforeStrip = await tabCount()
-  if (!(await pressLabel('New pane'))) {
-    failures.push('the pane strip has no New pane control, so no pointer can open a pane')
+  if (!(await pressLabel('New tab'))) {
+    failures.push('the pane strip has no New tab control, so no pointer can open a pane')
     return
   }
   const menuRows = () =>
@@ -665,19 +665,26 @@ async function checkWorktreeSurfaces(ask) {
     'choosing New terminal from the + menu did not open a pane'
   )
 
+  await checkGroupStrips(ask, call, worktreeId)
   await checkPatch(ask, worktreeId)
 
-  // No header row: the name, path and counts are already in the sidebar row,
-  // its menu and the status bar.
-  const head = await ask(`document.querySelector('.workspace__head') !== null`)
-  if (head === true) failures.push('a worktree header row is drawn between the pane strip and the panes')
+  // One head, above every strip: nothing sits between a strip and its pane.
+  const head = await ask(
+    `(() => {
+       const heads = document.querySelectorAll('.workspace__head')
+       const strips = [...document.querySelectorAll('.group > .tabs')]
+       const bottom = heads[0]?.getBoundingClientRect().bottom ?? Infinity
+       return heads.length === 1 && strips.every((strip) => strip.getBoundingClientRect().top >= bottom - 0.5)
+     })()`
+  )
+  if (head !== true) failures.push('the worktree head is missing, doubled, or drawn below a strip of tabs')
 
   // A quiet fresh shell closes on one press; only a busy pane or an agent is
   // asked about, because a question on every close is one people press through.
   const closed = await ask(
     `(() => {
        // The diff above is zoomed, so the file column may be all there is; its tab holds its close.
-       const button = document.querySelector('.pane__close, .column__close')
+       const button = document.querySelector('.tab__close')
        if (!button) return false
        button.click()
        return true
@@ -693,6 +700,54 @@ async function checkWorktreeSurfaces(ask) {
   )
 
   await checkUnreadPanes(ask, call, worktreeId)
+}
+
+/**
+ * Every group's strip sits right above its pane, edge for edge: as the panes are, then with one split right and
+ * another split down under it. Measured in the window, so a strip drawn in the wrong place cannot pass.
+ */
+async function checkGroupStrips(ask, call, worktreeId) {
+  const misaligned = () =>
+    ask(
+      `(() => {
+         const groups = [...document.querySelectorAll('.workspace__panes .group')]
+         const off = groups.flatMap((group) => {
+           const strip = group.querySelector(':scope > .tabs')?.getBoundingClientRect()
+           const body = group.querySelector(':scope > .group__body')?.getBoundingClientRect()
+           if (!strip || !body) return ['a group with no strip or no pane']
+           const edge = (a, b) => Math.abs(a - b) > 0.5
+           return edge(strip.left, body.left) || edge(strip.right, body.right) || edge(strip.bottom, body.top)
+             ? [group.dataset.group + ': strip ' + strip.left + '–' + strip.right + ', pane ' + body.left + '–' + body.right]
+             : []
+         })
+         return JSON.stringify({ count: groups.length, off })
+       })()`
+    ).then((said) => JSON.parse(said))
+  const expect = async (count, what) => {
+    const settled = await waitFor(
+      async () => (await misaligned()).count === count,
+      `${what} did not draw ${count} groups`
+    )
+    if (!settled) return
+    const { off } = await misaligned()
+    if (off.length > 0) failures.push(`${what}: a strip is not right above its pane: ${off.join('; ')}`)
+  }
+  const alone = await waitFor(async () => (await misaligned()).count >= 1, 'no group of tabs was drawn')
+  if (!alone) return
+  const start = (await misaligned()).count
+  await expect(start, 'the panes as they are')
+  const layout = await call('layout.get', { worktreeId })
+  const focused = layout.result?.focusedTerminalId
+  if (!focused) {
+    failures.push('no focused pane to split for the strip check')
+    return
+  }
+  const right = await call('terminal.split', { terminalId: focused, direction: 'row' })
+  if (right.ok !== true) return failures.push(`could not split a pane right: ${JSON.stringify(right.error ?? right)}`)
+  await expect(start + 1, 'a pane split right')
+  const down = await call('terminal.split', { terminalId: right.result.terminal.id, direction: 'column' })
+  if (down.ok !== true) return failures.push(`could not split a pane down: ${JSON.stringify(down.error ?? down)}`)
+  await expect(start + 2, 'a pane split down under it')
 }
 
 /** Appearance opens over the panes: the workspace, the window's scroll and the pty's size hold still. */
@@ -804,7 +859,7 @@ async function checkUnreadPanes(ask, call, worktreeId) {
         `(() => {
            const tabs = [...document.querySelectorAll('[role="tab"]')]
            const unread = tabs.filter((tab) => tab.closest('.tab')?.classList.contains('tab--unread'))
-           const selected = tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')
+           const selected = document.querySelector('.tabs--active [role="tab"][aria-selected="true"]')
            // Exactly one, and never the pane being looked at: a mark on the
            // focused tab would be the window telling somebody they have not
            // read what is on their screen.

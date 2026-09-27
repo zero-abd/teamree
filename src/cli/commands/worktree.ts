@@ -1334,10 +1334,17 @@ async function waitForCheckout(context: CommandContext, worktree: Worktree, time
   return settled
 }
 
-/** One line per node, indented by depth; a split names its axis and its shares. */
+/** One line per node, indented by depth; a split names its axis and its shares, a group of tabs the one shown. */
 function renderPane(node: PaneNode, indent: string, focused: string | null): string {
   if (node.kind === 'leaf') {
     return `${indent}${node.terminalId}${node.terminalId === focused ? '  <- focused' : ''}`
+  }
+  if (node.tabs === true) {
+    const shown = node.shown ?? (node.children[0]?.kind === 'leaf' ? node.children[0].terminalId : '')
+    return [
+      `${indent}tabs (${node.children.length}, ${shown} shown)`,
+      ...node.children.map((child) => renderPane(child, `${indent}  `, focused))
+    ].join('\n')
   }
   const shares = node.sizes.map((size) => `${Math.round(size * 100)}%`).join('/')
   return [

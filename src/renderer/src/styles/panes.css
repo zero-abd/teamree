@@ -605,7 +605,7 @@ body.is-dragging-pane * {
 }
 
 .tab--dragged > * {
-  opacity: 0;
+  visibility: hidden;
 }
 
 /* The thumbnail on a hovered `[Image #N]`. Never takes the pointer: the link under it keeps it. */

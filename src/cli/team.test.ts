@@ -1170,6 +1170,24 @@ describe('worktree start-points and layout', () => {
     expect(cli.stub.received.at(-1)).toMatchObject({ method: 'layout.get', params: { worktreeId: 'wt_1' } })
   })
 
+  it('draws a group of tabs with the tab it shows', async () => {
+    const root = {
+      kind: 'split',
+      direction: 'column',
+      sizes: [0.5, 0.5],
+      children: [
+        { kind: 'leaf', terminalId: 't_1' },
+        { kind: 'leaf', terminalId: 't_2' }
+      ],
+      tabs: true,
+      shown: 't_2'
+    }
+    const cli = await harness(teamHandler({ 'layout.get': () => ({ ...LAYOUT, root }) }))
+    const result = await cli.run(['worktree', 'layout', 'fix-login'])
+    expect(result.out).toContain('tabs (2, t_2 shown)')
+    expect(result.out).not.toContain('column split')
+  })
+
   it('says so when a worktree has no panes', async () => {
     const cli = await harness(teamHandler({ 'layout.get': () => ({ ...LAYOUT, root: null, focusedTerminalId: null }) }))
     const result = await cli.run(['worktree', 'layout', 'fix-login'])
