@@ -175,3 +175,15 @@ describe('an error the window reports', () => {
     expect(logText()).not.toContain('a string')
   })
 })
+
+describe('what the window just wrote to localStorage', () => {
+  it('is put on disk when the window asks, not when Chromium next commits', async () => {
+    const guard = await loadGuard()
+    guard.installStorageFlush()
+    const [channel, listener] = electron.ipcMain.on.mock.calls[0] as [string, Listener]
+    expect(channel).toBe(guard.STORAGE_FLUSH_CHANNEL)
+    const flushStorageData = vi.fn()
+    listener({ sender: { session: { flushStorageData } } })
+    expect(flushStorageData).toHaveBeenCalledTimes(1)
+  })
+})

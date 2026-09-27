@@ -66,8 +66,10 @@ describe.skipIf(process.platform === 'win32')('socket server', () => {
   let endpoint: string
   let hub: SubscriptionHub
   let server: RuntimeSocketServer
+  let errors: unknown[]
 
   beforeEach(async () => {
+    errors = []
     directory = await mkdtemp(join(tmpdir(), 'teamree-socket-'))
     endpoint = join(directory, 'runtime.sock')
     const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
@@ -83,7 +85,12 @@ describe.skipIf(process.platform === 'win32')('socket server', () => {
       })
       return { subscription }
     })
-    server = await startSocketServer({ endpoint, dispatch: createDispatcher(registry), subscriptions: hub })
+    server = await startSocketServer({
+      endpoint,
+      dispatch: createDispatcher(registry),
+      subscriptions: hub,
+      onError: (error) => errors.push(error)
+    })
   })
 
   afterEach(async () => {
@@ -134,6 +141,21 @@ describe.skipIf(process.platform === 'win32')('socket server', () => {
     await waitUntil(() => hub.size === 0)
   })
 
+  it('does not report a client that hangs up while frames are still coming', async () => {
+    for (let round = 0; round < 20; round += 1) {
+      const client = await openClient(endpoint)
+      client.send(`${JSON.stringify({ id: 's', method: 'terminal.subscribe', params: { terminalId: 't1' } })}\n`)
+      await client.waitFor(2)
+      client.socket.pause()
+      await new Promise((tick) => setTimeout(tick, 20))
+      client.socket.destroy()
+      await waitUntil(() => hub.size === 0)
+    }
+    await new Promise((tick) => setTimeout(tick, 20))
+
+    expect(errors).toEqual([])
+  })
+
   it('rejects a corrupt line and hangs up', async () => {
     const client = await openClient(endpoint)
     const closed = new Promise((resolve) => client.socket.once('close', resolve))
@@ -159,13 +181,20 @@ describe.skipIf(process.platform === 'win32')('socket server', () => {
     const context = createRuntimeContext({ version: '1.2.3', store, subscriptions: hub, endpoint })
     const registry = new MethodRegistry(context)
     registerHandlers(registry)
-    server = await startSocketServer({ endpoint, dispatch: createDispatcher(registry), subscriptions: hub })
+    server = await startSocketServer({
+      endpoint,
+      dispatch: createDispatcher(registry),
+      subscriptions: hub,
+      onError: (error) => errors.push(error)
+    })
 
     const client = await openClient(endpoint)
     client.send(`${JSON.stringify({ id: 'z', method: 'status.get' })}\n`)
     await client.waitFor(1)
 
     expect(client.frames[0]).toMatchObject({ id: 'z', ok: true })
+    // Recovered, so not an error: the saved-errors log is for what went wrong.
+    expect(errors).toEqual([])
     client.socket.destroy()
   })
 })

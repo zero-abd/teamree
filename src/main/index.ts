@@ -1,5 +1,12 @@
 // First: installs the handlers that keep every later throw off Electron's raw error dialog.
-import { attachWindow, installErrorReports, mainErrors, showErrorLog, watchGoneProcesses } from './crashGuard'
+import {
+  attachWindow,
+  installErrorReports,
+  installStorageFlush,
+  mainErrors,
+  showErrorLog,
+  watchGoneProcesses
+} from './crashGuard'
 import { join } from 'node:path'
 import {
   app,
@@ -324,6 +331,7 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
     }
     installMenu()
     installErrorReports()
+    installStorageFlush()
     watchGoneProcesses(mainWindow)
     protocol.handle(FILE_SCHEME, (request) => serveGrantedFile(fileGrants, request))
 
