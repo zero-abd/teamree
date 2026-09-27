@@ -192,16 +192,23 @@ describe('cliLine', () => {
     ...overrides
   })
 
-  it('is the link and where it leads, with nothing to do', () => {
-    expect(cliLine(status())).toMatchObject({
-      state: '/usr/local/bin/teamree → /Applications/teamree.app/Contents/Resources/cli/teamree',
-      action: null
+  const LINK = { label: 'Link', path: '/usr/local/bin/teamree' }
+  const APP_CLI = '/Applications/teamree.app/Contents/Resources/cli/teamree'
+
+  it('is Installed, the link and where it leads as rows, with nothing to do', () => {
+    expect(cliLine(status())).toEqual({
+      status: 'Installed',
+      paths: [LINK, { label: 'Target', path: APP_CLI }],
+      action: null,
+      title: null,
+      manual: null
     })
   })
 
-  it('is "Not installed" and Install', () => {
+  it('is "Not installed" and Install, with no path to show', () => {
     expect(cliLine(status({ state: 'absent', resolved: null }))).toMatchObject({
-      state: 'Not installed',
+      status: 'Not installed',
+      paths: [],
       action: 'Install'
     })
   })
@@ -209,11 +216,13 @@ describe('cliLine', () => {
   // Two failures under one state: a link to nothing, and a link to another copy.
   it('is the wrong destination and Repair', () => {
     expect(cliLine(status({ state: 'elsewhere', resolved: '/Volumes/old/teamree', dangling: true }))).toMatchObject({
-      state: '/usr/local/bin/teamree → /Volumes/old/teamree (missing)',
+      status: 'Link broken',
+      paths: [LINK, { label: 'Target', path: '/Volumes/old/teamree' }],
       action: 'Repair'
     })
     expect(cliLine(status({ state: 'elsewhere', resolved: '/opt/teamree/cli/teamree' }))).toMatchObject({
-      state: '/usr/local/bin/teamree → /opt/teamree/cli/teamree (another copy)',
+      status: 'Another copy',
+      paths: [LINK, { label: 'Target', path: '/opt/teamree/cli/teamree' }],
       action: 'Repair'
     })
   })
@@ -221,7 +230,7 @@ describe('cliLine', () => {
   it('leaves a link to another working copy alone from any other copy', () => {
     for (const copy of ['profile', 'other'] as const) {
       expect(cliLine(status({ copy, state: 'elsewhere', resolved: '/opt/teamree/cli/teamree' }))).toMatchObject({
-        state: '/usr/local/bin/teamree → /opt/teamree/cli/teamree (another copy)',
+        status: 'Another copy',
         action: null
       })
     }
@@ -230,10 +239,26 @@ describe('cliLine', () => {
     ).toBeNull()
   })
 
-  it('says when the link is right but no PATH teamree can read reaches it', () => {
-    expect(cliLine(status({ onPath: null })).state).toBe(
-      '/usr/local/bin/teamree → /Applications/teamree.app/Contents/Resources/cli/teamree · /usr/local/bin not on PATH'
+  it('says when the link is right but no PATH teamree can read reaches it, the path in its own row', () => {
+    expect(cliLine(status({ onPath: null }))).toMatchObject({
+      status: 'Not on PATH',
+      paths: [LINK, { label: 'Target', path: APP_CLI }]
+    })
+    expect(cliLine(status({ onPath: null, state: 'elsewhere', resolved: '/opt/teamree' })).status).toBe(
+      'Another copy · not on PATH'
     )
+  })
+
+  it('names what is in the way of the link, and a copy that cannot be linked to', () => {
+    expect(cliLine(status({ state: 'file', resolved: null }))).toMatchObject({
+      status: 'A file is in the way',
+      paths: [LINK],
+      action: null
+    })
+    expect(cliLine(status({ impermanent: 'volume', source: '/Volumes/teamree/cli/teamree' }))).toMatchObject({
+      status: 'Move teamree to Applications',
+      paths: [{ label: 'Running from', path: '/Volumes/teamree/cli/teamree' }]
+    })
   })
 
   // The button carries a password prompt, and the hover is where that is said.
@@ -245,16 +270,16 @@ describe('cliLine', () => {
 
   it('has no button where this app cannot link, and says what to type', () => {
     expect(cliLine(status({ bundle: null, packaged: false }))).toMatchObject({
-      state: 'Not built',
+      status: 'Not built',
       action: null,
       manual: 'npm run build:cli'
     })
     expect(cliLine(status({ installable: false, platform: 'linux' }))).toMatchObject({
-      state: 'Not installable on linux',
+      status: 'Not installable on linux',
       action: null,
       manual: expect.stringContaining('ln -sf')
     })
-    expect(cliLine(null)).toMatchObject({ state: 'Looking…', action: null })
+    expect(cliLine(null)).toMatchObject({ status: 'Looking…', paths: [], action: null })
   })
 })
 

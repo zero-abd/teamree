@@ -9,6 +9,7 @@ import { AgentGlyph } from '../agents/glyphs'
 import { hasResumable } from '../agents/harnesses'
 import { Modal } from '../dialogs/Modal'
 import { holdsModifier, type PlatformModifier } from '../keyboard/platformModifier'
+import { editorLines } from '../files/editorLines'
 import { focusedCodeFile, projectForNewTask, runWorkspaceCommand, whyUnavailable } from '../keyboard/workspaceCommands'
 import { commandNamed, shortcutHint } from '../keyboard/workspaceShortcuts'
 import { compareTitle } from '../compare/siblingRuns'
@@ -316,6 +317,10 @@ export function CommandPalette({
   const place = useMemo(() => lineQuery(query), [query])
   const lineOnly = place.path === '' && wanted.startsWith(':')
   const codeFile = useWorkspaceStore(focusedCodeFile)
+  const lineCount =
+    lineOnly && place.line === undefined && codeFile !== null && filesOf !== null
+      ? editorLines(filesOf, codeFile)
+      : undefined
   const found = useFileMatches(filesWanted && !lineOnly ? filesOf : null, place.path, fileLimit)
 
   const files = useMemo(() => {
@@ -583,20 +588,29 @@ export function CommandPalette({
   return (
     <Modal title={mode === 'files' ? 'Go to File' : 'Go to'} hideTitle onClose={closeDialog}>
       <div className="palette">
-        <input
-          className="palette__input"
-          type="text"
-          value={query}
-          placeholder={mode === 'files' ? 'File name or path…' : 'Worktree, branch, file, or a command…'}
-          aria-label={mode === 'files' ? 'Search files' : 'Search worktrees, files and commands'}
-          autoComplete="off"
-          spellCheck={false}
-          onChange={(event) => {
-            setQuery(event.target.value)
-            setSelected(0)
-          }}
-          onKeyDown={onKeyDown}
-        />
+        <div className="palette__field">
+          <input
+            className="palette__input"
+            type="text"
+            value={query}
+            placeholder={mode === 'files' ? 'File name or path…' : 'Worktree, branch, file, or a command…'}
+            aria-label={mode === 'files' ? 'Search files' : 'Search worktrees, files and commands'}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(event) => {
+              setQuery(event.target.value)
+              setSelected(0)
+            }}
+            onKeyDown={onKeyDown}
+          />
+          {/* A placeholder after the typed `:`, which hides the real one. */}
+          {lineCount === undefined ? null : (
+            <span className="palette__ghost" aria-hidden="true">
+              <span className="palette__ghost-typed">{query}</span>
+              {`1–${lineCount}`}
+            </span>
+          )}
+        </div>
 
         {matches.length === 0 ? (
           wanted !== '' && settled ? (

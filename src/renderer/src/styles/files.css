@@ -404,6 +404,11 @@
   background: var(--bg-hover);
 }
 
+/* Not wholly in sight: left out rather than cut mid-name; the `+N` list reaches it. */
+.column__tab[data-cut] {
+  visibility: hidden;
+}
+
 .column__tab--shown {
   background: var(--bg-pane);
   color: var(--fg-secondary);

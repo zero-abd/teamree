@@ -820,3 +820,28 @@ describe('a markdown tab', () => {
     expect(closeTerminal).toHaveBeenCalledWith('file:1')
   })
 })
+
+// A page has its own head; an empty strip over it is a band of nothing.
+describe('over a page', () => {
+  it.each([
+    ['Settings', { settingsOpen: true }],
+    ['Teamwork', { teamworkProjectId: 'p1' }],
+    ['Help', { helpOpen: true }]
+  ])('draws no strip over %s while the sidebar holds the window buttons', (_page, state) => {
+    seed({ activeWorktreeId: 'w1', layouts: { w1: layout('w1', row('t1'), 't1') }, ...state })
+    const { container } = render(<TerminalTabs modifier={MAC} />)
+    expect(container.querySelector('.tabs')).toBeNull()
+  })
+
+  it('draws no strip over Settings with the sidebar put away, since Settings has the window', () => {
+    seed({ sidebarVisible: false, settingsOpen: true })
+    const { container } = render(<TerminalTabs modifier={MAC} />)
+    expect(container.querySelector('.tabs')).toBeNull()
+  })
+
+  it('keeps the strip over a page for the Show sidebar button while the sidebar is away', () => {
+    seed({ sidebarVisible: false, teamworkProjectId: 'p1' })
+    mount()
+    expect(screen.getByRole('button', { name: 'Show sidebar' })).toBeTruthy()
+  })
+})

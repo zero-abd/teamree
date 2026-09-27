@@ -1024,6 +1024,12 @@
   outline: none;
 }
 
+/* The one in front, marked as its tab is: a line of the accent. */
+.row-menu__item[aria-current='true'] {
+  box-shadow: inset 2px 0 0 var(--accent);
+  font-weight: 600;
+}
+
 .row-menu__more {
   flex: none;
   margin-left: var(--s4);

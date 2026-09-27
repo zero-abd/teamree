@@ -1,7 +1,7 @@
 // The settings page: machine-level facts (PATH, updates, text size, checkouts), so it takes the window,
 // one section at a time beside its own section list. Colours and relays are read here and set where they live.
 
-import { createContext, Fragment, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { agentLaunchCommand } from '@shared/agentLaunch'
 import { branchPrefixFor } from '@shared/branchName'
 import type { Project, RunKind } from '@shared/entities'
@@ -34,6 +34,7 @@ import {
   type TerminalCursorStyle
 } from '../state/preferences'
 import { NoticeTest } from '../notices/NoticeTest'
+import { openInBrowser } from '../shell/openInBrowser'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
@@ -379,12 +380,12 @@ export function SettingsView({
     useWorkspaceStore.setState({ settingsSection: null })
   }, [section])
 
-  // The palette's Open Setting: the filter holds its label and its section is rung once shown.
+  // The palette's Open Setting: the filter holds its label, and its row's control takes the focus once shown.
   const asked = useWorkspaceStore((state) => state.settingsQuery)
-  const ring = useRef<SectionId | null>(null)
+  const landing = useRef<string | null>(null)
   useEffect(() => {
     if (asked === null) return
-    ring.current = firstMatch(asked)?.section ?? null
+    landing.current = asked
     setQuery(asked)
     useWorkspaceStore.setState({ settingsQuery: null })
   }, [asked])
@@ -392,8 +393,14 @@ export function SettingsView({
   // Each new filter starts at the top, so a match below the fold is not missed.
   useEffect(() => {
     if (body.current !== null) body.current.scrollTop = 0
-    if (ring.current !== null && filtering) flash(ring.current)
-    ring.current = null
+    // Mounted asking, this runs once for the empty filter first; the label waits for its own.
+    const label = landing.current
+    if (label === null || label !== query || body.current === null) return
+    landing.current = null
+    if (!landOn(body.current, label)) {
+      const section = firstMatch(label)?.section
+      if (section !== undefined) flash(section)
+    }
   }, [query])
 
   // The find chord, while this page covers the panes.
@@ -483,11 +490,34 @@ function flash(id: SectionId): void {
   const group = document
     .getElementById(`settings-${id}`)
     ?.closest('.settings-section')
-    ?.querySelector('.settings-group')
-  group?.animate?.([{ boxShadow: '0 0 0 2px var(--accent)' }, { boxShadow: '0 0 0 2px transparent' }], {
-    duration: 1600,
-    easing: 'ease-out'
-  })
+    ?.querySelector<HTMLElement>('.settings-group')
+  if (group) ring(group)
+}
+
+/** Inset for a row, which its neighbours would paint over. */
+function ring(element: HTMLElement, inset = ''): void {
+  element.animate?.(
+    [{ boxShadow: `${inset}0 0 0 2px var(--accent)` }, { boxShadow: `${inset}0 0 0 2px transparent` }],
+    {
+      duration: 1600,
+      easing: 'ease-out'
+    }
+  )
+}
+
+/** Focuses the control of the first row labelled `label` and rings the row; false when there is none. */
+function landOn(page: HTMLElement, label: string): boolean {
+  const row = [...page.querySelectorAll<HTMLElement>('.settings-field')].find(
+    (field) => field.querySelector('.settings-field__label')?.textContent === label
+  )
+  if (row === undefined) return false
+  row
+    .querySelector<HTMLElement>(
+      '.settings-field__control :is(input, select, textarea, button, [tabindex="0"]):not(:disabled)'
+    )
+    ?.focus()
+  ring(row, 'inset ')
+  return true
 }
 
 type SectionEntry = (typeof SETTINGS_SECTIONS)[number]
@@ -723,10 +753,8 @@ function CliSection(): React.JSX.Element {
     <section className="settings-section" aria-labelledby="settings-cli">
       <SectionTitle id="cli" text="CLI" />
       <Group>
-        <div className="settings-row">
-          <p className="settings-fact settings-fact--mono">
-            <BreakAtSlashes text={line.state} />
-          </p>
+        <Field label="Status">
+          <span className="settings-value">{line.status}</span>
           {line.action ? (
             <button
               type="button"
@@ -738,7 +766,12 @@ function CliSection(): React.JSX.Element {
               {pending ? 'Linking…' : line.action}
             </button>
           ) : null}
-        </div>
+        </Field>
+        {line.paths.map((row) => (
+          <Field key={row.label} label={row.label} wide>
+            <PathText path={row.path} />
+          </Field>
+        ))}
 
         {line.manual ? (
           <pre className="settings-command">
@@ -799,9 +832,13 @@ function AddonsSection(): React.JSX.Element {
               ) : null}
               {line.action === 'uv' ? (
                 <>
-                  <a className="button button--small" href={UV_INSTALL_DOCUMENT} target="_blank" rel="noreferrer">
+                  <button
+                    type="button"
+                    className="button button--small"
+                    onClick={() => openInBrowser(UV_INSTALL_DOCUMENT)}
+                  >
                     Get uv
-                  </a>
+                  </button>
                   <button type="button" className="button button--small" onClick={check}>
                     Check Again
                   </button>
@@ -985,10 +1022,12 @@ function reasonFor(error: unknown): string {
 function WorktreesIn({
   own,
   applied,
+  source,
   save
 }: {
   own: string | undefined
   applied: string
+  source?: React.ReactNode
   /** An empty folder clears it. */
   save: (folder: string, allowInsideRepository?: boolean) => Promise<unknown>
 }): React.JSX.Element {
@@ -1013,6 +1052,7 @@ function WorktreesIn({
     <Field
       label="Worktrees in"
       wide
+      source={source}
       below={
         problem === null ? null : (
           <p className="settings-error">
@@ -1059,11 +1099,13 @@ function BranchPrefix({
   id,
   own,
   inherited,
+  source,
   save
 }: {
   id: string
   own: string
   inherited: string
+  source?: React.ReactNode
   save: (prefix: string) => Promise<unknown>
 }): React.JSX.Element {
   const shown = useShown()
@@ -1076,6 +1118,7 @@ function BranchPrefix({
     <Field
       label="Branch prefix"
       htmlFor={id}
+      source={source}
       below={problem === null ? null : <p className="settings-error">{problem}</p>}
     >
       <input
@@ -1842,6 +1885,7 @@ function ProjectWorktrees({ project }: { project: Project }): React.JSX.Element 
         <WorktreesIn
           own={project.worktreesRoot}
           applied={project.worktreesRoot ?? machineRoot(machine)}
+          source={<OverrideChip own={project.worktreesRoot !== undefined} />}
           save={(worktreesRoot, allowInsideRepository) =>
             save({ worktreesRoot, ...(allowInsideRepository ? { allowInsideRepository } : {}) })
           }
@@ -1852,10 +1896,22 @@ function ProjectWorktrees({ project }: { project: Project }): React.JSX.Element 
           id={`settings-branch-prefix-${project.id}`}
           own={project.branchPrefix ?? ''}
           inherited={machine?.branchPrefix ?? ''}
+          source={<OverrideChip own={(project.branchPrefix ?? '') !== ''} />}
           save={(branchPrefix) => save({ branchPrefix })}
         />
       ) : null}
     </>
+  )
+}
+
+/** Under a project row that shares General's label: whose value is in effect. */
+function OverrideChip({ own }: { own: boolean }): React.JSX.Element {
+  return (
+    <div className="settings-source">
+      <span className={`settings-chip${own ? ' settings-chip--local' : ''}`}>
+        {own ? 'This project' : 'From General'}
+      </span>
+    </div>
   )
 }
 
@@ -2288,23 +2344,5 @@ function RelayBlock({ project }: { project: Project }): React.JSX.Element {
         Open Teamwork
       </button>
     </Field>
-  )
-}
-
-/** Lets a path wrap after each `/` rather than mid-name. */
-function BreakAtSlashes({ text }: { text: string }): React.JSX.Element {
-  return (
-    <>
-      {text.split('/').map((part, index) => (
-        <Fragment key={index}>
-          {index > 0 ? (
-            <>
-              /<wbr />
-            </>
-          ) : null}
-          {part}
-        </Fragment>
-      ))}
-    </>
   )
 }

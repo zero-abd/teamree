@@ -654,6 +654,29 @@ button.picker__chevron:hover {
   outline: none;
 }
 
+.palette__field {
+  position: relative;
+}
+
+/* Laid over the input on the same box and type, the typed part invisible, so the rest follows it. */
+.palette__ghost {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: var(--s3) var(--s4);
+  border: 1px solid transparent;
+  color: var(--fg-muted);
+  font-size: var(--text-base);
+  white-space: pre;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.palette__ghost-typed {
+  visibility: hidden;
+}
+
 .palette__list {
   margin: var(--s3) 0 0;
   padding: 0;

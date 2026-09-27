@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 // The bottom rail: state that is not on screen. The runtime only when it is not ready, keep-awake and
-// memory as icons, the git line, the pane count, and how many panes anywhere are asking or failed.
+// memory, the git line, the pane count, and how many panes anywhere are asking or failed.
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -349,10 +349,11 @@ describe('the runtime', () => {
 })
 
 describe('keep awake', () => {
-  it('is an icon with the mode on its hover, follows the agents by default, and offers the three modes upward', () => {
+  it('is an icon, a word and the mode, follows the agents by default, and offers the three modes upward', () => {
     mount()
     const button = screen.getByRole('button', { name: 'Keep awake, agent' })
-    expect(button.textContent).toBe('')
+    expect(button.querySelector('.statusbar__muted')?.textContent).toBe('awake')
+    expect(button.textContent).toBe('awakeagent')
     expect(button.getAttribute('title')).toBe('Keep awake · Agent')
     expect(button.querySelector('svg')).toBeTruthy()
     expect(button.querySelector('.statusbar__dot')).toBeNull()
@@ -421,18 +422,18 @@ describe('resources', () => {
     })
   }
 
-  it('is an icon alone until the app holds more than 2 GB', async () => {
+  it('is an icon and a word, the total beside them once the app holds more than 2 GB', async () => {
     mount()
     await flush()
     const button = screen.getByRole('button', { name: /Resources/ })
-    expect(button.textContent).toBe('')
+    expect(button.textContent).toBe('mem')
     expect(button.querySelector('svg')).toBeTruthy()
     cleanup()
 
     answer = { ...resources, rss: 2.5 * 1024 * MB }
     mount()
     await flush()
-    expect(screen.getByRole('button', { name: /Resources/ }).textContent).toBe('2.5 GB')
+    expect(screen.getByRole('button', { name: /Resources/ }).textContent).toBe('mem2.5 GB')
   })
 
   it('shows the total on the button while the popover is open, and the tree in the popover', async () => {
@@ -458,7 +459,7 @@ describe('resources', () => {
     const button = screen.getByRole('button', { name: /Resources/ })
     fireEvent.click(button)
     await flush()
-    expect(button.textContent).toBe('560 MB')
+    expect(button.textContent).toBe('mem560 MB')
     const popover = screen.getByRole('dialog', { name: 'Resources' })
     expect(popover.textContent).toContain('105.2%')
     expect(popover.textContent).toContain('Rewrite the pager')

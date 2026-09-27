@@ -17,6 +17,20 @@
   overflow-y: auto;
 }
 
+/* Settings has the window, so the macOS window buttons sit over this column's top, which drags it. */
+.shell--mac .settings-side {
+  position: relative;
+  padding-top: var(--titlebar-h, 38px);
+}
+
+.shell--mac .settings-side::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: var(--titlebar-h, 38px);
+  -webkit-app-region: drag;
+}
+
 .settings-search {
   display: flex;
   align-items: center;
@@ -234,13 +248,6 @@
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-weight: 400;
-  overflow-wrap: anywhere;
-}
-
-.settings-fact--mono {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: 500;
   overflow-wrap: anywhere;
 }
 
@@ -729,6 +736,11 @@
     width: 52px;
     padding-inline: var(--s2);
     overflow: visible;
+  }
+
+  /* The window buttons reach past the narrow list. */
+  .shell--mac .page--side .page__head {
+    padding-left: calc(var(--titlebar-inset, 84px) - 52px);
   }
 
   .settings-nav__heading,

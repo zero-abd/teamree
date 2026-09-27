@@ -628,6 +628,39 @@ describe('sixteen open files', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
+  // A tab cut at either edge shows half a name; it is left out until scrolled wholly into sight.
+  it('shows only whole tabs, however the strip is scrolled', () => {
+    render(draw(1))
+    const tab = (at: number): HTMLElement => document.querySelector(`[data-pane-id="file:${at}"]`) as HTMLElement
+    const cut = (): number[] => [0, 1, 2, 3, 4].filter((at) => tab(at).hasAttribute('data-cut'))
+    expect(cut()).toEqual([3, 4])
+    strip().scrollLeft = 50
+    fireEvent.scroll(strip())
+    expect(cut()).toEqual([0, 3, 4])
+    expect(screen.getByRole('button', { name: 'All open files' }).textContent).toBe('+14')
+  })
+
+  it('marks the shown file in the list, and starts the keyboard on it', () => {
+    render(draw(5))
+    fireEvent.click(screen.getByRole('button', { name: 'All open files' }))
+    const items = screen.getAllByRole('menuitem')
+    expect(items.filter((item) => item.getAttribute('aria-current') === 'true')).toEqual([items[5]])
+    expect(document.activeElement).toBe(items[5])
+  })
+
+  it('scrolls a tab in from the right to a tab edge, so the first tab on the strip is whole', () => {
+    const view = render(draw(0))
+    const wide = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('column__tabs') ? 250 : 0
+    })
+    try {
+      view.rerender(draw(4))
+      expect(strip().scrollLeft).toBe(300)
+    } finally {
+      wide.mockRestore()
+    }
+  })
+
   it('has no button while every tab fits', () => {
     Object.defineProperty(HTMLElement.prototype, 'scrollWidth', { configurable: true, get: () => 300 })
     Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 1600 })
