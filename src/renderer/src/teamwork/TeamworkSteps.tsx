@@ -14,6 +14,8 @@ import {
   type TeamworkStatus
 } from '@shared/entities'
 import { Confirm } from '../dialogs/Confirm'
+import { Icon } from '../icons/Icon'
+import { BrandMark } from '../shell/Brand'
 import {
   ADD_KEY_BUTTON,
   brokenRelayOverride,
@@ -229,7 +231,7 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
   )
 }
 
-/** Which of the two jobs this is: two buttons, the one the repository points at primary, and taken by neither. */
+/** Which of the two jobs this is: the page's empty state, the one the repository points at primary. */
 function PathChoice({
   list,
   relay,
@@ -242,14 +244,19 @@ function PathChoice({
   const suggestion = suggestedPath(list, relay) ?? { id: 'start', because: null }
   return (
     <div className="path-choice">
+      <div className="path-choice__motif" aria-hidden="true">
+        <BrandMark />
+      </div>
+      <h2 className="path-choice__title">Work with your team</h2>
       <div className="path-choice__buttons">
         {TEAMWORK_PATHS.map((option) => (
           <button
             key={option.id}
             type="button"
-            className={option.id === suggestion.id ? 'button button--primary' : 'button'}
+            className={`button button--lead ${option.id === suggestion.id ? 'button--primary' : 'button--secondary'}`}
             onClick={() => onChoose(option.id)}
           >
+            {option.id === 'start' ? <Icon name="team" /> : null}
             {option.button}
           </button>
         ))}

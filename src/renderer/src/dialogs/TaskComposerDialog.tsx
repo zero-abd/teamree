@@ -312,14 +312,14 @@ export function TaskComposerDialog({
         ) : null}
 
         <footer className="modal__actions">
-          <p className="form__note">{taskPlanNote(agents, agentsProbed, selection)}</p>
+          <p className="modal__note">{taskPlanNote(agents, agentsProbed, selection)}</p>
           <button type="button" className="button button--ghost" onClick={closeDialog}>
             Cancel
           </button>
           {/* Filled while it cannot go yet, so the dialog always shows its one primary; `submit` refuses. */}
           <button type="submit" className="button button--primary" aria-disabled={!canSubmit}>
             Start Task
-            <kbd className="button__kbd" aria-hidden="true">
+            <kbd className="modal__chord" aria-hidden="true">
               {formatChord({ key: 'Enter' }, windowModifier())}
             </kbd>
           </button>

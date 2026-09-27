@@ -732,20 +732,74 @@
   line-height: 1.55;
 }
 
-/* Which end of a two-sided thing you are on: two buttons on the page, no card around them. */
+/* Which end of a two-sided thing you are on: the page's empty state, centred in the body. */
+.steps:has(> .path-choice) {
+  flex: 1 0 auto;
+  max-width: none;
+}
+
 .path-choice {
   display: flex;
+  flex: 1 0 auto;
   flex-direction: column;
-  gap: var(--s2);
+  align-items: center;
+  justify-content: center;
+  min-height: 360px;
+  padding-bottom: var(--s8);
+  text-align: center;
+}
+
+/* The two halves of the mark over a split light: the one motif every empty state shares. */
+.path-choice__motif {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 74px;
+  margin-bottom: 18px;
+  border-radius: 18px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent), transparent 94%) 0 49.5%,
+    color-mix(in srgb, var(--accent), transparent 97%) 50.5% 100%
+  );
+  box-shadow: inset 0 0 32px color-mix(in srgb, var(--accent), transparent 94%);
+  color: var(--fg-faint);
+}
+
+.path-choice__motif::after {
+  position: absolute;
+  inset: 9px 50% 9px auto;
+  width: 1px;
+  background: linear-gradient(transparent, var(--accent-line), transparent);
+  content: '';
+}
+
+.path-choice__motif .brand__mark {
+  position: relative;
+  z-index: 1;
+  width: 56px;
+  height: 56px;
+}
+
+.path-choice__title {
+  color: var(--fg);
+  font-size: var(--text-xl);
+  font-weight: 680;
+  line-height: 24px;
+  letter-spacing: -0.025em;
 }
 
 .path-choice__buttons {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: var(--s2);
+  margin-top: 18px;
 }
 
 .path-choice__because {
+  margin-top: var(--s3);
   color: var(--fg-muted);
   font-size: var(--text-xs);
 }
@@ -879,16 +933,51 @@
   white-space: pre-wrap;
 }
 
-/* ---------------------------------------------------------- shared notes */
 
-.shared-notes {
-  max-width: 78ch;
+/* ------------------------------------------------------------ the team's home */
+
+/* Two columns: what needs you and who is here, then what happened and where, beside them. */
+.team-home {
   display: flex;
   flex-direction: column;
-  gap: var(--s2);
+  gap: var(--s4);
   margin-bottom: var(--s5);
 }
 
+.team-home__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  align-items: start;
+  gap: 18px;
+}
+
+.team-home__main,
+.team-home__side {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+/* The side column drops under the main one when the page is narrow. */
+@container (width < 720px) {
+  .team-home__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.team-home__line {
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.team-home__section {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.team-home__head,
 .shared-notes__head {
   display: flex;
   align-items: baseline;
@@ -896,31 +985,394 @@
   color: var(--fg);
   font-size: var(--text-sm);
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
-.shared-notes__unread {
-  color: var(--fg-secondary);
-  font-size: var(--text-xs);
-  font-weight: 500;
+.team-home__empty {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
 }
 
+.team-cards,
+.team-members,
+.team-activity,
+.team-member__worktrees,
 .shared-notes__list {
   display: flex;
   flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.team-cards {
+  gap: var(--s2);
+}
+
+/* One card per ask or offer: the face, what it is, and its answers on the right. */
+.team-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 60px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-1);
+}
+
+/* An ask is the one card with an edge: amber, inset, never a fill. */
+.team-card--asking {
+  box-shadow:
+    inset 2px 0 var(--warning),
+    var(--shadow-1);
+}
+
+.team-card__text {
+  display: flex;
+  flex-direction: column;
   gap: 1px;
+  min-width: 0;
 }
 
-.shared-notes__row {
-  padding: var(--s2) var(--s3);
-  border-radius: var(--r2);
-  background: var(--bg-panel);
+.team-card__title {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 600;
 }
 
-.shared-notes__line {
+.team-card__line {
+  overflow: hidden;
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-card--asking .team-card__line {
+  font-family: var(--font-mono);
+}
+
+.team-card__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s1);
+}
+
+/* An asking pane's answers here lead with the first, as the page's one filled action per card. */
+.team-answers .answers__choice:first-child {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.team-answers .answers__choice:first-child:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.team-answers .answers__choice + .answers__choice {
+  border-color: transparent;
+  background: transparent;
+  color: var(--fg-secondary);
+}
+
+/* Members: one card, a row per person divided by a quiet line. */
+.team-members {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-1);
+}
+
+.team-member {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 12px;
+  padding: 14px;
+}
+
+.team-member + .team-member {
+  border-top: 1px solid var(--line-subtle);
+}
+
+.team-member__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.team-member__line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-height: 20px;
+}
+
+.team-member__handle {
+  overflow: hidden;
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-member__presence {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.team-member__presence--online {
+  color: var(--success);
+}
+
+.team-member__worktrees {
+  gap: 2px;
+}
+
+.team-member__worktree {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 30px;
+}
+
+.team-member__more {
+  padding: 0 var(--s1);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.team-worktree {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 28px;
+  margin-left: calc(-1 * var(--s1));
+  padding: 0 var(--s1);
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.team-worktree:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.team-worktree:disabled {
+  cursor: default;
+}
+
+.team-worktree__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-worktree__branch {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Activity: a card of one-line events, each with its face and time. */
+.team-activity {
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-1);
+}
+
+.team-activity__row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.team-activity__text {
+  overflow: hidden;
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-activity__when {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The project the page is for: its name and the ref new work starts from. */
+.team-project {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-1);
+}
+
+.team-project__icon {
+  display: flex;
+  color: var(--fg-secondary);
+}
+
+.team-project__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.team-project__name {
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.team-project__ref {
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The page head's two: Copy Invitation leads; the pasted invitation's field opens beside it. */
+.team-invite {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--s2);
+}
+
+.team-invite .chosen-path__paste {
+  flex: 0 1 280px;
+}
+
+.team-setup__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Faces on this page: the person's hue as a wash with their initial in it, on a rounded square. */
+.team-home .avatar,
+.shared-notes .avatar {
+  border-radius: 30%;
+  background: oklch(0.6 0.12 var(--avatar-hue) / 20%);
+  color: oklch(0.78 0.11 var(--avatar-hue));
+}
+
+:root[data-tone='light'] .team-home .avatar,
+:root[data-tone='light'] .shared-notes .avatar {
+  background: oklch(0.6 0.12 var(--avatar-hue) / 16%);
+  color: oklch(0.45 0.13 var(--avatar-hue));
+}
+
+.team-home .avatar--sm {
+  --avatar-size: 20px;
+  font-size: var(--text-xs);
+}
+
+.team-home .avatar--md {
+  --avatar-size: 28px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.avatar--lg {
+  --avatar-size: 38px;
+  border-radius: 11px;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.team-home .avatar__presence {
+  right: -2px;
+  bottom: -2px;
+  width: 9px;
+  height: 9px;
+  box-shadow: 0 0 0 2px var(--bg-raised);
+}
+
+/* ------------------------------------------------------------- shared notes */
+
+.shared-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.shared-notes__unread {
+  color: var(--accent-bright);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+/* One card; a row per note, its actions arriving on hover or focus. */
+.shared-notes__list {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-1);
+}
+
+.shared-notes__row + .shared-notes__row {
+  border-top: 1px solid var(--line-subtle);
+}
+
+.shared-notes__line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 var(--s2) 0 14px;
 }
 
 .shared-notes__title {
@@ -944,11 +1396,22 @@
   white-space: nowrap;
 }
 
+.shared-notes__line .button {
+  opacity: var(--row-action-rest);
+  transition: opacity var(--motion-fast) var(--ease-standard);
+}
+
+.shared-notes__row:hover .button,
+.shared-notes__row:focus-within .button,
+.shared-notes__line .button[aria-expanded='true'] {
+  opacity: 1;
+}
+
 .shared-notes__text {
   max-height: 28rem;
-  margin-top: var(--s2);
   overflow: auto;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--line-subtle);
+  background: var(--bg-code);
 }
 
 /* The pane's room to scroll past the end is dead space in a list. */
@@ -956,221 +1419,53 @@
   padding: var(--s3) var(--page-gutter) var(--s4);
 }
 
-/* The team's home: sections in one column at the steps' width, each with a small head. */
-.team-home {
-  max-width: 78ch;
-  display: flex;
-  flex-direction: column;
-  gap: var(--s5);
-  margin-bottom: var(--s5);
-}
-
-.team-home__bar {
-  display: flex;
-  flex-wrap: wrap;
+/* A state pill, stand-in for the shared one: a neutral ground, the dot carries the hue. */
+.state-pill {
+  display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: var(--s2);
-}
-
-.team-home__line {
-  color: var(--danger);
-  font-size: var(--text-sm);
-}
-
-.team-home__section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-}
-
-.team-home__head {
-  color: var(--fg);
-  font-size: var(--text-sm);
+  gap: 5px;
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  background: var(--bg-hover);
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
   font-weight: 600;
-}
-
-.team-home__empty {
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
-}
-
-.team-waiting,
-.team-members,
-.team-activity {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  list-style: none;
-}
-
-.team-waiting__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s2);
-  padding: var(--s2) var(--s3);
-  border-radius: var(--r2);
-  background: var(--bg-panel);
-}
-
-.team-waiting__text {
-  flex: 1 1 12rem;
-  min-width: 0;
-  color: var(--fg);
-  font-size: var(--text-sm);
-}
-
-.team-waiting__when,
-.team-activity__when {
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
+  line-height: 1;
   white-space: nowrap;
 }
 
-.team-member {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--s3);
-  padding: var(--s2) var(--s3);
-  border-radius: var(--r2);
-  background: var(--bg-panel);
+.state-pill::before {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: currentcolor;
+  content: '';
 }
 
-.team-member__body {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--s1);
-  min-width: 0;
+.state-pill--starting {
+  color: var(--accent-bright);
 }
 
-.team-member__line {
-  display: flex;
-  align-items: baseline;
-  gap: var(--s2);
-  min-height: 28px;
-  line-height: 28px;
+.state-pill--working {
+  color: var(--working);
 }
 
-.team-member__handle {
-  overflow: hidden;
-  color: var(--fg);
-  font-size: var(--text-base);
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.state-pill--asking {
+  color: var(--warning);
 }
 
-.team-member__presence {
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-}
-
-.team-member__presence--online {
+.state-pill--ready {
   color: var(--success);
 }
 
-.team-member__worktrees {
-  display: flex;
-  flex-direction: column;
-  list-style: none;
+.state-pill--failed {
+  color: var(--danger);
 }
 
-.team-member__more {
-  padding: 0 var(--s2);
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-}
-
-.team-worktree {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  gap: var(--s2);
-  padding: var(--s1) var(--s2);
-  border: 0;
-  border-radius: var(--r1);
-  background: none;
-  color: var(--fg-secondary);
-  font: inherit;
-  font-size: var(--text-sm);
-  text-align: left;
-  cursor: pointer;
-}
-
-.team-worktree:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--fg);
-}
-
-.team-worktree:disabled {
-  cursor: default;
-}
-
-.team-worktree__name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.team-worktree__branch {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 50%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--fg-muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-}
-
-.team-worktree__word {
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-}
-
-.team-activity__row {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  padding: var(--s1) var(--s3);
-}
-
-.team-activity__text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--fg-secondary);
-  font-size: var(--text-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.team-setup__toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s1);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.shared-notes__line .avatar {
-  align-self: center;
-}
-
-.team-home .shared-notes {
-  margin-bottom: 0;
-}
-
-.team-worktree__nodot {
-  visibility: hidden;
+.state-pill--ended,
+.state-pill--idle {
+  color: var(--stopped);
 }

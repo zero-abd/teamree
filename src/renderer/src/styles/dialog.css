@@ -1,12 +1,8 @@
 /* Modal layer and the form controls it contains.
 
-   One frame for every dialog: anchored near the top of the window, the floating surface with
-   its border and radius, a head with the title, and a body the frame pads on
-   the same edge as the head. The content classes below — a form, the palette,
-   a confirm — lay out what is inside them and never inset themselves, which is
-   how the sentence under a question comes to start where the question does.
-   Every dialog ends in `.modal__actions`: one right-aligned row, the answer
-   that changes nothing first and the one that goes through with it last. */
+   One frame for every dialog: a 54px head with the title and the close control, a body padded on the
+   title's edge, and `.modal__actions` as the footer band on the raised tone: the answer that changes
+   nothing first, the one that goes through with it last. Content classes never inset themselves. */
 
 .modal-layer {
   position: fixed;
@@ -22,6 +18,10 @@
 }
 
 .modal {
+  /* Fields a hand can hit: a dialog is where people type. */
+  --control-h: var(--control-md);
+  --modal-pad: 20px;
+
   position: relative;
   width: min(520px, calc(100vw - 48px));
   border: 1px solid var(--line-strong);
@@ -36,9 +36,8 @@
   display: flex;
   align-items: center;
   min-height: 54px;
-  padding: var(--s3) 20px;
-  /* Clear of the close control. */
-  padding-right: 56px;
+  /* Clear of the close control on the right. */
+  padding: 15px 56px 15px var(--modal-pad);
   border-bottom: 1px solid var(--line);
 }
 
@@ -56,16 +55,15 @@
 }
 
 .modal__body {
-  padding: 20px;
+  padding: var(--modal-pad);
 }
 
 .modal__close {
   position: absolute;
   top: 13px;
   right: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
   width: 28px;
   height: 28px;
   padding: 0;
@@ -75,8 +73,8 @@
   color: var(--fg-muted);
   cursor: pointer;
   transition:
-    background var(--motion-fast) var(--ease),
-    color var(--motion-fast) var(--ease);
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
 }
 
 .modal__close:hover {
@@ -84,16 +82,16 @@
   color: var(--fg);
 }
 
-/* The last row of every dialog: the body's inset bled back out so it runs edge to edge on the raised tone,
-   the answer that changes nothing first and the one that goes through with it last. */
+/* The footer band: bled to the frame's edges from inside the body, so every dialog's content can end
+   its own form with it. 8px between buttons, the gap a row of native buttons has. */
 .modal__actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
   min-height: 54px;
-  margin: var(--s5) -20px -20px;
-  padding: 10px 20px;
+  margin: var(--s1) calc(-1 * var(--modal-pad)) calc(-1 * var(--modal-pad));
+  padding: 10px var(--modal-pad);
   border-top: 1px solid var(--line);
   border-radius: 0 0 calc(var(--r4) - 1px) calc(var(--r4) - 1px);
   background: var(--bg-raised);
@@ -102,6 +100,26 @@
 /* Four answers is more than a row holds in a narrow window. */
 .modal__actions--wrap {
   flex-wrap: wrap;
+}
+
+/* What the dialog will do, or why it cannot yet: quiet, left of the answers. */
+.modal__note {
+  min-width: 0;
+  margin: 0 auto 0 0;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* A chord on a footer button: the button's own ink, dimmed, never a cap. */
+.modal__chord {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  opacity: 0.72;
 }
 
 .form {
@@ -113,34 +131,48 @@
 .field {
   display: flex;
   flex-direction: column;
-  gap: var(--s1);
+  gap: 6px;
+  min-width: 0;
 }
 
 .field__label {
   padding: 0;
   color: var(--fg-secondary);
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .field__input {
   width: 100%;
   min-height: var(--control-h);
-  padding: 6px var(--s3);
+  padding: 6px 10px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r2);
   background: var(--bg-input);
   color: var(--fg);
   font: inherit;
   font-size: var(--text-base);
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
 }
 
-/* The task is the one field the user has to think about, so it is the one that
-   reads as a paragraph rather than as a form control. */
+.field__input:hover:not(:focus-visible) {
+  border-color: color-mix(in srgb, var(--line-strong), var(--fg) 20%);
+}
+
+.field__input::placeholder {
+  color: var(--fg-faint);
+}
+
+/* The task grows with what is typed, from four lines, so it never needs a grip. */
 .field__input--task {
-  min-height: 66px;
-  resize: vertical;
-  font-size: var(--text-lg);
+  min-height: 96px;
+  max-height: 40vh;
+  padding: 9px 10px;
+  field-sizing: content;
+  resize: none;
   line-height: 1.45;
 }
 
@@ -153,12 +185,11 @@
 
 .field__input--mono {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
 }
 
 .field__input:focus-visible {
   outline: none;
-  border-color: var(--accent-line);
+  border-color: var(--accent);
   box-shadow: var(--ring);
 }
 
@@ -179,6 +210,36 @@
 
 .picker__input--ref {
   font-family: var(--font-mono);
+}
+
+/* The resolved commit after the ref, drawn on the input's own box and type so it follows the text. */
+.picker__ghost {
+  position: absolute;
+  inset: 0 30px 0 0;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  white-space: pre;
+  pointer-events: none;
+}
+
+.picker__ghost-typed {
+  visibility: hidden;
+}
+
+/* Said inside the box instead; kept for the box's description. */
+.combo__status--in-box {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .picker__chevron {
@@ -225,9 +286,14 @@ button.picker__chevron:hover {
 /* Project and Start from side by side: where the task starts. */
 .form__where {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 160px minmax(0, 1fr);
   align-items: start;
-  gap: var(--s4);
+  gap: var(--s3);
+}
+
+.form__where .select,
+.form__where .select__input {
+  width: 100%;
 }
 
 /* The new branch: the task's own name, tagged auto, until typed over. */
@@ -238,7 +304,6 @@ button.picker__chevron:hover {
 .branch__input {
   height: var(--control-h);
   padding-right: 56px;
-  font-size: var(--text-base);
 }
 
 .branch__auto,
@@ -276,7 +341,7 @@ button.picker__chevron:hover {
 
 .task-source {
   position: absolute;
-  top: 0;
+  top: -3px;
   right: 0;
   display: flex;
   align-items: center;
@@ -316,33 +381,39 @@ button.picker__chevron:hover {
   opacity: 0.6;
 }
 
-/* One row per installed agent, each with a count: the table is the whole
-   choice, so it reads as a list rather than as a control. */
+/* One row per installed agent: its mark and name, its permission mode while it runs, its count. */
 .agents {
-  gap: var(--s1);
+  gap: 0;
   margin: 0;
   padding: 0;
   border: 0;
 }
 
+.agents > .field__label {
+  margin-bottom: 2px;
+}
+
 .agents__row {
   display: flex;
   align-items: center;
-  gap: var(--s2);
-  padding: 2px 0;
+  gap: var(--s3);
+  min-height: 40px;
 }
 
 .agents__name {
   display: flex;
   flex: 1;
   align-items: center;
-  gap: var(--s2);
+  gap: 10px;
+  min-width: 0;
   color: var(--fg);
   font-size: var(--text-base);
+  font-weight: 600;
 }
 
 .agents__mark {
   display: flex;
+  color: var(--fg-secondary);
 }
 
 .agents__name .agent-glyph {
@@ -350,16 +421,87 @@ button.picker__chevron:hover {
   height: 16px;
 }
 
-.agents__step {
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--line-strong);
+/* The segmented well: a sunken track, the chosen mode lifted out of it. */
+.agents__modes {
+  display: flex;
+  gap: 2px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--line);
   border-radius: var(--r2);
-  background: var(--bg-input);
+  background: var(--bg-sunken);
+}
+
+.agents__mode {
+  min-width: 60px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.agents__mode:hover {
+  color: var(--fg);
+}
+
+.agents__mode--current,
+.agents__mode--current:hover {
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-1);
+  color: var(--fg);
+}
+
+/* Bypass is the one mode that skips every question: chosen, it reads as the danger it is. */
+.agents__mode--bypass.agents__mode--current,
+.agents__mode--bypass.agents__mode--current:hover {
+  background: color-mix(in srgb, var(--danger) 20%, var(--bg-raised));
+  color: var(--danger);
+}
+
+.agents__mode:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.agents__stepper {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.agents__step {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: var(--bg-raised);
   color: var(--fg);
   font: inherit;
   line-height: 1;
   cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    transform var(--motion-instant) var(--ease-standard);
+}
+
+.agents__step:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.agents__step:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .agents__step:disabled {
@@ -371,64 +513,19 @@ button.picker__chevron:hover {
 
 .agents__step:focus-visible {
   outline: none;
-  border-color: var(--accent-line);
-  box-shadow: var(--ring);
-}
-
-/* A selected agent's permission mode, left of its count so the steppers stay in a column. */
-.agents__modes {
-  display: flex;
-  gap: 2px;
-  margin-right: var(--s2);
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--bg-input);
-}
-
-.agents__mode {
-  padding: 1px var(--s2);
-  border: 0;
-  border-radius: var(--r1);
-  background: none;
-  color: var(--fg-secondary);
-  font: inherit;
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-.agents__mode:hover {
-  background: var(--bg-hover);
-  color: var(--fg);
-}
-
-.agents__mode--current,
-.agents__mode--current:hover {
-  background: var(--bg-selected);
-  color: var(--fg);
-}
-
-.agents__mode--bypass.agents__mode--current,
-.agents__mode--bypass.agents__mode--current:hover {
-  background: color-mix(in srgb, var(--danger) 22%, transparent);
-  color: var(--danger);
-}
-
-.agents__mode:focus-visible {
-  outline: none;
   box-shadow: var(--ring);
 }
 
 /* A fixed width so the rows do not shuffle sideways as the counts change. */
 .agents__count {
-  min-width: 14px;
-  color: var(--fg-secondary);
+  min-width: 16px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
-/* Project, and whatever joins it: short choices that belong on one line, and
-   stack when the modal is narrower than they are. */
 /* The destination field and its folder picker, on one line. */
 .clone__destination {
   display: flex;
@@ -450,12 +547,6 @@ button.picker__chevron:hover {
   font-size: var(--text-xs);
   text-overflow: ellipsis;
   white-space: pre;
-}
-
-.form__note {
-  margin-right: auto;
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
 }
 
 /* A child task's one line: what it is under and where it starts, in place of the project and start point. */
@@ -516,16 +607,17 @@ button.picker__chevron:hover {
    resolves to stays readable while the list is browsed. */
 .combo__pop {
   position: absolute;
+  transform-origin: top center;
   z-index: 1;
   top: calc(100% + var(--s1));
   right: 0;
   left: 0;
   overflow: hidden;
   border: 1px solid var(--line-strong);
-  border-radius: var(--r2);
-  background: var(--bg-raised);
+  border-radius: var(--r3);
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-pop);
-  animation: combo-in var(--motion-fast) var(--ease);
+  animation: combo-in var(--motion-base) var(--ease-enter);
 }
 
 .combo__list {
@@ -538,12 +630,10 @@ button.picker__chevron:hover {
   position: sticky;
   top: 0;
   padding: var(--s2) var(--s3) var(--s1);
-  background: var(--bg-raised);
+  background: var(--bg-elevated);
   color: var(--fg-muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .combo__group + .combo__group .combo__grouphead {
@@ -552,10 +642,15 @@ button.picker__chevron:hover {
 
 .combo__row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--s2);
-  padding: 4px var(--s3);
+  min-height: 30px;
+  padding: 0 var(--s3);
   cursor: pointer;
+}
+
+.combo__row:hover:not(.is-active) {
+  background: var(--bg-hover);
 }
 
 .combo__row.is-active {
@@ -591,7 +686,7 @@ button.picker__chevron:hover {
 .combo__badge {
   padding: 0 5px;
   border: 1px solid var(--line-strong);
-  border-radius: 99px;
+  border-radius: var(--r-pill);
   color: var(--fg-secondary);
   font-size: var(--text-xs);
   line-height: 1.5;
@@ -626,7 +721,7 @@ button.picker__chevron:hover {
 @keyframes combo-in {
   from {
     opacity: 0;
-    transform: translateY(-3px);
+    transform: translateY(-4px) scale(0.98);
   }
 }
 
@@ -643,13 +738,6 @@ button.picker__chevron:hover {
   margin: 0;
   color: var(--fg);
   font-size: var(--text-base);
-}
-
-.confirm__hint {
-  margin: 0;
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
-  text-align: right;
 }
 
 .confirm__path {

@@ -61,25 +61,27 @@ export function AgentSteppers({
                 ))}
               </div>
             ) : null}
-            <button
-              type="button"
-              className="agents__step"
-              aria-label={`One fewer ${harnessName(entry.kind)}`}
-              disabled={count === 0}
-              onClick={() => step(count - 1)}
-            >
-              −
-            </button>
-            <output className="agents__count">{count}</output>
-            <button
-              type="button"
-              className="agents__step"
-              aria-label={`One more ${harnessName(entry.kind)}`}
-              disabled={count === MAX_PER_AGENT || (most !== undefined && total >= most)}
-              onClick={() => step(count + 1)}
-            >
-              +
-            </button>
+            <span className="agents__stepper">
+              <button
+                type="button"
+                className="agents__step"
+                aria-label={`One fewer ${harnessName(entry.kind)}`}
+                disabled={count === 0}
+                onClick={() => step(count - 1)}
+              >
+                −
+              </button>
+              <output className="agents__count">{count}</output>
+              <button
+                type="button"
+                className="agents__step"
+                aria-label={`One more ${harnessName(entry.kind)}`}
+                disabled={count === MAX_PER_AGENT || (most !== undefined && total >= most)}
+                onClick={() => step(count + 1)}
+              >
+                +
+              </button>
+            </span>
           </div>
         )
       })}

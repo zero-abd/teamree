@@ -12,7 +12,8 @@ import { TerminalView } from '../terminal/TerminalView'
 import { PageFrame } from '../workspace/PageFrame'
 import { SharedNotesList } from './SharedNotesList'
 import { unreadNotes, useSharedNotes } from './sharedNotesStore'
-import { TeamHome } from './TeamHome'
+import { onlineCount } from './homeRows'
+import { TeamHome, TeamInviteActions } from './TeamHome'
 import { TeamworkSteps } from './TeamworkSteps'
 import { inviteText, startTeamworkFlow, type TeamworkPath } from './startTeamwork'
 
@@ -184,6 +185,7 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   // Undefined until pressed: open while a step is still to do, folded once nothing is.
   const [setupShown, setSetupShown] = useState<boolean | undefined>(undefined)
   const setupOpen = setupShown ?? toDo
+  const presence = useWorkspaceStore((state) => state.teammates[projectId])
   const origin = teamworkFacts(status)?.origin
   const invite = inviteText({
     originUrl: origin?.ok === true ? origin.url : null,
@@ -257,23 +259,40 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
     </section>
   )
 
+  const projectSelect =
+    projects.length > 1 ? (
+      <Select aria-label="Project" value={projectId} onChange={(event) => openTeamwork(event.target.value)}>
+        {projects.map((entry) => {
+          const unread = unreadNotes({ inbox, deleting }, entry.id)
+          return (
+            <option key={entry.id} value={entry.id}>
+              {unread > 0 ? `${entry.name} · ${unread} unread` : entry.name}
+            </option>
+          )
+        })}
+      </Select>
+    ) : null
+
   return (
     <PageFrame
       label={home ? `Teamwork in ${name}` : `Set up teamwork in ${name}`}
-      title={project === undefined ? 'Teamwork' : `Teamwork · ${project.name}`}
+      title={project?.name ?? 'Teamwork'}
+      lede={
+        project === undefined
+          ? undefined
+          : home
+            ? `Teamwork · ${onlineCount({ list, presence, status })} online`
+            : 'Teamwork'
+      }
       actions={
-        projects.length > 1 ? (
-          <Select aria-label="Project" value={projectId} onChange={(event) => openTeamwork(event.target.value)}>
-            {projects.map((entry) => {
-              const unread = unreadNotes({ inbox, deleting }, entry.id)
-              return (
-                <option key={entry.id} value={entry.id}>
-                  {unread > 0 ? `${entry.name} · ${unread} unread` : entry.name}
-                </option>
-              )
-            })}
-          </Select>
-        ) : undefined
+        home ? (
+          <>
+            {projectSelect}
+            <TeamInviteActions invite={invite} onCopy={copyText} onPasteInvitation={(raw) => openInvitation(raw)} />
+          </>
+        ) : (
+          (projectSelect ?? undefined)
+        )
       }
       onClose={closeTeamwork}
       focusKey={projectId}
@@ -282,12 +301,7 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
         <>
           {/* First while a step is left to do: that step is the thing to do. */}
           {toDo ? setup : null}
-          <TeamHome
-            projectId={projectId}
-            invite={invite}
-            onCopy={copyText}
-            onPasteInvitation={(raw) => openInvitation(raw)}
-          />
+          <TeamHome projectId={projectId} />
           {toDo ? null : setup}
         </>
       ) : (

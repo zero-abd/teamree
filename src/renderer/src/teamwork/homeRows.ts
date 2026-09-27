@@ -77,8 +77,7 @@ export function teamMembers(input: {
         return { ...person, presence: 'you', lastSeenAt: null, worktrees }
       }
       const standing = heard?.teammates.find((entry) => entry.publicKey === person.publicKey)
-      const link = links.find((entry) => entry.publicKey === person.publicKey)
-      const online = standing?.connected ?? link?.phase === 'connected'
+      const online = isOnline(person.publicKey, heard, links)
       const lastSeenAt = online ? null : (input.memory.lastOnline.get(person.publicKey) ?? standing?.heardAt ?? null)
       const theirs = rows.filter((row) => row.handle === person.handle)
       const twins = twinNames(theirs.map((row) => row.name))
@@ -101,6 +100,29 @@ export function teamMembers(input: {
       }
     })
     .sort((a, b) => PRESENCE_ORDER[a.presence] - PRESENCE_ORDER[b.presence] || a.handle.localeCompare(b.handle))
+}
+
+/** Who is here now, you included once you are on the roster: the count the page's head gives. */
+export function onlineCount(input: {
+  list: MemberList | undefined
+  presence: TeammatePresence | undefined
+  status: TeamworkStatus | undefined
+}): number {
+  const heard = teammatesHeard(input.presence)
+  const links = teamworkFacts(input.status)?.links ?? []
+  const others = (input.list?.members ?? []).filter((member) => !member.isSelf)
+  const online = others.filter((member) => isOnline(member.publicKey, heard, links)).length
+  return online + (input.list?.enrolled === true ? 1 : 0)
+}
+
+/** Presence first; a live link says so when no presence has been heard. */
+function isOnline(
+  publicKey: string,
+  heard: ReturnType<typeof teammatesHeard>,
+  links: readonly { publicKey: string; phase: string }[]
+): boolean {
+  const standing = heard?.teammates.find((entry) => entry.publicKey === publicKey)
+  return standing?.connected ?? links.find((entry) => entry.publicKey === publicKey)?.phase === 'connected'
 }
 
 function stageWord(stage: TaskStage | undefined, tone: DotTone | null): string | null {

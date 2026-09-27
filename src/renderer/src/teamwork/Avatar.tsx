@@ -29,7 +29,7 @@ export function Avatar({
 }: {
   handle: string
   presence?: Presence
-  size?: 'xs' | 'sm' | 'md'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
   /** When the handle is already said beside it. */
   decorative?: boolean
 }): React.JSX.Element {

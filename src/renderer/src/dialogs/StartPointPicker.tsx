@@ -104,6 +104,8 @@ export function StartPointPicker({ state, onReload, value, onChange, note }: Sta
   const summaryOption = (open && activeRow?.kind === 'option' ? activeRow.option : null) ?? value.option
   const summaryRef = (open && activeRow ? choiceOf(activeRow).ref : value.text).trim()
   const browsing = open && activeRow !== null
+  // The resolved commit reads inside the box, after the ref, until the line under it has more to say.
+  const shaInBox = !browsing && note == null && value.option !== null && value.option.ref === value.text.trim()
 
   return (
     <div className="field">
@@ -130,6 +132,12 @@ export function StartPointPicker({ state, onReload, value, onChange, note }: Sta
             aria-activedescendant={open && activeId ? prefix + activeId : undefined}
             aria-describedby={statusId}
           />
+          {shaInBox ? (
+            <span className="picker__ghost" aria-hidden="true">
+              <span className="picker__ghost-typed">{value.text}</span>
+              {` · ${value.option?.shortSha ?? ''}`}
+            </span>
+          ) : null}
           <button
             type="button"
             className="picker__chevron"
@@ -147,7 +155,7 @@ export function StartPointPicker({ state, onReload, value, onChange, note }: Sta
           </button>
         </div>
 
-        <p className="field__hint" id={statusId}>
+        <p className={shaInBox ? 'field__hint combo__status--in-box' : 'field__hint'} id={statusId}>
           <StartPointStatus
             state={state}
             onReload={onReload}

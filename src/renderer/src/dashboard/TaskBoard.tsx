@@ -14,6 +14,7 @@ import { useOverlapChips } from '../sidebar/useOverlapChip'
 import { useUsageStore } from '../state/usageStore'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { useChildren } from '../workspace/rightPanel/childrenStore'
+import { pillTone, StatusPill } from '../teamwork/StatusPill'
 import { STAGE_WORD, type TaskRow } from './taskRows'
 
 /** Uncommitted lines for each listed worktree, read again whenever its git status is. */
@@ -116,7 +117,7 @@ export function TaskBoard({
                   )}
                 </span>
                 <span className="task-row__stage">
-                  {STAGE_WORD[row.stage]}
+                  <StatusPill tone={pillTone(null, row.stage)}>{STAGE_WORD[row.stage]}</StatusPill>
                   {row.notPushed ? <span className="task-row__unpushed">not pushed</span> : null}
                 </span>
                 <span className="task-row__panes">

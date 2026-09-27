@@ -212,7 +212,7 @@ describe('the setup as a place in the window', () => {
   it('is a landmark that names the repository it is setting up', () => {
     mount()
     expect(screen.getByRole('main', { name: 'Set up teamwork in pager' })).toBeTruthy()
-    expect(screen.getByRole('heading', { name: 'Teamwork · pager' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'pager' })).toBeTruthy()
   })
 
   // Reached from a button elsewhere, so the keyboard has to come with it.
@@ -232,7 +232,8 @@ describe('the setup as a place in the window', () => {
   it('sits in the shared page frame, closed by the same × as the other pages', () => {
     mount()
     const main = screen.getByRole('main', { name: 'Set up teamwork in pager' })
-    expect(main.querySelector('.page__head h1')?.textContent).toBe('Teamwork · pager')
+    expect(main.querySelector('.page__head h1')?.textContent).toBe('pager')
+    expect(main.querySelector('.page__head .page__lede')?.textContent).toBe('Teamwork')
     expect(within(main).queryByRole('button', { name: 'Close' })).toBeNull()
   })
 
@@ -757,10 +758,19 @@ describe('a team that exists, as its home', () => {
     seed({ members: { p1: team() }, relays: { p1: relayOnDisk() }, teamwork: { p1: linked('connected') } })
     open()
     expect(screen.queryByRole('button', { name: 'Start a Team' })).toBeNull()
-    for (const name of ['Waiting on You', 'Members', 'Shared Notes', 'Activity']) {
+    for (const name of ['Waiting on you', 'Members', 'Shared notes', 'Activity', 'Project']) {
       expect(screen.getByRole('region', { name })).toBeTruthy()
     }
-    expect(screen.getByRole('button', { name: 'Copy Invitation' })).toBeTruthy()
+  })
+
+  it('names the project in its head, who is online, and the invitation beside them', () => {
+    seed({ members: { p1: team() }, relays: { p1: relayOnDisk() }, teamwork: { p1: linked('connected') } })
+    open()
+    const head = document.querySelector('.page__head') as HTMLElement
+    expect(head.querySelector('h1')?.textContent).toBe('pager')
+    expect(head.querySelector('.page__lede')?.textContent).toBe('Teamwork · 2 online')
+    expect(within(head).getByRole('button', { name: 'Copy Invitation' })).toBeTruthy()
+    expect(within(head).getByRole('button', { name: 'Paste Invitation…' })).toBeTruthy()
   })
 
   it('keeps the setup folded once there is nothing left to do, one press away', () => {

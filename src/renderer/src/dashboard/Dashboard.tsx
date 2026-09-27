@@ -26,6 +26,7 @@ import { Segments } from '../files/FileBar'
 import { askingWorktrees, useMessageStore } from '../state/messages'
 import { useTaskTreeStore } from '../state/taskTreeStore'
 import { useUsageReads } from '../state/usageStore'
+import { pillTone, StatusPill } from '../teamwork/StatusPill'
 import { dashboardRows, toneCounts, type DashboardRow } from './dashboardRows'
 import { TaskBoard, useChangedLines } from './TaskBoard'
 import { STAGE_WORD, taskRows } from './taskRows'
@@ -219,7 +220,6 @@ export function Dashboard(): React.JSX.Element {
           {shown.map((row) => {
             const state = dotTone(row.activity, row.agent)
             const isUnread = unread.has(row.terminalId)
-            const needsYou = state === 'waiting' || state === 'failed'
             const where = [row.worktreeName, row.branch, row.projectName].filter(Boolean).join(' · ')
             const theirs = row.teammate
             return (
@@ -242,9 +242,9 @@ export function Dashboard(): React.JSX.Element {
                     <PullRequestMark pull={landings[row.worktreeId]?.pullRequest} />
                   </span>
                   <span className="board-row__evidence">{row.evidence ?? ''}</span>
-                  <span className={needsYou ? `board-row__state board-row__state--${state}` : 'board-row__state'}>
+                  <StatusPill tone={pillTone(state)} className="board-row__state">
                     {TONE_LABEL[state]}
-                  </span>
+                  </StatusPill>
                   <span className="board-row__since">{sinceLabel(row.quietFor)}</span>
                 </button>
                 {row.choices === undefined ? null : (

@@ -21,7 +21,7 @@ type ConfirmProps = {
   tone?: 'danger' | 'primary'
   /** Nothing to go through with yet, or something in the way. */
   confirmDisabled?: boolean
-  /** Why the confirm is disabled: its tooltip, and a line under the answers. */
+  /** Why the confirm is disabled: its tooltip, and a line beside the answers. */
   confirmHint?: string
   onCancel: () => void
   onConfirm: () => void
@@ -72,12 +72,18 @@ export function Confirm({
         {body === undefined ? null : <p className="confirm__body">{body}</p>}
         {children}
         <div className="modal__actions">
+          {confirmHint === undefined ? null : <p className="modal__note">{confirmHint}</p>}
           {decline === undefined ? null : (
             <button type="button" className="button confirm__decline" onClick={decline.onChoose}>
               {decline.label}
             </button>
           )}
-          <button type="button" className="button" data-default={destructive ? 'true' : undefined} onClick={onCancel}>
+          <button
+            type="button"
+            className="button button--ghost"
+            data-default={destructive ? 'true' : undefined}
+            onClick={onCancel}
+          >
             {cancel}
           </button>
           <button
@@ -91,7 +97,6 @@ export function Confirm({
             {confirm}
           </button>
         </div>
-        {confirmHint === undefined ? null : <p className="confirm__hint">{confirmHint}</p>}
       </div>
     </Modal>
   )
