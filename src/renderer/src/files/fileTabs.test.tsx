@@ -291,10 +291,21 @@ describe('the file viewer', () => {
       if (method === 'worktree.changes') return { worktreeId: 'w1', changes: [{ path: 'src/app.ts' }] }
       return method === 'layout.set' ? params : undefined
     })
-    await useWorkspaceStore.getState().openFileAt('w1', 'src/app.ts', 3)
+    await useWorkspaceStore.getState().openFileAt('w1', 'src/app.ts')
     const [leaf] = fileLeavesIn(layout().root)
     expect(useWorkspaceStore.getState().diffPanes[leaf!.terminalId]).toBe(true)
     expect(useWorkspaceStore.getState().goToLine).toBeNull()
+  })
+
+  it('goes to the line a changed path was printed with, rather than its diff', async () => {
+    call.mockImplementation(async (method: string, params: { root?: unknown }) => {
+      if (method === 'worktree.changes') return { worktreeId: 'w1', changes: [{ path: 'src/app.ts' }] }
+      return method === 'layout.set' ? params : undefined
+    })
+    await useWorkspaceStore.getState().openFileAt('w1', 'src/app.ts', 3, 2)
+    const [leaf] = fileLeavesIn(layout().root)
+    expect(useWorkspaceStore.getState().diffPanes[leaf!.terminalId]).not.toBe(true)
+    expect(useWorkspaceStore.getState().goToLine).toMatchObject({ path: 'src/app.ts', line: 3, column: 2 })
   })
 
   it('offers Reload and Overwrite when the file changed under the edit', async () => {

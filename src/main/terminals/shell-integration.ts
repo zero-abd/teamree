@@ -1,5 +1,6 @@
 // Startup files that run the user's own and then put this build's CLI first on
-// PATH, so a login shell that rebuilds PATH (path_helper, a profile) still finds it.
+// PATH, so a login shell that rebuilds PATH (path_helper, a profile) still finds it;
+// an interactive one also reports its directory at each prompt (OSC 7).
 // zsh through ZDOTDIR, handed back once startup ends; bash through --init-file and BASH_ENV.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -20,6 +21,13 @@ const ZSH_FILES = {
 
 const ZSH_PREPEND = '[[ -n $TEAMREE_CLI ]] && path=("${TEAMREE_CLI:h}" "${(@)path:#${TEAMREE_CLI:h}}")'
 
+// OSC 7 at every prompt: the pane reads a printed path from where the shell is now.
+const ZSH_CWD = `__teamree_cwd() { print -rn -- $'\\e]7;file://'"$HOST$PWD"$'\\a' }
+autoload -Uz add-zsh-hook && add-zsh-hook precmd __teamree_cwd`
+const BASH_CWD = `__teamree_cwd() { printf '\\033]7;file://%s%s\\a' "$HOSTNAME" "$PWD"; }
+PROMPT_COMMAND="__teamree_cwd\${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+`
+
 // Top level, not a function: a user's `typeset` inside a sourced file would otherwise turn local.
 // Set and unset are kept apart: an unset ZDOTDIR means $HOME, and tools test which it is.
 function zshFile(name: keyof typeof ZSH_FILES): string {
@@ -28,6 +36,7 @@ function zshFile(name: keyof typeof ZSH_FILES): string {
     name === '.zshrc'
       ? '[[ $HISTFILE == $__teamree_zdotdir/.zsh_history ]] && HISTFILE=${TEAMREE_USER_ZDOTDIR:-$HOME}/.zsh_history\n'
       : ''
+  const cwd = name === '.zshrc' ? `${ZSH_CWD}\n` : ''
   return `# teamree: the user's own ${name}, then this build's CLI first on PATH.
 __teamree_zdotdir=$ZDOTDIR
 ${history}if (( \${+TEAMREE_USER_ZDOTDIR} )); then ZDOTDIR=$TEAMREE_USER_ZDOTDIR; else unset ZDOTDIR; fi
@@ -36,7 +45,7 @@ if [[ \${ZDOTDIR:-$HOME} != $__teamree_zdotdir && -r \${ZDOTDIR:-$HOME}/${name} 
 fi
 if (( \${+ZDOTDIR} )); then export TEAMREE_USER_ZDOTDIR=$ZDOTDIR; else unset TEAMREE_USER_ZDOTDIR; fi
 ${ZSH_PREPEND}
-if ${ZSH_FILES[name]}; then
+${cwd}if ${ZSH_FILES[name]}; then
   if (( \${+TEAMREE_USER_ZDOTDIR} )); then export ZDOTDIR=$TEAMREE_USER_ZDOTDIR; else unset ZDOTDIR; fi
   unset TEAMREE_USER_ZDOTDIR
 else
@@ -64,7 +73,7 @@ for __teamree_profile in ~/.bash_profile ~/.bash_login ~/.profile; do
   if [ -r "$__teamree_profile" ]; then . "$__teamree_profile"; break; fi
 done
 unset __teamree_profile
-${BASH_PREPEND}`
+${BASH_PREPEND}${BASH_CWD}`
 
 const BASH_ENV_FILE = `# teamree: the user's own BASH_ENV, then this build's CLI first on PATH.
 if [ -n "$TEAMREE_USER_BASH_ENV" ] && [ -r "$TEAMREE_USER_BASH_ENV" ]; then . "$TEAMREE_USER_BASH_ENV"; fi

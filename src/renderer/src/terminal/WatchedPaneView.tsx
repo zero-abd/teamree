@@ -10,18 +10,22 @@ import { teammatesHeard, type TeammatePresence } from '@shared/entities'
 import type { WatchedPaneEvent } from '@shared/methods'
 import { copyText } from '../clipboard/clipboard'
 import { Icon } from '../icons/Icon'
-import { detectPlatform, resolvePlatformModifier } from '../keyboard/platformModifier'
+import { detectPlatform, holdsModifier, resolvePlatformModifier } from '../keyboard/platformModifier'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { paneNames } from '../sidebar/agentRows'
 import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere, type HandsHere } from './handsHere'
+import { LinkTipView, linkTips, type LinkTip } from './LinkTip'
+import { paneLinks, type PaneLinks } from './paneLinks'
+import { openInBrowser } from '../shell/openInBrowser'
 import {
   holdRightClickFromProgram,
   menuAnchor,
   reportsMouse,
   rightClickOpensMenu,
   terminalMenuEntries,
+  type Pointed,
   type TerminalMenuEntry
 } from './terminalMenu'
 import { readTerminalColors } from './terminalTheme'
@@ -110,7 +114,13 @@ export function WatchedPaneView({
   const termRef = useRef<XTerm | null>(null)
   const refitRef = useRef<(() => void) | null>(null)
   const openedAtRef = useRef(0)
-  const [menu, setMenu] = useState<{ anchor: RowMenuAnchor; entries: TerminalMenuEntry[] } | null>(null)
+  const [menu, setMenu] = useState<{
+    anchor: RowMenuAnchor
+    entries: TerminalMenuEntry[]
+    pointed: Pointed | null
+  } | null>(null)
+  const [tip, setTip] = useState<LinkTip | null>(null)
+  const linksRef = useRef<PaneLinks | null>(null)
   const modifier = useMemo(
     () =>
       resolvePlatformModifier(
@@ -136,12 +146,14 @@ export function WatchedPaneView({
     let subscription: { close: () => void } | null = null
     let observer: ResizeObserver | null = null
     let hands: HandsHere | null = null
+    let links: PaneLinks | null = null
     // A right-click with the bypass key is the menu's, never a mouse report typed onto their machine.
     const releaseRightClick = holdRightClickFromProgram(
       host,
       () => term !== null && reportsMouse(term),
       modifier,
-      () => onFocusRef.current()
+      () => onFocusRef.current(),
+      (event) => (links?.at(event) ?? null) !== null
     )
 
     /** Fits the owner's picture into this window. Only ever shrinks: blown up it would be a different thing. */
@@ -311,8 +323,20 @@ export function WatchedPaneView({
         term.open(host)
         // App chords reach the window handler, not the far end. Deliberately nothing
         // more: no `paneKeyHandler` clipboard chords (the interrupt half would be a
-        // keystroke on their machine) and no clickable links — `docs/renderer-boundary.md`.
+        // keystroke on their machine). Their URLs follow a ⌘-click; their paths are never links.
         term.attachCustomKeyEventHandler((event) => !chordRef.current(event))
+        links = paneLinks(term, {
+          place: () => null,
+          worktrees: () => [],
+          files: NO_FILES,
+          openUrl: openInBrowser,
+          openFile: () => {},
+          holds: (event) => holdsModifier(event, modifier),
+          tip: linkTips(modifier, (shown) => {
+            if (alive) setTip(shown)
+          })
+        })
+        linksRef.current = links
         // Only bytes a person in this window produced; `handsHere` is the whole argument.
         hands = handsHere(term.element)
         term.onData((data) => {
@@ -355,6 +379,9 @@ export function WatchedPaneView({
       refitRef.current = null
       observer?.disconnect()
       hands?.stop()
+      links?.dispose()
+      linksRef.current = null
+      setTip(null)
       // Closing the subscription is what tells the owner's runtime to stop streaming.
       subscription?.close()
       webgl?.dispose()
@@ -410,9 +437,11 @@ export function WatchedPaneView({
   const openMenu = (event: React.MouseEvent<HTMLElement>): void => {
     const term = termRef.current
     event.preventDefault()
-    if (term === null || !rightClickOpensMenu(event, reportsMouse(term), modifier)) return
-    const entries = terminalMenuEntries({ readOnly: true, hasSelection: term.hasSelection(), pointed: null }, modifier)
-    setMenu({ anchor: menuAnchor(event), entries })
+    if (term === null) return
+    const pointed = linksRef.current?.at(event.nativeEvent) ?? null
+    if (!rightClickOpensMenu(event, reportsMouse(term) && pointed === null, modifier)) return
+    const entries = terminalMenuEntries({ readOnly: true, hasSelection: term.hasSelection(), pointed }, modifier)
+    setMenu({ anchor: menuAnchor(event), entries, pointed })
   }
 
   const closeMenu = useCallback(() => {
@@ -420,12 +449,15 @@ export function WatchedPaneView({
     if (focusedRef.current) termRef.current?.focus()
   }, [])
 
-  // A read-only menu: Copy and Select All.
-  const chooseFromMenu = (entry: TerminalMenuEntry): void => {
+  // A read-only menu: the link under the pointer, Copy and Select All.
+  const chooseFromMenu = (entry: TerminalMenuEntry, pointed: Pointed | null): void => {
     const term = termRef.current
     if (term === null) return
     if (entry.action === 'copy') copyText(term.getSelection())
     else if (entry.action === 'select-all') term.selectAll()
+    else if (pointed?.kind !== 'link') return
+    else if (entry.action === 'open-link') openInBrowser(pointed.uri)
+    else if (entry.action === 'copy-link') void useWorkspaceStore.getState().copyToClipboard(pointed.uri, 'the link')
   }
 
   // On the bar and as its title, so a narrow slot cannot ellipsise the fact away.
@@ -482,13 +514,17 @@ export function WatchedPaneView({
           items={menu.entries.map((entry) => ({
             ...entry,
             icon: entry.icon && <Icon name={entry.icon} size={14} />,
-            onChoose: () => chooseFromMenu(entry)
+            onChoose: () => chooseFromMenu(entry, menu.pointed)
           }))}
         />
       )}
+      <LinkTipView tip={tip} />
     </section>
   )
 }
+
+/** A teammate's files are on their machine: no listing here. */
+const NO_FILES = { get: async () => null, peek: () => null }
 
 /** The owner's dimensions for one pane, and when this machine last heard them. */
 export type WatchedPaneSize = { cols: number; rows: number; heardAt: number }

@@ -7,8 +7,6 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
-type LinkOptions = { hover?: (event: MouseEvent, text: string) => void; leave?: () => void }
-
 type FakeTerm = {
   element: HTMLElement | null
   selection: string
@@ -20,7 +18,8 @@ type FakeTerm = {
 
 const terms = vi.hoisted(() => [] as unknown[])
 const fakeTerms = terms as FakeTerm[]
-const webLinks = vi.hoisted(() => [] as unknown[])
+/** What the pane's link layer finds under the pointer; its finding is `paneLinks.test.ts`'s business. */
+const underPointer = vi.hoisted(() => ({ link: null as unknown }))
 
 vi.mock('@xterm/xterm', () => {
   class Terminal {
@@ -86,6 +85,7 @@ vi.mock('@xterm/xterm', () => {
     registerLinkProvider(): { dispose: () => void } {
       return { dispose: () => {} }
     }
+    parser = { registerOscHandler: () => ({ dispose: () => {} }) }
     loadAddon(addon: { activate?: (term: unknown) => void }): void {
       addon.activate?.(this)
     }
@@ -105,12 +105,9 @@ vi.mock('@xterm/addon-fit', () => ({
     fit(): void {}
   }
 }))
-vi.mock('@xterm/addon-web-links', () => ({
-  WebLinksAddon: class {
-    constructor(_handler: unknown, options: LinkOptions) {
-      webLinks.push(options)
-    }
-  }
+vi.mock('./paneLinks', async (actual) => ({
+  ...(await actual<typeof import('./paneLinks')>()),
+  paneLinks: () => ({ at: () => underPointer.link, dispose: () => {} })
 }))
 vi.mock('@xterm/addon-search', () => ({
   SearchAddon: class {
@@ -179,7 +176,7 @@ const labels = (): string[] =>
 
 beforeEach(() => {
   fakeTerms.length = 0
-  webLinks.length = 0
+  underPointer.link = null
 })
 
 afterEach(async () => {
@@ -209,12 +206,11 @@ it('turns Copy on over a selection and leaves the selection alone', async () => 
 
 it('leads with the link the pointer is on', async () => {
   await mount()
-  const links = webLinks.at(-1) as LinkOptions
-  act(() => links.hover?.(new MouseEvent('mousemove'), 'https://example.com/pr/1'))
+  underPointer.link = { kind: 'link', uri: 'https://example.com/pr/1' }
   rightClick()
   expect(labels().slice(0, 2)).toEqual(['Open Link', 'Copy Link'])
   fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
-  act(() => links.leave?.())
+  underPointer.link = null
   rightClick()
   expect(labels()[0]).toMatch(/^Copy/)
 })
@@ -227,11 +223,15 @@ it('pastes through the emulator, which adds the program’s bracketed-paste mark
   expect(screen.queryByRole('menu')).toBeNull()
 })
 
-it('leaves the right-click to a program reporting the mouse, unless ⌥ is held', async () => {
+it('leaves the right-click to a program reporting the mouse, unless ⌥ is held or it is on a link', async () => {
   const term = await mount()
   term.mouseTrackingMode = 'vt200'
   rightClick()
   expect(screen.queryByRole('menu')).toBeNull()
   rightClick({ altKey: true })
   expect(screen.getByRole('menu')).toBeTruthy()
+  fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+  underPointer.link = { kind: 'path', worktreeId: 'w1', path: 'src/a.ts', absolute: '/w/src/a.ts' }
+  rightClick()
+  expect(labels().slice(0, 3)).toEqual(['Open File', 'Copy Path', 'Reveal in Finder'])
 })
