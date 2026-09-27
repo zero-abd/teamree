@@ -784,7 +784,7 @@ describe('stylesheets', () => {
       expect(declarationOf(patch, 'font-family')).toBe('var(--font-mono)')
     })
 
-    // A changed word's fill sits on its line's fill.
+    // A changed word's fill sits on its line's fill, and the line's on the pane every patch is drawn in.
     it.each(themeIds)('fills changed lines and words so they stand out, and their text still reads, in %s', (id) => {
       const palette = paletteOf(id)
       const amountOf = (sheet: string, selector: string): number => {
@@ -799,7 +799,7 @@ describe('stylesheets', () => {
         const word = amountOf('review.css', `.patch__row--${side} .patch__word`)
         expect(line, side).toBeGreaterThanOrEqual(0.2)
         expect(word, side).toBeGreaterThanOrEqual(0.35)
-        const lineFill = mix(rgbOf(palette['bg-panel']), rgbOf(palette[tone]), line)
+        const lineFill = mix(rgbOf(palette['bg-pane']), rgbOf(palette[tone]), line)
         const wordFill = mix(lineFill, rgbOf(palette[tone]), word)
         expect(contrastRatio(rgbOf(palette['fg-secondary']), lineFill), `${side} line`).toBeGreaterThanOrEqual(4.5)
         expect(contrastRatio(rgbOf(palette.fg), wordFill), `${side} word`).toBeGreaterThanOrEqual(4.5)
