@@ -82,7 +82,11 @@ export function App(): React.JSX.Element {
   const spoken = useAnnouncements()
 
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
-  const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
+  // Settings brings its own section list, so it has the window to itself; the sidebar comes back as it was.
+  const settingsShown = useWorkspaceStore(
+    (state) => state.settingsOpen && !state.dashboardOpen && state.teamworkProjectId === null
+  )
+  const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible) && !settingsShown
   const dialog = useWorkspaceStore((state) => state.dialog)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
   // Outside `dialog`: a teammate raised it, it has its own deadline, and nothing else may close it.

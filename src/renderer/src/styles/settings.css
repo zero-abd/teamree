@@ -1,50 +1,84 @@
-/* The settings page, inside the page frame: a sticky section list beside grouped rows, labels in a
-   left column and controls aligned in the right one. */
+/* The settings page: its own grouped section list down the left, then one section's cards of rows,
+   each row a label on the left and its control on the right at one width. */
 
-.settings__layout {
-  display: grid;
-  grid-template-columns: 140px minmax(0, 1fr);
-  gap: var(--s6);
-}
-
-.settings__content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s6);
-  min-width: 0;
+.page--side .page__column {
+  max-width: 760px;
 }
 
 /* Section list ------------------------------------------------------------ */
 
-.settings__side {
+.settings-side {
   display: flex;
-  position: sticky;
-  top: 0;
   flex-direction: column;
-  gap: var(--s3);
-  align-self: start;
+  gap: var(--s5);
+  width: 216px;
+  height: 100%;
+  padding: var(--s4) var(--s3);
+  overflow-y: auto;
 }
 
-.settings-filter {
-  width: 100%;
+.settings-search {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
   height: var(--control-h);
   padding: 0 var(--s2);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   border-radius: var(--r2);
   background: var(--bg-input);
+  color: var(--fg-muted);
+  cursor: text;
+}
+
+.settings-search:focus-within {
+  border-color: var(--accent-line);
+  box-shadow: var(--ring);
+}
+
+.settings-search__icon {
+  flex: none;
+}
+
+.settings-search__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
   color: var(--fg);
   font: inherit;
   font-size: var(--text-sm);
 }
 
-.settings-filter::placeholder {
+.settings-search__input::placeholder {
   color: var(--fg-muted);
 }
 
-.settings-filter:focus-visible {
-  outline: none;
-  border-color: var(--accent-line);
-  box-shadow: var(--ring);
+.settings-search__key {
+  flex: none;
+  padding: 0 4px;
+  border-radius: var(--r1);
+  background: var(--bg-press);
+  color: var(--fg-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+
+.settings-nav__heading {
+  margin: 0 0 var(--s1);
+  padding: 0 var(--s2);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .settings-nav__list {
@@ -57,14 +91,18 @@
 }
 
 .settings-nav__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
   width: 100%;
-  padding: 4px var(--s2);
+  height: var(--control-h);
+  padding: 0 var(--s2);
   border: 0;
   border-radius: var(--r2);
   background: none;
   color: var(--fg-secondary);
   font: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   text-align: left;
   cursor: pointer;
 }
@@ -75,7 +113,7 @@
 }
 
 .settings-nav__item[aria-current='true'] {
-  background: var(--accent-soft);
+  background: var(--bg-selected);
   color: var(--fg);
 }
 
@@ -84,19 +122,57 @@
   box-shadow: var(--ring);
 }
 
+.settings-nav__icon {
+  flex: none;
+  color: var(--fg-muted);
+}
+
+.settings-nav__item[aria-current='true'] .settings-nav__icon {
+  color: var(--accent-bright);
+}
+
+.settings-nav__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The sidebar's `!` on Settings, on the row that fixes it; in ink, as there. */
+.settings-nav__badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--bg-press);
+  color: var(--fg);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
 /* Sections ---------------------------------------------------------------- */
+
+.settings__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+  min-width: 0;
+}
 
 .settings-section {
   display: flex;
   flex-direction: column;
-  gap: var(--s2);
+  gap: var(--s5);
 }
 
 .settings-section__title {
-  padding-left: var(--s1);
-  color: var(--fg-secondary);
-  font-size: var(--text-sm);
+  color: var(--fg);
+  font-size: var(--text-lg);
   font-weight: 600;
+  letter-spacing: -0.01em;
   scroll-margin-top: var(--s5);
 }
 
@@ -104,12 +180,32 @@
   outline: none;
 }
 
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+/* A card the filter emptied goes with its title. */
+.settings-card:has(> .settings-group:empty) {
+  display: none;
+}
+
+.settings-card__title {
+  padding-left: var(--s1);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .settings-group {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
   border-radius: var(--r3);
-  background: var(--bg-raised);
+  background: var(--bg-panel);
 }
 
 .settings-group > * {
@@ -118,12 +214,12 @@
 }
 
 .settings-group > * + * {
-  border-top: 1px solid var(--line);
+  border-top: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
 }
 
 .settings-fact {
   color: var(--fg);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 560;
 }
 
@@ -133,8 +229,17 @@
   font-weight: 400;
 }
 
+.settings-fact--value {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
 .settings-fact--mono {
   font-family: var(--font-mono);
+  font-size: var(--text-sm);
   font-weight: 500;
   overflow-wrap: anywhere;
 }
@@ -182,12 +287,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--s3);
+  justify-content: flex-end;
+  gap: var(--s2);
 }
 
-/* Rows and fields --------------------------------------------------------- */
+/* Rows -------------------------------------------------------------------- */
 
-/* Whatever the row is about on the left, its button on the right. */
+/* A fact on the left, its buttons on the right. */
 .settings-row {
   display: flex;
   flex-wrap: wrap;
@@ -205,59 +311,79 @@
   flex: 0 1 auto;
 }
 
-.settings-check {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  color: var(--fg);
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-.settings-check input {
-  flex: none;
-  margin: 0;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
 .settings-field {
-  --settings-label: 190px;
+  --settings-control: 260px;
   display: grid;
-  grid-template-columns: var(--settings-label) minmax(0, 1fr);
-  column-gap: var(--s4);
+  grid-template-columns: minmax(0, 1fr) minmax(0, var(--settings-control));
+  align-items: center;
+  column-gap: var(--s5);
   row-gap: var(--s2);
 }
 
-.settings-field__label {
-  grid-column: 1;
-  align-self: start;
-  margin: 0;
-  padding-top: var(--s2);
-  color: var(--fg);
-  font-size: var(--text-sm);
-  font-weight: 400;
-  line-height: 16px;
+/* A path or a value with buttons: the control takes what the label leaves. */
+.settings-field--wide {
+  grid-template-columns: auto minmax(0, 1fr);
 }
 
-.settings-field > :not(.settings-field__label) {
-  grid-column: 2;
+.settings-field__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
   min-width: 0;
 }
 
-.settings-field__row {
+.settings-field__label {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.settings-field__hint {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.settings-field__control {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
+  gap: var(--s2);
+  min-width: 0;
+  min-height: var(--control-h);
+}
+
+.settings-field__control > .select,
+.settings-field__control > .settings-input:not(.settings-input--number),
+.settings-field__control > .settings-stack {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-field__control .select__input {
+  width: 100%;
+}
+
+.settings-field__below {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+}
+
+.settings-stack {
+  display: flex;
+  flex-direction: column;
   gap: var(--s2);
 }
 
-.settings-field__row > .settings-field__input {
-  flex: 1 1 160px;
+.settings-stack > .select {
+  align-self: stretch;
 }
 
 /* Monospace because what goes in it is a ref, a path or a command. */
-.settings-field__input {
+.settings-input {
   width: 100%;
   min-width: 0;
   height: var(--control-h);
@@ -271,8 +397,40 @@
   line-height: 16px;
 }
 
+/* `None`, in the sans: an empty field must not look like one holding a value. */
+.settings-input::placeholder {
+  color: var(--fg-muted);
+  font-family: var(--font-ui);
+}
+
+/* The command an agent runs bare: a command, so in the mono it runs in. */
+.settings-input--command::placeholder {
+  font-family: var(--font-mono);
+}
+
+.settings-input:focus-visible {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: var(--ring);
+}
+
+/* Six digits and the stepper; any wider reads as a text field. */
+.settings-input--number {
+  flex: none;
+  width: 12ch;
+  padding-right: 2px;
+}
+
+.settings-input--lines {
+  height: auto;
+  min-height: var(--control-h);
+  padding: 5px var(--s2);
+  resize: vertical;
+}
+
 /* A value in effect, shown as text beside the button that changes it. */
 .settings-value {
+  min-width: 0;
   margin: 0;
   color: var(--fg);
   font-size: var(--text-sm);
@@ -282,56 +440,81 @@
   font-family: var(--font-mono);
 }
 
-.settings-field__input--lines {
-  height: auto;
-  min-height: var(--control-h);
-  padding: 4px var(--s2);
-  resize: vertical;
-}
-
-/* `None`, in the sans: an empty field must not look like one holding a value. */
-.settings-field__input::placeholder {
+/* One line, cut in the middle: the head gives way first, so the folder's own name stays. */
+.settings-path {
+  display: flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
   color: var(--fg-secondary);
-  font-family: var(--font-ui);
-}
-
-/* The command an agent runs bare: a command, so in the mono it runs in. */
-.settings-field__input--command::placeholder {
   font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  white-space: nowrap;
 }
 
-.settings-field__input:focus-visible {
+.settings-path__head {
+  flex: 0 1 auto;
+  min-width: 2ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-path__tail {
+  flex: none;
+}
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 30px;
+  height: 18px;
+  margin: 0;
+  border-radius: 9px;
+  background: var(--line-strong);
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--ease);
+  appearance: none;
+}
+
+.switch::before {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 30%);
+  content: '';
+  transition: transform var(--motion-fast) var(--ease);
+}
+
+.switch:checked {
+  background: var(--accent);
+}
+
+.switch:checked::before {
+  transform: translateX(12px);
+}
+
+.switch:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.switch:focus-visible {
   outline: none;
-  border-color: var(--accent-line);
   box-shadow: var(--ring);
 }
 
-/* A path in effect; it wraps anywhere rather than pushing its buttons off the row. */
-.settings-value--path {
-  flex: 1 1 200px;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-/* A branch prefix, `abd/`: a few characters. */
-.settings-field__input--short {
-  justify-self: start;
-  width: 20ch;
-}
-
-/* Six digits and the stepper; any wider reads as a text field. */
-.settings-field__input--number {
-  justify-self: start;
-  width: 12ch;
-  padding-right: 2px;
-}
-
-/* A lone checkbox in the control column, centred on the label's line. */
-.settings-field__check {
-  justify-self: start;
-  align-self: start;
-  margin: 6px 0 0;
-  accent-color: var(--accent);
+/* A second, smaller setting beside a row's control: Blink beside Cursor. */
+.settings-inline {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
   cursor: pointer;
 }
 
@@ -343,7 +526,6 @@
   white-space: pre;
 }
 
-/* The line a pane will run, under the field that changes it: output, so dimmed and unboxed. */
 /* An agent's mark and name, as New task draws them. */
 .settings-agent {
   display: flex;
@@ -351,6 +533,7 @@
   gap: var(--s2);
 }
 
+/* The line a pane will run, under the field that changes it: output, so dimmed and unboxed. */
 .settings-launch {
   color: var(--fg-muted);
   font-family: var(--font-mono);
@@ -360,7 +543,6 @@
 }
 
 .settings-launch--missing {
-  margin: 0;
   color: var(--fg-secondary);
   font-family: var(--font-ui);
 }
@@ -379,10 +561,10 @@
 
 .settings-size {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: var(--s3);
-  min-height: var(--control-h);
-  max-width: 320px;
+  min-width: 0;
 }
 
 .settings-size__range {
@@ -399,16 +581,48 @@
   font-family: var(--font-mono);
   font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Where a project setting comes from, under its label: the repository's file, or this Mac's override. */
+.settings-source {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-top: 2px;
+}
+
+.settings-chip {
+  padding: 0 var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  line-height: 16px;
+}
+
+.settings-chip--local {
+  border-color: var(--accent-line);
+  color: var(--fg-secondary);
+}
+
+.settings-source__reset {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.settings-source__reset:hover {
+  color: var(--fg);
 }
 
 /* Shortcuts --------------------------------------------------------------- */
-
-.settings-subhead {
-  padding: var(--s1) 0 0 var(--s1);
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
 
 .settings-keys {
   list-style: none;
@@ -432,10 +646,69 @@
 
 /* Projects ---------------------------------------------------------------- */
 
-.settings-project__identity {
+.settings-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-self: flex-start;
+  gap: 2px;
+  max-width: 100%;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+}
+
+.settings-picker__item {
+  height: 24px;
+  padding: 0 var(--s3);
+  border: 0;
+  border-radius: var(--r1);
+  background: none;
+  color: var(--fg-secondary);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.settings-picker__item:hover {
+  color: var(--fg);
+}
+
+.settings-picker__item[aria-pressed='true'] {
+  background: var(--bg-raised);
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.settings-picker__item:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.settings-project {
   display: flex;
   flex-direction: column;
+  gap: var(--s5);
+}
+
+.settings-project__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s4);
+  min-width: 0;
+}
+
+.settings-project__identity {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   gap: 2px;
+  min-width: 0;
+}
+
+.settings-project__head > .settings-actions {
+  flex: none;
 }
 
 .settings-project__name {
@@ -445,63 +718,77 @@
 
 .settings-project__path {
   color: var(--fg-muted);
-  font-family: var(--font-mono);
   font-size: var(--text-xs);
-  line-height: 1.5;
-  overflow-wrap: anywhere;
 }
 
-.settings-relay .settings-fact {
-  padding-top: 5px;
-  overflow-wrap: anywhere;
-}
+/* Narrow ------------------------------------------------------------------ */
 
-/* Narrow -------------------------------------------------------------------- */
-
-@container (max-width: 600px) {
-  .settings__layout {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--s4);
+/* The section list keeps its icons; the search opens over the list when it has the focus or a filter. */
+@media (max-width: 900px) {
+  .settings-side {
+    width: 52px;
+    padding-inline: var(--s2);
+    overflow: visible;
   }
 
-  .settings__side {
-    position: static;
-  }
-
-  .settings-nav__list {
-    flex-flow: row wrap;
+  .settings-nav__heading,
+  .settings-nav__label,
+  .settings-search__key {
+    display: none;
   }
 
   .settings-nav__item {
-    width: auto;
+    position: relative;
+    justify-content: center;
+    padding: 0;
   }
 
-  .settings-field {
+  .settings-nav__badge {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
+
+  .settings-search {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .settings-search__input {
+    flex: 0 0 0;
+  }
+
+  .settings-search:focus-within,
+  .settings-search:has(.settings-search__input:not(:placeholder-shown)) {
+    position: relative;
+    z-index: 2;
+    width: 220px;
+    justify-content: flex-start;
+    padding: 0 var(--s2);
+  }
+
+  .settings-search:focus-within .settings-search__input,
+  .settings-search:has(.settings-search__input:not(:placeholder-shown)) .settings-search__input {
+    flex: 1 1 auto;
+  }
+}
+
+@container (max-width: 560px) {
+  .settings-field,
+  .settings-field--wide {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .settings-field__label,
-  .settings-field > :not(.settings-field__label) {
-    grid-column: 1;
+  .settings-field__control {
+    justify-content: flex-start;
   }
-}
 
-/* Where a project setting comes from, under its field: the repository's file, or this Mac's override. */
-.settings-source {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-}
+  /* An on/off row stays one line: the switch fits beside any label. */
+  .settings-field:has(> .settings-field__control > .switch:only-child) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
 
-.settings-chip {
-  padding: 1px var(--s2);
-  border: 1px solid var(--line);
-  border-radius: var(--r1);
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-  line-height: 16px;
-}
-
-.settings-chip--local {
-  color: var(--fg-secondary);
+  .settings-project__head {
+    flex-wrap: wrap;
+  }
 }

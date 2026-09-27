@@ -339,7 +339,24 @@ const GLYPHS = {
   ),
   'md-link': (
     <path d="m6.5 10.5-1 1a2.5 2.5 0 0 1-3.5-3.5l2.25-2.25a2.5 2.5 0 0 1 3.5 0M9.5 5.5l1-1A2.5 2.5 0 0 1 14 8l-2.25 2.25a2.5 2.5 0 0 1-3.5 0M5.75 10.25l4.5-4.5" />
-  )
+  ),
+  branch: (
+    <>
+      <circle cx="4.5" cy="3.5" r="1.5" />
+      <circle cx="4.5" cy="12.5" r="1.5" />
+      <circle cx="11.5" cy="5" r="1.5" />
+      <path d="M4.5 5v6M11.5 6.5c0 3-3.5 2.5-6.25 4.75" />
+    </>
+  ),
+  bell: <path d="M4 11.25V7a4 4 0 0 1 8 0v4.25l1.25 1.5H2.75zM6.5 14.25h3" />,
+  keyboard: (
+    <>
+      <rect x="1.75" y="4" width="12.5" height="8.5" rx="1.5" />
+      <path d="M4.5 6.75h.01M7 6.75h.01M9.5 6.75h.01M12 6.75h.01M5.5 9.75h5" />
+    </>
+  ),
+  plug: <path d="M5.75 1.75v3m4.5-3v3M3.75 4.75h8.5v2.5a4.25 4.25 0 0 1-8.5 0zM8 11.5v2.75" />,
+  download: <path d="M8 2.25v8M4.75 7 8 10.25 11.25 7M2.75 13.75h10.5" />
 } satisfies Record<string, React.JSX.Element>
 
 export type IconName = keyof typeof GLYPHS

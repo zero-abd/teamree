@@ -209,6 +209,7 @@ import { panelCost, panelYields, sidebarCost, type Sides } from '../workspace/ro
 import { couldNotCheck } from '../updates/updateNotice'
 import { useMessageStore } from './messages'
 import { rowVisibility } from './rowVisibility'
+import type { SettingsSectionId } from '../settings/settingsModel'
 
 export type DialogState =
   /** A picked or dropped folder the runtime would not add as it was. */
@@ -410,7 +411,7 @@ export function reconcileRelayPanes(
 }
 
 /** A section of the settings page that can be asked for by name. */
-export type SettingsSection = 'agents' | 'cli'
+export type SettingsSection = SettingsSectionId
 
 type WorkspaceState = {
   connection: ConnectionState
