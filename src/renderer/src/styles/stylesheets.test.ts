@@ -114,6 +114,55 @@ describe('stylesheets', () => {
     }
   })
 
+  describe('one type scale', () => {
+    it('reads no smaller than 11px, with rows at 13px', () => {
+      const tokens = customProperties('tokens.css')
+      expect(tokens.get('--text-xs')).toBe('11px')
+      expect(tokens.get('--text-sm')).toBe('12px')
+      expect(tokens.get('--text-base')).toBe('13px')
+      expect(tokens.get('--text-lg')).toBe('15px')
+      expect(tokens.get('--text-xl')).toBe('18px')
+      expect(declarationOf(ruleFor('sidebar.css', '.worktree__name'), 'font-size')).toBe('var(--text-base)')
+    })
+
+    // Only markdown headings and inline code size themselves, relative to the page.
+    it('takes every font size from a token', () => {
+      const literal: string[] = []
+      for (const name of sheets) {
+        postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls('font-size', (decl) => {
+          if (/\d(px|rem|pt)\b/.test(decl.value)) literal.push(`${name} ${(decl.parent as postcss.Rule).selector}`)
+        })
+      }
+      expect(literal).toEqual([])
+    })
+
+    it('sets text in the UI face or the mono face only', () => {
+      const other: string[] = []
+      for (const name of sheets) {
+        postcss.parse(readFileSync(path.join(here, name), 'utf8'), { from: name }).walkDecls('font-family', (decl) => {
+          const selector = (decl.parent as postcss.Rule).selector
+          if (selector === '.md-bar__mark--italic') return
+          if (!/^(var\(--font-(ui|mono)\)|inherit)$/.test(decl.value)) other.push(`${name} ${selector}`)
+        })
+      }
+      expect(other).toEqual([])
+    })
+
+    // Chromium draws a bare button, field or select in Arial at 13.33px.
+    it('lets every form control inherit the app’s font', () => {
+      const reset = ruleListing('base.css', 'button')
+      expect(reset?.selectors).toEqual(expect.arrayContaining(['button', 'input', 'select', 'textarea']))
+      expect(declarationOf(reset as postcss.Rule, 'font')).toBe('inherit')
+      expect(declarationOf(reset as postcss.Rule, 'letter-spacing')).toBe('inherit')
+    })
+
+    it('labels the project list in sentence case', () => {
+      const title = ruleFor('sidebar.css', '.sidebar__head-title')
+      expect(declarationOf(title, 'text-transform')).toBeUndefined()
+      expect(declarationOf(title, 'font-size')).toBe('var(--text-sm)')
+    })
+  })
+
   // One activity dot, on sidebar, strip, board and pane bar.
   it('has one activity dot, and no second dot on the pane bar', () => {
     expect(ruleFor('sidebar.css', '.activity')).toBeTruthy()
