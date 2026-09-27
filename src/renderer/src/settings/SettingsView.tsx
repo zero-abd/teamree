@@ -13,6 +13,9 @@ import { AgentGlyph } from '../agents/glyphs'
 import { harnessName } from '../agents/harnesses'
 import { cliOutcome } from '../dialogs/cliInstallModel'
 import { Select } from '../dialogs/Select'
+import { paneNumberRows, shortcutGroups } from '../help/helpTopics'
+import { formatChord, resolvePlatformModifier, type PlatformModifier } from '../keyboard/platformModifier'
+import { menuLabel } from '../menu/menuBar'
 import {
   NO_DEFAULT_AGENT,
   TERMINAL_FONT_MAX_PX,
@@ -20,6 +23,8 @@ import {
   TERMINAL_SCROLLBACK_MAX,
   TERMINAL_SCROLLBACK_MIN,
   type AgentNoticePreference,
+  type DiffLayout,
+  type KeepAwakeMode,
   type TerminalCursorStyle
 } from '../state/preferences'
 import { NoticeTest } from '../notices/NoticeTest'
@@ -64,7 +69,7 @@ function useShown(): Shown {
 }
 
 function shownUnder(title: string, query: string, rows: readonly SettingsRow[]): Shown {
-  const whole = labelMatches(title, query)
+  const whole = labelMatches(title, query) || describedOnly(title, query)
   return {
     whole,
     query,
@@ -117,6 +122,35 @@ const NOTICE_CHOICES: readonly { value: AgentNoticePreference; label: string }[]
   { value: 'notify', label: 'Notify' },
   { value: 'sound', label: 'Notify with sound' }
 ]
+
+const KEEP_AWAKE_CHOICES: readonly { value: KeepAwakeMode; label: string }[] = [
+  { value: 'agent', label: 'While Agents Work' },
+  { value: 'on', label: 'Always' },
+  { value: 'off', label: 'Off' }
+]
+
+const DIFF_LAYOUTS: readonly { value: DiffLayout; label: string }[] = [
+  { value: 'inline', label: 'Inline' },
+  { value: 'split', label: 'Side by side' }
+]
+
+type ShortcutRow = { group: string; label: string; chord: string }
+
+/** Every chord Help lists, in its order, under its group's title. */
+function useShortcutRows(modifier: PlatformModifier): ShortcutRow[] {
+  const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
+  const rightPanelOpen = useWorkspaceStore((state) => state.rightPanelOpen)
+  return shortcutGroups().flatMap((group) => [
+    ...group.shortcuts.map((shortcut) => ({
+      group: group.title,
+      label: menuLabel(shortcut.command, { sidebarVisible, rightPanelOpen }),
+      chord: shortcut.chord ? formatChord(shortcut.chord, modifier) : ''
+    })),
+    ...(group.id === 'panes'
+      ? paneNumberRows(modifier).map((row) => ({ group: group.title, label: row.title, chord: row.chord }))
+      : [])
+  ])
+}
 
 /** Every theme and mode by name: the options behind the Theme row's Change… button. */
 const THEME_WORDS = [...BUILT_IN_THEMES.map((theme) => theme.name), ...Object.values(APPEARANCE_MODE_LABEL)]
@@ -176,18 +210,23 @@ function useProjectRows(machine: RuntimeSettings | null): (project: Project) => 
 }
 
 /** Every row outside a project as the filter reads it: label, option labels and current value. */
-function useSectionRows(machine: RuntimeSettings | null): Record<Exclude<SectionId, 'projects'>, SettingsRow[]> {
+function useSectionRows(
+  machine: RuntimeSettings | null,
+  modifier: PlatformModifier
+): Record<Exclude<SectionId, 'projects'>, SettingsRow[]> {
   const agentArgs = useWorkspaceStore((state) => state.agentArgs)
   const fontSize = useWorkspaceStore((state) => state.terminalFontSize)
   const options = useWorkspaceStore((state) => state.terminalOptions)
   const agents = useAgentRows()
   const themeValue = useThemeValue()
+  const shortcuts = useShortcutRows(modifier)
   return {
     general: [
       { label: 'Worktrees in', words: [machineRoot(machine)] },
       { label: 'Branch prefix', words: [machine?.branchPrefix ?? ''] },
       ...(offersMenuBar() ? [{ label: 'Show in Menu Bar', words: [] }] : []),
-      { label: 'Show Cost', words: [] }
+      { label: 'Show Cost', words: [] },
+      { label: 'Keep Awake', words: KEEP_AWAKE_CHOICES.map((choice) => choice.label) }
     ],
     agents: [
       {
@@ -197,6 +236,11 @@ function useSectionRows(machine: RuntimeSettings | null): Record<Exclude<Section
       ...agents.map((row) => ({ label: harnessName(row.kind), words: [agentArgs[row.kind] ?? ''] })),
       { label: 'Trust New Worktrees', words: [] },
       { label: 'Warn Agents About Overlaps', words: [] }
+    ],
+    git: [
+      { label: 'Diff layout', words: DIFF_LAYOUTS.map((layout) => layout.label) },
+      { label: 'Wrap Diff Lines', words: [] },
+      { label: 'Hide Whitespace Changes', words: [] }
     ],
     panes: [
       { label: 'Terminal text size', words: [`${fontSize}px`] },
@@ -209,6 +253,7 @@ function useSectionRows(machine: RuntimeSettings | null): Record<Exclude<Section
     notices: [{ label: 'When an agent stops or asks', words: NOTICE_CHOICES.map((choice) => choice.label) }],
     teamwork: [{ label: 'Share Task Details', words: [] }],
     appearance: [{ label: 'Theme', words: [themeValue, ...THEME_WORDS] }],
+    shortcuts: shortcuts.map((row) => ({ label: row.label, words: [row.chord] })),
     updates: [{ label: 'Check Automatically', words: [] }],
     cli: [{ label: 'teamree command', words: [] }]
   }
@@ -217,7 +262,11 @@ function useSectionRows(machine: RuntimeSettings | null): Record<Exclude<Section
 /** A heading this close to the top of the scrolling body counts as the section in view. */
 const IN_VIEW_PX = 48
 
-export function SettingsView(): React.JSX.Element {
+export function SettingsView({
+  modifier = resolvePlatformModifier(window.teamree?.platform)
+}: {
+  modifier?: PlatformModifier
+}): React.JSX.Element {
   const projects = useWorkspaceStore((state) => state.projects)
   const toggleSettings = useWorkspaceStore((state) => state.toggleSettings)
   const loadCli = useWorkspaceStore((state) => state.loadCli)
@@ -226,14 +275,14 @@ export function SettingsView(): React.JSX.Element {
   const agents = useAgentRows()
   const [query, setQuery] = useState('')
   const machine = useRuntimeSettings()
-  const sectionRows = useSectionRows(machine.settings)
+  const sectionRows = useSectionRows(machine.settings, modifier)
   const projectRows = useProjectRows(machine.settings)
   const rowsOf = (id: SectionId): SettingsRow[] =>
     id === 'projects'
       ? projects.flatMap((project) => [{ label: project.name, words: [] }, ...projectRows(project)])
       : sectionRows[id]
   const sections = SETTINGS_SECTIONS.filter((entry) => entry.id !== 'agents' || agents.length > 0).filter(
-    (entry) => labelMatches(entry.label, query) || rowsOf(entry.id).some((row) => rowMatches(row, query))
+    (entry) => shownUnder(entry.label, query, []).whole || rowsOf(entry.id).some((row) => rowMatches(row, query))
   )
 
   // Read again on open: both are facts about the world outside this window that may have moved.
@@ -326,7 +375,7 @@ export function SettingsView(): React.JSX.Element {
           <MachineContext.Provider value={machine}>
             {sections.map((entry) => (
               <ShownContext.Provider key={entry.id} value={shownUnder(entry.label, query, rowsOf(entry.id))}>
-                <SectionBody id={entry.id} projects={projects} />
+                <SectionBody id={entry.id} projects={projects} modifier={modifier} />
               </ShownContext.Provider>
             ))}
           </MachineContext.Provider>
@@ -336,7 +385,15 @@ export function SettingsView(): React.JSX.Element {
   )
 }
 
-function SectionBody({ id, projects }: { id: SectionId; projects: readonly Project[] }): React.JSX.Element | null {
+function SectionBody({
+  id,
+  projects,
+  modifier
+}: {
+  id: SectionId
+  projects: readonly Project[]
+  modifier: PlatformModifier
+}): React.JSX.Element | null {
   switch (id) {
     case 'general':
       return <GeneralSection />
@@ -344,6 +401,8 @@ function SectionBody({ id, projects }: { id: SectionId; projects: readonly Proje
       return <AgentsSection />
     case 'projects':
       return <ProjectsSection projects={projects} />
+    case 'git':
+      return <GitSection />
     case 'panes':
       return <PanesSection />
     case 'notices':
@@ -352,6 +411,8 @@ function SectionBody({ id, projects }: { id: SectionId; projects: readonly Proje
       return <TeamworkSection />
     case 'appearance':
       return <AppearanceSection />
+    case 'shortcuts':
+      return <ShortcutsSection modifier={modifier} />
     case 'updates':
       return <UpdatesSection />
     case 'cli':
@@ -539,18 +600,14 @@ function UpdatesSection(): React.JSX.Element {
         ) : null}
         {shown.whole && step?.problem ? <p className="settings-error">{step.problem}</p> : null}
 
+        {/* Half a minute after startup, then every six hours; a label is not the place for a schedule. */}
         {panel.offersCheck && shown.row('Check Automatically') ? (
-          <label className="settings-check">
-            <input
-              type="checkbox"
-              checked={update?.automatic ?? false}
-              onChange={(event) => void setAutomaticUpdates(event.target.checked)}
-            />
-            {/* Half a minute after startup, then every six hours; a label is not the place for a schedule. */}
-            <span>
-              <Marked text="Check Automatically" />
-            </span>
-          </label>
+          <CheckField
+            id="settings-check-updates"
+            label="Check Automatically"
+            checked={update?.automatic ?? false}
+            onChange={(automatic) => void setAutomaticUpdates(automatic)}
+          />
         ) : null}
 
         {/* A checkable build says its failure beside the button instead. */}
@@ -571,6 +628,8 @@ function offersMenuBar(): boolean {
 function GeneralSection(): React.JSX.Element {
   const machine = useContext(MachineContext)
   const settings = machine.settings
+  const keepAwake = useWorkspaceStore((state) => state.keepAwake)
+  const setKeepAwake = useWorkspaceStore((state) => state.setKeepAwake)
   const show = useShown()
 
   return (
@@ -597,37 +656,34 @@ function GeneralSection(): React.JSX.Element {
           />
         ) : null}
         {offersMenuBar() && show.row('Show in Menu Bar') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-menu-bar">
-              <Marked text="Show in Menu Bar" />
-            </label>
-            <input
-              id="settings-menu-bar"
-              className="settings-field__check"
-              type="checkbox"
-              checked={settings?.showInMenuBar ?? false}
-              disabled={settings === null}
-              onChange={(event) => machine.change({ showInMenuBar: event.target.checked })}
-            />
-          </div>
+          <CheckField
+            id="settings-menu-bar"
+            label="Show in Menu Bar"
+            checked={settings?.showInMenuBar ?? false}
+            disabled={settings === null}
+            onChange={(showInMenuBar) => machine.change({ showInMenuBar })}
+          />
         ) : null}
         {show.row('Show Cost') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-show-cost">
-              <Marked text="Show Cost" />
-            </label>
-            <input
-              id="settings-show-cost"
-              className="settings-field__check"
-              type="checkbox"
-              checked={settings?.showCost ?? false}
-              disabled={settings === null}
-              onChange={(event) => {
-                machine.change({ showCost: event.target.checked })
-                useUsageStore.setState({ showCost: event.target.checked })
-              }}
-            />
-          </div>
+          <CheckField
+            id="settings-show-cost"
+            label="Show Cost"
+            checked={settings?.showCost ?? false}
+            disabled={settings === null}
+            onChange={(showCost) => {
+              machine.change({ showCost })
+              useUsageStore.setState({ showCost })
+            }}
+          />
+        ) : null}
+        {show.row('Keep Awake') ? (
+          <ChoiceField
+            id="settings-keep-awake"
+            label="Keep Awake"
+            value={keepAwake}
+            choices={KEEP_AWAKE_CHOICES}
+            onChange={setKeepAwake}
+          />
         ) : null}
         {machine.problem === null ? null : <p className="settings-error">{machine.problem}</p>}
       </div>
@@ -802,17 +858,13 @@ function TeamworkSection(): React.JSX.Element {
         <Marked text="Teamwork" />
       </h2>
       <div className="settings-group">
-        <label className="settings-check">
-          <input
-            type="checkbox"
-            checked={settings?.shareTaskDetails ?? true}
-            disabled={settings === null}
-            onChange={(event) => change({ shareTaskDetails: event.target.checked })}
-          />
-          <span>
-            <Marked text="Share Task Details" />
-          </span>
-        </label>
+        <CheckField
+          id="settings-share-task-details"
+          label="Share Task Details"
+          checked={settings?.shareTaskDetails ?? true}
+          disabled={settings === null}
+          onChange={(shareTaskDetails) => change({ shareTaskDetails })}
+        />
         {problem === null ? null : <p className="settings-error">{problem}</p>}
       </div>
     </section>
@@ -922,33 +974,21 @@ function PanesSection(): React.JSX.Element {
         ) : null}
 
         {shown.row('Option as Meta') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-option-meta">
-              <Marked text="Option as Meta" />
-            </label>
-            <input
-              id="settings-option-meta"
-              className="settings-field__check"
-              type="checkbox"
-              checked={options.optionIsMeta}
-              onChange={(event) => setOptions({ optionIsMeta: event.target.checked })}
-            />
-          </div>
+          <CheckField
+            id="settings-option-meta"
+            label="Option as Meta"
+            checked={options.optionIsMeta}
+            onChange={(optionIsMeta) => setOptions({ optionIsMeta })}
+          />
         ) : null}
 
         {shown.row('Copy on Select') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-copy-on-select">
-              <Marked text="Copy on Select" />
-            </label>
-            <input
-              id="settings-copy-on-select"
-              className="settings-field__check"
-              type="checkbox"
-              checked={options.copyOnSelect}
-              onChange={(event) => setOptions({ copyOnSelect: event.target.checked })}
-            />
-          </div>
+          <CheckField
+            id="settings-copy-on-select"
+            label="Copy on Select"
+            checked={options.copyOnSelect}
+            onChange={(copyOnSelect) => setOptions({ copyOnSelect })}
+          />
         ) : null}
 
         {shown.row('Scrollback lines') ? (
@@ -987,6 +1027,155 @@ function PanesSection(): React.JSX.Element {
         {runtime.problem === null ? null : <p className="settings-error">{runtime.problem}</p>}
       </div>
     </section>
+  )
+}
+
+/** How reviews open: the defaults the diff toolbar changes too. */
+function GitSection(): React.JSX.Element {
+  const layout = useWorkspaceStore((state) => state.diffLayout)
+  const setDiffLayout = useWorkspaceStore((state) => state.setDiffLayout)
+  const options = useWorkspaceStore((state) => state.diffOptions)
+  const toggleDiffOption = useWorkspaceStore((state) => state.toggleDiffOption)
+  const shown = useShown()
+
+  return (
+    <section className="settings-section" aria-labelledby="settings-git">
+      <h2 className="settings-section__title" id="settings-git" tabIndex={-1}>
+        <Marked text="Git" />
+      </h2>
+      <div className="settings-group">
+        {shown.row('Diff layout') ? (
+          <ChoiceField
+            id="settings-diff-layout"
+            label="Diff layout"
+            value={layout}
+            choices={DIFF_LAYOUTS}
+            onChange={setDiffLayout}
+          />
+        ) : null}
+        {shown.row('Wrap Diff Lines') ? (
+          <CheckField
+            id="settings-diff-wrap"
+            label="Wrap Diff Lines"
+            checked={options.wrap}
+            onChange={() => toggleDiffOption('wrap')}
+          />
+        ) : null}
+        {shown.row('Hide Whitespace Changes') ? (
+          <CheckField
+            id="settings-diff-whitespace"
+            label="Hide Whitespace Changes"
+            checked={options.hideWhitespace}
+            onChange={() => toggleDiffOption('hideWhitespace')}
+          />
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
+/** The chords, read only: the same table the key handler and Help read. */
+function ShortcutsSection({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
+  const rows = useShortcutRows(modifier)
+  const shown = useShown()
+  const groups = [...new Set(rows.map((row) => row.group))]
+
+  return (
+    <section className="settings-section" aria-labelledby="settings-shortcuts">
+      <h2 className="settings-section__title" id="settings-shortcuts" tabIndex={-1}>
+        <Marked text="Shortcuts" />
+      </h2>
+      {groups.map((group) => {
+        const kept = rows.filter((row) => row.group === group && shown.row(row.label))
+        return kept.length === 0 ? null : (
+          <Fragment key={group}>
+            <h3 className="settings-subhead">{group}</h3>
+            <ul className="settings-group settings-keys" aria-label={group}>
+              {kept.map((row) => (
+                <li className="settings-key" key={row.label}>
+                  <span>
+                    <Marked text={row.label} />
+                  </span>
+                  <kbd className="settings-key__chord">
+                    <Marked text={row.chord} />
+                  </kbd>
+                </li>
+              ))}
+            </ul>
+          </Fragment>
+        )
+      })}
+    </section>
+  )
+}
+
+/** A label and its checkbox: the page's one shape for an on/off setting. */
+function CheckField({
+  id,
+  label,
+  checked,
+  disabled = false,
+  onChange
+}: {
+  id: string
+  label: string
+  checked: boolean
+  disabled?: boolean
+  onChange: (checked: boolean) => void
+}): React.JSX.Element {
+  return (
+    <div className="settings-field">
+      <label className="settings-field__label" htmlFor={id}>
+        <Marked text={label} />
+      </label>
+      <input
+        id={id}
+        className="settings-field__check"
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    </div>
+  )
+}
+
+/** A label and a picker over a fixed set of values. */
+function ChoiceField<T extends string>({
+  id,
+  label,
+  value,
+  choices,
+  onChange
+}: {
+  id: string
+  label: string
+  value: T
+  choices: readonly { value: T; label: string }[]
+  onChange: (value: T) => void
+}): React.JSX.Element {
+  const shown = useShown()
+  return (
+    <div className="settings-field">
+      <label className="settings-field__label" htmlFor={id}>
+        <Marked text={label} />
+      </label>
+      <Select
+        id={id}
+        value={value}
+        onChange={(event) => onChange(event.target.value as T)}
+        {...hitMark(
+          shown,
+          choices.map((choice) => choice.label)
+        )}
+      >
+        {choices.map((choice) => (
+          <option key={choice.value} value={choice.value}>
+            {choice.label}
+          </option>
+        ))}
+      </Select>
+    </div>
   )
 }
 
@@ -1076,34 +1265,22 @@ function AgentsSection(): React.JSX.Element | null {
           ))}
 
         {shown.row('Trust New Worktrees') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-trust-worktrees">
-              <Marked text="Trust New Worktrees" />
-            </label>
-            <input
-              id="settings-trust-worktrees"
-              className="settings-field__check"
-              type="checkbox"
-              checked={trustNewWorktrees}
-              onChange={(event) => void setTrustNewWorktrees(event.target.checked)}
-            />
-          </div>
+          <CheckField
+            id="settings-trust-worktrees"
+            label="Trust New Worktrees"
+            checked={trustNewWorktrees}
+            onChange={(trust) => void setTrustNewWorktrees(trust)}
+          />
         ) : null}
 
         {shown.row('Warn Agents About Overlaps') ? (
-          <div className="settings-field">
-            <label className="settings-field__label" htmlFor="settings-warn-overlaps">
-              <Marked text="Warn Agents About Overlaps" />
-            </label>
-            <input
-              id="settings-warn-overlaps"
-              className="settings-field__check"
-              type="checkbox"
-              checked={runtime.settings?.warnAgentsAboutOverlaps ?? true}
-              disabled={runtime.settings === null}
-              onChange={(event) => runtime.change({ warnAgentsAboutOverlaps: event.target.checked })}
-            />
-          </div>
+          <CheckField
+            id="settings-warn-overlaps"
+            label="Warn Agents About Overlaps"
+            checked={runtime.settings?.warnAgentsAboutOverlaps ?? true}
+            disabled={runtime.settings === null}
+            onChange={(warnAgentsAboutOverlaps) => runtime.change({ warnAgentsAboutOverlaps })}
+          />
         ) : null}
         {runtime.problem === null ? null : <p className="settings-error">{runtime.problem}</p>}
       </div>
@@ -1311,20 +1488,13 @@ function ProjectWorktrees({ project }: { project: Project }): React.JSX.Element 
 /** Whether this project's base ref is fetched on a timer and on window focus. */
 function FetchInBackground({ project }: { project: Project }): React.JSX.Element {
   const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
-  const id = `settings-fetch-${project.id}`
   return (
-    <div className="settings-field">
-      <label className="settings-field__label" htmlFor={id}>
-        <Marked text="Fetch in Background" />
-      </label>
-      <input
-        id={id}
-        className="settings-field__check"
-        type="checkbox"
-        checked={project.fetchInBackground !== false}
-        onChange={(event) => void setProjectPaths(project.id, { fetchInBackground: event.target.checked })}
-      />
-    </div>
+    <CheckField
+      id={`settings-fetch-${project.id}`}
+      label="Fetch in Background"
+      checked={project.fetchInBackground !== false}
+      onChange={(fetchInBackground) => void setProjectPaths(project.id, { fetchInBackground })}
+    />
   )
 }
 

@@ -30,6 +30,8 @@ const { runtimeClient } = await import('../runtimeClient/currentRuntimeClient')
 const { SettingsView } = await import('./SettingsView')
 const { useUsageStore } = await import('../state/usageStore')
 const { TERMINAL_OPTIONS_DEFAULT } = await import('../state/preferences')
+const { resolvePlatformModifier } = await import('../keyboard/platformModifier')
+const MAC = resolvePlatformModifier('darwin')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -124,6 +126,9 @@ const openDialog = vi.fn()
 const installCli = vi.fn()
 const showAppearance = vi.fn()
 const saveProjectSettings = vi.fn()
+const setDiffLayout = vi.fn()
+const toggleDiffOption = vi.fn()
+const setKeepAwake = vi.fn()
 
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
@@ -158,6 +163,9 @@ function seed(overrides: Record<string, unknown> = {}): void {
       installCli,
       showAppearance,
       saveProjectSettings,
+      setDiffLayout,
+      toggleDiffOption,
+      setKeepAwake,
       ...overrides
     },
     true
@@ -197,7 +205,10 @@ beforeEach(() => {
     openDialog,
     installCli,
     showAppearance,
-    saveProjectSettings
+    saveProjectSettings,
+    setDiffLayout,
+    toggleDiffOption,
+    setKeepAwake
   ]) {
     mock.mockReset()
   }
@@ -334,7 +345,19 @@ describe('the section list', () => {
       within(nav())
         .getAllByRole('button')
         .map((button) => button.textContent)
-    ).toEqual(['General', 'Agents', 'Projects', 'Panes', 'Notifications', 'Teamwork', 'Appearance', 'Updates', 'CLI'])
+    ).toEqual([
+      'General',
+      'Agents',
+      'Projects',
+      'Git',
+      'Panes',
+      'Notifications',
+      'Teamwork',
+      'Appearance',
+      'Shortcuts',
+      'Updates',
+      'CLI'
+    ])
     unmount()
 
     seed({ agents: [] })
@@ -360,18 +383,38 @@ describe('the section list', () => {
     expect(document.activeElement).toBe(item('Notifications'))
     fireEvent.keyDown(item('Notifications'), { key: 'ArrowUp' })
     fireEvent.keyDown(item('Panes'), { key: 'ArrowUp' })
-    expect(document.activeElement).toBe(item('Projects'))
-    fireEvent.keyDown(item('Projects'), { key: 'End' })
+    expect(document.activeElement).toBe(item('Git'))
+    fireEvent.keyDown(item('Git'), { key: 'End' })
     expect(document.activeElement).toBe(item('CLI'))
   })
 
   it('highlights the section scrolled into view', () => {
     render(<SettingsView />)
     const body = screen.getByTestId('settings-body')
-    layOut({ projects: -400, panes: -200, notices: 10, teamwork: 150, appearance: 300, updates: 600, cli: 900 })
+    layOut({
+      projects: -400,
+      git: -300,
+      panes: -200,
+      notices: 10,
+      teamwork: 150,
+      appearance: 300,
+      shortcuts: 450,
+      updates: 600,
+      cli: 900
+    })
     fireEvent.scroll(body)
     expect(current()).toEqual(['Notifications'])
-    layOut({ projects: -900, panes: -700, notices: -500, teamwork: -400, appearance: -300, updates: -100, cli: 200 })
+    layOut({
+      projects: -900,
+      git: -800,
+      panes: -700,
+      notices: -500,
+      teamwork: -400,
+      appearance: -300,
+      shortcuts: -200,
+      updates: -100,
+      cli: 200
+    })
     fireEvent.scroll(body)
     expect(current()).toEqual(['Updates'])
   })
@@ -601,6 +644,62 @@ describe('panes', () => {
   })
 })
 
+describe('general', () => {
+  it('keeps the Mac awake while agents work, always, or leaves it to the system', () => {
+    render(<SettingsView />)
+    const mode = screen.getByLabelText('Keep Awake') as HTMLSelectElement
+    expect(mode.value).toBe('agent')
+    expect([...mode.options].map((option) => option.text)).toEqual(['While Agents Work', 'Always', 'Off'])
+    fireEvent.change(mode, { target: { value: 'on' } })
+    expect(setKeepAwake).toHaveBeenCalledWith('on')
+  })
+})
+
+describe('git', () => {
+  it('sets how diffs open: layout, wrapping and whitespace', () => {
+    seed({ diffLayout: 'inline', diffOptions: { wrap: false, hideWhitespace: true } })
+    render(<SettingsView />)
+    fireEvent.change(screen.getByLabelText('Diff layout'), { target: { value: 'split' } })
+    expect(setDiffLayout).toHaveBeenCalledWith('split')
+
+    const wrap = screen.getByLabelText('Wrap Diff Lines') as HTMLInputElement
+    expect(wrap.checked).toBe(false)
+    fireEvent.click(wrap)
+    expect(toggleDiffOption).toHaveBeenCalledWith('wrap')
+
+    const whitespace = screen.getByLabelText('Hide Whitespace Changes') as HTMLInputElement
+    expect(whitespace.checked).toBe(true)
+    fireEvent.click(whitespace)
+    expect(toggleDiffOption).toHaveBeenCalledWith('hideWhitespace')
+  })
+})
+
+describe('shortcuts', () => {
+  const section = (): HTMLElement => screen.getByRole('region', { name: 'Shortcuts' })
+  const commands = (): string[] =>
+    within(section())
+      .getAllByRole('listitem')
+      .map((row) => row.firstElementChild?.textContent ?? '')
+
+  it('lists every command with its chord, read only', () => {
+    render(<SettingsView modifier={MAC} />)
+    const row = within(section()).getByText('Split Pane Right').closest('li') as HTMLElement
+    expect(within(row).getByText('⌘D')).toBeTruthy()
+    expect(within(section()).queryByRole('textbox')).toBeNull()
+    expect(within(section()).queryByRole('button')).toBeNull()
+  })
+
+  it('filters to the commands named, and shows them all for what the section is about', () => {
+    render(<SettingsView modifier={MAC} />)
+    const filter = screen.getByRole('searchbox', { name: 'Filter settings' })
+    fireEvent.change(filter, { target: { value: 'split pane' } })
+    expect(commands()).toEqual(['Split Pane Right', 'Split Pane Down'])
+
+    fireEvent.change(filter, { target: { value: 'keybindings' } })
+    expect(commands()).toContain('New Terminal')
+  })
+})
+
 describe('appearance', () => {
   // The controls live in the sheet beside the panes; a page that hides them is no place to judge a theme.
   it('names the theme in effect, and opens the sheet to change it', () => {
@@ -741,7 +840,18 @@ describe('the filter', () => {
     render(<SettingsView />)
     type('cursor')
     type('')
-    expect(nav()).toEqual(['General', 'Projects', 'Panes', 'Notifications', 'Teamwork', 'Appearance', 'Updates', 'CLI'])
+    expect(nav()).toEqual([
+      'General',
+      'Projects',
+      'Git',
+      'Panes',
+      'Notifications',
+      'Teamwork',
+      'Appearance',
+      'Shortcuts',
+      'Updates',
+      'CLI'
+    ])
   })
 
   // Escape empties a filter before it closes the page.
