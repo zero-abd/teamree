@@ -174,3 +174,38 @@ describe('task lists', () => {
     expect(serializeMarkdown(doc)).toBe('- [x] done\n- plain\n\n1. [ ] first\n')
   })
 })
+
+describe('front matter', () => {
+  const types = (text: string): (string | undefined)[] => parseMarkdown(text).content?.map((node) => node.type) ?? []
+
+  it('reads a leading YAML block as front matter, not a rule and a heading', () => {
+    const doc = parseMarkdown('---\ntitle: Round trip\ntags: [a, b]\n---\n\n# Round trip\n')
+    expect(doc.content?.[0]).toEqual({ type: 'frontMatter', attrs: { yaml: 'title: Round trip\ntags: [a, b]' } })
+    expect(types('---\ntitle: Round trip\ntags: [a, b]\n---\n\n# Round trip\n')).toEqual(['frontMatter', 'heading'])
+  })
+
+  it('takes nested values, comments, blank lines and a `...` closer', () => {
+    const text = '---\n# comment\nauthor:\n  name: A\n\nlist:\n  - one\n...\nBody\n'
+    expect(parseMarkdown(text).content?.[0]).toEqual({
+      type: 'frontMatter',
+      attrs: { yaml: '# comment\nauthor:\n  name: A\n\nlist:\n  - one' }
+    })
+    expect(types(text)).toEqual(['frontMatter', 'paragraph'])
+  })
+
+  it('is only ever the first thing in the file', () => {
+    expect(types('Intro\n\n---\ntitle: x\n---\n')).toEqual(['paragraph', 'horizontalRule', 'heading'])
+    expect(types('\n---\ntitle: x\n---\n')).toEqual(['horizontalRule', 'heading'])
+    expect(types('> ---\n> title: x\n> ---\n')).toEqual(['blockquote'])
+  })
+
+  it('leaves rules around prose, and an unclosed block, as markdown', () => {
+    expect(types('---\n\nJust prose.\n\n---\n')).toEqual(['horizontalRule', 'paragraph', 'horizontalRule'])
+    expect(types('---\ntitle: x\n')).toEqual(['horizontalRule', 'paragraph'])
+  })
+
+  it('writes itself back between its fences', () => {
+    const text = '---\ntitle: Round trip\ntags: [a, b]\n---\n\n# Round trip\n'
+    expect(pass(text)).toBe(text)
+  })
+})

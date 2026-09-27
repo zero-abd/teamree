@@ -436,6 +436,8 @@ type WorkspaceState = {
   editedFiles: Record<string, EditedFile>
   /** File panes showing their diff rather than their text, by pane id. */
   diffPanes: Record<string, true>
+  /** Markdown panes showing their source rather than their page, by pane id. */
+  sourcePanes: Record<string, true>
   /** A markdown editor holds the keyboard, so ⌘B and ⌘E are bold and code, not the window's. */
   editingMarkdown: boolean
   /** The worktree whose strip asks for a file name, because NOTES.md is already open. */
@@ -737,6 +739,8 @@ type WorkspaceState = {
   pinFilePane: (paneId: string) => void
   /** Shows a file pane's diff, or its text again. */
   setPaneDiff: (paneId: string, on: boolean) => void
+  /** Shows a markdown pane's source, off its diff, or its page again. */
+  setPaneSource: (paneId: string, on: boolean) => void
   /** `New Markdown`: NOTES.md, or a name asked for in the strip when that is already open. */
   newMarkdown: (worktreeId: string) => void
   /** Answers the strip's question with a name, or null to withdraw it. */
@@ -1944,6 +1948,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       lastDrafts.map(([paneId, draft]) => [paneId, { worktreeId: draft.worktreeId, path: draft.path }])
     ),
     diffPanes: {},
+    sourcePanes: {},
     editingMarkdown: false,
     namingMarkdown: null,
     recentFiles: {},
@@ -2689,6 +2694,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         })
         forgetEdits([terminalId])
         get().setPaneDiff(terminalId, false)
+        get().setPaneSource(terminalId, false)
         if (get().expandedTerminalId === terminalId) set({ expandedTerminalId: null })
         const leaf = fileLeavesIn(layout.root).find((entry) => entry.terminalId === terminalId)
         if (leaf !== undefined) keepClosedFile(activeWorktreeId, { leaf, closedAt: Date.now() })
@@ -2966,6 +2972,17 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         if (on) diffPanes[paneId] = true
         else delete diffPanes[paneId]
         return on || state.paneSearch?.terminalId !== paneId ? { diffPanes } : { diffPanes, paneSearch: null }
+      })
+    },
+
+    setPaneSource(paneId, on) {
+      if (on) get().setPaneDiff(paneId, false)
+      set((state) => {
+        if ((state.sourcePanes[paneId] === true) === on) return {}
+        const sourcePanes = { ...state.sourcePanes }
+        if (on) sourcePanes[paneId] = true
+        else delete sourcePanes[paneId]
+        return { sourcePanes }
       })
     },
 

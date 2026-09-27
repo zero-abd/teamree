@@ -116,7 +116,8 @@ function actions(): CommandActions & Record<string, ReturnType<typeof vi.fn>> {
     showRightPanelTab: vi.fn(),
     pushActiveWorktree: vi.fn(async () => {}),
     setTerminalFontSize: vi.fn(),
-    toggleDiffOption: vi.fn()
+    toggleDiffOption: vi.fn(),
+    setPaneSource: vi.fn()
   } as unknown as CommandActions & Record<string, ReturnType<typeof vi.fn>>
 }
 
@@ -824,5 +825,45 @@ describe('Clear Pane', () => {
     expect(cleared).toEqual(['t1'])
     expect(callCount(store)).toBe(0)
     for (const undo of unshow) undo()
+  })
+})
+
+describe('the markdown source', () => {
+  const focusedOn = (leaf: Record<string, unknown>, extra: Partial<CommandState> = {}): CommandState => ({
+    ...WORKING,
+    layouts: {
+      w1: {
+        worktreeId: 'w1',
+        root: { kind: 'leaf', terminalId: 'file:m', pane: 'file', ...leaf } as PaneNode,
+        focusedTerminalId: 'file:m'
+      }
+    },
+    ...extra
+  })
+
+  it('is offered only while a markdown file of the worktree has the focus', () => {
+    expect(isCommandAvailable('toggle-markdown-source', focusedOn({ path: 'docs/post.md' }))).toBe(true)
+    expect(isCommandAvailable('toggle-markdown-source', focusedOn({ path: 'NOTES.markdown' }))).toBe(true)
+    expect(isCommandAvailable('toggle-markdown-source', focusedOn({ path: 'src/a.ts' }))).toBe(false)
+    expect(isCommandAvailable('toggle-markdown-source', focusedOn({ path: 'a.md', commit: 'abc' }))).toBe(false)
+    expect(isCommandAvailable('toggle-markdown-source', focusedOn({ path: 'a.md', sharedNote: 's1' }))).toBe(false)
+    expect(isCommandAvailable('toggle-markdown-source', WORKING)).toBe(false)
+  })
+
+  it('shows the source, the page again, and the source instead of a diff', () => {
+    const page = workspace(focusedOn({ path: 'a.md' }))
+    runWorkspaceCommand('toggle-markdown-source', page)
+    expect(page.setPaneSource).toHaveBeenCalledExactlyOnceWith('file:m', true)
+
+    const shown = workspace(focusedOn({ path: 'a.md' }, { sourcePanes: { 'file:m': true } }))
+    runWorkspaceCommand('toggle-markdown-source', shown)
+    expect(shown.setPaneSource).toHaveBeenCalledExactlyOnceWith('file:m', false)
+
+    const diff = workspace(
+      focusedOn({ path: 'a.md' }, { sourcePanes: { 'file:m': true }, diffPanes: { 'file:m': true } })
+    )
+    runWorkspaceCommand('toggle-markdown-source', diff)
+    expect(diff.setPaneSource).toHaveBeenCalledExactlyOnceWith('file:m', true)
+    expect(callCount(diff)).toBe(1)
   })
 })

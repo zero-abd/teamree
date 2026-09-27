@@ -26,7 +26,7 @@
 // "Close Pane, New Terminal, New Task" is a list. `menuBar.test.ts` pins it.
 
 import type { Chord } from '../keyboard/platformModifier'
-import { isCommandAvailable, type CommandState } from '../keyboard/workspaceCommands'
+import { isCommandAvailable, showsMarkdownSource, type CommandState } from '../keyboard/workspaceCommands'
 import { WORKSPACE_SHORTCUTS, type WorkspaceCommand, type WorkspaceShortcut } from '../keyboard/workspaceShortcuts'
 
 /**
@@ -126,6 +126,7 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   'open-appearance': { section: 'view', label: 'Appearance…' },
   'toggle-diff-wrap': { section: 'view' },
   'toggle-diff-whitespace': { section: 'view' },
+  'toggle-markdown-source': { section: 'view' },
 
   // View's own group, where the zoom roles were.
   'actual-size': { section: 'text' },
@@ -177,7 +178,7 @@ export function menuLabel(command: WorkspaceCommand, panels?: PanelState): strin
 
 /** Whether each side panel is on screen, absent reading as shown, what the worktree on screen tracks, and the diff options. */
 export type PanelState = Pick<CommandState, 'sidebarVisible' | 'rightPanelOpen' | 'diffOptions'> &
-  Partial<Pick<CommandState, 'statuses' | 'activeWorktreeId'>>
+  Partial<Pick<CommandState, 'statuses' | 'activeWorktreeId'>> & { markdownSource?: boolean }
 
 /** Finder's wording: a toggle names what choosing it does now. Null for every other command. */
 function panelLabel(command: WorkspaceCommand, panels: PanelState): string | null {
@@ -187,6 +188,7 @@ function panelLabel(command: WorkspaceCommand, panels: PanelState): string | nul
   if (command === 'toggle-diff-whitespace') {
     return panels.diffOptions?.hideWhitespace === true ? 'Show Whitespace Changes' : 'Hide Whitespace Changes'
   }
+  if (command === 'toggle-markdown-source' && panels.markdownSource === true) return 'Show Markdown Page'
   if (command === 'push-worktree' && panels.activeWorktreeId) {
     return panels.statuses?.[panels.activeWorktreeId]?.upstream === null ? 'Publish Branch' : null
   }
@@ -260,12 +262,13 @@ export function menuBarSpec(
   state: CommandState,
   shortcuts: readonly WorkspaceShortcut[] = WORKSPACE_SHORTCUTS
 ): MenuBarItem[] {
+  const panels = { ...state, markdownSource: showsMarkdownSource(state) }
   return shortcuts
     .map((shortcut) => {
       const placement = PLACEMENT[shortcut.command]
       return {
         command: shortcut.command,
-        label: placement.label ?? panelLabel(shortcut.command, state) ?? shortcut.title,
+        label: placement.label ?? panelLabel(shortcut.command, panels) ?? shortcut.title,
         // Empty for a command with no chord, which the main process draws as an
         // item with nothing beside it.
         accelerator: shortcut.chord ? acceleratorForChord(shortcut.chord) : '',

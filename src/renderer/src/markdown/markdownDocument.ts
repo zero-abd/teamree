@@ -3,6 +3,7 @@
 
 import { getSchema, type JSONContent } from '@tiptap/core'
 import MarkdownIt from 'markdown-it'
+import type StateBlock from 'markdown-it/lib/rules_block/state_block.mjs'
 import type StateCore from 'markdown-it/lib/rules_core/state_core.mjs'
 import type Token from 'markdown-it/lib/token.mjs'
 import type { Node as ProseNode } from '@tiptap/pm/model'
@@ -134,8 +135,37 @@ function artifactCards(state: StateCore): void {
   state.tokens = out
 }
 
+const FRONT_MATTER_OPEN = /^---[ \t]*$/
+const FRONT_MATTER_CLOSE = /^(?:---|\.\.\.)[ \t]*$/
+const YAML_KEY = /^[^\s#-][^:]*:(?:[ \t]|$)/
+
+/** A YAML block fenced by `---` on the file's first line; anything that is not keys stays markdown. */
+function frontMatter(state: StateBlock, startLine: number, endLine: number, silent: boolean): boolean {
+  if (startLine !== 0 || state.parentType !== 'root' || state.level !== 0) return false
+  const line = (at: number): string => state.src.slice(state.bMarks[at], state.eMarks[at])
+  if (!FRONT_MATTER_OPEN.test(line(0))) return false
+  let keyed = false
+  for (let at = 1; at < endLine; at += 1) {
+    const text = line(at)
+    if (FRONT_MATTER_CLOSE.test(text)) {
+      if (!keyed) return false
+      if (silent) return true
+      const token = state.push('front_matter', '', 0)
+      token.block = true
+      token.map = [0, at + 1]
+      token.content = state.getLines(1, at, 0, false).replace(/\n$/, '')
+      state.line = at + 1
+      return true
+    }
+    if (YAML_KEY.test(text)) keyed = true
+    else if (!/^[ \t]*(?:#.*)?$/.test(text) && !(keyed && /^[ \t]|^-(?:[ \t]|$)/.test(text))) return false
+  }
+  return false
+}
+
 function createTokenizer(): MarkdownIt {
   const md = new MarkdownIt('default', { html: true, linkify: false, typographer: false })
+  md.block.ruler.before('table', 'teamree_front_matter', frontMatter)
   md.core.ruler.after('block', 'teamree_task_lists', taskLists)
   md.core.ruler.after('block', 'teamree_table_cells', tableCells)
   md.core.ruler.after('block', 'teamree_callouts', callouts)
@@ -186,6 +216,7 @@ const TOKENS: Record<string, ParseSpec> = {
     getAttrs: (token) => ({ language: token.info.trim().split(/\s+/)[0] || null })
   },
   hr: { node: 'horizontalRule' },
+  front_matter: { node: 'frontMatter', getAttrs: (token) => ({ yaml: token.content }) },
   image: {
     node: 'image',
     getAttrs: (token) => ({
@@ -314,6 +345,11 @@ const NODES: Record<string, NodeWriter> = {
     state.text(node.textContent, false)
     state.write('\n')
     state.write(fence)
+    state.closeBlock(node)
+  },
+  frontMatter(state, node) {
+    const yaml = String(node.attrs.yaml)
+    state.text(`---\n${yaml.length > 0 ? `${yaml}\n` : ''}---`, false)
     state.closeBlock(node)
   },
   horizontalRule(state, node) {

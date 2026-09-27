@@ -50,6 +50,8 @@ export type CommandState = {
   editedFiles?: Readonly<Record<string, unknown>>
   /** File panes showing their diff; absent reads as none. */
   diffPanes?: Readonly<Record<string, unknown>>
+  /** Markdown panes showing their source; absent reads as none. */
+  sourcePanes?: Readonly<Record<string, unknown>>
   /** Absent reads as shown, for both. */
   sidebarVisible?: boolean
   rightPanelOpen?: boolean
@@ -95,6 +97,7 @@ export type CommandActions = {
   openReview: (worktreeId: string) => void
   setTerminalFontSize: (size: number) => void
   toggleDiffOption: (option: keyof DiffOptions) => void
+  setPaneSource: (paneId: string, on: boolean) => void
 }
 
 export type Workspace = CommandState & CommandActions
@@ -176,6 +179,20 @@ function editedFocus(state: CommandState): string | null {
 function canStepHistory(state: CommandState, step: 1 | -1): boolean {
   if (state.visits === undefined) return false
   return stepVisits(state.visits, step, new Set(state.worktrees.map((worktree) => worktree.id)), 0) !== null
+}
+
+/** The focused pane when it is a markdown file of the worktree. */
+function focusedMarkdown(state: CommandState): string | null {
+  const focused = ownFocusedPane(state)
+  if (focused === null || !isFilePaneId(focused)) return null
+  const leaf = fileLeavesIn(activeLayout(state)?.root ?? null).find((entry) => entry.terminalId === focused)
+  return leaf !== undefined && isWorktreeFileLeaf(leaf) && fileViewerFor(leaf.path) === 'markdown' ? focused : null
+}
+
+/** Whether the focused markdown pane shows its source rather than its page or diff. */
+export function showsMarkdownSource(state: CommandState): boolean {
+  const pane = focusedMarkdown(state)
+  return pane !== null && state.sourcePanes?.[pane] !== undefined && state.diffPanes?.[pane] === undefined
 }
 
 function fontSize(state: CommandState): number {
@@ -304,6 +321,8 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
     case 'open-dashboard':
       // Greyed while the editor types: on macOS only a disabled item lets ⌘B and ⌘E reach the page.
       return unless(state.editingMarkdown !== true, 'editing markdown')
+    case 'toggle-markdown-source':
+      return unless(focusedMarkdown(state) !== null, 'no markdown focused')
     case 'bigger-text':
       return unless(fontSize(state) < TERMINAL_FONT_MAX_PX, 'largest size')
     case 'smaller-text':
@@ -481,6 +500,11 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
     case 'toggle-diff-whitespace':
       store.toggleDiffOption('hideWhitespace')
       break
+    case 'toggle-markdown-source': {
+      const pane = focusedMarkdown(store)
+      if (pane) store.setPaneSource(pane, !showsMarkdownSource(store))
+      break
+    }
     case 'add-project':
       void store.chooseProjectFolder()
       break

@@ -1,9 +1,10 @@
-// A markdown file as a pane: the bar every pane wears, the page under it, and
-// the file kept in step — written as the typing pauses, re-read when it moves.
+// A markdown file as a pane: the bar every pane wears, the page or its source under
+// it, and the file kept in step — written as the typing pauses, re-read when it moves.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { FileContent } from '@shared/entities'
 import { filePaneName } from '@shared/filePane'
+import type { CodeEditorHandle } from '../files/CodeEditor'
 import { FileBar, fileLabel } from '../files/FileBar'
 import { DiffBody, DiffTools, useFileDiff } from '../files/FileDiff'
 import type { FilePaneProps } from '../panes/FilePane'
@@ -16,6 +17,8 @@ import { MarkdownEditor, type MarkdownEditorHandle } from './MarkdownEditor'
 import { registerPage } from './openAsArtifact'
 
 const URL_SCHEME = /^[a-z][a-z0-9+.-]*:/i
+
+const CodeEditor = lazy(() => import('../files/CodeEditor').then((module) => ({ default: module.CodeEditor })))
 
 /** The worktree path an image link names, read from the page's folder; null when it leaves the worktree. */
 function imagePath(page: string, src: string): string | null {
@@ -61,11 +64,16 @@ export function MarkdownPane({
   const setFileUnsaved = useWorkspaceStore((state) => state.setFileUnsaved)
   const setEditingMarkdown = useWorkspaceStore((state) => state.setEditingMarkdown)
   const filesEpoch = useWorkspaceStore((state) => state.worktreeFilesEpoch)
+  const source = useWorkspaceStore((state) => state.sourcePanes[paneId] === true)
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [error, setError] = useState<string | null>(null)
   // The file moved under an edited page; the person picks which wins.
   const [onDisk, setOnDisk] = useState<Loaded | null>(null)
   const editor = useRef<MarkdownEditorHandle | null>(null)
+  const code = useRef<CodeEditorHandle | null>(null)
+  // The text the source opened on, then as edited there; the page reads it back on return.
+  const [sourceText, setSourceText] = useState<string | null>(null)
+  const sourceDraft = useRef<string | null>(null)
   // What this pane last knows to be on disk.
   const known = useRef<Loaded>({ content: '', modifiedAt: 0 })
   // Each image's URL by worktree path; the editor draws every image twice as it starts.
@@ -125,10 +133,25 @@ export function MarkdownPane({
 
   // The keyboard follows the focus here, so a new page can be typed on at once.
   useEffect(() => {
-    if (focused && loaded !== null && !diff.shown) editor.current?.focus()
-  }, [focused, loaded, diff.shown])
+    if (focused && loaded !== null && !diff.shown && !source) editor.current?.focus()
+  }, [focused, loaded, diff.shown, source])
 
-  useEffect(() => registerPage(paneId, () => editor.current?.getMarkdown() ?? known.current.content), [paneId])
+  const current = (): string => code.current?.text() ?? editor.current?.getMarkdown() ?? known.current.content
+
+  useEffect(() => registerPage(paneId, () => current()), [paneId])
+
+  useLayoutEffect(() => {
+    if (loaded === null) return
+    if (source) {
+      sourceDraft.current = editor.current?.getMarkdown() ?? known.current.content
+      setSourceText(sourceDraft.current)
+      return
+    }
+    const draft = sourceDraft.current
+    if (draft !== null && draft !== editor.current?.getMarkdown()) editor.current?.setMarkdown(draft)
+    sourceDraft.current = null
+    setSourceText(null)
+  }, [source, loaded])
 
   // A change reported by the worktree is taken when the page has nothing of its own to lose.
   useEffect(() => {
@@ -146,6 +169,7 @@ export function MarkdownPane({
         }
         known.current = next
         editor.current?.setMarkdown(file.content)
+        replaceSource(file.content)
       })
       .catch(() => {})
     return () => {
@@ -154,11 +178,18 @@ export function MarkdownPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filesEpoch])
 
+  const replaceSource = (text: string): void => {
+    if (sourceDraft.current === null) return
+    sourceDraft.current = text
+    code.current?.replace(text)
+  }
+
   const reload = (): void => {
     if (onDisk === null) return
     autosave.cancel()
     known.current = onDisk
     editor.current?.setMarkdown(onDisk.content)
+    replaceSource(onDisk.content)
     setFileUnsaved(paneId, false)
     setOnDisk(null)
   }
@@ -175,6 +206,13 @@ export function MarkdownPane({
     },
     [autosave, paneId, setFileUnsaved]
   )
+
+  const onSourceEdit = useCallback(() => {
+    const text = code.current?.text()
+    if (text === undefined) return
+    sourceDraft.current = text
+    onChange(text)
+  }, [onChange])
 
   // Only through a grant the runtime confined to the worktree; a URL passes as written but for `file:`.
   const resolveImage = useCallback(
@@ -220,18 +258,30 @@ export function MarkdownPane({
             Reload
           </button>
         )}
-        <ShareNoteButton
-          worktreeId={worktreeId}
-          path={path}
-          getMarkdown={() => editor.current?.getMarkdown() ?? known.current.content}
-        />
-        <DiffTools diff={diff} view="Page" />
+        <ShareNoteButton worktreeId={worktreeId} path={path} getMarkdown={current} />
+        <DiffTools diff={diff} view="Page" source={source} />
       </FileBar>
       <div className="file__body" ref={diff.body}>
         {diff.shown ? (
           <DiffBody worktreeId={worktreeId} diff={diff} searchToken={searchToken} onCloseSearch={onCloseSearch} />
         ) : null}
-        <div className="file__view" hidden={diff.shown}>
+        {source && sourceText !== null ? (
+          <div className="file__view" hidden={diff.shown}>
+            <Suspense fallback={null}>
+              <CodeEditor
+                ref={code}
+                path={path}
+                savedText={known.current.content}
+                {...(sourceText === known.current.content ? {} : { draftText: sourceText })}
+                lineEnding={sourceText.includes('\r\n') ? '\r\n' : '\n'}
+                focused={focused && !diff.shown}
+                onDirtyChange={() => {}}
+                onEdit={onSourceEdit}
+              />
+            </Suspense>
+          </div>
+        ) : null}
+        <div className="file__view" hidden={diff.shown || source}>
           {loaded === null ? (
             <div className="md-frame" />
           ) : (
