@@ -272,6 +272,7 @@ const STAGES_BY_ATTENTION: readonly TaskStage[] = [
   'asking',
   'working',
   'ready',
+  'idle',
   'stopped',
   'done',
   'landed'

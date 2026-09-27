@@ -63,7 +63,8 @@ export class JacAddon {
 
   constructor(options: JacAddonOptions) {
     this.#options = options
-    this.#env = childEnv(options.env ?? process.env)
+    // Its own uv cache, so removing <userData>/addons/jac removes every download too.
+    this.#env = { ...childEnv(options.env ?? process.env), UV_CACHE_DIR: join(this.dir, 'uv-cache') }
   }
 
   get dir(): string {

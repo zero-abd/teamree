@@ -1,7 +1,7 @@
 // Settings › Add-ons › Jac Graph Memory: off by default, installed with uv, run as a provider or not at all.
 
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -165,6 +165,29 @@ describe('the Jac Graph Memory add-on', () => {
       detail: 'No solution found when resolving: teamree-jac'
     })
     expect(enabled).toBe(false)
+  })
+
+  it('keeps what uv downloads in its own folder, for install and run, so removing the folder removes it all', async () => {
+    const uv = path.join(userDataDir, 'stub/uv')
+    await mkdir(path.dirname(uv), { recursive: true })
+    await writeFile(
+      uv,
+      `#!/bin/sh
+case "$1" in
+  venv) for last; do :; done; mkdir -p "$last/bin" ;;
+  pip) mkdir -p "$UV_CACHE_DIR" && echo wheel > "$UV_CACHE_DIR/teamree_jac.whl"
+    printf '#!/bin/sh\\necho teamree-jac 0.1.0\\n' > "$(dirname "$5")/teamree-jac"; chmod +x "$(dirname "$5")/teamree-jac" ;;
+esac
+`
+    )
+    await chmod(uv, 0o755)
+    const elsewhere = path.join(userDataDir, 'global-uv-cache')
+    const jac = addon({ findUv: () => uv, env: { PATH: '/usr/bin:/bin', UV_CACHE_DIR: elsewhere } })
+    expect(await jac.install()).toMatchObject({ state: 'running' })
+    const cache = path.join(userDataDir, 'addons/jac/uv-cache')
+    expect(existsSync(path.join(cache, 'teamree_jac.whl'))).toBe(true)
+    expect(existsSync(elsewhere)).toBe(false)
+    expect(made[0]?.env?.UV_CACHE_DIR).toBe(cache)
   })
 
   it('notices uv arriving or leaving without a restart', () => {

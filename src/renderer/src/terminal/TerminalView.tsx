@@ -831,6 +831,7 @@ function paneLinkHost(
       return terminal === undefined ? null : { worktreeId: terminal.worktreeId, cwd: terminal.cwd }
     },
     worktrees: () => useWorkspaceStore.getState().worktrees,
+    ...(window.teamree?.homeDir ? { home: window.teamree.homeDir } : {}),
     files: worktreeFileNames,
     openUrl: openPaneLink,
     openFile: (file, line, column) =>

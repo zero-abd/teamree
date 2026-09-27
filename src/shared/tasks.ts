@@ -8,11 +8,12 @@ export const MAX_CHILD_DEPTH = 3
 export const MAX_OPEN_CHILDREN = 6
 
 /** A task's stage, derived from panes, git and reports; never set by hand. */
-export type TaskStage = 'working' | 'asking' | 'stopped' | 'ready' | 'done' | 'landed' | 'failed' | 'missing'
+export type TaskStage = 'working' | 'asking' | 'idle' | 'stopped' | 'ready' | 'done' | 'landed' | 'failed' | 'missing'
 
 export const TASK_STAGES: readonly TaskStage[] = [
   'working',
   'asking',
+  'idle',
   'stopped',
   'ready',
   'done',

@@ -17,6 +17,7 @@ import {
   reportedDirectory,
   worktreeOf,
   type LinkedFile,
+  type PaneLinkHost,
   type PaneLinks
 } from './paneLinks'
 
@@ -128,7 +129,10 @@ type Pane = {
 }
 
 /** A real emulator with the layer on it, laid out on a 10×20 cell grid; `/w` holds src/math.ts and friends. */
-function pane(listed: Record<string, string[]> = { src: ['math.ts', 'b.ts'], 'src/deep/er': ['handler.ts'] }): Pane {
+function pane(
+  listed: Record<string, string[]> = { src: ['math.ts', 'b.ts'], 'src/deep/er': ['handler.ts'] },
+  overrides: Partial<PaneLinkHost> = {}
+): Pane {
   const host = document.body.appendChild(document.createElement('div'))
   const term = new XTerm({ allowProposedApi: true, cols: COLS, rows: ROWS })
   const providers: ILinkProvider[] = []
@@ -152,7 +156,8 @@ function pane(listed: Record<string, string[]> = { src: ['math.ts', 'b.ts'], 'sr
     files: fileListings(async (_worktreeId, dir) => new Set(listed[dir] ?? [])),
     openUrl: (uri) => urls.push(uri),
     openFile: (file, line, column) => files.push([file, line, column]),
-    holds: (event) => event.metaKey
+    holds: (event) => event.metaKey,
+    ...overrides
   })
   return {
     term,
@@ -225,6 +230,22 @@ describe('a pane with links in it', () => {
     view.press(8, 0, { metaKey: true })
     await settle()
     expect(view.files.map(([file]) => file.path)).toEqual(['src/math.ts'])
+  })
+
+  it('reads ~/ as the home folder, and links no path in a pane with no place', async () => {
+    const home = { home: '/u', worktrees: () => [{ id: 'w1', path: '/u/w' }] }
+    const view = pane(undefined, home)
+    await view.write('~/w/src/math.ts:7 ~/src/b.ts ~x/src/b.ts\r\n')
+    expect((await view.links(1)).map((link) => link.text)).toEqual(['~/w/src/math.ts:7'])
+    view.press(2, 0, { metaKey: true })
+    await settle()
+    expect(view.files).toEqual([
+      [{ worktreeId: 'w1', path: 'src/math.ts', absolute: '/u/w/src/math.ts' }, 7, undefined]
+    ])
+
+    const watched = pane(undefined, { ...home, place: () => null })
+    await watched.write('~/w/src/math.ts\r\n')
+    expect(await watched.links(1)).toEqual([])
   })
 
   it('joins a path wrapped onto the next row', async () => {

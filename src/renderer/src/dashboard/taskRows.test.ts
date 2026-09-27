@@ -61,10 +61,11 @@ describe('a task’s stage, derived and never set', () => {
   it.each([
     ['working', facts({ tone: 'working' })],
     ['asking', facts({ tone: 'waiting' })],
-    ['stopped', facts({ tone: 'quiet' })],
+    ['idle', facts({ tone: 'quiet' })],
+    ['stopped', facts({ tone: 'stopped' })],
     ['stopped', facts({})],
     ['ready', facts({ tone: 'quiet', ahead: 2 })],
-    ['stopped', facts({ tone: 'quiet', ahead: 2, status: { ...clean, unstaged: 1 } })],
+    ['idle', facts({ tone: 'quiet', ahead: 2, status: { ...clean, unstaged: 1 } })],
     ['done', facts({ tone: 'quiet', worktree: { state: 'ready', report: done('succeeded') } })],
     ['failed', facts({ worktree: { state: 'ready', report: done('failed') } })],
     ['landed', facts({ landed: true, worktree: { state: 'ready', report: done('succeeded') } })],
