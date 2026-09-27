@@ -827,6 +827,27 @@ describe('replacing this copy in place', () => {
     expect(restarts).toHaveLength(1)
   })
 
+  it('knows whether a quit is its restart, waits for idle on the card, and restarts now when asked again', async () => {
+    const { update, restarts } = installing()
+    expect(update.restartIntent()).toBeNull()
+    await update.check({ force: true })
+    await vi.waitFor(() => expect(update.state().install?.state).toBe('ready'))
+
+    await update.restartToUpdate()
+    expect(update.restartIntent()).toBe('asked')
+    update.restartWhenIdle()
+    expect(update.restartIntent()).toBe('when-idle')
+    expect(update.state().install).toEqual({ state: 'ready', version: '0.2.0', whenIdle: true })
+
+    await update.restartToUpdate()
+    expect(update.restartIntent()).toBe('now')
+    expect(restarts).toHaveLength(2)
+
+    update.quitDeclined()
+    expect(update.restartIntent()).toBeNull()
+    expect(update.state().install).toEqual({ state: 'ready', version: '0.2.0' })
+  })
+
   it('installs nothing on a later quit when this one was declined', () => {
     const { self, calls } = installer()
     const { update } = installing({ self })

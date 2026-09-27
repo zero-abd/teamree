@@ -129,6 +129,12 @@ describe('an update fetched in place', () => {
     expect(installerStep(state({ install: ready }))).toMatchObject({ kind: 'restart', label: 'Restart to Update' })
   })
 
+  it('says it restarts when idle, and offers Restart Now', () => {
+    const waiting = { ...ready, whenIdle: true }
+    expect(updateNotice(state({ install: waiting }))?.headline).toBe('teamree 0.2.0 restarts when idle')
+    expect(installerStep(state({ install: waiting }))).toMatchObject({ kind: 'restart', label: 'Restart Now' })
+  })
+
   it('shows progress while it is fetched', () => {
     const downloading = { state: 'downloading' as const, version: '0.2.0', received: 420, total: 1000 }
     expect(installerStep(state({ install: downloading }))).toMatchObject({ kind: 'progress', label: 'Downloading 42%' })

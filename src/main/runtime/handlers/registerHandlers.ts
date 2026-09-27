@@ -46,6 +46,7 @@ import { registerFetchHandler } from './fetchHandler'
 import { registerPastedImageHandler } from './pastedImageHandler'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerQuitHandler } from './quitHandler'
+import { busyAgents, busyLine } from '../../quitAgents'
 import { registerResourcesHandlers } from './resourcesHandlers'
 import { PortWatcher } from '../../resources/ports'
 import { registerStatusHandler } from './statusHandler'
@@ -125,7 +126,11 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   registerStatusHandler(registry)
   registerQuitHandler(registry, {
     ...(options.requestQuit === undefined ? {} : { requestQuit: options.requestQuit }),
-    ...(options.unsavedFiles === undefined ? {} : { unsavedFiles: options.unsavedFiles })
+    ...(options.unsavedFiles === undefined ? {} : { unsavedFiles: options.unsavedFiles }),
+    busyAgents: () => {
+      const busy = busyAgents(terminals.manager.list(), (terminal) => terminal.title)
+      return busy.working + busy.asking === 0 ? null : busyLine(busy)
+    }
   })
   registerUnsubscribeHandler(registry)
   registerWorkspaceSubscribeHandler(registry)

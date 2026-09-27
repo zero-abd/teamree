@@ -18,7 +18,7 @@ export const quitCommands: readonly CommandSpec[] = [
     details:
       'The app quits the way its quit key does, so panes are killed, their transcripts written, and the ' +
       'socket and discovery file released before this returns. Refused while a file in the app has unsaved ' +
-      'edits, unless --force.\n\n' +
+      'edits or an agent is working, unless --force.\n\n' +
       "Returns once the endpoint is gone and the app's process has exited. Exit code 3 when no app is " +
       'running, 1 when one was asked and was still quitting when the wait ran out.',
     flags: [
@@ -31,7 +31,7 @@ export const quitCommands: readonly CommandSpec[] = [
       {
         name: 'force',
         kind: 'boolean',
-        description: 'Quit even with unsaved files in the app; their edits come back when it next opens.'
+        description: 'Quit even with unsaved files or working agents; the edits come back when it next opens.'
       }
     ],
     examples: ['teamree quit', 'teamree quit --json', 'teamree quit --force'],

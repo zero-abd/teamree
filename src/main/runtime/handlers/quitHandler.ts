@@ -1,8 +1,8 @@
 // Quitting the app from outside the window. A signal skips `before-quit`, where
 // every pty is killed, the socket released and the scrollback written, so this asks
 // for the quit key's quit. Deferred to a macrotask so the reply leaves before the connection goes.
-// Refused while the window has edited files, since nobody is at the window to answer its question;
-// `force` quits anyway and the edits come back as drafts.
+// Refused while the window has edited files or agents are mid-turn, since nobody is at the window to
+// answer its question; `force` quits anyway and the edits come back as drafts.
 
 import { Params } from '../../../shared/methods'
 import type { MethodRegistry } from '../methodRegistry'
@@ -13,6 +13,8 @@ export type QuitHandlerOptions = {
   requestQuit?: (force: boolean) => void
   /** The window's edited files. */
   unsavedFiles?: () => readonly string[]
+  /** `2 agents are working`, or null when none is. */
+  busyAgents?: () => string | null
   /** Defers the quit past the reply. Swappable for the tests, which cannot wait. */
   defer?: (run: () => void) => void
 }
@@ -32,6 +34,8 @@ export function registerQuitHandler(registry: MethodRegistry, options: QuitHandl
         unsaved
       })
     }
+    const busy = force ? null : (options.busyAgents?.() ?? null)
+    if (busy !== null) throw conflict(`${busy}. Pass --force to quit anyway.`)
     defer(() => requestQuit(force))
     return { quitting: true as const, pid: registry.context.pid }
   })

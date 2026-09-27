@@ -8,15 +8,17 @@ export function InstallerButton({ step, className }: { step: InstallerStep; clas
   const fetchInstaller = useWorkspaceStore((state) => state.fetchInstaller)
   const openInstaller = useWorkspaceStore((state) => state.openInstaller)
   const restartToUpdate = useWorkspaceStore((state) => state.restartToUpdate)
-  // Stays pressed through the quit; a refused swap hands the button back.
-  const [restarting, setRestarting] = useState(false)
+  const update = useWorkspaceStore((state) => state.update)
+  // Stays pressed through the quit; a refused swap, or any word from the quit's question, hands it back.
+  const [pressedAt, setPressedAt] = useState<typeof update | undefined>(undefined)
+  const restarting = pressedAt === update
   const run = {
     browser: downloadUpdate,
     fetch: fetchInstaller,
     open: openInstaller,
     restart: async () => {
-      setRestarting(true)
-      if (!(await restartToUpdate())) setRestarting(false)
+      setPressedAt(update)
+      if (!(await restartToUpdate())) setPressedAt(undefined)
     },
     progress: null
   }[step.kind]

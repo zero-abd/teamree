@@ -77,4 +77,25 @@ describe('app.quit', () => {
     for (const run of deferred) run()
     expect(requestQuit).toHaveBeenCalledWith(true)
   })
+
+  it('refuses while agents are working, and quits with force', async () => {
+    const deferred: Array<() => void> = []
+    const requestQuit = vi.fn()
+    registerQuitHandler(registry, {
+      requestQuit,
+      busyAgents: () => '2 agents are working',
+      defer: (run) => deferred.push(run)
+    })
+    const dispatch = createDispatcher(registry)
+
+    const refused = (await dispatch({ id: 'q5', method: 'app.quit', params: {} }, call)) as ErrorResponse
+    expect(refused.ok).toBe(false)
+    expect(refused.error.code).toBe(ErrorCode.Conflict)
+    expect(refused.error.message).toBe('2 agents are working. Pass --force to quit anyway.')
+    expect(deferred).toHaveLength(0)
+
+    expect(await dispatch({ id: 'q6', method: 'app.quit', params: { force: true } }, call)).toMatchObject({ ok: true })
+    for (const run of deferred) run()
+    expect(requestQuit).toHaveBeenCalledWith(true)
+  })
 })

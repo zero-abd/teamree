@@ -25,10 +25,12 @@ export const INSTALL_DOCUMENT = 'https://github.com/zero-abd/teamree/blob/main/d
 export function updateNotice(state: UpdateState | null): UpdateNotice | null {
   if (state === null || state.available === null) return null
   const release = state.available
-  const ready = state.install?.state === 'ready' && state.install.version === release.version
+  const install = state.install?.version === release.version ? state.install : null
+  const ready = install?.state === 'ready'
+  const status = ready ? (install.whenIdle === true ? 'restarts when idle' : 'is ready') : 'is available'
 
   return {
-    headline: `teamree ${release.version} is ${ready ? 'ready' : 'available'}`,
+    headline: `teamree ${release.version} ${status}`,
     detail: ready ? null : `Running ${state.current} · disk image, install by hand`,
     notes: release.notes,
     action: release.downloadUrl === null ? 'Open Release Page' : `Download ${release.version}`,
@@ -60,7 +62,7 @@ export function installerStep(state: UpdateState | null): InstallerStep | null {
     const blocked = install.blocked ?? null
     return {
       kind: 'restart',
-      label: 'Restart to Update',
+      label: install.whenIdle === true ? 'Restart Now' : 'Restart to Update',
       problem: blocked?.problem ?? null,
       settings: blocked?.settings ?? false
     }

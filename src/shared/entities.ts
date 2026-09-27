@@ -1779,5 +1779,5 @@ export type UpdateBlock = { problem: string; settings: boolean }
 /** Replacing this copy in place: fetched and verified beside the profile, swapped in after a quit. */
 export type UpdateInstall =
   | { state: 'downloading'; version: string; received: number; total: number }
-  | { state: 'ready'; version: string; blocked?: UpdateBlock | null }
+  | { state: 'ready'; version: string; blocked?: UpdateBlock | null; whenIdle?: boolean }
   | { state: 'failed'; version: string; problem: string }
