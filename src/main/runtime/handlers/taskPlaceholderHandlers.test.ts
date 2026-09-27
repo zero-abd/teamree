@@ -49,13 +49,13 @@ describe('task, memory and add-on methods before their branches land', () => {
       templates: [],
       problems: []
     })
-    expect(await result('addons.status', {})).toEqual([{ id: 'jac-memory', state: 'off' }])
+    // Real now: off by default, and whether uv is here depends on the machine.
+    expect(await result('addons.status', {})).toEqual([expect.objectContaining({ id: 'jac-memory', state: 'off' })])
   })
 
   it('refuses every write as not implemented yet', async () => {
     const writes: [string, unknown][] = [
-      ['project.saveTemplate', { projectId: 'p', name: 'review', agents: {}, prompt: 'x' }],
-      ['addons.install', { id: 'jac-memory' }]
+      ['project.saveTemplate', { projectId: 'p', name: 'review', agents: {}, prompt: 'x' }]
     ]
     for (const [method, params] of writes) {
       const response = (await dispatch({ id: 'w', method, params }, call)) as ErrorResponse

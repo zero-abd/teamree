@@ -40,9 +40,11 @@ import { installerStep } from '../updates/updateNotice'
 import { PageFrame } from '../workspace/PageFrame'
 import { activeChoice, BUILT_IN_THEMES, themeById } from '@shared/theme'
 import { APPEARANCE_MODE_LABEL } from './AppearanceSettings'
+import { useAddonStatus } from './addonStatus'
 import { useRuntimeSettings, type RuntimeSettingsState } from './runtimeSettings'
 import { useUsageStore } from '../state/usageStore'
 import {
+  addonLine,
   agentRows,
   cliLine,
   describedOnly,
@@ -299,6 +301,7 @@ function useSectionRows(
     teamwork: [{ label: 'Share Task Details', words: [] }],
     appearance: [{ label: 'Theme', words: [themeValue, ...THEME_WORDS] }],
     shortcuts: shortcuts.map((row) => ({ label: row.label, words: [row.chord] })),
+    addons: [{ label: 'Jac Graph Memory', words: [] }],
     updates: [{ label: 'Check Automatically', words: [] }],
     cli: [{ label: 'teamree command', words: [] }]
   }
@@ -458,6 +461,8 @@ function SectionBody({
       return <AppearanceSection />
     case 'shortcuts':
       return <ShortcutsSection modifier={modifier} />
+    case 'addons':
+      return <AddonsSection />
     case 'updates':
       return <UpdatesSection />
     case 'cli':
@@ -589,6 +594,58 @@ function CliSection(): React.JSX.Element {
         {/* Beside the button that caused it: that is where the retry happens. */}
         {error ? <p className="settings-error">{error}</p> : null}
         {install && error === null ? <p className="settings-done">{cliOutcome(install)}</p> : null}
+      </div>
+    </section>
+  )
+}
+
+const UV_INSTALL_DOCUMENT = 'https://docs.astral.sh/uv/getting-started/installation/'
+
+/** Optional helpers that run outside the app; each is off until installed and turned on. */
+function AddonsSection(): React.JSX.Element {
+  const machine = useContext(MachineContext)
+  const { status, problem, install } = useAddonStatus()
+  const line = addonLine(status, machine.settings?.jacMemoryAddon ?? false)
+  const shown = useShown()
+  return (
+    <section className="settings-section" aria-labelledby="settings-addons">
+      <h2 className="settings-section__title" id="settings-addons" tabIndex={-1}>
+        <Marked text="Add-ons" />
+      </h2>
+      <div className="settings-group">
+        {shown.row('Jac Graph Memory') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-jac-memory">
+              <Marked text="Jac Graph Memory" />
+            </label>
+            <div className="settings-actions" data-testid="addon-jac-memory">
+              <span className="settings-aside">{line.state}</span>
+              {line.action === 'install' ? (
+                <button type="button" className="button button--small" onClick={install}>
+                  Install
+                </button>
+              ) : null}
+              {line.action === 'uv' ? (
+                <a className="button button--small" href={UV_INSTALL_DOCUMENT} target="_blank" rel="noreferrer">
+                  Get uv
+                </a>
+              ) : null}
+              {line.on === null ? null : (
+                <input
+                  id="settings-jac-memory"
+                  className="settings-field__check"
+                  type="checkbox"
+                  checked={line.on}
+                  disabled={machine.settings === null}
+                  onChange={(event) => machine.change({ jacMemoryAddon: event.target.checked })}
+                />
+              )}
+            </div>
+            {line.problem === null && problem === null ? null : (
+              <p className="settings-error">{line.problem ?? problem}</p>
+            )}
+          </div>
+        ) : null}
       </div>
     </section>
   )

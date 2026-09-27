@@ -2,6 +2,7 @@
 // stdio. How an out-of-process memory (the Jac add-on) plugs in behind `project.context`.
 
 import { z } from 'zod'
+import { GraphAnswerSchema, RelatedTaskSchema, type GraphAsk } from './graphMemory'
 import {
   MAX_NOTE_CHARS,
   MAX_NOTE_PATHS,
@@ -26,8 +27,12 @@ export const PROVIDER_FAILURES_BEFORE_OFF = 3
 /** Longest line read from a provider; a longer one is a failure, not a reply. */
 export const MAX_PROVIDER_LINE_CHARS = 262_144
 
+/** A project as a provider needs it: where its repository is and what it lands in. */
+export type MemoryProject = { id: string; name: string; path: string; baseRef: string }
+
 /** A change to project memory, mirrored to a provider as it happens. */
 export type MemoryEvent =
+  | { type: 'project'; project: MemoryProject }
   | { type: 'worktree'; worktree: MemoryWorktree }
   | { type: 'worktreeRemoved'; worktreeId: string }
   | { type: 'touch'; touch: MemoryTouch }
@@ -49,6 +54,8 @@ export type ProviderRequest =
       sections?: ContextSection[]
       query?: string
     }
+  /** A question for one of the provider's walkers, answered with an `answer` line. */
+  | { type: 'ask'; id: number; projectId: string; ask: GraphAsk }
 
 const Text = (max: number) => z.string().max(max)
 const Paths = z.array(z.string().min(1).max(4096)).max(200)
@@ -93,7 +100,9 @@ export const ProviderContextSchema = z.object({
   files: z
     .array(z.object({ path: z.string().min(1).max(4096), summary: Text(240), touchedBy: z.array(Text(256)).max(20) }))
     .max(200)
-    .optional()
+    .optional(),
+  /** Earlier tasks like this one; teamree adds them below its own sections, within the budget. */
+  related: z.array(RelatedTaskSchema).max(10).optional()
 })
 
 export type ProviderContext = z.infer<typeof ProviderContextSchema>
@@ -102,6 +111,7 @@ export type ProviderContext = z.infer<typeof ProviderContextSchema>
 export const ProviderReplySchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('hello'), protocol: z.number().int(), name: Text(128), version: Text(64) }),
   z.object({ type: z.literal('context'), id: z.number().int(), context: ProviderContextSchema }),
+  z.object({ type: z.literal('answer'), id: z.number().int(), answer: GraphAnswerSchema }),
   z.object({ type: z.literal('error'), id: z.number().int().optional(), message: Text(1024) })
 ])
 

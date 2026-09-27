@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "teamree-jac"
+version = "0.1.0"
+description = "teamree's Jac Graph Memory add-on: a team work graph (who changed what, what moves together, why) in Jac."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+authors = [{ name = "teamree contributors" }]
+keywords = ["teamree", "jac", "jaseci", "git", "agents"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Environment :: Console",
+]
+dependencies = ["jaclang==0.16.7"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.urls]
+Homepage = "https://github.com/zero-abd/teamree/tree/main/addons/jac-memory"
+Source = "https://github.com/zero-abd/teamree"
+
+[project.scripts]
+teamree-jac = "teamree_jac.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/teamree_jac"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/teamree_jac", "tests", "README.md", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# jaclang installs its import hook before pytest can rewrite it.
+filterwarnings = ["ignore::pytest.PytestAssertRewriteWarning"]

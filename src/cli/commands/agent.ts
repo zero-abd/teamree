@@ -127,7 +127,11 @@ async function sessionContext(context: CommandContext, worktreeId: string): Prom
     format: 'text'
   })
   if (bundle.text === '') return
-  const text = `teamree: live sibling worktrees overlap this one.\n${bundle.text}`
+  // The ledger's lines lead when anything overlaps; alone, the add-on's earlier work gets its own heading.
+  const heading = bundle.text.startsWith('earlier: ')
+    ? 'teamree: earlier work like this task.'
+    : 'teamree: live sibling worktrees overlap this one.'
+  const text = `${heading}\n${bundle.text}`
   context.streams.out(hookOutput('SessionStart', text))
 }
 

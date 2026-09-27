@@ -4,8 +4,9 @@
 import { randomUUID } from 'node:crypto'
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { PROVIDER_TIMEOUT_MS, type MemoryEvent } from '../../shared/contextProvider'
+import { PROVIDER_TIMEOUT_MS, type MemoryEvent, type MemoryProject } from '../../shared/contextProvider'
 import type { Project, Worktree } from '../../shared/entities'
+import type { ConflictRisk, FileWhy, GraphAnswer, GraphAsk, GraphTeammate, RiskRow } from '../../shared/graphMemory'
 import {
   MAX_CLAIM_GLOBS,
   type EditCheck,
@@ -20,6 +21,7 @@ import {
   type ContextSection,
   type MemoryConflict,
   type MemoryNote,
+  type MemoryWorktree,
   type NoteKind,
   type NoteScope,
   type ProjectContext
@@ -32,7 +34,8 @@ import { notFound } from '../runtime/runtimeError'
 import { buildBundle } from './bundle'
 import { editOverlaps, editWarning, repoRelative } from './editCheck'
 import { baseChanges, isAncestor, landingConflicts, mergeConflicts, readTouches, resolveCommit } from './gitReads'
-import { normalizeGlob } from '../../shared/globs'
+import { matchesGlob, normalizeGlob } from '../../shared/globs'
+import { commitWhy, riskText, whyText } from './graphText'
 import {
   LedgerStore,
   MAX_NOTES,
@@ -43,13 +46,19 @@ import {
   type LedgerWorktree
 } from './ledgerStore'
 import { byCodeUnit, hotPathTest, rankOverlaps, unrelated, type RankedOverlap } from './ranking'
-import { askSources, type ContextSource } from './source'
+import type { ProviderEventLine } from './providerProcess'
+import { askSources, type ContextProvider, type ContextSource } from './source'
 
 const MEMORY_DIR_NAME = 'memory'
 
 /** `project.context` re-reads git first when the last pass is older than this. */
 const FRESH_MS = 2_000
 const GIT_READS_AT_ONCE = 4
+
+/** The edit hook's whole call is cut at a second; the add-on gets part of it. */
+const HOOK_ASK_MS = 450
+/** Siblings on a co-changing file told before an edit, at most. */
+const LIKELY_TOLD = 2
 
 export type ContextLedgerOptions = {
   /** `<userData>`; files go under `memory/`. */
@@ -65,13 +74,16 @@ export type ContextLedgerOptions = {
   maxMergeTreesPerPass?: number
   /** Something an agent or the window reads changed. */
   onChange?: (projectId: string) => void
-  providers?: ContextSource[]
+  /** Out-of-process memory running now; asked with a timeout, never waited on past it. */
+  providers?: () => readonly ContextProvider[]
+  /** Runs on close, after the ledgers are written: the providers' processes end here. */
+  onClose?: () => Promise<void>
   /** Settings › Warn Agents About Overlaps; absent, on. */
   warnAgents?: () => boolean
 }
 
 /** A teammate's worktree as presence carries it: changed paths, never contents. */
-export type TeammatePaths = { handle: string; worktreeId: string; paths: readonly string[] }
+export type TeammatePaths = { handle: string; worktreeId: string; name?: string; paths: readonly string[] }
 
 export type LedgerStats = {
   passes: number
@@ -120,6 +132,9 @@ export class ContextLedger {
   readonly #stats: LedgerStats = { passes: 0, gitRuns: 0, mergeTrees: 0, snapshots: 0, lastPassMs: 0 }
   readonly #builtIn: ContextSource
   readonly #lastPassAt = new Map<string, number>()
+  /** What providers were last told of each worktree and project, so only changes are sent. */
+  readonly #mirrored = new Map<string, { meta: string; touched: string }>()
+  readonly #projectsMirrored = new Map<string, string>()
   #running: Promise<void> = Promise.resolve()
   #timer: NodeJS.Timeout | undefined
   /** What the scheduled pass re-reads: 'all' once anything asked without naming worktrees. */
@@ -189,6 +204,7 @@ export class ContextLedger {
     clearTimeout(this.#timer)
     await this.#running
     for (const store of this.#stores.values()) await (await store).flush()
+    await this.#options.onClose?.()
   }
 
   async inspect(projectId: string): Promise<LedgerDocument> {
@@ -204,7 +220,7 @@ export class ContextLedger {
     const { project } = this.#locate(params.worktreeId)
     if ((this.#lastPassAt.get(project.id) ?? 0) < this.#now() - FRESH_MS) await this.refresh(project.id)
     return askSources(
-      this.#options.providers ?? [],
+      this.#providers(),
       this.#builtIn,
       {
         projectId: project.id,
@@ -394,15 +410,14 @@ export class ContextLedger {
     const live = this.#live(store)
     if (viewer === undefined || !live.includes(viewer)) return nothing
     const byId = new Map(store.document.worktrees.map((row) => [row.id, row]))
-    const siblings = editOverlaps(
-      relative,
-      live.filter((other) => unrelated(viewer, other, byId)),
-      {
-        conflicts: (other) => this.#merges.get(this.#pairKey(viewer.id, other.id) ?? '') ?? [],
-        isHot: hotPathTest(live)
-      }
-    )
-    if (params.hook !== true) return { ...nothing, siblings, text: editWarning(relative, siblings) }
+    const others = live.filter((other) => unrelated(viewer, other, byId))
+    const siblings = editOverlaps(relative, others, {
+      conflicts: (other) => this.#merges.get(this.#pairKey(viewer.id, other.id) ?? '') ?? [],
+      isHot: hotPathTest(live)
+    })
+    const likely = await this.#likely(project.id, viewer.id, relative, others, siblings)
+    const extra = likely.length > 0 ? { likely } : {}
+    if (params.hook !== true) return { ...nothing, siblings, ...extra, text: editWarning(relative, siblings, likely) }
 
     if (!viewer.touched.includes(relative)) {
       viewer.touched = [...viewer.touched, relative].sort(byCodeUnit).slice(0, MAX_TOUCHED)
@@ -418,7 +433,179 @@ export class ContextLedger {
       })
       if (logged) fresh.push(sibling)
     }
-    return { ...nothing, siblings, text: editWarning(relative, fresh) }
+    const freshLikely: RiskRow[] = []
+    for (const row of likely) {
+      if (await this.warned(worktree.id, { path: row.path, with: row.worktreeId, via: 'graph' })) freshLikely.push(row)
+    }
+    return { ...nothing, siblings, ...extra, text: editWarning(relative, fresh, freshLikely) }
+  }
+
+  /** Siblings changing a file that usually changes with `path`, and not already told about: the add-on's, or none. */
+  async #likely(
+    projectId: string,
+    worktreeId: string,
+    path: string,
+    others: readonly LedgerWorktree[],
+    siblings: EditCheck['siblings']
+  ): Promise<RiskRow[]> {
+    const answer = await this.#askGraph(projectId, { walker: 'conflict_risk', worktreeId, paths: [path] }, HOOK_ASK_MS)
+    if (answer?.walker !== 'conflict_risk') return []
+    const live = new Set(others.map((other) => other.id))
+    const told = new Set(siblings.map((sibling) => sibling.worktreeId))
+    return answer.rows
+      .filter(
+        (row) => row.kind === 'co-change' && row.owner === 'me' && live.has(row.worktreeId) && !told.has(row.worktreeId)
+      )
+      .slice(0, LIKELY_TOLD)
+  }
+
+  /** Where a planned edit meets other work: the ledger's overlaps, and with the add-on, co-change and teammates. */
+  async risk(params: { worktreeId: string; paths?: string[]; teammates?: GraphTeammate[] }): Promise<ConflictRisk> {
+    const { project, worktree } = this.#locate(params.worktreeId)
+    const store = await this.#store(project.id)
+    const viewer = store.worktree(worktree.id)
+    const asked = params.paths ?? viewer?.touched ?? []
+    const paths = [...new Set(asked.flatMap((path) => repoRelative(worktree.path, path) ?? []))].slice(0, 50)
+    const live = this.#live(store)
+    const byId = new Map(store.document.worktrees.map((row) => [row.id, row]))
+    const others = viewer === undefined ? [] : live.filter((other) => unrelated(viewer, other, byId))
+    const rows: RiskRow[] = []
+    for (const path of paths) {
+      const found = editOverlaps(path, others, {
+        conflicts: (other) => this.#merges.get(this.#pairKey(worktree.id, other.id) ?? '') ?? [],
+        isHot: hotPathTest(live)
+      })
+      for (const sibling of found) {
+        const kind = sibling.kind === 'changed' ? 'touched' : sibling.kind
+        rows.push({ path, kind, worktreeId: sibling.worktreeId, name: sibling.name, owner: 'me' })
+      }
+    }
+    const teammates = params.teammates ?? []
+    const answer = await this.#askGraph(
+      project.id,
+      { walker: 'conflict_risk', worktreeId: worktree.id, paths, teammates },
+      PROVIDER_TIMEOUT_MS
+    )
+    let predicted: ConflictRisk['predicted'] = []
+    if (answer?.walker === 'conflict_risk') {
+      const siblings = new Set(others.map((other) => other.id))
+      const seen = new Set(rows.map((row) => `${row.owner}\0${row.worktreeId}\0${row.path}`))
+      for (const row of answer.rows) {
+        const key = `${row.owner}\0${row.worktreeId}\0${row.path}`
+        if (seen.has(key) || (row.owner === 'me' && !siblings.has(row.worktreeId))) continue
+        seen.add(key)
+        rows.push(row)
+      }
+      predicted = answer.predicted
+    } else {
+      for (const teammate of teammates) {
+        for (const path of paths.filter((path) => teammate.paths.includes(path))) {
+          rows.push({
+            path,
+            kind: 'touched',
+            worktreeId: teammate.worktreeId,
+            name: teammate.name ?? teammate.worktreeId,
+            owner: teammate.handle
+          })
+        }
+      }
+    }
+    const source = answer === undefined ? 'ledger' : 'jac-memory'
+    return { worktreeId: worktree.id, source, rows, predicted, text: riskText(rows, predicted) }
+  }
+
+  /** Why a file is as it is: the add-on's history of tasks and decisions, or the last commits and the ledger's notes. */
+  async why(params: { worktreeId: string; path: string }): Promise<FileWhy> {
+    const { project, worktree } = this.#locate(params.worktreeId)
+    const path = repoRelative(worktree.path, params.path) ?? params.path
+    const store = await this.#store(project.id)
+    const names = new Map(this.#options.snapshot().worktrees.map((row) => [row.id, row]))
+    const noted = store.document.notes
+      .filter((note) => note.kind === 'decision' && (note.paths ?? []).some((glob) => matchesGlob(path, glob)))
+      .map((note) => ({
+        text: note.text,
+        at: Math.floor(note.at / 1000),
+        worktree: names.get(note.worktreeId)?.name ?? '',
+        outcome: 'live'
+      }))
+    const answer = await this.#askGraph(project.id, { walker: 'why_file', path }, PROVIDER_TIMEOUT_MS)
+    if (answer?.walker === 'why_file') {
+      const decisions = [...answer.decisions]
+      for (const note of noted) if (!decisions.some((row) => row.text === note.text)) decisions.push(note)
+      const why = { ...answer, decisions, source: 'jac-memory' as const }
+      return { ...why, text: whyText(why) }
+    }
+    const read = await commitWhy(this.#runner, worktree.path, path)
+    const why = { path, source: 'ledger' as const, ...read, decisions: noted }
+    return { ...why, text: whyText(why) }
+  }
+
+  /** The first running provider that answers walkers, within `timeoutMs`; undefined when there is none or it failed. */
+  async #askGraph(projectId: string, ask: GraphAsk, timeoutMs: number): Promise<GraphAnswer | undefined> {
+    const provider = this.#providers().find((candidate) => candidate.ask !== undefined)
+    if (provider?.ask === undefined) return undefined
+    let timer: NodeJS.Timeout | undefined
+    try {
+      return await Promise.race([
+        provider.ask(projectId, ask, timeoutMs),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('timeout')), timeoutMs)
+        })
+      ])
+    } catch {
+      return undefined
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  #providers(): readonly ContextProvider[] {
+    return this.#options.providers?.() ?? []
+  }
+
+  /** Everything a provider started now should know: each project, its worktrees and what they touched, its decisions. */
+  async providerSnapshot(): Promise<ProviderEventLine[]> {
+    const lines: ProviderEventLine[] = []
+    for (const view of this.#views()) {
+      const store = await this.#store(view.project.id)
+      const projectId = view.project.id
+      lines.push({ projectId, event: { type: 'project', project: memoryProject(view.project) } })
+      for (const row of store.document.worktrees) {
+        lines.push({ projectId, event: { type: 'worktree', worktree: memoryWorktree(projectId, row) } })
+        lines.push({ projectId, event: touchEvent(row, this.#now()) })
+      }
+      for (const note of store.document.notes) lines.push({ projectId, event: { type: 'note', note } })
+    }
+    return lines
+  }
+
+  /** Tells providers what changed since they were last told: the project, and each worktree's record and touches. */
+  #mirror(store: LedgerStore, project?: Project): void {
+    const providers = this.#providers()
+    if (providers.length === 0) return
+    const events: MemoryEvent[] = []
+    if (project !== undefined) {
+      const said = `${project.path}\0${project.baseRef}`
+      if (this.#projectsMirrored.get(project.id) !== said) {
+        this.#projectsMirrored.set(project.id, said)
+        events.push({ type: 'project', project: memoryProject(project) })
+      }
+    }
+    for (const row of store.document.worktrees) {
+      const meta = JSON.stringify([row.name, row.branch, row.goal, row.state, row.parentId ?? '', row.claims])
+      const touched = row.touched.join('\0')
+      const last = this.#mirrored.get(row.id)
+      if (last?.meta !== meta) events.push({ type: 'worktree', worktree: memoryWorktree(store.projectId, row) })
+      if (last?.touched !== touched) events.push(touchEvent(row, this.#now()))
+      this.#mirrored.set(row.id, { meta, touched })
+    }
+    for (const provider of providers) for (const event of events) provider.observe?.(store.projectId, event)
+  }
+
+  #removed(store: LedgerStore, worktreeId: string): void {
+    this.#mirrored.delete(worktreeId)
+    for (const provider of this.#providers())
+      provider.observe?.(store.projectId, { type: 'worktreeRemoved', worktreeId })
   }
 
   async #bundle(
@@ -512,8 +699,8 @@ export class ContextLedger {
   #changed(store: LedgerStore, event?: MemoryEvent): void {
     store.document.revision += 1
     store.save()
-    if (event !== undefined)
-      for (const provider of this.#options.providers ?? []) provider.observe?.(store.projectId, event)
+    if (event !== undefined) for (const provider of this.#providers()) provider.observe?.(store.projectId, event)
+    this.#mirror(store)
     this.#options.onChange?.(store.projectId)
   }
 
@@ -561,6 +748,7 @@ export class ContextLedger {
       }
       document.worktrees = document.worktrees.filter((kept) => kept !== row)
       document.notes = document.notes.filter((note) => note.worktreeId !== row.id)
+      this.#removed(store, row.id)
       landedOrGone = true
     }
 
@@ -593,6 +781,7 @@ export class ContextLedger {
     this.#accumulateShared(store)
     const more = await this.#checkPairs(store, view.project.path)
     if (landedOrGone || JSON.stringify(document.worktrees) !== before) this.#changed(store)
+    this.#mirror(store, view.project)
     this.#stats.passes += 1
     this.#stats.lastPassMs = this.#now() - started
     // Pairs left over need no worktree re-read.
@@ -617,7 +806,7 @@ export class ContextLedger {
     row.shared = []
     row.warnings = []
     store.document.notes = store.document.notes.filter((note) => note.worktreeId !== row.id)
-    for (const provider of this.#options.providers ?? []) {
+    for (const provider of this.#providers()) {
       provider.observe?.(store.projectId, { type: 'landed', worktreeId: row.id, into })
     }
   }
@@ -777,6 +966,28 @@ export class ContextLedger {
     )
     return conflicts.filter((path) => paths.has(path))
   }
+}
+
+function memoryProject(project: Project): MemoryProject {
+  return { id: project.id, name: project.name, path: project.path, baseRef: project.baseRef }
+}
+
+function memoryWorktree(projectId: string, row: LedgerWorktree): MemoryWorktree {
+  return {
+    id: row.id,
+    projectId,
+    ...(row.parentId === undefined ? {} : { parentId: row.parentId }),
+    name: row.name,
+    branch: row.branch,
+    goal: row.goal,
+    state: row.state,
+    owner: row.owner,
+    claims: [...row.claims]
+  }
+}
+
+function touchEvent(row: LedgerWorktree, at: number): MemoryEvent {
+  return { type: 'touch', touch: { worktreeId: row.id, paths: [...row.touched], source: 'diff', at } }
 }
 
 async function forEachLimited<T>(items: readonly T[], limit: number, run: (item: T) => Promise<void>): Promise<void> {

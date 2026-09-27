@@ -1621,6 +1621,16 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'memory.unclaim': ({ worktreeId }) => ({ worktreeId, globs: [] }),
     'memory.list': ({ projectId }) => ({ projectId, revision: 0, worktrees: [], notes: [] }),
     'memory.check': ({ worktreeId, path }) => ({ worktreeId: worktreeId ?? '', path, siblings: [], text: '' }),
+    'memory.risk': ({ worktreeId }) => ({ worktreeId, source: 'ledger', rows: [], predicted: [], text: '' }),
+    'memory.why': ({ path }) => ({
+      path,
+      source: 'ledger',
+      changes: 0,
+      tasks: [],
+      decisions: [],
+      people: [],
+      text: ''
+    }),
     'worktree.overlaps': ({ projectId }) => ({ projectId, overlaps: [], readAt: Date.now() }),
     'worktree.usage': () => [],
     'teamwork.handOff': notInDemo('teamwork.handOff'),

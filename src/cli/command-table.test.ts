@@ -93,6 +93,8 @@ const EXPECTED = [
   'agent event',
   'agent check',
   'context',
+  'why',
+  'risk',
   'claim',
   'unclaim',
   'note',

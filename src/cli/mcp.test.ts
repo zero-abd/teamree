@@ -95,6 +95,8 @@ describe('teamree mcp', () => {
     expect(replies).toHaveLength(5)
 
     expect(stub.received.map(({ method, params }) => ({ method, params }))).toEqual([
+      // Asked at tools/list: the graph tools are offered only while the add-on runs.
+      { method: 'addons.status', params: {} },
       { method: 'project.context', params: { worktreeId: 'wt_1', format: 'text' } },
       { method: 'memory.check', params: { worktreeId: 'wt_1', path: 'src/free.ts' } },
       {
@@ -108,6 +110,43 @@ describe('teamree mcp', () => {
         }
       }
     ])
+  })
+
+  it('offers conflict_risk and why_file while Jac Graph Memory runs, answered through the runtime', async () => {
+    const running: StubHandler = (method, params, context) => {
+      if (method === 'addons.status') return [{ id: 'jac-memory', state: 'running', version: '0.1.0' }]
+      if (method === 'memory.risk') {
+        return { worktreeId: 'wt_1', source: 'jac-memory', rows: [], predicted: [], text: 'b also changes src/a.ts.' }
+      }
+      if (method === 'memory.why') return { path: (params as { path: string }).path, text: '' }
+      return runtime(method, params, context)
+    }
+    const { replies, stub } = await transcript(
+      [
+        { jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} },
+        call(2, 'conflict_risk', { paths: ['src/a.ts'] }),
+        call(3, 'why_file', { path: 'src/a.ts' }),
+        call(4, 'why_file', {})
+      ],
+      running
+    )
+    const list = replies[0] as { result: { tools: Array<{ name: string }> } }
+    expect(list.result.tools.map((tool) => tool.name)).toEqual(['siblings', 'note', 'conflict_risk', 'why_file'])
+    expect(replies[1]).toMatchObject({ result: { content: [{ type: 'text', text: 'b also changes src/a.ts.' }] } })
+    expect(replies[2]).toMatchObject({ result: { content: [{ type: 'text', text: 'No history.' }] } })
+    expect(replies[3]).toMatchObject({ id: 4, result: { isError: true } })
+    expect(stub.received.map(({ method }) => method)).toEqual(['addons.status', 'memory.risk', 'memory.why'])
+    expect(stub.received[1]?.params).toEqual({ worktreeId: 'wt_1', paths: ['src/a.ts'] })
+  })
+
+  it('leaves the graph tools out while the add-on is off', async () => {
+    const off: StubHandler = (method, params, context) =>
+      method === 'addons.status'
+        ? [{ id: 'jac-memory', state: 'failed', detail: 'timeout' }]
+        : runtime(method, params, context)
+    const { replies } = await transcript([{ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }], off)
+    const list = replies[0] as { result: { tools: Array<{ name: string }> } }
+    expect(list.result.tools.map((tool) => tool.name)).toEqual(['siblings', 'note'])
   })
 
   it('offers its own protocol version when the client asks for one it does not know', async () => {
