@@ -460,7 +460,14 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     },
     stopAgents: async (worktreeId) => {
       const agents = terminals.manager.list(worktreeId).filter((pane) => pane.running && pane.agent !== undefined)
-      await Promise.all(agents.map((pane) => terminals.manager.interrupt(pane.id)))
+      // Ctrl-C twice, as a person quits Claude Code or Codex; `interrupt` sends the second and ends one that ignores both.
+      await Promise.all(
+        agents.map(async (pane) => {
+          terminals.manager.write(pane.id, '\x03', false)
+          await new Promise((resolve) => setTimeout(resolve, 200))
+          await terminals.manager.interrupt(pane.id)
+        })
+      )
       if (agents.length > 0) workspaceEvents.emit({ type: 'terminals' })
       return agents.length
     },

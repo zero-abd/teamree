@@ -155,7 +155,7 @@ describe('Hand Off', () => {
         settleHandoff: () => {}
       },
       worktree: (id) => (id === worktree.id ? worktree : undefined),
-      project: () => undefined,
+      project: () => ({ id: 'p', name: 'p', path: repo.repoPath, baseRef: 'origin/main' }),
       push: async (worktreeId) => {
         steps.push('push')
         pushed.push(worktreeId)
@@ -239,7 +239,7 @@ describe('Hand Off', () => {
     expect(brief).toContain('Files changed (2):\n- auth.ts\n- index.md')
     expect(brief).toContain('Report (succeeded): Sessions moved to redis.')
     expect(brief).toContain('Open questions:\n- Keep the old cookie?')
-    expect(brief).toContain('Commits since main:\n- Split the session store')
+    expect(brief).toContain('Commits since origin/main:\n- Split the session store')
   })
 
   it('leaves uncommitted work here when asked to, and pushes the commits alone', async () => {

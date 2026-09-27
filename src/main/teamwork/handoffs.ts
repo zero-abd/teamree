@@ -333,7 +333,8 @@ async function briefFor(ports: HandoffPorts, worktree: Worktree): Promise<string
   )
   return handoffBrief({
     task: worktree.task,
-    base: worktree.startedFrom,
+    // Named as the user knows it; a worktree records the sha it started from.
+    base: worktree.baseRef ?? ports.project(worktree.projectId)?.baseRef ?? worktree.startedFrom,
     commits,
     files,
     ...(worktree.report === undefined ? {} : { report: worktree.report }),

@@ -161,7 +161,7 @@ describe.skipIf(!RELAY_BUILT)('handing a worktree to a teammate', () => {
     const flat = printed.replace(/\r?\n/g, '')
     expect(flat).toContain('ana handed this task over.')
     expect(flat).toContain(NOTE)
-    expect(flat).toContain(`Commits since ${worktree.startedFrom}:- ${WIP}`)
+    expect(flat).toMatch(new RegExp(`Commits since [^:]+:- ${WIP}`))
 
     const [outgoing] = await until(async () => {
       const read = (await peers.leader.call('teamwork.handoffs', {
