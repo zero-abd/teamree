@@ -54,6 +54,7 @@ import type {
   WorktreeHunkStage,
   WorktreeKeep,
   WorktreeLanding,
+  WorktreeLock,
   WorktreeLog,
   WorktreeMerge,
   WorktreeMergePreview,
@@ -381,6 +382,10 @@ export const Params = {
     /** Then push the base to origin; a child landing in its parent ignores it. */
     push: z.boolean().optional()
   }),
+  /** An `index.lock` of the worktree's repository, as a `locked` error named it. */
+  worktreeLock: z.object({ worktreeId: z.string().min(1), lockPath: z.string().min(1).max(4096) }),
+  /** Removes that lock; refused while a git process runs in its checkout or while it is fresh. */
+  worktreeClearLock: z.object({ worktreeId: z.string().min(1), lockPath: z.string().min(1).max(4096) }),
   /** Removes the task's other runs, keeping their branches; refused over their unsaved work without `force`. */
   worktreeKeep: z.object({ worktreeId: z.string().min(1), force: z.boolean().optional() }),
 
@@ -1002,6 +1007,8 @@ export type MethodContract = TaskMethodContract &
     }
     'worktree.mergeIntoBase': { params: z.infer<typeof Params.worktreeMergeIntoBase>; result: WorktreeMerge }
     'worktree.keep': { params: z.infer<typeof Params.worktreeKeep>; result: WorktreeKeep }
+    'worktree.lock': { params: z.infer<typeof Params.worktreeLock>; result: WorktreeLock }
+    'worktree.clearLock': { params: z.infer<typeof Params.worktreeClearLock>; result: WorktreeLock }
 
     'worktree.rename': { params: z.infer<typeof Params.worktreeRename>; result: Worktree }
 

@@ -932,6 +932,14 @@ export function createSeededRuntimeClient(): RuntimeClient {
       const checkout = parent?.path ?? '/demo'
       return { worktreeId, into, checkout, commits: [], fastForward: true, dirty: [], merged: false }
     },
+    'worktree.lock': ({ lockPath }) => ({ lockPath, exists: false, ageMs: 0, gitRunning: false, clearable: false }),
+    'worktree.clearLock': ({ lockPath }) => ({
+      lockPath,
+      exists: false,
+      ageMs: 0,
+      gitRunning: false,
+      clearable: false
+    }),
     'worktree.keep': ({ worktreeId }) => {
       const kept = required(worktrees.get(worktreeId), 'worktree')
       const removed = siblingRuns(kept, [...worktrees.values()]).map((sibling) => sibling.id)

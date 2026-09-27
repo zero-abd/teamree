@@ -3,7 +3,9 @@
 // input. Everything else exists so a hung or chatty git can never wedge the runtime.
 
 import { spawn } from 'node:child_process'
-import { GitCommandError } from './errors'
+import { access } from 'node:fs/promises'
+import path from 'node:path'
+import { GitCommandError, lockedIndex } from './errors'
 
 export type GitRun = {
   args: readonly string[]
@@ -45,13 +47,29 @@ const MAX_OUTPUT_BYTES = 32 * 1024 * 1024
 export type GitRunner = {
   /** Rejects with GitCommandError unless git exits 0. */
   run(run: GitRun): Promise<GitOutput>
-  /** Resolves with the exit code even when non-zero; still rejects on timeout/abort. */
+  /** Resolves with the exit code even when non-zero; still rejects on timeout, abort or a held index lock. */
   tryRun(run: GitRun): Promise<GitOutput>
   readonly binary: string
 }
 
 export function createGitRunner(binary = process.env.TEAMREE_GIT_BINARY || 'git'): GitRunner {
-  const tryRun = (run: GitRun): Promise<GitOutput> => spawnGit(binary, run)
+  const tryRun = async (run: GitRun): Promise<GitOutput> => {
+    const output = await spawnGit(binary, run)
+    if (output.exitCode === 0) return output
+    // git stops before writing anything when the lock is taken, so no caller has a failure of its own to read here.
+    // A merge that is not a fast-forward says only "Unable to write index", so the lock is looked for.
+    const lockPath =
+      lockedIndex(output.stderr) ??
+      (/Unable to write index/.test(output.stderr) ? await heldIndexLock(binary, run.cwd) : null)
+    if (lockPath === null) return output
+    throw new GitCommandError({
+      args: run.args,
+      cwd: run.cwd,
+      exitCode: output.exitCode,
+      stderr: output.stderr,
+      lockPath
+    })
+  }
   return {
     binary,
     tryRun,
@@ -69,6 +87,19 @@ export function createGitRunner(binary = process.env.TEAMREE_GIT_BINARY || 'git'
       return output
     }
   }
+}
+
+/** The checkout's `index.lock` when one is there, else null. */
+async function heldIndexLock(binary: string, cwd: string): Promise<string | null> {
+  const found = await spawnGit(binary, { args: ['rev-parse', '--git-path', 'index.lock'], cwd, readOnly: true })
+  const lockPath = path.resolve(cwd, found.stdout.trim())
+  return found.exitCode === 0 &&
+    (await access(lockPath).then(
+      () => true,
+      () => false
+    ))
+    ? lockPath
+    : null
 }
 
 /**

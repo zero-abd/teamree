@@ -22,6 +22,7 @@ import type {
   PaneWatchers,
   Project,
   ProjectBase,
+  GitLockedData,
   PushFailureData,
   RelaySetting,
   RemovedWorktree,
@@ -230,6 +231,8 @@ export type DialogState =
   | { kind: 'confirm-discard'; worktreeId: string; path: string; hunk?: PatchHunk }
   /** Merging a worktree's branch into the base branch in the project's own checkout. */
   | { kind: 'confirm-merge'; worktreeId: string }
+  /** Deleting a stale `index.lock`, then retrying the write it refused. */
+  | { kind: 'clear-lock'; worktreeId: string; lockPath: string }
   /** Committing, pushing and opening a pull request in one step. */
   | { kind: 'create-pr'; worktreeId: string }
   /** Pushing the project checkout's base to origin; `failure` is the push that just did not land. */
@@ -298,6 +301,8 @@ export type Notice = {
   action?: { label: string; url: string } | { label: string; hide: keyof Sides } | { label: string; undo: UndoTarget }
   /** What the notice is about; a newer notice with the same key replaces it, and success clears it. */
   key?: string
+  /** A git write refused by a held `index.lock`: Retry, and Clear Lock when `clearable`. */
+  lock?: { worktreeId: string; lockPath: string; clearable: boolean }
 }
 
 /** What an Undo puts back: removed worktrees (`removedIds` parents first), one discard's paths, or a deleted shared note. */
@@ -974,6 +979,12 @@ type WorkspaceState = {
   openDialog: (dialog: NonNullable<DialogState>) => void
   closeDialog: () => void
   dismissNotice: (id: number) => void
+  /** Runs again the git write a held lock refused in this worktree. */
+  retryLocked: (worktreeId: string) => Promise<void>
+  /** Asks before Clear Lock deletes the lock. */
+  askClearLock: (worktreeId: string, lockPath: string) => void
+  /** Deletes a stale lock (the runtime refuses while git runs there or it is fresh), then retries. */
+  clearLock: (worktreeId: string, lockPath: string) => Promise<void>
 }
 
 let noticeSeq = 0
@@ -982,6 +993,13 @@ let goToSeq = 0
 /** The notice a failed teamwork push leaves, cleared by the next one that lands. */
 const pushNoticeKey = (projectId: string): string => `teamwork-push:${projectId}`
 const pullNoticeKey = (projectId: string): string => `teamwork-pull:${projectId}`
+
+/** How long a git write refused by a held lock waits before its one quiet retry. */
+export const LOCK_RETRY_MS = 1_000
+const LOCKED = 'Another git process holds the lock'
+const lockNoticeKey = (worktreeId: string): string => `git-lock:${worktreeId}`
+/** The write each worktree's lock notice retries. */
+const lockRetries = new Map<string, () => Promise<unknown>>()
 
 /** The status-bar notice for a pane refused for want of room. */
 const NO_ROOM = 'No room for another pane'
@@ -1006,13 +1024,20 @@ const lastDrafts = [...keptDrafts()]
 const lastPanel = readStoredRightPanel(storage)
 
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
-  const notify = (text: string, tone: Notice['tone'] = 'error', action?: Notice['action'], key?: string): void => {
+  const notify = (
+    text: string,
+    tone: Notice['tone'] = 'error',
+    action?: Notice['action'],
+    key?: string,
+    lock?: Notice['lock']
+  ): void => {
     const notice: Notice = {
       id: ++noticeSeq,
       text,
       tone,
       ...(action === undefined ? {} : { action }),
-      ...(key === undefined ? {} : { key })
+      ...(key === undefined ? {} : { key }),
+      ...(lock === undefined ? {} : { lock })
     }
     const kept = (state: WorkspaceState): Notice[] =>
       key === undefined ? state.notices : state.notices.filter((entry) => entry.key !== key)
@@ -1030,6 +1055,65 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
   const failed = (what: string) => (error: unknown) => {
     notify(`${what}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+
+  /** A git write, tried once more a second later when another process holds the index lock; landing clears its notice. */
+  const pastLock = async <T>(worktreeId: string, write: () => Promise<T>): Promise<T> => {
+    let written: T
+    try {
+      written = await write()
+    } catch (error) {
+      if (lockedPath(error) === null) throw error
+      await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS))
+      written = await write()
+    }
+    clearNotices(lockNoticeKey(worktreeId))
+    return written
+  }
+
+  /** Says a write met a held lock, offering `retry` and, when the runtime allows, Clear Lock. False for any other error. */
+  const heldLock = async (worktreeId: string, error: unknown, retry: () => Promise<unknown>): Promise<boolean> => {
+    const lockPath = lockedPath(error)
+    if (lockPath === null) return false
+    lockRetries.set(worktreeId, retry)
+    const lock = await runtimeClient.call('worktree.lock', { worktreeId, lockPath }).catch(() => null)
+    notify(LOCKED, 'error', undefined, lockNoticeKey(worktreeId), {
+      worktreeId,
+      lockPath,
+      clearable: lock?.clearable === true
+    })
+    return true
+  }
+
+  /** Commits `paths`, or everything with `all`, or what is staged; true when it landed. */
+  async function commit(
+    worktreeId: string,
+    message: string,
+    paths: string[] | undefined,
+    all: boolean
+  ): Promise<boolean> {
+    set({ committing: true })
+    try {
+      const result = await pastLock(worktreeId, () =>
+        runtimeClient.call('worktree.commit', { worktreeId, message, ...(paths && { paths }), ...(all && { all }) })
+      )
+      // The commit can capture more than was ticked (anything staged earlier in a terminal); saying
+      // so is the difference between a notice and a surprise. Otherwise the Changes tab shows it.
+      const extra = paths ? alsoCommitted(result.paths, paths) : 0
+      if (extra > 0) notify(`Also committed ${extra} staged file${extra === 1 ? '' : 's'}`, 'info')
+      else if (!changesOnScreen(get())) notify(`Committed ${result.shortSha}: ${result.message}`, 'info')
+      // Nothing is left ticked; the list refetches on the invalidation the runtime publishes, and
+      // doing it here too would be a second way for this window to disagree with the others.
+      set({ stagedPaths: [], selectedChangePath: null })
+      return true
+    } catch (error) {
+      if (!(await heldLock(worktreeId, error, () => commit(worktreeId, message, paths, all)))) {
+        failed('Could not commit')(error)
+      }
+      return false
+    } finally {
+      set({ committing: false })
+    }
   }
 
   // One OS sheet at a time: a second press while it is up would queue another.
@@ -3157,30 +3241,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // 'all' names none either: the list stops at its cap, and git's own -A does not.
       const paths = scope === 'ticked' ? ticked : undefined
       if (scope === 'all' && rows.length === 0) return false
-
-      set({ committing: true })
-      try {
-        const result = await runtimeClient.call('worktree.commit', {
-          worktreeId,
-          message,
-          ...(paths && { paths }),
-          ...(scope === 'all' && { all: true })
-        })
-        // The commit can capture more than was ticked (anything staged earlier in a terminal); saying
-        // so is the difference between a notice and a surprise. Otherwise the Changes tab shows it.
-        const extra = paths ? alsoCommitted(result.paths, paths) : 0
-        if (extra > 0) notify(`Also committed ${extra} staged file${extra === 1 ? '' : 's'}`, 'info')
-        else if (!changesOnScreen(get())) notify(`Committed ${result.shortSha}: ${result.message}`, 'info')
-        // Nothing is left ticked; the list refetches on the invalidation the runtime publishes, and
-        // doing it here too would be a second way for this window to disagree with the others.
-        set({ stagedPaths: [], selectedChangePath: null })
-        return true
-      } catch (error) {
-        failed('Could not commit')(error)
-        return false
-      } finally {
-        set({ committing: false })
-      }
+      return commit(worktreeId, message, paths, scope === 'all')
     },
 
     async applyHunk(worktreeId, path, hunk, staged) {
@@ -3189,15 +3250,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set({ hunkPending: true })
       try {
         // The parsed hunk goes over the wire as it stands: the contract's shape is a subset of it.
-        await runtimeClient.call(staged ? 'worktree.stageHunk' : 'worktree.unstageHunk', {
-          worktreeId,
-          path,
-          hunk
-        })
+        await pastLock(worktreeId, () =>
+          runtimeClient.call(staged ? 'worktree.stageHunk' : 'worktree.unstageHunk', { worktreeId, path, hunk })
+        )
         // Nothing is set here: both halves come back through the same invalidation the other windows
         // ride, so this one must not get ahead of them.
       } catch (error) {
-        failed(staged ? 'Could not stage that hunk' : 'Could not unstage that hunk')(error)
+        if (!(await heldLock(worktreeId, error, () => get().applyHunk(worktreeId, path, hunk, staged)))) {
+          failed(staged ? 'Could not stage that hunk' : 'Could not unstage that hunk')(error)
+        }
       } finally {
         set({ hunkPending: false })
       }
@@ -3207,9 +3268,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (get().hunkPending) return
       set((state) => ({ hunkPending: true, stagedPaths: state.stagedPaths.filter((entry) => entry !== path) }))
       try {
-        await runtimeClient.call('worktree.unstagePath', { worktreeId, path })
+        await pastLock(worktreeId, () => runtimeClient.call('worktree.unstagePath', { worktreeId, path }))
       } catch (error) {
-        failed(`Could not unstage ${path}`)(error)
+        if (!(await heldLock(worktreeId, error, () => get().unstagePath(worktreeId, path)))) {
+          failed(`Could not unstage ${path}`)(error)
+        }
       } finally {
         set({ hunkPending: false })
       }
@@ -3219,16 +3282,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       if (get().hunkPending) return
       set({ hunkPending: true })
       try {
-        const discarded =
+        const discarded = await pastLock(worktreeId, () =>
           hunk === undefined
-            ? await runtimeClient.call('worktree.discardPath', { worktreeId, path })
-            : await runtimeClient.call('worktree.discardHunk', { worktreeId, path, hunk })
+            ? runtimeClient.call('worktree.discardPath', { worktreeId, path })
+            : runtimeClient.call('worktree.discardHunk', { worktreeId, path, hunk })
+        )
         if (discarded.trashId !== undefined) {
           const undo: UndoTarget = { kind: 'discard', worktreeId, trashId: discarded.trashId }
           notify(hunk === undefined ? `Discarded ${path}` : 'Discarded hunk', 'info', { label: 'Undo', undo })
         }
       } catch (error) {
-        failed(hunk === undefined ? `Could not discard ${path}` : 'Could not discard that hunk')(error)
+        if (!(await heldLock(worktreeId, error, () => get().discardChange(worktreeId, path, hunk)))) {
+          failed(hunk === undefined ? `Could not discard ${path}` : 'Could not discard that hunk')(error)
+        }
       } finally {
         set({ hunkPending: false })
       }
@@ -3768,8 +3834,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         return { updating: worktreeId, updateErrors }
       })
       try {
-        return await runtimeClient.call('worktree.update', landing === true ? { worktreeId, landing } : { worktreeId })
+        return await pastLock(worktreeId, () =>
+          runtimeClient.call('worktree.update', landing === true ? { worktreeId, landing } : { worktreeId })
+        )
       } catch (error) {
+        if (await heldLock(worktreeId, error, () => get().updateWorktree(worktreeId, landing))) return null
         const line = error instanceof Error ? error.message : String(error)
         set((state) => ({ updateErrors: { ...state.updateErrors, [worktreeId]: line } }))
         return null
@@ -3898,11 +3967,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     async mergeIntoBase(worktreeId, push) {
       let merged: WorktreeMerge
       try {
-        merged = await runtimeClient.call(
-          'worktree.mergeIntoBase',
-          push === undefined ? { worktreeId } : { worktreeId, push }
+        merged = await pastLock(worktreeId, () =>
+          runtimeClient.call('worktree.mergeIntoBase', push === undefined ? { worktreeId } : { worktreeId, push })
         )
       } catch (error) {
+        if (await heldLock(worktreeId, error, () => get().mergeIntoBase(worktreeId, push))) return LOCKED
         return error instanceof Error ? error.message : String(error)
       }
       const projectId = get().worktrees.find((worktree) => worktree.id === worktreeId)?.projectId
@@ -4405,6 +4474,26 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     dismissNotice(id) {
       set((state) => ({ notices: state.notices.filter((notice) => notice.id !== id) }))
+    },
+
+    async retryLocked(worktreeId) {
+      clearNotices(lockNoticeKey(worktreeId))
+      await lockRetries.get(worktreeId)?.()
+    },
+
+    askClearLock(worktreeId, lockPath) {
+      set({ dialog: { kind: 'clear-lock', worktreeId, lockPath } })
+    },
+
+    async clearLock(worktreeId, lockPath) {
+      if (get().dialog?.kind === 'clear-lock') set({ dialog: null })
+      try {
+        await runtimeClient.call('worktree.clearLock', { worktreeId, lockPath })
+      } catch (error) {
+        failed('Could not clear the lock')(error)
+        return
+      }
+      await get().retryLocked(worktreeId)
     }
   }
 })
@@ -4426,6 +4515,12 @@ useWorkspaceStore.subscribe((state, previous) => {
   if (state.paneSeenAt === previous.paneSeenAt) return
   writePaneSeen(storage, state.paneSeenAt)
 })
+
+/** The `index.lock` another process holds, when that is why a git write failed. */
+function lockedPath(error: unknown): string | null {
+  const data = (error as { data?: Partial<GitLockedData> } | null)?.data
+  return data?.kind === 'locked' && typeof data.lockPath === 'string' ? data.lockPath : null
+}
 
 /**
  * Whether the runtime refused rather than failed: a refusal is the only answer this window may turn

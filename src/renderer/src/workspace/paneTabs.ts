@@ -8,7 +8,6 @@ import {
   dotTone,
   paneAgent,
   paneNamesById,
-  paneText,
   TONE_LABEL,
   type AgentActivity,
   type PaneNameSource
@@ -19,7 +18,7 @@ export type PaneTab = {
   terminalId: string
   agent: AgentKind | undefined
   label: string
-  /** What the tab draws beside the glyph; see `paneText`. */
+  /** What the tab draws beside the glyph: the label, or `Files` for a column of several. */
   text: string
   /** Null until the terminal's record has arrived; the leaf is on the board either way. */
   activity: AgentActivity | null
@@ -69,7 +68,7 @@ export function paneTabs(
     const pane = record ?? UNARRIVED
     const label = names[node.terminalId] ?? 'terminal'
     const activity = record ? activityOf(record) : null
-    return { terminalId: node.terminalId, agent: paneAgent(pane), label, text: paneText(pane, label), activity }
+    return { terminalId: node.terminalId, agent: paneAgent(pane), label, text: label, activity }
   })
 }
 

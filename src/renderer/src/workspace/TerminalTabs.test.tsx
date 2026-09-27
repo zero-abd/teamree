@@ -540,6 +540,8 @@ describe('naming a pane', () => {
   it('tells two panes of the same agent apart, and calls the named one what it was named', () => {
     threeAgents()
     expect(tabNames()).toEqual(['Claude Code', 'Claude Code 2', 'auth refactor'])
+    const drawn = screen.getAllByRole('tab').map((tab) => tab.querySelector('.tab__name')?.textContent)
+    expect(drawn).toEqual(['Claude Code', 'Claude Code 2', 'auth refactor'])
   })
 
   // A button as well as double-click, so a name can be set without a mouse.

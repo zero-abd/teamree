@@ -188,12 +188,13 @@
   cursor: default;
 }
 
-/* A tab is as wide as its name up to 320px, gives way to 96px as the strip fills, then the list scrolls. */
+/* A tab is as wide as its name up to 320px, gives way to six characters of it as the strip fills (83px is
+   the dot, glyph, gaps and two buttons), then the list scrolls. The full name is the tab's tooltip. */
 .tab {
   display: flex;
   flex: 0 1 auto;
   align-items: center;
-  min-width: 96px;
+  min-width: calc(83px + 6ch);
   max-width: 320px;
   padding-right: var(--s1);
   box-shadow: inset 0 -2px 0 transparent;

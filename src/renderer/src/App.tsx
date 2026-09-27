@@ -29,6 +29,7 @@ import { CreatePullRequestDialog } from './dialogs/CreatePullRequestDialog'
 import { PushBaseDialog } from './dialogs/PushBaseDialog'
 import { ConfirmCleanUpDialog } from './dialogs/ConfirmCleanUpDialog'
 import { ConfirmKeepDialog } from './dialogs/ConfirmKeepDialog'
+import { ClearLockDialog } from './dialogs/ClearLockDialog'
 import { ConfirmRebaseDialog } from './dialogs/ConfirmRebaseDialog'
 import { MoveUnderDialog } from './dialogs/MoveUnderDialog'
 import { HandOffDialog } from './dialogs/HandOffDialog'
@@ -168,6 +169,7 @@ export function App(): React.JSX.Element {
                   {notice.action.label}
                 </button>
               )}
+              {notice.lock === undefined ? null : <LockActions lock={notice.lock} />}
               <button
                 type="button"
                 className="notice__close"
@@ -214,6 +216,9 @@ export function App(): React.JSX.Element {
       {dialog?.kind === 'confirm-close-pane' ? <ConfirmClosePaneDialog terminalId={dialog.terminalId} /> : null}
       {dialog?.kind === 'confirm-close-file' ? <ConfirmCloseFileDialog terminalId={dialog.terminalId} /> : null}
       {dialog?.kind === 'confirm-unsaved' ? <ConfirmUnsavedDialog paneIds={dialog.paneIds} /> : null}
+      {dialog?.kind === 'clear-lock' ? (
+        <ClearLockDialog worktreeId={dialog.worktreeId} lockPath={dialog.lockPath} />
+      ) : null}
       {dialog?.kind === 'confirm-discard' ? (
         <ConfirmDiscardDialog
           worktreeId={dialog.worktreeId}
@@ -259,5 +264,28 @@ export function App(): React.JSX.Element {
       {/* A folder dropped anywhere on the window becomes a project. */}
       <FolderDrop />
     </div>
+  )
+}
+
+/** A held lock's notice: Retry, and Clear Lock once the runtime found it stale with no git running. */
+function LockActions({ lock }: { lock: NonNullable<Notice['lock']> }): React.JSX.Element {
+  const retryLocked = useWorkspaceStore((state) => state.retryLocked)
+  const askClearLock = useWorkspaceStore((state) => state.askClearLock)
+  return (
+    <>
+      <button type="button" className="notice__action" onClick={() => void retryLocked(lock.worktreeId)}>
+        Retry
+      </button>
+      {lock.clearable ? (
+        <button
+          type="button"
+          className="notice__action"
+          title={lock.lockPath}
+          onClick={() => askClearLock(lock.worktreeId, lock.lockPath)}
+        >
+          Clear Lock…
+        </button>
+      ) : null}
+    </>
   )
 }

@@ -128,7 +128,8 @@ describe('splitPane', () => {
     if (root.kind === 'split') {
       expect(root.children).toHaveLength(3)
       expect(sum(root.sizes)).toBeCloseTo(1)
-      expect(root.sizes[0]).toBeCloseTo(0.25)
+      // Evened out, as the runtime does, rather than 'a' giving away half of its half.
+      for (const size of root.sizes) expect(size).toBeCloseTo(1 / 3)
     }
   })
 

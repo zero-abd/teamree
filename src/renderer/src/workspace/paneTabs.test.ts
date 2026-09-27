@@ -123,7 +123,7 @@ describe('paneTabs', () => {
   })
 
   // The glyph names the agent, so the text beside it carries only what the glyph cannot.
-  it('draws an agent by its glyph, keeping a task name and a twin’s whole name as text', () => {
+  it('draws an agent by its glyph and its name, a bare one included', () => {
     const tabs = paneTabs(
       row('one', 'two', 'named', 'shell'),
       byId(
@@ -135,10 +135,10 @@ describe('paneTabs', () => {
     )
 
     expect(tabs.map((tab) => [tab.agent, tab.text])).toEqual([
-      ['codex', ''],
+      ['codex', 'Codex'],
       ['codex', 'Codex 2'],
       ['claude', 'auth refactor'],
-      ['grok', '']
+      ['grok', 'Grok']
     ])
   })
 
@@ -181,8 +181,9 @@ describe('paneTabs', () => {
 
     const second = terminal({ id: 'second', agent: 'claude', ordinal: 2 })
     const both = paneTabs(row('again', 'second'), byId(again, second), task)
+    // A tab always draws its name, the agent's bare name included: a glyph alone was a lost label.
     expect(both.map((tab) => [tab.label, tab.text])).toEqual([
-      ['Claude Code', ''],
+      ['Claude Code', 'Claude Code'],
       ['Claude Code 2', 'Claude Code 2']
     ])
   })
