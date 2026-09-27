@@ -1,5 +1,5 @@
-// Which setup offer, if any, sits across the top of a worktree: the project's suggested
-// command until it is used or put off, then Run for a checkout that lacks its dependencies.
+// Which setup offer, if any, the rail shows for a worktree: the project's suggested command until it
+// is used or put off, then Run for a checkout that lacks what a used or configured command installs.
 
 import type { Project, Worktree, WorktreeSetupCheck } from '@shared/entities'
 
@@ -17,8 +17,8 @@ export function setupOfferFor(input: {
   const { project, worktree, check } = input
   if (worktree.setupAsk !== undefined) return null
   const command = project.setupCommand ?? project.repository?.setupCommand
-  if (command === undefined && project.suggestedSetup !== undefined && !input.dismissed) {
-    return { kind: 'project', command: project.suggestedSetup }
+  if (command === undefined && project.suggestedSetup !== undefined) {
+    return input.dismissed ? null : { kind: 'project', command: project.suggestedSetup }
   }
   const run = command ?? check.command
   if (check.missing === undefined || run === undefined || input.skipped) return null

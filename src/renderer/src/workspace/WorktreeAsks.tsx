@@ -1,5 +1,5 @@
-// The open worktree's setup questions, as cards in the corner stack: a row over the panes refit them
-// each time one came or went.
+// The open worktree's setup questions, in the status rail: a row over the panes refit them, and a
+// floating card covered the prompt line.
 
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { SetupAsk } from './SetupAsk'

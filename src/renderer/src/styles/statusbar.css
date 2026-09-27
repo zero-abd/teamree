@@ -62,6 +62,43 @@
   white-space: nowrap;
 }
 
+/* The open worktree's setup question: a segment of the rail, so it covers no pane and sits under any scrim. */
+.setup-ask {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.setup-ask__label {
+  flex: none;
+  color: var(--fg-muted);
+}
+
+.setup-ask__command {
+  min-width: 0;
+  max-width: 40ch;
+  overflow: hidden;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setup-ask__field {
+  width: 32ch;
+  padding: 0 var(--s1);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  font-size: inherit;
+}
+
+.setup-ask .button {
+  flex: none;
+}
+
 .statusbar__spacer {
   flex: 1;
 }

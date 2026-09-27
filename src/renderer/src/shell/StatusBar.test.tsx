@@ -274,6 +274,23 @@ describe('the rail as a whole', () => {
   })
 })
 
+describe('the open worktree’s setup questions', () => {
+  // A card in the corner covered the end of the prompt line and stayed bright over a dialog's scrim.
+  it('sit in the rail, over no pane', () => {
+    seed({ worktrees: [{ ...worktree, setupAsk: 'npm ci' }] })
+    mount()
+    const ask = screen.getByRole('region', { name: 'Setup' })
+    expect(ask.closest('footer.statusbar')).not.toBeNull()
+    expect(ask.textContent).toContain('npm ci')
+  })
+
+  it('are not asked while a page covers the worktree', () => {
+    seed({ worktrees: [{ ...worktree, setupAsk: 'npm ci' }], settingsOpen: true })
+    mount()
+    expect(screen.queryByRole('region', { name: 'Setup' })).toBeNull()
+  })
+})
+
 describe('the pane count', () => {
   // `terminals 1 / 14` beside a Panes badge of 4: two numbers, neither the tab's.
   // A second number read as every worktree; how many hold panes waits for the hover.

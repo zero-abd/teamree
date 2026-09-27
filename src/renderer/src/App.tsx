@@ -60,7 +60,6 @@ import { watchSystemTone } from './theme/systemTone'
 import { applyPalette } from './theme/applyPalette'
 import { SharedNotePopups } from './teamwork/SharedNotePopups'
 import { HandoffPopups } from './teamwork/HandoffPopups'
-import { WorktreeAsks } from './workspace/WorktreeAsks'
 import { UpdateAvailableCard } from './updates/UpdateAvailableCard'
 import { WorkspaceArea } from './workspace/WorkspaceArea'
 import { Icon } from './icons/Icon'
@@ -173,7 +172,6 @@ export function App(): React.JSX.Element {
 
       {/* Bottom right above the status bar: notices stack above the update card, never over it. */}
       <div className="corner-stack">
-        <WorktreeAsks />
         <SharedNotePopups />
         <HandoffPopups />
         {/* Always mounted: a live region added with its first message is often not heard saying it. */}
