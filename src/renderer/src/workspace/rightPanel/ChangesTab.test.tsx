@@ -1200,6 +1200,36 @@ describe('discarding a file', () => {
     render(<Tab />)
     expect(screen.queryByRole('button', { name: 'Discard src/done.ts…' })).toBeNull()
   })
+
+  it('draws Discard as an icon, its label in the tooltip rather than on every row', () => {
+    withRows()
+    render(<Tab />)
+    const discard = screen.getByRole('button', { name: 'Discard src/new.ts…' })
+    expect(discard.textContent).toBe('')
+    expect(discard.getAttribute('title')).toBe('Discard…')
+    expect(discard.querySelector('svg[data-icon="discard"]')).not.toBeNull()
+  })
+})
+
+describe('a changed file’s path', () => {
+  it('reads name first, then its folder, with the whole path in the title', () => {
+    seed()
+    withChanges([
+      { path: 'src/cart/totals.ts', kind: 'modified', staged: false, unstaged: true },
+      { path: 'README.md', kind: 'modified', staged: false, unstaged: true }
+    ])
+    render(<ChangesTab />)
+    const parts = (path: string): (string | null)[][] =>
+      [...(screen.getByTitle(path).querySelector('.change__path')?.children ?? [])].map((part) => [
+        part.className,
+        part.textContent
+      ])
+    expect(parts('src/cart/totals.ts')).toEqual([
+      ['change__name', 'totals.ts'],
+      ['change__dir', 'src/cart']
+    ])
+    expect(parts('README.md')).toEqual([['change__name', 'README.md']])
+  })
 })
 
 describe('what can be discarded', () => {

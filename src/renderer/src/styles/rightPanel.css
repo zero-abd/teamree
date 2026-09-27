@@ -328,13 +328,37 @@
   width: 10px;
 }
 
+.tree__icon {
+  flex: none;
+  color: var(--fg-muted);
+}
+
 .tree__name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* A changed file's name in its letter's colour. */
+.tree__name--modified,
+.tree__name--renamed,
+.tree__name--copied,
+.tree__name--typeChanged {
+  color: var(--info);
+}
+
+.tree__name--added,
+.tree__name--untracked {
+  color: var(--success);
+}
+
+.tree__name--deleted,
+.tree__name--conflicted {
+  color: var(--danger);
+}
+
 .tree__dir {
+  margin-left: var(--s2);
   color: var(--fg-muted);
 }
 
@@ -373,27 +397,18 @@
   border-radius: var(--r1);
   background: transparent;
   color: var(--fg-muted);
-  opacity: var(--control-rest);
+  opacity: var(--row-action-rest);
   cursor: pointer;
 }
 
 .tree__item:hover .tree__reveal,
-.tree__reveal:focus-visible {
+.tree__item:focus-within .tree__reveal {
   opacity: 1;
 }
 
 .tree__reveal:hover {
   background: var(--bg-hover);
   color: var(--fg);
-}
-
-.tree__reveal svg {
-  width: 11px;
-  height: 11px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.2;
-  stroke-linejoin: round;
 }
 
 /* Changes ----------------------------------------------------------------- */

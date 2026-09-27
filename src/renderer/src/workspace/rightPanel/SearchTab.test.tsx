@@ -141,11 +141,11 @@ describe('the search tab', () => {
       .map((row) => row.textContent)
     expect(rows).toEqual([
       'rate limits2',
-      'middleware.tssrc/2',
+      'middleware.tssrc2',
       '1limit()',
       '2const x = limit(2)',
       'auth refresh1',
-      'limits.tssrc/1',
+      'limits.tssrc1',
       '4export const limit = 3'
     ])
     expect(screen.getByRole('status').textContent).toBe('3 matches in 2 files')

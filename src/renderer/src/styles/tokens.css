@@ -86,6 +86,7 @@
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Inter, Roboto, sans-serif;
   --font-mono:
     ui-monospace, SFMono-Regular, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  --text-code: 13px;
 
   --text-xs: 10.5px;
   --text-sm: 11.5px;
@@ -129,11 +130,14 @@
 
   /* A row's or tab's own controls at rest: seen without hovering, full on hover or focus; 3:1 on every ground. */
   --control-rest: 0.8;
+  /* A file row's own actions at rest: out of sight until the row is hovered, focused or selected. */
+  --row-action-rest: 0;
 }
 
 @media (hover: none) {
   :root {
     --control-rest: 1;
+    --row-action-rest: 1;
   }
 }
 

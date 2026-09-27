@@ -43,8 +43,8 @@ describe('emptyChangesLabel', () => {
 // went with it, including the `---`/`+++` trap they were written for.
 
 describe('splitting a path for display', () => {
-  it('keeps the directory and the name apart, so the name can stay put', () => {
-    expect(directoryOf('src/search/rankResults.ts')).toBe('src/search/')
+  it('keeps the folder and the name apart, so the name can read first', () => {
+    expect(directoryOf('src/search/rankResults.ts')).toBe('src/search')
     expect(fileNameOf('src/search/rankResults.ts')).toBe('rankResults.ts')
   })
 

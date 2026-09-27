@@ -244,13 +244,13 @@
 /* The words a changed pair of lines differs in; text at full strength, since the tint dims syntax colours. */
 .patch__row--removed .patch__word,
 .patch__side--removed .patch__word {
-  background: color-mix(in srgb, var(--danger) 30%, transparent);
+  background: color-mix(in srgb, var(--danger) 35%, transparent);
   color: var(--fg);
 }
 
 .patch__row--added .patch__word,
 .patch__side--added .patch__word {
-  background: color-mix(in srgb, var(--success) 30%, transparent);
+  background: color-mix(in srgb, var(--success) 35%, transparent);
   color: var(--fg);
 }
 

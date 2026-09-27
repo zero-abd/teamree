@@ -586,6 +586,91 @@ describe('stylesheets', () => {
       expect([...themeable].filter((name) => !declared.has(name))).toEqual([])
     })
   })
+
+  describe('the file tree, the changes list and the diff', () => {
+    const themeIds = BUILT_IN_THEMES.map((theme) => theme.id)
+
+    it.each([
+      [
+        'rightPanel.css',
+        '.tree__reveal',
+        ['.tree__item:hover .tree__reveal', '.tree__item:focus-within .tree__reveal']
+      ],
+      [
+        'workspace.css',
+        '.change__icon',
+        [
+          '.changes__item:hover .change__icon',
+          '.changes__item:focus-within .change__icon',
+          '.changes__item--selected .change__icon'
+        ]
+      ]
+    ])('keeps %s %s out of sight until its row is hovered, focused or selected', (sheet, selector, shownBy) => {
+      expect(declarationOf(ruleFor(sheet, selector), 'opacity')).toBe('var(--row-action-rest)')
+      for (const shown of shownBy) {
+        const rule = ruleListing(sheet, shown)
+        expect(rule && declarationOf(rule, 'opacity'), shown).toBe('1')
+      }
+    })
+
+    it('shows a row’s own actions at rest where nothing can hover', () => {
+      expect(customProperties('tokens.css').get('--row-action-rest')).toBe('0')
+      expect(customProperties('tokens.css', '(hover: none)').get('--row-action-rest')).toBe('1')
+    })
+
+    // Amber stays the asking agent's, so a modified file is blue.
+    it.each([
+      ['modified', 'var(--info)'],
+      ['renamed', 'var(--info)'],
+      ['added', 'var(--success)'],
+      ['untracked', 'var(--success)'],
+      ['deleted', 'var(--danger)'],
+      ['conflicted', 'var(--danger)']
+    ])('names a %s file in %s, the colour of its letter', (kind, colour) => {
+      const name = ruleListing('rightPanel.css', `.tree__name--${kind}`)
+      const letter = ruleListing('workspace.css', `.change__kind--${kind}`)
+      expect(name && declarationOf(name, 'color')).toBe(colour)
+      expect(letter && declarationOf(letter, 'color')).toBe(colour)
+    })
+
+    it.each(themeIds)('draws each git status at 3:1 or better on the panel in %s', (id) => {
+      const palette = paletteOf(id)
+      for (const tone of ['info', 'success', 'danger'] as const) {
+        expect(contrastRatio(rgbOf(palette[tone]), rgbOf(palette['bg-panel'])), tone).toBeGreaterThanOrEqual(3)
+      }
+    })
+
+    it('sets diff code at 13 px on 20 px lines, in the app’s monospace', () => {
+      expect(customProperties('tokens.css').get('--text-code')).toBe('13px')
+      const patch = ruleFor('workspace.css', '.patch')
+      expect(declarationOf(patch, 'font-size')).toBe('var(--text-code)')
+      expect(declarationOf(patch, 'line-height')).toBe('20px')
+      expect(declarationOf(patch, 'font-family')).toBe('var(--font-mono)')
+    })
+
+    // A changed word's fill sits on its line's fill.
+    it.each(themeIds)('fills changed lines and words so they stand out, and their text still reads, in %s', (id) => {
+      const palette = paletteOf(id)
+      const amountOf = (sheet: string, selector: string): number => {
+        const rule = ruleListing(sheet, selector)
+        return Number(/(\d+)%/.exec((rule && declarationOf(rule, 'background')) ?? '')?.[1]) / 100
+      }
+      for (const [tone, side] of [
+        ['success', 'added'],
+        ['danger', 'removed']
+      ] as const) {
+        const line = amountOf('workspace.css', `.patch__row--${side}`)
+        const word = amountOf('review.css', `.patch__row--${side} .patch__word`)
+        expect(line, side).toBeGreaterThanOrEqual(0.2)
+        expect(word, side).toBeGreaterThanOrEqual(0.35)
+        const lineFill = mix(rgbOf(palette['bg-panel']), rgbOf(palette[tone]), line)
+        const wordFill = mix(lineFill, rgbOf(palette[tone]), word)
+        expect(contrastRatio(rgbOf(palette['fg-secondary']), lineFill), `${side} line`).toBeGreaterThanOrEqual(4.5)
+        expect(contrastRatio(rgbOf(palette.fg), wordFill), `${side} word`).toBeGreaterThanOrEqual(4.5)
+      }
+    })
+  })
+
   // A ring round the inner button left the checkbox and the counts outside it, inside the selected fill.
   it('rings a focused changed file as the whole row, not its inner button', () => {
     expect(declarationOf(ruleFor('workspace.css', '.changes__item .change:focus-visible'), 'outline')).toBe('none')
@@ -616,7 +701,6 @@ describe('stylesheets', () => {
     ['sidebar.css', '.worktree__action'],
     ['sidebar.css', '.project__more'],
     ['review.css', '.patch__plus'],
-    ['rightPanel.css', '.tree__reveal'],
     ['files.css', '.column__close']
   ])('draws %s %s faintly at rest, not invisibly', (sheet, selector) => {
     const opacities: string[] = []
@@ -735,6 +819,19 @@ describe('stylesheets', () => {
 })
 
 const LIGHT_SCHEME = '(prefers-color-scheme: light)'
+
+/** A built-in theme's palette, in the tone it is made for. */
+function paletteOf(id: string): Record<string, string> {
+  const appearance: Appearance =
+    themeTone(id) === 'dark'
+      ? { ...DEFAULT_APPEARANCE, mode: 'dark', themeId: id }
+      : { ...DEFAULT_APPEARANCE, mode: 'light', light: { themeId: id, ground: null, accent: null, overrides: {} } }
+  return resolvePalette(appearance)
+}
+
+function rgbOf(colour: string | undefined): Rgb {
+  return parseColor(colour ?? '') as Rgb
+}
 
 /** Every custom property `:root` declares in one stylesheet, at the top level or inside one `@media`. */
 function customProperties(name: string, media?: string): Map<string, string> {

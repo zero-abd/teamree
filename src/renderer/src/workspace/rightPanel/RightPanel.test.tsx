@@ -426,7 +426,7 @@ describe('the files tab', () => {
       within(found)
         .getAllByRole('button')
         .map((row) => row.textContent)
-    ).toEqual(['src/app.ts?'])
+    ).toEqual(['app.tssrc?'])
 
     fireEvent.click(within(found).getByRole('button'))
     expect(fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root).map((leaf) => leaf.path)).toEqual(['src/app.ts'])
