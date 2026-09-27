@@ -197,14 +197,15 @@ describe('teamree msg reply, done, note', () => {
 describe('teamree msg inbox', () => {
   it('lists what waits for you outside a pane, open asks included, and marks the rest read', async () => {
     const messages = [
-      message(1, { kind: 'ask', to: { you: true }, text: 'Ship?', state: 'read' }),
+      message(1, { kind: 'ask', to: { you: true }, text: 'Ship?' }),
       message(2, { kind: 'done', to: { you: true }, outcome: 'succeeded', text: 'Shipped.' }),
       message(3, { kind: 'note', to: { worktreeId: 'lead' }, text: 'not yours' })
     ]
     const { run } = await cli(messages)
     const { out } = await run(['msg', 'inbox'], {})
     expect(out).toBe('#1 ask from "Write tests": Ship?\n#2 "Write tests" done (succeeded): Shipped.\n')
-    expect(messages.map((entry) => entry.state)).toEqual(['read', 'read', 'queued'])
+    // An ask stays unread: read, once its asker stops waiting, is how the window dismisses it.
+    expect(messages.map((entry) => entry.state)).toEqual(['queued', 'read', 'queued'])
     expect((await run(['msg', 'inbox'], LEAD_PANE)).out).toBe('#3 note from "Write tests": not yours\n')
   })
 })

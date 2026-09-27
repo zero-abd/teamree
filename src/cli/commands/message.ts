@@ -301,7 +301,7 @@ export const messageCommands: readonly CommandSpec[] = [
       const messages = (await context.client.call('message.list', { open: true, limit: LIST_LIMIT })).filter(
         (message) => mine(message.to) && (message.state === 'queued' || message.kind === 'ask')
       )
-      const unread = messages.filter((message) => message.state === 'queued')
+      const unread = messages.filter((message) => message.state === 'queued' && message.kind !== 'ask')
       if (unread.length > 0) await context.client.call('message.read', { ids: unread.map((message) => message.id) })
       return {
         data: messages,

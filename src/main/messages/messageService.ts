@@ -54,7 +54,8 @@ export class MessageService {
     const from = senderOf(params.from, directory)
     const ask = params.kind === 'reply' ? this.openAsk(params.replyTo) : undefined
     const late = params.kind === 'note' && params.replyTo !== undefined ? this.lapsedAsk(params.replyTo) : undefined
-    const recipients = ask !== undefined ? [ask.from] : recipientsOf(from, params.to, params.kind, directory)
+    const answered = ask ?? late
+    const recipients = answered !== undefined ? [answered.from] : recipientsOf(from, params.to, params.kind, directory)
     const projectOf = (party: MessageParty): string | undefined =>
       directory.worktrees.find((worktree) => worktree.id === party.worktreeId)?.projectId
     const projectId = projectOf(from) ?? ask?.projectId ?? recipients.map(projectOf).find((id) => id !== undefined)
@@ -76,9 +77,7 @@ export class MessageService {
         at: (this.options.now ?? Date.now)()
       })
     }
-    for (const answered of [ask, late]) {
-      if (answered !== undefined) this.store.update(answered.id, { state: 'answered', answeredBy: from })
-    }
+    if (answered !== undefined) this.store.update(answered.id, { state: 'answered', answeredBy: from })
 
     const sent = recipients.map((to) =>
       this.store.add({
@@ -127,6 +126,8 @@ export class MessageService {
     for (const id of ids) {
       const message = this.store.get(id)
       if (message === undefined || (message.state !== 'queued' && message.state !== 'delivered')) continue
+      // Read is how the window dismisses an ask for you, which it offers only once nothing waits on it.
+      if (message.kind === 'ask' && message.to.you === true && message.expiredAt === undefined) continue
       this.store.update(id, { state: 'read' })
       read += 1
     }

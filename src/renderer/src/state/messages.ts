@@ -59,8 +59,8 @@ export function waitedOn(ask: TaskMessage): boolean {
 }
 
 function openForYou(message: TaskMessage): boolean {
-  // Read once nobody waits on it is dismissed; read while waited on is only `msg inbox` having listed it.
-  const dismissed = !waitedOn(message) && message.state === 'read'
+  // Only Dismiss marks an ask for you read.
+  const dismissed = message.state === 'read'
   return message.kind === 'ask' && message.to.you === true && message.state !== 'answered' && !dismissed
 }
 

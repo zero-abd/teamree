@@ -325,13 +325,15 @@ describe('an ask for you', () => {
     expect([...asking]).toEqual([])
     await expect(reply(id)).rejects.toThrow('stopped waiting')
 
-    await service.send({ from: { you: true }, to: fromTests, kind: 'note', replyTo: id, text: 'Sandbox' })
+    // To whoever asked, as a reply goes, whatever it was addressed to.
+    await service.send({ from: { you: true }, to: { you: true }, kind: 'note', replyTo: id, text: 'Sandbox' })
     expect(service.store.get(id)).toMatchObject({ state: 'answered', answeredBy: { you: true } })
     expect(pastes('t_tests')).toEqual(['\x1b[200~[teamree] note from "you", answering #1: Sandbox\x1b[201~'])
   })
 
-  it('refuses a note answering an ask still waited on', async () => {
+  it('refuses a note answering an ask still waited on, or dismissing it', async () => {
     const id = await askYou()
+    expect(service.read([id])).toEqual({ read: 0 })
     await expect(
       service.send({ from: { you: true }, to: fromTests, kind: 'note', replyTo: id, text: 'Sandbox' })
     ).rejects.toThrow('still waiting')
@@ -351,6 +353,7 @@ describe('an ask for you', () => {
     const first = await askYou()
     service.paneExited('t_tests')
     expect(service.store.get(first)?.expiredAt).toBe(now)
+    expect(service.read([first])).toEqual({ read: 1 })
     const second = await askYou()
     service = startService()
     expect(service.store.get(second)?.expiredAt).toBe(now)
