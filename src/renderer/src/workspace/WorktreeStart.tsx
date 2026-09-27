@@ -10,6 +10,7 @@ import { startedFromLabel, worktreeDisplay, worktreeLabel } from '../sidebar/wor
 import { resumableAgent } from '../state/closedPanes'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { RESUME_CONVERSATION, useStartMenuItems } from './startMenu'
+import { buttonClass } from '../ui/Button'
 
 export function WorktreeStart({
   worktree,
@@ -38,7 +39,7 @@ export function WorktreeStart({
     <button
       key={item.label}
       type="button"
-      className={`button button--lg${quiet ? ' button--ghost' : ''}`}
+      className={buttonClass(quiet ? 'ghost' : 'secondary', 'lg')}
       onClick={item.onChoose}
     >
       {item.icon === undefined ? null : (
@@ -81,7 +82,7 @@ export function WorktreeStart({
           {resume === null || resume.agent === undefined ? null : (
             <button
               type="button"
-              className="button button--lg button--primary"
+              className={buttonClass('primary', 'lg')}
               onClick={() => void reopenTerminal(worktree.id, resume.terminalId)}
             >
               <span className="worktree-start__icon" aria-hidden="true">

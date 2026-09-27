@@ -135,30 +135,13 @@
   position: absolute;
   top: 8px;
   right: 8px;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r1);
-  background: transparent;
-  color: var(--fg-muted);
   opacity: var(--row-action-rest);
-  cursor: pointer;
-  transition:
-    opacity var(--motion-fast) var(--ease),
-    background var(--motion-fast) var(--ease);
+  transition: opacity var(--motion-fast) var(--ease);
 }
 
 .notice:hover .notice__close,
 .notice__close:focus-visible {
   opacity: 1;
-}
-
-.notice__close:hover {
-  background: var(--bg-hover);
-  color: var(--fg);
 }
 
 /* A teammate's popup: one sentence, its buttons under it, no icon. */

@@ -9,6 +9,7 @@ import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortc
 import { menuLabel } from '../menu/menuBar'
 import { MarkFull } from '../shell/Brand'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { Button, buttonClass } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
 import { Kbd } from '../ui/Kbd'
 import { SetupSummary } from './SetupRows'
@@ -49,7 +50,7 @@ export function Welcome({
           actions={
             <button
               type="button"
-              className="button button--primary button--lg"
+              className={buttonClass('primary', 'lg')}
               ref={primary}
               title={`New Task · ${shortcutHint('new-worktree', modifier)}`}
               onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
@@ -64,10 +65,9 @@ export function Welcome({
   }
 
   const other = (icon: IconName, label: string, onClick: () => void): React.JSX.Element => (
-    <button type="button" className="button button--secondary welcome__other" onClick={onClick}>
-      <Icon name={icon} />
+    <Button icon={icon} onClick={onClick}>
       {label}
-    </button>
+    </Button>
   )
 
   return (
@@ -88,7 +88,7 @@ export function Welcome({
         <div className="welcome__actions">
           <button
             type="button"
-            className="button button--primary button--lg welcome__first"
+            className={`${buttonClass('primary', 'lg')} welcome__first`}
             ref={primary}
             onClick={() => void chooseProjectFolder()}
           >

@@ -2,6 +2,7 @@
 
 import type { Worktree } from '@shared/entities'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { Button } from '../ui/Button'
 
 export function CheckoutMissing({ worktree }: { worktree: Pick<Worktree, 'id' | 'path'> }): React.JSX.Element {
   const recreateCheckout = useWorkspaceStore((state) => state.recreateCheckout)
@@ -14,23 +15,15 @@ export function CheckoutMissing({ worktree }: { worktree: Pick<Worktree, 'id' | 
         {worktree.path}
       </code>
       <div className="checkout-missing__actions">
-        <button
-          type="button"
-          className="button button--primary button--small"
-          onClick={() => void recreateCheckout(worktree.id)}
-        >
+        <Button variant="primary" size="sm" onClick={() => void recreateCheckout(worktree.id)}>
           Restore
-        </button>
-        <button type="button" className="button button--small" onClick={() => void locateCheckout(worktree.id)}>
+        </Button>
+        <Button size="sm" onClick={() => void locateCheckout(worktree.id)}>
           Locate…
-        </button>
-        <button
-          type="button"
-          className="button button--small"
-          onClick={() => void removeFromTeamree({ worktreeId: worktree.id })}
-        >
+        </Button>
+        <Button size="sm" onClick={() => void removeFromTeamree({ worktreeId: worktree.id })}>
           Remove from teamree…
-        </button>
+        </Button>
       </div>
     </section>
   )

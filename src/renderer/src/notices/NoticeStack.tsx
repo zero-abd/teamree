@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { copyText } from '../clipboard/clipboard'
 import { Icon } from '../icons/Icon'
+import { Button, IconButton } from '../ui/Button'
 import { openInBrowser } from '../shell/openInBrowser'
 import { useWorkspaceStore, type Notice } from '../state/workspaceStore'
 import { HandoffPopups } from '../teamwork/HandoffPopups'
@@ -75,7 +76,7 @@ function NoticeCard({ notice, onLeft }: { notice: Notice; onLeft?: () => void })
   const { title, detail } = noticeParts(notice.text)
   const leaving = onLeft !== undefined
   // The first action of an error is the way out, so it is the one with a face.
-  const actionClass = `button button--small ${look === 'error' ? 'button--secondary' : 'button--ghost'}`
+  const actionVariant = look === 'error' ? 'secondary' : 'ghost'
 
   const act = (): void => {
     const action = notice.action
@@ -112,22 +113,20 @@ function NoticeCard({ notice, onLeft }: { notice: Notice; onLeft?: () => void })
           <div className="notice__actions">
             {notice.action === undefined ? null : (
               // The verb is the whole button.
-              <button type="button" className={actionClass} onClick={act}>
+              <Button variant={actionVariant} size="sm" onClick={act}>
                 {notice.action.label}
-              </button>
+              </Button>
             )}
             {notice.lock === undefined ? null : <LockActions lock={notice.lock} />}
           </div>
         )}
       </div>
-      <button
-        type="button"
+      <IconButton
+        icon="close"
+        label="Dismiss message"
         className="notice__close"
-        aria-label="Dismiss message"
         onClick={() => dismissNotice(notice.id)}
-      >
-        <Icon name="close" size={14} />
-      </button>
+      />
     </div>
   )
 }
@@ -138,22 +137,18 @@ function LockActions({ lock }: { lock: NonNullable<Notice['lock']> }): React.JSX
   const askClearLock = useWorkspaceStore((state) => state.askClearLock)
   return (
     <>
-      <button
-        type="button"
-        className="button button--small button--secondary"
-        onClick={() => void retryLocked(lock.worktreeId)}
-      >
+      <Button size="sm" onClick={() => void retryLocked(lock.worktreeId)}>
         Retry
-      </button>
+      </Button>
       {lock.clearable ? (
-        <button
-          type="button"
-          className="button button--small button--ghost"
+        <Button
+          variant="ghost"
+          size="sm"
           title={lock.lockPath}
           onClick={() => askClearLock(lock.worktreeId, lock.lockPath)}
         >
           Clear Lock…
-        </button>
+        </Button>
       ) : null}
     </>
   )
