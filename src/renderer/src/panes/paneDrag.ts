@@ -18,8 +18,8 @@ export type DragSource = { id: string; label: string }
 /** `group` names any tab of the group; `index` is where the tab ends up, not the gap it was dropped in. */
 export type DropTarget = { kind: 'tabs'; group: string; index: number } | { kind: 'pane'; id: string; edge: DropEdge }
 
-/** `refused`: letting go here would leave a pane under its floor, so it will be refused. */
-export type Drop = { target: DropTarget; mark: Rect; line: boolean; refused: boolean }
+/** `refused`: letting go here would leave a pane under its floor, so it will be refused. `label` names a pane's zone. */
+export type Drop = { target: DropTarget; mark: Rect; line: boolean; refused: boolean; label: string | null }
 
 type PaneDrag = { source: DragSource; x: number; y: number; drop: Drop | null }
 
@@ -30,6 +30,18 @@ const DRAG_SLOP_PX = 5
 
 const LINE_PX = 2
 
+/** A zone's mark stands this far in from the pane's edges. */
+const ZONE_INSET_PX = 12
+
+/** What a zone says it will do. */
+const ZONE_LABEL: Record<DropEdge, string> = {
+  left: 'Split left',
+  right: 'Split right',
+  top: 'Split up',
+  bottom: 'Split down',
+  center: 'Add as tab'
+}
+
 /** The side of `rect` the point is in: the outer third nearest it, else the centre. */
 export function dropEdge(rect: Rect, x: number, y: number): DropEdge {
   const fx = (x - rect.x) / rect.width
@@ -39,6 +51,22 @@ export function dropEdge(rect: Rect, x: number, y: number): DropEdge {
   if (dx >= 1 / 3 && dy >= 1 / 3) return 'center'
   if (dx <= dy) return fx < 0.5 ? 'left' : 'right'
   return fy < 0.5 ? 'top' : 'bottom'
+}
+
+/** Where a tab let go on `edge` of `rect` is shown to land: the half it would take, or a card in the middle to join. */
+export function zoneMark(rect: Rect, edge: DropEdge, inset = ZONE_INSET_PX): Rect {
+  if (edge === 'center') {
+    const width = Math.min(rect.width - 2 * inset, Math.max(120, rect.width * 0.4))
+    const height = Math.min(rect.height - 2 * inset, Math.max(72, rect.height * 0.3))
+    return { x: rect.x + (rect.width - width) / 2, y: rect.y + (rect.height - height) / 2, width, height }
+  }
+  // Half the inset on the side the pane keeps, so the two halves' gap matches the frame's.
+  const area = edgeArea(rect, edge)
+  const left = edge === 'right' ? inset / 2 : inset
+  const right = edge === 'left' ? inset / 2 : inset
+  const top = edge === 'bottom' ? inset / 2 : inset
+  const bottom = edge === 'top' ? inset / 2 : inset
+  return { x: area.x + left, y: area.y + top, width: area.width - left - right, height: area.height - top - bottom }
 }
 
 /** The part of `rect` a pane dropped on `edge` would take. */
@@ -146,10 +174,11 @@ function dropAt(source: DragSource, x: number, y: number): Drop | null {
   if (!root) return null
   const under = document.elementFromPoint(x, y)
   const grid = paneGrid(state.terminalFontSize, state.terminalOptions)
-  const drop = (target: DropTarget, mark: Rect, line: boolean): Drop | null => {
+  const drop = (target: DropTarget, mark: Rect, line: boolean, label: string | null = null): Drop | null => {
     const next = arranged(root, source, target)
     if (next === root) return null
-    return { target, mark, line, refused: grid !== undefined && !leavesRoom(root, next, grid.area, grid.minPane) }
+    const refused = grid !== undefined && !leavesRoom(root, next, grid.area, grid.minPane)
+    return { target, mark, line, refused, label: refused && label !== null ? 'No room' : label }
   }
 
   const group = under?.closest<HTMLElement>('.group')
@@ -173,7 +202,7 @@ function dropAt(source: DragSource, x: number, y: number): Drop | null {
   if (!body) return null
   const pane = rectOf(body)
   const target: DropTarget = { kind: 'pane', id: member, edge: dropEdge(pane, x, y) }
-  return drop(target, edgeArea(pane, target.edge), false)
+  return drop(target, zoneMark(pane, target.edge), false, ZONE_LABEL[target.edge])
 }
 
 function rectOf(element: Element): Rect {

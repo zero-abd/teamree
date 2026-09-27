@@ -22,7 +22,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
-const { GroupStrip, TerminalTabs } = await import('./TerminalTabs')
+const { GroupStrip, WorkspaceHead } = await import('./TerminalTabs')
 const { paneGroups, groupTabIds } = await import('../panes/paneGroups')
 const { shownRoot } = await import('../panes/paneLayout')
 
@@ -100,14 +100,13 @@ function Strips(): React.JSX.Element {
   const focused = state.focusedWatchId === null ? (layout?.focusedTerminalId ?? null) : null
   return (
     <>
-      <TerminalTabs modifier={MAC} />
-      {groups.map((group, at) => (
+      <WorkspaceHead modifier={MAC} />
+      {groups.map((group) => (
         <GroupStrip
           key={groupTabIds(group)[0]}
           group={group}
           terminals={state.terminals}
           worktree={worktree}
-          edges={{ top: true, left: at === 0, right: at === groups.length - 1 }}
           active={focused !== null && groupTabIds(group).includes(focused)}
           modifier={MAC}
           onFocus={state.focusPane}
@@ -223,7 +222,7 @@ describe('the worktree the strip belongs to', () => {
 
 describe('which tab is the selected one', () => {
   const selectedNames = (): (string | null)[] =>
-    [...document.querySelectorAll('.group__strip--active [role="tab"][aria-selected="true"]')].map((tab) =>
+    [...document.querySelectorAll('.tabs--active [role="tab"][aria-selected="true"]')].map((tab) =>
       tab.getAttribute('aria-label')
     )
 
@@ -236,7 +235,7 @@ describe('which tab is the selected one', () => {
     })
     mount()
     expect(selectedNames()).toEqual(['Claude Code'])
-    expect(document.querySelectorAll('.group__strip--active')).toHaveLength(1)
+    expect(document.querySelectorAll('.tabs--active')).toHaveLength(1)
   })
 
   // A watched pane holding focus marks no group, as `WorkspaceArea` draws no focused pane.
@@ -346,16 +345,21 @@ describe('the pane buttons at the end of the strip', () => {
   })
 
   // Pinned to the strip's end in a group of their own, so a new tab never moves them.
-  it('keeps the layout buttons in their own group at the end, apart from the tabs and the runs', () => {
+  // The worktree's buttons in a group of their own at the head's end; a group's `+` at its strip's end.
+  it('keeps the layout buttons at the head’s end, and each + at its strip’s end, after the tabs', () => {
     onePane()
+    const head = document.querySelector('.workspace__head') as HTMLElement
     const strip = document.querySelector('.tabs') as HTMLElement
     const layout = screen.getByRole('button', { name: 'Split right' }).parentElement as HTMLElement
     expect(layout.classList.contains('tabs__layout')).toBe(true)
-    for (const name of ['Maximize', 'Split right', 'Split down', 'New tab']) {
+    for (const name of ['Maximize', 'Split right', 'Split down']) {
       expect(screen.getByRole('button', { name }).parentElement).toBe(layout)
     }
-    expect(screen.getByRole('tablist').contains(layout)).toBe(false)
-    expect(strip.querySelector('.tabs__actions')?.lastElementChild).toBe(layout)
+    expect(head.querySelector('.tabs__actions')?.lastElementChild).toBe(layout)
+    expect(strip.contains(layout)).toBe(false)
+    const plus = screen.getByRole('button', { name: 'New tab' })
+    expect(strip.lastElementChild).toBe(plus)
+    expect(screen.getByRole('tablist').contains(plus)).toBe(false)
   })
 
   it('says what each one does, for anything that cannot see the icon', () => {
@@ -634,6 +638,33 @@ describe('naming a pane', () => {
 })
 
 // The strip is the window's top edge, so it holds the control that brings a hidden sidebar back.
+describe('the head over the panes', () => {
+  it('names the worktree, then its project and branch, once above every group', () => {
+    seed({
+      activeWorktreeId: 'w1',
+      projects: [{ id: 'p1', name: 'shop', path: '/repos/shop' }],
+      worktrees: [
+        {
+          id: 'w1',
+          projectId: 'p1',
+          name: 'session migration',
+          branch: 'session-migration',
+          path: '/w',
+          state: 'ready'
+        }
+      ],
+      layouts: { w1: layout('w1', row('t1', 't2'), 't1') },
+      terminals: byId(terminal({ id: 't1' }), terminal({ id: 't2' }))
+    })
+    mount()
+    const heads = document.querySelectorAll('.workspace__head')
+    expect(heads).toHaveLength(1)
+    expect(heads[0]!.textContent).toContain('session migration')
+    expect(heads[0]!.textContent).toContain('shop · session-migration')
+    expect(document.querySelectorAll('.tabs')).toHaveLength(2)
+  })
+})
+
 describe('the way back to the sidebar', () => {
   it('offers to show the sidebar from the strip’s left end while it is hidden', () => {
     seed({ sidebarVisible: false })
@@ -642,7 +673,7 @@ describe('the way back to the sidebar', () => {
     expect(show.getAttribute('title')).toBe('Show sidebar')
     expect(show.textContent).toBe('')
     expect(show.querySelector('svg')).toBeTruthy()
-    expect(show.parentElement?.classList.contains('tabs')).toBe(true)
+    expect(show.parentElement?.classList.contains('workspace__head')).toBe(true)
     expect(show.parentElement?.firstElementChild).toBe(show)
     fireEvent.click(show)
     expect(toggleSidebar).toHaveBeenCalledOnce()
@@ -654,11 +685,11 @@ describe('the way back to the sidebar', () => {
     expect(screen.queryByRole('button', { name: 'Show sidebar' })).toBeNull()
   })
 
-  // Still a strip with nothing in it: the drag region and the expand control.
-  it('keeps the strip with nothing to list in it', () => {
+  // Still a head with nothing in it: the drag region and the expand control.
+  it('keeps the head with nothing to list in it', () => {
     seed({ sidebarVisible: false })
     mount()
-    expect(document.querySelector('.tabs')).toBeTruthy()
+    expect(document.querySelector('.workspace__head')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Show sidebar' })).toBeTruthy()
   })
 })
@@ -832,13 +863,13 @@ describe('over a page', () => {
     ['Help', { helpOpen: true }]
   ])('draws no strip over %s while the sidebar holds the window buttons', (_page, state) => {
     seed({ activeWorktreeId: 'w1', layouts: { w1: layout('w1', row('t1'), 't1') }, ...state })
-    const { container } = render(<TerminalTabs modifier={MAC} />)
+    const { container } = render(<Strips />)
     expect(container.querySelector('.tabs')).toBeNull()
   })
 
   it('draws no strip over Settings with the sidebar put away, since Settings has the window', () => {
     seed({ sidebarVisible: false, settingsOpen: true })
-    const { container } = render(<TerminalTabs modifier={MAC} />)
+    const { container } = render(<Strips />)
     expect(container.querySelector('.tabs')).toBeNull()
   })
 

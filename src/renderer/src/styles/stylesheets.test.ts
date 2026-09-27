@@ -194,11 +194,13 @@ describe('stylesheets', () => {
       expect(declarationOf(ruleFor('workspace.css', '.tab'), 'border-bottom')).toBeUndefined()
     })
 
-    // Both strips are the window's top row; two heights would be a step in the frame.
-    it('is as tall as the sidebar’s header, so the two read as one bar', () => {
-      expect(declarationOf(ruleFor('workspace.css', '.tabs'), 'height')).toBe(
+    // The head and the sidebar's header are the window's top row; two heights would be a step in the frame.
+    it('has the workspace’s head as tall as the sidebar’s header, so the two read as one bar', () => {
+      expect(declarationOf(ruleFor('workspace.css', '.workspace__head'), 'height')).toBe(
         declarationOf(ruleFor('shell.css', '.sidebar__brand'), 'height')
       )
+      expect(declarationOf(ruleFor('workspace.css', '.workspace__head'), '-webkit-app-region')).toBe('drag')
+      expect(declarationOf(ruleFor('workspace.css', '.tabs'), '-webkit-app-region')).toBeUndefined()
     })
   })
 
@@ -212,6 +214,8 @@ describe('stylesheets', () => {
       ['sidebar.css', '.sidebar', 'var(--bg-rail)'],
       ['statusbar.css', '.statusbar', 'var(--bg-rail)'],
       ['workspace.css', '.tabs', 'var(--bg-tabstrip)'],
+      ['workspace.css', '.tabs--active', 'var(--bg-tabstrip-active)'],
+      ['workspace.css', '.workspace__head', 'var(--bg-tabstrip)'],
       ['rightPanel.css', '.panel', 'var(--bg-panel)'],
       ['dialog.css', '.modal', 'var(--bg-raised)']
     ])('%s paints %s in %s', (sheet, selector, token) => {
@@ -264,7 +268,7 @@ describe('stylesheets', () => {
       expect(declarationOf(ruleFor('workspace.css', '.tab--active'), 'box-shadow')).toBe(
         'inset 0 -2px 0 var(--line-strong)'
       )
-      expect(declarationOf(ruleFor('workspace.css', '.group__strip--active .tab--active'), 'box-shadow')).toBe(
+      expect(declarationOf(ruleFor('workspace.css', '.tabs--active .tab--active'), 'box-shadow')).toBe(
         'inset 0 -2px 0 var(--accent)'
       )
       expect(findRule('panes.css', '.pane--focused')).toBeUndefined()

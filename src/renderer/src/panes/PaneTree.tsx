@@ -18,7 +18,7 @@ import { TerminalView } from '../terminal/TerminalView'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { usePaneMenu } from '../workspace/paneMenu'
 import { RESUME_CONVERSATION } from '../workspace/startMenu'
-import { GroupStrip, type GroupEdges } from '../workspace/TerminalTabs'
+import { GroupStrip } from '../workspace/TerminalTabs'
 import { FilePane } from './FilePane'
 import { groupTabs, shownOf, type PaneGroup } from './paneGroups'
 import { normalizeSizes } from './paneLayout'
@@ -51,8 +51,6 @@ export type PaneCallbacks = {
   minPane?: Box
   /** The file column folded for room: drawn nowhere, its share lent to its siblings. */
   foldedColumn?: PaneNode | null
-  /** Which window edges this subtree touches; the whole tree touches all. */
-  edges?: GroupEdges
 }
 
 export function PaneTree({
@@ -70,8 +68,6 @@ export function PaneTree({
   return path.length === 0 ? <GroupBirths>{tree}</GroupBirths> : tree
 }
 
-const ALL_EDGES: GroupEdges = { top: true, left: true, right: true }
-
 /** The keys of the groups drawn so far in this tree, and whether its first frame is past: a group new after it fades in. */
 const Births = createContext<{ seen: Set<string>; settled: { current: boolean } } | null>(null)
 
@@ -84,11 +80,7 @@ function GroupBirths({ children }: { children: React.ReactNode }): React.JSX.Ele
 }
 
 /** A group: its strip over its tabs, every tab kept mounted and only the shown one drawn. */
-function PaneGroupView({
-  group,
-  edges = ALL_EDGES,
-  ...callbacks
-}: PaneCallbacks & { group: PaneGroup }): React.JSX.Element {
+function PaneGroupView({ group, ...callbacks }: PaneCallbacks & { group: PaneGroup }): React.JSX.Element {
   const tabs = groupTabs(group)
   const shown = shownOf(group)
   const births = useContext(Births)
@@ -106,7 +98,6 @@ function PaneGroupView({
         group={group}
         terminals={callbacks.terminals}
         worktree={callbacks.worktree}
-        edges={edges}
         active={active}
         modifier={callbacks.modifier}
         onFocus={callbacks.onFocus}
@@ -379,15 +370,10 @@ function PaneSplit({
   onResize,
   ...callbacks
 }: PaneCallbacks & { node: Extract<PaneNode, { kind: 'split' }>; path: number[] }): React.JSX.Element {
-  const { minPane, foldedColumn = null, edges = ALL_EDGES } = callbacks
+  const { minPane, foldedColumn = null } = callbacks
   // Indices into the whole split, so a resize addresses the tree the runtime holds.
   const drawn = node.children.flatMap((child, index) => (child === foldedColumn ? [] : [{ child, index }]))
-  const row = node.direction === 'row'
-  const edgesOf = (at: number): GroupEdges => ({
-    top: edges.top && (row || at === 0),
-    left: edges.left && (!row || at === 0),
-    right: edges.right && (!row || at === drawn.length - 1)
-  })
+
   const sizes = normalizeSizes(node.sizes, node.children.length)
   const lent = 1 - drawn.reduce((sum, { index }) => sum + (sizes[index] ?? 0), 0)
   return (
@@ -400,9 +386,9 @@ function PaneSplit({
         onResize(path, whole)
       }}
       minPx={minPane && drawn.map(({ child }) => minExtent(child, node.direction, minPane))}
-      cells={drawn.map(({ child, index }, at) => ({
+      cells={drawn.map(({ child, index }) => ({
         key: paneKey(child, index),
-        node: <PaneTree node={child} path={[...path, index]} onResize={onResize} {...callbacks} edges={edgesOf(at)} />
+        node: <PaneTree node={child} path={[...path, index]} onResize={onResize} {...callbacks} />
       }))}
     />
   )

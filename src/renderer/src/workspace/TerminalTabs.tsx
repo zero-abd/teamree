@@ -1,7 +1,6 @@
-// The strips along the top of the panes. Each group of tabs has its own (`GroupStrip`), aligned above it: its
-// tabs, `+N` for tabs scrolled out of sight, and `+` for a new tab there. The runs, maximize and splits act on
-// the worktree and the focused pane, so they sit once, at the window's top-right, on whichever strip is there.
-// With no panes, or over a page, `TerminalTabs` is the top edge instead: Show sidebar and the same buttons.
+// The workspace's head and its strips of tabs. The head is the window's top edge on this side: the worktree's
+// name, and the runs, maximize and splits, which act on the worktree and the focused pane. Each group of tabs
+// under it has its own strip, directly above its pane: its tabs, `+N` for any out of sight, and `+`.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { hasCheckout, type Terminal } from '@shared/entities'
@@ -17,7 +16,7 @@ import { PaneGlyph } from '../agents/glyphs'
 import { Icon } from '../icons/Icon'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { dotClass, dotTone } from '../sidebar/agentRows'
-import type { WorktreeNameSource } from '../sidebar/worktreeDisplay'
+import { worktreeDisplay, type WorktreeNameSource } from '../sidebar/worktreeDisplay'
 import { refocus, RowMenu, type MenuClosed, type RowMenuAnchor } from '../sidebar/RowMenu'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -28,14 +27,11 @@ const MENU_GAP_PX = 4
 /** Within the 120–180 ms the rest of the chrome moves in. */
 const TAB_MOTION_MS = 150
 
-/** Which of the window's edges a group touches: the top ones are the title bar, its corners hold its controls. */
-export type GroupEdges = { top: boolean; left: boolean; right: boolean }
-
-export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): React.JSX.Element | null {
-  const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
-  const hasPanes = useWorkspaceStore(
-    (state) => state.activeWorktreeId !== null && (state.layouts[state.activeWorktreeId]?.root ?? null) !== null
-  )
+/** Over the panes, the worktree's name and its buttons; over a page with the sidebar away, only Show sidebar. */
+export function WorkspaceHead({ modifier }: { modifier: PlatformModifier }): React.JSX.Element | null {
+  const worktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
+  const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === state.activeWorktreeId))
+  const project = useWorkspaceStore((state) => state.projects.find((entry) => entry.id === worktree?.projectId))
   const sidebarVisible = useWorkspaceStore((state) => state.sidebarVisible)
   // Same precedence `WorkspaceArea` applies.
   const panesShown = useWorkspaceStore(
@@ -46,16 +42,22 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
     (state) => state.settingsOpen && !state.dashboardOpen && state.teamworkProjectId === null
   )
 
-  // The groups' own strips are the top edge while there are panes; a page's head is while it is open.
-  if (panesShown && hasPanes) return null
+  // A page's own head is the top edge while it is open.
   if (!panesShown && (sidebarVisible || settingsShown)) return null
+  const display = worktree === undefined ? undefined : worktreeDisplay(worktree)
 
   return (
-    <div className="tabs" data-region="strip">
+    <div className="workspace__head" data-region="strip">
       <SidebarToggle />
-      {activeWorktreeId === null || !panesShown ? null : (
-        <StripActions worktreeId={activeWorktreeId} group={null} corner modifier={modifier} />
+      {display === undefined || !panesShown ? null : (
+        <>
+          <span className="workspace__name">{display.title}</span>
+          <span className="workspace__where">
+            {[project?.name, worktree?.branch].filter((part) => part !== undefined && part !== '').join(' · ')}
+          </span>
+        </>
       )}
+      {worktreeId === null || !panesShown ? null : <HeadActions worktreeId={worktreeId} modifier={modifier} />}
     </div>
   )
 }
@@ -77,12 +79,11 @@ function SidebarToggle(): React.JSX.Element | null {
   )
 }
 
-/** One group's strip: its tabs, `+N` for any out of sight, and `+`; the corner one carries the window's buttons too. */
+/** One group's strip: its tabs, `+N` for any out of sight, and `+` for a new tab here. */
 export function GroupStrip({
   group,
   terminals,
   worktree,
-  edges,
   active,
   modifier,
   onFocus,
@@ -92,7 +93,6 @@ export function GroupStrip({
   terminals: Readonly<Record<string, Terminal>>
   /** What names the worktree; its agent pane goes by its title. */
   worktree: WorktreeNameSource | undefined
-  edges: GroupEdges
   /** It holds the focused pane. */
   active: boolean
   modifier: PlatformModifier
@@ -147,13 +147,7 @@ export function GroupStrip({
   const naming = active && namingMarkdown !== null && namingMarkdown === worktreeId
 
   return (
-    <div
-      className={`tabs group__strip${edges.top ? ' group__strip--top' : ''}${
-        edges.top && edges.left ? ' group__strip--lead' : ''
-      }${active ? ' group__strip--active' : ''}`}
-      data-region="strip"
-    >
-      {edges.top && edges.left ? <SidebarToggle /> : null}
+    <div className={`tabs${active ? ' tabs--active' : ''}`} data-region="strip">
       <div
         ref={list}
         className="tabs__list"
@@ -235,9 +229,7 @@ export function GroupStrip({
           }))}
         />
       )}
-      {worktreeId === null ? null : (
-        <StripActions worktreeId={worktreeId} group={shown} corner={edges.top && edges.right} modifier={modifier} />
-      )}
+      {worktreeId === null ? null : <NewTab worktreeId={worktreeId} group={shown} modifier={modifier} />}
       {paneMenu.menu}
     </div>
   )
@@ -334,21 +326,8 @@ function Tab({ tab, shown, unread, unsaved, dragged, renaming, ...on }: TabProps
   )
 }
 
-/**
- * The end of a strip: `+` for a new tab in `group` (a new pane where there is room without one), and in the
- * window's corner the runs, maximize and the splits before it, pinned so none moves as tabs open.
- */
-function StripActions({
-  worktreeId,
-  group,
-  corner,
-  modifier
-}: {
-  worktreeId: string
-  group: string | null
-  corner: boolean
-  modifier: PlatformModifier
-}): React.JSX.Element {
+/** The runs, maximize and the splits, pinned to the head's end; with no panes yet, `+` too. */
+function HeadActions({ worktreeId, modifier }: { worktreeId: string; modifier: PlatformModifier }): React.JSX.Element {
   // Refused only for a worktree known to have no checkout yet.
   const noCheckout = useWorkspaceStore((state) => {
     const worktree = state.worktrees.find((entry) => entry.id === worktreeId)
@@ -358,6 +337,62 @@ function StripActions({
   const expanded = useWorkspaceStore((state) => state.expandedTerminalId)
   const splitFocusedPane = useWorkspaceStore((state) => state.splitFocusedPane)
   const toggleExpandedPane = useWorkspaceStore((state) => state.toggleExpandedPane)
+  const empty = root === null
+
+  return (
+    <div className="tabs__actions">
+      {noCheckout ? null : <RunButtons worktreeId={worktreeId} />}
+      <div className="tabs__layout">
+        <button
+          type="button"
+          className="tabs__action"
+          title={expanded === null ? 'Maximize' : 'Restore'}
+          aria-label={expanded === null ? 'Maximize' : 'Restore'}
+          disabled={expanded === null && collectTerminalIds(root).length < 2}
+          onClick={toggleExpandedPane}
+        >
+          <Icon name={expanded === null ? 'maximize' : 'restore'} />
+        </button>
+        <button
+          type="button"
+          className="tabs__action"
+          title="Split right"
+          aria-label="Split right"
+          disabled={empty}
+          onClick={() => void splitFocusedPane('row')}
+        >
+          <Icon name="split-right" />
+        </button>
+        <button
+          type="button"
+          className="tabs__action"
+          title="Split down"
+          aria-label="Split down"
+          disabled={empty}
+          onClick={() => void splitFocusedPane('column')}
+        >
+          <Icon name="split-down" />
+        </button>
+        {empty ? <NewTab worktreeId={worktreeId} group={null} modifier={modifier} /> : null}
+      </div>
+    </div>
+  )
+}
+
+/** `+` and the menu of what can start: a tab of `group`, or a pane where there is room without one. */
+function NewTab({
+  worktreeId,
+  group,
+  modifier
+}: {
+  worktreeId: string
+  group: string | null
+  modifier: PlatformModifier
+}): React.JSX.Element {
+  const noCheckout = useWorkspaceStore((state) => {
+    const worktree = state.worktrees.find((entry) => entry.id === worktreeId)
+    return worktree !== undefined && !hasCheckout(worktree)
+  })
   const loadConversations = useWorkspaceStore((state) => state.loadConversations)
   const startItems = useStartMenuItems(worktreeId, modifier, false, group ?? undefined)
   const plus = useRef<HTMLButtonElement | null>(null)
@@ -367,72 +402,34 @@ function StripActions({
     setMenuAt(null)
     refocus(plus.current, closed)
   }, [])
-  const empty = root === null
 
   return (
-    <div className="tabs__actions">
-      {corner && !noCheckout ? <RunButtons worktreeId={worktreeId} /> : null}
-      <div className="tabs__layout">
-        {corner ? (
-          <>
-            <button
-              type="button"
-              className="tabs__action"
-              title={expanded === null ? 'Maximize' : 'Restore'}
-              aria-label={expanded === null ? 'Maximize' : 'Restore'}
-              disabled={expanded === null && collectTerminalIds(root).length < 2}
-              onClick={toggleExpandedPane}
-            >
-              <Icon name={expanded === null ? 'maximize' : 'restore'} />
-            </button>
-            <button
-              type="button"
-              className="tabs__action"
-              title="Split right"
-              aria-label="Split right"
-              disabled={empty}
-              onClick={() => void splitFocusedPane('row')}
-            >
-              <Icon name="split-right" />
-            </button>
-            <button
-              type="button"
-              className="tabs__action"
-              title="Split down"
-              aria-label="Split down"
-              disabled={empty}
-              onClick={() => void splitFocusedPane('column')}
-            >
-              <Icon name="split-down" />
-            </button>
-          </>
-        ) : null}
-        <button
-          ref={plus}
-          type="button"
-          className="tabs__action"
-          title="New tab"
-          aria-label="New tab"
-          aria-haspopup="menu"
-          aria-expanded={menuAt !== null}
-          disabled={noCheckout}
-          onClick={() => {
-            if (menuAt !== null) {
-              closeMenu()
-              return
-            }
-            void loadConversations(worktreeId)
-            const rect = plus.current?.getBoundingClientRect()
-            if (rect) setMenuAt({ x: rect.right, y: rect.bottom + MENU_GAP_PX, align: 'right' })
-          }}
-        >
-          <Icon name="plus" />
-        </button>
-      </div>
+    <>
+      <button
+        ref={plus}
+        type="button"
+        className="tabs__action tabs__new"
+        title="New tab"
+        aria-label="New tab"
+        aria-haspopup="menu"
+        aria-expanded={menuAt !== null}
+        disabled={noCheckout}
+        onClick={() => {
+          if (menuAt !== null) {
+            closeMenu()
+            return
+          }
+          void loadConversations(worktreeId)
+          const rect = plus.current?.getBoundingClientRect()
+          if (rect) setMenuAt({ x: rect.right, y: rect.bottom + MENU_GAP_PX, align: 'right' })
+        }}
+      >
+        <Icon name="plus" />
+      </button>
       {menuAt === null ? null : (
         <RowMenu label="New tab" anchor={menuAt} opener={plus.current} onClose={closeMenu} items={startItems} />
       )}
-    </div>
+    </>
   )
 }
 

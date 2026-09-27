@@ -46,39 +46,74 @@
   min-height: 0;
 }
 
-/* One tab per terminal in the worktree you are looking at — the sidebar is the
-   list of sessions, so the strip is the list of what is running inside the one
-   you opened. The dot is `.activity`, borrowed from the sidebar exactly as the
-   dashboard borrows it: same reading of the same PTY, so a second dot here
-   would be a second vocabulary.
-
-   It is also the window's drag region on this side, the same height as the
-   sidebar's header and — once the sidebar is away — the row the macOS window
-   buttons sit on; shell.css moves their inset onto it then.
-
-   One row, one vertical centre. The tabs, the three pane buttons and the
-   sidebar control all centre on the strip's height: the tabs used to sit on
-   the bottom edge while the buttons sat in the middle, so a label's centre was
-   eleven pixels under the icon beside it. A tab is the strip's full height and
-   the active one is marked by a line on the strip's own bottom edge, so the
-   mark meets the baseline rather than stopping short of it on a shorter box. */
-.tabs {
+/* The head: the worktree's name, where it lives, and the buttons that act on
+   it and on the focused pane. It is the window's drag region on this side, the
+   same height as the sidebar's header and — once the sidebar is away — the row
+   the macOS window buttons sit on; shell.css moves their inset onto it then. */
+.workspace__head {
   -webkit-app-region: drag;
   flex: none;
   display: flex;
   align-items: center;
   gap: var(--s2);
+  min-width: 0;
   height: var(--titlebar-h, 38px);
   padding: 0 var(--s3);
+  border-bottom: 1px solid var(--line);
   background: var(--bg-tabstrip);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
 }
 
-/* The list scrolls; the buttons beside it do not. They are the only way to
-   split or open a pane with a pointer, so a twentieth tab must not push them
-   off the end of the strip. Stretched to the strip's height so a tab's mark
-   can reach the bottom edge; each tab centres its own contents. */
-.tabs__list {
+.workspace__name {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  color: var(--fg);
+  font-size: var(--text-base);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace__where {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A group's strip of tabs, right above its pane. The dot is `.activity`,
+   borrowed from the sidebar exactly as the dashboard borrows it: same reading
+   of the same PTY, so a second dot here would be a second vocabulary.
+
+   One row, one vertical centre. A tab is the strip's full height and the
+   active one is marked by a line on the strip's own bottom edge. The group
+   holding the keys has its strip a tone lighter. */
+.tabs {
+  flex: none;
   display: flex;
+  align-items: center;
+  gap: var(--s2);
+  height: var(--group-strip-h);
+  padding: 0 var(--s1) 0 0;
+  background: var(--bg-tabstrip);
+  transition: background var(--motion-base) var(--ease);
+}
+
+.tabs--active {
+  background: var(--bg-tabstrip-active);
+}
+
+/* The list scrolls and takes the room; `+` after it keeps one x however many
+   tabs are open. Stretched to the strip's height so a tab's mark can reach the
+   bottom edge; positioned, so a tab's offsetLeft is measured from the list. */
+.tabs__list {
+  position: relative;
+  display: flex;
+  flex: 1;
   align-items: stretch;
   align-self: stretch;
   gap: 1px;
@@ -89,18 +124,6 @@
 
 .tabs__list::-webkit-scrollbar {
   display: none;
-}
-
-/* A strip inside the window is not its title bar: shorter, and dragging it moves tabs, not the window. */
-.group__strip:not(.group__strip--top) {
-  -webkit-app-region: no-drag;
-  height: var(--group-strip-h);
-}
-
-/* Positioned, so a tab's offsetLeft is measured from the strip it scrolls in. */
-.group__strip .tabs__list {
-  position: relative;
-  flex: 1;
 }
 
 /* Not wholly in sight: left out rather than cut mid-name; the `+N` list reaches it. */
@@ -134,7 +157,7 @@
   align-items: center;
 }
 
-/* Pinned to the strip's end, so the layout group sits at one x however many tabs are open. */
+/* Pinned to the head's end, so the layout group sits at one x whatever the worktree is called. */
 .tabs__actions {
   display: flex;
   flex: none;
@@ -247,7 +270,7 @@
   transition: box-shadow var(--motion-base) var(--ease);
 }
 
-.group__strip--active .tab--active {
+.tabs--active .tab--active {
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 

@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PaneNode } from '@shared/entities'
 import { fileLeaf, withTabs } from '@shared/filePane'
-import { arranged, dropEdge, edgeArea, gapAt } from './paneDrag'
+import { arranged, dropEdge, edgeArea, gapAt, zoneMark } from './paneDrag'
 import { collectTerminalIds, leaf } from './paneLayout'
 
 const box = { x: 100, y: 50, width: 300, height: 600 }
@@ -31,6 +31,20 @@ describe('edgeArea', () => {
     expect(edgeArea(box, 'top')).toEqual({ x: 100, y: 50, width: 300, height: 300 })
     expect(edgeArea(box, 'bottom')).toEqual({ x: 100, y: 350, width: 300, height: 300 })
     expect(edgeArea(box, 'center')).toEqual(box)
+  })
+})
+
+describe('zoneMark', () => {
+  it('stands a split zone in from the pane, half as far on the side the pane keeps', () => {
+    expect(zoneMark(box, 'right')).toEqual({ x: 256, y: 62, width: 132, height: 576 })
+    expect(zoneMark(box, 'top')).toEqual({ x: 112, y: 62, width: 276, height: 282 })
+  })
+
+  it('draws joining the tabs as a card in the middle', () => {
+    const card = zoneMark(box, 'center')
+    expect(card.x + card.width / 2).toBe(250)
+    expect(card.y + card.height / 2).toBe(350)
+    expect(card.width).toBeLessThan(box.width)
   })
 })
 
