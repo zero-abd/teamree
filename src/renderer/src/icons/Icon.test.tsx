@@ -16,6 +16,11 @@ describe('the icon set', () => {
     expect(svg.childElementCount).toBeGreaterThan(0)
   })
 
+  it('draws every name differently', () => {
+    const drawn = ICON_NAMES.map((name) => render(<Icon name={name} />).container.querySelector('svg')?.innerHTML)
+    expect(new Set(drawn).size).toBe(ICON_NAMES.length)
+  })
+
   it('is named for screen readers when given a label', () => {
     const { container } = render(<Icon name="agent" label="Kiro" data-agent="kiro" />)
     const svg = container.querySelector('svg') as SVGSVGElement
