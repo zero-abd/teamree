@@ -3,7 +3,7 @@
 // Boots the real `out/main/index.js`: a window of its own had no IPC bridge
 // behind it and passed anyway. Callbacks, not top-level await — Electron does
 // not pump its event loop until this module finishes evaluating.
-import { app, Menu, systemPreferences } from 'electron'
+import { app, Menu, systemPreferences, Tray } from 'electron'
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -98,6 +98,14 @@ async function waitFor(probe, failure) {
   }
 }
 
+// The status item as the app makes it, so the quit can run with its menu open.
+let statusItem
+const listen = Tray.prototype.on
+Tray.prototype.on = function (...args) {
+  statusItem = this
+  return listen.apply(this, args)
+}
+
 async function run() {
   // After `whenReady`, so the two settings above are made before the app reads them.
   await import(pathToFileURL(join(root, 'out/main/index.js')).href)
@@ -134,6 +142,24 @@ async function run() {
   await checkRendererBoundary(window, ask)
   await checkPeerCrypto()
   checkLocalBoundary()
+  await openStatusItemMenu()
+}
+
+/**
+ * Opens the status item's menu as a click does and leaves it open. Its nested AppKit loop outlives
+ * `app.quit()` and `app.exit()`, so the quit that follows proves the app closes it.
+ */
+async function openStatusItemMenu() {
+  if (process.platform !== 'darwin') return
+  if (!statusItem) return void failures.push('the menu bar extra made no status item')
+  let shown = false
+  const popUp = statusItem.popUpContextMenu.bind(statusItem)
+  statusItem.popUpContextMenu = (menu, ...rest) => {
+    menu.once('menu-will-show', () => (shown = true))
+    popUp(menu, ...rest)
+  }
+  statusItem.emit('click')
+  await waitFor(async () => shown, 'clicking the status item did not open its menu')
 }
 
 /**
