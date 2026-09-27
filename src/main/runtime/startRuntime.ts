@@ -14,6 +14,7 @@ import { createDispatcher, type Dispatcher } from './dispatcher'
 import { discoveryFilePath, removeDiscoveryFile, writeDiscoveryFile } from './discoveryFile'
 import { registerHandlers } from './handlers/registerHandlers'
 import { releaseInTurn } from './releaseInTurn'
+import type { RestartIntent } from '../quitAgents'
 import { MethodRegistry } from './methodRegistry'
 import { createRuntimeContext, type RuntimeContext } from './runtimeContext'
 import { resolveEndpoint } from './socketEndpoint'
@@ -92,6 +93,10 @@ export type Runtime = {
   terminals: () => Terminal[]
   /** A quit was declined at its questions, so a Restart to Update that started it installs nothing. */
   quitDeclined: () => void
+  /** Whether the quit under way is Restart to Update's, and how it was asked for. */
+  restartIntent: () => RestartIntent
+  /** Keeps Restart to Update armed until the agents are idle. */
+  restartWhenIdle: () => void
   /** The window came to the front: a moment to see whether the base refs moved, or a long absence to check updates over. */
   noteWindowFocus: () => void
   /** The window left the front: the moment a long absence away is measured from. */
@@ -257,6 +262,8 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     updateState: () => areas.updates.state(),
     terminals: () => areas.terminals.manager.list(),
     quitDeclined: () => areas.updates.quitDeclined(),
+    restartIntent: () => areas.updates.restartIntent(),
+    restartWhenIdle: () => areas.updates.restartWhenIdle(),
     noteWindowFocus: () => {
       if (fetchBases) {
         void areas.bases.nudge()

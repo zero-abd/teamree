@@ -34,6 +34,7 @@ import { DEFAULT_APPEARANCE, type Appearance } from '../shared/theme'
 import { installNativeAppearance, windowBackground } from './nativeAppearance'
 import { TRAFFIC_LIGHT_X_PX, TRAFFIC_LIGHT_Y_PX } from '../shared/windowChrome'
 import { APP_VERSION } from './appVersion'
+import { askAboutAgents, busyAgents, whenIdle, type BusyAgents } from './quitAgents'
 import { createQuitSequence } from './quitSequence'
 import { installUnsavedFiles, type UnsavedFiles } from './unsavedFiles'
 import { registerOpenPathHandler } from './reveal/openPath'
@@ -153,6 +154,63 @@ function quitWithoutAsking(): void {
   forced = true
   unsaved?.release()
   app.quit()
+}
+
+/** Restart When Idle's wait, while there is one. */
+let idleWait: (() => void) | undefined
+
+/** Agents mid-turn or asking, named as the menu bar extra names them. */
+function currentBusyAgents(): BusyAgents {
+  if (runtime === undefined) return { working: 0, asking: 0, names: [] }
+  const store = runtime.context.store
+  const names = notices?.window()?.names ?? {}
+  return busyAgents(runtime.terminals(), (terminal) => {
+    const worktree = store.getWorktree(terminal.worktreeId)?.name
+    const pane = names[terminal.id] ?? (terminal.label?.trim() || terminal.title)
+    return worktree === undefined || worktree === pane ? pane : `${worktree} — ${pane}`
+  })
+}
+
+/** Asks about working agents; false keeps the app, and Restart When Idle quits again once they are idle. */
+async function mayLeaveAgents(): Promise<boolean> {
+  if (forced || runtime === undefined) return true
+  const current = runtime
+  const answer = await askAboutAgents({
+    intent: current.restartIntent(),
+    busy: currentBusyAgents(),
+    show: async (question) => {
+      const options = { type: 'warning' as const, noLink: true, ...question }
+      const window = mainWindow()
+      // A sheet on a hidden or minimized window is never seen, and the quit would wait on it.
+      if (window?.isVisible() && !window.isMinimized()) return (await dialog.showMessageBox(window, options)).response
+      if (!isBackgroundLaunch(process.env)) app.focus({ steal: true })
+      return (await dialog.showMessageBox(options)).response
+    }
+  })
+  switch (answer) {
+    case 'go':
+      return true
+    case 'when-idle':
+      current.restartWhenIdle()
+      idleWait?.()
+      idleWait = whenIdle({ busy: currentBusyAgents, onIdle: () => app.quit() })
+      return false
+    case 'keep-waiting':
+      return false
+    case 'quit-only':
+      declineRestart()
+      return true
+    case 'cancel':
+      declineRestart()
+      return false
+  }
+}
+
+/** The restart under way, or waiting for idle, installs nothing. */
+function declineRestart(): void {
+  idleWait?.()
+  idleWait = undefined
+  runtime?.quitDeclined()
 }
 
 /** The app's window, not the Quick Note panel; undefined once closed. */
@@ -426,8 +484,9 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
   const onBeforeQuit = createQuitSequence({
     whenStarted: () => launched,
     mayQuit: async () => {
+      if (!(await mayLeaveAgents())) return false
       const proceed = forced || unsaved === undefined || (await unsaved.ask('quit'))
-      if (!proceed) runtime?.quitDeclined()
+      if (!proceed) declineRestart()
       return proceed
     },
     stop: () => {

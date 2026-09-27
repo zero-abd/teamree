@@ -4,6 +4,7 @@
 
 import type { UpdateDownload, UpdateInstall, UpdateRelease, UpdateState } from '../../shared/entities'
 import { DEV_VERSION } from '../appVersion'
+import type { RestartIntent } from '../quitAgents'
 import { conflict, internal } from '../runtime/runtimeError'
 import { ChecksumMismatch, downloadDiskImage, releaseHostPolicy, type HostPolicy } from './downloadInstaller'
 import {
@@ -119,6 +120,7 @@ export class UpdateService {
   #unwatchWake: (() => void) | undefined
   /** When the window last lost focus; null once consumed by a return worth checking over. */
   #blurredAt: number | null = null
+  #restartIntent: RestartIntent = null
 
   constructor(options: UpdateServiceOptions) {
     this.#version = options.version
@@ -452,13 +454,37 @@ export class UpdateService {
       return { blocked: blocked.problem }
     }
     await this.#selfInstall.arm(version, true)
+    // Asked again while waiting for idle is the card's Restart Now.
+    this.#restartIntent = this.#restartIntent === 'when-idle' ? 'now' : 'asked'
     this.#restart()
     return { restarting: version }
+  }
+
+  /** Whether the quit under way is this service's restart, and how it was asked for. */
+  restartIntent(): RestartIntent {
+    return this.#restartIntent
+  }
+
+  /** The quit's question chose Restart When Idle: the helper stays armed and the card says so. */
+  restartWhenIdle(): void {
+    const install = this.#install
+    if (install?.state !== 'ready') return
+    this.#restartIntent = 'when-idle'
+    this.#install = { ...install, whenIdle: true }
+    this.#onChange()
   }
 
   /** The quit was declined (Cancel on a Save question): the next ordinary quit installs nothing. */
   quitDeclined(): void {
     this.#selfInstall?.disarm()
+    this.#restartIntent = null
+    if (this.#install?.state === 'ready' && this.#install.whenIdle === true) {
+      const rest = { ...this.#install }
+      delete rest.whenIdle
+      this.#install = rest
+    }
+    // The window's Restart to Update button is still pressed.
+    this.#onChange()
   }
 
   /** Opens the verified `.dmg`, which mounts it. Nothing else can be named. */
