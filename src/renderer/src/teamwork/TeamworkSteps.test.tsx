@@ -251,7 +251,7 @@ describe('a refused handle', () => {
   // A corner of the screen is the wrong place for an instruction about the box the cursor is in.
   it('is shown under the handle field, not only somewhere else', () => {
     const markup = render({ membersError: taken })
-    const field = markup.indexOf('field__input')
+    const field = markup.indexOf('class="input')
     const refusal = markup.indexOf('choose another handle')
     expect(refusal).toBeGreaterThan(-1)
     expect(refusal).toBeGreaterThan(field)

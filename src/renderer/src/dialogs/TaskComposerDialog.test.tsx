@@ -217,7 +217,7 @@ describe('how it reads', () => {
     expect(branch().value).toBe('')
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     expect(branch().value).toBe('rewrite-the-pager')
-    expect(branch().classList.contains('field__input--mono')).toBe(true)
+    expect(branch().classList.contains('input--mono')).toBe(true)
     expect(screen.getByText('auto')).toBeTruthy()
   })
 

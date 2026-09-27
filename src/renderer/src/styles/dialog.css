@@ -149,60 +149,18 @@
   letter-spacing: -0.01em;
 }
 
-.field__input {
-  width: 100%;
-  min-height: var(--control-h);
-  padding: 6px 10px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r2);
-  background: var(--bg-input);
-  color: var(--fg);
-  font: inherit;
-  font-size: var(--text-base);
-  transition:
-    border-color var(--motion-fast) var(--ease-standard),
-    box-shadow var(--motion-fast) var(--ease-standard);
-}
-
-.field__input:hover:not(:focus-visible) {
-  border-color: color-mix(in srgb, var(--line-strong), var(--fg) 20%);
-}
-
-.field__input::placeholder {
-  color: var(--fg-faint);
-}
-
-textarea.field__input {
-  padding: 9px 10px;
-  line-height: 1.45;
-  resize: none;
-}
-
 /* The task grows with what is typed, from four lines, so it never needs a grip. */
-.field__input--task {
+.field__task {
   min-height: 96px;
   max-height: 40vh;
-  padding: 9px 10px;
   field-sizing: content;
-  resize: none;
-  line-height: 1.45;
 }
 
-.field__input--message {
+.field__message {
+  min-height: 0;
   max-height: 12lh;
   field-sizing: content;
-  resize: none;
   line-height: 1.4;
-}
-
-.field__input--mono {
-  font-family: var(--font-mono);
-}
-
-.field__input:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: var(--ring);
 }
 
 /* Start from: a field with the select's chevron. */
@@ -216,7 +174,7 @@ textarea.field__input {
   font-size: var(--text-base);
 }
 
-.picker > .field__input {
+.picker > .input {
   padding-right: 30px;
 }
 

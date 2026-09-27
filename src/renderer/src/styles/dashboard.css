@@ -71,10 +71,6 @@
   margin: 0;
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--r3);
-  background: var(--bg-raised);
-  box-shadow: var(--shadow-1);
   list-style: none;
 }
 

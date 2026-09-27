@@ -19,6 +19,7 @@ import {
 } from './startPointModel'
 import { EMPTY_START_POINTS, type StartPointsState } from './useStartPoints'
 import { Icon } from '../icons/Icon'
+import { Input } from '../ui/Input'
 
 /** The text in the box, plus the listed option it stands for, if any. */
 export type StartPointValue = { text: string; option: StartPoint | null }
@@ -115,10 +116,10 @@ export function StartPointPicker({ state, onReload, value, onChange, note }: Sta
 
       <div className="combo">
         <div className="picker">
-          <input
+          <Input
             id={inputId}
             role="combobox"
-            className="field__input picker__input picker__input--ref"
+            className="picker__input picker__input--ref"
             value={value.text}
             onChange={(event) => retype(event.target.value)}
             onKeyDown={onKeyDown}

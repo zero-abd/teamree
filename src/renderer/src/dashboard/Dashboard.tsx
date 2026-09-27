@@ -219,7 +219,7 @@ export function Dashboard(): React.JSX.Element {
           </h2>
         </div>
       ) : (
-        <ul className="board__list" ref={list} onKeyDown={step}>
+        <ul className="card board__list" ref={list} onKeyDown={step}>
           {shown.map((row) => {
             const state = dotTone(row.activity, row.agent)
             const isUnread = unread.has(row.terminalId)

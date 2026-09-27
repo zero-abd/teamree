@@ -56,7 +56,7 @@ export function SharedNotesList({
         Shared notes
         {unread > 0 ? <span className="shared-notes__unread">{unread} unread</span> : null}
       </h2>
-      <ul className="shared-notes__list">
+      <ul className="card shared-notes__list">
         {notes.map((note) => {
           const open = expanded === note.shareId
           const body = bodies[note.shareId]

@@ -1,6 +1,7 @@
 // The new branch's name: the task's own until typed over, and an Auto button to hand it back.
 
 import { useId } from 'react'
+import { Input } from '../ui/Input'
 
 export function BranchField({
   edit,
@@ -27,16 +28,17 @@ export function BranchField({
         Branch
       </label>
       <div className="branch">
-        <input
+        <Input
           id={id}
-          className="field__input field__input--mono branch__input"
+          mono
+          className="branch__input"
           value={edit ?? derived}
           placeholder={derived || 'branch-name'}
           // A space is never part of a branch; it becomes the hyphen that was meant.
           onChange={(event) => onEdit(event.target.value.replace(/\s/gu, '-'))}
           autoComplete="off"
           spellCheck={false}
-          aria-invalid={problem !== null}
+          invalid={problem !== null}
           aria-describedby={hint === null ? undefined : hintId}
         />
         {edit === null ? (

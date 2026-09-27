@@ -9,6 +9,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { commitSuggestion } from '../workspace/rightPanel/commitMessage'
 import { Modal } from './Modal'
 import { Select } from '../ui/Select'
+import { Textarea } from '../ui/Input'
 
 export function HandOffDialog({ worktreeId }: { worktreeId: string }): React.JSX.Element | null {
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId))
@@ -98,8 +99,7 @@ export function HandOffDialog({ worktreeId }: { worktreeId: string }): React.JSX
         </label>
         <label className="field">
           <span className="field__label">Note</span>
-          <textarea
-            className="field__input"
+          <Textarea
             rows={8}
             value={note ?? ''}
             onChange={(event) => setNote(event.target.value)}
@@ -119,8 +119,8 @@ export function HandOffDialog({ worktreeId }: { worktreeId: string }): React.JSX
           </label>
         )}
         {committing ? (
-          <textarea
-            className="field__input field__input--message"
+          <Textarea
+            className="field__message"
             rows={1}
             value={shownMessage}
             aria-label="Commit message"

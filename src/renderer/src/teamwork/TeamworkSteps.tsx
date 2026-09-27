@@ -67,6 +67,7 @@ import {
   type StepMark,
   type TeamworkPath
 } from './startTeamwork'
+import { Input } from '../ui/Input'
 
 export type TeamworkStepsProps = {
   /** Primary checkout, so step 4's commands run where `.teamree` is; undefined leaves the `cd` off. */
@@ -298,8 +299,8 @@ export function PasteInvitation({ onPaste }: { onPaste: (raw: string) => string 
   }
   return (
     <div className="chosen-path__paste">
-      <input
-        className="field__input field__input--mono"
+      <Input
+        mono
         aria-label="Invitation"
         placeholder={INVITATION_PLACEHOLDER}
         autoFocus
@@ -444,8 +445,8 @@ function JoinBody({
       <form className="members__self members__self--join" onSubmit={submit}>
         <label className="field">
           <span className="field__label">Handle</span>
-          <input
-            className="field__input field__input--mono"
+          <Input
+            mono
             value={handle}
             onChange={(event) => {
               setHandle(event.target.value)
@@ -453,7 +454,7 @@ function JoinBody({
               onClearError()
             }}
             placeholder={list.self.handle ?? 'pick a name'}
-            aria-invalid={error !== null}
+            invalid={error !== null}
             autoComplete="off"
             spellCheck={false}
           />
@@ -499,12 +500,12 @@ function OriginFix({ origin, onSetOrigin }: { origin: OriginState; onSetOrigin: 
     <form className="origin-fix" onSubmit={submit}>
       <label className="field">
         <span className="field__label">Origin</span>
-        <input
-          className="field__input field__input--mono"
+        <Input
+          mono
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder="git@github.com:org/repo.git"
-          aria-invalid={refusal !== null}
+          invalid={refusal !== null}
           aria-describedby={refusal === null ? undefined : hint}
           autoComplete="off"
           spellCheck={false}
@@ -671,8 +672,8 @@ function RelayDraft({
     <form className="members__relay" onSubmit={submit}>
       <label className="field">
         <span className="field__label">Relay URL</span>
-        <input
-          className="field__input field__input--mono"
+        <Input
+          mono
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder="wss://your-relay.example/v1/relay"

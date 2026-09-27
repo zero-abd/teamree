@@ -8,6 +8,7 @@ import { AgentSteppers } from './AgentSteppers'
 import { Modal } from './Modal'
 import { branchRows, filterRows, pullRequestRows, reviewPrompt, type OpenableRow } from './openBranchModel'
 import { fanOut, type AgentCounts } from './taskPlan'
+import { Textarea } from '../ui/Input'
 
 type Listing = { phase: 'loading' } | { phase: 'ready'; rows: OpenableRow[] } | { phase: 'error'; message: string }
 
@@ -134,8 +135,7 @@ export function OpenBranchDialog({
         {agent === undefined ? null : (
           <label className="field">
             <span className="field__label">Prompt</span>
-            <textarea
-              className="field__input"
+            <Textarea
               rows={2}
               value={prompt ?? reviewPrompt(row?.base ?? baseRef)}
               onChange={(event) => setPrompt(event.target.value)}

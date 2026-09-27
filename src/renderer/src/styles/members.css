@@ -951,10 +951,6 @@
   gap: 10px;
   min-height: 60px;
   padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--r3);
-  background: var(--bg-raised);
-  box-shadow: var(--shadow-1);
 }
 
 /* An ask is the one card with an edge: amber, inset, never a fill. */
@@ -1028,10 +1024,6 @@
 /* Members: one card, a row per person divided by a quiet line. */
 .team-members {
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--r3);
-  background: var(--bg-raised);
-  box-shadow: var(--shadow-1);
 }
 
 .team-member {
@@ -1151,10 +1143,6 @@
 .team-activity {
   gap: 10px;
   padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--r3);
-  background: var(--bg-raised);
-  box-shadow: var(--shadow-1);
 }
 
 .team-activity__row {
@@ -1185,10 +1173,6 @@
   align-items: center;
   gap: 10px;
   padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--r3);
-  background: var(--bg-raised);
-  box-shadow: var(--shadow-1);
 }
 
 .team-project__icon {

@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import type { JoinStage } from '../teamwork/joinTeam'
 import { defaultParent } from './CloneProjectDialog'
 import { Modal } from './Modal'
+import { Input } from '../ui/Input'
 
 const STAGE_WORDS: Record<JoinStage, string> = {
   clone: 'Cloning…',
@@ -84,8 +85,8 @@ export function JoinTeamDialog({ invitation }: { invitation: Invitation }): Reac
           <div className="clone__destination">
             <label className="field">
               <span className="field__label">Destination</span>
-              <input
-                className="field__input field__input--mono"
+              <Input
+                mono
                 value={destination}
                 onChange={(event) => setEdited(event.target.value)}
                 autoComplete="off"

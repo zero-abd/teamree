@@ -15,6 +15,7 @@ import { useHandoffs } from './handoffsStore'
 import { SharedNotesList } from './SharedNotesList'
 import { listedNotes, useSharedNotes } from './sharedNotesStore'
 import { paneState } from './paneState'
+import { Button } from '../ui/Button'
 import { StatusPill } from '../ui/StatusPill'
 import {
   activityWhen,
@@ -132,7 +133,7 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
 
           <section className="team-home__section" aria-label="Members">
             <h2 className="team-home__head">Members</h2>
-            <ul className="team-members">
+            <ul className="card team-members">
               {members.map((member) => (
                 <MemberRow key={member.publicKey} member={member} projectId={projectId} now={now} />
               ))}
@@ -149,7 +150,7 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
             {activity.length === 0 ? (
               <p className="team-home__empty">No activity yet</p>
             ) : (
-              <ul className="team-activity">
+              <ul className="card team-activity">
                 {activity.map((item) => (
                   <li key={item.key} className="team-activity__row">
                     <Avatar handle={item.handle} size="sm" decorative />
@@ -164,7 +165,7 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
           {project === undefined ? null : (
             <section className="team-home__section" aria-label="Project">
               <h2 className="team-home__head">Project</h2>
-              <div className="team-project">
+              <div className="card team-project">
                 <span className="team-project__icon">
                   <Icon name="folder" />
                 </span>
@@ -200,7 +201,7 @@ function WaitingRow({
     const { handoff } = item
     const from = handoff.from ?? 'a teammate'
     return (
-      <li className="home-card home-card--handoff" title={handoff.note}>
+      <li className="card home-card home-card--handoff" title={handoff.note}>
         <Avatar handle={from} size="md" decorative />
         <span className="home-card__text">
           <span className="home-card__title">
@@ -211,26 +212,18 @@ function WaitingRow({
           </span>
         </span>
         <span className="home-card__actions">
-          <button
-            type="button"
-            className="button button--primary button--small"
-            onClick={() => void takeHandoff(projectId, handoff.id)}
-          >
+          <Button variant="primary" size="sm" onClick={() => void takeHandoff(projectId, handoff.id)}>
             Take
-          </button>
-          <button
-            type="button"
-            className="button button--ghost button--small"
-            onClick={() => void dismiss(projectId, handoff.id)}
-          >
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => void dismiss(projectId, handoff.id)}>
             Dismiss
-          </button>
+          </Button>
         </span>
       </li>
     )
   }
   return (
-    <li className="home-card home-card--asking">
+    <li className="card home-card home-card--asking">
       <Avatar handle={item.handle} size="md" decorative />
       <span className="home-card__text">
         <span className="home-card__title">
@@ -348,9 +341,9 @@ function WorktreeButton({
 function OpenPane({ projectId, pane }: { projectId: string; pane: TeammatePaneRow }): React.JSX.Element {
   const watch = useWatch(projectId)
   return (
-    <button type="button" className="button button--ghost button--small" onClick={() => watch(pane)}>
+    <Button variant="ghost" size="sm" onClick={() => watch(pane)}>
       Open
-    </button>
+    </Button>
   )
 }
 

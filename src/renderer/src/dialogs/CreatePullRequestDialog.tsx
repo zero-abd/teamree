@@ -13,6 +13,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { CommitFrom } from '../workspace/rightPanel/CommitFrom'
 import { useCommitMessage } from '../workspace/rightPanel/commitMessage'
 import { Confirm } from './Confirm'
+import { Input, Textarea } from '../ui/Input'
 
 export function CreatePullRequestDialog({ worktreeId }: { worktreeId: string }): React.JSX.Element {
   const landing = useWorkspaceStore((state) => state.landings[worktreeId])
@@ -134,7 +135,7 @@ export function CreatePullRequestDialog({ worktreeId }: { worktreeId: string }):
           <p className="confirm__body">{`${Math.max(pending?.total ?? 0, counted).toLocaleString('en-US')} uncommitted`}</p>
           <textarea
             ref={messageBox}
-            className="field__input field__input--message"
+            className="textarea field__message"
             rows={1}
             value={message}
             placeholder="Commit message"
@@ -148,8 +149,7 @@ export function CreatePullRequestDialog({ worktreeId }: { worktreeId: string }):
         </>
       ) : null}
       {commitFirst ? <p className="confirm__body">Pull request</p> : null}
-      <input
-        className="field__input"
+      <Input
         value={shownTitle}
         placeholder="Title"
         aria-label="Title"
@@ -158,8 +158,8 @@ export function CreatePullRequestDialog({ worktreeId }: { worktreeId: string }):
         onChange={(event) => setTitle(event.target.value)}
         onKeyDown={onEnter}
       />
-      <textarea
-        className="field__input field__input--message pullRequest__body"
+      <Textarea
+        className="field__message pullRequest__body"
         rows={3}
         value={shownBody}
         placeholder="Body"

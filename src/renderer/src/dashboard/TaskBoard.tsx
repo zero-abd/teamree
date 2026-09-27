@@ -79,7 +79,7 @@ export function TaskBoard({
         <span className="task-head__end">Tokens</span>
         <span className="task-head__end">Age</span>
       </div>
-      <ul className="board__list" ref={listRef} onKeyDown={onKeyDown}>
+      <ul className="card board__list" ref={listRef} onKeyDown={onKeyDown}>
         {rows.map((row) => {
           const isUnread = row.panes.some((pane) => unread.has(pane.terminalId))
           const overlap = overlapOf(row.worktreeId)

@@ -33,6 +33,7 @@ import {
 } from './taskPlan'
 import { useStartPoints } from './useStartPoints'
 import { worktreeDisplay } from '../sidebar/worktreeDisplay'
+import { Textarea } from '../ui/Input'
 
 export function TaskComposerDialog({
   projectId: openedFor,
@@ -192,8 +193,8 @@ export function TaskComposerDialog({
           <div className="task-field">
             <label className="field field--task">
               <span className="field__label">Task</span>
-              <textarea
-                className="field__input field__input--task"
+              <Textarea
+                className="field__task"
                 value={task}
                 onChange={(event) => setTask(event.target.value)}
                 // Enter submits: this is the field people finish in.
