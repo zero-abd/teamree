@@ -83,6 +83,14 @@ describe('a task’s stage, derived and never set', () => {
     expect(taskStage(facts({ tone: 'working', landed: true }))).toBe('working')
   })
 
+  it('is asking while an ask for you is open, even with its pane working', () => {
+    expect(taskStage(facts({ tone: 'working', askingYou: true }))).toBe('asking')
+    expect(
+      taskStage(facts({ tone: null, askingYou: true, worktree: { state: 'ready', report: done('succeeded') } }))
+    ).toBe('asking')
+    expect(taskStage(facts({ askingYou: true, worktree: { state: 'failed' } }))).toBe('failed')
+  })
+
   it('counts done and landed as done', () => {
     expect(['done', 'landed', 'ready'].map((stage) => isDoneStage(stage as never))).toEqual([true, true, false])
   })
@@ -136,6 +144,11 @@ describe('the Tasks board rows', () => {
     expect(tests?.panes.map((pane) => pane.tone)).toEqual(['waiting', 'idle'])
     expect(tests?.age).toBe(5 * 60_000)
     expect(migration).toMatchObject({ stage: 'ready', ahead: 3, added: null, removed: null })
+  })
+
+  it('says asking for a task with an ask for you and no pane to show it', () => {
+    const rows = taskRows(input({ asking: new Set(['limits']) }))
+    expect(rows.find((row) => row.worktreeId === 'limits')?.stage).toBe('asking')
   })
 
   it('tallies a parent’s children, done counting landed', () => {

@@ -81,6 +81,8 @@ export const TaskParams = {
     limit: z.number().int().positive().max(2000).optional()
   }),
   messageRead: z.object({ ids: z.array(z.number().int().positive()).min(1).max(2000) }),
+  /** The asker stopped waiting on these asks, or, resuming, started again. */
+  messageWaiting: z.object({ ids: z.array(z.number().int().positive()).min(1).max(2000), waiting: z.boolean() }),
 
   /** `budgetTokens` is clamped to `CONTEXT_BUDGET`; `format: 'text'` fills `text` only. */
   projectContext: z.object({
@@ -168,6 +170,7 @@ export type TaskMethodContract = LedgerMethodContract & {
   'message.send': { params: z.infer<P['messageSend']>; result: TaskMessage[] }
   'message.list': { params: z.infer<P['messageList']>; result: TaskMessage[] }
   'message.read': { params: z.infer<P['messageRead']>; result: { read: number } }
+  'message.waiting': { params: z.infer<P['messageWaiting']>; result: { changed: number } }
 
   'project.context': { params: z.infer<P['projectContext']>; result: ProjectContext }
   'memory.note': { params: z.infer<P['memoryNote']>; result: MemoryNote }

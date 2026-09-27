@@ -65,6 +65,12 @@ describe('going to the next pane that needs you', () => {
     expect(walk('a', 1, 4)).toEqual(['b', 'd', 'c', 'b'])
   })
 
+  it('visits an agent waiting on an ask for you like one asking on screen', () => {
+    const state = window('a')
+    state.terminals = { ...state.terminals, a: terminal('a', 'wa', { busy: true, askingYou: 11 }) }
+    expect(panesNeedingYou(state).map((pane) => pane.terminalId)).toEqual(['a', 'b', 'd', 'c'])
+  })
+
   it('goes back the same way', () => {
     expect(walk('a', -1, 4)).toEqual(['c', 'd', 'b', 'c'])
   })

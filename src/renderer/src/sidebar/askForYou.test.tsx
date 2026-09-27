@@ -23,7 +23,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
-const { useMessageStore, askForYou, childDone, firstSentence } = await import('../state/messages')
+const { useMessageStore, askForYou, askingWorktrees, childDone, firstSentence } = await import('../state/messages')
 const { WorktreeRow } = await import('./WorktreeRow')
 
 const worktree = (id: string, name: string, extra: Partial<Worktree> = {}): Worktree => ({
@@ -54,11 +54,12 @@ const message = (extra: Partial<TaskMessage>): TaskMessage => ({
   ...extra
 })
 
-function mount(row: Worktree): void {
+function mount(row: Worktree, compact = false): void {
   render(
     <ul>
       <WorktreeRow
         worktree={row}
+        compact={compact}
         status={undefined}
         mergePreview={undefined}
         terminals={[]}
@@ -129,6 +130,57 @@ describe('a question for you', () => {
   })
 })
 
+describe('a question the agent stopped waiting on', () => {
+  const lapsed = (extra: Partial<TaskMessage> = {}): TaskMessage => message({ expiredAt: 5, ...extra })
+
+  it('says so, stops asking, and sends an answer anyway as a note', async () => {
+    useMessageStore.setState({ messages: [lapsed()] })
+    mount(TESTS)
+    expect(screen.getByText('Timed out · the agent moved on')).toBeTruthy()
+    expect(screen.queryByRole('img', { name: 'asking', hidden: true })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'postgres' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Send Anyway…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'postgres' }))
+    await waitFor(() =>
+      expect(call).toHaveBeenCalledWith('message.send', {
+        from: { you: true },
+        to: { worktreeId: 'tests', terminalId: 'term_2' },
+        kind: 'note',
+        replyTo: 7,
+        text: 'postgres'
+      })
+    )
+  })
+
+  it('is dismissed, and then gone', async () => {
+    useMessageStore.setState({ messages: [lapsed()] })
+    mount(TESTS)
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    await waitFor(() => expect(call).toHaveBeenCalledWith('message.read', { ids: [7] }))
+    cleanup()
+    useMessageStore.setState({ messages: [lapsed({ state: 'read' })] })
+    mount(TESTS)
+    expect(screen.queryByRole('group', { name: 'Question #7' })).toBeNull()
+  })
+})
+
+describe('a question for you, compact', () => {
+  it('keeps one line: the question, then its answers', () => {
+    useMessageStore.setState({ messages: [message({})] })
+    mount(TESTS, true)
+    const card = screen.getByRole('group', { name: 'Question #7' })
+    expect(card.className).toContain('worktree__ask--compact')
+    expect(screen.getByText('Which store for the limiter?')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'redis' })).toBeTruthy()
+  })
+
+  it('leaves out one nobody waits on', () => {
+    useMessageStore.setState({ messages: [message({ expiredAt: 5 })] })
+    mount(TESTS, true)
+    expect(screen.queryByRole('group', { name: 'Question #7' })).toBeNull()
+  })
+})
+
 describe('done', () => {
   it("shows a child's done on its parent, and a task's report on its own row", () => {
     useMessageStore.setState({
@@ -157,6 +209,9 @@ describe('the selectors', () => {
     const elsewhere = message({ id: 3, to: { worktreeId: 'lead' } })
     expect(askForYou([older, newer, elsewhere], 'tests')).toBe(newer)
     expect(askForYou([older], 'lead')).toBeUndefined()
+    expect(askForYou([message({ expiredAt: 5, state: 'read' })], 'tests')).toBeUndefined()
+    const live = message({ id: 5, from: { worktreeId: 'lead' } })
+    expect([...askingWorktrees([older, message({ id: 6, expiredAt: 5 }), live, elsewhere])]).toEqual(['tests', 'lead'])
     const done = message({ id: 4, kind: 'done', to: { worktreeId: 'lead' } })
     expect(childDone([older, done], 'lead')).toBe(done)
     expect(firstSentence('Added it. Tests pass.\nMore.')).toBe('Added it.')

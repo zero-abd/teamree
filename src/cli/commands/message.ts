@@ -19,6 +19,8 @@ import { WaitTimeout, waitForState } from '../waiting.js'
 
 /** An ask waits this long before exiting with its id, to be resumed. */
 export const DEFAULT_ASK_TIMEOUT_MS = 600_000
+/** A person may be away from the window: an ask for you waits longer. */
+export const DEFAULT_ASK_YOU_TIMEOUT_MS = 1_800_000
 const DEFAULT_MSG_WAIT_TIMEOUT_MS = 600_000
 /** Enough to find any message a project keeps. */
 const LIST_LIMIT = 2000
@@ -82,8 +84,10 @@ export function messageLine(message: TaskMessage, worktrees: readonly Worktree[]
       const files = message.paths === undefined ? '' : ` Files: ${message.paths.length}.`
       return `#${message.id} "${from}" done (${message.outcome ?? 'succeeded'}): ${message.text}${files}`
     }
-    case 'note':
-      return `#${message.id} note from "${from}": ${message.text}`
+    case 'note': {
+      const answering = message.replyTo === undefined ? '' : `, answering #${message.replyTo}`
+      return `#${message.id} note from "${from}"${answering}: ${message.text}`
+    }
   }
 }
 
@@ -101,6 +105,11 @@ function positiveId(raw: string | number | undefined, what: string): number {
   return id
 }
 
+/** How long asks wait when `--timeout-ms` is not given. */
+export function askTimeoutMs(asks: readonly TaskMessage[]): number {
+  return asks.some((ask) => ask.to.you === true) ? DEFAULT_ASK_YOU_TIMEOUT_MS : DEFAULT_ASK_TIMEOUT_MS
+}
+
 /** Blocks until every ask has its reply; the replies are marked read so none is pasted too. */
 async function awaitReplies(
   context: CommandContext,
@@ -108,6 +117,12 @@ async function awaitReplies(
   timeoutMs: number
 ): Promise<TaskMessage[]> {
   const ids = asks.map((ask) => ask.id)
+  // The window shows an ask for you as waiting only while something here waits on it.
+  const forYou = asks.filter((ask) => ask.to.you === true).map((ask) => ask.id)
+  const stopWaiting = async (): Promise<void> => {
+    if (forYou.length > 0) await context.client.call('message.waiting', { ids: forYou, waiting: false }).catch(() => {})
+  }
+  const release = stopOnSignal(stopWaiting)
   const read = async (): Promise<TaskMessage[]> => {
     const replies = await context.client.call('message.list', { kinds: ['reply'], limit: LIST_LIMIT })
     return ids.flatMap((id) => replies.filter((reply) => reply.replyTo === id).slice(0, 1))
@@ -122,6 +137,7 @@ async function awaitReplies(
       timeoutMs
     })
   } catch (error) {
+    await stopWaiting()
     if (!(error instanceof WaitTimeout)) throw error
     throw new CliError({
       code: 'wait_timeout',
@@ -130,10 +146,24 @@ async function awaitReplies(
       exitCode: ExitCode.Failure,
       data: { ids }
     })
+  } finally {
+    release()
   }
   const unread = replies.filter((reply) => reply.state === 'queued' || reply.state === 'delivered')
   if (unread.length > 0) await context.client.call('message.read', { ids: unread.map((reply) => reply.id) })
   return replies
+}
+
+/** Killed mid-wait, as an agent's tool timeout does, the ask is still let go before exiting. */
+function stopOnSignal(stop: () => Promise<void>): () => void {
+  const onSignal = (signal: NodeJS.Signals): void => {
+    void stop().finally(() => process.exit(signal === 'SIGINT' ? 130 : 143))
+  }
+  const signals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP']
+  for (const signal of signals) process.once(signal, onSignal)
+  return () => {
+    for (const signal of signals) process.off(signal, onSignal)
+  }
 }
 
 const TO_FLAG = {
@@ -150,6 +180,11 @@ const TIMEOUT_FLAG = {
   description: 'How long to wait; default 600000.'
 } as const
 
+const ASK_TIMEOUT_FLAG = {
+  ...TIMEOUT_FLAG,
+  description: 'How long to wait; default 600000, or 1800000 for you.'
+} as const
+
 export const messageCommands: readonly CommandSpec[] = [
   {
     path: ['msg', 'ask'],
@@ -161,17 +196,18 @@ export const messageCommands: readonly CommandSpec[] = [
     flags: [
       TO_FLAG,
       { name: 'options', kind: 'string', placeholder: '<a,b>', description: 'Answers to offer, comma-separated.' },
-      TIMEOUT_FLAG,
+      ASK_TIMEOUT_FLAG,
       { name: 'resume', kind: 'number', placeholder: '<id>', description: 'Keep waiting on an earlier ask.' }
     ],
     examples: ['teamree msg ask "Which store for the limiter?" --options redis,postgres', 'teamree msg ask --resume 7'],
     run: async (context) => {
       const me = await whoAmI(context)
-      const timeoutMs = readNumber(context.flags, 'timeout-ms') ?? DEFAULT_ASK_TIMEOUT_MS
       const resume = readNumber(context.flags, 'resume')
       let asks: TaskMessage[]
       if (resume !== undefined) {
-        asks = [await findMessage(context.client, positiveId(resume, '--resume'), 'ask')]
+        const ask = await findMessage(context.client, positiveId(resume, '--resume'), 'ask')
+        if (ask.to.you === true) await context.client.call('message.waiting', { ids: [ask.id], waiting: true })
+        asks = [ask]
       } else {
         requireWorktree(me)
         const options = readString(context.flags, 'options')
@@ -186,6 +222,7 @@ export const messageCommands: readonly CommandSpec[] = [
           ...(options === undefined || options.length === 0 ? {} : { options })
         })
       }
+      const timeoutMs = readNumber(context.flags, 'timeout-ms') ?? askTimeoutMs(asks)
       const replies = await awaitReplies(context, asks, timeoutMs)
       const text =
         replies.length === 1
@@ -264,7 +301,7 @@ export const messageCommands: readonly CommandSpec[] = [
       const messages = (await context.client.call('message.list', { open: true, limit: LIST_LIMIT })).filter(
         (message) => mine(message.to) && (message.state === 'queued' || message.kind === 'ask')
       )
-      const unread = messages.filter((message) => message.state === 'queued')
+      const unread = messages.filter((message) => message.state === 'queued' && message.kind !== 'ask')
       if (unread.length > 0) await context.client.call('message.read', { ids: unread.map((message) => message.id) })
       return {
         data: messages,

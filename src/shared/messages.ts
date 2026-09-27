@@ -35,4 +35,6 @@ export type TaskMessage = {
   at: number
   state: MessageState
   answeredBy?: MessageParty
+  /** When the asker stopped waiting: timed out, interrupted, or its pane or the app went. */
+  expiredAt?: number
 }

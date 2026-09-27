@@ -27,6 +27,7 @@ import { activityOf, agentRows, worktreeTone, type DotTone } from './agentRows'
 import { flattenTask, taskForest, taskTally, treeTone, type TaskNode } from './taskTree'
 import { isDoneStage, taskStages } from '../dashboard/taskRows'
 import { useTaskTreeStore } from '../state/taskTreeStore'
+import { askingWorktrees, useMessageStore } from '../state/messages'
 import { useOverlaps } from '../state/overlapStore'
 import { overlapChip } from './overlapChip'
 import { openOverlap, overlapNamer } from './useOverlapChip'
@@ -96,17 +97,20 @@ export function Sidebar({
   const collapsedTasks = useTaskTreeStore((state) => state.collapsedTasks)
   const overlaps = useOverlaps((state) => state.byProject)
   const setTaskCollapsed = useTaskTreeStore((state) => state.setTaskCollapsed)
+  const messages = useMessageStore((state) => state.messages)
+  const asking = useMemo(() => askingWorktrees(messages), [messages])
   const stages = useMemo(
-    () => taskStages({ worktrees, terminals: paneList, statuses, mergePreviews, landings, now }),
-    [worktrees, paneList, statuses, mergePreviews, landings, now]
+    () => taskStages({ worktrees, terminals: paneList, statuses, mergePreviews, landings, asking, now }),
+    [worktrees, paneList, statuses, mergePreviews, landings, asking, now]
   )
   const tones = useMemo(() => {
     const byId: Record<string, DotTone | null> = {}
     for (const worktree of worktrees) {
-      byId[worktree.id] = hasCheckout(worktree) ? worktreeTone(agentRows(paneList, worktree.id, now)) : null
+      const tone = asking.has(worktree.id) ? 'waiting' : worktreeTone(agentRows(paneList, worktree.id, now))
+      byId[worktree.id] = hasCheckout(worktree) ? tone : null
     }
     return byId
-  }, [worktrees, paneList, now])
+  }, [worktrees, paneList, asking, now])
   const titleOf = (worktreeId: string): string => {
     const worktree = worktrees.find((entry) => entry.id === worktreeId)
     return worktree === undefined ? '' : worktreeDisplay(worktree, kindOf).title

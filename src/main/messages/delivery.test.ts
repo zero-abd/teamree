@@ -46,6 +46,7 @@ let reports: Record<string, WorktreeReport>
 let worktrees: Worktree[]
 let changes: number
 let asked: number[]
+let asking: ReadonlyMap<string, number>
 let service: MessageService
 
 /** Runs every timer due by `now`, as the clock moves. */
@@ -73,13 +74,19 @@ beforeEach(() => {
   reports = {}
   changes = 0
   asked = []
+  asking = new Map()
   worktrees = [
     worktree('lead', 'Rate limits'),
     worktree('tests', 'Write tests', 'lead'),
     worktree('docs', 'Docs', 'lead')
   ]
   panes = [pane('t_lead', 'lead'), pane('t_tests', 'tests'), pane('t_docs', 'docs')]
-  service = new MessageService({
+  service = startService()
+})
+afterEach(() => rmSync(dir, { recursive: true, force: true }))
+
+function startService(): MessageService {
+  return new MessageService({
     dir,
     worktrees: {
       list: () => worktrees,
@@ -92,7 +99,8 @@ beforeEach(() => {
         const target = panes.find((entry) => entry.id === terminalId)
         if (target === undefined || !target.running) throw new Error('exited')
         written.push({ terminalId, data })
-      }
+      },
+      asking: (byPane) => (asking = byPane)
     },
     changedPaths: async () => ['src/limiter.ts', 'src/limiter.test.ts'],
     onChange: () => (changes += 1),
@@ -104,8 +112,7 @@ beforeEach(() => {
       return { cancel: () => timers.splice(timers.indexOf(timer), 1) }
     }
   })
-})
-afterEach(() => rmSync(dir, { recursive: true, force: true }))
+}
 
 const fromTests = { worktreeId: 'tests', terminalId: 't_tests' }
 
@@ -292,5 +299,63 @@ describe('delivery', () => {
     expect(new TextEncoder().encode(pasted.slice(6, -6)).length).toBeLessThanOrEqual(8192)
     expect(pasted.endsWith('…\x1b[201~')).toBe(true)
     expect(note?.text).toHaveLength(4096)
+  })
+})
+
+describe('an ask for you', () => {
+  const askYou = async (): Promise<number> => {
+    const [ask] = await service.send({ from: fromTests, to: { you: true }, kind: 'ask', text: 'Sandbox or live?' })
+    return ask?.id as number
+  }
+  const reply = (id: number): Promise<unknown> =>
+    service.send({ from: { you: true }, to: fromTests, kind: 'reply', replyTo: id, text: 'Sandbox' })
+
+  it('marks the asking pane until it is answered', async () => {
+    const id = await askYou()
+    expect([...asking]).toEqual([['t_tests', id]])
+    await reply(id)
+    expect([...asking]).toEqual([])
+  })
+
+  it('once the asker stops waiting, refuses a reply and takes a note answering it', async () => {
+    const id = await askYou()
+    now += 5
+    expect(service.waiting([id], false)).toEqual({ changed: 1 })
+    expect(service.store.get(id)?.expiredAt).toBe(now)
+    expect([...asking]).toEqual([])
+    await expect(reply(id)).rejects.toThrow('stopped waiting')
+
+    // To whoever asked, as a reply goes, whatever it was addressed to.
+    await service.send({ from: { you: true }, to: { you: true }, kind: 'note', replyTo: id, text: 'Sandbox' })
+    expect(service.store.get(id)).toMatchObject({ state: 'answered', answeredBy: { you: true } })
+    expect(pastes('t_tests')).toEqual(['\x1b[200~[teamree] note from "you", answering #1: Sandbox\x1b[201~'])
+  })
+
+  it('refuses a note answering an ask still waited on, or dismissing it', async () => {
+    const id = await askYou()
+    expect(service.read([id])).toEqual({ read: 0 })
+    await expect(
+      service.send({ from: { you: true }, to: fromTests, kind: 'note', replyTo: id, text: 'Sandbox' })
+    ).rejects.toThrow('still waiting')
+  })
+
+  it('waits again on resume', async () => {
+    const id = await askYou()
+    service.waiting([id], false)
+    expect(service.waiting([id], true)).toEqual({ changed: 1 })
+    expect(service.store.get(id)?.expiredAt).toBeUndefined()
+    expect([...asking]).toEqual([['t_tests', id]])
+    await reply(id)
+    expect(service.store.get(id)?.state).toBe('answered')
+  })
+
+  it('stops waiting when its pane exits, and when the app restarts', async () => {
+    const first = await askYou()
+    service.paneExited('t_tests')
+    expect(service.store.get(first)?.expiredAt).toBe(now)
+    expect(service.read([first])).toEqual({ read: 1 })
+    const second = await askYou()
+    service = startService()
+    expect(service.store.get(second)?.expiredAt).toBe(now)
   })
 })

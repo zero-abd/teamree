@@ -1571,6 +1571,38 @@
   font-size: var(--text-xs);
 }
 
+/* The agent stopped waiting: the card goes quiet and says so. */
+.worktree__ask--lapsed {
+  border-color: var(--line);
+  background: none;
+}
+
+.worktree__ask-lapsed {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+/* Compact keeps it to one line: the question clipped, then its answers. */
+.worktree__ask--compact {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: var(--s1);
+  padding: var(--s1) var(--s2);
+}
+
+.worktree__ask--compact .worktree__ask-text {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.worktree__ask--compact .answers {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
 .worktree__line {
   margin: 0 var(--s2) var(--s1) 28px;
 }

@@ -33,7 +33,8 @@ export function registerMessageHandlers(
     panes: {
       all: () => manager.list(),
       list: (worktreeId) => manager.list(worktreeId),
-      write: (terminalId, data) => manager.write(terminalId, data)
+      write: (terminalId, data) => manager.write(terminalId, data),
+      asking: (byPane) => manager.setAskingYou(byPane)
     },
     changedPaths: async (worktreeId) =>
       (await deps.git.worktreeChanges({ worktreeId, base: true })).changes.map((change) => change.path),
@@ -44,6 +45,7 @@ export function registerMessageHandlers(
   registry.register('message.send', Params.messageSend, (params) => service.send(params))
   registry.register('message.list', Params.messageList, (params) => service.list(params))
   registry.register('message.read', Params.messageRead, ({ ids }) => service.read(ids))
+  registry.register('message.waiting', Params.messageWaiting, ({ ids, waiting }) => service.waiting(ids, waiting))
 
   // Wrapped rather than replaced, as the ledger wraps `terminal.agentEvent`.
   const write = registry.lookup('terminal.write')
@@ -61,7 +63,7 @@ export function registerMessageHandlers(
       return terminal as never
     })
   }
-  manager.onTerminalExit((terminalId) => service.delivery.forget(terminalId))
+  manager.onTerminalExit((terminalId) => service.paneExited(terminalId))
   workspaceEvents.on((event) => {
     if (event.type === 'terminals') service.delivery.pump()
   })

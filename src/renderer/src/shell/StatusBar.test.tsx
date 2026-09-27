@@ -491,6 +491,13 @@ describe('what needs you', () => {
     expect(revealPane).toHaveBeenCalledWith('w2', 'b')
   })
 
+  it('counts an agent waiting on an ask for you', () => {
+    seed({ terminals: { a: pane('a', 'w1', { agent: 'claude', busy: true, askingYou: 11 }) } })
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: '1 asking' }))
+    expect(revealPane).toHaveBeenCalledWith('w1', 'a')
+  })
+
   it('counts failed panes beside them, and goes to an asking one before them', () => {
     seed({
       worktrees: [worktree, other],

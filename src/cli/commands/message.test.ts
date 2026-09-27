@@ -9,6 +9,7 @@ import type { Worktree } from '../../shared/entities.js'
 import type { TaskMessage } from '../../shared/messages.js'
 import type { Streams } from '../output.js'
 import { runCli } from '../run.js'
+import { askTimeoutMs, DEFAULT_ASK_TIMEOUT_MS, DEFAULT_ASK_YOU_TIMEOUT_MS } from './message.js'
 import { StubError, startStubRuntime, type StubRuntime } from '../stub-runtime.js'
 
 const row = (id: string, name: string, parentId?: string): Worktree => ({
@@ -58,9 +59,11 @@ async function cli(messages: TaskMessage[]): Promise<{
       for (const entry of messages) if (ids.includes(entry.id)) entry.state = 'read'
       return { read: ids.length }
     }
+    if (method === 'message.waiting') return { changed: 1 }
     if (method === 'message.send') {
       const sent = params as Omit<TaskMessage, 'id' | 'at' | 'state' | 'projectId'>
-      const stored = message(messages.length + 1, { ...sent, to: { worktreeId: 'lead' } } as Partial<TaskMessage>)
+      const to = 'you' in sent.to ? { you: true as const } : { worktreeId: 'lead' }
+      const stored = message(messages.length + 1, { ...sent, to } as Partial<TaskMessage>)
       messages.push(stored)
       return [stored]
     }
@@ -124,6 +127,31 @@ describe('teamree msg ask', () => {
     setTimeout(() => messages.push(message(2, { kind: 'reply', replyTo: 1, text: 'yes' })), 300)
     expect(await run(['msg', 'ask', '--resume', '1'])).toEqual({ code: 0, out: 'yes\n' })
     expect(sends(stub)).toHaveLength(1)
+    // Only an ask for you is marked: another agent's answer is still pasted in, late.
+    expect(stub.received.filter((call) => call.method === 'message.waiting')).toEqual([])
+  })
+
+  it('tells the window when it stops waiting on you, and when it waits again', async () => {
+    const messages: TaskMessage[] = []
+    const { stub, run } = await cli(messages)
+    const timedOut = await run(['msg', 'ask', 'Sandbox or live?', '--to', 'you', '--timeout-ms', '300'])
+    expect(timedOut.code).toBe(1)
+    const waits = (): unknown[] =>
+      stub.received.filter((call) => call.method === 'message.waiting').map((call) => call.params)
+    expect(waits()).toEqual([{ ids: [1], waiting: false }])
+
+    setTimeout(() => messages.push(message(2, { kind: 'reply', replyTo: 1, text: 'Sandbox' })), 300)
+    expect(await run(['msg', 'ask', '--resume', '1'])).toEqual({ code: 0, out: 'Sandbox\n' })
+    expect(waits()).toEqual([
+      { ids: [1], waiting: false },
+      { ids: [1], waiting: true }
+    ])
+  })
+
+  it('waits longer on you than on another agent', () => {
+    expect(askTimeoutMs([message(1, { kind: 'ask', to: { you: true } })])).toBe(DEFAULT_ASK_YOU_TIMEOUT_MS)
+    expect(askTimeoutMs([message(1, { kind: 'ask' })])).toBe(DEFAULT_ASK_TIMEOUT_MS)
+    expect(DEFAULT_ASK_YOU_TIMEOUT_MS).toBeGreaterThan(DEFAULT_ASK_TIMEOUT_MS)
   })
 })
 
@@ -169,14 +197,15 @@ describe('teamree msg reply, done, note', () => {
 describe('teamree msg inbox', () => {
   it('lists what waits for you outside a pane, open asks included, and marks the rest read', async () => {
     const messages = [
-      message(1, { kind: 'ask', to: { you: true }, text: 'Ship?', state: 'read' }),
+      message(1, { kind: 'ask', to: { you: true }, text: 'Ship?' }),
       message(2, { kind: 'done', to: { you: true }, outcome: 'succeeded', text: 'Shipped.' }),
       message(3, { kind: 'note', to: { worktreeId: 'lead' }, text: 'not yours' })
     ]
     const { run } = await cli(messages)
     const { out } = await run(['msg', 'inbox'], {})
     expect(out).toBe('#1 ask from "Write tests": Ship?\n#2 "Write tests" done (succeeded): Shipped.\n')
-    expect(messages.map((entry) => entry.state)).toEqual(['read', 'read', 'queued'])
+    // An ask stays unread: read, once its asker stops waiting, is how the window dismisses it.
+    expect(messages.map((entry) => entry.state)).toEqual(['queued', 'read', 'queued'])
     expect((await run(['msg', 'inbox'], LEAD_PANE)).out).toBe('#3 note from "Write tests": not yours\n')
   })
 })

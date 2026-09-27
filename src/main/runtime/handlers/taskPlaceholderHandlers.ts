@@ -17,6 +17,7 @@ export function registerTaskPlaceholderHandlers(registry: MethodRegistry): void 
   registry.register('message.send', Params.messageSend, refuse('message.send'))
   registry.register('message.list', Params.messageList, () => [])
   registry.register('message.read', Params.messageRead, () => ({ read: 0 }))
+  registry.register('message.waiting', Params.messageWaiting, () => ({ changed: 0 }))
 
   registry.register('project.context', Params.projectContext, ({ worktreeId }) => emptyProjectContext(worktreeId))
   registry.register('memory.note', Params.memoryNote, refuse('memory.note'))

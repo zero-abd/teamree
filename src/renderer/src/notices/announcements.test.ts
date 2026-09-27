@@ -56,6 +56,12 @@ describe('what changed that is worth saying', () => {
     ])
   })
 
+  it('says an agent asking you through teamree is asking', () => {
+    expect(said([pane('t1', 'w1', working)], [pane('t1', 'w1', { ...working, askingYou: 11 })])).toEqual([
+      'billing is asking'
+    ])
+  })
+
   it('says nothing on the first read, for a pane first seen, or while a state holds', () => {
     expect(announcements(null, heardStates(input([pane('t1', 'w1', asking)])))).toEqual([])
     expect(said([], [pane('t1', 'w1', asking)])).toEqual([])

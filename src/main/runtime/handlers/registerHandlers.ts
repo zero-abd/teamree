@@ -317,7 +317,9 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
         answers: (ask.options ?? []).map((label) => ({
           label,
           choose: async () => {
-            await messages.send({ from: { you: true }, to: ask.from, kind: 'reply', replyTo: ask.id, text: label })
+            const lapsed = messages.store.get(ask.id)?.expiredAt !== undefined
+            const kind = lapsed ? 'note' : 'reply'
+            await messages.send({ from: { you: true }, to: ask.from, kind, replyTo: ask.id, text: label })
           }
         }))
       })

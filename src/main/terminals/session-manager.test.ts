@@ -69,6 +69,27 @@ describePty('terminal handlers', () => {
   )
 
   it(
+    'marks a pane whose agent waits on an ask for you, and says so as an activity change',
+    async () => {
+      const changed: string[] = []
+      const service = createTerminalService({
+        resolveWorktreeCwd: () => process.cwd(),
+        onActivityChange: (terminalId) => changed.push(terminalId)
+      })
+      services.push(service)
+      const terminal = await newTerminal(service)
+      changed.length = 0
+      service.manager.setAskingYou(new Map([[terminal.id, 11]]))
+      expect((await service.handlers['terminal.list']({}))[0]?.askingYou).toBe(11)
+      service.manager.setAskingYou(new Map([[terminal.id, 11]]))
+      service.manager.setAskingYou(new Map())
+      expect((await service.handlers['terminal.list']({}))[0]?.askingYou).toBeUndefined()
+      expect(changed).toEqual([terminal.id, terminal.id])
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'starts each pane told the tone of the ground it prints on',
     async () => {
       let tone: 'light' | 'dark' = 'light'

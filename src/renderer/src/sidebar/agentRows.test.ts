@@ -56,6 +56,12 @@ describe('activityOf', () => {
     expect(activityOf(terminal({ id: 't', running: false, exitCode: 130 }))).toBe('failed')
   })
 
+  it('is waiting while its agent waits on an ask for you, whatever its hooks say', () => {
+    const blocked = { id: 't', agent: 'claude', busy: true, askingYou: 11 } as const
+    expect(activityOf(terminal({ ...blocked, agentEvent: { event: 'UserPromptSubmit', at: 1 } }))).toBe('waiting')
+    expect(activityOf(terminal({ ...blocked, running: false, exitCode: 0 }))).toBe('done')
+  })
+
   it('is working while output is still arriving', () => {
     expect(activityOf(terminal({ id: 't', agent: 'claude', busy: true }))).toBe('working')
   })
