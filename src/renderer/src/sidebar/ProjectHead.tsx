@@ -27,8 +27,10 @@ type ProjectHeadProps = {
   onForget: () => void
   /** Move to Trash…: the folder goes to the macOS Trash. */
   onTrash: () => void
-  /** Where new tasks start and what the team is doing, on the name's own row. */
+  /** Where new tasks start: beside the name, and the first to give way. */
   meta?: React.ReactNode
+  /** What the team is doing, beside the actions; never squeezed by the name. */
+  team?: React.ReactNode
 }
 
 export function ProjectHead({
@@ -42,7 +44,8 @@ export function ProjectHead({
   onOpenBranch,
   onForget,
   onTrash,
-  meta
+  meta,
+  team
 }: ProjectHeadProps): React.JSX.Element {
   const row = useRef<HTMLButtonElement | null>(null)
   const opener = useRef<HTMLElement | null>(null)
@@ -122,62 +125,67 @@ export function ProjectHead({
         openMenu(rowAnchor())
       }}
     >
-      <button
-        type="button"
-        className="project__toggle"
-        ref={row}
-        role="treeitem"
-        aria-level={1}
-        aria-expanded={!collapsed}
-        tabIndex={-1}
-        onClick={onToggle}
-        onKeyDown={(event) => {
-          if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
-          if (event.key === (collapsed ? 'ArrowRight' : 'ArrowLeft')) {
-            event.preventDefault()
-            onToggle()
-          }
-        }}
-      >
-        <Icon name="chevron-right" size={14} className={`chevron${collapsed ? '' : ' chevron--open'}`} />
-        <span className="project__name">{project.name}</span>
-        {collapsed ? <span className="project__count">{count}</span> : null}
-        {collapsed && theirs > 0 ? (
-          <span
-            className="project__count project__count--teammate"
-            title={`${theirs} teammate worktree${theirs === 1 ? '' : 's'}`}
-          >
-            {`+${theirs}`}
-          </span>
-        ) : null}
-      </button>
-      {meta}
-      <button
-        type="button"
-        className="button button--ghost button--icon"
-        tabIndex={-1}
-        title="New Task"
-        aria-label={`New Task in ${project.name}`}
-        onClick={onNewTask}
-      >
-        {/* A pencil on a page, not a plus: the plus above adds a project. */}
-        <Icon name="new-task" size={14} />
-      </button>
-      <button
-        type="button"
-        className="button button--ghost button--icon project__more"
-        tabIndex={-1}
-        title={`More for ${project.name}`}
-        aria-label={`More for ${project.name}`}
-        aria-haspopup="menu"
-        aria-expanded={menuAt !== null}
-        onClick={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect()
-          openMenu({ x: rect.right - 8, y: rect.bottom + 2 }, event.currentTarget)
-        }}
-      >
-        <Icon name="more" size={14} />
-      </button>
+      <div className="project__text">
+        <button
+          type="button"
+          className="project__toggle"
+          ref={row}
+          role="treeitem"
+          aria-level={1}
+          aria-expanded={!collapsed}
+          tabIndex={-1}
+          onClick={onToggle}
+          onKeyDown={(event) => {
+            if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return
+            if (event.key === (collapsed ? 'ArrowRight' : 'ArrowLeft')) {
+              event.preventDefault()
+              onToggle()
+            }
+          }}
+        >
+          <Icon name="chevron-right" size={14} className={`chevron${collapsed ? '' : ' chevron--open'}`} />
+          <span className="project__name">{project.name}</span>
+          {collapsed ? <span className="project__count">{count}</span> : null}
+          {collapsed && theirs > 0 ? (
+            <span
+              className="project__count project__count--teammate"
+              title={`${theirs} teammate worktree${theirs === 1 ? '' : 's'}`}
+            >
+              {`+${theirs}`}
+            </span>
+          ) : null}
+        </button>
+        {meta}
+      </div>
+      <div className="project__actions">
+        {team}
+        <button
+          type="button"
+          className="button button--ghost button--icon"
+          tabIndex={-1}
+          title="New Task"
+          aria-label={`New Task in ${project.name}`}
+          onClick={onNewTask}
+        >
+          {/* A pencil on a page, not a plus: the plus above adds a project. */}
+          <Icon name="new-task" size={14} />
+        </button>
+        <button
+          type="button"
+          className="button button--ghost button--icon project__more"
+          tabIndex={-1}
+          title={`More for ${project.name}`}
+          aria-label={`More for ${project.name}`}
+          aria-haspopup="menu"
+          aria-expanded={menuAt !== null}
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect()
+            openMenu({ x: rect.right - 8, y: rect.bottom + 2 }, event.currentTarget)
+          }}
+        >
+          <Icon name="more" size={14} />
+        </button>
+      </div>
       {drop.target === null ? null : (
         <DropHint text={drop.target.allowed ? drop.target.hint : drop.target.reason} refused={!drop.target.allowed} />
       )}

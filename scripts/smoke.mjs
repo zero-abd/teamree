@@ -11,7 +11,15 @@ import { pathToFileURL } from 'node:url'
 import { childEnv } from './child-env.mjs'
 import { runPeerCheck } from './electron-peer-check.mjs'
 import { FIXTURE_REPO_FLAG, PEER_BUNDLE_FLAG, USER_DATA_FLAG, readNamedArg } from './smoke-args.mjs'
-import { pressWorktreeRow, worktreeRowIsOpen } from './smoke-probes.mjs'
+import {
+  pressWorktreeRow,
+  projectHeadCollisions,
+  restoreProjectHead,
+  setSidebarWidth,
+  SIDEBAR_WIDTHS_CHECKED,
+  stageProjectHead,
+  worktreeRowIsOpen
+} from './smoke-probes.mjs'
 
 // Each wait fails on its own after READY_MS; the whole-run cap only catches a hang outside one, and names the last wait.
 const TIMEOUT_MS = 120_000
@@ -143,6 +151,7 @@ async function run() {
   await checkWindowSurfaces(ask)
   await checkMenuBar(ask)
   await checkWorktreeSurfaces(ask)
+  await checkProjectHead(ask)
   await checkRendererBoundary(window, ask)
   await checkMainErrors(ask)
   await checkPeerCrypto()
@@ -406,6 +415,23 @@ async function checkMenuBar(ask) {
     named('All Panes')?.click()
     await waitFor(async () => !(await showsDashboard()), 'choosing the same menu item again did not put the view away')
   }
+}
+
+/** A long name, a long base ref and a team at the narrowest and the default sidebar: nothing drawn over anything (#488). */
+async function checkProjectHead(ask) {
+  if (!(await ask('Boolean(document.querySelector(".project__head"))'))) return
+  for (const team of [false, true]) {
+    await ask(stageProjectHead(team))
+    for (const px of SIDEBAR_WIDTHS_CHECKED) {
+      if (!(await waitFor(() => ask(setSidebarWidth(px)), `the sidebar never became ${px}px wide`))) continue
+      const collisions = JSON.parse(await ask(projectHeadCollisions()))
+      const at = `the project head at ${px}px${team ? ' with a team' : ''}`
+      for (const collision of collisions) failures.push(`${at}: ${collision}`)
+    }
+  }
+  await ask(restoreProjectHead())
+  await ask(setSidebarWidth(SIDEBAR_WIDTHS_CHECKED[1]))
+  console.log(`smoke: project head measured at ${SIDEBAR_WIDTHS_CHECKED.join(' and ')}px, with and without a team`)
 }
 
 /**

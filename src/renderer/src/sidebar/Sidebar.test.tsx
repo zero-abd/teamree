@@ -288,7 +288,7 @@ describe('a project header', () => {
     seed({ teamwork: { p1: read({ disabledReason: 'no .teamree/relay in this project' }) } })
     mount()
     expect(screen.queryByRole('button', { name: /Teamwork · off/ })).toBeNull()
-    expect(document.querySelectorAll('.project__meta button')).toHaveLength(0)
+    expect(document.querySelectorAll('.project__team button')).toHaveLength(0)
   })
 
   it('says nothing about teamwork before anything has been read', () => {
@@ -304,7 +304,7 @@ describe('a project header', () => {
     const control = screen.getByRole('button', { name: 'Teamwork · no key in pager' })
     expect(control.textContent).toBe('Teamwork · no key')
     expect(control.classList.contains('project__teamwork--off')).toBe(true)
-    expect(document.querySelectorAll('.project__meta button')).toHaveLength(1)
+    expect(document.querySelectorAll('.project__team button')).toHaveLength(1)
   })
 
   // Named with the project: the rail has an entry of the same name, and two "Teamwork" buttons are one to a listener.
@@ -315,18 +315,22 @@ describe('a project header', () => {
     expect(openTeamwork).toHaveBeenCalledWith('p1')
   })
 
-  // A second line under every project pushed the first worktree down the window.
-  it('lays the name, where new tasks start and the teamwork control out on one row', () => {
+  // A second line under every project pushed the first worktree down the window. A long name drew
+  // New Task over the base ref (#488): the text is one column, the team and the actions another.
+  it('lays the name and where new tasks start in one column, and the team and actions in the next', () => {
     seed({ teamwork: { p1: read() } })
     mount()
-    const meta = document.querySelector('.project__meta') as HTMLElement
-    expect(meta.parentElement).toBe(document.querySelector('.project__head'))
-    expect(meta.previousElementSibling).toBe(screen.getByRole('treeitem', { name: 'pager' }))
-    expect(meta.firstElementChild?.textContent).toBe('from origin/main')
-    expect(meta.lastElementChild?.lastElementChild).toBe(
-      screen.getByRole('button', { name: 'Teamwork · no key in pager' })
-    )
-    expect(meta.children).toHaveLength(2)
+    const head = document.querySelector('.project__head') as HTMLElement
+    const [text, actions] = [...head.children]
+    expect(text?.className).toBe('project__text')
+    expect(actions?.className).toBe('project__actions')
+    expect(text?.firstElementChild).toBe(screen.getByRole('treeitem', { name: 'pager' }))
+    expect(text?.querySelector('.project__base')?.textContent).toBe('from origin/main')
+    expect(within(actions as HTMLElement).getByRole('button', { name: 'Teamwork · no key in pager' })).toBeTruthy()
+    expect([...(actions?.children ?? [])].slice(-2)).toEqual([
+      screen.getByRole('button', { name: 'New Task in pager' }),
+      screen.getByRole('button', { name: 'More for pager' })
+    ])
   })
 
   it('starts a new task in the project the button belongs to', () => {
@@ -1643,9 +1647,9 @@ describe('the team at a glance', () => {
       }
     })
     mount()
-    const meta = document.querySelector('.project__meta') as HTMLElement
-    expect(within(meta).getByRole('button', { name: 'priya, online · 1 working' })).toBeTruthy()
-    expect(within(meta).queryByRole('button', { name: /Teamwork ·/ })).toBeNull()
+    const team = document.querySelector('.project__team') as HTMLElement
+    expect(within(team).getByRole('button', { name: 'priya, online · 1 working' })).toBeTruthy()
+    expect(within(team).queryByRole('button', { name: /Teamwork ·/ })).toBeNull()
   })
 
   it('groups a teammate’s worktrees under one row with their face', () => {
@@ -1671,9 +1675,9 @@ describe('the team at a glance', () => {
       }
     })
     mount()
-    const meta = document.querySelector('.project__meta') as HTMLElement
-    expect(meta.querySelector('.avatar--away')).toBeTruthy()
-    expect(within(meta).getByRole('button', { name: 'Teamwork · relay unreachable in pager' }).textContent).toBe(
+    const team = document.querySelector('.project__team') as HTMLElement
+    expect(team.querySelector('.avatar--away')).toBeTruthy()
+    expect(within(team).getByRole('button', { name: 'Teamwork · relay unreachable in pager' }).textContent).toBe(
       'relay down'
     )
   })
