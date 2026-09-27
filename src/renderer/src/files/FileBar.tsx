@@ -95,11 +95,3 @@ export function Segments({ label, children }: { label: string; children: React.R
 export function UnsavedDot(): React.JSX.Element {
   return <span className="file__unsaved" role="img" aria-label="Unsaved" title="Unsaved" data-testid="unsaved" />
 }
-
-export function FileGlyph(): React.JSX.Element {
-  return (
-    <svg className="file__glyph" viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M3 1.5 H7.5 L10 4 V10.5 H3 Z M7.5 1.5 V4 H10" />
-    </svg>
-  )
-}

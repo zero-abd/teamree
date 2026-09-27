@@ -133,12 +133,6 @@
   cursor: pointer;
 }
 
-.run-buttons__run svg {
-  width: 12px;
-  height: 12px;
-  fill: currentcolor;
-}
-
 .run-buttons__run:hover,
 .run-buttons__run:focus-visible {
   background: var(--bg-hover);
@@ -169,11 +163,6 @@
   background: transparent;
   color: var(--fg-muted);
   cursor: pointer;
-}
-
-.tabs__action svg {
-  width: 16px;
-  height: 16px;
 }
 
 .tabs__action:hover,
@@ -284,12 +273,6 @@
   color: var(--fg-muted);
   cursor: pointer;
   opacity: var(--control-rest);
-}
-
-.tab__rename svg,
-.tab__close svg {
-  width: 14px;
-  height: 14px;
 }
 
 .tab:hover .tab__rename,
@@ -403,10 +386,6 @@
 
 .welcome__other:hover:not(:disabled) {
   color: var(--fg);
-}
-
-.welcome__actions svg {
-  flex: none;
 }
 
 .welcome__other svg {
@@ -641,16 +620,6 @@
 
 .button--primary .worktree-start__icon {
   color: inherit;
-}
-
-.worktree-start__icon svg {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.1;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 /* The workspace splits horizontally once the changes panel is open: panes keep

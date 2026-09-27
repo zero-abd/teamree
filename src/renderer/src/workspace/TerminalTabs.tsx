@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { hasCheckout } from '@shared/entities'
-import { FileGlyph, UnsavedDot } from '../files/FileBar'
+import { UnsavedDot } from '../files/FileBar'
 import { usePaneDrag, useTabDrag } from '../panes/paneDrag'
 import { collectTerminalIds, hasTerminal } from '../panes/paneLayout'
 import { usePaneMenu } from './paneMenu'
@@ -17,7 +17,6 @@ import { Icon } from '../icons/Icon'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { dotClass, dotTone } from '../sidebar/agentRows'
 import { refocus, RowMenu, type MenuClosed, type RowMenuAnchor } from '../sidebar/RowMenu'
-import { SidebarGlyph } from '../shell/Brand'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
@@ -106,7 +105,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
           aria-label="Show sidebar"
           onClick={toggleSidebar}
         >
-          <SidebarGlyph />
+          <Icon name="sidebar-toggle" />
         </button>
       )}
 
@@ -182,7 +181,7 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
                       PTY, and a second dot would be a second vocabulary for four
                       states the app can only honestly describe one way. */}
                     {isFile ? (
-                      <FileGlyph />
+                      <Icon name="file" size={14} className="file__glyph" />
                     ) : (
                       <span
                         className={dotClass(tab.activity === null ? null : dotTone(tab.activity, tab.agent))}

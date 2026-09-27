@@ -8,6 +8,7 @@ import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import type { RowMenuItem } from '../sidebar/RowMenu'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { Icon } from '../icons/Icon'
 
 export const RESUME_CONVERSATION = 'Resume Conversation…'
 
@@ -41,13 +42,13 @@ export const MENU_ROWS: readonly StartMenuGroup[] = [
     {
       label: 'New Terminal',
       command: 'new-terminal',
-      icon: <TerminalGlyph />,
+      icon: <Icon name="terminal" size={14} />,
       run: (actions) => actions.newTerminal()
     },
     {
       label: 'New Markdown',
       command: 'new-markdown',
-      icon: <PageGlyph />,
+      icon: <Icon name="page" size={14} />,
       run: (actions) => actions.newMarkdown()
     }
   ],
@@ -55,13 +56,13 @@ export const MENU_ROWS: readonly StartMenuGroup[] = [
   [
     {
       label: RESUME_CONVERSATION,
-      icon: <HistoryGlyph />,
+      icon: <Icon name="history" size={14} />,
       run: (actions) => actions.resumeConversation(),
       needsHistory: true
     },
     {
       label: 'Agent Settings…',
-      icon: <SettingsGlyph />,
+      icon: <Icon name="settings" size={14} />,
       run: (actions) => actions.openAgentSettings(),
       menuOnly: true
     }
@@ -127,37 +128,5 @@ export function useStartMenuItems(
     },
     panesOnly,
     hasResumable(conversations, agents)
-  )
-}
-
-function TerminalGlyph(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M1.5 2.5 H10.5 V9.5 H1.5 Z M3.5 4.8 L5.3 6.2 L3.5 7.6 M6.3 7.6 H8.5" />
-    </svg>
-  )
-}
-
-function HistoryGlyph(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M2.2 4.2 A4 4 0 1 1 2 6.8 M2.2 1.8 V4.2 H4.6 M6 3.6 V6 L7.6 7.2" />
-    </svg>
-  )
-}
-
-function PageGlyph(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M3 1.5 H7.5 L10 4 V10.5 H3 Z M7.5 1.5 V4 H10 M4.5 6.5 H8.5 M4.5 8.5 H8.5" />
-    </svg>
-  )
-}
-
-function SettingsGlyph(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M6 4.2 A1.8 1.8 0 1 0 6 7.8 A1.8 1.8 0 1 0 6 4.2 M6 1.5 V3 M6 9 V10.5 M1.5 6 H3 M9 6 H10.5 M2.8 2.8 L3.9 3.9 M8.1 8.1 L9.2 9.2 M2.8 9.2 L3.9 8.1 M8.1 3.9 L9.2 2.8" />
-    </svg>
   )
 }

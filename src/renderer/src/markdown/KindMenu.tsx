@@ -43,7 +43,7 @@ export function MenuRow({
       onClick={onPick}
     >
       <span className="md-popover__icon">
-        <BlockIcon name={icon} />
+        <BlockIcon name={icon} size={14} />
       </span>
       {label}
     </button>

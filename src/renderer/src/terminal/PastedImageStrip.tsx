@@ -4,6 +4,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ShownImage } from './paneImageLinks'
 import type { NotRemoved } from './promptEdit'
+import { Icon } from '../icons/Icon'
 
 /** Per pane, so a strip that remounts with its pane comes back as it was left. */
 const minimizedPanes = new Set<string>()
@@ -117,9 +118,7 @@ export function PastedImageStrip({
                   title="Remove from prompt"
                   onClick={() => remove(image, images[at + 1] ?? images[at - 1])}
                 >
-                  <svg viewBox="0 0 12 12" aria-hidden="true">
-                    <path d="M3.5 3.5 L8.5 8.5 M8.5 3.5 L3.5 8.5" />
-                  </svg>
+                  <Icon name="remove" size={14} />
                 </button>
               </li>
             ))}
@@ -137,9 +136,7 @@ export function PastedImageStrip({
             title="Minimize"
             onClick={() => minimize(true)}
           >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M3 6 H9" />
-            </svg>
+            <Icon name="minimize" size={14} />
           </button>
         </>
       )}

@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useSidebarView } from '../state/sidebarViewStore'
 import { QUICK_FILTERS } from './sidebarFilter'
+import { Icon } from '../icons/Icon'
 
 export function SidebarFilter({
   field,
@@ -83,13 +84,7 @@ export function CompactToggle(): React.JSX.Element {
       aria-pressed={compact}
       onClick={() => setCompact(!compact)}
     >
-      <svg viewBox="0 0 14 14" aria-hidden="true">
-        {compact ? (
-          <path d="M2.5 3.5h9M2.5 6h9M2.5 8.5h9M2.5 11h9" />
-        ) : (
-          <path d="M2.5 3.5h9M2.5 5.5h5M2.5 9h9M2.5 11h5" />
-        )}
-      </svg>
+      <Icon name={compact ? 'density-compact' : 'density-comfortable'} size={14} />
     </button>
   )
 }

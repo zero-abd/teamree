@@ -44,6 +44,21 @@ describe('stylesheets', () => {
     expect(empty).toEqual([])
   })
 
+  // Icons take their size and stroke from `Icon`; per-stylesheet overrides are how five grids and seven strokes crept in.
+  it('leaves every icon’s size and stroke to the icon set', () => {
+    const overrides: string[] = []
+    for (const name of sheets) {
+      postcss
+        .parse(readFileSync(path.join(here, name), 'utf8'), { from: name })
+        .walkDecls(/^(width|height|stroke-width)$/, (decl) => {
+          const selector = (decl.parent as postcss.Rule).selector
+          if (/\bsvg\b|\[data-icon\]/.test(selector) && !selector.includes('resources__spark'))
+            overrides.push(`${name} ${selector} ${decl.prop}`)
+        })
+    }
+    expect(overrides).toEqual([])
+  })
+
   // A notice under the modal scrim is painted and covered; the two z-indexes live in two files.
   it('stacks the notices above the modal layer, so no dialog can hide its own error', () => {
     expect(zIndexOf('.corner-stack')).toBeGreaterThan(zIndexOf('.modal-layer'))
@@ -184,12 +199,6 @@ describe('stylesheets', () => {
       const active = ruleFor('workspace.css', '.tab--active')
       expect(declarationOf(active, 'box-shadow')).toMatch(/^inset 0 -2px 0 /)
       expect(declarationOf(ruleFor('workspace.css', '.tab'), 'border-bottom')).toBeUndefined()
-    })
-
-    it('draws the pane buttons’ icons in a 16px box', () => {
-      const icon = ruleFor('workspace.css', '.tabs__action svg')
-      expect(declarationOf(icon, 'width')).toBe('16px')
-      expect(declarationOf(icon, 'height')).toBe('16px')
     })
 
     // Both strips are the window's top row; two heights would be a step in the frame.

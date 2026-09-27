@@ -18,6 +18,7 @@ import {
   type PickerRow
 } from './startPointModel'
 import { EMPTY_START_POINTS, type StartPointsState } from './useStartPoints'
+import { Icon } from '../icons/Icon'
 
 /** The text in the box, plus the listed option it stands for, if any. */
 export type StartPointValue = { text: string; option: StartPoint | null }
@@ -142,7 +143,7 @@ export function StartPointPicker({ state, onReload, value, onChange, note }: Sta
               document.getElementById(inputId)?.focus()
             }}
           >
-            <Chevron />
+            <Icon name="chevron-down" size={14} />
           </button>
         </div>
 
@@ -201,15 +202,6 @@ export function StartPointPicker({ state, onReload, value, onChange, note }: Sta
         ) : null}
       </div>
     </div>
-  )
-}
-
-/** The one chevron: every select, and Start from. */
-export function Chevron(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 12 12" aria-hidden="true">
-      <path d="M3 4.5 6 7.5 9 4.5" />
-    </svg>
   )
 }
 

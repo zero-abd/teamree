@@ -96,7 +96,7 @@ describe('the files tab’s rows', () => {
     render(<FilesTab worktree={worktree} />)
     const icons = await Promise.all(
       ['src', 'NOTES.md', 'logo.png', 'package.json', 'totals.ts'].map(async (name) =>
-        (await rowFor(name)).querySelector('svg[data-icon]')?.getAttribute('data-icon')
+        (await rowFor(name)).querySelector('.tree__icon')?.getAttribute('data-icon')
       )
     )
     expect(icons).toEqual(['folder', 'file-text', 'file-image', 'file-data', 'file-code'])
@@ -105,7 +105,7 @@ describe('the files tab’s rows', () => {
   it('opens the folder icon with the folder', async () => {
     render(<FilesTab worktree={worktree} />)
     fireEvent.click(await rowFor('src'))
-    expect((await rowFor('src')).querySelector('svg[data-icon]')?.getAttribute('data-icon')).toBe('folder-open')
+    expect((await rowFor('src')).querySelector('.tree__icon')?.getAttribute('data-icon')).toBe('folder-open')
   })
 
   it('colours a changed file’s name by what git says of it, with the letter beside it', async () => {
@@ -143,6 +143,6 @@ describe('the files tab’s rows', () => {
       ['tree__file', 'totals.ts'],
       ['tree__dir', 'src/cart']
     ])
-    expect(row.querySelector('svg[data-icon]')?.getAttribute('data-icon')).toBe('file-code')
+    expect(row.querySelector('.tree__icon')?.getAttribute('data-icon')).toBe('file-code')
   })
 })

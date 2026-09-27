@@ -222,15 +222,6 @@
   opacity: var(--control-rest);
 }
 
-.pane__close svg {
-  width: 9px;
-  height: 9px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-}
-
 .pane:hover .pane__close,
 .pane--focused .pane__close,
 .pane__close:focus-visible {
@@ -628,16 +619,6 @@ body.is-dragging-pane * {
 .image-strip__minimize:hover {
   background: var(--bg-press);
   color: var(--fg);
-}
-
-.image-strip__remove svg,
-.image-strip__minimize svg {
-  width: 10px;
-  height: 10px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
 }
 
 .image-strip--minimized {

@@ -465,9 +465,7 @@ export function WatchedPaneView({
           aria-label={`Stop watching ${handle}’s pane ${name}`}
           onClick={onClose}
         >
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M3 3 L9 9 M9 3 L3 9" />
-          </svg>
+          <Icon name="close" size={14} />
         </button>
       </header>
 

@@ -14,16 +14,6 @@ export function Brand(): React.JSX.Element {
   )
 }
 
-/** The glyph on both sidebar toggles; the button's position and label say which way. */
-export function SidebarGlyph(): React.JSX.Element {
-  return (
-    <svg viewBox="0 0 14 14" aria-hidden="true">
-      <rect x="1.5" y="2.5" width="11" height="9" rx="1.5" />
-      <path d="M5.5 2.5 V11.5" />
-    </svg>
-  )
-}
-
 /**
  * The teamree mark in its reduced form (`brand/mark-small.svg`): below ~32px the full mark's frame bars
  * fuse. Inlined for `currentColor` and no asset path; decorative, since the wordmark names it.

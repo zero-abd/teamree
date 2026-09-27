@@ -20,6 +20,7 @@ import {
 } from '@shared/theme'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { TOKEN_GROUPS } from '../theme/tokenGroups'
+import { Icon } from '../icons/Icon'
 
 export function AppearanceSettings(): React.JSX.Element {
   const appearance = useWorkspaceStore((state) => state.appearance)
@@ -178,9 +179,7 @@ export function AppearanceSettings(): React.JSX.Element {
           aria-expanded={editingColours}
           onClick={() => setEditingColours((open) => !open)}
         >
-          <svg className={`chevron${editingColours ? ' chevron--open' : ''}`} viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M4.5 2.5 L8 6 L4.5 9.5" />
-          </svg>
+          <Icon name="chevron-right" size={14} className={`chevron${editingColours ? ' chevron--open' : ''}`} />
           <span>All Colours</span>
           {Object.keys(choice.overrides).length > 0 ? (
             <span className="appearance__count">{` ${Object.keys(choice.overrides).length} changed`}</span>

@@ -409,12 +409,7 @@ export function WorktreeRow({
             aria-label={badge.detail}
             title={badge.detail}
           >
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <circle cx="3.5" cy="2.5" r="1.3" />
-              <circle cx="3.5" cy="9.5" r="1.3" />
-              <circle cx="8.5" cy="5" r="1.3" />
-              <path d="M3.5 3.8v4.4M8.5 6.3c0 1.6-2 2.2-5 2.2" />
-            </svg>
+            <Icon name="merge-clean" size={14} />
           </span>
         ) : badge?.tone === 'conflicts' ? (
           <span
@@ -423,13 +418,7 @@ export function WorktreeRow({
             aria-label={badge.detail}
             title={badge.detail}
           >
-            {/* The clean mark with its join broken by a cross. */}
-            <svg viewBox="0 0 12 12" aria-hidden="true">
-              <circle cx="3.5" cy="2.5" r="1.3" />
-              <circle cx="3.5" cy="9.5" r="1.3" />
-              <circle cx="8.5" cy="2.5" r="1.3" />
-              <path d="M3.5 3.8v4.4M8.5 3.8v1.4M7 7.5l3 3M10 7.5l-3 3" />
-            </svg>
+            <Icon name="merge-conflict" size={14} />
           </span>
         ) : badge ? (
           <span className={`chip worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
@@ -673,9 +662,7 @@ export function WorktreeRow({
             aria-expanded={!task.collapsed}
             onClick={() => task.onCollapse(!task.collapsed)}
           >
-            <svg className={`chevron${task.collapsed ? '' : ' chevron--open'}`} viewBox="0 0 12 12" aria-hidden="true">
-              <path d="M4.5 2.5 L8.5 6 L4.5 9.5" />
-            </svg>
+            <Icon name="chevron-right" size={14} className={`chevron${task.collapsed ? '' : ' chevron--open'}`} />
           </button>
         )}
         {/* A field cannot sit inside a button, so while renaming the row is a plain box. */}
@@ -735,11 +722,7 @@ export function WorktreeRow({
             openMenu({ x: rect.right - 8, y: rect.bottom + 2 }, event.currentTarget)
           }}
         >
-          <svg viewBox="0 0 12 12" aria-hidden="true">
-            <circle cx="2.5" cy="6" r="1" />
-            <circle cx="6" cy="6" r="1" />
-            <circle cx="9.5" cy="6" r="1" />
-          </svg>
+          <Icon name="more" size={14} />
         </button>
       </div>
 

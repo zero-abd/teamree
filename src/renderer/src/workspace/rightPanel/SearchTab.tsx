@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '../../state/workspaceStore'
 import { directoryOf, fileNameOf } from './ChangesTab'
 import { fileKey, groupSearchResults, hitWindow, searchRows, stepHit } from './searchModel'
 import { searchSignature, useSearchStore, type SearchForm } from './searchStore'
+import { Icon } from '../../icons/Icon'
 
 /** How long the field waits after a keystroke before searching. */
 const SEARCH_DEBOUNCE_MS = 200
@@ -214,13 +215,7 @@ export function SearchTab({ worktree }: { worktree: Worktree }): React.JSX.Eleme
                   title={row.file.path}
                   onClick={() => fold(fileKey(row.file))}
                 >
-                  <svg
-                    className={`chevron${row.collapsed ? '' : ' chevron--open'}`}
-                    viewBox="0 0 12 12"
-                    aria-hidden="true"
-                  >
-                    <path d="M4.5 2.5 L8.5 6 L4.5 9.5" />
-                  </svg>
+                  <Icon name="chevron-right" size={14} className={`chevron${row.collapsed ? '' : ' chevron--open'}`} />
                   <span className="search__fileName">{fileNameOf(row.file.path)}</span>
                   <span className="search__dir">{directoryOf(row.file.path)}</span>
                   <span className="search__count">{row.file.lines.length}</span>

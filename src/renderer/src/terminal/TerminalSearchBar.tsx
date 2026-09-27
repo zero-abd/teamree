@@ -4,6 +4,7 @@
 
 import { useEffect, useRef } from 'react'
 import { canStep, matchLabel, searchFieldAction, type PaneSearchOptions, type PaneSearchState } from './paneSearchModel'
+import { Icon } from '../icons/Icon'
 
 type TerminalSearchBarProps = {
   state: PaneSearchState
@@ -104,9 +105,7 @@ export function TerminalSearchBar({
         disabled={!steppable}
         onClick={() => onStep('previous')}
       >
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          <path d="M2.5 7.5 L6 4 L9.5 7.5" />
-        </svg>
+        <Icon name="chevron-up" size={14} />
       </button>
       <button
         type="button"
@@ -116,9 +115,7 @@ export function TerminalSearchBar({
         disabled={!steppable}
         onClick={() => onStep('next')}
       >
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          <path d="M2.5 4.5 L6 8 L9.5 4.5" />
-        </svg>
+        <Icon name="chevron-down" size={14} />
       </button>
       <button
         type="button"
@@ -127,9 +124,7 @@ export function TerminalSearchBar({
         aria-label="Close search"
         onClick={onClose}
       >
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          <path d="M3 3 L9 9 M9 3 L3 9" />
-        </svg>
+        <Icon name="close" size={14} />
       </button>
     </div>
   )

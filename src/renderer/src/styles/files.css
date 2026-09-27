@@ -5,13 +5,7 @@
 }
 
 .file__glyph {
-  width: 12px;
-  height: 12px;
   flex: none;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.1;
-  stroke-linejoin: round;
   opacity: 0.75;
 }
 
@@ -101,15 +95,6 @@
   display: grid;
   place-items: center;
   padding: 0 5px;
-}
-
-.file__icon svg {
-  width: 12px;
-  height: 12px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.2;
-  stroke-linecap: round;
 }
 
 .file__more {
@@ -460,15 +445,6 @@
   color: var(--fg-muted);
   cursor: pointer;
   opacity: var(--control-rest);
-}
-
-.column__close svg {
-  width: 9px;
-  height: 9px;
-  fill: none;
-  stroke: currentcolor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
 }
 
 .column__tab:hover .column__close,

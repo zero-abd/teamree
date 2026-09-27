@@ -740,16 +740,6 @@
   color: var(--fg-secondary);
 }
 
-.md-popover__icon .md-glyph {
-  width: 14px;
-  height: 14px;
-}
-
-.md-popover__icon .md-glyph--letters {
-  width: auto;
-  height: auto;
-}
-
 .md-popover__icon .md-glyph--letters::before {
   font-size: var(--text-xs);
 }

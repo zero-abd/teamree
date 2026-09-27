@@ -148,7 +148,7 @@ export function SetupSummary(): React.JSX.Element {
       <div className="welcome__status">
         {working.map((name) => (
           <span key={name} className="welcome__check">
-            <Icon name="check" size={12} />
+            <Icon name="check" size={14} />
             {name}
           </span>
         ))}

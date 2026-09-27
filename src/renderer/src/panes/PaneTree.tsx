@@ -28,6 +28,7 @@ import { FilePane } from './FilePane'
 import { usePaneDrag, useTabDrag } from './paneDrag'
 import { normalizeSizes } from './paneLayout'
 import { SplitFrame } from './SplitFrame'
+import { Icon } from '../icons/Icon'
 
 export type PaneCallbacks = {
   terminals: Record<string, Terminal>
@@ -195,9 +196,7 @@ function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColu
                   aria-label={`Close ${name}`}
                   onClick={() => callbacks.onClose(tab.terminalId)}
                 >
-                  <svg viewBox="0 0 12 12" aria-hidden="true">
-                    <path d="M3 3 L9 9 M9 3 L3 9" />
-                  </svg>
+                  <Icon name="close" size={14} />
                 </button>
               </div>
             )

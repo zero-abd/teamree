@@ -10,6 +10,7 @@ import { activityWords, presenceWords, type TeammateGlance, type TheirOverlap } 
 import { isFolded, useTeamFold } from './teamFold'
 import type { TeammatePaneRow, TeammateWorktreeRowModel } from './teammateRows'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
+import { Icon } from '../icons/Icon'
 
 type TeammateGroupsProps = {
   projectId: string
@@ -69,9 +70,7 @@ export function TeammateGroups({
                 }
               }}
             >
-              <svg className={`chevron${closed ? '' : ' chevron--open'}`} viewBox="0 0 12 12" aria-hidden="true">
-                <path d="M4.5 2.5 L8.5 6 L4.5 9.5" />
-              </svg>
+              <Icon name="chevron-right" size={14} className={`chevron${closed ? '' : ' chevron--open'}`} />
               <Avatar handle={teammate.handle} presence={teammate.presence} decorative />
               <span className="teammate__name">{teammate.handle}</span>
               {teammate.presence === 'online' ? null : (

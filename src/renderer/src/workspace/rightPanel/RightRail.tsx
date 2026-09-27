@@ -2,6 +2,7 @@
 // panel, icons down the right edge when closed, so the panel stays findable.
 
 import type { RightPanelTab } from './rightPanelState'
+import { Icon } from '../../icons/Icon'
 
 /** What the Changes badge counts: what a commit would deal with; ahead/behind belong to the status bar. */
 export function changedCount(
@@ -24,29 +25,17 @@ const TABS: readonly { id: RightPanelTab; label: string; icon: React.JSX.Element
   {
     id: 'files',
     label: 'Files',
-    icon: (
-      <svg viewBox="0 0 14 14" aria-hidden="true">
-        <path d="M1.5 3.5 H5.5 L7 5 H12.5 V11.5 H1.5 Z" />
-      </svg>
-    )
+    icon: <Icon name="folder" />
   },
   {
     id: 'changes',
     label: 'Changes',
-    icon: (
-      <svg viewBox="0 0 14 14" aria-hidden="true">
-        <path d="M4 1.5 H8.5 L11 4 V12.5 H4 Z M5.5 6.5 H9.5 M5.5 9 H9.5" />
-      </svg>
-    )
+    icon: <Icon name="changes" />
   },
   {
     id: 'search',
     label: 'Search',
-    icon: (
-      <svg viewBox="0 0 14 14" aria-hidden="true">
-        <path d="M6 2 A4 4 0 1 1 6 10 A4 4 0 1 1 6 2 Z M9 9 L12.5 12.5" />
-      </svg>
-    )
+    icon: <Icon name="search" />
   }
 ]
 
@@ -87,9 +76,7 @@ export function RightRail({ open, tab, status, onPick, onToggle }: RightRailProp
         title={open ? 'Hide panel' : 'Show panel'}
         onClick={onToggle}
       >
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          {open ? <path d="M4 2.5 L7.5 6 L4 9.5" /> : <path d="M8 2.5 L4.5 6 L8 9.5" />}
-        </svg>
+        <Icon name={open ? 'panel-hide' : 'panel-show'} size={14} />
       </button>
     </div>
   )

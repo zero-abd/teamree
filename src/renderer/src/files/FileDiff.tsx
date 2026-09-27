@@ -15,6 +15,7 @@ import { ConflictView } from './ConflictView'
 import { Segments } from './FileBar'
 import { DIFF_MATCH_LIMIT, findInPatches, stepMatch, type DiffMatch } from './diffFind'
 import { usePagedPatch } from './usePagedPatch'
+import { Icon } from '../icons/Icon'
 
 type Diffs = { working: WorktreeDiff; staged: WorktreeDiff }
 
@@ -185,9 +186,7 @@ function LayoutSegments({
         aria-pressed={layout === 'inline'}
         onClick={() => setDiffLayout('inline')}
       >
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          <path d="M2 3.5 H10 M2 6 H10 M2 8.5 H10" />
-        </svg>
+        <Icon name="diff-inline" size={14} />
       </button>
       <button
         type="button"
@@ -198,9 +197,7 @@ function LayoutSegments({
         disabled={fitLayout('split', bodyWidth) !== 'split'}
         onClick={() => setDiffLayout('split')}
       >
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          <path d="M1.5 3.5 H5 M7 3.5 H10.5 M1.5 6 H5 M7 6 H10.5 M1.5 8.5 H5 M7 8.5 H10.5" />
-        </svg>
+        <Icon name="diff-split" size={14} />
       </button>
     </Segments>
   )
@@ -220,9 +217,7 @@ function DiffOptionTools(): React.JSX.Element {
         aria-pressed={options.wrap}
         onClick={() => toggle('wrap')}
       >
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          <path d="M1.5 3 H10.5 M1.5 6 H9 A1.5 1.5 0 0 1 9 9 H6 M7.2 7.8 L6 9 L7.2 10.2 M1.5 9 H3.5" />
-        </svg>
+        <Icon name="wrap" size={14} />
       </button>
       <button
         type="button"
@@ -232,9 +227,7 @@ function DiffOptionTools(): React.JSX.Element {
         aria-pressed={options.hideWhitespace}
         onClick={() => toggle('hideWhitespace')}
       >
-        <svg viewBox="0 0 12 12" aria-hidden="true">
-          <path d="M2 5.5 V8.5 H10 V5.5" />
-        </svg>
+        <Icon name="whitespace" size={14} />
       </button>
     </Segments>
   )
