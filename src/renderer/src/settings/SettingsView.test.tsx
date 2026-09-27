@@ -1026,7 +1026,7 @@ describe('appearance', () => {
     renderAt('appearance')
     const section = screen.getByRole('region', { name: 'Appearance' })
     expect(within(section).queryByRole('radiogroup')).toBeNull()
-    expect(within(section).getByText('Charcoal · Dark')).toBeTruthy()
+    expect(within(section).getByText('Studio · Dark')).toBeTruthy()
     fireEvent.click(within(section).getByRole('button', { name: 'Change…' }))
     expect(showAppearance).toHaveBeenCalledExactlyOnceWith(true)
   })

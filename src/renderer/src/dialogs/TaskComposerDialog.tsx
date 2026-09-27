@@ -17,7 +17,7 @@ import { branchNameFromTask } from './branchNameFromTask'
 import { IssuePicker } from './IssuePicker'
 import { issueBranch, issueTask } from './issueModel'
 import { Modal } from './Modal'
-import { Select } from './Select'
+import { Select } from '../ui/Select'
 import { StartPointPicker, type StartPointValue } from './StartPointPicker'
 import { landedAhead } from './startPointModel'
 import {

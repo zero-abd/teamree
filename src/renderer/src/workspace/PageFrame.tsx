@@ -1,16 +1,22 @@
-// The frame Settings, Help, Teamwork and All Panes share: a head with the title and a ×, the page's own
-// controls under them, then one measured column that scrolls under it.
+// The frame Settings, Help, Teamwork and All Panes share: the page header, the page's own controls under
+// it, then one measured column that scrolls under it.
 
 import { useEffect, useRef, type ReactNode, type Ref } from 'react'
 import { modalOnScreen } from '../dialogs/modalLayer'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { Icon } from '../icons/Icon'
+import type { IconName } from '../icons/Icon'
+import { PageHeader } from '../ui/PageHeader'
 
 type PageFrameProps = {
   /** The landmark's name. */
   label: string
   title: string
+  /** The 32px tile before the title. */
+  icon?: IconName
   lede?: ReactNode
+  /** Right-aligned in the head, before the close. */
+  trailing?: ReactNode
+  /** A row of the page's own controls under the head. */
   actions?: ReactNode
   onClose: () => void
   closeTitle?: string
@@ -26,7 +32,9 @@ type PageFrameProps = {
 export function PageFrame({
   label,
   title,
+  icon,
   lede,
+  trailing,
   actions,
   onClose,
   closeTitle = 'Back to the panes',
@@ -68,21 +76,14 @@ export function PageFrame({
       {side === undefined ? null : <div className="page__side">{side}</div>}
       <header className="page__head">
         <div className="page__column">
-          <div className="page__head-row">
-            <div className="page__identity">
-              <h1 className="page__title">{title}</h1>
-              {lede === undefined ? null : <p className="page__lede">{lede}</p>}
-            </div>
-            <button
-              type="button"
-              className="page__close"
-              title={closeTitle}
-              aria-label="Back to the panes"
-              onClick={onClose}
-            >
-              <Icon name="close" size={14} />
-            </button>
-          </div>
+          <PageHeader
+            title={title}
+            icon={icon}
+            lede={lede}
+            trailing={trailing}
+            onClose={onClose}
+            closeTitle={closeTitle}
+          />
           {actions === undefined ? null : <div className="page__actions">{actions}</div>}
         </div>
       </header>

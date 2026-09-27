@@ -355,7 +355,7 @@ export type IconName = keyof typeof GLYPHS
 
 export const ICON_NAMES = Object.keys(GLYPHS) as IconName[]
 
-/** One glyph at 14 or 16 px. Hidden from assistive tech unless `label` names it. */
+/** One glyph: 16 px, 14 in dense rows and tabs, 12 in dense meta, 20 in a page tile. Hidden unless `label` names it. */
 export function Icon({
   name,
   size = 16,
@@ -364,7 +364,7 @@ export function Icon({
   ...data
 }: {
   name: IconName
-  size?: 14 | 16
+  size?: 12 | 14 | 16 | 20
   className?: string
   label?: string
 } & { [attribute: `data-${string}`]: string }): React.JSX.Element {

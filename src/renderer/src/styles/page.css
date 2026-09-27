@@ -3,6 +3,14 @@
 
 .page {
   overflow: hidden;
+  animation: page-in var(--motion-slow) var(--ease-enter);
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
 }
 
 .page:focus-visible {
@@ -21,8 +29,9 @@
   flex: none;
   overflow: hidden;
   scrollbar-gutter: stable;
-  padding: var(--s4) var(--s5) var(--s3);
+  padding: var(--s5) var(--s5) var(--s4);
   border-bottom: 1px solid var(--line);
+  background: var(--bg-pane);
   /* The window's top edge here once the pane strip steps aside for a page. */
   -webkit-app-region: drag;
 }
@@ -35,28 +44,51 @@
 .page__head-row {
   display: flex;
   align-items: center;
-  gap: var(--s4);
+  gap: 14px;
 }
 
-/* The lede sits on the title's baseline, so the title row is one height on every page. */
+/* The page's mark: a 32px tile in the accent's wash. */
+.page__tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--accent-line);
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
 .page__identity {
   display: flex;
   flex: 1 1 auto;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 var(--s3);
+  flex-direction: column;
   min-width: 0;
 }
 
 .page__title {
-  font-size: var(--text-xl);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  line-height: 32px;
+  letter-spacing: -0.035em;
 }
 
 .page__lede {
+  margin-top: 2px;
   color: var(--fg-muted);
   font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 16px;
+}
+
+/* The head's own actions, right-aligned before the close. */
+.page__trailing {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s2);
+  -webkit-app-region: no-drag;
 }
 
 /* The page's own controls get a row under the title, so the title and the × sit in the same place on
@@ -71,15 +103,21 @@
 }
 
 .page__close {
-  padding: var(--s1);
   display: grid;
-  place-items: center;
   flex: none;
+  place-items: center;
+  align-self: flex-start;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 0;
-  border-radius: var(--r1);
+  border-radius: var(--r2);
   background: none;
   color: var(--fg-muted);
   cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
 }
 
 .page__close:hover {

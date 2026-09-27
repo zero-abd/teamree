@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { teamworkFacts } from '@shared/entities'
 import { copyText } from '../clipboard/clipboard'
-import { Select } from '../dialogs/Select'
+import { Select } from '../ui/Select'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { TerminalView } from '../terminal/TerminalView'

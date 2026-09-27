@@ -48,9 +48,10 @@ beforeEach(() => {
 })
 
 describe('picking a theme', () => {
-  it('offers the built-ins with Charcoal already chosen', () => {
+  it('offers the built-ins with Studio already chosen', () => {
     render(<AppearanceSettings />)
-    expect(screen.getByRole('radio', { name: /Charcoal/ }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('radio', { name: /^Studio/ }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('radio', { name: /Charcoal/ }).getAttribute('aria-checked')).toBe('false')
     expect(screen.getByRole('radio', { name: /Absolute Black/ }).getAttribute('aria-checked')).toBe('false')
     expect(screen.getByRole('radio', { name: /Midnight/ }).getAttribute('aria-checked')).toBe('false')
   })
@@ -96,9 +97,10 @@ describe('the two choices worth making without opening anything', () => {
     expect(lastChange().accent).toBe('#e070c0')
   })
 
-  it('names the brand accent Violet, and marks it chosen on a new installation', () => {
+  it('names Studio’s accent Studio Violet, and marks it chosen on a new installation', () => {
     render(<AppearanceSettings />)
-    expect(screen.getByRole('button', { name: 'Violet' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Studio Violet' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Violet' }).getAttribute('aria-pressed')).toBe('false')
     expect(screen.queryByRole('button', { name: 'Indigo' })).toBeNull()
   })
 
@@ -132,7 +134,7 @@ describe('the two choices worth making without opening anything', () => {
   it('offers a way back to the preset’s ground once one has been chosen', () => {
     seed({ ...DEFAULT_APPEARANCE, ground: '#101820' })
     render(<AppearanceSettings />)
-    fireEvent.click(screen.getByRole('button', { name: /Back to Charcoal/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Back to Studio/ }))
     expect(lastChange().ground).toBeNull()
   })
 })
@@ -208,10 +210,11 @@ describe('light, dark, or whatever the Mac is', () => {
   it('offers the light presets while the window is light', () => {
     seed(DEFAULT_APPEARANCE, 'light')
     render(<AppearanceSettings />)
-    expect(preset('Light').getAttribute('aria-checked')).toBe('true')
+    expect(preset('Studio Light').getAttribute('aria-checked')).toBe('true')
+    expect(preset('Light').getAttribute('aria-checked')).toBe('false')
     expect(screen.queryByRole('radio', { name: /Charcoal/ })).toBeNull()
     fireEvent.click(preset('Paper'))
-    expect(lastChange()).toMatchObject({ themeId: 'charcoal', light: { themeId: 'paper' } })
+    expect(lastChange()).toMatchObject({ themeId: 'studio', light: { themeId: 'paper' } })
   })
 
   it('edits the light slot while light, and leaves the dark one alone', () => {

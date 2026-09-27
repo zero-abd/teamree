@@ -428,7 +428,10 @@ describe('workspace store', () => {
       })
 
       it('moves an untouched Charcoal and Light to Studio and Studio Light once, and writes that down', async () => {
-        await stored({ ...pristine('charcoal'), mode: 'system', light: pristine('light') }, { themeMigratedToCharcoal: true })
+        await stored(
+          { ...pristine('charcoal'), mode: 'system', light: pristine('light') },
+          { themeMigratedToCharcoal: true }
+        )
         const store = await WorkspaceStore.open(filePath)
         expect(store.getAppearance()).toEqual({ ...DEFAULT_APPEARANCE, light: pristine('studio-light') })
         await store.flush()

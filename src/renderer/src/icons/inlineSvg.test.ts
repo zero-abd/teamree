@@ -7,8 +7,14 @@ import { describe, expect, it } from 'vitest'
 
 const renderer = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
-// The set itself, the brand mark, other products' marks and a data chart.
-const ALLOWED = ['src/icons/Icon.tsx', 'src/shell/Brand.tsx', 'src/agents/glyphs.tsx', 'src/shell/ResourcesControl.tsx']
+// The set itself, the brand mark (the sidebar's and the empty state's), other products' marks and a data chart.
+const ALLOWED = [
+  'src/icons/Icon.tsx',
+  'src/shell/Brand.tsx',
+  'src/ui/EmptyState.tsx',
+  'src/agents/glyphs.tsx',
+  'src/shell/ResourcesControl.tsx'
+]
 
 function sources(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

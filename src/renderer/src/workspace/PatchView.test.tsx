@@ -778,7 +778,7 @@ describe('reading a changed line', () => {
 describe('the rules the patch is drawn with', () => {
   const styles = path.join(path.dirname(fileURLToPath(import.meta.url)), '../styles')
   const css = postcss.parse(
-    ['workspace.css', 'files.css', 'review.css'].map((file) => readFileSync(path.join(styles, file), 'utf8')).join('\n')
+    ['changes.css', 'files.css', 'review.css'].map((file) => readFileSync(path.join(styles, file), 'utf8')).join('\n')
   )
 
   const declarations = (selector: string, property: string): string[] => {

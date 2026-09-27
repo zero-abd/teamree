@@ -1,134 +1,129 @@
 /* The whole visual language: one palette, one type scale, one spacing ramp.
    Nothing below this file should invent a colour or a size.
 
-   THE COLOURS HERE ARE A COPY, AND THE ORIGINAL IS `src/shared/theme.ts`.
-
-   Every value in the palette block is the default preset, Charcoal, as that
-   module resolves it, and `stylesheets.test.ts` recomputes them and fails if the two
-   have drifted. They are written out rather than left to script for one reason:
-   this file paints the first frame. The renderer resolves the stored appearance
-   and writes it onto the root element as soon as it mounts, but a window whose
-   colours arrived a tick late would open as a flash of unstyled dark, and a
-   packaged app that failed to read its theme would open as no colours at all.
-
-   So: change a colour in `theme.ts`, run the suite, and paste what it tells
-   you. Change one only here and the app reverts it on the first render. */
+   The palette is a copy of the default presets as `src/shared/theme.ts` resolves them (Studio, and Studio
+   Light under a light system), written out so the first frame is painted before any script runs.
+   `styles/stylesheets.test.ts` recomputes them and fails if the two drift: change a colour there and paste. */
 
 :root {
   color-scheme: dark;
 
-  /* Surfaces, from the window backdrop up to the things that float. The panes
-     are the ground; the rail (sidebar and status bar), the tab strip, the right
-     panel and anything raised each sit a measured step off it. */
-  --bg-window: #101114;
-  --bg-pane: #101114;
-  --bg-rail: #1a1b20;
-  --bg-tabstrip: #24252a;
-  --bg-panel: #1d1e24;
-  --bg-raised: #292a30;
-  --bg-input: #121318;
-  --bg-hover: rgb(238 241 248 / 7%);
-  --bg-press: rgb(238 241 248 / 12%);
-  --bg-selected: rgb(139 140 247 / 16%);
-  --scrim: rgb(0 0 0 / 62%);
+  /* Surfaces, from the window up to what floats. */
+  --bg-window: #0b0d12;
+  --bg-pane: #0b0d12;
+  --bg-rail: #11141b;
+  --bg-tabstrip: #111419;
+  --bg-tabstrip-active: #141821;
+  --bg-panel: #11141b;
+  --bg-raised: #171b24;
+  --bg-worktree: #151923;
+  --bg-elevated: #1c202a;
+  --bg-sunken: #080a0f;
+  --bg-code: #0a0c11;
+  --bg-input: #0d1016;
+  --bg-hover: rgb(236 239 255 / 6%);
+  --bg-press: rgb(236 239 255 / 10%);
+  --bg-selected: rgb(116 103 255 / 15%);
+  --scrim: rgb(2 3 7 / 74%);
 
-  --line: #42434b;
-  --line-strong: #595b65;
+  --line: #272c38;
+  --line-strong: #3b4251;
+  --line-subtle: #1b202a;
 
-  --fg: #e4e7ee;
-  --fg-secondary: #a0a2a7;
-  --fg-muted: #96979b;
+  --fg: #f1f3f8;
+  --fg-secondary: #aeb4c0;
+  --fg-muted: #7f8795;
+  --fg-faint: #5e6674;
 
-  --accent: #8b8cf7;
-  --accent-bright: #9e9ef8;
-  --accent-soft: rgb(139 140 247 / 16%);
-  --accent-line: rgb(139 140 247 / 55%);
-  /* The label on a filled accent button: a tint of the accent rather than flat
-     black, so the one saturated shape on screen still belongs to the window. */
-  --on-accent: #0e0e19;
+  --accent: #6d5bf2;
+  --accent-bright: #958bff;
+  --accent-soft: rgb(116 103 255 / 15%);
+  --accent-line: rgb(149 139 255 / 58%);
+  --accent-hover: #6754e8;
+  --accent-press: #5f4bd2;
+  --on-accent: #ffffff;
 
-  --success: #57c38a;
-  --warning: #d6a24a;
-  --danger: #e96861;
-  --info: #5aa9e6;
+  /* State: working, asking, ready, failed, stopped. The accent never means one. */
+  --success: #48c78e;
+  --warning: #e8a84c;
+  --danger: #ef6a73;
+  --info: #58a6e7;
+  --working: #49a8f2;
+  --stopped: #7f8795;
 
-  /* Terminal palette, read back by the emulator so both stay in step. The
-     background is the window's own ground, which is what keeps a pane from
-     being a slightly different black inside the same window.
+  /* The terminal reads these back, so pane and chrome stay one surface. */
+  --term-bg: #0b0d12;
+  --term-fg: #dfe3eb;
+  --term-cursor: #958bff;
+  --term-selection: #302b69;
+  --term-black: #303642;
+  --term-red: #ef6a73;
+  --term-green: #48c78e;
+  --term-yellow: #e8a84c;
+  --term-blue: #58a6e7;
+  --term-magenta: #b68cff;
+  --term-cyan: #48b8c7;
+  --term-white: #c5cad4;
+  --term-bright-black: #737b89;
+  --term-bright-red: #f38d94;
+  --term-bright-green: #75d7ad;
+  --term-bright-yellow: #efbf78;
+  --term-bright-blue: #80bced;
+  --term-bright-magenta: #c9aaff;
+  --term-bright-cyan: #76ccd6;
+  --term-bright-white: #f1f3f8;
 
-     The bright half is here rather than left to the emulator's defaults: xterm
-     falls back to its own sixteen when a colour is not supplied, and a theme
-     that supplied eight was a theme whose other eight never moved. */
-  --term-bg: #101114;
-  --term-fg: #e4e7ee;
-  --term-cursor: #9e9ef8;
-  --term-selection: #353658;
-  --term-black: #2f3034;
-  --term-red: #e8615a;
-  --term-green: #57c38a;
-  --term-yellow: #d6a24a;
-  --term-blue: #5aa9e6;
-  --term-magenta: #a98bf0;
-  --term-cyan: #4fb6b2;
-  --term-white: #bec0c7;
-  --term-bright-black: #7a7c80;
-  --term-bright-red: #ed847e;
-  --term-bright-green: #7cd0a4;
-  --term-bright-yellow: #dfb672;
-  --term-bright-blue: #7ebcec;
-  --term-bright-magenta: #bca5f3;
-  --term-bright-cyan: #76c6c3;
-  --term-bright-white: #e4e7ee;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'SF Pro Text', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
 
-  --font-ui:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Inter, Roboto, sans-serif;
-  --font-mono:
-    ui-monospace, SFMono-Regular, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
-  --text-code: 13px;
-
+  /* 11 meta, 12 labels and row sub-lines, 13 body, 15 heading, 19 title, 26 page; code 13 on 20. */
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
   --text-lg: 15px;
-  --text-xl: 18px;
-  --leading: 1.4;
+  --text-xl: 19px;
+  --text-2xl: 26px;
+  --text-code: 13px;
+  --leading: 1.45;
 
-  --s1: 3px;
-  --s2: 6px;
-  --s3: 9px;
-  --s4: 13px;
-  --s5: 18px;
-  --s6: 26px;
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 40px;
+  --s8: 48px;
 
-  --r1: 3px;
-  --r2: 6px;
+  --r1: 4px;
+  --r2: 7px;
   --r3: 10px;
+  --r4: 14px;
+  --r-pill: 999px;
 
-  /* One height for a select and the fields beside it, in Settings and in dialogs. */
-  --control-h: 28px;
-  /* A group's strip of tabs, and the focused group's, a tone lighter than the rest. */
-  --group-strip-h: 36px;
-  --bg-tabstrip-active: var(--bg-raised);
+  --control-h: 32px;
+  --control-sm: 26px;
+  --control-md: 32px;
+  --control-lg: 38px;
+  /* A group's strip of tabs. */
+  --strip-h: 36px;
+  --statusbar-h: 26px;
 
-  /* Two rings, not one: a gap of the surface the control sits on, then the
-     accent. A single accent ring drawn tight against a control's own border is
-     legible on a grey window and almost invisible on this one, because the
-     border it is touching is the only other bright edge in the area. The first
-     stop pushes the ring off the control; the second is the mark itself.
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 28%);
+  --shadow-2: 0 8px 24px rgb(0 0 0 / 34%), 0 1px 3px rgb(0 0 0 / 28%);
+  --shadow-pop: 0 24px 72px rgb(0 0 0 / 56%), 0 4px 16px rgb(0 0 0 / 38%);
+  /* A gap of the ground, then the accent, so the ring never reads as a thicker border. */
+  --ring: 0 0 0 2px var(--bg-pane), 0 0 0 4px var(--accent-bright);
 
-     The gap is the raised surface because everything that wears this ring — the
-     fields, the palette's input, the resizer — is either on a dialog or beside
-     one, and a stop painted in the window's ground would read as a hole. */
-  --ring: 0 0 0 2px var(--bg-raised), 0 0 0 4px var(--accent-bright);
-  /* Deeper than a lifted-grey app needs. On a black ground a shadow cannot
-     announce a floating panel — there is nothing for it to darken — so the
-     panels are separated by their own surface and their border, and this only
-     has to keep the window behind them from reading as part of them. */
-  --shadow-pop: 0 24px 56px rgb(0 0 0 / 72%), 0 2px 10px rgb(0 0 0 / 60%);
-
-  --motion-fast: 110ms;
-  --motion-base: 170ms;
-  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+  --motion-instant: 70ms;
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-slow: 280ms;
+  --ease: cubic-bezier(0.2, 0.72, 0.2, 1);
+  --ease-standard: cubic-bezier(0.2, 0.72, 0.2, 1);
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.2, 1.25, 0.35, 1);
 
   /* A row's or tab's own controls at rest: seen without hovering, full on hover or focus; 3:1 on every ground. */
   --control-rest: 0.8;
@@ -143,63 +138,83 @@
   }
 }
 
-/* The Light preset as `theme.ts` resolves it: the first frame of a light window, since main
-   points `prefers-color-scheme` at the chosen mode. `stylesheets.test.ts` holds it to the source. */
+/* Studio Light: the first frame of a light window, since main points `prefers-color-scheme` at the chosen mode. */
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
 
-    --bg-window: #ffffff;
+    /* Surfaces, from the window up to what floats. */
+    --bg-window: #f4f5f8;
     --bg-pane: #ffffff;
-    --bg-rail: #f5f5f6;
-    --bg-tabstrip: #f5f5f6;
-    --bg-panel: #f3f3f4;
-    --bg-raised: #e9eaec;
+    --bg-rail: #eef0f4;
+    --bg-tabstrip: #f7f8fa;
+    --bg-tabstrip-active: #ffffff;
+    --bg-panel: #f3f4f7;
+    --bg-raised: #ffffff;
+    --bg-worktree: #f8f9fb;
+    --bg-elevated: #ffffff;
+    --bg-sunken: #e9ebf0;
+    --bg-code: #fafbfc;
     --bg-input: #ffffff;
-    --bg-hover: rgb(28 34 51 / 5%);
-    --bg-press: rgb(28 34 51 / 9%);
-    --bg-selected: rgb(139 140 247 / 16%);
-    --scrim: rgb(14 17 26 / 22%);
-    --line: #e4e4e7;
-    --line-strong: #cfd1d4;
-    --fg: #15171c;
-    --fg-secondary: #505155;
-    --fg-muted: #68696b;
-    --accent: #8b8cf7;
-    --accent-bright: #595a9f;
-    --accent-soft: rgb(139 140 247 / 16%);
-    --accent-line: rgb(139 140 247 / 55%);
-    --on-accent: #0e0e19;
-    --success: #357653;
-    --warning: #85642e;
-    --danger: #af4944;
-    --info: #3b6e96;
+    --bg-hover: rgb(31 38 55 / 5%);
+    --bg-press: rgb(31 38 55 / 9%);
+    --bg-selected: rgb(85 70 230 / 11%);
+    --scrim: rgb(16 20 30 / 40%);
+
+    --line: #d9dde5;
+    --line-strong: #b8bec9;
+    --line-subtle: #e8eaf0;
+
+    --fg: #171a22;
+    --fg-secondary: #505866;
+    --fg-muted: #626b79;
+    --fg-faint: #8b93a1;
+
+    --accent: #5848df;
+    --accent-bright: #4c3bd5;
+    --accent-soft: rgb(88 72 223 / 11%);
+    --accent-line: rgb(76 59 213 / 42%);
+    --accent-hover: #4f3ed5;
+    --accent-press: #4232bd;
+    --on-accent: #ffffff;
+
+    /* State: working, asking, ready, failed, stopped. The accent never means one. */
+    --success: #177a50;
+    --warning: #9b5f08;
+    --danger: #bd3848;
+    --info: #17689e;
+    --working: #176da8;
+    --stopped: #626b79;
+
+    /* The terminal reads these back, so pane and chrome stay one surface. */
     --term-bg: #ffffff;
-    --term-fg: #15171c;
-    --term-cursor: #6162ad;
-    --term-selection: #d8d8fc;
-    --term-black: #282a2e;
-    --term-red: #c4524c;
-    --term-green: #3b845d;
-    --term-yellow: #947033;
-    --term-blue: #427ba8;
-    --term-magenta: #806ab6;
-    --term-cyan: #38817e;
-    --term-white: #737477;
-    --term-bright-black: #75767c;
-    --term-bright-red: #99403b;
-    --term-bright-green: #2e6749;
-    --term-bright-yellow: #735728;
-    --term-bright-blue: #336083;
-    --term-bright-magenta: #64538e;
-    --term-bright-cyan: #2c6562;
-    --term-bright-white: #15171c;
+    --term-fg: #20242d;
+    --term-cursor: #5848df;
+    --term-selection: #dcd8ff;
+    --term-black: #2b303a;
+    --term-red: #bd3848;
+    --term-green: #177a50;
+    --term-yellow: #9b5f08;
+    --term-blue: #17689e;
+    --term-magenta: #744db0;
+    --term-cyan: #14747e;
+    --term-white: #6b7280;
+    --term-bright-black: #707785;
+    --term-bright-red: #9e2c3a;
+    --term-bright-green: #11633f;
+    --term-bright-yellow: #7b4b06;
+    --term-bright-blue: #11557f;
+    --term-bright-magenta: #5d3d8d;
+    --term-bright-cyan: #105d65;
+    --term-bright-white: #171a22;
   }
 }
 
-/* On a light ground a shadow can announce a floating panel, so it only needs to be soft. */
 :root[data-tone='light'] {
-  --shadow-pop: 0 18px 44px rgb(20 24 36 / 20%), 0 2px 8px rgb(20 24 36 / 12%);
+  --shadow-1: 0 1px 2px rgb(25 31 45 / 9%);
+  --shadow-2: 0 8px 24px rgb(25 31 45 / 12%), 0 1px 3px rgb(25 31 45 / 9%);
+  --shadow-pop: 0 24px 64px rgb(25 31 45 / 22%), 0 4px 14px rgb(25 31 45 / 10%);
+  --ring: 0 0 0 2px var(--bg-pane), 0 0 0 4px var(--accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -209,5 +224,6 @@
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }

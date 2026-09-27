@@ -186,7 +186,14 @@ export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
       surface: '#eef1ff',
       ink: '#f1f3f8',
       accent: STUDIO_ACCENT,
-      hues: { red: '#ef6a73', green: '#48c78e', yellow: '#e8a84c', blue: '#58a6e7', magenta: '#b68cff', cyan: '#48b8c7' },
+      hues: {
+        red: '#ef6a73',
+        green: '#48c78e',
+        yellow: '#e8a84c',
+        blue: '#58a6e7',
+        magenta: '#b68cff',
+        cyan: '#48b8c7'
+      },
       mutedContrast: 4.5,
       lineWeight: 1,
       secondaryContrast: 5.5
@@ -259,7 +266,14 @@ export const BUILT_IN_THEMES: readonly BuiltInTheme[] = [
       surface: '#1f2637',
       ink: '#171a22',
       accent: '#5848df',
-      hues: { red: '#bd3848', green: '#177a50', yellow: '#9b5f08', blue: '#17689e', magenta: '#744db0', cyan: '#14747e' },
+      hues: {
+        red: '#bd3848',
+        green: '#177a50',
+        yellow: '#9b5f08',
+        blue: '#17689e',
+        magenta: '#744db0',
+        cyan: '#14747e'
+      },
       mutedContrast: 4.5,
       lineWeight: 1,
       secondaryContrast: 5.5

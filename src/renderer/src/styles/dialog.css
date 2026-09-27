@@ -1,6 +1,6 @@
 /* Modal layer and the form controls it contains.
 
-   One frame for every dialog: anchored near the top of the window, the raised surface with
+   One frame for every dialog: anchored near the top of the window, the floating surface with
    its border and radius, a head with the title, and a body the frame pads on
    the same edge as the head. The content classes below — a form, the palette,
    a confirm — lay out what is inside them and never inset themselves, which is
@@ -18,32 +18,35 @@
   padding-block: 12vh var(--s5);
   overflow-y: auto;
   background: var(--scrim);
-  animation: scrim-in var(--motion-fast) var(--ease);
+  animation: scrim-in var(--motion-slow) var(--ease-enter);
 }
 
 .modal {
-  /* Fields a hand can hit: a dialog is where people type. */
-  --control-h: 32px;
-
   position: relative;
-  width: min(460px, calc(100vw - 48px));
+  width: min(520px, calc(100vw - 48px));
   border: 1px solid var(--line-strong);
-  border-radius: var(--r3);
-  background: var(--bg-raised);
+  border-radius: var(--r4);
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-pop);
-  animation: modal-in var(--motion-base) var(--ease);
+  animation: modal-in var(--motion-slow) var(--ease-enter);
 }
 
+/* The title's bar: 54px, the close at its right, a line under it. */
 .modal__head {
-  padding: var(--s5) var(--s5) var(--s4);
+  display: flex;
+  align-items: center;
+  min-height: 54px;
+  padding: var(--s3) 20px;
+  /* Clear of the close control. */
+  padding-right: 56px;
+  border-bottom: 1px solid var(--line);
 }
 
 .modal__title {
-  /* Clear of the close control. */
-  padding-right: 24px;
   font-size: var(--text-xl);
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-weight: 680;
+  line-height: 24px;
+  letter-spacing: -0.025em;
   /* A whole task title may be long; two lines, the rest on hover. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -53,17 +56,13 @@
 }
 
 .modal__body {
-  padding: 0 var(--s5) var(--s5);
-}
-
-.modal__body:first-child {
-  padding-top: var(--s5);
+  padding: 20px;
 }
 
 .modal__close {
   position: absolute;
-  top: calc(var(--s5) - 4px);
-  right: calc(var(--s5) - 6px);
+  top: 13px;
+  right: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -75,6 +74,9 @@
   background: transparent;
   color: var(--fg-muted);
   cursor: pointer;
+  transition:
+    background var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease);
 }
 
 .modal__close:hover {
@@ -82,15 +84,19 @@
   color: var(--fg);
 }
 
-/* The last row of every dialog. 8px between buttons, which is the one gap in
-   these sheets off the spacing ramp: it is the gap a row of native buttons
-   has, and a dialog is the one place the app draws a row of them. */
+/* The last row of every dialog: the body's inset bled back out so it runs edge to edge on the raised tone,
+   the answer that changes nothing first and the one that goes through with it last. */
 .modal__actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  padding-top: var(--s1);
+  min-height: 54px;
+  margin: var(--s5) -20px -20px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 calc(var(--r4) - 1px) calc(var(--r4) - 1px);
+  background: var(--bg-raised);
 }
 
 /* Four answers is more than a row holds in a narrow window. */
@@ -479,9 +485,9 @@ button.picker__chevron:hover {
   font-size: var(--text-xs);
 }
 
-/* On a black ground the scrim alone does not part the dialog from what is under it. */
+/* On a dark ground the scrim alone does not part the dialog from what is under it. */
 :root[data-tone='dark'] .modal-layer {
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(8px);
 }
 
 @keyframes scrim-in {
@@ -493,7 +499,7 @@ button.picker__chevron:hover {
 @keyframes modal-in {
   from {
     opacity: 0;
-    transform: translateY(-8px) scale(0.99);
+    transform: translateY(10px) scale(0.985);
   }
 }
 

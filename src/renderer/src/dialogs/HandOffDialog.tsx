@@ -8,7 +8,7 @@ import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { commitSuggestion } from '../workspace/rightPanel/commitMessage'
 import { Modal } from './Modal'
-import { Select } from './Select'
+import { Select } from '../ui/Select'
 
 export function HandOffDialog({ worktreeId }: { worktreeId: string }): React.JSX.Element | null {
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId))

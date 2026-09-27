@@ -4,29 +4,32 @@
 .row-menu {
   position: fixed;
   z-index: 40;
-  min-width: 180px;
-  padding: var(--s1);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--bg-raised);
+  min-width: 220px;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r3);
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-pop);
-  animation: menu-in var(--motion-fast) var(--ease);
+  animation: menu-in var(--motion-base) var(--ease-enter);
+  transform-origin: top left;
 }
 
 @keyframes menu-in {
   from {
     opacity: 0;
-    transform: scale(0.98);
+    transform: translateY(-4px) scale(0.98);
   }
 }
 
 .row-menu__item {
   display: flex;
+  position: relative;
   align-items: center;
-  gap: var(--s2);
-  padding: 5px var(--s2);
+  gap: 9px;
+  min-height: 32px;
+  padding: 0 var(--s2);
   border-radius: var(--r1);
-  color: var(--fg);
+  color: var(--fg-secondary);
   font-size: var(--text-sm);
   white-space: nowrap;
   cursor: pointer;
@@ -37,7 +40,7 @@
   display: flex;
   flex: none;
   justify-content: center;
-  width: 14px;
+  width: 16px;
   color: var(--fg-muted);
 }
 
@@ -61,7 +64,8 @@
 .row-menu__item:hover,
 .row-menu__item:focus-visible,
 .row-menu__item--open {
-  background: var(--bg-press);
+  background: var(--bg-hover);
+  color: var(--fg);
   outline: none;
 }
 
@@ -80,12 +84,21 @@
 /* The rule that keeps the destructive item from being the one under the
    pointer's momentum. */
 .row-menu__item--separated {
-  margin-top: var(--s1);
-  padding-top: calc(var(--s1) + 4px);
-  border-top: 1px solid var(--line);
+  margin-top: 11px;
 }
 
-.row-menu__item--danger {
+.row-menu__item--separated::before {
+  position: absolute;
+  top: -6px;
+  right: 4px;
+  left: 4px;
+  height: 1px;
+  background: var(--line);
+  content: '';
+}
+
+.row-menu__item--danger,
+.row-menu__item--danger .row-menu__icon {
   color: var(--danger);
 }
 
@@ -102,4 +115,5 @@
 .row-menu__item--danger:hover,
 .row-menu__item--danger:focus-visible {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
 }
