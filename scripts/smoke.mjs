@@ -168,12 +168,12 @@ async function openStatusItemMenu() {
  * this presses the button and waits for the heading — deliberately no more.
  */
 async function checkWindowSurfaces(ask) {
-  // By the words on them: a selector that outlived a relabelled button is worse than none.
+  // By the words on them, or the name an icon button carries: a selector that outlived a relabelled button is worse than none.
   const press = (label) =>
     ask(
       `(() => {
         const found = [...document.querySelectorAll('button')].find(
-          (button) => button.textContent?.trim().startsWith(${JSON.stringify(label)})
+          (button) => (button.getAttribute('aria-label') ?? button.textContent)?.trim().startsWith(${JSON.stringify(label)})
         )
         if (!found) return false
         found.click()

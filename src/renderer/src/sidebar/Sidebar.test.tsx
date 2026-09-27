@@ -395,7 +395,7 @@ describe('the CLI mark on Settings', () => {
     mount()
     expect(badge()).toBeNull()
     expect(screen.queryByRole('button', { name: /PATH|teamree command/ })).toBeNull()
-    expect(document.querySelector('.sidebar__foot')).toBeNull()
+    expect(within(foot()).getAllByRole('button')).toHaveLength(3)
   })
 
   it('marks the Settings entry while the CLI is not linked to this build, and says why on hover', () => {
@@ -425,7 +425,8 @@ describe('the CLI mark on Settings', () => {
     expect(settings.contains(mark)).toBe(true)
     expect(settings.title).toMatch(/^Settings · CLI: /)
     expect(settings.title).toContain('/usr/local/bin/teamree')
-    expect(document.querySelector('.sidebar__foot')).toBeNull()
+    // A mark on the entry, not a pill of its own in the foot.
+    expect(within(foot()).getAllByRole('button')).toHaveLength(3)
   })
 
   it('opens Settings at the row the mark is about', () => {
@@ -460,6 +461,51 @@ describe('the CLI mark on Settings', () => {
     })
     mount()
     expect(badge()).toBeNull()
+  })
+})
+
+const foot = (): HTMLElement => screen.getByRole('navigation', { name: 'Settings and help' })
+
+// Where people look for Settings: under the list, however long it grows.
+describe('the foot of the sidebar', () => {
+  it('holds Settings, Appearance and Help, and the rail above keeps only the places you work in', () => {
+    mount()
+    const names = (root: HTMLElement): string[] =>
+      within(root)
+        .getAllByRole('button')
+        .map((button) => (button.getAttribute('aria-label') ?? button.textContent ?? '').trim())
+    expect(names(foot())).toEqual(['Settings', 'Appearance', 'Help'])
+    expect(names(screen.getByRole('navigation', { name: 'Go to' }))).toEqual([
+      'Search worktrees and commands',
+      'Teamwork',
+      'All Panes'
+    ])
+  })
+
+  it('sits below the list, outside what scrolls', () => {
+    seed({ worktrees: Array.from({ length: 40 }, (_, n) => worktree({ id: `w${n}`, name: `task ${n}` })) })
+    mount()
+    const sidebar = document.querySelector('.sidebar') as HTMLElement
+    expect(sidebar.lastElementChild).toBe(foot())
+    expect(document.querySelector('.sidebar__projects')?.contains(foot())).toBe(false)
+  })
+
+  it('is in the sidebar’s keyboard region, after the tree in Tab order', () => {
+    mount()
+    const settings = within(foot()).getByRole('button', { name: 'Settings' })
+    expect(settings.closest('[data-region]')?.getAttribute('data-region')).toBe('sidebar')
+    const tree = screen.getByRole('tree', { name: 'Worktrees' })
+    expect(tree.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    for (const button of within(foot()).getAllByRole('button')) expect(button.tabIndex).toBe(0)
+  })
+
+  it('says Help is the page you are on', () => {
+    seed({ helpOpen: true, toggleHelp })
+    mount()
+    const help = within(foot()).getByRole('button', { name: 'Help' })
+    expect(help.getAttribute('aria-current')).toBe('page')
+    act(() => help.click())
+    expect(toggleHelp).toHaveBeenCalled()
   })
 })
 
@@ -560,9 +606,9 @@ describe('the list itself', () => {
   })
 })
 
-// A surface with no entry in the rail and no row in the palette is one somebody has to already know about.
-describe('the rail reaches the window-level surfaces', () => {
-  it('opens settings from the rail', () => {
+// A surface with no entry in the sidebar and no row in the palette is one somebody has to already know about.
+describe('the sidebar reaches the window-level surfaces', () => {
+  it('opens settings from the foot', () => {
     seed({ settingsOpen: false, toggleSettings })
     mount()
     const entry = screen.getByRole('button', { name: /Settings/ })
@@ -571,7 +617,7 @@ describe('the rail reaches the window-level surfaces', () => {
     expect(toggleSettings).toHaveBeenCalled()
   })
 
-  it('opens the appearance sheet from the rail, and closes it from there too', () => {
+  it('opens the appearance sheet from the foot, and closes it from there too', () => {
     const showAppearance = vi.fn()
     seed({ showAppearance })
     const { unmount } = render(<Sidebar searchHint="⌘K" />)
@@ -643,13 +689,14 @@ describe('the rail reaches the window-level surfaces', () => {
   })
 
   // The window has too many places explaining shortcuts; the search field keeps its one.
-  it('draws no chord on any rail row but the search', () => {
+  it('draws no chord on any sidebar entry but the search', () => {
     seed({ toggleHelp })
     mount()
     expect(screen.getByRole('button', { name: /Help/ }).querySelector('kbd')).toBeNull()
     expect(screen.getByRole('button', { name: /Settings/ }).querySelector('kbd')).toBeNull()
     expect(screen.getByRole('button', { name: /Appearance/ }).querySelector('kbd')).toBeNull()
     expect(document.querySelectorAll('.rail kbd')).toHaveLength(1)
+    expect(foot().querySelectorAll('kbd')).toHaveLength(0)
     act(() => screen.getByRole('button', { name: /Help/ }).click())
     expect(toggleHelp).toHaveBeenCalled()
   })
