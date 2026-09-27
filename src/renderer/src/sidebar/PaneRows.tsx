@@ -5,7 +5,7 @@ import type { Subagent } from '@shared/entities'
 import { PaneGlyph } from '../agents/glyphs'
 import { harnessName } from '../agents/harnesses'
 import { requestRegionFocus } from '../shell/regions'
-import { AnswerButtons } from './AnswerButtons'
+import { AllowOpen } from './AnswerButtons'
 import { paneRowSpeech } from './rowSpeech'
 import { SubagentRows } from './SubagentRows'
 import { SubagentTranscriptDialog } from './SubagentTranscriptDialog'
@@ -37,7 +37,7 @@ type PaneRowsProps = {
   tree?: boolean
   /** Their tree level, one under their worktree's. */
   level?: number
-  /** An asking row's answers folded to one `Answer…` that opens the pane: another worktree is open and asks too. */
+  /** An asking row offers Open alone: another worktree is open and asks too. */
   answerChip?: boolean
 }
 
@@ -72,7 +72,7 @@ export function PaneRows({
           <li
             key={row.terminalId}
             role={tree ? 'none' : undefined}
-            className="pane-item"
+            className={`pane-item${row.choices === undefined ? '' : ' pane-item--asking'}`}
             onFocus={() => setFocused(row.terminalId)}
             onBlur={(event) => {
               if (!event.currentTarget.contains(event.relatedTarget)) setFocused(null)
@@ -127,25 +127,17 @@ export function PaneRows({
                     muted
                   </span>
                 ) : null}
-                <PaneSince tone={dotTone(row.activity, row.agent)} quietFor={row.quietFor} />
+                {/* Allow and Open stand in for the slot, which would only say asking again. */}
+                {row.choices === undefined ? (
+                  <PaneSince tone={dotTone(row.activity, row.agent)} quietFor={row.quietFor} />
+                ) : null}
               </span>
             </button>
-            {row.choices === undefined ? null : answerChip ? (
-              <span className="pane-item__answers">
-                <button
-                  type="button"
-                  className="button button--tiny answers__choice"
-                  tabIndex={tabbable ? undefined : -1}
-                  onClick={() => goToPane(row.terminalId)}
-                >
-                  Answer…
-                </button>
-              </span>
-            ) : (
-              <AnswerButtons
+            {row.choices === undefined ? null : (
+              <AllowOpen
                 terminalId={row.terminalId}
-                choices={row.choices}
-                className="pane-item__answers"
+                choices={answerChip ? [] : row.choices}
+                onOpen={() => goToPane(row.terminalId)}
                 tabbable={tabbable}
               />
             )}

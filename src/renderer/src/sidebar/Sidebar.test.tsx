@@ -206,18 +206,18 @@ describe('having nothing to show', () => {
 })
 
 describe('a project header', () => {
-  // Open, the rows under it are the count.
-  it('counts your worktrees and theirs apart only while folded', () => {
+  it('counts your worktrees at the head’s end, and theirs apart while folded', () => {
     const teammates = { p1: presence({ worktrees: [theirWorktree('priya', 'priya:t7')] }) }
     seed({ worktrees: [worktree()], teammates })
     mount()
     expect(screen.getByRole('treeitem', { expanded: true, name: /^pager/ }).textContent).toBe('pager')
+    const count = (): HTMLElement => document.querySelector('.project__actions .project__count') as HTMLElement
+    expect(count().textContent).toBe('1')
     cleanup()
     seed({ worktrees: [worktree()], teammates, collapsedProjects: { p1: true } })
     mount()
-    const toggle = screen.getByRole('treeitem', { expanded: false, name: /^pager/ })
-    expect(within(toggle).getByText('1')).toBeTruthy()
-    expect(within(toggle).getByText('+1')).toBeTruthy()
+    expect(within(count()).getByText('+1')).toBeTruthy()
+    expect(count().textContent).toBe('1+1')
   })
 
   it('says main is ahead of origin, and pushes it from there or its menu', () => {
@@ -325,7 +325,7 @@ describe('a project header', () => {
     expect(text?.className).toBe('project__text')
     expect(actions?.className).toBe('project__actions')
     expect(text?.firstElementChild).toBe(screen.getByRole('treeitem', { name: 'pager' }))
-    expect(text?.querySelector('.project__base')?.textContent).toBe('from origin/main')
+    expect(text?.querySelector('.project__base')?.textContent).toBe('origin/main')
     expect(within(actions as HTMLElement).getByRole('button', { name: 'Teamwork · no key in pager' })).toBeTruthy()
     expect([...(actions?.children ?? [])].slice(-2)).toEqual([
       screen.getByRole('button', { name: 'New Task in pager' }),
@@ -337,8 +337,6 @@ describe('a project header', () => {
     mount()
     const add = screen.getByRole('button', { name: 'New Task in pager' })
     expect(add.getAttribute('title')).toBe('New Task')
-    // Not the Projects header's plus, which adds a project.
-    expect(add.innerHTML).not.toBe(screen.getByRole('button', { name: 'Add project' }).innerHTML)
     add.click()
     expect(openDialog).toHaveBeenCalledWith({ kind: 'new-task', projectId: 'p1' })
   })
@@ -495,6 +493,33 @@ describe('the foot of the sidebar', () => {
     ])
   })
 
+  it('says beside Teamwork who is online, and beside All Panes how many panes there are', () => {
+    const pane = { worktreeId: 'w1', cwd: '/w1', shell: '/bin/zsh', cols: 80, rows: 24, running: true, busy: false }
+    seed({
+      worktrees: [worktree()],
+      terminals: { t1: { ...pane, id: 't1', title: 'zsh', lastOutputAt: NOW } },
+      teammates: {
+        p1: presence({
+          teammates: [
+            { handle: 'ana', publicKey: 'ana-key', connected: true, heardAt: NOW },
+            { handle: 'bo', publicKey: 'bo-key', connected: true, heardAt: NOW },
+            { handle: 'cy', publicKey: 'cy-key', connected: false, heardAt: null }
+          ]
+        })
+      }
+    })
+    mount()
+    const meta = (name: string): string | null | undefined =>
+      screen.getByRole('button', { name }).querySelector('.rail__meta')?.textContent
+    expect(meta('Teamwork')).toBe('2 online')
+    expect(meta('All Panes')).toBe('1')
+  })
+
+  it('leaves the metas out while there is nothing to count', () => {
+    mount()
+    expect(document.querySelectorAll('.rail__meta')).toHaveLength(0)
+  })
+
   it('sits below the list, outside what scrolls', () => {
     seed({ worktrees: Array.from({ length: 40 }, (_, n) => worktree({ id: `w${n}`, name: `task ${n}` })) })
     mount()
@@ -533,7 +558,8 @@ describe('the rail above the tree', () => {
   it('sends search to the palette rather than pretending to be one', () => {
     mount()
     const search = screen.getByRole('button', { name: 'Search worktrees and commands' })
-    expect(search.textContent).toContain('⌘K')
+    expect(search.textContent).toBe('Search')
+    expect(search.title).toBe('Search ⌘K')
     search.click()
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'palette' })
   })
@@ -702,14 +728,14 @@ describe('the sidebar reaches the window-level surfaces', () => {
     expect(document.querySelector('.worktree--active')).toBeTruthy()
   })
 
-  // The window has too many places explaining shortcuts; the search field keeps its one.
-  it('draws no chord on any sidebar entry but the search', () => {
+  // Chords are taught in the menu bar, Help, the palette and the welcome; the search names its own on hover.
+  it('draws no chord on any sidebar entry', () => {
     seed({ toggleHelp })
     mount()
     expect(screen.getByRole('button', { name: /Help/ }).querySelector('kbd')).toBeNull()
     expect(screen.getByRole('button', { name: /Settings/ }).querySelector('kbd')).toBeNull()
     expect(screen.getByRole('button', { name: /Appearance/ }).querySelector('kbd')).toBeNull()
-    expect(document.querySelectorAll('.rail kbd')).toHaveLength(1)
+    expect(document.querySelectorAll('.rail kbd')).toHaveLength(0)
     expect(foot().querySelectorAll('kbd')).toHaveLength(0)
     act(() => screen.getByRole('button', { name: /Help/ }).click())
     expect(toggleHelp).toHaveBeenCalled()
@@ -1054,17 +1080,17 @@ describe('asking rows', () => {
     expect(within(rowOf('Rewrite the pager')).getByRole('group', { name: 'Answer' })).toBeTruthy()
   })
 
-  it('folds the others to Answer… while the open worktree asks too', () => {
+  it('offers the others Open alone while the open worktree asks too', () => {
     seed({
       worktrees: [worktree(), second],
       activeWorktreeId: 'w2',
       terminals: { a: asking('a', 'w1'), b: asking('b', 'w2') }
     })
     mount()
-    expect(within(rowOf('Second')).getByRole('group', { name: 'Answer' })).toBeTruthy()
+    expect(within(rowOf('Second')).getByRole('button', { name: 'Allow' })).toBeTruthy()
     const other = rowOf('Rewrite the pager')
-    expect(within(other).queryByRole('group', { name: 'Answer' })).toBeNull()
-    expect(within(other).getByRole('button', { name: 'Answer…' })).toBeTruthy()
+    expect(within(other).queryByRole('button', { name: 'Allow' })).toBeNull()
+    expect(within(other).getByRole('button', { name: 'Open' })).toBeTruthy()
   })
 })
 

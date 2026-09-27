@@ -15,7 +15,7 @@ import { Icon } from '../icons/Icon'
 type ProjectHeadProps = {
   project: Project
   collapsed: boolean
-  /** Your worktrees, then theirs, counted apart; shown only while folded. */
+  /** Your worktrees, then theirs, counted apart while folded. */
   count: number
   theirs: number
   onToggle: () => void
@@ -145,30 +145,29 @@ export function ProjectHead({
         >
           <Icon name="chevron-right" size={14} className={`chevron${collapsed ? '' : ' chevron--open'}`} />
           <span className="project__name">{project.name}</span>
-          {collapsed ? <span className="project__count">{count}</span> : null}
-          {collapsed && theirs > 0 ? (
-            <span
-              className="project__count project__count--teammate"
-              title={`${theirs} teammate worktree${theirs === 1 ? '' : 's'}`}
-            >
-              {`+${theirs}`}
-            </span>
-          ) : null}
         </button>
         {meta}
       </div>
       <div className="project__actions">
         {team}
+        {/* At the end at rest; New Task and ⋯ take its place under the pointer. Folded, theirs are counted apart. */}
+        <span
+          className="project__count"
+          aria-hidden="true"
+          title={theirs > 0 && collapsed ? `${theirs} teammate worktree${theirs === 1 ? '' : 's'}` : undefined}
+        >
+          {count}
+          {theirs > 0 && collapsed ? <span className="project__count--teammate">{`+${theirs}`}</span> : null}
+        </span>
         <button
           type="button"
-          className="button button--ghost button--icon"
+          className="button button--ghost button--icon project__new"
           tabIndex={-1}
           title="New Task"
           aria-label={`New Task in ${project.name}`}
           onClick={onNewTask}
         >
-          {/* A pencil on a page, not a plus: the plus above adds a project. */}
-          <Icon name="new-task" size={14} />
+          <Icon name="plus" size={14} />
         </button>
         <button
           type="button"

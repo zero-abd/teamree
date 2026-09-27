@@ -34,41 +34,43 @@ describe('sidebar.css', () => {
     expect(declarationOf(ruleFor(SHEET, '.sidebar'), 'background')).toBe('var(--bg-rail)')
   })
 
-  it.each(['.worktree--active', '.rail__link--current'])(
-    'fills the selected row %s with the selected surface',
-    (selector) => {
-      expect(declarationOf(ruleFor(SHEET, selector), 'background')).toBe('var(--bg-selected)')
-    }
-  )
-
   // A border on the current entry reads as a focus ring; the ring is keyboard focus's alone.
-  it('fills the current rail entry the way the current worktree is filled', () => {
+  it('fills the current rail entry and edges it, with no border', () => {
     const current = ruleFor(SHEET, '.rail__link--current')
+    expect(declarationOf(current, 'background')).toBe('var(--bg-selected)')
     expect(declarationOf(current, 'border-color')).toBeUndefined()
-    expect(declarationOf(current, 'background')).toBe(declarationOf(ruleFor(SHEET, '.worktree--active'), 'background'))
+    expect(declarationOf(ruleFor(SHEET, '.rail__link--current::before'), 'background')).toBe('var(--accent)')
   })
 
-  // The title line filled and a bar outside it made two frames, and half the box looked selected.
-  it('marks the open worktree with one fill and one line around its whole box', () => {
+  // A filled box and a line round it made two frames; the open box is the line and the edge, no fill.
+  it('marks the open worktree with the accent line and its edge, never a fill', () => {
     const active = ruleFor(SHEET, '.worktree--active')
     expect(declarationOf(active, 'border-color')).toBe('var(--accent-line)')
-    expect(findRule(SHEET, '.worktree--active::before')).toBeUndefined()
+    expect(declarationOf(active, 'background')).toBeUndefined()
+    expect(declarationOf(ruleFor(SHEET, '.worktree--active::before'), 'background')).toBe('var(--accent)')
     expect(findRule(SHEET, '.worktree--active .worktree__row')).toBeUndefined()
   })
 
+  it('gives an asking box the amber edge', () => {
+    expect(declarationOf(ruleFor(SHEET, '.worktree--asking::before'), 'background')).toBe('var(--warning)')
+  })
+
   // A weight made names jump in width and the list look randomly bold.
-  it('marks an unread worktree by ink and a dot after its name, never by weight', () => {
-    const unread = ruleListing(SHEET, '.worktree__name--unread') as postcss.Rule
-    expect(declarationOf(unread, 'font-weight')).toBeUndefined()
-    expect(declarationOf(unread, 'color')).toBe('var(--fg)')
-    expect(declarationOf(ruleFor(SHEET, '.worktree__name'), 'color')).toBe('var(--fg-secondary)')
-    expect(declarationOf(ruleFor(SHEET, '.worktree__name--unread::after'), 'background')).toBe('var(--accent-bright)')
+  it('sets every name at 600 in ink, and marks unread by a dot after it', () => {
+    const unread = ruleListing(SHEET, '.worktree__name--unread') as postcss.Rule | undefined
+    expect(unread).toBeUndefined()
+    const name = ruleFor(SHEET, '.worktree__name')
+    expect(declarationOf(name, 'color')).toBe('var(--fg)')
+    expect(declarationOf(name, 'font-weight')).toBe('600')
+    const dot = ruleFor(SHEET, '.worktree__name--unread::after')
+    expect(declarationOf(dot, 'background')).toBe('var(--accent-bright)')
+    expect(declarationOf(dot, 'font-weight')).toBeUndefined()
   })
 
   // A page holds the main area, so its rail entry is the one selected thing in the sidebar.
-  it('leaves the open worktree its line, no fill, while a page is open', () => {
+  it('keeps the open worktree its line, unfilled, while a page is open', () => {
     const page = ruleFor(SHEET, '.sidebar--page .worktree--active')
-    expect(declarationOf(page, 'background')).toBe('none')
+    expect(declarationOf(page, 'background')).toBeUndefined()
     expect(declarationOf(page, 'border-color')).toBeUndefined()
   })
 
@@ -83,13 +85,33 @@ describe('sidebar.css', () => {
     expect(declarationOf(ruleFor(SHEET, '.worktree__branch'), 'font-family')).toBe('var(--font-mono)')
   })
 
-  // One card per worktree, its panes inside: a line and a corner from the tokens, a gap between cards.
-  it('draws each worktree as a box of its own', () => {
+  // One raised box per worktree, its panes inside: its own ground, no line at rest, a split edge, 6px apart.
+  it('draws each worktree as a raised box of its own', () => {
     const box = ruleFor(SHEET, '.worktree')
-    expect(declarationOf(box, 'border')).toBe('1px solid var(--line)')
-    expect(declarationOf(box, 'border-radius')).toBe('var(--r2)')
-    expect(declarationOf(box, 'padding')).toMatch(/^var\(--s\d\)$/)
-    expect(declarationOf(ruleFor(SHEET, '.project__worktrees'), 'gap')).toMatch(/^var\(--s\d\)$/)
+    expect(declarationOf(box, 'background')).toBe('var(--bg-worktree)')
+    expect(declarationOf(box, 'border')).toBe('1px solid transparent')
+    expect(declarationOf(box, 'border-radius')).toBe('var(--r3)')
+    expect(declarationOf(box, 'box-shadow')).toBe('var(--shadow-1)')
+    expect(declarationOf(ruleFor(SHEET, '.worktree::before'), 'width')).toBe('2px')
+    expect(declarationOf(ruleFor(SHEET, '.project__worktrees'), 'gap')).toBe('6px')
+  })
+
+  // An ask is answered where it is read: Allow and Open on the question's own line.
+  it('lays an asking row out as one line, the question giving way to Allow and Open', () => {
+    const item = ruleFor(SHEET, '.pane-item--asking')
+    expect(declarationOf(item, 'display')).toBe('flex')
+    expect(declarationOf(ruleFor(SHEET, '.pane-item--asking > .pane-row'), 'min-width')).toBe('0')
+    expect(declarationOf(ruleFor(SHEET, '.pane-item__answers'), 'flex')).toBe('none')
+  })
+
+  it('draws the nav as 30px rows and the foot’s icons as 24px buttons', () => {
+    expect(declarationOf(ruleFor(SHEET, '.rail__link'), 'min-height')).toBe('30px')
+    const icon = ruleFor(SHEET, '.rail__link--icon')
+    expect([declarationOf(icon, 'width'), declarationOf(icon, 'height')]).toEqual(['24px', '24px'])
+  })
+
+  it('draws the brand mark in the text’s ink', () => {
+    expect(declarationOf(ruleFor(SHEET, '.sidebar__brand .brand__mark'), 'color')).toBe('var(--fg)')
   })
 
   // Drawn outside, the ring of a 23px row covers the rows above and below it.
@@ -104,20 +126,25 @@ describe('sidebar.css', () => {
     }
   })
 
-  it('draws working as the one violet dot, and asking as the one that moves', () => {
+  // The accent is focus and selection; a dot in it read as selected.
+  it('draws working in its own blue, the one dot that breathes, and no dot in the accent', () => {
     const violet: string[] = []
     parse(SHEET).walkRules(/\.activity/, (rule) => {
       rule.walkDecls('background', (decl) => {
         if (/--accent/.test(decl.value)) violet.push(rule.selector)
       })
     })
-    expect(violet).toEqual(['.activity--working'])
+    expect(violet).toEqual([])
+    const working = parse(SHEET).nodes.find(
+      (node): node is postcss.Rule => node.type === 'rule' && node.selector === '.activity--working'
+    )
+    expect(working && declarationOf(working, 'background')).toBe('var(--working)')
     const moving: string[] = []
     parse(SHEET).walkDecls('animation', (decl) => {
       const rule = decl.parent as postcss.Rule
       if (rule.parent?.type === 'root' && /\.activity/.test(rule.selector)) moving.push(rule.selector)
     })
-    expect(moving).toEqual(['.activity--waiting'])
+    expect(moving).toEqual(['.activity--working'])
   })
 
   // Amber is the asking agent's, so an overlap is blue and a conflict red.
@@ -203,10 +230,18 @@ describe('sidebar.css', () => {
   // and the menu key reach every row's menu.
   it.each([
     ['.worktree__action', '.worktree--active > .worktree__row > .worktree__action'],
-    ['.project__more', null]
+    ['.project__more', null],
+    ['.project__new', null]
   ])('keeps %s out of sight at rest, but for the open row', (selector, active) => {
     expect(declarationOf(ruleFor(SHEET, selector), 'opacity')).toBe('var(--row-action-rest)')
     if (active !== null) expect(declarationOf(ruleFor(SHEET, active), 'opacity')).toBe('var(--control-rest)')
+  })
+
+  // The count stands where New Task and ⋯ appear, and gives way as they do, wherever nothing can hover too.
+  it('shows a project’s count at rest and its actions under the pointer, never both', () => {
+    const count = ruleFor(SHEET, '.project__count')
+    expect(declarationOf(count, 'opacity')).toBe('calc(1 - var(--row-action-rest))')
+    expect(declarationOf(count, 'pointer-events')).toBe('none')
   })
 
   // Answering is the most urgent thing on the row; under the pointer only, it also covered the question.

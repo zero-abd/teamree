@@ -97,7 +97,10 @@ describe('TeammateGroups', () => {
     const bo = document.querySelector('[data-teammate="bo"]') as HTMLElement
     expect(within(bo).getByText('cart-totals')).toBeTruthy()
     expect(within(bo).getByText('retry-payment')).toBeTruthy()
-    expect(bo.querySelector('.teammate__doing--asking')?.textContent).toBe('1 asking · 1 working')
+    // On screen, asking in amber, else whether they are here; the name above has the rest.
+    expect(bo.querySelector('.teammate__doing--asking')?.textContent).toBe('1 asking')
+    const ana = document.querySelector('[data-teammate="ana"]') as HTMLElement
+    expect(ana.querySelector('.teammate__doing--online')?.textContent).toBe('online')
   })
 
   it('folds a teammate by their row and keeps what they are doing on it', () => {
@@ -120,7 +123,7 @@ describe('TeammateGroups', () => {
   it('says once, on the group, that a teammate is away and how long since they were heard', () => {
     mount([theirs({ live: false, heardAt: NOW - 36_000 })])
     const head = screen.getByRole('treeitem', { name: /^bo,/ })
-    expect(head.querySelector('.teammate__presence')?.textContent).toBe('away')
+    expect(head.querySelector('.teammate__doing--away')?.textContent).toBe('away')
     expect(head.getAttribute('title')).toBe('bo’s machine is not connected · showing what it had 36s ago')
   })
 })

@@ -237,7 +237,7 @@ describe('the keyboard on a pane row', () => {
   })
 })
 
-// Answering is the fastest unblock there is: the answers are drawn at rest, on a line of their own under the question.
+// Answering is the fastest unblock there is: Allow and Open sit at rest on the asking row's own line.
 describe('an asking pane row', () => {
   const MENU = {
     prompt: 'p',
@@ -266,46 +266,63 @@ describe('an asking pane row', () => {
     )
   }
 
-  it('draws its answers under the row, beside nothing, and only while it asks', () => {
+  it('draws Allow and Open beside the row, never inside it, and only while it asks', () => {
     mountAsking({}, asking('t1'), terminal({ id: 't2', agent: 'codex', busy: true, screenMenu: MENU }))
     const [group, ...others] = screen.getAllByRole('group', { name: 'Answer' })
     expect(others).toHaveLength(0)
+    expect(
+      within(group as HTMLElement)
+        .getAllByRole('button')
+        .map((button) => button.textContent)
+    ).toEqual(['Allow', 'Open'])
     const row = group?.closest('li')?.querySelector('.pane-row')
     expect(row?.contains(group as HTMLElement)).toBe(false)
     expect(row?.nextElementSibling).toBe(group)
     expect(row?.querySelector('.pane-row__evidence')?.textContent).toBe('Do you want to proceed?')
+    // The buttons stand in for the time slot, which would only say asking again.
+    expect(row?.querySelector('.pane-row__since')).toBeNull()
   })
 
-  it('names its answers in a word each, keeping the whole answer for the hover', () => {
+  it('allows with the menu’s first answer, named whole on hover', () => {
     mountAsking({}, asking('t1'))
-    const buttons = within(screen.getByRole('group', { name: 'Answer' })).getAllByRole('button')
-    expect(buttons.map((button) => button.textContent)).toEqual(['Yes', 'Always', 'No…'])
-    expect(buttons.map((button) => button.title)).toEqual(['Yes', 'Yes, Always', 'No…'])
+    expect(screen.getByRole('button', { name: 'Allow' }).title).toBe('Yes')
   })
 
-  // The tree is one Tab stop: the answers join it only while their row holds the focus.
-  it('reaches its answers with Tab from the row, and keeps them out of the tree’s Tab order otherwise', async () => {
-    const user = userEvent.setup()
-    mountAsking({ tree: true }, asking('t1'))
-    const yes = screen.getByRole('button', { name: 'Yes' })
-    expect(yes.tabIndex).toBe(-1)
-    const row = document.querySelector<HTMLElement>('.pane-row') as HTMLElement
-    row.focus()
-    await user.tab()
-    expect(document.activeElement).toBe(yes)
-    await user.tab()
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Always' }))
-  })
-
-  it('folds to one Answer… that opens the pane when told to', async () => {
+  it('opens the pane, where the rest of its answers are', async () => {
     const { onRegionRequest } = await import('../shell/regions')
     const asked: string[] = []
     onRegionRequest((region) => asked.push(region))
     const focus = vi.fn()
-    mountAsking({ answerChip: true, onFocusTerminal: focus }, asking('t1'))
-    expect(screen.queryByRole('group', { name: 'Answer' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Answer…' }))
+    mountAsking({ onFocusTerminal: focus }, asking('t1'))
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
     expect(focus).toHaveBeenCalledExactlyOnceWith('t1')
     await vi.waitFor(() => expect(asked).toEqual(['panes']))
+  })
+
+  // The tree is one Tab stop: the answers join it only while their row holds the focus.
+  it('reaches Allow and Open with Tab from the row, and keeps them out of the tree’s Tab order otherwise', async () => {
+    const user = userEvent.setup()
+    mountAsking({ tree: true }, asking('t1'))
+    const allow = screen.getByRole('button', { name: 'Allow' })
+    expect(allow.tabIndex).toBe(-1)
+    const row = document.querySelector<HTMLElement>('.pane-row') as HTMLElement
+    row.focus()
+    await user.tab()
+    expect(document.activeElement).toBe(allow)
+    await user.tab()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open' }))
+  })
+
+  it('offers Open alone when told to', () => {
+    const focus = vi.fn()
+    mountAsking({ answerChip: true, onFocusTerminal: focus }, asking('t1'))
+    const group = screen.getByRole('group', { name: 'Answer' })
+    expect(
+      within(group)
+        .getAllByRole('button')
+        .map((button) => button.textContent)
+    ).toEqual(['Open'])
+    fireEvent.click(within(group).getByRole('button', { name: 'Open' }))
+    expect(focus).toHaveBeenCalledExactlyOnceWith('t1')
   })
 })

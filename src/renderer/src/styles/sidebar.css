@@ -1,5 +1,4 @@
-/* Projects and worktrees. Dense by design: the row has to carry a name, a
-   branch and a git summary without becoming a paragraph. */
+/* Projects and worktrees: a raised box per worktree, a sub-row per pane, the state in the gutter. */
 
 .sidebar {
   display: flex;
@@ -9,32 +8,47 @@
   border-right: 1px solid transparent;
 }
 
-/* The rail: search, then the destinations that are about the window rather
-   than about one worktree. Above the tree, because that is what they are. */
+/* The lockup in the brand row: the mark in the text's ink, beside the wordmark. The row is the shell's. */
+.sidebar__brand .brand {
+  gap: 9px;
+}
+
+.sidebar__brand .brand__mark {
+  width: 20px;
+  height: 20px;
+  color: var(--fg);
+}
+
+.sidebar__brand .wordmark {
+  font-size: var(--text-base);
+  font-weight: 680;
+}
+
+/* Search, then the places that are about the window rather than one worktree. */
 .rail {
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: var(--s1);
-  padding: var(--s4) var(--s3) var(--s3);
+  gap: 2px;
+  padding: var(--s1) 7px var(--s2);
   border-bottom: 1px solid var(--line);
 }
 
-/* Dressed as a field because that is where the eye looks for search; the chord
-   at its end is what stops it pretending to be one. */
+/* A button dressed as a field: the palette is the search. */
 .rail__search {
   display: flex;
   align-items: center;
   gap: var(--s2);
-  width: 100%;
-  margin-bottom: var(--s2);
-  padding: 5px var(--s3);
-  border: 1px solid var(--line);
+  width: auto;
+  height: var(--control-md);
+  margin: 2px 3px var(--s2);
+  padding: 0 var(--s3) 0 9px;
+  border: 1px solid var(--line-strong);
   border-radius: var(--r2);
   background: var(--bg-input);
   color: var(--fg-muted);
   font: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   text-align: left;
   cursor: pointer;
   transition:
@@ -43,7 +57,7 @@
 }
 
 .rail__search:hover {
-  border-color: var(--line-strong);
+  border-color: var(--fg-faint);
   color: var(--fg-secondary);
 }
 
@@ -54,7 +68,7 @@
 .rail__list {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .rail__link {
@@ -63,13 +77,15 @@
   align-items: center;
   gap: var(--s2);
   width: 100%;
-  padding: 5px var(--s2);
+  min-height: 30px;
+  padding: 0 var(--s2) 0 10px;
   border: 1px solid transparent;
   border-radius: var(--r2);
   background: none;
   color: var(--fg-secondary);
   font: inherit;
   font-size: var(--text-sm);
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
   transition:
@@ -90,16 +106,28 @@
 /* Something about the machine wants a look, and this entry is where it is dealt with. */
 .rail__badge {
   flex: none;
-  margin-left: var(--s1);
+  margin-left: auto;
   color: var(--fg-secondary);
   font-size: var(--text-xs);
   font-weight: 600;
   line-height: 1;
 }
 
-/* Where you are. Said in `aria-current` first; this is the same fact for eyes
-   that are not reading the accessibility tree. */
-/* Marked like the current worktree row, fill and left bar; a border here read as a focus ring. */
+/* Who is online, how many panes: at the row's end, in the meta ink. */
+.rail__meta {
+  flex: none;
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.rail__meta--online {
+  color: var(--success);
+}
+
+/* Where you are: said in `aria-current`, filled for the eye, and edged as a settings row is. */
 .rail__link--current {
   background: var(--bg-selected);
   color: var(--fg);
@@ -108,8 +136,8 @@
 .rail__link--current::before {
   content: '';
   position: absolute;
-  top: 6px;
-  bottom: 6px;
+  top: 7px;
+  bottom: 7px;
   left: 1px;
   width: 2px;
   border-radius: 2px;
@@ -121,8 +149,9 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: 1px;
-  padding: var(--s2) var(--s3);
+  gap: 2px;
+  min-height: 42px;
+  padding: 6px 7px;
   border-top: 1px solid var(--line);
 }
 
@@ -134,11 +163,15 @@
 .rail__link--icon {
   flex: none;
   justify-content: center;
-  width: auto;
-  padding: 5px;
+  width: 24px;
+  min-height: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: var(--r1);
+  color: var(--fg-muted);
 }
 
-/* Too small a box for the bar; the fill says it. */
+/* Too small a box for the edge; the fill says it. */
 .rail__link--icon.rail__link--current::before {
   display: none;
 }
@@ -151,26 +184,42 @@
   min-height: 0;
 }
 
-/* The wordmark is in the sidebar's own header, above the rail, so this row is
-   the section label and its add button; the button sits at the end of the row. */
+/* The section label, then Hide Done and Compact under the pointer, then Filter and Add. */
 .sidebar__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--s2);
-  padding: var(--s2) var(--s3) var(--s1) var(--s4);
+  min-height: 34px;
+  padding: 0 var(--s2) 0 var(--s3);
 }
 
 .sidebar__head-title {
-  color: var(--fg-muted);
+  color: var(--fg-secondary);
   font-size: var(--text-sm);
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 .sidebar__head-actions {
   display: flex;
   align-items: center;
   gap: 2px;
+}
+
+.sidebar__head-view {
+  display: flex;
+  gap: 2px;
+}
+
+.sidebar__head-view > .button--icon {
+  opacity: var(--row-action-rest);
+  transition: opacity var(--motion-fast) var(--ease);
+}
+
+.sidebar__head:is(:hover, :focus-within) .sidebar__head-view > .button--icon,
+.sidebar__head-view > .button--icon[aria-pressed='true'] {
+  opacity: 1;
 }
 
 .sidebar__head-actions .button--icon:is([aria-pressed='true'], [aria-expanded='true']) {
@@ -183,15 +232,15 @@
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: var(--s1);
+  gap: 6px;
   padding: 0 var(--s3) var(--s2);
 }
 
 .sidebar__filter-field {
   width: 100%;
-  height: 24px;
-  padding: 0 var(--s2);
-  border: 1px solid var(--line);
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
   border-radius: var(--r2);
   background: var(--bg-input);
   color: var(--fg);
@@ -206,7 +255,7 @@
 }
 
 .sidebar__filter-field:hover {
-  border-color: var(--line-strong);
+  border-color: var(--fg-faint);
 }
 
 .sidebar__filter-field:focus-visible {
@@ -261,23 +310,20 @@
 
 /* Project ---------------------------------------------------------------- */
 
+/* Space, not a rule, between projects: the boxes group themselves. */
 .project {
-  padding: var(--s1) var(--s2) var(--s2);
+  padding: 0 7px var(--s2);
 }
 
-.project + .project {
-  border-top: 1px solid var(--line);
-}
-
-/* Two columns: the name and where new tasks start, which give way; then the team and the actions, which
-   never do. Actions that would leave the name under 10ch drop to a second line. */
+/* One 28px line: chevron and name, the base ref, then the team and the count, which New Task and ⋯ replace
+   under the pointer. Actions that would leave the name under 10ch drop to a second line. */
 .project__head {
   position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 0 var(--s1);
-  padding-right: var(--s2);
+  padding-right: 1px;
 }
 
 /* The base keeps the name's line while its floor fits; past that it wraps onto the line this clips. */
@@ -285,19 +331,20 @@
   display: flex;
   flex: 1 1 0;
   flex-wrap: wrap;
-  column-gap: var(--s1);
+  column-gap: 6px;
   min-width: min(10ch, 100%);
-  height: 26px;
+  height: 28px;
   overflow: clip;
 }
 
 .project__actions {
+  position: relative;
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--s1);
+  gap: 2px;
   max-width: 100%;
-  height: 26px;
+  height: 28px;
   margin-left: auto;
 }
 
@@ -309,18 +356,18 @@
   flex: 0 1 auto;
   display: flex;
   align-items: center;
-  gap: var(--s2);
+  gap: 6px;
   min-width: 0;
-  height: 26px;
-  padding: 0 var(--s2);
+  height: 28px;
+  padding: 0 var(--s1);
   border: 0;
   border-radius: var(--r1);
   background: transparent;
   color: var(--fg);
   font: inherit;
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
   cursor: pointer;
 }
 
@@ -328,13 +375,18 @@
   background: var(--bg-hover);
 }
 
-/* The project's menu, the same one right-click opens; out of sight until the head is pointed at. */
-.project__more {
+/* New Task and the project's menu, the one right-click opens: out of sight until the head is pointed at. */
+.project__new {
   opacity: var(--row-action-rest);
+  transition: opacity var(--motion-fast) var(--ease);
 }
 
-.project__head:hover .project__more,
-.project__more:focus-visible,
+.project__more {
+  opacity: var(--row-action-rest);
+  transition: opacity var(--motion-fast) var(--ease);
+}
+
+.project__head:is(:hover, :focus-within) :is(.project__new, .project__more),
 .project__more[aria-expanded='true'] {
   opacity: 1;
 }
@@ -356,12 +408,24 @@
   white-space: nowrap;
 }
 
+/* Over the buttons' room at the head's end, drawn while they are not. */
 .project__count {
-  margin-left: auto;
+  position: absolute;
+  top: 0;
+  right: 7px;
   color: var(--fg-muted);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
+  line-height: 28px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: calc(1 - var(--row-action-rest));
+  transition: opacity var(--motion-fast) var(--ease);
+}
+
+.project__head:is(:hover, :focus-within, :has(.project__more[aria-expanded='true'])) .project__count {
+  opacity: 0;
 }
 
 /* Whole where it fits beside the name; else cut, and past the meta's floor it wraps out of sight. */
@@ -370,7 +434,7 @@
   min-width: 8ch;
   max-width: 100%;
   overflow: hidden;
-  line-height: 26px;
+  line-height: 28px;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--fg-muted);
@@ -421,12 +485,8 @@
   background: var(--bg-hover);
 }
 
-/* The one teamwork control in the project's header: its text is the state,
-   its hover is the reason, and pressing it opens the setup. Four tones because
-   there are four different things to say, and collapsing them would send
-   somebody to check their network because a colleague shut a laptop. The base
-   ref beside it is what gives way when the row is narrow, since a state is
-   the thing somebody glances here for. */
+/* The one teamwork control in the project's head: its text is the state, its hover the reason, and
+   pressing it opens the setup. The base ref gives way first. */
 .project__teamwork {
   flex: 0 1 auto;
   min-width: 0;
@@ -462,8 +522,7 @@
   color: var(--fg-secondary);
 }
 
-/* Deliberately unadorned: "nothing is set up here" is a thing to do, not a
-   fault, and colouring it like one would have people looking for a break. */
+/* Unadorned: nothing set up here is a thing to do, not a fault. */
 .project__teamwork--off {
   color: var(--fg-muted);
 }
@@ -472,9 +531,7 @@
   color: var(--danger);
 }
 
-/* The count of a teammate's worktrees, beside the count of your own. Separate
-   numbers because they are separate things: "+3" reads as "and three more that
-   are somebody else's", which is exactly what it means. */
+/* A teammate's worktrees, counted apart from yours while folded. */
 .project__count--teammate {
   margin-left: var(--s1);
   color: var(--accent-bright);
@@ -508,7 +565,8 @@
 .project__worktrees {
   display: flex;
   flex-direction: column;
-  gap: var(--s1);
+  gap: 6px;
+  padding-top: 2px;
 }
 
 /* Hide Done's fold: `3 done`, under the rows it stands for. */
@@ -548,14 +606,14 @@
   color: var(--fg-muted);
 }
 
-/* Compact: one line a row, the boxes drawn without their padding. */
+/* Compact: one line a box, tighter boxes. */
 .sidebar--compact .project__worktrees {
-  gap: 1px;
+  gap: 3px;
 }
 
 .sidebar--compact .project__worktrees > .worktree,
 .sidebar--compact .task {
-  padding: 0;
+  padding-block: 2px;
 }
 
 .sidebar--compact .worktree__open {
@@ -563,21 +621,67 @@
   padding-bottom: 1px;
 }
 
-/* Worktree row ------------------------------------------------------------ */
+/* Worktree box --------------------------------------------------------- */
 
-/* One box per worktree, its panes inside it. */
+/* One raised box per worktree, its panes inside it; a 2px split edge down its left. */
 .worktree {
   position: relative;
-  padding: var(--s1);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
+  padding: 6px 3px 6px 0;
+  border: 1px solid transparent;
+  border-radius: var(--r3);
+  background: var(--bg-worktree);
+  box-shadow: var(--shadow-1);
+  transition:
+    background var(--motion-base) var(--ease),
+    border-color var(--motion-base) var(--ease),
+    box-shadow var(--motion-base) var(--ease);
+}
+
+.worktree::before {
+  content: '';
+  position: absolute;
+  top: 9px;
+  bottom: 9px;
+  left: -1px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--line-strong);
+  transition: background var(--motion-base) var(--ease);
+}
+
+.worktree:hover {
+  background: color-mix(in srgb, var(--fg) 3%, var(--bg-worktree));
+}
+
+/* An agent asking: an amber edge and a warm tint, whatever else the box says. */
+.worktree--asking {
+  background: color-mix(in srgb, var(--warning) 6%, var(--bg-worktree));
+}
+
+.worktree--asking::before {
+  background: var(--warning);
+}
+
+/* The open box: the accent line round it and down its edge, and no fill. */
+.worktree--active {
+  border-color: var(--accent-line);
+  box-shadow:
+    var(--shadow-1),
+    0 0 18px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.worktree--active::before {
+  background: var(--accent);
 }
 
 /* A task and its child tasks share one box; each level is one step in, with nothing drawn between. */
 .task {
-  padding: var(--s1);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
+  position: relative;
+  padding: 6px 3px 6px 0;
+  border: 1px solid transparent;
+  border-radius: var(--r3);
+  background: var(--bg-worktree);
+  box-shadow: var(--shadow-1);
 }
 
 .task__rows {
@@ -588,7 +692,19 @@
 
 .task__rows > .worktree {
   padding: 0;
-  border: 0;
+  border-radius: var(--r2);
+  background: transparent;
+  box-shadow: none;
+}
+
+.task__rows > .worktree::before {
+  top: 5px;
+  bottom: 5px;
+  left: calc(var(--depth, 0) * 14px);
+}
+
+.task__rows > .worktree:not(.worktree--active, .worktree--asking)::before {
+  background: transparent;
 }
 
 /* Folds the task's panes and children; the mouse's, ← and → are the keyboard's. */
@@ -701,38 +817,17 @@
   display: flex;
   align-items: center;
   gap: var(--s2);
-  padding: 2px var(--s2) 2px 0;
   border-radius: var(--r2);
 }
 
-.worktree:not(.worktree--active):hover .worktree__row {
-  background: var(--bg-hover);
-}
-
-/* The open row: one fill and one line around its whole box, panes and all. */
-.worktree--active {
-  background: var(--bg-selected);
-  border-color: var(--accent-line);
-}
-
-/* A child task's row has no border of its own inside the task's box. */
-.task__rows > .worktree--active {
-  box-shadow: inset 0 0 0 1px var(--accent-line);
-}
-
-/* The row a menu is open for, so the menu reads as about it. */
+/* The box a menu is open for, so the menu reads as about it. */
 .worktree--menu-open {
   border-color: var(--line-strong);
-  box-shadow: 0 0 0 1px var(--line-strong);
 }
 
-/* Under a page the rail entry is what is selected; the worktree keeps its line to come back to. */
+/* Under a page the rail entry is what is selected; the box keeps its line to come back to. */
 .sidebar--page .worktree--active {
-  background: none;
-}
-
-.sidebar--page .worktree--active:hover .worktree__row {
-  background: var(--bg-hover);
+  box-shadow: var(--shadow-1);
 }
 
 /* Inside the row: rows are packed, and a ring outside one covers its neighbours' text. */
@@ -748,10 +843,10 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0;
+  gap: 1px;
   min-width: 0;
   overflow: hidden;
-  padding: 3px var(--s2) 3px calc(28px + var(--depth, 0) * 14px);
+  padding: 3px 0 3px calc(28px + var(--depth, 0) * 14px);
   border: 0;
   border-radius: var(--r2);
   background: transparent;
@@ -774,16 +869,18 @@
   min-width: 0;
 }
 
-/* Too narrow for its facts, the line wraps the tally under them rather than past the row's edge. */
+/* The line under the name: the branch and its facts, quiet. Too narrow, the tally wraps under them. */
 .worktree__meta {
   flex-wrap: wrap;
   row-gap: 2px;
+  min-height: 20px;
 }
 
 /* Too narrow for the name and its chips, the chips wrap under it at their size rather than fold. */
 .worktree__title {
   flex-wrap: wrap;
   row-gap: 2px;
+  min-height: 20px;
 }
 
 .sidebar--compact .worktree__title {
@@ -797,16 +894,25 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--fg-secondary);
+  color: var(--fg);
   font-size: var(--text-base);
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 /* The state dot, in the gutter left of the name: 8px across, and the name still starts at 28px. */
 .worktree__title > .activity:first-child {
   width: 8px;
   height: 8px;
-  margin-left: -14px;
+  margin-left: -16px;
+}
+
+/* `asking`, at the line's end in the meta ink: the dot and edge carry the amber. */
+.worktree__state {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
 }
 
 .worktree__open--renaming {
@@ -846,7 +952,7 @@
   height: 14px;
 }
 
-/* The facts, when there is no branch line: at the title line's right edge. */
+/* The facts, when there is no branch line: at the title line's right edge, in tabular figures. */
 .worktree__end {
   position: relative;
   display: inline-flex;
@@ -856,6 +962,7 @@
   align-items: center;
   gap: var(--s2);
   margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Clips while `FoldedChips` measures, so an overflow is a chip to fold rather than one under the `⋯`. */
@@ -889,9 +996,9 @@
   align-items: flex-start;
   gap: var(--s1);
   padding: var(--s2);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r3);
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-pop);
 }
 
@@ -913,8 +1020,7 @@
   color: var(--fg-secondary);
 }
 
-/* Whole row rather than only the name: a checkout that is not on disk is not a
-   place, and the branch under it is as unreachable as the name. */
+/* The whole row, not only the name: a checkout not on disk is not a place, nor is its branch. */
 .worktree--missing .worktree__row {
   opacity: 0.55;
 }
@@ -932,8 +1038,7 @@
   font-size: var(--text-xs);
 }
 
-/* `creating` and `failed`: the chip's own shape, with a colour only for the
-   one that is a fault. */
+/* `creating` and `failed`: the chip's own shape, with a colour only for the one that is a fault. */
 .worktree__tag {
   background: var(--bg-raised);
 }
@@ -956,9 +1061,9 @@
 .worktree__action {
   flex: none;
   align-self: flex-start;
-  margin: 3px 0 0 calc(-1 * var(--s2));
-  width: 18px;
-  height: 18px;
+  margin: 2px 0 0 -6px;
+  width: 16px;
+  height: 16px;
   padding: 0;
   border: 0;
   border-radius: var(--r1);
@@ -984,7 +1089,7 @@
 
 .worktree__progress {
   height: 2px;
-  margin: 2px var(--s2) var(--s2) 28px;
+  margin: 4px var(--s2) var(--s1) 28px;
   border-radius: 2px;
   background: var(--line);
   overflow: hidden;
@@ -1013,7 +1118,7 @@
   display: flex;
   align-items: center;
   gap: var(--s2);
-  margin: 0 var(--s2) var(--s2) 28px;
+  margin: 2px 0 var(--s1) 22px;
   padding: var(--s2);
   border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
   border-radius: var(--r2);
@@ -1105,73 +1210,59 @@
   color: var(--fg-secondary);
 }
 
-/* What a worktree, tab or board row is doing; the words are `TONE_LABEL`'s.
-   Amber is only an agent asking, so it stands out wherever it is. */
+/* What a worktree, tab or board row is doing; the words are `TONE_LABEL`'s. Blue works and breathes,
+   amber asks, green is ready or done, red failed, grey ended. The accent is never a state. */
 .activity {
   width: 7px;
   height: 7px;
   flex: none;
   border-radius: 99px;
-  background: var(--fg-muted);
+  background: var(--stopped);
+  transition: background var(--motion-base) var(--ease);
 }
 
-/* Steady: the halo is enough, and the one dot that moves is the one asking. */
 .activity--working {
-  background: var(--accent-bright);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--working);
+  animation: activity-breathe 1.6s var(--ease) infinite;
 }
 
-/* The agent has said it wants something; pulsing because this is the one the
-   sidebar exists to find. */
 .activity--waiting {
   background: var(--warning);
-  animation: activity-pulse 1.6s ease-in-out infinite;
 }
 
-/* An agent at its prompt is hollow: it is not asking, so it must not look like it is. */
-.activity--quiet {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--fg-secondary);
-}
-
-/* Ended without finishing: a square, the stop mark, so it never reads as a live agent's ring. */
-.activity--stopped {
-  border-radius: 1px;
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--fg-muted);
-}
-
-.activity--idle {
-  background: var(--fg-muted);
-}
-
+.activity--quiet,
 .activity--done {
   background: var(--success);
+}
+
+.activity--stopped {
+  background: var(--stopped);
+}
+
+/* A plain shell at its prompt: a mark, fainter than an ended agent. */
+.activity--idle {
+  background: var(--fg-faint);
 }
 
 .activity--failed {
   background: var(--danger);
 }
 
-@keyframes activity-pulse {
+@keyframes activity-breathe {
   50% {
-    opacity: 0.35;
+    opacity: 0.42;
+    transform: scale(0.82);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .activity--waiting {
+  .activity--working {
     animation: none;
   }
 }
 
-/* Printed since this person last looked: the name in ink and a mark after it, the pane's label in ink.
-   Never a weight, which made names jump in width. Inside the name, so it follows a short one. */
-.worktree__name--unread,
-.worktree--active:not(.worktree--context) .worktree__name {
-  color: var(--fg);
-}
-
+/* Printed since this person last looked: a mark after the name, never a weight, which made names jump
+   in width. Inside the name, so it follows a short one. */
 .worktree__name--unread::after {
   content: '';
   display: inline-block;
@@ -1187,24 +1278,27 @@
   color: var(--fg);
 }
 
-/* The glyph starts under the worktree name: 28px, less the row's own padding. */
+/* A sub-row per pane: the glyph in the dot's column, the summary under the name, the time at the end
+   of the same column as the title line's facts. */
 .panes {
   margin: 0;
-  padding: 0 0 var(--s1) calc(22px + var(--depth, 0) * 14px);
+  padding: 1px 12px 0 calc(6px + var(--depth, 0) * 14px);
   list-style: none;
 }
 
 .pane-row {
   width: 100%;
-  padding: 1px var(--s2);
+  min-height: 22px;
+  padding: 0 6px;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   align-items: stretch;
   border: 0;
   border-radius: var(--r1);
   background: none;
   color: var(--fg-muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   text-align: left;
   cursor: pointer;
 }
@@ -1212,8 +1306,12 @@
 .pane-row__head {
   display: flex;
   align-items: center;
-  gap: var(--s2);
+  gap: 7px;
   min-width: 0;
+}
+
+.pane-row .agent-glyph {
+  color: var(--fg-secondary);
 }
 
 .pane-row:hover,
@@ -1222,14 +1320,39 @@
   color: var(--fg-secondary);
 }
 
-/* An asking pane's answers, at rest on a line of their own under the question, starting under its text. */
+/* An asking row keeps one line: the question, then Allow and Open where its time would be. */
+.pane-item--asking {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.pane-item--asking > .pane-row {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.pane-item--asking > .subagents {
+  flex-basis: 100%;
+}
+
 .pane-item__answers {
-  padding: 1px var(--s2) var(--s1) calc(var(--s2) * 2 + 14px);
+  flex: none;
+  flex-wrap: nowrap;
+  gap: 2px;
+  margin-left: var(--s1);
 }
 
 /* A row's height, not a toolbar's. */
-.pane-item__answers .answers__choice {
-  padding-block: 0;
+.pane-item__answers .button--small {
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--r1);
+  font-weight: 600;
+}
+
+.pane-item__answers .answers__open {
+  padding-inline: 5px;
 }
 
 .pane-row__label {
@@ -1243,6 +1366,7 @@
 
 .pane-row__since {
   flex: none;
+  margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1261,15 +1385,13 @@
   max-width: 50%;
 }
 
-/* The last line the pane printed. Beside the name, or in its place for the pane named after its
-   worktree, so every row is one line high. A one-line clamp rather than `text-overflow`: it ends on
-   a word, where an ellipsis cuts wherever the box does. */
+/* The last line the pane printed, beside the name or in its place, so every row is one line high. A
+   one-line clamp rather than `text-overflow`: it ends on a word. */
 .pane-row__evidence {
   display: -webkit-box;
   flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
-  /* A step brighter than the label: the quoted line is what the row exists to show. */
   color: var(--fg-secondary);
   font-size: var(--text-sm);
   line-height: inherit;
@@ -1281,7 +1403,7 @@
 /* A pane's subagents, under its row: the pane's glyph column, one step in per level of nesting. */
 .subagents {
   margin: 0;
-  padding: 0 0 0 var(--s4);
+  padding: 0 0 0 var(--s5);
   list-style: none;
 }
 
@@ -1291,7 +1413,8 @@
   display: flex;
   align-items: center;
   gap: var(--s2);
-  padding: 1px var(--s2) 1px calc(var(--s2) + var(--subagent-depth) * var(--s3));
+  min-height: 20px;
+  padding: 0 6px 0 calc(6px + var(--subagent-depth) * var(--s3));
   border: 0;
   border-radius: var(--r1);
   background: none;
@@ -1325,22 +1448,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------------------------------------------------------------------------
-   A teammate's worktrees.
-
-   They sit under the same project as your own, because that is what they are:
-   the same repository, checked out on somebody else's machine. Everything here
-   exists so a reader is never wrong about two things — whose checkout this is,
-   and that it is not theirs to act on.
-
-   The second one is structural rather than decorative. There is no disabled
-   button anywhere below, because a disabled button is a thing that would work
-   if something were different, and this is a thing that will not. Milestone C
-   makes a pane openable for reading; until then the honest affordance is none.
-   --------------------------------------------------------------------------- */
+/* A teammate's worktrees -------------------------------------------------
+   Under the same project as your own, in their person's group: the same box, never yours to act on.
+   The rows are divs, not disabled buttons; a pane can be watched, and an ask answered through them. */
 
 .worktree--teammate {
-  --teammate-line: var(--accent-line);
   margin-left: calc(var(--depth, 0) * var(--s4));
 }
 
@@ -1359,51 +1471,39 @@
   flex: 0 0 auto;
 }
 
-/* Indented past your own rows and marked down the left edge, so the point where
-   your checkouts stop is visible without reading a word. */
-.worktree__row--teammate {
-  margin-left: var(--s4);
-  border-left: 2px solid var(--teammate-line);
-  border-radius: 0 var(--r2) var(--r2) 0;
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-}
-
 .worktree__open--teammate {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  gap: 1px;
   min-width: 0;
-  padding: 3px var(--s2) 3px var(--s4);
+  padding: 3px 0 3px 10px;
   cursor: default;
 }
 
-.worktree--teammate .worktree__name {
-  color: var(--fg-secondary);
+/* Their face leads the line where your own boxes have the dot. */
+.worktree__open--teammate .worktree__title > .avatar:first-child {
+  margin-right: -1px;
 }
 
-.panes--teammate {
-  margin-left: var(--s4);
-  padding-left: calc(var(--s4) - var(--s2));
-  border-left: 2px solid var(--teammate-line);
+/* Remembered, not live: no raise, a dashed edge. Told apart by shape and by the group's `away`, never faded. */
+.worktree--stale {
+  background: transparent;
+  box-shadow: none;
+  border: 1px dashed var(--line);
 }
 
-.worktree--stale .worktree__row--teammate {
-  border-left-style: dashed;
+.worktree--stale::before {
   background: transparent;
 }
 
-/* A remembered row is told apart by the dashed edge above and by its group's
-   `away`, both of which survive being read. Fading the row
-   as well put a teammate's branch name under the AA floor — which is to say
-   the app said "this is old" by making it hard to find out what it was. */
 .worktree--stale .worktree__name,
 .worktree--stale .worktree__branch {
   color: var(--fg-muted);
 }
 
-/* One line, not a row each: a teammate never heard from has no worktrees to
-   show and may genuinely have none. */
+/* One line, not a row each: a teammate never heard from has no worktrees to show and may have none. */
 .project__unheard {
   padding: 3px var(--s2) 3px var(--s6);
   color: var(--fg-muted);
@@ -1418,9 +1518,7 @@
   background: transparent;
 }
 
-/* A teammate's pane is the one thing on their row that can be acted on, and
-   only in one direction: it can be read. So it gets a pointer back, and the
-   row it is on says nothing about typing because nothing here types. */
+/* A teammate's pane can be read, so it gets a pointer back; nothing on it types. */
 .pane-row--watchable {
   cursor: pointer;
 }
@@ -1429,17 +1527,13 @@
   background: var(--bg-hover);
 }
 
-/* The pane this window is currently reading. Marked on the row as well as in
-   the viewer, so closing the viewer is never the only way to know. */
+/* The pane this window is reading, marked on the row as well as in the viewer. */
 .pane-row--watching {
   background: var(--bg-hover);
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-/* Who is reading one of *your* panes. In the accent and on the row itself
-   rather than in a tooltip: the design's case for why a project where anyone
-   can type is survivable is that none of it can happen unseen, and a fact
-   behind a hover is a fact somebody can miss. */
+/* Who is reading one of your panes, named on the row itself: none of it happens unseen. */
 .pane-row__watchers {
   flex: 0 0 auto;
   max-width: 45%;
@@ -1451,14 +1545,11 @@
   white-space: nowrap;
 }
 
-/* Somebody typing is louder than somebody reading, because it is: one of them
-   is running commands as you. */
 .pane-row__watchers--typing {
   color: var(--accent-bright);
 }
 
-/* Quiet, and always there while it is true. A mute the owner cannot see in the
-   list is a mute they will not remember lifting. */
+/* Quiet, and always there while it is true: a mute the owner cannot see is one they forget to lift. */
 .pane-row__muted {
   flex: 0 0 auto;
   color: var(--fg-secondary);
@@ -1468,8 +1559,8 @@
 
 /* Drag to nest ------------------------------------------------------------ */
 
-/* Onto a row fills and rings it; a row's edges are between rows and draw nothing. */
-.worktree--drop > .worktree__row,
+/* Onto a box rings and fills it; the gaps between boxes draw nothing. */
+.worktree--drop,
 .project__head--drop .project__toggle {
   background: var(--accent-soft);
   box-shadow: inset 0 0 0 1px var(--accent);
@@ -1486,7 +1577,7 @@
   cursor: not-allowed;
 }
 
-.worktree--dragging > .worktree__row {
+.worktree--dragging {
   opacity: 0.5;
 }
 
@@ -1501,7 +1592,7 @@
   padding: 1px var(--s2);
   border: 1px solid var(--accent-line);
   border-radius: var(--r1);
-  background: var(--bg-raised);
+  background: var(--bg-elevated);
   color: var(--accent-bright);
   font-size: var(--text-xs);
   white-space: nowrap;
@@ -1527,12 +1618,12 @@
 .worktree__ask {
   display: flex;
   flex-direction: column;
-  gap: var(--s1);
-  margin: 0 var(--s2) var(--s2) 28px;
-  padding: var(--s2);
-  border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
+  gap: 6px;
+  margin: 2px 0 var(--s1) 22px;
+  padding: 7px var(--s2);
+  border: 1px solid color-mix(in srgb, var(--warning) 32%, transparent);
   border-radius: var(--r2);
-  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
 }
 
 .worktree__ask-text {
@@ -1583,7 +1674,7 @@
 }
 
 .worktree__line {
-  margin: 0 var(--s2) var(--s1) 28px;
+  margin: 0 0 var(--s1) 28px;
 }
 
 /* Holds claims: quiet, since a claim is a note to other agents, not something to act on. */
@@ -1621,7 +1712,7 @@
   justify-content: center;
   width: var(--avatar-size);
   height: var(--avatar-size);
-  border-radius: 99px;
+  border-radius: 30%;
   background: oklch(0.5 0.12 var(--avatar-hue));
   color: #fff;
   font-size: var(--text-xs);
@@ -1678,9 +1769,9 @@
   display: inline-flex;
   padding: 0;
   border: 0;
-  border-radius: 99px;
+  border-radius: 30%;
   background: none;
-  box-shadow: 0 0 0 1.5px var(--bg-panel);
+  box-shadow: 0 0 0 1.5px var(--bg-rail);
   cursor: pointer;
 }
 
@@ -1771,11 +1862,16 @@
   box-shadow: var(--ring);
 }
 
-/* One teammate: a slim row with their face and what their agents are doing, their worktrees under it. */
+/* One teammate: a group box with their face, whether they are here and what their agents do, then their
+   boxes inside it. */
 .teammate {
   display: flex;
   flex-direction: column;
-  gap: var(--s1);
+  gap: 6px;
+  padding: 3px 6px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: color-mix(in srgb, var(--info) 4%, var(--bg-rail));
 }
 
 .teammate__head {
@@ -1783,7 +1879,8 @@
   align-items: center;
   gap: var(--s2);
   min-width: 0;
-  padding: 3px var(--s2) 3px var(--s2);
+  min-height: 30px;
+  padding: 0 var(--s1);
   border-radius: var(--r1);
   cursor: pointer;
 }
@@ -1797,6 +1894,11 @@
   box-shadow: var(--ring);
 }
 
+/* The online ring meets the group's ground, not the panel's. */
+.teammate__head .avatar__presence {
+  box-shadow: 0 0 0 2px var(--bg-rail);
+}
+
 .teammate__name {
   flex: 0 1 auto;
   min-width: 0;
@@ -1808,12 +1910,6 @@
   white-space: nowrap;
 }
 
-.teammate__presence {
-  flex: none;
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-}
-
 .teammate__doing {
   flex: 0 1 auto;
   min-width: 0;
@@ -1821,6 +1917,7 @@
   overflow: hidden;
   color: var(--fg-muted);
   font-size: var(--text-xs);
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1829,18 +1926,14 @@
   color: var(--warning);
 }
 
+.teammate__doing--online {
+  color: var(--success);
+}
+
 .teammate__rows {
   display: flex;
   flex-direction: column;
-  gap: var(--s1);
-}
-
-.teammate__rows .worktree__row--teammate {
-  margin-left: 0;
-}
-
-.teammate__rows .worktree__title .avatar {
-  margin-right: 1px;
+  gap: 6px;
 }
 
 /* Your worktree touching the same files as theirs, drawn as your own overlap chip; pressing it opens yours. */
@@ -1859,10 +1952,11 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 4px var(--s2) 5px var(--s4);
+  padding: 7px var(--s2) 7px var(--s3);
   border: 1px solid var(--accent-line);
-  border-radius: var(--r2);
-  background: var(--accent-soft);
+  border-radius: var(--r3);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-worktree));
+  box-shadow: var(--shadow-1);
 }
 
 .handoff-row__row:focus-visible {
@@ -1880,7 +1974,8 @@
 .handoff-row__name {
   overflow: hidden;
   color: var(--fg);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1900,14 +1995,21 @@
 
 .handoff-row__take,
 .handoff-row__dismiss {
-  padding: 1px var(--s2);
-  border: 1px solid var(--line-strong);
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid transparent;
   border-radius: var(--r1);
-  background: var(--bg-raised);
-  color: var(--fg);
+  background: transparent;
+  color: var(--fg-secondary);
   font: inherit;
   font-size: var(--text-xs);
+  font-weight: 600;
   cursor: pointer;
+}
+
+.handoff-row__dismiss:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
 }
 
 .handoff-row__take {
@@ -1925,8 +2027,8 @@
   gap: var(--s2);
   padding: var(--s3);
   border: 1px solid var(--line-strong);
-  border-radius: var(--r2);
-  background: var(--bg-raised);
+  border-radius: var(--r3);
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-pop);
   pointer-events: none;
 }

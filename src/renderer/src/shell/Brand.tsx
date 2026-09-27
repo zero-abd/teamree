@@ -1,11 +1,9 @@
-// The brand lockup, drawn in the sidebar's header: the mark on its tile, then the wordmark.
+// The brand lockup, drawn in the sidebar's header: the mark in the ink of the text, then the wordmark.
 
 export function Brand(): React.JSX.Element {
   return (
     <span className="brand">
-      <span className="brand__tile" aria-hidden="true">
-        <BrandMark />
-      </span>
+      <BrandMark />
       <span className="wordmark">
         teamree
         <span className="wordmark__dot" aria-hidden="true" />

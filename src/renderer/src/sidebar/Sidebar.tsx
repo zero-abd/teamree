@@ -45,7 +45,7 @@ import { Icon } from '../icons/Icon'
 export function Sidebar({
   searchHint
 }: {
-  /** The one chord drawn in the rail; the rows carry none, the menu bar and help page name theirs. */
+  /** The palette's chord, named in the search's hover; nothing in the sidebar draws a chord. */
   searchHint: string
 }): React.JSX.Element {
   const projects = useWorkspaceStore((state) => state.projects)
@@ -194,6 +194,10 @@ export function Sidebar({
   const active = worktrees.find((entry) => entry.id === activeWorktreeId)
   const railProject = projects.find((project) => project.id === active?.projectId) ?? projects[0]
   const notesUnread = useSharedNotes((state) => unreadNotes(state))
+  const online =
+    railProject === undefined
+      ? 0
+      : (teammatesHeard(teammates[railProject.id])?.teammates.filter((mate) => mate.connected).length ?? 0)
   const pageOpen = dashboardOpen || settingsOpen || helpOpen || teamworkProjectId !== null
 
   // A new filter starts the list from its top; declared first, so on mount the open row still wins.
@@ -247,17 +251,16 @@ export function Sidebar({
 
       <nav className="rail" aria-label="Go to">
         {/* A button, not an input: it opens the palette, which is the search
-            this app actually has. Dressing it as a field is about where the eye
-            goes, and the chord beside it says what it really is. */}
+            this app actually has. Dressed as a field for where the eye goes. */}
         <button
           type="button"
           className="rail__search"
           aria-label="Search worktrees and commands"
+          title={`Search ${searchHint}`}
           onClick={() => openDialog({ kind: 'palette' })}
         >
           <Icon name="search" />
           <span className="rail__search-text">Search</span>
-          <kbd>{searchHint}</kbd>
         </button>
 
         <ul className="rail__list">
@@ -279,6 +282,8 @@ export function Sidebar({
                 <span className="rail__badge" role="img" aria-label={`${notesUnread} unread`}>
                   {notesUnread}
                 </span>
+              ) : online > 0 ? (
+                <span className="rail__meta rail__meta--online" aria-hidden="true">{`${online} online`}</span>
               ) : null}
             </button>
           </li>
@@ -292,6 +297,11 @@ export function Sidebar({
             >
               <Icon name="all-panes" />
               <span>All Panes</span>
+              {paneList.length > 0 ? (
+                <span className="rail__meta" aria-hidden="true">
+                  {paneList.length}
+                </span>
+              ) : null}
             </button>
           </li>
         </ul>
@@ -313,9 +323,12 @@ export function Sidebar({
           <div className="sidebar__head-actions">
             {projects.length === 0 ? null : (
               <>
+                {/* How rows are drawn: under the pointer, or while on. */}
+                <span className="sidebar__head-view">
+                  <HideDoneToggle />
+                  <CompactToggle />
+                </span>
                 <FilterToggle />
-                <HideDoneToggle />
-                <CompactToggle />
               </>
             )}
             <AddProjectButton />
@@ -506,7 +519,7 @@ export function Sidebar({
                   onTrash={() => void trashProject(project.id)}
                   meta={
                     <div className="project__meta">
-                      <p className="project__base">{`from ${project.baseRef}`}</p>
+                      <p className="project__base">{project.baseRef}</p>
                       <BaseFreshness project={project} />
                       <UnpushedBase projectId={project.id} />
                     </div>

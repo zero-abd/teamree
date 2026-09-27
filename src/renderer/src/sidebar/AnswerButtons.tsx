@@ -3,6 +3,7 @@
 
 import type { ReactNode } from 'react'
 import type { ScreenChoice } from '@shared/screenOpinion'
+import { Button } from '../ui/Button'
 import { useWorkspaceStore } from '../state/workspaceStore'
 
 export type AnswerChoice = { label: string; title?: string }
@@ -71,6 +72,46 @@ export function AnswerButtons({
       className={className}
       tabbable={tabbable}
     />
+  )
+}
+
+/** A sidebar ask's two buttons: Allow sends the menu's first answer; Open goes to the pane, where the others are. */
+export function AllowOpen({
+  terminalId,
+  choices,
+  onOpen,
+  tabbable = true,
+  onChoose
+}: {
+  terminalId: string
+  /** Empty leaves Allow out: Open alone. */
+  choices: readonly ScreenChoice[]
+  onOpen: () => void
+  tabbable?: boolean
+  /** Instead of answering this machine's pane: a teammate's goes through their consent. */
+  onChoose?: (choice: ScreenChoice) => void
+}): React.JSX.Element {
+  const answerPane = useWorkspaceStore((state) => state.answerPane)
+  const first = choices[0]
+  const tabIndex = tabbable ? undefined : -1
+  return (
+    <span className="answers pane-item__answers" role="group" aria-label="Answer">
+      {first === undefined ? null : (
+        <Button
+          variant="primary"
+          size="sm"
+          className="answers__choice"
+          title={first.label}
+          tabIndex={tabIndex}
+          onClick={() => (onChoose ? onChoose(first) : void answerPane(terminalId, first))}
+        >
+          Allow
+        </Button>
+      )}
+      <Button variant="ghost" size="sm" className="answers__open" tabIndex={tabIndex} onClick={onOpen}>
+        Open
+      </Button>
+    </span>
   )
 }
 
