@@ -1,6 +1,6 @@
 // The strip along the top of the workspace: the open worktree's panes (what and how is `paneTabs`),
-// plus the actions a tab reaches. It is the window's top edge and drag region on this side, so it is
-// always drawn; it lists panes only while panes are under it. The end buttons split and start (`+`
+// plus the actions a tab reaches. It is the window's top edge and drag region on this side while panes
+// are under it; over a page it is drawn only to hold Show sidebar. The end buttons split and start (`+`
 // opens a menu of what can start here) whenever a worktree is open, and a tab is where a pane gets renamed.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -23,7 +23,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 /** Between the `+` and the menu that hangs from it. */
 const MENU_GAP_PX = 4
 
-export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): React.JSX.Element {
+export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): React.JSX.Element | null {
   const activeWorktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   // Refused only for a worktree known to have no checkout yet.
   const noCheckout = useWorkspaceStore((state) => {
@@ -42,6 +42,10 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
   // Same precedence `WorkspaceArea` applies.
   const panesShown = useWorkspaceStore(
     (state) => !state.dashboardOpen && state.teamworkProjectId === null && !state.settingsOpen && !state.helpOpen
+  )
+  // Settings hides the sidebar itself (see App), so there is no Show sidebar to hold over it.
+  const settingsShown = useWorkspaceStore(
+    (state) => state.settingsOpen && !state.dashboardOpen && state.teamworkProjectId === null
   )
   // A teammate's pane holding focus marks no tab here, as `WorkspaceArea` marks no focused border.
   const focusedWatchId = useWorkspaceStore((state) => state.focusedWatchId)
@@ -92,6 +96,9 @@ export function TerminalTabs({ modifier }: { modifier: PlatformModifier }): Reac
     if (at.left < box.left) strip.scrollLeft += at.left - box.left
     else if (at.right > box.right) strip.scrollLeft += at.right - box.right
   }, [focusedTerminalId, tabs.length])
+
+  // A page's head is the top edge then.
+  if (!panesShown && (sidebarVisible || settingsShown)) return null
 
   return (
     <div className="tabs" data-region="strip">

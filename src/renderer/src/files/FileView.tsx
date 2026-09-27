@@ -13,6 +13,7 @@ import type { CodeEditorHandle } from './CodeEditor'
 import { FileBar, fileLabel } from './FileBar'
 import { DiffBody, DiffTools, useFileDiff } from './FileDiff'
 import { draftFor, dropDraft, fileSize, keepDraft, registerSaver, type FileDraft } from './fileDrafts'
+import { noteEditorLines } from './editorLines'
 import { ImageView } from './ImageView'
 
 /** How long typing may run before the draft in the profile catches up. */
@@ -242,6 +243,7 @@ export function FileView({
                 onDirtyChange={onDirtyChange}
                 onEdit={onEdit}
                 onComment={(from, lines) => setComment(quotedCode(from, lines))}
+                onLines={(lines) => noteEditorLines(worktreeId, path, lines)}
                 {...(goTo === null ? {} : { goTo })}
                 onWent={wentToLine}
               />

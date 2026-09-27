@@ -21,6 +21,8 @@ export type RowMenuItem = {
   icon?: React.ReactNode
   /** A submenu, opened by hover, click or the right arrow; `onChoose` is then unused. */
   items?: readonly RowMenuItem[]
+  /** The one in front, e.g. the shown file of a list of files: marked, and where the keyboard starts. */
+  current?: boolean
 }
 
 /** Whether a pointer closed the menu, which decides if the focus going back shows its ring. */
@@ -59,7 +61,12 @@ export function RowMenu({ label, items, anchor, onClose, opener }: RowMenuProps)
   const menu = useRef<HTMLDivElement | null>(null)
   const entries = useRef<(HTMLDivElement | null)[]>([])
   const subEntries = useRef<(HTMLDivElement | null)[]>([])
-  const [active, setActive] = useState(0)
+  const [active, setActive] = useState(() =>
+    Math.max(
+      0,
+      items.findIndex((item) => item.current === true)
+    )
+  )
   // `at` is -1 while the submenu is open under the pointer but the focus is still on its parent.
   const [sub, setSub] = useState<{ index: number; at: number } | null>(null)
   const children = sub === null ? undefined : items[sub.index]?.items
@@ -247,6 +254,7 @@ function MenuEntry({
       tabIndex={focusable ? 0 : -1}
       ref={ref}
       {...(item.disabled === true ? { 'aria-disabled': true } : {})}
+      {...(item.current === true ? { 'aria-current': true } : {})}
       {...(parent ? { 'aria-haspopup': 'menu' as const, 'aria-expanded': expanded } : {})}
       onClick={onChoose}
       onMouseEnter={onHover}

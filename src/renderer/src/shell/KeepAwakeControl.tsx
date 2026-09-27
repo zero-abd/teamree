@@ -1,4 +1,4 @@
-// The rail's icon for sleep, filled while it holds the machine awake, and the three ways to change it.
+// The rail's sleep control, its icon filled while it holds the machine awake, and the three ways to change it.
 
 import { useCallback, useRef, useState } from 'react'
 import { KEEP_AWAKE_MODES, type KeepAwakeMode } from '../state/preferences'
@@ -59,6 +59,8 @@ export function KeepAwakeControl(): React.JSX.Element {
         onClick={() => (open ? close() : setOpen(true))}
       >
         <Icon name={holding ? 'keep-awake-on' : 'keep-awake'} size={14} />
+        <span className="statusbar__muted">awake</span>
+        {MODE_NAME[mode].toLowerCase()}
       </button>
       {open ? (
         <StatusPopover label="Keep awake" anchor={button.current} onClose={close}>

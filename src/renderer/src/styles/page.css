@@ -23,6 +23,13 @@
   scrollbar-gutter: stable;
   padding: var(--s4) var(--s5) var(--s3);
   border-bottom: 1px solid var(--line);
+  /* The window's top edge here once the pane strip steps aside for a page. */
+  -webkit-app-region: drag;
+}
+
+.page__head button,
+.page__actions {
+  -webkit-app-region: no-drag;
 }
 
 .page__head-row {

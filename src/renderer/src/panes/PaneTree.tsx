@@ -126,7 +126,7 @@ function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColu
   const strip = useRef<HTMLDivElement | null>(null)
   const [outside, setOutside] = useState(0)
   const [listing, setListing] = useState<{ anchor: RowMenuAnchor; opener: HTMLElement } | null>(null)
-  const count = useCallback(() => setOutside(tabsOutOfView(strip.current)), [])
+  const count = useCallback(() => setOutside(cutTabsOutOfView(strip.current)), [])
   const shownTab = useCallback(
     () =>
       shown === undefined
@@ -231,6 +231,7 @@ function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColu
               // A second file of the same name goes by its path, so every row reads apart.
               label: names.indexOf(name) === names.lastIndexOf(name) ? name : tab.path,
               icon: <span className="column__mark">{unsaved[tab.terminalId] ? <UnsavedDot /> : null}</span>,
+              current: tab.terminalId === shown,
               onChoose: () => callbacks.onFocus(tab.terminalId)
             }
           })}
@@ -245,21 +246,30 @@ function FileColumnPane({ node, ...callbacks }: PaneCallbacks & { node: FileColu
   )
 }
 
-/** Scrolls the strip the least that shows all of `tab`. */
+/** Scrolls the strip the least that shows all of `tab`, to a tab's left edge so the strip starts on a whole one. */
 function bringIntoView(strip: HTMLElement, tab: HTMLElement): void {
   const end = tab.offsetLeft + tab.offsetWidth
   if (tab.offsetLeft < strip.scrollLeft) strip.scrollLeft = tab.offsetLeft
-  else if (end > strip.scrollLeft + strip.clientWidth) strip.scrollLeft = end - strip.clientWidth
+  else if (end > strip.scrollLeft + strip.clientWidth) {
+    const least = end - strip.clientWidth
+    const edge = [...strip.querySelectorAll<HTMLElement>('.column__tab')].find((each) => each.offsetLeft >= least)
+    strip.scrollLeft = Math.min(edge?.offsetLeft ?? least, tab.offsetLeft)
+  }
 }
 
-/** How many tabs are not wholly in sight; none while they all fit. */
-function tabsOutOfView(strip: HTMLElement | null): number {
-  if (strip === null || strip.scrollWidth <= strip.clientWidth) return 0
+/** Marks `data-cut` on every tab not wholly in sight, so no half name shows, and counts them. */
+function cutTabsOutOfView(strip: HTMLElement | null): number {
+  if (strip === null) return 0
+  const fits = strip.scrollWidth <= strip.clientWidth
   const from = strip.scrollLeft
   const to = from + strip.clientWidth
-  return [...strip.querySelectorAll<HTMLElement>('.column__tab')].filter(
-    (tab) => tab.offsetLeft < from || tab.offsetLeft + tab.offsetWidth > to
-  ).length
+  let cut = 0
+  for (const tab of strip.querySelectorAll<HTMLElement>('.column__tab')) {
+    const outside = !fits && (tab.offsetLeft < from || tab.offsetLeft + tab.offsetWidth > to)
+    tab.toggleAttribute('data-cut', outside)
+    if (outside) cut += 1
+  }
+  return cut
 }
 
 /** The worktree's panes named in the order they were opened, as `paneTabs` and the sidebar name them. */

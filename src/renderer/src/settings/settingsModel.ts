@@ -95,10 +95,12 @@ function overrideLine(relay: RelaySetting, value: string): string {
   return `${name}=${value} overrides ${relay.file} (${relay.onDisk.url ?? 'empty'}) until unset and relaunched`
 }
 
-/** The `teamree` command's section: one line of state and a button; the judgement is `cliInstallModel`'s. */
+/** The `teamree` command's section: a status row with its button, then a row per path. */
 export type CliLine = {
-  /** `/usr/local/bin/teamree → …`, or `Not installed`; a directory no readable PATH reaches is said here too. */
-  state: string
+  /** `Installed`, `Not installed`, `Link broken`…; ` · not on PATH` when no readable PATH reaches the link. */
+  status: string
+  /** The link and where it leads, or where this copy runs from; each drawn on its own row. */
+  paths: { label: string; path: string }[]
   /** `Install` with no link, `Repair` for one leading elsewhere; null when this app can do nothing here. */
   action: 'Install' | 'Repair' | null
   /** The button's hover: what it does and whether macOS will ask for an admin password. */
@@ -108,35 +110,39 @@ export type CliLine = {
 }
 
 export function cliLine(status: CliStatus | null): CliLine {
-  const none: CliLine = { state: 'Looking…', action: null, title: null, manual: null }
+  const none: CliLine = { status: 'Looking…', paths: [], action: null, title: null, manual: null }
   if (status === null) return none
   const panel = cliPanel(status)
-  if (!status.installable) return { ...none, state: `Not installable on ${status.platform}`, manual: panel.manual }
-  if (status.source === null) return { ...none, state: 'No CLI in this build' }
+  if (!status.installable) return { ...none, status: `Not installable on ${status.platform}`, manual: panel.manual }
+  if (status.source === null) return { ...none, status: 'No CLI in this build' }
   // A link into a mounted image or translocated copy dangles by the evening.
   if (status.impermanent !== null) {
-    return { ...none, state: `Running from ${status.source} — move teamree to Applications` }
+    return { ...none, status: 'Move teamree to Applications', paths: [{ label: 'Running from', path: status.source }] }
   }
   // An unbuilt CLI: the link would resolve and the command exit on its first line.
-  if (status.bundle === null) return { ...none, state: 'Not built', manual: panel.manual }
+  if (status.bundle === null) return { ...none, status: 'Not built', manual: panel.manual }
 
-  const reach = status.onPath === null ? ` · ${status.directory} not on PATH` : ''
+  const offPath = status.onPath === null
+  const reach = offPath ? ' · not on PATH' : ''
+  const link = { label: 'Link', path: status.destination }
+  const leads = (path: string): CliLine['paths'] => [link, { label: 'Target', path }]
   const title = panel.promise === null ? null : [panel.promise, panel.password].filter(Boolean).join(' · ')
   switch (status.state) {
     case 'linked':
-      return { ...none, state: `${status.destination} → ${status.resolved ?? status.source}${reach}` }
+      return { ...none, status: offPath ? 'Not on PATH' : 'Installed', paths: leads(status.resolved ?? status.source) }
     case 'elsewhere':
       return {
-        state: `${status.destination} → ${status.resolved} (${status.dangling ? 'missing' : 'another copy'})${reach}`,
+        status: `${status.dangling ? 'Link broken' : 'Another copy'}${reach}`,
+        paths: status.resolved === null ? [link] : leads(status.resolved),
         action: leavesLinkAlone(status) ? null : 'Repair',
         title: leavesLinkAlone(status) ? null : title,
         manual: null
       }
     case 'file':
     case 'directory':
-      return { ...none, state: `${status.destination} is a ${status.state} — move it aside` }
+      return { ...none, status: `A ${status.state} is in the way`, paths: [link] }
     default:
-      return { state: `Not installed${reach}`, action: 'Install', title, manual: null }
+      return { ...none, status: `Not installed${reach}`, action: 'Install', title }
   }
 }
 

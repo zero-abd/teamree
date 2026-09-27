@@ -29,6 +29,7 @@ vi.mock('../terminal/TerminalView', () => ({ TerminalView: () => <div /> }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { FileView } = await import('./FileView')
+const { editorLines } = await import('./editorLines')
 const { paneTabs } = await import('../workspace/paneTabs')
 const { PaneTree } = await import('../panes/PaneTree')
 const { TerminalTabs } = await import('../workspace/TerminalTabs')
@@ -263,6 +264,15 @@ describe('the file viewer', () => {
       expectedModifiedAt: 100
     })
     expect(onDisk).toMatchObject({ content: 'const a = 2\n' })
+  })
+
+  it('tells Go to Line how many lines the file has, as it is edited', async () => {
+    call.mockImplementation(async (method: string) => (method === 'file.read' ? text('a\nb\nc\n') : undefined))
+    mount('src/lines.ts')
+    const view = await editorView()
+    expect(editorLines('w1', 'src/lines.ts')).toBe(4)
+    act(() => view.dispatch({ changes: { from: 0, insert: 'z\n' } }))
+    expect(editorLines('w1', 'src/lines.ts')).toBe(5)
   })
 
   // `src/app.ts:3:5` ⌘-clicked in a pane: the code, at that line and column, once.

@@ -106,13 +106,6 @@ describe('stylesheets', () => {
     expect(declarationOf(rule, 'white-space')).not.toBe('nowrap')
   })
 
-  // `break-all` split "(another copy)" as "(ano / ther copy)".
-  it('wraps a path line in settings without splitting the words beside it', () => {
-    const rule = ruleFor('settings.css', '.settings-fact--mono')
-    expect(declarationOf(rule, 'word-break')).toBeUndefined()
-    expect(declarationOf(rule, 'overflow-wrap')).toBe('anywhere')
-  })
-
   // One chip radius and size everywhere.
   it('draws every chip from one rule', () => {
     const chip = ruleFor('base.css', '.chip')

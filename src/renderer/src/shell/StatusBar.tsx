@@ -1,5 +1,5 @@
-// The bottom rail: state that is off screen. The runtime only when it is not ready, keep-awake and memory
-// as icons, the branch, the git line, setup questions, the pane count, and how many panes are asking or failed.
+// The bottom rail: state that is off screen. The runtime only when it is not ready, keep-awake and memory,
+// the branch, the git line, setup questions, the pane count, and how many panes are asking or failed.
 
 import { useMemo } from 'react'
 import type { WorktreeStatus } from '@shared/entities'

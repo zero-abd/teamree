@@ -13,6 +13,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InstalledAgent, Project, Worktree } from '@shared/entities'
 import { formatInvitation } from '@shared/invitation'
+import { noteEditorLines } from '../files/editorLines'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 const call = vi.hoisted(() => vi.fn((..._args: unknown[]): Promise<unknown> => new Promise(() => {})))
@@ -362,6 +363,19 @@ describe('going to a file', () => {
   it('opens with a typed : when Go to Line asks', () => {
     render(<CommandPalette modifier={MAC} mode="files" query=":" />)
     expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe(':')
+  })
+
+  // The colon alone hides the placeholder, so the range sits after it until a digit is typed.
+  it('shows the focused file’s line range after the : until a number is typed', () => {
+    const root = { kind: 'leaf' as const, terminalId: 'file:1', pane: 'file' as const, path: 'src/app.ts' }
+    seed({ openFilePane, layouts: { w1: { worktreeId: 'w1', root, focusedTerminalId: 'file:1' } } })
+    noteEditorLines('w1', 'src/app.ts', 240)
+    render(<CommandPalette modifier={MAC} mode="files" query=":" />)
+    const ghost = (): Element | null => document.querySelector('.palette__ghost')
+    expect(ghost()?.textContent).toBe(':1–240')
+    expect(ghost()?.getAttribute('aria-hidden')).toBe('true')
+    type(':12')
+    expect(ghost()).toBeNull()
   })
 
   it('opens it as a split with the modifier held', () => {

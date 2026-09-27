@@ -44,6 +44,8 @@ export type CodeEditorProps = {
   onDirtyChange: (dirty: boolean) => void
   /** Every change to the document. */
   onEdit: () => void
+  /** The document's line count, on mount and after each change. */
+  onLines?: (lines: number) => void
   /** A comment asked for on `lines`, the first being line `from` (from 1): the gutter's `+`, or ⌘⇧A. */
   onComment?: (from: number, lines: string[]) => void
   /** A line to put the cursor on and bring into view, once per `token`; 1-based. */
@@ -72,6 +74,7 @@ export function CodeEditor({
   onDirtyChange,
   onEdit,
   onComment,
+  onLines,
   goTo,
   onWent
 }: CodeEditorProps): React.JSX.Element {
@@ -79,8 +82,8 @@ export function CodeEditor({
   const view = useRef<EditorView | null>(null)
   const saved = useRef<Text | null>(null)
   const dirty = useRef(false)
-  const callbacks = useRef({ onDirtyChange, onEdit, onComment })
-  callbacks.current = { onDirtyChange, onEdit, onComment }
+  const callbacks = useRef({ onDirtyChange, onEdit, onComment, onLines })
+  callbacks.current = { onDirtyChange, onEdit, onComment, onLines }
   const comment = (editor: EditorView, at?: number): boolean => {
     const ask = callbacks.current.onComment
     if (ask === undefined) return false
@@ -141,6 +144,7 @@ export function CodeEditor({
         EditorView.updateListener.of((update) => {
           if (!update.docChanged) return
           report(update.state)
+          callbacks.current.onLines?.(update.state.doc.lines)
           callbacks.current.onEdit()
         })
       ]
@@ -149,6 +153,7 @@ export function CodeEditor({
     const editor = new EditorView({ state, parent: host.current })
     view.current = editor
     report(state)
+    callbacks.current.onLines?.(state.doc.lines)
     let alive = true
     void loadLanguage(path).then((support) => {
       if (alive && support !== null) editor.dispatch({ effects: language.reconfigure(support) })

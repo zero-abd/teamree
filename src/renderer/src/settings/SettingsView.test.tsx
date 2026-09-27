@@ -386,18 +386,22 @@ describe('Add-ons', () => {
     }
   })
 
-  it('says it needs uv, links to it, and offers no Install', async () => {
+  it('says it needs uv, opens its page from a button like Install, and offers no Install', async () => {
     runtimeCall.answer = (method) => {
       if (method === 'addons.status') return Promise.resolve([{ id: 'jac-memory', state: 'off', needs: 'uv' }])
       return new Promise(() => {})
     }
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null)
     try {
       renderAt('addons')
-      const link = await within(row()).findByRole('link', { name: 'Get uv' })
-      expect(link.getAttribute('href')).toContain('docs.astral.sh/uv')
+      const button = await within(row()).findByRole('button', { name: 'Get uv' })
+      expect(within(row()).queryByRole('link')).toBeNull()
+      fireEvent.click(button)
+      expect(open).toHaveBeenCalledWith(expect.stringContaining('docs.astral.sh/uv'), '_blank', 'noopener')
       expect(within(row()).queryByRole('button', { name: 'Install' })).toBeNull()
       expect(within(row()).getByText('Needs uv')).toBeTruthy()
     } finally {
+      open.mockRestore()
       runtimeCall.answer = () => new Promise(() => {})
     }
   })
@@ -569,41 +573,43 @@ describe('the section list', () => {
   })
 })
 
-// One line of state and a button.
+// Rows: the status with its button, then each path on a line of its own.
 describe('the CLI', () => {
   const cliSection = (): HTMLElement => screen.getByRole('region', { name: 'CLI' })
+  /** The value beside a row's label. */
+  const rowOf = (label: string): HTMLElement =>
+    within(cliSection()).getByText(label).closest('.settings-field') as HTMLElement
 
-  it('says where the link leads, in one line, with nothing to press', () => {
+  it('says Installed, then the link and where it leads as rows, with nothing to press', () => {
     renderAt('cli')
-    expect(
-      screen.getByText('/usr/local/bin/teamree → /Applications/teamree.app/Contents/Resources/cli/teamree')
-    ).toBeTruthy()
+    expect(within(rowOf('Status')).getByText('Installed')).toBeTruthy()
+    expect(within(rowOf('Link')).getByTitle('/usr/local/bin/teamree')).toBeTruthy()
+    expect(within(rowOf('Target')).getByTitle('/Applications/teamree.app/Contents/Resources/cli/teamree')).toBeTruthy()
     expect(within(cliSection()).queryByRole('button')).toBeNull()
-    expect(within(cliSection()).queryByText(/leads to|on your PATH\./)).toBeNull()
+    expect(cliSection().querySelector('.settings-fact--mono')).toBeNull()
   })
 
-  it('says it is not installed, and offers Install', () => {
+  it('says it is not installed, and offers Install on the status row', () => {
     seed({ cli: { ...linkedCli(), state: 'absent', resolved: null, needsAdministrator: false } })
     renderAt('cli')
-    expect(screen.getByText('Not installed')).toBeTruthy()
+    expect(within(rowOf('Status')).getByText('Not installed')).toBeTruthy()
     expect(within(cliSection()).getAllByRole('button')).toHaveLength(1)
-    fireEvent.click(screen.getByRole('button', { name: 'Install' }))
+    fireEvent.click(within(rowOf('Status')).getByRole('button', { name: 'Install' }))
     expect(installCli).toHaveBeenCalled()
   })
 
-  // A path wraps at its slashes, and the words after it do not wrap mid-word.
-  it('lets the path break after each slash', () => {
-    seed({ cli: { ...linkedCli(), state: 'elsewhere', resolved: '/Volumes/old/teamree', dangling: false } })
+  it('says a link off PATH in the status, the path on its own row', () => {
+    seed({ cli: { ...linkedCli(), onPath: null } })
     renderAt('cli')
-    const line = screen.getByText(/another copy/)
-    expect(line.querySelectorAll('wbr').length).toBe('/usr/local/bin/teamree/Volumes/old/teamree'.split('/').length - 1)
-    expect(line.textContent).toBe('/usr/local/bin/teamree → /Volumes/old/teamree (another copy)')
+    expect(within(rowOf('Status')).getByText('Not on PATH')).toBeTruthy()
+    expect(within(cliSection()).queryByText(/→/)).toBeNull()
   })
 
   it('says where a wrong link leads, and offers Repair', () => {
     seed({ cli: { ...linkedCli(), state: 'elsewhere', resolved: '/Volumes/old/teamree', dangling: true } })
     renderAt('cli')
-    expect(screen.getByText('/usr/local/bin/teamree → /Volumes/old/teamree (missing)')).toBeTruthy()
+    expect(within(rowOf('Status')).getByText('Link broken')).toBeTruthy()
+    expect(within(rowOf('Target')).getByTitle('/Volumes/old/teamree')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Repair' }))
     expect(installCli).toHaveBeenCalled()
   })
@@ -1059,6 +1065,21 @@ describe('the filter', () => {
     expect(filter().value).toBe('Scrollback lines')
     expect(nav()).toEqual(['Panes'])
     expect(useWorkspaceStore.getState().settingsQuery).toBeNull()
+  })
+
+  // The switch is what was asked for; a Tab to reach it is one step too many.
+  it('lands the focus on the named setting’s control', () => {
+    render(<SettingsView />)
+    act(() => useWorkspaceStore.getState().openSetting('Copy on Select'))
+    expect(document.activeElement).toBe(screen.getByRole('switch', { name: 'Copy on Select' }))
+    act(() => useWorkspaceStore.getState().openSetting('Scrollback lines'))
+    expect(document.activeElement).toBe(screen.getByLabelText('Scrollback lines'))
+  })
+
+  it('lands the focus on the control when Settings opens asked for it', () => {
+    useWorkspaceStore.getState().openSetting('Copy on Select')
+    render(<SettingsView />)
+    expect(document.activeElement).toBe(screen.getByRole('switch', { name: 'Copy on Select' }))
   })
 
   it('hides every row whose label does not match, and the sections left empty', () => {
@@ -1893,12 +1914,20 @@ describe('general', () => {
       show('Projects')
       const own = document.getElementById('settings-branch-prefix-p1') as HTMLInputElement
       await vi.waitFor(() => expect(own.placeholder).toBe('abd/'))
+      // Same labels as General's rows, so each says whether it is General's or this project's own.
+      const sourceOf = (label: string): string | null | undefined =>
+        [...document.querySelectorAll('.settings-project .settings-field')]
+          .find((field) => field.querySelector('.settings-field__label')?.textContent === label)
+          ?.querySelector('.settings-chip')?.textContent
+      expect(sourceOf('Branch prefix')).toBe('From General')
+      expect(sourceOf('Worktrees in')).toBe('From General')
       fireEvent.change(own, { target: { value: 'team/' } })
       fireEvent.keyDown(own, { key: 'Enter' })
       await vi.waitFor(() =>
         expect(call).toHaveBeenCalledWith('project.setPaths', { projectId: 'p1', branchPrefix: 'team/' })
       )
       await vi.waitFor(() => expect(own.value).toBe('team/'))
+      expect(sourceOf('Branch prefix')).toBe('This project')
     } finally {
       call.mockRestore()
       delete (window as unknown as { teamree?: unknown }).teamree

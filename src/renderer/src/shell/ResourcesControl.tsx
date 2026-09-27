@@ -1,5 +1,5 @@
-// What everything this app spawned costs: an icon on the rail, with the memory beside it past 2 GB or while
-// open, and per-pane CPU and memory in the panel with a Kill per row. Sampled slowly while closed, every 2s open.
+// What everything this app spawned costs: an icon and `mem` on the rail (the total too past 2 GB or while open),
+// and per-pane CPU and memory in the panel with a Kill per row. Sampled slowly while closed, every 2s open.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ResourceProcess, SystemResources } from '@shared/entities'
@@ -135,6 +135,7 @@ export function ResourcesControl(): React.JSX.Element {
         onClick={() => (open ? close() : setOpen(true))}
       >
         <Icon name="resources" size={14} />
+        <span className="statusbar__muted">mem</span>
         {railMemory}
       </button>
       {open ? (
