@@ -129,6 +129,29 @@ beforeEach(() => {
   seed()
 })
 
+describe('the branch', () => {
+  it('names the open worktree’s branch and where it started, and copies it on a click', () => {
+    const copyToClipboard = vi.fn(() => Promise.resolve())
+    seed({ copyToClipboard })
+    mount()
+    const branch = screen.getByRole('button', { name: 'Copy Branch rewrite-the-pager' })
+    expect(branch.textContent).toBe('rewrite-the-pager')
+    expect(branch.getAttribute('title')).toBe('rewrite-the-pager from origin/main')
+    fireEvent.click(branch)
+    expect(copyToClipboard).toHaveBeenCalledWith('rewrite-the-pager', 'the branch rewrite-the-pager')
+  })
+
+  it('is not offered with no worktree open, or a page over it', () => {
+    seed({ activeWorktreeId: null })
+    mount()
+    expect(screen.queryByRole('button', { name: /Copy Branch/ })).toBeNull()
+    cleanup()
+    seed({ dashboardOpen: true })
+    mount()
+    expect(screen.queryByRole('button', { name: /Copy Branch/ })).toBeNull()
+  })
+})
+
 describe('the git segment', () => {
   it('opens the changes panel, and says which panel it is', () => {
     seed({ statuses: { w1: status({ behind: 2, unstaged: 1 }) } })

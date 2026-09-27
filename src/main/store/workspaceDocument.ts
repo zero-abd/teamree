@@ -41,6 +41,7 @@ const WorktreeSchema = z.object({
   branch: z.string().min(1),
   path: z.string().min(1),
   startedFrom: z.string().min(1),
+  startedFromRef: z.string().min(1).optional().catch(undefined),
   state: z.enum(['creating', 'ready', 'removing', 'failed']),
   error: z.string().optional(),
   retryable: z.literal(true).optional(),

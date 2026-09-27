@@ -118,6 +118,8 @@ export type Worktree = {
   path: string
   /** What this branched from: a ref name or a commit sha. */
   startedFrom: string
+  /** The ref it was asked to start from, `origin/main`, once `startedFrom` holds the sha; absent for a sha or a checkout. */
+  startedFromRef?: string
   state: WorktreeState
   error?: string
   /** On a failed create whose cause may pass (a timeout, a lock, a cancel); only then is a retry offered. */

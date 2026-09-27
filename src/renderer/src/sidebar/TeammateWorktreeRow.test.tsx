@@ -4,7 +4,7 @@
 // that it is not yours to act on must be structural (a `div`, not a disabled button). The one
 // exception is a pane, and only for reading.
 
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PeerPane, TeammateWorktree } from '@shared/entities'
 
@@ -133,9 +133,12 @@ describe('whose worktree this is', () => {
     expect(within(item).getByText('priya/relay-budget')).toBeTruthy()
   })
 
-  it('leaves out a branch that is only its name slugified', () => {
+  it('names its branch even when it is the name slugified, but not when it is the name', () => {
     mount(theirs({ branch: 'fix-the-relay-budget' }))
-    expect(screen.queryByText('fix-the-relay-budget')).toBeNull()
+    expect(screen.getByText('fix-the-relay-budget')).toBeTruthy()
+    cleanup()
+    mount(theirs({ name: 'perf', branch: 'perf' }))
+    expect(document.querySelector('.worktree__branch')).toBeNull()
   })
 
   it('says whose it is first on hover, because that changes what the rest means', () => {

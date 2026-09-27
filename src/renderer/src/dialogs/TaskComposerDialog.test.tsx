@@ -159,7 +159,7 @@ describe('an old base', () => {
       fetchProject
     })
     await open()
-    expect(startHint()).toContain('originm · origin/main from 3h ago')
+    expect(startHint()).toContain('originm · fetched 3h ago')
     const asked = call.mock.calls.length
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Fetch Now' }))

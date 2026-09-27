@@ -204,6 +204,12 @@ describe('a compact row with more chips than two', () => {
     room.mockRestore()
   })
 
+  it('keeps its branch off the line and names it on hover', () => {
+    mount()
+    expect(document.querySelector('.worktree__branch')).toBeNull()
+    expect(title().querySelector('.worktree__name')?.getAttribute('title')).toContain('long-refactor from origin/main')
+  })
+
   it('draws no +N with nothing to fold', () => {
     mount({ chips: false })
     expect(plus()).toBeNull()
@@ -218,5 +224,10 @@ describe('a two-line row', () => {
     expect(meta.querySelector('.overlap')).not.toBeNull()
     expect(meta.querySelector('.worktree__port')).not.toBeNull()
     expect(meta.querySelector('.worktree__claims')).not.toBeNull()
+  })
+
+  it('names its branch on the second line', () => {
+    mount({ compact: false })
+    expect(document.querySelector('.worktree__meta .worktree__branch')?.textContent).toBe('long-refactor')
   })
 })

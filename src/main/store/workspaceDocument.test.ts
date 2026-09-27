@@ -43,6 +43,15 @@ describe('workspace document: task-tree fields and settings', () => {
     expect(parseWorkspaceDocument({ worktrees: [mangled] }).worktrees).toEqual([worktree])
   })
 
+  it('keeps the ref a worktree was started from beside its sha, and drops a mangled one', () => {
+    const resolved = { ...worktree, startedFrom: 'a'.repeat(40), startedFromRef: 'origin/main' }
+    expect(parseWorkspaceDocument({ worktrees: [resolved] }).worktrees).toEqual([resolved])
+    const mangled = { ...resolved, startedFromRef: '' }
+    expect(parseWorkspaceDocument({ worktrees: [mangled] }).worktrees).toEqual([
+      { ...resolved, startedFromRef: undefined }
+    ])
+  })
+
   it('reads settings one switch at a time', () => {
     const document = parseWorkspaceDocument({
       settings: { shareTaskDetails: false, showCost: 'yes', jacMemoryAddon: true }

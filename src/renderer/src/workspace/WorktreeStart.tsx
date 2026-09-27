@@ -1,4 +1,4 @@
-// An open worktree with no panes: its name and branch, and the `+` menu's pane rows as buttons.
+// An open worktree with no panes: its name, branch and start point, and the `+` menu's pane rows as buttons.
 // Resuming goes on a row of its own; an agent closed here that can pick its conversation up is the one primary button.
 
 import { useEffect } from 'react'
@@ -6,7 +6,7 @@ import { hasCheckout, type Worktree } from '@shared/entities'
 import { AgentGlyph } from '../agents/glyphs'
 import { harnessName } from '../agents/harnesses'
 import type { PlatformModifier } from '../keyboard/platformModifier'
-import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
+import { startedFromLabel, worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { resumableAgent } from '../state/closedPanes'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { RESUME_CONVERSATION, useStartMenuItems } from './startMenu'
@@ -24,6 +24,7 @@ export function WorktreeStart({
   const closed = useWorkspaceStore((state) => state.closedPanes[worktree.id])
   const loadClosedPanes = useWorkspaceStore((state) => state.loadClosedPanes)
   const reopenTerminal = useWorkspaceStore((state) => state.reopenTerminal)
+  const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
   const loadConversations = useWorkspaceStore((state) => state.loadConversations)
   useEffect(() => {
     if (!ready) return
@@ -55,7 +56,20 @@ export function WorktreeStart({
         {display.agent?.kind === undefined ? null : <AgentGlyph kind={display.agent.kind} decorative />}
         {display.title}
       </h1>
-      {display.branch === undefined ? null : <span className="worktree-start__branch">{display.branch}</span>}
+      <p className="worktree-start__where">
+        {display.branch === undefined ? null : (
+          <button
+            type="button"
+            className="worktree-start__branch"
+            title="Copy Branch"
+            aria-label={`Copy Branch ${display.branch}`}
+            onClick={() => void copyToClipboard(worktree.branch, `the branch ${worktree.branch}`)}
+          >
+            {display.branch}
+          </button>
+        )}
+        {startedFromLabel(worktree)}
+      </p>
       {worktree.issue === undefined ? null : (
         <a className="worktree-start__issue" href={worktree.issue.url} target="_blank" rel="noreferrer">
           {`#${worktree.issue.number}`}

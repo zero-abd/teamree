@@ -311,11 +311,11 @@ describe('a project header', () => {
     expect(openTeamwork).toHaveBeenCalledWith('p1')
   })
 
-  it('lays the base ref and the teamwork control out as the one row under the name', () => {
+  it('lays where new tasks start and the teamwork control out as the one row under the name', () => {
     seed({ teamwork: { p1: read() } })
     mount()
     const meta = document.querySelector('.project__meta') as HTMLElement
-    expect(meta.firstElementChild?.textContent).toBe('origin/main')
+    expect(meta.firstElementChild?.textContent).toBe('from origin/main')
     expect(meta.lastElementChild).toBe(screen.getByRole('button', { name: 'Teamwork · no key in pager' }))
     expect(meta.children).toHaveLength(2)
   })
@@ -964,8 +964,7 @@ describe('several runs of one task', () => {
     ).toEqual(['claude', 'codex'])
     expect(heads.map((head) => head.querySelector('.worktree__name')?.textContent)).toEqual([task, task])
     expect(screen.getByRole('treeitem', { name: `${task} (Claude Code)` })).toBeTruthy()
-    // The branch line said the name again, slugified.
-    expect(screen.queryByText('add-a-subtract-function-to-claude')).toBeNull()
+    expect(screen.getByText('add-a-subtract-function-to-claude')).toBeTruthy()
   })
 
   // The glyph tells claude from codex; only a second claude run needs its word to be told apart.
@@ -1063,7 +1062,7 @@ describe('the tree from the keyboard', () => {
     t2: { ...pane, id: 't2', title: 'claude', running: true, busy: true, lastOutputAt: NOW }
   }
   const items = (): HTMLElement[] => screen.getAllByRole('treeitem')
-  const names = (): string[] => items().map((item) => item.textContent?.trim().split(/\s/)[0] ?? '')
+  const names = (): string[] => items().map((item) => item.getAttribute('aria-label') ?? item.textContent ?? '')
   const stops = (): HTMLElement[] => items().filter((item) => item.tabIndex === 0)
   const press = (key: string): void => {
     fireEvent.keyDown(document.activeElement as HTMLElement, { key })

@@ -1,7 +1,6 @@
 // What a worktree is called, on every surface: the sidebar, the strip, the pane header, the status
 // bar, the board, the palette, their tooltips and accessible names. Nothing else reads `name` to show it.
 
-import { slugifyBranchName } from '@shared/branchName'
 import type { AgentKind, InstalledAgent, Worktree } from '@shared/entities'
 import { HARNESSES, harnessName } from '../agents/harnesses'
 import { taskName, taskNames } from '../dialogs/taskPlan'
@@ -13,7 +12,7 @@ export type WorktreeDisplay = {
   agent?: { text: string; kind?: AgentKind }
   /** The task's first line, whole; the name when there is no task, or the name says something else. */
   title: string
-  /** Absent when it is only the name or the title slugified. */
+  /** Absent when it is the name or the title itself. */
   branch?: string
 }
 
@@ -43,9 +42,7 @@ export function worktreeDisplay(
   if (named.includes(name) || (run !== null && named.includes(run.base))) display.title = taskName(task, Infinity)
   else if (run !== null && agentKind(run.word) !== undefined) display.title = run.base
   if (run !== null && display.title !== name) display.agent = runAgent(run, kindOf)
-  if (worktree.branch !== slugifyBranchName(name) && worktree.branch !== slugifyBranchName(display.title)) {
-    display.branch = worktree.branch
-  }
+  if (worktree.branch !== name && worktree.branch !== display.title) display.branch = worktree.branch
   return display
 }
 
@@ -78,6 +75,12 @@ export function agentName(agent: NonNullable<WorktreeDisplay['agent']>): string 
 /** The display where no glyph can be drawn: `Add a subtract function (Claude Code)`. */
 export function worktreeLabel(display: WorktreeDisplay): string {
   return display.agent === undefined ? display.title : `${display.title} (${agentName(display.agent)})`
+}
+
+/** Where a worktree started, `from origin/main`; a commit by its short sha. */
+export function startedFromLabel(worktree: Pick<Worktree, 'startedFrom' | 'startedFromRef'>): string {
+  const from = worktree.startedFromRef ?? worktree.startedFrom
+  return `from ${/^[0-9a-f]{40}$/u.test(from) ? from.slice(0, 7) : from}`
 }
 
 /** A pane labelled with its worktree's name, as a task's agent is, goes by the worktree's title. */

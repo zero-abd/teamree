@@ -11,6 +11,7 @@ import {
   type WorktreeMergePreview,
   type WorktreeStatus
 } from '@shared/entities'
+import { slugifyBranchName } from '@shared/branchName'
 import { runPaneOf, runState } from '@shared/runCommands'
 import { usageLines } from '@shared/usage'
 import { AgentGlyph } from '../agents/glyphs'
@@ -41,7 +42,7 @@ import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { WorktreeNameField } from './WorktreeNameField'
 import { RunChip, runMenuItems, TEST_CHIP, useRunActions, useRunOffers } from '../workspace/runButtons'
 import { useChildren } from '../workspace/rightPanel/childrenStore'
-import { agentName, worktreeDisplay, worktreeLabel, type WorktreeDisplay } from './worktreeDisplay'
+import { agentName, startedFromLabel, worktreeDisplay, worktreeLabel, type WorktreeDisplay } from './worktreeDisplay'
 
 /** A task with child tasks: they sit under it in its box and fold with its panes. */
 export type TaskFold = {
@@ -316,6 +317,10 @@ export function WorktreeRow({
   // A task's tally, a handoff and a pull request need the second line too, or their chips squeeze the name.
   const pullShown = ready && !merged && landing?.pullRequest !== undefined
   const twoLines = !compact && (display.branch !== undefined || task !== undefined || handoff !== null || pullShown)
+  // Heard after the name, a branch that is only the name slugified says it twice.
+  const spokenBranch = [worktree.name, display.title].some((name) => slugifyBranchName(name) === display.branch)
+    ? undefined
+    : display.branch
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
   const testPane = ready ? runPaneOf(terminals, worktree.id, 'test') : undefined
@@ -331,7 +336,7 @@ export function WorktreeRow({
     question: liveAsk?.text ?? rows.find((row) => row.activity === 'waiting')?.evidence ?? null,
     ...(rolled?.from === undefined ? {} : { from: rolled.from }),
     unread: unreadHere,
-    ...(display.branch === undefined ? {} : { branch: display.branch }),
+    ...(spokenBranch === undefined ? {} : { branch: spokenBranch }),
     ...(ready && status !== undefined
       ? { status, child: worktree.parentId !== undefined, ignored: status.ignored ?? 0 }
       : {}),
@@ -556,6 +561,7 @@ export function WorktreeRow({
               className={`worktree__name${unreadHere ? ' worktree__name--unread' : ''}`}
               title={[
                 pullRequest === undefined ? label : `${label} · Pull Request #${pullRequest.number}`,
+                `${worktree.branch} ${startedFromLabel(worktree)}`,
                 ...(tokens ?? [])
               ].join('\n')}
               onDoubleClick={() => setRenaming(true)}
@@ -584,7 +590,9 @@ export function WorktreeRow({
       </span>
       {twoLines ? (
         <span className="worktree__meta" aria-hidden="true">
-          <span className="worktree__branch">{display.branch ?? ''}</span>
+          <span className="worktree__branch" title={display.branch}>
+            {display.branch ?? ''}
+          </span>
           {chips.map((chip) => (
             <Fragment key={chip.key}>{chip.node}</Fragment>
           ))}

@@ -17,10 +17,10 @@ export function baseFreshness(project: Fetched, now: number): string | null {
   return `fetched ${agoLabel(now - fetch.fetchedAt)}`
 }
 
-/** The composer's note on starting from the base: `origin/main from 3h ago`, or why it has no date. */
+/** The composer's note beside Start from on the base: `fetched 3h ago`, or why it has no date. */
 export function startPointAge(project: Fetched, now: number): string | null {
   const words = baseFreshness(project, now)
   const at = project.fetch?.fetchedAt
   if (words === null || at === undefined) return words
-  return `${project.baseRef} from ${agoLabel(now - at)}`
+  return `fetched ${agoLabel(now - at)}`
 }

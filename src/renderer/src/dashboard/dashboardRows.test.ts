@@ -65,7 +65,7 @@ describe('dashboardRows', () => {
   })
 
   // `perf perf`, and the stored "Add a subtract function to claude" twice over.
-  it('names the worktree as the sidebar does, the branch only when it says more', () => {
+  it('names the worktree as the sidebar does, the branch unless it is the name', () => {
     const task = 'Add a subtract function to src/math.ts'
     const rows = build(
       [
@@ -85,7 +85,7 @@ describe('dashboardRows', () => {
 
     const agent = rows.find((row) => row.terminalId === 'agent')
     expect(agent).toMatchObject({ label: 'Claude Code', worktreeName: task })
-    expect(agent?.branch).toBeUndefined()
+    expect(agent?.branch).toBe('add-a-subtract-function-to-claude')
     const shell = rows.find((row) => row.terminalId === 'shell')
     expect(shell).toMatchObject({ label: 'bash', worktreeName: 'perf' })
     expect(shell?.branch).toBeUndefined()

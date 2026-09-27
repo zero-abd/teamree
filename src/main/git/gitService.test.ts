@@ -199,6 +199,25 @@ describe('worktree.create', () => {
     expect(last?.type === 'worktree.updated' && last.worktree.state).toBe('ready')
   })
 
+  it('keeps the start point it was asked for by name beside the sha it resolved to', async () => {
+    const repo = await newRepo({ withRemote: true })
+    const service = newService(repo)
+    const project = await service.addProject({ path: repo.repoPath })
+
+    const named = await readyWorktree(service, project.id, 'From the base')
+    expect(named.startedFrom).toMatch(/^[0-9a-f]{40}$/u)
+    expect(named.startedFromRef).toBe('origin/main')
+
+    const pending = await service.createWorktree({
+      projectId: project.id,
+      name: 'From a sha',
+      startedFrom: named.startedFrom
+    })
+    const bySha = await service.whenSettled(pending.id)
+    expect(bySha.startedFrom).toBe(named.startedFrom)
+    expect(bySha.startedFromRef).toBeUndefined()
+  })
+
   it('dedupes the branch name against existing branches and other worktrees', async () => {
     const repo = await newRepo()
     const service = newService(repo)
