@@ -15,6 +15,7 @@ export type WorkspaceCommand =
   | 'new-markdown'
   | 'new-worktree'
   | 'new-child-task'
+  | 'quick-note'
   | 'toggle-sidebar'
   | 'toggle-right-panel'
   | 'focus-sidebar'
@@ -32,6 +33,8 @@ export type WorkspaceCommand =
   | 'expand-pane'
   | 'previous-worktree'
   | 'next-worktree'
+  | 'worktree-back'
+  | 'worktree-forward'
   | 'next-needing'
   | 'previous-needing'
   | 'open-palette'
@@ -75,10 +78,12 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   { command: 'new-markdown', chord: { key: 'm', shift: true }, title: 'New Markdown' },
   { command: 'new-worktree', chord: { key: 'n' }, title: 'New Task…' },
   { command: 'new-child-task', chord: { key: 'n', shift: true }, title: 'New Child Task…' },
+  { command: 'quick-note', chord: { key: 'n', alt: true }, title: 'Quick Note…' },
   { command: 'toggle-sidebar', chord: { key: 'b' }, title: 'Show/Hide Sidebar' },
   // J: the side-panel key in the editors people run in these panes.
   { command: 'toggle-right-panel', chord: { key: 'j' }, title: 'Show/Hide Right Panel' },
-  { command: 'focus-sidebar', title: 'Focus Sidebar' },
+  // E for Explorer, as editors focus their side bar.
+  { command: 'focus-sidebar', chord: { key: 'e', shift: true }, title: 'Focus Sidebar' },
   // Alt, as ⌘F finds in a pane and ⌘⇧F searches files.
   { command: 'filter-sidebar', chord: { key: 'f', alt: true }, title: 'Filter Sidebar' },
   { command: 'focus-panes', title: 'Focus Panes' },
@@ -101,6 +106,9 @@ export const WORKSPACE_SHORTCUTS: readonly WorkspaceShortcut[] = [
   // With alt: bare ⌘↑/⌘↓ are document keys inside a pane.
   { command: 'previous-worktree', chord: { key: 'ArrowUp', alt: true }, title: 'Previous Worktree' },
   { command: 'next-worktree', chord: { key: 'ArrowDown', alt: true }, title: 'Next Worktree' },
+  // History, not sidebar order; bare ⌘←/⌘→ are line keys in a pane.
+  { command: 'worktree-back', chord: { key: 'ArrowLeft', alt: true }, title: 'Go Back' },
+  { command: 'worktree-forward', chord: { key: 'ArrowRight', alt: true }, title: 'Go Forward' },
   // ⌃⌘, not ⌘⇧: that selects to the end or start in every text field and editor; see `needingYou.ts`.
   { command: 'next-needing', chord: { key: 'ArrowDown', control: true }, title: 'Go to Next Needing You' },
   { command: 'previous-needing', chord: { key: 'ArrowUp', control: true }, title: 'Go to Previous Needing You' },

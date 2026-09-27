@@ -75,6 +75,7 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
 
   'new-worktree': { section: 'file' },
   'new-child-task': { section: 'file' },
+  'quick-note': { section: 'file' },
   'new-terminal': { section: 'file' },
   'new-markdown': { section: 'file' },
   'add-project': { section: 'file' },
@@ -105,6 +106,8 @@ const PLACEMENT: Record<WorkspaceCommand, Placement> = {
   // three presses too slow for, which is moving one row at a time.
   'previous-worktree': { section: 'view' },
   'next-worktree': { section: 'view' },
+  'worktree-back': { section: 'view' },
+  'worktree-forward': { section: 'view' },
   'next-needing': { section: 'view' },
   'previous-needing': { section: 'view' },
   'open-dashboard': { section: 'view' },

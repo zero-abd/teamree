@@ -21,6 +21,7 @@ import {
   type DiffOptions
 } from '../state/preferences'
 import type { DialogState } from '../state/workspaceStore'
+import { stepVisits, type VisitHistory } from '../state/visitHistory'
 import type { WorkspaceCommand } from './workspaceShortcuts'
 
 /** As much of the store as availability reads, structural so a test can state only its three fields. */
@@ -57,6 +58,8 @@ export type CommandState = {
   /** What ⌘⇧T could bring back, by worktree; absent reads as nothing. */
   closedPanes?: Readonly<Record<string, readonly ClosedPane[]>>
   closedFiles?: Readonly<Record<string, readonly unknown[]>>
+  /** Where Go Back and Go Forward walk; absent reads as nowhere. */
+  visits?: VisitHistory
 } & Omit<NeedingState, 'projects' | 'worktrees' | 'layouts' | 'activeWorktreeId' | 'focusedWatchId'>
 
 /** The store's own methods, named so this module does not import the store. */
@@ -73,6 +76,8 @@ export type CommandActions = {
   showPane: (paneId: string) => void
   toggleExpandedPane: () => void
   stepWorktree: (step: 1 | -1) => void
+  stepHistory: (step: 1 | -1) => void
+  openQuickNote: () => void
   revealPane: (worktreeId: string, terminalId: string) => Promise<void>
   openPaneSearch: () => void
   toggleSidebar: () => void
@@ -158,6 +163,12 @@ export function paneNumberTarget(n: number, state: CommandState): string | null 
 function editedFocus(state: CommandState): string | null {
   const focused = ownFocusedPane(state)
   return focused !== null && state.editedFiles?.[focused] !== undefined ? focused : null
+}
+
+/** Whether the history has a worktree still listed `step` away. */
+function canStepHistory(state: CommandState, step: 1 | -1): boolean {
+  if (state.visits === undefined) return false
+  return stepVisits(state.visits, step, new Set(state.worktrees.map((worktree) => worktree.id)), 0) !== null
 }
 
 function fontSize(state: CommandState): number {
@@ -257,6 +268,12 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
     case 'next-worktree':
       // Two rows in sidebar order; with one the walk lands where it started.
       return unless(worktreeOrder(state.projects, state.worktrees).length >= 2, 'one worktree')
+    case 'worktree-back':
+      return unless(canStepHistory(state, -1), 'nothing back')
+    case 'worktree-forward':
+      return unless(canStepHistory(state, 1), 'nothing forward')
+    case 'quick-note':
+      return unless(state.projects.length > 0, 'no project')
     case 'next-needing':
       return unless(stepNeedingYou(state, 1) !== null, 'nothing needs you')
     case 'previous-needing':
@@ -405,6 +422,15 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       break
     case 'next-worktree':
       store.stepWorktree(1)
+      break
+    case 'worktree-back':
+      store.stepHistory(-1)
+      break
+    case 'worktree-forward':
+      store.stepHistory(1)
+      break
+    case 'quick-note':
+      store.openQuickNote()
       break
     case 'next-needing':
     case 'previous-needing': {

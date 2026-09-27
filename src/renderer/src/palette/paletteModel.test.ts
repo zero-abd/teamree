@@ -833,13 +833,12 @@ describe('the first screen, before anything is typed', () => {
     expect(groups[2]?.items.some((item) => item.id === 'new-terminal')).toBe(true)
   })
 
-  it('leads with the commands last run from it, each listed once', () => {
+  it('heads Commands with the commands last run from it, each listed once', () => {
     const groups = paletteGroups(items(), ['action:new-terminal', 'agent:claude', 'action:gone'], 'login fix')
-    expect(groups[0]?.title).toBe('Recent')
-    expect(groups[0]?.items.map(paletteKey)).toEqual(['action:new-terminal', 'agent:claude'])
-    const rest = groups.slice(1).flatMap((group) => group.items.map(paletteKey))
-    expect(rest).not.toContain('action:new-terminal')
-    expect(rest).not.toContain('agent:claude')
+    const commands = groups.find((group) => group.title === 'Commands')
+    expect(commands?.items.slice(0, 2).map(paletteKey)).toEqual(['action:new-terminal', 'agent:claude'])
+    const all = groups.flatMap((group) => group.items.map(paletteKey))
+    expect(all.filter((key) => key === 'action:new-terminal' || key === 'agent:claude')).toHaveLength(2)
   })
 
   it('leaves out what would do nothing, recent or not', () => {
@@ -1257,5 +1256,82 @@ describe('opening one setting from the palette', () => {
     expect(filterPalette(items, 'branch prefix')[0]?.label).toBe('Open Setting: Branch prefix')
     const shown = paletteGroups(items, [], 'here').flatMap((group) => group.items)
     expect(shown.some((item) => item.id.startsWith('setting:'))).toBe(false)
+  })
+})
+
+describe('where you have been', () => {
+  const MINUTE = 60_000
+  const NOW = 100 * MINUTE
+  const worktrees = [
+    worktree({ id: 'a', name: 'checkout flow' }),
+    worktree({ id: 'b', name: 'pagination', projectId: 'p2' }),
+    worktree({ id: 'c', name: 'db pool', projectId: 'p2' }),
+    worktree({ id: 'd', name: 'faq' })
+  ]
+  const terminal = (overrides: Partial<Terminal> & { id: string; worktreeId: string }): Terminal => ({
+    title: 'zsh',
+    cwd: '/',
+    shell: '/bin/zsh',
+    cols: 80,
+    rows: 24,
+    running: true,
+    busy: false,
+    lastOutputAt: 0,
+    ...overrides
+  })
+  const terminals = [
+    terminal({ id: 't-shell', worktreeId: 'a' }),
+    terminal({ id: 't-claude', worktreeId: 'b', agent: 'claude', lastOutputAt: NOW - 4 * MINUTE }),
+    terminal({ id: 't-codex', worktreeId: 'd', agent: 'codex', lastOutputAt: NOW - 9 * MINUTE }),
+    terminal({ id: 't-dev', worktreeId: 'a', title: 'npm run dev', lastOutputAt: NOW - 30 * MINUTE }),
+    terminal({ id: 't-here', worktreeId: 'c', agent: 'claude', lastOutputAt: NOW })
+  ]
+  // Visited a, then b, then c, which is on screen.
+  const items = (): PaletteItem[] =>
+    buildPaletteItems(
+      context({
+        worktrees,
+        activeWorktreeId: 'c',
+        terminals,
+        visited: { a: NOW - 5 * MINUTE, b: NOW - 2 * MINUTE, c: NOW },
+        // Looked at more lately than it printed.
+        paneSeenAt: { 't-codex': NOW - MINUTE },
+        focusedPaneId: 't-here',
+        now: NOW
+      })
+    )
+
+  it('opens on the worktree before this one, so ⌘K Enter goes back, then the others by visit, with how long ago', () => {
+    const groups = paletteGroups(items(), [], 'db pool')
+    expect(groups[0]?.title).toBe('Recent')
+    expect(groups[0]?.items.map((item) => item.id)).toEqual(['b', 'a'])
+    expect(groups[0]?.items.map((item) => (item.kind === 'worktree' ? item.age : null))).toEqual(['2m', '5m'])
+    const listed = groups.flatMap((group) => group.items.map(paletteKey))
+    expect(listed.filter((key) => key === 'worktree:b')).toHaveLength(1)
+  })
+
+  it('then the agent and command panes of every worktree, the latest active first', () => {
+    const groups = paletteGroups(items(), [], 'db pool')
+    expect(groups.map((group) => group.title).slice(0, 3)).toEqual(['Recent', 'Panes', 'Worktrees'])
+    const panes = groups[1]?.items ?? []
+    expect(panes.map((item) => item.label)).toEqual([
+      'Codex · faq',
+      'Claude Code · pagination',
+      'npm run dev · checkout flow'
+    ])
+    expect(panes.map((item) => (item.kind === 'pane' ? item.age : null))).toEqual(['1m', '4m', '30m'])
+    expect(panes.map(trailing)).toEqual(['atlas', 'ledger', 'atlas'])
+  })
+
+  it('then the rest in sidebar order, with nothing visited yet', () => {
+    const groups = paletteGroups(buildPaletteItems(context({ worktrees, activeWorktreeId: 'c' })), [], 'db pool')
+    expect(groups[0]?.title).toBe('Worktrees')
+  })
+
+  it('finds a running pane by its agent and by its worktree', () => {
+    const claude = filterPalette(items(), 'claude')
+    expect(claude.some((item) => item.kind === 'pane' && item.id === 't-claude')).toBe(true)
+    expect(filterPalette(items(), 'pagination').map(paletteKey)).toContain('pane:t-claude')
+    expect(filterPalette(items(), 'npm run').map(paletteKey)[0]).toBe('pane:t-dev')
   })
 })

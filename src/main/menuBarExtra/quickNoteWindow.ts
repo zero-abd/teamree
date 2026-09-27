@@ -8,6 +8,7 @@ import { readQuickNote, type QuickNote, type QuickNoteContext } from './quickNot
 export const QUICK_NOTE_CONTEXT_CHANNEL = 'teamree:quick-note:context'
 export const QUICK_NOTE_SAVE_CHANNEL = 'teamree:quick-note:save'
 export const QUICK_NOTE_CLOSE_CHANNEL = 'teamree:quick-note:close'
+export const QUICK_NOTE_OPEN_CHANNEL = 'teamree:quick-note:open'
 
 export const QUICK_NOTE_SIZE = { width: 440, height: 236 } as const
 
@@ -45,6 +46,8 @@ export function installQuickNote(
     context: () => QuickNoteContext
     /** Writes the note and answers where. */
     save: (note: QuickNote) => Promise<string>
+    /** Whether a message came from the app's own window, whose menu, chord and palette open the panel. */
+    fromWindow: (event: IpcMainEvent) => boolean
   }
 ): { open: () => void; stop: () => void } {
   let panel: QuickNotePanel | null = null
@@ -71,20 +74,26 @@ export function installQuickNote(
     if (fromPanel(event)) live()?.close()
   })
 
+  const open = (): void => {
+    const shown = live()
+    if (shown === null) {
+      panel = host.create()
+      return
+    }
+    shown.show()
+    shown.focus()
+  }
+  ipc.on(QUICK_NOTE_OPEN_CHANNEL, (event) => {
+    if (!fromPanel(event) && host.fromWindow(event)) open()
+  })
+
   return {
-    open() {
-      const open = live()
-      if (open === null) {
-        panel = host.create()
-        return
-      }
-      open.show()
-      open.focus()
-    },
+    open,
     stop() {
       ipc.removeHandler(QUICK_NOTE_CONTEXT_CHANNEL)
       ipc.removeHandler(QUICK_NOTE_SAVE_CHANNEL)
       ipc.removeAllListeners(QUICK_NOTE_CLOSE_CHANNEL)
+      ipc.removeAllListeners(QUICK_NOTE_OPEN_CHANNEL)
     }
   }
 }

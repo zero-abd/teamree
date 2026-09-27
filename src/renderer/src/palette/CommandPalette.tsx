@@ -16,6 +16,8 @@ import { dotClass, TONE_LABEL } from '../sidebar/agentRows'
 import { useOpenIn } from '../sidebar/openIn'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { lastVisits } from '../state/visitHistory'
+import { requestRegionFocus } from '../shell/regions'
 import { listedNotes, useSharedNotes } from '../teamwork/sharedNotesStore'
 import { canDiscard, childOf, updateFrom } from '../workspace/rightPanel/ChangesTab'
 import { idleLand, landOffer } from '../workspace/rightPanel/landOffer'
@@ -76,6 +78,10 @@ export function CommandPalette({
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const [recentCommands] = useState(() => readStoredRecent(storage))
+  // Ages as of opening, so the rows hold still under the cursor.
+  const [now] = useState(() => Date.now())
+  const visits = useWorkspaceStore((state) => state.visits)
+  const visited = useMemo(() => lastVisits(visits), [visits])
 
   // Rows the window would refuse are left out, asked as of after the palette closes (it is a dialog too).
   const consent = useWorkspaceStore((state) => state.consent)
@@ -174,6 +180,10 @@ export function CommandPalette({
         resumable,
         runs,
         sharedNotes,
+        visited,
+        paneSeenAt,
+        focusedPaneId: focusedPane,
+        now,
         // Empty for a command with no key.
         hintFor: (action) => {
           const command = commandNamed(action)
@@ -201,7 +211,8 @@ export function CommandPalette({
             closedPanes,
             closedFiles,
             terminals,
-            paneSeenAt
+            paneSeenAt,
+            visits
           })
         },
         removed: removedWorktrees,
@@ -263,7 +274,11 @@ export function CommandPalette({
       change,
       resumable,
       runs,
-      sharedNotes
+      sharedNotes,
+      visited,
+      focusedPane,
+      now,
+      visits
     ]
   )
 
@@ -350,6 +365,11 @@ export function CommandPalette({
 
     if (item.kind === 'worktree') {
       void store.openWorktree(item.id)
+      return
+    }
+
+    if (item.kind === 'pane') {
+      void store.revealPane(item.worktreeId, item.id).then(() => requestRegionFocus('panes'))
       return
     }
 
@@ -590,10 +610,15 @@ export function CommandPalette({
                       onMouseMove={() => setSelected(index)}
                       onClick={(event) => run(item, holdsModifier(event, modifier))}
                     >
-                      {item.kind === 'worktree' && item.agent !== undefined ? <AgentGlyph kind={item.agent} /> : null}
+                      {(item.kind === 'worktree' || item.kind === 'pane') && item.agent !== undefined ? (
+                        <AgentGlyph kind={item.agent} />
+                      ) : null}
                       <span className="palette__label">{item.label}</span>
+                      {(item.kind === 'worktree' || item.kind === 'pane') && item.age !== undefined ? (
+                        <span className="palette__age">{item.age}</span>
+                      ) : null}
                       <span className="palette__trailing">{trailing(item)}</span>
-                      {item.kind === 'worktree' && item.tone !== undefined ? (
+                      {(item.kind === 'worktree' || item.kind === 'pane') && item.tone !== undefined ? (
                         <span className={dotClass(item.tone)} role="img" aria-label={TONE_LABEL[item.tone]} />
                       ) : null}
                     </button>

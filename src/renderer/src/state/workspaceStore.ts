@@ -175,6 +175,7 @@ import {
   writeStoredTerminalOptions
 } from './preferences'
 import { forgetClosedPanes, markSeen, readPaneSeen, writePaneSeen, type PaneSeen } from './paneSeen'
+import { readStoredVisits, stepVisits, visit, writeStoredVisits, type VisitHistory } from './visitHistory'
 import type { PatchHunk } from '@shared/patch'
 import type { ProjectAddRefusal, ResultOf } from '@shared/methods'
 import { parsePastedInvitation, type Invitation } from '@shared/invitation'
@@ -554,6 +555,8 @@ type WorkspaceState = {
   collapsedProjects: Record<string, boolean>
   openWorktreeIds: string[]
   activeWorktreeId: string | null
+  /** The worktrees opened, in order, and the pane focused in each; see `visitHistory.ts`. */
+  visits: VisitHistory
   /** True until `bootstrap` has put the last window's tabs back, or found none to put back. */
   restoring: boolean
   /** Whether the pane dashboard has the main area, replacing the panes rather than sharing with them. */
@@ -748,6 +751,10 @@ type WorkspaceState = {
   expandPane: (terminalId: string) => void
   /** Opens the worktree one row along the sidebar, wrapping at both ends. */
   stepWorktree: (step: 1 | -1) => void
+  /** Opens the worktree one visit back or forward, at the pane it was left on. */
+  stepHistory: (step: 1 | -1) => void
+  /** The menu bar's Quick Note panel, for the worktree on screen. */
+  openQuickNote: () => void
   applySplitSizes: (worktreeId: string, path: number[], sizes: number[]) => void
   /** Rearranges the open worktree's panes, focusing `focus`; refused, said, when a pane would end under its floor. */
   arrangePanes: (arrange: (root: PaneNode) => PaneNode, focus: string) => void
@@ -1992,6 +1999,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     collapsedProjects: lastSession.collapsedProjects,
     openWorktreeIds: [],
     activeWorktreeId: null,
+    visits: readStoredVisits(storage),
     restoring: true,
     dashboardOpen: false,
     teamworkProjectId: null,
@@ -3126,6 +3134,27 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // The sidebar's order, not the store's: these chords move the highlight the sidebar draws.
       const next = worktreeAfter(worktreeOrder(projects, worktrees), activeWorktreeId, step)
       if (next && next.id !== activeWorktreeId) void get().openWorktree(next.id)
+    },
+
+    stepHistory(step) {
+      const live = new Set(get().worktrees.map((worktree) => worktree.id))
+      const moved = stepVisits(get().visits, step, live, Date.now())
+      if (moved === null) return
+      set({ visits: moved.history })
+      const { worktreeId, paneId } = moved.visit
+      const refocus = (): void => {
+        const layout = get().layouts[worktreeId]
+        if (paneId === null || get().activeWorktreeId !== worktreeId || !layout) return
+        if (layout.focusedTerminalId !== paneId && hasTerminal(layout.root, paneId)) get().focusPane(paneId)
+      }
+      // At once when the layout is already here, else once it arrives.
+      const opening = get().openWorktree(worktreeId)
+      refocus()
+      void opening.then(refocus)
+    },
+
+    openQuickNote() {
+      if (typeof window !== 'undefined') window.teamree?.quickNote?.open()
     },
 
     openPaneSearch() {
@@ -4516,6 +4545,25 @@ useWorkspaceStore.subscribe((state, previous) => {
     ...state,
     sidebarVisible: state.sidebarVisible || state.roomHid.sidebar || state.compareHid?.sidebar === true
   })
+})
+
+/** Every worktree and pane arrived at, however: the palette, the sidebar, a chord, a notification. */
+useWorkspaceStore.subscribe((state, previous) => {
+  const worktreeId = state.activeWorktreeId
+  if (worktreeId === null) return
+  const paneId = state.layouts[worktreeId]?.focusedTerminalId ?? null
+  if (
+    worktreeId === previous.activeWorktreeId &&
+    paneId === (previous.layouts[worktreeId]?.focusedTerminalId ?? null)
+  ) {
+    return
+  }
+  const visits = visit(state.visits, worktreeId, paneId, Date.now())
+  if (visits !== state.visits) useWorkspaceStore.setState({ visits })
+})
+
+useWorkspaceStore.subscribe((state, previous) => {
+  if (state.visits !== previous.visits) writeStoredVisits(storage, state.visits)
 })
 
 /** And one writer for what has been read, on the same terms. */
