@@ -134,6 +134,27 @@ describe('the menu bar is built from the table the keyboard reads', () => {
     expect(menuBarSpec(on).find((item) => item.command === 'toggle-diff-wrap')?.section).toBe('view')
   })
 
+  it('says whether the markdown source or the page comes next', () => {
+    const label = (state: CommandState): string | undefined =>
+      menuBarSpec(state).find((item) => item.command === 'toggle-markdown-source')?.label
+    const markdown: CommandState = {
+      ...WORKING,
+      layouts: {
+        w1: {
+          worktreeId: 'w1',
+          root: { kind: 'leaf', terminalId: 'file:m', pane: 'file', path: 'a.md' },
+          focusedTerminalId: 'file:m'
+        }
+      }
+    }
+    expect(label(markdown)).toBe('Show Markdown Source')
+    expect(menuBarSpec(markdown).find((item) => item.command === 'toggle-markdown-source')?.enabled).toBe(true)
+    expect(label({ ...markdown, sourcePanes: { 'file:m': true } })).toBe('Show Markdown Page')
+    expect(label({ ...markdown, sourcePanes: { 'file:m': true }, diffPanes: { 'file:m': true } })).toBe(
+      'Show Markdown Source'
+    )
+  })
+
   // Menu order, not table order: "New Task, New Terminal, Close Pane".
   it('puts the items of a menu in the order they are read', () => {
     const sectionOrder = (section: string): string[] =>
@@ -181,7 +202,8 @@ describe('the menu bar is built from the table the keyboard reads', () => {
       'focus-previous-region',
       'open-appearance',
       'toggle-diff-wrap',
-      'toggle-diff-whitespace'
+      'toggle-diff-whitespace',
+      'toggle-markdown-source'
     ])
     expect(sectionOrder('window')).toEqual([
       'split-right',
@@ -308,6 +330,7 @@ describe('what the menu bar says can be done', () => {
       'open-appearance': true,
       'toggle-diff-wrap': true,
       'toggle-diff-whitespace': true,
+      'toggle-markdown-source': false,
       'open-settings': true,
       'add-project': true,
       'clone-repository': true,
@@ -322,7 +345,7 @@ describe('what the menu bar says can be done', () => {
 
   it('lights them once there is a worktree open with a pane in it', () => {
     // All but the walks (one pane, one worktree, nothing asking: nowhere to go), the git commands (no status read yet),
-    // Actual Size (already there), the saves (nothing edited) and the reopen (nothing closed).
+    // Actual Size (already there), the saves (nothing edited), the reopen (nothing closed) and Source (no markdown).
     const nowhere = [
       'go-to-line',
       'reopen-closed-pane',
@@ -343,7 +366,8 @@ describe('what the menu bar says can be done', () => {
       'next-needing',
       'previous-needing',
       'commit-changes',
-      'push-worktree'
+      'push-worktree',
+      'toggle-markdown-source'
     ]
     for (const item of menuBarSpec(WORKING)) {
       expect(item.enabled, item.command).toBe(!nowhere.includes(item.command))

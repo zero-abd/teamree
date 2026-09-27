@@ -514,6 +514,56 @@
   color: var(--fg-muted);
 }
 
+/* Front matter: its keys and values as rows; a click swaps in the YAML as written. */
+.md-props {
+  margin: 0 0 1em;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+  background: var(--bg-panel);
+  font-size: var(--text-sm);
+}
+
+.md-props__rows {
+  display: grid;
+  grid-template-columns: minmax(80px, max-content) 1fr;
+  gap: 2px var(--s4);
+  margin: 0;
+  cursor: text;
+}
+
+.md-props__rows dt {
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.8;
+}
+
+.md-props__rows dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.md-props__rows[hidden],
+.md-props__source[hidden] {
+  display: none;
+}
+
+.md-props__source {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 /* The artifact card: one line, the title as the button, the address beside. */
 .md-artifact {
   display: flex;

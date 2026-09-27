@@ -62,7 +62,8 @@ export function BlockHandle({
       if (open.current || !editor.isEditable) return
       if ((event.target as Element | null)?.closest?.('.md-handle, .md-popover, .md-menu, .md-bar')) return
       const block = blockAt(editor.view, event.clientY)
-      setTarget(block ? targetOf(editor, host, block) : null)
+      // Front matter belongs at the top, so it is never moved, turned or duplicated.
+      setTarget(block && block.node.type.name !== 'frontMatter' ? targetOf(editor, host, block) : null)
     }
     const leave = (): void => {
       if (!open.current) setTarget(null)

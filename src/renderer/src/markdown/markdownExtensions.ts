@@ -10,6 +10,7 @@ import {
   ArtifactCard,
   Callout,
   CodeBlockWithLanguage,
+  FrontMatter,
   HtmlBlock,
   HtmlInline,
   ImageByPath,
@@ -46,6 +47,7 @@ export function markdownExtensions(options: MarkdownExtensionOptions = {}): AnyE
     OrderedList.extend({ content: '(listItem | taskItem)+' }),
     ImageByPath.configure({ inline: true, allowBase64: false, resolve: options.resolveImage ?? (() => null) }),
     Callout,
+    FrontMatter,
     HtmlBlock,
     HtmlInline,
     ArtifactCard.configure({ onOpen: options.onOpenUrl ?? (() => {}) })

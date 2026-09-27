@@ -23,6 +23,111 @@ export const HtmlBlock = Node.create({
   }
 })
 
+/** Top-level `key: value` rows of a YAML block; nested lines join their key's value. */
+export function frontMatterRows(yaml: string): { key: string; value: string }[] {
+  const rows: { key: string; value: string }[] = []
+  for (const line of yaml.split('\n')) {
+    const key = /^([^\s#-][^:]*):(?:[ \t]+(.*))?$/.exec(line)
+    const last = rows[rows.length - 1]
+    if (key !== null) rows.push({ key: (key[1] ?? '').trim(), value: (key[2] ?? '').trim() })
+    else if (last !== undefined && line.trim().length > 0 && !line.trim().startsWith('#')) {
+      const item = line.trim().replace(/^-[ \t]+/, '')
+      last.value = last.value.length > 0 ? `${last.value}, ${item}` : item
+    }
+  }
+  return rows
+}
+
+/** YAML front matter, drawn as property rows; a click edits the YAML as written. */
+export const FrontMatter = Node.create({
+  name: 'frontMatter',
+  group: 'block',
+  atom: true,
+  // Else the page opens with it selected, and the first key typed replaces it.
+  selectable: false,
+  draggable: false,
+  addAttributes() {
+    return { yaml: { default: '' } }
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-front-matter]', getAttrs: (element) => ({ yaml: element.textContent ?? '' }) }]
+  },
+  renderHTML({ node }) {
+    return ['div', { 'data-front-matter': '', class: 'md-props' }, String(node.attrs.yaml)]
+  },
+  addNodeView() {
+    return ({ node, getPos, editor }) => {
+      let current = node
+      const dom = document.createElement('div')
+      dom.className = 'md-props'
+      dom.setAttribute('data-front-matter', '')
+      dom.contentEditable = 'false'
+      const rows = document.createElement('dl')
+      rows.className = 'md-props__rows'
+      const source = document.createElement('textarea')
+      source.className = 'md-props__source'
+      source.spellcheck = false
+      source.setAttribute('aria-label', 'Front matter')
+      const draw = (): void => {
+        const yaml = String(current.attrs.yaml)
+        const found = frontMatterRows(yaml)
+        rows.replaceChildren(
+          ...found.flatMap(({ key, value }) => {
+            const term = document.createElement('dt')
+            term.textContent = key
+            const detail = document.createElement('dd')
+            detail.textContent = value
+            return [term, detail]
+          })
+        )
+        if (found.length === 0) rows.textContent = yaml.length > 0 ? yaml : 'front matter'
+      }
+      const editing = (on: boolean): void => {
+        dom.classList.toggle('md-props--editing', on)
+        rows.hidden = on
+        source.hidden = !on
+        if (!on) draw()
+      }
+      const commit = (): void => {
+        const pos = getPos()
+        editing(false)
+        if (pos === undefined || source.value === String(current.attrs.yaml)) return
+        editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, yaml: source.value }))
+      }
+      rows.addEventListener('mousedown', (event) => {
+        if (!editor.isEditable) return
+        event.preventDefault()
+        source.value = String(current.attrs.yaml)
+        source.rows = Math.max(2, source.value.split('\n').length)
+        editing(true)
+        source.focus()
+      })
+      source.addEventListener('blur', commit)
+      source.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          source.value = String(current.attrs.yaml)
+          source.blur()
+        } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) source.blur()
+      })
+      source.addEventListener('input', () => (source.rows = Math.max(2, source.value.split('\n').length)))
+      dom.append(rows, source)
+      editing(false)
+      return {
+        dom,
+        // Clicks and keys in here are the block's own; the page would select it and take the focus.
+        stopEvent: () => true,
+        ignoreMutation: () => true,
+        update: (updated) => {
+          if (updated.type !== current.type) return false
+          current = updated
+          if (source.hidden) draw()
+          return true
+        }
+      }
+    }
+  }
+})
+
 /** A run of raw HTML inside a line, kept verbatim. */
 export const HtmlInline = Node.create({
   name: 'htmlInline',

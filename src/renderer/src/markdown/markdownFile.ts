@@ -320,6 +320,7 @@ class Writer {
     if (LISTS.has(node.type.name) && span.children !== null) text = this.changedList(node, span)
     else if (node.type.name === 'table' && span.children !== null) text = this.changedTable(node, span)
     else if (node.type.name === 'codeBlock') text = this.changedCode(node, span)
+    else if (node.type.name === 'frontMatter') text = this.changedFrontMatter(node, span)
     else if (node.isTextblock) return this.splice(node, span, 0) ?? this.fresh([node])
     if (text !== null && this.readsAs(text, [keyOf(node)], this.file.references)) return text
     return this.fresh([node])
@@ -498,6 +499,20 @@ class Writer {
       if (this.readsAs(text, [keyOf(table)], this.file.references)) return text
     }
     return null
+  }
+
+  /** The fences as written, around the YAML as it is now. */
+  private changedFrontMatter(node: ProseNode, span: Span): string {
+    const yaml = String(node.attrs.yaml)
+    const body =
+      yaml.length === 0
+        ? ''
+        : yaml
+            .split('\n')
+            .map((line) => `${line}${this.eol}`)
+            .join('')
+    const pieces = [this.lines[span.from] ?? '---', body, this.lines[span.to - 1] ?? '---']
+    return pieces.map((piece) => (endsLine(piece) ? piece : `${piece}${this.eol}`)).join('')
   }
 
   /** The fence lines as written, around the code as it is now. */
