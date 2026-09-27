@@ -39,6 +39,7 @@ import { removePromptImage, type NotRemoved } from './promptEdit'
 import { macEditBytes } from './macEditKeys'
 import { wideEmoji } from './paneUnicode'
 import { frameWrites, paneWebgl, syncScrollbarPerFrame } from './paneFrames'
+import { paneMarkers } from './paneMarkers'
 import { EMPTY_PANE_SEARCH, paneSearchReducer, SEARCH_HIGHLIGHT_LIMIT, toFindOptions } from './paneSearchModel'
 import { TerminalSearchBar } from './TerminalSearchBar'
 import {
@@ -542,6 +543,8 @@ function openEmulator(
     clear: () => void runtimeClient.call('terminal.clear', { terminalId }).catch(() => term.clear())
   })
   const gpu = paneWebgl(term)
+  const markers = paneMarkers(term)
+  term.onWriteParsed(() => markers.scan())
   const scrollbar = syncScrollbarPerFrame(term)
   const output = frameWrites((data) => term.write(data))
 
@@ -584,6 +587,7 @@ function openEmulator(
       links.dispose()
       imageLinks.dispose()
       output.dispose()
+      markers.dispose()
       scrollbar.dispose()
       gpu.dispose()
       unshow()
@@ -598,7 +602,7 @@ function openEmulator(
   /**
    * Bytes on their way to the pty. `byHand` travels with them because only
    * this window can tell a device-query reply from typing. See `handsHere.ts`.
-   * An exited pane refuses them; the notice bar already says so.
+   * An exited pane refuses them; its end block already says so.
    */
   const send = (data: string, byHand = true): void => {
     void runtimeClient.call('terminal.write', { terminalId, data, byHand }).catch(() => {})
@@ -697,7 +701,7 @@ function openEmulator(
       const drawn = { cols: term.cols, rows: term.rows }
       const widen = snapshot.widest !== undefined && snapshot.widest > drawn.cols
       if (widen) resizeQuietly(snapshot.widest!, drawn.rows)
-      term.write(snapshot.data)
+      term.write(snapshot.data, () => markers.scan(true))
       replaying = false
       for (const chunk of pending.splice(0)) {
         const unseen = afterSnapshot(chunk, snapshot.end)
@@ -756,7 +760,7 @@ function attributionTitle(attention: PaneAttention, typing: readonly PaneTypist[
 
 /**
  * Written when a pane's process ends: out of the alternate screen, colours, margins and every
- * input mode reset, cursor hidden. Nothing is printed; the notice bar says it exited.
+ * input mode reset, cursor hidden. Nothing is printed; the end block says it exited.
  */
 export const EXIT_RESET =
   '\u001b[r\u001b[?1049l\u001b[0m\u001b[?1000l\u001b[?1002l\u001b[?1003l\u001b[?1006l' +

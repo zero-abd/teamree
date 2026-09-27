@@ -83,7 +83,7 @@ export function SetupOffer({ project, worktree }: { project: Project; worktree: 
         <button type="button" className="button button--primary button--tiny" onClick={run}>
           Run
         </button>
-        <button type="button" className="button button--tiny" onClick={skip}>
+        <button type="button" className="button button--ghost button--tiny" onClick={skip}>
           Not Now
         </button>
       </section>
@@ -129,11 +129,11 @@ export function SetupOffer({ project, worktree }: { project: Project; worktree: 
         Use
       </button>
       {draft === null ? (
-        <button type="button" className="button button--tiny" onClick={() => setDraft(offer.command)}>
+        <button type="button" className="button button--ghost button--tiny" onClick={() => setDraft(offer.command)}>
           Edit…
         </button>
       ) : null}
-      <button type="button" className="button button--tiny" onClick={notNow}>
+      <button type="button" className="button button--ghost button--tiny" onClick={notNow}>
         Not Now
       </button>
     </section>

@@ -1,16 +1,17 @@
-/* The bottom rail. One line, tabular figures; the git line opens the changes
-   panel, keep-awake and memory open small panels upward, the attention count goes to a pane. */
+/* The bottom rail, the open worktree's strip. One line of text, tabular figures; each segment that
+   does something (the git line, keep-awake, memory, the counts) is text until hovered. */
 
 .statusbar {
   display: flex;
   align-items: center;
-  gap: var(--s4);
-  height: 26px;
-  padding: 0 var(--s4);
+  gap: 14px;
+  height: var(--statusbar-h);
+  padding: 0 var(--s3);
   border-top: 1px solid var(--line);
   background: var(--bg-rail);
-  color: var(--fg-secondary);
+  color: var(--fg-muted);
   font-size: var(--text-xs);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;
@@ -64,46 +65,23 @@
 
 .statusbar__branch {
   flex: 0 1000 auto;
+  gap: 5px;
   max-width: 32ch;
   font-family: var(--font-mono);
   white-space: nowrap;
 }
 
-/* The open worktree's setup question: a segment of the rail, so it covers no pane and sits under any scrim. */
-.setup-ask {
-  display: inline-flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: var(--s2);
-  min-width: 0;
-}
-
-.setup-ask__label {
+.statusbar__branch > svg {
   flex: none;
-  color: var(--fg-muted);
 }
 
-.setup-ask__command {
-  min-width: 0;
-  max-width: 40ch;
+.statusbar__text {
   overflow: hidden;
-  color: var(--fg);
-  font-family: var(--font-mono);
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.setup-ask__field {
-  width: 32ch;
-  padding: 0 var(--s1);
-  border: 1px solid var(--line);
-  border-radius: var(--r1);
-  background: var(--bg-input);
-  font-size: inherit;
-}
-
-.setup-ask .button {
-  flex: none;
+.statusbar__git {
+  font-family: var(--font-mono);
 }
 
 .statusbar__spacer {
@@ -148,9 +126,13 @@
   }
 }
 
-/* Panes anywhere that need you, in the sidebar's tones. */
-.statusbar__attention {
-  font-weight: 600;
+/* Agents anywhere, in the lifecycle's tones, and who of the team is here. */
+.statusbar__working {
+  color: var(--working);
+}
+
+.statusbar__online {
+  color: var(--success);
 }
 
 .statusbar__asking {

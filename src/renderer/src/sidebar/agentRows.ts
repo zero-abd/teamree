@@ -303,30 +303,6 @@ export function worktreeTone(rows: readonly AgentRow[]): DotTone | null {
   return rows.some((row) => row.activity === 'stopped') ? 'stopped' : 'idle'
 }
 
-/** How many panes there are, by the one rule every count follows: terminals the runtime lists, file panes aside. */
-export type PaneCount = {
-  /** In the worktree on screen. */
-  here: number
-  /** In every listed worktree: what the board lists. */
-  total: number
-  /** How many worktrees those are spread over. */
-  worktrees: number
-}
-
-export function paneCount(
-  terminals: readonly { worktreeId: string }[],
-  worktreeIds: readonly string[],
-  activeWorktreeId: string | null
-): PaneCount {
-  const listed = new Set(worktreeIds)
-  const counted = terminals.filter((terminal) => listed.has(terminal.worktreeId))
-  return {
-    here: counted.filter((terminal) => terminal.worktreeId === activeWorktreeId).length,
-    total: counted.length,
-    worktrees: new Set(counted.map((terminal) => terminal.worktreeId)).size
-  }
-}
-
 /**
  * How long since anything happened, in the shortest form that is still true.
  * Rounded down on purpose: a staleness number must never flatter.

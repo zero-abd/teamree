@@ -100,9 +100,8 @@ run, and it is first because it is the only item on this list that breaks the ap
 completely for a whole class of user.
 
 **2. Open two or three panes, print something in each, ⌘Q, relaunch. Then do it
-again, pressing ⌘Q twice quickly.** Expect every pane back under a dim
-`[record — up to <date> <time>, nothing running]` line, with its old output
-above an `[end of record — new shell below]` line. A pane that comes back empty
+again, pressing ⌘Q twice quickly.** Expect every pane back with its old output
+above a `Restored · <time>` marker rule and no bracketed line. A pane that comes back empty
 means the flush is not landing: look in
 `~/Library/Application Support/teamree/scrollback/` for one `<terminal-id>.json`
 per pane. No `.json` files at all means the write never ran; files ending `.tmp`
@@ -180,25 +179,23 @@ bug this check exists downstream of.
 The next shape takes one more step. Open an agent pane, type something into it
 and let it answer, ⌘Q, then delete that conversation from wherever the CLI in
 question keeps its conversations on disk, and relaunch. Expect the pane to come
-back *stopped*: its old output above under `[end of record — not run again]`, a
-dim `[no conversation to resume — agent stopped, task not re-sent]` under it, a
-`stopped` badge, and Resume Conversation… and Start Fresh beside it. A pane that
+back *stopped*: its old output, a `No conversation to resume · not resumed`
+marker under it, and an end block reading `Restored · <time>` with Resume and
+New Session. A pane that
 starts its agent on its own here, above all one handed its task again, is the bug
-of a finished parent fanning out its children twice. Start Fresh starts the agent
+of a finished parent fanning out its children twice. New Session starts the agent
 bare; the pane menu's Start Fresh with Task is the only way the task goes again.
 
-Then quit a running agent from inside it (Claude Code: ^C twice). Expect a
-`Claude Code ended` card under its output with Resume, New Session and Close, and
-neither `Resume this session with…` nor a record line in the pane. Resume, or
+Then quit a running agent from inside it (Claude Code: ^C twice). Expect an end
+block under its output, an `Ended <time>` marker over Resume, New Session and
+Close, and neither `Resume this session with…` nor a record line in the pane. Resume, or
 Enter in the pane, brings the same conversation back; New Session starts one bare.
 
 The genuine refusal needs the store to keep a conversation the CLI will not take
 back (another machine's, or a CLI whose store this app cannot read). Expect the
 pane to run its resume and be refused in a line by the agent itself, the badge to
-stop reading resumed, the old output above under
-`[end of record — resume attempt below]`, and a dim
-`[resume refused — agent exited <code>, record above; …]` line under the agent's
-own reason. The refusal is written down the first time it happens, so it costs
+stop reading resumed, the old output above a `Restored · <time>` marker, and a
+`Resume refused · exit <code>` marker under the agent's own reason. The refusal is written down the first time it happens, so it costs
 one restart rather than recurring on every launch for the life of the pane.
 
 Two failures to catch, neither of them visible in the pane at the time. A pane

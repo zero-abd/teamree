@@ -3,7 +3,6 @@ import type { Terminal } from '@shared/entities'
 import {
   activityOf,
   paneAgent,
-  paneCount,
   TONE_LABEL,
   TONES_BY_ATTENTION,
   dotClass,
@@ -746,24 +745,5 @@ describe('an agent back at its prompt after a turn', () => {
     const codex = terminal({ id: 'c', agent: 'codex', lastOutputAt: 1_000 })
     const tones = [claude, claudeLater, codex].map((pane) => dotTone(activityOf(pane), paneAgent(pane)))
     expect(tones).toEqual(['quiet', 'quiet', 'quiet'])
-  })
-})
-
-describe('paneCount', () => {
-  const panes = [
-    terminal({ id: 'a', worktreeId: 'wt1' }),
-    terminal({ id: 'b', worktreeId: 'wt1', running: false, exitCode: 0 }),
-    terminal({ id: 'c', worktreeId: 'wt2' }),
-    terminal({ id: 'd', worktreeId: 'gone' })
-  ]
-
-  // The rail's badge, the Panes tab and the status bar all count with this.
-  it('counts the terminals the Panes tab lists, here and across listed worktrees', () => {
-    expect(paneCount(panes, ['wt1', 'wt2'], 'wt1')).toEqual({ here: 2, total: 3, worktrees: 2 })
-    expect(paneCount(panes, ['wt1', 'wt2'], 'wt1').here).toBe(agentRows(panes, 'wt1', 0).length)
-  })
-
-  it('counts nothing here when no worktree is open', () => {
-    expect(paneCount(panes, ['wt1', 'wt2'], null)).toEqual({ here: 0, total: 3, worktrees: 2 })
   })
 })

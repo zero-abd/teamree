@@ -163,6 +163,8 @@ describe('stylesheets', () => {
         '.activity--waiting',
         '.pane-row__since--waiting',
         '.statusbar__asking',
+        // A pane asking: its card.
+        '.pane-state--asking',
         '.board-filter__number--waiting',
         '.board-filter__number--asking',
         // A teammate's agent asking, as a card on the Teamwork page.

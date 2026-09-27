@@ -153,24 +153,19 @@ describe('one pane', () => {
   // looks exactly like one waiting at a prompt.
   it('says the shell exited, and with which code', () => {
     mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 137 })])
-    expect(screen.getByText('exited 137')).toBeTruthy()
+    expect(document.querySelector('.pane-marker')?.textContent).toMatch(/^Exited 137/)
   })
 
   it('says a Run pane the quit hung up was stopped, not the code', () => {
     mount(leaf('t1'), [terminal('t1', { run: 'dev', running: false, exitCode: 129 })])
-    expect(screen.getByText('stopped')).toBeTruthy()
-    expect(screen.queryByText(/exited/)).toBeNull()
+    expect(document.querySelector('.pane-marker')?.textContent).toMatch(/^Stopped/)
+    expect(screen.queryByText(/Exited/)).toBeNull()
     expect(screen.getByRole('button', { name: 'Run Again' })).toBeTruthy()
   })
 
-  it('says it exited even when nothing reported a code', () => {
+  it('says it ended even when nothing reported a code', () => {
     mount(leaf('t1'), [terminal('t1', { running: false })])
-    expect(screen.getByText('exited')).toBeTruthy()
-  })
-
-  it('reports code 0 as a code, not as no code at all', () => {
-    mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 0 })])
-    expect(screen.getByText('exited 0')).toBeTruthy()
+    expect(document.querySelector('.pane-marker')?.textContent).toMatch(/^Ended/)
   })
 
   // Every pane has its tab, on its own group's strip right above it.
@@ -200,8 +195,7 @@ describe('one pane', () => {
       terminal('t2')
     ])
     const dead = screen.getByRole('region', { name: 'claude' })
-    expect(dead.querySelector('.pane__notice')).toBeTruthy()
-    expect(within(dead).getByText('exited 1')).toBeTruthy()
+    expect(dead.querySelector('.pane-end .pane-marker')?.textContent).toMatch(/^Exited 1/)
     expect(within(dead).getByRole('button', { name: 'New Shell' })).toBeTruthy()
     expect(within(dead).queryByText('claude')).toBeNull()
   })
@@ -209,36 +203,29 @@ describe('one pane', () => {
   it('says a lone pane exited, and offers to run it again, without naming it', () => {
     mount(leaf('t1'), [terminal('t1', { title: 'npm test', running: false, exitCode: 1, run: 'test' })])
     expect(document.querySelector('.pane__bar')).toBeNull()
-    expect(screen.getByText('exited 1')).toBeTruthy()
+    expect(document.querySelector('.pane-marker')?.textContent).toMatch(/^Exited 1/)
     expect(screen.getByRole('button', { name: 'Run Again' })).toBeTruthy()
     expect(document.querySelector('.pane__title')).toBeNull()
-  })
-
-  // The scrollback under the badge says "[no conversation to resume — fresh
-  // claude below]", and a badge two lines above it reading "new shell" was the
-  // window disagreeing with itself about what is running in the pane.
-  it('says an agent started over is a fresh agent, in the words the banner uses', () => {
-    mount(leaf('t1'), [terminal('t1', { agent: 'claude', restored: 'restarted' })])
-    expect(screen.getByText('fresh claude').getAttribute('title')).toContain('fresh claude')
-    expect(screen.queryByText('new shell')).toBeNull()
   })
 
   // Its conversation could not come back, and starting over would do its task twice.
   it('offers a stopped agent its conversation or a fresh start, and no exit code', () => {
     mount(leaf('t1'), [terminal('t1', { agent: 'claude', running: false, exitCode: 0, restored: 'stopped' })])
-    expect(screen.getByText('stopped').getAttribute('title')).toContain('task not re-sent')
-    expect(screen.queryByText(/exited/)).toBeNull()
+    expect(document.querySelector('.pane-marker')?.textContent).toMatch(/^Restored/)
+    expect(screen.queryByText(/Exited/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Run Again' })).toBeNull()
-    screen.getByRole('button', { name: 'Resume Conversation…' }).click()
+    screen.getByRole('button', { name: 'Resume' }).click()
     expect(onResumeConversation).toHaveBeenCalledExactlyOnceWith('t1')
-    screen.getByRole('button', { name: 'Start Fresh' }).click()
+    screen.getByRole('button', { name: 'New Session' }).click()
     expect(onRelaunch).toHaveBeenCalledExactlyOnceWith('t1', { fresh: true })
   })
 
-  it('distinguishes a resumed conversation from a pane that only came back', () => {
+  // The scrollback's marker says how a running pane came back; a chip over it said it twice.
+  it('draws no chip over a pane that came back running', () => {
     mount(row(leaf('t1'), leaf('t2')), [terminal('t1', { restored: 'agent' }), terminal('t2', { restored: 'shell' })])
-    expect(screen.getByText('resumed').getAttribute('title')).toContain('session resumed')
-    expect(screen.getByText('new shell').getAttribute('title')).toContain('previous process gone')
+    expect(screen.queryByText('resumed')).toBeNull()
+    expect(screen.queryByText('new shell')).toBeNull()
+    expect(document.querySelector('.chip')).toBeNull()
   })
 
   it('says nothing about restoring for a pane opened now', () => {
@@ -252,15 +239,15 @@ describe('one pane', () => {
   it('ends an agent with a card: its name, its conversation back, a new one, or the pane gone', () => {
     mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 0, agent: 'claude', restored: 'agent' })])
     const card = screen.getByRole('group', { name: 'Claude Code ended' })
-    expect(within(card).queryByText(/exit/)).toBeNull()
+    expect(within(card).queryByText(/Exited/)).toBeNull()
     // The card is the whole notice: no chip, no badge, no Run Again above it.
-    expect(document.querySelector('.pane__notice')).toBeNull()
+    expect(document.querySelector('.pane__notice, .chip')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Run Again' })).toBeNull()
     expect(
       within(card)
         .getAllByRole('button')
         .map((button) => button.textContent)
-    ).toEqual(['Resume↩', 'New Session', 'Close'])
+    ).toEqual(['Resume', 'New Session', 'Close'])
 
     within(card)
       .getByRole('button', { name: /Resume/ })
@@ -274,15 +261,15 @@ describe('one pane', () => {
 
   it('says the code an agent ended with, when it was not 0', () => {
     mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 1, agent: 'codex' })])
-    const card = screen.getByRole('group', { name: 'Codex ended' })
-    expect(within(card).getByText('exit 1')).toBeTruthy()
+    const card = screen.getByRole('group', { name: 'Codex failed' })
+    expect(card.querySelector('.pane-marker')?.textContent).toMatch(/^Exited 1/)
   })
 
   it('resumes on Enter in the ended terminal, and Tab goes to Resume', () => {
     mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 0, agent: 'claude' })], 't1')
     const surface = screen.getByTestId('surface-t1')
     fireEvent.keyDown(surface, { key: 'Tab' })
-    expect(document.activeElement?.textContent).toBe('Resume↩')
+    expect(document.activeElement?.textContent).toBe('Resume')
     expect(onRelaunch).not.toHaveBeenCalled()
     fireEvent.keyDown(surface, { key: 'Enter', metaKey: true })
     expect(onRelaunch).not.toHaveBeenCalled()
@@ -466,8 +453,8 @@ describe('a tree of panes', () => {
     ])
     const dead = screen.getByRole('region', { name: 'claude' })
     const alive = screen.getByRole('region', { name: 'zsh' })
-    expect(within(dead).getByText('exited 1')).toBeTruthy()
-    expect(within(alive).queryByText(/exited/)).toBeNull()
+    expect(dead.querySelector('.pane-marker')?.textContent).toMatch(/^Exited 1/)
+    expect(alive.querySelector('.pane-marker')).toBeNull()
   })
 })
 

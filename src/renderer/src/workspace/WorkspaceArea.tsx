@@ -24,6 +24,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { WorkspaceHead } from './TerminalTabs'
 import { useFoldedColumn, useRoomForPanes } from './useRoomForPanes'
 import { Welcome } from './Welcome'
+import { WorktreeAsks } from './WorktreeAsks'
 import { WorktreeStart } from './WorktreeStart'
 
 export function WorkspaceArea({
@@ -209,6 +210,7 @@ function WorkspaceView({
   return (
     <main className="workspace">
       {worktree.missing === true ? <CheckoutMissing worktree={worktree} /> : null}
+      <WorktreeAsks />
       <div className="workspace__body">
         <div
           className={`workspace__panes${

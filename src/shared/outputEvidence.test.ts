@@ -178,6 +178,7 @@ describe('evidenceLine, over the app’s own marks', () => {
     expect(evidenceLine('[end of record — new shell below]\r\n% ')).toBeNull()
     expect(evidenceLine('[no conversation to resume — fresh claude below]\r\n')).toBeNull()
     expect(evidenceLine('[resume refused — agent exited 1; open a new pane for a fresh one]\r\n')).toBeNull()
+    expect(evidenceLine(`${ESC}[0m\r\n${ESC}[38;5;244m── Restored · 11:40 ──${ESC}[0m\r\n% `)).toBeNull()
   })
 
   it('still quotes a program’s own bracketed line', () => {

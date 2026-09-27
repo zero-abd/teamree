@@ -167,8 +167,7 @@
   background: var(--term-bg);
 }
 
-.pane__bar,
-.pane__notice {
+.pane__bar {
   display: flex;
   align-items: center;
   gap: var(--s2);
@@ -183,10 +182,6 @@
 
 .pane--focused .pane__bar {
   color: var(--fg-secondary);
-}
-
-.pane__notice {
-  height: 22px;
 }
 
 .pane__title {
@@ -224,44 +219,6 @@
 .pane__again:hover {
   background: var(--bg-press);
   color: var(--fg);
-}
-
-/* An agent that ended: a card docked under its last output, where the prompt was. */
-.pane-ended {
-  display: flex;
-  flex: none;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s2) var(--s3);
-  margin: 0 var(--s3) var(--s3);
-  padding: var(--s2) var(--s2) var(--s2) var(--s3);
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--bg-raised);
-  color: var(--fg);
-  font-size: var(--text-sm);
-}
-
-.pane-ended > .agent-glyph {
-  flex: none;
-  color: var(--fg-secondary);
-}
-
-.pane-ended__title {
-  font-weight: 500;
-}
-
-.pane-ended__code {
-  color: var(--fg-muted);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.pane-ended__actions {
-  display: flex;
-  gap: var(--s1);
-  margin-left: auto;
-  white-space: nowrap;
 }
 
 /* A watched pane's size — theirs, which a reader never changes. Dimmed with a
@@ -378,14 +335,6 @@
 .terminal-surface .xterm-viewport {
   background: transparent !important;
   scrollbar-width: thin;
-}
-
-/* Says how a pane got here after a restart, and only until the user types into
-   it — by then they know what they are looking at. The chip's own shape,
-   coloured only when an agent's session came back with it. */
-.pane__restored--agent {
-  background: var(--accent-soft);
-  color: var(--accent-bright);
 }
 
 /* Beside a hovered link, over everything; never in the pointer's way. */
@@ -764,4 +713,203 @@ body.is-dragging-pane * {
 .image-strip__chip:hover {
   background: var(--bg-press);
   color: var(--fg);
+}
+
+/* The lifecycle: nothing here resizes the terminal while its program runs. The ask card and the starting
+   shimmer float; the footer is there for the whole life of an agent; the end block only once it is gone. */
+.pane-starting {
+  position: absolute;
+  z-index: 11;
+  top: var(--s3);
+  left: var(--s3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--fg-secondary);
+  pointer-events: none;
+}
+
+.shimmer-line {
+  width: 150px;
+  height: 7px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--line) 20%, var(--bg-hover) 45%, var(--line) 70%);
+  background-size: 220% 100%;
+  animation: pane-shimmer 1.2s linear infinite;
+}
+
+@keyframes pane-shimmer {
+  to {
+    background-position: -220% 0;
+  }
+}
+
+.pane-state {
+  position: absolute;
+  z-index: 11;
+  top: var(--s3);
+  right: var(--s3);
+  left: var(--s3);
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-2);
+  animation: pane-state-in var(--motion-base) var(--ease-enter);
+}
+
+.pane-state--asking {
+  border-color: color-mix(in srgb, var(--warning), transparent 58%);
+  background: color-mix(in srgb, var(--warning), var(--bg-raised) 91%);
+}
+
+@keyframes pane-state-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.pane-state__dot {
+  display: flex;
+  justify-self: center;
+}
+
+.pane-state__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pane-state__title {
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.pane-state__meta {
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-state__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.pane-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 var(--s2) 0 var(--s3);
+  border-top: 1px solid var(--line-subtle);
+  background: var(--bg-pane);
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+}
+
+.pane-foot__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pane-foot__dot {
+  display: flex;
+  flex: none;
+}
+
+.pane-foot__dot--breathing {
+  animation: pane-breathe 1.6s var(--ease-standard) infinite;
+}
+
+.pane-foot__check {
+  flex: none;
+  color: var(--success);
+}
+
+.pane-foot__stop {
+  margin-left: auto;
+}
+
+@keyframes pane-breathe {
+  50% {
+    opacity: 0.42;
+    transform: scale(0.82);
+  }
+}
+
+/* A dead pane's end: a marker line and one row of actions, docked where its prompt was. */
+.pane-end {
+  flex: none;
+  padding: var(--s2) var(--s3) var(--s3);
+  background: var(--term-bg);
+}
+
+.pane-marker {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--fg-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pane-marker::before,
+.pane-marker::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.pane-end__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--s2);
+}
+
+/* A scrollback boundary main wrote as a dim rule line, drawn over it as the marker; xterm sets `display` inline. */
+.xterm-decoration.pane-marker {
+  display: flex !important;
+  padding: 0 var(--s1);
+  background: var(--term-bg);
+  pointer-events: none;
+}
+
+/* The pane's output as text, in the Show Log sheet. */
+.pane-log {
+  max-height: 60vh;
+  margin: 0;
+  overflow: auto;
+  padding: var(--s3);
+  border-radius: var(--r2);
+  background: var(--bg-input);
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  line-height: 20px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

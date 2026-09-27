@@ -702,8 +702,8 @@ describePty('restoring terminals across a restart', () => {
 
     const shown = second.read(opened.id)
     expect(shown).toContain('hello-from-before')
-    expect(shown).toContain('nothing running')
-    expect(shown.indexOf('hello-from-before')).toBeLessThan(shown.indexOf('new shell below'))
+    expect(shown).toContain('── Restored · ')
+    expect(shown.indexOf('hello-from-before')).toBeLessThan(shown.indexOf('── Restored · '))
     expect(second.list('wt_1')[0]?.restored).toBe('shell')
 
     // The command did not run again. Proved by asking the restored shell: a
@@ -733,7 +733,7 @@ describePty('restoring terminals across a restart', () => {
     expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 1 })
 
     // The agent prints the conversation itself; a record above it would be the same exchange twice.
-    expect(second.read(opened.id)).not.toContain('nothing running')
+    expect(second.read(opened.id)).not.toContain('── Restored · ')
     expect(reopened.read(opened.id)?.text).toContain('AGENT ARGS:')
 
     // Held rather than shown, so the quit still writes last launch's output;
@@ -764,25 +764,25 @@ describePty('restoring terminals across a restart', () => {
     const streamed: TerminalEvent[] = []
     second.attachStream(opened.id, { emit: (event) => streamed.push(event), close: () => {} })
 
-    await waitUntil(() => second.read(opened.id).includes('resume refused'), 'the pane to say what happened')
+    await waitUntil(() => second.read(opened.id).includes('Resume refused'), 'the pane to say what happened')
     const shown = second.read(opened.id)
 
     // The agent's own reason, then the app's.
     expect(shown).toContain(REFUSAL)
-    expect(shown).toContain('[resume refused — agent exited 1')
+    expect(shown).toContain('── Resume refused · exit 1')
     expect(shown).not.toContain('deleted, expired, or recorded on another machine')
 
     // The held-back record is on the screen instead, above the attempt.
     expect(shown).toContain('AGENT ARGS:')
-    expect(shown).toContain('nothing running')
-    expect(shown).toContain('resume attempt below')
+    expect(shown).toContain('── Restored · ')
+    expect(shown).toContain('── Restored · ')
     expect(shown.indexOf('AGENT ARGS:')).toBeLessThan(shown.indexOf(REFUSAL))
 
     // "resumed" beside "exited 1" would be a claim the app can see is false.
     expect(second.list('wt_1')[0]?.restored).toBeUndefined()
 
     // A conversation being gone is no reason for the pane to be gone too.
-    expect(shown).toContain('fresh agent below')
+    expect(shown).toContain('Resume refused · exit 1 · New session')
     const fresh = repositories.listTerminals()[0]
     await waitUntil(
       () => second.read(opened.id).includes(`--session-id ${fresh?.agentSessionId as string}`),
@@ -792,7 +792,7 @@ describePty('restoring terminals across a restart', () => {
     expect(second.list('wt_1')[0]?.exitCode).toBeUndefined()
 
     // An open view reads once on mount, so the old output has to be sent too.
-    expect(outputOf(streamed)).toContain('resume refused')
+    expect(outputOf(streamed)).toContain('Resume refused')
     expect(outputOf(streamed)).toContain('AGENT ARGS:')
     // No exit: the agent in the pane was replaced.
     expect(streamed.some((event) => event.type === 'exit')).toBe(false)
@@ -828,10 +828,10 @@ describePty('restoring terminals across a restart', () => {
     second.write(opened.id, '\u001b[1;1R', false)
     expect(second.list('wt_1')[0]?.restored).toBe('agent')
 
-    await waitUntil(() => second.read(opened.id).includes('resume refused'), 'the pane to say what happened')
+    await waitUntil(() => second.read(opened.id).includes('Resume refused'), 'the pane to say what happened')
     const shown = second.read(opened.id)
     expect(shown).toContain(NOT_FOUND)
-    expect(shown).toContain('fresh agent below')
+    expect(shown).toContain('Resume refused · exit 1 · New session')
 
     const fresh = repositories.listTerminals()[0]
     await waitUntil(
@@ -860,7 +860,7 @@ describePty('restoring terminals across a restart', () => {
     // The launch that is refused.
     const second = manager(repositories, checkout, await ScrollbackArchive.open(archive.directory, [opened.id]))
     second.restoreSessions()
-    await waitUntil(() => second.read(opened.id).includes('resume refused'), 'the pane to say what happened')
+    await waitUntil(() => second.read(opened.id).includes('Resume refused'), 'the pane to say what happened')
     await second.shutdown()
 
     // The one after it: without the failure written down, the same refusal
@@ -868,13 +868,13 @@ describePty('restoring terminals across a restart', () => {
     const third = manager(repositories, checkout, await ScrollbackArchive.open(archive.directory, [opened.id]))
     expect(third.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
     await waitUntil(
-      () => third.read(opened.id).split('new shell below')[1]?.includes('AGENT ARGS:') === true,
+      () => third.read(opened.id).split('── Restored · ')[1]?.includes('AGENT ARGS:') === true,
       'the agent to start over'
     )
     expect(third.list('wt_1')[0]?.running).toBe(true)
 
     // Below the record line is this launch; above it the failed one is kept.
-    const thisLaunch = third.read(opened.id).split('new shell below')[1] as string
+    const thisLaunch = third.read(opened.id).split('── Restored · ')[1] as string
     expect(thisLaunch).toContain('--session-id')
     expect(thisLaunch).not.toContain(REFUSAL)
     expect(thisLaunch).not.toContain(lost as string)
@@ -900,7 +900,7 @@ describePty('restoring terminals across a restart', () => {
     second.restoreSessions()
     await waitUntil(() => second.list('wt_1')[0]?.running === false, 'the one-shot to finish')
 
-    expect(second.read(opened.id)).not.toContain('resume refused')
+    expect(second.read(opened.id)).not.toContain('Resume refused')
     expect(second.list('wt_1')[0]?.restored).toBe('agent')
     expect(repositories.listTerminals()[0]?.typed).toBe(true)
   }, 20_000)
@@ -923,7 +923,7 @@ describePty('restoring terminals across a restart', () => {
 
     // Quitting kills the pane; that exit must not be read as a refusal.
     await second.shutdown()
-    expect(reopened.read(opened.id)?.text).not.toContain('resume refused')
+    expect(reopened.read(opened.id)?.text).not.toContain('Resume refused')
   }, 20_000)
 
   it('starts the agent over, showing what it printed before, when nobody ever typed into it', async () => {
@@ -944,15 +944,15 @@ describePty('restoring terminals across a restart', () => {
     expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
 
     await waitUntil(
-      () => second.read(opened.id).split('new shell below')[1]?.includes('--session-id') === true,
+      () => second.read(opened.id).split('── Restored · ')[1]?.includes('--session-id') === true,
       'the agent to start over'
     )
     const shown = second.read(opened.id)
-    expect(shown).toContain('nothing running')
-    expect(shown).toContain('new shell below')
+    expect(shown).toContain('── Restored · ')
+    expect(shown).toContain('── Restored · ')
 
     // Below that line is this launch.
-    const thisLaunch = shown.split('new shell below')[1] as string
+    const thisLaunch = shown.split('── Restored · ')[1] as string
     expect(thisLaunch).toContain('--session-id')
     expect(thisLaunch).not.toContain('--resume')
     expect(thisLaunch).not.toContain(pinned as string)
@@ -1080,7 +1080,7 @@ describePty('restoring terminals across a restart', () => {
     const second = manager(repositories, checkout, reopened)
     expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
     expect(second.read(opened.id)).toContain('building-still')
-    expect(second.read(opened.id)).toContain('nothing running')
+    expect(second.read(opened.id)).toContain('── Restored · ')
   }, 20_000)
 
   it('forgets what Clear cleared: in a read, on disk and after a crash, keeping the cursor’s line', async () => {
@@ -1110,7 +1110,7 @@ describePty('restoring terminals across a restart', () => {
 
     // A restored pane's record goes too.
     second.clear(opened.id)
-    expect(second.read(opened.id)).not.toContain('nothing running')
+    expect(second.read(opened.id)).not.toContain('── Restored · ')
     expect(second.read(opened.id)).not.toContain('cursor-line')
   }, 20_000)
 
@@ -1219,7 +1219,7 @@ describePty('restoring terminals across a restart', () => {
     const second = manager(repositories, checkout, reopened)
     // An unreadable transcript costs a transcript, never a pane.
     expect(second.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
-    expect(second.read(opened.id)).not.toContain('nothing running')
+    expect(second.read(opened.id)).not.toContain('── Restored · ')
   }, 20_000)
 
   it('cannot be made to act by anything the last session printed', async () => {
@@ -1240,7 +1240,7 @@ describePty('restoring terminals across a restart', () => {
     second.restoreSessions()
 
     const shown = second.read(opened.id)
-    const boundary = shown.indexOf('new shell below')
+    const boundary = shown.indexOf('── Restored · ')
     expect(boundary).toBeGreaterThan(-1)
     expect(shown).toContain('done')
     expect(shown).not.toContain('renamed')

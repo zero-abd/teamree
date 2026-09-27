@@ -1,18 +1,18 @@
-// The bottom rail: state that is off screen. The runtime only when it is not ready, keep-awake and memory,
-// the branch, the git line, setup questions, the pane count, and how many panes are asking or failed.
+// The bottom rail, the open worktree's strip: branch, git line, keep-awake and memory on the left; agents
+// working, asking or failed anywhere, and teammates online, on the right. The runtime only when not ready.
 
 import { useMemo } from 'react'
-import type { WorktreeStatus } from '@shared/entities'
+import { teammatesHeard, type WorktreeStatus } from '@shared/entities'
+import { activityOf } from '@shared/paneActivity'
 import { attention, dashboardRows } from '../dashboard/dashboardRows'
 import { stepNeedingYou } from '../dashboard/needingYou'
-import { paneCount } from '../sidebar/agentRows'
+import { Icon } from '../icons/Icon'
 import { baseFreshness } from '../sidebar/baseFreshness'
 import { startedFromLabel } from '../sidebar/worktreeDisplay'
-import { formatReadAge, summarizeWorktreeStatus } from '../sidebar/worktreeStatusSummary'
+import { formatReadAge } from '../sidebar/worktreeStatusSummary'
 import { RUNTIME_IS_SEEDED } from '../runtimeClient/currentRuntimeClient'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { WorktreeAsks } from '../workspace/WorktreeAsks'
 import { requestRegionFocus } from './regions'
 import { useKeepAwake } from './keepAwake'
 import { KeepAwakeControl } from './KeepAwakeControl'
@@ -47,23 +47,29 @@ export function StatusBar(): React.JSX.Element {
   const fetching = useWorkspaceStore((state) => state.fetching)
   const fetchProject = useWorkspaceStore((state) => state.fetchProject)
   const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
+  const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
   const now = useNow(60_000)
 
   // The rail is always mounted, so it keeps main told which way sleep should go.
   useKeepAwake()
 
-  const panes = paneCount(Object.values(terminals), worktrees.map((entry) => entry.id), activeWorktreeId)
+  const working = Object.values(terminals).filter(
+    (terminal) => (terminal.agent ?? terminal.foregroundAgent) !== undefined && activityOf(terminal) === 'working'
+  ).length
   const active = worktrees.find((worktree) => worktree.id === activeWorktreeId)
   const child = active?.parentId !== undefined
   // The record outlives a status read from before the folder went, and exists before any read.
   const missing = active?.missing === true
   const shownStatus = missing && activeWorktreeId ? missingStatus(activeWorktreeId, status) : status
-  const summary = summarizeWorktreeStatus(shownStatus, child)
   const project = projects.find((entry) => entry.id === active?.projectId)
   const fresh = project === undefined ? null : baseFreshness(project, now)
   // In sync with a base that could not be fetched, or was fetched hours ago, is not known.
-  const description =
-    fresh !== null && !child && summary?.description === 'clean, in sync' ? 'clean' : summary?.description
+  const description = shownStatus === undefined ? undefined : gitWords(shownStatus, child, fresh !== null && !child)
+  const online = useWorkspaceStore((state) =>
+    project === undefined
+      ? 0
+      : (teammatesHeard(state.teammates[project.id])?.teammates.filter((mate) => mate.connected).length ?? 0)
+  )
   // `now` only moves the quiet-for column, which the count does not read.
   const owed = useMemo(
     () => attention(dashboardRows({ terminals: Object.values(terminals), worktrees, projects, layouts, now: 0 })),
@@ -84,9 +90,6 @@ export function StatusBar(): React.JSX.Element {
         </span>
       )}
 
-      <KeepAwakeControl />
-      <ResourcesControl />
-
       {active !== undefined && !pageOpen ? (
         <button
           type="button"
@@ -95,21 +98,21 @@ export function StatusBar(): React.JSX.Element {
           aria-label={`Copy Branch ${active.branch}`}
           onClick={() => void copyToClipboard(active.branch, `the branch ${active.branch}`)}
         >
-          {active.branch}
+          <Icon name="branch" size={14} />
+          <span className="statusbar__text">{active.branch}</span>
         </button>
       ) : null}
 
-      {summary && shownStatus && !pageOpen ? (
+      {description !== undefined && shownStatus && !pageOpen ? (
         // The count is in the accessible name too; offered on a clean tree for reading the last commits.
         <button
           type="button"
-          className={`statusbar__item statusbar__button${changesOpen ? ' statusbar__button--on' : ''}`}
+          className={`statusbar__item statusbar__button statusbar__git${changesOpen ? ' statusbar__button--on' : ''}`}
           aria-pressed={changesOpen}
           aria-label={`Changes, ${description}`}
           title={`Changes · read ${formatReadAge(shownStatus.readAt, Date.now())}`}
           onClick={toggleChanges}
         >
-          <span className="statusbar__muted">git</span>
           {description}
         </button>
       ) : null}
@@ -131,22 +134,14 @@ export function StatusBar(): React.JSX.Element {
         </button>
       ) : null}
 
-      <span className="statusbar__spacer" />
+      <KeepAwakeControl />
+      <ResourcesControl />
 
-      <WorktreeAsks />
+      <span className="statusbar__spacer" />
 
       {RUNTIME_IS_SEEDED ? <span className="statusbar__badge">seeded data</span> : null}
 
-      {panes.total === 0 ? null : (
-        <span
-          className="statusbar__item"
-          title={`${
-            activeWorktreeId ? `${panes.here} in this worktree · ` : ''
-          }${panes.total} across ${panes.worktrees} worktree${panes.worktrees === 1 ? '' : 's'}`}
-        >
-          {`${panes.total} pane${panes.total === 1 ? '' : 's'}`}
-        </span>
-      )}
+      {working === 0 ? null : <span className="statusbar__item statusbar__working">{`${working} working`}</span>}
 
       {first === null ? null : (
         <button
@@ -166,8 +161,32 @@ export function StatusBar(): React.JSX.Element {
           {owed.failed > 0 ? <span className="statusbar__failed">{`${owed.failed} failed`}</span> : null}
         </button>
       )}
+
+      {online === 0 || project === undefined ? null : (
+        <button
+          type="button"
+          className="statusbar__item statusbar__button statusbar__online"
+          onClick={() => openTeamwork(project.id)}
+        >
+          {`${online} teammate${online === 1 ? '' : 's'} online`}
+        </button>
+      )}
     </footer>
   )
+}
+
+/** The git line: changed files, then ahead and behind; `clean` alone when in sync is not known. */
+export function gitWords(status: WorktreeStatus, child: boolean, syncUnknown: boolean): string {
+  if (status.missing) return 'missing'
+  const changed = status.staged + status.unstaged + status.untracked
+  const parts: string[] = []
+  if (status.operation !== undefined) parts.push(status.operation === 'rebase' ? 'rebasing' : 'merging')
+  if (status.conflicted > 0) parts.push(`${status.conflicted} conflicted`)
+  if (changed > 0) parts.push(`${changed} changed`)
+  if (status.ahead > 0) parts.push(`${status.ahead} ahead`)
+  if (status.behind > 0) parts.push(child ? `${status.behind} behind parent` : `${status.behind} behind`)
+  if (parts.length > 0) return parts.join(' · ')
+  return syncUnknown ? 'clean' : 'clean, in sync'
 }
 
 /** The zeros of a status with no checkout behind it, whatever was read before the folder went. */

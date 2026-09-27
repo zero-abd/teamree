@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
-// The bottom rail: state that is not on screen. The runtime only when it is not ready, keep-awake and
-// memory, the git line, the pane count, and how many panes anywhere are asking or failed.
+// The bottom rail, the open worktree's strip: its branch and git line, keep-awake and memory on the left;
+// how many agents are working, asking or failed and how many teammates are online on the right.
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -139,6 +139,7 @@ describe('the branch', () => {
     mount()
     const branch = screen.getByRole('button', { name: 'Copy Branch rewrite-the-pager' })
     expect(branch.textContent).toBe('rewrite-the-pager')
+    expect(branch.querySelector('svg[data-icon="branch"]')).toBeTruthy()
     expect(branch.getAttribute('title')).toBe('rewrite-the-pager from origin/main')
     fireEvent.click(branch)
     expect(copyToClipboard).toHaveBeenCalledWith('rewrite-the-pager', 'the branch rewrite-the-pager')
@@ -159,8 +160,8 @@ describe('the git segment', () => {
   it('opens the changes panel, and says which panel it is', () => {
     seed({ statuses: { w1: status({ behind: 2, unstaged: 1 }) } })
     mount()
-    const git = screen.getByRole('button', { name: 'Changes, 2 behind · 1 uncommitted' })
-    expect(git.textContent).toBe('git2 behind · 1 uncommitted')
+    const git = screen.getByRole('button', { name: 'Changes, 1 changed · 2 behind' })
+    expect(git.textContent).toBe('1 changed · 2 behind')
     fireEvent.click(git)
     expect(toggleChanges).toHaveBeenCalledOnce()
   })
@@ -171,10 +172,16 @@ describe('the git segment', () => {
     expect(screen.getByRole('button', { name: 'Changes, 2 behind parent' })).toBeTruthy()
   })
 
+  it('says every changed file as one count, before ahead and behind', () => {
+    seed({ statuses: { w1: status({ staged: 1, unstaged: 1, untracked: 1, ahead: 3 }) } })
+    mount()
+    expect(screen.getByRole('button', { name: 'Changes, 3 changed · 3 ahead' }).textContent).toBe('3 changed · 3 ahead')
+  })
+
   it('says whether the panel is showing', () => {
     seed({ statuses: { w1: status({ unstaged: 1 }) }, rightPanelOpen: true, rightPanelTab: 'changes' })
     mount()
-    expect(screen.getByRole('button', { name: 'Changes, 1 uncommitted' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Changes, 1 changed' }).getAttribute('aria-pressed')).toBe('true')
   })
 
   // The panel open on another tab is not the changes panel showing: a click
@@ -183,7 +190,7 @@ describe('the git segment', () => {
   it('is not pressed while the panel shows another tab', () => {
     seed({ statuses: { w1: status({ unstaged: 1 }) }, rightPanelOpen: true, rightPanelTab: 'files' })
     mount()
-    expect(screen.getByRole('button', { name: 'Changes, 1 uncommitted' }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('button', { name: 'Changes, 1 changed' }).getAttribute('aria-pressed')).toBe('false')
   })
 
   // A clean tree is still a fact worth a button: the panel is where the last
@@ -202,7 +209,7 @@ describe('the git segment', () => {
     seed({ worktrees: [{ ...worktree, missing: true }], statuses })
     mount()
     const git = screen.getByRole('button', { name: 'Changes, missing' })
-    expect(git.textContent).toBe('gitmissing')
+    expect(git.textContent).toBe('missing')
     expect(screen.queryByText(/clean|in sync/)).toBeNull()
   })
 
@@ -278,48 +285,73 @@ describe('the rail as a whole', () => {
 })
 
 describe('the open worktree’s setup questions', () => {
-  // A card in the corner covered the end of the prompt line and stayed bright over a dialog's scrim.
-  it('sit in the rail, over no pane', () => {
+  // They have buttons; the rail has none of its own. They sit in a slim bar over the panes.
+  it('are not in the rail', () => {
     seed({ worktrees: [{ ...worktree, setupAsk: 'npm ci' }] })
-    mount()
-    const ask = screen.getByRole('region', { name: 'Setup' })
-    expect(ask.closest('footer.statusbar')).not.toBeNull()
-    expect(ask.textContent).toContain('npm ci')
-  })
-
-  it('are not asked while a page covers the worktree', () => {
-    seed({ worktrees: [{ ...worktree, setupAsk: 'npm ci' }], settingsOpen: true })
     mount()
     expect(screen.queryByRole('region', { name: 'Setup' })).toBeNull()
   })
 })
 
-describe('the pane count', () => {
-  // `terminals 1 / 14` beside a Panes badge of 4: two numbers, neither the tab's.
-  // A second number read as every worktree; how many hold panes waits for the hover.
-  it('shows every pane in the window, with the worktrees they span on hover', () => {
+describe('the agents working', () => {
+  it('counts working agents in every worktree, in the working tone', () => {
     const other: Worktree = { ...worktree, id: 'w2', name: 'Fix the index' }
     seed({
       worktrees: [worktree, other],
-      terminals: { a: pane('a', 'w1'), b: pane('b', 'w2'), c: pane('c', 'w2'), d: pane('d', 'gone') }
+      terminals: {
+        a: pane('a', 'w1', { agent: 'claude', busy: true }),
+        b: pane('b', 'w2', { agent: 'codex', busy: true }),
+        c: pane('c', 'w2', { busy: true }),
+        d: pane('d', 'w2', { agent: 'claude' })
+      }
     })
     mount()
-    const count = screen.getByText('3 panes')
-    expect(count.getAttribute('title')).toBe('1 in this worktree · 3 across 2 worktrees')
-    expect(screen.queryByText('terminals')).toBeNull()
+    const working = screen.getByText('2 working')
+    expect(working.classList.contains('statusbar__working')).toBe(true)
   })
 
-  it('says one pane in the singular', () => {
-    seed({ terminals: { a: pane('a', 'w1') } })
+  it('says nothing while none is working, and no pane count', () => {
+    seed({ terminals: { a: pane('a', 'w1'), b: pane('b', 'w1', { agent: 'claude' }) } })
     mount()
-    expect(screen.getByText('1 pane')).toBeTruthy()
-  })
-
-  // The first-run welcome has nothing open; a zero there is noise.
-  it('says nothing while there are no panes', () => {
-    seed({ terminals: {} })
-    mount()
+    expect(screen.queryByText(/working/)).toBeNull()
     expect(screen.queryByText(/\bpanes?\b/)).toBeNull()
+  })
+})
+
+describe('teammates', () => {
+  const heard = (connected: boolean[]) => ({
+    p1: {
+      state: 'read',
+      projectId: 'p1',
+      worktrees: [],
+      teammates: connected.map((on, index) => ({
+        handle: `mate${index}`,
+        publicKey: `k${index}`,
+        connected: on,
+        heardAt: 1
+      })),
+      readAt: 1
+    }
+  })
+
+  it('says how many are online on the open project, and opens Teamwork', () => {
+    const openTeamwork = vi.fn()
+    seed({ teammates: heard([true, true, false]), openTeamwork })
+    mount()
+    const online = screen.getByRole('button', { name: '2 teammates online' })
+    expect(online.textContent).toBe('2 teammates online')
+    fireEvent.click(online)
+    expect(openTeamwork).toHaveBeenCalledWith('p1')
+  })
+
+  it('says one in the singular, and nothing when none is online', () => {
+    seed({ teammates: heard([true]) })
+    const first = render(<StatusBar />)
+    expect(screen.getByText('1 teammate online')).toBeTruthy()
+    first.unmount()
+    seed({ teammates: heard([false]) })
+    mount()
+    expect(screen.queryByText(/online/)).toBeNull()
   })
 })
 
@@ -457,6 +489,15 @@ describe('resources', () => {
 
   const GB = 1024 * MB
   const memory = (): HTMLElement => screen.getByRole('button', { name: /^Memory/ })
+
+  // "… GB" read as broken while the first sample was on its way.
+  it('shows a calm dash until the first sample lands, and asks for it at once', () => {
+    pending = true
+    mount()
+    expect(calls.filter((call) => call.method === 'system.resources')).toHaveLength(1)
+    expect(memory().textContent).toBe('—')
+    expect(memory().getAttribute('aria-label')).toBe('Memory')
+  })
 
   it('is the live total in GB, and says what it counts on the hover', async () => {
     mount()

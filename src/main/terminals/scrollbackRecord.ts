@@ -3,6 +3,7 @@
 // clipboard and window title, so a record is reduced to an allowlist: text,
 // whitespace controls and SGR. Allowlist, not denylist: the dangerous set is not closed.
 
+import { markerText, markerTime } from '../../shared/paneMarker'
 import { freshAgentLabel } from '../../shared/paneRestore'
 
 /** One pane's kept output, and when this machine wrote it down. */
@@ -24,81 +25,62 @@ const ESC = '\x1b'
 const BEL = '\x07'
 const ST_C1 = '\u009c'
 
-/** The dim a pane's own asides are printed in; see TerminalView's exit line. */
+/** The dim a pane's own asides are printed in. */
 const DIM = `${ESC}[38;5;244m`
 const RESET = `${ESC}[0m`
 
 /** What is left once the sanitizer has run: text, the whitespace controls, and colour. */
 export const INERT_RECORD = /^(?:[^\u0000-\u001f\u007f-\u009f]|[\n\r\t\u0008]|\u001b\[[0-9;:]*m)*$/u
 
-/**
- * The record as written into a restored pane, between two marks said in words
- * so nobody takes a record for a running process. `startsBelow` names what
- * follows, which is not always a new shell.
- */
-export function replayableRecord(record: RecordedScrollback, startsBelow?: string): string {
-  return `${openingMark(record.recordedAt)}${record.text}${closingMark(startsBelow)}`
+/** One marker line (see `paneMarker.ts`), on a line of its own and in its own colour. */
+function markerLine(label: string): string {
+  return `${RESET}\r\n${DIM}${markerText(label)}${RESET}\r\n`
 }
 
-/** What follows a record in the ordinary case: the command was not re-issued, a shell starts. */
-export const NEW_SHELL_BELOW = 'new shell below'
+/** What follows a record read back on launch; the default. */
+export const RESTORED = 'Restored'
 
-/** What follows a restored Run pane's record: its command waits for Run Again. */
-export const NOT_RUN_AGAIN_BELOW = 'not run again'
+/** What follows a record when a shell starts in place of the program that wrote it. */
+export const NEW_SHELL_BELOW = 'New shell'
+
+/** What follows an ended agent's record when it picks its conversation back up. */
+export const RESUMED_BELOW = 'Resumed'
+
+/** What follows it when the agent starts over. */
+export const NEW_SESSION_BELOW = 'New session'
+
+/** What follows a Run pane's record when its command runs again. */
+export const RUN_AGAIN_BELOW = 'Restarted'
+
+/** Nothing follows: the pane waits on its end block's buttons, which say it came back. */
+export const NOT_RUN_AGAIN_BELOW = ''
 
 /** What follows it when a resume did not take; `pty-session.ts` withholds the record until then. */
-export const FAILED_RESUME_BELOW = 'resume attempt below'
+export const FAILED_RESUME_BELOW = RESTORED
 
-/** What follows it when a Run pane runs its command again. */
-export function startsAgainBelow(program: string): string {
-  return `${program} starts again below`
+/** The record, then a marker naming what follows it and when the record was taken. */
+export function replayableRecord(record: RecordedScrollback, startsBelow?: string): string {
+  return `${record.text}${closingMark(startsBelow, record.recordedAt)}`
 }
 
-/**
- * Said into a pane whose resume did not take: only what the app knows. The
- * agent's own reason sits immediately above. `restarted` is told, not guessed.
- */
-export function failedResumeMark(exitCode: number, hasRecord: boolean, restarted: boolean): string {
-  const kept = hasRecord ? ', record above' : ''
-  const next = restarted ? 'fresh agent below' : 'open a new pane for a fresh one'
-  return `${RESET}\r\n${DIM}[resume refused — agent exited ${exitCode}${kept}; ${next}]${RESET}\r\n`
+/** The marker after a record: what starts below, and when. Empty for a pane whose end block says it. */
+export function closingMark(startsBelow: string = RESTORED, at: number = Date.now()): string {
+  return startsBelow === '' ? '' : markerLine(`${startsBelow} · ${markerTime(at)}`)
 }
 
-/**
- * Said above a fresh agent when the store had nothing under the pinned id:
- * "we looked" is a different line from "it refused". Why it is absent is not
- * knowable from outside, so it is not claimed.
- */
+/** Said into a pane whose resume did not take; the agent's own reason sits immediately above. */
+export function failedResumeMark(exitCode: number, restarted: boolean): string {
+  return markerLine(`Resume refused · exit ${exitCode}${restarted ? ' · New session' : ''}`)
+}
+
+/** Said above a fresh agent when the store had nothing under the pinned id; why is not knowable, so not claimed. */
 export function noConversationMark(agent: string): string {
-  return `${RESET}\r\n${DIM}[no conversation to resume — ${freshAgentLabel(agent)} below]${RESET}\r\n`
+  return markerLine(`Nothing to resume · ${freshAgentLabel(agent)}`)
 }
 
 /** Said into an agent pane left stopped on the way back up; its buttons offer the rest. */
 export function agentStoppedMark(reason: string): string {
-  return `${RESET}\r\n${DIM}[${reason} — agent stopped, task not re-sent]${RESET}\r\n`
-}
-
-/**
- * Said before the record. "Up to" and not "until": the time is when this was
- * written down, and a checkpoint precedes the pane's last line.
- */
-export function openingMark(recordedAt: number): string {
-  return `${RESET}${DIM}[record — up to ${clockLabel(recordedAt)}, nothing running]${RESET}\r\n`
-}
-
-/** Said after it, which is the line somebody reads on the way down. */
-export function closingMark(startsBelow: string = NEW_SHELL_BELOW): string {
-  return `${RESET}\r\n${DIM}[end of record — ${startsBelow}]${RESET}\r\n`
-}
-
-/** Local wall-clock, to the minute. Absolute: a relative label computed once goes quietly wrong. */
-export function clockLabel(at: number): string {
-  const when = new Date(at)
-  const pad = (value: number): string => String(value).padStart(2, '0')
-  return (
-    `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())} ` +
-    `${pad(when.getHours())}:${pad(when.getMinutes())}`
-  )
+  return markerLine(`${reason.charAt(0).toUpperCase()}${reason.slice(1)} · not resumed`)
 }
 
 /**
