@@ -8,6 +8,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  container-type: inline-size;
 }
 
 .changes__empty,
@@ -18,32 +19,48 @@
   font-size: var(--text-sm);
 }
 
+/* The empty state sits above the folded sections, so it keeps to its content's height. */
+.changes__scroll .empty-state {
+  min-height: 0;
+  padding: var(--s5) var(--s4);
+}
+
+.empty-state .changes__last {
+  width: auto;
+  max-width: 100%;
+  margin-inline: auto;
+  padding-inline: 0;
+}
+
+/* One scroller for every section: never sideways, whatever a name's length. */
+.changes__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-bottom: var(--s3);
+}
+
 .changes__list {
   margin: 0;
-  padding: var(--s2) 0;
+  padding: 0 0 var(--s1);
   list-style: none;
-  overflow-y: auto;
-  /* Shrinks and scrolls before the commit box below it leaves the panel. */
-  flex: 0 1 auto;
-  min-height: 0;
 }
 
 .change {
-  width: 100%;
-  padding: var(--s1) var(--s4);
+  min-width: 0;
+  flex: 1;
+  height: 28px;
+  padding: 0 var(--s2) 0 calc(var(--s4) + var(--depth, 0) * 12px);
   display: flex;
-  align-items: baseline;
-  gap: var(--s2);
+  align-items: center;
+  gap: 6px;
   border: 0;
   background: none;
   color: var(--fg);
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   text-align: left;
   cursor: pointer;
-}
-
-.change:hover {
-  background: var(--bg-hover);
 }
 
 .change__kind {
@@ -53,6 +70,16 @@
   font-size: var(--text-xs);
   color: var(--fg-muted);
   text-align: center;
+}
+
+.changes__item > .change__kind {
+  margin-inline-end: var(--s3);
+  font-weight: 600;
+}
+
+.change__icon-file {
+  flex: none;
+  color: var(--fg-muted);
 }
 
 .change__kind--added,
@@ -82,6 +109,7 @@
   min-width: 0;
   flex: 1;
   display: flex;
+  align-items: baseline;
   overflow: hidden;
 }
 
@@ -101,6 +129,27 @@
   flex: 0 100 auto;
   margin-left: var(--s2);
   color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+/* A long name keeps its end: the ellipsis falls before the last ten characters. */
+.change__name:has(> .change__tail) {
+  display: flex;
+}
+
+.change__head {
+  min-width: 1ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.change__tail {
+  flex: none;
+}
+
+.change__name--deleted {
+  color: var(--fg-secondary);
+  text-decoration: line-through;
 }
 
 .change__where {
@@ -114,6 +163,13 @@
   color: var(--fg-secondary);
   font-size: var(--text-xs);
   font-variant-numeric: tabular-nums;
+}
+
+/* A narrow panel spends its width on names. */
+@container (max-width: 300px) {
+  .changes__item .change__stat {
+    display: none;
+  }
 }
 
 /* A patch scrolls sideways rather than wrapping, and deliberately: its meaning
@@ -410,26 +466,44 @@
   border-left: 1px solid var(--line);
 }
 
-/* The checkbox sits outside the row button, so clicking a file to read its
-   patch and ticking it for a commit are two different acts. */
+/* The row button opens the diff; its actions and the status letter sit beside it, outside it. */
 .changes__item {
   display: flex;
-  align-items: baseline;
-  gap: var(--s2);
-  padding-left: var(--s3);
+  align-items: center;
 }
 
-/* The row whose diff is open in the centre: the whole row, checkbox included. */
+.changes__item:hover {
+  background: var(--bg-hover);
+}
+
+/* The row whose diff is open in the centre: the whole row, actions included. */
 .changes__item--selected {
   background: var(--bg-selected);
   box-shadow: inset 2px 0 var(--accent);
 }
 
-.changes__item--selected .change:hover {
-  background: none;
+.changes__item--folder .change {
+  gap: var(--s1);
+  color: var(--fg-secondary);
 }
 
-/* Focus rings the whole row, checkbox and counts included, inside its fill, as thick as the shared ring. */
+/* Takes no room while its buttons are out of sight, so the name keeps it. */
+.change__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  max-width: calc(var(--row-action-rest) * 96px);
+  overflow: hidden;
+}
+
+.changes__item:hover .change__actions,
+.changes__item:focus-within .change__actions,
+.changes__item--selected .change__actions {
+  max-width: none;
+}
+
+/* Focus rings the whole row, actions and counts included, inside its fill, as thick as the shared ring. */
 .changes__item .change:focus-visible {
   outline: none;
 }
@@ -442,16 +516,6 @@
   box-shadow:
     inset 2px 0 var(--accent),
     inset 0 0 0 2px var(--accent-bright);
-}
-
-.change__tick {
-  flex: none;
-  margin: 0;
-  accent-color: var(--accent);
-}
-
-.changes__item .change {
-  padding-left: 0;
 }
 
 .change__discard {
@@ -488,9 +552,8 @@
   flex: none;
   place-items: center;
   align-self: center;
-  width: 20px;
-  height: 20px;
-  margin-inline-end: var(--s3);
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 0;
   border-radius: var(--r1);
@@ -518,41 +581,12 @@
 }
 
 .changes__commit {
+  flex: none;
   padding: var(--s3) var(--s4);
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
   gap: var(--s2);
-  border-top: 1px solid var(--line);
-  background: var(--bg-raised);
-}
-
-/* Pulled back to the rows' inset, so this box sits in the column of theirs. */
-.changes__all {
-  width: 100%;
-  margin-inline-start: calc(var(--s3) - var(--s4));
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  color: var(--fg-muted);
-  font-size: var(--text-xs);
-}
-
-.changes__all label {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  color: var(--fg-secondary);
-  cursor: pointer;
-}
-
-.changes__all input {
-  margin: 0;
-  accent-color: var(--accent);
-}
-
-.changes__allCount {
-  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--line);
 }
 
 .changes__message {
@@ -571,16 +605,61 @@
   box-shadow: var(--ring);
 }
 
+/* One line that grows with the message, to a few. */
 textarea.changes__message {
-  max-height: 12lh;
+  flex: none;
+  min-height: calc(1lh + 2 * var(--s2) + 2px);
+  max-height: calc(5lh + 2 * var(--s2) + 2px);
   field-sizing: content;
   resize: none;
   font-family: inherit;
+  font-size: var(--text-base);
   line-height: 1.4;
 }
 
-.changes__commit > .button {
-  align-self: flex-end;
+/* The agent's message, offered in one line: taken on a click, never typed in for you. */
+.changes__suggest {
+  min-width: 0;
+  max-width: 100%;
+  align-self: flex-start;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.changes__suggest:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.changes__suggestUse {
+  flex: none;
+  color: var(--fg-muted);
+}
+
+.changes__suggestText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Commit, and its menu joined to it. */
+.changes__commitRow {
+  display: flex;
+}
+
+.changes__commitButton {
+  flex: 1;
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.changes__commitMore {
+  flex: none;
+  padding-inline: var(--s2);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  box-shadow: inset 1px 0 color-mix(in srgb, var(--on-accent) 30%, transparent);
 }
 
 /* Marks a commit message still as suggested; ✕ empties it. */
@@ -623,9 +702,59 @@ textarea.changes__message {
    is the settled half: an agent that finished leaves only this. */
 .commits {
   flex: none;
-  max-height: 34%;
-  overflow-y: auto;
-  border-top: 1px solid var(--line);
+}
+
+/* A section's heading: the chevron folds it, its actions come up on hover. */
+.scm-head {
+  margin: var(--s1) 0 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  padding-inline-end: var(--s2);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.scm-head__toggle {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 0 0 var(--s2);
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.scm-head__toggle:hover {
+  color: var(--fg);
+}
+
+.scm-head__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scm-head__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  opacity: var(--row-action-rest);
+}
+
+.scm-head:hover .scm-head__actions,
+.scm-head:focus-within .scm-head__actions {
+  opacity: 1;
 }
 
 .commits__title {
@@ -688,11 +817,7 @@ textarea.changes__message {
 
 /* Context: claims and notes from the ledger. Shrinks and scrolls like the list, never pushing it out. */
 .context {
-  flex: 0 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  border-top: 1px solid var(--line);
-  padding-bottom: var(--s3);
+  flex: none;
 }
 
 .context__add {

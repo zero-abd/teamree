@@ -105,10 +105,15 @@ export const useCommitDrafts = create<DraftState>((set) => ({
   setDraft: (worktreeId, draft) => set((state) => ({ drafts: { ...state.drafts, [worktreeId]: draft } }))
 }))
 
-/** One worktree's commit message, kept across tab changes; `from` is set while it is still the suggestion. */
+/**
+ * One worktree's commit message, kept across tab changes; `from` is set while it is still the suggestion.
+ * `typed` is only what was typed or taken, for a box that offers the suggestion rather than starting with it.
+ */
 export function useCommitMessage(worktreeId: string | null): {
   message: string
   from: CommitSuggestion['from'] | null
+  typed: string
+  suggestion: CommitSuggestion | null
   setMessage: (text: string) => void
 } {
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId))
@@ -120,6 +125,8 @@ export function useCommitMessage(worktreeId: string | null): {
   return {
     message: shown.text,
     from: shown.from,
+    typed: stored?.text ?? '',
+    suggestion,
     setMessage: (text) => {
       if (worktreeId !== null) setDraft(worktreeId, { text, seed: suggestion?.text ?? null })
     }

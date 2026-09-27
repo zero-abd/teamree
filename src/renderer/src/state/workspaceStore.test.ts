@@ -225,7 +225,9 @@ it('commits all when every listed row of a cut-off list is ticked', async () => 
   useWorkspaceStore.setState((state) => ({
     changes: { ...state.changes, [worktreeId]: { ...state.changes[worktreeId]!, total: 2000, truncated: true } }
   }))
-  useWorkspaceStore.getState().setAllStaged(true)
+  useWorkspaceStore
+    .getState()
+    .stagePaths(useWorkspaceStore.getState().changes[worktreeId]!.changes.map((change) => change.path))
 
   const call = vi.spyOn(runtimeClient, 'call')
   expect(await useWorkspaceStore.getState().commitStaged('everything')).toBe(true)

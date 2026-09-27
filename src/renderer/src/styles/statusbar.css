@@ -55,6 +55,13 @@
 }
 
 /* Gives way first: the git line beside it says more about the worktree than its name does. */
+.statusbar__tokens {
+  flex: none;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .statusbar__branch {
   flex: 0 1000 auto;
   max-width: 32ch;

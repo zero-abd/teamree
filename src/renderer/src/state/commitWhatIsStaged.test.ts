@@ -137,7 +137,7 @@ it('says nothing when All was ticked, a folded folder of new files included', as
   await repo.write('g.txt', 'G\n')
   await refresh()
   expect(useWorkspaceStore.getState().changes.wt?.changes.map((change) => change.path)).toEqual(['g.txt', 'gen/'])
-  useWorkspaceStore.getState().setAllStaged(true)
+  useWorkspaceStore.getState().stagePaths(['g.txt', 'gen/'])
 
   expect(await useWorkspaceStore.getState().commitStaged('all of it')).toBe(true)
 

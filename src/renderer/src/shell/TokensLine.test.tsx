@@ -4,9 +4,9 @@ import { act, render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 const call = vi.fn((_method: string, _params: unknown) => new Promise(() => {}))
-vi.mock('../../runtimeClient/currentRuntimeClient', () => ({ runtimeClient: { call }, RUNTIME_IS_SEEDED: false }))
+vi.mock('../runtimeClient/currentRuntimeClient', () => ({ runtimeClient: { call }, RUNTIME_IS_SEEDED: false }))
 
-const { useUsageStore } = await import('../../state/usageStore')
+const { useUsageStore } = await import('../state/usageStore')
 const { TokensLine } = await import('./TokensLine')
 
 describe('TokensLine', () => {
@@ -22,7 +22,7 @@ describe('TokensLine', () => {
         showCost: true
       })
     )
-    const line = container.querySelector('.changes__tokens')
+    const line = container.querySelector('.statusbar__tokens')
     expect(line?.textContent).toBe('100 tok · ≈$1.00')
     expect(line?.getAttribute('title')).toBe(
       'in 10 · out 20 · cache read 30 · cache write 40\n2.1k tok · ≈$2.00 with children'

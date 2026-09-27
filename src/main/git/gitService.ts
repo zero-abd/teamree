@@ -1352,6 +1352,7 @@ export class GitService {
       message: params.message,
       ...(params.paths === undefined ? {} : { paths: params.paths }),
       ...(params.all === undefined ? {} : { all: params.all }),
+      ...(params.amend === undefined ? {} : { amend: params.amend }),
       prepared: this.#preparedPaths(worktree.projectId),
       now: this.#now
     })

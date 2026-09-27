@@ -34,7 +34,6 @@ import type {
   Terminal,
   UpdateState,
   Worktree,
-  WorktreeChange,
   WorktreeChanges,
   WorktreeCleanup,
   WorktreeCommitSummary,
@@ -204,6 +203,7 @@ import {
   writeStoredRightPanelWidth,
   type RightPanelTab
 } from '../workspace/rightPanel/rightPanelState'
+import { commitScope } from '../workspace/rightPanel/sourceControl'
 import { panelCost, panelYields, sidebarCost, type Sides } from '../workspace/roomForPanes'
 import { couldNotCheck } from '../updates/updateNotice'
 import { useMessageStore } from './messages'
@@ -237,8 +237,8 @@ export type DialogState =
       after: 'quit' | 'close' | { remove: string } | { ask: ConfirmAfterUnsaved }
     }
   | ConfirmAfterUnsaved
-  /** Throwing away a path's unstaged change, or one hunk of it. */
-  | { kind: 'confirm-discard'; worktreeId: string; path: string; hunk?: PatchHunk }
+  /** Throwing away a path's unstaged change, or one hunk of it; with `paths`, every path named. */
+  | { kind: 'confirm-discard'; worktreeId: string; path: string; hunk?: PatchHunk; paths?: readonly string[] }
   /** Merging a worktree's branch into the base branch in the project's own checkout. */
   | { kind: 'confirm-merge'; worktreeId: string }
   /** Deleting a stale `index.lock`, then retrying the write it refused. */
@@ -324,6 +324,7 @@ export type UndoTarget =
   | { kind: 'remove'; projectId: string; removedId: string }
   | { kind: 'remove-many'; projectId: string; removedIds: string[] }
   | { kind: 'discard'; worktreeId: string; trashId: string }
+  | { kind: 'discard-many'; worktreeId: string; trashIds: string[] }
   | { kind: 'shared-note'; shareId: string }
 
 /** The title, body and draft the create dialog sends; absent parts are drafted by the runtime. */
@@ -346,22 +347,6 @@ export type TeamworkReadErrors = { list?: string; relay?: string; status?: strin
 
 /** A relay command running in a pane in this window, one pane per project. Rebuilt from the runtime's list, see `reconcileRelayPanes`. */
 export type { RelayPaneKind, RelayPaneState } from '../teamwork/startTeamwork'
-
-/**
- * What Commit takes: the ticked paths plus the index, else the index alone, else every change.
- * Every row of a cut-off list ticked is All: the rows past the cap cannot be ticked.
- */
-export function commitScope(
-  ticked: readonly string[],
-  changes: readonly WorktreeChange[],
-  truncated = false
-): 'ticked' | 'staged' | 'all' {
-  if (ticked.length > 0) {
-    const tickable = changes.filter((change) => change.kind !== 'conflicted' && (change.unstaged || !change.staged))
-    return truncated && tickable.every((change) => ticked.includes(change.path)) ? 'all' : 'ticked'
-  }
-  return changes.some((change) => change.staged) ? 'staged' : 'all'
-}
 
 /**
  * The worktree id a project's teamwork pane is created under. Namespaced so it cannot collide; the verb
@@ -800,16 +785,22 @@ type WorkspaceState = {
   selectChange: (path: string | null, pin?: boolean) => void
   /** Adds or removes one path from what the next commit will capture. */
   toggleStaged: (path: string) => void
-  /** Every changed path, or none. */
-  setAllStaged: (staged: boolean) => void
-  /** Commits what `commitScope` names; true when it landed. */
-  commitStaged: (message: string) => Promise<boolean>
+  /** Adds these paths to what the next commit will capture. */
+  stagePaths: (paths: readonly string[]) => void
+  /** Unticks everything and takes every path git holds out of the index. The working tree is never touched. */
+  unstageAll: (worktreeId: string) => Promise<void>
+  /** Commits what `commitScope` names, or rewrites the last commit with it; true when it landed. */
+  commitStaged: (message: string, amend?: boolean) => Promise<boolean>
   /** Puts one hunk into the index, or takes it out. The hunk is exactly what was on screen; the runtime refuses it if the file moved on. */
   applyHunk: (worktreeId: string, path: string, hunk: PatchHunk, staged: boolean) => Promise<void>
   /** Takes a whole path out of the index and unticks it. The working tree is never touched. */
   unstagePath: (worktreeId: string, path: string) => Promise<void>
   /** Throws away a path's unstaged change, or one unstaged hunk. The index is never touched. */
   discardChange: (worktreeId: string, path: string, hunk?: PatchHunk) => Promise<void>
+  /** Throws away each path's unstaged change, with one Undo for all of them. */
+  discardChanges: (worktreeId: string, paths: readonly string[]) => Promise<void>
+  /** Reads the changes, the commits and the status again, now. */
+  rereadChanges: (worktreeId: string) => void
   /** Sends the active worktree's branch, or this one's, to its remote. Never forces. */
   pushActiveWorktree: (worktreeId?: string) => Promise<void>
   /** Brings the base ref's new commits into a worktree, or with `landing` the branch it lands in: rebase if unpublished, merge if published. */
@@ -1126,17 +1117,24 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     return true
   }
 
-  /** Commits `paths`, or everything with `all`, or what is staged; true when it landed. */
+  /** Commits `paths`, or everything with `all`, or what is staged, as a new commit or into the last; true when it landed. */
   async function commit(
     worktreeId: string,
     message: string,
     paths: string[] | undefined,
-    all: boolean
+    all: boolean,
+    amend = false
   ): Promise<boolean> {
     set({ committing: true })
     try {
       const result = await pastLock(worktreeId, () =>
-        runtimeClient.call('worktree.commit', { worktreeId, message, ...(paths && { paths }), ...(all && { all }) })
+        runtimeClient.call('worktree.commit', {
+          worktreeId,
+          message,
+          ...(paths && { paths }),
+          ...(all && { all }),
+          ...(amend && { amend })
+        })
       )
       // The commit can capture more than was ticked (anything staged earlier in a terminal); saying
       // so is the difference between a notice and a surprise. Otherwise the Changes tab shows it.
@@ -1148,7 +1146,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set({ stagedPaths: [], selectedChangePath: null })
       return true
     } catch (error) {
-      if (!(await heldLock(worktreeId, error, () => commit(worktreeId, message, paths, all)))) {
+      if (!(await heldLock(worktreeId, error, () => commit(worktreeId, message, paths, all, amend)))) {
         failed('Could not commit')(error)
       }
       return false
@@ -2473,8 +2471,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         if (missed > 0) notify(`Could not restore ${missed} worktree${missed === 1 ? '' : 's'}`)
         return
       }
+      const trashIds = target.kind === 'discard' ? [target.trashId] : target.trashIds
       try {
-        await runtimeClient.call('worktree.undoDiscard', { worktreeId: target.worktreeId, trashId: target.trashId })
+        for (const trashId of trashIds) {
+          await runtimeClient.call('worktree.undoDiscard', { worktreeId: target.worktreeId, trashId })
+        }
       } catch (error) {
         failed('Could not undo the discard')(error)
       }
@@ -3320,13 +3321,17 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }))
     },
 
-    setAllStaged(staged) {
-      const worktreeId = get().activeWorktreeId
-      const rows = worktreeId ? (get().changes[worktreeId]?.changes ?? []) : []
-      set({ stagedPaths: staged ? rows.map((change) => change.path) : [] })
+    stagePaths(paths) {
+      set((state) => ({ stagedPaths: [...new Set([...state.stagedPaths, ...paths])] }))
     },
 
-    async commitStaged(message) {
+    async unstageAll(worktreeId) {
+      set({ stagedPaths: [] })
+      const held = (get().changes[worktreeId]?.changes ?? []).filter((change) => change.staged)
+      for (const change of held) await get().unstagePath(worktreeId, change.path)
+    },
+
+    async commitStaged(message, amend = false) {
       const worktreeId = get().activeWorktreeId
       if (!worktreeId) return false
       const ticked = get().stagedPaths
@@ -3336,8 +3341,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // 'staged' names no paths: a path would be added whole, and a hunk left out of the index with it.
       // 'all' names none either: the list stops at its cap, and git's own -A does not.
       const paths = scope === 'ticked' ? ticked : undefined
-      if (scope === 'all' && rows.length === 0) return false
-      return commit(worktreeId, message, paths, scope === 'all')
+      if (scope === 'all' && rows.length === 0 && !amend) return false
+      return commit(worktreeId, message, paths, scope === 'all' && rows.length > 0, amend)
     },
 
     async applyHunk(worktreeId, path, hunk, staged) {
@@ -3394,6 +3399,38 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       } finally {
         set({ hunkPending: false })
       }
+    },
+
+    async discardChanges(worktreeId, paths) {
+      if (get().hunkPending) return
+      set({ hunkPending: true })
+      const trashIds: string[] = []
+      let missed = 0
+      try {
+        for (const path of paths) {
+          try {
+            const discarded = await pastLock(worktreeId, () =>
+              runtimeClient.call('worktree.discardPath', { worktreeId, path })
+            )
+            if (discarded.trashId !== undefined) trashIds.push(discarded.trashId)
+          } catch {
+            missed += 1
+          }
+        }
+      } finally {
+        set({ hunkPending: false })
+      }
+      if (missed > 0) notify(`Could not discard ${missed} file${missed === 1 ? '' : 's'}`)
+      const done = paths.length - missed
+      if (done === 0) return
+      const text = `Discarded ${done} file${done === 1 ? '' : 's'}`
+      if (trashIds.length === 0) notify(text, 'info')
+      else notify(text, 'info', { label: 'Undo', undo: { kind: 'discard-many', worktreeId, trashIds } })
+    },
+
+    rereadChanges(worktreeId) {
+      readChangesNow(worktreeId)
+      void refreshStatuses([worktreeId])
     },
 
     async startAgent(command, tabOf) {
