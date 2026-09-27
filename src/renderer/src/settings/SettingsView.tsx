@@ -248,7 +248,8 @@ function useSectionRows(
       { label: 'Cursor', words: [...CURSOR_STYLES.map((style) => style.label), 'Blink'] },
       { label: 'Option as Meta', words: [] },
       { label: 'Copy on Select', words: [] },
-      { label: 'Scrollback lines', words: [String(options.scrollback)] }
+      { label: 'Scrollback lines', words: [String(options.scrollback)] },
+      { label: 'Keep Agents Running When teamree Quits', words: [] }
     ],
     notices: [{ label: 'When an agent stops or asks', words: NOTICE_CHOICES.map((choice) => choice.label) }],
     teamwork: [{ label: 'Share Task Details', words: [] }],

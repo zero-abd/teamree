@@ -1213,6 +1213,10 @@ describe('the agent you always use', () => {
       fireEvent.click(box)
       await vi.waitFor(() => expect(box.checked).toBe(true))
       expect(sent).toEqual([{ keepPanesRunning: true }])
+
+      fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'survive' } })
+      expect(screen.getByRole('checkbox', { name })).toBeTruthy()
+      expect(screen.queryByLabelText('Scrollback lines')).toBeNull()
     } finally {
       runtimeCall.answer = () => new Promise(() => {})
     }
