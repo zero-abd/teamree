@@ -13,6 +13,8 @@ export type RuntimeSettings = {
   showInMenuBar: boolean
   /** Settings › Agents › Warn Agents About Overlaps: the edit-time hook and session-start context. */
   warnAgentsAboutOverlaps: boolean
+  /** Settings › Panes › Keep Agents Running When teamree Quits: panes run in the pane host. Experimental; absent is off. */
+  keepPanesRunning?: boolean
 
   /** Settings › General › Worktrees in: where new worktrees go when their project names no folder. */
   worktreesRoot?: string

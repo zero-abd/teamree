@@ -172,6 +172,7 @@ const SettingsSchema = z.object({
   jacMemoryAddon: z.boolean().optional().catch(undefined),
   showInMenuBar: z.boolean().optional().catch(undefined),
   warnAgentsAboutOverlaps: z.boolean().optional().catch(undefined),
+  keepPanesRunning: z.boolean().optional().catch(undefined),
   worktreesRoot: z.string().min(1).optional().catch(undefined),
   branchPrefix: z.string().min(1).optional().catch(undefined)
 })

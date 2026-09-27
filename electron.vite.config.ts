@@ -14,7 +14,10 @@ export default defineConfig({
     // Bundled rather than shipped: the package leaves @xterm out of node_modules, and main reads agent screens with it.
     plugins: [externalizeDepsPlugin({ exclude: ['@xterm/xterm'] })],
     define: { __APP_VERSION__: JSON.stringify(appVersion) },
-    build: { rollupOptions: { input: { index: resolve('src/main/index.ts') } } }
+    // The pane host runs apart from the app, as Electron in node mode (src/main/paneHost/hosting.ts).
+    build: {
+      rollupOptions: { input: { index: resolve('src/main/index.ts'), paneHost: resolve('src/main/paneHost.ts') } }
+    }
   },
   preload: {
     plugins: [externalizeDepsPlugin()],

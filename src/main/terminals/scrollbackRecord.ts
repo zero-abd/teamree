@@ -10,7 +10,15 @@ export type RecordedScrollback = {
   text: string
   /** When the record was taken, not when the pane stopped: a checkpoint of a running pane is neither. */
   recordedAt: number
+  /** Written for a pane running in the pane host; see `HostedRecord`. */
+  host?: HostedRecord
 }
+
+/**
+ * A hosted pane's session in the pane host, and the record its output followed. A launch that finds
+ * the session alive shows `before`, then the host's own replay, instead of `text`.
+ */
+export type HostedRecord = { session: string; before?: string }
 
 const ESC = '\x1b'
 const BEL = '\x07'

@@ -831,6 +831,7 @@ function PanesSection(): React.JSX.Element {
     if (Number.isFinite(lines)) setOptions({ scrollback: lines })
   })
   const shown = useShown()
+  const runtime = useRuntimeSettings()
 
   return (
     <section className="settings-section" aria-labelledby="settings-panes">
@@ -967,6 +968,23 @@ function PanesSection(): React.JSX.Element {
             />
           </div>
         ) : null}
+
+        {shown.row('Keep Agents Running When teamree Quits') ? (
+          <div className="settings-field">
+            <label className="settings-field__label" htmlFor="settings-keep-panes">
+              <Marked text="Keep Agents Running When teamree Quits" />
+            </label>
+            <input
+              id="settings-keep-panes"
+              className="settings-field__check"
+              type="checkbox"
+              checked={runtime.settings?.keepPanesRunning ?? false}
+              disabled={runtime.settings === null}
+              onChange={(event) => runtime.change({ keepPanesRunning: event.target.checked })}
+            />
+          </div>
+        ) : null}
+        {runtime.problem === null ? null : <p className="settings-error">{runtime.problem}</p>}
       </div>
     </section>
   )

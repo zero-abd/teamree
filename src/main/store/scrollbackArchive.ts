@@ -6,7 +6,12 @@ import { createHash } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
 import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import { sanitizeRecordedOutput, tailFromLineBoundary, type RecordedScrollback } from '../terminals/scrollbackRecord'
+import {
+  sanitizeRecordedOutput,
+  tailFromLineBoundary,
+  type HostedRecord,
+  type RecordedScrollback
+} from '../terminals/scrollbackRecord'
 import { writeJsonFileAtomically } from './atomicJsonFile'
 
 /** Beside `workspace.json`, in the app's own data directory. */
@@ -111,7 +116,7 @@ export class ScrollbackArchive {
       }
       const raw: unknown = JSON.parse(readFileSync(path, 'utf8'))
       if (typeof raw !== 'object' || raw === null) return undefined
-      const { text, recordedAt, endedAt } = raw as Record<string, unknown>
+      const { text, recordedAt, endedAt, host } = raw as Record<string, unknown>
       if (typeof text !== 'string' || text.length === 0) return undefined
       // `endedAt` is the pre-checkpoint name for the same number; still read so an
       // upgrade does not date every restored pane to the moment of the upgrade.
@@ -120,7 +125,12 @@ export class ScrollbackArchive {
       // Sanitised and capped again here: the file is the boundary whatever wrote it.
       const kept = tailFromLineBoundary(sanitizeRecordedOutput(text), MAX_RECORD_BYTES)
       if (kept.length === 0) return undefined
-      return { text: kept, recordedAt: typeof at === 'number' && Number.isFinite(at) ? at : this.#now() }
+      const hosted = hostedRecord(host)
+      return {
+        text: kept,
+        recordedAt: typeof at === 'number' && Number.isFinite(at) ? at : this.#now(),
+        ...(hosted === undefined ? {} : { host: hosted })
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         this.#onProblem(`could not read the record for ${terminalId}: ${describe(error)}`)
@@ -133,7 +143,7 @@ export class ScrollbackArchive {
    * Writes the capped, inert tail of `text`. Queued; `flush` waits for it. An
    * unchanged record is skipped, timestamp included: it says when output was last new.
    */
-  put(terminalId: string, text: string): void {
+  put(terminalId: string, text: string, hosted?: HostedRecord): void {
     const path = this.#pathFor(terminalId)
     if (path === undefined) return
 
@@ -143,7 +153,11 @@ export class ScrollbackArchive {
       return
     }
 
-    const fingerprint = createHash('sha256').update(kept).digest('base64')
+    const host = hosted === undefined ? undefined : hostedRecord(hosted)
+    const fingerprint = createHash('sha256')
+      .update(JSON.stringify(host ?? null))
+      .update(kept)
+      .digest('base64')
     if (this.#lastWritten.get(terminalId) === fingerprint) return
     // Taken now, not when the write lands: an exit and a quit arrive together.
     this.#lastWritten.set(terminalId, fingerprint)
@@ -152,6 +166,7 @@ export class ScrollbackArchive {
       version: SCROLLBACK_RECORD_VERSION,
       terminalId,
       recordedAt: this.#now(),
+      ...(host === undefined ? {} : { host }),
       text: kept
     }
     this.#enqueue(
@@ -208,6 +223,17 @@ export class ScrollbackArchive {
       }
     })
   }
+}
+
+/** A hosted pane's session and earlier record, reduced and capped like the text; undefined when malformed. */
+function hostedRecord(raw: unknown): HostedRecord | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined
+  const { session, before } = raw as Record<string, unknown>
+  if (typeof session !== 'string' || !/^[A-Za-z0-9_.-]{1,128}$/.test(session)) return undefined
+  // Half the cap: the file holds this beside the text and must stay under its own limit.
+  const kept =
+    typeof before === 'string' ? tailFromLineBoundary(sanitizeRecordedOutput(before), MAX_RECORD_BYTES / 2) : ''
+  return kept.length === 0 ? { session } : { session, before: kept }
 }
 
 function describe(error: unknown): string {

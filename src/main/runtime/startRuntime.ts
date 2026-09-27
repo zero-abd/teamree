@@ -8,6 +8,7 @@ import type { SharedNoteSummary } from '../../shared/sharedNote'
 import type { Terminal, UpdateState } from '../../shared/entities'
 import type { Appearance, Tone } from '../../shared/theme'
 import { ScrollbackArchive, SCROLLBACK_DIR_NAME } from '../store/scrollbackArchive'
+import { PaneHosting } from '../paneHost/hosting'
 import type { SelfInstall } from '../updates'
 import { WorkspaceStore } from '../store/workspaceStore'
 import { createDispatcher, type Dispatcher } from './dispatcher'
@@ -72,6 +73,8 @@ export type RuntimeOptions = {
   onAppearance?: (appearance: Appearance) => void
   /** What macOS is showing; `nativeTheme` in the app. */
   systemTone?: () => Tone
+  /** `out/main/paneHost.js`, for Keep Agents Running. Absent, panes always run in this process. */
+  paneHostEntry?: string
   onError?: (error: unknown) => void
 }
 
@@ -101,6 +104,8 @@ export type Runtime = {
   noteWindowFocus: () => void
   /** The window left the front: the moment a long absence away is measured from. */
   noteWindowBlur: () => void
+  /** Panes a quit leaves running in the pane host; no agent in one is warned about. */
+  panesKeptOnQuit: () => string[]
   stop: () => Promise<void>
 }
 
@@ -126,6 +131,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     unsavedFiles,
     onAppearance,
     systemTone,
+    paneHostEntry,
     onError
   } = options
   const report = onError ?? ((error: unknown) => console.error('[runtime]', error))
@@ -142,6 +148,18 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
   const context = createRuntimeContext({ version, store, subscriptions })
   const registry = new MethodRegistry(context)
   const endpoint = serveCli ? resolveEndpoint(userDataDir) : undefined
+  const paneHost = new PaneHosting({
+    userDataDir,
+    appVersion: version,
+    enabled: () => store.runtimeSettings().keepPanesRunning === true,
+    ...(paneHostEntry === undefined ? {} : { entry: paneHostEntry }),
+    onProblem: (reason) => report(new Error(`pane host: ${reason}`))
+  })
+  // Before the panes are restored, so the ones it kept are attached rather than started again. Off, a no-op.
+  await paneHost.open()
+  context.workspaceEvents.on((event) => {
+    if (event.type === 'settings') void paneHost.open()
+  })
   const areas = registerHandlers(registry, {
     openExternal,
     downloadsDirectory,
@@ -157,7 +175,8 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     ...(onAppearance === undefined ? {} : { onAppearance }),
     ...(systemTone === undefined ? {} : { systemTone }),
     ...(online === undefined ? {} : { online }),
-    ...(endpoint === undefined ? {} : { paneEndpoint: endpoint })
+    ...(endpoint === undefined ? {} : { paneEndpoint: endpoint }),
+    paneHost
   })
   const dispatch = createDispatcher(registry)
 
@@ -272,6 +291,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
       areas.updates.noteWindowFocus()
     },
     noteWindowBlur: () => areas.updates.noteWindowBlur(),
+    panesKeptOnQuit: () => areas.terminals.manager.keptOnQuit(),
     stop
   }
 }

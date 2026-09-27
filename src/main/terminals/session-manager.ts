@@ -80,9 +80,12 @@ import {
   sanitizeRecordedOutput,
   startsAgainBelow,
   tailFromLineBoundary,
+  type HostedRecord,
   type RecordedScrollback
 } from './scrollbackRecord'
-import { EXITED_RETENTION_BYTES, PtySession, type PtySessionInit } from './pty-session'
+import { EXITED_RETENTION_BYTES, PtySession, type PaneProcess, type PtySessionInit } from './pty-session'
+import type { PaneHostPort } from '../paneHost/hosting'
+import type { HostSession } from '../paneHost/protocol'
 import { conflict, invalidParams, notFound } from './service-error'
 import { resolveLoginShell, type ProfileStores } from './shell-environment'
 import { SubagentTracker, type SubagentTrackerOptions } from './subagents'
@@ -130,7 +133,8 @@ export const CLOSED_PANES_KEPT = 10
  */
 export type ScrollbackRepository = {
   read(terminalId: string): RecordedScrollback | undefined
-  put(terminalId: string, text: string): void
+  /** `hosted` for a pane in the pane host, so the next launch can attach to it. */
+  put(terminalId: string, text: string, hosted?: HostedRecord): void
   remove(terminalId: string): void
   flush(): Promise<void>
 }
@@ -177,6 +181,8 @@ export type TerminalSessionManagerOptions = {
   promptPrefix?: (worktreeId: string) => string | undefined
   /** What each pane's tree listens on (`resources/ports.ts`); absent, panes carry no ports. */
   ports?: (terminalId: string) => ListeningPort[] | undefined
+  /** Where panes run when Keep Agents Running is on; absent or not accepting, in this process. */
+  paneHost?: PaneHostPort
 }
 
 export type PaneIdentityOptions = {
@@ -257,7 +263,7 @@ export class TerminalSessionManager {
         : new ScrollbackCheckpoints({
             // A pane closed since the checkpoint was armed answers nothing.
             read: (terminalId) => this.sessions.get(terminalId)?.recordedOutput(CHECKPOINT_SOURCE_BYTES),
-            put: (terminalId, text) => archive.put(terminalId, text),
+            put: (terminalId, text) => archive.put(terminalId, text, this.sessions.get(terminalId)?.hosted),
             ...(options.checkpointIntervalMs === undefined ? {} : { intervalMs: options.checkpointIntervalMs })
           })
   }
@@ -284,9 +290,18 @@ export class TerminalSessionManager {
 
   /** Each running pane's pty child, for `system.resources`; an exited pid may be somebody else's by now. */
   paneProcesses(): { terminalId: string; worktreeId: string; pid: number }[] {
+    // A pane starting in the pane host has no pid until the host answers.
     return [...this.sessions.values()]
-      .filter((session) => session.isRunning)
+      .filter((session) => session.isRunning && session.pid > 0)
       .map((session) => ({ terminalId: session.id, worktreeId: session.worktreeId, pid: session.pid }))
+  }
+
+  /** The panes a quit now would leave running in the pane host. */
+  keptOnQuit(): string[] {
+    if (this.options.paneHost?.keeps() !== true) return []
+    return [...this.sessions.values()]
+      .filter((session) => session.isRunning && session.hosted !== undefined)
+      .map((session) => session.id)
   }
 
   /** Starts a terminal in the largest pane's place (`paneRoom.ts`), on the last grid a window reported. */
@@ -733,10 +748,16 @@ export class TerminalSessionManager {
       if (cwd === undefined || cwd.length === 0) this.forget(record.id)
     }
 
+    const hosted = this.hostedByTerminal(records)
     let restored = 0
     let resumed = 0
     for (const record of records) {
       if (this.sessions.has(record.id)) continue
+      const live = hosted.get(record.id)
+      if (live !== undefined && this.reattach(record, live)) {
+        restored += 1
+        continue
+      }
       const launch: RestoreLaunch =
         record.run !== undefined
           ? { command: endedRunCommand(record), resumed: false }
@@ -788,6 +809,68 @@ export class TerminalSessionManager {
     return { restored, resumed }
   }
 
+  /** The host's session for each record being restored; a session with no such record is ended. */
+  private hostedByTerminal(records: readonly TerminalRecord[]): Map<string, HostSession> {
+    const host = this.options.paneHost
+    const byTerminal = new Map<string, HostSession>()
+    if (host === undefined) return byTerminal
+    const wanted = new Set(records.map((record) => record.id))
+    for (const session of host.live()) {
+      const kept = byTerminal.get(session.terminal)
+      if (!wanted.has(session.terminal)) {
+        host.kill(session.id)
+        continue
+      }
+      if (kept === undefined) {
+        byTerminal.set(session.terminal, session)
+        continue
+      }
+      // Two for one pane: relaunched just before a crash. The running one is the pane.
+      const [pane, other] =
+        kept.exited !== undefined && session.exited === undefined ? [session, kept] : [kept, session]
+      host.kill(other.id)
+      byTerminal.set(session.terminal, pane)
+    }
+    return byTerminal
+  }
+
+  /**
+   * Picks up a pane the pane host kept running. The host replays all it kept, raw, so a full-screen
+   * agent redraws; the archive supplies only what came before this session, when it was written by it.
+   */
+  private reattach(record: TerminalRecord, live: HostSession): boolean {
+    const host = this.options.paneHost
+    if (host === undefined) return false
+    const kept = this.scrollback?.read(record.id)
+    const earlier: RecordedScrollback | undefined =
+      kept?.host?.session !== live.id
+        ? kept
+        : kept.host.before === undefined
+          ? undefined
+          : { text: kept.host.before, recordedAt: kept.recordedAt }
+    try {
+      this.startSession(
+        {
+          worktreeId: record.worktreeId,
+          cwd: record.cwd,
+          shell: record.shell,
+          cols: live.cols,
+          rows: live.rows,
+          ...(record.command === undefined ? {} : { command: record.command }),
+          ...(earlier === undefined ? {} : { restoredRecord: earlier }),
+          ...(record.run === undefined ? {} : { run: record.run })
+        },
+        record,
+        undefined,
+        host.attach(live)
+      )
+      return true
+    } catch {
+      host.kill(live.id)
+      return false
+    }
+  }
+
   /** Drops pane leaves whose terminal no longer exists; returns how many layouts changed. */
   reconcileLayouts(): number {
     const stored = this.layouts.listLayouts?.()
@@ -825,22 +908,29 @@ export class TerminalSessionManager {
   async shutdown(): Promise<void> {
     this.subagents.close()
     const sessions = [...this.sessions.values()]
+    // With Keep Agents Running, a pane in the host is let go of, not killed.
+    const keep = this.options.paneHost?.keeps() === true
+    const keptIds = new Set(this.keptOnQuit())
     this.sessions.clear()
+    const kept = new Set(sessions.filter((session) => keptIds.has(session.id)))
+    const ended = sessions.filter((session) => !kept.has(session))
     // Cleared first, so no exit the teardown causes is recorded as the run's result.
-    for (const session of sessions)
+    for (const session of ended)
       if (session.run !== undefined && session.isRunning) this.noteRunEnded(session.id, HUNG_UP)
     for (const terminalId of [...this.streams.keys()]) this.endStreamsFor(terminalId)
     this.ownSubscriptions.clear()
-    await Promise.all(sessions.map((session) => session.close(QUIT_KILL_GRACE_MS)))
+    for (const session of kept) session.detach()
+    await Promise.all(ended.map((session) => session.close(QUIT_KILL_GRACE_MS)))
 
     // After the closes: tearing a pty down drains undelivered output (see
     // `pty-tail.ts`), which arms a checkpoint that would fire after the flush.
     this.checkpoints?.cancelAll()
 
     if (this.scrollback !== undefined) {
-      for (const session of sessions) this.scrollback.put(session.id, session.recordedOutput())
+      for (const session of sessions) this.scrollback.put(session.id, session.recordedOutput(), session.hosted)
       await this.scrollback.flush()
     }
+    await this.options.paneHost?.release(keep)
   }
 
   /** One past the highest number an open pane of this program holds here: a gone pane counts for nothing. */
@@ -898,7 +988,9 @@ export class TerminalSessionManager {
       run?: RunKind
     },
     restoring?: TerminalRecord,
-    restored?: RestoredAs
+    restored?: RestoredAs,
+    /** A child already running, which this pane attaches to instead of starting one. */
+    attached?: PaneProcess
   ): PtySession {
     const cwd = params.cwd ?? this.options.resolveWorktreeCwd?.(params.worktreeId)
     if (cwd === undefined || cwd.length === 0) {
@@ -936,7 +1028,8 @@ export class TerminalSessionManager {
     const ordinal =
       this.sessions.get(id)?.ordinal ?? this.keptOrdinal(params.worktreeId, agent ?? shell, params.ordinal)
 
-    const session = PtySession.start({
+    const host = this.options.paneHost
+    const init: PtySessionInit = {
       id,
       worktreeId: params.worktreeId,
       cwd,
@@ -975,8 +1068,21 @@ export class TerminalSessionManager {
       ...(this.options.onActivityChange === undefined
         ? {}
         : { onScreenChange: (session: PtySession) => this.options.onActivityChange?.(session.id) }),
-      ...(this.options.scrollbackCapBytes === undefined ? {} : { scrollbackCapBytes: this.options.scrollbackCapBytes })
-    })
+      ...(this.options.scrollbackCapBytes === undefined ? {} : { scrollbackCapBytes: this.options.scrollbackCapBytes }),
+      ...(attached === undefined && host?.accepting() === true
+        ? {
+            spawn: (file, args, options) =>
+              host.spawn(id, file, typeof args === 'string' ? [args] : args, {
+                name: options.name ?? 'xterm-256color',
+                cwd: options.cwd ?? cwd,
+                cols: options.cols ?? DEFAULT_COLS,
+                rows: options.rows ?? DEFAULT_ROWS,
+                env: definedOnly(options.env ?? {})
+              })
+          }
+        : {})
+    }
+    const session = attached === undefined ? PtySession.start(init) : PtySession.attach(init, attached)
 
     this.sessions.set(session.id, session)
     const agentSessionId = restoring?.agentSessionId ?? launch.agentSessionId
@@ -1379,6 +1485,10 @@ function cloneLayout(layout: Layout): Layout {
     root: layout.root === null ? null : structuredClone(layout.root),
     focusedTerminalId: layout.focusedTerminalId
   }
+}
+
+function definedOnly(env: Record<string, string | undefined>): Record<string, string> {
+  return Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => entry[1] !== undefined))
 }
 
 function isDirectory(path: string): boolean {

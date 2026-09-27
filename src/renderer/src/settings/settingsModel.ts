@@ -191,6 +191,11 @@ export const SETTINGS_CATALOG: readonly SettingEntry[] = [
   { section: 'panes', label: 'Option as Meta', about: 'alt key keyboard' },
   { section: 'panes', label: 'Copy on Select', about: 'clipboard selection' },
   { section: 'panes', label: 'Scrollback lines', about: 'history buffer' },
+  {
+    section: 'panes',
+    label: 'Keep Agents Running When teamree Quits',
+    about: 'experimental host background restart crash survive detach'
+  },
   { section: 'notices', label: 'When an agent stops or asks', about: 'notification sound alert notify' },
   { section: 'teamwork', label: 'Share Task Details', about: 'privacy presence teammates' },
   { section: 'appearance', label: 'Theme', about: 'colors colours dark light mode' },
