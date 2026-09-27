@@ -24,7 +24,12 @@ type AgentSpec = {
   selectors: readonly Selector[]
   /** Argv that hands the agent its first prompt. Goes on last: a positional prompt swallows what follows. */
   prompt?: (text: string) => readonly string[]
+  /** What the agent prints as it exits to say which session resumes it; the first group is the id. */
+  exitHint?: RegExp
 }
+
+/** Colour and cursor moves an agent may wrap round the words of its exit line. */
+const DECOR = String.raw`(?:\x1b\[[0-9;?]*[A-Za-z])*`
 
 const AGENTS: Readonly<Record<AgentKind, AgentSpec>> = {
   claude: {
@@ -40,14 +45,18 @@ const AGENTS: Readonly<Record<AgentKind, AgentSpec>> = {
       { flag: '--continue', takesValue: false },
       { flag: '-c', takesValue: false }
     ],
-    prompt: (text) => [text]
+    prompt: (text) => [text],
+    exitHint: new RegExp(
+      String.raw`${DECOR}Resume this session with:${DECOR}[ \t]*\r*\n${DECOR}claude --resume ([\w-]+)${DECOR}(?:\r*\n)?`
+    )
   },
   codex: {
     executables: ['codex'],
     resume: (sessionId) => ['resume', sessionId],
     resumeLatest: ['resume', '--last'],
     selectors: [{ flag: 'resume', takesValue: true }],
-    prompt: (text) => [text]
+    prompt: (text) => [text],
+    exitHint: new RegExp(String.raw`${DECOR}To continue this session, run codex resume ([\w-]+)${DECOR}(?:\r*\n)?`)
   },
   gemini: {
     executables: ['gemini'],
@@ -298,6 +307,15 @@ export function detectAgent(command: string): AgentKind | null {
     if (executableIndex(tokenized.tokens, AGENTS[kind].executables) !== -1) return kind
   }
   return null
+}
+
+/** `chunk` without the agent's exit line, and the session id that line named. */
+export function takeExitHint(chunk: string, agent: AgentKind): { text: string; sessionId?: string } {
+  const hint = AGENTS[agent].exitHint
+  const found = hint === undefined ? null : hint.exec(chunk)
+  const sessionId = found?.[1]
+  if (found === null || sessionId === undefined || !isUsableSessionId(sessionId)) return { text: chunk }
+  return { text: chunk.slice(0, found.index) + chunk.slice(found.index + found[0].length), sessionId }
 }
 
 /** The command to run the first time, carrying the id we will resume with; unchanged if a session is already named. */

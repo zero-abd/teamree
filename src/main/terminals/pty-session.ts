@@ -33,7 +33,7 @@ import {
 import { terminalFailed, TerminalServiceError } from './service-error'
 import { integrateShell } from './shell-integration'
 import { ErrorCode } from '../../shared/protocol'
-import { agentForProcess, type AgentKind } from './agent-command'
+import { agentForProcess, takeExitHint, type AgentKind } from './agent-command'
 import { TitleSequenceScanner } from './title-sequence'
 import { titleOpinion, type TitleOpinion } from '../../shared/titleOpinion'
 import {
@@ -92,6 +92,9 @@ export const RESUME_WINDOW_MS = 30_000
 /** The longest cursor line a Clear keeps; past it the tail is a full-screen redraw, not a line. */
 const CLEARED_LINE_MAX_BYTES = 4096
 
+/** Where an agent's exit line is looked for when it arrived split across chunks and stayed in the pane. */
+const EXIT_HINT_TAIL_BYTES = 4096
+
 /** Home, erase the screen, erase the scrollback: a clear any emulator replays, watchers' included. */
 const CLEAR_SCREEN = '\x1b[H\x1b[2J\x1b[3J'
 
@@ -124,6 +127,8 @@ export type PtySessionInit = {
   restoredRecord?: RecordedScrollback
   /** What the mark under that record says is starting below it; absent means "a new shell". */
   recordStartsBelow?: string
+  /** The record is shown without its marks: an agent's pane run again says nothing about itself. */
+  recordBare?: boolean
   /**
    * A line to put in the pane before anything this session prints. Written into
    * the output, not emitted: nobody is subscribed at the moment a pane starts.
@@ -233,6 +238,8 @@ export class PtySession {
   private typedInto = false
   /** True from the moment close() is called: this pane is being ended on purpose. */
   private closing = false
+  /** The session the agent named in its exit line, which is kept out of the pane. */
+  private hintedSessionId: string | undefined
 
   private constructor(
     private readonly init: PtySessionInit,
@@ -467,7 +474,9 @@ export class PtySession {
   read(tailBytes?: number): string {
     const live = this.scrollback.tail(tailBytes)
     if (this.record === undefined || this.recordHeld) return live
-    const framed = replayableRecord(this.record, this.resumeFailed ? FAILED_RESUME_BELOW : this.init.recordStartsBelow)
+    const framed = this.init.recordBare
+      ? endedLine(this.record.text)
+      : replayableRecord(this.record, this.resumeFailed ? FAILED_RESUME_BELOW : this.init.recordStartsBelow)
     if (tailBytes === undefined) return `${framed}${live}`
 
     // The live output is the newer half; the record only supplies what is left over.
@@ -483,9 +492,7 @@ export class PtySession {
   recordedOutput(capBytes?: number): string {
     const live = this.scrollback.tail(capBytes)
     if (this.record === undefined || this.scrollback.byteLength >= (capBytes ?? Infinity)) return live
-    // A record that ended mid-line must not have this session's first line run on from it.
-    const joined = this.record.text.endsWith('\n') ? this.record.text : `${this.record.text}\r\n`
-    const combined = `${joined}${live}`
+    const combined = `${endedLine(this.record.text)}${live}`
     return capBytes === undefined ? combined : tailFromLineBoundary(combined, capBytes)
   }
 
@@ -583,7 +590,20 @@ export class PtySession {
     })
   }
 
-  private receive(chunk: string): void {
+  /** The session the agent said, as it exited, resumes it; undefined when it said none. */
+  get exitHintSessionId(): string | undefined {
+    if (this.agent === undefined) return undefined
+    return this.hintedSessionId ?? takeExitHint(this.scrollback.tail(EXIT_HINT_TAIL_BYTES), this.agent).sessionId
+  }
+
+  private receive(output: string): void {
+    const hint = this.agent === undefined ? { text: output } : takeExitHint(output, this.agent)
+    if (hint.sessionId !== undefined) this.hintedSessionId = hint.sessionId
+    const chunk = hint.text
+    if (chunk.length === 0) {
+      if (this.draining) this.restartQuietWindow()
+      return
+    }
     if (this.clock() - this.resizedAt >= REDRAW_AFTER_RESIZE_MS) this.noteActivity()
     this.emit({ type: 'data', data: chunk, end: this.append(chunk) })
     this.cancelScreenRead ??= this.scheduler(() => {
@@ -837,6 +857,11 @@ function startChild(init: PtySessionInit, command: string | undefined, platform:
   } catch (error) {
     throw terminalFailed(`failed to start ${file}: ${startFailureReason(error)}`, { cwd: init.cwd })
   }
+}
+
+/** The record with its last line ended: the next session's first line must not run on from it. */
+function endedLine(text: string): string {
+  return text.endsWith('\n') ? text : `${text}\r\n`
 }
 
 function initialTitle(init: PtySessionInit, platform: NodeJS.Platform): string {

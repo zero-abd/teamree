@@ -49,14 +49,9 @@ export const NOT_RUN_AGAIN_BELOW = 'not run again'
 /** What follows it when a resume did not take; `pty-session.ts` withholds the record until then. */
 export const FAILED_RESUME_BELOW = 'resume attempt below'
 
-/** What follows it when an exited pane runs its program again: "again", not "resumed" — a fresh conversation. */
+/** What follows it when a Run pane runs its command again. */
 export function startsAgainBelow(program: string): string {
   return `${program} starts again below`
-}
-
-/** What follows it when an exited pane resumes a chosen conversation. */
-export function resumesBelow(program: string): string {
-  return `${program} resumes below`
 }
 
 /**

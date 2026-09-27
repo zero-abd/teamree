@@ -22,7 +22,7 @@ import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 vi.mock('../terminal/TerminalView', () => ({
   TerminalView: ({ terminalId, focused }: { terminalId: string; focused: boolean }) => (
-    <div data-testid={`surface-${terminalId}`} data-focused={String(focused)} />
+    <div className="xterm" tabIndex={0} data-testid={`surface-${terminalId}`} data-focused={String(focused)} />
   )
 }))
 
@@ -195,7 +195,7 @@ describe('one pane', () => {
   })
 
   it('says a lone pane exited, and offers to run it again, without naming it', () => {
-    mount(leaf('t1'), [terminal('t1', { title: 'claude', agent: 'claude', running: false, exitCode: 1 })])
+    mount(leaf('t1'), [terminal('t1', { title: 'npm test', running: false, exitCode: 1, run: 'test' })])
     expect(document.querySelector('.pane__bar')).toBeNull()
     expect(screen.getByText('exited 1')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Run Again' })).toBeTruthy()
@@ -220,7 +220,7 @@ describe('one pane', () => {
     screen.getByRole('button', { name: 'Resume Conversation…' }).click()
     expect(onResumeConversation).toHaveBeenCalledExactlyOnceWith('t1')
     screen.getByRole('button', { name: 'Start Fresh' }).click()
-    expect(onRelaunch).toHaveBeenCalledExactlyOnceWith('t1')
+    expect(onRelaunch).toHaveBeenCalledExactlyOnceWith('t1', { fresh: true })
   })
 
   it('distinguishes a resumed conversation from a pane that only came back', () => {
@@ -236,11 +236,56 @@ describe('one pane', () => {
   })
 
   // The pane that died is the one somebody is standing in front of wondering
-  // what to do, and there is only ever one answer: run it again.
-  it('offers to run the agent again once the pane has exited', () => {
-    mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 1, agent: 'claude' })])
-    screen.getByRole('button', { name: 'Run Again' }).click()
+  // what to do, and the answer is nearly always: its conversation back.
+  it('ends an agent with a card: its name, its conversation back, a new one, or the pane gone', () => {
+    mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 0, agent: 'claude', restored: 'agent' })])
+    const card = screen.getByRole('group', { name: 'Claude Code ended' })
+    expect(within(card).queryByText(/exit/)).toBeNull()
+    // The card is the whole notice: no chip, no badge, no Run Again above it.
+    expect(document.querySelector('.pane__notice')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Run Again' })).toBeNull()
+    expect(
+      within(card)
+        .getAllByRole('button')
+        .map((button) => button.textContent)
+    ).toEqual(['Resume↩', 'New Session', 'Close'])
+
+    within(card)
+      .getByRole('button', { name: /Resume/ })
+      .click()
+    expect(onRelaunch).toHaveBeenLastCalledWith('t1')
+    within(card).getByRole('button', { name: 'New Session' }).click()
+    expect(onRelaunch).toHaveBeenLastCalledWith('t1', { fresh: true })
+    within(card).getByRole('button', { name: 'Close' }).click()
+    expect(onClose).toHaveBeenCalledExactlyOnceWith('t1')
+  })
+
+  it('says the code an agent ended with, when it was not 0', () => {
+    mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 1, agent: 'codex' })])
+    const card = screen.getByRole('group', { name: 'Codex ended' })
+    expect(within(card).getByText('exit 1')).toBeTruthy()
+  })
+
+  it('resumes on Enter in the ended terminal, and Tab goes to Resume', () => {
+    mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 0, agent: 'claude' })], 't1')
+    const surface = screen.getByTestId('surface-t1')
+    fireEvent.keyDown(surface, { key: 'Tab' })
+    expect(document.activeElement?.textContent).toBe('Resume↩')
+    expect(onRelaunch).not.toHaveBeenCalled()
+    fireEvent.keyDown(surface, { key: 'Enter', metaKey: true })
+    expect(onRelaunch).not.toHaveBeenCalled()
+    fireEvent.keyDown(surface, { key: 'Enter' })
     expect(onRelaunch).toHaveBeenCalledExactlyOnceWith('t1')
+    // Enter on a card button is that button's.
+    fireEvent.keyDown(screen.getByRole('button', { name: 'New Session' }), { key: 'Enter' })
+    expect(onRelaunch).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves Enter alone in a live agent pane', () => {
+    mount(leaf('t1'), [terminal('t1', { agent: 'claude' })], 't1')
+    fireEvent.keyDown(screen.getByTestId('surface-t1'), { key: 'Enter' })
+    expect(onRelaunch).not.toHaveBeenCalled()
+    expect(screen.queryByRole('group', { name: /ended/ })).toBeNull()
   })
 
   it('offers to run a Run pane’s command again, not a shell', () => {
@@ -259,10 +304,10 @@ describe('one pane', () => {
       terminal('t1', { running: false, agent: 'claude' }),
       terminal('t2', { agent: 'claude' })
     ])
-    expect(screen.getAllByRole('button', { name: 'Run Again' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /Resume/ })).toHaveLength(1)
     // Two claude panes nobody named: `Claude Code` and `Claude Code 2`, as the strip calls them.
     const alive = screen.getByRole('region', { name: 'Claude Code 2' })
-    expect(within(alive).queryByRole('button', { name: /Again|New Shell/ })).toBeNull()
+    expect(within(alive).queryByRole('button', { name: /Again|New Shell|Resume/ })).toBeNull()
   })
 
   it('offers each dead pane its own, out of two', () => {
@@ -271,7 +316,7 @@ describe('one pane', () => {
       terminal('t2', { running: false, agent: 'codex' })
     ])
     within(screen.getByRole('region', { name: 'Codex' }))
-      .getByRole('button', { name: 'Run Again' })
+      .getByRole('button', { name: /Resume/ })
       .click()
     expect(onRelaunch).toHaveBeenCalledExactlyOnceWith('t2')
   })

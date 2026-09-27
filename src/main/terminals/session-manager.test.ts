@@ -622,7 +622,7 @@ describePty('running an exited pane again', () => {
   )
 
   it(
-    'starts the same agent over, in the same pane, under a session id of its own',
+    'starts an agent that left no conversation over, in the same pane, under a session id of its own',
     async () => {
       const { service, records } = serviceWithRecords()
       const command = await writeFakeAgent(await scratchDir())
@@ -653,12 +653,10 @@ describePty('running an exited pane again', () => {
         return data.includes(second as string)
       }, 'the second run to say which session it was given')
 
-      // What the dead pane printed is still there, above the line.
+      // What the dead pane printed is still there, above the new run, with no mark between.
       const after = (await service.handlers['terminal.read']({ terminalId: terminal.id })).data
-      const banner = after.indexOf('claude starts again below')
-      expect(banner).toBeGreaterThan(-1)
-      expect(after.indexOf(first as string)).toBeLessThan(banner)
-      expect(after.indexOf(second as string)).toBeGreaterThan(banner)
+      expect(after.indexOf(first as string)).toBeLessThan(after.indexOf(second as string))
+      expect(after).not.toContain('end of record')
     },
     TEST_TIMEOUT_MS
   )
@@ -726,7 +724,7 @@ describePty('running an exited pane again', () => {
   )
 
   it(
-    'keeps a subscription open across the relaunch, and says in it where the new run starts',
+    'keeps a subscription open across the relaunch, with no mark in it',
     async () => {
       const { service } = serviceWithRecords()
       const command = await writeFakeAgent(await scratchDir())
@@ -739,11 +737,10 @@ describePty('running an exited pane again', () => {
 
       // A subscription is to the pane, not to the process.
       await waitUntil(
-        () =>
-          published.some(({ event }) => event.type === 'data' && event.data.includes('claude starts again below')) &&
-          published.some(({ event }) => event.type === 'data' && event.data.includes('agent args:')),
-        'the banner and the second run to reach the subscriber'
+        () => published.some(({ event }) => event.type === 'data' && event.data.includes('agent args:')),
+        'the second run to reach the subscriber'
       )
+      expect(published.some(({ event }) => event.type === 'data' && event.data.includes('end of record'))).toBe(false)
     },
     TEST_TIMEOUT_MS
   )

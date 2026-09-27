@@ -14,6 +14,7 @@ import {
   quoteArgument,
   restartSessionCommand,
   resumeSessionCommand,
+  takeExitHint,
   tokenizeCommand
 } from './agent-command'
 
@@ -347,5 +348,33 @@ describe('firstPromptCommand', () => {
     expect(firstPromptCommand('copilot', 'copilot', 'go')).toBe('copilot --interactive go')
     expect(firstPromptCommand('qwen', 'qwen', 'go')).toBe('qwen --prompt-interactive go')
     expect(firstPromptCommand('cursor-agent', 'cursor', 'go')).toBe('cursor-agent go')
+  })
+})
+
+describe('takeExitHint', () => {
+  const id = '82d677cb-729f-4c62-b5cf-13c8236a5451'
+
+  it('takes the resume line claude prints as it exits, colour and all, and keeps the rest', () => {
+    const chunk = `bye\r\n\r\n\x1b[2mResume this session with:\x1b[22m\r\n\x1b[2mclaude --resume ${id}\x1b[22m\r\n`
+    expect(takeExitHint(chunk, 'claude')).toEqual({ text: 'bye\r\n\r\n', sessionId: id })
+    expect(takeExitHint(`Resume this session with:\nclaude --resume ${id}`, 'claude').sessionId).toBe(id)
+    // A tty that adds its own CR to a line already ending in one.
+    expect(takeExitHint(`Resume this session with:\r\r\nclaude --resume ${id}\r\r\n`, 'claude')).toEqual({
+      text: '',
+      sessionId: id
+    })
+  })
+
+  it("takes codex's", () => {
+    expect(takeExitHint(`To continue this session, run codex resume ${id}\r\n`, 'codex')).toEqual({
+      text: '',
+      sessionId: id
+    })
+  })
+
+  it('leaves everything else alone: half a line, a quote of it, another agent', () => {
+    expect(takeExitHint('Resume this session with:\r\n', 'claude')).toEqual({ text: 'Resume this session with:\r\n' })
+    expect(takeExitHint(`claude --resume ${id}`, 'claude')).toEqual({ text: `claude --resume ${id}` })
+    expect(takeExitHint(`Resume this session with:\nclaude --resume ${id}`, 'gemini').sessionId).toBeUndefined()
   })
 })
