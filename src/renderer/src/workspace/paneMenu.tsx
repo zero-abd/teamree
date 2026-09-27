@@ -196,8 +196,9 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
   }
 
   const exited = terminal !== undefined && !terminal.running
-  // An agent that ended is resumed, or started over bare; its task goes again only when asked for.
-  const fresh = terminal?.restored === 'stopped' ? 'Start Fresh' : 'Run Again'
+  // An agent that ended resumes, or starts over bare; its task goes again only when asked for.
+  const stopped = terminal?.restored === 'stopped'
+  const fresh = stopped ? 'Start Fresh' : 'New Session'
   const again: RowMenuItem[] = !exited
     ? []
     : terminal.agent === undefined || terminal.run !== undefined
@@ -210,13 +211,23 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
           }
         ]
       : [
+          ...(stopped
+            ? []
+            : [
+                {
+                  label: 'Resume',
+                  icon: <Icon name="restart" size={14} />,
+                  separated: true,
+                  onChoose: () => void store.relaunchTerminal(terminalId)
+                }
+              ]),
           {
             label: RESUME_CONVERSATION,
             icon: <Icon name="history" size={14} />,
-            separated: true,
+            separated: stopped,
             onChoose: () => store.openDialog({ kind: 'resume-conversation', worktreeId: worktree.id, terminalId })
           },
-          { label: fresh, onChoose: () => void store.relaunchTerminal(terminalId) },
+          { label: fresh, onChoose: () => void store.relaunchTerminal(terminalId, { fresh: true }) },
           ...(worktree.task === undefined
             ? []
             : [

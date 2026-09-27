@@ -707,7 +707,10 @@ type WorkspaceState = {
   forceCloseTerminal: (terminalId: string) => Promise<void>
   /** Runs an exited pane's program again, in the same pane. */
   /** `task` hands the fresh agent its worktree's task again; `resume` resumes that conversation instead. */
-  relaunchTerminal: (terminalId: string, options?: { task?: boolean; resume?: string }) => Promise<void>
+  relaunchTerminal: (
+    terminalId: string,
+    options?: { task?: boolean; resume?: string; fresh?: boolean }
+  ) => Promise<void>
   createTerminal: (worktreeId: string) => Promise<void>
   /**
    * Opens `path` as a tab of the file column, or focuses the tab already on it; `diff` shows its diff,
@@ -2802,7 +2805,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       await get().loadClosedPanes(worktreeId)
     },
 
-    /** Runs an exited pane again, in place. Nothing is asked first: the pane is dead, and its output stays above the new run. */
+    /** Runs an exited pane again, in place; an agent resumes unless `fresh`. Its output stays above the new run. */
     async relaunchTerminal(terminalId, options = {}) {
       try {
         const terminal = await runtimeClient.call('terminal.relaunch', { terminalId, ...options })

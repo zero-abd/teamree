@@ -809,6 +809,8 @@ export const Params = {
     terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
     /** Hands the fresh agent the worktree's task again; never done unasked. */
     task: z.boolean().optional(),
+    /** Starts an ended agent over under a new id instead of resuming its conversation. */
+    fresh: z.boolean().optional(),
     /** Resumes this conversation of the pane's agent (`agent.conversations`) in the pane instead of a fresh one. */
     resume: agentSessionId.optional()
   }),

@@ -187,6 +187,11 @@ starts its agent on its own here, above all one handed its task again, is the bu
 of a finished parent fanning out its children twice. Start Fresh starts the agent
 bare; the pane menu's Start Fresh with Task is the only way the task goes again.
 
+Then quit a running agent from inside it (Claude Code: ^C twice). Expect a
+`Claude Code ended` card under its output with Resume, New Session and Close, and
+neither `Resume this session with…` nor a record line in the pane. Resume, or
+Enter in the pane, brings the same conversation back; New Session starts one bare.
+
 The genuine refusal needs the store to keep a conversation the CLI will not take
 back (another machine's, or a CLI whose store this app cannot read). Expect the
 pane to run its resume and be refused in a line by the agent itself, the badge to

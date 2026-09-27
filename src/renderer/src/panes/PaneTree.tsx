@@ -15,7 +15,9 @@ import {
 import { freshAgentLabel } from '@shared/paneRestore'
 import { minExtent, type Box } from '@shared/paneRoom'
 import { runState } from '@shared/runCommands'
-import type { PlatformModifier } from '../keyboard/platformModifier'
+import { formatChord, type PlatformModifier } from '../keyboard/platformModifier'
+import { AgentGlyph } from '../agents/glyphs'
+import { harnessName } from '../agents/harnesses'
 import { paneNamesById } from '../sidebar/agentRows'
 import { RowMenu, type RowMenuAnchor } from '../sidebar/RowMenu'
 import type { WorktreeNameSource } from '../sidebar/worktreeDisplay'
@@ -41,8 +43,8 @@ export type PaneCallbacks = {
   focusedTerminalId: string | null
   onFocus: (terminalId: string) => void
   onClose: (terminalId: string) => void
-  /** Runs an exited pane's program again, in the same pane. */
-  onRelaunch: (terminalId: string) => void
+  /** Runs an exited pane's program again, in the same pane; an agent resumes unless `fresh`. */
+  onRelaunch: (terminalId: string, options?: { fresh?: boolean }) => void
   /** Picks a conversation for an ended agent pane to resume in place; absent leaves the button out. */
   onResumeConversation?: (terminalId: string) => void
   onResize: (path: number[], sizes: number[]) => void
@@ -290,6 +292,7 @@ function PaneLeaf({
   names,
   focusedTerminalId,
   onFocus,
+  onClose,
   onRelaunch,
   onResumeConversation,
   isAppChord,
@@ -307,6 +310,8 @@ function PaneLeaf({
   const stopped = terminal?.restored === 'stopped'
   // A run ended by Stop or the quit's hang-up: its signal code is not a result.
   const runStopped = exited && terminal.run !== undefined && runState(terminal) === 'stopped'
+  // An agent that ended this launch: the end card says so and offers its conversation back.
+  const endedAgent = exited && !stopped && terminal.agent !== undefined && terminal.run === undefined
   // One name per pane, shared by strip, region, menu and close question.
   const name = names?.[terminalId] ?? terminal?.title ?? 'terminal'
 
@@ -331,7 +336,11 @@ function PaneLeaf({
         </button>
       ) : null}
       {exited ? (
-        <button type="button" className="pane__again" onClick={() => onRelaunch(terminalId)}>
+        <button
+          type="button"
+          className="pane__again"
+          onClick={() => (stopped ? onRelaunch(terminalId, { fresh: true }) : onRelaunch(terminalId))}
+        >
           {stopped
             ? 'Start Fresh'
             : terminal?.agent === undefined && terminal?.run === undefined
@@ -348,9 +357,13 @@ function PaneLeaf({
   )
 
   return (
-    <section className={`pane pane--terminal${focused ? ' pane--focused' : ''}`} aria-label={name}>
+    <section
+      className={`pane pane--terminal${focused ? ' pane--focused' : ''}`}
+      aria-label={name}
+      onKeyDownCapture={endedAgent ? (event) => endedKeys(event, () => onRelaunch(terminalId)) : undefined}
+    >
       {/* The tab is its name, dot and close; what is left to say is how it ended or came back. */}
-      {exited || terminal?.restored !== undefined ? (
+      {!endedAgent && (exited || terminal?.restored !== undefined) ? (
         <div className="pane__notice" onContextMenu={(event) => menu.onContextMenu(terminalId, name, event)}>
           {status}
         </div>
@@ -364,9 +377,82 @@ function PaneLeaf({
         searchToken={searchToken}
         onCloseSearch={onCloseSearch}
       />
+      {endedAgent ? (
+        <EndedAgent
+          agent={terminal.agent!}
+          exitCode={terminal.exitCode}
+          modifier={modifier}
+          onResume={() => onRelaunch(terminalId)}
+          onNewSession={() => onRelaunch(terminalId, { fresh: true })}
+          onClose={() => onClose(terminalId)}
+          onContextMenu={(event) => menu.onContextMenu(terminalId, name, event)}
+        />
+      ) : null}
       {menu.menu}
     </section>
   )
+}
+
+/**
+ * An agent that ended: what it was, and its conversation back, a new one, or the pane gone.
+ * Resume is first, so Tab from the dead terminal lands on it.
+ */
+function EndedAgent({
+  agent,
+  exitCode,
+  modifier,
+  onResume,
+  onNewSession,
+  onClose,
+  onContextMenu
+}: {
+  agent: NonNullable<Terminal['agent']>
+  exitCode: number | undefined
+  modifier: PlatformModifier
+  onResume: () => void
+  onNewSession: () => void
+  onClose: () => void
+  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void
+}): React.JSX.Element {
+  const title = `${harnessName(agent)} ended`
+  return (
+    <div className="pane-ended" role="group" aria-label={title} onContextMenu={onContextMenu}>
+      <AgentGlyph kind={agent} decorative />
+      <span className="pane-ended__title">{title}</span>
+      {exitCode === undefined || exitCode === 0 ? null : <span className="pane-ended__code">exit {exitCode}</span>}
+      <span className="pane-ended__actions">
+        <button type="button" className="button button--primary button--small" onClick={onResume}>
+          Resume
+          <kbd className="button__kbd" aria-hidden="true">
+            {formatChord({ key: 'Enter', bare: true }, modifier)}
+          </kbd>
+        </button>
+        <button type="button" className="button button--ghost button--small" onClick={onNewSession}>
+          New Session
+        </button>
+        <button type="button" className="button button--ghost button--small" onClick={onClose}>
+          Close
+        </button>
+      </span>
+    </div>
+  )
+}
+
+/** In an ended agent's dead terminal, Enter resumes and Tab goes to the card; the find bar and buttons keep theirs. */
+function endedKeys(event: React.KeyboardEvent<HTMLElement>, resume: () => void): void {
+  if ((event.target as HTMLElement).closest('.xterm') === null) return
+  if (event.metaKey || event.ctrlKey || event.altKey) return
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    event.stopPropagation()
+    resume()
+  } else if (event.key === 'Tab' && !event.shiftKey) {
+    const first = event.currentTarget.querySelector<HTMLButtonElement>('.pane-ended button')
+    if (first === null) return
+    event.preventDefault()
+    event.stopPropagation()
+    first.focus()
+  }
 }
 
 /** The badge, in the scrollback banner's words; `restarted` is an agent started fresh, not a shell. */

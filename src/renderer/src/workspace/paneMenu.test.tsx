@@ -253,8 +253,10 @@ describe('the rows that depend on the pane', () => {
     expect(labels(menu)).toContain('Start Fresh with Task')
     expect(labels(menu)).not.toContain('Run Again')
 
+    expect(labels(menu)).not.toContain('Resume')
+
     choose(menu, 'Start Fresh')
-    expect(actions.relaunchTerminal).toHaveBeenCalledExactlyOnceWith('t2')
+    expect(actions.relaunchTerminal).toHaveBeenCalledExactlyOnceWith('t2', { fresh: true })
     choose(rightClickTab('rewrite'), 'Start Fresh with Task')
     expect(actions.relaunchTerminal).toHaveBeenLastCalledWith('t2', { task: true })
     choose(rightClickTab('rewrite'), 'Resume Conversation…')
@@ -263,6 +265,26 @@ describe('the rows that depend on the pane', () => {
       worktreeId: 'w1',
       terminalId: 't2'
     })
+  })
+
+  it('offers an agent that ended its conversation first, then a new one', () => {
+    seed(leaf('t2'), {
+      worktrees: [{ ...worktree, task: 'Make the pager stream' }],
+      terminals: { t2: terminal({ id: 't2', agent: 'claude', running: false, exitCode: 0 }) }
+    })
+    render(<TerminalTabs modifier={MAC} />)
+    const menu = rightClickTab('rewrite')
+    const offered = labels(menu)
+    expect(offered.slice(offered.indexOf('Resume'), offered.indexOf('Resume') + 4)).toEqual([
+      'Resume',
+      'Resume Conversation…',
+      'New Session',
+      'New Session with Task'
+    ])
+    choose(menu, 'Resume')
+    expect(actions.relaunchTerminal).toHaveBeenCalledExactlyOnceWith('t2')
+    choose(rightClickTab('rewrite'), 'New Session')
+    expect(actions.relaunchTerminal).toHaveBeenLastCalledWith('t2', { fresh: true })
   })
 
   it('leaves Close Others and the moves out when there are no others', () => {
@@ -384,9 +406,9 @@ describe('a pane header', () => {
   }
 
   // A live terminal pane has no strip of its own: its tab carries the menu, and its notice once it ends.
-  it('opens the same menu on an ended terminal pane’s notice, acting on that pane', () => {
+  it('opens the same menu on an ended agent pane’s card, acting on that pane', () => {
     mount(row(leaf('t1'), leaf('t2')), 't2')
-    const notice = screen.getByRole('region', { name: 'Claude Code' }).querySelector('.pane__notice')!
+    const notice = screen.getByRole('group', { name: 'Claude Code ended' })
     fireEvent.contextMenu(notice, { clientX: 300, clientY: 60 })
     const menu = screen.getByRole('menu', { name: 'Actions for Claude Code' })
     expect(labels(menu)).toContain('Copy Output')

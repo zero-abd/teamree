@@ -159,7 +159,10 @@ function WorkspaceView({
     [activeWorktreeId, applySplitSizes]
   )
   const onClose = useCallback((terminalId: string) => void closeTerminal(terminalId), [closeTerminal])
-  const onRelaunch = useCallback((terminalId: string) => void relaunchTerminal(terminalId), [relaunchTerminal])
+  const onRelaunch = useCallback(
+    (terminalId: string, options?: { fresh?: boolean }) => void relaunchTerminal(terminalId, options),
+    [relaunchTerminal]
+  )
   const onResumeConversation = useCallback(
     (terminalId: string) => {
       if (activeWorktreeId) openDialog({ kind: 'resume-conversation', worktreeId: activeWorktreeId, terminalId })

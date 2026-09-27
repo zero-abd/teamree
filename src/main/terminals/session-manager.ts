@@ -76,7 +76,6 @@ import {
   closingMark,
   NEW_SHELL_BELOW,
   NOT_RUN_AGAIN_BELOW,
-  resumesBelow,
   sanitizeRecordedOutput,
   startsAgainBelow,
   tailFromLineBoundary,
@@ -375,8 +374,8 @@ export class TerminalSessionManager {
 
   /**
    * Runs an exited pane's program again in the same pane: same terminal id and
-   * streams, the dead pane's output kept as this session's record. Not a resume —
-   * the agent starts over under a fresh id. Refused while `running`, which stays
+   * streams, the dead pane's output kept as this session's record. An agent resumes
+   * its conversation unless `fresh` or `task`. Refused while `running`, which stays
    * true while a reaped pane's last output is still arriving.
    */
   async relaunch(params: ParamsOf<'terminal.relaunch'>, command?: string): Promise<Terminal> {
@@ -436,16 +435,15 @@ export class TerminalSessionManager {
     // A Run button's pane runs its command again, `command` when the project's has changed since.
     // The record's, not the session's: a restored Run pane's session only ended.
     const rerun = previous.run === undefined ? undefined : (command ?? stored?.command ?? previous.command)
+    const resumed =
+      rerun === undefined && params.resume === undefined && params.task !== true && params.fresh !== true
+        ? this.resumeOf(previous, stored)
+        : undefined
     const launch: ReturnType<typeof relaunchCommand> =
-      rerun === undefined ? relaunchCommand(stored, params.resume) : { command: rerun }
-    const below =
-      rerun !== undefined
-        ? startsAgainBelow(rerun)
-        : launch.agent === undefined
-          ? NEW_SHELL_BELOW
-          : params.resume === undefined
-            ? startsAgainBelow(launch.agent)
-            : resumesBelow(launch.agent)
+      rerun !== undefined ? { command: rerun } : (resumed ?? relaunchCommand(stored, params.resume))
+    // An agent's pane carries no marks: the view clears into its scrollback, and the pane says the rest.
+    const bare = rerun === undefined && launch.agent !== undefined
+    const below = rerun !== undefined ? startsAgainBelow(rerun) : NEW_SHELL_BELOW
     // Only when asked: an agent that already ran would do its task twice.
     const prompt =
       params.task === true && params.resume === undefined && stored !== undefined && launch.agent !== undefined
@@ -467,7 +465,8 @@ export class TerminalSessionManager {
       ...(launch.agentSessionId === undefined ? {} : { agentSessionId: launch.agentSessionId }),
       // The name is the person's, not the replaced process's.
       ...(size.label === undefined ? {} : { label: size.label }),
-      typed: false,
+      // A conversation picked back up is one somebody had: the next launch resumes it too.
+      typed: resumed !== undefined || params.resume !== undefined,
       cols: size.cols,
       rows: size.rows,
       createdAt: stored?.createdAt ?? Date.now()
@@ -482,7 +481,7 @@ export class TerminalSessionManager {
         shell: previous.shell,
         cols: size.cols,
         rows: size.rows,
-        recordStartsBelow: below,
+        ...(bare ? { recordBare: true } : { recordStartsBelow: below }),
         ...(previous.run === undefined ? {} : { run: previous.run }),
         ...(launch.command === undefined ? {} : { command: launch.command }),
         ...(prompt === undefined ? {} : { prompt }),
@@ -495,10 +494,38 @@ export class TerminalSessionManager {
     this.rebindStreams(session)
     // Said as well as written: `read()` builds the line in for views mounting
     // later, but an open view read its snapshot once and will not read again.
+    // Bare, an invisible reset: the view's cue that the new run starts here.
+    const boundary = bare ? '\x1b[0m' : closingMark(below)
     for (const stream of this.streamsFor(session.id)) {
-      stream.channel.emit({ type: 'data', data: closingMark(below) })
+      stream.channel.emit({ type: 'data', data: boundary })
     }
     return session.snapshot()
+  }
+
+  /**
+   * How an ended agent picks its conversation back up: the session it named as it left, else the
+   * pinned one if its store (or a keystroke, where the store cannot say) says there is one.
+   */
+  private resumeOf(
+    previous: PtySession,
+    record: TerminalRecord | undefined
+  ): { command: string; agent: AgentKind; agentSessionId?: string } | undefined {
+    if (record?.command === undefined || record.agent === undefined || previous.leftStopped) return undefined
+    const said = previous.exitHintSessionId
+    const id = said ?? record.agentSessionId
+    if (said === undefined) {
+      const evidence = this.evidence({
+        agent: record.agent,
+        cwd: record.cwd,
+        ...(id === undefined ? {} : { agentSessionId: id })
+      })
+      const spoken = record.typed !== false || record.prompted === true
+      if (evidence === 'absent' || (evidence === 'unknown' && !spoken)) return undefined
+    }
+    const byId = id === undefined ? null : resumeByIdCommand(record.command, record.agent, id)
+    const command = byId ?? resumeSessionCommand(record.command, record.agent, null)
+    if (command === null) return undefined
+    return { command, agent: record.agent, ...(byId === null || id === undefined ? {} : { agentSessionId: id }) }
   }
 
   /**
@@ -1035,6 +1062,7 @@ export class TerminalSessionManager {
       /** What this pane runs instead if the resume is refused. */
       fallback?: { command: string; agentSessionId?: string }
       recordStartsBelow?: string
+      recordBare?: boolean
       /** Printed before the command, saying why this is not a resume. */
       startupNote?: string
       /** The number a reopened pane had; kept unless a live pane has it now. */
@@ -1096,6 +1124,7 @@ export class TerminalSessionManager {
       ...(restored === undefined ? {} : { restored }),
       ...(params.restoredRecord === undefined ? {} : { restoredRecord: params.restoredRecord }),
       ...(params.recordStartsBelow === undefined ? {} : { recordStartsBelow: params.recordStartsBelow }),
+      ...(params.recordBare === true ? { recordBare: true } : {}),
       ...(params.startupNote === undefined ? {} : { startupNote: params.startupNote }),
       ...(agent === undefined ? {} : { agent }),
       ...(fallback === undefined
