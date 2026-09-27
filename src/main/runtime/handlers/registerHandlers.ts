@@ -131,7 +131,10 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     ...(options.requestQuit === undefined ? {} : { requestQuit: options.requestQuit }),
     ...(options.unsavedFiles === undefined ? {} : { unsavedFiles: options.unsavedFiles }),
     busyAgents: () => {
-      const busy = busyAgents(terminals.manager.list(), (terminal) => terminal.title)
+      // A pane the pane host keeps is not ended by the quit.
+      const kept = new Set(terminals.manager.keptOnQuit())
+      const ending = terminals.manager.list().filter((terminal) => !kept.has(terminal.id))
+      const busy = busyAgents(ending, (terminal) => terminal.title)
       return busy.working + busy.asking === 0 ? null : busyLine(busy)
     }
   })
