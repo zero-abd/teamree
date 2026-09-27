@@ -13,11 +13,6 @@ export const TEAMMATE_AWAY_AFTER_MS = 15_000
 export type TeammateStaleness = {
   /** How old the picture is, rounded down, as every other row here does it. */
   age: string
-  /**
-   * The short form the row shows, naming which age this is: `heardAt` moves when a snapshot
-   * changes, not on contact, so this is the age of the picture and not of the absence.
-   */
-  badge: string
   /** The whole sentence, for the title and for a screen reader. */
   detail: string
 }
@@ -39,7 +34,6 @@ export function teammateStaleness(options: {
   const age = sinceLabel(awayFor)
   return {
     age,
-    badge: `away · picture ${age} old`,
     // Only that the machine is not reachable, never anything about the worktree: a worktree that
     // has gone is a row that is not here at all.
     detail: `${handle}’s machine is not connected · showing what it had ${age} ago`

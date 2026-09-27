@@ -352,7 +352,10 @@ describe('stylesheets', () => {
         '.task-row--asking .task-row__stage',
         '.child__stage--asking',
         // A task's question for you, under its row.
-        '.worktree__ask'
+        '.worktree__ask',
+        // A teammate's agent asking: the head's cue and their group's row.
+        '.project__cue--asking',
+        '.teammate__doing--asking'
       ])
       const elsewhere: string[] = []
       for (const name of sheets) {

@@ -31,15 +31,8 @@ describe('a row that is remembered rather than watched', () => {
     expect(stale?.detail).not.toMatch(/delet|remov|gone/i)
   })
 
-  it('says which fact its number is the age of, because it is the picture and not the absence', () => {
-    // `heardAt` moves when a teammate's snapshot changes, not on contact, so a
-    // colleague static for an hour arrives here at an hour the instant their
-    // link drops; `away · 1h` read as an hour of absence.
-    const stale = away(3_600_000)
-    expect(stale?.age).toBe('1h')
-    expect(stale?.badge).toBe('away · picture 1h old')
-    // The machine is away; a badge that dropped the word would leave that to a dashed border.
-    expect(stale?.badge).toContain('away')
+  it('rounds the age of the picture down', () => {
+    expect(away(3_600_000)?.age).toBe('1h')
   })
 
   it('never reads a clock ahead of this one as time already elapsed', () => {

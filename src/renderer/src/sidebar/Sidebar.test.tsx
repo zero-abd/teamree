@@ -36,6 +36,8 @@ const { worktreeOrder } = await import('./worktreeOrder')
 const { useTaskTreeStore } = await import('../state/taskTreeStore')
 const { NEST_DRAG_TYPE, endNestDrag } = await import('./nestDrag')
 const { useSharedNotes } = await import('../teamwork/sharedNotesStore')
+const { useHandoffs } = await import('../teamwork/handoffsStore')
+const { useTeamFold } = await import('./teamFold')
 
 const INITIAL = useWorkspaceStore.getState()
 const NOW = Date.now()
@@ -1585,5 +1587,120 @@ describe('drag a row onto another to nest it', () => {
       { worktreeId: 'fill', parentId: null }
     ])
     expect(useWorkspaceStore.getState().notices.at(-1)?.text).toBe('Moved Backfill to top level')
+  })
+})
+
+// A team ADE: who is here and what they need should be readable without opening anything.
+describe('the team at a glance', () => {
+  const link = (handle: string, phase: 'connected' | 'unreachable') => ({
+    publicKey: `${handle}-key`,
+    handle,
+    phase,
+    since: NOW - 60_000,
+    attempts: 1
+  })
+  const teamwork = (links: ReturnType<typeof link>[]): TeamworkStatus => ({
+    state: 'read',
+    projectId: 'p1',
+    relay: { url: 'ws://127.0.0.1:1/v1/relay', source: 'repository' },
+    disabledReason: null,
+    origin: { ok: true, url: 'https://example.com/ada/pager.git' },
+    enrolled: true,
+    links,
+    readAt: NOW
+  })
+  const asking = () => {
+    const base = theirWorktree('priya', 'priya:t7')
+    return { ...base, panes: base.panes.map((pane) => ({ ...pane, asking: true })) }
+  }
+
+  beforeEach(() => {
+    useHandoffs.setState({ byProject: {} })
+    useTeamFold.setState({ folded: {} })
+    vi.stubGlobal('requestAnimationFrame', (run: () => void) => {
+      run()
+      return 0
+    })
+  })
+
+  it('puts a face per teammate in the project head instead of a count, while everything is up', () => {
+    seed({
+      worktrees: [worktree()],
+      teamwork: { p1: teamwork([link('priya', 'connected')]) },
+      teammates: {
+        p1: presence({
+          worktrees: [theirWorktree('priya', 'priya:t7')],
+          teammates: [{ handle: 'priya', publicKey: 'priya-key', connected: true, heardAt: NOW }]
+        })
+      }
+    })
+    mount()
+    const meta = document.querySelector('.project__meta') as HTMLElement
+    expect(within(meta).getByRole('button', { name: 'priya, online · 1 working' })).toBeTruthy()
+    expect(within(meta).queryByRole('button', { name: /Teamwork ·/ })).toBeNull()
+  })
+
+  it('groups a teammate’s worktrees under one row with their face', () => {
+    seed({ worktrees: [worktree()], teammates: { p1: presence({ worktrees: [theirWorktree('priya', 'priya:t7')] }) } })
+    mount()
+    const group = document.querySelector('[data-teammate="priya"]') as HTMLElement
+    expect(
+      within(group)
+        .getByRole('treeitem', { name: /^priya,/ })
+        .getAttribute('aria-expanded')
+    ).toBe('true')
+    expect(within(group).getByText("priya's task")).toBeTruthy()
+  })
+
+  it('says the relay is down in one short line beside the faces', () => {
+    seed({
+      teamwork: { p1: teamwork([link('priya', 'unreachable')]) },
+      teammates: {
+        p1: presence({
+          worktrees: [{ ...theirWorktree('priya', 'priya:t7'), live: false, heardAt: NOW - 60_000 }],
+          teammates: [{ handle: 'priya', publicKey: 'priya-key', connected: false, heardAt: NOW - 60_000 }]
+        })
+      }
+    })
+    mount()
+    const meta = document.querySelector('.project__meta') as HTMLElement
+    expect(meta.querySelector('.avatar--away')).toBeTruthy()
+    expect(within(meta).getByRole('button', { name: 'Teamwork · relay unreachable in pager' }).textContent).toBe(
+      'relay down'
+    )
+  })
+
+  it('keeps a teammate asking on a folded project’s head, and pressing it unfolds and goes there', () => {
+    seed({ collapsedProjects: { p1: true }, teammates: { p1: presence({ worktrees: [asking()] }) } })
+    mount()
+    const cue = screen.getByRole('button', { name: 'priya asking' })
+    act(() => cue.click())
+    expect(toggleProject).toHaveBeenCalledWith('p1')
+  })
+
+  it('says a handoff is waiting, and lists it with Take and Dismiss', () => {
+    useHandoffs.setState({
+      byProject: {
+        p1: {
+          incoming: [
+            {
+              id: 'h1',
+              to: 'me',
+              from: 'priya',
+              worktreeName: 'refund-flow',
+              branch: 'refund-flow',
+              note: 'n',
+              at: NOW
+            }
+          ],
+          outgoing: []
+        }
+      }
+    })
+    mount()
+    expect(screen.getByRole('button', { name: 'handoff' })).toBeTruthy()
+    const row = screen.getByRole('treeitem', { name: /refund-flow/ })
+    expect(within(row).getByRole('button', { name: 'Take' })).toBeTruthy()
+    expect(within(row).getByRole('button', { name: 'Dismiss' })).toBeTruthy()
   })
 })

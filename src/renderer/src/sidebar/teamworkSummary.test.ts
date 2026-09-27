@@ -54,7 +54,7 @@ describe('what the project header says about teamwork', () => {
 
   it('distinguishes a relay it cannot reach from a teammate who is not connected', () => {
     const unreachable = teamworkSummary(status({ links: [link({ phase: 'unreachable' })] }), NOW)
-    expect(unreachable).toMatchObject({ tone: 'problem', label: 'relay unreachable' })
+    expect(unreachable).toMatchObject({ tone: 'problem', label: 'relay unreachable', short: 'relay down' })
     // Somebody else's laptop; "unreachable" would send the reader to check their own network.
     const away = teamworkSummary(status({ links: [link({ phase: 'waiting' })] }), NOW)
     expect(away).toMatchObject({ tone: 'pending', label: 'nobody connected' })
