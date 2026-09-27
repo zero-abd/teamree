@@ -39,8 +39,8 @@ export type TeamMember = {
   worktrees: MemberWorktree[]
 }
 
-/** One of your own worktrees as the caller reads it from the panes. */
-export type OwnWorktree = { id: string; name: string; tone: DotTone | null }
+/** One of your own worktrees as the caller reads it from the panes; `stage` from its report, as a teammate's is. */
+export type OwnWorktree = { id: string; name: string; tone: DotTone | null; stage?: TaskStage }
 
 const STAGE_WORD: Partial<Record<TaskStage, string>> = { landed: 'merged' }
 
@@ -65,9 +65,9 @@ export function teamMembers(input: {
     .map((person): TeamMember => {
       if (person.isSelf) {
         const worktrees = input.own
-          .map((worktree) => ({
+          .map(({ stage, ...worktree }) => ({
             ...worktree,
-            word: worktree.tone === null ? null : TONE_LABEL[worktree.tone],
+            word: stageWord(stage, worktree.tone),
             own: true
           }))
           .sort((a, b) => urgency(a) - urgency(b))
@@ -82,12 +82,7 @@ export function teamMembers(input: {
         .map((row) => ({
           id: row.id,
           name: row.name,
-          word:
-            row.stage === undefined
-              ? row.tone === null
-                ? null
-                : TONE_LABEL[row.tone]
-              : (STAGE_WORD[row.stage] ?? row.stage),
+          word: stageWord(row.stage, row.tone),
           tone: row.tone,
           ...(pickPane(row.panes) === undefined ? {} : { pane: pickPane(row.panes) }),
           own: false
@@ -101,6 +96,11 @@ export function teamMembers(input: {
       }
     })
     .sort((a, b) => PRESENCE_ORDER[a.presence] - PRESENCE_ORDER[b.presence] || a.handle.localeCompare(b.handle))
+}
+
+function stageWord(stage: TaskStage | undefined, tone: DotTone | null): string | null {
+  if (stage !== undefined) return STAGE_WORD[stage] ?? stage
+  return tone === null ? null : TONE_LABEL[tone]
 }
 
 /** Asking, then working, then the rest, merged last: what their agents are doing now comes first. */

@@ -209,10 +209,30 @@ describe('presenceFor with task details', () => {
       describeOne({ source: source(overrides, details, terminals), taskDetails: true })?.stage
     expect(stage([agent({ busy: true })])).toBe('working')
     expect(stage([agent({ screenSays: 'waiting' })])).toBe('asking')
-    expect(stage([agent({})])).toBe('stopped')
+    // A live agent at its prompt is not stopped; the owner's pane reading says what it is.
+    expect(stage([agent({})])).toBeUndefined()
+    expect(stage([agent({ titleSays: 'working' })])).toBe('working')
+    expect(stage([agent({ agentEvent: { event: 'UserPromptSubmit', at: 1 } })])).toBe('working')
     expect(stage([agent({})], { paths: ['a'], ahead: 1, clean: true })).toBe('ready')
     expect(stage([], undefined, { state: 'failed' })).toBe('failed')
     expect(stage([])).toBeUndefined()
+  })
+
+  it('sends each pane as its owner reads it', () => {
+    const agent = (id: string, overrides: Partial<Terminal>): Terminal => ({
+      ...terminal(id),
+      agent: 'claude',
+      ...overrides
+    })
+    const sent = describeOne({
+      source: source({}, undefined, [
+        agent('t1', { agentEvent: { event: 'UserPromptSubmit', at: 1 } }),
+        agent('t2', { agentEvent: { event: 'Stop', at: 1 } }),
+        agent('t3', { running: false, exitCode: 0, tookTurn: false })
+      ]),
+      taskDetails: false
+    })
+    expect(sent?.panes.map((pane) => pane.activity)).toEqual(['working', 'quiet', 'stopped'])
   })
 
   it('carries no file contents and no scrollback, only paths', () => {

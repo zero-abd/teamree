@@ -119,7 +119,7 @@ describe('activityOf', () => {
   // Declining the trust prompt exits 0 within a second; that is not a finished task.
   it('reads an agent that exits cleanly before its first turn as stopped', () => {
     expect(activityOf(terminal({ id: 't', agent: 'claude', running: false, exitCode: 0, tookTurn: false }))).toBe(
-      'quiet'
+      'stopped'
     )
     expect(activityOf(terminal({ id: 't', agent: 'claude', running: false, exitCode: 0, tookTurn: true }))).toBe('done')
     expect(activityOf(terminal({ id: 't', agent: 'claude', running: false, exitCode: 2, tookTurn: false }))).toBe(
@@ -151,9 +151,11 @@ describe('dotTone', () => {
     expect(dotTone('quiet', 'claude')).toBe('quiet')
   })
 
-  it('draws a stopped run hollow, as a stopped agent', () => {
-    expect(dotTone('stopped', undefined)).toBe('quiet')
+  it('draws a stopped run or agent apart from one alive at its prompt', () => {
+    expect(dotTone('stopped', undefined)).toBe('stopped')
+    expect(dotTone('stopped', 'claude')).toBe('stopped')
     expect(TONE_LABEL[dotTone('stopped', undefined)]).toBe('stopped')
+    expect(dotClass(dotTone('stopped', 'claude'))).not.toBe(dotClass(dotTone('quiet', 'claude')))
   })
 
   it('leaves every other state as it is', () => {
@@ -184,7 +186,9 @@ describe('worktreeTone', () => {
   })
 
   it('is stopped, not finished, when a Run pane was stopped', () => {
-    expect(worktreeTone([row({ activity: 'stopped' }), row({ activity: 'done' })])).toBe('quiet')
+    expect(worktreeTone([row({ activity: 'stopped' }), row({ activity: 'done' })])).toBe('stopped')
+    expect(worktreeTone([row({ activity: 'stopped' }), row({ activity: 'quiet', agent: 'claude' })])).toBe('quiet')
+    expect(worktreeTone([row({ activity: 'stopped' }), row({ activity: 'quiet' })])).toBe('stopped')
     expect(worktreeTone([row({ activity: 'stopped' }), row({ activity: 'working' })])).toBe('working')
   })
 
@@ -698,14 +702,23 @@ describe('TONE_LABEL', () => {
       failed: 'failed',
       waiting: 'asking',
       working: 'working',
-      quiet: 'stopped',
+      quiet: 'ready',
       idle: 'idle',
+      stopped: 'stopped',
       done: 'finished'
     })
   })
 
-  it('calls a quiet agent stopped and a quiet shell idle', () => {
-    expect(TONE_LABEL[dotTone('quiet', 'codex')]).toBe('stopped')
+  it('calls a live agent at its prompt ready, an ended one stopped and a quiet shell idle', () => {
+    expect(TONE_LABEL[dotTone('quiet', 'codex')]).toBe('ready')
+    expect(
+      TONE_LABEL[
+        dotTone(
+          activityOf(terminal({ id: 't', agent: 'codex', running: false, exitCode: 0, tookTurn: false })),
+          'codex'
+        )
+      ]
+    ).toBe('stopped')
     expect(TONE_LABEL[dotTone('quiet', undefined)]).toBe('idle')
   })
 })

@@ -415,13 +415,14 @@ describe('two peers over a relay', () => {
     expect(pane?.agent).toBe('codex')
     expect(pane?.running).toBe(true)
     expect(pane?.busy).toBe(false)
+    expect(pane?.activity).toBe('quiet')
     // Silence crosses as a duration, because two machines do not agree about
     // what time it is and an instant from a fast clock renders as the future.
     expect(pane?.quietForMs).toBeGreaterThanOrEqual(90_000)
     // Nothing that could carry a line of terminal output is on the wire; the
     // dimensions are metadata so a watcher can letterbox.
     expect(Object.keys(pane ?? {}).sort()).toEqual(
-      ['agent', 'busy', 'cols', 'id', 'quietForMs', 'rows', 'running', 'shell', 'title'].sort()
+      ['activity', 'agent', 'busy', 'cols', 'id', 'quietForMs', 'rows', 'running', 'shell', 'title'].sort()
     )
   })
 
@@ -1092,6 +1093,31 @@ describe('a snapshot from a teammate is somebody else’s bytes', () => {
     expect(panes?.map((one) => [one.id, one.run])).toEqual([
       ['t_dev', 'dev'],
       ['t_shell', undefined],
+      ['t_odd', undefined]
+    ])
+  })
+
+  it('keeps the owner’s reading of each pane, and drops one this build does not know', () => {
+    const projectKey = 'k'.repeat(64)
+    const pane = { title: 'zsh', shell: '/bin/zsh', running: true, busy: false, quietForMs: 0 }
+    const worktrees = [
+      {
+        id: 'wt_1',
+        name: 'one',
+        branch: 'main',
+        state: 'ready',
+        panes: [
+          { ...pane, id: 't_working', activity: 'working' },
+          { ...pane, id: 't_plain' },
+          { ...pane, id: 't_odd', activity: 'dreaming' }
+        ]
+      }
+    ]
+    const panes = parsePeerPresence({ revision: 1, handle: 'bob', projects: [{ projectKey, worktrees }] }, projectKey)
+      ?.projects[0]?.worktrees[0]?.panes
+    expect(panes?.map((one) => [one.id, one.activity])).toEqual([
+      ['t_working', 'working'],
+      ['t_plain', undefined],
       ['t_odd', undefined]
     ])
   })

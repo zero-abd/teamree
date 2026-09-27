@@ -94,7 +94,7 @@ describe('dashboardRows', () => {
   // Ordered by what would make somebody look. A failure is finished and wrong;
   // a pane that has asked for something cannot move without you; work in
   // progress is merely unfinished; a finished pane asks for nothing.
-  it('ranks failures above asking, asking above working, working above stopped, stopped above idle, idle above finished', () => {
+  it('ranks failures above asking, asking above working, working above ready, ready above idle, idle above finished', () => {
     const rows = build(
       [
         terminal({ id: 'done', running: false, exitCode: 0 }),
@@ -196,13 +196,13 @@ describe('toneCounts', () => {
       [worktree({ id: 'wt1' })]
     )
 
-    expect(toneCounts(rows)).toEqual({ failed: 1, waiting: 0, working: 1, quiet: 1, idle: 1, done: 0 })
+    expect(toneCounts(rows)).toEqual({ failed: 1, waiting: 0, working: 1, quiet: 1, idle: 1, stopped: 0, done: 0 })
   })
 
   // Every state present, so the row of counts keeps its shape as panes move
   // between them rather than reflowing under the reader.
   it('reports a zero for a state nothing is in, including with no panes at all', () => {
-    expect(toneCounts([])).toEqual({ failed: 0, waiting: 0, working: 0, quiet: 0, idle: 0, done: 0 })
+    expect(toneCounts([])).toEqual({ failed: 0, waiting: 0, working: 0, quiet: 0, idle: 0, stopped: 0, done: 0 })
   })
 })
 

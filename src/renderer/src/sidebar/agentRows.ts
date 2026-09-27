@@ -31,24 +31,32 @@ export type AgentRow = {
   subagents?: readonly Subagent[]
 }
 
-/** What a dot is coloured: `idle` is a quiet pane with no agent, drawn grey; a stopped agent or run is hollow. */
-export type DotTone = Exclude<AgentActivity, 'stopped'> | 'idle'
+/** What a dot is coloured: `quiet` is a live agent at its prompt, `idle` a quiet pane with no agent. */
+export type DotTone = AgentActivity | 'idle'
 
 /** The one word for each tone, wherever a dot is explained: rows, hovers, tabs and the board's legend. */
 export const TONE_LABEL: Record<DotTone, string> = {
   failed: 'failed',
   waiting: 'asking',
   working: 'working',
-  quiet: 'stopped',
+  quiet: 'ready',
   idle: 'idle',
+  stopped: 'stopped',
   done: 'finished'
 }
 
 /** The order attention is owed in; the board's legend and its sort. */
-export const TONES_BY_ATTENTION: readonly DotTone[] = ['failed', 'waiting', 'working', 'quiet', 'idle', 'done']
+export const TONES_BY_ATTENTION: readonly DotTone[] = [
+  'failed',
+  'waiting',
+  'working',
+  'quiet',
+  'idle',
+  'stopped',
+  'done'
+]
 
 export function dotTone(activity: AgentActivity, agent: AgentKind | undefined): DotTone {
-  if (activity === 'stopped') return 'quiet'
   return activity === 'quiet' && agent === undefined ? 'idle' : activity
 }
 
@@ -284,12 +292,12 @@ export function worktreeActivity(rows: readonly AgentRow[]): AgentActivity | nul
   return 'done'
 }
 
-/** The collapsed row's dot: idle unless one of its quiet panes runs an agent or a run was stopped. */
+/** The collapsed row's dot: of its quiet panes, a live agent first, then a stopped pane, else idle. */
 export function worktreeTone(rows: readonly AgentRow[]): DotTone | null {
   const overall = worktreeActivity(rows)
   if (overall !== 'quiet') return overall === null ? null : dotTone(overall, undefined)
-  const hollow = rows.some((row) => (row.activity === 'quiet' && row.agent !== undefined) || row.activity === 'stopped')
-  return hollow ? 'quiet' : 'idle'
+  if (rows.some((row) => row.activity === 'quiet' && row.agent !== undefined)) return 'quiet'
+  return rows.some((row) => row.activity === 'stopped') ? 'stopped' : 'idle'
 }
 
 /** How many panes there are, by the one rule every count follows: terminals the runtime lists, file panes aside. */

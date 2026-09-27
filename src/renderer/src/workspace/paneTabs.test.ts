@@ -225,7 +225,7 @@ describe('paneTabTitle', () => {
     expect(waiting).toBe(`claude · ${TONE_LABEL.quiet}`)
     expect(failed).toBe(`npm test · ${TONE_LABEL.failed}`)
     expect(shell).toBe('zsh · idle')
-    expect(waiting).toBe('claude · stopped')
+    expect(waiting).toBe('claude · ready')
   })
 })
 

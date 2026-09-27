@@ -119,10 +119,11 @@ function stageOf(
   const asking = (terminal: Terminal): boolean =>
     terminal.screenMenu !== undefined || terminal.screenSays === 'waiting' || terminal.titleSays === 'waiting'
   if (agents.some(asking)) return 'asking'
-  if (terminals.some((terminal) => terminal.running && terminal.busy)) return 'working'
+  if (terminals.some((terminal) => activityOf(terminal) === 'working')) return 'working'
   if (details?.merged === true) return 'landed'
   if (details !== undefined && details.clean && details.ahead > 0) return 'ready'
-  return agents.length > 0 ? 'stopped' : undefined
+  // A live agent at its prompt is no stage; its panes' `activity` says what it is.
+  return undefined
 }
 
 function firstSentence(summary: string): string {
@@ -150,7 +151,8 @@ function describePane(terminal: Terminal, at: number, muted: boolean): PeerPane 
   if (terminal.exitCode !== undefined) pane.exitCode = terminal.exitCode
   if (terminal.run !== undefined) pane.run = terminal.run
   // The same reading as the owner's own row; the menu's labels and keys are this app's table, not the screen's text.
-  if (activityOf(terminal) === 'waiting') {
+  pane.activity = activityOf(terminal)
+  if (pane.activity === 'waiting') {
     pane.asking = true
     if (terminal.screenMenu !== undefined) pane.menu = terminal.screenMenu
   }

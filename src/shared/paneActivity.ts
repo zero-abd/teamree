@@ -17,7 +17,7 @@ export type AgentActivity =
   | 'done'
   /** Exited with a non-zero status, or on a signal. */
   | 'failed'
-  /** A Run pane ended by Stop, a hang-up or the app's quit. */
+  /** Ended without finishing: a Run pane stopped or hung up, or an agent that exited before its first turn. */
   | 'stopped'
 
 /**
@@ -85,7 +85,7 @@ export function activityOf(terminal: PaneActivitySource): AgentActivity {
     if (terminal.run !== undefined && runState(terminal) === 'stopped') return 'stopped'
     if (terminal.exitCode !== 0) return 'failed'
     // Declining a trust prompt also exits 0; only an agent that took a turn finished one.
-    return terminal.tookTurn === false ? 'quiet' : 'done'
+    return terminal.tookTurn === false ? 'stopped' : 'done'
   }
   // The agent is blocked in `msg ask`, which its hooks report as a turn in progress.
   if (terminal.askingYou !== undefined) return 'waiting'

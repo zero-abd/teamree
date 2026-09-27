@@ -2,6 +2,7 @@
 // them, the renderer and the CLI only ever read or request changes to them.
 
 import type { PeerWorktreeMemory } from './memory'
+import type { AgentActivity } from './paneActivity'
 import type { RestoredAs } from './paneRestore'
 import type { ScreenMenu, ScreenOpinion } from './screenOpinion'
 import type { PeerHandoff, TaskOutcome, TaskStage, WorktreeReport } from './tasks'
@@ -1212,6 +1213,8 @@ export type PeerPane = {
   quietForMs: number
   /** Its agent is asking, by the owner's reading. Never the question: that is a byte the pane printed. */
   asking?: boolean
+  /** `activityOf` on the owner's machine, which reads hooks and titles this snapshot does not carry. */
+  activity?: AgentActivity
   /** The asking screen's answers and its fingerprint, which `teamwork.type`'s `answering` names. */
   menu?: ScreenMenu
   /** The owner has muted it: a keystroke would be refused. */
