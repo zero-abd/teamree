@@ -199,6 +199,8 @@ export type PaletteContext = {
   sidebarVisible?: boolean
   rightPanelOpen?: boolean
   diffOptions?: DiffOptions
+  /** The focused markdown pane shows its source. */
+  markdownSource?: boolean
   rightPanelTab?: RightPanelTab
   /** Every pane, for each worktree row's dot. */
   terminals?: readonly Terminal[]
@@ -715,6 +717,7 @@ const COMMAND_KEYWORDS: Record<WorkspaceCommand, string> = {
   'open-appearance': 'appearance theme colour color dark black contrast accent ground swatch',
   'toggle-diff-wrap': 'wrap unwrap diff lines long soft word patch review',
   'toggle-diff-whitespace': 'whitespace ignore hide show spaces indent diff patch review -w',
+  'toggle-markdown-source': 'markdown source raw text page front matter yaml md view',
   'add-project': 'add open project repository repo folder directory',
   'clone-repository': 'clone project repository repo git url remote github',
   'join-team': 'join team invitation invite link paste teammate accept teamwork',

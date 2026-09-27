@@ -128,7 +128,7 @@ describe('whose worktree this is', () => {
   it('carries their face on the row itself, not only on hover', () => {
     mount()
     const item = document.querySelector('.worktree') as HTMLElement
-    expect(item.querySelector('.avatar')?.textContent).toBe('Pr')
+    expect(item.querySelector('.avatar')?.textContent).toBe('P')
     expect(within(item).getByText('Fix the relay budget')).toBeTruthy()
     expect(within(item).getByText('priya/relay-budget')).toBeTruthy()
   })

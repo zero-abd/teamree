@@ -147,8 +147,8 @@ describe('when there is nothing open', () => {
     expect(screen.queryByRole('button', { name: 'Open Folder…' })).toBeNull()
   })
 
-  // First run: the ways to a project, side by side, and joining one from an invitation; no task button until there is one.
-  it('welcomes a first run with the mark, the three ways to add a project and Join a Team…', () => {
+  // First run: one first move, filled and focused so Return takes it; the other ways to a project quieter beside it.
+  it('welcomes a first run with the mark, Open Folder… first, and the other ways in quieter', () => {
     const chooseProjectFolder = vi.fn(() => Promise.resolve())
     const newProject = vi.fn(() => Promise.resolve())
     seed({ projects: [], chooseProjectFolder, newProject })
@@ -157,18 +157,21 @@ describe('when there is nothing open', () => {
     expect(screen.getByText('teamree')).toBeTruthy()
     expect(screen.queryByRole('heading')).toBeNull()
     const actions = document.querySelector('.welcome__actions') as HTMLElement
-    expect([...actions.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
-      'New Project…',
+    const buttons = [...actions.querySelectorAll('button')]
+    expect(buttons.map((button) => button.textContent)).toEqual([
       'Open Folder…',
+      'New Project…',
       'Clone Repository…',
       'Join a Team…'
     ])
-    const create = screen.getByRole('button', { name: 'New Project…' })
-    expect(create.className).toContain('button--primary')
-    fireEvent.click(create)
-    expect(newProject).toHaveBeenCalledOnce()
-    fireEvent.click(screen.getByRole('button', { name: 'Open Folder…' }))
+    expect(buttons.filter((button) => button.className.includes('button--primary'))).toEqual([buttons[0]])
+    for (const button of buttons) expect(button.querySelector('svg[aria-hidden="true"]')).toBeTruthy()
+    const open = screen.getByRole('button', { name: 'Open Folder…' })
+    expect(document.activeElement).toBe(open)
+    fireEvent.click(open)
     expect(chooseProjectFolder).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: 'New Project…' }))
+    expect(newProject).toHaveBeenCalledOnce()
     expect(openDialog).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Clone Repository…' }))
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'clone-project' })
@@ -178,6 +181,17 @@ describe('when there is nothing open', () => {
     expect(screen.queryByRole('button', { name: 'New Terminal' })).toBeNull()
   })
 
+  // Focus already somewhere, as after closing the last tab from the sidebar, stays there.
+  it('leaves focus where it is when something already has it', () => {
+    const elsewhere = document.createElement('input')
+    document.body.append(elsewhere)
+    elsewhere.focus()
+    seed({ projects: [] })
+    mount()
+    expect(document.activeElement).toBe(elsewhere)
+    elsewhere.remove()
+  })
+
   // With a project the page's one job is a task; the sidebar's + adds projects.
   it('offers only a new task once there is a project, and no agent by name', () => {
     seed({ projects: [project], agents: [{ kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }] })
@@ -185,6 +199,8 @@ describe('when there is nothing open', () => {
     const actions = document.querySelector('.welcome__actions') as HTMLElement
     expect([...actions.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['New Task…'])
     expect(screen.getByRole('button', { name: 'New Task…' }).className).toContain('button--primary')
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New Task…' }))
+    expect(screen.getByRole('button', { name: 'New Task…' }).querySelector('svg')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Open Folder…' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Clone Repository…' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'New Task…' }))
@@ -204,13 +220,18 @@ describe('when there is nothing open', () => {
   it('names the chords, New Task’s on its button rather than in the list', () => {
     seed({ projects: [project] })
     mount()
-    const keys = [...document.querySelectorAll('.welcome kbd')].map((node) => node.textContent)
-    expect(keys).toEqual(['⌘K', '⌘B'])
+    const chords = [...document.querySelectorAll('.welcome__shortcuts dd > kbd')]
+    expect(chords.map((node) => node.textContent)).toEqual(['⌘K', '⌘B'])
+    // One cap per key.
+    expect([...chords[0]!.querySelectorAll('kbd')].map((node) => node.textContent)).toEqual(['⌘', 'K'])
     expect(screen.getByRole('button', { name: 'New Task…' }).title).toBe('New Task · ⌘N')
     cleanup()
     seed({ projects: [] })
     mount()
-    expect([...document.querySelectorAll('.welcome kbd')].map((node) => node.textContent)).toEqual(['⌘K', '⌘B'])
+    expect([...document.querySelectorAll('.welcome__shortcuts dd > kbd')].map((node) => node.textContent)).toEqual([
+      '⌘K',
+      '⌘B'
+    ])
   })
 
   // The last window's front tab is on its way: a welcome in the meantime is a screen that flashes past.

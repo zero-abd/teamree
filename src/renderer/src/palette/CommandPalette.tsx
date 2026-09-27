@@ -101,6 +101,7 @@ export function CommandPalette({
   const bases = useWorkspaceStore((state) => state.bases)
   const pushing = useWorkspaceStore((state) => state.pushing)
   const diffPanes = useWorkspaceStore((state) => state.diffPanes)
+  const sourcePanes = useWorkspaceStore((state) => state.sourcePanes)
   const editedFiles = useWorkspaceStore((state) => state.editedFiles)
   const editingMarkdown = useWorkspaceStore((state) => state.editingMarkdown)
   const terminalFontSize = useWorkspaceStore((state) => state.terminalFontSize)
@@ -183,6 +184,7 @@ export function CommandPalette({
         sidebarVisible,
         rightPanelOpen,
         diffOptions,
+        markdownSource: focusedPane !== null && sourcePanes[focusedPane] === true && diffPanes[focusedPane] !== true,
         rightPanelTab,
         terminals: Object.values(terminals),
         resumable,
@@ -266,6 +268,7 @@ export function CommandPalette({
       bases,
       pushing,
       diffPanes,
+      sourcePanes,
       editedFiles,
       editingMarkdown,
       terminalFontSize,

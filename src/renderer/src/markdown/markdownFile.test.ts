@@ -264,3 +264,68 @@ describe('an edit', () => {
     expect(reread.doc).toEqual(joined)
   })
 })
+
+describe('a file with front matter, HTML, footnotes and reference links', () => {
+  const text = readFileSync(path.join(fixtures, 'front-matter.md'), 'utf8')
+  const yaml = (doc: JSONContent, change: (yaml: string) => string): JSONContent => {
+    const copy = structuredClone(doc)
+    const first = copy.content?.[0]
+    if (first?.type !== 'frontMatter') throw new Error('no front matter')
+    first.attrs = { ...first.attrs, yaml: change(String(first.attrs?.yaml)) }
+    return copy
+  }
+
+  it('opens on its front matter', () => {
+    expect(readMarkdownFile(text).doc.content?.[0]?.type).toBe('frontMatter')
+  })
+
+  it.each([
+    ['CRLF endings', '---\r\ntitle: x\r\n---\r\n\r\nBody.\r\n'],
+    ['a `...` closer', '---\ntitle: x\n...\n\nBody.\n'],
+    ['no body', '---\ntitle: x\n---\n'],
+    ['no final newline', '---\ntitle: x\n---'],
+    ['trailing spaces on a fence', '---  \ntitle: x\n---\t\nBody.\n'],
+    ['an empty block', '---\n---\n\nBody.\n']
+  ])('keeps front matter with %s', (_, source) => {
+    expect(unchanged(source)).toBe(source)
+  })
+
+  it('changes one line of the HTML block’s body for a one-character edit there', () => {
+    const file = readMarkdownFile(text)
+    expect(changedLines(text, writeMarkdownFile(edit(file.doc, 'Hidden body.', 'Hidden body.!'), file))).toEqual({
+      removed: ['Hidden body.'],
+      added: ['Hidden body.!']
+    })
+  })
+
+  it('changes only the footnote definition that was edited', () => {
+    const file = readMarkdownFile(text)
+    expect(changedLines(text, writeMarkdownFile(edit(file.doc, 'The note.', 'The first note.'), file))).toEqual({
+      removed: ['[^1]: The note.'],
+      added: ['[^1]: The first note.']
+    })
+  })
+
+  it('changes only the front matter line that was edited, fences and all else kept', () => {
+    const file = readMarkdownFile(text)
+    const written = writeMarkdownFile(
+      yaml(file.doc, (value) => value.replace('draft: false', 'draft: true')),
+      file
+    )
+    expect(changedLines(text, written)).toEqual({ removed: ['draft: false'], added: ['draft: true'] })
+    const crlf = readMarkdownFile('---\r\ntitle: x\r\n...\r\n\r\nBody.\r\n')
+    expect(
+      writeMarkdownFile(
+        yaml(crlf.doc, () => 'title: y\nextra: 1'),
+        crlf
+      )
+    ).toBe('---\r\ntitle: y\r\nextra: 1\r\n...\r\n\r\nBody.\r\n')
+  })
+
+  it('edits under the front matter leave it byte for byte', () => {
+    const file = readMarkdownFile(text)
+    const written = writeMarkdownFile(edit(file.doc, 'Round trip', 'Round trips'), file)
+    expect(written.split('\n').slice(0, 5)).toEqual(text.split('\n').slice(0, 5))
+    expect(changedLines(text, written)).toEqual({ removed: ['# Round trip'], added: ['# Round trips'] })
+  })
+})

@@ -173,10 +173,8 @@
 
 .sidebar__head-title {
   color: var(--fg-muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .sidebar__head-actions {
@@ -658,7 +656,7 @@
 }
 
 .overlap__glyph {
-  font-size: 9px;
+  font-size: var(--text-xs);
   line-height: 1;
 }
 
@@ -1146,7 +1144,7 @@
 }
 
 .gitchip__glyph {
-  font-size: 9px;
+  font-size: var(--text-xs);
   line-height: 1;
 }
 
@@ -1320,6 +1318,7 @@
   min-width: 0;
   flex: 1;
   overflow: hidden;
+  font-size: var(--text-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1356,7 +1355,7 @@
   /* A step brighter than the label: the quoted line is what the row exists to show. */
   color: var(--fg-secondary);
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: inherit;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
@@ -1439,7 +1438,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--fg-muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
 }
 
 .worktree__stage {
@@ -1624,7 +1623,7 @@
 .worktree__ask-text {
   overflow: hidden;
   color: var(--fg);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: 1.35;
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -1699,7 +1698,7 @@
    every list; the corner says whether they are here. */
 .avatar {
   --avatar-hue: 250;
-  --avatar-size: 18px;
+  --avatar-size: 20px;
   position: relative;
   display: inline-flex;
   flex: none;
@@ -1710,7 +1709,7 @@
   border-radius: 99px;
   background: oklch(0.5 0.12 var(--avatar-hue));
   color: #fff;
-  font-size: calc(var(--avatar-size) * 0.45);
+  font-size: var(--text-xs);
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0;
@@ -1719,11 +1718,11 @@
 
 .avatar--xs {
   --avatar-size: 15px;
-  font-size: 7px;
 }
 
 .avatar--md {
   --avatar-size: 28px;
+  font-size: var(--text-base);
 }
 
 .avatar--away {
@@ -1786,13 +1785,13 @@
 
 .project__face--more {
   align-items: center;
-  height: 18px;
-  min-width: 18px;
+  height: 20px;
+  min-width: 20px;
   padding: 0 4px;
   background: var(--bg-raised);
   color: var(--fg-secondary);
   font: inherit;
-  font-size: 9.5px;
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 

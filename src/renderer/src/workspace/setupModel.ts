@@ -129,3 +129,15 @@ function projectRow(projects: SetupFacts['projects']): SetupRow {
   const value = projects.length === 1 ? (projects[0]?.name ?? '') : `${projects.length} projects`
   return row('project', 'Projects', { state: 'done', value, actions: [] })
 }
+
+/** The welcome's reading: rows that need action in full, and what works as names on one line. */
+export function setupSummary(
+  rows: readonly SetupRow[],
+  agents: readonly InstalledAgent[]
+): { needsAction: SetupRow[]; working: string[] } {
+  const shown = rows.filter((each) => each.id !== 'project')
+  const working = shown
+    .filter((each) => each.state === 'done')
+    .flatMap((each) => (each.id === 'agents' ? agents.map((agent) => HARNESSES[agent.kind].name) : [each.label]))
+  return { needsAction: shown.filter((each) => each.state === 'todo'), working }
+}

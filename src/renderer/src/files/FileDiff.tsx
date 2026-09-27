@@ -107,15 +107,34 @@ export function useFileDiff(paneId: string, worktreeId: string, path: string): F
 }
 
 /** The bar's diff controls: the file (`view` names it) or its diff, then the layouts while the diff is open. */
-export function DiffTools({ diff, view = 'Code' }: { diff: FileDiff; view?: string }): React.JSX.Element {
+/** `source`, for a markdown pane, adds a Source view between the page and the diff. */
+export function DiffTools({
+  diff,
+  view = 'Code',
+  source
+}: {
+  diff: FileDiff
+  view?: string
+  source?: boolean
+}): React.JSX.Element {
   const setPaneDiff = useWorkspaceStore((state) => state.setPaneDiff)
+  const setPaneSource = useWorkspaceStore((state) => state.setPaneSource)
   const { shown, layout } = diff
+  const showView = (): void => {
+    setPaneDiff(diff.paneId, false)
+    if (source !== undefined) setPaneSource(diff.paneId, false)
+  }
   return (
     <>
       <Segments label="View">
-        <button type="button" aria-pressed={!shown} onClick={() => setPaneDiff(diff.paneId, false)}>
+        <button type="button" aria-pressed={!shown && source !== true} onClick={showView}>
           {view}
         </button>
+        {source === undefined ? null : (
+          <button type="button" aria-pressed={!shown && source} onClick={() => setPaneSource(diff.paneId, true)}>
+            Source
+          </button>
+        )}
         <button
           type="button"
           aria-pressed={shown}

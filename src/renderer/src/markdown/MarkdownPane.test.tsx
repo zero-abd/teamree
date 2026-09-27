@@ -2,6 +2,7 @@
 
 // Opening a page never writes the file; an edit writes only what it changed.
 
+import { EditorView } from '@codemirror/view'
 import type { Editor } from '@tiptap/core'
 import { act, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -314,5 +315,139 @@ describe('images on the page', () => {
     expect(byAlt('up')?.hasAttribute('src')).toBe(false)
     expect(byAlt('disk')?.hasAttribute('src')).toBe(false)
     expect(byAlt('dot')?.getAttribute('src')).toMatch(/^data:image\/gif/)
+  })
+})
+
+describe('front matter and the source', () => {
+  const POST = [
+    '---',
+    'title: Round trip',
+    'tags:',
+    '  - a',
+    '  - b',
+    '...',
+    '',
+    '# Post',
+    '',
+    'Body with a footnote.[^1]',
+    '',
+    '<details>',
+    '<summary>More</summary>',
+    '',
+    'Hidden.',
+    '</details>',
+    '',
+    '[^1]: The note.',
+    ''
+  ].join('\r\n')
+
+  beforeEach(() => {
+    call.mockImplementation(async (method: string) => {
+      if (method === 'file.read') return { ...read(POST), path: 'docs/post.md', lineEnding: '\r\n' }
+      if (method === 'file.write') return { worktreeId: 'w1', path: 'docs/post.md', size: 0, modifiedAt: 200 }
+      return undefined
+    })
+  })
+
+  const mountPost = () =>
+    render(
+      <MarkdownPane paneId="md:3" worktreeId="w1" path="docs/post.md" focused onFocus={() => {}} onClose={() => {}} />
+    )
+  const button = (name: string): HTMLButtonElement =>
+    [...document.querySelectorAll<HTMLButtonElement>('.file__bar button')].find((found) => found.textContent === name)!
+  const source = async (): Promise<EditorView> =>
+    waitFor(() => {
+      const found = document.querySelector('.cm-content')
+      const view = found instanceof HTMLElement ? EditorView.findFromDOM(found) : null
+      if (!view) throw new Error('no source yet')
+      return view
+    })
+  const written = (): string => ((writes().at(-1) as unknown[])[1] as { content: string }).content
+
+  it('draws the front matter as properties, not a rule and a heading', async () => {
+    mountPost()
+    await page()
+    const terms = [...document.querySelectorAll('.md-props dt')].map((term) => term.textContent)
+    const values = [...document.querySelectorAll('.md-props dd')].map((value) => value.textContent)
+    expect(terms).toEqual(['title', 'tags'])
+    expect(values).toEqual(['Round trip', 'a, b'])
+    expect(document.querySelector('.md-editor hr')).toBeNull()
+    expect([...document.querySelectorAll('.md-editor h1, .md-editor h2')].map((head) => head.textContent)).toEqual([
+      'Post'
+    ])
+  })
+
+  it('opens with the caret after the front matter, so typing never replaces it', async () => {
+    mountPost()
+    const editor = await page()
+    act(() => void editor.commands.focus('start'))
+    expect(editor.state.selection.empty).toBe(true)
+    act(() => void editor.commands.insertContent('x'))
+    await settle()
+    expect(written()).toBe(POST.replace('# Post', '# xPost'))
+  })
+
+  it('edits the front matter as written, and saves only that line', async () => {
+    mountPost()
+    await page()
+    act(() => void fireEvent.mouseDown(document.querySelector('.md-props dl')!))
+    const yaml = document.querySelector<HTMLTextAreaElement>('.md-props textarea')!
+    expect(yaml.value).toBe('title: Round trip\ntags:\n  - a\n  - b')
+    act(() => {
+      yaml.value = yaml.value.replace('Round trip', 'Round trips')
+      fireEvent.blur(yaml)
+    })
+    await settle()
+    expect(written()).toBe(POST.replace('title: Round trip', 'title: Round trips'))
+    expect(document.querySelector('.md-props dd')?.textContent).toBe('Round trips')
+  })
+
+  it('shows the file as written under Source, saves an edit there byte for byte, and reads it back on Page', async () => {
+    mountPost()
+    await page()
+    act(() => button('Source').click())
+    const view = await source()
+    expect(view.state.sliceDoc()).toBe(POST)
+    expect(button('Source').getAttribute('aria-pressed')).toBe('true')
+    expect(useWorkspaceStore.getState().sourcePanes['md:3']).toBe(true)
+    await settle()
+    expect(writes()).toEqual([])
+
+    const at = view.state.doc.toString().indexOf('Hidden.') + 'Hidden'.length
+    act(() => view.dispatch({ changes: { from: at, insert: ' body' } }))
+    await settle()
+    const edited = POST.replace('Hidden.', 'Hidden body.')
+    expect(written()).toBe(edited)
+
+    // Over to the diff and back keeps the source as edited.
+    act(() => useWorkspaceStore.getState().setPaneDiff('md:3', true))
+    act(() => useWorkspaceStore.getState().setPaneSource('md:3', true))
+    expect((await source()).state.sliceDoc()).toBe(edited)
+
+    act(() => button('Page').click())
+    const editor = await page()
+    expect(editor.getText()).toContain('Hidden body.')
+    expect(document.querySelector('.cm-content')).toBeNull()
+    await settle()
+    expect(writes()).toHaveLength(1)
+  })
+
+  it('opens Source with an edit made on the page, and keeps it', async () => {
+    mountPost()
+    const editor = await page()
+    act(
+      () =>
+        void editor
+          .chain()
+          .focus()
+          .insertContentAt(editor.state.doc.content.size - 1, 'x')
+          .run()
+    )
+    act(() => useWorkspaceStore.getState().setPaneSource('md:3', true))
+    const view = await source()
+    expect(view.state.sliceDoc()).not.toBe(POST)
+    expect(view.state.sliceDoc().startsWith('---\r\ntitle: Round trip\r\n')).toBe(true)
+    await settle()
+    expect(written()).toBe(view.state.sliceDoc())
   })
 })

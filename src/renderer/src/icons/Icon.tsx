@@ -54,6 +54,13 @@ const GLYPHS = {
       <path d="m5.25 8 2 2 3.75-4" />
     </>
   ),
+  check: <path d="m2.25 8.25 3.75 3.5 7.75-8" />,
+  clone: (
+    <>
+      <path d="M5 2.25h8.75v8.5H5zM2.25 5v8.75H11" />
+      <path d="m8.25 5.25 2.25 2-2.25 2M10.5 7.25H6.75" />
+    </>
+  ),
   close: <path d="m4.25 4.25 7.5 7.5m0-7.5-7.5 7.5" />,
   copy: (
     <>
@@ -68,11 +75,23 @@ const GLYPHS = {
     </>
   ),
   maximize: <path d="M2.25 5.75v-3.5h3.5m4.5 0h3.5v3.5m0 4.5v3.5h-3.5m-4.5 0h-3.5v-3.5" />,
+  'new-project': (
+    <>
+      <path d="M1.75 5.75v-2h4l1.5 2h7v7.5h-12.5z" />
+      <path d="M8 7.5v4M6 9.5h4" />
+    </>
+  ),
   'new-task': (
     <>
       <path d="M3.25 1.75h6l3.5 3.5v9H3.25z" />
       <path d="M9.25 1.75v3.5h3.5" />
       <path d="m6 11.75.5-2 4.75-4.75 1.75 1.75-4.75 4.75z" />
+    </>
+  ),
+  'open-folder': (
+    <>
+      <path d="M1.75 5.75v-2h4l1.5 2h7l-2 7.5h-10z" />
+      <path d="M3.25 5.75h11m-4-3.5h3.5v3.5" />
     </>
   ),
   play: <path d="m4.75 2.75 8 5.25-8 5.25z" fill="currentColor" stroke="none" />,
@@ -103,7 +122,13 @@ const GLYPHS = {
       <path d="M8.25 2.25v11.5" />
     </>
   ),
-  stop: <rect x="3" y="3" width="10" height="10" rx="1.5" fill="currentColor" stroke="none" />
+  stop: <rect x="3" y="3" width="10" height="10" rx="1.5" fill="currentColor" stroke="none" />,
+  team: (
+    <>
+      <circle cx="6" cy="5.25" r="2.25" />
+      <path d="M1.75 13.25c.25-2.5 1.75-4 4.25-4s4 1.5 4.25 4M10 4.25a2 2 0 0 1 0 4m1.25 1.25c1.75.5 2.75 1.75 3 3.75" />
+    </>
+  )
 } satisfies Record<string, React.JSX.Element>
 
 export type IconName = keyof typeof GLYPHS

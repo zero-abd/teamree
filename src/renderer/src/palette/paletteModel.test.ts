@@ -495,6 +495,15 @@ describe('every command the menu has is a row in the palette', () => {
     expect(find({ wrap: false, hideWhitespace: true }, 'toggle-diff-whitespace')).toBe('Show Whitespace Changes')
   })
 
+  it('offers the markdown source toggle by what it does next', () => {
+    const find = (markdownSource?: boolean): string | undefined =>
+      buildPaletteItems(context(markdownSource === undefined ? {} : { markdownSource })).find(
+        (item) => item.id === 'toggle-markdown-source'
+      )?.label
+    expect(find()).toBe('Show Markdown Source')
+    expect(find(true)).toBe('Show Markdown Page')
+  })
+
   it('names its own rows as the menu names commands', () => {
     const labels = buildPaletteItems(context())
       .filter((item) => item.kind === 'action')
