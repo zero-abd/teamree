@@ -10,7 +10,7 @@
 // dialog away, and that switching project does not leave the old repository's
 // base ref pointing at a branch the new one has never heard of.
 
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { IssueList, StartPoint, StartPointList } from '@shared/entities'
 import { formatChord, windowModifier } from '../keyboard/platformModifier'
@@ -94,6 +94,13 @@ async function open(projectId = 'p1'): Promise<void> {
   // first assertion's warm-up cost that whichever test ran first lost the race.
   await act(async () => {})
   expect(startPoint().value.length).toBeGreaterThan(0)
+}
+
+/** Picks another project and settles its listing, for the same reason `open` does. */
+async function switchProject(projectId: string): Promise<void> {
+  await act(async () => {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Project' }), { target: { value: projectId } })
+  })
 }
 
 // The label wraps its hint as well as its caption, so the accessible name is
@@ -337,8 +344,8 @@ describe('what it will not submit', () => {
 
   it('takes the new project’s own base ref once its listing lands', async () => {
     await open()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Project' }), { target: { value: 'p2' } })
-    await waitFor(() => expect(startPoint().value).toBe('origin/trunk'))
+    await switchProject('p2')
+    expect(startPoint().value).toBe('origin/trunk')
   })
 })
 
@@ -355,8 +362,8 @@ describe('the start point somebody set in settings', () => {
   it('belongs to the project it was set for, and does not follow a switch', async () => {
     seed({ startPointDefaults: { p1: 'feature/pager' } })
     await open()
-    fireEvent.change(screen.getByRole('combobox', { name: 'Project' }), { target: { value: 'p2' } })
-    await waitFor(() => expect(startPoint().value).toBe('origin/trunk'))
+    await switchProject('p2')
+    expect(startPoint().value).toBe('origin/trunk')
   })
 
   // Typed in the box, not stored: a preference that could not be overruled for
