@@ -34,7 +34,7 @@ describe('TeamFaces', () => {
     )
     expect(screen.getByRole('button', { name: 'ana, away · picture 36s old · no worktrees' })).toBeTruthy()
     const bo = screen.getByRole('button', { name: 'bo, online · 1 asking · 1 working' })
-    expect(bo.querySelector('.avatar--online')?.textContent).toBe('Bo')
+    expect(bo.querySelector('.avatar--online')?.textContent).toBe('B')
   })
 
   it('shows a card on hover with their worktrees and what each is doing, and hides it on leave', () => {

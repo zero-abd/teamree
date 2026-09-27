@@ -59,9 +59,23 @@ describe('the view store', () => {
 
   it('counts reveals, so the same one twice is still news', () => {
     const before = useSidebarView.getState().revealSeq
-    useSidebarView.getState().reveal()
-    useSidebarView.getState().reveal()
+    useSidebarView.getState().reveal('w1')
+    useSidebarView.getState().reveal('w1')
     expect(useSidebarView.getState().revealSeq).toBe(before + 2)
+  })
+
+  it('keeps the picked row past the filter until the filter changes', () => {
+    const view = useSidebarView.getState
+    view().reveal('w1')
+    expect(view().picked).toBe('w1')
+    view().setQuery('x')
+    expect(view().picked).toBeNull()
+    view().reveal('w2')
+    view().toggleQuick('working')
+    expect(view().picked).toBeNull()
+    view().reveal('w3')
+    view().closeFilter()
+    expect(view().picked).toBeNull()
   })
 
   it('holds a filter request until the field takes it', () => {

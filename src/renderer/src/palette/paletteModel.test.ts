@@ -1332,6 +1332,17 @@ describe('where you have been', () => {
     expect(panes.map(trailing)).toEqual(['atlas', 'ledger', 'atlas'])
   })
 
+  it('names a pane called after its worktree once', () => {
+    const named = buildPaletteItems(
+      context({
+        worktrees,
+        activeWorktreeId: 'c',
+        terminals: [terminal({ id: 't-task', worktreeId: 'd', agent: 'claude', label: 'faq' })]
+      })
+    )
+    expect(named.find((item) => item.id === 't-task')?.label).toBe('faq')
+  })
+
   it('then the rest in sidebar order, with nothing visited yet', () => {
     const groups = paletteGroups(buildPaletteItems(context({ worktrees, activeWorktreeId: 'c' })), [], 'db pool')
     expect(groups[0]?.title).toBe('Worktrees')

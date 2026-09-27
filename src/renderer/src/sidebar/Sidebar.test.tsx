@@ -973,7 +973,7 @@ describe('several runs of one task', () => {
     ).toEqual(['claude', 'codex'])
     expect(heads.map((head) => head.querySelector('.worktree__name')?.textContent)).toEqual([task, task])
     expect(screen.getByRole('treeitem', { name: `${task} (Claude Code)` })).toBeTruthy()
-    expect(screen.getByText('add-a-subtract-function-to-claude')).toBeTruthy()
+    expect(document.querySelector('.worktree__branch')).toBeNull()
   })
 
   // The glyph tells claude from codex; only a second claude run needs its word to be told apart.

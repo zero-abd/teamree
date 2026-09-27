@@ -341,9 +341,11 @@
   font-weight: 500;
 }
 
+/* Whole, or the team wraps to the next line; cut only where it alone is too long. */
 .project__base {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 8ch;
+  max-width: 100%;
   overflow: hidden;
   line-height: 26px;
   text-overflow: ellipsis;
@@ -355,8 +357,9 @@
 
 /* Why the base may be old; pressing it fetches. Gives way before the base it is about. */
 .project__fresh {
-  flex: 0 1000 auto;
+  flex: 1 1000 3ch;
   min-width: 3ch;
+  max-width: max-content;
   padding: 0 var(--s1);
   overflow: hidden;
   border: 0;
@@ -752,7 +755,17 @@
   row-gap: 2px;
 }
 
-/* Gives way before the chips down to its floor, then the chips fold; most of the line on the narrowest row. */
+/* Too narrow for the name and its chips, the chips wrap under it at their size rather than fold. */
+.worktree__title {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.sidebar--compact .worktree__title {
+  flex-wrap: nowrap;
+}
+
+/* Cut only where it alone is too long for the line, down to a floor; the chips wrap under it first. */
 .worktree__name {
   flex: 0 1000 auto;
   min-width: min(10ch, 70%);
@@ -881,11 +894,11 @@
   opacity: 0.55;
 }
 
-/* Takes the slack on its line, which pushes the chips and the merge badge to
-   the right edge and lets the branch itself be the part that gives way. */
+/* Takes the slack on its line, pushing the chips and the merge badge to the right edge. Gives way to
+   them down to its floor, as the name does; past that the chips wrap under it at their own size. */
 .worktree__branch {
   flex: 1 1 0;
-  min-width: 0;
+  min-width: min(16ch, 100%);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

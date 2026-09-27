@@ -130,7 +130,7 @@ export function askingLine(line: string | null, said: AgentEvent | undefined): s
 
 /**
  * A row's one line, best first: what the screen said, the agent's own title, the task's first line.
- * Never a fragment, and never what the row or its worktree is already called.
+ * Never a fragment, a line of bare paths, or what the row or its worktree is already called.
  */
 function rowLine(
   said: string | null,
@@ -143,10 +143,13 @@ function rowLine(
   const fallbacks = agent === undefined ? [] : [agentTitle(pane, agent), task]
   const shown = new Set(worktree === undefined ? [label] : [label, worktreeDisplay(worktree).title])
   for (const line of [said, ...fallbacks]) {
-    if (line !== null && !shown.has(line) && saysSomething(line)) return line
+    if (line !== null && !shown.has(line) && saysSomething(line) && !PATHS_ONLY.test(line)) return line
   }
   return null
 }
+
+/** `pwd` or `echo $PATH`: cut from the end on a row, only the shared start of the path shows. */
+const PATHS_ONLY = /^(?:~|\.{1,2})?\/\S*(?:[:\s]+(?:~|\.{1,2})?\/\S*)*$/u
 
 /** The summary an agent writes into the window title, without its status glyph; null for a default title. */
 function agentTitle(pane: Pick<Terminal, 'title' | 'shell' | 'cwd'>, agent: AgentKind): string | null {

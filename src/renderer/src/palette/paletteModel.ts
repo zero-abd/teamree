@@ -334,7 +334,7 @@ function paneItems(context: PaletteContext): PaletteItem[] {
             kind: 'pane',
             id: terminal.id,
             worktreeId: worktree.id,
-            label: `${name} · ${where}`,
+            label: name === where ? name : `${name} · ${where}`,
             hint: '',
             detail: project,
             search: `${name} ${where} ${terminal.title} ${agent === undefined ? '' : harnessName(agent)} ${project}`,

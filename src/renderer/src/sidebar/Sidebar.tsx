@@ -129,6 +129,7 @@ export function Sidebar({
   const view = useMemo(() => ({ query, quick, compact, openDone }), [query, quick, compact, openDone])
   const toggleDone = useSidebarView((state) => state.toggleDone)
   const revealSeq = useSidebarView((state) => state.revealSeq)
+  const picked = useSidebarView((state) => state.picked)
   const askFilter = useSidebarView((state) => state.askFilter)
   const narrowing = narrows(view)
 
@@ -138,7 +139,7 @@ export function Sidebar({
     void loadEditors()
   }, [loadEditors])
 
-  // Each project's rows as the field and chips leave them; the open row is never filtered out.
+  // Each project's rows as the field and chips leave them; a row picked since they changed stays.
   const groups = useMemo(() => {
     const factsOf = (worktree: Worktree): RowFacts => {
       const status = statuses[worktree.id]
@@ -154,12 +155,12 @@ export function Sidebar({
     }
     return worktreesByProject(projects, worktrees).map(({ project, rows }) => {
       const filtered = filterProject(rows, factsOf, view, {
-        keep: activeWorktreeId,
+        keep: picked === activeWorktreeId ? picked : null,
         doneOpen: view.openDone.includes(project.id)
       })
       return { project, rows, shown: filtered.rows, context: filtered.context, folded: filtered.folded }
     })
-  }, [projects, worktrees, statuses, mergePreviews, stages, kindOf, view, activeWorktreeId])
+  }, [projects, worktrees, statuses, mergePreviews, stages, kindOf, view, activeWorktreeId, picked])
 
   // Only the panes of worktrees actually rendered are read; a collapsed project costs nothing.
   const onScreen = useMemo(() => {

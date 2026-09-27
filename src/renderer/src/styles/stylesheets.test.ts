@@ -633,7 +633,15 @@ describe('stylesheets', () => {
       expect(declarationOf(ruleFor('sidebar.css', '.worktree__meta'), 'flex-wrap')).toBe('wrap')
       // A zero basis: a long branch never pushes the facts onto a line of their own.
       expect(declarationOf(ruleFor('sidebar.css', '.worktree__branch'), 'flex')).toBe('1 1 0')
+      // A floor, or chips squeezed it to `readm…`.
+      expect(declarationOf(ruleFor('sidebar.css', '.worktree__branch'), 'min-width')).toBe('min(16ch, 100%)')
       expect(declarationOf(ruleFor('sidebar.css', '.worktree__tally'), 'margin-left')).toBe('auto')
+    })
+
+    // With the branch left out, `long notes index` folded both its chips into `+2`.
+    it('wraps a title line’s chips under the name, except on a compact row', () => {
+      expect(declarationOf(ruleFor('sidebar.css', '.worktree__title'), 'flex-wrap')).toBe('wrap')
+      expect(declarationOf(ruleFor('sidebar.css', '.sidebar--compact .worktree__title'), 'flex-wrap')).toBe('nowrap')
     })
 
     // Closed, the panel is a 30px strip with a 1px border; a count on its edge was clipped.

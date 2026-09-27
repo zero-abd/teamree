@@ -332,11 +332,11 @@ export function WorktreeRow({
   const agentWord = display.agent?.kind === undefined || twinRun
   // A task's tally, a handoff and a pull request need the second line too, or their chips squeeze the name.
   const pullShown = ready && !merged && landing?.pullRequest !== undefined
-  const twoLines = !compact && (display.branch !== undefined || task !== undefined || handoff !== null || pullShown)
-  // Heard after the name, a branch that is only the name slugified says it twice.
-  const spokenBranch = [worktree.name, display.title].some((name) => slugifyBranchName(name) === display.branch)
+  // Under the name, a branch that is only the name slugified says it twice; the name's hover still has it.
+  const branch = [worktree.name, display.title].some((name) => slugifyBranchName(name) === display.branch)
     ? undefined
     : display.branch
+  const twoLines = !compact && (branch !== undefined || task !== undefined || handoff !== null || pullShown)
   // Rolled up: the collapsed row says something wants reading, the pane rows say which.
   const unreadHere = rows.some((row) => unread.has(row.terminalId))
   const testPane = ready ? runPaneOf(terminals, worktree.id, 'test') : undefined
@@ -352,7 +352,7 @@ export function WorktreeRow({
     question: liveAsk?.text ?? rows.find((row) => row.activity === 'waiting')?.evidence ?? null,
     ...(rolled?.from === undefined ? {} : { from: rolled.from }),
     unread: unreadHere,
-    ...(spokenBranch === undefined ? {} : { branch: spokenBranch }),
+    ...(branch === undefined ? {} : { branch }),
     ...(ready && status !== undefined
       ? { status, child: worktree.parentId !== undefined, ignored: status.ignored ?? 0 }
       : {}),
@@ -594,8 +594,8 @@ export function WorktreeRow({
       </span>
       {twoLines ? (
         <span className="worktree__meta" aria-hidden="true">
-          <span className="worktree__branch" title={display.branch}>
-            {display.branch ?? ''}
+          <span className="worktree__branch" title={branch}>
+            {branch ?? ''}
           </span>
           {chips.map((chip) => (
             <Fragment key={chip.key}>{chip.node}</Fragment>
