@@ -17,7 +17,7 @@ import { RunPanes } from '../../terminals/run-panes'
 import { agentMidTurn } from '../../git/worktreeNest'
 import { findProgram } from '../../git/worktreeLanding'
 import { registerSearchHandler } from '../../git/searchHandler'
-import { loginShellPath } from '../../terminals/shell-environment'
+import { loginShellPath, loginShellStores } from '../../terminals/shell-environment'
 import { writeShellIntegration } from '../../terminals/shell-integration'
 import { childPromptFor } from '../../tasks/childPrompt'
 import {
@@ -149,6 +149,8 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     subscriptions: registry.context.subscriptions,
     resolveWorktreeCwd: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.path,
     resolveWorktreeTask: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.task,
+    taskDone: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.report !== undefined,
+    profileStores: () => loginShellStores(),
     layouts: registry.context.store,
     sessions: registry.context.store,
     colorTone: () =>

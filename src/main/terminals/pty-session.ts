@@ -20,11 +20,13 @@ import {
   buildShellCommand,
   buildTerminalEnv,
   loginShellPath,
+  loginShellStores,
   shellCannotRun,
   type PaneIdentity,
   SHELL_UNRUNNABLE,
   TERMINAL_TYPE,
-  shellName
+  shellName,
+  withProfileStores
 } from './shell-environment'
 import { terminalFailed, TerminalServiceError } from './service-error'
 import { integrateShell } from './shell-integration'
@@ -706,6 +708,11 @@ export class PtySession {
     return true
   }
 
+  /** Restored as an agent pane that was not started; see `RestoredAs`. */
+  get leftStopped(): boolean {
+    return this.init.restored === 'stopped'
+  }
+
   /**
    * True once the resume failed and nothing was started in its place; the manager
    * writes that down so the pane does not fail the same way on every launch.
@@ -734,7 +741,8 @@ export class PtySession {
 function startChild(init: PtySessionInit, command: string | undefined, platform: NodeJS.Platform): IPty {
   const shellCommand = buildShellCommand(init.shell, command, platform)
   // The login shell's PATH, not the one launchd handed a desktop-launched app.
-  const built = buildTerminalEnv(init.env, platform, loginShellPath({ platform }), init.tone, init.identity)
+  const inherited = withProfileStores(init.env ?? process.env, loginShellStores({ platform }))
+  const built = buildTerminalEnv(inherited, platform, loginShellPath({ platform }), init.tone, init.identity)
   const { file, args, env } =
     init.shellIntegrationDir === undefined
       ? { ...shellCommand, env: built }
@@ -760,6 +768,8 @@ function startChild(init: PtySessionInit, command: string | undefined, platform:
 }
 
 function initialTitle(init: PtySessionInit, platform: NodeJS.Platform): string {
+  // Its command only ends the pane; the pane is still the agent's.
+  if (init.restored === 'stopped' && init.agent !== undefined) return init.agent
   if (init.command !== undefined) {
     const [program] = init.command.trim().split(/\s+/)
     if (program !== undefined && program.length > 0) return program

@@ -75,6 +75,12 @@ const PATH_PROBE_SHELLS = new Set(['bash', 'zsh', 'fish', 'ksh', 'mksh'])
 /** Wrapped around the probe's answer so a chatty profile cannot be mistaken for it. */
 const PATH_PROBE_BEGIN = '__teamree_path_begin__'
 const PATH_PROBE_END = '__teamree_path_end__'
+const PATH_PROBE_SEPARATOR = '__teamree_path_next__'
+
+/** Asked of the login shell beside PATH: where the agents keep their conversations, when a profile moves them. */
+export const PROFILE_STORE_VARIABLES = ['CLAUDE_CONFIG_DIR', 'CODEX_HOME'] as const
+export type ProfileStoreVariable = (typeof PROFILE_STORE_VARIABLES)[number]
+export type ProfileStores = Partial<Record<ProfileStoreVariable, string>>
 
 /** How long the shell gets to print its PATH. Blocks the caller; paid at most once per process. */
 const PATH_PROBE_TIMEOUT_MS = 3000
@@ -118,8 +124,10 @@ export function resolveLoginShell(
   return platform === 'darwin' ? '/bin/zsh' : '/bin/bash'
 }
 
+type ProbeAnswer = { path: string | undefined; stores: ProfileStores }
+
 /** What the probe last answered, and for which shell. See loginShellPath. */
-let probed: { key: string; path: string | undefined } | null = null
+let probed: ({ key: string } & ProbeAnswer) | null = null
 
 /**
  * The PATH a command typed into the user's own terminal would be found on. A
@@ -129,25 +137,34 @@ let probed: { key: string; path: string | undefined } | null = null
  * where a GUI process already has the user's environment block.
  */
 export function loginShellPath(options: LoginShellPathOptions = {}): string | undefined {
+  return probeLoginShell(options).path
+}
+
+/** `CLAUDE_CONFIG_DIR` and `CODEX_HOME` as the user's profile sets them, from the same probe as `loginShellPath`. */
+export function loginShellStores(options: LoginShellPathOptions = {}): ProfileStores {
+  return probeLoginShell(options).stores
+}
+
+function probeLoginShell(options: LoginShellPathOptions): ProbeAnswer {
   const platform = options.platform ?? process.platform
-  if (platform === 'win32') return undefined
+  if (platform === 'win32') return { path: undefined, stores: {} }
 
   const shell = resolveLoginShell(platform, options.env ?? process.env)
   const script = pathProbeScript(shellName(shell, platform))
   // An unfamiliar shell may answer with a usage error, or start interactively and never return.
-  if (script === null) return undefined
+  if (script === null) return { path: undefined, stores: {} }
 
   // Cached for the life of the process: a shell start per pane would be too
   // dear, and only a profile edit adding a new directory could change the answer.
   const key = `${shell} ${script}`
-  if (options.run === undefined && probed?.key === key) return probed.path
+  if (options.run === undefined && probed?.key === key) return probed
 
   // Login *and* interactive: zsh takes PATH from ~/.zprofile as a login shell and
   // from ~/.zshrc only when interactive, and ~/.zshrc is where version managers live.
   const output = (options.run ?? runPathProbe)(shell, ['-l', '-i', '-c', script])
-  const path = output === null ? undefined : parseProbedPath(output)
-  if (options.run === undefined) probed = { key, path }
-  return path
+  const answer = output === null ? { path: undefined, stores: {} } : parseProbe(output)
+  if (options.run === undefined) probed = { key, ...answer }
+  return answer
 }
 
 /** Forgets the probe's answer, so the next call asks again. Tests only. */
@@ -160,10 +177,16 @@ export function resetLoginShellPathCache(): void {
  * a profile's greeting from becoming the first entry of PATH.
  */
 function pathProbeScript(name: string): string | null {
-  // fish keeps PATH as a list: "$PATH" is its elements joined with spaces.
-  if (name === 'fish') return `printf '%s%s%s' '${PATH_PROBE_BEGIN}' (string join : $PATH) '${PATH_PROBE_END}'`
-  if (PATH_PROBE_SHELLS.has(name)) return `printf '%s%s%s' '${PATH_PROBE_BEGIN}' "$PATH" '${PATH_PROBE_END}'`
-  return null
+  const fish = name === 'fish'
+  if (!fish && !PATH_PROBE_SHELLS.has(name)) return null
+  // fish keeps PATH as a list: "$PATH" is its elements joined with spaces. An unset variable prints empty in each.
+  const words = [
+    `'${PATH_PROBE_BEGIN}'`,
+    fish ? '(string join : $PATH)' : '"$PATH"',
+    ...PROFILE_STORE_VARIABLES.flatMap((each) => [`'${PATH_PROBE_SEPARATOR}'`, fish ? `"$${each}"` : `"\${${each}-}"`]),
+    `'${PATH_PROBE_END}'`
+  ]
+  return `printf '${'%s'.repeat(words.length)}' ${words.join(' ')}`
 }
 
 /** The probe's stdout, or null if it could not be run to completion. */
@@ -187,17 +210,28 @@ function runPathProbe(file: string, args: readonly string[]): string | null {
 }
 
 /**
- * The PATH between the markers, or undefined if what came back is not one. The
- * exit status is not consulted: a profile ending in a failing command is common.
+ * The PATH between the markers, or undefined if what came back is not one, and
+ * the store variables after it. The exit status is not consulted: a profile ending in a failing command is common.
  */
-function parseProbedPath(output: string): string | undefined {
+function parseProbe(output: string): ProbeAnswer {
   const begin = output.indexOf(PATH_PROBE_BEGIN)
-  if (begin < 0) return undefined
+  if (begin < 0) return { path: undefined, stores: {} }
   const from = begin + PATH_PROBE_BEGIN.length
   const end = output.indexOf(PATH_PROBE_END, from)
-  if (end < 0) return undefined
+  if (end < 0) return { path: undefined, stores: {} }
 
-  const value = output.slice(from, end).trim()
+  const [path, ...values] = output.slice(from, end).split(PATH_PROBE_SEPARATOR)
+  const stores: ProfileStores = {}
+  PROFILE_STORE_VARIABLES.forEach((name, index) => {
+    const value = values[index]?.trim()
+    // Used as a directory to read: only an absolute path on one line is taken.
+    if (value !== undefined && value.startsWith('/') && !/[\n\r\0]/.test(value)) stores[name] = value
+  })
+  return { path: parsePath(path ?? ''), stores }
+}
+
+function parsePath(answer: string): string | undefined {
+  const value = answer.trim()
   if (value.length === 0) return undefined
   // A PATH holds neither a newline nor a NUL.
   if (/[\n\r\0]/.test(value)) return undefined
@@ -382,6 +416,13 @@ export function buildTerminalEnv(
     }
   }
 
+  return env
+}
+
+/** `base` with the profile's store variables where it sets none, so an agent uses the store its owner's terminal would. */
+export function withProfileStores(base: NodeJS.ProcessEnv, stores: ProfileStores): NodeJS.ProcessEnv {
+  const env = { ...base }
+  for (const [name, value] of Object.entries(stores)) if (nonEmpty(env[name]) === undefined) env[name] = value
   return env
 }
 

@@ -7,11 +7,13 @@ import {
   buildShellCommand,
   buildTerminalEnv,
   loginShellPath,
+  loginShellStores,
   resetLoginShellPathCache,
   resolveLoginShell,
   shellCannotRun,
   shellName,
-  TERMINAL_TYPE
+  TERMINAL_TYPE,
+  withProfileStores
 } from './shell-environment'
 
 describe('resolveLoginShell', () => {
@@ -329,6 +331,29 @@ describe('loginShellPath', () => {
 
   itPosix('comes back with nothing rather than throwing when SHELL names nothing', () => {
     expect(loginShellPath({ platform: 'darwin', env: { SHELL: '/nowhere/at/all/zsh' } })).toBeUndefined()
+  })
+
+  // Set in ~/.zshrc, they reach the pane's shell and not a Dock-launched app.
+  itPosix('reads where the profile puts the agents’ stores, from the same answer', () => {
+    const run = (_file: string, args: readonly string[]): string =>
+      execFileSync('/bin/sh', ['-c', args[args.length - 1] ?? ''], {
+        env: { PATH: '/usr/bin:/bin', CLAUDE_CONFIG_DIR: '/Users/me/.claude-work', CODEX_HOME: 'relative/codex' },
+        encoding: 'utf8'
+      })
+    const zsh = { platform: 'darwin' as const, env: { SHELL: '/bin/zsh' }, run }
+
+    expect(loginShellPath(zsh)).toBe('/usr/bin:/bin')
+    // A relative answer names no directory to read.
+    expect(loginShellStores(zsh)).toEqual({ CLAUDE_CONFIG_DIR: '/Users/me/.claude-work' })
+    expect(loginShellStores({ ...zsh, run: answersWith('/usr/bin') })).toEqual({})
+  })
+
+  it('hands a pane the profile’s stores only where the app has none of its own', () => {
+    const stores = { CLAUDE_CONFIG_DIR: '/profile/claude', CODEX_HOME: '/profile/codex' }
+    expect(withProfileStores({ CODEX_HOME: '/app/codex', CLAUDE_CONFIG_DIR: '' }, stores)).toEqual({
+      CLAUDE_CONFIG_DIR: '/profile/claude',
+      CODEX_HOME: '/app/codex'
+    })
   })
 
   itPosix('asks once and remembers, so a pane does not pay for a shell start', async () => {

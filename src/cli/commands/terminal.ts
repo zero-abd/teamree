@@ -231,15 +231,23 @@ export const terminalCommands: readonly CommandSpec[] = [
     details:
       'The pane keeps its id, its directory and its place in the split tree, and what it printed stays above ' +
       'the line where the new run starts.\n\n' +
-      'An agent pane starts the agent over under a fresh session id rather than resuming the old ' +
-      'conversation: whether there is one worth coming back to is a question answered at startup, and this ' +
-      'is for the pane that has already ended. Anything else comes back as a shell in the same directory.\n\n' +
+      'An agent pane starts the agent over under a fresh session id, without its task unless --task, or ' +
+      'resumes the conversation --resume names. Anything else comes back as a shell in the same directory.\n\n' +
       'Refused while the pane is still running.',
     args: [TERMINAL_ARG],
-    examples: ['teamree terminal relaunch t_12'],
+    flags: [
+      { name: 'task', kind: 'boolean', description: 'Hand the fresh agent its worktree’s task again.' },
+      { name: 'resume', kind: 'string', placeholder: '<session>', description: 'Resume this conversation instead.' }
+    ],
+    examples: ['teamree terminal relaunch t_12', 'teamree terminal relaunch t_12 --task'],
     run: async (context) => {
       const terminalId = terminalSelector(context.args[0] as string, context)
-      const terminal = await context.client.call('terminal.relaunch', { terminalId })
+      const resume = readString(context.flags, 'resume')
+      const terminal = await context.client.call('terminal.relaunch', {
+        terminalId,
+        ...(readBoolean(context.flags, 'task') ? { task: true } : {}),
+        ...(resume === undefined ? {} : { resume })
+      })
       return {
         data: terminal,
         text: formatFields([

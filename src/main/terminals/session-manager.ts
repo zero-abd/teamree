@@ -56,6 +56,8 @@ import {
   endedRunCommand,
   restorableRecords,
   restoreLaunch,
+  stoppedLaunch,
+  TASK_DONE,
   type ClosedTerminalRecord,
   type RestoreLaunch,
   type TerminalRecord
@@ -65,6 +67,7 @@ import {
   closingMark,
   NEW_SHELL_BELOW,
   NOT_RUN_AGAIN_BELOW,
+  resumesBelow,
   sanitizeRecordedOutput,
   startsAgainBelow,
   tailFromLineBoundary,
@@ -72,7 +75,7 @@ import {
 } from './scrollbackRecord'
 import { EXITED_RETENTION_BYTES, PtySession, type PtySessionInit } from './pty-session'
 import { conflict, invalidParams, notFound } from './service-error'
-import { resolveLoginShell } from './shell-environment'
+import { resolveLoginShell, type ProfileStores } from './shell-environment'
 import { SubagentTracker, type SubagentTrackerOptions } from './subagents'
 import { QUIT_KILL_GRACE_MS } from './process-tree'
 import type { Tone } from '../../shared/theme'
@@ -126,8 +129,10 @@ export type ScrollbackRepository = {
 export type TerminalSessionManagerOptions = {
   /** Where a terminal starts when terminal.create omits `cwd`: the worktree's checkout. */
   resolveWorktreeCwd?: (worktreeId: string) => string | undefined
-  /** `Worktree.task`, told again to a pane starting its agent over with no conversation behind it. */
+  /** `Worktree.task`, handed to a fresh agent only when `terminal.relaunch` asks for it. */
   resolveWorktreeTask?: (worktreeId: string) => string | undefined
+  /** Whether the worktree's task is done (its agent reported); its agent panes come back stopped. */
+  taskDone?: (worktreeId: string) => boolean
   layouts?: LayoutRepository
   /** Pass the workspace store and terminals come back after a restart. */
   sessions?: SessionRepository
@@ -151,6 +156,8 @@ export type TerminalSessionManagerOptions = {
   agentHooks?: AgentHookOptions
   /** Whether a restored pane's conversation is on this disk; tests point it at a store they built. */
   conversationEvidence?: (question: ConversationQuestion) => ConversationEvidence
+  /** Where the login shell says the agents keep their stores (`loginShellStores`); absent, only the app's environment. */
+  profileStores?: () => ProfileStores
   /** The window's tone, read as each pane starts; absent, panes are not told one. */
   colorTone?: () => Tone
   /** Where a Claude pane's subagents are read from, and how often; tests point them at a tree they built. */
@@ -357,15 +364,20 @@ export class TerminalSessionManager {
     // The record's, not the session's: a restored Run pane's session only ended.
     const rerun = previous.run === undefined ? undefined : (command ?? stored?.command ?? previous.command)
     const launch: ReturnType<typeof relaunchCommand> =
-      rerun === undefined ? relaunchCommand(stored) : { command: rerun }
+      rerun === undefined ? relaunchCommand(stored, params.resume) : { command: rerun }
     const below =
       rerun !== undefined
         ? startsAgainBelow(rerun)
         : launch.agent === undefined
           ? NEW_SHELL_BELOW
-          : startsAgainBelow(launch.agent)
-    // Told its task again only when nobody ever told it anything.
-    const prompt = stored !== undefined && launch.agent !== undefined ? this.taskToRepeat(stored) : undefined
+          : params.resume === undefined
+            ? startsAgainBelow(launch.agent)
+            : resumesBelow(launch.agent)
+    // Only when asked: an agent that already ran would do its task twice.
+    const prompt =
+      params.task === true && params.resume === undefined && stored !== undefined && launch.agent !== undefined
+        ? this.taskFor(stored).prompt
+        : undefined
 
     // Read before teardown: the only copy of what the pane printed. Sanitised
     // because nothing replayed into a live emulator may do anything but print.
@@ -590,7 +602,7 @@ export class TerminalSessionManager {
     const { record } = entry
     if (this.sessions.has(record.id)) throw conflict(`terminal ${record.id} is open`)
 
-    const launch = restoreLaunch(record, this.options.conversationEvidence)
+    const launch = restoreLaunch(record, this.evidence)
     const restoring: TerminalRecord =
       launch.repinned === undefined
         ? record
@@ -611,13 +623,12 @@ export class TerminalSessionManager {
         shell: record.shell,
         ...size,
         ...(launch.command === undefined ? {} : { command: launch.command }),
-        ...(launch.repinned === undefined ? {} : this.taskFor(record)),
         ...(launch.resumed && launch.fallback !== undefined ? { fallback: launch.fallback } : {}),
         ...(launch.note === undefined ? {} : { startupNote: launch.note }),
         ...(entry.ordinal === undefined ? {} : { ordinal: entry.ordinal })
       },
       restoring,
-      launch.resumed ? 'agent' : launch.repinned === undefined ? 'shell' : 'restarted'
+      restoredAs(launch)
     )
     this.setClosed(this.closedList().filter((candidate) => candidate !== entry))
     this.saveLayout({ worktreeId: record.worktreeId, root, focusedTerminalId: record.id })
@@ -716,9 +727,11 @@ export class TerminalSessionManager {
     for (const record of records) {
       if (this.sessions.has(record.id)) continue
       const launch: RestoreLaunch =
-        record.run === undefined
-          ? restoreLaunch(record, this.options.conversationEvidence)
-          : { command: endedRunCommand(record), resumed: false }
+        record.run !== undefined
+          ? { command: endedRunCommand(record), resumed: false }
+          : record.agent !== undefined && record.command !== undefined && this.options.taskDone?.(record.worktreeId)
+            ? stoppedLaunch(TASK_DONE)
+            : restoreLaunch(record, this.evidence)
       // Handed over even for a resume, which prints the conversation itself:
       // a resume that fails would otherwise leave the pane holding a one-line
       // refusal, and the next quit wrote *that* back over the transcript.
@@ -743,22 +756,16 @@ export class TerminalSessionManager {
             rows: record.rows,
             ...(launch.command === undefined ? {} : { command: launch.command }),
             ...(kept === undefined ? {} : { restoredRecord: kept }),
-            // A pane starting its agent over was never spoken to, so its task goes with it again.
-            ...(launch.repinned === undefined ? {} : this.taskFor(record)),
             ...(launch.resumed && launch.fallback !== undefined ? { fallback: launch.fallback } : {}),
             ...(launch.note === undefined ? {} : { startupNote: launch.note }),
-            ...(record.run === undefined ? {} : { run: record.run, recordStartsBelow: NOT_RUN_AGAIN_BELOW })
+            ...(record.run === undefined && launch.stopped === undefined
+              ? {}
+              : { recordStartsBelow: NOT_RUN_AGAIN_BELOW }),
+            ...(record.run === undefined ? {} : { run: record.run })
           },
           restoring,
-          // 'restarted' is running its agent; calling it a shell had the badge contradicting the banner.
           // A Run pane is no shell: its exit and Run Again say how it came back.
-          record.run !== undefined
-            ? undefined
-            : launch.resumed
-              ? 'agent'
-              : launch.repinned === undefined
-                ? 'shell'
-                : 'restarted'
+          record.run !== undefined ? undefined : restoredAs(launch)
         )
         restored += 1
         if (launch.resumed) resumed += 1
@@ -907,6 +914,7 @@ export class TerminalSessionManager {
       launch.command !== undefined && agent !== undefined && params.prompt !== undefined
         ? firstPromptCommand(launch.command, agent, this.prefixed(params.worktreeId, params.prompt))
         : launch.command
+    const prompted = spawned !== launch.command || restoring?.prompted === true
     const fallback = params.fallback
     // The record's name wins on a restore.
     const label = restoring?.label ?? params.label
@@ -989,6 +997,7 @@ export class TerminalSessionManager {
       // from before this field existed may have a real conversation behind it.
       // `markNotResumable` answers the unknown when the agent refuses.
       ...(restoring === undefined ? { typed: false } : restoring.typed === undefined ? {} : { typed: restoring.typed }),
+      ...(prompted ? { prompted: true } : {}),
       ...(params.run === undefined ? {} : { run: params.run }),
       cols: snapshot.cols,
       rows: snapshot.rows,
@@ -1024,17 +1033,12 @@ export class TerminalSessionManager {
     return task === undefined || task.length === 0 ? {} : { prompt: task }
   }
 
-  /** The worktree's task, for a pane that never got a conversation; asked the way `restoreLaunch` asks. */
-  private taskToRepeat(record: TerminalRecord): string | undefined {
-    if (record.agent === undefined) return undefined
-    const evidence = (this.options.conversationEvidence ?? conversationOnDisk)({
-      agent: record.agent,
-      cwd: record.cwd,
-      ...(record.agentSessionId === undefined ? {} : { agentSessionId: record.agentSessionId })
-    })
-    const never = evidence === 'absent' || (evidence === 'unknown' && record.typed === false)
-    return never ? this.taskFor(record).prompt : undefined
-  }
+  /** Whether a pane's conversation is on this disk, in every store its agent may have used. */
+  private readonly evidence = (question: ConversationQuestion): ConversationEvidence =>
+    (
+      this.options.conversationEvidence ??
+      ((asked) => conversationOnDisk(asked, undefined, this.options.profileStores?.()))
+    )(question)
 
   /** A pane's snapshot with what the manager keeps beside its session. */
   private withOverlays(terminal: Terminal): Terminal {
@@ -1053,7 +1057,8 @@ export class TerminalSessionManager {
     const resuming = this.resuming.delete(session.id)
     const settled = this.options.onAgentSettled
     const agent = session.agent
-    if (settled === undefined || agent === undefined) return
+    // A pane left stopped never ran its agent; its ending is nobody's news.
+    if (settled === undefined || agent === undefined || session.leftStopped) return
     // The resume finishing is not work finishing; an exit still is.
     if (resuming && reason === 'quiet') return
     const menu = session.snapshot().screenMenu
@@ -1117,6 +1122,7 @@ export class TerminalSessionManager {
     const stored = this.records.listTerminals().find((record) => record.id === terminalId)
     if (stored === undefined) return
     const next: TerminalRecord = { ...stored, command: restart.command, typed: false }
+    delete next.prompted
     // Deleted when the agent mints its own ids: absent means "ask the agent for the last session here".
     if (restart.agentSessionId === undefined) delete next.agentSessionId
     else next.agentSessionId = restart.agentSessionId
@@ -1129,10 +1135,13 @@ export class TerminalSessionManager {
     if (stored !== undefined && stored.exitCode !== exitCode) this.records.putTerminal({ ...stored, exitCode })
   }
 
+  /** Nothing behind the pane to resume any more: neither a keystroke nor its task still counts. */
   private markNotResumable(terminalId: string): void {
     const stored = this.records.listTerminals().find((record) => record.id === terminalId)
-    if (stored === undefined || stored.typed === false) return
-    this.records.putTerminal({ ...stored, typed: false })
+    if (stored === undefined || (stored.typed === false && stored.prompted !== true)) return
+    const next: TerminalRecord = { ...stored, typed: false }
+    delete next.prompted
+    this.records.putTerminal(next)
   }
 
   private require(terminalId: string): PtySession {
@@ -1272,14 +1281,25 @@ function resumeAgentSession(
 
 /**
  * What a pane runs when it is run again: an agent's command with a fresh id
- * pinned in, else a shell — `npm run deploy` was not asked for twice, and a
+ * pinned in, or resuming `resume`, else a shell — `npm run deploy` was not asked for twice, and a
  * command that cannot be modelled would leave a dead id on the line.
  */
-function relaunchCommand(record: TerminalRecord | undefined): {
+function relaunchCommand(
+  record: TerminalRecord | undefined,
+  resume?: string
+): {
   command?: string
   agent?: AgentKind
   agentSessionId?: string
 } {
+  if (resume !== undefined) {
+    const resumed =
+      record?.command === undefined || record.agent === undefined
+        ? null
+        : resumeByIdCommand(record.command, record.agent, resume)
+    if (resumed === null || record?.agent === undefined) throw invalidParams('this pane cannot resume a conversation')
+    return { command: resumed, agent: record.agent, agentSessionId: resume }
+  }
   if (record?.command === undefined || record.agent === undefined) return {}
   const restart = restartSessionCommand(record.command, record.agent)
   if (restart === null) return {}
@@ -1288,6 +1308,13 @@ function relaunchCommand(record: TerminalRecord | undefined): {
     agent: record.agent,
     ...(restart.agentSessionId === undefined ? {} : { agentSessionId: restart.agentSessionId })
   }
+}
+
+/** The badge a restored pane wears: 'restarted' is running its agent, so calling it a shell would contradict the banner. */
+function restoredAs(launch: RestoreLaunch): RestoredAs {
+  if (launch.stopped) return 'stopped'
+  if (launch.resumed) return 'agent'
+  return launch.repinned === undefined ? 'shell' : 'restarted'
 }
 
 /** Records nothing worth keeping: an in-memory manager has no next launch. */

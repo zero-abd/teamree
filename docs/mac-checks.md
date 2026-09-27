@@ -177,25 +177,24 @@ time replayed above under the same record lines as check 2 and no badge claiming
 otherwise. A pane that comes back dead here is the old behaviour, and it is the
 bug this check exists downstream of.
 
-The genuine failure takes one more step, because the case above is now the case
-that no longer fails. Open an agent pane, type something into it and let it
-answer, ⌘Q, then delete that conversation from wherever the CLI in question keeps
-its conversations on disk, and relaunch. Expect the pane to come back, run its
-resume, and be refused in a line by the agent itself, which then exits — and
-expect the app to say so rather than leave you looking at it: the badge stops
-reading resumed, the pane's old output is there above under an
-`[end of record — resume attempt below]` line rather than the usual one, and a
-dim bracketed line at the bottom reads
-`[resume refused — agent exited <code>, record above; open a new pane for a
-fresh one]`, immediately under the agent's own reason. The pane is dead, and that is the recorded behaviour rather than the
-failure — [`../ROADMAP.md`](../ROADMAP.md) records it under "Known gaps", along
-with why a pane that quietly started a fresh conversation instead would be the
-worse answer.
+The next shape takes one more step. Open an agent pane, type something into it
+and let it answer, ⌘Q, then delete that conversation from wherever the CLI in
+question keeps its conversations on disk, and relaunch. Expect the pane to come
+back *stopped*: its old output above under `[end of record — not run again]`, a
+dim `[no conversation to resume — agent stopped, task not re-sent]` under it, a
+`stopped` badge, and Resume Conversation… and Start Fresh beside it. A pane that
+starts its agent on its own here, above all one handed its task again, is the bug
+of a finished parent fanning out its children twice. Start Fresh starts the agent
+bare; the pane menu's Start Fresh with Task is the only way the task goes again.
 
-Then relaunch once more without touching anything. Expect that pane to come back
-*running*, with a fresh agent above the whole of the failed launch: the refusal
-is written down the first time it happens, so it costs one restart rather than
-recurring on every launch for the life of the pane.
+The genuine refusal needs the store to keep a conversation the CLI will not take
+back (another machine's, or a CLI whose store this app cannot read). Expect the
+pane to run its resume and be refused in a line by the agent itself, the badge to
+stop reading resumed, the old output above under
+`[end of record — resume attempt below]`, and a dim
+`[resume refused — agent exited <code>, record above; …]` line under the agent's
+own reason. The refusal is written down the first time it happens, so it costs
+one restart rather than recurring on every launch for the life of the pane.
 
 Two failures to catch, neither of them visible in the pane at the time. A pane
 still wearing the resumed badge over a dead agent, with nothing written into it,

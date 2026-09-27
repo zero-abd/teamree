@@ -262,7 +262,7 @@ const AGENT_FOOTERS = [
 ]
 
 /** The asides the app writes around a restored pane's record (see `scrollbackRecord.ts`); not the program's output. */
-const OWN_MARK = /^\[(?:record — up to |end of record — |resume refused — |no conversation to resume — )/
+const OWN_MARK = /^\[(?:record — up to |end of record — |resume refused — |no conversation to resume — |task done — )/
 
 /** A fragment: `E`, `│`, `⠋`, `…` — fewer letters and digits than any word worth quoting. */
 const MIN_WORD_CHARS = 3

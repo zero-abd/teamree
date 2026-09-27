@@ -109,4 +109,45 @@ describe('Resume Conversation', () => {
     const codex = (await screen.findByText('rename the config flag')).closest('button') as HTMLButtonElement
     expect(codex.disabled).toBe(true)
   })
+
+  // Opened from a stopped pane: that pane takes its own agent's conversation back, in place.
+  it('resumes in the ended pane it was opened from when the agent matches, else in a new pane', async () => {
+    useWorkspaceStore.setState({
+      terminals: {
+        term_1: {
+          id: 'term_1',
+          worktreeId: 'wt_1',
+          title: 'claude',
+          cwd: '/w',
+          shell: '/bin/zsh',
+          cols: 80,
+          rows: 24,
+          running: false,
+          busy: false,
+          lastOutputAt: 0,
+          agent: 'claude',
+          restored: 'stopped'
+        }
+      }
+    })
+    const relaunched = (): unknown[] =>
+      call.mock.calls.filter(([method]) => method === 'terminal.relaunch').map(([, p]) => p)
+    call.mockImplementation(async (method) => {
+      if (method === 'agent.conversations') return CONVERSATIONS
+      if (method === 'terminal.relaunch') return { id: 'term_1', worktreeId: 'wt_1' }
+      if (method === 'terminal.create') return { id: 'term_9', worktreeId: 'wt_1' }
+      return []
+    })
+
+    const { unmount } = render(<ResumeConversationDialog worktreeId="wt_1" terminalId="term_1" />)
+    fireEvent.doubleClick(await screen.findByText('auth work'))
+    await vi.waitFor(() => expect(relaunched()).toEqual([{ terminalId: 'term_1', resume: 'c-2' }]))
+    expect(created()).toEqual([])
+    unmount()
+
+    render(<ResumeConversationDialog worktreeId="wt_1" terminalId="term_1" />)
+    fireEvent.doubleClick(await screen.findByText('rename the config flag'))
+    await vi.waitFor(() => expect(created()).toHaveLength(1))
+    expect(relaunched()).toHaveLength(1)
+  })
 })

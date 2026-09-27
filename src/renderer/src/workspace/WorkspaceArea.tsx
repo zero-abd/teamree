@@ -110,6 +110,7 @@ function WorkspaceView({
   const focusPane = useWorkspaceStore((state) => state.focusPane)
   const closeTerminal = useWorkspaceStore((state) => state.closeTerminal)
   const relaunchTerminal = useWorkspaceStore((state) => state.relaunchTerminal)
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
   const applySplitSizes = useWorkspaceStore((state) => state.applySplitSizes)
   const paneSearch = useWorkspaceStore((state) => state.paneSearch)
   const closePaneSearch = useWorkspaceStore((state) => state.closePaneSearch)
@@ -152,6 +153,12 @@ function WorkspaceView({
   )
   const onClose = useCallback((terminalId: string) => void closeTerminal(terminalId), [closeTerminal])
   const onRelaunch = useCallback((terminalId: string) => void relaunchTerminal(terminalId), [relaunchTerminal])
+  const onResumeConversation = useCallback(
+    (terminalId: string) => {
+      if (activeWorktreeId) openDialog({ kind: 'resume-conversation', worktreeId: activeWorktreeId, terminalId })
+    },
+    [activeWorktreeId, openDialog]
+  )
 
   // Before the empty state: which pane needs you is a question about every worktree.
   if (dashboardOpen) return <Dashboard />
@@ -218,6 +225,7 @@ function WorkspaceView({
               onFocus={focusPane}
               onClose={onClose}
               onRelaunch={onRelaunch}
+              onResumeConversation={onResumeConversation}
               onResize={onResize}
               isAppChord={isAppChord}
               modifier={modifier}

@@ -237,6 +237,33 @@ describe('the rows that depend on the pane', () => {
     expect(labels(rightClickTab('Claude Code'))).not.toContain('Run Again')
   })
 
+  // An agent that ended is resumed, or started bare; its task goes again only when asked for.
+  it('offers a stopped agent its conversation, a fresh start, and its task only by name', () => {
+    seed(leaf('t2'), {
+      worktrees: [{ ...worktree, task: 'Make the pager stream' }],
+      terminals: { t2: terminal({ id: 't2', agent: 'claude', running: false, exitCode: 0, restored: 'stopped' }) },
+      openDialog: vi.fn()
+    })
+    render(<TerminalTabs modifier={MAC} />)
+    // A task's agent pane goes by the worktree's name.
+    const menu = rightClickTab('rewrite')
+    expect(labels(menu)).toContain('Resume Conversation…')
+    expect(labels(menu)).toContain('Start Fresh')
+    expect(labels(menu)).toContain('Start Fresh with Task')
+    expect(labels(menu)).not.toContain('Run Again')
+
+    choose(menu, 'Start Fresh')
+    expect(actions.relaunchTerminal).toHaveBeenCalledExactlyOnceWith('t2')
+    choose(rightClickTab('rewrite'), 'Start Fresh with Task')
+    expect(actions.relaunchTerminal).toHaveBeenLastCalledWith('t2', { task: true })
+    choose(rightClickTab('rewrite'), 'Resume Conversation…')
+    expect(useWorkspaceStore.getState().openDialog).toHaveBeenCalledWith({
+      kind: 'resume-conversation',
+      worktreeId: 'w1',
+      terminalId: 't2'
+    })
+  })
+
   it('leaves Close Others and the moves out when there are no others', () => {
     seed(leaf('t1'))
     render(<TerminalTabs modifier={MAC} />)

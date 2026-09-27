@@ -791,7 +791,13 @@ export const Params = {
   }),
   terminalSubscribe: z.object({ terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS) }),
   /** Starts an exited pane's program over in the same pane. Refused while still running. */
-  terminalRelaunch: z.object({ terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS) }),
+  terminalRelaunch: z.object({
+    terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
+    /** Hands the fresh agent the worktree's task again; never done unasked. */
+    task: z.boolean().optional(),
+    /** Resumes this conversation of the pane's agent (`agent.conversations`) in the pane instead of a fresh one. */
+    resume: agentSessionId.optional()
+  }),
   /** `[Image #N]` in a Claude Code pane, as the file pasted; see docs/plans/pasted-image-preview.md. */
   terminalPastedImage: z.object({
     terminalId: z.string().min(1).max(MAX_TERMINAL_ID_CHARS),
@@ -1099,7 +1105,7 @@ export type MethodContract = TaskMethodContract &
     'terminal.closed': { params: z.infer<typeof Params.terminalClosed>; result: ClosedPane[] }
     'terminal.reopen': { params: z.infer<typeof Params.terminalReopen>; result: Terminal }
     'terminal.split': { params: z.infer<typeof Params.terminalSplit>; result: { terminal: Terminal; layout: Layout } }
-    /** The same pane running its program again: same id, leaf, directory; agent started over, not resumed. */
+    /** The same pane running its program again: same id, leaf, directory; agent started over unless given `resume`. */
     'terminal.relaunch': { params: z.infer<typeof Params.terminalRelaunch>; result: Terminal }
     /** A grant URL to draw and the path to reveal; null when the file is not there. */
     'terminal.pastedImage': {

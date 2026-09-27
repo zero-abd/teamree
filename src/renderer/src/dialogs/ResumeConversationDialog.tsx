@@ -1,4 +1,5 @@
-// A worktree's past Claude Code and Codex conversations, newest first; the one chosen resumes in a new pane.
+// A worktree's past Claude Code and Codex conversations, newest first; the one chosen resumes in a new pane,
+// or in the ended pane it was opened from when that pane runs the same agent.
 
 import { useEffect, useState } from 'react'
 import type { AgentConversation } from '@shared/entities'
@@ -18,9 +19,17 @@ export const RESUME_CONVERSATION_TITLE = 'Resume Conversation'
 
 const keyOf = (conversation: AgentConversation): string => `${conversation.agent}:${conversation.sessionId}`
 
-export function ResumeConversationDialog({ worktreeId }: { worktreeId: string }): React.JSX.Element {
+export function ResumeConversationDialog({
+  worktreeId,
+  terminalId
+}: {
+  worktreeId: string
+  terminalId?: string
+}): React.JSX.Element {
   const agents = useWorkspaceStore((state) => state.agents)
   const resumeConversation = useWorkspaceStore((state) => state.resumeConversation)
+  const relaunchTerminal = useWorkspaceStore((state) => state.relaunchTerminal)
+  const pane = useWorkspaceStore((state) => (terminalId === undefined ? undefined : state.terminals[terminalId]))
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
 
   const [listing, setListing] = useState<Listing>({ phase: 'loading' })
@@ -63,7 +72,11 @@ export function ResumeConversationDialog({ worktreeId }: { worktreeId: string })
   const resume = (conversation: AgentConversation | undefined): void => {
     if (conversation === undefined || !installed(conversation)) return
     closeDialog()
-    void resumeConversation(worktreeId, conversation.agent, conversation.sessionId)
+    if (pane !== undefined && !pane.running && pane.agent === conversation.agent) {
+      void relaunchTerminal(pane.id, { resume: conversation.sessionId })
+    } else {
+      void resumeConversation(worktreeId, conversation.agent, conversation.sessionId)
+    }
   }
 
   return (

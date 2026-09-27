@@ -1,5 +1,5 @@
 // The task on its way to the agent, on a real pty: on the launched line, once,
-// after the session id, and never on a resume or in the record.
+// after the session id, and never on a resume, a relaunch unasked, or in the record.
 
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
@@ -8,7 +8,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { Layout } from '../../shared/entities'
 import type { ConversationEvidence } from './agent-conversations'
 import { canSpawnPty, waitUntil } from './pty-test-support'
-import type { TerminalRecord } from './session-restore'
+import { agentStoppedMark } from './scrollbackRecord'
+import { NO_CONVERSATION, TASK_DONE, type TerminalRecord } from './session-restore'
 import { TerminalSessionManager, type LayoutRepository, type SessionRepository } from './session-manager'
 
 const describePty = canSpawnPty() ? describe : describe.skip
@@ -65,11 +66,13 @@ function repositories(): LayoutRepository & SessionRepository & { records: Map<s
 function manager(
   stores: LayoutRepository & SessionRepository,
   checkout: string,
-  evidence: ConversationEvidence
+  evidence: ConversationEvidence,
+  taskDone = false
 ): TerminalSessionManager {
   const created = new TerminalSessionManager({
     resolveWorktreeCwd: (worktreeId) => (worktreeId === 'wt_1' ? checkout : undefined),
     resolveWorktreeTask: (worktreeId) => (worktreeId === 'wt_1' ? TASK : undefined),
+    taskDone: () => taskDone,
     conversationEvidence: () => evidence,
     layouts: stores,
     sessions: stores
@@ -141,45 +144,103 @@ describePty('the task as the first prompt', () => {
     TEST_TIMEOUT_MS
   )
 
+  /** A first launch handed the task, quit; the stores are what a relaunch then asks. */
+  async function ranOnce(
+    name: 'claude' | 'codex' = 'claude'
+  ): Promise<{ checkout: string; stores: ReturnType<typeof repositories>; terminalId: string }> {
+    const { checkout, launch } = await fakeAgent(name)
+    const stores = repositories()
+    const first = manager(stores, checkout, 'absent')
+    const opened = first.create({ worktreeId: 'wt_1', command: launch, prompt: TASK })
+    await printedArgs(first, opened.id)
+    await first.shutdown()
+    managers.splice(managers.indexOf(first), 1)
+    return { checkout, stores, terminalId: opened.id }
+  }
+
+  it('is written down as delivered, and not for a pane launched without it', async () => {
+    const { checkout, launch } = await fakeAgent('claude')
+    const stores = repositories()
+    const sessions = manager(stores, checkout, 'absent')
+    const told = sessions.create({ worktreeId: 'wt_1', command: launch, prompt: TASK })
+    const bare = sessions.create({ worktreeId: 'wt_1', command: launch })
+    expect(stores.records.get(told.id)?.prompted).toBe(true)
+    expect(stores.records.get(bare.id)?.prompted).toBeUndefined()
+  })
+
   it(
-    'is given again to a pane starting over with no conversation behind it',
+    'is not given again after a relaunch with no conversation behind it: the pane comes back stopped',
     async () => {
-      const { checkout, launch } = await fakeAgent('claude')
-      const stores = repositories()
-      const first = manager(stores, checkout, 'absent')
-      const opened = first.create({ worktreeId: 'wt_1', command: launch, prompt: TASK })
-      await printedArgs(first, opened.id)
-      await first.shutdown()
-      managers.splice(managers.indexOf(first), 1)
+      const { checkout, stores, terminalId } = await ranOnce()
 
       const next = manager(stores, checkout, 'absent')
-      next.restoreSessions()
-      const printed = await printedArgs(next, opened.id)
-      expect(printed).toContain('--session-id')
-      expect(printed.filter((arg) => arg === TASK)).toHaveLength(1)
+      expect(next.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
+      const printed = await printedArgs(next, terminalId)
+
+      expect(printed).toEqual([])
+      expect(next.read(terminalId)).toContain(agentStoppedMark(NO_CONVERSATION))
+      const pane = next.list('wt_1')[0]
+      expect(pane?.restored).toBe('stopped')
+      expect(pane?.agent).toBe('claude')
+      expect(pane?.title).toBe('claude')
+      // Still the agent's pane: the next launch asks the same question.
+      expect(stores.records.get(terminalId)?.command).toContain('--session-id')
+      expect(stores.records.get(terminalId)?.prompted).toBe(true)
     },
     TEST_TIMEOUT_MS
   )
 
   it(
-    'is given again by relaunch to a pane nobody ever spoke to, and not to one somebody did',
+    'is not given to a done task, whose agent comes back stopped though its conversation is there',
     async () => {
-      const { checkout, launch } = await fakeAgent('claude')
+      const { checkout, stores, terminalId } = await ranOnce()
 
-      // Only the arguments printed after the first run's are the relaunch's.
-      const untouched = manager(repositories(), checkout, 'absent')
-      const quiet = untouched.create({ worktreeId: 'wt_1', command: launch, prompt: TASK })
-      const before = await printedArgs(untouched, quiet.id)
-      await untouched.relaunch({ terminalId: quiet.id })
-      const again = (await printedArgs(untouched, quiet.id)).slice(before.length)
-      expect(again.filter((arg) => arg === TASK)).toHaveLength(1)
-      expect(again.indexOf('--session-id')).toBeLessThan(again.indexOf(TASK))
+      const next = manager(stores, checkout, 'present', true)
+      expect(next.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
 
-      const spoken = manager(repositories(), checkout, 'present')
-      const talked = spoken.create({ worktreeId: 'wt_1', command: launch, prompt: TASK })
-      const said = await printedArgs(spoken, talked.id)
-      await spoken.relaunch({ terminalId: talked.id })
-      expect((await printedArgs(spoken, talked.id)).slice(said.length)).not.toContain(TASK)
+      expect(await printedArgs(next, terminalId)).toEqual([])
+      expect(next.read(terminalId)).toContain(agentStoppedMark(TASK_DONE))
+      expect(next.list('wt_1')[0]?.restored).toBe('stopped')
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'is not given by Start Fresh, only when the task is asked for',
+    async () => {
+      const { checkout, stores, terminalId } = await ranOnce()
+      const next = manager(stores, checkout, 'absent')
+      next.restoreSessions()
+      await printedArgs(next, terminalId)
+
+      await next.relaunch({ terminalId })
+      const fresh = await printedArgs(next, terminalId)
+      expect(fresh).toContain('--session-id')
+      expect(fresh).not.toContain(TASK)
+      expect(stores.records.get(terminalId)?.prompted).toBeUndefined()
+
+      await next.relaunch({ terminalId, task: true })
+      const asked = (await printedArgs(next, terminalId)).slice(fresh.length)
+      expect(asked.filter((arg) => arg === TASK)).toHaveLength(1)
+      expect(asked.indexOf('--session-id')).toBeLessThan(asked.indexOf(TASK))
+      expect(stores.records.get(terminalId)?.prompted).toBe(true)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
+    'is not given to a conversation resumed in the pane',
+    async () => {
+      const { checkout, stores, terminalId } = await ranOnce()
+      const next = manager(stores, checkout, 'absent')
+      next.restoreSessions()
+      await printedArgs(next, terminalId)
+
+      const chosen = '0b0e1d7c-5f63-4a55-9d59-8c1f3e2a7b10'
+      await next.relaunch({ terminalId, resume: chosen })
+      const printed = await printedArgs(next, terminalId)
+      expect(printed).toEqual(['--resume', chosen])
+      expect(stores.records.get(terminalId)?.agentSessionId).toBe(chosen)
     },
     TEST_TIMEOUT_MS
   )

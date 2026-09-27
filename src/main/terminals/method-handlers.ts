@@ -109,7 +109,7 @@ export function createTerminalService(options: TerminalServiceOptions = {}): Ter
     'agent.conversations': async (params) => {
       const cwd = options.resolveWorktreeCwd?.(params.worktreeId)
       if (cwd === undefined) throw notFound(`no such worktree: ${params.worktreeId}`)
-      return listConversations(cwd)
+      return listConversations(cwd, undefined, options.profileStores?.())
     },
     'terminal.create': async (params) => manager.create(params),
     'terminal.write': async (params) => {
