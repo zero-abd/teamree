@@ -38,6 +38,12 @@
   font-size: var(--text-lg);
   font-weight: 600;
   letter-spacing: -0.01em;
+  /* A whole task title may be long; two lines, the rest on hover. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .modal__body {

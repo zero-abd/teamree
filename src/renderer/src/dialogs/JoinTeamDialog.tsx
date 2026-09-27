@@ -94,7 +94,7 @@ export function JoinTeamDialog({ invitation }: { invitation: Invitation }): Reac
               />
             </label>
             <button type="button" className="button" onClick={() => void choose()} disabled={running}>
-              Choose…
+              Change…
             </button>
             {found === undefined ? null : (
               <button type="button" className="button" onClick={() => setUseExisting(true)} disabled={running}>

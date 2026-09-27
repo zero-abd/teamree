@@ -5,6 +5,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { Worktree } from '@shared/entities'
 import type { SearchFileGroup } from './searchModel'
 import type { SearchLine } from '@shared/search'
+import { worktreeDisplay, worktreeLabel } from '../../sidebar/worktreeDisplay'
 import { useWorkspaceStore } from '../../state/workspaceStore'
 import { directoryOf, fileNameOf } from './ChangesTab'
 import { fileKey, groupSearchResults, hitWindow, searchRows, stepHit } from './searchModel'
@@ -60,7 +61,10 @@ export function SearchTab({ worktree }: { worktree: Worktree }): React.JSX.Eleme
   }, [focusToken])
 
   const siblings = useMemo(
-    () => worktrees.filter((entry) => entry.projectId === worktree.projectId),
+    () =>
+      worktrees
+        .filter((entry) => entry.projectId === worktree.projectId)
+        .map((entry) => ({ id: entry.id, name: worktreeLabel(worktreeDisplay(entry)) })),
     [worktrees, worktree.projectId]
   )
   const groups = useMemo(() => groupSearchResults(files, siblings, worktree.id), [files, siblings, worktree.id])
@@ -193,7 +197,9 @@ export function SearchTab({ worktree }: { worktree: Worktree }): React.JSX.Eleme
           if (row.kind === 'task') {
             return (
               <li key={row.key} className="search__task">
-                <span className="search__taskName">{row.group.name}</span>
+                <span className="search__taskName" title={row.group.name}>
+                  {row.group.name}
+                </span>
                 <span className="search__count">{row.group.matches}</span>
               </li>
             )

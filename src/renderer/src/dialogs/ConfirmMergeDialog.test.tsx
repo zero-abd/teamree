@@ -379,6 +379,19 @@ describe('pushing main after the merge', () => {
     expect(screen.queryByRole('checkbox')).toBeNull()
   })
 
+  it('names the parent by its whole title, not the name clipped from an issue', () => {
+    const task = '#7 Checkout double-charges on retry\n\nSeen twice.'
+    const parent = { ...worktree, id: 'w0', name: '#7 Checkout double-charges on', task }
+    useWorkspaceStore.setState({
+      worktrees: [parent, { ...worktree, parentId: 'w0' }],
+      landings: { w1: { ...landing, parent: { worktreeId: 'w0', name: parent.name } } }
+    })
+    render(<ConfirmMergeDialog worktreeId="w1" />)
+    const title = screen.getByRole('heading', { name: /^Merge / })
+    expect(title.textContent).toBe('Merge "fix typo" into #7 Checkout double-charges on retry?')
+    expect(title.getAttribute('title')).toBe(title.textContent)
+  })
+
   it('hands a push that did not land to the push dialog, the merge standing', async () => {
     const pushError = {
       message: 'origin/main moved',

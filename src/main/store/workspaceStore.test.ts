@@ -750,7 +750,12 @@ describe('workspace store', () => {
 
       const store = await WorkspaceStore.open(path)
       expect(store.getAppearance()).toEqual(DEFAULT_APPEARANCE)
-      expect(store.updateSettings()).toEqual({ automatic: true, lastCheckedAt: null, lastSeenVersion: null })
+      expect(store.updateSettings()).toEqual({
+        automatic: true,
+        lastCheckedAt: null,
+        lastSucceededAt: null,
+        lastSeenVersion: null
+      })
       expect(store.listStandingConsent()).toEqual([])
     })
   })

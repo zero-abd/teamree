@@ -414,7 +414,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
       settings: {
         read: () => registry.context.store.updateSettings(),
         setAutomatic: (automatic) => registry.context.store.setUpdateAutomatic(automatic),
-        recordAttempt: (at) => registry.context.store.recordUpdateCheck(at),
+        recordAttempt: (at, succeeded) => registry.context.store.recordUpdateCheck(at, succeeded),
         rememberLatest: (version) => registry.context.store.rememberLatestVersion(version)
       },
       openExternal: options.openExternal,

@@ -22,6 +22,7 @@ vi.mock('../../runtimeClient/currentRuntimeClient', () => ({
 
 const { useWorkspaceStore } = await import('../../state/workspaceStore')
 const { useChildren } = await import('./childrenStore')
+const { useOverlaps } = await import('../../state/overlapStore')
 const { ChildrenSection } = await import('./ChildrenSection')
 const { ChangesTab } = await import('./ChangesTab')
 
@@ -100,7 +101,8 @@ const rowOf = (name: string): HTMLElement => screen.getByRole('listitem', { name
 beforeEach(() => {
   call.mockReset()
   call.mockImplementation(() => new Promise(() => {}))
-  useChildren.setState({ merging: {}, stopped: {}, reveal: null })
+  useChildren.setState({ merging: {}, stopped: {}, skipped: {}, reveal: null })
+  useOverlaps.setState({ byProject: {} })
   seed()
 })
 afterEach(cleanup)
@@ -168,7 +170,39 @@ describe('the Children section', () => {
 
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Merge All Ready' })))
 
-    expect(mergeChildren).toHaveBeenCalledWith('parent', ['cart', 'notes'])
+    expect(mergeChildren).toHaveBeenCalledWith('parent', ['cart', 'notes'], [])
+  })
+
+  it('Merge All Ready says which child it leaves out for a clash, and Resolve… opens its merge', async () => {
+    const mergeChildren = vi.fn(async () => true)
+    useChildren.setState({ mergeChildren })
+    useWorkspaceStore.setState({
+      mergePreviews: { ...useWorkspaceStore.getState().mergePreviews, pay: preview('pay') }
+    })
+    const between = (worktreeId: string, other: string) => ({
+      worktreeId,
+      with: { worktreeId: other },
+      paths: ['money.js'],
+      conflicts: ['money.js']
+    })
+    useOverlaps.setState({ byProject: { p1: [between('cart', 'pay'), between('pay', 'cart')] } })
+    render(<ChildrenSection worktreeId="parent" />)
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Merge All Ready' })))
+    expect(mergeChildren).toHaveBeenCalledWith(
+      'parent',
+      ['cart', 'notes'],
+      [{ worktreeId: 'pay', title: 'Payment', clashesWith: 'Cart totals' }]
+    )
+
+    act(() =>
+      useChildren.setState({
+        skipped: { parent: [{ worktreeId: 'pay', title: 'Payment', clashesWith: 'Cart totals' }] }
+      })
+    )
+    expect(screen.getByRole('status').textContent).toContain('Skipped Payment: conflicts with Cart totals')
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve…' }))
+    expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'pay' })
   })
 
   it('says which child is merging and holds the other buttons', () => {

@@ -1756,6 +1756,8 @@ export type UpdateState = {
   checking: boolean
   /** When the last check was attempted, whether or not it succeeded. */
   checkedAt: number | null
+  /** When a check last got an answer; absent from an older runtime. */
+  succeededAt?: number | null
   /**
    * Why the last check produced no answer, or null. Kept rather than raised: a
    * check that could not reach GitHub is not worth interrupting anybody for.

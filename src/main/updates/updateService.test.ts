@@ -45,6 +45,7 @@ function settings(initial: Partial<Record<string, unknown>> = {}) {
   const held = {
     automatic: true,
     lastCheckedAt: null as number | null,
+    lastSucceededAt: null as number | null,
     lastSeenVersion: null as string | null,
     ...initial
   }
@@ -53,8 +54,9 @@ function settings(initial: Partial<Record<string, unknown>> = {}) {
     setAutomatic: (automatic) => {
       held.automatic = automatic
     },
-    recordAttempt: (at) => {
+    recordAttempt: (at, succeeded) => {
       held.lastCheckedAt = at
+      if (succeeded) held.lastSucceededAt = at
     },
     rememberLatest: (version) => {
       held.lastSeenVersion = version
@@ -240,6 +242,21 @@ describe('a check that could not be made', () => {
     await update.check({ force: true })
     expect(held.lastCheckedAt).toBe(NOW)
   })
+
+  it('keeps when a check last got an answer', async () => {
+    const { record } = settings({ lastCheckedAt: NOW - 7_200_000, lastSucceededAt: NOW - 7_200_000 })
+    const { update } = service({
+      record,
+      readRelease: async () => {
+        throw new Error('fetch failed')
+      }
+    })
+    const state = await update.check({ force: true })
+    expect(state).toMatchObject({ checkedAt: NOW, succeededAt: NOW - 7_200_000, problem: 'fetch failed' })
+
+    const answered = service({ record })
+    expect((await answered.update.check({ force: true })).succeededAt).toBe(NOW)
+  })
 })
 
 describe('how often GitHub is asked', () => {
@@ -300,7 +317,7 @@ describe('how often GitHub is asked', () => {
         settings: {
           read: () => store.updateSettings(),
           setAutomatic: (automatic) => store.setUpdateAutomatic(automatic),
-          recordAttempt: (at) => store.recordUpdateCheck(at),
+          recordAttempt: (at, succeeded) => store.recordUpdateCheck(at, succeeded),
           rememberLatest: (version) => store.rememberLatestVersion(version)
         },
         readRelease,

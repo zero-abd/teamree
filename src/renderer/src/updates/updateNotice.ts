@@ -83,3 +83,12 @@ function progress({ received, total }: { received: number; total: number }): Ins
   const percent = Math.floor((received * 100) / Math.max(total, 1))
   return { kind: 'progress', label: `Downloading ${percent}%`, problem: null, settings: false }
 }
+
+/** A failed check in a few words: `Couldn’t check · offline`, or GitHub's status. */
+export function couldNotCheck(problem: string): string {
+  if (/fetch failed|ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENETUNREACH|socket|network/i.test(problem)) {
+    return 'Couldn’t check · offline'
+  }
+  const answered = /GitHub answered \d+/.exec(problem)?.[0]
+  return `Couldn’t check · ${answered ?? problem}`
+}

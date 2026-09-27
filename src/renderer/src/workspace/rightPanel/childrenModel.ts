@@ -80,15 +80,26 @@ export function mergeable(row: ChildRow): boolean {
   return unmerged(row) && !['working', 'asking', 'failed', 'missing'].includes(row.stage)
 }
 
+/** A child Merge All Ready leaves out because it clashes with one it lands first. */
+export type HeldBack = { worktreeId: string; title: string; clashesWith: string }
+
 /** Mergeable, finished and conflict-free, counting the ones landed before it in this run: what Merge All Ready lands. */
 export function readyToMerge(rows: readonly ChildRow[]): ChildRow[] {
-  const picked: ChildRow[] = []
+  return mergePlan(rows).ready
+}
+
+export function heldBack(rows: readonly ChildRow[]): HeldBack[] {
+  return mergePlan(rows).held
+}
+
+function mergePlan(rows: readonly ChildRow[]): { ready: ChildRow[]; held: HeldBack[] } {
+  const ready: ChildRow[] = []
+  const held: HeldBack[] = []
   for (const row of rows) {
     if (!mergeable(row) || (row.stage !== 'done' && row.stage !== 'ready') || row.conflicts.length > 0) continue
-    const clashes = row.siblingConflicts.some((other) =>
-      picked.some((earlier) => earlier.worktreeId === other.worktreeId)
-    )
-    if (!clashes) picked.push(row)
+    const clash = row.siblingConflicts.find((other) => ready.some((earlier) => earlier.worktreeId === other.worktreeId))
+    if (clash === undefined) ready.push(row)
+    else held.push({ worktreeId: row.worktreeId, title: row.title, clashesWith: clash.title })
   }
-  return picked
+  return { ready, held }
 }

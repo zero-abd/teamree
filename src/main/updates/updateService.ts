@@ -37,8 +37,8 @@ export const FOCUS_RECHECK_AFTER_MS = 30 * 60 * 1000
 export type UpdateSettingsRecord = {
   read: () => StoredUpdateSettings
   setAutomatic: (automatic: boolean) => void
-  /** Writes down that a check was attempted, successful or not. */
-  recordAttempt: (at: number) => void
+  /** Writes down that a check was attempted, and whether it got an answer. */
+  recordAttempt: (at: number, succeeded: boolean) => void
   /** The newest version the API named, or null when it named none; a failed check leaves it alone. */
   rememberLatest: (version: string | null) => void
 }
@@ -46,6 +46,7 @@ export type UpdateSettingsRecord = {
 export type StoredUpdateSettings = {
   automatic: boolean
   lastCheckedAt: number | null
+  lastSucceededAt?: number | null
   /**
    * The newest version the last successful check saw, for a launch inside the
    * rate limit. Not the notes: text from the internet stays out of `workspace.json`.
@@ -222,6 +223,7 @@ export class UpdateService {
       available: this.#available(stored.lastSeenVersion),
       checking: this.#inFlight !== undefined,
       checkedAt: stored.lastCheckedAt,
+      succeededAt: stored.lastSucceededAt ?? null,
       problem: this.#problem,
       download: this.#download,
       install: this.#install,
@@ -258,6 +260,7 @@ export class UpdateService {
   }
 
   async #run(startedAt: number): Promise<UpdateState> {
+    let succeeded = false
     try {
       const release = await this.#readRelease(this.#channel())
       this.#latest = release
@@ -265,12 +268,13 @@ export class UpdateService {
       const version = release?.version ?? null
       this.#settings.rememberLatest(version === this.#untrusted ? null : version)
       if (release !== null && this.state().available !== null) this.#prepare(release)
+      succeeded = true
     } catch (error) {
       this.#problem = describe(error)
       this.#onProblem(`could not read the latest release: ${this.#problem}`, error)
     } finally {
       // A refused request was still a request, so it counts against the limit.
-      this.#settings.recordAttempt(startedAt)
+      this.#settings.recordAttempt(startedAt, succeeded)
       this.#onChange()
     }
     return this.state()

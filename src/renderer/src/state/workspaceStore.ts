@@ -199,6 +199,7 @@ import {
   type RightPanelTab
 } from '../workspace/rightPanel/rightPanelState'
 import { panelCost, panelYields, sidebarCost, type Sides } from '../workspace/roomForPanes'
+import { couldNotCheck } from '../updates/updateNotice'
 import { useMessageStore } from './messages'
 import { rowVisibility } from './rowVisibility'
 
@@ -822,7 +823,8 @@ type WorkspaceState = {
   /** Re-reads what the runtime knows about newer releases. Asks nobody. */
   loadUpdate: () => Promise<void>
   /** Asks GitHub now, because somebody chose to: raises a notice even when the answer is "you are current", and when it fails. */
-  checkForUpdates: () => Promise<void>
+  /** `inline`: the Settings row that asked shows a failure, so no toast repeats it. */
+  checkForUpdates: (options?: { inline?: boolean }) => Promise<void>
   /** Opens the newer release's download in the browser. */
   downloadUpdate: () => Promise<void>
   /** Fetches the verified `.dmg` into ~/Downloads; progress arrives as `update.download`. */
@@ -3372,7 +3374,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
-    async checkForUpdates() {
+    async checkForUpdates(options = {}) {
       // Optimistic, so the row pressed says "Checking…" at once.
       const before = get().update
       if (before) set({ update: { ...before, checking: true } })
@@ -3383,7 +3385,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // else to appear, and were asked for.
         if (update.available !== null) return
         if (update.problem !== null) {
-          notify(`Could not check for updates: ${update.problem}`, 'info')
+          if (options.inline !== true) notify(couldNotCheck(update.problem), 'info')
           return
         }
         notify(`teamree ${update.current} is the latest release`, 'info')

@@ -462,6 +462,17 @@ describe('updates', () => {
     expect(checkForUpdates).toHaveBeenCalled()
   })
 
+  it('says a failed check could not check, beside the last answer, and nothing raw', () => {
+    seed({
+      update: { ...release(), checkedAt: Date.now(), succeededAt: Date.now() - 4 * 60_000, problem: 'fetch failed' }
+    })
+    render(<SettingsView />)
+    expect(screen.getByText('Couldn’t check · offline · Checked 4m ago')).toBeTruthy()
+    expect(screen.queryByText('fetch failed')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Check for Updates' }))
+    expect(checkForUpdates).toHaveBeenCalledWith({ inline: true })
+  })
+
   it('will not offer a second check while one is in flight', () => {
     seed({ update: { ...release(), checking: true } })
     render(<SettingsView />)
@@ -529,7 +540,7 @@ describe('updates', () => {
   it('shows why the last check answered nothing, rather than swallowing it', () => {
     seed({ update: { ...release(), problem: 'github.com could not be reached' } })
     render(<SettingsView />)
-    expect(screen.getByText('github.com could not be reached')).toBeTruthy()
+    expect(screen.getByText('Couldn’t check · github.com could not be reached')).toBeTruthy()
   })
 })
 
