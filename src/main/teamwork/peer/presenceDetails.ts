@@ -16,6 +16,8 @@ export type TaskGitDetails = {
   ahead: number
   /** Nothing uncommitted. */
   clean: boolean
+  /** It made commits since `startedFrom` and every one is in the base. */
+  merged?: true
 }
 
 export type TaskGitReadOptions = {
@@ -23,6 +25,8 @@ export type TaskGitReadOptions = {
   baseRef: string
   /** What the project carries into every worktree, and so is not a change. */
   prepared?: PreparedPaths
+  /** The sha it was cut from; without it nothing is called merged. */
+  startedFrom?: string
 }
 
 export async function readTaskGitDetails(runner: GitRunner, options: TaskGitReadOptions): Promise<TaskGitDetails> {
@@ -64,11 +68,37 @@ export async function readTaskGitDetails(runner: GitRunner, options: TaskGitRead
     }
   }
 
+  const merged = ahead === 0 && (await landedIn(runner, cwd, options.baseRef, options.startedFrom))
   return {
     paths: [...new Set([...uncommitted, ...committed])].slice(0, MAX_PEER_PATHS),
     ahead,
-    clean: uncommitted.length === 0
+    clean: uncommitted.length === 0,
+    ...(merged ? { merged: true as const } : {})
   }
+}
+
+/** Made a commit since `startedFrom`, and HEAD is in `baseRef`: a branch with no commits is not merged. */
+async function landedIn(
+  runner: GitRunner,
+  cwd: string,
+  baseRef: string,
+  startedFrom: string | undefined
+): Promise<boolean> {
+  if (startedFrom === undefined || !usableRef(baseRef) || !usableRef(startedFrom)) return false
+  const made = await runner.tryRun({
+    args: ['rev-list', '--count', `${startedFrom}..HEAD`],
+    cwd,
+    readOnly: true,
+    timeoutMs: 30_000
+  })
+  if (made.exitCode !== 0 || (Number.parseInt(made.stdout.trim(), 10) || 0) === 0) return false
+  const inBase = await runner.tryRun({
+    args: ['merge-base', '--is-ancestor', 'HEAD', baseRef],
+    cwd,
+    readOnly: true,
+    timeoutMs: 30_000
+  })
+  return inBase.exitCode === 0
 }
 
 function usableRef(ref: string): boolean {
@@ -86,7 +116,8 @@ export function taskGitReader(
     return readTaskGitDetails(runner, {
       worktreePath: worktree.path,
       baseRef: worktree.baseRef ?? project.baseRef,
-      prepared: effectiveProjectSettings(project)
+      prepared: effectiveProjectSettings(project),
+      startedFrom: worktree.startedFrom
     })
   }
 }

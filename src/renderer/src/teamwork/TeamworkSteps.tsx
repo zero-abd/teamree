@@ -126,6 +126,8 @@ export type TeamworkStepsProps = {
   waitingFor?: string | undefined
   /** Opens the Join sheet for a pasted invitation; answers why not, or null. */
   onPasteInvitation?: (raw: string) => string | null
+  /** Under the team's home, which asks no question and has its own invite. */
+  inHome?: boolean
 }
 
 /** A glyph for the eye; `MARK_WORDS` is what is read out. */
@@ -156,7 +158,7 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
   const [opened, setOpened] = useState<StepId | null | undefined>(undefined)
   const open = opened === undefined ? (flow.currentId ?? 'connected') : opened
   // Somebody already connected is not asked what they came here to do.
-  const asking = props.path === null && flow.currentId !== null
+  const asking = props.path === null && flow.currentId !== null && props.inHome !== true
   const origin = teamworkFacts(props.status)?.origin
   const invite = inviteText({
     originUrl: origin?.ok === true ? origin.url : null,
@@ -178,7 +180,7 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
         <PathChoice list={props.list} relay={props.relay} onChoose={props.onChoosePath} />
       ) : (
         <>
-          {props.path === null ? null : (
+          {props.path === null || props.inHome === true ? null : (
             <ChosenPath
               path={props.path}
               onChange={() => props.onChoosePath(null)}
@@ -218,7 +220,7 @@ export function TeamworkSteps(props: TeamworkStepsProps): React.JSX.Element {
             })}
           </ol>
           {/* Once this machine is on the roster there is something to invite somebody to. */}
-          {invite === null || props.path === 'join' || props.list?.enrolled !== true ? null : (
+          {invite === null || props.path === 'join' || props.list?.enrolled !== true || props.inHome === true ? null : (
             <Invite invite={invite} onCopy={props.onCopy} />
           )}
         </>
@@ -268,43 +270,50 @@ function ChosenPath({
   onPasteInvitation: ((raw: string) => string | null) | undefined
 }): React.JSX.Element {
   const chosen = TEAMWORK_PATHS.find((option) => option.id === path) as (typeof TEAMWORK_PATHS)[number]
-  const [pasting, setPasting] = useState(false)
-  const [refused, setRefused] = useState<string | null>(null)
   return (
     <div className="chosen-path">
       <p className="chosen-path__line">
         <span className="chosen-path__label">{chosen.title}</span>
       </p>
-      {path === 'join' && onPasteInvitation !== undefined && !pasting ? (
-        <button type="button" className="button button--small" onClick={() => setPasting(true)}>
-          {PASTE_INVITATION_BUTTON}
-        </button>
-      ) : null}
+      {path === 'join' && onPasteInvitation !== undefined ? <PasteInvitation onPaste={onPasteInvitation} /> : null}
       <button type="button" className="button button--small" onClick={onChange}>
         Back
       </button>
-      {pasting && onPasteInvitation !== undefined ? (
-        <div className="chosen-path__paste">
-          <input
-            className="field__input field__input--mono"
-            aria-label="Invitation"
-            placeholder={INVITATION_PLACEHOLDER}
-            autoFocus
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(event) => {
-              const raw = event.target.value
-              // Opened on the paste itself; an untyped field shows no error.
-              setRefused(raw.trim() === '' ? null : onPasteInvitation(raw))
-            }}
-          />
-          {refused === null ? null : (
-            <span className="field__error" role="alert">
-              {refused}
-            </span>
-          )}
-        </div>
-      ) : null}
+    </div>
+  )
+}
+
+/** Paste Invitation…, then the field it opens; the Join sheet opens on the paste itself. */
+export function PasteInvitation({ onPaste }: { onPaste: (raw: string) => string | null }): React.JSX.Element {
+  const [pasting, setPasting] = useState(false)
+  const [refused, setRefused] = useState<string | null>(null)
+  if (!pasting) {
+    return (
+      <button type="button" className="button button--small" onClick={() => setPasting(true)}>
+        {PASTE_INVITATION_BUTTON}
+      </button>
+    )
+  }
+  return (
+    <div className="chosen-path__paste">
+      <input
+        className="field__input field__input--mono"
+        aria-label="Invitation"
+        placeholder={INVITATION_PLACEHOLDER}
+        autoFocus
+        autoComplete="off"
+        spellCheck={false}
+        onChange={(event) => {
+          const raw = event.target.value
+          // An untyped field shows no error.
+          setRefused(raw.trim() === '' ? null : onPaste(raw))
+        }}
+      />
+      {refused === null ? null : (
+        <span className="field__error" role="alert">
+          {refused}
+        </span>
+      )}
     </div>
   )
 }
@@ -1115,29 +1124,47 @@ function firstLineOf(text: string): string {
  * it goes out under this person's name, and nobody should send words they have not read.
  */
 function Invite({ invite, onCopy }: { invite: string; onCopy: (text: string) => void }): React.JSX.Element {
+  return (
+    <div className="invite">
+      <div className="invite__head">
+        <h3 className="invite__title">Invite</h3>
+        <CopyInviteButton invite={invite} onCopy={onCopy} />
+      </div>
+      <pre className="invite__text">{invite}</pre>
+    </div>
+  )
+}
+
+/** Copies the invitation and says so for two seconds; disabled while there is no origin to name. */
+export function CopyInviteButton({
+  invite,
+  onCopy,
+  className = 'button button--small'
+}: {
+  invite: string | null
+  onCopy: (text: string) => void
+  className?: string
+}): React.JSX.Element {
   const [copied, setCopied] = useState(false)
   // Cleared on the way out, so a panel closed mid-flash cannot set state on a component that has gone.
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(timer.current), [])
   return (
-    <div className="invite">
-      <div className="invite__head">
-        <h3 className="invite__title">Invite</h3>
-        <button
-          type="button"
-          className="button button--small"
-          onClick={() => {
-            onCopy(invite)
-            setCopied(true)
-            clearTimeout(timer.current)
-            timer.current = setTimeout(() => setCopied(false), 2_000)
-          }}
-        >
-          {copied ? 'Copied' : COPY_INVITE_BUTTON}
-        </button>
-      </div>
-      <pre className="invite__text">{invite}</pre>
-    </div>
+    <button
+      type="button"
+      className={className}
+      disabled={invite === null}
+      title={invite ?? undefined}
+      onClick={() => {
+        if (invite === null) return
+        onCopy(invite)
+        setCopied(true)
+        clearTimeout(timer.current)
+        timer.current = setTimeout(() => setCopied(false), 2_000)
+      }}
+    >
+      {copied ? 'Copied' : COPY_INVITE_BUTTON}
+    </button>
   )
 }
 

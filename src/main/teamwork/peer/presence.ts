@@ -120,6 +120,7 @@ function stageOf(
     terminal.screenMenu !== undefined || terminal.screenSays === 'waiting' || terminal.titleSays === 'waiting'
   if (agents.some(asking)) return 'asking'
   if (terminals.some((terminal) => terminal.running && terminal.busy)) return 'working'
+  if (details?.merged === true) return 'landed'
   if (details !== undefined && details.clean && details.ahead > 0) return 'ready'
   return agents.length > 0 ? 'stopped' : undefined
 }

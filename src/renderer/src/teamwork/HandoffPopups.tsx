@@ -3,6 +3,7 @@
 import { defaultAgentKind } from '../dialogs/taskPlan'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { handoffPopups, useHandoffs } from './handoffsStore'
+import { teamMemory } from './teamMemory'
 
 export function HandoffPopups(): React.JSX.Element | null {
   const byProject = useHandoffs((state) => state.byProject)
@@ -38,8 +39,12 @@ export async function takeHandoff(projectId: string, id: string): Promise<void> 
   const { agents, defaultAgent, openWorktree, showNotice } = useWorkspaceStore.getState()
   const kind = defaultAgentKind(agents, defaultAgent)
   const agent = agents.find((candidate) => candidate.kind === kind)?.command
+  const handoff = useHandoffs.getState().byProject[projectId]?.incoming.find((offer) => offer.id === id)
   try {
-    await openWorktree(await useHandoffs.getState().take(projectId, id, agent))
+    const worktreeId = await useHandoffs.getState().take(projectId, id, agent)
+    // The runtime stops listing an offer once taken; the Team page's activity keeps it.
+    if (handoff !== undefined) teamMemory.taken.set(id, { projectId, handoff, at: Date.now() })
+    await openWorktree(worktreeId)
   } catch (error) {
     showNotice(`Could not take it: ${error instanceof Error ? error.message : String(error)}`, 'error')
   }
