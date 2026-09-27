@@ -11,7 +11,7 @@ import { parsePatch } from '../../shared/patch'
 import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import { GitService } from './gitService'
-import { listGitProcesses, STALE_LOCK_MS, type GitProcesses } from './indexLock'
+import { listGitProcesses, STALE_LOCK_MS, type GitProcess, type GitProcesses } from './indexLock'
 import { createTempRepo, type TempRepo } from './testRepository'
 
 const repos: TempRepo[] = []
@@ -141,12 +141,10 @@ describe('Clear Lock', () => {
   })
 
   it('leaves the lock alone while a git process runs in that checkout', async () => {
-    const { repo, service, child } = await tree()
+    let listed: GitProcess[] = []
+    const { repo, service, child } = await tree(async () => listed)
     const lockPath = await lockIndex(repo, child.path, STALE_LOCK_MS + 1_000)
-    // A real git, waiting on stdin with its working directory in the checkout.
-    const running = spawn('git', ['cat-file', '--batch'], { cwd: child.path, stdio: 'pipe' })
-    children.push(running)
-    await new Promise((resolve) => running.once('spawn', resolve))
+    listed = [{ pid: 1, cwd: child.path, args: 'git cat-file --batch' }]
 
     expect(await service.worktreeLock({ worktreeId: child.id, lockPath })).toMatchObject({
       gitRunning: true,
@@ -156,13 +154,12 @@ describe('Clear Lock', () => {
     expect(refused.code).toBe(ErrorCode.Conflict)
     expect(existsSync(lockPath)).toBe(true)
 
-    running.kill('SIGKILL')
-    await new Promise((resolve) => running.once('exit', resolve))
+    listed = []
     expect(await service.worktreeLock({ worktreeId: child.id, lockPath })).toMatchObject({ clearable: true })
   })
 
   it('counts a git in another checkout as nobody, and one it cannot list as somebody', async () => {
-    let listed: Awaited<ReturnType<GitProcesses>> = []
+    let listed: GitProcess[] | null = []
     const { repo, service, parent, child } = await tree(async () => listed)
     const lockPath = await lockIndex(repo, child.path, STALE_LOCK_MS + 1_000)
     const read = () => service.worktreeLock({ worktreeId: child.id, lockPath })
@@ -173,6 +170,13 @@ describe('Clear Lock', () => {
     expect(await read()).toMatchObject({ gitRunning: true, clearable: false })
     listed = [{ pid: 1, cwd: '/', args: `git -C ${child.path} commit` }]
     expect(await read()).toMatchObject({ gitRunning: true, clearable: false })
+    // Gone before its cwd was read, or another user's: only its arguments place it.
+    listed = [{ pid: 1, cwd: null, args: 'git fetch' }]
+    expect(await read()).toMatchObject({ gitRunning: false, clearable: true })
+    listed = [{ pid: 1, cwd: null, args: `git -C ${child.path}/src add .` }]
+    expect(await read()).toMatchObject({ gitRunning: true, clearable: false })
+    listed = [{ pid: 1, cwd: `${child.path}-other`, args: `git -C ${child.path}-other status` }]
+    expect(await read()).toMatchObject({ gitRunning: false, clearable: true })
     listed = null
     expect(await read()).toMatchObject({ gitRunning: true, clearable: false })
   })

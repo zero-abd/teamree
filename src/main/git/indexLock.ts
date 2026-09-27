@@ -78,7 +78,12 @@ async function locate(runner: GitRunner, options: IndexLockOptions): Promise<{ l
 
 function runsIn(process: GitProcess, checkout: string): boolean {
   const inside = (at: string): boolean => at === checkout || at.startsWith(checkout + path.sep)
-  return process.cwd === null || inside(process.cwd) || process.args.includes(checkout)
+  // No cwd: it exited between `ps` and `lsof`, or belongs to another user, so only its arguments place it.
+  const named = process.args
+    .split(checkout)
+    .slice(1)
+    .some((after) => after === '' || /^[ /\\]/.test(after))
+  return named || (process.cwd !== null && inside(process.cwd))
 }
 
 /** Processes whose program is git, with their working directories, via `ps` and `lsof` (macOS) or `/proc` (Linux). */
