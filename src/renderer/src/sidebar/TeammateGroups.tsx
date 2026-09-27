@@ -73,12 +73,14 @@ export function TeammateGroups({
               <Icon name="chevron-right" size={14} className={`chevron${closed ? '' : ' chevron--open'}`} />
               <Avatar handle={teammate.handle} presence={teammate.presence} decorative />
               <span className="teammate__name">{teammate.handle}</span>
-              {teammate.presence === 'online' ? null : (
-                <span className="teammate__presence">{presenceWords(teammate)}</span>
+              {/* Asking outranks the rest; the whole of it is in the row's name. */}
+              {teammate.asking > 0 ? (
+                <span className="teammate__doing teammate__doing--asking">{`${teammate.asking} asking`}</span>
+              ) : (
+                <span className={`teammate__doing teammate__doing--${teammate.presence}`}>
+                  {presenceWords(teammate)}
+                </span>
               )}
-              <span className={`teammate__doing${teammate.asking > 0 ? ' teammate__doing--asking' : ''}`}>
-                {activityWords(teammate)}
-              </span>
             </div>
             {closed ? null : (
               <ul className="teammate__rows" role="group">

@@ -5,7 +5,7 @@
 import { useState } from 'react'
 import type { ScreenChoice } from '@shared/screenOpinion'
 import { dotClass, dotTone, TONE_LABEL, truncateName } from './agentRows'
-import { AnswerButtons } from './AnswerButtons'
+import { AllowOpen } from './AnswerButtons'
 import { PaneSince } from './PaneRows'
 import { teammateTitle, type TeammatePaneRow, type TeammateWorktreeRowModel } from './teammateRows'
 import { PaneGlyph } from '../agents/glyphs'
@@ -39,7 +39,9 @@ export function TeammateWorktreeRow({
   const level = 3 + row.depth
   return (
     <li
-      className={`worktree worktree--teammate worktree--${row.state}${row.staleness ? ' worktree--stale' : ''}`}
+      className={`worktree worktree--teammate worktree--${row.state}${tone === 'waiting' ? ' worktree--asking' : ''}${
+        row.staleness ? ' worktree--stale' : ''
+      }`}
       role="none"
       style={row.depth > 0 ? ({ '--depth': row.depth } as React.CSSProperties) : undefined}
     >
@@ -91,7 +93,7 @@ export function TeammateWorktreeRow({
               <li
                 key={pane.terminalId}
                 role="none"
-                className="pane-item"
+                className={`pane-item${pane.choices === undefined ? '' : ' pane-item--asking'}`}
                 onFocus={() => setFocused(pane.terminalId)}
                 onBlur={(event) => {
                   if (!event.currentTarget.contains(event.relatedTarget)) setFocused(null)
@@ -118,14 +120,18 @@ export function TeammateWorktreeRow({
                     <span className="pane-row__label">{truncateName(pane.text)}</span>
                     {/* Only ever a line the pane printed while somebody had it open. */}
                     {pane.evidence ? <span className="pane-row__evidence">{pane.evidence}</span> : null}
-                    <PaneSince tone={dotTone(pane.activity, pane.agent)} quietFor={pane.quietFor} />
+                    {pane.choices === undefined ? (
+                      <PaneSince tone={dotTone(pane.activity, pane.agent)} quietFor={pane.quietFor} />
+                    ) : null}
                   </span>
                 </button>
                 {pane.choices === undefined ? null : (
-                  <AnswerButtons
+                  <AllowOpen
                     terminalId={pane.terminalId}
                     choices={pane.choices}
-                    className="pane-item__answers"
+                    onOpen={() => {
+                      if (!watching) onWatch(pane)
+                    }}
                     tabbable={focused === pane.terminalId}
                     onChoose={(choice) => onAnswer(pane, choice)}
                   />

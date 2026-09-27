@@ -80,21 +80,25 @@ describe('a pane of theirs that is asking', () => {
   const asking = (overrides: Partial<PeerPane> = {}): TeammateWorktree =>
     theirs({ panes: [pane({ busy: false, asking: true, menu, ...overrides })] })
 
-  it('reads asking in amber on the row and on the worktree’s dot', () => {
+  it('reads asking in amber on the worktree’s dot, and in the slot of a pane it cannot answer from here', () => {
     mount(asking())
-    expect(document.querySelector('.pane-row__since--waiting')?.textContent).toBe('asking')
     expect(document.querySelector('.worktree__title .activity--waiting')).toBeTruthy()
+    expect(document.querySelector('.worktree')?.classList.contains('worktree--asking')).toBe(true)
+    expect(document.querySelector('.pane-row__since')).toBeNull()
+    cleanup()
+    mount(asking({ muted: true }))
+    expect(document.querySelector('.pane-row__since--waiting')?.textContent).toBe('asking')
   })
 
-  it('offers the owner’s answers, and a click hands back the pane and the choice', () => {
+  it('offers Allow and Open, and Allow hands back the pane and the first answer', () => {
     mount(asking())
     const answers = screen.getByRole('group', { name: 'Answer' })
     expect(
       within(answers)
         .getAllByRole('button')
         .map((button) => button.textContent)
-    ).toEqual(['Yes', 'Always', 'No…'])
-    fireEvent.click(within(answers).getByRole('button', { name: 'Yes' }))
+    ).toEqual(['Allow', 'Open'])
+    fireEvent.click(within(answers).getByRole('button', { name: 'Allow' }))
     expect(onAnswer).toHaveBeenCalledWith(
       expect.objectContaining({ terminalId: 'priya:t7', answering: '1a2b3c4d' }),
       menu.choices[0]

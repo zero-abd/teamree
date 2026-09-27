@@ -173,6 +173,9 @@ describe('stylesheets', () => {
         // A teammate's agent asking: the head's cue and their group's row.
         '.project__cue--asking',
         '.teammate__doing--asking',
+        // A worktree box an agent in it is asking from: its edge and its tint.
+        '.worktree--asking',
+        '.worktree--asking::before',
         // The status pill and the notice of an agent that is asking.
         '.status--asking',
         '.toast--asking::before'

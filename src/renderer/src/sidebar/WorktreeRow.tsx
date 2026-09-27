@@ -550,6 +550,8 @@ export function WorktreeRow({
       {/* Hidden while it only draws: the row's name and description say it all in words. */}
       <span className="worktree__title" aria-hidden={renaming ? undefined : true}>
         {/* In the gutter before the name, so the dots make one column to scan down. */}
+        {/* Nothing running still takes the gutter: a grey dot, so the names start on one line. */}
+        {tone === null && ready && task === undefined ? <span className="activity" /> : null}
         {tone ? (
           <span
             className={dotClass(tone)}
@@ -589,6 +591,10 @@ export function WorktreeRow({
           </>
         )}
         <span className="worktree__end">
+          {/* Said in words only where no facts need the room: the dot and the edge already say it. */}
+          {tone === 'waiting' && chips.length === 0 ? (
+            <span className="worktree__state">{TONE_LABEL.waiting}</span>
+          ) : null}
           {twoLines ? null : <FoldedChips chips={chips} most={compact ? COMPACT_CHIPS : chips.length} label={label} />}
         </span>
       </span>
@@ -608,11 +614,11 @@ export function WorktreeRow({
   return (
     <li
       ref={rowElement}
-      className={`worktree${active ? ' worktree--active' : ''} worktree--${missing ? 'missing' : worktree.state}${
-        dragged ? ' worktree--dragging' : ''
-      }${drop.target === null ? '' : drop.target.allowed ? ' worktree--drop' : ' worktree--no-drop'}${
-        context ? ' worktree--context' : ''
-      }${menuAt === null ? '' : ' worktree--menu-open'}`}
+      className={`worktree${active ? ' worktree--active' : ''}${
+        tone === 'waiting' ? ' worktree--asking' : ''
+      } worktree--${missing ? 'missing' : worktree.state}${dragged ? ' worktree--dragging' : ''}${
+        drop.target === null ? '' : drop.target.allowed ? ' worktree--drop' : ' worktree--no-drop'
+      }${context ? ' worktree--context' : ''}${menuAt === null ? '' : ' worktree--menu-open'}`}
       data-worktree-id={worktree.id}
       style={depth === 0 ? undefined : ({ '--depth': depth } as React.CSSProperties)}
       role="none"

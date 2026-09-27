@@ -457,7 +457,9 @@ describe('one of several runs of a task', () => {
   it('leads with its agent’s glyph, ahead of the task', () => {
     mount({ worktree: codexRun() })
     const head = document.querySelector('.worktree__title') as HTMLElement
-    const slot = head.firstElementChild as HTMLElement
+    // The dot keeps the gutter; the glyph leads the line.
+    expect(head.firstElementChild?.className).toBe('activity')
+    const slot = head.children[1] as HTMLElement
     expect(slot.className).toBe('worktree__agent')
     expect(slot.querySelector('[data-agent="codex"]')).not.toBeNull()
     expect(slot.textContent).toBe('')
@@ -1009,7 +1011,7 @@ describe('panes that have printed since they were read', () => {
 
       expect(ready.className).not.toBe(working.className)
       expect(ready.background).not.toBe(working.background)
-      expect(working.background).toBe('var(--accent-bright)')
+      expect(working.background).toBe('var(--working)')
     })
 
     // A weight change made names jump in width and the list look randomly bold.
@@ -1038,6 +1040,102 @@ describe('panes that have printed since they were read', () => {
 
     expect(screen.getByRole('treeitem', { name: /Claude Code/ }).className).not.toContain('pane-row--unread')
     expect(screen.getByText('Rewrite the pager').className).not.toContain('worktree__name--unread')
+  })
+})
+
+// The box: the dot in the gutter, the name, the meta on the right, then a sub-row per pane.
+describe('the worktree box', () => {
+  const MENU = {
+    prompt: 'p',
+    choices: [
+      { label: 'Yes', keys: ['\r'] },
+      { label: 'Yes, Always', keys: ['2'] },
+      { label: 'No…', keys: null }
+    ]
+  }
+  const asking = (): Terminal => terminal({ id: 't1', agent: 'claude', screenSays: 'waiting', screenMenu: MENU })
+  const sheet = document.createElement('style')
+  sheet.textContent = readFileSync(path.join(import.meta.dirname, '../styles/sidebar.css'), 'utf8')
+  beforeAll(() => {
+    document.head.append(sheet)
+  })
+  afterAll(() => {
+    sheet.remove()
+  })
+
+  it('puts the state dot left of the name', () => {
+    mount({ terminals: [terminal({ agent: 'claude', busy: true })] })
+    const title = document.querySelector('.worktree__title') as HTMLElement
+    const dot = title.querySelector('.activity') as Element
+    expect(title.firstElementChild).toBe(dot)
+    expect(dot.nextElementSibling?.classList.contains('worktree__name')).toBe(true)
+  })
+
+  it('draws a sub-row per live pane: glyph, summary and time', () => {
+    mount({
+      terminals: [terminal({ id: 't1', agent: 'claude', busy: true }), terminal({ id: 't2', title: 'git log' })],
+      evidence: { t1: 'Updating migration tests', t2: null }
+    })
+    const rows = [...row().querySelectorAll(':scope > .panes .pane-row')]
+    expect(rows).toHaveLength(2)
+    for (const each of rows) {
+      expect(each.querySelector('.agent-glyph')).toBeTruthy()
+      expect(each.querySelector('.pane-row__since')).toBeTruthy()
+    }
+    expect(rows[0]?.querySelector('.pane-row__evidence')?.textContent).toBe('Updating migration tests')
+  })
+
+  it('stays one line while nothing runs in it', () => {
+    mount()
+    expect(row().querySelector('.panes')).toBeNull()
+    expect(row().querySelector('.worktree__meta')).toBeNull()
+  })
+
+  it('marks an asking box and puts Allow and Open on its ask sub-row', () => {
+    const answerPane = vi.fn(async () => {})
+    const was = useWorkspaceStore.getState().answerPane
+    useWorkspaceStore.setState({ answerPane })
+    mount({ terminals: [asking()], evidence: { t1: 'Allow pnpm test?' } })
+    expect(row().className).toContain('worktree--asking')
+    const item = row().querySelector('.pane-item') as HTMLElement
+    const answers = within(item).getByRole('group', { name: 'Answer' })
+    expect(
+      within(answers)
+        .getAllByRole('button')
+        .map((button) => button.textContent)
+    ).toEqual(['Allow', 'Open'])
+    fireEvent.click(within(answers).getByRole('button', { name: 'Allow' }))
+    expect(answerPane).toHaveBeenCalledWith('t1', MENU.choices[0])
+    fireEvent.click(within(answers).getByRole('button', { name: 'Open' }))
+    expect(handlers.onFocusTerminal).toHaveBeenCalledWith('t1')
+    useWorkspaceStore.setState({ answerPane: was })
+  })
+
+  it('does not mark a box asking while nothing asks', () => {
+    mount({ terminals: [terminal({ agent: 'claude', busy: true })] })
+    expect(row().className).not.toContain('worktree--asking')
+  })
+
+  // A weight change made names jump in width; unread is a dot after the name.
+  it('sets read and unread names at one weight and width', () => {
+    mount({ terminals: [terminal({ id: 't1', agent: 'claude' })], unread: ['t1'] })
+    const unread = getComputedStyle(screen.getByText('Rewrite the pager'))
+    const was = { weight: unread.fontWeight, spacing: unread.letterSpacing, size: unread.fontSize }
+    cleanup()
+    mount({ terminals: [terminal({ id: 't1', agent: 'claude' })] })
+    const read = getComputedStyle(screen.getByText('Rewrite the pager'))
+    expect(was).toEqual({ weight: read.fontWeight, spacing: read.letterSpacing, size: read.fontSize })
+    expect(read.fontWeight).toBe('600')
+  })
+
+  it('keeps the ⋯ out of sight at rest on a row that is not open', () => {
+    const rest = /--row-action-rest:\s*([^;]+);/.exec(
+      readFileSync(path.join(import.meta.dirname, '../styles/tokens.css'), 'utf8')
+    )?.[1]
+    expect(rest?.trim()).toBe('0')
+    mount()
+    const more = screen.getByRole('button', { name: 'More for Rewrite the pager' })
+    expect(getComputedStyle(more).opacity).toBe('var(--row-action-rest)')
   })
 })
 
