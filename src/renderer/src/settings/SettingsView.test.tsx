@@ -8,6 +8,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CliStatus, InstalledAgent, PaneConsent, Project, RelaySetting, UpdateState } from '@shared/entities'
 import { DEFAULT_RUNTIME_SETTINGS } from '@shared/settings'
+import { BUILT_IN_THEMES, DEFAULT_THEME_ID, themeById } from '@shared/theme'
 import type { SettingsSectionId } from './settingsModel'
 
 const runtimeCall = vi.hoisted(() => ({
@@ -29,6 +30,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { runtimeClient } = await import('../runtimeClient/currentRuntimeClient')
 const { SettingsView } = await import('./SettingsView')
+const { accentName } = await import('./AppearancePage')
 const { useSettingsFind } = await import('./settingsFind')
 const { useUsageStore } = await import('../state/usageStore')
 const { TERMINAL_OPTIONS_DEFAULT } = await import('../state/preferences')
@@ -248,9 +250,38 @@ describe('the page itself', () => {
   it('sits in the shared page frame, its section list in the frame’s side column', () => {
     render(<SettingsView />)
     const main = screen.getByRole('main', { name: 'Settings' })
-    expect(main.querySelector('.page__head h1')?.textContent).toBe('Settings')
+    expect(main.querySelector('.page__head h1')?.textContent).toBe('General')
     expect(main.querySelector('.page__side nav[aria-label="Sections"]')).not.toBeNull()
     expect(main.querySelector('.page__body .page__column .settings__content')).not.toBeNull()
+  })
+
+  // The head is the section's: its icon, its name, and what it is set to now.
+  it('names the section on screen in the page head, with what it is set to in one line', () => {
+    seed({ terminalFontSize: 13, appearance: { ...INITIAL.appearance, mode: 'dark' }, systemTone: 'dark' })
+    renderAt('appearance')
+    const head = (): HTMLElement =>
+      screen.getByRole('main', { name: 'Settings' }).querySelector('.page__head') as HTMLElement
+    expect(head().querySelector('h1')?.textContent).toBe('Appearance')
+    expect(head().querySelector('.page__tile svg[data-icon="appearance"]')).not.toBeNull()
+    const accent = accentName(useWorkspaceStore.getState().appearance, 'dark')
+    expect(within(head()).getByText(`Dark · ${accent} · SF Mono 13`)).toBeTruthy()
+
+    show('Panes')
+    expect(head().querySelector('h1')?.textContent).toBe('Panes')
+    expect(within(head()).getByText('SF Mono 13 · Bar cursor · 5,000 lines')).toBeTruthy()
+
+    show('General')
+    expect(within(head()).getByText(/^0 worktrees · .* · Awake while agents work$/)).toBeTruthy()
+  })
+
+  it('says how many sections hold a match while filtering', () => {
+    render(<SettingsView />)
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter settings' }), { target: { value: 'cursor' } })
+    const head = screen.getByRole('main', { name: 'Settings' }).querySelector('.page__head') as HTMLElement
+    expect(head.querySelector('h1')?.textContent).toBe('Search')
+    expect(within(head).getByText('1 section')).toBeTruthy()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Filter settings' }), { target: { value: 'zzz' } })
+    expect(within(head).getByText('No matches')).toBeTruthy()
   })
 
   // Opened at that section from the strip's + menu, not at the top.
@@ -619,7 +650,8 @@ describe('updates', () => {
   it('says this build has nothing to compare against, instead of offering a check', () => {
     seed({ update: { ...release(), current: '0.0.0-dev', checkable: false } })
     renderAt('updates')
-    expect(screen.getByText('teamree 0.0.0-dev (not a release)')).toBeTruthy()
+    const section = screen.getByRole('region', { name: 'Updates' })
+    expect(within(section).getByText('teamree 0.0.0-dev (not a release)')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Check for Updates' })).toBeNull()
     expect(screen.queryByRole('switch', { name: 'Check Automatically' })).toBeNull()
   })
@@ -716,35 +748,41 @@ describe('updates', () => {
 
 describe('panes', () => {
   it('writes a new terminal text size through, under a label and no caption', () => {
+    seed({ terminalFontSize: 16 })
     renderAt('panes')
-    fireEvent.change(screen.getByLabelText('Terminal text size'), { target: { value: '17' } })
+    fireEvent.click(screen.getByRole('button', { name: 'More Terminal text size' }))
     expect(setTerminalFontSize).toHaveBeenCalledWith(17)
     // Every preference on this page is per-machine and none of them says so.
     expect(screen.queryByText(/Remembered on this machine only/)).toBeNull()
   })
 
-  it('shows the size it is at, which a slider alone cannot say', () => {
+  it('shows the size it is at between its buttons', () => {
     seed({ terminalFontSize: 15 })
     renderAt('panes')
-    expect(screen.getByText('15px')).toBeTruthy()
+    expect(within(screen.getByRole('group', { name: 'Terminal text size' })).getByText('15')).toBeTruthy()
   })
 
-  it('previews a font as it is typed and keeps it once the field is left', () => {
+  it('offers fonts by name, and any other face typed in, previewed as it is typed', () => {
     renderAt('panes')
-    const field = screen.getByLabelText('Font') as HTMLInputElement
-    expect(field.value).toBe(TERMINAL_OPTIONS_DEFAULT.fontFamily)
+    const font = screen.getByLabelText('Font') as HTMLSelectElement
+    expect(font.selectedOptions[0]?.textContent).toBe('SF Mono')
 
-    fireEvent.change(field, { target: { value: 'Menlo' } })
-    expect(screen.getByTestId('settings-font-preview').style.fontFamily).toBe('Menlo')
-    expect(setTerminalOptions).not.toHaveBeenCalled()
+    fireEvent.change(font, { target: { value: 'Menlo, monospace' } })
+    expect(setTerminalOptions).toHaveBeenLastCalledWith({ fontFamily: 'Menlo, monospace' })
+
+    fireEvent.change(font, { target: { value: 'other' } })
+    const field = screen.getByLabelText('Font family') as HTMLInputElement
+    fireEvent.change(field, { target: { value: 'Iosevka' } })
+    expect((screen.getByTestId('terminal-preview').firstChild as HTMLElement).style.fontFamily).toBe('Iosevka')
+    expect(setTerminalOptions).not.toHaveBeenCalledWith({ fontFamily: 'Iosevka' })
 
     fireEvent.blur(field)
-    expect(setTerminalOptions).toHaveBeenCalledWith({ fontFamily: 'Menlo' })
+    expect(setTerminalOptions).toHaveBeenLastCalledWith({ fontFamily: 'Iosevka' })
   })
 
   it('sets the cursor shape and whether it blinks', () => {
     renderAt('panes')
-    fireEvent.change(screen.getByLabelText('Cursor'), { target: { value: 'underline' } })
+    fireEvent.click(within(screen.getByRole('group', { name: 'Cursor' })).getByRole('button', { name: 'Underline' }))
     expect(setTerminalOptions).toHaveBeenCalledWith({ cursorStyle: 'underline' })
     const blink = screen.getByLabelText('Blink') as HTMLInputElement
     expect(blink.checked).toBe(true)
@@ -1020,14 +1058,18 @@ describe('shortcuts', () => {
 })
 
 describe('appearance', () => {
-  // The controls live in the sheet beside the panes; a page that hides them is no place to judge a theme.
-  it('names the theme in effect, and opens the sheet to change it', () => {
+  it('shows every theme, the mode, the accent and the terminal, with the colour editor behind Customize…', () => {
     seed({ appearance: { ...INITIAL.appearance, mode: 'dark' }, systemTone: 'dark' })
     renderAt('appearance')
     const section = screen.getByRole('region', { name: 'Appearance' })
-    expect(within(section).queryByRole('radiogroup')).toBeNull()
-    expect(within(section).getByText('Studio · Dark')).toBeTruthy()
-    fireEvent.click(within(section).getByRole('button', { name: 'Change…' }))
+    const pressed = (name: string): string | null =>
+      within(section).getByRole('button', { name }).getAttribute('aria-pressed')
+    expect(within(section).getAllByTestId('theme-preview')).toHaveLength(BUILT_IN_THEMES.length)
+    expect(pressed(themeById(DEFAULT_THEME_ID).name)).toBe('true')
+    expect(pressed('Dark')).toBe('true')
+    expect(pressed(accentName(useWorkspaceStore.getState().appearance, 'dark'))).toBe('true')
+    expect(within(section).getByTestId('terminal-preview')).toBeTruthy()
+    fireEvent.click(within(section).getByRole('button', { name: 'Customize…' }))
     expect(showAppearance).toHaveBeenCalledExactlyOnceWith(true)
   })
 })
@@ -1124,11 +1166,11 @@ describe('the filter', () => {
     render(<SettingsView />)
     type('midnight')
     expect(nav()).toEqual(['Appearance'])
-    expect(screen.getByRole('button', { name: 'Change…' }).hasAttribute('data-match')).toBe(true)
+    expect(screen.getByRole('button', { name: 'Midnight' }).hasAttribute('data-match')).toBe(true)
 
     type('dark')
     expect(nav()).toEqual(['Appearance'])
-    expect(screen.getByText('Dark', { selector: 'mark' })).toBeTruthy()
+    expect(screen.getByRole('group', { name: 'Mode' }).parentElement?.hasAttribute('data-match')).toBe(true)
   })
 
   it('marks the words it matched in a label', () => {
@@ -1631,7 +1673,7 @@ describe('the agent you always use', () => {
     seed({ agents: [claude, codex], agentArgs: { claude: '--model opus' } })
     renderAt('agents')
 
-    const section = screen.getByRole('heading', { name: 'Agents' }).parentElement as HTMLElement
+    const section = screen.getByRole('region', { name: 'Agents' })
     expect([...section.querySelectorAll('code')].map((node) => node.textContent)).toEqual(['claude --model opus'])
   })
 
@@ -1642,7 +1684,7 @@ describe('the agent you always use', () => {
     expect((screen.getByLabelText('Claude Code') as HTMLInputElement).placeholder).toBe('claude')
     expect((screen.getByLabelText('Codex') as HTMLInputElement).placeholder).toBe('codex-cli')
     expect(screen.queryByText('None')).toBeNull()
-    const section = screen.getByRole('heading', { name: 'Agents' }).parentElement as HTMLElement
+    const section = screen.getByRole('region', { name: 'Agents' })
     expect(section.querySelectorAll('code')).toHaveLength(0)
   })
 
