@@ -380,6 +380,10 @@ export function CommandPalette({
       store.openDialog({ kind: 'push-base', projectId: item.id.slice('push-base:'.length) })
       return
     }
+    if (item.id.startsWith('fetch:')) {
+      void store.fetchProject(item.id.slice('fetch:'.length))
+      return
+    }
     if (item.id.startsWith('clean-up:')) {
       store.openDialog({ kind: 'clean-up', projectId: item.id.slice('clean-up:'.length) })
       return

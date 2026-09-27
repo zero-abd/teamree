@@ -7,6 +7,7 @@ import { mkdir, realpath, rm, rmdir, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import type {
+  BaseFetchState,
   BranchList,
   CheckFailure,
   CloneProgress,
@@ -223,6 +224,8 @@ export class GitService {
   readonly #agentWorking: (worktreeId: string) => boolean
   // What each project's `.teamree/project.json` and lockfile said when last read; never persisted.
   readonly #projectFiles = new Map<string, CheckoutRead>()
+  // How each project's base fetch last went; never persisted.
+  readonly #fetches = new Map<string, BaseFetchState>()
   readonly #ensureVersion: (cwd: string) => Promise<unknown>
 
   readonly #store: GitRecordStore
@@ -298,8 +301,18 @@ export class GitService {
       ...(read?.settings === undefined ? {} : { repository: read.settings }),
       ...(read?.problem === undefined ? {} : { repositoryProblem: read.problem }),
       ...(suggest && read?.suggestedSetup !== undefined ? { suggestedSetup: read.suggestedSetup } : {}),
-      ...(read?.detectedRun === undefined ? {} : { detectedRun: read.detectedRun })
+      ...(read?.detectedRun === undefined ? {} : { detectedRun: read.detectedRun }),
+      ...(this.#fetches.has(project.id) ? { fetch: this.#fetches.get(project.id) } : {})
     }
+  }
+
+  /** Keeps how the base fetch went, announcing the project when that changed. */
+  recordFetch(projectId: string, state: BaseFetchState): void {
+    const project = this.#store.getProject(projectId)
+    if (!project) return
+    const before = JSON.stringify(this.#fetches.get(projectId) ?? null)
+    this.#fetches.set(projectId, state)
+    if (JSON.stringify(state) !== before) this.events.emit({ type: 'project.updated', project: this.#present(project) })
   }
 
   async #refreshProjectFile(projectId: string): Promise<void> {
@@ -399,6 +412,7 @@ export class GitService {
     }
     this.#store.removeProject(project.id)
     this.#projectFiles.delete(project.id)
+    this.#fetches.delete(project.id)
     this.events.emit({ type: 'project.removed', projectId: project.id })
     return { removed: true }
   }

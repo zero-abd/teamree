@@ -147,6 +147,36 @@ describe('the dialog itself', () => {
   })
 })
 
+describe('an old base', () => {
+  const startHint = (): string =>
+    document.getElementById(startPoint().getAttribute('aria-describedby') ?? '')?.textContent ?? ''
+
+  it('says how old origin/main is when it could not be fetched, and fetches it again from there', async () => {
+    const fetchProject = vi.fn(() => Promise.resolve())
+    const project = { id: 'p1', name: 'pager', path: '/repos/pager', baseRef: 'origin/main' }
+    seed({
+      projects: [{ ...project, fetch: { fetchedAt: Date.now() - 3 * 60 * 60_000, failure: 'offline' } }],
+      fetchProject
+    })
+    await open()
+    expect(startHint()).toContain('originm · origin/main from 3h ago')
+    const asked = call.mock.calls.length
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Fetch Now' }))
+    })
+    expect(fetchProject).toHaveBeenCalledWith('p1')
+    // The listing is read again, so the commit shown is the fetched one.
+    expect(call.mock.calls.slice(asked).map(([method]) => method)).toEqual(['worktree.startPoints'])
+  })
+
+  it('says nothing of a base fetched in the last hour', async () => {
+    const project = { id: 'p1', name: 'pager', path: '/repos/pager', baseRef: 'origin/main' }
+    seed({ projects: [{ ...project, fetch: { fetchedAt: Date.now() - 30 * 60_000 } }] })
+    await open()
+    expect(screen.queryByRole('button', { name: 'Fetch Now' })).toBeNull()
+  })
+})
+
 describe('how it reads', () => {
   it('names each agent beside its mark, with the stepper after the name', async () => {
     seed({ agents: bothAgents })

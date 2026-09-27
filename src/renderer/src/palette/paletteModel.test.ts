@@ -948,6 +948,23 @@ describe('Push main in the palette', () => {
   })
 })
 
+describe('Fetch Now in the palette', () => {
+  it('has a row for each project, saying how old its base is', () => {
+    const projects = [
+      { id: 'p1', name: 'atlas', path: '/a', baseRef: 'origin/main' },
+      { id: 'p2', name: 'ledger', path: '/l', baseRef: 'origin/main', fetch: { failure: 'auth' as const } }
+    ]
+    const items = buildPaletteItems(context({ projects }))
+    const rows = items.filter((item) => item.id.startsWith('fetch:'))
+
+    expect(rows.map((item) => [item.id, item.label, item.hint])).toEqual([
+      ['fetch:p1', 'Fetch Now', 'atlas · origin/main'],
+      ['fetch:p2', 'Fetch Now', 'ledger · sign-in failed']
+    ])
+    expect(filterPalette(items, 'fetch ledger').map((item) => item.id)[0]).toBe('fetch:p2')
+  })
+})
+
 describe('Teamwork and shared notes in the palette', () => {
   const note = (shareId: string, over: Partial<SharedNoteSummary> = {}): SharedNoteSummary => ({
     shareId,

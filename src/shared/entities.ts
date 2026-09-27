@@ -55,6 +55,20 @@ export type Project = {
   approvedRunCommands?: RunCommands
   /** What the primary checkout's manifests suggest (`package.json` scripts, a Makefile, go.mod…). Read, never stored. */
   detectedRun?: RunCommands
+  /** How fetching `baseRef` last went. Read, never stored. */
+  fetch?: BaseFetchState
+}
+
+/** Why a fetch of the base failed: no network, a refused sign-in, no such remote or branch, git killed at the limit, or else. */
+export type BaseFetchFailure = 'offline' | 'auth' | 'not-found' | 'timeout' | 'failed'
+
+export type BaseFetchState = {
+  /** When a fetch last reached the remote; absent when none is known. */
+  fetchedAt?: number
+  /** Set while the latest attempt failed. */
+  failure?: BaseFetchFailure
+  /** When the timer tries again, while a back-off holds it. */
+  retryAt?: number
 }
 
 /** What a worktree's Run buttons start: its dev server, or its tests. */

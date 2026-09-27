@@ -3,6 +3,7 @@
 // are open, which pane has focus, how wide the sidebar is).
 
 import { create } from 'zustand'
+import { fetchFailureWords } from '@shared/baseFetchWords'
 import { hasCheckout } from '@shared/entities'
 import { RUN_LABEL, runCommandOf, runPaneOf } from '@shared/runCommands'
 import type {
@@ -439,6 +440,8 @@ type WorkspaceState = {
   landings: Record<string, WorktreeLanding>
   /** Each project checkout's base against its upstream, as last read. */
   bases: Record<string, ProjectBase>
+  /** Projects whose Fetch Now is in flight. */
+  fetching: Record<string, true>
   /** Whether Merge into main… pushes main, per project, as last chosen; absent follows whether main has an upstream. */
   pushOnMerge: Record<string, boolean>
   /** True while a pull request is being made. */
@@ -787,6 +790,8 @@ type WorkspaceState = {
   mergeIntoBase: (worktreeId: string, push?: boolean) => Promise<string | null>
   /** Pushes a project's base to origin, pulling origin's first when `pull`; answers with why not, or null once pushed. */
   pushBase: (projectId: string, pull?: boolean) => Promise<PushBaseFailure | null>
+  /** Fetches a project's base now, clearing any back-off; a failure is said in a toast. */
+  fetchProject: (projectId: string) => Promise<void>
   /** Keeps one run of a task, removes the others and opens the one kept. Their branches stay. */
   confirmKeepRun: (worktreeId: string, force: boolean) => Promise<void>
   /** Hides the sidebar and panel for a compare on screen, and shows again what it hid. */
@@ -1832,6 +1837,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     mergePreviews: {},
     landings: {},
     bases: {},
+    fetching: {},
     pushOnMerge: readStoredPushOnMerge(storage),
     openingPullRequest: false,
     members: {},
@@ -3936,6 +3942,25 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }))
       notify(`Pushed ${base.branch} to origin`, 'info')
       return null
+    },
+
+    async fetchProject(projectId) {
+      if (get().fetching[projectId]) return
+      set((state) => ({ fetching: { ...state.fetching, [projectId]: true } }))
+      try {
+        const project = await runtimeClient.call('project.fetch', { projectId })
+        set((state) => ({ projects: state.projects.map((entry) => (entry.id === projectId ? project : entry)) }))
+        const failure = project.fetch?.failure
+        if (failure !== undefined)
+          notify(`Could not fetch ${project.baseRef}: ${fetchFailureWords(failure, project.baseRef)}`)
+      } catch (error) {
+        notify(`Could not fetch: ${error instanceof Error ? error.message : String(error)}`)
+      } finally {
+        set((state) => {
+          const { [projectId]: _done, ...fetching } = state.fetching
+          return { fetching }
+        })
+      }
     },
 
     async confirmKeepRun(worktreeId, force) {

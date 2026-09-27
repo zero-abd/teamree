@@ -2,8 +2,10 @@
 
 import { useRef, useState } from 'react'
 import type { Project, ProjectBase } from '@shared/entities'
+import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { agoLabel } from './agentRows'
+import { baseFreshness } from './baseFreshness'
 import { useNestDrop } from './nestDrag'
 import { RowMenu, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { worktreeDisplay, worktreeLabel } from './worktreeDisplay'
@@ -49,6 +51,7 @@ export function ProjectHead({
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const openTeamwork = useWorkspaceStore((state) => state.openTeamwork)
   const openSetting = useWorkspaceStore((state) => state.openSetting)
+  const fetchProject = useWorkspaceStore((state) => state.fetchProject)
   const unpushed = useWorkspaceStore((state) => unpushedBase(state.bases[project.id]))
   const anyMerged = useWorkspaceStore((state) =>
     state.worktrees.some((worktree) => worktree.projectId === project.id && state.landings[worktree.id]?.merged)
@@ -71,6 +74,7 @@ export function ProjectHead({
     { label: 'Open Branch…', onChoose: () => onOpenBranch(false) },
     { label: 'Check Out Pull Request…', onChoose: () => onOpenBranch(true) },
     ...(removed.length === 0 ? [] : [{ label: 'Recently Deleted', items: removed, onChoose: () => {} }]),
+    { label: 'Fetch Now', hint: project.baseRef, onChoose: () => void fetchProject(project.id), separated: true },
     ...(unpushed === null
       ? []
       : [
@@ -209,6 +213,28 @@ export function UnpushedBase({ projectId }: { projectId: string }): React.JSX.El
       onClick={() => openDialog({ kind: 'push-base', projectId })}
     >
       {`${base.branch} ↑${base.ahead}`}
+    </button>
+  )
+}
+
+/** `can't reach origin` or `fetched 3h ago` beside the base ref; pressing it fetches now. */
+export function BaseFreshness({ project }: { project: Project }): React.JSX.Element | null {
+  const now = useNow(60_000)
+  const fetching = useWorkspaceStore((state) => state.fetching[project.id] === true)
+  const fetchProject = useWorkspaceStore((state) => state.fetchProject)
+  const words = baseFreshness(project, now)
+  if (words === null && !fetching) return null
+  return (
+    <button
+      type="button"
+      className={`project__fresh${project.fetch?.failure === undefined ? '' : ' project__fresh--failed'}`}
+      tabIndex={-1}
+      title="Fetch Now"
+      aria-label={`Fetch ${project.baseRef} now${words === null ? '' : `, ${words}`}`}
+      disabled={fetching}
+      onClick={() => void fetchProject(project.id)}
+    >
+      {fetching ? 'fetching…' : words}
     </button>
   )
 }

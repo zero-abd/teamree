@@ -614,6 +614,12 @@ export function createSeededRuntimeClient(): RuntimeClient {
     'project.pullBase': () => {
       throw Object.assign(new Error('no remote'), { code: 'not_found' })
     },
+    'project.fetch': ({ projectId }) => {
+      const next: Project = { ...required(projects.get(projectId), 'project'), fetch: { fetchedAt: Date.now() } }
+      projects.set(next.id, next)
+      announce({ type: 'projects' })
+      return next
+    },
     'worktree.setup': ({ worktreeId }) => {
       const worktree = required(worktrees.get(worktreeId), 'worktree')
       const { setupAsk: _answered, ...next } = worktree

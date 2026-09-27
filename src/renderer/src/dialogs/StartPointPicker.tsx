@@ -27,9 +27,11 @@ type StartPointPickerProps = {
   onReload: () => void
   value: StartPointValue
   onChange: (value: StartPointValue) => void
+  /** Said after the resolved commit, as how old the base is. */
+  note?: React.ReactNode
 }
 
-export function StartPointPicker({ state, onReload, value, onChange }: StartPointPickerProps): React.JSX.Element {
+export function StartPointPicker({ state, onReload, value, onChange, note }: StartPointPickerProps): React.JSX.Element {
   const prefix = useId()
   const inputId = `${prefix}-input`
   const listboxId = `${prefix}-listbox`
@@ -152,6 +154,7 @@ export function StartPointPicker({ state, onReload, value, onChange }: StartPoin
             summaryRef={summaryRef}
             summaryOption={summaryOption}
           />
+          {note}
         </p>
 
         {open ? (

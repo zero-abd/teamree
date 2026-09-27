@@ -7,6 +7,8 @@ import { branchPrefixFor } from '@shared/branchName'
 import type { WorktreeIssue } from '@shared/entities'
 import { permissionModesFor } from '@shared/permissionMode'
 import { useRuntimeSettings } from '../settings/runtimeSettings'
+import { startPointAge } from '../sidebar/baseFreshness'
+import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { AgentSteppers } from './AgentSteppers'
 import { BranchField } from './BranchField'
@@ -56,6 +58,9 @@ export function TaskComposerDialog({
   const rememberPermissionModes = useWorkspaceStore((state) => state.rememberPermissionModes)
   const parent = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === parentId))
   const parentStatus = useWorkspaceStore((state) => (parentId === undefined ? undefined : state.statuses[parentId]))
+  const fetching = useWorkspaceStore((state) => state.fetching)
+  const fetchProject = useWorkspaceStore((state) => state.fetchProject)
+  const now = useNow(60_000)
 
   const [projectId, setProjectId] = useState(openedFor)
   const [task, setTask] = useState(initialTask)
@@ -120,6 +125,8 @@ export function TaskComposerDialog({
       : (plannedBranches(taskCreates(task, selection), existing, prefix)[0] ?? '')
   const problem = branchProblem(creates, existing)
   const startedFrom = parent?.branch ?? startPoint.text.trim()
+  // Only the base is fetched in the background, so only it can be said to be old.
+  const age = startedFrom === project.baseRef ? startPointAge(project, now) : null
   const leftBehind =
     parentStatus === undefined ? 0 : parentStatus.staged + parentStatus.unstaged + parentStatus.untracked
   // Bounded by the agent's command line; a paste past it is refused, not cut.
@@ -275,6 +282,21 @@ export function TaskComposerDialog({
                   setTouched(true)
                   setStartPoint(value)
                 }}
+                note={
+                  age === null ? null : (
+                    <>
+                      {` · ${age} `}
+                      <button
+                        type="button"
+                        className="button button--ghost button--tiny"
+                        disabled={fetching[projectId] === true}
+                        onClick={() => void fetchProject(projectId).then(reload)}
+                      >
+                        {fetching[projectId] ? 'Fetching…' : 'Fetch Now'}
+                      </button>
+                    </>
+                  )
+                }
               />
             </div>
 

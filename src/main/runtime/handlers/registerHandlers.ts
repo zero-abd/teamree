@@ -42,6 +42,7 @@ import type { Terminal } from '../../../shared/entities'
 import { paletteTone, resolvePalette, type Appearance, type Tone } from '../../../shared/theme'
 import { registerAgentTrustHandlers, trustCheckoutFor } from './agentTrustHandlers'
 import { registerAppearanceHandlers } from './appearanceHandlers'
+import { registerFetchHandler } from './fetchHandler'
 import { registerPastedImageHandler } from './pastedImageHandler'
 import { registerPlaceholderHandlers } from './placeholderHandlers'
 import { registerQuitHandler } from './quitHandler'
@@ -332,8 +333,10 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
       workspaceEvents.emit({ type: 'worktrees', worktreeIds: projectWorktreeIds(git, projectId) })
       void teamwork.refresh(projectId, { fetch: false }).catch(() => undefined)
     },
+    onState: (projectId, state) => git.recordFetch(projectId, state),
     ...(options.online === undefined ? {} : { online: options.online })
   })
+  registerFetchHandler(registry, git, bases)
 
   // A pull that brings in a teammate's key or the team's relay is nobody's
   // method call; without this both machines sit on the roster read before it.

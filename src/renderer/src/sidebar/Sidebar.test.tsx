@@ -228,6 +228,28 @@ describe('a project header', () => {
     expect(openDialog).toHaveBeenLastCalledWith({ kind: 'push-base', projectId: 'p1' })
   })
 
+  it.each([
+    [{ fetchedAt: NOW - 90_000, failure: 'offline' as const }, "can't reach origin"],
+    [{ failure: 'auth' as const }, 'sign-in failed'],
+    [{ fetchedAt: NOW - 3 * 60 * 60_000 }, 'fetched 3h ago']
+  ])('says beside the base ref when it may be old (%o), and fetches from there or the menu', (fetch, words) => {
+    const fetchProject = vi.fn(() => Promise.resolve())
+    seed({ projects: [{ ...project, fetch }], fetchProject })
+    mount()
+    const fresh = screen.getByRole('button', { name: `Fetch origin/main now, ${words}` })
+    expect(fresh.textContent).toBe(words)
+    fireEvent.click(fresh)
+    fireEvent.click(screen.getByRole('button', { name: 'More for pager' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Fetch Now/ }))
+    expect(fetchProject.mock.calls).toEqual([['p1'], ['p1']])
+  })
+
+  it('says nothing beside the base ref fetched in the last hour', () => {
+    seed({ projects: [{ ...project, fetch: { fetchedAt: NOW - 59 * 60_000 } }] })
+    mount()
+    expect(screen.queryByRole('button', { name: /^Fetch origin/ })).toBeNull()
+  })
+
   it('says nothing about main while origin has all of it', () => {
     seed({ bases: { p1: { projectId: 'p1', branch: 'main', upstream: 'origin/main', ahead: 0, behind: 3 } } })
     mount()
