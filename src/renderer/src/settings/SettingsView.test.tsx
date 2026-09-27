@@ -1084,6 +1084,30 @@ describe('the agent you always use', () => {
     expect(check.closest('.settings-field')?.textContent).toBe('Trust New Worktrees')
   })
 
+  it('keeps agents running on quit only once ticked, through the runtime', async () => {
+    const sent: unknown[] = []
+    runtimeCall.answer = (method, params) => {
+      if (method === 'settings.get') return Promise.resolve({ ...DEFAULT_RUNTIME_SETTINGS })
+      if (method !== 'settings.set') return new Promise(() => {})
+      sent.push(params)
+      return Promise.resolve({ ...DEFAULT_RUNTIME_SETTINGS, keepPanesRunning: true })
+    }
+    try {
+      seed({ agents: [claude, codex] })
+      render(<SettingsView />)
+      const name = 'Keep Agents Running When teamree Quits'
+      const box = (await screen.findByRole('checkbox', { name })) as HTMLInputElement
+      await vi.waitFor(() => expect(box.disabled).toBe(false))
+      expect(box.checked).toBe(false)
+      expect(box.closest('.settings-field')?.textContent).toBe(name)
+      fireEvent.click(box)
+      await vi.waitFor(() => expect(box.checked).toBe(true))
+      expect(sent).toEqual([{ keepPanesRunning: true }])
+    } finally {
+      runtimeCall.answer = () => new Promise(() => {})
+    }
+  })
+
   it('warns agents about overlaps unless unticked, through the runtime', async () => {
     const sent: unknown[] = []
     runtimeCall.answer = (method, params) => {

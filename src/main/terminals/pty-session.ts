@@ -3,7 +3,7 @@
 
 import type { RestoredAs } from '../../shared/paneRestore'
 import { spawn } from 'node-pty'
-import type { IDisposable, IPty } from 'node-pty'
+import type { IDisposable, IPty, IPtyForkOptions } from 'node-pty'
 import type { AgentEvent, ListeningPort, RunKind, Terminal } from '../../shared/entities'
 import type { TerminalEvent } from '../../shared/methods'
 import { KILL_ESCALATION_MS, killProcessTree } from './process-tree'
@@ -14,6 +14,7 @@ import {
   failedResumeMark,
   replayableRecord,
   tailFromLineBoundary,
+  type HostedRecord,
   type RecordedScrollback
 } from './scrollbackRecord'
 import {
@@ -87,6 +88,9 @@ export const EXITED_RETENTION_BYTES = 256 * 1024
  */
 export const RESUME_WINDOW_MS = 30_000
 
+/** The part of node-pty's IPty a pane uses; a pane host's `RemotePty` serves the same. */
+export type PaneProcess = Pick<IPty, 'pid' | 'onData' | 'onExit' | 'write' | 'resize' | 'kill' | 'process'>
+
 export type PtySessionInit = {
   id: string
   worktreeId: string
@@ -142,6 +146,8 @@ export type PtySessionInit = {
   now?: () => number
   /** Timer seam, so a test need not wait out the quiet window. */
   schedule?: (run: () => void, delayMs: number) => () => void
+  /** Starts the child somewhere else, e.g. in the pane host; absent, node-pty in this process. */
+  spawn?: (file: string, args: string[] | string, options: IPtyForkOptions) => PaneProcess
 }
 
 export type TerminalEventListener = (event: TerminalEvent) => void
@@ -162,7 +168,7 @@ export class PtySession {
     return this.pty.pid
   }
 
-  private pty: IPty
+  private pty: PaneProcess
   private readonly platform: NodeJS.Platform
   private readonly scrollback: ScrollbackBuffer
   /** Characters of output appended since the session started; a data event carries the count after it. */
@@ -221,7 +227,7 @@ export class PtySession {
 
   private constructor(
     private readonly init: PtySessionInit,
-    handle: IPty,
+    handle: PaneProcess,
     platform: NodeJS.Platform
   ) {
     this.id = init.id
@@ -255,7 +261,7 @@ export class PtySession {
   }
 
   /** Routes one child's output, and its death, into this pane. */
-  private listen(handle: IPty): void {
+  private listen(handle: PaneProcess): void {
     this.subscriptions.push(
       handle.onData((chunk) => this.receive(chunk)),
       handle.onExit(({ exitCode, signal }) => this.finish(exitCode, signal)),
@@ -267,6 +273,33 @@ export class PtySession {
     const platform = init.platform ?? process.platform
     const handle = startChild(init, init.command, platform)
     return new PtySession(init, handle, platform)
+  }
+
+  /** A pane around a child that is already running, e.g. one the pane host kept through a restart. */
+  static attach(init: PtySessionInit, handle: PaneProcess): PtySession {
+    return new PtySession(init, handle, init.platform ?? process.platform)
+  }
+
+  /** Set while the child runs in the pane host: its session there, and the record this pane came back with. */
+  get hosted(): HostedRecord | undefined {
+    const session = (this.pty as { hostMark?: { session: string } }).hostMark?.session
+    if (session === undefined) return undefined
+    return this.record === undefined ? { session } : { session, before: this.record.text }
+  }
+
+  /** Lets go of a hosted child without ending it: the next launch attaches to it again. */
+  detach(): void {
+    this.closing = true
+    this.cancelQuietWatch?.()
+    this.cancelQuietWatch = undefined
+    this.cancelScreenRead?.()
+    this.cancelScreenRead = undefined
+    this.draining?.cancelQuiet()
+    this.draining?.cancelCeiling()
+    for (const subscription of this.subscriptions) subscription.dispose()
+    this.subscriptions.length = 0
+    this.listeners.clear()
+    ;(this.pty as { release?: () => void }).release?.()
   }
 
   snapshot(): Terminal {
@@ -687,7 +720,7 @@ export class PtySession {
   private restartAgent(): boolean {
     const command = this.init.restartCommand
     if (command === undefined) return false
-    let handle: IPty
+    let handle: PaneProcess
     try {
       handle = startChild(this.init, command, this.platform)
     } catch {
@@ -738,7 +771,7 @@ export class PtySession {
  * Puts one child on the other end of a new pty. The command is separate from
  * `init` because a pane whose resume is refused restarts under a different one.
  */
-function startChild(init: PtySessionInit, command: string | undefined, platform: NodeJS.Platform): IPty {
+function startChild(init: PtySessionInit, command: string | undefined, platform: NodeJS.Platform): PaneProcess {
   const shellCommand = buildShellCommand(init.shell, command, platform)
   // The login shell's PATH, not the one launchd handed a desktop-launched app.
   const inherited = withProfileStores(init.env ?? process.env, loginShellStores({ platform }))
@@ -755,7 +788,7 @@ function startChild(init: PtySessionInit, command: string | undefined, platform:
   }
 
   try {
-    return spawn(file, args, {
+    return (init.spawn ?? spawn)(file, args, {
       name: TERMINAL_TYPE,
       cwd: init.cwd,
       cols: init.cols,

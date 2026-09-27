@@ -30,6 +30,7 @@ import {
 import { PeerService, registerPeerHandlers, taskGitReader } from '../../teamwork/peer'
 import { registerHandoffHandlers } from '../../teamwork/handoffs'
 import { createTerminalService, registerTerminalHandlers } from '../../terminals/method-handlers'
+import type { PaneHostPort } from '../../paneHost/hosting'
 import { UpdateService, registerUpdateHandlers, type SelfInstall } from '../../updates'
 import { registerUsageHandlers } from '../../usage'
 import type { TerminalService } from '../../terminals/method-handlers'
@@ -119,6 +120,8 @@ export type RegisterHandlersOptions = {
   selfInstall?: SelfInstall
   /** The socket panes are told to reach (`TEAMREE_ENDPOINT`); known before it listens, as restored panes start first. */
   paneEndpoint?: string
+  /** Where panes run with Keep Agents Running on. Absent, always in this process. */
+  paneHost?: PaneHostPort
 }
 
 export function registerHandlers(registry: MethodRegistry, options: RegisterHandlersOptions = {}): RegisteredAreas {
@@ -128,7 +131,10 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     ...(options.requestQuit === undefined ? {} : { requestQuit: options.requestQuit }),
     ...(options.unsavedFiles === undefined ? {} : { unsavedFiles: options.unsavedFiles }),
     busyAgents: () => {
-      const busy = busyAgents(terminals.manager.list(), (terminal) => terminal.title)
+      // A pane the pane host keeps is not ended by the quit.
+      const kept = new Set(terminals.manager.keptOnQuit())
+      const ending = terminals.manager.list().filter((terminal) => !kept.has(terminal.id))
+      const busy = busyAgents(ending, (terminal) => terminal.title)
       return busy.working + busy.asking === 0 ? null : busyLine(busy)
     }
   })
@@ -152,6 +158,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
   const terminals = createTerminalService({
     ports: (terminalId) => ports?.ports(terminalId),
     subscriptions: registry.context.subscriptions,
+    ...(options.paneHost === undefined ? {} : { paneHost: options.paneHost }),
     resolveWorktreeCwd: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.path,
     resolveWorktreeTask: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.task,
     taskDone: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.report !== undefined,

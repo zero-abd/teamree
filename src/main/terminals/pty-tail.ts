@@ -7,7 +7,7 @@
 
 import { readSync } from 'node:fs'
 import { StringDecoder } from 'node:string_decoder'
-import type { IDisposable, IPty } from 'node-pty'
+import type { IDisposable } from 'node-pty'
 
 const READ_CHUNK_BYTES = 64 * 1024
 
@@ -27,7 +27,7 @@ const inert: IDisposable = { dispose: () => {} }
  * the pty. Inert on Windows and on any handle that does not look as expected.
  */
 export function recoverTailOnTeardown(
-  handle: IPty,
+  handle: object,
   platform: NodeJS.Platform,
   onChunk: (chunk: string) => void
 ): IDisposable {

@@ -152,6 +152,7 @@ export const TaskParams = {
     jacMemoryAddon: z.boolean().optional(),
     showInMenuBar: z.boolean().optional(),
     warnAgentsAboutOverlaps: z.boolean().optional(),
+    keepPanesRunning: z.boolean().optional(),
     /** Absolute or `~/`; empty clears it. Refused when not writable or inside a project's repository. */
     worktreesRoot: z.string().max(4096).optional(),
     /** Takes a `worktreesRoot` inside a repository. */

@@ -166,7 +166,10 @@ function currentBusyAgents(): BusyAgents {
   if (runtime === undefined) return { working: 0, asking: 0, names: [] }
   const store = runtime.context.store
   const names = notices?.window()?.names ?? {}
-  return busyAgents(runtime.terminals(), (terminal) => {
+  // A pane the pane host keeps is not ended by the quit.
+  const kept = new Set(runtime.panesKeptOnQuit())
+  const ending = runtime.terminals().filter((terminal) => !kept.has(terminal.id))
+  return busyAgents(ending, (terminal) => {
     const worktree = store.getWorktree(terminal.worktreeId)?.name
     const pane = names[terminal.id] ?? (terminal.label?.trim() || terminal.title)
     return worktree === undefined || worktree === pane ? pane : `${worktree} — ${pane}`
@@ -448,6 +451,7 @@ if (!app.requestSingleInstanceLock(launchData(process.env))) {
         unsavedFiles: () => unsaved?.paths() ?? [],
         onAppearance: (appearance) => followAppearance?.(appearance),
         systemTone: () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light'),
+        paneHostEntry: join(import.meta.dirname, 'paneHost.js'),
         fetchBases: true,
         online: () => net.isOnline(),
         onError: (error) => mainErrors.log('runtime', error)

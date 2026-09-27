@@ -28,6 +28,16 @@ describe('ScrollbackArchive', () => {
     expect(store.read('term_1')?.recordedAt).toBeGreaterThan(0)
   })
 
+  it('keeps which pane host session a record came from, and the record before it, made inert', async () => {
+    const store = await archive()
+    store.put('term_1', 'old\r\nnew\r\n', { session: 'term_1.ab12cd34', before: 'old\x1b]52;c;x\x07\r\n' })
+    store.put('term_2', 'shell\r\n', { session: '../escape' })
+    await store.flush()
+
+    expect(store.read('term_1')?.host).toEqual({ session: 'term_1.ab12cd34', before: 'old\r\n' })
+    expect(store.read('term_2')?.host).toBeUndefined()
+  })
+
   // The field was called `endedAt` before checkpoints existed.
   it('reads the date out of a record an older build wrote', async () => {
     const store = await archive()
