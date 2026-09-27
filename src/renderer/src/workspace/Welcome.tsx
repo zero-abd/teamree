@@ -9,7 +9,8 @@ import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortc
 import { menuLabel } from '../menu/menuBar'
 import { MarkFull } from '../shell/Brand'
 import { useWorkspaceStore } from '../state/workspaceStore'
-import { EmptyState } from './EmptyState'
+import { EmptyState } from '../ui/EmptyState'
+import { Kbd } from '../ui/Kbd'
 import { SetupSummary } from './SetupRows'
 
 /** The chords worth knowing first, as commands so label and key come from the menu's table. */
@@ -106,7 +107,7 @@ export function Welcome({
             <div key={command} data-command={command}>
               <dt>{menuLabel(command, { sidebarVisible, rightPanelOpen })}</dt>
               <dd>
-                <kbd className="kbd">{shortcutHint(command, modifier)}</kbd>
+                <Kbd keys={[shortcutHint(command, modifier)]} />
               </dd>
             </div>
           ))}

@@ -48,7 +48,8 @@ import type { RunKind } from '@shared/entities'
 import { useFocusedChange } from './useFocusedChange'
 import { highlight, rowIcon, rowStatus, STATUS_CLASS } from './paletteRow'
 import { Icon } from '../icons/Icon'
-import { EmptyState } from '../workspace/EmptyState'
+import { EmptyState } from '../ui/EmptyState'
+import { Kbd } from '../ui/Kbd'
 
 const NO_PATHS: readonly string[] = []
 
@@ -57,6 +58,10 @@ const storage = typeof window === 'undefined' ? undefined : window.localStorage
 /** A file row named with the line it opens at. */
 const atLine = (item: PaletteItem, line: number | undefined): PaletteItem =>
   line === undefined ? item : { ...item, label: `${item.label}:${line}` }
+
+/** A row made from the query says it back whole; marking it would light the entire label. */
+const echoes = (item: PaletteItem): boolean =>
+  item.kind === 'action' && (/^(new-task|open-branch|join):/.test(item.id) || item.id === 'search-contents')
 
 const dimmed = (item: PaletteItem): item is Extract<PaletteItem, { kind: 'action' }> & { unavailable: string } =>
   item.kind === 'action' && item.unavailable !== undefined
@@ -599,7 +604,7 @@ export function CommandPalette({
     <Modal title={mode === 'files' ? 'Go to File' : 'Go to'} hideTitle onClose={closeDialog}>
       <div className="palette">
         <div className="palette__field">
-          <Icon name="search" className="palette__search" />
+          <Icon name="search" size={20} className="palette__search" />
           <div className="palette__entry">
             <input
               className="palette__input"
@@ -667,7 +672,7 @@ export function CommandPalette({
                         {'agent' in icon ? <AgentGlyph kind={icon.agent} decorative /> : <Icon name={icon.icon} />}
                       </span>
                       <span className="palette__label">
-                        {highlight(item.label, mode === 'files' ? place.path : query).map((part, piece) =>
+                        {highlight(item.label, echoes(item) ? '' : mode === 'files' ? place.path : query).map((part, piece) =>
                           part.match ? (
                             <mark className="palette__match" key={piece}>
                               {part.text}
@@ -687,7 +692,7 @@ export function CommandPalette({
                         </span>
                       )}
                       <span className="palette__trailing">
-                        {chordOf(item, status.meta) ? <kbd className="kbd">{status.meta}</kbd> : status.meta}
+                        {chordOf(item, status.meta) ? <Kbd keys={[status.meta]} /> : status.meta}
                       </span>
                     </button>
                   </li>
@@ -699,13 +704,13 @@ export function CommandPalette({
 
         <footer className="palette__footer" aria-hidden="true">
           <span>
-            <kbd className="kbd">↑↓</kbd> move
+            <Kbd keys={['↑↓']} /> move
           </span>
           <span>
-            <kbd className="kbd">↵</kbd> open
+            <Kbd keys={['↵']} /> open
           </span>
           <span>
-            <kbd className="kbd">esc</kbd> close
+            <Kbd keys={['esc']} /> close
           </span>
         </footer>
       </div>

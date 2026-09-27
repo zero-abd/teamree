@@ -28,4 +28,25 @@ describe('notices.css', () => {
     expect(declarationOf(spoken, 'clip-path')).toBe('inset(50%)')
     expect(declarationOf(ruleFor(SHEET, '.notices:not(:has(.notice))'), 'position')).toBe('absolute')
   })
+
+  // The tone is an edge, never a fill; the cards are one width.
+  it('draws a card 340 wide with its tone as a 2px inset edge', () => {
+    expect(declarationOf(ruleFor(SHEET, '.notices'), 'width')).toBe('340px')
+    const edge = ruleFor(SHEET, '.notice::before')
+    expect(declarationOf(edge, 'width')).toBe('2px')
+    expect(declarationOf(edge, 'left')).toBe('2px')
+    expect(declarationOf(ruleFor(SHEET, '.notice--error::before'), 'background')).toBe('var(--danger)')
+    expect(declarationOf(ruleFor(SHEET, '.notice'), 'background')).toBe('var(--bg-elevated)')
+  })
+
+  it('slides a card in from the right at the enter curve and out at the exit curve', () => {
+    expect(declarationOf(ruleFor(SHEET, '.notice'), 'animation')).toBe('notice-in var(--motion-slow) var(--ease-enter)')
+    expect(declarationOf(ruleFor(SHEET, '.notice--leaving'), 'animation')).toBe(
+      'notice-out var(--motion-base) var(--ease-exit) forwards'
+    )
+  })
+
+  it('keeps the close control out of sight at rest, where something can hover', () => {
+    expect(declarationOf(ruleFor(SHEET, '.notice__close'), 'opacity')).toBe('var(--row-action-rest)')
+  })
 })

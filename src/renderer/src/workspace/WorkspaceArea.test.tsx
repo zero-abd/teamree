@@ -224,7 +224,7 @@ describe('when there is nothing open', () => {
   it('names the first chords on a first run, and New Task’s on its button once there is a project', () => {
     seed({ projects: [] })
     mount()
-    const chords = [...document.querySelectorAll('.welcome__shortcuts dd > kbd.kbd')]
+    const chords = [...document.querySelectorAll('.welcome__shortcuts dd .kbd')]
     expect(chords.map((node) => node.textContent)).toEqual(['⌘K', '⌘N', '⌘B'])
     cleanup()
     seed({ projects: [project] })

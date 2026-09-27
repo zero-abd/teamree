@@ -1,4 +1,4 @@
-/* Transient messages and the update card, stacked above the status rail.
+/* Transient messages and the update card, stacked above the status rail, newest at the bottom.
 
    Above the modal layer, not below it: the errors a dialog raises — a folder
    that is not a git checkout, a handle that collides — arrive here, and under
@@ -11,21 +11,22 @@
 
 .corner-stack {
   position: fixed;
-  right: var(--s4);
-  bottom: 34px;
+  right: 18px;
+  bottom: calc(var(--statusbar-h) + var(--s2));
   z-index: 70;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: var(--s2);
+  gap: 10px;
+  max-width: calc(100vw - 36px);
   pointer-events: none;
 }
 
 .notices {
   display: flex;
   flex-direction: column;
-  gap: var(--s2);
-  max-width: 420px;
+  width: 340px;
+  max-width: 100%;
 }
 
 /* Always mounted for the screen reader; out of the stack's gaps while it holds no card. */
@@ -42,42 +43,146 @@
   white-space: nowrap;
 }
 
+/* A card: the tone a 2px edge inside the left border, never a fill; an icon, a title, one line of why,
+   and small actions under them. A margin rather than the column's gap, so a leaving card folds its gap away too. */
 .notice {
-  display: flex;
-  pointer-events: auto;
-  align-items: flex-start;
-  gap: var(--s3);
-  padding: var(--s3) var(--s3) var(--s3) var(--s4);
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 12px 12px 12px 15px;
   border: 1px solid var(--line-strong);
-  border-left: 2px solid var(--danger);
-  border-radius: var(--r2);
-  background: var(--bg-raised);
+  border-radius: var(--r3);
+  background: var(--bg-elevated);
   box-shadow: var(--shadow-pop);
+  color: var(--fg);
   font-size: var(--text-sm);
-  animation: notice-in var(--motion-base) var(--ease);
+  pointer-events: auto;
+  animation: notice-in var(--motion-slow) var(--ease-enter);
 }
 
-.notice--info {
-  border-left-color: var(--info);
+.notices > .notice:last-child {
+  margin-bottom: 0;
 }
 
-.notice__text {
-  flex: 1;
+.notice::before {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--stopped);
+  content: '';
+}
+
+.notice--info::before {
+  background: var(--info);
+}
+
+.notice--success::before {
+  background: var(--success);
+}
+
+.notice--error::before {
+  background: var(--danger);
+}
+
+.notice__icon {
+  display: flex;
+  padding-top: 1px;
   color: var(--fg-secondary);
 }
 
-/* The one thing a notice can offer to do. Beside the text rather than under
-   it: a notice is a line, and a line with a block under it is a card. */
-.notice__action {
-  flex: none;
-  align-self: center;
-  padding: 2px var(--s2);
-  border: 1px solid var(--line-strong);
+.notice--success .notice__icon {
+  color: var(--success);
+}
+
+.notice--error .notice__icon {
+  color: var(--danger);
+}
+
+.notice__body {
+  min-width: 0;
+}
+
+/* Clear of the close control in the corner. */
+.notice__title {
+  padding-right: var(--s5);
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.notice__detail {
+  margin-top: 2px;
+  color: var(--fg-muted);
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.notice__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* Every card can be dismissed; the control arrives with the pointer, as a row's actions do. */
+.notice__close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
   border-radius: var(--r1);
   background: transparent;
+  color: var(--fg-muted);
+  opacity: var(--row-action-rest);
+  cursor: pointer;
+  transition:
+    opacity var(--motion-fast) var(--ease),
+    background var(--motion-fast) var(--ease);
+}
+
+.notice:hover .notice__close,
+.notice__close:focus-visible {
+  opacity: 1;
+}
+
+.notice__close:hover {
+  background: var(--bg-hover);
   color: var(--fg);
-  font: inherit;
-  font-size: var(--text-xs);
+}
+
+/* A teammate's popup: one sentence, its buttons under it, no icon. */
+.notice:not(:has(.notice__body)) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 6px;
+}
+
+.notice__text {
+  flex: 1 0 100%;
+  color: var(--fg-secondary);
+  line-height: 18px;
+}
+
+.notice__action {
+  height: var(--control-sm);
+  padding: 0 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r1);
+  background: var(--bg-raised);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -86,26 +191,28 @@
   background: var(--bg-hover);
 }
 
-.notice__close {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--r1);
-  background: transparent;
-  color: var(--fg-muted);
-  cursor: pointer;
-}
-
-.notice__close:hover {
-  background: var(--bg-hover);
-  color: var(--fg);
-}
-
 @keyframes notice-in {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateX(16px);
+  }
+}
+
+/* Out to the right while its height folds away, so the cards above settle into the gap. */
+.notice--leaving {
+  overflow: hidden;
+  interpolate-size: allow-keywords;
+  pointer-events: none;
+  animation: notice-out var(--motion-base) var(--ease-exit) forwards;
+}
+
+@keyframes notice-out {
+  to {
+    height: 0;
+    margin-bottom: 0;
+    padding-block: 0;
+    border-width: 0;
+    opacity: 0;
+    transform: translateX(10px);
   }
 }

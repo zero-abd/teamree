@@ -38,7 +38,7 @@ export function WorktreeStart({
     <button
       key={item.label}
       type="button"
-      className={`button button--lead${quiet ? ' button--ghost' : ''}`}
+      className={`button button--lg${quiet ? ' button--ghost' : ''}`}
       onClick={item.onChoose}
     >
       {item.icon === undefined ? null : (
@@ -81,7 +81,7 @@ export function WorktreeStart({
           {resume === null || resume.agent === undefined ? null : (
             <button
               type="button"
-              className="button button--lead button--primary"
+              className="button button--lg button--primary"
               onClick={() => void reopenTerminal(worktree.id, resume.terminalId)}
             >
               <span className="worktree-start__icon" aria-hidden="true">

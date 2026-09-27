@@ -635,6 +635,7 @@ describe('the first screen', () => {
     const found = row('Fix the ruler')
     expect([...found.querySelectorAll('.palette__match')].map((mark) => mark.textContent)).toEqual(['rul'])
     expect(found.querySelector('.palette__label')?.textContent).toBe('Fix the ruler')
+    expect(row('Search in Files: “rul”').querySelector('.palette__match')).toBeNull()
   })
 
   it('draws an icon on every row, and caps only on a command’s chord', () => {
