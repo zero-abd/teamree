@@ -504,7 +504,7 @@ export function Sidebar({
                   onTrash={() => void trashProject(project.id)}
                 />
                 <div className="project__meta">
-                  <p className="project__base">{project.baseRef}</p>
+                  <p className="project__base">{`from ${project.baseRef}`}</p>
                   <BaseFreshness project={project} />
                   <UnpushedBase projectId={project.id} />
                   {/* Only where teamwork is on; the rail reaches the setup either way. Named with the

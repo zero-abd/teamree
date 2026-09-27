@@ -54,6 +54,14 @@
   box-shadow: var(--ring);
 }
 
+/* Gives way first: the git line beside it says more about the worktree than its name does. */
+.statusbar__branch {
+  flex: 0 1000 auto;
+  max-width: 32ch;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
 .statusbar__spacer {
   flex: 1;
 }

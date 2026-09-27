@@ -27,12 +27,10 @@ describe('baseFreshness', () => {
 })
 
 describe('startPointAge', () => {
-  it('dates the base when it is old or could not be fetched, and says why when no date is known', () => {
+  it('dates the fetch when it is old or failed, and says why when no date is known', () => {
     expect(startPointAge(project({ fetchedAt: now - 60_000 }), now)).toBeNull()
-    expect(startPointAge(project({ fetchedAt: now - 3 * 60 * 60_000 }), now)).toBe('origin/main from 3h ago')
-    expect(startPointAge(project({ fetchedAt: now - 20 * 60_000, failure: 'offline' }), now)).toBe(
-      'origin/main from 20m ago'
-    )
+    expect(startPointAge(project({ fetchedAt: now - 3 * 60 * 60_000 }), now)).toBe('fetched 3h ago')
+    expect(startPointAge(project({ fetchedAt: now - 20 * 60_000, failure: 'offline' }), now)).toBe('fetched 20m ago')
     expect(startPointAge(project({ failure: 'auth' }), now)).toBe('sign-in failed')
   })
 })

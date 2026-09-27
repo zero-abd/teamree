@@ -73,7 +73,7 @@ const context = (
 
 describe('buildPaletteItems', () => {
   // The row said the stored "Add a subtract function to claude", and `perf` hinted `perf`.
-  it('names a worktree as the sidebar does, hinting the branch only when it says more', () => {
+  it('names a worktree as the sidebar does, hinting the branch unless it is the name', () => {
     const task = 'Add a subtract function to src/math.ts'
     const items = buildPaletteItems(
       context({
@@ -91,7 +91,7 @@ describe('buildPaletteItems', () => {
 
     const rows = items.filter((item) => item.kind === 'worktree')
     expect(rows.map((item) => [item.label, item.hint])).toEqual([
-      [task, ''],
+      [task, 'add-a-subtract-function-to-claude'],
       ['perf', '']
     ])
     // The glyph tells sibling runs apart on the row; typing the agent's name still finds it.

@@ -262,19 +262,26 @@ describe('a worktree with no panes in it', () => {
       (button) => button.lastChild?.textContent ?? ''
     )
 
-  // `perf / perf`: the branch is said only when it is not the name slugified.
-  it('names the worktree, its branch only when it says more, and none of the front door', () => {
+  it('names the worktree, its branch and where it started, and none of the front door', () => {
     openEmpty()
     expect(screen.getByRole('heading', { name: 'Rewrite the pager' })).toBeTruthy()
-    expect(screen.queryByText('rewrite-the-pager')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Copy Branch rewrite-the-pager' })).toBeTruthy()
+    expect(screen.getByText('from origin/main')).toBeTruthy()
     cleanup()
-    openEmpty({ branch: 'feature/pager' })
-    expect(screen.getByText('feature/pager')).toBeTruthy()
+    openEmpty({ name: 'perf', branch: 'perf' })
+    expect(document.querySelector('.worktree-start__branch')).toBeNull()
     for (const name of ['Open Folder…', 'New Task…', 'Star on GitHub']) {
       expect(screen.queryByRole('button', { name })).toBeNull()
     }
     expect(document.querySelector('.brand__mark')).toBeNull()
     expect(document.querySelector('kbd')).toBeNull()
+  })
+
+  it('copies its branch from under the name', () => {
+    const copyToClipboard = vi.fn(() => Promise.resolve())
+    openEmpty({ branch: 'ada/pager' }, { copyToClipboard })
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Branch ada/pager' }))
+    expect(copyToClipboard).toHaveBeenCalledWith('ada/pager', 'the branch ada/pager')
   })
 
   // `29-after-close.png` was titled by the stored name, agent word first.

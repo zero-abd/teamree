@@ -707,7 +707,8 @@ export class GitService {
       const nested = this.#patch(worktree.id, {
         ...(worktree.parentId === undefined ? { clearParent: true } : { parentId: worktree.parentId }),
         ...(worktree.baseRef === undefined ? { clearBaseRef: true } : { baseRef: worktree.baseRef }),
-        startedFrom: worktree.startedFrom
+        startedFrom: worktree.startedFrom,
+        ...(worktree.startedFromRef === undefined ? {} : { startedFromRef: worktree.startedFromRef })
       })
       if (nested === null) throw new GitServiceError(ErrorCode.NotFound, 'Removed')
       return { ...answer, worktree: nested }
@@ -764,7 +765,11 @@ export class GitService {
     await checkReplay(this.#runner, replayed, this.#agentWorking(child.id))
     const tip = await this.#runner.run({ args: ['rev-parse', parent.branch], cwd: project.path, readOnly: true })
     return {
-      answer: { worktree: { ...nested, startedFrom: tip.stdout.trim() }, change: 'rebase', dryRun },
+      answer: {
+        worktree: { ...nested, startedFrom: tip.stdout.trim(), startedFromRef: parent.branch },
+        change: 'rebase',
+        dryRun
+      },
       replayed
     }
   }
@@ -1081,6 +1086,7 @@ export class GitService {
           branch: worktree.branch,
           path: worktree.path,
           startedFrom: worktree.startedFrom,
+          ...(worktree.startedFromRef === undefined ? {} : { startedFromRef: worktree.startedFromRef }),
           createdAt: worktree.createdAt,
           ...(worktree.task === undefined ? {} : { task: worktree.task }),
           ...(worktree.parentId === undefined ? {} : { parentId: worktree.parentId }),
@@ -2069,6 +2075,7 @@ export class GitService {
         this.#patch(worktreeId, {
           state: 'ready',
           startedFrom,
+          ...(start === undefined || start.kind === 'commit' ? {} : { startedFromRef: start.requested }),
           clearError: true,
           ...(setupTerminalId === undefined ? {} : { setupTerminalId }),
           ...(setupAsk === undefined ? {} : { setupAsk })

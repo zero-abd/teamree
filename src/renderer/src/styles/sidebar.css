@@ -356,8 +356,8 @@
 }
 
 .project__base {
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: none;
+  max-width: 75%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -366,10 +366,10 @@
   font-size: var(--text-xs);
 }
 
-/* Why the base may be old; pressing it fetches. */
+/* Why the base may be old; pressing it fetches. Gives way before the base it is about. */
 .project__fresh {
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: 0 1000 auto;
+  min-width: 3ch;
   margin-right: auto;
   padding: 0 var(--s1);
   overflow: hidden;

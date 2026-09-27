@@ -1,5 +1,5 @@
 // The bottom rail: state that is off screen. The runtime only when it is not ready, keep-awake and memory
-// as icons, the git line, the pane count, and how many panes anywhere are asking or failed.
+// as icons, the branch, the git line, the pane count, and how many panes anywhere are asking or failed.
 
 import { useMemo } from 'react'
 import type { WorktreeStatus } from '@shared/entities'
@@ -7,6 +7,7 @@ import { attention, dashboardRows } from '../dashboard/dashboardRows'
 import { stepNeedingYou } from '../dashboard/needingYou'
 import { paneCount } from '../sidebar/agentRows'
 import { baseFreshness } from '../sidebar/baseFreshness'
+import { startedFromLabel } from '../sidebar/worktreeDisplay'
 import { formatReadAge, summarizeWorktreeStatus } from '../sidebar/worktreeStatusSummary'
 import { RUNTIME_IS_SEEDED } from '../runtimeClient/currentRuntimeClient'
 import { useNow } from '../state/useNow'
@@ -43,20 +44,20 @@ export function StatusBar(): React.JSX.Element {
   const revealPane = useWorkspaceStore((state) => state.revealPane)
   const fetching = useWorkspaceStore((state) => state.fetching)
   const fetchProject = useWorkspaceStore((state) => state.fetchProject)
+  const copyToClipboard = useWorkspaceStore((state) => state.copyToClipboard)
   const now = useNow(60_000)
 
   // The rail is always mounted, so it keeps main told which way sleep should go.
   useKeepAwake()
 
   const panes = paneCount(Object.values(terminals), worktrees.map((entry) => entry.id), activeWorktreeId)
-  const child = worktrees.some((entry) => entry.id === activeWorktreeId && entry.parentId !== undefined)
+  const active = worktrees.find((worktree) => worktree.id === activeWorktreeId)
+  const child = active?.parentId !== undefined
   // The record outlives a status read from before the folder went, and exists before any read.
-  const missing = worktrees.some((entry) => entry.id === activeWorktreeId && entry.missing === true)
+  const missing = active?.missing === true
   const shownStatus = missing && activeWorktreeId ? missingStatus(activeWorktreeId, status) : status
   const summary = summarizeWorktreeStatus(shownStatus, child)
-  const project = projects.find(
-    (entry) => entry.id === worktrees.find((worktree) => worktree.id === activeWorktreeId)?.projectId
-  )
+  const project = projects.find((entry) => entry.id === active?.projectId)
   const fresh = project === undefined ? null : baseFreshness(project, now)
   // In sync with a base that could not be fetched, or was fetched hours ago, is not known.
   const description =
@@ -83,6 +84,18 @@ export function StatusBar(): React.JSX.Element {
 
       <KeepAwakeControl />
       <ResourcesControl />
+
+      {active !== undefined && !pageOpen ? (
+        <button
+          type="button"
+          className="statusbar__item statusbar__button statusbar__branch"
+          title={`${active.branch} ${startedFromLabel(active)}`}
+          aria-label={`Copy Branch ${active.branch}`}
+          onClick={() => void copyToClipboard(active.branch, `the branch ${active.branch}`)}
+        >
+          {active.branch}
+        </button>
+      ) : null}
 
       {summary && shownStatus && !pageOpen ? (
         // The count is in the accessible name too; offered on a clean tree for reading the last commits.

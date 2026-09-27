@@ -310,15 +310,30 @@ describe('a worktree that is ready', () => {
     expect(within(openButton()).getByText('ada/pager')).toBeTruthy()
   })
 
-  // `scratch / scratch`: a branch that is only the name slugified says it twice.
-  it('leaves out a branch that is only its name slugified', () => {
+  it('names its branch under the name, slugified or not, whole on hover', () => {
     mount()
-    expect(within(openButton()).queryByText('rewrite-the-pager')).toBeNull()
+    const branch = within(openButton()).getByText('rewrite-the-pager')
+    expect(branch.getAttribute('title')).toBe('rewrite-the-pager')
+  })
+
+  // `perf / perf`: a branch that is the name itself says it twice.
+  it('leaves out a branch that is its name', () => {
+    mount({ worktree: worktree({ name: 'perf', branch: 'perf' }) })
+    expect(document.querySelector('.worktree__branch')).toBeNull()
+  })
+
+  it('names its branch and where it started on hover', () => {
+    mount({ worktree: worktree({ name: 'perf', branch: 'perf', startedFrom: 'v1.2.0' }) })
+    expect(document.querySelector('.worktree__name')?.getAttribute('title')).toBe('perf\nperf from v1.2.0')
   })
 
   // A chip alone on a second line reads as loose; with no branch there is no second line.
   it('keeps its chips on the first line, just left of the dot, when the branch is left out', () => {
-    mount({ status: status({ unstaged: 1 }), terminals: [terminal({ agent: 'claude' })] })
+    mount({
+      worktree: worktree({ name: 'perf', branch: 'perf' }),
+      status: status({ unstaged: 1 }),
+      terminals: [terminal({ agent: 'claude' })]
+    })
     expect(document.querySelector('.worktree__meta')).toBeNull()
     const head = document.querySelector('.worktree__title') as HTMLElement
     const chips = head.querySelector('.gitchips') as HTMLElement
@@ -442,10 +457,12 @@ describe('one of several runs of a task', () => {
   it('reads the whole task line, then its agent in words, and hovers the same name', () => {
     mount({ worktree: codexRun() })
     expect(screen.getByRole('treeitem', { name: `${TASK} (Codex)` })).toBeTruthy()
-    expect(document.querySelector('.worktree__name')?.getAttribute('title')).toBe(`${TASK} (Codex)`)
+    expect(document.querySelector('.worktree__name')?.getAttribute('title')).toBe(
+      `${TASK} (Codex)\nadd-a-subtract-function-to-codex from origin/main`
+    )
     expect(screen.getByRole('button', { name: `More for ${TASK} (Codex)` })).toBeTruthy()
     expect(document.body.innerHTML).not.toMatch(/codex ·|claude ·/u)
-    expect(document.querySelector('.worktree__branch')).toBeNull()
+    expect(document.querySelector('.worktree__branch')?.textContent).toBe('add-a-subtract-function-to-codex')
   })
 
   // Name first, then what state it is in: glued together, "claudeAdd a subtract…stopped" is one word.
@@ -1065,7 +1082,9 @@ describe('a worktree whose work has landed', () => {
     })
 
     expect(screen.queryByText('Merged')).toBeNull()
-    expect(screen.getByText('Rewrite the pager').getAttribute('title')).toBe('Rewrite the pager · Pull Request #12')
+    expect(screen.getByText('Rewrite the pager').getAttribute('title')).toBe(
+      'Rewrite the pager · Pull Request #12\nrewrite-the-pager from origin/main'
+    )
     fireEvent.contextMenu(row())
     expect(labels().at(-1)).toBe('Delete Worktree…')
   })
@@ -1436,13 +1455,15 @@ describe('tokens on hover', () => {
       })
     )
     const name = (): string | null => document.querySelector('.worktree__name')?.getAttribute('title') ?? null
-    expect(name()).toBe('Rewrite the pager\n1.2M tok\n3.4M tok with children')
+    expect(name()).toBe('Rewrite the pager\nrewrite-the-pager from origin/main\n1.2M tok\n3.4M tok with children')
 
     // Read a moment ago: a second hover asks nothing.
     fireEvent.mouseEnter(document.querySelector('li.worktree')!)
     expect(read).toHaveBeenCalledTimes(1)
 
     act(() => useUsageStore.setState({ showCost: true }))
-    expect(name()).toBe('Rewrite the pager\n1.2M tok · ≈$3.10\n3.4M tok · ≈$9.00 with children')
+    expect(name()).toBe(
+      'Rewrite the pager\nrewrite-the-pager from origin/main\n1.2M tok · ≈$3.10\n3.4M tok · ≈$9.00 with children'
+    )
   })
 })
