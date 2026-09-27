@@ -4,7 +4,7 @@
 
 import type { ClosedPane, ConsentRequest, Layout, PaneNode, WorktreeStatus } from '@shared/entities'
 import type { RightPanelTab } from '../workspace/rightPanel/rightPanelState'
-import { fileColumnIn, fileLeavesIn, fileViewerFor, isFilePaneId, isWorktreeFileLeaf } from '@shared/filePane'
+import { fileLeavesIn, fileViewerFor, isFilePaneId, isWorktreeFileLeaf } from '@shared/filePane'
 import { firstQuestion } from '../dialogs/modalLayer'
 import { stepNeedingYou, type NeedingState } from '../dashboard/needingYou'
 import { groupOf, groupTabIds, moveTabBy, splitTabOut, stripOrder } from '../panes/paneGroups'

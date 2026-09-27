@@ -1297,7 +1297,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
   /** A tab of the group holding `member`: it takes no room, and the runtime sizes it as that group from the grid. */
   const asTab = (member: string): { room: Partial<NewPane> & { tabOf: string }; zoomed: false } => {
     const grid = paneGrid(get().terminalFontSize, get().terminalOptions)
-    return { room: { ...(grid ?? {}), tabOf: member }, zoomed: false }
+    return { room: { ...grid, tabOf: member }, zoomed: false }
   }
   /** Folds a panel laid over the panes, or one folded for room that would come back over them, before a pane opens. */
   const yieldPanel = (): void => {
