@@ -5,8 +5,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
-import { WebLinksAddon } from '@xterm/addon-web-links'
-import type { IDisposable, ILinkHandler, ITerminalOptions } from '@xterm/xterm'
+import type { IDisposable, ITerminalOptions } from '@xterm/xterm'
 import { Terminal as XTerm } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import type { PaneTypist } from '@shared/entities'
@@ -30,7 +29,8 @@ import type { TerminalOptions } from '../state/preferences'
 import { useNow } from '../state/useNow'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { handsHere } from './handsHere'
-import { paneFileLinks, type FileLinkHost } from './paneFileLinks'
+import { LinkTipView, linkTips, type LinkTip } from './LinkTip'
+import { fileListings, paneLinks, type PaneLinkHost, type PaneLinks } from './paneLinks'
 import { paneImageLinks, pastedImageLookup, type PastedImage, type ShownImage } from './paneImageLinks'
 import { PastedImagePeek, PastedImageViewer, type ImagePeek } from './PastedImageViews'
 import { PastedImageStrip } from './PastedImageStrip'
@@ -103,6 +103,7 @@ export function TerminalView({
   const [viewing, setViewing] = useState<ShownImage | null>(null)
   const [promptImages, setPromptImages] = useState<ShownImage[]>([])
   const [menu, setMenu] = useState<TerminalMenu | null>(null)
+  const [tip, setTip] = useState<LinkTip | null>(null)
   const emulatorRef = useRef<PaneEmulator | null>(null)
   const onFocusRef = useRef(onFocus)
   onFocusRef.current = onFocus
@@ -131,6 +132,7 @@ export function TerminalView({
       copyOnSelect: () => optionsRef.current.copyOnSelect,
       onResults: (results) => dispatch({ type: 'results', ...results }),
       peekImage: setPeek,
+      tip: setTip,
       openImage: (image) => {
         setPeek(null)
         setViewing(image)
@@ -223,7 +225,8 @@ export function TerminalView({
       host,
       () => reportsMouse(term),
       modifierRef.current,
-      () => onFocusRef.current()
+      () => onFocusRef.current(),
+      (event) => emulator.links.at(event) !== null
     )
 
     return () => {
@@ -324,8 +327,10 @@ export function TerminalView({
   const openMenu = (event: React.MouseEvent<HTMLElement>): void => {
     const emulator = emulatorRef.current
     event.preventDefault()
-    if (emulator === null || !rightClickOpensMenu(event, reportsMouse(emulator.term), modifierRef.current)) return
-    const { pointed, term } = emulator
+    if (emulator === null) return
+    const { term } = emulator
+    const pointed = emulator.links.at(event.nativeEvent)
+    if (!rightClickOpensMenu(event, reportsMouse(term) && pointed === null, modifierRef.current)) return
     const entries = terminalMenuEntries(
       { readOnly: false, hasSelection: term.hasSelection(), pointed },
       modifierRef.current
@@ -348,7 +353,8 @@ export function TerminalView({
       clipboard: { copy: copyText, read: pasteText },
       byHand: emulator.markHands,
       openLink: openPaneLink,
-      copyLink: (uri) => void store.copyToClipboard(uri, 'the link'),
+      copyLink: (text) => void store.copyToClipboard(text, pointed?.kind === 'path' ? 'the path' : 'the link'),
+      openPath: (file) => void store.openFileAt(file.worktreeId, file.path, file.line, file.column),
       reveal: (absolute, path) => void store.revealInFinder(absolute, path),
       find: () => {
         store.focusPane(terminalId)
@@ -425,6 +431,7 @@ export function TerminalView({
           }))}
         />
       )}
+      <LinkTipView tip={tip} />
       {peek === null ? null : <PastedImagePeek peek={peek} />}
       {viewing === null ? null : <PastedImageViewer image={viewing} onClose={() => setViewing(null)} />}
     </div>
@@ -440,6 +447,7 @@ type EmulatorView = {
   copyOnSelect: () => boolean
   onResults: (results: { resultIndex: number; resultCount: number }) => void
   peekImage: (peek: ImagePeek | null) => void
+  tip: (tip: LinkTip | null) => void
   openImage: (image: ShownImage) => void
 }
 
@@ -453,8 +461,7 @@ type PaneEmulator = {
   /** Takes image `index` out of the agent's unsent prompt; see `promptEdit.ts`. */
   removeImage: (index: number) => Promise<NotRemoved | null>
   view: EmulatorView
-  /** The link or path under the pointer, for the right-click menu. */
-  pointed: Pointed | null
+  links: PaneLinks
   /** Vouches for a paste from the menu. See `handsHere.ts`. */
   markHands: () => void
   dispose: () => void
@@ -505,28 +512,13 @@ function openEmulator(
     letterSpacing: 0,
     ...emulatorOptions(options),
     ...SLIM_SCROLLBAR,
-    ...readTerminalColors(document.documentElement),
-    // OSC 8 hyperlinks (`gh`, `npm`) come from xterm's own provider. Without
-    // this xterm asks in a `confirm()` and calls `window.open()` with no URL,
-    // which the main process denies. See PANE_LINK_HANDLER.
-    linkHandler: {
-      ...PANE_LINK_HANDLER,
-      hover: (_event, uri) => point({ kind: 'link', uri }),
-      leave: () => point(null)
-    }
+    ...readTerminalColors(document.documentElement)
   })
-  const point = (target: Pointed | null): void => {
-    emulator.pointed = target
-  }
 
   const fit = new FitAddon()
   term.loadAddon(fit)
   wideEmoji(term)
 
-  // Bare URLs in the output are inert until this addon; it matches only
-  // `http:` and `https:`, the set the main process hands the OS.
-  term.loadAddon(paneLinkAddon(point))
-  const fileLinks = paneFileLinks(term, fileLinkHost(terminalId, modifier, point))
   const findImage = pastedImageLookup((index) => runtimeClient.call('terminal.pastedImage', { terminalId, index }))
   const imageLinks = paneImageLinks(term, {
     find: findImage,
@@ -540,6 +532,10 @@ function openEmulator(
   term.loadAddon(search)
 
   term.open(host)
+  const links = paneLinks(
+    term,
+    paneLinkHost(terminalId, modifier, (tip) => emulator.view.tip(tip))
+  )
   // Cleared by the runtime, in the stream, so every view and watcher of the pane clears with this one.
   const unshow = showPane(terminalId, {
     buffer: term.buffer,
@@ -576,15 +572,16 @@ function openEmulator(
       copyOnSelect: () => false,
       onResults: () => {},
       peekImage: () => {},
+      tip: () => {},
       openImage: () => {}
     },
-    pointed: null,
+    links,
     markHands: () => hands.mark(),
     dispose: () => {
       alive = false
       subscription?.close()
       hands.stop()
-      fileLinks.dispose()
+      links.dispose()
       imageLinks.dispose()
       output.dispose()
       scrollbar.dispose()
@@ -822,59 +819,36 @@ const INTERRUPT = '\u0003'
 /** Opens a link a pane printed in the browser, never in this window. See `openInBrowser.ts` for why there is one of it. */
 export const openPaneLink = openInBrowser
 
-/** A click on an OSC 8 hyperlink does what a click on a bare URL does; xterm only offers `http:`/`https:` ones. */
-export const PANE_LINK_HANDLER: ILinkHandler = {
-  activate: (_event, text) => openPaneLink(text)
-}
-
-/** A pane's paths are read from its own directory and must be a file git lists in its worktree. */
-function fileLinkHost(
+/** Paths are read from the pane's directory and open in a file pane; anything else goes to the browser. */
+function paneLinkHost(
   terminalId: string,
   modifier: PlatformModifier,
-  point: (target: Pointed | null) => void
-): FileLinkHost {
+  tip: (tip: LinkTip | null) => void
+): PaneLinkHost {
   return {
-    point,
     place: () => {
-      const state = useWorkspaceStore.getState()
-      const terminal = state.terminals[terminalId]
-      const worktree = state.worktrees.find((entry) => entry.id === terminal?.worktreeId)
-      if (terminal === undefined || worktree === undefined) return null
-      return { worktreeId: worktree.id, root: worktree.path, cwd: terminal.cwd }
+      const terminal = useWorkspaceStore.getState().terminals[terminalId]
+      return terminal === undefined ? null : { worktreeId: terminal.worktreeId, cwd: terminal.cwd }
     },
-    exists: fileListed,
-    open: (worktreeId, path, line, column) =>
-      void useWorkspaceStore.getState().openFileAt(worktreeId, path, line, column),
-    holds: (event) => holdsModifier(event, modifier)
+    worktrees: () => useWorkspaceStore.getState().worktrees,
+    files: worktreeFileNames,
+    openUrl: openPaneLink,
+    openFile: (file, line, column) =>
+      void useWorkspaceStore.getState().openFileAt(file.worktreeId, file.path, line, column),
+    holds: (event) => holdsModifier(event, modifier),
+    tip: linkTips(modifier, tip)
   }
 }
 
-/** How long one answer about a path stands: a hover asks for every row the pointer crosses. */
-const LISTED_FOR_MS = 10_000
-const listed = new Map<string, { at: number; answer: Promise<boolean> }>()
-
-function fileListed(worktreeId: string, path: string): Promise<boolean> {
-  const key = `${worktreeId}\u0000${path}`
-  const known = listed.get(key)
-  if (known !== undefined && Date.now() - known.at < LISTED_FOR_MS) return known.answer
-  if (listed.size > 500) listed.clear()
-  const answer = runtimeClient
-    .call('worktree.findFiles', { worktreeId, query: path.split('/').pop() ?? path, limit: 1000 })
-    .then(
-      (found) => found.paths.includes(path),
-      () => false
-    )
-  listed.set(key, { at: Date.now(), answer })
-  return answer
-}
-
-/** The addon that turns a bare URL in the scrollback into something clickable; `point` hears the pointer on and off one. */
-export function paneLinkAddon(point?: (target: Pointed | null) => void): WebLinksAddon {
-  return new WebLinksAddon((_event, uri) => openPaneLink(uri), {
-    hover: (_event, uri) => point?.({ kind: 'link', uri }),
-    leave: () => point?.(null)
+/** The files, not folders, in one directory of a worktree, for every pane's links. */
+const worktreeFileNames = fileListings(async (worktreeId, dir) => {
+  const listing = await runtimeClient.call('worktree.files', {
+    worktreeId,
+    limit: 10_000,
+    ...(dir === '' ? {} : { path: dir })
   })
-}
+  return new Set(listing.entries.filter((entry) => entry.kind !== 'dir').map((entry) => entry.name))
+})
 
 /** Everything the key handler below is allowed to touch. */
 export type PaneKeys = {

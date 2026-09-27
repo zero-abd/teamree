@@ -324,6 +324,24 @@
   color: var(--accent-bright);
 }
 
+/* Beside a hovered link, over everything; never in the pointer's way. */
+.pane-link-tip {
+  position: fixed;
+  z-index: 60;
+  max-width: 480px;
+  overflow: hidden;
+  padding: 2px var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-pop);
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
 /* Find bar ---------------------------------------------------------------- */
 
 .pane-search {

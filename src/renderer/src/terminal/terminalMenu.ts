@@ -7,8 +7,10 @@ import { formatChord, type PlatformModifier } from '../keyboard/platformModifier
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { anchorAtPointer, type RowMenuAnchor } from '../sidebar/RowMenu'
 
-/** A URL or a worktree file under the pointer, as the pane's link providers found it. */
-export type Pointed = { kind: 'link'; uri: string } | { kind: 'path'; path: string; absolute: string }
+/** A URL or a worktree file under the pointer, as the pane's link layer found it. */
+export type Pointed =
+  | { kind: 'link'; uri: string }
+  | { kind: 'path'; worktreeId: string; path: string; absolute: string; line?: number; column?: number }
 
 export type TerminalMenuContext = {
   /** A teammate's pane: nothing in the menu may type into it. */
@@ -20,6 +22,8 @@ export type TerminalMenuContext = {
 export type TerminalMenuAction =
   | 'open-link'
   | 'copy-link'
+  | 'open-path'
+  | 'copy-path'
   | 'reveal-path'
   | 'copy'
   | 'paste'
@@ -51,8 +55,6 @@ export function terminalMenuEntries(context: TerminalMenuContext, modifier: Plat
     disabled: !context.hasSelection
   }
   const selectAll: TerminalMenuEntry = { action: 'select-all', label: 'Select All', hint: clipboard('a') }
-  if (context.readOnly) return [copy, selectAll]
-
   const pointed: TerminalMenuEntry[] =
     context.pointed?.kind === 'link'
       ? [
@@ -60,8 +62,13 @@ export function terminalMenuEntries(context: TerminalMenuContext, modifier: Plat
           { action: 'copy-link', label: 'Copy Link' }
         ]
       : context.pointed?.kind === 'path'
-        ? [{ action: 'reveal-path', label: 'Reveal in Finder', icon: 'reveal' }]
+        ? [
+            { action: 'open-path', label: 'Open File' },
+            { action: 'copy-path', label: 'Copy Path' },
+            { action: 'reveal-path', label: 'Reveal in Finder', icon: 'reveal' }
+          ]
         : []
+  if (context.readOnly) return [...pointed, { ...copy, separated: pointed.length > 0 }, selectAll]
   return [
     ...pointed,
     { ...copy, separated: pointed.length > 0 },
@@ -80,8 +87,8 @@ export function reportsMouse(term: Pick<XTerm, 'modes'>): boolean {
 }
 
 /**
- * A program reporting the mouse owns the right-click, except with the key that forces a selection
- * past it: ⌥ on macOS, Shift elsewhere.
+ * A program reporting the mouse owns the right-click, except over a link or with the key that forces
+ * a selection past it: ⌥ on macOS, Shift elsewhere. Pass `mouseReporting` false over a link.
  */
 export function rightClickOpensMenu(
   event: { altKey: boolean; shiftKey: boolean },
@@ -97,11 +104,13 @@ export function holdRightClickFromProgram(
   element: HTMLElement,
   reporting: () => boolean,
   modifier: PlatformModifier,
-  onPress: () => void
+  onPress: () => void,
+  overLink: (event: MouseEvent) => boolean = () => false
 ): () => void {
   // Capture on the host runs before xterm's own listeners below it.
   const hold = (event: MouseEvent): void => {
-    if (event.button !== 2 || !reporting() || !rightClickOpensMenu(event, true, modifier)) return
+    if (event.button !== 2 || !reporting()) return
+    if (!rightClickOpensMenu(event, true, modifier) && !overLink(event)) return
     event.stopPropagation()
     if (event.type === 'mousedown') onPress()
   }
@@ -133,7 +142,9 @@ export type TerminalMenuHost = {
   /** Vouches for a paste as typing. See `handsHere.ts`. */
   byHand?: () => void
   openLink: (uri: string) => void
-  copyLink: (uri: string) => void
+  /** Copies a link or a path. */
+  copyLink: (text: string) => void
+  openPath: (pointed: Extract<Pointed, { kind: 'path' }>) => void
   reveal: (absolute: string, path: string) => void
   find: () => void
   split: (direction: 'row' | 'column') => void
@@ -150,6 +161,12 @@ export function runTerminalMenuAction(
       if (pointed?.kind !== 'link') return
       if (action === 'open-link') host.openLink(pointed.uri)
       else host.copyLink(pointed.uri)
+      return
+    case 'open-path':
+      if (pointed?.kind === 'path') host.openPath(pointed)
+      return
+    case 'copy-path':
+      if (pointed?.kind === 'path') host.copyLink(pointed.absolute)
       return
     case 'reveal-path':
       if (pointed?.kind === 'path') host.reveal(pointed.absolute, pointed.path)

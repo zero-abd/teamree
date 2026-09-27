@@ -78,6 +78,7 @@ vi.mock('@xterm/xterm', () => {
     buffer = { active: { baseY: 0, getLine: () => undefined } }
 
     attachCustomKeyEventHandler(): void {}
+    parser = { registerOscHandler: () => ({ dispose: () => {} }) }
     registerLinkProvider(): { dispose: () => void } {
       return { dispose: () => {} }
     }
@@ -113,7 +114,6 @@ vi.mock('@xterm/addon-fit', () => ({
 // jsdom lays nothing out; a pane with no box is never fitted.
 Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 800 })
 Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => 600 })
-vi.mock('@xterm/addon-web-links', () => ({ WebLinksAddon: class {} }))
 vi.mock('@xterm/addon-search', () => ({
   SearchAddon: class {
     onDidChangeResults(): void {}

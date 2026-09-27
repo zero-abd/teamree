@@ -2873,11 +2873,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async openFileAt(worktreeId, path, line, column) {
+      if (line !== undefined) {
+        get().openFilePane(worktreeId, path, undefined, { line, ...(column === undefined ? {} : { column }) })
+        return
+      }
       // Asked now: the Changes list is only read while it is on screen.
       const asked = await runtimeClient.call('worktree.changes', { worktreeId, path }).catch(() => null)
       const changed = (asked ?? get().changes[worktreeId])?.changes.some((change) => change.path === path) === true
-      if (changed || line === undefined) get().openFilePane(worktreeId, path, changed ? 'diff' : undefined)
-      else get().openFilePane(worktreeId, path, undefined, { line, ...(column === undefined ? {} : { column }) })
+      get().openFilePane(worktreeId, path, changed ? 'diff' : undefined)
     },
 
     wentToLine(token) {

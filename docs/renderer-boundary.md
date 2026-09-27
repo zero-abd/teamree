@@ -272,15 +272,17 @@ Compared field by field rather than by origin, because a `file:` URL's origin is
 the string `"null"` and an equality test on it calls every file on the disk the
 app's own page. That trap has a test of its own.
 
-**A link in a pane arrives here too.** A URL an agent printed is clickable now,
-and that is the whole of where a click goes: `TerminalView` hands the emulator
-one activation handler — for the web-links addon's bare URLs and for xterm's own
-OSC 8 hyperlinks alike — and all it does is call `window.open`. So the answer is
-`windowOpenAnswer`'s, in this process: a web address is opened beside the app,
-everything else is refused, and no window is opened here either way. There is
-deliberately **no second scheme check in the renderer**; one free to disagree
-with the real one is worse than none. This is also why there is no new preload
-channel for it — see the end of this document.
+**A link in a pane arrives here too.** A URL a pane printed is followed on a
+⌘-click, and that is the whole of where the click goes: the pane's link layer
+(`paneLinks.ts`, the same one for bare URLs, OSC 8 hyperlinks and a teammate's
+pane) calls `window.open`. So the answer is `windowOpenAnswer`'s, in this
+process: a web address is opened beside the app, everything else is refused,
+and no window is opened here either way. There is deliberately **no second
+scheme check in the renderer**; one free to disagree with the real one is worse
+than none. The one thing routed elsewhere is a `file:` link or a printed path,
+which opens in a file pane only when it names a file in one of this machine's
+worktrees. This is also why there is no new preload channel for it — see the
+end of this document.
 
 `setWindowOpenHandler` refuses to hand macOS anything that is not `http:` or
 `https:`. `shell.openExternal` asks the OS to open whatever it is given, and it
@@ -351,15 +353,13 @@ Measured against xterm 6.0.0, driven for real rather than read about:
   nothing in this renderer subscribes, and `document.title` does not move. (The
   main process *does* scan OSC 0 and 2 out of a **local** pty to name a pane —
   `title-sequence.ts` — which is a different stream in a different process.)
-- **No link at all.** A teammate's pane is the one place this is still true, and
-  now deliberately rather than incidentally. `WatchedPaneView` loads no link
-  addon and hands the emulator no link handler, so a URL in somebody else's
-  output is characters on a screen: nothing to click, and nothing that could
-  open an address chosen by a stream from another machine. A pane of your own is
-  the other case and is described under the navigation rule above — the programs
-  writing into it are yours, and a URL they print is clickable. xterm's own OSC 8
-  provider narrows it either way, refusing to offer a link unless the URL in the
-  sequence parses as `http:` or `https:`.
+- **No link that opens by itself.** A URL in a teammate's pane is followed only
+  on the reader's own ⌘-click, through the same `window.open` gate as any other
+  pane: an `http:` or `https:` address goes to the browser and nothing else
+  opens. An OSC 8 hyperlink, whose label can say anything, shows its real
+  address beside the pointer before it is clicked. Their paths are never links:
+  the files are on their machine, and a path that happened to exist here would
+  be a different file.
 - **No escape from the pane.** Everything else a stream can do — alternate
   screen, mouse tracking, the colour palette, a screen reset — happens inside
   the emulator. It can make the pane unreadable. It cannot make it something

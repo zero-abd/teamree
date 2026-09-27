@@ -83,6 +83,10 @@ vi.mock('@xterm/xterm', () => {
 
     loadAddon(): void {}
     unicode = { activeVersion: '6' }
+    registerLinkProvider(): { dispose: () => void } {
+      return { dispose: () => {} }
+    }
+    parser = { registerOscHandler: () => ({ dispose: () => {} }) }
 
     modes = { mouseTrackingMode: 'none' }
     selectedAll = 0
@@ -102,6 +106,16 @@ vi.mock('@xterm/xterm', () => {
   }
   return { Terminal }
 })
+
+/** The link layer's finding under the pointer, and the hosts it was built with; finding is `paneLinks.test.ts`'s. */
+const links = vi.hoisted(() => ({ under: null as unknown, hosts: [] as Array<{ place: () => unknown }> }))
+vi.mock('./paneLinks', async (actual) => ({
+  ...(await actual<typeof import('./paneLinks')>()),
+  paneLinks: (_term: unknown, host: { place: () => unknown }) => {
+    links.hosts.push(host)
+    return { at: () => links.under, dispose: () => {} }
+  }
+}))
 
 vi.mock('@xterm/addon-webgl', () => ({
   WebglAddon: class {
@@ -429,6 +443,28 @@ describe('a slot in the window, like any other pane', () => {
     fireEvent.click(items[1]!)
     expect((fakeTerms[0] as unknown as { selectedAll: number }).selectedAll).toBe(1)
     expect(call).not.toHaveBeenCalledWith('teamwork.type', expect.anything())
+  })
+
+  it('offers the link under the pointer and opens it in the browser; their paths are never links', async () => {
+    const watch = armWatch()
+    mount()
+    await watch.resolve()
+    expect(links.hosts.at(-1)?.place()).toBeNull()
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    links.under = { kind: 'link', uri: 'https://example.com/pr/1' }
+    fireEvent.contextMenu(pane().querySelector('.watch__surface')!, { clientX: 20, clientY: 30 })
+    const items = within(screen.getByRole('menu')).getAllByRole('menuitem')
+    expect(items.map((item) => item.textContent?.replace(/⌘.*/u, ''))).toEqual([
+      'Open Link',
+      'Copy Link',
+      'Copy',
+      'Select All'
+    ])
+    fireEvent.click(items[0]!)
+    expect(open).toHaveBeenCalledWith('https://example.com/pr/1', '_blank', 'noopener')
+    expect(call).not.toHaveBeenCalledWith('teamwork.type', expect.anything())
+    links.under = null
+    open.mockRestore()
   })
 
   it('declines the app’s own chords rather than sending them to the owner', async () => {

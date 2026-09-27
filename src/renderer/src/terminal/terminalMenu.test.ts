@@ -54,9 +54,11 @@ describe('the rows', () => {
       'Split Right': 'split-right',
       'Split Down': 'split-down'
     })
-    expect(icons({ ...plain, pointed: { kind: 'path', path: 'a.ts', absolute: '/w/a.ts' } })['Reveal in Finder']).toBe(
-      'reveal'
-    )
+    expect(
+      icons({ ...plain, pointed: { kind: 'path', worktreeId: 'w1', path: 'a.ts', absolute: '/w/a.ts' } })[
+        'Reveal in Finder'
+      ]
+    ).toBe('reveal')
   })
 
   it('turns Copy on over a selection', () => {
@@ -68,21 +70,22 @@ describe('the rows', () => {
     expect(rows(context).slice(0, 3)).toEqual(['Open Link', 'Copy Link', '— Copy ⌘C (off)'])
   })
 
-  it('leads with Reveal in Finder over a path the worktree lists', () => {
+  it('leads with Open File, Copy Path and Reveal in Finder over a file', () => {
     const context: TerminalMenuContext = {
       ...plain,
-      pointed: { kind: 'path', path: 'src/a.ts', absolute: '/repo/src/a.ts' }
+      pointed: { kind: 'path', worktreeId: 'w1', path: 'src/a.ts', absolute: '/repo/src/a.ts' }
     }
-    expect(rows(context).slice(0, 2)).toEqual(['Reveal in Finder', '— Copy ⌘C (off)'])
+    expect(rows(context).slice(0, 4)).toEqual(['Open File', 'Copy Path', 'Reveal in Finder', '— Copy ⌘C (off)'])
   })
 
-  it('gives a teammate’s pane only Copy and Select All, whatever is under the pointer', () => {
+  it('gives a teammate’s pane the link under the pointer, Copy and Select All, and nothing that types', () => {
     const context: TerminalMenuContext = {
       readOnly: true,
       hasSelection: true,
       pointed: { kind: 'link', uri: 'https://example.com' }
     }
-    expect(rows(context)).toEqual(['Copy ⌘C', 'Select All ⌘A'])
+    expect(rows(context)).toEqual(['Open Link', 'Copy Link', '— Copy ⌘C', 'Select All ⌘A'])
+    expect(rows({ ...context, pointed: null })).toEqual(['Copy ⌘C', 'Select All ⌘A'])
   })
 
   it('shows no clipboard chords where Ctrl+C is the interrupt', () => {
@@ -153,6 +156,26 @@ describe('whose right-click it is', () => {
     press({ altKey: true })
     expect(program).toHaveBeenCalledTimes(3)
   })
+
+  it('keeps a right-click on a link from the program, so the link’s menu opens', () => {
+    const host = document.createElement('div')
+    const inner = host.appendChild(document.createElement('div'))
+    const program = vi.fn()
+    inner.addEventListener('mousedown', program)
+    let onLink = true
+    holdRightClickFromProgram(
+      host,
+      () => true,
+      MAC,
+      () => {},
+      () => onLink
+    )
+    inner.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 2 }))
+    expect(program).not.toHaveBeenCalled()
+    onLink = false
+    inner.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 2 }))
+    expect(program).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('what each row does', () => {
@@ -170,6 +193,7 @@ describe('what each row does', () => {
       byHand: () => calls.push('byHand'),
       openLink: (uri) => calls.push(`open ${uri}`),
       copyLink: (uri) => calls.push(`copyLink ${uri}`),
+      openPath: (file) => calls.push(`openPath ${file.worktreeId} ${file.path} ${file.line}`),
       reveal: (absolute, path) => calls.push(`reveal ${absolute} ${path}`),
       find: () => calls.push('find'),
       split: (direction) => calls.push(`split ${direction}`)
@@ -197,14 +221,19 @@ describe('what each row does', () => {
     expect(target.calls).toEqual([])
   })
 
-  it('opens and copies the link it was raised over, and reveals the path', () => {
+  it('opens and copies the link it was raised over, and opens, copies and reveals the file', () => {
     const target = host()
+    const file = { kind: 'path', worktreeId: 'w1', path: 'src/a.ts', absolute: '/repo/src/a.ts', line: 7 } as const
     runTerminalMenuAction('open-link', { kind: 'link', uri: 'https://example.com' }, target)
     runTerminalMenuAction('copy-link', { kind: 'link', uri: 'https://example.com' }, target)
-    runTerminalMenuAction('reveal-path', { kind: 'path', path: 'src/a.ts', absolute: '/repo/src/a.ts' }, target)
+    runTerminalMenuAction('open-path', file, target)
+    runTerminalMenuAction('copy-path', file, target)
+    runTerminalMenuAction('reveal-path', file, target)
     expect(target.calls).toEqual([
       'open https://example.com',
       'copyLink https://example.com',
+      'openPath w1 src/a.ts 7',
+      'copyLink /repo/src/a.ts',
       'reveal /repo/src/a.ts src/a.ts'
     ])
   })

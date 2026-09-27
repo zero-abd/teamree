@@ -167,6 +167,34 @@ unix('the startup files', () => {
     expect(run('/bin/zsh', ['-i', '-c', 'print -r -- $HISTFILE'], env)).toBe(path.join(user, '.zsh_history'))
   })
 
+  it.runIf(process.platform === 'darwin')('says where an interactive zsh is at each prompt, with OSC 7', () => {
+    const { integration, cli, user } = rig()
+    const { env } = integrateShell(
+      { file: '/bin/zsh', args: ['-l'] },
+      { PATH: '/usr/bin:/bin', HOME: os.homedir(), TEAMREE_CLI: cli, ZDOTDIR: user },
+      integration
+    )
+    expect(run('/bin/zsh', ['-i', '-c', 'print -r -- ${precmd_functions[(I)__teamree_cwd]}'], env)).not.toBe('0')
+    expect(run('/bin/zsh', ['-i', '-c', 'cd /usr && __teamree_cwd'], env)).toMatch(/^\x1b\]7;file:\/\/[^/]*\/usr\x07$/)
+  })
+
+  it('says where an interactive bash is at each prompt, with OSC 7', () => {
+    const { root, integration, cli } = rig()
+    const home = path.join(root, 'home')
+    mkdirSync(home)
+    const launch = integrateShell(
+      { file: '/bin/bash', args: ['-l'] },
+      { PATH: '/usr/bin:/bin', HOME: home, TEAMREE_CLI: cli },
+      integration
+    )
+    const said = run(
+      '/bin/bash',
+      [...(launch.args as string[]), '-i', '-c', 'cd /usr && eval "$PROMPT_COMMAND"'],
+      launch.env
+    )
+    expect(said).toMatch(/^\x1b\]7;file:\/\/[^/]*\/usr\x07$/)
+  })
+
   it('finds the bundled CLI from bash, login or not, after the user’s files rebuild PATH', () => {
     const { root, integration, cli, stale } = rig()
     // bash reads its login files from HOME, so this one is scratch: bash is not node and never reaches a keychain.
