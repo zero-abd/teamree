@@ -49,12 +49,15 @@ import {
   type AgentHookOptions
 } from './agent-hooks'
 import {
+  containsTerminal,
   insertBeside,
+  joinGroup,
   leafPane,
   normalisePane,
   parsePaneNode,
   placeOf,
   removePane,
+  shownWith,
   splitPane,
   terminalIdsIn,
   type SplitDirection
@@ -310,6 +313,10 @@ export class TerminalSessionManager {
     if (params.minPane !== undefined) this.minPane = params.minPane
     const layout = this.layoutFor(params.worktreeId)
     const placed = (id: string): PaneNode => {
+      // A tab takes no room from anyone.
+      if (params.tabOf !== undefined && containsTerminal(layout.root, params.tabOf)) {
+        return joinGroup(layout.root, params.tabOf, id)
+      }
       const added = leafPane(id)
       // The window refuses a pane with no room before asking; a CLI caller is not refused, only placed.
       const fitted = this.minPane && placePaneWithin(layout.root, added, this.paneArea, this.minPane)
@@ -1369,11 +1376,14 @@ export class TerminalSessionManager {
   private dropLeaf(worktreeId: string, terminalId: string): void {
     const layout = this.layoutFor(worktreeId)
     const root = removePane(layout.root, terminalId)
+    // A tab's group shows its next tab, which is where the focus goes.
+    const place = placeOf(layout.root, terminalId)
+    const next = place?.tab === true ? shownWith(root, place.beside[0] ?? '') : undefined
     this.saveLayout({
       worktreeId,
       root,
       focusedTerminalId:
-        layout.focusedTerminalId === terminalId ? (terminalIdsIn(root)[0] ?? null) : layout.focusedTerminalId
+        layout.focusedTerminalId === terminalId ? (next ?? terminalIdsIn(root)[0] ?? null) : layout.focusedTerminalId
     })
   }
 

@@ -244,9 +244,15 @@ export function closePane(root: PaneNode | null, terminalId: string): PaneNode |
   })
 
   if (kept.length === 0) return null
-  if (isFileColumn(root)) return withTabs(root, kept, shownAfterClose(root, kept))
+  if (isFileColumn(root)) return asGroup(withTabs(root, kept, shownAfterClose(root, kept)))
   if (kept.length === 1) return kept[0] ?? null
   return { kind: 'split', direction: root.direction, sizes: normalizeSizes(keptSizes, kept.length), children: kept }
+}
+
+/** A group of one terminal is that pane; one of one file stays the file column. */
+export function asGroup(group: FileColumn): PaneNode {
+  const only = group.children[0]
+  return group.children.length === 1 && only !== undefined && !isFileLeaf(only) ? only : group
 }
 
 /** The shown tab once some closed: itself, else the tab now at its place, else the one before. */
@@ -267,7 +273,9 @@ export function addTab(
   added: FileLeaf,
   { preview = false, replace }: { preview?: boolean; replace?: string | undefined } = {}
 ): PaneNode {
+  const files = fileColumnIn(root)
   return mapColumn(root, (column) => {
+    if (column !== files) return column
     const tabs = [...column.children]
     const indexOf = (id: string | undefined): number => tabs.findIndex((tab) => hasTerminal(tab, id ?? ''))
     const replaced = indexOf(replace)
@@ -380,7 +388,8 @@ function withStops(root: PaneNode, stops: readonly PaneNode[]): PaneNode {
   return walk(root)
 }
 
-function beside(root: PaneNode, targetId: string, edge: Exclude<DropEdge, 'center'>, added: PaneNode): PaneNode {
+/** `added` on `edge` of the pane holding `targetId`, a group moving as one. */
+export function beside(root: PaneNode, targetId: string, edge: Exclude<DropEdge, 'center'>, added: PaneNode): PaneNode {
   const direction = edge === 'left' || edge === 'right' ? 'row' : 'column'
   return flatten(splitPaneWith(root, targetId, direction, added, edge === 'left' || edge === 'top'))
 }
@@ -435,10 +444,8 @@ export function setSizesAt(root: PaneNode, path: readonly number[], sizes: reado
  */
 export function shownRoot(root: PaneNode | null, expandedTerminalId: string | null): PaneNode | null {
   if (expandedTerminalId === null) return root
-  // A file tab fills the centre with its column, the other tabs still on it.
-  const column = fileColumnIn(root)
-  if (column && hasTerminal(column, expandedTerminalId)) return column
-  return collectLeaves(root).find((node) => node.terminalId === expandedTerminalId) ?? root
+  // A tab fills the centre with its group, the other tabs still on it.
+  return (root && stopsOf(root).find((stop) => hasTerminal(stop, expandedTerminalId))) ?? root
 }
 
 /** `root` without its file column, the column's share handed back to its siblings. */

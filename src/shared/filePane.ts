@@ -176,10 +176,10 @@ export function shownTabId(column: FileColumn): string | undefined {
   return column.shown !== undefined && ids.includes(column.shown) ? column.shown : ids[0]
 }
 
-/** The file column in the tree, if there is one. */
+/** The file column in the tree, if there is one: the first tab group holding a file. */
 export function fileColumnIn(root: PaneNode | null): FileColumn | null {
   if (root === null || root.kind === 'leaf') return null
-  if (isFileColumn(root)) return root
+  if (isFileColumn(root)) return root.children.some(isFileLeaf) ? root : null
   for (const child of root.children) {
     const found = fileColumnIn(child)
     if (found !== null) return found
