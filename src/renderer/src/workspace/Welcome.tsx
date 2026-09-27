@@ -43,18 +43,21 @@ export function Welcome({
   if (project !== undefined) {
     return (
       <div className="welcome welcome--project">
-        <EmptyState title={hasWorktrees ? 'No worktree open' : 'No worktrees yet'}>
-          <button
-            type="button"
-            className="button button--primary button--lg"
-            ref={primary}
-            title={`New Task · ${shortcutHint('new-worktree', modifier)}`}
-            onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
-          >
-            <Icon name="new-task" />
-            New Task…
-          </button>
-        </EmptyState>
+        <EmptyState
+          title={hasWorktrees ? 'No worktree open' : 'No worktrees yet'}
+          actions={
+            <button
+              type="button"
+              className="button button--primary button--lg"
+              ref={primary}
+              title={`New Task · ${shortcutHint('new-worktree', modifier)}`}
+              onClick={() => openDialog({ kind: 'new-task', projectId: project.id })}
+            >
+              <Icon name="new-task" />
+              New Task…
+            </button>
+          }
+        />
       </div>
     )
   }

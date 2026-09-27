@@ -1,30 +1,26 @@
-// Nothing here yet: the mark over a split light, one title, and the one move that fills it.
+// Nothing here yet: the mark over its split light, a title, an optional hint, and one primary.
 
+import type { ReactNode } from 'react'
 import { MarkFull } from '../shell/Brand'
 
-/** `compact` drops the motif, for a list that came up empty inside a panel. */
-export function EmptyState({
-  title,
-  hint,
-  compact = false,
-  children
-}: {
-  title: string
-  hint?: React.ReactNode
-  compact?: boolean
-  /** The actions, the primary first. */
-  children?: React.ReactNode
-}): React.JSX.Element {
+type EmptyStateProps = {
+  title: ReactNode
+  hint?: ReactNode
+  /** One primary, then any secondary verbs. */
+  actions?: ReactNode
+}
+
+export function EmptyState({ title, hint, actions }: EmptyStateProps): React.JSX.Element {
   return (
-    <div className={`empty${compact ? ' empty--compact' : ''}`}>
-      {compact ? null : (
-        <span className="empty__motif" aria-hidden="true">
+    <div className="empty-state">
+      <div className="empty-state__inner">
+        <div className="empty-state__motif" aria-hidden="true">
           <MarkFull size={56} />
-        </span>
-      )}
-      <p className="empty__title">{title}</p>
-      {hint === undefined ? null : <div className="empty__hint">{hint}</div>}
-      {children === undefined ? null : <div className="empty__actions">{children}</div>}
+        </div>
+        <h2 className="empty-state__title">{title}</h2>
+        {hint === undefined ? null : <p className="empty-state__hint">{hint}</p>}
+        {actions === undefined ? null : <div className="empty-state__actions">{actions}</div>}
+      </div>
     </div>
   )
 }

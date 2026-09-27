@@ -198,9 +198,9 @@ describe('when there is nothing open', () => {
   it('offers only a new task once there is a project, and no agent by name', () => {
     seed({ projects: [project], agents: [{ kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }] })
     mount()
-    expect(document.querySelector('.empty__title')?.textContent).toBe('No worktrees yet')
-    expect(document.querySelector('.empty__motif .mark')).toBeTruthy()
-    const actions = document.querySelector('.empty__actions') as HTMLElement
+    expect(document.querySelector('.empty-state__title')?.textContent).toBe('No worktrees yet')
+    expect(document.querySelector('.empty-state__motif svg')).toBeTruthy()
+    const actions = document.querySelector('.empty-state__actions') as HTMLElement
     expect([...actions.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['New Task…'])
     expect(screen.getByRole('button', { name: 'New Task…' }).className).toContain('button--primary')
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New Task…' }))
@@ -236,7 +236,7 @@ describe('when there is nothing open', () => {
   it('says no worktree is open when the project has some', () => {
     seed({ projects: [project], worktrees: [worktree()] })
     mount()
-    expect(document.querySelector('.empty__title')?.textContent).toBe('No worktree open')
+    expect(document.querySelector('.empty-state__title')?.textContent).toBe('No worktree open')
   })
 
   // The last window's front tab is on its way: a welcome in the meantime is a screen that flashes past.

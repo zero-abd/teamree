@@ -627,7 +627,7 @@ export function CommandPalette({
 
         {matches.length === 0 ? (
           wanted !== '' && settled ? (
-            <EmptyState title="No matches" compact />
+            <EmptyState title="No matches" />
           ) : null
         ) : (
           <ul className="palette__list" role="listbox" aria-label="Results" ref={list}>
