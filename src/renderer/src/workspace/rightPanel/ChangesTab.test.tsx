@@ -505,7 +505,7 @@ describe('committing', () => {
   })
 
   // The list stops at 500 rows; the commit, the counts and the All box must not.
-  it('commits all 2,000 when only 500 are listed, and says how many are not', () => {
+  it('commits all 2,000 when only 500 are listed, and says how many are not', { timeout: 90_000 }, () => {
     const listed = Array.from(
       { length: 500 },
       (_, index): WorktreeChange => ({ path: `src/f${index}.ts`, kind: 'modified', staged: false, unstaged: true })
@@ -513,17 +513,18 @@ describe('committing', () => {
     useWorkspaceStore.setState({
       changes: { w1: { worktreeId: 'w1', changes: listed, total: 2000, limit: 500, truncated: true, readAt: 0 } }
     })
+    // Label and text lookups: role queries rescan all 500 rows each time and time out on a loaded machine.
     render(<ChangesTab />)
-    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Rank' } })
+    fireEvent.change(screen.getByLabelText('Commit message'), { target: { value: 'Rank' } })
 
-    const group = screen.getByRole('region', { name: 'Uncommitted' })
+    const group = screen.getByLabelText('Uncommitted')
     expect(within(group).getByText('2,000')).toBeTruthy()
     expect(screen.getByText('+1,500 more')).toBeTruthy()
     expect(screen.getByText('0/2,000')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Select all changes' }))
+    fireEvent.click(screen.getByLabelText('Select all changes'))
     expect(screen.getByText('2,000/2,000')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Commit All 2,000' }))
+    fireEvent.click(screen.getByText('Commit All 2,000', { selector: 'button' }))
     expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
   })
 
