@@ -4,7 +4,7 @@
 
 import type { ClosedPane, ConsentRequest, Layout, WorktreeStatus } from '@shared/entities'
 import type { RightPanelTab } from '../workspace/rightPanel/rightPanelState'
-import { fileColumnIn, fileLeavesIn, isFilePaneId } from '@shared/filePane'
+import { fileColumnIn, fileLeavesIn, fileViewerFor, isFilePaneId, isWorktreeFileLeaf } from '@shared/filePane'
 import { firstQuestion } from '../dialogs/modalLayer'
 import { stepNeedingYou, type NeedingState } from '../dashboard/needingYou'
 import { collectTerminalIds, paneStops } from '../panes/paneLayout'
@@ -130,6 +130,13 @@ function ownFocusedPane(state: CommandState): string | null {
   return activeLayout(state)?.focusedTerminalId ?? null
 }
 
+/** The path of the focused pane when it is a file of the worktree drawn as code, else null. */
+export function focusedCodeFile(state: CommandState): string | null {
+  const focused = ownFocusedPane(state)
+  const leaf = fileLeavesIn(activeLayout(state)?.root ?? null).find((entry) => entry.terminalId === focused)
+  return leaf !== undefined && isWorktreeFileLeaf(leaf) && fileViewerFor(leaf.path) === 'code' ? leaf.path : null
+}
+
 /** The strip's tabs, every kind, in the order it draws them (`paneTabs`); the file column is one. */
 function stripTabs(state: CommandState): string[] {
   return paneStops(activeLayout(state)?.root ?? null)
@@ -222,6 +229,8 @@ export function whyUnavailable(command: WorkspaceCommand, state: CommandState): 
         ),
         'checkout not ready'
       )
+    case 'go-to-line':
+      return unless(focusedCodeFile(state) !== null, 'no file focused')
     case 'toggle-right-panel':
     case 'focus-right-panel':
       // The panel shows one worktree's files, changes and panes; with none
@@ -414,6 +423,9 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
       else store.openDialog(mode === 'files' ? { kind: 'palette', mode } : { kind: 'palette' })
       break
     }
+    case 'go-to-line':
+      store.openDialog({ kind: 'palette', mode: 'files', query: ':' })
+      break
     case 'find-in-pane':
       store.openPaneSearch()
       break

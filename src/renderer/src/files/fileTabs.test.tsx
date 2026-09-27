@@ -133,6 +133,19 @@ describe('file tabs in the store', () => {
     expect(paths()).toEqual(['b.ts', 'c.ts', 'd.ts', 'e.ts'])
   })
 
+  it('opens at a line, and turns an open diff back to its code to get there', () => {
+    useWorkspaceStore.getState().openFilePane('w1', 'a.ts', 'preview', { line: 3, column: 5 })
+    const a = fileLeavesIn(layout().root)[0]!.terminalId
+    expect(useWorkspaceStore.getState().goToLine).toMatchObject({ worktreeId: 'w1', path: 'a.ts', line: 3, column: 5 })
+    expect(fileColumnIn(layout().root)?.preview).toBe(a)
+
+    useWorkspaceStore.getState().setPaneDiff(a, true)
+    useWorkspaceStore.getState().openFilePane('w1', 'a.ts', 'preview', { line: 9 })
+    expect(useWorkspaceStore.getState().goToLine).toMatchObject({ path: 'a.ts', line: 9, column: 1 })
+    expect(useWorkspaceStore.getState().diffPanes[a]).toBeUndefined()
+    expect(fileColumnIn(layout().root)?.preview).toBe(a)
+  })
+
   it('still splits beside the focused pane when asked, rather than adding a tab', () => {
     useWorkspaceStore.getState().openFilePane('w1', 'a.ts')
     useWorkspaceStore.getState().openFilePane('w1', 'b.ts', 'split')

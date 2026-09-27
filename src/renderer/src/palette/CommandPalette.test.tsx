@@ -327,8 +327,41 @@ describe('going to a file', () => {
 
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'ArrowDown' })
     fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
-    expect(openFilePane).toHaveBeenCalledExactlyOnceWith('w1', 'src/module0/big0.ts', undefined)
+    expect(openFilePane).toHaveBeenCalledExactlyOnceWith('w1', 'src/module0/big0.ts', 'preview')
     expect(closeDialog).toHaveBeenCalledOnce()
+  })
+
+  it('reads a pasted path:line:col, asks the runtime for the path alone, and opens there', async () => {
+    mount('files')
+    type('module7/big7.ts:3:5')
+    await waitFor(() => expect(labels()).toEqual(['big7.ts:3']))
+    expect(call).toHaveBeenCalledWith('worktree.findFiles', expect.objectContaining({ query: 'module7/big7.ts' }))
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
+    expect(openFilePane).toHaveBeenCalledExactlyOnceWith('w1', 'src/module7/big7.ts', 'preview', {
+      line: 3,
+      column: 5
+    })
+  })
+
+  it('takes :line alone as a line of the focused file', () => {
+    const root = { kind: 'leaf' as const, terminalId: 'file:1', pane: 'file' as const, path: 'src/app.ts' }
+    seed({ openFilePane, layouts: { w1: { worktreeId: 'w1', root, focusedTerminalId: 'file:1' } } })
+    mount('files')
+    type(':12')
+    expect(labels()).toEqual(['app.ts:12'])
+    fireEvent.keyDown(screen.getByRole('textbox'), { key: 'Enter' })
+    expect(openFilePane).toHaveBeenCalledExactlyOnceWith('w1', 'src/app.ts', 'preview', { line: 12 })
+  })
+
+  it('offers no line of a terminal', () => {
+    mount('files')
+    type(':12')
+    expect(labels()).toEqual([])
+  })
+
+  it('opens with a typed : when Go to Line asks', () => {
+    render(<CommandPalette modifier={MAC} mode="files" query=":" />)
+    expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe(':')
   })
 
   it('opens it as a split with the modifier held', () => {

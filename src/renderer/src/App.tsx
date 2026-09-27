@@ -207,7 +207,12 @@ export function App(): React.JSX.Element {
 
       <RegionBoundary region="dialog" resetKey={dialog?.kind ?? ''} onDismiss={closeDialog}>
         {dialog?.kind === 'palette' ? (
-          <CommandPalette key={dialog.mode ?? 'all'} modifier={modifier} mode={dialog.mode ?? 'all'} />
+          <CommandPalette
+            key={dialog.mode ?? 'all'}
+            modifier={modifier}
+            mode={dialog.mode ?? 'all'}
+            {...(dialog.query === undefined ? {} : { query: dialog.query })}
+          />
         ) : null}
         {dialog?.kind === 'confirm-remove' ? <ConfirmRemoveDialog worktreeId={dialog.worktreeId} /> : null}
         {dialog?.kind === 'confirm-forget' ? <ConfirmForgetDialog target={dialog.target} /> : null}

@@ -2,7 +2,7 @@
 // Raised by right-click, ⇧F10, the context-menu key or a file pane's `⋯`; the chords are the shortcut table's.
 
 import { useCallback, useState } from 'react'
-import { fileLeavesIn, fileViewerFor, isCommitLeaf, isCompareLeaf } from '@shared/filePane'
+import { fileColumnIn, fileLeavesIn, fileViewerFor, isCommitLeaf, isCompareLeaf } from '@shared/filePane'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import { openAsArtifact } from '../markdown/openAsArtifact'
@@ -144,8 +144,14 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
   if (isCompareLeaf(file)) return [maximize, ...moves, ...closing]
   if (file !== undefined) {
     const absolute = `${worktree.path}/${file.path}`
+    const preview = fileColumnIn(root)?.preview === terminalId
     return [
-      { label: 'Copy Path', onChoose: () => void store.copyToClipboard(absolute, `the path to ${file.path}`) },
+      ...(preview ? [{ label: 'Keep Open', onChoose: () => store.pinFilePane(terminalId) }] : []),
+      {
+        label: 'Copy Path',
+        separated: preview,
+        onChoose: () => void store.copyToClipboard(absolute, `the path to ${file.path}`)
+      },
       { label: 'Reveal in Finder', onChoose: () => void store.revealInFinder(absolute, file.path) },
       { label: 'Open in', onChoose: () => {}, items: openIn(worktree.projectId, absolute, file.path, true) },
       ...(fileViewerFor(file.path) === 'markdown'

@@ -617,6 +617,29 @@ describe('the file column by key', () => {
   })
 })
 
+describe('going to a line', () => {
+  const leaf = (path: string): PaneNode => ({ kind: 'leaf', terminalId: 'f1', pane: 'file', path })
+  const on = (path: string, diff = false): CommandState => ({
+    ...WORKING,
+    layouts: { w1: { worktreeId: 'w1', root: leaf(path), focusedTerminalId: 'f1' } },
+    ...(diff ? { diffPanes: { f1: true as const } } : {})
+  })
+
+  it('is offered only with a code file in front, its diff included', () => {
+    expect(isCommandAvailable('go-to-line', on('src/app.ts'))).toBe(true)
+    expect(isCommandAvailable('go-to-line', on('src/app.ts', true))).toBe(true)
+    expect(whyUnavailable('go-to-line', WORKING)).toBe('no file focused')
+    expect(isCommandAvailable('go-to-line', on('README.md'))).toBe(false)
+    expect(isCommandAvailable('go-to-line', on('logo.png'))).toBe(false)
+  })
+
+  it('opens the file finder with the colon typed', () => {
+    const store = workspace(on('src/app.ts'))
+    runWorkspaceCommand('go-to-line', store)
+    expect(store.openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'palette', mode: 'files', query: ':' })
+  })
+})
+
 describe('the text size', () => {
   it('steps the terminal text by a pixel and resets it to 12', () => {
     const cases: Array<[WorkspaceCommand, number, number]> = [

@@ -216,7 +216,7 @@ export type DialogState =
   /** `parentId`: a child task of that worktree; `fromIssue`: opens on the issue picker; `task`: its starting text. */
   | { kind: 'new-task'; projectId: string; parentId?: string; fromIssue?: true; task?: string }
   /** `files`: ⌘P, only the worktree's files. */
-  | { kind: 'palette'; mode?: 'files' }
+  | { kind: 'palette'; mode?: 'files'; query?: string }
   /** Asked before every removal; `refused` once the runtime has refused one unforced. */
   | { kind: 'confirm-remove'; worktreeId: string; intent: RemoveIntent; refused?: true }
   /** Raised only when the pane is doing work a close would kill. See `closePaneModel`. */
@@ -696,8 +696,9 @@ type WorkspaceState = {
   /**
    * Opens `path` as a tab of the file column, or focuses the tab already on it; `diff` shows its diff,
    * `split` puts it to the right of the focused pane instead, `preview` replaces the preview tab, `diff-preview` both.
+   * `at` shows its code at that line (and column).
    */
-  openFilePane: (worktreeId: string, path: string, mode?: FileOpenMode) => void
+  openFilePane: (worktreeId: string, path: string, mode?: FileOpenMode, at?: { line: number; column?: number }) => void
   /** Opens a path a pane printed: its diff when it has changes, else its code at `line`. */
   openFileAt: (worktreeId: string, path: string, line?: number, column?: number) => Promise<void>
   /** Where the next code pane on this path puts its cursor, until it has; `token` tells two requests apart. */
@@ -2810,8 +2811,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set({ editingWorktreeName: worktree === undefined ? null : worktree.id })
     },
 
-    openFilePane(worktreeId, path, mode) {
+    openFilePane(worktreeId, path, mode, at) {
       yieldPanel()
+      if (at !== undefined)
+        set({ goToLine: { worktreeId, path, line: at.line, column: at.column ?? 1, token: ++goToSeq } })
       set((state) => {
         const recent = [path, ...(state.recentFiles[worktreeId] ?? []).filter((entry) => entry !== path)]
         return { recentFiles: { ...state.recentFiles, [worktreeId]: recent.slice(0, RECENT_FILES_KEPT) } }
@@ -2820,6 +2823,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const open = fileLeavesIn(layout.root).find((leaf) => leaf.path === path && isWorktreeFileLeaf(leaf))
       if (open) {
         if (mode === 'diff' || mode === 'diff-preview') get().setPaneDiff(open.terminalId, true)
+        else if (at !== undefined) get().setPaneDiff(open.terminalId, false)
         if (mode !== 'preview' && mode !== 'diff-preview') get().pinFilePane(open.terminalId)
         get().focusPane(open.terminalId)
         return
@@ -2831,10 +2835,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       // Asked now: the Changes list is only read while it is on screen.
       const asked = await runtimeClient.call('worktree.changes', { worktreeId, path }).catch(() => null)
       const changed = (asked ?? get().changes[worktreeId])?.changes.some((change) => change.path === path) === true
-      if (line !== undefined && !changed) {
-        set({ goToLine: { worktreeId, path, line, column: column ?? 1, token: ++goToSeq } })
-      }
-      get().openFilePane(worktreeId, path, changed ? 'diff' : undefined)
+      if (changed || line === undefined) get().openFilePane(worktreeId, path, changed ? 'diff' : undefined)
+      else get().openFilePane(worktreeId, path, undefined, { line, ...(column === undefined ? {} : { column }) })
     },
 
     wentToLine(token) {
