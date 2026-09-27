@@ -194,6 +194,15 @@ describe('agent event --context, at session start', () => {
     expect(stub.received[2]?.params).toEqual({ worktreeId: 'wt_1', budgetTokens: 380, format: 'text' })
   })
 
+  it('heads earlier work from Jac Graph Memory as such when nothing overlaps', async () => {
+    const earlier = 'earlier: #7 rate-limit-the-api (merged): Counters live in the database'
+    const { run } = await harness(sessionStart({}, earlier))
+    const context = `teamree: earlier work like this task.\n${earlier}`
+    expect((await run(argv, fixture('session-start'))).out).toBe(
+      `${JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: context } })}\n`
+    )
+  })
+
   it('prints nothing when nothing overlaps', async () => {
     const { run } = await harness(sessionStart({}, ''))
     expect((await run(argv, fixture('session-start'))).out).toBe('')

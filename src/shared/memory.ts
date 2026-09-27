@@ -1,6 +1,8 @@
 // Project memory: notes, the budgeted `project.context` bundle and conflicts.
 // The graph lives in the main process; these are the shapes that leave it.
 
+import type { RelatedTask } from './graphMemory'
+
 export type NoteKind = 'decision' | 'question' | 'summary'
 
 export const NOTE_KINDS: readonly NoteKind[] = ['decision', 'question', 'summary']
@@ -30,7 +32,7 @@ export type MemoryNote = {
   agentId?: string
 }
 
-export type ContextSection = 'ancestors' | 'siblings' | 'self' | 'questions' | 'files' | 'teammates'
+export type ContextSection = 'ancestors' | 'siblings' | 'self' | 'questions' | 'files' | 'teammates' | 'related'
 
 export const CONTEXT_SECTIONS: readonly ContextSection[] = [
   'ancestors',
@@ -38,7 +40,8 @@ export const CONTEXT_SECTIONS: readonly ContextSection[] = [
   'self',
   'questions',
   'files',
-  'teammates'
+  'teammates',
+  'related'
 ]
 
 /** Token budget for `project.context`; tokens are estimated as ceil(chars / 4). */
@@ -83,6 +86,8 @@ export type ProjectContext = {
   self: { goal: string; decisions: MemoryNote[]; questions: MemoryNote[]; claims?: string[] }
   siblings: ContextSibling[]
   files: { path: string; summary: string; touchedBy: string[] }[]
+  /** Earlier tasks like this one, from the Jac Graph Memory add-on when it runs. */
+  related?: RelatedTask[]
   /** The same bundle rendered as text under the budget. */
   text: string
   sources?: ContextSourceReport[]
@@ -123,6 +128,8 @@ export type MemoryWorktree = {
   goal: string
   state: string
   owner: 'me' | string
+  /** Advisory globs it claims. */
+  claims?: string[]
 }
 
 /** Paths a worktree touched, and how that was learned. Paths only, never contents. */

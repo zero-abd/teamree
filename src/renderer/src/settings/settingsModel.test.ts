@@ -7,8 +7,10 @@
 // never read again until it was wrong in front of somebody.
 
 import { describe, expect, it } from 'vitest'
+import type { AddonStatus } from '@shared/contextProvider'
 import type { CliStatus, RelaySetting, UpdateState } from '@shared/entities'
 import {
+  addonLine,
   cliLine,
   describedOnly,
   firstMatch,
@@ -299,5 +301,36 @@ describe('finding a setting', () => {
     expect(firstMatch('prefix')).toMatchObject({ section: 'general', label: 'Branch prefix' })
     expect(firstMatch('scrollback')).toMatchObject({ section: 'panes' })
     expect(firstMatch('zzz')).toBeNull()
+  })
+})
+
+describe('the Jac Graph Memory row', () => {
+  const at = (status: Partial<AddonStatus>): AddonStatus => ({ id: 'jac-memory', state: 'off', ...status })
+
+  it('offers Install until installed, and the box after', () => {
+    expect(addonLine(null, false)).toEqual({ state: 'Reading…', action: null, on: null, problem: null })
+    expect(addonLine(at({}), false)).toEqual({ state: 'Off', action: 'install', on: null, problem: null })
+    expect(addonLine(at({ needs: 'uv' }), false)).toEqual({ state: 'Needs uv', action: 'uv', on: null, problem: null })
+    expect(addonLine(at({ version: '0.1.0' }), false)).toMatchObject({ state: 'Off', action: null, on: false })
+    expect(addonLine(at({ state: 'installing' }), false)).toMatchObject({ state: 'Installing…', on: null })
+  })
+
+  it('says running, starting, or failed and why', () => {
+    expect(addonLine(at({ state: 'running', version: '0.1.0' }), true)).toMatchObject({
+      state: 'Running 0.1.0',
+      on: true
+    })
+    expect(addonLine(at({ state: 'running', detail: 'starting', version: '0.1.0' }), true).state).toBe('Starting…')
+    expect(addonLine(at({ state: 'failed', version: '0.1.0', detail: 'timeout' }), true)).toEqual({
+      state: 'Failed',
+      action: null,
+      on: true,
+      problem: 'timeout'
+    })
+    expect(addonLine(at({ state: 'failed', detail: 'No solution found' }), false)).toMatchObject({
+      action: 'install',
+      on: null,
+      problem: 'No solution found'
+    })
   })
 })

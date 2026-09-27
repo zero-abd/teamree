@@ -329,6 +329,74 @@ describe('Teamwork', () => {
   })
 })
 
+describe('Add-ons', () => {
+  const row = (): HTMLElement => screen.getByTestId('addon-jac-memory')
+
+  it('offers Install, then the on/off box once installed, and turns it on through the runtime', async () => {
+    const sent: unknown[] = []
+    let status: object = { id: 'jac-memory', state: 'off' }
+    runtimeCall.answer = (method, params) => {
+      if (method === 'settings.get') return Promise.resolve({ ...DEFAULT_RUNTIME_SETTINGS })
+      if (method === 'addons.status') return Promise.resolve([status])
+      if (method === 'addons.install') {
+        sent.push(params)
+        status = { id: 'jac-memory', state: 'running', version: '0.1.0' }
+        return Promise.resolve(status)
+      }
+      if (method === 'settings.set') {
+        sent.push(params)
+        return Promise.resolve({ ...DEFAULT_RUNTIME_SETTINGS, ...(params as object) })
+      }
+      return new Promise(() => {})
+    }
+    try {
+      render(<SettingsView />)
+      fireEvent.click(await within(row()).findByRole('button', { name: 'Install' }))
+      await within(row()).findByText('Running 0.1.0')
+      expect(sent).toEqual([{ id: 'jac-memory' }])
+      const box = within(row()).getByRole('checkbox') as HTMLInputElement
+      expect(box.checked).toBe(true)
+      fireEvent.click(box)
+      await vi.waitFor(() => expect(sent).toContainEqual({ jacMemoryAddon: false }))
+    } finally {
+      runtimeCall.answer = () => new Promise(() => {})
+    }
+  })
+
+  it('says it needs uv, links to it, and offers no Install', async () => {
+    runtimeCall.answer = (method) => {
+      if (method === 'addons.status') return Promise.resolve([{ id: 'jac-memory', state: 'off', needs: 'uv' }])
+      return new Promise(() => {})
+    }
+    try {
+      render(<SettingsView />)
+      const link = await within(row()).findByRole('link', { name: 'Get uv' })
+      expect(link.getAttribute('href')).toContain('docs.astral.sh/uv')
+      expect(within(row()).queryByRole('button', { name: 'Install' })).toBeNull()
+      expect(within(row()).getByText('Needs uv')).toBeTruthy()
+    } finally {
+      runtimeCall.answer = () => new Promise(() => {})
+    }
+  })
+
+  it('shows Failed and why', async () => {
+    runtimeCall.answer = (method) => {
+      if (method === 'settings.get') return Promise.resolve({ ...DEFAULT_RUNTIME_SETTINGS, jacMemoryAddon: true })
+      if (method === 'addons.status') {
+        return Promise.resolve([{ id: 'jac-memory', state: 'failed', version: '0.1.0', detail: 'timeout' }])
+      }
+      return new Promise(() => {})
+    }
+    try {
+      render(<SettingsView />)
+      expect(await within(row()).findByText('Failed')).toBeTruthy()
+      expect(await screen.findByText('timeout')).toBeTruthy()
+    } finally {
+      runtimeCall.answer = () => new Promise(() => {})
+    }
+  })
+})
+
 describe('the section list', () => {
   const nav = (): HTMLElement => screen.getByRole('navigation', { name: 'Sections' })
   const item = (name: string): HTMLElement => within(nav()).getByRole('button', { name })
@@ -364,6 +432,7 @@ describe('the section list', () => {
       'Teamwork',
       'Appearance',
       'Shortcuts',
+      'Add-ons',
       'Updates',
       'CLI'
     ])
@@ -408,6 +477,7 @@ describe('the section list', () => {
       teamwork: 150,
       appearance: 300,
       shortcuts: 450,
+      addons: 500,
       updates: 600,
       cli: 900
     })
@@ -421,6 +491,7 @@ describe('the section list', () => {
       teamwork: -400,
       appearance: -300,
       shortcuts: -200,
+      addons: -150,
       updates: -100,
       cli: 200
     })
@@ -995,6 +1066,7 @@ describe('the filter', () => {
       'Teamwork',
       'Appearance',
       'Shortcuts',
+      'Add-ons',
       'Updates',
       'CLI'
     ])

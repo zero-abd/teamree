@@ -1,6 +1,7 @@
 // The settings page's judgements: whether this build can check for updates, where a project's relay
 // comes from (an env var beating the file is the case nobody works out), and what the filter reads.
 
+import type { AddonStatus } from '@shared/contextProvider'
 import type { AgentKind, CliStatus, InstalledAgent, RelaySetting, UpdateState } from '@shared/entities'
 import { HARNESSES } from '../agents/harnesses'
 import { cliPanel, leavesLinkAlone } from '../dialogs/cliInstallModel'
@@ -149,6 +150,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'teamwork', label: 'Teamwork' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'shortcuts', label: 'Shortcuts' },
+  { id: 'addons', label: 'Add-ons' },
   { id: 'updates', label: 'Updates' },
   { id: 'cli', label: 'CLI' }
 ] as const
@@ -215,6 +217,7 @@ export const SETTINGS_CATALOG: readonly SettingEntry[] = [
   { section: 'teamwork', label: 'Share Task Details', about: 'privacy presence teammates' },
   { section: 'appearance', label: 'Theme', about: 'colors colours dark light mode' },
   { section: 'shortcuts', label: 'Shortcuts', about: 'keyboard keys keybindings hotkeys chords' },
+  { section: 'addons', label: 'Jac Graph Memory', about: 'jaseci graph history co-change why provenance uv plugin' },
   { section: 'updates', label: 'Check Automatically', about: 'update version release' },
   { section: 'cli', label: 'teamree command', about: 'cli terminal install link path shell' }
 ]
@@ -242,6 +245,41 @@ export function describedOnly(label: string, query: string): boolean {
 export function firstMatch(query: string): SettingEntry | null {
   if (query.trim() === '') return null
   return SETTINGS_CATALOG.find((entry) => labelMatches(entry.label, query) || labelMatches(entry.about, query)) ?? null
+}
+
+/** The add-on's row: a state word, at most one button, and the on/off box once it is installed. */
+export type AddonLine = {
+  state: string
+  action: 'install' | 'uv' | null
+  /** Null until installed. */
+  on: boolean | null
+  problem: string | null
+}
+
+export function addonLine(status: AddonStatus | null, enabled: boolean): AddonLine {
+  const line: AddonLine = { state: 'Reading…', action: null, on: null, problem: null }
+  if (status === null) return line
+  const installed = status.version !== undefined
+  switch (status.state) {
+    case 'installing':
+      return { ...line, state: 'Installing…' }
+    case 'failed':
+      return {
+        state: 'Failed',
+        action: installed ? null : 'install',
+        on: installed ? enabled : null,
+        problem: status.detail ?? null
+      }
+    case 'running':
+      return {
+        ...line,
+        state: status.detail === 'starting' ? 'Starting…' : `Running ${status.version ?? ''}`.trim(),
+        on: true
+      }
+    default:
+      if (status.needs === 'uv') return { ...line, state: 'Needs uv', action: 'uv' }
+      return installed ? { ...line, state: 'Off', on: enabled } : { ...line, state: 'Off', action: 'install' }
+  }
 }
 
 /** An agent's row: `command` is null for one given arguments or chosen as default that the probe did not find. */

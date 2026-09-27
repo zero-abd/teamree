@@ -156,7 +156,9 @@ describe('dispatcher', () => {
       'memory.list',
       'memory.note',
       'memory.resolve',
+      'memory.risk',
       'memory.unclaim',
+      'memory.why',
       // Local: agent mail never crosses to a teammate.
       'message.list',
       'message.read',

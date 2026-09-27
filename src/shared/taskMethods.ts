@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { MAX_AGENT_ARGS_CHARS } from './agentLaunch'
 import { ADDON_IDS, type AddonId, type AddonStatus } from './contextProvider'
 import type { Worktree } from './entities'
+import { GraphParams, type GraphMethodContract } from './graphMemory'
 import { LedgerParams, type LedgerMethodContract } from './ledgerMethods'
 import {
   CONTEXT_SECTIONS,
@@ -168,12 +169,15 @@ export const TaskParams = {
   /** Sets the add-on up with the person's own tools; never downloads a binary. */
   addonsInstall: z.object({ id: z.enum(ADDON_IDS as [AddonId, ...AddonId[]]) }),
 
-  ...LedgerParams
+  ...LedgerParams,
+  ...GraphParams
 } as const
 
 type P = typeof TaskParams
 
-export type TaskMethodContract = LedgerMethodContract & {
+type MemoryMethodContract = LedgerMethodContract & GraphMethodContract
+
+export type TaskMethodContract = MemoryMethodContract & {
   /** One message per recipient: `children` and `siblings` fan out. */
   'message.send': { params: z.infer<P['messageSend']>; result: TaskMessage[] }
   'message.list': { params: z.infer<P['messageList']>; result: TaskMessage[] }

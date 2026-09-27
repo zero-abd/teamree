@@ -76,6 +76,40 @@ export const contextCommands: readonly CommandSpec[] = [
     }
   },
   {
+    path: ['why'],
+    summary: 'Why a file is as it is: the merged work and commit reasons behind it, decisions on it, who changed it.',
+    details:
+      'With Settings › Add-ons › Jac Graph Memory running, read from its graph of history and decisions kept ' +
+      'past landing; otherwise the last commits to the file and the ledger’s decisions on it.',
+    args: [{ name: 'path', description: 'A file in this worktree.', required: true }],
+    flags: [WORKTREE_FLAG],
+    examples: ['teamree why src/auth/session.ts'],
+    run: async (context) => {
+      const why = await context.client.call('memory.why', {
+        worktreeId: await callerWorktree(context),
+        path: resolve(context.cwd, context.args[0] as string)
+      })
+      return { data: why, text: why.text === '' ? 'No history.' : why.text }
+    }
+  },
+  {
+    path: ['risk'],
+    summary: 'Who else is on the files you plan to edit, or on files that usually change with them.',
+    details:
+      'Siblings and teammates changing or claiming the files; with Jac Graph Memory running, also those on ' +
+      'files that change together with them in git history. Without paths, the files this worktree touched.',
+    args: [{ name: 'paths', description: 'Files you plan to edit.', variadic: true }],
+    flags: [WORKTREE_FLAG],
+    examples: ['teamree risk src/api/list.ts', 'teamree risk'],
+    run: async (context) => {
+      const risk = await context.client.call('memory.risk', {
+        worktreeId: await callerWorktree(context),
+        ...(context.args.length === 0 ? {} : { paths: context.args.map((path) => resolve(context.cwd, path)) })
+      })
+      return { data: risk, text: risk.text === '' ? 'No risk found.' : risk.text }
+    }
+  },
+  {
     path: ['claim'],
     summary: 'Claim paths for this worktree. Advisory: siblings are told, nothing is locked.',
     args: [

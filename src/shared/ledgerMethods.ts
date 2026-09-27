@@ -2,6 +2,7 @@
 // Merged into the contract through taskMethods.ts. Claims never lock anything.
 
 import { z } from 'zod'
+import type { RiskRow } from './graphMemory'
 import type { MemoryNote } from './memory'
 
 /** Most globs one worktree may claim. */
@@ -36,6 +37,8 @@ export type EditCheck = {
   /** Repo-relative, or as given when outside the worktree. */
   path: string
   siblings: { worktreeId: string; name: string; goal: string; kind: EditOverlapKind }[]
+  /** Siblings on a file that usually changes with this one, from the Jac Graph Memory add-on. */
+  likely?: RiskRow[]
   text: string
 }
 

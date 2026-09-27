@@ -3,8 +3,10 @@
 
 import { realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
+import type { RiskRow } from '../../shared/graphMemory'
 import type { EditCheck, EditOverlapKind } from '../../shared/ledgerMethods'
 import { matchesAny, normalizeGlob } from '../../shared/globs'
+import { likelyLine } from './graphText'
 import type { LedgerWorktree } from './ledgerStore'
 
 const SIBLINGS_TOLD = 2
@@ -62,8 +64,9 @@ export function editOverlaps(
   return siblings.sort((a, b) => RANK[a.kind] - RANK[b.kind])
 }
 
-export function editWarning(path: string, siblings: EditCheck['siblings']): string {
-  if (siblings.length === 0) return ''
+/** `likely`: siblings on a file that usually changes with `path`, told after those on `path` itself. */
+export function editWarning(path: string, siblings: EditCheck['siblings'], likely: readonly RiskRow[] = []): string {
+  if (siblings.length === 0 && likely.length === 0) return ''
   const lines = siblings.slice(0, SIBLINGS_TOLD).map((sibling) => {
     const who = sibling.goal === '' ? `${sibling.name} (sibling)` : `${sibling.name} (sibling: "${clip(sibling.goal)}")`
     if (sibling.kind === 'conflict') return `${who} also changes ${path} — would conflict.`
@@ -71,7 +74,8 @@ export function editWarning(path: string, siblings: EditCheck['siblings']): stri
   })
   const more = siblings.length - SIBLINGS_TOLD
   if (more > 0) lines[lines.length - 1] += ` (+${more} more)`
-  const name = siblings[0]?.name ?? ''
+  lines.push(...likely.slice(0, Math.max(1, SIBLINGS_TOLD - siblings.length)).map(likelyLine))
+  const name = siblings[0]?.name ?? likely[0]?.name ?? ''
   const to = /^[\w.@/-]+$/.test(name) ? name : JSON.stringify(name)
   lines.push(`Coordinate first: teamree msg ask --to ${to} "<question>", or pick another file.`)
   return lines.join('\n')
