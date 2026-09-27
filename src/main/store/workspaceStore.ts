@@ -10,6 +10,7 @@ import { samePath } from '../git/pathIdentity'
 import { openJsonFile, writeJsonFileAtomically } from './atomicJsonFile'
 import {
   DEFAULT_APPEARANCE,
+  DEFAULT_LIGHT_THEME_ID,
   DEFAULT_THEME_ID,
   isPristine,
   sanitizeAppearance,
@@ -138,12 +139,20 @@ export class WorkspaceStore {
     this.moveOldDefaultTheme()
   }
 
-  // Absolute Black was the default until Charcoal: an untouched one was never chosen, so it moves once.
+  // Absolute Black, then Charcoal and Light, were the defaults before Studio: an untouched one was never chosen, so it moves once.
   private moveOldDefaultTheme(): void {
-    if (this.settings.themeMigratedToCharcoal === true) return
-    if (this.appearance.themeId !== 'black' || !isPristine(this.appearance)) return
-    this.appearance = { ...this.appearance, themeId: DEFAULT_THEME_ID }
-    this.settings = { ...this.settings, themeMigratedToCharcoal: true }
+    if (this.settings.themeMigratedToStudio === true) return
+    const { themeId, light } = this.appearance
+    const oldDark = themeId === 'charcoal' || (themeId === 'black' && this.settings.themeMigratedToCharcoal !== true)
+    const moveDark = oldDark && isPristine(this.appearance)
+    const moveLight = light !== undefined && light.themeId === 'light' && isPristine(light)
+    if (!moveDark && !moveLight) return
+    this.appearance = {
+      ...this.appearance,
+      ...(moveDark ? { themeId: DEFAULT_THEME_ID } : {}),
+      ...(moveLight ? { light: { ...light, themeId: DEFAULT_LIGHT_THEME_ID } } : {})
+    }
+    this.settings = { ...this.settings, themeMigratedToCharcoal: true, themeMigratedToStudio: true }
     this.persist()
   }
 
@@ -322,9 +331,9 @@ export class WorkspaceStore {
   /** Replaces the whole choice, sanitised here: the last place before the bytes hit the disk. */
   setAppearance(appearance: unknown): Appearance {
     this.appearance = sanitizeAppearance(appearance)
-    // A theme written from here on is a choice, Absolute Black included.
-    if (this.settings.themeMigratedToCharcoal !== true)
-      this.settings = { ...this.settings, themeMigratedToCharcoal: true }
+    // A theme written from here on is a choice, an old default included.
+    if (this.settings.themeMigratedToStudio !== true)
+      this.settings = { ...this.settings, themeMigratedToCharcoal: true, themeMigratedToStudio: true }
     this.persist()
     return this.appearance
   }

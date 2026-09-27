@@ -30,6 +30,8 @@ export type RuntimeSettings = {
   fetchMinutes?: number
   /** The stored dark theme is a choice, not the old Absolute Black default; set by the store, never by `settings.set`. */
   themeMigratedToCharcoal?: boolean
+  /** The stored themes are choices, not the old Charcoal and Light defaults; set by the store only. */
+  themeMigratedToStudio?: boolean
 }
 
 /** Minutes between background fetches when none are set. */

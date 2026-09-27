@@ -19,6 +19,7 @@ import {
   BUILT_IN_THEMES,
   DEFAULT_ACCENT,
   DEFAULT_APPEARANCE,
+  DEFAULT_LIGHT_THEME_ID,
   DEFAULT_THEME_ID,
   isPristine,
   resolvePalette,
@@ -54,6 +55,8 @@ const PAIRS: readonly { ink: ThemeToken; on: ThemeToken; least: number; why: str
   { ink: 'warning', on: 'bg-raised', least: 4.5, why: 'what a discard is about to cost' },
   { ink: 'danger', on: 'bg-raised', least: 4.5, why: 'conflicts, failures, the destructive button' },
   { ink: 'info', on: 'bg-raised', least: 4.5, why: 'notices that are not errors' },
+  { ink: 'working', on: 'bg-raised', least: 4.5, why: 'a working agent’s dot and its pane foot' },
+  { ink: 'stopped', on: 'bg-raised', least: 4.5, why: 'an ended or restored pane' },
   { ink: 'term-fg', on: 'term-bg', least: 7, why: 'everything a pane prints' },
   { ink: 'term-bright-black', on: 'term-bg', least: 4.5, why: 'what most agents print their reasoning in' },
   { ink: 'term-red', on: 'term-bg', least: 4.5, why: 'a failing test' },
@@ -100,8 +103,9 @@ describe.each(BUILT_IN_THEMES.map((theme) => [theme.id, theme.name] as const))('
   // Not an accessibility rule but a legibility one: a panel that cannot be
   // distinguished from the window behind it is a layout nobody can read the
   // shape of, and on a pure black ground that is the easy mistake to make.
-  it.each(ELEVATIONS)('%s is visibly above the window', (surface) => {
-    expect(ratio(palette, surface, 'bg-window')).toBeGreaterThan(1.05)
+  // A light window's panes are white on a grey window, so a surface need only part from one of the two.
+  it.each(ELEVATIONS)('%s is visibly off the window or the pane', (surface) => {
+    expect(Math.max(ratio(palette, surface, 'bg-window'), ratio(palette, surface, 'bg-pane'))).toBeGreaterThan(1.05)
   })
 
   // The chip's own tint is darker than any surface on a light ground, so it is the accent ink's worst case.
@@ -127,9 +131,9 @@ describe.each(BUILT_IN_THEMES.map((theme) => [theme.id, theme.name] as const))('
   // The emulator and the chrome are one surface on purpose: a terminal that
   // sits on a slightly different black than the window is the seam this whole
   // module exists to remove.
-  it('paints the terminal on the same ground as the window', () => {
-    expect(palette['term-bg']).toBe(palette['bg-window'])
-    expect(palette['bg-pane']).toBe(palette['bg-window'])
+  it('paints the terminal on the same ground as the pane', () => {
+    expect(palette['term-bg']).toBe(palette['bg-pane'])
+    if (themeTone(id) === 'dark') expect(palette['bg-pane']).toBe(palette['bg-window'])
   })
 })
 
@@ -148,8 +152,8 @@ describe.each(BUILT_IN_THEMES.filter((theme) => themeTone(theme.id) === 'light')
       expect(ratio(palette, 'term-black', 'term-bg')).toBeGreaterThanOrEqual(4.5)
     })
 
-    it('keeps the violet accent', () => {
-      expect(palette.accent).toBe(DEFAULT_ACCENT)
+    it('keeps its own accent', () => {
+      expect(palette.accent).toBe(themeById(id).seed.accent)
     })
   }
 )
@@ -170,7 +174,7 @@ describe('light and dark', () => {
   it('keeps the chosen dark preset for when the system goes dark again', () => {
     const appearance: Appearance = { ...DEFAULT_APPEARANCE, themeId: 'midnight', mode: 'system' }
     expect(resolvePalette(appearance, 'dark')['bg-window']).toBe(themeById('midnight').seed.ground)
-    expect(resolvePalette(appearance, 'light')['bg-window']).toBe(themeById('light').seed.ground)
+    expect(resolvePalette(appearance, 'light')['bg-window']).toBe(themeById(DEFAULT_LIGHT_THEME_ID).seed.ground)
   })
 
   it('ignores the system when told Light or Dark', () => {
@@ -209,7 +213,7 @@ describe('light and dark', () => {
   })
 })
 
-describe('the default', () => {
+describe('Charcoal', () => {
   // Chosen from two measured options; every value here is the option's own.
   const OPTION: Partial<Palette> = {
     'bg-window': '#101114',
@@ -232,10 +236,10 @@ describe('the default', () => {
     accent: '#8b8cf7'
   }
 
-  it('is Charcoal, painted in the lifted option exactly', () => {
-    expect(DEFAULT_THEME_ID).toBe('charcoal')
-    expect(themeTone(DEFAULT_THEME_ID)).toBe('dark')
-    const palette = resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark' })
+  const CHARCOAL: Appearance = { ...DEFAULT_APPEARANCE, mode: 'dark', themeId: 'charcoal' }
+
+  it('is painted in the lifted option exactly', () => {
+    const palette = resolvePalette(CHARCOAL)
     expect(Object.fromEntries(Object.keys(OPTION).map((token) => [token, palette[token as ThemeToken]]))).toEqual(
       OPTION
     )
@@ -243,11 +247,11 @@ describe('the default', () => {
 
   // The option's selection is 30% accent over the ground; the search addon reads only solid hex.
   it('selects terminal text in the option’s 30% accent, flattened onto the ground', () => {
-    expect(resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark' })['term-selection']).toBe('#353658')
+    expect(resolvePalette(CHARCOAL)['term-selection']).toBe('#353658')
   })
 
   it('steps each surface off its neighbour by at least 6 in every channel', () => {
-    const palette = resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark' })
+    const palette = resolvePalette(CHARCOAL)
     const steps: [ThemeToken, ThemeToken][] = [
       ['bg-window', 'bg-rail'],
       ['bg-rail', 'bg-tabstrip'],
@@ -265,7 +269,7 @@ describe('the default', () => {
   })
 
   it('keeps its measured steps only on its own ground', () => {
-    const palette = resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark', ground: '#202020' })
+    const palette = resolvePalette({ ...CHARCOAL, ground: '#202020' })
     expect(palette['bg-rail']).not.toBe(OPTION['bg-rail'])
     expect(ratio(palette, 'bg-rail', 'bg-window')).toBeGreaterThan(1.05)
   })
@@ -273,6 +277,132 @@ describe('the default', () => {
   it('leaves Absolute Black absolute, #000000', () => {
     expect(themeById('black').seed.ground).toBe('#000000')
     expect(resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark', themeId: 'black' })['bg-window']).toBe('#000000')
+  })
+
+  // The roles added with Studio follow the surfaces an older preset already has, so its look does not move.
+  it('draws the newer roles from its own surfaces', () => {
+    const palette = resolvePalette(CHARCOAL)
+    expect(palette['bg-tabstrip-active']).toBe(palette['bg-tabstrip'])
+    expect(palette['bg-elevated']).toBe(palette['bg-raised'])
+    expect(palette['bg-worktree']).toBe(palette['bg-raised'])
+    expect(palette['bg-sunken']).toBe(palette['bg-input'])
+    expect(palette['bg-code']).toBe(palette['bg-input'])
+    expect(palette.working).toBe(palette.info)
+    expect(palette.stopped).toBe(palette['fg-muted'])
+  })
+
+  it('lets a follower track an edit to the surface it follows, unless it is edited itself', () => {
+    const raised = resolvePalette({ ...CHARCOAL, overrides: { 'bg-raised': '#333338' } })
+    expect(raised['bg-elevated']).toBe('#333338')
+    const both = resolvePalette({ ...CHARCOAL, overrides: { 'bg-raised': '#333338', 'bg-elevated': '#444449' } })
+    expect(both['bg-elevated']).toBe('#444449')
+  })
+})
+
+describe('the default, Studio', () => {
+  // The design's own values; bg-tabstrip and bg-panel sit a step higher than drawn, to clear the step rule.
+  const STUDIO: Partial<Palette> = {
+    'bg-window': '#0b0d12',
+    'bg-pane': '#0b0d12',
+    'bg-rail': '#11141b',
+    'bg-tabstrip': '#111419',
+    'bg-tabstrip-active': '#141821',
+    'bg-panel': '#11141b',
+    'bg-raised': '#171b24',
+    'bg-worktree': '#151923',
+    'bg-elevated': '#1c202a',
+    'bg-sunken': '#080a0f',
+    'bg-code': '#0a0c11',
+    'bg-input': '#0d1016',
+    'bg-hover': 'rgb(236 239 255 / 6%)',
+    'bg-press': 'rgb(236 239 255 / 10%)',
+    'bg-selected': 'rgb(116 103 255 / 15%)',
+    scrim: 'rgb(2 3 7 / 74%)',
+    line: '#272c38',
+    'line-strong': '#3b4251',
+    'line-subtle': '#1b202a',
+    fg: '#f1f3f8',
+    'fg-secondary': '#aeb4c0',
+    'fg-muted': '#7f8795',
+    'fg-faint': '#5e6674',
+    accent: '#6d5bf2',
+    'accent-bright': '#958bff',
+    'accent-hover': '#6754e8',
+    'accent-press': '#5f4bd2',
+    'on-accent': '#ffffff',
+    success: '#48c78e',
+    warning: '#e8a84c',
+    danger: '#ef6a73',
+    info: '#58a6e7',
+    working: '#49a8f2',
+    stopped: '#7f8795',
+    'term-bg': '#0b0d12',
+    'term-fg': '#dfe3eb',
+    'term-selection': '#302b69'
+  }
+  const STUDIO_LIGHT: Partial<Palette> = {
+    'bg-window': '#f4f5f8',
+    'bg-pane': '#ffffff',
+    'bg-rail': '#eef0f4',
+    'bg-tabstrip': '#f7f8fa',
+    'bg-tabstrip-active': '#ffffff',
+    'bg-panel': '#f3f4f7',
+    'bg-raised': '#ffffff',
+    'bg-elevated': '#ffffff',
+    'bg-sunken': '#e9ebf0',
+    line: '#d9dde5',
+    'line-strong': '#b8bec9',
+    fg: '#171a22',
+    'fg-secondary': '#505866',
+    'fg-muted': '#626b79',
+    accent: '#5848df',
+    'accent-bright': '#4c3bd5',
+    'on-accent': '#ffffff',
+    success: '#177a50',
+    warning: '#9b5f08',
+    danger: '#bd3848',
+    working: '#176da8',
+    'term-bg': '#ffffff',
+    'term-fg': '#20242d'
+  }
+  const pick = (palette: Palette, wanted: Partial<Palette>): Partial<Palette> =>
+    Object.fromEntries(Object.keys(wanted).map((token) => [token, palette[token as ThemeToken]]))
+
+  it('opens a new installation on Studio in the dark and Studio Light in the light', () => {
+    expect(DEFAULT_THEME_ID).toBe('studio')
+    expect(DEFAULT_LIGHT_THEME_ID).toBe('studio-light')
+    expect(themeTone(DEFAULT_THEME_ID)).toBe('dark')
+    expect(themeTone(DEFAULT_LIGHT_THEME_ID)).toBe('light')
+  })
+
+  it('is painted in the design’s values', () => {
+    expect(pick(resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark' }), STUDIO)).toEqual(STUDIO)
+    expect(pick(resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'light' }), STUDIO_LIGHT)).toEqual(STUDIO_LIGHT)
+  })
+
+  it('draws working in its own blue, never the accent', () => {
+    for (const tone of ['dark', 'light'] as const) {
+      const palette = resolvePalette({ ...DEFAULT_APPEARANCE, mode: tone })
+      expect(palette.working).not.toBe(palette.accent)
+      expect(palette.working).not.toBe(palette['accent-bright'])
+    }
+  })
+
+  it('steps each borderless surface off the pane by at least 6 in every channel', () => {
+    const palette = resolvePalette({ ...DEFAULT_APPEARANCE, mode: 'dark' })
+    const steps: [ThemeToken, ThemeToken][] = [
+      ['bg-pane', 'bg-rail'],
+      ['bg-pane', 'bg-tabstrip'],
+      ['bg-pane', 'bg-panel'],
+      ['bg-panel', 'bg-raised']
+    ]
+    for (const [a, b] of steps) {
+      const [x, y] = [rgb(palette[a]), rgb(palette[b])]
+      expect(
+        Math.min(Math.abs(x.r - y.r), Math.abs(x.g - y.g), Math.abs(x.b - y.b)),
+        `${a} to ${b}`
+      ).toBeGreaterThanOrEqual(6)
+    }
   })
 
   it('is what an installation that has never chosen anything gets', () => {
@@ -292,6 +422,9 @@ describe('a theme somebody has edited', () => {
   it('takes a new accent, and relabels the button that is filled with it', () => {
     const palette = resolvePalette({ ...DEFAULT_APPEARANCE, accent: '#e070c0' })
     expect(palette.accent).toBe('#e070c0')
+    // Every accent role follows it, not only the fill.
+    expect(palette['accent-hover']).not.toBe('#6754e8')
+    expect(palette['bg-selected']).toBe('rgb(224 112 192 / 16%)')
     expect(ratio(palette, 'on-accent', 'accent')).toBeGreaterThanOrEqual(4.5)
     expect(ratio(palette, 'accent-bright', 'bg-raised')).toBeGreaterThanOrEqual(4.5)
   })
@@ -387,7 +520,17 @@ describe('accents', () => {
         expect(apart(hue(value), hue(tone)), `${name} vs ${state}`).toBeGreaterThan(20)
       }
     }
-    expect(ACCENT_PRESETS.map((option) => option.name)).toEqual(['Violet', 'Sky', 'Teal', 'Orchid', 'Pink', 'Graphite'])
+    expect(ACCENT_PRESETS.map((option) => option.name)).toEqual([
+      'Studio Violet',
+      'Violet',
+      'Sky',
+      'Teal',
+      'Orchid',
+      'Pink',
+      'Graphite'
+    ])
+    expect(ACCENT_PRESETS[0]?.value).toBe('#6d5bf2')
+    expect(ACCENT_PRESETS[1]?.value).toBe(DEFAULT_ACCENT)
   })
 
   it('reads a stored amber, lime or rose accent as the nearest one offered', () => {

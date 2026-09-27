@@ -16,8 +16,13 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
       { token: 'bg-pane', label: 'Pane', about: 'Editor, diff and page ground' },
       { token: 'bg-rail', label: 'Rail', about: 'Sidebar, status bar' },
       { token: 'bg-tabstrip', label: 'Tab strip', about: 'Pane tabs, file tabs' },
+      { token: 'bg-tabstrip-active', label: 'Focused strip', about: 'Tab strip of the focused group' },
       { token: 'bg-panel', label: 'Panel', about: 'Right panel, pane bars' },
-      { token: 'bg-raised', label: 'Raised', about: 'Dialogs, palette, buttons, pop-ups' },
+      { token: 'bg-raised', label: 'Raised', about: 'Cards, buttons, settings groups' },
+      { token: 'bg-worktree', label: 'Worktree box', about: 'A worktree in the sidebar' },
+      { token: 'bg-elevated', label: 'Floating', about: 'Menus, dialogs, palette, toasts' },
+      { token: 'bg-sunken', label: 'Sunken', about: 'Segmented wells, path chips' },
+      { token: 'bg-code', label: 'Code', about: 'Code blocks, previews' },
       { token: 'bg-input', label: 'Field', about: 'Text field fill' },
       { token: 'bg-hover', label: 'Hover', about: 'Row under the pointer' },
       { token: 'bg-press', label: 'Press', about: 'Row while held' },
@@ -29,7 +34,8 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
     title: 'Lines',
     tokens: [
       { token: 'line', label: 'Hairline', about: 'Borders between regions' },
-      { token: 'line-strong', label: 'Strong line', about: 'Button and field borders, key caps' }
+      { token: 'line-strong', label: 'Strong line', about: 'Button and field borders, key caps' },
+      { token: 'line-subtle', label: 'Subtle line', about: 'Dividers inside cards' }
     ]
   },
   {
@@ -37,7 +43,8 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
     tokens: [
       { token: 'fg', label: 'Text', about: 'Worktree names, dialog text, terminal output' },
       { token: 'fg-secondary', label: 'Secondary', about: 'Field labels, notices, the rail' },
-      { token: 'fg-muted', label: 'Muted', about: 'Branches, counts, timestamps, hints' }
+      { token: 'fg-muted', label: 'Muted', about: 'Branches, counts, timestamps, hints' },
+      { token: 'fg-faint', label: 'Faint', about: 'Marks that are not text' }
     ]
   },
   {
@@ -47,6 +54,8 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
       { token: 'accent-bright', label: 'Accent text', about: 'Accent as text' },
       { token: 'accent-soft', label: 'Accent wash', about: 'Pressed toggles, drop targets' },
       { token: 'accent-line', label: 'Accent line', about: 'Focused field border, focus ring' },
+      { token: 'accent-hover', label: 'Accent hover', about: 'Primary button under the pointer' },
+      { token: 'accent-press', label: 'Accent press', about: 'Primary button while held' },
       { token: 'on-accent', label: 'On accent', about: 'Label on an accent button' }
     ]
   },
@@ -56,7 +65,9 @@ export const TOKEN_GROUPS: readonly TokenGroup[] = [
       { token: 'success', label: 'Success', about: 'Finished pane' },
       { token: 'warning', label: 'Asking', about: 'An agent waiting on you' },
       { token: 'danger', label: 'Danger', about: 'Conflicts, failures, destructive button' },
-      { token: 'info', label: 'Info', about: 'Non-error notice' }
+      { token: 'info', label: 'Info', about: 'Non-error notice' },
+      { token: 'working', label: 'Working', about: 'An agent at work' },
+      { token: 'stopped', label: 'Stopped', about: 'Ended or restored pane' }
     ]
   },
   {
