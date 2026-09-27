@@ -179,7 +179,7 @@ function WorkspaceView({
   if (teamworkProjectId !== null) return <TeamworkView key={teamworkProjectId} projectId={teamworkProjectId} />
 
   // Settings and help too, ahead of the empty state: a window with nothing open is where people look.
-  if (settingsOpen) return <SettingsView />
+  if (settingsOpen) return <SettingsView modifier={modifier} />
   if (helpOpen) return <HelpView modifier={modifier} />
 
   if (!worktree || !activeWorktreeId) {

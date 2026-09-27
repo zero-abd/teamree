@@ -143,10 +143,12 @@ export const SETTINGS_SECTIONS = [
   { id: 'general', label: 'General' },
   { id: 'agents', label: 'Agents' },
   { id: 'projects', label: 'Projects' },
+  { id: 'git', label: 'Git' },
   { id: 'panes', label: 'Panes' },
   { id: 'notices', label: 'Notifications' },
   { id: 'teamwork', label: 'Teamwork' },
   { id: 'appearance', label: 'Appearance' },
+  { id: 'shortcuts', label: 'Shortcuts' },
   { id: 'updates', label: 'Updates' },
   { id: 'cli', label: 'CLI' }
 ] as const
@@ -171,6 +173,7 @@ export const SETTINGS_CATALOG: readonly SettingEntry[] = [
   { section: 'general', label: 'Branch prefix', about: BRANCH_PREFIX },
   { section: 'general', label: 'Show in Menu Bar', about: 'status item tray quick note' },
   { section: 'general', label: 'Show Cost', about: 'tokens usage price dollars spend' },
+  { section: 'general', label: 'Keep Awake', about: 'sleep power caffeinate lid battery' },
   { section: 'agents', label: 'Default agent', about: 'new task first harness' },
   { section: 'agents', label: 'Trust New Worktrees', about: 'trust folder prompt permission' },
   { section: 'agents', label: 'Warn Agents About Overlaps', about: 'overlap conflict same file hook' },
@@ -185,6 +188,9 @@ export const SETTINGS_CATALOG: readonly SettingEntry[] = [
   { section: 'projects', label: 'Relay', about: 'teamwork server url' },
   { section: 'projects', label: 'Worktrees in', about: WORKTREES_IN },
   { section: 'projects', label: 'Branch prefix', about: BRANCH_PREFIX },
+  { section: 'git', label: 'Diff layout', about: 'side by side split inline unified review' },
+  { section: 'git', label: 'Wrap Diff Lines', about: 'long lines wrapping review' },
+  { section: 'git', label: 'Hide Whitespace Changes', about: 'ignore spaces indentation review' },
   { section: 'panes', label: 'Terminal text size', about: 'font size zoom' },
   { section: 'panes', label: 'Font', about: 'typeface family monospace' },
   { section: 'panes', label: 'Cursor', about: 'caret blink bar block underline' },
@@ -199,6 +205,7 @@ export const SETTINGS_CATALOG: readonly SettingEntry[] = [
   { section: 'notices', label: 'When an agent stops or asks', about: 'notification sound alert notify' },
   { section: 'teamwork', label: 'Share Task Details', about: 'privacy presence teammates' },
   { section: 'appearance', label: 'Theme', about: 'colors colours dark light mode' },
+  { section: 'shortcuts', label: 'Shortcuts', about: 'keyboard keys keybindings hotkeys chords' },
   { section: 'updates', label: 'Check Automatically', about: 'update version release' },
   { section: 'cli', label: 'teamree command', about: 'cli terminal install link path shell' }
 ]

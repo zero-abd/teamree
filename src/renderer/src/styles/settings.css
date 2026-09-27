@@ -401,6 +401,35 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Shortcuts --------------------------------------------------------------- */
+
+.settings-subhead {
+  padding: var(--s1) 0 0 var(--s1);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.settings-keys {
+  list-style: none;
+}
+
+.settings-group > .settings-key {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding-block: var(--s2);
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.settings-key__chord {
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
 /* Projects ---------------------------------------------------------------- */
 
 .settings-project__identity {
