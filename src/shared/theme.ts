@@ -641,7 +641,7 @@ type FollowerToken =
 
 // The roles added with Studio, for a preset that does not draw them: each from a role it already has.
 const FOLLOWERS: Record<FollowerToken, (palette: Omit<Palette, FollowerToken>) => string> = {
-  'bg-tabstrip-active': (palette) => palette['bg-tabstrip'],
+  'bg-tabstrip-active': (palette) => palette['bg-raised'],
   'bg-elevated': (palette) => palette['bg-raised'],
   'bg-sunken': (palette) => palette['bg-input'],
   'bg-worktree': (palette) => palette['bg-raised'],

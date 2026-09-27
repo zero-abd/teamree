@@ -282,7 +282,7 @@ describe('Charcoal', () => {
   // The roles added with Studio follow the surfaces an older preset already has, so its look does not move.
   it('draws the newer roles from its own surfaces', () => {
     const palette = resolvePalette(CHARCOAL)
-    expect(palette['bg-tabstrip-active']).toBe(palette['bg-tabstrip'])
+    expect(palette['bg-tabstrip-active']).toBe(palette['bg-raised'])
     expect(palette['bg-elevated']).toBe(palette['bg-raised'])
     expect(palette['bg-worktree']).toBe(palette['bg-raised'])
     expect(palette['bg-sunken']).toBe(palette['bg-input'])
