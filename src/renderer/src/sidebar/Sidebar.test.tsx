@@ -638,6 +638,7 @@ describe('the sidebar reaches the window-level surfaces', () => {
     mount()
     const entry = screen.getByRole('button', { name: /Appearance/ })
     expect(entry.getAttribute('aria-pressed')).toBe('true')
+    expect(entry.getAttribute('aria-controls')).toBe('appearance-sheet')
     act(() => entry.click())
     expect(showAppearance).toHaveBeenLastCalledWith(false)
   })

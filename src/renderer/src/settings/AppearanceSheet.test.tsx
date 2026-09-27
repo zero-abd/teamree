@@ -44,6 +44,31 @@ describe('the appearance sheet', () => {
     expect(document.activeElement).toBe(screen.getByRole('complementary', { name: 'Appearance' }))
   })
 
+  // Focused while it still sits off the right edge, it scrolled the whole window over to it.
+  it('takes the focus without scrolling anything to it', () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus')
+    render(<AppearanceSheet />)
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true })
+    focus.mockRestore()
+  })
+
+  it('closes on a press outside it, but not on the control that toggles it', () => {
+    render(
+      <>
+        <button type="button">elsewhere</button>
+        <button type="button" aria-controls="appearance-sheet">
+          toggle
+        </button>
+        <AppearanceSheet />
+      </>
+    )
+    fireEvent.pointerDown(screen.getByRole('radio', { name: /Midnight/ }))
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'toggle' }))
+    expect(showAppearance).not.toHaveBeenCalled()
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'elsewhere' }))
+    expect(showAppearance).toHaveBeenCalledExactlyOnceWith(false)
+  })
+
   it('closes on its ×, and on Escape pressed inside it', () => {
     render(<AppearanceSheet />)
     fireEvent.click(screen.getByRole('button', { name: 'Close Appearance' }))

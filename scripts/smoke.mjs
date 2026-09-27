@@ -547,6 +547,7 @@ async function checkWorktreeSurfaces(ask) {
   if (!tabbed) return
 
   await checkPaneLinks(ask, call, terminal.result.id)
+  await checkAppearanceOverlay(ask, call, terminal.result.id)
 
   // A menu item that needs a worktree open acts on the right one; enablement
   // alone cannot say so.
@@ -666,6 +667,57 @@ async function checkWorktreeSurfaces(ask) {
   )
 
   await checkUnreadPanes(ask, call, worktreeId)
+}
+
+/** Appearance opens over the panes: the workspace, the window's scroll and the pty's size hold still. */
+async function checkAppearanceOverlay(ask, call, terminalId) {
+  const size = async () => {
+    const listed = await call('terminal.list', {})
+    const found = (listed.result ?? []).find((terminal) => terminal.id === terminalId)
+    return found ? `${found.cols}x${found.rows}` : 'gone'
+  }
+  const ptyBefore = await size()
+  const drift = JSON.parse(
+    await ask(
+      `new Promise((resolve) => {
+         const workspace = document.querySelector('.workspace')
+         const toggle = document.querySelector('button[aria-controls="appearance-sheet"]')
+         if (!workspace || !toggle) return resolve({ missing: true })
+         const box = () => {
+           const rect = workspace.getBoundingClientRect()
+           return rect.left + ',' + rect.width
+         }
+         const before = box()
+         const seen = new Set()
+         let scrolled = 0
+         toggle.click()
+         const started = performance.now()
+         const sample = () => {
+           seen.add(box())
+           scrolled = Math.max(scrolled, Math.abs(document.scrollingElement.scrollLeft))
+           if (performance.now() - started < 400) setTimeout(sample, 16)
+           else resolve({ before, seen: [...seen], scrolled, open: document.querySelector('.appearance-sheet') !== null })
+         }
+         sample()
+       }).then((result) => JSON.stringify(result))`
+    )
+  )
+  if (drift.missing) {
+    failures.push('no workspace or Appearance control on screen, so the sheet could not be opened over the panes')
+    return
+  }
+  if (!drift.open) failures.push('pressing Appearance put no sheet on screen')
+  if (drift.scrolled !== 0) failures.push(`opening Appearance scrolled the window ${drift.scrolled}px sideways`)
+  if (drift.seen.some((box) => box !== drift.before)) {
+    failures.push(`opening Appearance moved the workspace: ${drift.before} became ${drift.seen.join(' / ')}`)
+  }
+  const ptyAfter = await size()
+  if (ptyAfter !== ptyBefore) failures.push(`opening Appearance resized the pty from ${ptyBefore} to ${ptyAfter}`)
+  await ask(`document.querySelector('button[aria-controls="appearance-sheet"]')?.click()`)
+  await waitFor(
+    () => ask(`document.querySelector('.appearance-sheet') === null`),
+    'Appearance would not close on its control'
+  )
 }
 
 /**
