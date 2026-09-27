@@ -103,12 +103,12 @@ describe('Open Branch', () => {
   it('starts one reviewer agent with the prompt prefilled against the base', async () => {
     render(<OpenBranchDialog projectId="p1" pullRequests={false} />)
     await screen.findByText('add-a-sub-function')
-    fireEvent.click(screen.getByRole('button', { name: 'One more Claude Code' }))
+    fireEvent.click(screen.getByRole('button', { name: 'More Claude Code' }))
     expect((screen.getByLabelText('Prompt') as HTMLTextAreaElement).value).toBe(
       'Review this branch against origin/main'
     )
     // One checkout holds one branch, so one agent.
-    expect((screen.getByRole('button', { name: 'One more Claude Code' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'More Claude Code' }) as HTMLButtonElement).disabled).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Open' }))
     expect(startTask).toHaveBeenCalledWith({
       projectId: 'p1',

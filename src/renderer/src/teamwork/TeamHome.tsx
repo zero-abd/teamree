@@ -14,7 +14,8 @@ import { takeHandoff } from './HandoffPopups'
 import { useHandoffs } from './handoffsStore'
 import { SharedNotesList } from './SharedNotesList'
 import { listedNotes, useSharedNotes } from './sharedNotesStore'
-import { pillTone, StatusPill } from './StatusPill'
+import { paneState } from './paneState'
+import { StatusPill } from '../ui/StatusPill'
 import {
   activityWhen,
   presenceLabel,
@@ -202,7 +203,9 @@ function WaitingRow({
       <li className="home-card home-card--handoff" title={handoff.note}>
         <Avatar handle={from} size="md" decorative />
         <span className="home-card__text">
-          <span className="home-card__title">{handoff.worktreeName}</span>
+          <span className="home-card__title">
+            <span className="home-card__name">{handoff.worktreeName}</span>
+          </span>
           <span className="home-card__line">
             {from} handed this to you · {agoLabel(Math.max(0, now - handoff.at))}
           </span>
@@ -231,8 +234,10 @@ function WaitingRow({
       <Avatar handle={item.handle} size="md" decorative />
       <span className="home-card__text">
         <span className="home-card__title">
-          {item.handle} · {item.worktree}
-          <StatusPill tone="asking">asking</StatusPill>
+          <span className="home-card__name">
+            {item.handle} · {item.worktree}
+          </span>
+          <StatusPill state="asking" />
         </span>
         {item.pane.evidence === null ? null : <span className="home-card__line">{item.pane.evidence}</span>}
       </span>
@@ -333,7 +338,7 @@ function WorktreeButton({
       }}
     >
       {worktree.word === null ? null : (
-        <StatusPill tone={pillTone(worktree.tone, worktree.word)}>{worktree.word}</StatusPill>
+        <StatusPill state={paneState(worktree.tone, worktree.word)} label={worktree.word} />
       )}
       <span className="team-worktree__name">{worktree.name}</span>
     </button>

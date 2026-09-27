@@ -171,11 +171,9 @@ describe('a row', () => {
       }
     })
     render(<Dashboard />)
-    const classes = [...document.querySelectorAll('.board-row__state')].map((state) => state.className)
-    expect(classes).toEqual([
-      'state-pill state-pill--failed board-row__state',
-      'state-pill state-pill--idle board-row__state'
-    ])
+    const pills = [...document.querySelectorAll('.board-row__state .status-pill')]
+    expect(pills.map((pill) => pill.classList.contains('status--failed'))).toEqual([true, false])
+    expect(pills.map((pill) => pill.classList.contains('status--ended'))).toEqual([false, true])
   })
 })
 

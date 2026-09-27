@@ -6,6 +6,7 @@ import type { InstalledAgent } from '@shared/entities'
 import { permissionArgs, permissionModesFor, type PermissionMode } from '@shared/permissionMode'
 import { harnessName } from '../agents/harnesses'
 import { Icon } from '../icons/Icon'
+import { Stepper } from '../ui/Stepper'
 import { agentCount, MAX_PER_AGENT, withAgentCount, type AgentCounts, type AgentModes } from './taskPlan'
 
 const MODE_LABEL: Readonly<Record<PermissionMode, string>> = { default: 'Default', auto: 'Auto', bypass: 'Bypass' }
@@ -45,7 +46,11 @@ export function AgentSteppers({
               {harnessName(entry.kind)}
             </span>
             {offered.length > 0 ? (
-              <div className="agents__modes" role="radiogroup" aria-label={`${harnessName(entry.kind)} permissions`}>
+              <div
+                className="segmented agents__modes"
+                role="radiogroup"
+                aria-label={`${harnessName(entry.kind)} permissions`}
+              >
                 {offered.map((mode) => (
                   <button
                     type="button"
@@ -53,7 +58,7 @@ export function AgentSteppers({
                     role="radio"
                     aria-checked={mode === chosen}
                     title={permissionArgs(entry.kind, mode) || undefined}
-                    className={`agents__mode agents__mode--${mode}${mode === chosen ? ' agents__mode--current' : ''}`}
+                    className={`segmented__item agents__mode agents__mode--${mode}`}
                     onClick={() => onMode?.(entry.kind, mode)}
                   >
                     {MODE_LABEL[mode]}
@@ -61,27 +66,12 @@ export function AgentSteppers({
                 ))}
               </div>
             ) : null}
-            <span className="agents__stepper">
-              <button
-                type="button"
-                className="agents__step"
-                aria-label={`One fewer ${harnessName(entry.kind)}`}
-                disabled={count === 0}
-                onClick={() => step(count - 1)}
-              >
-                −
-              </button>
-              <output className="agents__count">{count}</output>
-              <button
-                type="button"
-                className="agents__step"
-                aria-label={`One more ${harnessName(entry.kind)}`}
-                disabled={count === MAX_PER_AGENT || (most !== undefined && total >= most)}
-                onClick={() => step(count + 1)}
-              >
-                +
-              </button>
-            </span>
+            <Stepper
+              label={harnessName(entry.kind)}
+              value={count}
+              max={most === undefined ? MAX_PER_AGENT : Math.min(MAX_PER_AGENT, count + Math.max(0, most - total))}
+              onChange={step}
+            />
           </div>
         )
       })}

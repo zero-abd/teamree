@@ -22,11 +22,12 @@ import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { PageFrame } from '../workspace/PageFrame'
-import { Segments } from '../files/FileBar'
 import { askingWorktrees, useMessageStore } from '../state/messages'
 import { useTaskTreeStore } from '../state/taskTreeStore'
 import { useUsageReads } from '../state/usageStore'
-import { pillTone, StatusPill } from '../teamwork/StatusPill'
+import { paneState } from '../teamwork/paneState'
+import { Segmented } from '../ui/Segmented'
+import { StatusPill } from '../ui/StatusPill'
 import { dashboardRows, toneCounts, type DashboardRow } from './dashboardRows'
 import { TaskBoard, useChangedLines } from './TaskBoard'
 import { STAGE_WORD, taskRows } from './taskRows'
@@ -134,6 +135,7 @@ export function Dashboard(): React.JSX.Element {
   return (
     <PageFrame
       label="Every pane"
+      icon="all-panes"
       title={mode === 'tasks' ? 'Tasks' : 'All Panes'}
       lede={
         mode === 'tasks'
@@ -146,14 +148,15 @@ export function Dashboard(): React.JSX.Element {
       }
       actions={
         <>
-          <Segments label="Show">
-            <button type="button" aria-pressed={mode === 'panes'} onClick={() => setMode('panes')}>
-              Panes
-            </button>
-            <button type="button" aria-pressed={mode === 'tasks'} onClick={() => setMode('tasks')}>
-              Tasks
-            </button>
-          </Segments>
+          <Segmented
+            label="Show"
+            options={[
+              { value: 'panes', label: 'Panes' },
+              { value: 'tasks', label: 'Tasks' }
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
           {mode === 'tasks' ? (
             <ul className="board__filters" aria-label="Tasks by stage">
               {STAGES_BY_ATTENTION.filter((stage) => stageCounts[stage] > 0).map((stage) => (
@@ -242,9 +245,9 @@ export function Dashboard(): React.JSX.Element {
                     <PullRequestMark pull={landings[row.worktreeId]?.pullRequest} />
                   </span>
                   <span className="board-row__evidence">{row.evidence ?? ''}</span>
-                  <StatusPill tone={pillTone(state)} className="board-row__state">
-                    {TONE_LABEL[state]}
-                  </StatusPill>
+                  <span className="board-row__state">
+                    <StatusPill state={paneState(state)} label={TONE_LABEL[state]} />
+                  </span>
                   <span className="board-row__since">{sinceLabel(row.quietFor)}</span>
                 </button>
                 {row.choices === undefined ? null : (

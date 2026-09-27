@@ -20,7 +20,6 @@
 .modal {
   /* Fields a hand can hit: a dialog is where people type. */
   --control-h: var(--control-md);
-  --modal-pad: 20px;
 
   position: relative;
   width: min(520px, calc(100vw - 48px));
@@ -36,8 +35,9 @@
   display: flex;
   align-items: center;
   min-height: 54px;
-  /* Clear of the close control on the right. */
-  padding: 15px 56px 15px var(--modal-pad);
+  padding: 15px 20px;
+  /* Clear of the close control. */
+  padding-right: 56px;
   border-bottom: 1px solid var(--line);
 }
 
@@ -55,7 +55,7 @@
 }
 
 .modal__body {
-  padding: var(--modal-pad);
+  padding: 20px;
 }
 
 .modal__close {
@@ -90,8 +90,8 @@
   justify-content: flex-end;
   gap: 8px;
   min-height: 54px;
-  margin: var(--s1) calc(-1 * var(--modal-pad)) calc(-1 * var(--modal-pad));
-  padding: 10px var(--modal-pad);
+  margin: var(--s1) -20px -20px;
+  padding: 10px 20px;
   border-top: 1px solid var(--line);
   border-radius: 0 0 calc(var(--r4) - 1px) calc(var(--r4) - 1px);
   background: var(--bg-raised);
@@ -99,7 +99,7 @@
 
 /* A question with nothing under its title: the answers sit straight under the head. */
 .modal__body > :first-child > .modal__actions:first-child {
-  margin-top: calc(-1 * var(--modal-pad));
+  margin-top: -20px;
   border-top: 0;
 }
 
@@ -401,10 +401,6 @@ button.picker__chevron:hover {
   border: 0;
 }
 
-.agents > .field__label {
-  margin-bottom: 2px;
-}
-
 .agents__row {
   display: flex;
   align-items: center;
@@ -429,109 +425,17 @@ button.picker__chevron:hover {
 }
 
 
-/* The segmented well: a sunken track, the chosen mode lifted out of it. */
-.agents__modes {
-  display: flex;
-  gap: 2px;
-  height: 28px;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: var(--r2);
-  background: var(--bg-sunken);
-}
-
-.agents__mode {
-  min-width: 60px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: 5px;
-  background: none;
-  color: var(--fg-muted);
-  font: inherit;
-  font-size: var(--text-xs);
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    background var(--motion-fast) var(--ease-standard),
-    color var(--motion-fast) var(--ease-standard);
-}
-
-.agents__mode:hover {
-  color: var(--fg);
-}
-
-.agents__mode--current,
-.agents__mode--current:hover {
+/* The permission modes are radios in the segmented well: the chosen one lifts out of it. */
+.agents__modes .segmented__item[aria-checked='true'] {
   background: var(--bg-raised);
   box-shadow: var(--shadow-1);
   color: var(--fg);
 }
 
 /* Bypass is the one mode that skips every question: chosen, it reads as the danger it is. */
-.agents__mode--bypass.agents__mode--current,
-.agents__mode--bypass.agents__mode--current:hover {
+.agents__modes .agents__mode--bypass[aria-checked='true'] {
   background: color-mix(in srgb, var(--danger) 20%, var(--bg-raised));
   color: var(--danger);
-}
-
-.agents__mode:focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
-}
-
-.agents__stepper {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: var(--s2);
-}
-
-.agents__step {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r1);
-  background: var(--bg-raised);
-  color: var(--fg);
-  font: inherit;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    background var(--motion-fast) var(--ease-standard),
-    transform var(--motion-instant) var(--ease-standard);
-}
-
-.agents__step:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-
-.agents__step:active:not(:disabled) {
-  transform: translateY(1px);
-}
-
-.agents__step:disabled {
-  border-color: var(--line);
-  background: transparent;
-  color: var(--fg-muted);
-  cursor: default;
-}
-
-.agents__step:focus-visible {
-  outline: none;
-  box-shadow: var(--ring);
-}
-
-/* A fixed width so the rows do not shuffle sideways as the counts change. */
-.agents__count {
-  min-width: 16px;
-  color: var(--fg);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
 }
 
 /* The destination field and its folder picker, on one line. */

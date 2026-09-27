@@ -275,6 +275,7 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
   return (
     <PageFrame
       label={home ? `Teamwork in ${name}` : `Set up teamwork in ${name}`}
+      icon="team"
       title={project?.name ?? 'Teamwork'}
       lede={
         project === undefined
@@ -283,7 +284,7 @@ export function TeamworkView({ projectId }: { projectId: string }): React.JSX.El
             ? `Teamwork · ${onlineCount({ list, presence, status })} online`
             : 'Teamwork'
       }
-      actions={
+      trailing={
         home ? (
           <>
             {projectSelect}

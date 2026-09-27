@@ -164,9 +164,9 @@ describe('stylesheets', () => {
         '.pane-row__since--waiting',
         '.statusbar__asking',
         '.board-filter__number--waiting',
-        '.board-row__state--waiting',
         '.board-filter__number--asking',
-        '.task-row--asking .task-row__stage',
+        // A teammate's agent asking, as a card on the Teamwork page.
+        '.home-card--asking',
         '.child__stage--asking',
         // A task's question for you, under its row.
         '.worktree__ask',

@@ -64,7 +64,7 @@ describe('dialog.css', () => {
       expect(declarationOf(actions, 'gap')).toBe('8px')
       expect(declarationOf(actions, 'background')).toBe('var(--bg-raised)')
       expect(declarationOf(actions, 'border-top')).toBe('1px solid var(--line)')
-      expect(declarationOf(actions, 'margin')).toBe('var(--s5) -20px -20px')
+      expect(declarationOf(actions, 'margin')).toBe('var(--s1) -20px -20px')
       expect(findRule(SHEET, '.confirm__actions')).toBeUndefined()
       expect(findRule(SHEET, '.form__actions')).toBeUndefined()
       expect(findRule(SHEET, '.consent__actions')).toBeUndefined()
@@ -89,12 +89,14 @@ describe('dialog.css', () => {
       expect(declarationOf(ref, 'font-size')).toBeUndefined()
     })
 
-    it('draws a stepper that cannot step like every other disabled button', () => {
-      for (const property of ['border-color', 'background', 'color']) {
-        expect(declarationOf(ruleFor(SHEET, '.agents__step:disabled'), property)).toBe(
-          declarationOf(ruleFor('base.css', '.button:disabled'), property)
-        )
+    // The agents' counts and modes are the shared stepper and segmented well; the sheet adds only the radio's look.
+    it('draws the agents with the shared stepper and segmented well', () => {
+      for (const selector of ['.agents__step', '.agents__step:disabled', '.agents__count', '.agents__mode']) {
+        expect(findRule(SHEET, selector), selector).toBeUndefined()
       }
+      expect(declarationOf(ruleFor(SHEET, ".agents__modes .segmented__item[aria-checked='true']"), 'background')).toBe(
+        declarationOf(ruleFor('base.css', ".segmented__item[aria-pressed='true']"), 'background')
+      )
     })
   })
 

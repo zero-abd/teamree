@@ -197,8 +197,8 @@ describe('the members', () => {
 
   it('draws what each worktree is doing as a pill in that state’s tone', () => {
     home()
-    const pill = within(region('Members')).getByText('working')
-    expect(pill.classList.contains('state-pill--working')).toBe(true)
+    const pill = within(region('Members')).getByText('working').closest('.status-pill')
+    expect(pill?.classList.contains('status--working')).toBe(true)
   })
 
   it('names the project and the ref new work starts from beside the team', () => {
@@ -259,7 +259,7 @@ describe('what is waiting on you', () => {
     seed({ teammates: { p1: presence([asking]) } })
     home()
     const waiting = within(region('Waiting on you'))
-    expect(waiting.getByText('asking').classList.contains('state-pill--asking')).toBe(true)
+    expect(waiting.getByText('asking').closest('.status-pill')?.classList.contains('status--asking')).toBe(true)
     fireEvent.click(waiting.getByRole('button', { name: 'Yes' }))
     expect(answerTeammatePane).toHaveBeenCalledWith(
       'p1',
