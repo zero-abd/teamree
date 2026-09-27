@@ -61,9 +61,10 @@ export function menuBarMenu(state: MenuBarState): MenuBarEntry[] {
     enabled: true,
     action: { kind }
   })
+  const summary = summaryLabel(state.terminals, asking.length)
   return [
     ...shown,
-    { type: 'item', label: runningLabel(state.terminals), enabled: false },
+    ...(summary === null ? [] : [{ type: 'item' as const, label: summary, enabled: false }]),
     { type: 'separator' },
     item('New Task…', 'new-task'),
     item('Quick Note…', 'quick-note'),
@@ -76,12 +77,14 @@ export function menuBarMenu(state: MenuBarState): MenuBarEntry[] {
   ]
 }
 
-function runningLabel(terminals: readonly Terminal[]): string {
-  const running = terminals.filter(
+/** Agents working, beside those asking; nothing when the asking rows above are everything. */
+function summaryLabel(terminals: readonly Terminal[], asking: number): string | null {
+  const working = terminals.filter(
     (terminal) => (terminal.agent ?? terminal.foregroundAgent) !== undefined && activityOf(terminal) === 'working'
   ).length
-  if (running === 0) return 'No Agents Running'
-  return `${running} ${running === 1 ? 'Agent' : 'Agents'} Running`
+  if (asking > 0) return working === 0 ? null : `${working} Working · ${asking} Asking`
+  if (working === 0) return 'No Agents Running'
+  return `${working} ${working === 1 ? 'Agent' : 'Agents'} Running`
 }
 
 /** The app menu's Check for Updates…, or what the update card would say instead. */

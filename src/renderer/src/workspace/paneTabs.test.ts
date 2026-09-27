@@ -194,6 +194,14 @@ describe('paneTabs', () => {
 })
 
 describe('paneTabTitle', () => {
+  it('calls a Run pane the quit hung up stopped', () => {
+    const [tab] = paneTabs(
+      leaf('d'),
+      byId(terminal({ id: 'd', label: 'dev', run: 'dev', running: false, exitCode: 129 }))
+    )
+    expect(tab && paneTabTitle(tab)).toBe('dev · stopped')
+  })
+
   it('says the name alone while nothing is known about the pane', () => {
     expect(
       paneTabTitle({ terminalId: 'a', agent: undefined, label: 'terminal', text: 'terminal', activity: null })

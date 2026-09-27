@@ -107,16 +107,21 @@ describe('menuBarMenu', () => {
     )
   })
 
-  it('puts the agents asking first, each opening its pane, then the running count', () => {
+  it('puts the agents asking first, each opening its pane, then who is working and asking', () => {
     const menu = menuBarMenu(
       state({ terminals: [asking('t1', 'w1'), working('t2', 'w1'), working('t3', 'w2')], paneNames: { t1: 'Claude' } })
     )
     expect(menuAsText(menu).split('\n').slice(0, 3)).toEqual([
       '● login-bug — Claude',
-      '  2 Agents Running (disabled)',
+      '  2 Working · 1 Asking (disabled)',
       '---'
     ])
     expect(menu[0]).toMatchObject({ action: { kind: 'reveal', worktreeId: 'w1', terminalId: 't1' }, enabled: true })
+  })
+
+  it('says nothing more when the asking list is everything running', () => {
+    const menu = menuBarMenu(state({ terminals: [asking('t1', 'w1'), asking('t2', 'w2')] }))
+    expect(menuAsText(menu).split('\n').slice(0, 3)).toEqual(['● login-bug — zsh', '● api-refactor — zsh', '---'])
   })
 
   it('counts one agent in the singular and leaves shells out', () => {

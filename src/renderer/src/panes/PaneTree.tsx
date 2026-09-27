@@ -13,6 +13,7 @@ import {
 } from '@shared/filePane'
 import { freshAgentLabel } from '@shared/paneRestore'
 import { minExtent, type Box } from '@shared/paneRoom'
+import { runState } from '@shared/runCommands'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { paneNamesById } from '../sidebar/agentRows'
 import type { WorktreeNameSource } from '../sidebar/worktreeDisplay'
@@ -207,6 +208,8 @@ function PaneLeaf({
   const exited = terminal !== undefined && !terminal.running
   // Never started this launch: the badge says so, and its exit code means nothing.
   const stopped = terminal?.restored === 'stopped'
+  // A run ended by Stop or the quit's hang-up: its signal code is not a result.
+  const runStopped = exited && terminal.run !== undefined && runState(terminal) === 'stopped'
   // One name per pane, shared by strip, bar, close button and close question.
   const name = names?.[terminalId] ?? terminal?.title ?? 'terminal'
   // The grid size is on the name's hover: nobody acts on it.
@@ -215,7 +218,15 @@ function PaneLeaf({
   const status = (
     <>
       {exited && !stopped ? (
-        <span className="chip pane__exit">exited{terminal?.exitCode === undefined ? '' : ` ${terminal.exitCode}`}</span>
+        runStopped ? (
+          <span className="chip pane__exit" title={`exited ${terminal.exitCode}`}>
+            stopped
+          </span>
+        ) : (
+          <span className="chip pane__exit">
+            exited{terminal?.exitCode === undefined ? '' : ` ${terminal.exitCode}`}
+          </span>
+        )
       ) : null}
       {/* Beside the badge that says the pane is dead, because the next thing anybody does about a
           dead pane is this; the pane menu's word for an agent or a Run pane, since that is not a new shell. */}

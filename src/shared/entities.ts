@@ -1193,6 +1193,8 @@ export type PeerPane = {
   agent?: AgentKind
   running: boolean
   exitCode?: number
+  /** `Terminal.run` on the owner's machine: its exit is how the run ended. */
+  run?: RunKind
   busy: boolean
   /**
    * The size of the owner's pty, so a watcher can letterbox to it. Optional

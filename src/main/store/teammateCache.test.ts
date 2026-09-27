@@ -180,6 +180,19 @@ describe('a file written by another build', () => {
     expect(read.teammates[0]?.worktrees[0]?.panes[2]?.label?.length).toBe(MAX_CACHED_TEXT)
   })
 
+  it('keeps which Run button started a teammate’s pane', () => {
+    const pane = { title: 'zsh', shell: '/bin/zsh', running: false, exitCode: 129, busy: false, quietForMs: 0 }
+    const panes = [
+      { ...pane, id: 't_dev', run: 'dev' },
+      { ...pane, id: 't_odd', run: 'deploy' }
+    ]
+    const read = parseTeammateCache({
+      version: 1,
+      teammates: [{ ...entry(), worktrees: [{ ...theirWorktree(), panes }] }]
+    })
+    expect(read.teammates[0]?.worktrees[0]?.panes.map((one) => one.run)).toEqual(['dev', undefined])
+  })
+
   it('reads a document that is not one as an empty cache rather than as a failure', () => {
     expect(parseTeammateCache('nonsense').teammates).toEqual([])
     expect(parseTeammateCache(null).teammates).toEqual([])

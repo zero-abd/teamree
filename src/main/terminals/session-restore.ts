@@ -139,8 +139,8 @@ export function restoreLaunch(
   return { command: resume, resumed: true, ...(fallback === null ? {} : { fallback }) }
 }
 
-// The quit hangs up a run still going; see `killProcessTree`.
-const HUNG_UP = 129
+/** The exit a run still going at the quit is recorded with: the hang-up `killProcessTree` sends. */
+export const HUNG_UP = 129
 
 /** What a restored Run pane runs: nothing but ending the way its run did, so Run Again has its pane back. */
 export function endedRunCommand(record: TerminalRecord): string {

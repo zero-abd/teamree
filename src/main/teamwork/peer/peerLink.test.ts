@@ -1071,6 +1071,31 @@ describe('a snapshot from a teammate is somebody else’s bytes', () => {
     ])
   })
 
+  it('carries which Run button started a teammate’s pane, and reads an unknown kind as none', () => {
+    const projectKey = 'k'.repeat(64)
+    const pane = { title: 'zsh', shell: '/bin/zsh', running: false, exitCode: 129, busy: false, quietForMs: 0 }
+    const worktrees = [
+      {
+        id: 'wt_1',
+        name: 'one',
+        branch: 'main',
+        state: 'ready',
+        panes: [
+          { ...pane, id: 't_dev', run: 'dev' },
+          { ...pane, id: 't_shell' },
+          { ...pane, id: 't_odd', run: 'deploy' }
+        ]
+      }
+    ]
+    const panes = parsePeerPresence({ revision: 1, handle: 'bob', projects: [{ projectKey, worktrees }] }, projectKey)
+      ?.projects[0]?.worktrees[0]?.panes
+    expect(panes?.map((one) => [one.id, one.run])).toEqual([
+      ['t_dev', 'dev'],
+      ['t_shell', undefined],
+      ['t_odd', undefined]
+    ])
+  })
+
   it('reads a snapshot carrying fields this build has never heard of', () => {
     // What an older build does with the pane's name: drops it and keeps the pane.
     const projectKey = 'k'.repeat(64)

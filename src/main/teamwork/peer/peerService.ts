@@ -58,6 +58,7 @@ import {
   boundTaskDetails,
   PaneLabelOnRead,
   PaneOrdinalOnRead,
+  PaneRunOnRead,
   TeammateCacheStore,
   TEAMMATE_CACHE_FILE,
   type TeammateCache
@@ -2184,6 +2185,7 @@ const PanePayload = z.object({
   agent: AgentKindOnRead,
   running: z.boolean(),
   exitCode: z.number().optional(),
+  run: PaneRunOnRead,
   busy: z.boolean(),
   cols: z.number().int().positive().optional(),
   rows: z.number().int().positive().optional(),
