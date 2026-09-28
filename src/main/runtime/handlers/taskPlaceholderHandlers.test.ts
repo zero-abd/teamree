@@ -33,7 +33,9 @@ describe('task, memory and add-on methods before their branches land', () => {
   })
 
   afterEach(async () => {
-    await rm(directory, { recursive: true, force: true })
+    // A settings write still queued would land mid-removal (ENOTEMPTY).
+    await store.flush()
+    await rm(directory, { recursive: true, force: true, maxRetries: 3 })
   })
 
   const result = async (method: string, params: unknown): Promise<unknown> => {
