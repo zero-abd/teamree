@@ -8,6 +8,7 @@ import type { CodeEditorHandle } from '../files/CodeEditor'
 import { FileBar, fileLabel } from '../files/FileBar'
 import { DiffBody, DiffTools, useFileDiff } from '../files/FileDiff'
 import type { FilePaneProps } from '../panes/FilePane'
+import { focusWhenFree } from '../panes/paneFocus'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { openInBrowser } from '../shell/openInBrowser'
 import { useWorkspaceStore } from '../state/workspaceStore'
@@ -133,7 +134,7 @@ export function MarkdownPane({
 
   // The keyboard follows the focus here, so a new page can be typed on at once.
   useEffect(() => {
-    if (focused && loaded !== null && !diff.shown && !source) editor.current?.focus()
+    if (focused && loaded !== null && !diff.shown && !source) return focusWhenFree(() => editor.current?.focus())
   }, [focused, loaded, diff.shown, source])
 
   const current = (): string => code.current?.text() ?? editor.current?.getMarkdown() ?? known.current.content

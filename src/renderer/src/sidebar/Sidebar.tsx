@@ -216,7 +216,10 @@ export function Sidebar({
   }
   const openFirstShown = (): void => {
     const first = groups.flatMap((group) => group.shown.filter((worktree) => !group.context.has(worktree.id)))[0]
-    if (first !== undefined) void openWorktree(first.id)
+    if (first === undefined) return
+    // Return asks for that worktree, so its pane may take the keyboard from the field.
+    filterField.current?.blur()
+    void openWorktree(first.id)
   }
 
   return (

@@ -2,7 +2,8 @@
 
 // A right-click on a pane's terminal: it opens the menu at the pointer with Copy off until something
 // is selected, leads with the link under the pointer, pastes through the emulator, and leaves a
-// program that asked for the mouse its right-click unless ⌥ is held.
+// program that asked for the mouse its right-click unless ⌥ is held. A pane that mounts focused under an
+// open dialog leaves the keyboard in the dialog.
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -14,6 +15,7 @@ type FakeTerm = {
   pasted: string[]
   cleared: number
   selectedAll: number
+  focused: boolean
 }
 
 const terms = vi.hoisted(() => [] as unknown[])
@@ -32,6 +34,7 @@ vi.mock('@xterm/xterm', () => {
     pasted: string[] = []
     cleared = 0
     selectedAll = 0
+    focused = false
 
     constructor(options: Record<string, unknown>) {
       this.options = options
@@ -90,8 +93,12 @@ vi.mock('@xterm/xterm', () => {
       addon.activate?.(this)
     }
     unicode = { activeVersion: '6', register: (): void => {} }
-    focus(): void {}
-    blur(): void {}
+    focus(): void {
+      this.focused = true
+    }
+    blur(): void {
+      this.focused = false
+    }
     dispose(): void {}
   }
   return { Terminal }
@@ -247,4 +254,26 @@ it('offers the file under the pointer once its folder is read, hovered or not', 
   underPointer.found = { kind: 'path', worktreeId: 'w1', path: 'src/a.ts', absolute: '/w/src/a.ts', line: 3 }
   await rightClick()
   expect(labels().slice(0, 3)).toEqual(['Open File', 'Copy Path', 'Reveal in Finder'])
+})
+
+it('leaves the keyboard in a dialog that was open when it mounted, and takes it once the dialog goes', async () => {
+  const dialog = document.createElement('div')
+  dialog.setAttribute('role', 'dialog')
+  dialog.setAttribute('aria-modal', 'true')
+  dialog.appendChild(document.createElement('textarea'))
+  document.body.appendChild(dialog)
+  dialog.querySelector('textarea')!.focus()
+  const term = await mount()
+  expect(term.focused).toBe(false)
+  expect(document.activeElement?.closest('[role=dialog]')).toBe(dialog)
+  await act(async () => {
+    dialog.remove()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+  expect(term.focused).toBe(true)
+})
+
+it('takes the keyboard when it mounts focused with nothing open', async () => {
+  expect((await mount()).focused).toBe(true)
 })

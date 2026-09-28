@@ -20,6 +20,7 @@ import {
   rectangularSelection
 } from '@codemirror/view'
 import { useEffect, useImperativeHandle, useRef, type Ref } from 'react'
+import { focusWhenFree } from '../panes/paneFocus'
 import { loadLanguage } from './codeLanguage'
 import { codeTheme } from './codeTheme'
 
@@ -218,7 +219,7 @@ export function CodeEditor({
   )
 
   useEffect(() => {
-    if (focused && view.current !== null && !view.current.hasFocus) view.current.focus()
+    if (focused && view.current !== null && !view.current.hasFocus) return focusWhenFree(() => view.current?.focus())
   }, [focused])
 
   const pendingKey = pending?.join(',') ?? ''
