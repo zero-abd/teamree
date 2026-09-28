@@ -15,7 +15,6 @@ import {
   type WorktreeStatus
 } from '@shared/entities'
 import { fuzzyPathScore, matchTier } from '@shared/fuzzyPath'
-import { activityOf } from '@shared/paneActivity'
 import { parseInvitation } from '@shared/invitation'
 import type { SharedNoteSummary } from '@shared/sharedNote'
 import { APPEARANCE_MODES, BUILT_IN_THEMES, type AppearanceMode } from '@shared/theme'
@@ -30,6 +29,7 @@ import {
   agentRows,
   agoLabel,
   dotTone,
+  paneActivity,
   paneAgent,
   paneLabel,
   paneNamesById,
@@ -238,7 +238,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     const label = display.title
     const agent = display.agent?.kind
     // The clock only feeds `quietFor`, which no tone reads.
-    const tone = hasCheckout(worktree) ? worktreeTone(agentRows(terminals, worktree.id, 0)) : null
+    const tone = hasCheckout(worktree) ? worktreeTone(agentRows(terminals, worktree, 0)) : null
     const visitedAt = open(worktree) ? undefined : context.visited?.[worktree.id]
     return {
       kind: 'worktree',
@@ -339,7 +339,7 @@ function paneItems(context: PaletteContext): PaletteItem[] {
             detail: project,
             search: `${name} ${where} ${terminal.title} ${agent === undefined ? '' : harnessName(agent)} ${project}`,
             ...(agent === undefined ? {} : { agent }),
-            tone: dotTone(activityOf(terminal), agent),
+            tone: dotTone(paneActivity(terminal, worktree.report), agent),
             activeAt,
             ...ageOf(activeAt, context.now)
           }

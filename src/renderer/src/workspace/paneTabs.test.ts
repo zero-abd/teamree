@@ -107,6 +107,16 @@ describe('paneTabs', () => {
     expect(tabs.map((tab) => tab.activity)).toEqual(['working', 'quiet', 'stopped', 'failed'])
   })
 
+  it('reads an agent at its prompt after a failed report as failed, as the sidebar does', () => {
+    const failed = { ...worktree, report: { outcome: 'failed' as const, summary: 'Migration failed.' } }
+    const tabs = paneTabs(
+      row('agent', 'shell'),
+      byId(terminal({ id: 'agent', agent: 'claude' }), terminal({ id: 'shell' })),
+      failed
+    )
+    expect(tabs.map((tab) => tab.activity)).toEqual(['failed', 'quiet'])
+  })
+
   // The strip is the other half of the same answer: a sidebar that numbers its
   // rows and a tab strip that does not would be two answers about three panes.
   it('numbers unnamed panes that would read identically, and leaves named ones whole', () => {

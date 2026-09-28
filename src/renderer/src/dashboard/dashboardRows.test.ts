@@ -258,3 +258,37 @@ describe('a teammate’s asking pane', () => {
     expect(rows[0]?.worktreeName).toContain('sam')
   })
 })
+
+describe('dashboardRows, a task that reported', () => {
+  const report = (outcome: 'succeeded' | 'failed') => ({
+    outcome,
+    summary: 'Migration failed: column users.plan.',
+    paths: [],
+    at: 1
+  })
+  const agent = (id: string, worktreeId: string): Terminal =>
+    terminal({ id, worktreeId, agent: 'claude', agentEvent: { event: 'Stop', at: 1 } })
+
+  it('reads its agent at the prompt as failed, first, with the report as its summary', () => {
+    const rows = build(
+      [agent('ok', 'done'), agent('bad', 'broke')],
+      [worktree({ id: 'done', report: report('succeeded') }), worktree({ id: 'broke', report: report('failed') })]
+    )
+    expect(rows.map((row) => [row.terminalId, row.activity, row.evidence])).toEqual([
+      ['bad', 'failed', '✗ Migration failed: column users.plan.'],
+      ['ok', 'quiet', '✓ Migration failed: column users.plan.']
+    ])
+    expect(toneCounts(rows)).toMatchObject({ failed: 1, quiet: 1 })
+  })
+
+  it('never quotes the agent’s own `msg done` call', () => {
+    const rows = dashboardRows({
+      terminals: [agent('a', 'wt1')],
+      worktrees: [worktree({ id: 'wt1', report: report('succeeded') })],
+      projects,
+      now: NOW,
+      evidence: { a: 'teamree msg done "Migration failed: column users.plan."' }
+    })
+    expect(rows[0]?.evidence).toBe('✓ Migration failed: column users.plan.')
+  })
+})

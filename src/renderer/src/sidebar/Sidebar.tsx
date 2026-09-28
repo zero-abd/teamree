@@ -110,7 +110,7 @@ export function Sidebar({
   const tones = useMemo(() => {
     const byId: Record<string, DotTone | null> = {}
     for (const worktree of worktrees) {
-      const tone = asking.has(worktree.id) ? 'waiting' : worktreeTone(agentRows(paneList, worktree.id, now))
+      const tone = asking.has(worktree.id) ? 'waiting' : worktreeTone(agentRows(paneList, worktree, now))
       byId[worktree.id] = hasCheckout(worktree) ? tone : null
     }
     return byId

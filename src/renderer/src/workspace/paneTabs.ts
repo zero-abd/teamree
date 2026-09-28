@@ -5,8 +5,8 @@ import type { AgentKind, PaneNode, Terminal } from '@shared/entities'
 import { fileTabName, isFileColumn, isFileLeaf } from '@shared/filePane'
 import { collectLeaves } from '../panes/paneLayout'
 import {
-  shownActivity,
   dotTone,
+  paneActivity,
   paneAgent,
   paneNamesById,
   TONE_LABEL,
@@ -61,7 +61,7 @@ export function paneTabs(
     const record = terminals[node.terminalId]
     const pane = record ?? UNARRIVED
     const label = names[node.terminalId] ?? 'terminal'
-    const activity = record ? shownActivity(record) : null
+    const activity = record ? paneActivity(record, worktree?.report) : null
     const agent = paneAgent(pane)
     // The task's own pane is named after its worktree, which the header over the strip says: its tab says the agent.
     const text = agent !== undefined && label === title ? harnessName(agent) : label

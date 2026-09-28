@@ -13,8 +13,10 @@ import {
   paneName,
   paneNames,
   paneNamesById,
+  paneActivity,
   paneText,
   shownActivity,
+  reportLine,
   sinceLabel,
   truncateName,
   watchedBy,
@@ -763,5 +765,68 @@ describe('shownActivity', () => {
     const [ended] = agentRows([terminal({ id: 'a', agent: 'claude', running: false, exitCode: 0 })], 'wt1', 0)
     expect(ended?.activity).toBe('stopped')
     expect(TONE_LABEL.stopped).toBe('ended')
+  })
+})
+
+describe('a worktree whose agent reported it failed', () => {
+  const failed = {
+    id: 'wt1',
+    name: 'fail migration users',
+    branch: 'fail-migration-users',
+    report: { outcome: 'failed' as const, summary: 'Migration failed: column users.plan is missing. Rolled back.' }
+  }
+  const claude = (overrides: Partial<Terminal> = {}): Terminal =>
+    terminal({ id: 'a', agent: 'claude', agentEvent: { event: 'Stop', at: 1 }, ...overrides })
+
+  it('reads a live agent at its prompt as failed, not ready', () => {
+    const [row] = agentRows([claude()], failed, 0)
+    expect(row?.activity).toBe('failed')
+    expect(worktreeTone(agentRows([claude()], failed, 0))).toBe('failed')
+  })
+
+  // After a relaunch the pane comes back ended; the report is what the task said.
+  it('keeps failed once its agent has exited or been restored', () => {
+    expect(paneActivity(claude({ running: false, exitCode: 0 }), failed.report)).toBe('failed')
+    expect(paneActivity(claude({ running: false, exitCode: 0, tookTurn: false }), failed.report)).toBe('failed')
+  })
+
+  it('lets a new turn or a question outrank the report', () => {
+    const prompted = claude({ agentEvent: { event: 'UserPromptSubmit', at: 2 } })
+    expect(paneActivity(prompted, failed.report)).toBe('working')
+    expect(paneActivity(claude({ askingYou: 3 }), failed.report)).toBe('waiting')
+  })
+
+  it('leaves its shells, its Run panes and a succeeded report alone', () => {
+    expect(paneActivity(terminal({ id: 's' }), failed.report)).toBe('quiet')
+    expect(paneActivity(terminal({ id: 'd', run: 'dev' }), failed.report)).toBe('quiet')
+    expect(paneActivity(claude(), { outcome: 'succeeded' })).toBe('quiet')
+  })
+})
+
+describe('the line of an agent that reported', () => {
+  const done = (outcome: 'succeeded' | 'failed') => ({
+    id: 'wt1',
+    name: 'fix batch 1',
+    branch: 'fix-batch-1',
+    report: { outcome, summary: 'Fixed. Tests pass.' }
+  })
+  const claude = (overrides: Partial<Terminal> = {}): Terminal =>
+    terminal({ id: 'a', agent: 'claude', agentEvent: { event: 'Stop', at: 1 }, ...overrides })
+  const screen = { a: 'teamree msg done "Fixed. Tests pass."' }
+
+  it('is the report at rest, never the call that sent it', () => {
+    expect(agentRows([claude()], done('succeeded'), 0, screen)[0]?.evidence).toBe('✓ Fixed.')
+    expect(agentRows([claude()], done('failed'), 0, screen)[0]?.evidence).toBe('✗ Fixed.')
+  })
+
+  it('is the screen again once the agent works on', () => {
+    const busy = claude({ busy: true, agentEvent: { event: 'UserPromptSubmit', at: 2 } })
+    expect(agentRows([busy], done('succeeded'), 0, { a: 'Reading src/app.ts' })[0]?.evidence).toBe('Reading src/app.ts')
+  })
+
+  it('says the report once, in one form', () => {
+    expect(reportLine({ outcome: 'failed', summary: 'Migration failed: column users.plan. Rolled back.' })).toBe(
+      '✗ Migration failed: column users.plan.'
+    )
   })
 })

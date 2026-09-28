@@ -326,3 +326,34 @@ describe('evidenceInRows, over a shell’s prompts', () => {
     expect(evidenceInRows(['coverage: 100 %'])).toBe('coverage: 100 %')
   })
 })
+
+describe('evidenceInRows, over teamree’s own calls', () => {
+  it('skips the call an agent reports with, and its answer, for the line before', () => {
+    const stand = ['● Wrote CHANGELOG.md', '● teamree msg done "Fixed. Tests pass."', '  ⎿ done: told you', '>']
+    expect(evidenceInRows(stand)).toBe('Wrote CHANGELOG.md')
+    const claude = [
+      '⏺ Updated the footer.',
+      '⏺ Bash(teamree msg done "Fixed. Tests pass." --failed)',
+      '  ⎿  done: told you'
+    ]
+    expect(evidenceInRows(claude)).toBe('Updated the footer.')
+    const codex = [
+      '• Edited src/footer.ts',
+      '• Ran "$TEAMREE_CLI" msg note "halfway" --to siblings',
+      '  └ told ada, ben'
+    ]
+    expect(evidenceInRows(codex)).toBe('Edited src/footer.ts')
+  })
+
+  it('skips one typed at a shell prompt, and its answer', () => {
+    expect(evidenceInRows(['3 files changed', 'ana@mac ~ % teamree claim src/app.ts', 'told you', 'ana@mac ~ %'])).toBe(
+      '3 files changed'
+    )
+  })
+
+  it('still quotes a line that only mentions teamree', () => {
+    expect(evidenceInRows(['Installed teamree msg handling in src/cli.ts'])).toBe(
+      'Installed teamree msg handling in src/cli.ts'
+    )
+  })
+})

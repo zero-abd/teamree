@@ -25,7 +25,7 @@ import { rowVisibility } from '../state/rowVisibility'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import type { PaneAttention } from '../state/paneAttention'
 import { useUsageStore } from '../state/usageStore'
-import { agentRows, dotClass, TONE_LABEL, worktreeTone, type DotTone } from './agentRows'
+import { agentRows, dotClass, reportLine, TONE_LABEL, worktreeTone, type DotTone } from './agentRows'
 import { AskForYou } from './AskForYou'
 import { PaneRows } from './PaneRows'
 import { listPorts, portChip, portUrl } from './portChip'
@@ -322,7 +322,7 @@ export function WorktreeRow({
   const rolled = task?.collapsed === true ? task.rolled : null
   // A question for you outranks whatever the panes say: the agent is only waiting on the answer.
   const tone = rolled?.tone ?? (liveAsk === undefined ? worktreeTone(rows) : 'waiting')
-  const report = liveAsk === undefined ? reportLine(worktree) : null
+  const report = liveAsk === undefined && worktree.report !== undefined ? reportLine(worktree.report) : null
   // A lone pane that is not working says again what the question or the report above it says.
   const lone = rows.length === 1 ? rows[0] : undefined
   const saidAbove =
@@ -758,7 +758,10 @@ export function WorktreeRow({
         <PaneRows
           tree
           level={3 + depth}
-          rows={rows}
+          // The report is the line above; a pane row saying it again is noise.
+          rows={
+            report === null ? rows : rows.map((row) => (row.evidence === report ? { ...row, evidence: null } : row))
+          }
           worktreeName={display.title}
           watchers={watchers}
           unread={unread}
@@ -797,13 +800,6 @@ export function WorktreeRow({
 export function DropHint({ text, refused }: { text: string | null; refused: boolean }): React.JSX.Element | null {
   if (text === null) return null
   return <span className={`drop-hint${refused ? ' drop-hint--refused' : ''}`}>{text}</span>
-}
-
-/** A finished task's own word on how it went: `msg done`'s first sentence. */
-function reportLine(worktree: Worktree): string | null {
-  const report = worktree.report
-  if (report === undefined) return null
-  return `${report.outcome === 'failed' ? '✗' : '✓'} ${firstSentence(report.summary)}`
 }
 
 const FAILURE_LINE_MAX = 60

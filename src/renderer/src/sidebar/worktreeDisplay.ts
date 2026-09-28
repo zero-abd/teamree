@@ -2,10 +2,14 @@
 // bar, the board, the palette, their tooltips and accessible names. Nothing else reads `name` to show it.
 
 import type { AgentKind, InstalledAgent, Worktree } from '@shared/entities'
+import type { WorktreeReport } from '@shared/tasks'
 import { HARNESSES, harnessName } from '../agents/harnesses'
 import { taskName, taskNames } from '../dialogs/taskPlan'
 
-export type WorktreeNameSource = Pick<Worktree, 'name' | 'branch' | 'task'>
+/** What a worktree and its panes are named from; `report` is what its panes are read with once `msg done` ran. */
+export type WorktreeNameSource = Pick<Worktree, 'name' | 'branch' | 'task'> & {
+  report?: Pick<WorktreeReport, 'outcome' | 'summary'>
+}
 
 export type WorktreeDisplay = {
   /** The run's agent, when the worktree is one of a task's runs, e.g. `claude 2`; `kind` draws its glyph. */
