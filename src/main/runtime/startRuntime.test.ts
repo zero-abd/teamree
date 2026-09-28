@@ -3,7 +3,7 @@
 // whatever else the teardown managed.
 
 import { existsSync } from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -69,5 +69,18 @@ describe('stopping the runtime', () => {
     // Reported, not swallowed: a teardown that failed is worth a line.
     expect(onError).toHaveBeenCalledOnce()
     expect(String(onError.mock.calls[0]?.[0])).toContain('the bridge would not come down')
+  })
+
+  it('writes nothing to the workspace file once stopped', async () => {
+    const { runtime } = await running(vi.fn())
+    const { store } = runtime.context
+    store.putProject({ id: 'p1', name: 'kept', path: '/repos/kept', baseRef: 'main' })
+
+    await runtime.stop()
+    store.putProject({ id: 'p2', name: 'late', path: '/repos/late', baseRef: 'main' })
+    await store.flush()
+
+    const written = JSON.parse(await readFile(store.filePath, 'utf8')) as { projects: { id: string }[] }
+    expect(written.projects.map((project) => project.id)).toEqual(['p1'])
   })
 })

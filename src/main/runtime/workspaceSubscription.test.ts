@@ -15,7 +15,7 @@ import { degradedWatchReport, type WatchDegraded } from '../git/worktreeWatcher'
 import { createTerminalService, registerTerminalHandlers } from '../terminals/method-handlers'
 import type { TerminalService } from '../terminals/method-handlers'
 import { canSpawnPty, testShell } from '../terminals/pty-test-support'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../store/storeTestSupport'
 import { createDispatcher, type Dispatcher } from './dispatcher'
 import { registerUnsubscribeHandler } from './handlers/unsubscribeHandler'
 import { registerWorkspaceSubscribeHandler } from './handlers/workspaceSubscribeHandler'
@@ -63,7 +63,7 @@ type HarnessOptions = {
 
 async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
   const dataDir = await mkdtemp(join(tmpdir(), 'teamree-workspace-stream-'))
-  const store = await WorkspaceStore.open(join(dataDir, 'workspace.json'))
+  const store = await openTestStore(join(dataDir, 'workspace.json'))
   const hub = new SubscriptionHub()
   const context = createRuntimeContext({ version: 'test', store, subscriptions: hub })
   const registry = new MethodRegistry(context)
@@ -160,7 +160,7 @@ async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
       await git.dispose()
       hub.closeAll()
       await store.flush().catch(() => undefined)
-      await rm(dataDir, { recursive: true, force: true })
+      await removeTempDir(dataDir)
     }
   }
 }

@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Project } from '../../shared/entities'
 import { WorkspaceStore, type StoreProblem } from './workspaceStore'
+import { openTestStore, removeTempDir } from './storeTestSupport'
 
 const shop: Project = { id: 'p1', name: 'shop', path: '/repos/shop', baseRef: 'origin/main' }
 const api: Project = { id: 'p2', name: 'api', path: '/repos/api', baseRef: 'origin/main' }
@@ -16,7 +17,6 @@ const AT = Date.parse('2026-01-02T03:04:05.678Z')
 describe('a workspace file that goes bad', () => {
   let directory: string
   let filePath: string
-  const stores: WorkspaceStore[] = []
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'teamree-recovery-'))
@@ -24,18 +24,15 @@ describe('a workspace file that goes bad', () => {
   })
 
   afterEach(async () => {
-    for (const store of stores.splice(0)) store.close()
-    await rm(directory, { recursive: true, force: true })
+    await removeTempDir(directory)
   })
 
   async function open(problems: StoreProblem[] = [], retryMs = 60_000): Promise<WorkspaceStore> {
-    const store = await WorkspaceStore.open(filePath, {
+    return openTestStore(filePath, {
       onProblem: (problem) => problems.push(problem),
       now: () => AT,
       retryMs
     })
-    stores.push(store)
-    return store
   }
 
   it('keeps a copy of each write beside the file', async () => {

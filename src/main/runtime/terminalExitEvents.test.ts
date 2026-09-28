@@ -2,7 +2,7 @@
 // wires it, because restored panes exist before any handler does and still
 // have to announce their own exits.
 
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -13,7 +13,7 @@ import { createTerminalService, registerTerminalHandlers } from '../terminals/me
 import type { TerminalService } from '../terminals/method-handlers'
 import { canSpawnPty, testShell, waitUntil } from '../terminals/pty-test-support'
 import type { TerminalRecord } from '../terminals/session-restore'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../store/storeTestSupport'
 import { createDispatcher, type Dispatcher } from './dispatcher'
 import { MethodRegistry } from './methodRegistry'
 import { createRuntimeContext } from './runtimeContext'
@@ -39,7 +39,7 @@ const services: TerminalService[] = []
 
 afterEach(async () => {
   await Promise.all(services.splice(0).map((service) => service.shutdown()))
-  await Promise.all(temporaryDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  await Promise.all(temporaryDirs.splice(0).map((dir) => removeTempDir(dir)))
 })
 
 /**
@@ -68,7 +68,7 @@ async function fakeAgent(): Promise<{ checkout: string; binary: string; stopFile
 async function startAfterRestart(record: TerminalRecord, checkout: string, stopFile: string): Promise<Harness> {
   const dataDir = await mkdtemp(join(tmpdir(), 'teamree-exit-events-data-'))
   temporaryDirs.push(dataDir)
-  const store = await WorkspaceStore.open(join(dataDir, 'workspace.json'))
+  const store = await openTestStore(join(dataDir, 'workspace.json'))
   store.putTerminal(record)
 
   const hub = new SubscriptionHub()

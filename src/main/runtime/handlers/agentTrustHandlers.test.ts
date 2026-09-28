@@ -1,9 +1,9 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { TrustRequest } from '../../agentTrust'
-import { WorkspaceStore } from '../../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../../store/storeTestSupport'
 import { createDispatcher } from '../dispatcher'
 import { MethodRegistry } from '../methodRegistry'
 import { createRuntimeContext } from '../runtimeContext'
@@ -18,7 +18,7 @@ describe('Trust New Worktrees', () => {
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'teamree-agent-trust-'))
-    const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    const store = await openTestStore(join(directory, 'workspace.json'))
     registry = new MethodRegistry(
       createRuntimeContext({ version: '9.9.9', store, subscriptions: new SubscriptionHub() })
     )
@@ -26,7 +26,7 @@ describe('Trust New Worktrees', () => {
   })
 
   afterEach(async () => {
-    await rm(directory, { recursive: true, force: true })
+    await removeTempDir(directory)
   })
 
   it('is on by default and turns off', async () => {

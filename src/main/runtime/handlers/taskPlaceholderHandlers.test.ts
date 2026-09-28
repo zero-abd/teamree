@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -6,6 +6,7 @@ import { ErrorCode, type ErrorResponse, type SuccessResponse } from '../../../sh
 import { DEFAULT_RUNTIME_SETTINGS } from '../../../shared/settings'
 import type { WorkspaceEvent } from '../../../shared/methods'
 import { WorkspaceStore } from '../../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../../store/storeTestSupport'
 import { resolveLoginShell } from '../../terminals/shell-environment'
 import { createDispatcher, type Dispatcher } from '../dispatcher'
 import { MethodRegistry } from '../methodRegistry'
@@ -23,7 +24,7 @@ describe('task, memory and add-on methods before their branches land', () => {
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'teamree-task-placeholders-'))
-    store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    store = await openTestStore(join(directory, 'workspace.json'))
     const context = createRuntimeContext({ version: '9.9.9', store, subscriptions: new SubscriptionHub() })
     const registry = new MethodRegistry(context)
     registerHandlers(registry)
@@ -35,7 +36,7 @@ describe('task, memory and add-on methods before their branches land', () => {
   afterEach(async () => {
     // A settings write still queued would land mid-removal (ENOTEMPTY).
     await store.flush()
-    await rm(directory, { recursive: true, force: true, maxRetries: 3 })
+    await removeTempDir(directory)
   })
 
   const result = async (method: string, params: unknown): Promise<unknown> => {
@@ -115,7 +116,7 @@ describe('task, memory and add-on methods before their branches land', () => {
       fetchMinutes: 15
     })
     await store.flush()
-    const reopened = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    const reopened = await openTestStore(join(directory, 'workspace.json'))
     expect(reopened.runtimeSettings()).toMatchObject({ shell: '/bin/sh', fetchMinutes: 15 })
 
     const cleared = (await result('settings.set', { shell: '' })) as Record<string, unknown>
@@ -126,7 +127,7 @@ describe('task, memory and add-on methods before their branches land', () => {
   it('keeps the window’s Scrollback lines across a restart, and refuses one outside the setting’s range', async () => {
     expect(await result('settings.set', { scrollbackLines: 20_000 })).toMatchObject({ scrollbackLines: 20_000 })
     await store.flush()
-    const reopened = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    const reopened = await openTestStore(join(directory, 'workspace.json'))
     expect(reopened.runtimeSettings().scrollbackLines).toBe(20_000)
 
     for (const scrollbackLines of [999, 100_001, 1.5]) {

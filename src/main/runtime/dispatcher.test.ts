@@ -1,10 +1,10 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { ErrorCode, type ErrorResponse } from '../../shared/protocol'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../store/storeTestSupport'
 import { registerPlaceholderHandlers } from './handlers/placeholderHandlers'
 import { createDispatcher, type Dispatcher } from './dispatcher'
 import { registerHandlers } from './handlers/registerHandlers'
@@ -23,7 +23,7 @@ describe('dispatcher', () => {
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'teamree-dispatch-'))
-    const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    const store = await openTestStore(join(directory, 'workspace.json'))
     context = createRuntimeContext({ version: '9.9.9', store, subscriptions: new SubscriptionHub() })
     context.endpoint = '/tmp/teamree-test.sock'
     registry = new MethodRegistry(context)
@@ -32,7 +32,7 @@ describe('dispatcher', () => {
   })
 
   afterEach(async () => {
-    await rm(directory, { recursive: true, force: true })
+    await removeTempDir(directory)
   })
 
   it('answers status.get with the runtime identity', async () => {

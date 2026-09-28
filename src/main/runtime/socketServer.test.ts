@@ -1,14 +1,14 @@
 // End-to-end over a real unix socket: the CLI's whole experience of the runtime
 // is this transport, so it is tested against actual connections rather than mocks.
 
-import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, stat, writeFile } from 'node:fs/promises'
 import { connect, type Socket } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Params } from '../../shared/methods'
 import { createFrameDecoder, type Response } from '../../shared/protocol'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../store/storeTestSupport'
 import { createDispatcher } from './dispatcher'
 import { registerHandlers } from './handlers/registerHandlers'
 import { MethodRegistry } from './methodRegistry'
@@ -72,7 +72,7 @@ describe.skipIf(process.platform === 'win32')('socket server', () => {
     errors = []
     directory = await mkdtemp(join(tmpdir(), 'teamree-socket-'))
     endpoint = join(directory, 'runtime.sock')
-    const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    const store = await openTestStore(join(directory, 'workspace.json'))
     hub = new SubscriptionHub()
     const context = createRuntimeContext({ version: '1.2.3', store, subscriptions: hub, endpoint })
     const registry = new MethodRegistry(context)
@@ -95,7 +95,7 @@ describe.skipIf(process.platform === 'win32')('socket server', () => {
 
   afterEach(async () => {
     await server.close()
-    await rm(directory, { recursive: true, force: true })
+    await removeTempDir(directory)
   })
 
   it('answers two requests arriving in one chunk', async () => {
@@ -177,7 +177,7 @@ describe.skipIf(process.platform === 'win32')('socket server', () => {
     await server.close()
     await writeFile(endpoint, '', 'utf8')
 
-    const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    const store = await openTestStore(join(directory, 'workspace.json'))
     const context = createRuntimeContext({ version: '1.2.3', store, subscriptions: hub, endpoint })
     const registry = new MethodRegistry(context)
     registerHandlers(registry)
@@ -223,7 +223,7 @@ describe.skipIf(process.platform === 'win32')('the endpoint under a permissive u
   afterEach(async () => {
     process.umask(restore)
     await server.close()
-    await rm(directory, { recursive: true, force: true })
+    await removeTempDir(directory)
   })
 
   it('is owner-only however permissive the umask the app inherited', async () => {

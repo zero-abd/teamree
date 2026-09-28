@@ -12,7 +12,7 @@ import { createDispatcher } from '../runtime/dispatcher'
 import { MethodRegistry, WINDOW_CONNECTION_PREFIX } from '../runtime/methodRegistry'
 import { createRuntimeContext } from '../runtime/runtimeContext'
 import { SubscriptionHub } from '../runtime/subscriptionHub'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore } from '../store/storeTestSupport'
 import { GitServiceError } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
 import { GitService, type GitEvent, type GitServiceOptions } from './gitService'
@@ -123,7 +123,7 @@ describe('nesting a worktree whose branch already holds the parent tip', () => {
     const repo = await createTempRepo()
     repos.push(repo)
     const file = path.join(repo.base, 'workspace.json')
-    const store = await WorkspaceStore.open(file)
+    const store = await openTestStore(file)
     const service = new GitService({ worktreesRoot: repo.worktreesRoot, store })
     services.push(service)
     const project = await service.addProject({ path: repo.repoPath })
@@ -138,7 +138,7 @@ describe('nesting a worktree whose branch already holds the parent tip', () => {
       parentId: parent.id,
       baseRef: parent.branch
     })
-    const again = new GitService({ worktreesRoot: repo.worktreesRoot, store: await WorkspaceStore.open(file) })
+    const again = new GitService({ worktreesRoot: repo.worktreesRoot, store: await openTestStore(file) })
     services.push(again)
     again.reviveRestoredRecords()
     expect((await again.getWorktree({ worktreeId: other.id })).parentId).toBe(parent.id)
@@ -338,7 +338,7 @@ describe('limits over the dispatcher', () => {
     call: (connectionId: string, params: Record<string, unknown>) => Promise<WorktreeNest>
   }> {
     const s = await setup()
-    const store = await WorkspaceStore.open(path.join(s.repo.base, 'unused.json'))
+    const store = await openTestStore(path.join(s.repo.base, 'unused.json'))
     const registry = new MethodRegistry(
       createRuntimeContext({ version: '0.0.0-test', store, subscriptions: new SubscriptionHub() })
     )

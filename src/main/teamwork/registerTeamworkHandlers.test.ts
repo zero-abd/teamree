@@ -1,7 +1,7 @@
 // Proof that the seam fits: the real runtime registry and dispatcher, driven
 // with wire-shaped requests, against a real repository.
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -11,7 +11,7 @@ import { createDispatcher } from '../runtime/dispatcher'
 import { MethodRegistry } from '../runtime/methodRegistry'
 import { createRuntimeContext } from '../runtime/runtimeContext'
 import { SubscriptionHub } from '../runtime/subscriptionHub'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../store/storeTestSupport'
 import { registerTeamworkHandlers } from './handlers'
 import { TeamworkService } from './teamworkService'
 
@@ -20,7 +20,7 @@ const dirs: string[] = []
 
 afterEach(async () => {
   await Promise.all(repos.splice(0).map((repo) => repo.cleanup()))
-  await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  await Promise.all(dirs.splice(0).map((dir) => removeTempDir(dir)))
 })
 
 async function wire(): Promise<{ call: (method: string, params?: unknown) => Promise<unknown>; project: Project }> {
@@ -30,7 +30,7 @@ async function wire(): Promise<{ call: (method: string, params?: unknown) => Pro
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'teamree-seam-'))
   dirs.push(dataDir)
 
-  const store = await WorkspaceStore.open(path.join(dataDir, 'workspace.json'))
+  const store = await openTestStore(path.join(dataDir, 'workspace.json'))
   const project = store.putProject({ id: 'p1', name: 'repo', path: repo.repoPath, baseRef: 'main' })
   const registry = new MethodRegistry(
     createRuntimeContext({ version: '0.0.0-test', store, subscriptions: new SubscriptionHub() })

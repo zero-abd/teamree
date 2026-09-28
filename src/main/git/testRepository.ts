@@ -4,6 +4,7 @@
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { closeStoresIn } from '../store/storeTestSupport'
 import { createGitRunner, type GitRunner } from './gitProcess'
 
 export type TempRepo = {
@@ -60,6 +61,7 @@ export async function createTempRepo(options: TempRepoOptions = {}): Promise<Tem
       await git(['commit', '--no-verify', '-m', message], cwd)
     },
     async cleanup() {
+      await closeStoresIn(base)
       await rm(base, { recursive: true, force: true, maxRetries: 3 })
     }
   }

@@ -3,7 +3,7 @@
 // directory, so this exercises the whole path without going near
 // /usr/local/bin.
 
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -12,14 +12,14 @@ import { createDispatcher } from '../runtime/dispatcher'
 import { MethodRegistry } from '../runtime/methodRegistry'
 import { createRuntimeContext } from '../runtime/runtimeContext'
 import { SubscriptionHub } from '../runtime/subscriptionHub'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../store/storeTestSupport'
 import { CliService } from './cliService'
 import { registerCliHandlers } from './handlers'
 
 const dirs: string[] = []
 
 afterEach(async () => {
-  await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  await Promise.all(dirs.splice(0).map((dir) => removeTempDir(dir)))
 })
 
 async function wire(): Promise<{
@@ -36,7 +36,7 @@ async function wire(): Promise<{
   const directory = path.join(root, 'bin')
   await mkdir(directory)
 
-  const store = await WorkspaceStore.open(path.join(root, 'workspace.json'))
+  const store = await openTestStore(path.join(root, 'workspace.json'))
   const registry = new MethodRegistry(
     createRuntimeContext({ version: '0.0.0-test', store, subscriptions: new SubscriptionHub() })
   )
