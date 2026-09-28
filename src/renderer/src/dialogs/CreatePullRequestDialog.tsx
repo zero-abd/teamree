@@ -2,6 +2,7 @@
 // body the runtime drafted. Each step shows as it runs; a failed one says why, and Retry resumes from it.
 
 import { useEffect, useRef, useState } from 'react'
+import { changedFiles } from '@shared/entities'
 import {
   pullRequestSteps,
   runPullRequestSteps,
@@ -35,7 +36,7 @@ export function CreatePullRequestDialog({ worktreeId }: { worktreeId: string }):
   const [done, setDone] = useState<PullRequestStep[]>([])
   const [failure, setFailure] = useState<PullRequestStepFailure | null>(null)
 
-  const counted = status === undefined ? 0 : status.staged + status.unstaged + status.untracked
+  const counted = status === undefined ? 0 : changedFiles(status)
   const steps =
     plan ??
     pullRequestSteps({

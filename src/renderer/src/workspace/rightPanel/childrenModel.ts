@@ -1,7 +1,14 @@
 // A parent's children as its Changes panel lists them, or the board's finished tasks: stage, distance from
 // where they land, what a merge would stop on, and which can land now. Listed order is landing order.
 
-import type { Terminal, Worktree, WorktreeLanding, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
+import {
+  changedFiles,
+  type Terminal,
+  type Worktree,
+  type WorktreeLanding,
+  type WorktreeMergePreview,
+  type WorktreeStatus
+} from '@shared/entities'
 import type { TaskStage, WorktreeOverlap } from '@shared/tasks'
 import { taskStages } from '../../dashboard/taskRows'
 import { worktreeDisplay, worktreeLabel } from '../../sidebar/worktreeDisplay'
@@ -73,7 +80,7 @@ export function landingRows(
       stage,
       ahead: preview?.ahead ?? 0,
       behind: status?.behind ?? 0,
-      uncommitted: status === undefined ? 0 : status.staged + status.unstaged + status.untracked + status.conflicted,
+      uncommitted: status === undefined ? 0 : changedFiles(status) + status.conflicted,
       conflicts: [...conflicts].sort(),
       siblingConflicts,
       ...(child.report === undefined ? {} : { report: child.report.summary }),

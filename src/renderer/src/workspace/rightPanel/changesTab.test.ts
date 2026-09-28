@@ -66,6 +66,10 @@ describe('changedCount', () => {
     expect(changedCount({ staged: 0, unstaged: 0, untracked: 0, conflicted: 0 })).toBe(0)
   })
 
+  it('counts a file staged and edited again once', () => {
+    expect(changedCount({ staged: 1, unstaged: 1, untracked: 1, conflicted: 1, changed: 2 })).toBe(3)
+  })
+
   it('is zero when the status has not been read yet', () => {
     expect(changedCount(undefined)).toBe(0)
   })

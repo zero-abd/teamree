@@ -639,6 +639,35 @@ button.picker__chevron:hover {
   font-size: var(--text-xs);
 }
 
+/* A hunk discard's changed lines, one row each, cut rather than wrapped. */
+.confirm__hunk {
+  overflow: hidden;
+  border-radius: var(--r1);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.confirm__hunkLine {
+  overflow: hidden;
+  padding: 0 var(--s2);
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.confirm__hunkLine--added {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+}
+
+.confirm__hunkLine--removed {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
+.confirm__hunkMore {
+  padding: 0 var(--s2);
+  color: var(--fg-muted);
+}
+
 /* Don't Save sits apart from Cancel and Save, as in a macOS sheet. */
 .confirm__decline {
   margin-right: auto;

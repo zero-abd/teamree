@@ -246,8 +246,10 @@ export type WorktreeStatus = {
   unstaged: number
   untracked: number
   conflicted: number
+  /** Distinct changed files, conflicts apart: a file staged and edited again is one, and a new folder counts its files. */
+  changed?: number
   /**
-   * Entries a .gitignore covers, a wholly ignored directory counting as one.
+   * Entries a .gitignore covers, a directory an ignore rule names counting as one.
    * Not added to the counts above, but removing the checkout deletes them and
    * git's "dirty" leaves them out, so this is the only warning. Optional: never asked is not zero.
    */
@@ -256,6 +258,11 @@ export type WorktreeStatus = {
   operation?: 'rebase' | 'merge'
   /** Wall-clock time of the read, so stale reads are visible to the UI. */
   readAt: number
+}
+
+/** The files a commit would take, conflicts apart, as the Changes panel counts them. */
+export function changedFiles(status: Pick<WorktreeStatus, 'staged' | 'unstaged' | 'untracked' | 'changed'>): number {
+  return status.changed ?? status.staged + status.unstaged + status.untracked
 }
 
 /** What git says happened to one path in a worktree. */

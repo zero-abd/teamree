@@ -178,6 +178,12 @@ describe('the git segment', () => {
     expect(screen.getByRole('button', { name: 'Changes, 3 changed · 3 ahead' }).textContent).toBe('3 changed · 3 ahead')
   })
 
+  it('counts a partly staged file once, and each file in a new folder, as the panel does', () => {
+    seed({ statuses: { w1: status({ staged: 1, unstaged: 1, untracked: 2000, changed: 2001 }) } })
+    mount()
+    expect(screen.getByRole('button', { name: 'Changes, 2001 changed' })).toBeTruthy()
+  })
+
   it('says whether the panel is showing', () => {
     seed({ statuses: { w1: status({ unstaged: 1 }) }, rightPanelOpen: true, rightPanelTab: 'changes' })
     mount()

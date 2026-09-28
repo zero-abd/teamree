@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { changedFiles } from '../../shared/entities'
 import { GitService } from './gitService'
 import { createTempRepo, type TempRepo } from './testRepository'
+import { UNTRACKED_LISTED_LIMIT } from './worktreeChanges'
 import { parsePorcelainV2, readWorktreeStatus } from './worktreeStatus'
 
 /** Builds a NUL-separated status stream the way git writes one. */
@@ -43,6 +45,8 @@ describe('parsePorcelainV2', () => {
       unstaged: 2, // unstaged.txt, both.txt
       untracked: 1,
       conflicted: 1,
+      // both.txt once: five files, not the seven the counts above add up to.
+      changed: 5,
       // Counted apart: an ignored file is not a change, but a removal would delete it.
       ignored: 1,
       ignoredPaths: ['ignored.txt']
@@ -110,6 +114,33 @@ describe('worktree.status', () => {
       behind: 1
     })
     expect(status.readAt).toBeGreaterThan(0)
+  })
+
+  it('counts files as the Changes panel does: a partly staged file once, a new folder by its files', async () => {
+    const repo = await createTempRepo()
+    repos.push(repo)
+    const service = new GitService({ worktreesRoot: repo.worktreesRoot })
+    services.push(service)
+    const lines = (from: number): string => Array.from({ length: 12 }, (_, at) => `line ${at + from}`).join('\n') + '\n'
+    await repo.write('cart.js', lines(0))
+    await repo.write('.gitignore', 'node_modules/\n')
+    await repo.commit('cart')
+    const project = await service.addProject({ path: repo.repoPath })
+    const worktree = await service.whenSettled((await service.createWorktree({ projectId: project.id, name: 'n' })).id)
+
+    await repo.write('cart.js', lines(0).replace('line 0', 'top'), worktree.path)
+    await repo.git(['add', 'cart.js'], worktree.path)
+    await repo.write('cart.js', lines(0).replace('line 0', 'top').replace('line 11', 'bottom'), worktree.path)
+    for (let at = 0; at < UNTRACKED_LISTED_LIMIT + 5; at += 1) await repo.write(`gen/f${at}.js`, 'x\n', worktree.path)
+    await repo.write('node_modules/a/index.js', 'x\n', worktree.path)
+    await repo.write('node_modules/b/index.js', 'x\n', worktree.path)
+
+    const status = await service.worktreeStatus({ worktreeId: worktree.id })
+    const panel = await service.worktreeChanges({ worktreeId: worktree.id })
+
+    expect(status).toMatchObject({ staged: 1, unstaged: 1, untracked: UNTRACKED_LISTED_LIMIT + 5, ignored: 1 })
+    expect(changedFiles(status)).toBe(1 + UNTRACKED_LISTED_LIMIT + 5)
+    expect(changedFiles(status)).toBe(panel.changes.reduce((sum, change) => sum + (change.files ?? 1), 0))
   })
 
   it('uses the upstream for ahead/behind once the branch is pushed', async () => {

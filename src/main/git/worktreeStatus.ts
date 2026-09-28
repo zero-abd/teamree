@@ -20,7 +20,9 @@ export type ParsedStatus = {
   unstaged: number
   untracked: number
   conflicted: number
-  /** Ignored entries, a wholly ignored directory counting as one. */
+  /** Distinct changed files, conflicts apart: `staged + unstaged` counts a partly staged file twice. */
+  changed: number
+  /** Ignored entries, a directory an ignore rule names counting as one. */
   ignored: number
   /** The first few of them by name, for a sentence a person can act on. */
   ignoredPaths: string[]
@@ -32,11 +34,11 @@ const DETACHED = '(detached)'
 export const IGNORED_SAMPLE_LIMIT = 6
 
 /**
- * `traditional` collapses a wholly ignored directory into one entry, but only
- * while untracked files are listed normally, so that is pinned. `-z` because
- * git otherwise C-quotes paths that are compared and shown by name.
+ * `matching` keeps an ignored directory one entry while new files are listed one by one, as the
+ * Changes panel counts them; `traditional` would walk every ignored directory to the bottom.
+ * `-z` because git otherwise C-quotes paths that are compared and shown by name.
  */
-const IGNORED_ARGS = ['-z', '--ignored=traditional', '--untracked-files=normal']
+const IGNORED_ARGS = ['-z', '--ignored=matching', '--untracked-files=all']
 
 export function parsePorcelainV2(raw: string, prepared?: PreparedPaths): ParsedStatus {
   const parsed: ParsedStatus = {
@@ -49,6 +51,7 @@ export function parsePorcelainV2(raw: string, prepared?: PreparedPaths): ParsedS
     unstaged: 0,
     untracked: 0,
     conflicted: 0,
+    changed: 0,
     ignored: 0,
     ignoredPaths: []
   }
@@ -64,7 +67,10 @@ export function parsePorcelainV2(raw: string, prepared?: PreparedPaths): ParsedS
     }
     if (marker === '?') {
       // A checkout teamree linked `node_modules` into is not one the developer touched.
-      if (!isPreparedPath(prepared, record.slice(2), true)) parsed.untracked += 1
+      if (!isPreparedPath(prepared, record.slice(2), true)) {
+        parsed.untracked += 1
+        parsed.changed += 1
+      }
       continue
     }
     if (marker === '!') {
@@ -85,6 +91,7 @@ export function parsePorcelainV2(raw: string, prepared?: PreparedPaths): ParsedS
       const worktree = record[3]
       if (indexState && indexState !== '.') parsed.staged += 1
       if (worktree && worktree !== '.') parsed.unstaged += 1
+      parsed.changed += 1
       // Under `-z` the record after a rename is the path it came from, not a
       // second change; on one line per record it is after a tab on the same one.
       if (marker === '2' && nulSeparated) index += 1
@@ -173,6 +180,7 @@ export async function readWorktreeStatus(runner: GitRunner, options: StatusReadO
     unstaged: parsed.unstaged,
     untracked: parsed.untracked,
     conflicted: parsed.conflicted,
+    changed: parsed.changed,
     ignored: parsed.ignored,
     ...(operation === undefined ? {} : { operation }),
     readAt: (options.now ?? Date.now)()

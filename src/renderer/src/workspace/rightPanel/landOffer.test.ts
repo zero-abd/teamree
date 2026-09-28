@@ -71,6 +71,10 @@ describe('the land offer in every state', () => {
     expect(landOffer(child, dirty)).toEqual({ kind: 'merge', into: 'Rework auth', parent: true, uncommitted: 2 })
   })
 
+  it('counts a partly staged file once', () => {
+    expect(landOffer(top, { ...status, staged: 1, unstaged: 1, changed: 1 })).toMatchObject({ uncommitted: 1 })
+  })
+
   it('is blocked by conflicts, which no commit settles', () => {
     expect(landOffer(top, { ...status, conflicted: 1 })).toEqual({
       kind: 'merge',

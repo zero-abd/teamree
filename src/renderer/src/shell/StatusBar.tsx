@@ -2,7 +2,7 @@
 // working, asking or failed anywhere, and teammates online, on the right. The runtime only when not ready.
 
 import { useMemo } from 'react'
-import { teammatesHeard, type WorktreeStatus } from '@shared/entities'
+import { changedFiles, teammatesHeard, type WorktreeStatus } from '@shared/entities'
 import { activityOf } from '@shared/paneActivity'
 import { attention, dashboardRows } from '../dashboard/dashboardRows'
 import { stepNeedingYou } from '../dashboard/needingYou'
@@ -178,7 +178,7 @@ export function StatusBar(): React.JSX.Element {
 /** The git line: changed files, then ahead and behind; `clean` alone when in sync is not known. */
 export function gitWords(status: WorktreeStatus, child: boolean, syncUnknown: boolean): string {
   if (status.missing) return 'missing'
-  const changed = status.staged + status.unstaged + status.untracked
+  const changed = changedFiles(status)
   const parts: string[] = []
   if (status.operation !== undefined) parts.push(status.operation === 'rebase' ? 'rebasing' : 'merging')
   if (status.conflicted > 0) parts.push(`${status.conflicted} conflicted`)

@@ -3,7 +3,7 @@
 // Work uncommitted in the worktree itself is committed first, under a message typed here, never left behind.
 
 import { useEffect, useRef, useState } from 'react'
-import type { WorktreeChanges, WorktreeMerge } from '@shared/entities'
+import { changedFiles, type WorktreeChanges, type WorktreeMerge } from '@shared/entities'
 import { useReviewStore } from '../review/reviewStore'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { worktreeDisplay, worktreeLabel } from '../sidebar/worktreeDisplay'
@@ -92,7 +92,7 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   const dirty = plan?.dirty ?? []
   const commits = (plan?.commits ?? []).map((commit) => `${commit.shortSha} ${commit.subject}`)
   const uncommitted = pending?.changes.map((change) => change.path) ?? []
-  const counted = status === undefined ? 0 : status.staged + status.unstaged + status.untracked + status.conflicted
+  const counted = status === undefined ? 0 : changedFiles(status) + status.conflicted
   // The list stops at its cap; its total does not, and a file both staged and edited is one.
   const total = pending?.total ?? counted
   const commitFirst = total > 0 || counted > 0
