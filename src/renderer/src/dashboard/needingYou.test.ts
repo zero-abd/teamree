@@ -87,6 +87,19 @@ describe('going to the next pane that needs you', () => {
     expect(panesNeedingYou(state).map((pane) => pane.terminalId)).toEqual(['b', 'a', 'd', 'c'])
   })
 
+  it('counts an agent at its prompt whose report says it failed as failed', () => {
+    const state = window('b')
+    state.terminals = {
+      b: terminal('b', 'wb', asking),
+      a: terminal('a', 'wa', { agentEvent: { event: 'Stop', at: 1 } })
+    }
+    state.worktrees = [
+      { id: 'wa', projectId: 'p1', report: { outcome: 'failed' } },
+      { id: 'wb', projectId: 'p1' }
+    ]
+    expect(panesNeedingYou(state).map((pane) => pane.terminalId)).toEqual(['b', 'a'])
+  })
+
   it('has nowhere to go when nothing else needs you', () => {
     const state = window('b')
     state.terminals = { b: terminal('b', 'wb', asking), a: terminal('a', 'wa', { busy: true }) }

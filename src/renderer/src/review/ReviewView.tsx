@@ -10,7 +10,7 @@ import { LayoutTools, ReadOnlyDiffBody, useWidth } from '../files/FileDiff'
 import { usePagedPatch } from '../files/usePagedPatch'
 import type { FilePaneProps } from '../panes/FilePane'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
-import { paneAgent } from '../sidebar/agentRows'
+import { paneAgent, reportLine } from '../sidebar/agentRows'
 import { usePaneEvidence } from '../sidebar/usePaneEvidence'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { fitLayout, type PatchViewing } from '../workspace/PatchView'
@@ -184,7 +184,7 @@ function jumpFile(scroller: HTMLElement, step: 1 | -1): void {
   if (start !== undefined) scroller.scrollTop = start
 }
 
-/** The task as it was typed, and the last line its agent printed. */
+/** The task as it was typed, and its agent's report, else the last line it printed. */
 function ReviewHead({ worktreeId }: { worktreeId: string }): React.JSX.Element {
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId))
   const terminals = useWorkspaceStore((state) => state.terminals)
@@ -196,15 +196,17 @@ function ReviewHead({ worktreeId }: { worktreeId: string }): React.JSX.Element {
     [terminals, worktreeId]
   )
   const evidence = usePaneEvidence(agents, terminals)
-  const speaker = agents.find((terminal) => (evidence[terminal.id] ?? '') !== '')
+  const report = worktree?.report
+  const speaker = report === undefined ? agents.find((terminal) => (evidence[terminal.id] ?? '') !== '') : agents[0]
   const kind = speaker === undefined ? undefined : paneAgent(speaker)
+  const said = report === undefined ? (speaker === undefined ? '' : (evidence[speaker.id] ?? '')) : reportLine(report)
   return (
     <div className="review__head">
       <p className="review__task">{worktree?.task ?? worktree?.name ?? ''}</p>
-      {speaker === undefined ? null : (
-        <p className="review__said">
+      {said === '' ? null : (
+        <p className="review__said" title={report?.summary}>
           {kind === undefined ? null : <AgentGlyph kind={kind} />}
-          <span>{evidence[speaker.id]}</span>
+          <span>{said}</span>
         </p>
       )}
     </div>

@@ -5,7 +5,7 @@
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PaneNode, Terminal } from '@shared/entities'
+import type { PaneNode, Terminal, Worktree } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 const writes: Array<{ method: string; params: unknown }> = []
@@ -33,6 +33,19 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { PaneTree } = await import('./PaneTree')
 const { showPane } = await import('../terminal/shownPanes')
 const { paneStage } = await import('./PaneLifecycle')
+const { useWorkspaceStore } = await import('../state/workspaceStore')
+
+const worktree = (report: { outcome: 'succeeded' | 'failed'; summary: string }): Worktree => ({
+  id: 'w1',
+  projectId: 'p1',
+  name: 'fix batch 1',
+  branch: 'fix-batch-1',
+  path: '/repos/pager',
+  startedFrom: 'main',
+  state: 'ready',
+  createdAt: 0,
+  report: { ...report, paths: [], at: 1 }
+})
 
 const terminal = (id: string, overrides: Partial<Terminal> = {}): Terminal => ({
   id,
@@ -83,6 +96,7 @@ const actions = (): string[] =>
 const marker = (): string => document.querySelector('.pane-end .pane-marker')?.textContent ?? ''
 
 beforeEach(() => {
+  useWorkspaceStore.setState({ worktrees: [] })
   writes.length = 0
   onRelaunch.mockReset()
   onClose.mockReset()
@@ -234,6 +248,20 @@ describe('a live agent', () => {
     const foot = document.querySelector('.pane-foot') as HTMLElement
     expect(foot.textContent).toContain('Ready')
     expect(within(foot).queryByRole('button', { name: 'Stop' })).toBeNull()
+  })
+
+  it('says what its report says once at rest, never the `msg done` call', () => {
+    useWorkspaceStore.setState({ worktrees: [worktree({ outcome: 'succeeded', summary: 'Fixed. Tests pass.' })] })
+    mount(terminal('t1', { agent: 'claude', agentEvent: { event: 'Stop', at: 1 } }))
+    expect(document.querySelector('.pane-foot')?.textContent).toBe('Ready · Fixed. Tests pass.')
+  })
+
+  it('reads failed in the footer, in red, when its report says it failed', () => {
+    useWorkspaceStore.setState({ worktrees: [worktree({ outcome: 'failed', summary: 'Migration failed.' })] })
+    mount(terminal('t1', { agent: 'claude', agentEvent: { event: 'Stop', at: 1 } }))
+    const foot = document.querySelector('.pane-foot') as HTMLElement
+    expect(foot.textContent).toBe('Failed · Migration failed.')
+    expect(foot.querySelector('.status--failed')).not.toBeNull()
   })
 
   it('floats a card over the top while it asks, with the ask and Review', () => {

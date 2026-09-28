@@ -83,7 +83,7 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
     return worktrees
       .filter((worktree) => worktree.projectId === projectId)
       .map((worktree) => {
-        const tone = worktreeTone(agentRows(panes, worktree.id, now).filter((row) => row.agent !== undefined))
+        const tone = worktreeTone(agentRows(panes, worktree, now).filter((row) => row.agent !== undefined))
         // As the sidebar's `taskStage`: an agent working or asking outranks a landing, which outranks a report.
         const stage =
           tone === 'working' || tone === 'waiting'

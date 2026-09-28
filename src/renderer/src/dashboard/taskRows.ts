@@ -110,7 +110,7 @@ export type TaskRow = {
 export function taskStages(input: Omit<TaskRowsInput, 'projects' | 'changes'>): Record<string, TaskStage> {
   return Object.fromEntries(
     input.worktrees.map((worktree) => {
-      const tone = worktreeTone(agentRows(input.terminals, worktree.id, input.now))
+      const tone = worktreeTone(agentRows(input.terminals, worktree, input.now))
       const status = input.statuses[worktree.id]
       const stage = taskStage({
         worktree,

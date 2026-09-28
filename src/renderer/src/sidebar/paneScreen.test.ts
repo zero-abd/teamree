@@ -39,6 +39,16 @@ describe('screenEvidence', () => {
     expect(screenEvidence(screen, { agent })).toBe(question)
   })
 
+  // The stand-in's screen as the audit caught it: the sidebar, board and foot all quoted the call.
+  it('quotes the line before the agent’s own `msg done` call', async () => {
+    const screen = await replayScreen(
+      '● Wrote CHANGELOG.md\r\n● teamree msg done "Fixed. Tests pass."\r\n  ⎿ done: told you\r\n> ',
+      80,
+      24
+    )
+    expect(screenEvidence(screen, { agent: 'claude' })).toBe('Wrote CHANGELOG.md')
+  })
+
   it('reads the question of an agent run from a shell', async () => {
     const screen = await replayScreen(recorded('codex-trust.txt'), 100, 30)
     expect(screenEvidence(screen, { foregroundAgent: 'codex' })).toBe('Trust this directory?')

@@ -43,8 +43,8 @@ export function evidenceInRows(rows: readonly string[], maxChars: number = EVIDE
     const head = messageHead(rows, index, first)
     if (head === null) return truncate(candidate, maxChars)
     const headRow = (rows[head] ?? '').trim()
-    // A recap or a composer is not output, and neither is anything indented under it.
-    if (CHROME_HEAD.test(headRow)) {
+    // A recap, a composer or a call to teamree is not output, and neither is anything indented under it.
+    if (CHROME_HEAD.test(headRow) || OWN_CALL.test(tidy(headRow))) {
       index = head
       continue
     }
@@ -264,6 +264,12 @@ const AGENT_FOOTERS = [
 /** The asides the app writes around a restored pane's record (see `scrollbackRecord.ts`); not the program's output. */
 const OWN_MARK = /^\[(?:record — up to |end of record — |resume refused — |no conversation to resume — |task done — )/
 
+/** teamree's own CLI, as an agent's tool line or a prompt shows the call: talking to teamree, not work. */
+const OWN_CALL = /^(?:(?:Bash|Shell)\(|(?:Ran|Running) |\$ )?(?:"?\$\{?TEAMREE_CLI\}?"?|teamree) [a-z]/u
+
+/** The CLI's answer to `msg done` and `msg note`: `done: told you`, `told ada, ben`. */
+const OWN_ANSWER = /^(?:[⎿└]\s*)?(?:done: )?told [\w.@-]+(?:, [\w.@-]+)*$/u
+
 /** A fragment: `E`, `│`, `⠋`, `…` — fewer letters and digits than any word worth quoting. */
 const MIN_WORD_CHARS = 3
 
@@ -273,11 +279,12 @@ export function saysSomething(line: string): boolean {
   return tidied.length > 0 && !isUninformative(tidied)
 }
 
-/** A line with nothing to act on: a fragment, a bare prompt, a frame, an agent's footer or composer, the app's own mark. */
+/** A line with nothing to act on: a fragment, a bare prompt, a frame, an agent's footer or composer, the app's own mark or CLI. */
 function isUninformative(line: string): boolean {
   if ((line.match(/[\p{L}\p{N}]/gu)?.length ?? 0) < MIN_WORD_CHARS) return true
   if (OSC_REMNANT.test(line)) return true
   if (FRAME.test(line) || COMPOSER_LINE.test(line) || AGENT_FOOTERS.some((footer) => footer.test(line))) return true
+  if (OWN_CALL.test(line) || OWN_ANSWER.test(line)) return true
   return OWN_MARK.test(line) || line.startsWith(RECAP_GLYPH) || isBarePrompt(line)
 }
 

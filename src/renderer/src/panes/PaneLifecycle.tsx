@@ -10,7 +10,7 @@ import { harnessName } from '../agents/harnesses'
 import { Modal } from '../dialogs/Modal'
 import { Icon } from '../icons/Icon'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
-import { activityOf, askingLine } from '../sidebar/agentRows'
+import { activityOf, askingLine, paneActivity } from '../sidebar/agentRows'
 import { SCREEN_ROWS_READ, screenEvidence } from '../sidebar/paneScreen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { shownScreen } from '../terminal/shownPanes'
@@ -117,11 +117,12 @@ export function elapsedLabel(milliseconds: number): string {
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h`
 }
 
-const FOOT_WORD: Record<'starting' | 'working' | 'asking' | 'ready', string> = {
+const FOOT_WORD: Record<'starting' | 'working' | 'asking' | 'ready' | 'failed', string> = {
   starting: 'Starting',
   working: 'Working',
   asking: 'Asking',
-  ready: 'Ready'
+  ready: 'Ready',
+  failed: 'Failed'
 }
 
 /**
@@ -135,19 +136,23 @@ export function PaneFoot({
   terminal: Terminal
   stage: 'starting' | 'working' | 'asking' | 'ready'
 }): React.JSX.Element {
+  const report = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === terminal.worktreeId)?.report)
   const line = useShownLine(terminal, stage !== 'starting')
   const age = useStageAge(terminal.id, stage, stage === 'working')
-  const said = stage === 'asking' ? askFor(terminal, line) : line
-  const parts = [FOOT_WORD[stage], said, stage === 'working' ? elapsedLabel(age) : null].filter(
+  // At rest, the report says what was done, never the `msg done` call on screen; a failed one reads failed.
+  const shown = stage === 'ready' && paneActivity(terminal, report) === 'failed' ? 'failed' : stage
+  const summary = stage === 'ready' && report !== undefined ? (report.summary.trim().split('\n')[0] ?? null) : null
+  const said = stage === 'asking' ? askFor(terminal, line) : (summary ?? line)
+  const parts = [FOOT_WORD[shown], said, stage === 'working' ? elapsedLabel(age) : null].filter(
     (part): part is string => part !== null && part !== ''
   )
   return (
-    <div className={`pane-foot pane-foot--${stage}`}>
-      {stage === 'ready' ? (
+    <div className={`pane-foot pane-foot--${shown}`}>
+      {shown === 'ready' ? (
         <Icon name="check" size={14} className="pane-foot__check" />
       ) : (
-        <span className={`pane-foot__dot${stage === 'working' ? ' pane-foot__dot--breathing' : ''}`}>
-          <StatusDot state={stage} />
+        <span className={`pane-foot__dot${shown === 'working' ? ' pane-foot__dot--breathing' : ''}`}>
+          <StatusDot state={shown} />
         </span>
       )}
       <span className="pane-foot__text">{parts.join(' · ')}</span>

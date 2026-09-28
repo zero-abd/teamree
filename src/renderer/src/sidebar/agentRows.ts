@@ -4,10 +4,12 @@
 
 import type { AgentEvent, AgentKind, PaneWatcher, Subagent, Terminal } from '@shared/entities'
 import { saysSomething } from '@shared/outputEvidence'
-import { activityOf, type AgentActivity } from '@shared/paneActivity'
+import { activityOf, type AgentActivity, type PaneActivitySource } from '@shared/paneActivity'
 import { hookQuestion, isAnswerOrHint, type ScreenChoice } from '@shared/screenOpinion'
+import type { WorktreeReport } from '@shared/tasks'
 import { harnessName } from '../agents/harnesses'
 import { taskName } from '../dialogs/taskPlan'
+import { firstSentence } from '../state/messages'
 import { paneInWorktree, worktreeDisplay, type WorktreeNameSource } from './worktreeDisplay'
 
 export { activityOf, agentSays, type AgentActivity, type PaneActivitySource } from '@shared/paneActivity'
@@ -88,6 +90,29 @@ function listOf(handles: readonly string[]): string {
   return `${handles.slice(0, -1).join(', ')} and ${last} are `
 }
 
+/** A finished task's own word: `✓`/`✗` and the first sentence of its `msg done`. */
+export function reportLine(report: NonNullable<WorktreeNameSource['report']>): string {
+  return `${report.outcome === 'failed' ? '✗' : '✓'} ${firstSentence(report.summary)}`
+}
+
+/**
+ * `shownActivity` read with its worktree's report: an agent at rest after a failed `done` is failed, restored or
+ * not, until it works or asks again. Every surface that draws a pane's state reads it here.
+ */
+export function paneActivity(pane: Terminal, report?: Pick<WorktreeReport, 'outcome'>): AgentActivity {
+  return reportFailed(pane, report) ? 'failed' : shownActivity(pane)
+}
+
+/** Whether a failed report outranks what the pane itself says. */
+export function reportFailed(pane: PaneActivitySource, report: Pick<WorktreeReport, 'outcome'> | undefined): boolean {
+  return report?.outcome === 'failed' && atRestAgent(pane, activityOf(pane))
+}
+
+function atRestAgent(pane: PaneActivitySource, activity: AgentActivity): boolean {
+  const agent = pane.agent ?? pane.foregroundAgent
+  return agent !== undefined && pane.run === undefined && activity !== 'working' && activity !== 'waiting'
+}
+
 /**
  * The rows for one worktree, in the order their panes were opened. Plain
  * shells included, or the count on the row disagrees with what is open.
@@ -101,12 +126,20 @@ export function agentRows(
   const worktreeId = typeof worktree === 'string' ? worktree : worktree.id
   const mine = terminals.filter((terminal) => terminal.worktreeId === worktreeId)
   const source = typeof worktree === 'string' ? undefined : worktree
+  const report = source?.report
   const names = paneNames(mine, source)
   return mine.map((terminal, index) => {
     const label = names[index] ?? paneName(terminal)
-    const activity = shownActivity(terminal)
+    const activity = paneActivity(terminal, report)
     const read = evidence[terminal.id] ?? null
-    const line = rowLine(activity === 'waiting' ? askingLine(read, terminal.agentEvent) : read, terminal, label, source)
+    // An agent at rest is summed up by its report, never by the `msg done` call it printed last.
+    const said =
+      activity === 'waiting'
+        ? askingLine(read, terminal.agentEvent)
+        : report !== undefined && atRestAgent(terminal, activity)
+          ? reportLine(report)
+          : read
+    const line = rowLine(said, terminal, label, source)
     const choices = activity === 'waiting' ? terminal.screenMenu?.choices : undefined
     return {
       terminalId: terminal.id,

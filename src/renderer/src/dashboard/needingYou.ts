@@ -2,15 +2,16 @@
 // failed, then finished and unread, oldest first; within a tier, the board's order.
 
 import type { Layout, Terminal } from '@shared/entities'
+import type { WorktreeReport } from '@shared/tasks'
 import { collectLeaves } from '../panes/paneLayout'
-import { activityOf } from '../sidebar/agentRows'
+import { activityOf, reportFailed } from '../sidebar/agentRows'
 import { worktreeOrder } from '../sidebar/worktreeOrder'
 import { isPaneUnread, paneInFront, panesOnScreen, type FrontOfWindow, type PaneSeen } from '../state/paneSeen'
 
 /** As much of the store as the walk reads; everything past the first three is absent in a test that has no panes. */
 export type NeedingState = {
   projects: readonly { id: string }[]
-  worktrees: readonly { id: string; projectId: string; parentId?: string }[]
+  worktrees: readonly { id: string; projectId: string; parentId?: string; report?: Pick<WorktreeReport, 'outcome'> }[]
   layouts: Readonly<Record<string, Layout>>
   activeWorktreeId: string | null
   focusedWatchId: string | null
@@ -63,10 +64,11 @@ function placedPanes(state: NeedingState, front: FrontOfWindow): (Placed & { tie
   const onScreen = panesOnScreen(front)
   const terminals = Object.values(state.terminals ?? {})
   const opened = new Map(terminals.map((terminal, index) => [terminal.id, index]))
+  const reports = new Map(state.worktrees.map((worktree) => [worktree.id, worktree.report]))
   return terminals
     .filter((terminal) => order.includes(terminal.worktreeId))
     .map((terminal) => {
-      const tier = tierOf(terminal)
+      const tier = tierOf(terminal, reports.get(terminal.worktreeId))
       const tabs = collectLeaves(state.layouts[terminal.worktreeId]?.root ?? null).map((leaf) => leaf.terminalId)
       const tab = tabs.includes(terminal.id) ? tabs.indexOf(terminal.id) : tabs.length + (opened.get(terminal.id) ?? 0)
       const unread = isPaneUnread(terminal, state.paneSeenAt?.[terminal.id], onScreen.includes(terminal.id))
@@ -83,8 +85,8 @@ function placedPanes(state: NeedingState, front: FrontOfWindow): (Placed & { tie
 
 const DONE = 2
 
-function tierOf(terminal: Terminal): number | null {
-  const activity = activityOf(terminal)
+function tierOf(terminal: Terminal, report: Pick<WorktreeReport, 'outcome'> | undefined): number | null {
+  const activity = reportFailed(terminal, report) ? 'failed' : activityOf(terminal)
   if (activity === 'waiting') return 0
   if (activity === 'failed') return 1
   return activity === 'done' ? DONE : null
