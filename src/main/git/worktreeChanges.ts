@@ -249,8 +249,29 @@ async function readStatusRecords(runner: GitRunner, options: ChangesReadOptions)
   }
 
   const found = await read('all')
-  if (found.filter((change) => change.kind === 'untracked').length <= UNTRACKED_LISTED_LIMIT) return found
-  return read('normal')
+  const files = found.filter((change) => change.kind === 'untracked')
+  if (files.length <= UNTRACKED_LISTED_LIMIT) return found
+  return withFileCounts(await read('normal'), files)
+}
+
+/** A folded folder carries how many of the new files are in it: the commit takes every one. */
+function withFileCounts(folded: WorktreeChange[], files: readonly WorktreeChange[]): WorktreeChange[] {
+  const counts = new Map<string, number>()
+  for (const change of folded) {
+    if (change.kind === 'untracked' && change.path.endsWith('/')) counts.set(change.path, 0)
+  }
+  for (const { path } of files) {
+    for (let cut = path.indexOf('/'); cut !== -1; cut = path.indexOf('/', cut + 1)) {
+      const count = counts.get(path.slice(0, cut + 1))
+      if (count === undefined) continue
+      counts.set(path.slice(0, cut + 1), count + 1)
+      break
+    }
+  }
+  return folded.map((change) => {
+    const count = counts.get(change.path)
+    return count === undefined || count === 0 ? change : { ...change, files: count }
+  })
 }
 
 export type DiffReadOptions = {

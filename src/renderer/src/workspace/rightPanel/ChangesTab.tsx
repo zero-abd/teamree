@@ -43,7 +43,7 @@ export function ChangesTab(): React.JSX.Element | null {
   const changes = useWorkspaceStore((state) => (worktreeId ? state.changes[worktreeId] : undefined))
   const selectedPath = useWorkspaceStore((state) => state.selectedChangePath)
   const selectChange = useWorkspaceStore((state) => state.selectChange)
-  const stagedPaths = useWorkspaceStore((state) => state.stagedPaths)
+  const stagedPaths = useWorkspaceStore((state) => (worktreeId ? state.stagedPaths[worktreeId] : undefined) ?? NONE)
   const stagePaths = useWorkspaceStore((state) => state.stagePaths)
   const unstageAll = useWorkspaceStore((state) => state.unstageAll)
   const hunkPending = useWorkspaceStore((state) => state.hunkPending)
@@ -243,6 +243,7 @@ export function ChangesTab(): React.JSX.Element | null {
           land={land}
           remote={landing?.remote !== false}
           amend={amendBlocker(status, log)}
+          lastMessage={lastCommit?.message ?? lastCommit?.subject ?? ''}
           onLand={landAfterCommit}
         />
       ) : null}
@@ -604,6 +605,8 @@ export function shownCommitIn(root: PaneNode | null): string | null {
   const shown = column.children.find((child) => child.kind === 'leaf' && child.terminalId === shownTabId(column))
   return isCommitLeaf(shown) ? shown.commit : null
 }
+
+const NONE: string[] = []
 
 const PUSH_LABEL = { push: ['Push', 'Pushing…'], publish: ['Publish Branch', 'Publishing…'] } as const
 

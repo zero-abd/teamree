@@ -53,7 +53,7 @@ const refresh = async (ticked: string[] = []): Promise<void> => {
     activeWorktreeId: 'wt',
     changes: { wt: changes },
     statuses: {},
-    stagedPaths: ticked,
+    stagedPaths: { wt: ticked },
     notices: [],
     rightPanelOpen: true,
     rightPanelTab: 'changes'

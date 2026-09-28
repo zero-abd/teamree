@@ -137,7 +137,7 @@ beforeEach(() => {
     changes: { wt: changes },
     selectedChangePath: null,
     diffPanes: { 'file:1': true },
-    stagedPaths: [],
+    stagedPaths: {},
     diffLayout: 'inline',
     diffOptions: { wrap: false, hideWhitespace: false }
   })

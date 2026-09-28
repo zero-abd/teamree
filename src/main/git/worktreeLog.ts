@@ -15,13 +15,17 @@ export const DEFAULT_LOG_LIMIT = 50
 const FIELD_FORMAT = '%x00'
 const FIELD = '\0'
 
-/** Reads `log`'s NUL-separated fields; every field including the last is terminated. */
-export function parseLogRecords(raw: string): WorktreeLog['commits'] {
+/**
+ * Reads `log`'s NUL-separated fields; every field including the last is terminated.
+ * `withMessage` reads a fifth, `%B`, the whole message.
+ */
+export function parseLogRecords(raw: string, withMessage = false): WorktreeLog['commits'] {
   const fields = raw.split(FIELD)
   const commits: WorktreeLog['commits'] = []
+  const width = withMessage ? 5 : 4
 
-  // Four fields per commit; a partial record is a truncated read and is dropped.
-  for (let index = 0; index + 3 < fields.length; index += 4) {
+  // A partial record is a truncated read and is dropped.
+  for (let index = 0; index + width - 1 < fields.length; index += width) {
     const sha = (fields[index] as string).trim()
     if (sha.length === 0) continue
     commits.push({
@@ -30,7 +34,8 @@ export function parseLogRecords(raw: string): WorktreeLog['commits'] {
       author: fields[index + 1] as string,
       // ISO 8601 as git wrote it: it carries the commit's own UTC offset.
       committedAt: fields[index + 2] as string,
-      subject: fields[index + 3] as string
+      subject: fields[index + 3] as string,
+      ...(withMessage ? { message: (fields[index + 4] as string).trimEnd() } : {})
     })
   }
   return commits
@@ -86,7 +91,7 @@ export async function readWorktreeLog(runner: GitRunner, options: LogReadOptions
     args: [
       'log',
       `--max-count=${limit + 1}`,
-      `--format=%H${FIELD_FORMAT}%an${FIELD_FORMAT}%aI${FIELD_FORMAT}%s${FIELD_FORMAT}`,
+      `--format=%H${FIELD_FORMAT}%an${FIELD_FORMAT}%aI${FIELD_FORMAT}%s${FIELD_FORMAT}%B${FIELD_FORMAT}`,
       `${options.baseRef}..${options.branch}`
     ],
     cwd: options.worktreePath,
@@ -99,7 +104,7 @@ export async function readWorktreeLog(runner: GitRunner, options: LogReadOptions
   // error, but an empty list would read as "committed nothing".
   if (result.exitCode !== 0) return nothingKnown(await refusalReason(runner, options, result.stderr))
 
-  const all = parseLogRecords(result.stdout)
+  const all = parseLogRecords(result.stdout, true)
   return { ...base, commits: all.slice(0, limit), truncated: all.length > limit }
 }
 

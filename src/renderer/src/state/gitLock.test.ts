@@ -29,7 +29,7 @@ beforeEach(() => {
   useWorkspaceStore.setState({
     notices: [],
     dialog: null,
-    stagedPaths: [],
+    stagedPaths: {},
     rightPanelOpen: true,
     rightPanelTab: 'changes'
   })

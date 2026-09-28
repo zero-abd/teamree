@@ -1,13 +1,13 @@
 // The commit message and Commit, at the top of the Changes tab. An agent's suggested message is offered, never
-// typed in; Commit's menu pushes, lands or amends after it.
+// typed in; Commit's menu pushes or lands after it, or switches to amending the last commit.
 
 import { useState } from 'react'
 import { Icon } from '../../icons/Icon'
 import { useWorkspaceStore } from '../../state/workspaceStore'
 import { Button } from '../../ui/Button'
 import { Textarea } from '../../ui/Input'
-import { Menu, type MenuAnchor } from '../../ui/Menu'
-import { useCommitMessage } from './commitMessage'
+import { Menu, type MenuAnchor, type MenuItem } from '../../ui/Menu'
+import { useCommitDrafts, useCommitMessage } from './commitMessage'
 import type { LandOffer } from './landOffer'
 import { commitChoices, commitLabel, type CommitChoice, type Sections } from './sourceControl'
 
@@ -17,6 +17,7 @@ export function CommitBox({
   land,
   remote,
   amend,
+  lastMessage,
   onLand
 }: {
   worktreeId: string
@@ -25,38 +26,67 @@ export function CommitBox({
   remote: boolean
   /** Why Amend is off, or null. */
   amend: string | null
+  /** The last commit's whole message, which an Amend starts from. */
+  lastMessage: string
   onLand: () => void
 }): React.JSX.Element {
   const committing = useWorkspaceStore((state) => state.committing)
   const commitStaged = useWorkspaceStore((state) => state.commitStaged)
   const pushActiveWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
   const { typed, suggestion, setMessage } = useCommitMessage(worktreeId)
+  const amendText = useCommitDrafts((state) => state.amends[worktreeId])
+  const setAmend = useCommitDrafts((state) => state.setAmend)
   const [menuAt, setMenuAt] = useState<{ at: MenuAnchor; opener: HTMLElement } | null>(null)
-  const ready = typed.trim() !== '' && !committing
+  const amending = amend === null && amendText !== undefined
+  const text = amending ? amendText : typed
+  const ready = text.trim() !== '' && !committing
 
   const run = (kind: CommitChoice['kind']): void => {
     if (!ready) return
     // The message is the one thing the app cannot reconstruct; only a commit that landed clears it.
-    void commitStaged(typed, kind === 'amend').then((landed) => {
+    void commitStaged(text, amending).then((landed) => {
       if (!landed) return
-      setMessage('')
+      if (amending) setAmend(worktreeId, null)
+      else setMessage('')
       if (kind === 'push') void pushActiveWorktree(worktreeId)
       else if (kind === 'land') onLand()
     })
   }
-  const offered = suggestion !== null && typed !== suggestion.text ? suggestion.text : null
+  const choose = (kind: CommitChoice['kind']): void => {
+    if (kind !== 'amend') return run(kind)
+    setAmend(worktreeId, lastMessage)
+    menuAt?.opener.closest('.changes__commit')?.querySelector('textarea')?.focus()
+  }
+  const offered = !amending && suggestion !== null && typed !== suggestion.text ? suggestion.text : null
+  const choices: MenuItem[] = amending
+    ? [{ label: 'Cancel Amend', onChoose: () => setAmend(worktreeId, null) }]
+    : commitChoices({ land, remote, amend }).map((choice) => ({
+        label: choice.label,
+        onChoose: () => choose(choice.kind),
+        ...(choice.disabled !== undefined
+          ? { disabled: true, hint: choice.disabled }
+          : choice.kind !== 'amend' && !ready
+            ? { disabled: true }
+            : {})
+      }))
 
   return (
     <div className="changes__commit">
       <Textarea
         className="changes__message"
         rows={1}
-        value={typed}
+        value={text}
         placeholder="Message (⌘↩ to commit)"
         aria-label="Commit message"
         disabled={committing}
-        onChange={(event) => setMessage(event.target.value)}
+        onChange={(event) => (amending ? setAmend(worktreeId, event.target.value) : setMessage(event.target.value))}
         onKeyDown={(event) => {
+          if (event.key === 'Escape' && amending) {
+            event.preventDefault()
+            event.stopPropagation()
+            setAmend(worktreeId, null)
+            return
+          }
           if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return
           event.preventDefault()
           run('commit')
@@ -82,7 +112,7 @@ export function CommitBox({
           loading={committing}
           onClick={() => run('commit')}
         >
-          {committing ? 'Committing…' : commitLabel(shown)}
+          {committing ? 'Committing…' : amending ? 'Amend Last Commit' : commitLabel(shown)}
         </Button>
         <Button
           variant="primary"
@@ -90,9 +120,9 @@ export function CommitBox({
           aria-label="Commit Actions"
           aria-haspopup="menu"
           aria-expanded={menuAt !== null}
-          aria-disabled={!ready}
+          aria-disabled={committing}
           onClick={(event) => {
-            if (!ready) return
+            if (committing) return
             const rect = event.currentTarget.getBoundingClientRect()
             const at: MenuAnchor = { x: rect.right, y: rect.bottom + 4, align: 'right' }
             setMenuAt(menuAt === null ? { at, opener: event.currentTarget } : null)
@@ -107,11 +137,7 @@ export function CommitBox({
           anchor={menuAt.at}
           opener={menuAt.opener}
           onClose={() => setMenuAt(null)}
-          items={commitChoices({ land, remote, amend }).map((choice) => ({
-            label: choice.label,
-            onChoose: () => run(choice.kind),
-            ...(choice.disabled === undefined ? {} : { disabled: true, hint: choice.disabled })
-          }))}
+          items={choices}
         />
       )}
     </div>

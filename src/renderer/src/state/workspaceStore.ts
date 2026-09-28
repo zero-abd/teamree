@@ -467,8 +467,8 @@ type WorkspaceState = {
   /** Each worktree's files against where its branch left its base, committed or not. */
   branchChanges: Record<string, WorktreeChanges>
   selectedChangePath: string | null
-  /** Paths ticked for the next commit. Held here, not in git's index: browsing must not stage anything. */
-  stagedPaths: string[]
+  /** Each worktree's paths ticked for its next commit. Held here, not in git's index: browsing must not stage anything. */
+  stagedPaths: Record<string, string[]>
   committing: boolean
   pushing: boolean
   pushes: Record<string, PushState>
@@ -783,7 +783,7 @@ type WorkspaceState = {
   setRightPanelWidth: (width: number) => void
   /** Selects one changed path and opens its diff in the centre as the preview tab, kept when `pin`; null clears. */
   selectChange: (path: string | null, pin?: boolean) => void
-  /** Adds or removes one path from what the next commit will capture. */
+  /** Adds or removes one path from what the active worktree's next commit will capture. */
   toggleStaged: (path: string) => void
   /** Adds these paths to what the next commit will capture. */
   stagePaths: (paths: readonly string[]) => void
@@ -1143,7 +1143,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       else if (!changesOnScreen(get())) notify(`Committed ${result.shortSha}: ${result.message}`, 'info')
       // Nothing is left ticked; the list refetches on the invalidation the runtime publishes, and
       // doing it here too would be a second way for this window to disagree with the others.
-      set({ stagedPaths: [], selectedChangePath: null })
+      set((state) => ({ stagedPaths: { ...state.stagedPaths, [worktreeId]: [] }, selectedChangePath: null }))
       return true
     } catch (error) {
       if (!(await heldLock(worktreeId, error, () => commit(worktreeId, message, paths, all, amend)))) {
@@ -1410,7 +1410,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     set((state) => ({
       changes: { ...state.changes, [worktreeId]: changes },
       // A path that stopped being a change cannot stay ticked for a commit that would then fail.
-      stagedPaths: state.stagedPaths.filter((path) => live.has(path))
+      stagedPaths: {
+        ...state.stagedPaths,
+        [worktreeId]: (state.stagedPaths[worktreeId] ?? []).filter((path) => live.has(path))
+      }
     }))
   }
 
@@ -2012,7 +2015,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     logs: {},
     branchChanges: {},
     selectedChangePath: null,
-    stagedPaths: [],
+    stagedPaths: {},
     committing: false,
     pushing: false,
     pushes: {},
@@ -2494,15 +2497,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         openWorktreeIds: state.openWorktreeIds.includes(worktreeId)
           ? state.openWorktreeIds
           : [...state.openWorktreeIds, worktreeId],
-        // A patch, its ticks and a maximised pane all belong to the worktree they were made in; none
-        // travels across a tab switch.
-        ...(switching
-          ? {
-              selectedChangePath: null,
-              stagedPaths: [],
-              expandedTerminalId: null
-            }
-          : {})
+        // A patch and a maximised pane belong to the worktree they were made in; neither travels across a
+        // tab switch. Ticks are kept per worktree.
+        ...(switching ? { selectedChangePath: null, expandedTerminalId: null } : {})
       }))
       if (changesOnScreen(get())) readChangesNow(worktreeId)
       void get().loadClosedPanes(worktreeId)
@@ -3314,19 +3311,28 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     toggleStaged(path) {
-      set((state) => ({
-        stagedPaths: state.stagedPaths.includes(path)
-          ? state.stagedPaths.filter((entry) => entry !== path)
-          : [...state.stagedPaths, path]
-      }))
+      const worktreeId = get().activeWorktreeId
+      if (!worktreeId) return
+      set((state) => {
+        const ticked = state.stagedPaths[worktreeId] ?? []
+        const next = ticked.includes(path) ? ticked.filter((entry) => entry !== path) : [...ticked, path]
+        return { stagedPaths: { ...state.stagedPaths, [worktreeId]: next } }
+      })
     },
 
     stagePaths(paths) {
-      set((state) => ({ stagedPaths: [...new Set([...state.stagedPaths, ...paths])] }))
+      const worktreeId = get().activeWorktreeId
+      if (!worktreeId) return
+      set((state) => ({
+        stagedPaths: {
+          ...state.stagedPaths,
+          [worktreeId]: [...new Set([...(state.stagedPaths[worktreeId] ?? []), ...paths])]
+        }
+      }))
     },
 
     async unstageAll(worktreeId) {
-      set({ stagedPaths: [] })
+      set((state) => ({ stagedPaths: { ...state.stagedPaths, [worktreeId]: [] } }))
       const held = (get().changes[worktreeId]?.changes ?? []).filter((change) => change.staged)
       for (const change of held) await get().unstagePath(worktreeId, change.path)
     },
@@ -3334,7 +3340,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     async commitStaged(message, amend = false) {
       const worktreeId = get().activeWorktreeId
       if (!worktreeId) return false
-      const ticked = get().stagedPaths
+      const ticked = get().stagedPaths[worktreeId] ?? []
       const listed = get().changes[worktreeId]
       const rows = listed?.changes ?? []
       const scope = commitScope(ticked, rows, listed?.truncated)
@@ -3367,7 +3373,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     async unstagePath(worktreeId, path) {
       if (get().hunkPending) return
-      set((state) => ({ hunkPending: true, stagedPaths: state.stagedPaths.filter((entry) => entry !== path) }))
+      set((state) => ({
+        hunkPending: true,
+        stagedPaths: {
+          ...state.stagedPaths,
+          [worktreeId]: (state.stagedPaths[worktreeId] ?? []).filter((entry) => entry !== path)
+        }
+      }))
       try {
         await pastLock(worktreeId, () => runtimeClient.call('worktree.unstagePath', { worktreeId, path }))
       } catch (error) {

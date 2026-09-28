@@ -97,12 +97,22 @@ export function shownDraft(
 
 type DraftState = {
   drafts: Record<string, CommitDraft>
+  /** The message an Amend under way will write, kept apart so leaving it gives the draft back. */
+  amends: Record<string, string>
   setDraft: (worktreeId: string, draft: CommitDraft) => void
+  /** Starts or edits an Amend's message; null leaves Amend. */
+  setAmend: (worktreeId: string, text: string | null) => void
 }
 
 export const useCommitDrafts = create<DraftState>((set) => ({
   drafts: {},
-  setDraft: (worktreeId, draft) => set((state) => ({ drafts: { ...state.drafts, [worktreeId]: draft } }))
+  amends: {},
+  setDraft: (worktreeId, draft) => set((state) => ({ drafts: { ...state.drafts, [worktreeId]: draft } })),
+  setAmend: (worktreeId, text) =>
+    set((state) => {
+      const { [worktreeId]: _left, ...amends } = state.amends
+      return { amends: text === null ? amends : { ...amends, [worktreeId]: text } }
+    })
 }))
 
 /**
