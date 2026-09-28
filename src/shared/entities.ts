@@ -50,6 +50,8 @@ export type Project = {
   approvedSetupCommand?: string
   /** The command the primary checkout's lockfile suggests, while no setup command applies. Never run unasked. */
   suggestedSetup?: string
+  /** Ignored env files in the primary checkout (`.env`, `.env.local`), while no copied paths apply. Never copied unasked. */
+  suggestedCopies?: string[]
   /** This Mac's Run Dev and Run Tests commands; each outranks the repository's and the detected one. */
   runCommands?: RunCommands
   /** The repository's run commands as this Mac last approved them; a different one asks before it runs. */

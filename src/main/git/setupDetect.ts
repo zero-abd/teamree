@@ -4,6 +4,7 @@
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { RunCommands, WorktreeSetupCheck } from '../../shared/entities'
+import type { GitRunner } from './gitProcess'
 
 /** A command, and the directory it fills that says it has run. */
 export type SetupSuggestion = { command: string; installs?: string }
@@ -16,7 +17,10 @@ const RULES: ReadonlyArray<{ files: readonly string[]; suggestion: SetupSuggesti
   { files: ['package-lock.json'], suggestion: { command: 'npm ci', installs: 'node_modules' } },
   { files: ['package.json'], suggestion: { command: 'npm install', installs: 'node_modules' } },
   { files: ['uv.lock'], suggestion: { command: 'uv sync', installs: '.venv' } },
-  { files: ['Gemfile.lock'], suggestion: { command: 'bundle install' } }
+  { files: ['poetry.lock'], suggestion: { command: 'poetry install', installs: '.venv' } },
+  { files: ['requirements.txt'], suggestion: { command: 'python3 -m pip install -r requirements.txt' } },
+  { files: ['Gemfile.lock'], suggestion: { command: 'bundle install' } },
+  { files: ['Cargo.lock', 'Cargo.toml'], suggestion: { command: 'cargo fetch' } }
 ]
 
 /** The suggestion for a checkout whose top level holds these names, if any. */
@@ -36,6 +40,31 @@ export async function checkSetup(dir: string): Promise<WorktreeSetupCheck> {
   if (suggestion === undefined) return {}
   const { command, installs } = suggestion
   return installs === undefined || names.has(installs) ? { command } : { command, missing: installs }
+}
+
+// `.env`, `.env.local`, `.env.test.local`, `.envrc`; never the committed templates.
+const ENV_FILE = /^\.env(rc|\.[\w.-]+)?$/
+const ENV_TEMPLATE = /\.(example|sample|template|dist|defaults)$/
+
+/** The top-level names that look like env files a checkout keeps to itself, sorted. */
+export function envFileCandidates(names: Iterable<string>): string[] {
+  return [...names].filter((name) => ENV_FILE.test(name) && !ENV_TEMPLATE.test(name)).sort()
+}
+
+/** The env files present in a checkout that git ignores: what a new worktree would lack. */
+export async function ignoredEnvFiles(runner: GitRunner, dir: string): Promise<string[]> {
+  let candidates: string[]
+  try {
+    candidates = envFileCandidates(await readdir(dir))
+  } catch {
+    return []
+  }
+  if (candidates.length === 0) return []
+  const answer = await runner
+    .tryRun({ args: ['check-ignore', '--', ...candidates], cwd: dir, readOnly: true })
+    .catch(() => null)
+  const ignored = new Set((answer?.stdout ?? '').split('\n').map((line) => line.trim()))
+  return candidates.filter((name) => ignored.has(name))
 }
 
 /** What `detectRun` reads beyond the names: `package.json`'s scripts and the Makefile's text. */

@@ -1,7 +1,7 @@
 // The setup command read off a project's lockfile: offered on the project, checked per worktree,
 // and never run until someone presses Run.
 
-import { mkdir } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ErrorCode } from '../../shared/protocol'
@@ -100,5 +100,35 @@ describe('a setup command suggested from the lockfile', () => {
     expect(blank).toBeInstanceOf(GitServiceError)
     expect((blank as GitServiceError).code).toBe(ErrorCode.InvalidParams)
     expect(ran).toEqual(['npm ci'])
+  })
+})
+
+describe('ignored env files offered for copying', () => {
+  async function envRepo(): Promise<TempRepo> {
+    const repo = await npmRepo()
+    await repo.write('.gitignore', '.env\n')
+    await repo.commit('ignore env')
+    await repo.write('.env', 'SECRET=1\n')
+    return repo
+  }
+
+  it('ride on the project until copied paths are set, and then reach new worktrees', async () => {
+    const repo = await envRepo()
+    const service = newService(repo, [])
+    const project = await service.addProject({ path: repo.repoPath })
+    expect(project.suggestedCopies).toEqual(['.env'])
+
+    const set = await service.setProjectPaths({ projectId: project.id, copiedPaths: ['.env'] })
+    expect(set.suggestedCopies).toBeUndefined()
+    const worktree = await service.whenSettled((await service.createWorktree({ projectId: project.id, name: 'x' })).id)
+    expect(await readFile(path.join(worktree.path, '.env'), 'utf8')).toBe('SECRET=1\n')
+  })
+
+  it('are not offered when the repository file names its own', async () => {
+    const repo = await envRepo()
+    await repo.write('.teamree/project.json', '{"copiedPaths": [".env.local"]}')
+    await repo.commit('share copies')
+    const service = newService(repo, [])
+    expect((await service.addProject({ path: repo.repoPath })).suggestedCopies).toBeUndefined()
   })
 })

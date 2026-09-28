@@ -9,6 +9,7 @@ import type { PaneNode, Terminal } from '@shared/entities'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 
 const writes: Array<{ method: string; params: unknown }> = []
+let output = 'Error: test suite failed\r\nFAIL retry.test.ts\r\n'
 
 vi.mock('../terminal/TerminalView', () => ({
   TerminalView: ({ terminalId }: { terminalId: string }) => (
@@ -20,8 +21,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
     call: (method: string, params: unknown) => {
       writes.push({ method, params })
-      if (method === 'terminal.read')
-        return Promise.resolve({ data: 'Error: test suite failed\r\nFAIL retry.test.ts\r\n' })
+      if (method === 'terminal.read') return Promise.resolve({ data: output })
       return Promise.resolve({})
     },
     connection: { phase: 'ready' },
@@ -31,6 +31,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { PaneTree } = await import('./PaneTree')
+const { showPane } = await import('../terminal/shownPanes')
 const { paneStage } = await import('./PaneLifecycle')
 
 const terminal = (id: string, overrides: Partial<Terminal> = {}): Terminal => ({
@@ -150,6 +151,47 @@ describe('a failed pane', () => {
     const sheet = await screen.findByRole('dialog')
     expect(await within(sheet).findByText(/FAIL retry\.test\.ts/)).toBeTruthy()
     expect(writes.some((call) => call.method === 'terminal.read')).toBe(true)
+  })
+})
+
+describe('a command that was not found', () => {
+  afterEach(() => {
+    output = 'Error: test suite failed\r\nFAIL retry.test.ts\r\n'
+  })
+
+  it('names the missing tool on a Run pane that exited 127, with the fix', async () => {
+    output = '\u001b[1mzsh:1: command not found: pnpm\r\n'
+    mount(terminal('t1', { run: 'dev', running: false, exitCode: 127 }))
+    await act(async () => {})
+    expect(marker()).toBe('pnpm not found · 11:04')
+    expect(document.querySelector('.pane-end__hint')?.textContent).toBe('Install with: npm i -g pnpm')
+    expect(actions()).toEqual(['Run Again', 'Show Log', 'Close'])
+  })
+
+  it('says so on the setup pane, which stays a shell', () => {
+    vi.useFakeTimers()
+    // A fresh shell's screen: a few rows written, the rest of the grid blank under them.
+    const rows = ['% pnpm install --frozen-lockfile', 'zsh: command not found: pnpm', '% ', ...Array(21).fill('')]
+    const hide = showPane('t1', {
+      buffer: {
+        active: {
+          length: rows.length,
+          getLine: (row) => ({ isWrapped: false, translateToString: () => rows[row] ?? '' })
+        }
+      },
+      clear: () => {}
+    })
+    try {
+      mount(terminal('t1', { label: 'setup' }))
+      act(() => {
+        vi.advanceTimersByTime(1_000)
+      })
+      const card = screen.getByRole('group', { name: 'pnpm not found' })
+      expect(card.textContent).toContain('Install with: npm i -g pnpm')
+    } finally {
+      hide()
+      vi.useRealTimers()
+    }
   })
 })
 

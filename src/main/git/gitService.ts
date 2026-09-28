@@ -119,7 +119,7 @@ import { findWorktreeFiles, readWorktreeFiles } from './worktreeFiles'
 import { readIgnoredEntries, readWorktreeStatus, type IgnoredEntries } from './worktreeStatus'
 import { normalizePreparedPaths, prepareWorktree, type PreparedPaths } from './worktreePreparation'
 import { normalizeSetupCommand } from './worktreeSetup'
-import { checkRun, checkSetup } from './setupDetect'
+import { checkRun, checkSetup, ignoredEnvFiles } from './setupDetect'
 import type { RunPanes } from '../terminals/run-panes'
 import { runCommandOf } from '../../shared/runCommands'
 import {
@@ -302,11 +302,13 @@ export class GitService {
   #present(project: Project): Project {
     const read = this.#projectFiles.get(project.id)
     const suggest = project.setupCommand === undefined && read?.settings?.setupCommand === undefined
+    const suggestCopies = project.copiedPaths === undefined && read?.settings?.copiedPaths === undefined
     return {
       ...project,
       ...(read?.settings === undefined ? {} : { repository: read.settings }),
       ...(read?.problem === undefined ? {} : { repositoryProblem: read.problem }),
       ...(suggest && read?.suggestedSetup !== undefined ? { suggestedSetup: read.suggestedSetup } : {}),
+      ...(suggestCopies && read?.suggestedCopies !== undefined ? { suggestedCopies: read.suggestedCopies } : {}),
       ...(read?.detectedRun === undefined ? {} : { detectedRun: read.detectedRun }),
       ...(this.#fetches.has(project.id) ? { fetch: this.#fetches.get(project.id) } : {})
     }
@@ -324,7 +326,7 @@ export class GitService {
   async #refreshProjectFile(projectId: string): Promise<void> {
     const project = this.#store.getProject(projectId)
     if (!project) return
-    const read = await readCheckout(project.path)
+    const read = await readCheckout(this.#runner, project.path)
     const before = JSON.stringify(this.#projectFiles.get(projectId) ?? {})
     this.#projectFiles.set(projectId, read)
     if (JSON.stringify(read) === before || !this.#store.getProject(projectId)) return
@@ -351,7 +353,7 @@ export class GitService {
     }
     this.#store.putProject(project)
     // Before the announcement, so a project arrives with its repository's setup already applied.
-    this.#projectFiles.set(project.id, await readCheckout(project.path))
+    this.#projectFiles.set(project.id, await readCheckout(this.#runner, project.path))
     const presented = this.#present(project)
     this.events.emit({ type: 'project.added', project: presented })
     return presented
@@ -2346,13 +2348,19 @@ export class GitService {
   }
 }
 
-type CheckoutRead = ProjectFileRead & { suggestedSetup?: string; detectedRun?: RunCommands }
+type CheckoutRead = ProjectFileRead & { suggestedSetup?: string; suggestedCopies?: string[]; detectedRun?: RunCommands }
 
-async function readCheckout(root: string): Promise<CheckoutRead> {
-  const [file, check, run] = await Promise.all([readProjectFile(root), checkSetup(root), checkRun(root)])
+async function readCheckout(runner: GitRunner, root: string): Promise<CheckoutRead> {
+  const [file, check, run, envFiles] = await Promise.all([
+    readProjectFile(root),
+    checkSetup(root),
+    checkRun(root),
+    ignoredEnvFiles(runner, root)
+  ])
   return {
     ...file,
     ...(check.command === undefined ? {} : { suggestedSetup: check.command }),
+    ...(envFiles.length === 0 ? {} : { suggestedCopies: envFiles }),
     ...(Object.keys(run).length === 0 ? {} : { detectedRun: run })
   }
 }

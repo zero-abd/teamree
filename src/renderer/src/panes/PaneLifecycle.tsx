@@ -16,9 +16,12 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { shownScreen } from '../terminal/shownPanes'
 import { Button, type ButtonVariant } from '../ui/Button'
 import { StatusDot, type PaneState } from '../ui/StatusPill'
+import { missingTool, type MissingTool } from './missingTool'
 
 /** What a shell's ^C exit reads as: the person stopped it, nothing failed. */
 const INTERRUPTED = 130
+/** A shell's exit when the program it was asked to run is not on PATH. */
+const NOT_FOUND = 127
 
 /** The stage `terminal` is in; null for a live shell, which draws none. `seen`: it has printed. */
 export function paneStage(terminal: Terminal, seen: boolean): PaneState | null {
@@ -213,10 +216,17 @@ export type EndActions = {
 type EndAction = { label: string; run: () => void; tone: ButtonVariant }
 
 /** The end block's marker words: how it ended and when. */
-export function endMarker(terminal: Terminal, stage: 'ended' | 'failed' | 'restored'): string {
+export function endMarker(
+  terminal: Terminal,
+  stage: 'ended' | 'failed' | 'restored',
+  missing: MissingTool | null = null
+): string {
   const time = terminal.lastOutputAt > 0 ? markerTime(terminal.lastOutputAt) : null
   if (stage === 'restored') return time === null ? 'Restored' : `Restored · ${time}`
-  if (stage === 'failed') return [`Exited ${terminal.exitCode ?? ''}`.trim(), time].filter(Boolean).join(' · ')
+  if (stage === 'failed') {
+    const head = missing === null ? `Exited ${terminal.exitCode ?? ''}`.trim() : `${missing.tool} not found`
+    return [head, time].filter(Boolean).join(' · ')
+  }
   const stopped = terminal.run !== undefined && runState(terminal) === 'stopped'
   const head = [stopped ? 'Stopped' : 'Ended', time].filter(Boolean).join(' ')
   return terminal.exitCode === INTERRUPTED ? `${head} · ^C` : head
@@ -264,6 +274,7 @@ export function PaneEndBlock({
   actions: EndActions
 }): React.JSX.Element {
   const [log, setLog] = useState(false)
+  const missing = useMissingAfterExit(terminal, stage === 'failed' && terminal.exitCode === NOT_FOUND)
   const agent = terminal.agent !== undefined && terminal.run === undefined
   const label = agent ? `${harnessName(terminal.agent!)} ${stage}` : `${name} ${stage}`
   return (
@@ -273,7 +284,12 @@ export function PaneEndBlock({
       aria-label={label}
       onContextMenu={actions.onContextMenu}
     >
-      <div className="pane-marker">{endMarker(terminal, stage)}</div>
+      <div className="pane-marker">{endMarker(terminal, stage, missing)}</div>
+      {missing?.fix === undefined ? null : (
+        <p className="pane-end__hint">
+          Install with: <code>{missing.fix}</code>
+        </p>
+      )}
       <div className="pane-end__row">
         {endActions(terminal, stage, actions, () => setLog(true)).map((action) => (
           <Button key={action.label} variant={action.tone} size="sm" onClick={action.run}>
@@ -282,6 +298,64 @@ export function PaneEndBlock({
         ))}
       </div>
       {log ? <PaneLog terminal={terminal} name={name} onClose={() => setLog(false)} /> : null}
+    </div>
+  )
+}
+
+/** How much of a pane's output is read for the program it could not find. */
+const NOT_FOUND_TAIL_BYTES = 4 * 1024
+
+/** The program a pane that exited 127 could not find, read off its last output once. */
+function useMissingAfterExit(terminal: Terminal, notFound: boolean): MissingTool | null {
+  const [missing, setMissing] = useState<MissingTool | null>(null)
+  const id = terminal.id
+  useEffect(() => {
+    setMissing(null)
+    if (!notFound) return
+    let live = true
+    void runtimeClient
+      .call('terminal.read', { terminalId: id, tailBytes: NOT_FOUND_TAIL_BYTES })
+      .then((read) => live && setMissing(missingTool(plainText(read.data).split('\n'))))
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [id, notFound])
+  return missing
+}
+
+/** Rows the setup pane's check reads: the error and the prompt after it. */
+const SETUP_ROWS_READ = 3
+
+/** Over the setup pane, which stays a shell: the program its command could not find, while the screen says so. */
+export function SetupMissingTool({ terminal }: { terminal: Terminal }): React.JSX.Element | null {
+  const [missing, setMissing] = useState<MissingTool | null>(null)
+  const id = terminal.id
+  useEffect(() => {
+    const read = (): void => {
+      const rows = (shownScreen(id, SCREEN_ROWS_READ)?.rows ?? []).filter((row) => row.trim() !== '')
+      const next = missingTool(rows.slice(-SETUP_ROWS_READ))
+      setMissing((current) => (current?.tool === next?.tool ? current : next))
+    }
+    read()
+    const timer = setInterval(read, 1_000)
+    return () => clearInterval(timer)
+  }, [id])
+  if (missing === null) return null
+  const title = `${missing.tool} not found`
+  return (
+    <div className="pane-state pane-state--failed" role="group" aria-label={title}>
+      <span className="pane-state__dot">
+        <StatusDot state="failed" />
+      </span>
+      <span className="pane-state__body">
+        <span className="pane-state__title">{title}</span>
+        {missing.fix === undefined ? null : (
+          <span className="pane-state__meta">
+            Install with: <code>{missing.fix}</code>
+          </span>
+        )}
+      </span>
     </div>
   )
 }

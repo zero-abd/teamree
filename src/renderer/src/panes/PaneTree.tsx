@@ -14,7 +14,15 @@ import { TerminalView } from '../terminal/TerminalView'
 import { usePaneMenu } from '../workspace/paneMenu'
 import { GroupStrip } from '../workspace/TerminalTabs'
 import { FilePane } from './FilePane'
-import { PaneAsk, PaneEndBlock, PaneFoot, PaneStarting, paneStage, useSeenOutput } from './PaneLifecycle'
+import {
+  PaneAsk,
+  PaneEndBlock,
+  PaneFoot,
+  PaneStarting,
+  paneStage,
+  SetupMissingTool,
+  useSeenOutput
+} from './PaneLifecycle'
 import { groupTabs, shownOf, type PaneGroup } from './paneGroups'
 import { normalizeSizes } from './paneLayout'
 import { SplitFrame } from './SplitFrame'
@@ -201,6 +209,7 @@ function PaneLeaf({
         <PaneAsk terminal={terminal} onReview={() => onFocus(terminalId)} />
       ) : null}
       {stage === 'starting' && terminal !== undefined ? <PaneStarting terminal={terminal} /> : null}
+      {stage === null && terminal?.label === 'setup' ? <SetupMissingTool terminal={terminal} /> : null}
       <TerminalView
         terminalId={terminalId}
         focused={focused}
