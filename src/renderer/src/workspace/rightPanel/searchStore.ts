@@ -26,7 +26,10 @@ type SearchState = SearchForm & {
   summary: SearchSummary | null
   running: boolean
   failed: string | null
+  /** The hit row walked to or opened, by its row key; kept across the remount a jump to another task causes. */
+  selected: string | null
   setForm: (patch: Partial<SearchForm>) => void
+  select: (key: string | null) => void
   run: (target: { worktreeId: string; projectId: string }) => void
   cancel: () => void
 }
@@ -66,8 +69,10 @@ export const useSearchStore = create<SearchState>((set, get) => ({
   summary: null,
   running: false,
   failed: null,
+  selected: null,
 
   setForm: (patch) => set(patch),
+  select: (selected) => set({ selected }),
 
   run: (target) => {
     get().cancel()
@@ -78,7 +83,14 @@ export const useSearchStore = create<SearchState>((set, get) => ({
     }
     const mine = ++generation
     const include = includeGlobs(form.include)
-    set({ answered: searchSignature(form, target), files: [], summary: null, running: true, failed: null })
+    set({
+      answered: searchSignature(form, target),
+      files: [],
+      summary: null,
+      running: true,
+      failed: null,
+      selected: null
+    })
     runtimeClient
       .searchContents(
         {

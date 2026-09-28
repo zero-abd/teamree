@@ -26,3 +26,27 @@ describe('languageFor', () => {
     expect(support?.language.name).toBe('typescript')
   })
 })
+
+describe('markdown', () => {
+  const nodes = async (text: string): Promise<string[]> => {
+    const support = await loadLanguage('guide.md')
+    const names: string[] = []
+    support!.language.parser.parse(text).iterate({ enter: (node) => void names.push(node.name) })
+    return names
+  }
+
+  it('reads a leading YAML block as front matter, not a rule and a heading', async () => {
+    const names = await nodes('---\ntitle: Shop guide\ntags: [shop, docs]\n---\n\n# Shop guide\n')
+    expect(names.slice(0, 2)).toEqual(['Document', 'FrontMatter'])
+    expect(names.filter((name) => /Setext|HorizontalRule|Link/.test(name))).toEqual([])
+    expect(names).toContain('ATXHeading1')
+    expect(await nodes('---\ntitle: x\n...\n')).toContain('FrontMatter')
+  })
+
+  it('leaves a rule that does not open the file, or opens it before prose, as a rule', async () => {
+    expect(await nodes('text\n\n---\ntitle: x\n---\n')).not.toContain('FrontMatter')
+    const rule = await nodes('---\n\nSome prose.\n')
+    expect(rule).not.toContain('FrontMatter')
+    expect(rule).toContain('HorizontalRule')
+  })
+})

@@ -351,4 +351,27 @@ describe('a pane with links in it', () => {
     expect(at(28)).toEqual({ kind: 'path', worktreeId: 'w1', path: 'src/math.ts', absolute: '/w/src/math.ts', line: 7 })
     expect(at(1)).toBeNull()
   })
+
+  it('finds a path under a right-click the pointer never hovered, or rested on past its listing', async () => {
+    let now = 0
+    const view = pane(undefined, {
+      files: fileListings(
+        async (_worktreeId, dir) => new Set(dir === 'src' ? ['math.ts'] : []),
+        () => now
+      )
+    })
+    await view.write('see https://example.com/x src/math.ts:7 src/nope.ts\r\n')
+    const event = (col: number, row = 0): MouseEvent =>
+      new MouseEvent('contextmenu', { clientX: col * CELL.width + 5, clientY: row * CELL.height + 10 })
+    const math = { kind: 'path', worktreeId: 'w1', path: 'src/math.ts', absolute: '/w/src/math.ts', line: 7 }
+    expect(view.layer.at(event(28))).toBeNull()
+    expect(await view.layer.resolveAt(event(28))).toEqual(math)
+    await view.links(1)
+    now = 60_000
+    expect(view.layer.at(event(28))).toBeNull()
+    expect(await view.layer.resolveAt(event(28))).toEqual(math)
+    expect(await view.layer.resolveAt(event(6))).toEqual({ kind: 'link', uri: 'https://example.com/x' })
+    expect(await view.layer.resolveAt(event(4, 1))).toBeNull()
+    expect(await view.layer.resolveAt(event(1))).toBeNull()
+  })
 })

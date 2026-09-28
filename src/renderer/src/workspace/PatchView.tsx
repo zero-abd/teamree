@@ -6,7 +6,9 @@ import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } fro
 import { parsePatch, type PatchFile, type PatchHunk, type PatchLine } from '@shared/patch'
 import { syntaxLanguage, tokenizeLine, type SyntaxLanguage, type SyntaxToken } from '@shared/syntax'
 import { CommentComposer } from '../review/CommentComposer'
+import type { ReviewComment } from '../review/reviewComments'
 import { hunkLabel } from '../review/reviewModel'
+import { useReviewStore } from '../review/reviewStore'
 import type { DiffLayout } from '../state/preferences'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { changedSpans, sourceHunk, withoutWhitespace, type Spans } from './lineDiff'
@@ -117,6 +119,8 @@ export function PatchView({
   const files = useMemo(() => (hideWhitespace ? withoutWhitespace(parsed) : parsed), [parsed, hideWhitespace])
   const opening = useMemo(() => linesOnOpen(files), [files])
   const headless = named && files.length === 1
+  const batch = useReviewStore((state) => (commentsIn === undefined ? undefined : state.batch[commentsIn]))
+  const pending = useMemo(() => pendingLines(files, batch), [files, batch])
   const [draft, setDraft] = useState<Draft | null>(null)
   const root = useRef<HTMLDivElement | null>(null)
   // Stable, so a hunk's memoised rows redraw only when the draft is theirs.
@@ -183,6 +187,7 @@ export function PatchView({
                 startLines={opening[index]?.[at] ?? 0}
                 revealLine={reveal?.file === index && reveal.hunk === at ? reveal.line : null}
                 busy={busy}
+                pending={pending.get(`${index}:${at}`)}
                 {...(!commenting
                   ? {}
                   : {
@@ -269,6 +274,29 @@ function changedIn(hunk: PatchHunk): number {
   let changed = 0
   for (const line of hunk.lines) if (line.kind !== 'context') changed += 1
   return changed
+}
+
+/** By `file:hunk`, the lines a comment waiting in the batch quotes. */
+function pendingLines(
+  files: readonly PatchFile[],
+  batch: readonly ReviewComment[] | undefined
+): Map<string, ReadonlySet<number>> {
+  const found = new Map<string, Set<number>>()
+  files.forEach((file, index) => {
+    const quoted = (batch ?? []).flatMap((comment) => (comment.path === file.path ? comment.lines : []))
+    if (quoted.length === 0) return
+    file.hunks.forEach((hunk, at) =>
+      hunk.lines.forEach((line, row) => {
+        const same = quoted.some(
+          (q) => q.kind === line.kind && q.oldNumber === line.oldNumber && q.newNumber === line.newNumber
+        )
+        if (!same) return
+        const place = `${index}:${at}`
+        found.set(place, (found.get(place) ?? new Set<number>()).add(row))
+      })
+    )
+  })
+  return found
 }
 
 /** `c`, or ⌘⇧A, with lines of this patch selected opens a comment on them. */
@@ -359,7 +387,8 @@ function HunkView({
   onDiscard,
   draft = null,
   onPick,
-  composer = null
+  composer = null,
+  pending
 }: LineComments & {
   hunk: PatchHunk
   /** `file:hunk`, which find paints by. */
@@ -424,6 +453,7 @@ function HunkView({
           draft={draft}
           {...(onPick === undefined ? {} : { onPick })}
           composer={composer}
+          pending={pending}
         />
       )}
     </details>
@@ -444,7 +474,8 @@ const HunkLines = memo(function HunkLines({
   place,
   draft = null,
   onPick,
-  composer = null
+  composer = null,
+  pending
 }: LineComments & {
   hunk: PatchHunk
   language: SyntaxLanguage | null
@@ -493,6 +524,7 @@ const HunkLines = memo(function HunkLines({
             draft={draft}
             {...(onPlus === undefined ? {} : { onPlus })}
             composer={composer}
+            pending={pending}
           />
         ) : (
           <SplitRows
@@ -506,6 +538,7 @@ const HunkLines = memo(function HunkLines({
             draft={draft}
             {...(onPlus === undefined ? {} : { onPlus })}
             composer={composer}
+            pending={pending}
           />
         )
       )}
@@ -551,7 +584,8 @@ const InlineRows = memo(function InlineRows({
   words,
   draft = null,
   onPlus,
-  composer = null
+  composer = null,
+  pending
 }: LineComments & {
   lines: readonly PatchLine[]
   from: number
@@ -566,8 +600,13 @@ const InlineRows = memo(function InlineRows({
         return (
           // Two lines can be byte-identical and still be different lines.
           <Fragment key={offset}>
-            <div className={`patch__row patch__row--${line.kind}${rowPicked(draft, index)}`}>
+            <div
+              className={`patch__row patch__row--${line.kind}${rowPicked(draft, index)}${
+                pending?.has(index) ? ' patch__row--pending' : ''
+              }`}
+            >
               <Plus line={line} index={index} onPlus={onPlus} />
+              {pending?.has(index) ? <PendingMark /> : null}
               <span className="patch__num">{line.oldNumber ?? ''}</span>
               <span className="patch__num">{line.newNumber ?? ''}</span>
               <Text line={line} index={index} language={language} spans={words.get(line)} />
@@ -580,12 +619,17 @@ const InlineRows = memo(function InlineRows({
   )
 })
 
-/** What a hunk's rows need to offer a comment: the lines picked, the `+`, and the composer under them. */
+/** What a hunk's rows need to offer a comment: the lines picked, the `+`, the composer under them, and batched lines. */
 type LineComments = {
   draft?: Draft | null
   onPlus?: (line: number, extend: boolean) => void
   onPick?: (place: string, line: number, extend: boolean) => void
   composer?: React.ReactNode
+  pending?: ReadonlySet<number> | undefined
+}
+
+function PendingMark(): React.JSX.Element {
+  return <span className="status-dot patch__pending" role="img" aria-label="Comment in batch" />
 }
 
 function rowPicked(draft: Draft | null, index: number): string {
@@ -625,7 +669,8 @@ const SplitRows = memo(function SplitRows({
   words,
   draft = null,
   onPlus,
-  composer = null
+  composer = null,
+  pending
 }: LineComments & {
   rows: readonly PatchRow[]
   lineIndex: ReadonlyMap<PatchLine, number>
@@ -642,10 +687,16 @@ const SplitRows = memo(function SplitRows({
         // The later of the two, so a comment on a changed pair takes both and the composer lands under it.
         const index = Math.max(oldIndex, newIndex)
         const last = draft !== null && (draft.to === oldIndex || draft.to === newIndex)
+        const batched = pending !== undefined && (pending.has(oldIndex) || pending.has(newIndex))
         return (
           <Fragment key={offset}>
-            <div className={`patch__row patch__row--split${rowPicked(draft, index) || rowPicked(draft, oldIndex)}`}>
+            <div
+              className={`patch__row patch__row--split${rowPicked(draft, index) || rowPicked(draft, oldIndex)}${
+                batched ? ' patch__row--pending' : ''
+              }`}
+            >
               <Plus line={row.new ?? row.old} index={index} onPlus={onPlus} />
+              {batched ? <PendingMark /> : null}
               <Side line={row.old} index={oldIndex} side="old" language={language} words={words} />
               <Side line={row.new} index={newIndex} side="new" language={language} words={words} />
             </div>

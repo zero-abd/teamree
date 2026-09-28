@@ -330,13 +330,15 @@ export function TerminalView({
     event.preventDefault()
     if (emulator === null) return
     const { term } = emulator
-    const pointed = emulator.links.at(event.nativeEvent)
-    if (!rightClickOpensMenu(event, reportsMouse(term) && pointed === null, modifierRef.current)) return
-    const entries = terminalMenuEntries(
-      { readOnly: false, hasSelection: term.hasSelection(), pointed },
-      modifierRef.current
-    )
-    setMenu({ anchor: menuAnchor(event), entries, pointed })
+    const overLink = emulator.links.at(event.nativeEvent) !== null
+    if (!rightClickOpensMenu(event, reportsMouse(term) && !overLink, modifierRef.current)) return
+    const anchor = menuAnchor(event)
+    const hasSelection = term.hasSelection()
+    // A path's folder may not be read yet (never hovered, or hovered too long ago); the menu waits for it.
+    void emulator.links.resolveAt(event.nativeEvent).then((pointed) => {
+      const entries = terminalMenuEntries({ readOnly: false, hasSelection, pointed }, modifierRef.current)
+      setMenu({ anchor, entries, pointed })
+    })
   }
 
   const closeMenu = useCallback(() => {

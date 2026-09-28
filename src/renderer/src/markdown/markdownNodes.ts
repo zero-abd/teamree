@@ -23,16 +23,20 @@ export const HtmlBlock = Node.create({
   }
 })
 
-/** Top-level `key: value` rows of a YAML block; nested lines join their key's value. */
-export function frontMatterRows(yaml: string): { key: string; value: string }[] {
-  const rows: { key: string; value: string }[] = []
+/** Top-level `key: value` rows of a YAML block; nested lines join their key's value, which ends at `end`. */
+export function frontMatterRows(yaml: string): { key: string; value: string; end: number }[] {
+  const rows: { key: string; value: string; end: number }[] = []
+  let at = 0
   for (const line of yaml.split('\n')) {
     const key = /^([^\s#-][^:]*):(?:[ \t]+(.*))?$/.exec(line)
     const last = rows[rows.length - 1]
-    if (key !== null) rows.push({ key: (key[1] ?? '').trim(), value: (key[2] ?? '').trim() })
+    const end = at + line.trimEnd().length
+    at += line.length + 1
+    if (key !== null) rows.push({ key: (key[1] ?? '').trim(), value: (key[2] ?? '').trim(), end })
     else if (last !== undefined && line.trim().length > 0 && !line.trim().startsWith('#')) {
       const item = line.trim().replace(/^-[ \t]+/, '')
       last.value = last.value.length > 0 ? `${last.value}, ${item}` : item
+      last.end = end
     }
   }
   return rows
@@ -72,11 +76,12 @@ export const FrontMatter = Node.create({
         const yaml = String(current.attrs.yaml)
         const found = frontMatterRows(yaml)
         rows.replaceChildren(
-          ...found.flatMap(({ key, value }) => {
+          ...found.flatMap(({ key, value, end }) => {
             const term = document.createElement('dt')
             term.textContent = key
             const detail = document.createElement('dd')
             detail.textContent = value
+            term.dataset.end = detail.dataset.end = String(end)
             return [term, detail]
           })
         )
@@ -101,6 +106,10 @@ export const FrontMatter = Node.create({
         source.rows = Math.max(2, source.value.split('\n').length)
         editing(true)
         source.focus()
+        const end = Number(
+          (event.target as HTMLElement).closest<HTMLElement>('[data-end]')?.dataset.end ?? source.value.length
+        )
+        source.setSelectionRange(end, end)
       })
       source.addEventListener('blur', commit)
       source.addEventListener('keydown', (event) => {

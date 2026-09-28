@@ -19,7 +19,7 @@ type FakeTerm = {
 const terms = vi.hoisted(() => [] as unknown[])
 const fakeTerms = terms as FakeTerm[]
 /** What the pane's link layer finds under the pointer; its finding is `paneLinks.test.ts`'s business. */
-const underPointer = vi.hoisted(() => ({ link: null as unknown }))
+const underPointer = vi.hoisted(() => ({ link: null as unknown, found: null as unknown }))
 
 vi.mock('@xterm/xterm', () => {
   class Terminal {
@@ -107,7 +107,11 @@ vi.mock('@xterm/addon-fit', () => ({
 }))
 vi.mock('./paneLinks', async (actual) => ({
   ...(await actual<typeof import('./paneLinks')>()),
-  paneLinks: () => ({ at: () => underPointer.link, dispose: () => {} })
+  paneLinks: () => ({
+    at: () => underPointer.link,
+    resolveAt: async () => underPointer.link ?? underPointer.found,
+    dispose: () => {}
+  })
 }))
 vi.mock('@xterm/addon-search', () => ({
   SearchAddon: class {
@@ -165,8 +169,9 @@ async function mount(): Promise<FakeTerm> {
 
 const surface = (): HTMLElement => document.querySelector('.terminal-surface') as HTMLElement
 
-function rightClick(init: MouseEventInit = {}): void {
+async function rightClick(init: MouseEventInit = {}): Promise<void> {
   fireEvent.contextMenu(surface(), { clientX: 40, clientY: 50, button: 2, ...init })
+  await act(async () => {})
 }
 
 const labels = (): string[] =>
@@ -177,6 +182,7 @@ const labels = (): string[] =>
 beforeEach(() => {
   fakeTerms.length = 0
   underPointer.link = null
+  underPointer.found = null
 })
 
 afterEach(async () => {
@@ -186,7 +192,7 @@ afterEach(async () => {
 
 it('opens at the pointer, with Copy off while nothing is selected', async () => {
   await mount()
-  rightClick()
+  await rightClick()
   const copy = screen.getByRole('menuitem', { name: /^Copy/ })
   expect(copy.getAttribute('aria-disabled')).toBe('true')
   expect(labels()).toContain('Split Right⌘D')
@@ -199,7 +205,7 @@ it('opens at the pointer, with Copy off while nothing is selected', async () => 
 it('turns Copy on over a selection and leaves the selection alone', async () => {
   const term = await mount()
   term.selection = 'kept'
-  rightClick()
+  await rightClick()
   expect(screen.getByRole('menuitem', { name: /^Copy/ }).getAttribute('aria-disabled')).toBeNull()
   expect(term.selection).toBe('kept')
 })
@@ -207,17 +213,17 @@ it('turns Copy on over a selection and leaves the selection alone', async () => 
 it('leads with the link the pointer is on', async () => {
   await mount()
   underPointer.link = { kind: 'link', uri: 'https://example.com/pr/1' }
-  rightClick()
+  await rightClick()
   expect(labels().slice(0, 2)).toEqual(['Open Link', 'Copy Link'])
   fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
   underPointer.link = null
-  rightClick()
+  await rightClick()
   expect(labels()[0]).toMatch(/^Copy/)
 })
 
 it('pastes through the emulator, which adds the program’s bracketed-paste markers', async () => {
   const term = await mount()
-  rightClick()
+  await rightClick()
   fireEvent.click(screen.getByRole('menuitem', { name: /^Paste/ }))
   await vi.waitFor(() => expect(term.pasted).toEqual(['echo pasted']))
   expect(screen.queryByRole('menu')).toBeNull()
@@ -226,12 +232,19 @@ it('pastes through the emulator, which adds the program’s bracketed-paste mark
 it('leaves the right-click to a program reporting the mouse, unless ⌥ is held or it is on a link', async () => {
   const term = await mount()
   term.mouseTrackingMode = 'vt200'
-  rightClick()
+  await rightClick()
   expect(screen.queryByRole('menu')).toBeNull()
-  rightClick({ altKey: true })
+  await rightClick({ altKey: true })
   expect(screen.getByRole('menu')).toBeTruthy()
   fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
   underPointer.link = { kind: 'path', worktreeId: 'w1', path: 'src/a.ts', absolute: '/w/src/a.ts' }
-  rightClick()
+  await rightClick()
+  expect(labels().slice(0, 3)).toEqual(['Open File', 'Copy Path', 'Reveal in Finder'])
+})
+
+it('offers the file under the pointer once its folder is read, hovered or not', async () => {
+  await mount()
+  underPointer.found = { kind: 'path', worktreeId: 'w1', path: 'src/a.ts', absolute: '/w/src/a.ts', line: 3 }
+  await rightClick()
   expect(labels().slice(0, 3)).toEqual(['Open File', 'Copy Path', 'Reveal in Finder'])
 })

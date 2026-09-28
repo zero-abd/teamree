@@ -402,6 +402,45 @@ describe('front matter and the source', () => {
     expect(document.querySelector('.md-props dd')?.textContent).toBe('Round trips')
   })
 
+  it('puts the caret at the end of the value of the row clicked', async () => {
+    mountPost()
+    await page()
+    const yaml = (): HTMLTextAreaElement => document.querySelector<HTMLTextAreaElement>('.md-props textarea')!
+    const value = (row: number): HTMLElement => document.querySelectorAll<HTMLElement>('.md-props dd')[row]!
+    act(() => void fireEvent.mouseDown(value(0)))
+    expect(document.activeElement).toBe(yaml())
+    expect([yaml().selectionStart, yaml().selectionEnd]).toEqual([
+      'title: Round trip'.length,
+      'title: Round trip'.length
+    ])
+    act(() => void fireEvent.keyDown(yaml(), { key: 'Escape' }))
+
+    act(() => void fireEvent.mouseDown(document.querySelectorAll('.md-props dt')[0]!))
+    expect(yaml().selectionStart).toBe('title: Round trip'.length)
+    act(() => void fireEvent.keyDown(yaml(), { key: 'Escape' }))
+
+    act(() => void fireEvent.mouseDown(value(1)))
+    expect(yaml().selectionStart).toBe('title: Round trip\ntags:\n  - a\n  - b'.length)
+  })
+
+  it('draws the front matter under Source as a muted block, not a heading', async () => {
+    mountPost()
+    await page()
+    act(() => button('Source').click())
+    await source()
+    await waitFor(() => expect(document.querySelectorAll('.cm-line.cm-frontMatter')).toHaveLength(6))
+    const lines = [...document.querySelectorAll('.cm-line')]
+    expect(lines.slice(0, 7).map((line) => line.classList.contains('cm-frontMatter'))).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ])
+  })
+
   it('shows the file as written under Source, saves an edit there byte for byte, and reads it back on Page', async () => {
     mountPost()
     await page()

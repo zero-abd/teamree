@@ -26,13 +26,21 @@ export function RightPanel(): React.JSX.Element | null {
     state.activeWorktreeId ? state.statuses[state.activeWorktreeId] : undefined
   )
   const showRightPanelTab = useWorkspaceStore((state) => state.showRightPanelTab)
+  const openSearch = useWorkspaceStore((state) => state.openSearch)
   const toggleRightPanel = useWorkspaceStore((state) => state.toggleRightPanel)
   const setRightPanelWidth = useWorkspaceStore((state) => state.setRightPanelWidth)
 
   if (!worktree) return null
 
   const rail = (
-    <RightRail open={open} tab={tab} status={status} onPick={showRightPanelTab} onToggle={toggleRightPanel} />
+    <RightRail
+      open={open}
+      tab={tab}
+      status={status}
+      // Search is picked to type in, so its field takes the caret.
+      onPick={(picked) => (picked === 'search' ? openSearch() : showRightPanelTab(picked))}
+      onToggle={toggleRightPanel}
+    />
   )
 
   // One aside open and closed, so its width slides between the rail's and the dragged one.
