@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-// A worktree's setup questions ride in the status rail, so the panes never move or hide under them.
+// A worktree's setup questions sit in a slim bar over its panes, not in the status rail, which holds no buttons.
 
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -49,6 +49,7 @@ describe('the open worktree’s setup questions', () => {
   it('asks each one on its own', () => {
     render(<WorktreeAsks />)
     expect(screen.getByRole('region', { name: 'Setup' }).textContent).toContain('npm ci')
+    expect(screen.getByRole('region', { name: 'Setup' }).parentElement?.className).toBe('setup-bar')
     expect(screen.getByRole('region', { name: 'Run test' }).textContent).toContain('make check')
   })
 

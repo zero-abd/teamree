@@ -125,10 +125,8 @@ export type PtySessionInit = {
    * buffer so no byte of it can be mistaken for one this session produced.
    */
   restoredRecord?: RecordedScrollback
-  /** What the mark under that record says is starting below it; absent means "a new shell". */
+  /** What the marker under that record says starts below it; absent means the pane was restored. */
   recordStartsBelow?: string
-  /** The record is shown without its marks: an agent's pane run again says nothing about itself. */
-  recordBare?: boolean
   /**
    * A line to put in the pane before anything this session prints. Written into
    * the output, not emitted: nobody is subscribed at the moment a pane starts.
@@ -474,9 +472,7 @@ export class PtySession {
   read(tailBytes?: number): string {
     const live = this.scrollback.tail(tailBytes)
     if (this.record === undefined || this.recordHeld) return live
-    const framed = this.init.recordBare
-      ? endedLine(this.record.text)
-      : replayableRecord(this.record, this.resumeFailed ? FAILED_RESUME_BELOW : this.init.recordStartsBelow)
+    const framed = replayableRecord(this.record, this.resumeFailed ? FAILED_RESUME_BELOW : this.init.recordStartsBelow)
     if (tailBytes === undefined) return `${framed}${live}`
 
     // The live output is the newer half; the record only supplies what is left over.
@@ -763,7 +759,7 @@ export class PtySession {
     // Before the note, which says which of the two things happened.
     const restarted = this.restartAgent()
 
-    const note = failedResumeMark(exitCode, this.record !== undefined, restarted)
+    const note = failedResumeMark(exitCode, restarted)
     // Appended as well as emitted: a subscriber arriving after the exit reads the pane.
     this.emit({ type: 'data', data: note, end: this.append(note) })
 

@@ -125,8 +125,7 @@ describe('base.css', () => {
     for (const [sheet, selector] of [
       ['sidebar.css', '.worktree__tag'],
       ['sidebar.css', '.worktree__merge'],
-      ['panes.css', '.pane__exit'],
-      ['panes.css', '.pane__restored--agent']
+      ['panes.css', '.pane__exit']
     ] as const) {
       const rule = ruleFor(sheet, selector)
       expect(declarationOf(rule, 'border-radius'), selector).toBeUndefined()

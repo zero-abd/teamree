@@ -6,19 +6,15 @@
 import { createContext, useContext, useEffect, useRef } from 'react'
 import type { PaneNode, Terminal } from '@shared/entities'
 import { fileColumnIn, fileTabName, isFileColumn, isFileLeaf, type FileLeaf as FileLeafNode } from '@shared/filePane'
-import { freshAgentLabel } from '@shared/paneRestore'
 import { minExtent, type Box } from '@shared/paneRoom'
-import { runState } from '@shared/runCommands'
-import { formatChord, type PlatformModifier } from '../keyboard/platformModifier'
-import { AgentGlyph } from '../agents/glyphs'
-import { harnessName } from '../agents/harnesses'
+import type { PlatformModifier } from '../keyboard/platformModifier'
 import { paneNamesById } from '../sidebar/agentRows'
 import type { WorktreeNameSource } from '../sidebar/worktreeDisplay'
 import { TerminalView } from '../terminal/TerminalView'
 import { usePaneMenu } from '../workspace/paneMenu'
-import { RESUME_CONVERSATION } from '../workspace/startMenu'
 import { GroupStrip } from '../workspace/TerminalTabs'
 import { FilePane } from './FilePane'
+import { PaneAsk, PaneEndBlock, PaneFoot, PaneStarting, paneStage, useSeenOutput } from './PaneLifecycle'
 import { groupTabs, shownOf, type PaneGroup } from './paneGroups'
 import { normalizeSizes } from './paneLayout'
 import { SplitFrame } from './SplitFrame'
@@ -185,70 +181,26 @@ function PaneLeaf({
   const menu = usePaneMenu(modifier)
   const terminal = terminals[terminalId]
   const focused = focusedTerminalId === terminalId
-  // A dead shell keeps its scrollback, so without this it looks like one at a prompt.
-  const exited = terminal !== undefined && !terminal.running
-  // Never started this launch: the badge says so, and its exit code means nothing.
-  const stopped = terminal?.restored === 'stopped'
-  // A run ended by Stop or the quit's hang-up: its signal code is not a result.
-  const runStopped = exited && terminal.run !== undefined && runState(terminal) === 'stopped'
-  // An agent that ended this launch: the end card says so and offers its conversation back.
-  const endedAgent = exited && !stopped && terminal.agent !== undefined && terminal.run === undefined
+  const seen = useSeenOutput(terminal)
+  const stage = terminal === undefined ? null : paneStage(terminal, seen)
+  const ended = stage === 'ended' || stage === 'failed' || stage === 'restored'
   // One name per pane, shared by strip, region, menu and close question.
   const name = names?.[terminalId] ?? terminal?.title ?? 'terminal'
-
-  const status = (
-    <>
-      {exited && !stopped ? (
-        runStopped ? (
-          <span className="chip pane__exit" title={`exited ${terminal.exitCode}`}>
-            stopped
-          </span>
-        ) : (
-          <span className="chip pane__exit">
-            exited{terminal?.exitCode === undefined ? '' : ` ${terminal.exitCode}`}
-          </span>
-        )
-      ) : null}
-      {/* Beside the badge that says the pane is dead, because the next thing anybody does about a
-          dead pane is this; the pane menu's word for an agent or a Run pane, since that is not a new shell. */}
-      {exited && stopped && onResumeConversation !== undefined ? (
-        <button type="button" className="pane__again" onClick={() => onResumeConversation(terminalId)}>
-          {RESUME_CONVERSATION}
-        </button>
-      ) : null}
-      {exited ? (
-        <button
-          type="button"
-          className="pane__again"
-          onClick={() => (stopped ? onRelaunch(terminalId, { fresh: true }) : onRelaunch(terminalId))}
-        >
-          {stopped
-            ? 'Start Fresh'
-            : terminal?.agent === undefined && terminal?.run === undefined
-              ? 'New Shell'
-              : 'Run Again'}
-        </button>
-      ) : null}
-      {terminal?.restored === undefined ? null : (
-        <span className={`chip pane__restored pane__restored--${terminal.restored}`} title={restoredTitle(terminal)}>
-          {restoredBadge(terminal)}
-        </span>
-      )}
-    </>
-  )
+  const primary = (): void => {
+    if (stage === 'restored' && onResumeConversation !== undefined) onResumeConversation(terminalId)
+    else onRelaunch(terminalId)
+  }
 
   return (
     <section
       className={`pane pane--terminal${focused ? ' pane--focused' : ''}`}
       aria-label={name}
-      onKeyDownCapture={endedAgent ? (event) => endedKeys(event, () => onRelaunch(terminalId)) : undefined}
+      onKeyDownCapture={ended ? (event) => endedKeys(event, primary) : undefined}
     >
-      {/* The tab is its name, dot and close; what is left to say is how it ended or came back. */}
-      {!endedAgent && (exited || terminal?.restored !== undefined) ? (
-        <div className="pane__notice" onContextMenu={(event) => menu.onContextMenu(terminalId, name, event)}>
-          {status}
-        </div>
+      {stage === 'asking' && terminal !== undefined ? (
+        <PaneAsk terminal={terminal} onReview={() => onFocus(terminalId)} />
       ) : null}
+      {stage === 'starting' && terminal !== undefined ? <PaneStarting terminal={terminal} /> : null}
       <TerminalView
         terminalId={terminalId}
         focused={focused}
@@ -258,15 +210,20 @@ function PaneLeaf({
         searchToken={searchToken}
         onCloseSearch={onCloseSearch}
       />
-      {endedAgent ? (
-        <EndedAgent
-          agent={terminal.agent!}
-          exitCode={terminal.exitCode}
-          modifier={modifier}
-          onResume={() => onRelaunch(terminalId)}
-          onNewSession={() => onRelaunch(terminalId, { fresh: true })}
-          onClose={() => onClose(terminalId)}
-          onContextMenu={(event) => menu.onContextMenu(terminalId, name, event)}
+      {terminal !== undefined && stage !== null && !ended ? <PaneFoot terminal={terminal} stage={stage} /> : null}
+      {terminal !== undefined && ended ? (
+        <PaneEndBlock
+          terminal={terminal}
+          name={name}
+          stage={stage}
+          actions={{
+            onRelaunch: (options) => (options === undefined ? onRelaunch(terminalId) : onRelaunch(terminalId, options)),
+            ...(onResumeConversation === undefined
+              ? {}
+              : { onResumeConversation: () => onResumeConversation(terminalId) }),
+            onClose: () => onClose(terminalId),
+            onContextMenu: (event) => menu.onContextMenu(terminalId, name, event)
+          }}
         />
       ) : null}
       {menu.menu}
@@ -274,92 +231,20 @@ function PaneLeaf({
   )
 }
 
-/**
- * An agent that ended: what it was, and its conversation back, a new one, or the pane gone.
- * Resume is first, so Tab from the dead terminal lands on it.
- */
-function EndedAgent({
-  agent,
-  exitCode,
-  modifier,
-  onResume,
-  onNewSession,
-  onClose,
-  onContextMenu
-}: {
-  agent: NonNullable<Terminal['agent']>
-  exitCode: number | undefined
-  modifier: PlatformModifier
-  onResume: () => void
-  onNewSession: () => void
-  onClose: () => void
-  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void
-}): React.JSX.Element {
-  const title = `${harnessName(agent)} ended`
-  return (
-    <div className="pane-ended" role="group" aria-label={title} onContextMenu={onContextMenu}>
-      <AgentGlyph kind={agent} decorative />
-      <span className="pane-ended__title">{title}</span>
-      {exitCode === undefined || exitCode === 0 ? null : <span className="pane-ended__code">exit {exitCode}</span>}
-      <span className="pane-ended__actions">
-        <button type="button" className="button button--primary button--small" onClick={onResume}>
-          Resume
-          <kbd className="button__kbd" aria-hidden="true">
-            {formatChord({ key: 'Enter', bare: true }, modifier)}
-          </kbd>
-        </button>
-        <button type="button" className="button button--ghost button--small" onClick={onNewSession}>
-          New Session
-        </button>
-        <button type="button" className="button button--ghost button--small" onClick={onClose}>
-          Close
-        </button>
-      </span>
-    </div>
-  )
-}
-
-/** In an ended agent's dead terminal, Enter resumes and Tab goes to the card; the find bar and buttons keep theirs. */
-function endedKeys(event: React.KeyboardEvent<HTMLElement>, resume: () => void): void {
+/** In a dead pane's terminal, Enter takes the end block's first action and Tab goes to it; buttons keep theirs. */
+function endedKeys(event: React.KeyboardEvent<HTMLElement>, primary: () => void): void {
   if ((event.target as HTMLElement).closest('.xterm') === null) return
   if (event.metaKey || event.ctrlKey || event.altKey) return
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     event.stopPropagation()
-    resume()
+    primary()
   } else if (event.key === 'Tab' && !event.shiftKey) {
-    const first = event.currentTarget.querySelector<HTMLButtonElement>('.pane-ended button')
+    const first = event.currentTarget.querySelector<HTMLButtonElement>('.pane-end button')
     if (first === null) return
     event.preventDefault()
     event.stopPropagation()
     first.focus()
-  }
-}
-
-/** The badge, in the scrollback banner's words; `restarted` is an agent started fresh, not a shell. */
-function restoredBadge(terminal: Terminal): string {
-  switch (terminal.restored) {
-    case 'agent':
-      return 'resumed'
-    case 'restarted':
-      return freshAgentLabel(terminal.agent ?? 'agent')
-    case 'stopped':
-      return 'stopped'
-    default:
-      return 'new shell'
-  }
-}
-
-function restoredTitle(terminal: Terminal): string {
-  switch (terminal.restored) {
-    case 'agent':
-      return 'Restored · session resumed'
-    case 'restarted':
-      return `Restored · nothing to resume, ${freshAgentLabel(terminal.agent ?? 'agent')} running`
-    case 'stopped':
-      return 'Restored · agent not started, task not re-sent'
-    default:
-      return 'Restored · new shell, previous process gone'
   }
 }
 

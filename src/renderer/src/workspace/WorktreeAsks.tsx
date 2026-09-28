@@ -1,5 +1,5 @@
-// The open worktree's setup questions, in the status rail: a row over the panes refit them, and a
-// floating card covered the prompt line.
+// The open worktree's setup questions, in a slim bar over its panes: they carry buttons, and the status
+// rail carries none. A floating card covered the prompt line.
 
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { SetupAsk } from './SetupAsk'
@@ -17,7 +17,7 @@ export function WorktreeAsks(): React.JSX.Element | null {
   )
   if (worktree === undefined || covered) return null
   return (
-    <>
+    <div className="setup-bar">
       {worktree.setupAsk === undefined ? null : (
         <SetupAsk command={worktree.setupAsk} onAnswer={(run) => void answerSetup(worktree.id, run)} />
       )}
@@ -25,6 +25,6 @@ export function WorktreeAsks(): React.JSX.Element | null {
         <SetupAsk command={runAsk.command} label={runAsk.kind} onAnswer={(run) => void answerRunAsk(run)} />
       )}
       {project === undefined ? null : <SetupOffer key={worktree.id} project={project} worktree={worktree} />}
-    </>
+    </div>
   )
 }

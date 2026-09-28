@@ -6,6 +6,14 @@ import { declarationOf, findRule, opacitiesOf, ruleFor } from './css'
 const SHEET = 'workspace.css'
 
 describe('workspace.css', () => {
+  // A floating card covered the prompt line and sat over the scrim.
+  it('asks for the setup command in a slim bar over the panes, under any dialog', () => {
+    const ask = ruleFor(SHEET, '.setup-ask')
+    expect(declarationOf(ask, 'position')).toBeUndefined()
+    expect(declarationOf(ask, 'box-shadow')).toBeUndefined()
+    expect(declarationOf(ask, 'height')).toBe('28px')
+  })
+
   it.each([
     ['.workspace', 'var(--bg-pane)'],
     ['.workspace__head', 'var(--bg-tabstrip)'],

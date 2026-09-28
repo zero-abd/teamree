@@ -1,6 +1,7 @@
 // A stand-in runtime that answers the whole method catalogue from memory.
 // Deliberately the only place in the renderer that fabricates data.
 
+import { markerText, markerTime } from '@shared/paneMarker'
 import { effectiveProjectSettings, PROJECT_FILE } from '@shared/projectSettings'
 import type {
   CliStatus,
@@ -1576,7 +1577,7 @@ export function createSeededRuntimeClient(): RuntimeClient {
       const terminal = required(terminals.get(terminalId), 'terminal')
       terminal.record = { ...terminal.record, running: true, busy: false, lastOutputAt: Date.now() }
       delete terminal.record.exitCode
-      const again = `\r\n${dim('[end of record — new shell below]')}\r\n${prompt(terminal)}`
+      const again = `\r\n${dim(markerText(`New shell · ${markerTime(Date.now())}`))}\r\n${prompt(terminal)}`
       terminal.buffer += again
       emit(terminal, { type: 'data', data: again })
       announce({ type: 'terminals' })

@@ -653,9 +653,10 @@ describePty('running an exited pane again', () => {
         return data.includes(second as string)
       }, 'the second run to say which session it was given')
 
-      // What the dead pane printed is still there, above the new run, with no mark between.
+      // What the dead pane printed is still there, above the new run, under one marker line.
       const after = (await service.handlers['terminal.read']({ terminalId: terminal.id })).data
-      expect(after.indexOf(first as string)).toBeLessThan(after.indexOf(second as string))
+      expect(after.indexOf(first as string)).toBeLessThan(after.indexOf('── New session · '))
+      expect(after.indexOf('── New session · ')).toBeLessThan(after.indexOf(second as string))
       expect(after).not.toContain('end of record')
     },
     TEST_TIMEOUT_MS
@@ -695,8 +696,8 @@ describePty('running an exited pane again', () => {
       expect(records.get(terminal.id)?.command).toBeUndefined()
 
       const after = (await service.handlers['terminal.read']({ terminalId: terminal.id })).data
-      expect(after).toContain('new shell below')
-      expect(after.indexOf('one-shot')).toBeLessThan(after.indexOf('new shell below'))
+      expect(after).toContain('── New shell · ')
+      expect(after.indexOf('one-shot')).toBeLessThan(after.indexOf('── New shell · '))
     },
     TEST_TIMEOUT_MS
   )
@@ -724,7 +725,7 @@ describePty('running an exited pane again', () => {
   )
 
   it(
-    'keeps a subscription open across the relaunch, with no mark in it',
+    'keeps a subscription open across the relaunch, with a marker and no bracketed mark in it',
     async () => {
       const { service } = serviceWithRecords()
       const command = await writeFakeAgent(await scratchDir())
@@ -741,6 +742,9 @@ describePty('running an exited pane again', () => {
         'the second run to reach the subscriber'
       )
       expect(published.some(({ event }) => event.type === 'data' && event.data.includes('end of record'))).toBe(false)
+      expect(published.some(({ event }) => event.type === 'data' && event.data.includes('── New session · '))).toBe(
+        true
+      )
     },
     TEST_TIMEOUT_MS
   )

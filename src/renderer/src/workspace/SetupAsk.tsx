@@ -18,7 +18,7 @@ export function SetupAsk({
       <button type="button" className="button button--primary button--tiny" onClick={() => onAnswer(true)}>
         Run
       </button>
-      <button type="button" className="button button--tiny" onClick={() => onAnswer(false)}>
+      <button type="button" className="button button--ghost button--tiny" onClick={() => onAnswer(false)}>
         Skip
       </button>
     </section>

@@ -416,3 +416,65 @@
   overflow: hidden;
 }
 
+/* The open worktree's setup questions: a slim bar over its panes, gone when there is none. */
+.setup-bar {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-raised);
+  font-size: var(--text-sm);
+}
+
+.setup-bar:empty {
+  display: none;
+}
+
+.setup-ask {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--s2) 0 var(--s3);
+}
+
+.setup-ask + .setup-ask {
+  border-top: 1px solid var(--line);
+}
+
+.setup-ask__label::first-letter {
+  text-transform: uppercase;
+}
+
+.setup-ask__label {
+  flex: none;
+  color: var(--fg-muted);
+}
+
+.setup-ask__command {
+  min-width: 0;
+  max-width: 40ch;
+  overflow: hidden;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setup-ask__field {
+  width: 32ch;
+  padding: 0 var(--s1);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  background: var(--bg-input);
+  font-size: inherit;
+}
+
+.setup-ask .button {
+  flex: none;
+}
+
+.setup-ask__command + .button {
+  margin-left: auto;
+}

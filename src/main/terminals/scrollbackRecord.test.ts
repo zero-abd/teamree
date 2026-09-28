@@ -4,14 +4,17 @@ import { Terminal as Emulator } from '@xterm/xterm'
 import { describe, expect, it } from 'vitest'
 import { evidenceLine } from '../../shared/outputEvidence'
 import { screenRows } from './screenRows'
+import { markerText, markerTime } from '../../shared/paneMarker'
 import {
-  clockLabel,
+  agentStoppedMark,
   closingMark,
   failedResumeMark,
   noConversationMark,
   INERT_RECORD,
-  openingMark,
+  NEW_SHELL_BELOW,
+  NOT_RUN_AGAIN_BELOW,
   replayableRecord,
+  RUN_AGAIN_BELOW,
   sanitizeRecordedOutput,
   tailFromLineBoundary
 } from './scrollbackRecord'
@@ -169,28 +172,41 @@ describe('tailFromLineBoundary', () => {
 })
 
 describe('the marks around a record', () => {
-  it('says what the output is, and where this session starts', () => {
-    const framed = replayableRecord({ text: 'built in 4.2s\r\n', recordedAt: Date.parse('2026-03-04T09:05:00Z') })
+  const at = new Date(2026, 2, 4, 9, 5).getTime()
 
-    expect(framed).toContain('record')
-    expect(framed).toContain('nothing running')
-    expect(framed).toContain('new shell below')
-    expect(framed).toContain('built in 4.2s')
-    expect(framed.indexOf('nothing running')).toBeLessThan(framed.indexOf('built in 4.2s'))
-    expect(framed.indexOf('built in 4.2s')).toBeLessThan(framed.indexOf('new shell below'))
+  it('closes the record with one marker line and no bracketed sentence', () => {
+    const framed = replayableRecord({ text: 'built in 4.2s\r\n', recordedAt: at })
+    expect(framed.startsWith('built in 4.2s')).toBe(true)
+    expect(framed).toContain(markerText(`Restored · ${markerTime(at)}`))
+    expect(framed.replace(/\x1b\[[0-9;]*m/g, '')).not.toMatch(/\[|end of record|nothing running|below/)
   })
 
-  it('dates the record, and resets the colour on both sides of itself', () => {
-    const at = Date.parse('2026-03-04T09:05:00Z')
-    expect(openingMark(at)).toContain(clockLabel(at))
-    // The date is when the record was written down, not when the pane stopped.
-    expect(openingMark(at)).toContain('up to')
-    expect(openingMark(at)).toContain('nothing running')
-    expect(clockLabel(at)).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/)
+  it('names what follows a record run again in place', () => {
+    const framed = replayableRecord({ text: 'x\r\n', recordedAt: at }, NEW_SHELL_BELOW)
+    expect(framed).toContain(markerText(`New shell · ${markerTime(at)}`))
+    expect(closingMark(RUN_AGAIN_BELOW, at)).toContain(markerText(`Restarted · ${markerTime(at)}`))
+  })
+
+  // The pane's own end block says a stopped or not-rerun pane came back; a second marker would repeat it.
+  it('leaves the record unmarked when the pane waits for its buttons', () => {
+    expect(replayableRecord({ text: 'x\r\n', recordedAt: at }, NOT_RUN_AGAIN_BELOW)).toBe('x\r\n')
+  })
+
+  it('resets the colour on both sides of a marker', () => {
     // A record that ended mid-colour must not paint the mark, or the shell.
-    expect(openingMark(at).startsWith(`${ESC}[0m`)).toBe(true)
     expect(closingMark().startsWith(`${ESC}[0m`)).toBe(true)
     expect(closingMark().endsWith(`${ESC}[0m\r\n`)).toBe(true)
+  })
+
+  it('says a refused resume, a missing conversation and a stopped agent as markers', () => {
+    for (const mark of [failedResumeMark(1, true), noConversationMark('claude'), agentStoppedMark('task done')]) {
+      const line = mark.replace(/\x1b\[[0-9;]*m/g, '').trim()
+      expect(line).toMatch(/^── .+ ──$/)
+      expect(line).not.toMatch(/[[\]]/)
+    }
+    expect(failedResumeMark(1, true)).toContain('Resume refused · exit 1 · New session')
+    expect(failedResumeMark(1, false)).toContain('Resume refused · exit 1 ──')
+    expect(agentStoppedMark('task done')).toContain('Task done · not resumed')
   })
 })
 
@@ -199,6 +215,6 @@ describe('the marks, as a sidebar row quotes a restored pane', () => {
   it('are never the line a row quotes', () => {
     const replayed = replayableRecord({ text: 'server listening on :3000\r\n', recordedAt: 0 })
     expect(evidenceLine(`${replayed}user@host login-flow % `)).toBe('server listening on :3000')
-    expect(evidenceLine(`${failedResumeMark(1, true, false)}${noConversationMark('claude')}`)).toBeNull()
+    expect(evidenceLine(`${failedResumeMark(1, false)}${noConversationMark('claude')}`)).toBeNull()
   })
 })

@@ -155,7 +155,7 @@ export function ResourcesControl(): React.JSX.Element {
         onClick={() => (open ? close() : setOpen(true))}
       >
         <span className={`statusbar__memory statusbar__memory--${sample === null ? 'calm' : memoryLevel(sample.rss)}`}>
-          {total ?? '… GB'}
+          {total ?? '—'}
         </span>
       </button>
       {open ? (

@@ -79,8 +79,10 @@ import {
   closingMark,
   NEW_SHELL_BELOW,
   NOT_RUN_AGAIN_BELOW,
+  NEW_SESSION_BELOW,
+  RESUMED_BELOW,
+  RUN_AGAIN_BELOW,
   sanitizeRecordedOutput,
-  startsAgainBelow,
   tailFromLineBoundary,
   type HostedRecord,
   type RecordedScrollback
@@ -448,9 +450,9 @@ export class TerminalSessionManager {
         : undefined
     const launch: ReturnType<typeof relaunchCommand> =
       rerun !== undefined ? { command: rerun } : (resumed ?? relaunchCommand(stored, params.resume))
-    // An agent's pane carries no marks: the view clears into its scrollback, and the pane says the rest.
-    const bare = rerun === undefined && launch.agent !== undefined
-    const below = rerun !== undefined ? startsAgainBelow(rerun) : NEW_SHELL_BELOW
+    const talked = resumed !== undefined || params.resume !== undefined
+    const agentBelow = talked ? RESUMED_BELOW : NEW_SESSION_BELOW
+    const below = rerun !== undefined ? RUN_AGAIN_BELOW : launch.agent !== undefined ? agentBelow : NEW_SHELL_BELOW
     // Only when asked: an agent that already ran would do its task twice.
     const prompt =
       params.task === true && params.resume === undefined && stored !== undefined && launch.agent !== undefined
@@ -473,7 +475,7 @@ export class TerminalSessionManager {
       // The name is the person's, not the replaced process's.
       ...(size.label === undefined ? {} : { label: size.label }),
       // A conversation picked back up is one somebody had: the next launch resumes it too.
-      typed: resumed !== undefined || params.resume !== undefined,
+      typed: talked,
       cols: size.cols,
       rows: size.rows,
       createdAt: stored?.createdAt ?? Date.now()
@@ -488,7 +490,7 @@ export class TerminalSessionManager {
         shell: previous.shell,
         cols: size.cols,
         rows: size.rows,
-        ...(bare ? { recordBare: true } : { recordStartsBelow: below }),
+        recordStartsBelow: below,
         ...(previous.run === undefined ? {} : { run: previous.run }),
         ...(launch.command === undefined ? {} : { command: launch.command }),
         ...(prompt === undefined ? {} : { prompt }),
@@ -501,8 +503,7 @@ export class TerminalSessionManager {
     this.rebindStreams(session)
     // Said as well as written: `read()` builds the line in for views mounting
     // later, but an open view read its snapshot once and will not read again.
-    // Bare, an invisible reset: the view's cue that the new run starts here.
-    const boundary = bare ? '\x1b[0m' : closingMark(below)
+    const boundary = closingMark(below)
     for (const stream of this.streamsFor(session.id)) {
       stream.channel.emit({ type: 'data', data: boundary })
     }
@@ -1069,7 +1070,6 @@ export class TerminalSessionManager {
       /** What this pane runs instead if the resume is refused. */
       fallback?: { command: string; agentSessionId?: string }
       recordStartsBelow?: string
-      recordBare?: boolean
       /** Printed before the command, saying why this is not a resume. */
       startupNote?: string
       /** The number a reopened pane had; kept unless a live pane has it now. */
@@ -1131,7 +1131,6 @@ export class TerminalSessionManager {
       ...(restored === undefined ? {} : { restored }),
       ...(params.restoredRecord === undefined ? {} : { restoredRecord: params.restoredRecord }),
       ...(params.recordStartsBelow === undefined ? {} : { recordStartsBelow: params.recordStartsBelow }),
-      ...(params.recordBare === true ? { recordBare: true } : {}),
       ...(params.startupNote === undefined ? {} : { startupNote: params.startupNote }),
       ...(agent === undefined ? {} : { agent }),
       ...(fallback === undefined

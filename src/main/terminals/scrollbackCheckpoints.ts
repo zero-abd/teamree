@@ -5,7 +5,7 @@
 /**
  * How long after output a running pane's record is written. Longer than
  * `QUIET_AFTER_MS`, so a bursty agent is checkpointed per burst; shorter than
- * the minute `clockLabel` resolves to.
+ * the minute a marker resolves to.
  */
 export const CHECKPOINT_INTERVAL_MS = 15_000
 
