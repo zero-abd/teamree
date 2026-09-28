@@ -392,19 +392,22 @@ describe('pushing main after the merge', () => {
     expect(title.getAttribute('title')).toBe(title.textContent)
   })
 
-  it('hands a push that did not land to the push dialog, the merge standing', async () => {
-    const pushError = {
-      message: 'origin/main moved',
-      detail: '! [rejected] main -> main (fetch first)',
-      kind: 'rejected' as const
-    }
-    call.mockImplementation(merged({ pushed: false, pushError }))
+  it('says a push that did not land and that the merge was undone, and lands on a second try', async () => {
+    let tries = 0
+    call.mockImplementation((method: unknown, params: unknown) => {
+      if (method !== 'worktree.mergeIntoBase') return new Promise(() => {})
+      if ((params as { dryRun?: boolean }).dryRun === true) return Promise.resolve(plan)
+      tries += 1
+      if (tries === 1) return Promise.reject(new Error('Push failed: origin/main moved · merge undone'))
+      return Promise.resolve({ ...plan, merged: true, pushed: true })
+    })
+    useWorkspaceStore.setState({ dialog: { kind: 'confirm-merge', worktreeId: 'w1' } })
     render(<ConfirmMergeDialog worktreeId="w1" />)
     fireEvent.click(await screen.findByRole('button', { name: 'Merge' }))
 
-    await waitFor(() =>
-      expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'push-base', projectId: 'p1', failure: pushError })
-    )
+    expect((await screen.findByRole('alert')).textContent).toBe('Push failed: origin/main moved · merge undone')
+    fireEvent.click(screen.getByRole('button', { name: 'Merge' }))
+    await waitFor(() => expect(useWorkspaceStore.getState().dialog).toBeNull())
   })
 })
 

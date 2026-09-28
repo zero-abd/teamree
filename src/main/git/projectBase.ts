@@ -47,44 +47,11 @@ export async function pushProjectBase(runner: GitRunner, options: ProjectBaseOpt
   return readProjectBase(runner, options)
 }
 
-/** A push's refusal as the merge result carries it: the merge stands either way. */
-export async function tryPushProjectBase(
-  runner: GitRunner,
-  options: ProjectBaseOptions
-): Promise<
-  { pushed: true } | { pushed: false; pushError: { message: string; detail: string; kind?: PushFailureKind } }
-> {
-  try {
-    await pushProjectBase(runner, options)
-    return { pushed: true }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    const data = (error instanceof GitServiceError ? error.data : undefined) as
-      | { detail?: string; kind?: PushFailureKind }
-      | undefined
-    return {
-      pushed: false,
-      pushError: {
-        message,
-        detail: data?.detail ?? message,
-        ...(data?.kind === undefined ? {} : { kind: data.kind })
-      }
-    }
-  }
-}
-
 /** Fetches origin's base and merges it into the checkout's, never leaving the checkout mid-merge. */
 export async function pullProjectBase(runner: GitRunner, options: ProjectBaseOptions): Promise<ProjectBase> {
   const branch = baseBranch(options.baseRef)
   const cwd = options.repoPath
-  const head = await runner.tryRun({ args: ['symbolic-ref', '--quiet', '--short', 'HEAD'], cwd, readOnly: true })
-  const current = head.exitCode === 0 ? head.stdout.trim() : ''
-  if (current !== branch) {
-    throw new GitServiceError(
-      ErrorCode.Conflict,
-      `${cwd} has ${current === '' ? 'a detached HEAD' : current} checked out, not ${branch}`
-    )
-  }
+  await requireCheckedOut(runner, cwd, branch)
   const tracking = `refs/remotes/${REMOTE}/${branch}`
   const fetched = await runner.tryRun({
     args: ['fetch', '--no-tags', REMOTE, `+refs/heads/${branch}:${tracking}`],
@@ -110,6 +77,57 @@ export async function pullProjectBase(runner: GitRunner, options: ProjectBaseOpt
     )
   }
   return readProjectBase(runner, options)
+}
+
+/** Puts the checkout's base back at origin's, undoing local landings; refused when a commit only it holds would go. */
+export async function resetProjectBase(runner: GitRunner, options: ProjectBaseOptions): Promise<ProjectBase> {
+  const branch = baseBranch(options.baseRef)
+  const cwd = options.repoPath
+  await requireCheckedOut(runner, cwd, branch)
+  const tracking = `refs/remotes/${REMOTE}/${branch}`
+  // Merge commits are the landings themselves; every other commit must still be on some other branch.
+  const only = await runner.tryRun({
+    args: [
+      'rev-list',
+      '--count',
+      '--no-merges',
+      `refs/heads/${branch}`,
+      '--not',
+      tracking,
+      `--exclude=${branch}`,
+      '--branches'
+    ],
+    cwd,
+    readOnly: true
+  })
+  if (only.exitCode !== 0) {
+    throw new GitServiceError(ErrorCode.GitFailed, firstLine(only.stderr) || `could not read ${branch}`)
+  }
+  const count = Number.parseInt(only.stdout.trim(), 10) || 0
+  if (count > 0) {
+    throw new GitServiceError(
+      ErrorCode.Conflict,
+      `${count} ${count === 1 ? 'commit is' : 'commits are'} only on ${branch}`
+    )
+  }
+  const reset = await runner.tryRun({ args: ['reset', '--keep', tracking], cwd, timeoutMs: 120_000 })
+  if (reset.exitCode !== 0) {
+    throw new GitServiceError(ErrorCode.Conflict, firstLine(reset.stderr) || `could not reset ${branch}`, {
+      detail: reset.stderr.trim()
+    })
+  }
+  return readProjectBase(runner, options)
+}
+
+async function requireCheckedOut(runner: GitRunner, cwd: string, branch: string): Promise<void> {
+  const head = await runner.tryRun({ args: ['symbolic-ref', '--quiet', '--short', 'HEAD'], cwd, readOnly: true })
+  const current = head.exitCode === 0 ? head.stdout.trim() : ''
+  if (current !== branch) {
+    throw new GitServiceError(
+      ErrorCode.Conflict,
+      `${cwd} has ${current === '' ? 'a detached HEAD' : current} checked out, not ${branch}`
+    )
+  }
 }
 
 function baseBranch(baseRef: string): string {

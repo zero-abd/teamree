@@ -468,6 +468,8 @@ export const Params = {
   projectPushBase: z.object({ projectId: z.string().min(1) }),
   /** Merges origin's base into the checkout's, backing out of a conflict. */
   projectPullBase: z.object({ projectId: z.string().min(1) }),
+  /** Resets the checkout's base branch to origin's; refused when a commit only it holds would be lost. */
+  projectResetBase: z.object({ projectId: z.string().min(1) }),
   /** Fetches the base now, clearing any back-off. */
   projectFetch: z.object({ projectId: z.string().min(1) }),
   /** Everything a new worktree could branch from, for the create dialog. */
@@ -965,6 +967,7 @@ export type MethodContract = TaskMethodContract &
     'project.base': { params: z.infer<typeof Params.projectBase>; result: ProjectBase }
     'project.pushBase': { params: z.infer<typeof Params.projectPushBase>; result: ProjectBase }
     'project.pullBase': { params: z.infer<typeof Params.projectPullBase>; result: ProjectBase }
+    'project.resetBase': { params: z.infer<typeof Params.projectResetBase>; result: ProjectBase }
     /** The project with its `fetch` as the fetch left it. */
     'project.fetch': { params: z.infer<typeof Params.projectFetch>; result: Project }
 

@@ -788,7 +788,11 @@ export const worktreeCommands: readonly CommandSpec[] = [
     args: [{ name: 'worktree', description: 'Worktree id, name, path, branch, or here.', required: true }],
     flags: [
       { name: 'merge', kind: 'boolean', description: 'Merge into the base even on a known host.' },
-      { name: 'push', kind: 'boolean', description: 'After merging into the base, push it to origin.' }
+      {
+        name: 'push',
+        kind: 'boolean',
+        description: "After merging into origin's latest base, push it; a refused push undoes the merge."
+      }
     ],
     examples: [
       'teamree worktree land fix-login',
@@ -818,13 +822,6 @@ export const worktreeCommands: readonly CommandSpec[] = [
         const how = merged.fastForward ? 'fast-forward' : 'merge commit'
         const into = landing.parent === undefined ? `${merged.into} in ${merged.checkout}` : landing.parent.name
         const text = `Merged ${landing.branch} into ${into} (${how}).`
-        if (merged.pushError !== undefined) {
-          throw new CliError({
-            code: 'push_failed',
-            message: `${text} Push failed: ${merged.pushError.message}\n${merged.pushError.detail}`,
-            exitCode: ExitCode.Failure
-          })
-        }
         return { data: merged, text: merged.pushed === true ? `${text} Pushed ${merged.into} to origin.` : text }
       }
       if (!landing.published) {

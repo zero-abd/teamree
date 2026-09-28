@@ -128,13 +128,21 @@ export function publishGitWrites(registry: MethodRegistry, git: GitService, bus:
   // A merge moves the base every row of the project is measured against; a pull request is a landing of its own.
   registry.register('worktree.mergeIntoBase', Params.worktreeMergeIntoBase, async (params) => {
     const projectId = git.snapshot().worktrees.find((worktree) => worktree.id === params.worktreeId)?.projectId
-    const result = await git.worktreeMergeIntoBase(params)
-    if (!result.merged) return result
-    bus.emit(
-      projectId === undefined
-        ? { type: 'worktrees' }
-        : { type: 'worktrees', worktreeIds: projectWorktreeIds(git, projectId) }
-    )
+    const moved = (): void =>
+      bus.emit(
+        projectId === undefined
+          ? { type: 'worktrees' }
+          : { type: 'worktrees', worktreeIds: projectWorktreeIds(git, projectId) }
+      )
+    let result
+    try {
+      result = await git.worktreeMergeIntoBase(params)
+    } catch (error) {
+      // A landing that stopped may still have fast-forwarded the base to origin's.
+      if (params.dryRun !== true) moved()
+      throw error
+    }
+    if (result.merged) moved()
     return result
   })
 
@@ -147,6 +155,12 @@ export function publishGitWrites(registry: MethodRegistry, git: GitService, bus:
 
   registry.register('project.pullBase', Params.projectPullBase, async (params) => {
     const result = await git.projectPullBase(params)
+    bus.emit({ type: 'worktrees', worktreeIds: projectWorktreeIds(git, params.projectId) })
+    return result
+  })
+
+  registry.register('project.resetBase', Params.projectResetBase, async (params) => {
+    const result = await git.projectResetBase(params)
     bus.emit({ type: 'worktrees', worktreeIds: projectWorktreeIds(git, params.projectId) })
     return result
   })

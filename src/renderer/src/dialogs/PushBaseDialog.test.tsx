@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 
-// Pushing main: a refused push is one line with git's words behind Details, and Pull and Retry when origin moved.
+// Pushing main: a refused push is one line with git's words behind Details, Pull and Retry when origin moved,
+// and Undo Merge when origin's cannot be pulled in.
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
@@ -58,20 +59,61 @@ it('says how far main is ahead, and pushes it', async () => {
 })
 
 it('offers Pull and Retry when origin moved, and pulls before pushing', async () => {
-  render(
-    <PushBaseDialog
-      projectId="p1"
-      failure={{ message: 'origin/main moved', detail: '! [rejected] main -> main (fetch first)', kind: 'rejected' }}
-    />
-  )
+  call.mockRejectedValueOnce(refusal('origin/main moved', 'rejected'))
+  render(<PushBaseDialog projectId="p1" />)
+  fireEvent.click(screen.getByRole('button', { name: 'Push' }))
 
-  expect(screen.getByRole('alert').textContent).toBe('Push failed: origin/main moved')
+  expect((await screen.findByRole('alert')).textContent).toBe('Push failed: origin/main moved')
   expect(screen.getByText('Details')).toBeTruthy()
   call.mockImplementation((method: unknown) => Promise.resolve(method === 'project.pullBase' ? base : pushed))
   fireEvent.click(screen.getByRole('button', { name: 'Pull and Retry' }))
 
   await waitFor(() => expect(useWorkspaceStore.getState().dialog).toBeNull())
-  expect(call.mock.calls.map(([method]) => method)).toEqual(['project.pullBase', 'project.pushBase'])
+  expect(call.mock.calls.map(([method]) => method)).toEqual([
+    'project.pushBase',
+    'project.pullBase',
+    'project.pushBase'
+  ])
+})
+
+const conflict = Object.assign(new Error('origin/main conflicts with main in CHANGELOG.md'), {
+  code: 'conflict',
+  data: { conflicts: ['CHANGELOG.md'] }
+})
+
+it('offers Undo Merge, never Retry, when origin cannot be pulled in', async () => {
+  call.mockRejectedValueOnce(refusal('origin/main moved', 'rejected'))
+  render(<PushBaseDialog projectId="p1" />)
+  fireEvent.click(screen.getByRole('button', { name: 'Push' }))
+  await screen.findByRole('button', { name: 'Pull and Retry' })
+  call.mockRejectedValueOnce(conflict)
+  fireEvent.click(screen.getByRole('button', { name: 'Pull and Retry' }))
+
+  expect((await screen.findByRole('button', { name: 'Undo Merge' })).hasAttribute('disabled')).toBe(false)
+  expect(screen.getByRole('alert').textContent).toBe('Push failed: origin/main conflicts with main in CHANGELOG.md')
+  expect(screen.queryByRole('button', { name: /Retry/ })).toBeNull()
+  call.mockResolvedValueOnce({ ...base, ahead: 0 })
+  fireEvent.click(screen.getByRole('button', { name: 'Undo Merge' }))
+
+  await waitFor(() => expect(useWorkspaceStore.getState().dialog).toBeNull())
+  expect(call).toHaveBeenLastCalledWith('project.resetBase', { projectId: 'p1' })
+  expect(useWorkspaceStore.getState().bases.p1?.ahead).toBe(0)
+})
+
+it('says why an undo was refused and offers nothing more to press', async () => {
+  call.mockRejectedValueOnce(refusal('origin/main moved', 'rejected'))
+  render(<PushBaseDialog projectId="p1" />)
+  fireEvent.click(screen.getByRole('button', { name: 'Push' }))
+  await screen.findByRole('button', { name: 'Pull and Retry' })
+  call.mockRejectedValueOnce(conflict)
+  fireEvent.click(screen.getByRole('button', { name: 'Pull and Retry' }))
+  await screen.findByRole('button', { name: 'Undo Merge' })
+  call.mockRejectedValueOnce(new Error('1 commit is only on main'))
+  fireEvent.click(screen.getByRole('button', { name: 'Undo Merge' }))
+
+  expect(await screen.findByText('Undo failed: 1 commit is only on main')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Undo Merge' }).hasAttribute('disabled')).toBe(true)
+  expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'push-base', projectId: 'p1' })
 })
 
 it('gives an auth refusal its own line and a plain Retry', async () => {

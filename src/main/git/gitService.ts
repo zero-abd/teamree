@@ -99,7 +99,13 @@ import {
   type TrashNote
 } from './worktreeTrash'
 import { pushWorktree } from './worktreePush'
-import { pullProjectBase, pushProjectBase, readProjectBase, type ProjectBaseOptions } from './projectBase'
+import {
+  pullProjectBase,
+  pushProjectBase,
+  readProjectBase,
+  resetProjectBase,
+  type ProjectBaseOptions
+} from './projectBase'
 import { bareRef } from './reviewUrl'
 import { abortWorktreeUpdate, continueWorktreeUpdate, resolveWorktreeConflict, updateWorktree } from './worktreeUpdate'
 import {
@@ -1607,6 +1613,10 @@ export class GitService {
 
   async projectPullBase(params: ParamsOf<'project.pullBase'>): Promise<ProjectBase> {
     return pullProjectBase(this.#runner, this.#baseOptions(params.projectId))
+  }
+
+  async projectResetBase(params: ParamsOf<'project.resetBase'>): Promise<ProjectBase> {
+    return resetProjectBase(this.#runner, this.#baseOptions(params.projectId))
   }
 
   #baseOptions(projectId: string): ProjectBaseOptions {

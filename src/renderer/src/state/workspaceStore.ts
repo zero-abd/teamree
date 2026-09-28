@@ -245,8 +245,8 @@ export type DialogState =
   | { kind: 'clear-lock'; worktreeId: string; lockPath: string }
   /** Committing, pushing and opening a pull request in one step. */
   | { kind: 'create-pr'; worktreeId: string }
-  /** Pushing the project checkout's base to origin; `failure` is the push that just did not land. */
-  | { kind: 'push-base'; projectId: string; failure?: PushBaseFailure }
+  /** Pushing the project checkout's base to origin. */
+  | { kind: 'push-base'; projectId: string }
   /** Keeping one run of a task and removing the others; `refused` once the runtime has refused one unforced. */
   | { kind: 'confirm-keep'; worktreeId: string; refused?: true }
   /** Clean Up Merged: a project's landed worktrees, as a checklist. */
@@ -268,8 +268,8 @@ export type DialogState =
   | { kind: 'hand-off'; worktreeId: string }
   | null
 
-/** A base push that did not land: one line, git's words, and `rejected` when a pull would let it. */
-export type PushBaseFailure = NonNullable<WorktreeMerge['pushError']>
+/** A base push that did not land: one line, git's words, `rejected` when a pull would let it, and a pull's `conflicts`. */
+export type PushBaseFailure = NonNullable<WorktreeMerge['pushError']> & { conflicts?: string[] }
 
 /** Forgetting a project or a worktree, or moving a project's folder to the Trash. */
 export type ConfirmAfterUnsaved =
@@ -821,6 +821,8 @@ type WorkspaceState = {
   mergeIntoBase: (worktreeId: string, push?: boolean) => Promise<string | null>
   /** Pushes a project's base to origin, pulling origin's first when `pull`; answers with why not, or null once pushed. */
   pushBase: (projectId: string, pull?: boolean) => Promise<PushBaseFailure | null>
+  /** Resets a project's base to origin's, undoing landings not pushed; answers with why not, or null. */
+  undoBaseMerge: (projectId: string) => Promise<string | null>
   /** Fetches a project's base now, clearing any back-off; a failure is said in a toast. */
   fetchProject: (projectId: string) => Promise<void>
   /** Keeps one run of a task, removes the others and opens the one kept. Their branches stay. */
@@ -4098,9 +4100,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     },
 
     async mergeIntoBase(worktreeId, push) {
-      let merged: WorktreeMerge
       try {
-        merged = await pastLock(worktreeId, () =>
+        await pastLock(worktreeId, () =>
           runtimeClient.call('worktree.mergeIntoBase', push === undefined ? { worktreeId } : { worktreeId, push })
         )
       } catch (error) {
@@ -4113,13 +4114,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         set({ pushOnMerge })
         writeStoredPushOnMerge(storage, pushOnMerge)
       }
-      if (get().dialog?.kind === 'confirm-merge') {
-        // The merge stands; the push that did not land is asked about where it can be retried.
-        const failure = merged.pushError
-        set({
-          dialog: failure === undefined || projectId === undefined ? null : { kind: 'push-base', projectId, failure }
-        })
-      }
+      if (get().dialog?.kind === 'confirm-merge') set({ dialog: null })
       // A child lands in its parent's checkout, which moves too.
       const parentId = get().worktrees.find((worktree) => worktree.id === worktreeId)?.parentId
       refresher.request(refreshTargets({ statuses: parentId === undefined ? [worktreeId] : [worktreeId, parentId] }))
@@ -4137,7 +4132,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         return {
           message,
           detail: typeof data?.detail === 'string' ? data.detail : message,
-          ...(data?.kind === undefined ? {} : { kind: data.kind })
+          ...(data?.kind === undefined ? {} : { kind: data.kind }),
+          ...(Array.isArray(data?.conflicts) ? { conflicts: data.conflicts } : {})
         }
       }
       set((state) => ({
@@ -4145,6 +4141,21 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         ...(state.dialog?.kind === 'push-base' ? { dialog: null } : {})
       }))
       notify(`Pushed ${base.branch} to origin`, 'info')
+      return null
+    },
+
+    async undoBaseMerge(projectId) {
+      let base: ProjectBase
+      try {
+        base = await runtimeClient.call('project.resetBase', { projectId })
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error)
+      }
+      set((state) => ({
+        bases: { ...state.bases, [projectId]: base },
+        ...(state.dialog?.kind === 'push-base' ? { dialog: null } : {})
+      }))
+      notify(`Reset ${base.branch} to ${base.upstream ?? 'origin'}`, 'info')
       return null
     },
 

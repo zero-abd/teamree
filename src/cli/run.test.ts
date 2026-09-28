@@ -537,24 +537,17 @@ describe('landing a worktree', () => {
     expect(result.out).toContain('(fast-forward). Pushed main to origin.')
   })
 
-  it('fails with the push reason when the merge landed and the push did not', async () => {
-    const cli = await harness((method, params, stub) =>
-      method === 'worktree.mergeIntoBase'
-        ? {
-            ...(landed({})(method, params, stub) as object),
-            pushed: false,
-            pushError: {
-              message: 'origin/main moved',
-              detail: '! [rejected] main -> main (fetch first)',
-              kind: 'rejected'
-            }
-          }
-        : landed({})(method, params, stub)
-    )
+  it('fails with the push reason when the push did not land and the merge was undone', async () => {
+    const cli = await harness((method, params, stub) => {
+      if (method === 'worktree.mergeIntoBase') {
+        throw new StubError('git_failed', 'Push failed: origin/main moved · merge undone')
+      }
+      return landed({})(method, params, stub)
+    })
     const result = await cli.run(['worktree', 'land', 'fix-login', '--push'])
 
     expect(result.code).toBe(ExitCode.Failure)
-    expect(result.err).toContain('Push failed: origin/main moved')
+    expect(result.err).toContain('Push failed: origin/main moved · merge undone')
   })
 
   it('pushes a base that already has the branch but not origin', async () => {
