@@ -15,9 +15,10 @@ type Glyph = Cell & { chars: string; width: number; faint: boolean }
 
 type Screen = Pick<XTerm, 'buffer' | 'rows'>
 
-/** Where the last prompt ended; null once its line has left the buffer or the line was run. */
+/** Where a shell's prompt ended: a buffer line and a column. */
 export type PromptEnd = { line: number; col: number }
 
+/** The last prompt end a shell marked; null once its line has left the buffer or was run (133;C). */
 export function promptEnds(term: Pick<XTerm, 'parser' | 'registerMarker' | 'buffer'>): {
   last: () => PromptEnd | null
   dispose: () => void
@@ -277,6 +278,7 @@ type SelectionTerm = Pick<
   | 'clearSelection'
 >
 
+/** ⌘A's selection of the typed input, and what the next key or bytes do to it. */
 export function typedInputSelection(options: {
   term: SelectionTerm
   find: () => TypedInput | null

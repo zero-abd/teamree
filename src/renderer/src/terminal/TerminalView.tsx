@@ -889,24 +889,22 @@ export type PaneKeys = {
 
 /**
  * The pane's answer to one keypress, as xterm's custom key handler wants it:
- * `true` to let the emulator have it, `false` to keep it. App chords first, then ⌘A and the keys
- * on a selected input (`typedInput.ts`), the Mac editing keys (`macEditKeys.ts`), the clipboard pair, then the emulator. On macOS
- * the Edit menu claims these accelerators before the page; the branch it loses is in `src/main/appMenu.ts`.
+ * `true` to let the emulator have it, `false` to keep it. App chords first, then ⌘A and the keys on a
+ * selected input (`typedInput.ts`), the Mac editing keys (`macEditKeys.ts`), the clipboard pair, then the emulator.
+ * On macOS the Edit menu claims these accelerators before the page; the branch it loses is in `src/main/appMenu.ts`.
  */
 export function paneKeyHandler(keys: PaneKeys): (event: KeyboardEvent) => boolean {
   const clipboard = keys.clipboard ?? { copy: copyText, read: pasteText }
   return (event) => {
     if (keys.isAppChord(event)) return false
-    const typed =
-      keys.input !== undefined && keys.modifier.eventFlag === 'metaKey'
-        ? typedInputKey(event, keys.input.active())
-        : null
-    if (typed !== null) {
+    const input = keys.modifier.eventFlag === 'metaKey' ? keys.input : undefined
+    const typed = input === undefined ? null : typedInputKey(event, input.active())
+    if (input !== undefined && typed !== null) {
       if (event.type === 'keydown') {
         event.preventDefault()
-        if (typed === 'select' ? !keys.input!.select() : typed === 'select-all') keys.term.selectAll()
-        else if (typed === 'clear') void keys.input!.clear()
-        else if (typed === 'drop') keys.input!.drop()
+        if (typed === 'clear') void input.clear()
+        else if (typed === 'drop') input.drop()
+        else if (typed === 'select-all' || !input.select()) keys.term.selectAll()
       }
       return false
     }
