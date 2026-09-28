@@ -3,7 +3,7 @@
 // wearing a field's clothes: it opens the palette rather than being a second, weaker search.
 
 import { useEffect, useMemo, useRef } from 'react'
-import { hasCheckout, teammatesHeard, type Worktree } from '@shared/entities'
+import { teammatesHeard, type Worktree } from '@shared/entities'
 import { hasResumable } from '../agents/harnesses'
 import { cliActionLabel, cliTitle, offerCliInstall } from '../dialogs/cliInstallModel'
 import { attentionByPane } from '../state/paneAttention'
@@ -24,10 +24,10 @@ import { teamworkControlLabel, teamworkOn, teamworkSummary } from './teamworkSum
 import { usePaneEvidence, useWatchEvidence } from './usePaneEvidence'
 import { treeItems, treeStop, useTreeKeys } from './treeKeys'
 import { moveWorktree } from './nestDrag'
-import { worktreesByProject } from './worktreeOrder'
+import { sortedByProject } from './worktreeOrder'
 import { WorktreeRow, type TaskFold } from './WorktreeRow'
-import { activityOf, agentRows, worktreeTone, type DotTone } from './agentRows'
-import { attentionOrder, flattenTask, taskForest, taskTally, treeTone, type TaskNode } from './taskTree'
+import { activityOf, worktreeTones } from './agentRows'
+import { flattenTask, taskForest, taskTally, treeTone, type TaskNode } from './taskTree'
 import { isDoneStage, taskStages } from '../dashboard/taskRows'
 import { useTaskTreeStore } from '../state/taskTreeStore'
 import { askingWorktrees, useMessageStore } from '../state/messages'
@@ -109,14 +109,7 @@ export function Sidebar({
     () => taskStages({ worktrees, terminals: paneList, statuses, mergePreviews, landings, asking, now }),
     [worktrees, paneList, statuses, mergePreviews, landings, asking, now]
   )
-  const tones = useMemo(() => {
-    const byId: Record<string, DotTone | null> = {}
-    for (const worktree of worktrees) {
-      const tone = asking.has(worktree.id) ? 'waiting' : worktreeTone(agentRows(paneList, worktree, now))
-      byId[worktree.id] = hasCheckout(worktree) ? tone : null
-    }
-    return byId
-  }, [worktrees, paneList, asking, now])
+  const tones = useMemo(() => worktreeTones(worktrees, paneList, asking, now), [worktrees, paneList, asking, now])
   const titleOf = (worktreeId: string): string => {
     const worktree = worktrees.find((entry) => entry.id === worktreeId)
     return worktree === undefined ? '' : worktreeDisplay(worktree, kindOf).title
@@ -156,8 +149,7 @@ export function Sidebar({
         changed: dirty || (mergePreviews[worktree.id]?.ahead ?? 0) > 0
       }
     }
-    return worktreesByProject(projects, worktrees).map(({ project, rows: listed }) => {
-      const rows = byAttention.includes(project.id) ? attentionOrder(listed, (id) => tones[id] ?? null) : listed
+    return sortedByProject(projects, worktrees, byAttention, (id) => tones[id] ?? null).map(({ project, rows }) => {
       const filtered = filterProject(rows, factsOf, view, {
         keep: picked === activeWorktreeId ? picked : null,
         doneOpen: view.openDone.includes(project.id)

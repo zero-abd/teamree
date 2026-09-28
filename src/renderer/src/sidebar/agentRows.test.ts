@@ -806,6 +806,33 @@ describe('a worktree whose agent reported it failed', () => {
   })
 })
 
+describe('a worktree whose agent reported it succeeded', () => {
+  const succeeded = {
+    id: 'wt1',
+    name: 'fix batch 1',
+    branch: 'fix-batch-1',
+    report: { outcome: 'succeeded' as const, summary: 'Fixed. Tests pass.' }
+  }
+  const claude = (overrides: Partial<Terminal> = {}): Terminal =>
+    terminal({ id: 'a', agent: 'claude', agentEvent: { event: 'Stop', at: 1 }, ...overrides })
+  const restored = claude({ running: false, restored: 'stopped', stoppedFor: 'task-done' })
+
+  // After a relaunch the pane comes back ended; the task is still done.
+  it('stays ready once its agent has exited or been restored', () => {
+    expect(paneActivity(restored, succeeded.report)).toBe('quiet')
+    expect(paneActivity(claude({ running: false, exitCode: 0 }), succeeded.report)).toBe('quiet')
+    const rows = agentRows([restored, terminal({ id: 's', running: false, restored: 'stopped' })], succeeded, 0)
+    expect(rows[0]?.evidence).toBe('✓ Fixed.')
+    expect(worktreeTone(rows)).toBe('quiet')
+  })
+
+  it('leaves a crash, a shell and a report-less agent ended', () => {
+    expect(paneActivity(claude({ running: false, exitCode: 1 }), succeeded.report)).toBe('failed')
+    expect(paneActivity(terminal({ id: 's', running: false, restored: 'stopped' }), succeeded.report)).toBe('stopped')
+    expect(paneActivity(restored)).toBe('stopped')
+  })
+})
+
 describe('the line of an agent that reported', () => {
   const done = (outcome: 'succeeded' | 'failed') => ({
     id: 'wt1',

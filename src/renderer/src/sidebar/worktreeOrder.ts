@@ -2,7 +2,8 @@
 // under it, each child task under its parent. Computed once so the list and the "next worktree" chord cannot disagree; generic
 // over the row types so the structural slice in `workspaceCommands.ts` can pass what it has.
 
-import { taskOrder } from './taskTree'
+import type { DotTone } from './agentRows'
+import { attentionOrder, taskOrder } from './taskTree'
 
 export type ProjectLike = { id: string }
 export type WorktreeLike = { id: string; projectId: string; parentId?: string }
@@ -15,6 +16,19 @@ export function worktreesByProject<P extends ProjectLike, W extends WorktreeLike
   return projects.map((project) => ({
     project,
     rows: taskOrder(worktrees.filter((worktree) => worktree.projectId === project.id))
+  }))
+}
+
+/** `worktreesByProject` with each project in `byAttention` ordered by its rows' tones, as Sort by Attention draws it. */
+export function sortedByProject<P extends ProjectLike, W extends WorktreeLike>(
+  projects: readonly P[],
+  worktrees: readonly W[],
+  byAttention: readonly string[],
+  toneOf: (worktreeId: string) => DotTone | null
+): { project: P; rows: W[] }[] {
+  return worktreesByProject(projects, worktrees).map(({ project, rows }) => ({
+    project,
+    rows: byAttention.includes(project.id) ? attentionOrder(rows, toneOf) : rows
   }))
 }
 
