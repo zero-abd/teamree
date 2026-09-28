@@ -12,12 +12,37 @@ describe('rightPanel.css', () => {
     expect(declarationOf(ruleFor(SHEET, '.panel'), 'background')).toBe('var(--bg-panel)')
   })
 
-  it.each(['.panel__tab--current', '.search__hit--current'])(
-    'fills the selected row %s with the selected surface',
-    (selector) => {
-      expect(declarationOf(ruleFor(SHEET, selector), 'background')).toBe('var(--bg-selected)')
-    }
-  )
+  it('fills the current search hit with the selected surface', () => {
+    expect(declarationOf(ruleFor(SHEET, '.search__hit--current'), 'background')).toBe('var(--bg-selected)')
+  })
+
+  // One selection treatment per surface: the current tab is ink over a 2px accent line, never a fill.
+  it('marks the current panel tab with an accent underline, not a fill', () => {
+    expect(declarationOf(ruleFor(SHEET, '.panel__tab--current'), 'background')).toBeUndefined()
+    const line = ruleFor(SHEET, '.panel__tab--current::after')
+    expect(declarationOf(line, 'height')).toBe('2px')
+    expect(declarationOf(line, 'background')).toBe('var(--accent)')
+    expect(declarationOf(ruleFor(SHEET, '.panel__tab'), 'white-space')).toBe('nowrap')
+  })
+
+  it('draws the panel head at the tab strip’s height', () => {
+    expect(declarationOf(ruleFor(SHEET, '.panel__rail'), 'height')).toBe('var(--strip-h)')
+  })
+
+  it('draws the current tab’s count in the accent’s wash and the others’ in neutral ink', () => {
+    expect(declarationOf(ruleFor(SHEET, '.panel__count'), 'background')).toBe('var(--bg-hover)')
+    expect(declarationOf(ruleFor(SHEET, '.panel__tab--current .panel__count'), 'background')).toBe('var(--accent-soft)')
+  })
+
+  // Rows on the 4px grid, 30px for a name, 24px for a hit hanging under its file.
+  it.each([
+    ['.tree__row', '30px'],
+    ['.search__file', '30px'],
+    ['.search__task', '30px'],
+    ['.search__hit', '24px']
+  ])('draws %s %s high', (selector, height) => {
+    expect(declarationOf(ruleFor(SHEET, selector), 'height')).toBe(height)
+  })
 
   it('keeps a file tree row’s reveal out of sight until its row is hovered or focused', () => {
     expect(declarationOf(ruleFor(SHEET, '.tree__reveal'), 'opacity')).toBe('var(--row-action-rest)')

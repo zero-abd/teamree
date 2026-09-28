@@ -3,6 +3,7 @@
 
 import { PaneCloseButton } from '../panes/PaneCloseButton'
 import { useWorkspaceStore } from '../state/workspaceStore'
+import { IconButton } from '../ui/Button'
 
 type FileBarProps = {
   name: string
@@ -41,28 +42,10 @@ export function FileBar({
       {unsaved && !tabbed ? <UnsavedDot /> : null}
       <span className="file__spacer" />
       {children}
-      <button
-        type="button"
-        className="file__tool file__more"
-        aria-label={`More for ${name}`}
-        title="More"
-        onClick={onMenu}
-      >
-        ⋯
-      </button>
+      <IconButton icon="more" label={`More for ${name}`} onClick={onMenu} />
       {tabbed ? null : <PaneCloseButton name={name} onClose={onClose} />}
       {/* Only a zoomed file pane's bar is on screen while anything is zoomed. */}
-      {zoomed ? (
-        <button
-          type="button"
-          className="file__tool"
-          aria-label="Restore layout"
-          title="Restore layout"
-          onClick={restore}
-        >
-          ⤡
-        </button>
-      ) : null}
+      {zoomed ? <IconButton icon="restore" label="Restore layout" onClick={restore} /> : null}
     </header>
   )
 }
@@ -85,7 +68,7 @@ function PathLabel({ path, name }: { path: string; name: string }): React.JSX.El
 /** Toggles drawn as one segmented control; each child is a button with `aria-pressed`. */
 export function Segments({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
   return (
-    <div className="file__seg" role="group" aria-label={label}>
+    <div className="segmented file__seg" role="group" aria-label={label}>
       {children}
     </div>
   )

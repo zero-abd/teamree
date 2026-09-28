@@ -28,6 +28,24 @@ describe('markdown.css', () => {
     expect(at(600)).toBeLessThan(52)
   })
 
+  it.each([
+    ['h1', 'var(--text-2xl)', '32px'],
+    ['h2', 'var(--text-xl)', '24px'],
+    ['h3', 'var(--text-lg)', '20px']
+  ])('sets a page’s %s on the app’s type ramp', (heading, size, line) => {
+    const rule = ruleFor(SHEET, `.md-editor ${heading}`)
+    expect(declarationOf(rule, 'font-size')).toBe(size)
+    expect(declarationOf(rule, 'line-height')).toBe(line)
+  })
+
+  it('draws a code block on the code ground, rounded like a control, at the code size', () => {
+    const pre = ruleFor(SHEET, '.md-code pre')
+    expect(declarationOf(pre, 'background')).toBe('var(--bg-code)')
+    expect(declarationOf(pre, 'border-radius')).toBe('var(--r2)')
+    expect(declarationOf(pre, 'font-size')).toBe('var(--text-code)')
+    expect(declarationOf(pre, 'line-height')).toBe('20px')
+  })
+
   // The editor's own `pre-wrap` split a one-line import in two.
   it('scrolls a code block sideways rather than wrapping it', () => {
     expect(declarationOf(ruleFor(SHEET, '.md-editor .md-code pre'), 'white-space')).toBe('pre')

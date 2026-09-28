@@ -282,13 +282,15 @@ describe('the rail', () => {
     }
   })
 
-  it('draws icons with tooltips down the edge when closed', () => {
+  it('draws icons with tooltips down the edge when closed', async () => {
     mount()
     const tab = screen.getByRole('tab', { name: 'Changes, 2' })
     expect(tab.querySelector('svg')).not.toBeNull()
     expect(tab.querySelector('.panel__tabLabel')).toBeNull()
-    expect(tab.title).toBe('Changes')
+    expect(tab.title).toBe('')
     expect(tab.querySelector('.panel__count')?.textContent).toBe('2')
+    fireEvent.pointerEnter(tab)
+    expect((await screen.findByRole('tooltip')).textContent).toBe('Changes')
   })
 
   it('keeps its width across a change of worktree and a fold', () => {
