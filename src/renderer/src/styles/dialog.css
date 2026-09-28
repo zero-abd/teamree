@@ -786,6 +786,11 @@ button.picker__chevron:hover {
 }
 
 /* Land All: Clean Up's rows, numbered in landing order, the commit message or clash on the right. */
+.landall input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .landall__order {
   flex: none;
   min-width: 2ch;
