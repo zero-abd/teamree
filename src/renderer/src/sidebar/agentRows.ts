@@ -39,7 +39,12 @@ export type AgentRow = {
   choices?: readonly ScreenChoice[]
   /** Subagents its session started. */
   subagents?: readonly Subagent[]
+  /** Set on a new worktree's setup pane. */
+  setup?: SetupRun
 }
+
+/** A setup pane's command and how it went. */
+export type SetupRun = { command: string | undefined; running: boolean; exitCode: number | undefined }
 
 /** A new worktree's setup while it runs, on its row and over its pane. */
 export const SETTING_UP = 'Setting up'
@@ -165,7 +170,10 @@ export function agentRows(
       quietFor: Math.max(0, now - terminal.lastOutputAt),
       evidence: settingUp ? (terminal.command ?? line) : line,
       ...(choices === undefined ? {} : { choices }),
-      ...(terminal.subagents === undefined ? {} : { subagents: terminal.subagents })
+      ...(terminal.subagents === undefined ? {} : { subagents: terminal.subagents }),
+      ...(terminal.run === 'setup'
+        ? { setup: { command: terminal.command, running: terminal.running, exitCode: terminal.exitCode } }
+        : {})
     }
   })
 }

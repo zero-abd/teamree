@@ -9,9 +9,9 @@ import { AllowOpen } from './AnswerButtons'
 import { paneRowSpeech } from './rowSpeech'
 import { SubagentRows } from './SubagentRows'
 import { SubagentTranscriptDialog } from './SubagentTranscriptDialog'
+import { lastOutputTip, paneMarkTip, setupTip } from './tipText'
 import { NO_ATTENTION, typingNow, type PaneAttention } from '../state/paneAttention'
 import {
-  agoLabel,
   dotTone,
   sinceLabel,
   TONE_LABEL,
@@ -68,6 +68,10 @@ export function PaneRows({
         const isUnread = unread.has(row.terminalId)
         const named = row.label !== worktreeName
         const tabbable = !tree || focused === row.terminalId
+        const tone = dotTone(row.activity, row.agent)
+        const mark = row.setup === undefined ? paneMarkTip(row.agent, tone) : setupTip(row.setup, tone)
+        const label = truncateName(row.text)
+        const typed = typedTip(attention)
         return (
           <li
             key={row.terminalId}
@@ -82,7 +86,7 @@ export function PaneRows({
               type="button"
               {...item}
               className={`pane-row${isUnread ? ' pane-row--unread' : ''}`}
-              title={paneTitle(row, attention, typing, isUnread)}
+              data-tip={typed || undefined}
               aria-label={paneRowSpeech(
                 named || row.agent === undefined ? row : { ...row, label: harnessName(row.agent) },
                 {
@@ -107,30 +111,37 @@ export function PaneRows({
               }}
             >
               <span className="pane-row__head">
-                {/* Shortened for the row only: the hover text carries the whole of it. */}
-                <PaneGlyph agent={row.agent} decorative />
-                {named ? <span className="pane-row__label">{truncateName(row.text)}</span> : null}
+                <PaneGlyph agent={row.agent} decorative tip={isUnread ? `${mark} · unread` : mark} />
+                {/* Shortened for the row only: its tooltip carries the whole of it. */}
+                {named ? (
+                  <span className="pane-row__label" data-tip={row.text} {...clippedOnly(label === row.text)}>
+                    {label}
+                  </span>
+                ) : null}
                 {/* Nothing when there is nothing worth quoting: an empty line would read as an answer. */}
-                {row.evidence ? <span className="pane-row__evidence">{row.evidence}</span> : null}
+                {row.evidence ? (
+                  <span className="pane-row__evidence" data-tip={row.evidence} data-tip-clipped>
+                    {row.evidence}
+                  </span>
+                ) : null}
                 {/* Named, never counted: "2 watching" says nothing about who. */}
                 {typing.length > 0 || attention.watchers.length > 0 ? (
                   <span
                     className={`pane-row__watchers${typing.length > 0 ? ' pane-row__watchers--typing' : ''}`}
-                    title={hands}
+                    data-tip={hands}
+                    data-tip-clipped
                   >
                     {hands}
                   </span>
                 ) : null}
                 {/* Mute is the owner's and is not hidden from them. */}
                 {attention.muted ? (
-                  <span className="pane-row__muted" title="muted: teammates can read this pane, not type into it">
+                  <span className="pane-row__muted" data-tip="Teammates can read, not type">
                     muted
                   </span>
                 ) : null}
                 {/* Allow and Open stand in for the slot, which would only say asking again. */}
-                {row.choices === undefined ? (
-                  <PaneSince tone={dotTone(row.activity, row.agent)} quietFor={row.quietFor} />
-                ) : null}
+                {row.choices === undefined ? <PaneSince tone={tone} quietFor={row.quietFor} /> : null}
               </span>
             </button>
             {row.choices === undefined ? null : (
@@ -171,32 +182,29 @@ export function PaneSince({ tone, quietFor }: { tone: DotTone; quietFor: number 
   // An ended pane has no age worth reading: it says ended, as its pane and tab do.
   const worded = tone === 'waiting' || tone === 'failed' || tone === 'stopped'
   return (
-    <span className={worded ? `pane-row__since pane-row__since--${tone}` : 'pane-row__since'}>
+    <span
+      className={worded ? `pane-row__since pane-row__since--${tone}` : 'pane-row__since'}
+      data-tip={lastOutputTip(quietFor)}
+    >
       {worded ? TONE_LABEL[tone] : sinceLabel(quietFor)}
     </span>
   )
 }
 
-/** The hover text, which says where the quoted line came from: a line with no provenance reads as a verdict. */
-export function paneTitle(
-  row: AgentRow,
-  attention: PaneAttention,
-  typing: readonly { handle: string }[],
-  unread: boolean
-): string {
-  const head = `${row.label} · ${TONE_LABEL[dotTone(row.activity, row.agent)]}${
-    unread ? ' · unread' : ''
-  } · last output ${agoLabel(row.quietFor)}`
-  const lines = [row.evidence ? `${head}\nlast printed: ${row.evidence}` : head]
-  if (attention.watchers.length > 0) lines.push(watchedBy(attention.watchers))
-  if (typing.length > 0) lines.push(typedBy(typing))
-  // Said even when nobody is typing now: a pane somebody else has run commands in does not go back to being only yours.
-  for (const typist of attention.typists) {
-    if (typist.writes > 0) lines.push(`${typist.handle} has typed ${typist.writes} keystrokes here`)
-    if (typist.refused > 0) lines.push(`${typist.handle} tried ${typist.refused} this machine refused`)
-  }
-  if (attention.muted) lines.push('muted for teammates')
-  return lines.join('\n')
+/** What only the row's tooltip says: a pane somebody else has run commands in does not go back to being only yours. */
+function typedTip(attention: PaneAttention): string {
+  return attention.typists
+    .flatMap((typist) => [
+      typist.writes > 0 ? `${typist.handle} has typed ${typist.writes} keystrokes here` : '',
+      typist.refused > 0 ? `${typist.handle} tried ${typist.refused} this machine refused` : ''
+    ])
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** A name the row drew whole says it only once the width cuts it off. */
+function clippedOnly(whole: boolean): { 'data-tip-clipped'?: true } {
+  return whole ? { 'data-tip-clipped': true } : {}
 }
 
 function listed(subagents: readonly Subagent[] | undefined, id: string): Subagent | undefined {

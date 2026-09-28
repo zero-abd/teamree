@@ -37,6 +37,9 @@ const mountUnread = (unread: string[], ...panes: Terminal[]): HTMLElement[] => {
   return screen.getAllByRole('button')
 }
 
+const glyphTip = (row: HTMLElement | undefined): string | null | undefined =>
+  row?.querySelector('.agent-glyph')?.getAttribute('data-tip')
+
 describe('PaneRows', () => {
   // The glyph and the text beside it read `Claude CodeClaude Code` when both were named.
   it('draws an agent as its harness glyph, named once, by the row', () => {
@@ -71,6 +74,8 @@ describe('PaneRows', () => {
     expect(running?.querySelector('.pane-row__evidence')?.textContent).toBe('npm install')
     expect(failed?.querySelector('.pane-row__label')?.textContent).toBe('setup')
     expect(failed?.querySelector('.pane-row__since')?.textContent).toBe('failed')
+    expect(glyphTip(running)).toBe('Setting up · npm install')
+    expect(glyphTip(failed)).toBe('Setup failed · exit 127')
   })
 
   it('draws a harness found in a plain shell’s foreground', () => {
@@ -117,7 +122,41 @@ describe('PaneRows', () => {
     const head = row?.querySelector('.pane-row__head')
     expect(row?.querySelector('.activity')).toBeNull()
     expect(head?.children[0]?.getAttribute('class')).toContain('agent-glyph')
-    expect(row?.title).toContain('Claude Code · working')
+    expect(glyphTip(row)).toBe('Claude Code · working')
+  })
+
+  // The app's tooltip, never the browser's: one hover, saying only what the row does not already show.
+  it('keeps native titles off the row', () => {
+    const [row] = mount(terminal({ id: 't1', agent: 'claude', busy: true }))
+    expect(row?.closest('li')?.querySelectorAll('[title]')).toHaveLength(0)
+    expect(row?.hasAttribute('data-tip')).toBe(false)
+  })
+
+  it('says the quoted line on hover only where it is cut off', () => {
+    render(
+      <PaneRows
+        rows={agentRows([terminal({ id: 't1', agent: 'claude', label: 'orders' })], 'w1', 0, {
+          t1: 'Paginated the order history endpoint with a keyset cursor'
+        })}
+        watchers={{}}
+        unread={new Set()}
+        now={0}
+        onFocusTerminal={() => {}}
+      />
+    )
+    const line = document.querySelector('.pane-row__evidence')
+    expect(line?.getAttribute('data-tip')).toBe('Paginated the order history endpoint with a keyset cursor')
+    expect(line?.hasAttribute('data-tip-clipped')).toBe(true)
+    expect(document.querySelector('.pane-row__label')?.hasAttribute('data-tip-clipped')).toBe(true)
+  })
+
+  it('names a name cut short whole on hover', () => {
+    const long = 'Paginate the order history endpoint with a cursor'
+    const [row] = mount(terminal({ id: 't1', agent: 'codex', label: long }))
+    const label = row?.querySelector('.pane-row__label')
+    expect(label?.textContent).not.toBe(long)
+    expect(label?.getAttribute('data-tip')).toBe(long)
+    expect(label?.hasAttribute('data-tip-clipped')).toBe(false)
   })
 
   it('reads the age in the time slot while nothing needs you', () => {
@@ -130,8 +169,9 @@ describe('PaneRows', () => {
       expect(row?.querySelector('.pane-row__since')?.className).toBe('pane-row__since')
       expect(row?.querySelector('.pane-row__since')?.textContent).toBe('now')
     }
-    expect(idle?.title).toContain('zsh · idle')
-    expect(ready?.title).toContain('Codex · ready')
+    expect(glyphTip(idle)).toBe('Terminal · idle')
+    expect(glyphTip(ready)).toBe('Codex · ready')
+    expect(working?.querySelector('.pane-row__since')?.getAttribute('data-tip')).toBe('Last output just now')
   })
 
   it('reads asking in the time slot, in its tone', () => {
@@ -141,7 +181,7 @@ describe('PaneRows', () => {
     const since = row?.querySelector('.pane-row__since')
     expect(since?.textContent).toBe('asking')
     expect(since?.className).toBe('pane-row__since pane-row__since--waiting')
-    expect(row?.title).toContain('asking')
+    expect(glyphTip(row)).toBe('Claude Code · asking')
   })
 
   it('reads failed in the time slot, in its tone', () => {
@@ -155,7 +195,7 @@ describe('PaneRows', () => {
     const [row] = mountUnread(['t1'], terminal({ id: 't1', title: 'npm test' }))
     expect(row?.className).toContain('pane-row--unread')
     expect(row?.querySelector('.activity, .pip')).toBeNull()
-    expect(row?.title).toContain('unread')
+    expect(glyphTip(row)).toBe('Terminal · idle · unread')
   })
 })
 
@@ -178,7 +218,7 @@ describe('a pane named after its worktree', () => {
     return screen.getAllByRole('button')
   }
 
-  it('shows its glyph and last line on one line, and the name only on hover', () => {
+  it('shows its glyph and last line on one line, and leaves the name to the worktree row', () => {
     const [row] = mountIn(
       'Add a subtract function to codex',
       { t1: 'Edited calc.js (+1 -0)' },
@@ -186,7 +226,7 @@ describe('a pane named after its worktree', () => {
     )
     expect(row?.querySelector('.pane-row__label')).toBeNull()
     expect(row?.querySelector('.pane-row__head .pane-row__evidence')?.textContent).toBe('Edited calc.js (+1 -0)')
-    expect(row?.title).toContain('Add a subtract function to codex')
+    expect(row?.closest('li')?.innerHTML).not.toContain('Add a subtract function to codex')
   })
 
   // Every row one line high: a quoted line under some rows and not others knocked them out of line.
@@ -304,7 +344,7 @@ describe('an asking pane row', () => {
 
   it('allows with the menu’s first answer, named whole on hover', () => {
     mountAsking({}, asking('t1'))
-    expect(screen.getByRole('button', { name: 'Allow' }).title).toBe('Yes')
+    expect(screen.getByRole('button', { name: 'Allow' }).dataset.tip).toBe('Yes')
   })
 
   it('opens the pane, where the rest of its answers are', async () => {

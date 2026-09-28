@@ -32,7 +32,7 @@ export function AnswerChoices({
           key={choice.label}
           type="button"
           className="button button--tiny answers__choice"
-          title={choice.title}
+          data-tip={choice.title === choice.label ? undefined : choice.title}
           tabIndex={tabbable ? undefined : -1}
           disabled={disabled}
           onClick={() => onChoose(index)}
@@ -103,7 +103,7 @@ export function AllowOpen({
           variant="primary"
           size="sm"
           className="answers__choice"
-          title={first.label}
+          data-tip={first.label}
           tabIndex={tabIndex}
           onClick={() => (onChoose ? onChoose(first) : void answerPane(terminalId, first))}
         >
