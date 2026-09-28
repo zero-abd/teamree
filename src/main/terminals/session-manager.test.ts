@@ -107,6 +107,21 @@ describePty('terminal handlers', () => {
   )
 
   it(
+    'keeps the ask on the record a resize or a rename answers with, which the window stores whole',
+    async () => {
+      const service = createTerminalService({ resolveWorktreeCwd: () => process.cwd() })
+      services.push(service)
+      const terminal = await newTerminal(service)
+      service.manager.setAskingYou(new Map([[terminal.id, 11]]))
+      const resized = await service.handlers['terminal.resize']({ terminalId: terminal.id, cols: 90, rows: 30 })
+      expect(resized.askingYou).toBe(11)
+      const renamed = await service.handlers['terminal.rename']({ terminalId: terminal.id, label: 'release' })
+      expect(renamed.askingYou).toBe(11)
+    },
+    TEST_TIMEOUT_MS
+  )
+
+  it(
     'starts each pane told the tone of the ground it prints on',
     async () => {
       let tone: 'light' | 'dark' = 'light'

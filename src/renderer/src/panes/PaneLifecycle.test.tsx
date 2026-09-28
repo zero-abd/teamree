@@ -420,6 +420,30 @@ describe('an agent asking in its pane', () => {
     expect(focusAskAnswer('elsewhere')).toBe(false)
   })
 
+  it('still draws the question once the pane’s first resize has answered with its record', () => {
+    useMessageStore.setState({ messages: [{ ...put, text: 'Ship it?', options: ['Yes', 'No'] }] })
+    const asking = terminal('t1', { agent: 'claude', askingYou: 7, tookTurn: true })
+    useWorkspaceStore.setState({ terminals: { t1: { ...asking, askingYou: undefined } } })
+    useWorkspaceStore.getState().recordTerminal({ ...asking, cols: 120, rows: 40 })
+    mount(useWorkspaceStore.getState().terminals.t1 as Terminal)
+    const card = screen.getByRole('group', { name: 'Needs you' })
+    expect(within(card).getByText('Ship it?')).toBeTruthy()
+    expect(
+      within(card)
+        .getAllByRole('button')
+        .map((button) => button.textContent)
+    ).toEqual(['Yes', 'No', 'Reply…'])
+  })
+
+  it('closes Reply on Escape and gives the keyboard to the first answer', () => {
+    useMessageStore.setState({ messages: [put] })
+    mount(terminal('t1', { agent: 'claude', askingYou: 7, tookTurn: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'Reply…' }))
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Answer' }), { key: 'Escape' })
+    expect(screen.queryByRole('textbox', { name: 'Answer' })).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'redis' }))
+  })
+
   // #567: the card goes with its answer, and the keyboard goes back to the pane rather than to the page.
   describe('once answered', () => {
     const input = (): Element | null => screen.getByRole('textbox', { name: 'input t1' })

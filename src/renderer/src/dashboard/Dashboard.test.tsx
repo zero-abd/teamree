@@ -14,6 +14,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConsentRequest, PaneConsent, Project, Terminal, Worktree } from '@shared/entities'
+import type { TaskMessage } from '@shared/messages'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
@@ -35,6 +36,7 @@ const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { Dashboard } = await import('./Dashboard')
 const { useTaskTreeStore } = await import('../state/taskTreeStore')
 const { useUsageStore } = await import('../state/usageStore')
+const { useMessageStore } = await import('../state/messages')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -101,6 +103,7 @@ function seed(over: Partial<ReturnType<typeof useWorkspaceStore.getState>> = {})
 beforeEach(() => {
   toggleDashboard.mockReset()
   for (const key of Object.keys(printed)) delete printed[key]
+  useMessageStore.setState({ messages: [] })
   seed()
 })
 
@@ -415,6 +418,31 @@ describe('answers on the board', () => {
       expect.objectContaining({ terminalId: 'peer:sam:t1', answering: '1a2b3c4d' }),
       menu.choices[0]
     )
+  })
+
+  it('says a question put with `msg ask`, with its options as answers', () => {
+    const put: TaskMessage = {
+      id: 7,
+      projectId: 'p1',
+      kind: 'ask',
+      from: { worktreeId: 'w1', terminalId: 'asks' },
+      to: { you: true },
+      text: 'Ship it?',
+      options: ['Yes', 'No'],
+      at: 1,
+      state: 'queued'
+    }
+    const answer = vi.fn(async () => true)
+    useMessageStore.setState({ messages: [put], answer })
+    printed.asks = 'Working…'
+    seed({ terminals: { asks: { ...PANE, id: 'asks', agent: 'claude', askingYou: 7, tookTurn: true } } })
+    render(<Dashboard />)
+    const group = screen.getByRole('group', { name: 'Answer' })
+    const item = group.closest('li') as HTMLElement
+    expect(item.querySelector('.board-row__evidence')?.textContent).toBe('Ship it?')
+    expect([...group.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['Yes', 'No'])
+    fireEvent.click(within(group).getByRole('button', { name: 'Yes' }))
+    expect(answer).toHaveBeenCalledWith(put, 'Yes')
   })
 })
 
