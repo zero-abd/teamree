@@ -368,6 +368,34 @@ textarea.changes__message {
   box-shadow: inset 1px 0 color-mix(in srgb, var(--on-accent) 30%, transparent);
 }
 
+/* A commit a hook refused: its first lines, until the next attempt. */
+.changes__blocked {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  font-size: var(--text-xs);
+}
+
+.changes__blockedHead {
+  margin: 0;
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.changes__blockedLines {
+  margin: 0;
+  overflow: hidden;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  white-space: pre;
+  text-overflow: ellipsis;
+}
+
+.changes__blockedActions {
+  display: flex;
+  gap: var(--s2);
+}
+
 /* Marks a commit message still as suggested; ✕ empties it. */
 .commit-from {
   margin-inline-start: auto;

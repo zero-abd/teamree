@@ -22,6 +22,7 @@ import type {
   PaneWatchers,
   Project,
   ProjectBase,
+  GitHookFailedData,
   GitLockedData,
   PushFailureData,
   RelaySetting,
@@ -246,6 +247,8 @@ export type DialogState =
   | { kind: 'confirm-merge'; worktreeId: string }
   /** Deleting a stale `index.lock`, then retrying the write it refused. */
   | { kind: 'clear-lock'; worktreeId: string; lockPath: string }
+  /** The whole output of the hook that refused this worktree's last commit. */
+  | { kind: 'commit-output'; worktreeId: string }
   /** Committing, pushing and opening a pull request in one step. */
   | { kind: 'create-pr'; worktreeId: string }
   /** Pushing the project checkout's base to origin. */
@@ -321,7 +324,12 @@ export type Notice = {
   key?: string
   /** A git write refused by a held `index.lock`: Retry, and Clear Lock when `clearable`. */
   lock?: { worktreeId: string; lockPath: string; clearable: boolean }
+  /** A commit a hook refused: Details and Send to Agent, from `commitBlocks`. */
+  commitBlock?: { worktreeId: string }
 }
+
+/** What a refusing commit hook said, kept until the next commit attempt in its worktree. */
+export type CommitBlock = { hook: string; output: string }
 
 /** What an Undo puts back: removed worktrees (`removedIds` parents first), one discard's paths, or a deleted shared note. */
 export type UndoTarget =
@@ -474,6 +482,8 @@ type WorkspaceState = {
   /** Each worktree's paths ticked for its next commit. Held here, not in git's index: browsing must not stage anything. */
   stagedPaths: Record<string, string[]>
   committing: boolean
+  /** Each worktree's last commit a hook refused; cleared by the next attempt. */
+  commitBlocks: Record<string, CommitBlock>
   pushing: boolean
   pushes: Record<string, PushState>
   /** The worktree whose update from its base is running, or null. */
@@ -797,6 +807,8 @@ type WorkspaceState = {
   unstageAll: (worktreeId: string) => Promise<void>
   /** Commits what `commitScope` names, or rewrites the last commit with it; true when it landed. */
   commitStaged: (message: string, amend?: boolean) => Promise<boolean>
+  /** Forgets the worktree's refused commit; with `error`, records it when a hook refused and says so. True when one did. */
+  noteCommit: (worktreeId: string, error?: unknown) => boolean
   /** Puts one hunk into the index, or takes it out. The hunk is exactly what was on screen; the runtime refuses it if the file moved on. */
   applyHunk: (worktreeId: string, path: string, hunk: PatchHunk, staged: boolean) => Promise<void>
   /** Takes a whole path out of the index and unticks it. The working tree is never touched. */
@@ -1036,6 +1048,7 @@ const pullNoticeKey = (projectId: string): string => `teamwork-pull:${projectId}
 export const LOCK_RETRY_MS = 1_000
 const LOCKED = 'Another git process holds the lock'
 const lockNoticeKey = (worktreeId: string): string => `git-lock:${worktreeId}`
+export const commitBlockKey = (worktreeId: string): string => `commit-block:${worktreeId}`
 /** The write each worktree's lock notice retries. */
 const lockRetries = new Map<string, () => Promise<unknown>>()
 
@@ -1070,7 +1083,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     tone: Notice['tone'] = 'error',
     action?: Notice['action'],
     key?: string,
-    lock?: Notice['lock']
+    about?: Pick<Notice, 'lock' | 'commitBlock'>
   ): void => {
     const notice: Notice = {
       id: ++noticeSeq,
@@ -1078,7 +1091,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       tone,
       ...(action === undefined ? {} : { action }),
       ...(key === undefined ? {} : { key }),
-      ...(lock === undefined ? {} : { lock })
+      ...about
     }
     const kept = (state: WorkspaceState): Notice[] =>
       key === undefined ? state.notices : state.notices.filter((entry) => entry.key !== key)
@@ -1119,9 +1132,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     lockRetries.set(worktreeId, retry)
     const lock = await runtimeClient.call('worktree.lock', { worktreeId, lockPath }).catch(() => null)
     notify(LOCKED, 'error', undefined, lockNoticeKey(worktreeId), {
-      worktreeId,
-      lockPath,
-      clearable: lock?.clearable === true
+      lock: { worktreeId, lockPath, clearable: lock?.clearable === true }
     })
     return true
   }
@@ -1135,6 +1146,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     amend = false
   ): Promise<boolean> {
     set({ committing: true })
+    get().noteCommit(worktreeId)
     try {
       const result = await pastLock(worktreeId, () =>
         runtimeClient.call('worktree.commit', {
@@ -1155,7 +1167,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set((state) => ({ stagedPaths: { ...state.stagedPaths, [worktreeId]: [] }, selectedChangePath: null }))
       return true
     } catch (error) {
-      if (!(await heldLock(worktreeId, error, () => commit(worktreeId, message, paths, all, amend)))) {
+      if (
+        !(await heldLock(worktreeId, error, () => commit(worktreeId, message, paths, all, amend))) &&
+        !get().noteCommit(worktreeId, error)
+      ) {
         failed('Could not commit')(error)
       }
       return false
@@ -2028,6 +2043,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     selectedChangePath: null,
     stagedPaths: {},
     committing: false,
+    commitBlocks: {},
     pushing: false,
     pushes: {},
     updating: null,
@@ -3366,6 +3382,34 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set((state) => ({ stagedPaths: { ...state.stagedPaths, [worktreeId]: [] } }))
       const held = (get().changes[worktreeId]?.changes ?? []).filter((change) => change.staged)
       for (const change of held) await get().unstagePath(worktreeId, change.path)
+    },
+
+    noteCommit(worktreeId, error) {
+      const hook = error === undefined ? null : hookFailure(error)
+      if (hook === null) {
+        if (get().commitBlocks[worktreeId] !== undefined) {
+          set((state) => {
+            const { [worktreeId]: _cleared, ...commitBlocks } = state.commitBlocks
+            return { commitBlocks }
+          })
+        }
+        clearNotices(commitBlockKey(worktreeId))
+        return false
+      }
+      set((state) => ({ commitBlocks: { ...state.commitBlocks, [worktreeId]: hook } }))
+      const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
+      const name = worktree === undefined ? '' : worktreeLabel(worktreeDisplay(worktree))
+      // Short enough that the first line of the output stays the detail under it.
+      const where = name.length > 26 ? ` · ${name.slice(0, 25).trimEnd()}…` : name === '' ? '' : ` · ${name}`
+      const first = hook.output.split('\n').find((line) => line.trim() !== '')
+      notify(
+        `Commit blocked · ${hook.hook}${where}${first === undefined ? '' : `: ${first.trim()}`}`,
+        'error',
+        undefined,
+        commitBlockKey(worktreeId),
+        { commitBlock: { worktreeId } }
+      )
+      return true
     },
 
     async commitStaged(message, amend = false) {
@@ -4736,6 +4780,14 @@ useWorkspaceStore.subscribe((state, previous) => {
   if (state.paneSeenAt === previous.paneSeenAt) return
   writePaneSeen(storage, state.paneSeenAt)
 })
+
+/** The hook that refused a commit and what it printed, when that is why it failed. */
+function hookFailure(error: unknown): CommitBlock | null {
+  const data = (error as { data?: Partial<GitHookFailedData> } | null)?.data
+  return data?.kind === 'hook' && typeof data.hook === 'string' && typeof data.output === 'string'
+    ? { hook: data.hook, output: data.output }
+    : null
+}
 
 /** The `index.lock` another process holds, when that is why a git write failed. */
 function lockedPath(error: unknown): string | null {

@@ -23,6 +23,7 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   const worktree = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId))
   const landing = useWorkspaceStore((state) => state.landings[worktreeId])
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
+  const noteCommit = useWorkspaceStore((state) => state.noteCommit)
   const mergeIntoBase = useWorkspaceStore((state) => state.mergeIntoBase)
   const pending = useWorkspaceStore((state) => state.changes[worktreeId])
   const status = useWorkspaceStore((state) => state.statuses[worktreeId])
@@ -102,19 +103,27 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
         ? 'Needs a commit message'
         : undefined
 
+  /** Commits what is uncommitted first; false, having said why, when that failed. */
+  const committed = async (): Promise<boolean> => {
+    if (!commitFirst) return true
+    noteCommit(worktreeId)
+    try {
+      await runtimeClient.call('worktree.commit', { worktreeId, message, all: true })
+      setMessage('')
+      return true
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure))
+      setMerging(false)
+      // A hook's refusal is said on its notice and in the Changes panel, with the way out.
+      if (noteCommit(worktreeId, failure)) closeDialog()
+      return false
+    }
+  }
+
   const merge = async (): Promise<void> => {
     setMerging(true)
     setError(null)
-    if (commitFirst) {
-      try {
-        await runtimeClient.call('worktree.commit', { worktreeId, message, all: true })
-        setMessage('')
-      } catch (failure) {
-        setError(failure instanceof Error ? failure.message : String(failure))
-        setMerging(false)
-        return
-      }
-    }
+    if (!(await committed())) return
     const why = await mergeIntoBase(worktreeId, offerPush ? push : undefined)
     if (why === null) return
     // A conflict the commit just made is said as one, with the way through, rather than as git's line.
@@ -140,16 +149,7 @@ export function ConfirmMergeDialog({ worktreeId }: { worktreeId: string }): Reac
   const takeIn = async (ask: boolean): Promise<void> => {
     setMerging(true)
     setError(null)
-    if (commitFirst) {
-      try {
-        await runtimeClient.call('worktree.commit', { worktreeId, message, all: true })
-        setMessage('')
-      } catch (failure) {
-        setError(failure instanceof Error ? failure.message : String(failure))
-        setMerging(false)
-        return
-      }
-    }
+    if (!(await committed())) return
     await showConflicts()
     const update = await updateWorktree(worktreeId, true)
     if (ask && update?.outcome === 'conflicts') await askToResolve(worktreeId, update.conflicts)

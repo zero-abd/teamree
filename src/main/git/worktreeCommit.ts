@@ -2,15 +2,21 @@
 // repository, so it refuses rather than guesses. Nothing is staged unasked; `all` asks for
 // everything. A conflicted tree, an empty commit and a git with no identity are refused.
 
-import type { WorktreeCommit } from '../../shared/entities'
-import { GitServiceError } from './errors'
-import type { GitRunner } from './gitProcess'
+import { randomUUID } from 'node:crypto'
+import { readFile, rm } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import type { GitHookFailedData, WorktreeCommit } from '../../shared/entities'
+import { GitCommandError, GitServiceError } from './errors'
+import type { GitOutput, GitRunner } from './gitProcess'
 import { ErrorCode } from '../../shared/protocol'
 import { parseChangeRecords } from './worktreeChanges'
 import { preparedExcludes, type PreparedPaths } from './worktreePreparation'
 
 /** Hooks run, and a hook can be slow; this is the ceiling before one is killed. */
 const COMMIT_TIMEOUT_MS = 120_000
+/** How much of a refusing hook's output is kept. */
+const HOOK_OUTPUT_LINES = 200
 
 export type CommitOptions = {
   worktreeId: string
@@ -70,11 +76,19 @@ export async function commitWorktree(runner: GitRunner, options: CommitOptions):
     )
   }
 
-  await runner.run({
-    args: ['commit', ...(options.amend === true ? ['--amend'] : []), '-m', message],
-    ...run,
-    ...signal
-  })
+  const args = ['commit', ...(options.amend === true ? ['--amend'] : []), '-m', message]
+  // git's trace names the hook that exited non-zero; its prose says nothing a hook could not also print.
+  const trace = path.join(os.tmpdir(), `teamree-commit-${randomUUID()}.trace`)
+  try {
+    const output = await runner.tryRun({ args, ...run, ...signal, env: { GIT_TRACE2_EVENT: trace } })
+    if (output.exitCode !== 0) {
+      const hook = await refusingHook(trace)
+      if (hook !== null) throw hookFailure(hook, output)
+      throw new GitCommandError({ args, cwd: run.cwd, exitCode: output.exitCode, stderr: output.stderr })
+    }
+  } finally {
+    await rm(trace, { force: true })
+  }
 
   const { stdout } = await runner.run({
     args: ['rev-parse', 'HEAD'],
@@ -140,4 +154,52 @@ async function readStatus(
     timeoutMs: 30_000
   })
   return parseChangeRecords(stdout)
+}
+
+/** The hook that failed this commit according to git's own trace, or null when none did. */
+async function refusingHook(trace: string): Promise<string | null> {
+  const text = await readFile(trace, 'utf8').catch(() => '')
+  const hooks = new Map<number, string>()
+  let failed: string | null = null
+  for (const line of text.split('\n')) {
+    let event: {
+      event?: string
+      sid?: string
+      child_id?: number
+      child_class?: string
+      hook_name?: string
+      code?: number
+    }
+    try {
+      event = JSON.parse(line)
+    } catch {
+      continue
+    }
+    // A git run by the hook traces into the same file under a nested sid.
+    if (event.sid?.includes('/') !== false || event.child_id === undefined) continue
+    if (event.event === 'child_start' && event.child_class === 'hook' && event.hook_name) {
+      hooks.set(event.child_id, event.hook_name)
+    } else if (event.event === 'child_exit' && event.code !== 0 && hooks.has(event.child_id)) {
+      failed = hooks.get(event.child_id) ?? null
+    }
+  }
+  return failed
+}
+
+function hookFailure(hook: string, output: GitOutput): GitServiceError {
+  const lines = [output.stdout, output.stderr]
+    .join('\n')
+    .split('\n')
+    .map((line) => line.trimEnd())
+  while (lines[0] === '') lines.shift()
+  while (lines.at(-1) === '') lines.pop()
+  const kept = lines.slice(0, HOOK_OUTPUT_LINES)
+  const left = lines.length - kept.length
+  const text = [...kept, ...(left > 0 ? [`… ${left} more lines`] : [])].join('\n')
+  const first = lines.find((line) => line.trim() !== '')
+  return new GitServiceError(
+    ErrorCode.GitFailed,
+    first === undefined ? `${hook} hook failed` : `${hook} hook failed: ${first.trim()}`,
+    { kind: 'hook', hook, output: text } satisfies GitHookFailedData
+  )
 }

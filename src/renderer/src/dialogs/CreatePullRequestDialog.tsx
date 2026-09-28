@@ -20,6 +20,7 @@ export function CreatePullRequestDialog({ worktreeId }: { worktreeId: string }):
   const status = useWorkspaceStore((state) => state.statuses[worktreeId])
   const pending = useWorkspaceStore((state) => state.changes[worktreeId])
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
+  const noteCommit = useWorkspaceStore((state) => state.noteCommit)
   const createPullRequest = useWorkspaceStore((state) => state.createPullRequest)
   const pushWorktree = useWorkspaceStore((state) => state.pushActiveWorktree)
   const { message, from, setMessage } = useCommitMessage(worktreeId)
@@ -79,7 +80,11 @@ export function CreatePullRequestDialog({ worktreeId }: { worktreeId: string }):
       order,
       async (step) => {
         if (step === 'commit') {
-          await runtimeClient.call('worktree.commit', { worktreeId, message, all: true })
+          noteCommit(worktreeId)
+          await runtimeClient.call('worktree.commit', { worktreeId, message, all: true }).catch((error: unknown) => {
+            if (noteCommit(worktreeId, error)) closeDialog()
+            throw error
+          })
           setMessage('')
         } else if (step === 'push') {
           await pushWorktree(worktreeId)
