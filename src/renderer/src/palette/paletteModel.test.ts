@@ -1358,7 +1358,8 @@ describe('where you have been', () => {
     expect(panes.map(trailing)).toEqual(['atlas', 'ledger', 'atlas'])
   })
 
-  it('names a pane called after its worktree once', () => {
+  // `Claude Code · faq`, as every other agent row reads; `faq` alone read as the worktree row.
+  it('names an agent pane called after its worktree by its agent, then the worktree once', () => {
     const named = buildPaletteItems(
       context({
         worktrees,
@@ -1366,7 +1367,7 @@ describe('where you have been', () => {
         terminals: [terminal({ id: 't-task', worktreeId: 'd', agent: 'claude', label: 'faq' })]
       })
     )
-    expect(named.find((item) => item.id === 't-task')?.label).toBe('faq')
+    expect(named.find((item) => item.id === 't-task')?.label).toBe('Claude Code · faq')
   })
 
   it('then the rest in sidebar order, with nothing visited yet', () => {

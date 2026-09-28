@@ -33,6 +33,8 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { PaneTree } = await import('./PaneTree')
 const { showPane } = await import('../terminal/shownPanes')
 const { paneStage } = await import('./PaneLifecycle')
+const { useMessageStore } = await import('../state/messages')
+const { focusAskAnswer } = await import('./askCards')
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 
 const worktree = (report: { outcome: 'succeeded' | 'failed'; summary: string }): Worktree => ({
@@ -334,7 +336,8 @@ describe('a live agent', () => {
     const card = screen.getByRole('group', { name: 'Permission needed' })
     expect(card.className).toContain('pane-state--asking')
     expect(within(card).getByRole('button', { name: 'Review' })).toBeTruthy()
-    expect(document.querySelector('.pane-foot')?.textContent).toContain('Asking')
+    // The card says what it asks; the foot only names the state, so the ask is not said twice.
+    expect(document.querySelector('.pane-foot')?.textContent).toBe('Asking')
   })
 
   it('draws no footer for a plain shell', () => {
@@ -354,5 +357,58 @@ describe('a live agent', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+// #529: the question and its answers where the keyboard lands, not only in the sidebar.
+describe('an agent asking in its pane', () => {
+  const put = {
+    id: 7,
+    projectId: 'p1',
+    kind: 'ask' as const,
+    from: { worktreeId: 'w1', terminalId: 't1' },
+    to: { you: true as const },
+    text: 'Which store for the limiter?',
+    options: ['redis', 'postgres'],
+    at: 1,
+    state: 'queued' as const
+  }
+
+  afterEach(() => useMessageStore.setState({ messages: [] }))
+
+  it('quotes a question put to it with its options and Reply…, and no Review', () => {
+    const answer = vi.fn(async () => true)
+    useMessageStore.setState({ messages: [put], answer })
+    mount(terminal('t1', { agent: 'claude', askingYou: 7, tookTurn: true }))
+    const card = document.querySelector('.pane-state--asking') as HTMLElement
+    expect(within(card).getByText('Which store for the limiter?')).toBeTruthy()
+    expect(within(card).queryByRole('button', { name: 'Review' })).toBeNull()
+    fireEvent.click(within(card).getByRole('button', { name: 'redis' }))
+    expect(answer).toHaveBeenCalledWith(put, 'redis')
+    fireEvent.click(within(card).getByRole('button', { name: 'Reply…' }))
+    fireEvent.change(within(card).getByRole('textbox', { name: 'Answer' }), { target: { value: 'sqlite' } })
+    fireEvent.submit(within(card).getByRole('textbox', { name: 'Answer' }))
+    expect(answer).toHaveBeenLastCalledWith(put, 'sqlite')
+  })
+
+  it('offers Allow for a menu on its screen, and Review only when it has no answer to offer', () => {
+    mount(
+      terminal('t1', {
+        agent: 'claude',
+        agentEvent: { event: 'Notification', at: 1, message: 'Claude needs your permission to use Bash' },
+        screenMenu: { prompt: 'p', choices: [{ label: 'Yes', keys: ['1'] }] }
+      })
+    )
+    const card = screen.getByRole('group', { name: 'Permission needed' })
+    expect(within(card).getByRole('button', { name: 'Allow' })).toBeTruthy()
+    expect(within(card).queryByRole('button', { name: 'Review' })).toBeNull()
+  })
+
+  it('hands its first answer the focus when the keyboard lands on the pane', () => {
+    useMessageStore.setState({ messages: [put] })
+    mount(terminal('t1', { agent: 'claude', askingYou: 7, tookTurn: true }))
+    expect(focusAskAnswer('t1')).toBe(true)
+    expect(document.activeElement?.textContent).toBe('redis')
+    expect(focusAskAnswer('elsewhere')).toBe(false)
   })
 })

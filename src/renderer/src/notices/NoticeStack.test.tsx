@@ -220,6 +220,13 @@ describe('an agent asking out of sight', () => {
     useMessageStore.setState({ messages: [] })
   })
 
+  // All Panes lists every ask with its answers; a card for each would say it twice.
+  it('draws none over All Panes', () => {
+    setAsking({ dashboardOpen: true })
+    render(<NoticeStack />)
+    expect(screen.queryByText('payment retries needs you')).toBeNull()
+  })
+
   it('draws none while its pane is on screen, and none once dismissed', () => {
     setAsking({ activeWorktreeId: 'w2' })
     render(<NoticeStack />)

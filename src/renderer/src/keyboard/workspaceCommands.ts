@@ -23,6 +23,7 @@ import {
   type DiffOptions
 } from '../state/preferences'
 import type { DialogState } from '../state/workspaceStore'
+import { focusAskAnswer } from '../panes/askCards'
 import { stepVisits, type VisitHistory } from '../state/visitHistory'
 import type { WorkspaceCommand } from './workspaceShortcuts'
 
@@ -500,7 +501,12 @@ export function runWorkspaceCommand(command: WorkspaceCommand, store: Workspace)
     case 'next-needing':
     case 'previous-needing': {
       const target = stepNeedingYou(store, command === 'next-needing' ? 1 : -1)
-      if (target) void store.revealPane(target.worktreeId, target.terminalId).then(() => requestRegionFocus('panes'))
+      // An asking card's first answer, once it is drawn, rather than the terminal under it.
+      if (target)
+        void store.revealPane(target.worktreeId, target.terminalId).then(() => {
+          requestRegionFocus('panes')
+          setTimeout(() => focusAskAnswer(target.terminalId))
+        })
       break
     }
     case 'open-palette':

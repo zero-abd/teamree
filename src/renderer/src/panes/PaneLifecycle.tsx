@@ -1,7 +1,7 @@
 // A pane's lifecycle as the pane draws it: the starting shimmer, the asking card and the state footer while
 // an agent runs, and the end block (marker line and one row of actions) once the program is gone.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Terminal } from '@shared/entities'
 import { markerTime } from '@shared/paneMarker'
 import type { StoppedFor } from '@shared/paneRestore'
@@ -13,10 +13,12 @@ import { Icon } from '../icons/Icon'
 import { runtimeClient } from '../runtimeClient/currentRuntimeClient'
 import { activityOf, askingLine, paneActivity } from '../sidebar/agentRows'
 import { SCREEN_ROWS_READ, screenEvidence } from '../sidebar/paneScreen'
+import { askForYou, useMessageStore } from '../state/messages'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { shownScreen } from '../terminal/shownPanes'
 import { Button, type ButtonVariant } from '../ui/Button'
 import { StatusDot, type PaneState } from '../ui/StatusPill'
+import { registerAskCard } from './askCards'
 import { missingTool, type MissingTool } from './missingTool'
 
 /** What a shell's ^C exit reads as: the person stopped it, nothing failed. */
@@ -144,7 +146,8 @@ export function PaneFoot({
   // At rest, the report says what was done, never the `msg done` call on screen; a failed one reads failed.
   const shown = stage === 'ready' && paneActivity(terminal, report) === 'failed' ? 'failed' : stage
   const summary = stage === 'ready' && report !== undefined ? (report.summary.trim().split('\n')[0] ?? null) : null
-  const said = stage === 'asking' ? askFor(terminal, line) : (summary ?? line)
+  // Asking, the card above says what; the foot names the state alone.
+  const said = stage === 'asking' ? null : (summary ?? line)
   const parts = [FOOT_WORD[shown], said, stage === 'working' ? elapsedLabel(age) : null].filter(
     (part): part is string => part !== null && part !== ''
   )
@@ -177,36 +180,91 @@ function askFor(terminal: Terminal, line: string | null): string | null {
   return askingLine(line, terminal.agentEvent)
 }
 
-/** Over the top of an asking pane: what it wants, and the way to answer. Floats, so nothing refits. */
+/**
+ * At the top of an asking pane, in a row of its own: what it wants and the ways to answer. A question put
+ * with `msg ask` shows its words, its options and Reply…; a menu on screen offers Allow; Review only when
+ * there is nothing to answer here.
+ */
 export function PaneAsk({ terminal, onReview }: { terminal: Terminal; onReview: () => void }): React.JSX.Element {
   const answerPane = useWorkspaceStore((state) => state.answerPane)
-  const line = useShownLine(terminal, true)
+  const put = useMessageStore((state) =>
+    terminal.askingYou === undefined ? undefined : askForYou(state.messages, terminal.worktreeId)
+  )
+  const answer = useMessageStore((state) => state.answer)
+  const [replying, setReplying] = useState(false)
+  const [draft, setDraft] = useState('')
+  const card = useRef<HTMLDivElement | null>(null)
+  useEffect(() => (card.current === null ? undefined : registerAskCard(terminal.id, card.current)), [terminal.id])
+  const line = useShownLine(terminal, put === undefined)
   const permission = terminal.screenMenu !== undefined || terminal.agentEvent?.event === 'Notification'
-  const title = permission ? 'Permission needed' : 'Needs you'
-  const ask = askFor(terminal, line)
-  const allow = terminal.screenMenu?.choices[0]
+  const title = permission && put === undefined ? 'Permission needed' : 'Needs you'
+  const ask = put?.text ?? askFor(terminal, line)
+  const allow = put === undefined ? terminal.screenMenu?.choices[0] : undefined
+  const options = put?.options ?? []
+  const send = async (text: string): Promise<void> => {
+    if (put !== undefined && (await answer(put, text))) setReplying(false)
+  }
   return (
-    <div className="pane-state pane-state--asking" role="group" aria-label={title}>
+    <div ref={card} className="pane-state pane-state--asking" role="group" aria-label={title}>
       <span className="pane-state__dot">
         <StatusDot state="asking" />
       </span>
       <span className="pane-state__body">
         <span className="pane-state__title">{title}</span>
         {ask === null ? null : (
-          <span className="pane-state__meta" title={ask}>
+          <span className={`pane-state__meta${put === undefined ? '' : ' pane-state__meta--question'}`} title={ask}>
             {ask}
           </span>
         )}
       </span>
       <span className="pane-state__actions">
+        {options.map((option, index) => (
+          <Button
+            key={option}
+            variant={index === 0 ? 'primary' : 'secondary'}
+            size="sm"
+            onClick={() => void send(option)}
+          >
+            {option}
+          </Button>
+        ))}
+        {put === undefined ? null : replying ? (
+          <form
+            className="pane-state__reply"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void send(draft)
+            }}
+          >
+            <input
+              className="input pane-state__field"
+              aria-label="Answer"
+              placeholder="Answer"
+              value={draft}
+              autoComplete="off"
+              autoFocus
+              data-own-escape
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setReplying(false)
+              }}
+            />
+          </form>
+        ) : (
+          <Button variant="ghost" size="sm" onClick={() => setReplying(true)}>
+            Reply…
+          </Button>
+        )}
         {allow === undefined ? null : (
           <Button variant="primary" size="sm" title={allow.label} onClick={() => void answerPane(terminal.id, allow)}>
             Allow
           </Button>
         )}
-        <Button variant={allow === undefined ? 'primary' : 'ghost'} size="sm" onClick={onReview}>
-          Review
-        </Button>
+        {put !== undefined || allow !== undefined ? null : (
+          <Button variant="primary" size="sm" onClick={onReview}>
+            Review
+          </Button>
+        )}
       </span>
     </div>
   )

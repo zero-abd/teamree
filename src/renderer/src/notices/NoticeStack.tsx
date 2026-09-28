@@ -191,9 +191,9 @@ function AskingCards(): React.JSX.Element | null {
   const activeWorktreeId = useWorkspaceStore((store) => store.activeWorktreeId)
   const expandedTerminalId = useWorkspaceStore((store) => store.expandedTerminalId)
   const focusedWatchId = useWorkspaceStore((store) => store.focusedWatchId)
-  const covered = useWorkspaceStore(
-    (store) => store.settingsOpen || store.helpOpen || store.dashboardOpen || store.teamworkProjectId !== null
-  )
+  const covered = useWorkspaceStore((store) => store.settingsOpen || store.helpOpen || store.teamworkProjectId !== null)
+  // All Panes lists every ask with its answers already.
+  const board = useWorkspaceStore((store) => store.dashboardOpen)
   const state = useMemo(
     () => ({ terminals, worktrees, layouts, activeWorktreeId, expandedTerminalId, focusedWatchId, covered }),
     [terminals, worktrees, layouts, activeWorktreeId, expandedTerminalId, focusedWatchId, covered]
@@ -206,7 +206,7 @@ function AskingCards(): React.JSX.Element | null {
   const shown = hiddenAsks(state, evidence)
     .filter((ask) => !dismissed.has(ask.key))
     .slice(0, MOST_ASKING)
-  if (shown.length === 0) return null
+  if (shown.length === 0 || board) return null
   return (
     <div className="notices notices--asking">
       {shown.map((ask) => (

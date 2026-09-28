@@ -540,7 +540,8 @@ function openEmulator(
   // Cleared by the runtime, in the stream, so every view and watcher of the pane clears with this one.
   const unshow = showPane(terminalId, {
     buffer: term.buffer,
-    clear: () => void runtimeClient.call('terminal.clear', { terminalId }).catch(() => term.clear())
+    clear: () => void runtimeClient.call('terminal.clear', { terminalId }).catch(() => term.clear()),
+    scrollToBottom: () => term.scrollToBottom()
   })
   const gpu = paneWebgl(term)
   const markers = paneMarkers(term)
