@@ -44,10 +44,13 @@
   cursor: pointer;
 }
 
-.statusbar__button:hover,
-.statusbar__button--on {
+.statusbar__button:hover {
   background: var(--bg-hover);
   color: var(--fg);
+}
+
+.statusbar__button--on {
+  color: var(--fg-secondary);
 }
 
 .statusbar__button:focus-visible {

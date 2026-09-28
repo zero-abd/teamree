@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { flattenTask, taskForest, taskOrder, taskTally, treeTone } from './taskTree'
+import { attentionOrder, flattenTask, taskForest, taskOrder, taskTally, treeTone } from './taskTree'
 import type { DotTone } from './agentRows'
 
 const row = (id: string, parentId?: string, projectId = 'p1') => ({
@@ -92,5 +92,28 @@ describe('rolling state up a tree', () => {
     expect(taskTally(auth!, (worktree) => worktree.id === 'tests')).toEqual({ done: 1, total: 2 })
     // A grandchild's state is its parent's business.
     expect(taskTally(auth!, (worktree) => worktree.id === 'backfill')).toEqual({ done: 0, total: 2 })
+  })
+})
+
+// Sort by Attention: the tasks that need you first, each tree kept whole (#534).
+describe('attentionOrder', () => {
+  it('puts asking, then failed, working, ready trees first, keeping each tree whole and ties in order', () => {
+    const rows = [row('a'), row('b'), row('b1', 'b'), row('c'), row('d'), row('e')]
+    const tones: Record<string, DotTone | null> = {
+      a: 'quiet',
+      b: 'idle',
+      b1: 'waiting',
+      c: 'working',
+      d: 'failed',
+      e: null
+    }
+    expect(attentionOrder(rows, (id) => tones[id] ?? null).map((entry) => entry.id)).toEqual([
+      'b',
+      'b1',
+      'd',
+      'c',
+      'a',
+      'e'
+    ])
   })
 })

@@ -22,7 +22,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('../state/workspaceStore')
-const { GroupStrip, WorkspaceHead } = await import('./TerminalTabs')
+const { GroupStrip, WorkspaceHead, cutTabsOutOfView } = await import('./TerminalTabs')
 const { paneGroups, groupTabIds } = await import('../panes/paneGroups')
 const { shownRoot } = await import('../panes/paneLayout')
 
@@ -877,5 +877,47 @@ describe('over a page', () => {
     seed({ sidebarVisible: false, teamworkProjectId: 'p1' })
     mount()
     expect(screen.getByRole('button', { name: 'Show sidebar' })).toBeTruthy()
+  })
+})
+
+// A group narrower than its shown tab drew a bare `+1` and no tab at all.
+describe('a strip too narrow for its tabs', () => {
+  const tab = (left: number, width: number, active = false): HTMLElement => {
+    const element = document.createElement('div')
+    element.className = active ? 'tab tab--active' : 'tab'
+    element.dataset.paneId = String(left)
+    Object.defineProperties(element, { offsetLeft: { value: left }, offsetWidth: { value: width } })
+    return element
+  }
+
+  it('cuts the tabs out of sight, never the shown one', () => {
+    const strip = document.createElement('div')
+    const shown = tab(0, 200, true)
+    const other = tab(200, 120)
+    strip.append(shown, other)
+    Object.defineProperties(strip, {
+      scrollWidth: { value: 320 },
+      clientWidth: { value: 150 },
+      scrollLeft: { value: 0 }
+    })
+    expect(cutTabsOutOfView(strip)).toBe(1)
+    expect(shown.hasAttribute('data-cut')).toBe(false)
+    expect(other.hasAttribute('data-cut')).toBe(true)
+  })
+})
+
+// The welcome and an empty project drew a bare band over the page: with no worktree, the head is only the drag edge.
+describe('the head with no worktree open', () => {
+  it('draws no band, only the edge the window is dragged by', () => {
+    seed({ activeWorktreeId: null })
+    mount()
+    expect(document.querySelector('.workspace__head')?.className).toBe('workspace__head workspace__head--bare')
+    cleanup()
+    seed({
+      activeWorktreeId: 'w1',
+      worktrees: [{ id: 'w1', projectId: 'p1', name: 'session migration', branch: 'b', path: '/w', state: 'ready' }]
+    })
+    mount()
+    expect(document.querySelector('.workspace__head')?.className).toBe('workspace__head')
   })
 })

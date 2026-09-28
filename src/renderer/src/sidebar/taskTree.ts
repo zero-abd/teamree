@@ -78,3 +78,22 @@ export function taskTally<W extends TreeWorktree>(
     total: node.children.length
   }
 }
+
+/** Sort by Attention's order: what waits on you, then what broke, what runs, what is done, what sits. */
+const ATTENTION: readonly DotTone[] = ['waiting', 'failed', 'working', 'quiet', 'done', 'idle', 'stopped']
+
+/** Top-level trees by their most urgent tone, each tree whole beneath its root, ties in listed order. */
+export function attentionOrder<W extends TreeWorktree>(
+  worktrees: readonly W[],
+  toneOf: (worktreeId: string) => DotTone | null
+): W[] {
+  const place = (node: TaskNode<W>): number => {
+    const tone = treeTone(node, toneOf)?.tone
+    return tone === undefined ? ATTENTION.length : ATTENTION.indexOf(tone)
+  }
+  const walk = (node: TaskNode<W>): W[] => [node.worktree, ...node.children.flatMap(walk)]
+  return taskForest(worktrees)
+    .map((node, at) => ({ node, at, place: place(node) }))
+    .sort((one, other) => one.place - other.place || one.at - other.at)
+    .flatMap(({ node }) => walk(node))
+}

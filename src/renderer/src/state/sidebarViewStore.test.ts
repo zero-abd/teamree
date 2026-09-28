@@ -26,17 +26,30 @@ describe('the stored view', () => {
       query: 'cart',
       quick: ['working', 'hide-done'],
       compact: true,
-      openDone: ['p1']
+      openDone: ['p1'],
+      byAttention: ['p2']
     }
     writeStoredSidebarView(storage, view)
     expect(readStoredSidebarView(storage)).toEqual(view)
   })
 
   it('starts empty, and drops what it cannot read', () => {
-    expect(readStoredSidebarView(memory())).toEqual({ query: '', quick: [], compact: false, openDone: [] })
+    expect(readStoredSidebarView(memory())).toEqual({
+      query: '',
+      quick: [],
+      compact: false,
+      openDone: [],
+      byAttention: []
+    })
     const storage = memory()
     storage.setItem('teamree.sidebar.view', JSON.stringify({ query: 3, quick: ['working', 'bogus'], compact: 'yes' }))
-    expect(readStoredSidebarView(storage)).toEqual({ query: '', quick: ['working'], compact: false, openDone: [] })
+    expect(readStoredSidebarView(storage)).toEqual({
+      query: '',
+      quick: ['working'],
+      compact: false,
+      openDone: [],
+      byAttention: []
+    })
     storage.setItem('teamree.sidebar.view', '{nope')
     expect(readStoredSidebarView(storage).quick).toEqual([])
   })
@@ -55,6 +68,10 @@ describe('the view store', () => {
     expect(view().openDone).toEqual(['p1'])
     view().toggleDone('p1')
     expect(view().openDone).toEqual([])
+    view().toggleAttention('p2')
+    expect(view().byAttention).toEqual(['p2'])
+    view().toggleAttention('p2')
+    expect(view().byAttention).toEqual([])
   })
 
   it('counts reveals, so the same one twice is still news', () => {

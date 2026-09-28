@@ -27,7 +27,7 @@ import { moveWorktree } from './nestDrag'
 import { worktreesByProject } from './worktreeOrder'
 import { WorktreeRow, type TaskFold } from './WorktreeRow'
 import { activityOf, agentRows, worktreeTone, type DotTone } from './agentRows'
-import { flattenTask, taskForest, taskTally, treeTone, type TaskNode } from './taskTree'
+import { attentionOrder, flattenTask, taskForest, taskTally, treeTone, type TaskNode } from './taskTree'
 import { isDoneStage, taskStages } from '../dashboard/taskRows'
 import { useTaskTreeStore } from '../state/taskTreeStore'
 import { askingWorktrees, useMessageStore } from '../state/messages'
@@ -126,6 +126,7 @@ export function Sidebar({
   const quick = useSidebarView((state) => state.quick)
   const compact = useSidebarView((state) => state.compact)
   const openDone = useSidebarView((state) => state.openDone)
+  const byAttention = useSidebarView((state) => state.byAttention)
   const view = useMemo(() => ({ query, quick, compact, openDone }), [query, quick, compact, openDone])
   const toggleDone = useSidebarView((state) => state.toggleDone)
   const revealSeq = useSidebarView((state) => state.revealSeq)
@@ -153,14 +154,15 @@ export function Sidebar({
         changed: dirty || (mergePreviews[worktree.id]?.ahead ?? 0) > 0
       }
     }
-    return worktreesByProject(projects, worktrees).map(({ project, rows }) => {
+    return worktreesByProject(projects, worktrees).map(({ project, rows: listed }) => {
+      const rows = byAttention.includes(project.id) ? attentionOrder(listed, (id) => tones[id] ?? null) : listed
       const filtered = filterProject(rows, factsOf, view, {
         keep: picked === activeWorktreeId ? picked : null,
         doneOpen: view.openDone.includes(project.id)
       })
       return { project, rows, shown: filtered.rows, context: filtered.context, folded: filtered.folded }
     })
-  }, [projects, worktrees, statuses, mergePreviews, stages, kindOf, view, activeWorktreeId, picked])
+  }, [projects, worktrees, statuses, mergePreviews, stages, kindOf, view, activeWorktreeId, picked, byAttention, tones])
 
   // Only the panes of worktrees actually rendered are read; a collapsed project costs nothing.
   const onScreen = useMemo(() => {

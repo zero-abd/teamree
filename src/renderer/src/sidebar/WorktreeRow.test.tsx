@@ -38,6 +38,7 @@ const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { WorktreeRow } = await import('./WorktreeRow')
 const { useUsageStore } = await import('../state/usageStore')
 const { useLedger } = await import('../state/ledgerStore')
+const { useMessageStore } = await import('../state/messages')
 
 const NOW = 1_700_000_000_000
 
@@ -1639,5 +1640,49 @@ describe('tokens on hover', () => {
     expect(name()).toBe(
       'Rewrite the pager\nrewrite-the-pager from origin/main\n1.2M tok · ≈$3.10\n3.4M tok · ≈$9.00 with children'
     )
+  })
+})
+
+// Twenty tasks have to fit: a box says each thing once (#534).
+describe('a box that says each thing once', () => {
+  const report = { outcome: 'succeeded' as const, summary: 'Fixed. Tests pass.', paths: [], at: NOW }
+
+  it('drops the lone pane row of a finished task whose report already says how it went', () => {
+    mount({ worktree: worktree({ report }), terminals: [terminal({ id: 't1', agent: 'claude' })] })
+    expect(row().querySelector('.worktree__report')?.textContent).toBe('✓ Fixed.')
+    expect(row().querySelector('.panes')).toBeNull()
+  })
+
+  it('keeps the pane row while that pane works, or when there are two', () => {
+    mount({ worktree: worktree({ report }), terminals: [terminal({ id: 't1', agent: 'claude', busy: true })] })
+    expect(row().querySelectorAll('.pane-item')).toHaveLength(1)
+    cleanup()
+    mount({
+      worktree: worktree({ report }),
+      terminals: [terminal({ id: 't1', agent: 'claude' }), terminal({ id: 't2' })]
+    })
+    expect(row().querySelectorAll('.pane-item')).toHaveLength(2)
+  })
+
+  it('drops the lone pane row under a question for you, which already says asking', () => {
+    useMessageStore.setState({
+      messages: [
+        {
+          id: 7,
+          projectId: 'p1',
+          kind: 'ask',
+          from: { worktreeId: 'w1', terminalId: 't1' },
+          to: { you: true },
+          text: 'Which store for the limiter?',
+          options: ['redis', 'postgres'],
+          at: 1,
+          state: 'queued'
+        }
+      ]
+    })
+    mount({ terminals: [terminal({ id: 't1', agent: 'claude', askingYou: 7 })] })
+    expect(row().querySelector('.worktree__ask-text')?.textContent).toBe('Which store for the limiter?')
+    expect(row().querySelector('.panes')).toBeNull()
+    useMessageStore.setState({ messages: [] })
   })
 })

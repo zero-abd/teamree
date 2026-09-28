@@ -47,7 +47,10 @@ export function WorkspaceHead({ modifier }: { modifier: PlatformModifier }): Rea
   const display = worktree === undefined ? undefined : worktreeDisplay(worktree)
 
   return (
-    <div className="workspace__head" data-region="strip">
+    <div
+      className={display === undefined ? 'workspace__head workspace__head--bare' : 'workspace__head'}
+      data-region="strip"
+    >
       <SidebarToggle />
       {display === undefined || !panesShown ? null : (
         <>
@@ -473,15 +476,19 @@ function bringIntoView(strip: HTMLElement, tab: HTMLElement): void {
   }
 }
 
-/** Marks `data-cut` on every tab not wholly in sight, so no half name shows, and counts them. */
-function cutTabsOutOfView(strip: HTMLElement | null): number {
+/** Marks `data-cut` on every tab not wholly in sight, so no half name shows, and counts them; never the shown tab. */
+export function cutTabsOutOfView(strip: HTMLElement | null): number {
   if (strip === null) return 0
   const fits = strip.scrollWidth <= strip.clientWidth
   const from = strip.scrollLeft
   const to = from + strip.clientWidth
   let cut = 0
   for (const tab of strip.querySelectorAll<HTMLElement>(':scope > .tab[data-pane-id]')) {
-    const outside = !fits && (tab.offsetLeft < from || tab.offsetLeft + tab.offsetWidth > to)
+    // Wider than the whole strip, it is still the one tab worth showing: clipped beats a bare `+N`.
+    const outside =
+      !fits &&
+      !tab.classList.contains('tab--active') &&
+      (tab.offsetLeft < from || tab.offsetLeft + tab.offsetWidth > to)
     tab.toggleAttribute('data-cut', outside)
     if (outside) cut += 1
   }

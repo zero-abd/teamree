@@ -323,6 +323,11 @@ export function WorktreeRow({
   // A question for you outranks whatever the panes say: the agent is only waiting on the answer.
   const tone = rolled?.tone ?? (liveAsk === undefined ? worktreeTone(rows) : 'waiting')
   const report = liveAsk === undefined ? reportLine(worktree) : null
+  // A lone pane that is not working says again what the question or the report above it says.
+  const lone = rows.length === 1 ? rows[0] : undefined
+  const saidAbove =
+    lone !== undefined &&
+    (liveAsk !== undefined || (report !== null && lone.activity !== 'working' && lone.activity !== 'waiting'))
   const label = worktreeLabel(display)
   const usage = useUsageStore((state) => state.usage[worktree.id])
   const showCost = useUsageStore((state) => state.showCost)
@@ -749,7 +754,7 @@ export function WorktreeRow({
         <RowMenu label={`Actions for ${label}`} items={items} anchor={menuAt} onClose={closeMenu} />
       )}
 
-      {rows.length > 0 && shown && !compact ? (
+      {rows.length > 0 && shown && !compact && !saidAbove ? (
         <PaneRows
           tree
           level={3 + depth}

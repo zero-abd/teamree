@@ -21,6 +21,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { NoticeStack } = await import('./NoticeStack')
 const { noticeLook, noticeParts } = await import('./noticeView')
+const { useMessageStore } = await import('../state/messages')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -147,5 +148,86 @@ describe('the words on a card', () => {
     )
     expect(noticeLook({ tone: 'info', action: { label: 'Open Review', url: 'https://x' } })).toBe('neutral')
     expect(noticeLook({ tone: 'info' })).toBe('neutral')
+  })
+})
+
+describe('an agent asking out of sight', () => {
+  const asking = {
+    id: 'term_b',
+    worktreeId: 'w2',
+    title: 'claude',
+    cwd: '/w',
+    shell: '/bin/zsh',
+    cols: 80,
+    rows: 24,
+    running: true,
+    busy: false,
+    lastOutputAt: 0,
+    agent: 'claude' as const,
+    agentEvent: {
+      event: 'Notification' as const,
+      at: 5,
+      detail: 'permission_prompt',
+      message: 'Claude needs your permission to use Bash'
+    },
+    screenMenu: { prompt: 'p', choices: [{ label: 'Yes', keys: ['1'] }] }
+  }
+  const setAsking = (overrides: Record<string, unknown> = {}): void =>
+    useWorkspaceStore.setState({
+      terminals: { term_b: asking },
+      worktrees: [{ id: 'w2', name: 'payment retries' } as never],
+      layouts: { w2: { worktreeId: 'w2', root: { kind: 'leaf', terminalId: 'term_b' }, focusedTerminalId: 'term_b' } },
+      activeWorktreeId: 'w1',
+      ...overrides
+    })
+
+  it('gets a card with the question, Allow for the first answer and Open for the pane', () => {
+    const answerPane = vi.fn(async () => {})
+    const revealPane = vi.fn(async () => {})
+    setAsking({ answerPane, revealPane })
+    render(<NoticeStack />)
+    const notice = card('payment retries needs you')
+    expect(notice.className).toContain('notice--asking')
+    expect(within(notice).getByText('Permission to use Bash')).toBeTruthy()
+    fireEvent.click(within(notice).getByRole('button', { name: 'Allow' }))
+    expect(answerPane).toHaveBeenCalledWith('term_b', { label: 'Yes', keys: ['1'] })
+    fireEvent.click(within(notice).getByRole('button', { name: 'Open' }))
+    expect(revealPane).toHaveBeenCalledWith('w2', 'term_b')
+  })
+
+  // `msg ask --to you`: the question is the message's, and its options are the answers.
+  it('quotes a question put to you, with its options as the answers', () => {
+    const answer = vi.fn(async () => true)
+    const ask = {
+      id: 7,
+      projectId: 'p1',
+      kind: 'ask' as const,
+      from: { worktreeId: 'w2', terminalId: 'term_b' },
+      to: { you: true as const },
+      text: 'Which store for the limiter?',
+      options: ['redis', 'postgres'],
+      at: 1,
+      state: 'queued' as const
+    }
+    useMessageStore.setState({ messages: [ask], answer })
+    setAsking({ terminals: { term_b: { ...asking, agentEvent: undefined, screenMenu: undefined, askingYou: 7 } } })
+    render(<NoticeStack />)
+    const notice = card('payment retries needs you')
+    expect(within(notice).getByText('Which store for the limiter?')).toBeTruthy()
+    fireEvent.click(within(notice).getByRole('button', { name: 'redis' }))
+    expect(answer).toHaveBeenCalledWith(ask, 'redis')
+    expect(within(notice).getByRole('button', { name: 'Open' })).toBeTruthy()
+    useMessageStore.setState({ messages: [] })
+  })
+
+  it('draws none while its pane is on screen, and none once dismissed', () => {
+    setAsking({ activeWorktreeId: 'w2' })
+    render(<NoticeStack />)
+    expect(screen.queryByText('payment retries needs you')).toBeNull()
+    cleanup()
+    setAsking()
+    render(<NoticeStack />)
+    fireEvent.click(within(card('payment retries needs you')).getByRole('button', { name: 'Dismiss message' }))
+    expect(screen.queryByText('payment retries needs you')).toBeNull()
   })
 })

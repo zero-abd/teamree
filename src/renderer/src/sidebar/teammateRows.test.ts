@@ -75,7 +75,7 @@ describe('a teammate’s rows', () => {
       NOW
     )
     expect(row?.panes[0]?.activity).toBe('stopped')
-    expect(TONE_LABEL[row!.tone!]).toBe('stopped')
+    expect(TONE_LABEL[row!.tone!]).toBe('ended')
   })
 
   it('names an unnamed pane from its title and shell', () => {

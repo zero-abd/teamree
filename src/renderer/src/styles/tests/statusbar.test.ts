@@ -15,4 +15,11 @@ describe('statusbar.css', () => {
     expect(findRule(SHEET, '.setup-ask')).toBeUndefined()
     expect(declarationOf(ruleFor(SHEET, '.statusbar'), 'z-index')).toBeUndefined()
   })
+
+  // The Changes tab open lit the git line as a chip, a filled box on a rail of text.
+  it('says a segment is on in its ink, and fills only under the pointer', () => {
+    expect(declarationOf(ruleFor(SHEET, '.statusbar__button--on'), 'background')).toBeUndefined()
+    expect(declarationOf(ruleFor(SHEET, '.statusbar__button--on'), 'color')).toBe('var(--fg-secondary)')
+    expect(declarationOf(ruleFor(SHEET, '.statusbar__button:hover'), 'background')).toBe('var(--bg-hover)')
+  })
 })
