@@ -30,10 +30,16 @@ export function placeTooltip(
   return { left: Math.round(left), top: Math.round(side === 'below' ? below : above), side }
 }
 
+/** A `data-tip-clipped` element says its tip only while its text is cut off; otherwise the tip around it shows. */
 function tipTarget(node: EventTarget | null): Tipped | null {
   if (!(node instanceof Element)) return null
   const found = node.closest<Tipped>('[data-tip]')
-  return found !== null && found.dataset.tip !== '' ? found : null
+  if (found === null || found.dataset.tip === '') return null
+  return found.hasAttribute('data-tip-clipped') && !clipped(found) ? tipTarget(found.parentElement) : found
+}
+
+function clipped(element: Tipped): boolean {
+  return element.scrollWidth > element.clientWidth || element.scrollHeight > element.clientHeight
 }
 
 /** Starts the window's tooltips; the returned function stops them. */

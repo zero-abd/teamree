@@ -3,7 +3,7 @@
 // Messages on a worktree row: a question for you turns the row amber and answers from it;
 // a child's done shows on its parent, and a task's own report on its row.
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Worktree } from '@shared/entities'
 import type { TaskMessage } from '@shared/messages'
@@ -121,6 +121,26 @@ describe('a question for you', () => {
         expect.objectContaining({ text: 'Use postgres advisory locks' })
       )
     )
+  })
+
+  it('closes Reply on Escape and gives the keyboard to the first answer', () => {
+    useMessageStore.setState({ messages: [message({})] })
+    mount(TESTS)
+    fireEvent.click(screen.getByRole('button', { name: 'Reply…' }))
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Answer' }), { key: 'Escape' })
+    expect(screen.queryByRole('textbox', { name: 'Answer' })).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'redis' }))
+  })
+
+  it('gives the keyboard back to the row once the ask it was answering is gone', async () => {
+    useMessageStore.setState({ messages: [message({})] })
+    mount(TESTS)
+    fireEvent.click(screen.getByRole('button', { name: 'Reply…' }))
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Answer' }))
+    act(() =>
+      useMessageStore.setState({ messages: [message({ state: 'answered', answeredBy: { worktreeId: 'lead' } })] })
+    )
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('treeitem', { name: 'Write tests' })))
   })
 
   it('goes once answered', () => {

@@ -123,6 +123,24 @@ describe('tooltips', () => {
       delete (HTMLElement.prototype as { offsetWidth?: number }).offsetWidth
     }
   })
+
+  it('says a clipped line only while it is cut off, and the tip around it otherwise', () => {
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      `<div id="row" data-tip="bo has typed 12 keystrokes here">
+        <span id="line" data-tip="Paginated the order history" data-tip-clipped>Paginated the order history</span>
+      </div>`
+    )
+    fireEvent.pointerOver(byId('line'))
+    wait(TOOLTIP_DELAY_MS)
+    expect(tip()?.textContent).toBe('bo has typed 12 keystrokes here')
+    fireEvent.pointerOver(byId('text'))
+    wait(TOOLTIP_WARM_MS + 1)
+    Object.defineProperty(byId('line'), 'scrollHeight', { configurable: true, value: 40 })
+    fireEvent.pointerOver(byId('line'))
+    wait(TOOLTIP_DELAY_MS)
+    expect(tip()?.textContent).toBe('Paginated the order history')
+  })
 })
 
 describe('placeTooltip', () => {

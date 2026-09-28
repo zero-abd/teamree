@@ -2,7 +2,7 @@
 
 import { changedFiles, type AgentKind, type WorktreeStatus } from '@shared/entities'
 import { harnessName } from '../agents/harnesses'
-import { TONE_LABEL, type DotTone } from './agentRows'
+import { agoLabel, SETTING_UP, TONE_LABEL, type DotTone, type SetupRun } from './agentRows'
 
 /** `1 commit`, `2 commits`. */
 export function plural(count: number, one: string, many = `${one}s`): string {
@@ -57,6 +57,19 @@ export function changesTip(
 export function paneMarkTip(agent: AgentKind | undefined, tone: DotTone | null): string {
   const name = agent === undefined ? 'Terminal' : harnessName(agent)
   return tone === null ? name : `${name} · ${TONE_LABEL[tone]}`
+}
+
+/** A setup pane's glyph: `Setting up · npm ci`, `Setup failed · exit 127`. */
+export function setupTip(setup: SetupRun, tone: DotTone): string {
+  if (setup.running) return setup.command === undefined ? SETTING_UP : `${SETTING_UP} · ${setup.command}`
+  if (tone === 'failed') return setup.exitCode === undefined ? 'Setup failed' : `Setup failed · exit ${setup.exitCode}`
+  return setup.exitCode === 0 ? 'Setup passed' : 'Setup ended'
+}
+
+/** A pane row's time slot. */
+export function lastOutputTip(quietFor: number): string {
+  const ago = agoLabel(quietFor)
+  return ago === 'now' ? 'Last output just now' : `Last output ${ago}`
 }
 
 /** The project head's count; a folded project counts its teammates' worktrees apart. */

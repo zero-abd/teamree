@@ -642,10 +642,10 @@ describe('what the panes under it are doing', () => {
         }
       }
     })
-    const title = screen.getByRole('treeitem', { name: /zsh/ }).getAttribute('title') ?? ''
-    expect(title).toContain('bo has typed 12 keystrokes here')
-    expect(title).toContain('bo tried 4 this machine refused')
-    expect(title).toContain('muted')
+    const tip = screen.getByRole('treeitem', { name: /zsh/ }).dataset.tip ?? ''
+    expect(tip).toContain('bo has typed 12 keystrokes here')
+    expect(tip).toContain('bo tried 4 this machine refused')
+    expect(screen.getByText('muted').dataset.tip).toBe('Teammates can read, not type')
   })
 
   it('says a pane is muted wherever it is listed, because mute is the owner’s', () => {
@@ -656,10 +656,11 @@ describe('what the panes under it are doing', () => {
     expect(screen.getByText('muted')).toBeTruthy()
   })
 
-  it('says where a quoted line came from, so it never reads as a verdict', () => {
+  it('says a quoted line whole on hover once it is cut off', () => {
     mount({ terminals: [terminal({ id: 't1', agent: 'claude' })], evidence: { t1: '3 tests failed' } })
-    const title = screen.getByRole('treeitem', { name: /Claude Code/ }).getAttribute('title') ?? ''
-    expect(title).toContain('last printed: 3 tests failed')
+    const line = screen.getByText('3 tests failed')
+    expect(line.dataset.tip).toBe('3 tests failed')
+    expect(line.hasAttribute('data-tip-clipped')).toBe(true)
   })
 
   it('sums the panes into one state for the row, with a failure outranking work', () => {
@@ -985,7 +986,7 @@ describe('panes that have printed since they were read', () => {
 
     const pane = screen.getByRole('treeitem', { name: /Claude Code/ })
     expect(pane.className).toContain('pane-row--unread')
-    expect(pane.title).toContain('unread')
+    expect(pane.querySelector('.agent-glyph')?.getAttribute('data-tip')).toBe('Claude Code · ready · unread')
     expect(screen.getByText('Rewrite the pager').className).toContain('worktree__name--unread')
     // The state dot says the state alone; unread is the name's ink and a mark after it.
     expect(document.querySelectorAll('.pip')).toHaveLength(0)

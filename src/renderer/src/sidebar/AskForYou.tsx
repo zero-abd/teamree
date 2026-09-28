@@ -1,7 +1,8 @@
 // A task's question for you, under its row: the question, its options as buttons, and Reply… for anything else.
 // Once the agent stops waiting it says so, and an answer goes as a note.
 
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import type { TaskMessage } from '@shared/messages'
 import { useMessageStore, waitedOn } from '../state/messages'
 import { AnswerChoices } from './AnswerButtons'
@@ -14,6 +15,18 @@ export function AskForYou({ ask, compact = false }: { ask: TaskMessage; compact?
   const [replying, setReplying] = useState(false)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
+  const card = useRef<HTMLDivElement | null>(null)
+  // Answered or gone, the card goes with the keyboard in it; the keyboard goes to its row, never the page.
+  useLayoutEffect(() => {
+    const node = card.current
+    return () => {
+      if (node === null || !node.contains(document.activeElement)) return
+      const row = rowOf(node)
+      queueMicrotask(() => {
+        if (document.activeElement === null || document.activeElement === document.body) row?.focus()
+      })
+    }
+  }, [])
 
   const send = async (text: string): Promise<void> => {
     setSending(true)
@@ -44,7 +57,13 @@ export function AskForYou({ ask, compact = false }: { ask: TaskMessage; compact?
         data-own-escape
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === 'Escape') setReplying(false)
+          if (event.key !== 'Escape' || card.current === null) return
+          const row = rowOf(card.current)
+          // Drawn now, so the field's going leaves the keyboard on the first answer, not the page.
+          flushSync(() => setReplying(false))
+          const first = card.current?.querySelector<HTMLButtonElement>('.answers button:not(:disabled)')
+          first?.focus()
+          if (document.activeElement !== first) row?.focus()
         }}
       />
     </form>
@@ -74,6 +93,7 @@ export function AskForYou({ ask, compact = false }: { ask: TaskMessage; compact?
 
   return (
     <div
+      ref={card}
       className={`worktree__ask${compact ? ' worktree__ask--compact' : ''}${lapsed ? ' worktree__ask--lapsed' : ''}`}
       role="group"
       aria-label={`Question #${ask.id}`}
@@ -85,6 +105,10 @@ export function AskForYou({ ask, compact = false }: { ask: TaskMessage; compact?
       {actions}
     </div>
   )
+}
+
+function rowOf(card: Element): HTMLElement | null {
+  return card.closest('.worktree')?.querySelector<HTMLElement>(':scope > .worktree__row > .worktree__open') ?? null
 }
 
 /** Why nothing waits on the ask any more: only a timeout is said as one. */
