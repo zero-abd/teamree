@@ -12,7 +12,7 @@ export type AskingState = {
   activeWorktreeId: string | null
   expandedTerminalId: string | null
   focusedWatchId: string | null
-  /** Settings, Help, Teamwork or All Panes over the panes. */
+  /** Settings, Help or Teamwork over the panes. */
   covered: boolean
 }
 
