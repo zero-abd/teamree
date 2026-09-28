@@ -556,7 +556,11 @@ export const Params = {
   }),
 
   /** Coding agents found on PATH, so a pane can start one untold; `versions` also runs each `--version`. */
-  agentList: z.object({ versions: z.boolean().optional() }),
+  agentList: z.object({
+    versions: z.boolean().optional(),
+    /** Asks the login shell for PATH again, for an install that added a directory to the profile. */
+    fresh: z.boolean().optional()
+  }),
   /** A worktree's past Claude Code and Codex conversations, newest first, at most 20. Local only. */
   agentConversations: z.object({ worktreeId: z.string().min(1) }),
 

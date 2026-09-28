@@ -1,11 +1,12 @@
 // Starting work: describe the task, pick who does it (a count per agent, for racing attempts), and
 // where from, or under which worktree. One action makes the worktree and starts the agents; progress lives on the sidebar row.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { MAX_AGENT_ARGS_CHARS } from '@shared/agentLaunch'
 import { branchPrefixFor } from '@shared/branchName'
 import { changedFiles, type WorktreeIssue } from '@shared/entities'
 import { permissionModesFor } from '@shared/permissionMode'
+import { NoAgentFound } from '../agents/NoAgentFound'
 import { formatChord, windowModifier } from '../keyboard/platformModifier'
 import { useRuntimeSettings } from '../settings/runtimeSettings'
 import { startPointAge } from '../sidebar/baseFreshness'
@@ -25,6 +26,7 @@ import {
   defaultAgentCounts,
   fanOut,
   plannedBranches,
+  taskAction,
   taskCreates,
   taskName,
   taskPlanNote,
@@ -84,6 +86,11 @@ export function TaskComposerDialog({
   // What the first task's setup step had unticked: `setup`, or an env file's name.
   const [unticked, setUnticked] = useState<ReadonlySet<string>>(new Set())
   const [saving, setSaving] = useState(false)
+  // With no agent to hand it to, whether the text stays on the worktree as its task.
+  const [keepText, setKeepText] = useState(true)
+  const noAgent = agentsProbed && agents.length === 0
+  const taskBox = useId()
+  const hadNoAgent = useRef(noAgent)
   const machine = useRuntimeSettings().settings
 
   const project = projects.find((entry) => entry.id === projectId)
@@ -107,6 +114,14 @@ export function TaskComposerDialog({
     const base = landedAhead(startPoints.list) ?? startPoints.list.options.find((option) => option.isBase) ?? null
     setStartPoint({ text: base?.ref ?? startPoints.list.baseRef, option: base })
   }, [startPoints, touched])
+
+  // Check Again takes its own button away when it finds one; the cursor goes back to the task.
+  useEffect(() => {
+    if (hadNoAgent.current && !noAgent && document.activeElement === document.body) {
+      document.getElementById(taskBox)?.focus()
+    }
+    hadNoAgent.current = noAgent
+  }, [noAgent, taskBox])
 
   if (!project) return null
 
@@ -167,7 +182,7 @@ export function TaskComposerDialog({
       startedFrom,
       ...(parent === undefined ? {} : { parentId: parent.id }),
       ...(issue === null ? {} : { issue }),
-      creates
+      creates: noAgent && !keepText ? creates.map((create) => ({ ...create, task: '' })) : creates
     })
   }
 
@@ -234,6 +249,7 @@ export function TaskComposerDialog({
             <label className="field field--task">
               <span className="field__label">Task</span>
               <Textarea
+                id={taskBox}
                 className="field__task"
                 value={task}
                 onChange={(event) => setTask(event.target.value)}
@@ -285,13 +301,23 @@ export function TaskComposerDialog({
           </div>
         )}
 
-        <AgentSteppers
-          agents={agents}
-          counts={counts}
-          onChange={setAgentCounts}
-          modes={modes}
-          onMode={(kind, mode) => setModeEdits({ ...modeEdits, [kind]: mode })}
-        />
+        {noAgent ? (
+          <>
+            <NoAgentFound />
+            <label className="confirm__check">
+              <input type="checkbox" checked={keepText} onChange={() => setKeepText(!keepText)} />
+              Keep text on the worktree
+            </label>
+          </>
+        ) : (
+          <AgentSteppers
+            agents={agents}
+            counts={counts}
+            onChange={setAgentCounts}
+            modes={modes}
+            onMode={(kind, mode) => setModeEdits({ ...modeEdits, [kind]: mode })}
+          />
+        )}
 
         {parent === undefined ? (
           <>
@@ -376,13 +402,13 @@ export function TaskComposerDialog({
         )}
 
         <footer className="modal__actions">
-          <p className="modal__note">{taskPlanNote(agents, agentsProbed, selection)}</p>
+          <p className="modal__note">{taskPlanNote(agentsProbed, selection)}</p>
           <button type="button" className="button button--ghost" onClick={closeDialog}>
             Cancel
           </button>
           {/* Filled while it cannot go yet, so the dialog always shows its one primary; `submit` refuses. */}
           <button type="submit" className="button button--primary" aria-disabled={!canSubmit}>
-            Start Task
+            {taskAction(selection)}
             <kbd className="modal__chord" aria-hidden="true">
               {formatChord({ key: 'Enter' }, windowModifier())}
             </kbd>
