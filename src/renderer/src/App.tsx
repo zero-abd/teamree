@@ -19,6 +19,7 @@ import { NoticeStack } from './notices/NoticeStack'
 import { usePullRequestRefresh } from './state/usePullRequestRefresh'
 import { RegionBoundary } from './errors/RegionBoundary'
 import { useMainErrors } from './errors/useMainErrors'
+import { useScrollbackLines } from './terminal/scrollbackLines'
 import { shortcutHint } from './keyboard/workspaceShortcuts'
 import { ConfirmCloseFileDialog } from './dialogs/ConfirmCloseFileDialog'
 import { ConfirmUnsavedDialog } from './dialogs/ConfirmUnsavedDialog'
@@ -73,6 +74,7 @@ export function App(): React.JSX.Element {
   useAgentNotices()
   usePullRequestRefresh()
   useMainErrors()
+  useScrollbackLines()
 
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
   // Settings brings its own section list, so it has the window to itself; the sidebar comes back as it was.

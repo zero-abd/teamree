@@ -28,11 +28,17 @@ export type RuntimeSettings = {
   shellFallback?: string
   /** Settings › Git › Fetch every: minutes between background fetches of each project's base; absent is 5. */
   fetchMinutes?: number
+  /** Settings › Panes › Scrollback lines, mirrored by the window: how much of each pane a restart keeps. Absent is 5,000. */
+  scrollbackLines?: number
   /** The stored dark theme is a choice, not the old Absolute Black default; set by the store, never by `settings.set`. */
   themeMigratedToCharcoal?: boolean
   /** The stored themes are choices, not the old Charcoal and Light defaults; set by the store only. */
   themeMigratedToStudio?: boolean
 }
+
+export const SCROLLBACK_LINES_MIN = 1_000
+export const SCROLLBACK_LINES_MAX = 100_000
+export const DEFAULT_SCROLLBACK_LINES = 5_000
 
 /** Minutes between background fetches when none are set. */
 export const DEFAULT_FETCH_MINUTES = 5

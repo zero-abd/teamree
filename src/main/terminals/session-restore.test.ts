@@ -5,7 +5,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Layout } from '../../shared/entities'
 import type { TerminalEvent } from '../../shared/methods'
-import { MAX_RECORD_BYTES, ScrollbackArchive } from '../store/scrollbackArchive'
+import { ScrollbackArchive } from '../store/scrollbackArchive'
 import { canSpawnPty, waitUntil } from './pty-test-support'
 import {
   claudeTranscriptPath,
@@ -391,9 +391,11 @@ describePty('restoring terminals across a restart', () => {
     /** Shortened from fifteen seconds, so a test can watch a checkpoint happen. */
     checkpointIntervalMs?: number,
     /** Default "unknown": the real probe would answer "absent" for a checkout made in /tmp. */
-    conversationEvidence: (question: ConversationQuestion) => ConversationEvidence = () => 'unknown'
+    conversationEvidence: (question: ConversationQuestion) => ConversationEvidence = () => 'unknown',
+    scrollbackLines?: () => number
   ): TerminalSessionManager {
     const created = new TerminalSessionManager({
+      ...(scrollbackLines === undefined ? {} : { scrollbackLines }),
       resolveWorktreeCwd: (worktreeId) => (worktreeId === 'wt_1' ? checkout : undefined),
       layouts: repositories,
       sessions: repositories,
@@ -404,6 +406,16 @@ describePty('restoring terminals across a restart', () => {
     managers.push(created)
     return created
   }
+
+  /** 20,000 numbered lines of 110 columns: more lines and more bytes than anything keeps of them. */
+  const LOUD = "i=0; while [ $i -lt 20000 ]; do printf 'line %d %0100d\\n' $i 0; i=$((i+1)); done"
+
+  /** A record's lines, the numbered ones by their number. */
+  const lines = (text: string | undefined): string[] =>
+    (text ?? '')
+      .split('\r\n')
+      .slice(0, -1)
+      .map((line) => /^line \d+/.exec(line)?.[0] ?? line)
 
   /** The directory a restart's worth of pane output is kept in. */
   async function scrollbackArchive(keep: string[] = []): Promise<ScrollbackArchive> {
@@ -1148,24 +1160,52 @@ describePty('restoring terminals across a restart', () => {
     expect(await readFile(record, 'utf8')).toBe('untouched')
   }, 20_000)
 
-  it('keeps a running pane inside the same cap a finished one gets', async () => {
+  it('checkpoints a running pane to the same lines a finished one gets', async () => {
     const { checkout } = await fakeAgent('unused')
     const repositories = createRepositories()
     const archive = await scrollbackArchive()
 
     const first = manager(repositories, checkout, archive, 100)
-    const loud = 'i=0; while [ $i -lt 20000 ]; do echo "line $i"; i=$((i+1)); done; echo done-printing; sleep 30'
-    const opened = first.create({ worktreeId: 'wt_1', command: loud })
+    const opened = first.create({ worktreeId: 'wt_1', command: `${LOUD}; echo done-printing; sleep 30` })
     await waitUntil(
       () => archive.read(opened.id)?.text.includes('done-printing') === true,
-      'a checkpoint taken after the pane had printed past the cap'
+      'a checkpoint taken after the pane had printed past the setting'
     )
 
-    const kept = archive.read(opened.id)
-    expect(Buffer.byteLength(kept?.text ?? '', 'utf8')).toBeLessThanOrEqual(MAX_RECORD_BYTES)
-    expect(kept?.text).not.toContain('line 0\r\n')
+    const kept = lines(archive.read(opened.id)?.text)
+    expect(kept).toHaveLength(5_000)
+    expect(kept.slice(-2)).toEqual(['line 19999', 'done-printing'])
     expect(first.list('wt_1')[0]?.running).toBe(true)
   }, 30_000)
+
+  it('keeps the Scrollback lines setting’s worth of a busy pane through a restart', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const repositories = createRepositories()
+    const archive = await scrollbackArchive()
+
+    let setting = 12_000
+    const first = manager(repositories, checkout, archive, undefined, undefined, () => setting)
+    const running = first.create({ worktreeId: 'wt_1', command: `${LOUD}; sleep 30` })
+    // Exited before the quit: what an exited pane lets go of must not be what the quit writes.
+    const exited = first.create({ worktreeId: 'wt_1', command: LOUD })
+    await waitUntil(() => first.read(running.id).includes('line 19999'), 'the running pane to print')
+    await waitUntil(() => first.list('wt_1').some((pane) => !pane.running), 'the other pane to exit')
+    await first.shutdown()
+
+    for (const id of [running.id, exited.id]) {
+      const kept = lines(archive.read(id, setting)?.text)
+      expect(kept).toHaveLength(12_000)
+      expect([kept[0], kept.at(-1)]).toEqual(['line 8000', 'line 19999'])
+    }
+
+    setting = 3_000
+    const reopened = await ScrollbackArchive.open(archive.directory, [running.id, exited.id])
+    const second = manager(repositories, checkout, reopened, undefined, undefined, () => setting)
+    second.restoreSessions()
+    const shown = second.read(running.id)
+    expect(shown).toContain('line 19999')
+    expect(shown).not.toContain('line 16999\r\n')
+  }, 60_000)
 
   // Two writers, one path: the armed checkpoint and the quit.
   it('quits on a pane that is checkpointing without tearing its record', async () => {

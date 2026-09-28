@@ -6,7 +6,12 @@
 import { z } from 'zod'
 import type { Layout, PaneNode, Project, Worktree } from '../../shared/entities'
 import { MAX_PANE_LABEL_CHARS } from '../../shared/methods'
-import { DEFAULT_RUNTIME_SETTINGS, type RuntimeSettings } from '../../shared/settings'
+import {
+  DEFAULT_RUNTIME_SETTINGS,
+  SCROLLBACK_LINES_MAX,
+  SCROLLBACK_LINES_MIN,
+  type RuntimeSettings
+} from '../../shared/settings'
 import { sanitizeAppearance, type Appearance } from '../../shared/theme'
 import { AgentKindOnRead } from '../terminals/agent-command'
 import type { ClosedTerminalRecord, TerminalRecord } from '../terminals/session-restore'
@@ -180,6 +185,7 @@ const SettingsSchema = z.object({
   branchPrefix: z.string().min(1).optional().catch(undefined),
   shell: z.string().min(1).optional().catch(undefined),
   fetchMinutes: z.number().int().min(1).max(1440).optional().catch(undefined),
+  scrollbackLines: z.number().int().min(SCROLLBACK_LINES_MIN).max(SCROLLBACK_LINES_MAX).optional().catch(undefined),
   themeMigratedToCharcoal: z.boolean().optional().catch(undefined),
   themeMigratedToStudio: z.boolean().optional().catch(undefined)
 })

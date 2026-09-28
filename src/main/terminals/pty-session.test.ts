@@ -585,7 +585,7 @@ describePty('PtySession', () => {
       const tailBytes = session.retainedBytes - 'ab\x1b[38'.length
       expect(session.read(tailBytes)).not.toContain('end of record')
       expect(session.read(tailBytes)).not.toContain('138;')
-      expect(session.recordedOutput(tailBytes)).not.toContain('what this pane printed last time')
+      expect(session.recordedOutput(1)).not.toContain('what this pane printed last time')
     },
     TEST_TIMEOUT_MS
   )

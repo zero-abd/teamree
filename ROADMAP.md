@@ -772,7 +772,7 @@ recorded so none of them is discovered by surprise later.
   to say that an ordinary pane's scrollback died with the app along with whatever it
   was running, and half of that is no longer true. What a pane printed is kept beside
   the workspace file — never in it — and put back when the pane reopens (see M27):
-  the last 128 KiB per pane, reduced to text and colour so that nothing stored can
+  the last Scrollback lines of each pane, reduced to text and colour so that nothing stored can
   act when it is replayed, under a line saying it is a record of a session that has
   ended and above a line saying where the live shell starts. It is written when a
   pane exits, when the app quits, and — for a pane that is still running — fifteen

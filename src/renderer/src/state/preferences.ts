@@ -3,6 +3,7 @@
 // so storage being unavailable costs a default rather than a render.
 
 import { isPermissionMode, type PermissionMode } from '@shared/permissionMode'
+import { DEFAULT_SCROLLBACK_LINES, SCROLLBACK_LINES_MAX, SCROLLBACK_LINES_MIN } from '@shared/settings'
 
 /** Below this the emulator's own glyphs stop being glyphs; above it a pane holds nothing. */
 export const TERMINAL_FONT_MIN_PX = 9
@@ -116,8 +117,8 @@ export type TerminalCursorStyle = 'bar' | 'block' | 'underline'
 
 export const TERMINAL_CURSOR_STYLES: readonly TerminalCursorStyle[] = ['bar', 'block', 'underline']
 
-export const TERMINAL_SCROLLBACK_MIN = 1_000
-export const TERMINAL_SCROLLBACK_MAX = 100_000
+export const TERMINAL_SCROLLBACK_MIN = SCROLLBACK_LINES_MIN
+export const TERMINAL_SCROLLBACK_MAX = SCROLLBACK_LINES_MAX
 export const TERMINAL_LINE_HEIGHT_MIN = 1
 export const TERMINAL_LINE_HEIGHT_MAX = 2
 
@@ -141,7 +142,7 @@ export const TERMINAL_OPTIONS_DEFAULT: TerminalOptions = {
   cursorBlink: true,
   optionIsMeta: false,
   copyOnSelect: false,
-  scrollback: 5_000,
+  scrollback: DEFAULT_SCROLLBACK_LINES,
   lineHeight: 1.25
 }
 

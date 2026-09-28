@@ -41,7 +41,7 @@ import type { ScreenMenu } from '../../../shared/screenOpinion'
 import type { SharedNoteSummary } from '../../../shared/sharedNote'
 import { MAX_PEER_PATCH_BYTES } from '../../../shared/teammateReview'
 import type { TaskReviewNotice } from '../../teamwork/peer/taskReview'
-import { DEFAULT_FETCH_MINUTES } from '../../../shared/settings'
+import { DEFAULT_FETCH_MINUTES, DEFAULT_SCROLLBACK_LINES } from '../../../shared/settings'
 import type { Terminal } from '../../../shared/entities'
 import { paletteTone, resolvePalette, type Appearance, type Tone } from '../../../shared/theme'
 import { registerAgentTrustHandlers, trustCheckoutFor } from './agentTrustHandlers'
@@ -173,6 +173,7 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
     taskDone: (worktreeId) => registry.context.store.getWorktree(worktreeId)?.report !== undefined,
     profileStores: () => loginShellStores(),
     defaultShell: () => registry.context.store.runtimeSettings().shell,
+    scrollbackLines: () => registry.context.store.runtimeSettings().scrollbackLines ?? DEFAULT_SCROLLBACK_LINES,
     layouts: registry.context.store,
     sessions: registry.context.store,
     colorTone: () =>
