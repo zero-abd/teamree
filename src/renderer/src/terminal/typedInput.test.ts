@@ -5,7 +5,7 @@
 
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { resolvePlatformModifier } from '../keyboard/platformModifier'
 import { paneKeyHandler } from './TerminalView'
@@ -20,7 +20,7 @@ import {
 
 const APPLE = resolvePlatformModifier('darwin')
 const B = '\u001b]133;B\u0007'
-const FAST = { quietMs: 5, maxMs: 200 }
+const FAST = { quietMs: 5, maxMs: 1_000 }
 const FIXTURES = join(__dirname, '../../../main/terminals/fixtures')
 const KEY_CODES: Record<string, number> = { Backspace: 8, Delete: 46, Escape: 27, ArrowLeft: 37, ArrowRight: 39 }
 
@@ -217,7 +217,7 @@ function pane(options: { typed?: string; left?: number; clipboard?: string } = {
       Object.defineProperty(event, 'keyCode', { value: KEY_CODES[key] ?? key.toUpperCase().charCodeAt(0) })
       term.textarea?.dispatchEvent(event)
     },
-    settled: () => new Promise((resolve) => term.write('', () => setTimeout(resolve, 300)))
+    settled: () => new Promise((resolve) => term.write('', () => setTimeout(resolve, 0)))
   }
 }
 
@@ -250,7 +250,7 @@ describe('⌘A in a pane', () => {
     await atEnd.settled()
     atEnd.press('a', { metaKey: true })
     atEnd.press('Backspace')
-    await atEnd.settled()
+    await vi.waitFor(() => expect(atEnd.line()).toBe(''))
     expect(atEnd.sent).toEqual(['\u0015'])
     expect(atEnd.line()).toBe('')
 
@@ -259,7 +259,7 @@ describe('⌘A in a pane', () => {
     inside.sent.length = 0
     inside.press('a', { metaKey: true })
     inside.press('Delete')
-    await inside.settled()
+    await vi.waitFor(() => expect(inside.line()).toBe(''))
     expect(inside.sent).toEqual(['\u0005', '\u0015'])
     expect(inside.line()).toBe('')
   })
@@ -269,7 +269,7 @@ describe('⌘A in a pane', () => {
     await typing.settled()
     typing.press('a', { metaKey: true })
     typing.press('x')
-    await typing.settled()
+    await vi.waitFor(() => expect(typing.line()).toBe('x'))
     expect(typing.sent).toEqual(['\u0015', 'x'])
     expect(typing.line()).toBe('x')
 
@@ -277,7 +277,7 @@ describe('⌘A in a pane', () => {
     await pasting.settled()
     pasting.press('a', { metaKey: true })
     pasting.press('v', { metaKey: true })
-    await pasting.settled()
+    await vi.waitFor(() => expect(pasting.line()).toBe('ls -la'))
     expect(pasting.line()).toBe('ls -la')
   })
 
@@ -317,7 +317,7 @@ describe('⌘A in a pane', () => {
     input.write('\u001b[?1;2c', false)
     expect(input.active()).toBe(true)
     input.write('ü', false)
-    await new Promise((resolve) => setTimeout(resolve, 300))
+    await vi.waitFor(() => expect(program.line()).toBe('ü'))
     expect(sent).toEqual(['\u001b[?1;2c', '\u0015', 'ü'])
     expect(program.line()).toBe('ü')
   })
