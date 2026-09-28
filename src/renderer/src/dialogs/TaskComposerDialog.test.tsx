@@ -785,3 +785,66 @@ describe('from a GitHub issue', () => {
     expect(task()).toBeTruthy()
   })
 })
+
+describe('the first task in a new project', () => {
+  const found = {
+    id: 'p1',
+    name: 'pager',
+    path: '/repos/pager',
+    baseRef: 'origin/main',
+    suggestedSetup: 'pnpm install --frozen-lockfile',
+    suggestedCopies: ['.env']
+  }
+  const step = (): HTMLElement => screen.getByRole('group', { name: 'Set up new worktrees' })
+  const box = (name: string): HTMLInputElement => within(step()).getByRole('checkbox', { name }) as HTMLInputElement
+  const saved = (): unknown[] => call.mock.calls.filter(([method]) => method === 'project.setPaths').map(([, p]) => p)
+
+  beforeEach(() => {
+    window.localStorage.clear()
+    call.mockImplementation(async (method, params) => {
+      if (method === 'project.setPaths') return { ...found, ...(params as object) }
+      if (method !== 'worktree.startPoints') throw new Error(`unexpected ${method}`)
+      return listFor((params as { projectId: string }).projectId)
+    })
+  })
+
+  it('offers the setup command and the ignored env files, ticked', async () => {
+    seed({ projects: [found] })
+    await open()
+    expect(box('pnpm install --frozen-lockfile').checked).toBe(true)
+    expect(box('Copy .env').checked).toBe(true)
+  })
+
+  it('saves what is ticked for new worktrees before the task starts', async () => {
+    seed({ projects: [found] })
+    await open()
+    fireEvent.change(task(), { target: { value: 'Fix the login redirect' } })
+    await act(async () => {
+      submit().click()
+    })
+    expect(saved()).toEqual([
+      { projectId: 'p1', setupCommand: 'pnpm install --frozen-lockfile', copiedPaths: ['.env'] }
+    ])
+    expect(startTask).toHaveBeenCalledTimes(1)
+    const setPathsAt = call.mock.invocationCallOrder[call.mock.calls.findIndex(([m]) => m === 'project.setPaths')]
+    expect(setPathsAt).toBeLessThan(startTask.mock.invocationCallOrder[0] ?? 0)
+  })
+
+  it('still starts the task with everything unticked, and does not ask again', async () => {
+    seed({ projects: [found] })
+    await open()
+    fireEvent.click(box('pnpm install --frozen-lockfile'))
+    fireEvent.click(box('Copy .env'))
+    fireEvent.change(task(), { target: { value: 'Fix the login redirect' } })
+    submit().click()
+    expect(saved()).toEqual([])
+    expect(startTask).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(window.localStorage.getItem('teamree.setup.dismissed') ?? '[]')).toEqual(['p1'])
+  })
+
+  it('is not there once the project has a worktree, or nothing was found', async () => {
+    seed({ projects: [found], worktrees: [{ id: 'w1', projectId: 'p1', branch: 'a', name: 'a', path: '/w/a' }] })
+    await open()
+    expect(screen.queryByRole('group', { name: 'Set up new worktrees' })).toBeNull()
+  })
+})

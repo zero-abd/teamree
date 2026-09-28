@@ -26,6 +26,16 @@ export function setupOfferFor(input: {
   return { kind: 'worktree', command: run, missing: check.missing }
 }
 
+/** What a project's first task offers to set up for new worktrees: the detected command and ignored env files. */
+export type FirstTaskSetup = { command?: string; copies: string[] }
+
+export function firstTaskSetup(project: Project, hasWorktrees: boolean, dismissed: boolean): FirstTaskSetup | null {
+  if (hasWorktrees || dismissed) return null
+  const copies = project.suggestedCopies ?? []
+  if (project.suggestedSetup === undefined && copies.length === 0) return null
+  return { ...(project.suggestedSetup === undefined ? {} : { command: project.suggestedSetup }), copies }
+}
+
 const DISMISSED_KEY = 'teamree.setup.dismissed'
 
 /** Projects whose suggestion got Not Now, from this window's storage. */

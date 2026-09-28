@@ -2,12 +2,16 @@ import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { checkRun, checkSetup, detectRun, detectSetup } from './setupDetect'
+import { createGitRunner } from './gitProcess'
+import { checkRun, checkSetup, detectRun, detectSetup, envFileCandidates, ignoredEnvFiles } from './setupDetect'
+import { createTempRepo } from './testRepository'
 
 const dirs: string[] = []
+const cleanups: Array<() => Promise<void>> = []
 
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()))
 })
 
 async function checkout(files: string[]): Promise<string> {
@@ -29,7 +33,11 @@ describe('detectSetup', () => {
     [['package.json', 'bun.lock'], 'bun install', 'node_modules'],
     [['package.json'], 'npm install', 'node_modules'],
     [['pyproject.toml', 'uv.lock'], 'uv sync', '.venv'],
-    [['Gemfile', 'Gemfile.lock'], 'bundle install', undefined]
+    [['pyproject.toml', 'poetry.lock'], 'poetry install', '.venv'],
+    [['requirements.txt'], 'python3 -m pip install -r requirements.txt', undefined],
+    [['Gemfile', 'Gemfile.lock'], 'bundle install', undefined],
+    [['Cargo.toml', 'Cargo.lock'], 'cargo fetch', undefined],
+    [['Cargo.toml'], 'cargo fetch', undefined]
   ])('%j suggests %s', (files, command, installs) => {
     expect(detectSetup(new Set(files))).toEqual(installs === undefined ? { command } : { command, installs })
   })
@@ -60,6 +68,40 @@ describe('checkSetup', () => {
   it('answers empty for a checkout it cannot read or recognise', async () => {
     expect(await checkSetup(await checkout(['go.mod']))).toEqual({})
     expect(await checkSetup(path.join(os.tmpdir(), 'teamree-no-such-checkout'))).toEqual({})
+  })
+})
+
+describe('env files to copy', () => {
+  it('picks the env files a checkout keeps out of git, not the committed templates', () => {
+    const names = [
+      '.env',
+      '.env.local',
+      '.env.development.local',
+      '.envrc',
+      '.env.example',
+      '.env.sample',
+      '.envy',
+      'env'
+    ]
+    expect(envFileCandidates(names)).toEqual(['.env', '.env.development.local', '.env.local', '.envrc'])
+  })
+
+  it('offers an ignored .env in the checkout, and not a tracked one', async () => {
+    const repo = await createTempRepo()
+    cleanups.push(repo.cleanup)
+    await repo.write('.gitignore', '.env\n.env.local\n')
+    await repo.write('.env.production', 'SHARED=1\n')
+    await repo.commit('ignore env')
+    await repo.write('.env', 'SECRET=1\n')
+    await repo.write('.env.local', 'LOCAL=1\n')
+    expect(await ignoredEnvFiles(createGitRunner(), repo.repoPath)).toEqual(['.env', '.env.local'])
+  })
+
+  it('answers empty when nothing matches or the folder is gone', async () => {
+    const repo = await createTempRepo()
+    cleanups.push(repo.cleanup)
+    expect(await ignoredEnvFiles(createGitRunner(), repo.repoPath)).toEqual([])
+    expect(await ignoredEnvFiles(createGitRunner(), path.join(os.tmpdir(), 'teamree-no-such-checkout'))).toEqual([])
   })
 })
 

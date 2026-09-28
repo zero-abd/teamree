@@ -34,6 +34,9 @@ import {
 import { useStartPoints } from './useStartPoints'
 import { worktreeDisplay } from '../sidebar/worktreeDisplay'
 import { Textarea } from '../ui/Input'
+import { firstTaskSetup, readDismissed, writeDismissed } from '../workspace/setupOfferModel'
+
+const storage = typeof window === 'undefined' ? undefined : window.localStorage
 
 export function TaskComposerDialog({
   projectId: openedFor,
@@ -62,6 +65,7 @@ export function TaskComposerDialog({
   const parentStatus = useWorkspaceStore((state) => (parentId === undefined ? undefined : state.statuses[parentId]))
   const fetching = useWorkspaceStore((state) => state.fetching)
   const fetchProject = useWorkspaceStore((state) => state.fetchProject)
+  const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
   const now = useNow(60_000)
 
   const [projectId, setProjectId] = useState(openedFor)
@@ -77,6 +81,9 @@ export function TaskComposerDialog({
   // Whether the picker has been open, so the task box it gives way to takes the cursor back.
   const [pickedOnce, setPickedOnce] = useState(fromIssue)
   const [issue, setIssue] = useState<WorktreeIssue | null>(null)
+  // What the first task's setup step had unticked: `setup`, or an env file's name.
+  const [unticked, setUnticked] = useState<ReadonlySet<string>>(new Set())
+  const [saving, setSaving] = useState(false)
   const machine = useRuntimeSettings().settings
 
   const project = projects.find((entry) => entry.id === projectId)
@@ -133,10 +140,23 @@ export function TaskComposerDialog({
     parentStatus === undefined ? 0 : parentStatus.staged + parentStatus.unstaged + parentStatus.untracked
   // Bounded by the agent's command line; a paste past it is refused, not cut.
   const tooLong = task.trim().length > MAX_AGENT_ARGS_CHARS
-  const canSubmit = hasTask && !tooLong && startedFrom.length > 0 && problem === null
+  const canSubmit = hasTask && !tooLong && startedFrom.length > 0 && problem === null && !saving
+  const setup =
+    parent === undefined
+      ? firstTaskSetup(
+          project,
+          worktrees.some((worktree) => worktree.projectId === projectId),
+          readDismissed(storage).includes(projectId)
+        )
+      : null
+  const toggle = (key: string): void =>
+    setUnticked((current) => {
+      const next = new Set(current)
+      if (!next.delete(key)) next.add(key)
+      return next
+    })
 
-  const submit = (): void => {
-    if (!canSubmit) return
+  const start = (): void => {
     const used = Object.fromEntries(
       selection
         .filter((agent) => permissionModesFor(agent.kind).length > 0)
@@ -150,6 +170,27 @@ export function TaskComposerDialog({
       ...(issue === null ? {} : { issue }),
       creates
     })
+  }
+
+  const submit = (): void => {
+    if (!canSubmit) return
+    if (setup !== null) {
+      // Answered here, so the rail does not ask again on the worktree this starts.
+      const dismissed = readDismissed(storage)
+      if (!dismissed.includes(projectId)) writeDismissed(storage, [...dismissed, projectId])
+      const copies = setup.copies.filter((name) => !unticked.has(name))
+      const chosen = {
+        ...(setup.command === undefined || unticked.has('setup') ? {} : { setupCommand: setup.command }),
+        ...(copies.length === 0 ? {} : { copiedPaths: copies })
+      }
+      if (Object.keys(chosen).length > 0) {
+        setSaving(true)
+        // Saved first: the worktree reads its setup when it is made.
+        void setProjectPaths(projectId, chosen).then(start)
+        return
+      }
+    }
+    start()
   }
 
   return (
@@ -311,6 +352,29 @@ export function TaskComposerDialog({
             />
           </>
         ) : null}
+
+        {setup === null ? null : (
+          <fieldset className="task-setup">
+            <legend className="field__label">Set up new worktrees</legend>
+            {setup.command === undefined ? null : (
+              <label className="confirm__check">
+                <input type="checkbox" checked={!unticked.has('setup')} onChange={() => toggle('setup')} />
+                <code className="task-setup__command">{setup.command}</code>
+              </label>
+            )}
+            {setup.copies.map((name) => (
+              <label className="confirm__check" key={name}>
+                <input
+                  type="checkbox"
+                  aria-label={`Copy ${name}`}
+                  checked={!unticked.has(name)}
+                  onChange={() => toggle(name)}
+                />
+                Copy <code className="task-setup__command">{name}</code>
+              </label>
+            ))}
+          </fieldset>
+        )}
 
         <footer className="modal__actions">
           <p className="modal__note">{taskPlanNote(agents, agentsProbed, selection)}</p>
