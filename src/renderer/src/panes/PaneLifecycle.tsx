@@ -1,7 +1,7 @@
 // A pane's lifecycle as the pane draws it: the starting shimmer, the asking card and the state footer while
 // an agent runs, and the end block (marker line and one row of actions) once the program is gone.
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Terminal } from '@shared/entities'
 import { markerTime } from '@shared/paneMarker'
 import type { StoppedFor } from '@shared/paneRestore'
@@ -18,7 +18,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { shownScreen } from '../terminal/shownPanes'
 import { Button, type ButtonVariant } from '../ui/Button'
 import { StatusDot, type PaneState } from '../ui/StatusPill'
-import { registerAskCard } from './askCards'
+import { focusAfterAnswer, registerAskCard } from './askCards'
 import { missingTool, type MissingTool } from './missingTool'
 
 /** What a shell's ^C exit reads as: the person stopped it, nothing failed. */
@@ -195,6 +195,17 @@ export function PaneAsk({ terminal, onReview }: { terminal: Terminal; onReview: 
   const [draft, setDraft] = useState('')
   const card = useRef<HTMLDivElement | null>(null)
   useEffect(() => (card.current === null ? undefined : registerAskCard(terminal.id, card.current)), [terminal.id])
+  // Answered, the card goes with the keyboard in it; once it has, the keyboard goes to the pane, never the page.
+  useLayoutEffect(() => {
+    const node = card.current
+    return () => {
+      if (node === null || !node.contains(document.activeElement)) return
+      const pane = node.closest('.pane')
+      queueMicrotask(() => {
+        if (document.activeElement === null || document.activeElement === document.body) focusAfterAnswer(pane)
+      })
+    }
+  }, [])
   const line = useShownLine(terminal, put === undefined)
   const permission = terminal.screenMenu !== undefined || terminal.agentEvent?.event === 'Notification'
   const title = permission && put === undefined ? 'Permission needed' : 'Needs you'
@@ -202,7 +213,10 @@ export function PaneAsk({ terminal, onReview }: { terminal: Terminal; onReview: 
   const allow = put === undefined ? terminal.screenMenu?.choices[0] : undefined
   const options = put?.options ?? []
   const send = async (text: string): Promise<void> => {
-    if (put !== undefined && (await answer(put, text))) setReplying(false)
+    const pane = card.current?.closest('.pane') ?? null
+    if (put === undefined || !(await answer(put, text))) return
+    setReplying(false)
+    focusAfterAnswer(pane)
   }
   return (
     <div ref={card} className="pane-state pane-state--asking" role="group" aria-label={title}>

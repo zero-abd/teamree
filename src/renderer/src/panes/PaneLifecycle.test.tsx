@@ -13,7 +13,9 @@ let output = 'Error: test suite failed\r\nFAIL retry.test.ts\r\n'
 
 vi.mock('../terminal/TerminalView', () => ({
   TerminalView: ({ terminalId }: { terminalId: string }) => (
-    <div className="xterm" tabIndex={0} data-testid={`surface-${terminalId}`} />
+    <div className="xterm" tabIndex={0} data-testid={`surface-${terminalId}`}>
+      <textarea className="xterm-helper-textarea" aria-label={`input ${terminalId}`} />
+    </div>
   )
 }))
 
@@ -67,9 +69,15 @@ const onRelaunch = vi.fn()
 const onClose = vi.fn()
 const onResumeConversation = vi.fn()
 
-function mount(pane: Terminal): void {
+/** Draws the pane; the returned function draws it again with the terminal as it is now. */
+function mount(pane: Terminal): (next: Terminal) => void {
+  const drawn = render(tree(pane))
+  return (next) => drawn.rerender(tree(next))
+}
+
+function tree(pane: Terminal): React.JSX.Element {
   const node: PaneNode = { kind: 'leaf', terminalId: pane.id }
-  render(
+  return (
     <PaneTree
       node={node}
       path={[]}
@@ -410,5 +418,75 @@ describe('an agent asking in its pane', () => {
     expect(focusAskAnswer('t1')).toBe(true)
     expect(document.activeElement?.textContent).toBe('redis')
     expect(focusAskAnswer('elsewhere')).toBe(false)
+  })
+
+  // #567: the card goes with its answer, and the keyboard goes back to the pane rather than to the page.
+  describe('once answered', () => {
+    const input = (): Element | null => screen.getByRole('textbox', { name: 'input t1' })
+
+    it('gives the keyboard back to the pane’s terminal after an option', async () => {
+      useMessageStore.setState({ messages: [put], answer: vi.fn(async () => true) })
+      mount(terminal('t1', { agent: 'claude', askingYou: 7, tookTurn: true }))
+      const redis = screen.getByRole('button', { name: 'redis' })
+      redis.focus()
+      await act(async () => fireEvent.click(redis))
+      expect(document.activeElement).toBe(input())
+    })
+
+    it('and after a reply', async () => {
+      useMessageStore.setState({ messages: [put], answer: vi.fn(async () => true) })
+      mount(terminal('t1', { agent: 'claude', askingYou: 7, tookTurn: true }))
+      fireEvent.click(screen.getByRole('button', { name: 'Reply…' }))
+      const field = screen.getByRole('textbox', { name: 'Answer' })
+      fireEvent.change(field, { target: { value: 'sqlite' } })
+      await act(async () => fireEvent.submit(field))
+      expect(document.activeElement).toBe(input())
+    })
+
+    it('and after Allow, when the card goes with the keyboard in it', async () => {
+      const { answerPane } = useWorkspaceStore.getState()
+      useWorkspaceStore.setState({ answerPane: vi.fn(async () => {}) })
+      const asking = terminal('t1', {
+        agent: 'claude',
+        tookTurn: true,
+        agentEvent: { event: 'Notification', at: 1, message: 'Claude needs your permission to use Bash' },
+        screenMenu: { prompt: 'p', choices: [{ label: 'Yes', keys: ['1'] }] }
+      })
+      const redraw = mount(asking)
+      const allow = screen.getByRole('button', { name: 'Allow' })
+      allow.focus()
+      fireEvent.click(allow)
+      await act(async () => redraw({ ...asking, busy: true, screenMenu: undefined, agentEvent: undefined }))
+      expect(document.querySelector('.pane-state--asking')).toBeNull()
+      expect(document.activeElement).toBe(input())
+      useWorkspaceStore.setState({ answerPane })
+    })
+
+    it('finds the panes when its own has gone', async () => {
+      useMessageStore.setState({ messages: [put] })
+      const drawn = render(tree(terminal('t1', { agent: 'claude', askingYou: 7, tookTurn: true })))
+      screen.getByRole('button', { name: 'redis' }).focus()
+      await act(async () =>
+        drawn.rerender(
+          <div data-region="panes">
+            <section className="pane pane--focused">
+              <textarea className="xterm-helper-textarea" aria-label="input t2" />
+            </section>
+          </div>
+        )
+      )
+      expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'input t2' }))
+    })
+
+    it('leaves the keyboard alone when it was elsewhere', async () => {
+      const asking = terminal('t1', { agent: 'claude', askingYou: 7, tookTurn: true })
+      useMessageStore.setState({ messages: [put] })
+      const redraw = mount(asking)
+      const outside = document.body.appendChild(document.createElement('button'))
+      outside.focus()
+      await act(async () => redraw({ ...asking, askingYou: undefined }))
+      expect(document.activeElement).toBe(outside)
+      outside.remove()
+    })
   })
 })

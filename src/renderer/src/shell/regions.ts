@@ -1,10 +1,10 @@
 // The window's keyboard regions, each the element marked `data-region`: F6 walks them, View's Focus
 // items name them, and a region put away while it holds the focus hands it to the panes.
 
-export type Region = 'sidebar' | 'strip' | 'panes' | 'panel'
+export type Region = 'sidebar' | 'strip' | 'panes' | 'panel' | 'notices'
 
-/** F6's order, left to right as they are drawn. */
-export const REGION_ORDER: readonly Region[] = ['sidebar', 'strip', 'panes', 'panel']
+/** F6's order, left to right as they are drawn, then the corner stack. */
+export const REGION_ORDER: readonly Region[] = ['sidebar', 'strip', 'panes', 'panel', 'notices']
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'
 
@@ -14,7 +14,9 @@ const LANDING: Record<Region, readonly string[]> = {
   strip: ['.tabs--active [role="tab"][aria-selected="true"]', '[role="tab"][aria-selected="true"]'],
   // Terminal, then an editor, then a page such as All Panes, which takes the focus itself.
   panes: ['.pane--focused .xterm-helper-textarea', '.pane--focused [contenteditable="true"]', '.page'],
-  panel: ['[role="tab"][aria-selected="true"]']
+  panel: ['[role="tab"][aria-selected="true"]'],
+  // A card still sliding out is inert.
+  notices: ['.notice:not([inert]) .notice__actions button', '.notice:not([inert]) .notice__action']
 }
 
 export function regionOf(element: Element | null): Region | null {

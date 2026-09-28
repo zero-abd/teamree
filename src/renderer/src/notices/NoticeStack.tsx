@@ -2,12 +2,12 @@
 // then the update card.
 // A dismissed notice slides out in place before it goes, so the stack closes the gap rather than jumping.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { copyText } from '../clipboard/clipboard'
 import { Icon } from '../icons/Icon'
 import { Button, IconButton } from '../ui/Button'
 import { openInBrowser } from '../shell/openInBrowser'
-import { requestRegionFocus } from '../shell/regions'
+import { focusRegion, requestRegionFocus } from '../shell/regions'
 import { usePaneEvidence } from '../sidebar/usePaneEvidence'
 import { useWorkspaceStore, type Notice } from '../state/workspaceStore'
 import { HandoffPopups } from '../teamwork/HandoffPopups'
@@ -15,6 +15,7 @@ import { ReviewPopups } from '../teamwork/ReviewPopups'
 import { SharedNotePopups } from '../teamwork/SharedNotePopups'
 import { UpdateAvailableCard } from '../updates/UpdateAvailableCard'
 import { askForYou, useMessageStore } from '../state/messages'
+import { focusAfterAnswer } from '../panes/askCards'
 import { hiddenAsks, type HiddenAsk } from './askingNotices'
 import { SendBlockToAgent } from '../workspace/rightPanel/CommitBlocked'
 import { liveAction, NOTICE_ICON, noticeLook, noticeParts } from './noticeView'
@@ -31,10 +32,12 @@ export function NoticeStack(): React.JSX.Element {
   const notices = useWorkspaceStore((state) => state.notices)
   const leaving = useLeaving(notices)
   const shown = [...notices, ...leaving.cards].sort((left, right) => left.id - right.id)
+  const stack = useRef<HTMLDivElement | null>(null)
+  useKeyboardStays(stack)
 
   return (
     // Bottom right above the status bar: notices stack above the update card, never over it.
-    <div className="corner-stack">
+    <div className="corner-stack" data-region="notices" ref={stack}>
       <StoreProblemCards />
       <SharedNotePopups />
       <HandoffPopups />
@@ -56,6 +59,31 @@ export function NoticeStack(): React.JSX.Element {
       <UpdateAvailableCard />
     </div>
   )
+}
+
+/** A card that goes, or goes inert, while it holds the keyboard hands it to the next card, else to the panes. */
+function useKeyboardStays(stack: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const root = stack.current
+    if (root === null) return
+    let held: Element | null = null
+    const track = (event: FocusEvent): void => {
+      held = event.target instanceof Element && root.contains(event.target) ? event.target : null
+    }
+    const watch = new MutationObserver(() => {
+      if (held === null || (held.isConnected && held.closest('[inert]') === null)) return
+      const active = document.activeElement
+      if (active !== null && active !== document.body && active !== held) return
+      held = null
+      if (!focusRegion('notices')) focusAfterAnswer(null)
+    })
+    watch.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['inert'] })
+    document.addEventListener('focusin', track)
+    return () => {
+      watch.disconnect()
+      document.removeEventListener('focusin', track)
+    }
+  }, [stack])
 }
 
 /** Notices just dropped from the store, kept drawn until their slide out ends. */

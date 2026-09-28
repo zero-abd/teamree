@@ -32,7 +32,7 @@
 
   --fg: #f1f3f8;
   --fg-secondary: #aeb4c0;
-  --fg-muted: #7f8795;
+  --fg-muted: #878f9c;
   --fg-faint: #5e6674;
 
   --accent: #6d5bf2;
@@ -49,7 +49,7 @@
   --danger: #ef6a73;
   --info: #58a6e7;
   --working: #49a8f2;
-  --stopped: #7f8795;
+  --stopped: #878f9c;
 
   /* The terminal reads these back, so pane and chrome stay one surface. */
   --term-bg: #0b0d12;
@@ -167,7 +167,7 @@
 
     --fg: #171a22;
     --fg-secondary: #505866;
-    --fg-muted: #626b79;
+    --fg-muted: #5c6471;
     --fg-faint: #8b93a1;
 
     --accent: #5848df;
@@ -179,12 +179,12 @@
     --on-accent: #ffffff;
 
     /* State: working, asking, ready, failed, stopped. The accent never means one. */
-    --success: #177a50;
-    --warning: #9b5f08;
+    --success: #15714a;
+    --warning: #8f5707;
     --danger: #bd3848;
     --info: #17689e;
     --working: #176da8;
-    --stopped: #626b79;
+    --stopped: #5c6471;
 
     /* The terminal reads these back, so pane and chrome stay one surface. */
     --term-bg: #ffffff;

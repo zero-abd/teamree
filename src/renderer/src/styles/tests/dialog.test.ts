@@ -89,14 +89,17 @@ describe('dialog.css', () => {
       expect(declarationOf(ref, 'font-size')).toBeUndefined()
     })
 
-    // The agents' counts and modes are the shared stepper and segmented well; the sheet adds only the radio's look.
+    // The agents' counts and modes are the shared stepper and segmented well; the sheet adds only Bypass's danger.
     it('draws the agents with the shared stepper and segmented well', () => {
-      for (const selector of ['.agents__step', '.agents__step:disabled', '.agents__count', '.agents__mode']) {
+      for (const selector of [
+        '.agents__step',
+        '.agents__step:disabled',
+        '.agents__count',
+        '.agents__mode',
+        ".agents__modes .segmented__item[aria-checked='true']"
+      ]) {
         expect(findRule(SHEET, selector), selector).toBeUndefined()
       }
-      expect(declarationOf(ruleFor(SHEET, ".agents__modes .segmented__item[aria-checked='true']"), 'background')).toBe(
-        declarationOf(ruleFor('base.css', ".segmented__item[aria-pressed='true']"), 'background')
-      )
     })
   })
 

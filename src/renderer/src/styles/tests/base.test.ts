@@ -107,11 +107,11 @@ describe('base.css', () => {
     )
   })
 
-  it('sets a segmented control in a 28px sunken well, its choice raised', () => {
+  it('sets a segmented control in a 28px sunken well, its choice raised, a toggle or a radio alike', () => {
     const well = ruleFor(SHEET, '.segmented')
     expect(declarationOf(well, 'height')).toBe('28px')
     expect(declarationOf(well, 'background')).toBe('var(--bg-sunken)')
-    const on = listed(".segmented__item[aria-pressed='true']")
+    const on = listed(".segmented__item:is([aria-pressed='true'], [aria-checked='true'])")
     expect(declarationOf(on, 'background')).toBe('var(--bg-raised)')
     expect(declarationOf(on, 'box-shadow')).toBe('var(--shadow-1)')
   })

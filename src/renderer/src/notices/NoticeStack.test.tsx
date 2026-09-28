@@ -5,6 +5,7 @@
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Notice } from '../state/workspaceStore'
 
 vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: {
@@ -22,6 +23,7 @@ const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { NoticeStack } = await import('./NoticeStack')
 const { noticeLook, noticeParts } = await import('./noticeView')
 const { useMessageStore } = await import('../state/messages')
+const { regionAfter, regionOf } = await import('../shell/regions')
 
 const INITIAL = useWorkspaceStore.getState()
 
@@ -116,6 +118,50 @@ describe('a dismissed notice', () => {
     act(() => useWorkspaceStore.getState().dismissNotice(1))
     fireEvent.animationEnd(card('Copied the path'))
     expect(screen.queryByText('Copied the path')).toBeNull()
+  })
+})
+
+// #567: F6 reaches the stack, and a card that goes while it holds the keyboard hands it on.
+describe('the keyboard in the stack', () => {
+  const undoing = (label: string, shareId: string): Notice['action'] => ({
+    label,
+    undo: { kind: 'shared-note', shareId }
+  })
+  const two: Notice[] = [
+    { id: 1, text: 'Moved to the trash', tone: 'info', action: undoing('Undo', 's1') },
+    { id: 2, text: 'Could not push: remote rejected main', tone: 'error', action: undoing('Retry', 's2') }
+  ]
+
+  it('is a region F6 stops at while it has a notice, and not while it is empty', () => {
+    render(<NoticeStack />)
+    expect(regionAfter(null, 1)).toBeNull()
+    act(() => useWorkspaceStore.setState({ notices: two }))
+    const undo = screen.getByRole('button', { name: 'Undo' })
+    expect(regionOf(undo)).toBe('notices')
+    expect(regionAfter(null, 1)).toBe('notices')
+  })
+
+  it('moves on to the next card when the one holding the keyboard goes', async () => {
+    useWorkspaceStore.setState({ notices: two, undo: vi.fn(async () => {}) })
+    render(<NoticeStack />)
+    const undo = screen.getByRole('button', { name: 'Undo' })
+    undo.focus()
+    await act(async () => fireEvent.click(undo))
+    expect(document.activeElement?.textContent).toBe('Retry')
+  })
+
+  it('goes back to the panes when the last card goes', async () => {
+    document.body.insertAdjacentHTML(
+      'afterbegin',
+      '<div data-region="panes"><section class="pane pane--focused"><textarea class="xterm-helper-textarea" aria-label="input"></textarea></section></div>'
+    )
+    useWorkspaceStore.setState({ notices: two.slice(0, 1), undo: vi.fn(async () => {}) })
+    render(<NoticeStack />)
+    const undo = screen.getByRole('button', { name: 'Undo' })
+    undo.focus()
+    await act(async () => fireEvent.click(undo))
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'input' }))
+    document.querySelector('[data-region="panes"]')?.remove()
   })
 })
 
