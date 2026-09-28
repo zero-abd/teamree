@@ -53,6 +53,7 @@ import { RegionFocus } from './shell/RegionFocus'
 import { shellClassName } from './shell/shellClass'
 import { FolderDrop } from './shell/FolderDrop'
 import { watchLayoutMotion } from './shell/layoutMotion'
+import { installTooltips } from './ui/Tooltip'
 import { SidebarResizer } from './shell/SidebarResizer'
 import { StatusBar } from './shell/StatusBar'
 import { useWorkspaceStore } from './state/workspaceStore'
@@ -99,6 +100,7 @@ export function App(): React.JSX.Element {
 
   useEffect(() => watchSystemTone(useWorkspaceStore.getState().setSystemTone), [])
   useEffect(() => watchLayoutMotion(document), [])
+  useEffect(() => installTooltips(document), [])
 
   // `teamree://join?…` links the OS opened the app with: the one that launched it, then each after.
   useEffect(() => {

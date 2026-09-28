@@ -332,9 +332,9 @@ describe('the pane buttons at the end of the strip', () => {
   // Hover names the action only; chords are taught elsewhere.
   it('names what each one does on hover, and no chord', () => {
     onePane()
-    expect(screen.getByRole('button', { name: 'Split right' }).getAttribute('title')).toBe('Split right')
-    expect(screen.getByRole('button', { name: 'Split down' }).getAttribute('title')).toBe('Split down')
-    expect(screen.getByRole('button', { name: 'New tab' }).getAttribute('title')).toBe('New tab')
+    expect(screen.getByRole('button', { name: 'Split right' }).getAttribute('data-tip')).toBe('Split right')
+    expect(screen.getByRole('button', { name: 'Split down' }).getAttribute('data-tip')).toBe('Split down')
+    expect(screen.getByRole('button', { name: 'New tab' }).getAttribute('data-tip')).toBe('New tab')
   })
 
   it('carries no words of its own besides the tab names', () => {
@@ -389,7 +389,7 @@ describe('the Maximize button at the end of the strip', () => {
   it('maximizes the focused pane', () => {
     twoPanes()
     const button = screen.getByRole('button', { name: 'Maximize' })
-    expect(button.getAttribute('title')).toBe('Maximize')
+    expect(button.getAttribute('data-tip')).toBe('Maximize')
     fireEvent.click(button)
     expect(toggleExpandedPane).toHaveBeenCalledOnce()
   })
@@ -633,7 +633,20 @@ describe('naming a pane', () => {
 
     const tab = screen.getAllByRole('tab')[0]!
     expect(tab.querySelector('.tab__name')?.textContent).toBe(long)
-    expect(tab.getAttribute('title')).toContain(long)
+    expect(tab.getAttribute('data-tip')).toContain(long)
+  })
+
+  it('says the harness and its state on the dot and the glyph', () => {
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout('w1', row('t1'), 't1') },
+      terminals: byId(terminal({ id: 't1', agent: 'claude', busy: true }))
+    })
+    mount()
+    const tab = screen.getAllByRole('tab')[0]!
+    expect(tab.querySelector('.activity')?.getAttribute('data-tip')).toBe('Claude Code · working')
+    expect(tab.querySelector('.agent-glyph')?.getAttribute('data-tip')).toBe('Claude Code · working')
+    expect(tab.querySelector('title')).toBeNull()
   })
 })
 
@@ -670,7 +683,7 @@ describe('the way back to the sidebar', () => {
     seed({ sidebarVisible: false })
     mount()
     const show = screen.getByRole('button', { name: 'Show sidebar' })
-    expect(show.getAttribute('title')).toBe('Show sidebar')
+    expect(show.getAttribute('data-tip')).toBe('Show sidebar')
     expect(show.textContent).toBe('')
     expect(show.querySelector('svg')).toBeTruthy()
     expect(show.parentElement?.classList.contains('workspace__head')).toBe(true)
@@ -835,7 +848,7 @@ describe('a markdown tab', () => {
   it('shows a dot while the page is ahead of the file, and none once it is saved', () => {
     withPage({ unsavedFiles: { 'file:1': true } })
     expect(screen.getByTestId('unsaved')).toBeTruthy()
-    expect(screen.getByRole('tab', { name: /NOTES\.md/ }).getAttribute('title')).toBe('NOTES.md · unsaved')
+    expect(screen.getByRole('tab', { name: /NOTES\.md/ }).getAttribute('data-tip')).toBe('NOTES.md · unsaved')
     act(() => useWorkspaceStore.setState({ unsavedFiles: {} }))
     expect(screen.queryByTestId('unsaved')).toBeNull()
   })

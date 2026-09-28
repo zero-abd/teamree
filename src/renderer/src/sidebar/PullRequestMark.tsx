@@ -17,7 +17,7 @@ export function PullRequestMark({
       className={`chip prchip prchip--${chip.tone}`}
       role="link"
       aria-label={chip.title.replace(/\n/g, ' · ')}
-      title={chip.title}
+      data-tip={chip.title}
       onClick={(event) => {
         event.stopPropagation()
         openInBrowser(pull.url)

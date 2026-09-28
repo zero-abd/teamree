@@ -2,7 +2,6 @@
 
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { Icon, type IconName } from '../icons/Icon'
-import { Tooltip } from './Tooltip'
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 export type ButtonSize = 'sm' | 'md' | 'lg'
@@ -56,10 +55,8 @@ export function IconButton({ icon, label, size = 'md', className, ...rest }: Ico
     className === undefined ? '' : ` ${className}`
   }`
   return (
-    <Tooltip label={label}>
-      <button {...rest} type="button" className={classes} aria-label={label}>
-        <Icon name={icon} />
-      </button>
-    </Tooltip>
+    <button {...rest} type="button" className={classes} aria-label={label} data-tip={label}>
+      <Icon name={icon} />
+    </button>
   )
 }

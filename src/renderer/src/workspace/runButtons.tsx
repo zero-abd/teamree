@@ -95,7 +95,7 @@ export function RunButtons({ worktreeId }: { worktreeId: string }): React.JSX.El
             <button
               type="button"
               className={`run-buttons__run${running ? ' run-buttons__run--running' : ''}`}
-              title={`${running ? 'Show' : 'Run'} ${label} · ${offer.command}`}
+              data-tip={`${running ? 'Show' : 'Run'} ${label} · ${offer.command}`}
               aria-label={`${running ? 'Show' : 'Run'} ${label}`}
               onClick={() => actions.run(offer.kind, false)}
             >
@@ -107,7 +107,7 @@ export function RunButtons({ worktreeId }: { worktreeId: string }): React.JSX.El
                 <button
                   type="button"
                   className="tabs__action"
-                  title={`Restart ${label}`}
+                  data-tip={`Restart ${label}`}
                   aria-label={`Restart ${label}`}
                   onClick={() => actions.run(offer.kind, true)}
                 >
@@ -116,7 +116,7 @@ export function RunButtons({ worktreeId }: { worktreeId: string }): React.JSX.El
                 <button
                   type="button"
                   className="tabs__action"
-                  title={`Stop ${label}`}
+                  data-tip={`Stop ${label}`}
                   aria-label={`Stop ${label}`}
                   onClick={() => actions.stop(offer.kind)}
                 >
@@ -148,7 +148,7 @@ export function RunChip({
   return (
     <span
       className={`chip worktree__run worktree__run--${state}`}
-      title={pane?.exitCode === undefined ? 'Tests running' : `Tests exited ${pane.exitCode}`}
+      data-tip={pane?.exitCode === undefined ? 'Tests running' : `Tests exited ${pane.exitCode}`}
     >
       {text}
     </span>

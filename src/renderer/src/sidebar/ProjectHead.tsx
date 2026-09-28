@@ -8,6 +8,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { agoLabel } from './agentRows'
 import { baseFreshness } from './baseFreshness'
 import { useNestDrop } from './nestDrag'
+import { projectCountTip, unpushedTip } from './tipText'
 import { refocus, RowMenu, type MenuClosed, type RowMenuAnchor, type RowMenuItem } from './RowMenu'
 import { worktreeDisplay, worktreeLabel } from './worktreeDisplay'
 import { DropHint } from './WorktreeRow'
@@ -160,11 +161,7 @@ export function ProjectHead({
       <div className="project__actions">
         {team}
         {/* Before New Task and ⋯, or in their place while they wait for the pointer. Folded, theirs are counted apart. */}
-        <span
-          className="project__count"
-          aria-hidden="true"
-          title={theirs > 0 && collapsed ? `${theirs} teammate worktree${theirs === 1 ? '' : 's'}` : undefined}
-        >
+        <span className="project__count" aria-hidden="true" data-tip={projectCountTip(count, collapsed ? theirs : 0)}>
           {count}
           {theirs > 0 && collapsed ? <span className="project__count--teammate">{`+${theirs}`}</span> : null}
         </span>
@@ -172,7 +169,7 @@ export function ProjectHead({
           type="button"
           className="button button--ghost button--icon project__new"
           tabIndex={-1}
-          title="New Task"
+          data-tip="New Task"
           aria-label={`New Task in ${project.name}`}
           onClick={onNewTask}
         >
@@ -182,7 +179,7 @@ export function ProjectHead({
           type="button"
           className="button button--ghost button--icon project__more"
           tabIndex={-1}
-          title={`More for ${project.name}`}
+          data-tip={`More for ${project.name}`}
           aria-label={`More for ${project.name}`}
           aria-haspopup="menu"
           aria-expanded={menuAt !== null}
@@ -221,7 +218,7 @@ export function UnpushedBase({ projectId }: { projectId: string }): React.JSX.El
       className="project__unpushed"
       tabIndex={-1}
       aria-label={`Push ${base.branch}, ${base.ahead} ahead of ${upstream}`}
-      title={`${base.ahead} ahead of ${upstream}`}
+      data-tip={unpushedTip(base.ahead, upstream)}
       onClick={() => openDialog({ kind: 'push-base', projectId })}
     >
       {`${base.branch} ↑${base.ahead}`}
@@ -241,7 +238,7 @@ export function BaseFreshness({ project }: { project: Project }): React.JSX.Elem
       type="button"
       className={`project__fresh${project.fetch?.failure === undefined ? '' : ' project__fresh--failed'}`}
       tabIndex={-1}
-      title="Fetch Now"
+      data-tip={`Fetch ${project.baseRef} now`}
       aria-label={`Fetch ${project.baseRef} now${words === null ? '' : `, ${words}`}`}
       disabled={fetching}
       onClick={() => void fetchProject(project.id)}

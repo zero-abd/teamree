@@ -14,7 +14,7 @@ export function OverlapMark({
   return (
     <span
       className={`chip overlap overlap--${chip.tone}${onOpen === undefined ? '' : ' overlap--open'}`}
-      title={chip.title}
+      data-tip={chip.title}
       aria-label={`${chip.tone === 'conflict' ? 'Conflicts' : 'Overlaps'}: ${chip.label}`}
       onClick={
         onOpen === undefined || first === undefined

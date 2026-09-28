@@ -4,7 +4,7 @@ export function PaneCloseButton({ name, onClose }: { name: string; onClose: () =
     <button
       type="button"
       className="pane__close"
-      title="Close pane"
+      data-tip="Close pane"
       aria-label={`Close pane ${name}`}
       onClick={onClose}
     >

@@ -19,7 +19,7 @@ import { Stepper } from './Stepper'
 import { Switch } from './Switch'
 import { Tabs } from './Tabs'
 import { Toast, type ToastTone } from './Toast'
-import { TOOLTIP_DELAY_MS, Tooltip } from './Tooltip'
+import { installTooltips, TOOLTIP_DELAY_MS } from './Tooltip'
 
 afterEach(() => {
   vi.useRealTimers()
@@ -66,40 +66,19 @@ describe('Button', () => {
 
   it('names an icon button and shows its label only after a beat', () => {
     vi.useFakeTimers()
+    const stop = installTooltips(document)
     render(<IconButton icon="plus" label="New Tab" />)
     const button = screen.getByRole('button', { name: 'New Tab' })
     expect(button.className).toBe('button button--icon')
-    fireEvent.pointerEnter(button)
+    fireEvent.pointerOver(button)
     expect(screen.queryByRole('tooltip')).toBeNull()
     act(() => {
       vi.advanceTimersByTime(TOOLTIP_DELAY_MS)
     })
     expect(screen.getByRole('tooltip').textContent).toBe('New Tab')
-    fireEvent.pointerLeave(button)
+    fireEvent.pointerOut(button, { relatedTarget: null })
     expect(screen.queryByRole('tooltip')).toBeNull()
-  })
-})
-
-describe('Tooltip', () => {
-  it('shows on focus and leaves on blur, keeping the child’s own handlers', () => {
-    vi.useFakeTimers()
-    const focus = vi.fn()
-    render(
-      <Tooltip label="Split Right">
-        <button type="button" onFocus={focus}>
-          ⊟
-        </button>
-      </Tooltip>
-    )
-    const button = screen.getByRole('button')
-    fireEvent.focus(button)
-    act(() => {
-      vi.advanceTimersByTime(TOOLTIP_DELAY_MS)
-    })
-    expect(focus).toHaveBeenCalled()
-    expect(screen.getByRole('tooltip').textContent).toBe('Split Right')
-    fireEvent.blur(button)
-    expect(screen.queryByRole('tooltip')).toBeNull()
+    stop()
   })
 })
 

@@ -24,8 +24,8 @@ describe('TokensLine', () => {
     )
     const line = container.querySelector('.statusbar__tokens')
     expect(line?.textContent).toBe('100 tok · ≈$1.00')
-    expect(line?.getAttribute('title')).toBe(
-      'in 10 · out 20 · cache read 30 · cache write 40\n2.1k tok · ≈$2.00 with children'
+    expect(line?.getAttribute('data-tip')).toBe(
+      'Agent tokens in this worktree\nin 10 · out 20 · cache read 30 · cache write 40\n2.1k tok · ≈$2.00 with children'
     )
   })
 })

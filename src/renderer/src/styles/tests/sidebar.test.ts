@@ -62,7 +62,7 @@ describe('sidebar.css', () => {
     const name = ruleFor(SHEET, '.worktree__name')
     expect(declarationOf(name, 'color')).toBe('var(--fg)')
     expect(declarationOf(name, 'font-weight')).toBe('600')
-    const dot = ruleFor(SHEET, '.worktree__name--unread::after')
+    const dot = ruleFor(SHEET, '.worktree__unread')
     expect(declarationOf(dot, 'background')).toBe('var(--accent-bright)')
     expect(declarationOf(dot, 'font-weight')).toBeUndefined()
   })

@@ -1017,7 +1017,9 @@ describe('the changes header', () => {
     render(<ChangesTab />)
     const line = document.querySelector('.changes__ref') as HTMLElement
     expect(line.textContent).toBe('rewrite-the-pager → main · ↑2 ↓3')
-    expect(line.title).toBe('↑ origin/main  ↓ origin/main')
+    expect(line.getAttribute('data-tip')).toBe(
+      '2 commits ahead of origin/main, not pushed\n3 commits behind origin/main'
+    )
     expect(screen.getByRole('button', { name: 'Publish Branch' })).toBeTruthy()
   })
 
@@ -1623,7 +1625,7 @@ describe('discarding a file', () => {
     render(<Tab />)
     const discard = screen.getByRole('button', { name: 'Discard src/new.ts…' })
     expect(discard.textContent).toBe('')
-    expect(discard.getAttribute('title')).toBe('Discard…')
+    expect(discard.getAttribute('data-tip')).toBe('Discard…')
     expect(discard.querySelector('svg[data-icon="discard"]')).not.toBeNull()
   })
 })
@@ -1883,11 +1885,11 @@ describe('a stopped update', () => {
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Mark src/money.js Resolved' })))
     expect(call).toHaveBeenCalledWith('worktree.resolve', { worktreeId: 'w1', path: 'src/money.js' })
     const ours = screen.getByRole('button', { name: 'Take Ours for src/money.js' })
-    expect(ours.getAttribute('title')).toBe('Payment’s version')
+    expect(ours.getAttribute('data-tip')).toBe('Payment’s version')
     await act(async () => fireEvent.click(ours))
     expect(call).toHaveBeenCalledWith('worktree.resolve', { worktreeId: 'w1', path: 'src/money.js', take: 'ours' })
     const theirs = screen.getByRole('button', { name: 'Take Theirs for src/money.js' })
-    expect(theirs.getAttribute('title')).toBe('Checkout tax’s version')
+    expect(theirs.getAttribute('data-tip')).toBe('Checkout tax’s version')
     await act(async () => fireEvent.click(theirs))
     expect(call).toHaveBeenCalledWith('worktree.resolve', { worktreeId: 'w1', path: 'src/money.js', take: 'theirs' })
   })

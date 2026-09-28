@@ -326,7 +326,7 @@ describe('a folded task', () => {
     }))
     mount()
     const dot = document.querySelector('[data-worktree-id="checkout"] [aria-label="asking"]')
-    expect(dot?.getAttribute('title')).toBe('asking · Cart totals')
+    expect(dot?.getAttribute('data-tip')).toBe('asking · Cart totals')
   })
 })
 

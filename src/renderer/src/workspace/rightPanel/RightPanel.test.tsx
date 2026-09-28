@@ -13,6 +13,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fileColumnIn, fileLeavesIn } from '@shared/filePane'
+import { installTooltips } from '../../ui/Tooltip'
 import type {
   Layout,
   Project,
@@ -289,8 +290,12 @@ describe('the rail', () => {
     expect(tab.querySelector('.panel__tabLabel')).toBeNull()
     expect(tab.title).toBe('')
     expect(tab.querySelector('.panel__count')?.textContent).toBe('2')
-    fireEvent.pointerEnter(tab)
+    const stop = installTooltips(document)
+    fireEvent.pointerOver(tab)
     expect((await screen.findByRole('tooltip')).textContent).toBe('Changes')
+    fireEvent.pointerOver(tab.querySelector('.panel__count') as Element)
+    expect(screen.getByRole('tooltip').textContent).toBe('2 changed files')
+    stop()
   })
 
   it('keeps its width across a change of worktree and a fold', () => {

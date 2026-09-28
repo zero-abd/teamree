@@ -1263,16 +1263,17 @@
 }
 
 /* Printed since this person last looked: a mark after the name, never a weight, which made names jump
-   in width. Inside the name, so it follows a short one. */
-.worktree__name--unread::after {
-  content: '';
+   in width. Inside the name, so it follows a short one. The clear border is room to point at. */
+.worktree__unread {
   display: inline-block;
   width: 5px;
   height: 5px;
-  margin-left: var(--s2);
+  margin-left: calc(var(--s2) - 4px);
+  border: 4px solid transparent;
   border-radius: 99px;
   background: var(--accent-bright);
-  vertical-align: 0.15em;
+  background-clip: content-box;
+  vertical-align: calc(0.15em - 4px);
 }
 
 .pane-row--unread .pane-row__label {

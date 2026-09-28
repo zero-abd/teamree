@@ -20,7 +20,7 @@ export function PortChipView({
     <span
       className={`chip worktree__port${chip.clash ? ' worktree__port--clash' : ''}`}
       role="link"
-      title={chip.title}
+      data-tip={chip.title}
       onClick={(event) => {
         event.stopPropagation()
         openInBrowser(chip.url)

@@ -157,7 +157,7 @@ describe('a compact row with more chips than two', () => {
     mount()
     expect(shownKinds()).toEqual(['overlap', 'pr'])
     expect(plus()?.textContent).toBe('+5')
-    expect(plus()?.getAttribute('title')).toBe(
+    expect(plus()?.getAttribute('data-tip')).toBe(
       ['4 behind · 1 uncommitted', 'Issue #7', ':5173', 'Taken by mate', 'Claims: src/**'].join('\n')
     )
   })
@@ -207,7 +207,9 @@ describe('a compact row with more chips than two', () => {
   it('keeps its branch off the line and names it on hover', () => {
     mount()
     expect(document.querySelector('.worktree__branch')).toBeNull()
-    expect(title().querySelector('.worktree__name')?.getAttribute('title')).toContain('long-refactor from origin/main')
+    expect(title().querySelector('.worktree__name')?.getAttribute('data-tip')).toContain(
+      'long-refactor from origin/main'
+    )
   })
 
   it('draws no +N with nothing to fold', () => {

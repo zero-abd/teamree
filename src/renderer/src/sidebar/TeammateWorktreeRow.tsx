@@ -62,7 +62,7 @@ export function TeammateWorktreeRow({
     >
       <div
         className="worktree__row worktree__row--teammate"
-        title={teammateTitle(row)}
+        data-tip={teammateTitle(row)}
         onContextMenu={(event) => {
           if (items.length === 0) return
           event.preventDefault()
@@ -83,7 +83,9 @@ export function TeammateWorktreeRow({
           <span className="worktree__title">
             <Avatar handle={row.handle} size="xs" decorative />
             <span className="worktree__name">{row.name}</span>
-            {tone ? <span className={dotClass(tone)} title={TONE_LABEL[tone]} aria-label={TONE_LABEL[tone]} /> : null}
+            {tone ? (
+              <span className={dotClass(tone)} data-tip={TONE_LABEL[tone]} aria-label={TONE_LABEL[tone]} />
+            ) : null}
           </span>
           <span className="worktree__meta">
             {row.stage === undefined ? null : <span className="worktree__stage">{row.word}</span>}
@@ -94,7 +96,7 @@ export function TeammateWorktreeRow({
                 type="button"
                 className={`chip overlap overlap--${overlap.tone} overlap--open worktree__their-overlap`}
                 tabIndex={-1}
-                title={overlap.title}
+                data-tip={overlap.title}
                 aria-label={`Overlaps ${overlap.label}`}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -137,7 +139,7 @@ export function TeammateWorktreeRow({
                   data-teammate-pane={pane.terminalId}
                   tabIndex={-1}
                   className={`pane-row pane-row--teammate pane-row--watchable${watching ? ' pane-row--watching' : ''}`}
-                  title={
+                  data-tip={
                     watching
                       ? `Stop watching ${row.handle}’s ${pane.label}`
                       : `Watch ${row.handle}’s ${pane.label} · ${TONE_LABEL[dotTone(pane.activity, pane.agent)]} · reading only`

@@ -152,7 +152,7 @@ describe('the sidebar’s own header', () => {
   it('puts the sidebar away from its own header, without naming a chord', () => {
     mount()
     const hide = screen.getByRole('button', { name: 'Hide sidebar' })
-    expect(hide.getAttribute('title')).toBe('Hide sidebar')
+    expect(hide.getAttribute('data-tip')).toBe('Hide sidebar')
     fireEvent.click(hide)
     expect(toggleSidebar).toHaveBeenCalledOnce()
   })
@@ -337,7 +337,7 @@ describe('a project header', () => {
   it('starts a new task in the project the button belongs to', () => {
     mount()
     const add = screen.getByRole('button', { name: 'New Task in pager' })
-    expect(add.getAttribute('title')).toBe('New Task')
+    expect(add.getAttribute('data-tip')).toBe('New Task')
     add.click()
     expect(openDialog).toHaveBeenCalledWith({ kind: 'new-task', projectId: 'p1' })
   })
@@ -345,7 +345,10 @@ describe('a project header', () => {
 
 // Selected by hover text: a pane button is labelled by its content ("claude"), so two teammates on
 // the same agent are two identically named buttons. The text says what the next press would do.
-const paneOf = (handle: string): HTMLElement => screen.getByTitle(new RegExp(`^(Watch|Stop watching) ${handle}`))
+const paneOf = (handle: string): HTMLElement =>
+  [...document.querySelectorAll<HTMLElement>('[data-tip]')].find((node) =>
+    new RegExp(`^(Watch|Stop watching) ${handle}`).test(node.dataset.tip ?? '')
+  ) as HTMLElement
 
 describe('watching a teammate’s pane', () => {
   const open = (): { projectId: string; paneId: string }[] =>
@@ -435,8 +438,8 @@ describe('the CLI mark on Settings', () => {
     // Inside the Settings entry, so pressing the mark is pressing Settings.
     const settings = screen.getByRole('button', { name: 'Settings, CLI: Put teamree on my PATH' })
     expect(settings.contains(mark)).toBe(true)
-    expect(settings.title).toMatch(/^Settings · CLI: /)
-    expect(settings.title).toContain('/usr/local/bin/teamree')
+    expect(settings.getAttribute('data-tip')).toMatch(/^CLI: /)
+    expect(settings.getAttribute('data-tip')).toContain('/usr/local/bin/teamree')
     // A mark on the entry, not a pill of its own in the foot.
     expect(within(foot()).getAllByRole('button')).toHaveLength(3)
   })
@@ -560,7 +563,7 @@ describe('the rail above the tree', () => {
     mount()
     const search = screen.getByRole('button', { name: 'Search worktrees and commands' })
     expect(search.textContent).toBe('Search')
-    expect(search.title).toBe('Search ⌘K')
+    expect(search.getAttribute('data-tip')).toBe('Search ⌘K')
     search.click()
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'palette' })
   })
@@ -625,7 +628,7 @@ describe('the rail above the tree', () => {
     mount()
     const teamwork = screen.getByRole('button', { name: 'Teamwork' }) as HTMLButtonElement
     expect(teamwork.disabled).toBe(false)
-    expect(teamwork.getAttribute('title')).toBe('Join a Team…')
+    expect(teamwork.getAttribute('data-tip')).toBe('Join a Team…')
     fireEvent.click(teamwork)
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'join-invitation' })
   })
@@ -1418,7 +1421,7 @@ describe('task trees', () => {
 
   it('tallies the children that are done on the parent', () => {
     const tally = within(rowNamed('Rework auth')).getByText('0/1 done')
-    expect(tally.getAttribute('title')).toBe('Write the migration · stopped')
+    expect(tally.getAttribute('data-tip')).toBe('Write the migration · stopped')
     expect(within(rowNamed('Solo')).queryByText(/done$/)).toBeNull()
   })
 
@@ -1453,7 +1456,7 @@ describe('task trees', () => {
     expect(dot('Rework auth').className).toContain('activity--working')
     act(() => useTaskTreeStore.getState().setTaskCollapsed('auth', true))
     expect(dot('Rework auth').className).toContain('activity--waiting')
-    expect(dot('Rework auth').getAttribute('title')).toContain('Backfill')
+    expect(dot('Rework auth').getAttribute('data-tip')).toContain('Backfill')
   })
 
   it('offers New Child Task… in the row menu, under that worktree', () => {

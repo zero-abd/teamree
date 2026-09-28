@@ -140,7 +140,7 @@ describe('the branch', () => {
     const branch = screen.getByRole('button', { name: 'Copy Branch rewrite-the-pager' })
     expect(branch.textContent).toBe('rewrite-the-pager')
     expect(branch.querySelector('svg[data-icon="branch"]')).toBeTruthy()
-    expect(branch.getAttribute('title')).toBe('rewrite-the-pager from origin/main')
+    expect(branch.getAttribute('data-tip')).toBe('Copy branch · from origin/main')
     fireEvent.click(branch)
     expect(copyToClipboard).toHaveBeenCalledWith('rewrite-the-pager', 'the branch rewrite-the-pager')
   })
@@ -314,6 +314,7 @@ describe('the agents working', () => {
     mount()
     const working = screen.getByText('2 working')
     expect(working.classList.contains('statusbar__working')).toBe(true)
+    expect(working.getAttribute('data-tip')).toBe('2 agents working')
   })
 
   it('says nothing while none is working, and no pane count', () => {
@@ -405,7 +406,7 @@ describe('the runtime', () => {
     mount()
     const item = document.querySelector('.statusbar__connection')
     expect(item?.textContent).toBe('Runtime down')
-    expect(item?.getAttribute('title')).toBe('the runtime socket refused the connection')
+    expect(item?.getAttribute('data-tip')).toBe('the runtime socket refused the connection')
     expect(item?.querySelector('.statusbar__dot')).toBeTruthy()
   })
 })
@@ -415,7 +416,7 @@ describe('keep awake', () => {
     mount()
     const button = screen.getByRole('button', { name: 'Keep awake, Agents' })
     expect(button.textContent).toBe('Agents')
-    expect(button.getAttribute('title')).toBe('Keep awake · while agents work')
+    expect(button.getAttribute('data-tip')).toBe('Keep awake · while agents work')
     expect(button.querySelector('svg')).toBeTruthy()
     expect(button.querySelector('.statusbar__dot')).toBeNull()
     fireEvent.click(button)
@@ -532,7 +533,7 @@ describe('resources', () => {
     const button = memory()
     expect(button.textContent).toBe('0.5 GB')
     expect(button.getAttribute('aria-label')).toBe('Memory, 0.5 GB')
-    expect(button.getAttribute('title')).toBe('Memory · teamree + agents + shells')
+    expect(button.getAttribute('data-tip')).toBe('Memory · teamree, agents and shells')
     expect(button.querySelector('svg')).toBeNull()
   })
 
@@ -739,5 +740,25 @@ describe('what needs you', () => {
     fireEvent.click(button)
     fireEvent.click(button)
     expect(goTo.mock.calls.map((call) => call[1])).toEqual(['b', 'c', 'b'])
+  })
+})
+
+describe('what the git line says under the pointer', () => {
+  it('spells each count out against the project’s real base ref', () => {
+    seed({
+      projects: [{ ...project, baseRef: 'origin/master' }],
+      statuses: {
+        w1: status({ upstream: 'origin/rewrite-the-pager', changed: 115, unstaged: 115, ahead: 1, behind: 48 })
+      }
+    })
+    mount()
+    const git = screen.getByRole('button', { name: /^Changes, / })
+    expect(git.textContent).toBe('115 changed · 1 ahead · 48 behind')
+    expect([...git.querySelectorAll('span')].map((part) => part.getAttribute('data-tip'))).toEqual([
+      '115 changed files',
+      '1 commit not pushed to origin/rewrite-the-pager',
+      '48 commits behind origin/master'
+    ])
+    expect(git.getAttribute('data-tip')).toMatch(/^Changes · read /)
   })
 })

@@ -17,6 +17,7 @@ import { PaneGlyph } from '../agents/glyphs'
 import { Icon } from '../icons/Icon'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { dotClass, dotTone } from '../sidebar/agentRows'
+import { paneMarkTip } from '../sidebar/tipText'
 import { worktreeDisplay, type WorktreeNameSource } from '../sidebar/worktreeDisplay'
 import { refocus, RowMenu, type MenuClosed, type RowMenuAnchor } from '../sidebar/RowMenu'
 import { useUnreadPanes } from '../state/usePaneSeen'
@@ -74,7 +75,7 @@ function SidebarToggle(): React.JSX.Element | null {
     <button
       type="button"
       className="shell__toggle"
-      title="Show sidebar"
+      data-tip="Show sidebar"
       aria-label="Show sidebar"
       onClick={toggleSidebar}
     >
@@ -259,6 +260,7 @@ type TabProps = {
 
 function Tab({ tab, shown, unread, unsaved, dragged, renaming, ...on }: TabProps): React.JSX.Element {
   const isFile = tab.kind === 'file'
+  const tone = tab.activity === null ? null : dotTone(tab.activity, tab.agent)
   return (
     <div
       className={`tab${shown ? ' tab--active' : ''}${unread ? ' tab--unread' : ''}${dragged ? ' tab--dragged' : ''}`}
@@ -280,7 +282,7 @@ function Tab({ tab, shown, unread, unsaved, dragged, renaming, ...on }: TabProps
           aria-selected={shown}
           aria-label={tab.label}
           className="tab__main"
-          title={unsaved ? `${tab.label} · unsaved` : unread ? `${paneTabTitle(tab)} · unread` : paneTabTitle(tab)}
+          data-tip={unsaved ? `${tab.label} · unsaved` : unread ? `${paneTabTitle(tab)} · unread` : paneTabTitle(tab)}
           onClick={on.onFocus}
           onKeyDown={on.onKey}
           onDoubleClick={() => {
@@ -292,12 +294,9 @@ function Tab({ tab, shown, unread, unsaved, dragged, renaming, ...on }: TabProps
           {isFile ? (
             <Icon name="file" size={14} className="file__glyph" />
           ) : (
-            <span
-              className={dotClass(tab.activity === null ? null : dotTone(tab.activity, tab.agent))}
-              aria-hidden="true"
-            />
+            <span className={dotClass(tone)} aria-hidden="true" data-tip={paneMarkTip(tab.agent, tone)} />
           )}
-          {isFile ? null : <PaneGlyph agent={tab.agent} />}
+          {isFile ? null : <PaneGlyph agent={tab.agent} tip={paneMarkTip(tab.agent, tone)} />}
           {tab.text === '' ? null : (
             <span className={`tab__name${tab.preview ? ' tab__name--preview' : ''}`}>{tab.text}</span>
           )}
@@ -309,7 +308,7 @@ function Tab({ tab, shown, unread, unsaved, dragged, renaming, ...on }: TabProps
         <button
           type="button"
           className="tab__rename"
-          title={`Rename pane ${tab.label}`}
+          data-tip={`Rename pane ${tab.label}`}
           aria-label={`Rename pane ${tab.label}`}
           onClick={on.onRename}
         >
@@ -320,7 +319,7 @@ function Tab({ tab, shown, unread, unsaved, dragged, renaming, ...on }: TabProps
       <button
         type="button"
         className="tab__close"
-        title={`Close pane ${tab.label}`}
+        data-tip={`Close pane ${tab.label}`}
         aria-label={`Close pane ${tab.label}`}
         onClick={on.onClose}
       >
@@ -346,7 +345,7 @@ function ResumeAll({ worktreeId }: { worktreeId: string }): React.JSX.Element | 
       <button
         type="button"
         className="run-buttons__run"
-        title={`Resume ${ids.length} agents`}
+        data-tip={`Resume ${ids.length} agents`}
         onClick={() => void resumeAgents(ids)}
       >
         <Icon name="history" size={14} />
@@ -377,7 +376,7 @@ function HeadActions({ worktreeId, modifier }: { worktreeId: string; modifier: P
         <button
           type="button"
           className="tabs__action"
-          title={expanded === null ? 'Maximize' : 'Restore'}
+          data-tip={expanded === null ? 'Maximize' : 'Restore'}
           aria-label={expanded === null ? 'Maximize' : 'Restore'}
           disabled={expanded === null && collectTerminalIds(root).length < 2}
           onClick={toggleExpandedPane}
@@ -387,7 +386,7 @@ function HeadActions({ worktreeId, modifier }: { worktreeId: string; modifier: P
         <button
           type="button"
           className="tabs__action"
-          title="Split right"
+          data-tip="Split right"
           aria-label="Split right"
           disabled={empty}
           onClick={() => void splitFocusedPane('row')}
@@ -397,7 +396,7 @@ function HeadActions({ worktreeId, modifier }: { worktreeId: string; modifier: P
         <button
           type="button"
           className="tabs__action"
-          title="Split down"
+          data-tip="Split down"
           aria-label="Split down"
           disabled={empty}
           onClick={() => void splitFocusedPane('column')}
@@ -440,7 +439,7 @@ function NewTab({
         ref={plus}
         type="button"
         className="tabs__action tabs__new"
-        title="New tab"
+        data-tip="New tab"
         aria-label="New tab"
         aria-haspopup="menu"
         aria-expanded={menuAt !== null}

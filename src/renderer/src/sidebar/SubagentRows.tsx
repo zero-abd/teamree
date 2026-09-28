@@ -22,7 +22,7 @@ export function SubagentRows({ subagents, now, onOpen, level }: SubagentRowsProp
             className="subagent-row"
             {...(level === undefined ? {} : { role: 'treeitem', 'aria-level': level + 1 + depth, tabIndex: -1 })}
             style={{ '--subagent-depth': depth } as React.CSSProperties}
-            title={subagentTitle(subagent, now)}
+            data-tip={subagentTitle(subagent, now)}
             onClick={() => onOpen(subagent)}
           >
             <span className={dotClass('working')} aria-label="running" />

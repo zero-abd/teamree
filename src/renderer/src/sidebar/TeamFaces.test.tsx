@@ -92,7 +92,7 @@ describe('TeamFaces', () => {
     render(<TeamFaces glance={handles.map((handle) => teammate(handle))} onReveal={() => {}} onMore={onMore} />)
     expect(document.querySelectorAll('.avatar')).toHaveLength(MAX_FACES - 1)
     const more = screen.getByRole('button', { name: '+3' })
-    expect(more.getAttribute('title')).toBe('di, ed, fay')
+    expect(more.getAttribute('data-tip')).toBe('di, ed, fay')
     fireEvent.click(more)
     expect(onMore).toHaveBeenCalled()
   })

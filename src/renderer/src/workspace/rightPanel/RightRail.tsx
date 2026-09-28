@@ -5,7 +5,7 @@ import { changedFiles, type WorktreeStatus } from '@shared/entities'
 import type { RightPanelTab } from './rightPanelState'
 import { Icon } from '../../icons/Icon'
 import { IconButton } from '../../ui/Button'
-import { Tooltip } from '../../ui/Tooltip'
+import { changesTip } from '../../sidebar/tipText'
 
 /** What the Changes badge counts: what a commit would deal with; ahead/behind belong to the status bar. */
 export function changedCount(status: RailStatus | undefined): number {
@@ -55,7 +55,7 @@ export function RightRail({ open, tab, status, onPick, onToggle }: RightRailProp
         {TABS.map((entry) => {
           const current = open && tab === entry.id
           const count = counts[entry.id]
-          const button = (
+          return (
             <button
               type="button"
               key={entry.id}
@@ -63,18 +63,16 @@ export function RightRail({ open, tab, status, onPick, onToggle }: RightRailProp
               className={`panel__tab${current ? ' panel__tab--current' : ''}`}
               aria-selected={current}
               aria-label={count > 0 ? `${entry.label}, ${count}` : entry.label}
+              data-tip={open ? undefined : entry.label}
               onClick={() => onPick(entry.id)}
             >
               {open ? <span className="panel__tabLabel">{entry.label}</span> : entry.icon}
-              {count > 0 ? <span className="panel__count">{count}</span> : null}
+              {count > 0 ? (
+                <span className="panel__count" data-tip={status === undefined ? undefined : changesTip(status)}>
+                  {count}
+                </span>
+              ) : null}
             </button>
-          )
-          return open ? (
-            button
-          ) : (
-            <Tooltip key={entry.id} label={entry.label}>
-              {button}
-            </Tooltip>
           )
         })}
       </div>

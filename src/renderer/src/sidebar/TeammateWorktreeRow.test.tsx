@@ -147,7 +147,7 @@ describe('whose worktree this is', () => {
 
   it('says whose it is first on hover, because that changes what the rest means', () => {
     mount()
-    const title = document.querySelector('.worktree__row')?.getAttribute('title') ?? ''
+    const title = document.querySelector('.worktree__row')?.getAttribute('data-tip') ?? ''
     expect(title).toContain('priya’s worktree on their machine')
     expect(title.indexOf('priya')).toBeLessThan(title.indexOf('priya/relay-budget'))
   })
@@ -166,7 +166,7 @@ describe('what cannot be done to it', () => {
     mount()
     const buttons = document.querySelectorAll('button')
     expect(buttons).toHaveLength(1)
-    expect(buttons[0]?.getAttribute('title')).toContain('reading only')
+    expect(buttons[0]?.getAttribute('data-tip')).toContain('reading only')
   })
 })
 
@@ -174,7 +174,7 @@ describe('a pane of theirs', () => {
   it('is a button that says whose it is, what it is doing, and that it is read-only', () => {
     mount()
     const button = watchButton()
-    expect(button.getAttribute('title')).toBe('Watch priya’s Claude Code · working · reading only')
+    expect(button.getAttribute('data-tip')).toBe('Watch priya’s Claude Code · working · reading only')
   })
 
   it('is named once, by whose it is and its state, with its glyph unnamed', () => {
@@ -189,7 +189,7 @@ describe('a pane of theirs', () => {
     const button = watchButton()
     expect(button.getAttribute('aria-selected')).toBe('true')
     // A toggle whose hover text still offers what it already did lies about half its presses.
-    expect(button.getAttribute('title')).toBe('Stop watching priya’s Claude Code')
+    expect(button.getAttribute('data-tip')).toBe('Stop watching priya’s Claude Code')
   })
 
   it('is not selected when a different pane is the one being watched', () => {
@@ -252,7 +252,7 @@ describe('a teammate who has gone away', () => {
   // Nothing is known about the worktree, and the sentence must not imply otherwise.
   it('says their machine is not connected, never anything about the worktree', () => {
     mount(theirs({ live: false, heardAt: NOW - 240_000 }))
-    const title = document.querySelector('.worktree__row')?.getAttribute('title') ?? ''
+    const title = document.querySelector('.worktree__row')?.getAttribute('data-tip') ?? ''
     expect(title.split('\n')[1]).toBe('priya’s machine is not connected · showing what it had 4m ago')
   })
 

@@ -53,7 +53,7 @@ export function TeamFaces({
           type="button"
           className="project__face project__face--more"
           tabIndex={-1}
-          title={glance
+          data-tip={glance
             .slice(shown.length)
             .map((teammate) => teammate.handle)
             .join(', ')}
@@ -123,7 +123,7 @@ export function TeamCueButtons({
           className="project__cue project__cue--asking"
           tabIndex={-1}
           aria-label={cues.asking.label}
-          title={cues.asking.label}
+          data-tip={cues.asking.label}
           onClick={onAsking}
         >
           {cues.asking.count === 1 ? (
@@ -142,7 +142,7 @@ export function TeamCueButtons({
           className="project__cue project__cue--handoff"
           tabIndex={-1}
           aria-label={cues.handoffs.label}
-          title={cues.handoffs.label}
+          data-tip={cues.handoffs.label}
           onClick={onHandoff}
         >
           <Icon name="handoff" size={14} />

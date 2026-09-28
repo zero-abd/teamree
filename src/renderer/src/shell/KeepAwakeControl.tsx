@@ -58,7 +58,7 @@ export function KeepAwakeControl(): React.JSX.Element {
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={`Keep awake, ${MODE_NAME[mode]}`}
-        title={`Keep awake · ${MODE_NOTE[mode]}`}
+        data-tip={`Keep awake · ${MODE_NOTE[mode]}`}
         onClick={() => (open ? close() : setOpen(true))}
       >
         <Icon name={holding ? 'keep-awake-on' : 'keep-awake'} size={14} />
