@@ -756,6 +756,9 @@ describe('shownActivity', () => {
     expect(shownActivity(terminal({ id: 'b', agent: 'claude', running: false, exitCode: 130 }))).toBe('stopped')
     expect(shownActivity(terminal({ id: 'c', running: false, exitCode: 1, restored: 'stopped' }))).toBe('stopped')
     expect(shownActivity(terminal({ id: 'd', running: false, exitCode: 1 }))).toBe('failed')
+    // One that failed before the quit is still failed after it.
+    const failed = terminal({ id: 'f', agent: 'claude', running: false, exitCode: 1, restored: 'stopped' })
+    expect(shownActivity({ ...failed, stoppedFor: 'failed' })).toBe('failed')
     expect(shownActivity(terminal({ id: 'e', agent: 'claude', busy: true }))).toBe('working')
   })
 

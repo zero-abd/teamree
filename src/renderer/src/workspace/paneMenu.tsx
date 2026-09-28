@@ -214,7 +214,8 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
           }
         ]
       : [
-          ...(stopped
+          // Only where its own conversation comes back; otherwise it would start afresh under the word.
+          ...(terminal.resumable !== true
             ? []
             : [
                 {
@@ -227,7 +228,7 @@ function usePaneMenuItems(terminalId: string | null, name: string, modifier: Pla
           {
             label: RESUME_CONVERSATION,
             icon: <Icon name="history" size={14} />,
-            separated: stopped,
+            separated: terminal.resumable !== true,
             onChoose: () => store.openDialog({ kind: 'resume-conversation', worktreeId: worktree.id, terminalId })
           },
           { label: fresh, onChoose: () => void store.relaunchTerminal(terminalId, { fresh: true }) },

@@ -919,6 +919,8 @@ describe('the head with no worktree open', () => {
     })
     mount()
     expect(document.querySelector('.workspace__head')?.className).toBe('workspace__head')
+  })
+})
 
 // After a quit or a crash, every agent was brought back by hand, one pane at a time.
 describe('Resume All in the head', () => {

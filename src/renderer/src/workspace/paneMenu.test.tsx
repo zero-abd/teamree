@@ -294,7 +294,7 @@ describe('the rows that depend on the pane', () => {
   it('offers an agent that ended its conversation first, then a new one', () => {
     seed(leaf('t2'), {
       worktrees: [{ ...worktree, task: 'Make the pager stream' }],
-      terminals: { t2: terminal({ id: 't2', agent: 'claude', running: false, exitCode: 0 }) }
+      terminals: { t2: terminal({ id: 't2', agent: 'claude', running: false, exitCode: 0, resumable: true }) }
     })
     render(<Tree />)
     const menu = rightClickTab('rewrite')
@@ -309,6 +309,18 @@ describe('the rows that depend on the pane', () => {
     expect(actions.relaunchTerminal).toHaveBeenCalledExactlyOnceWith('t2')
     choose(rightClickTab('rewrite'), 'New Session')
     expect(actions.relaunchTerminal).toHaveBeenLastCalledWith('t2', { fresh: true })
+  })
+
+  // Its Resume started a new session: there was no conversation on disk to pick up.
+  it('offers no Resume to an ended agent with no conversation of its own', () => {
+    seed(leaf('t2'), {
+      worktrees: [{ ...worktree, task: 'Make the pager stream' }],
+      terminals: { t2: terminal({ id: 't2', agent: 'claude', running: false, exitCode: 0 }) }
+    })
+    render(<Tree />)
+    const offered = labels(rightClickTab('rewrite'))
+    expect(offered).not.toContain('Resume')
+    expect(offered).toContain('New Session')
   })
 
   it('leaves Close Others and the moves out when there are no others', () => {
