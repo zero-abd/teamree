@@ -477,15 +477,21 @@ describe('what it submits', () => {
     expect(startTask).toHaveBeenCalledWith(expect.objectContaining({ startedFrom: 'feature/pager' }))
   })
 
-  // One label for the one action; the note says no agent will run.
-  it('says Start Task when no agent will run, and omits the command', async () => {
+  // With nothing to run the task, the button says what it does and the panel says why.
+  it('offers Create Worktree with no agent found, naming what to install', async () => {
     seed({ agents: [] })
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
-    expect(screen.getByRole('button', { name: 'Start Task' })).toBeTruthy()
-    expect(screen.getByText('No coding agent on your login shell’s PATH')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Start Task' })).toBeNull()
+    const panel = screen.getByRole('region', { name: 'No coding agent found' })
+    expect(within(panel).getByText('Claude Code')).toBeTruthy()
+    expect(within(panel).getByText('npm install -g @anthropic-ai/claude-code')).toBeTruthy()
+    expect(within(panel).getByText('Codex')).toBeTruthy()
+    expect(within(panel).getByText('npm install -g @openai/codex')).toBeTruthy()
+    expect(panel.querySelector('svg.agent-glyph[data-agent="claude"]')).not.toBeNull()
+    expect(within(panel).getByRole('button', { name: 'Check Again' })).toBeTruthy()
     expect(screen.queryByRole('group', { name: 'Agents' })).toBeNull()
-    submit().click()
+    screen.getByRole('button', { name: 'Create Worktree' }).click()
     expect(startTask).toHaveBeenCalledWith({
       projectId: 'p1',
       startedFrom: 'origin/main',
@@ -493,6 +499,41 @@ describe('what it submits', () => {
     })
   })
 
+  it('keeps the text on the worktree only when asked to', async () => {
+    seed({ agents: [] })
+    await open()
+    fireEvent.change(task(), { target: { value: 'Rewrite the pager\n\nand its tests' } })
+    const keep = screen.getByRole('checkbox', { name: 'Keep text on the worktree' }) as HTMLInputElement
+    expect(keep.checked).toBe(true)
+    fireEvent.click(keep)
+    screen.getByRole('button', { name: 'Create Worktree' }).click()
+    expect(startTask.mock.calls[0]?.[0].creates).toEqual([{ name: 'Rewrite the pager', task: '' }])
+  })
+
+  // Found after an install: the dialog is the normal one again, the agent preselected.
+  it('goes back to Start Task once Check Again finds an agent', async () => {
+    seed({ agents: [] })
+    call.mockImplementation(async (method, params) => {
+      if (method === 'agent.list') return [{ kind: 'claude', command: 'claude', binary: '/opt/bin/claude' }]
+      if (method !== 'worktree.startPoints') throw new Error(`unexpected ${method}`)
+      return listFor((params as { projectId: string }).projectId)
+    })
+    await open()
+    fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
+    const again = screen.getByRole('button', { name: 'Check Again' })
+    again.focus()
+    await act(async () => {
+      fireEvent.click(again)
+    })
+    expect(call).toHaveBeenCalledWith('agent.list', { versions: true, fresh: true })
+    expect(screen.queryByRole('region', { name: 'No coding agent found' })).toBeNull()
+    expect(document.activeElement).toBe(task())
+    expect(screen.queryByRole('checkbox', { name: 'Keep text on the worktree' })).toBeNull()
+    submit().click()
+    expect(startTask.mock.calls[0]?.[0].creates).toEqual([
+      { name: 'Rewrite the pager', agentCommand: 'claude', task: 'Rewrite the pager' }
+    ])
+  })
   // The text goes on one command line, so past that line's bound the button
   // refuses rather than the runtime cutting or rejecting it later.
   it('refuses a task too long for one command line, and says by how much', async () => {
@@ -507,6 +548,7 @@ describe('what it submits', () => {
     seed({ agents: [], agentsProbed: false })
     await open()
     expect(screen.getByText('Looking for coding agents…')).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'No coding agent found' })).toBeNull()
   })
 
   it('drops the agent when the user steps it back to none', async () => {
@@ -514,8 +556,7 @@ describe('what it submits', () => {
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     fireEvent.click(fewer('Claude Code'))
     expect(screen.getByText('1 worktree · no agent')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Start Task' })).toBeTruthy()
-    submit().click()
+    screen.getByRole('button', { name: 'Create Worktree' }).click()
     expect(startTask.mock.calls[0]?.[0].creates).toEqual([{ name: 'Rewrite the pager', task: 'Rewrite the pager' }])
   })
 })

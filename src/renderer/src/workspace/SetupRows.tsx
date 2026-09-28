@@ -41,7 +41,7 @@ function useSetupRows(): { rows: SetupRow[]; run: (action: SetupAction) => void 
     const store = useWorkspaceStore.getState()
     switch (action) {
       case 'recheck-agents':
-        void loadAgents()
+        void loadAgents({ fresh: true })
         break
       case 'send-test':
         void bridge?.notices.test().then(setNoticeTest, () => setNoticeTest(null))
@@ -131,11 +131,14 @@ export function SetupRows(): React.JSX.Element {
 }
 
 /** The welcome's: a row only for what needs action, then one quiet line of what works, with Setup… for the rest. */
-export function SetupSummary(): React.JSX.Element {
+export function SetupSummary({ except }: { except?: SetupRow['id'] }): React.JSX.Element {
   const { rows, run } = useSetupRows()
   const agents = useWorkspaceStore((state) => state.agents)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
-  const { needsAction, working } = setupSummary(rows, agents)
+  const { needsAction, working } = setupSummary(
+    rows.filter((row) => row.id !== except),
+    agents
+  )
   return (
     <>
       {needsAction.length === 0 ? null : (

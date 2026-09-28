@@ -865,8 +865,8 @@ type WorkspaceState = {
 
   /** Reads where the CLI is and what is at its destination. */
   loadCli: () => Promise<void>
-  /** Probes the agents again, with each one's version. */
-  loadAgents: () => Promise<void>
+  /** Probes the agents again, with each one's version; `fresh` also asks the login shell for PATH again. */
+  loadAgents: (options?: { fresh?: boolean }) => Promise<void>
   /** Links the CLI into /usr/local/bin, asking for an administrator password only when needed. */
   installCli: () => Promise<void>
   /** Records that this installation has been asked, so the first-run offer is made once. Declining and accepting both come here. */
@@ -3640,9 +3640,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       }
     },
 
-    async loadAgents() {
+    async loadAgents(options = {}) {
       try {
-        set({ agents: await runtimeClient.call('agent.list', { versions: true }), agentsProbed: true })
+        const params = { versions: true, ...(options.fresh === true ? { fresh: true } : {}) }
+        set({ agents: await runtimeClient.call('agent.list', params), agentsProbed: true })
       } catch {
         // Never fatal; the startup read stands.
       }

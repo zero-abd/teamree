@@ -10,6 +10,7 @@ import {
   MAX_PER_AGENT,
   NO_AGENT,
   plannedBranches,
+  taskAction,
   taskCreates,
   taskName,
   taskPlanNote,
@@ -163,25 +164,27 @@ describe('the agent the dialog opens with', () => {
 
 describe('what the dialog promises', () => {
   it('counts the worktrees and names what runs in each, in order', () => {
-    expect(taskPlanNote(found, true, [claude])).toBe('1 worktree · Claude Code')
-    expect(taskPlanNote(found, true, [claude, codex])).toBe('2 worktrees · Claude Code, Codex')
-    expect(taskPlanNote(found, true, [claude, codex, claude])).toBe('3 worktrees · Claude Code, Codex, Claude Code')
+    expect(taskPlanNote(true, [claude])).toBe('1 worktree · Claude Code')
+    expect(taskPlanNote(true, [claude, codex])).toBe('2 worktrees · Claude Code, Codex')
+    expect(taskPlanNote(true, [claude, codex, claude])).toBe('3 worktrees · Claude Code, Codex, Claude Code')
   })
 
   it('says the worktree comes alone when the user asked for that', () => {
-    expect(taskPlanNote(found, true, [])).toBe('1 worktree · no agent')
+    expect(taskPlanNote(true, [])).toBe('1 worktree · no agent')
   })
 
-  // Two states that are both an empty list, and only one of which should tell
-  // someone their machine has no agent on it.
-  it('separates "not asked yet" from "none installed"', () => {
-    expect(taskPlanNote([], false, [])).toBe('Looking for coding agents…')
-    expect(taskPlanNote([], true, [])).toBe('No coding agent on your login shell’s PATH')
+  // An empty list before the probe answers is not "no agent": the dialog's own panel says that.
+  it('promises nothing before the agents have been looked for', () => {
+    expect(taskPlanNote(false, [])).toBe('Looking for coding agents…')
   })
+})
 
-  // The probe having answered says nothing about the answer being non-empty.
-  it('does not promise a worktree count on a machine that has none', () => {
-    expect(taskPlanNote([], true, [])).not.toContain('worktree')
+// The button says what it does: with no agent to run, nothing is started or sent.
+describe('taskAction', () => {
+  it('starts a task only when an agent will run it', () => {
+    expect(taskAction([claude])).toBe('Start Task')
+    expect(taskAction([claude, codex])).toBe('Start Task')
+    expect(taskAction([])).toBe('Create Worktree')
   })
 })
 

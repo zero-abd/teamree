@@ -3,6 +3,7 @@
 
 import { useEffect, useRef } from 'react'
 import type { Project } from '@shared/entities'
+import { NoAgentFound } from '../agents/NoAgentFound'
 import { Icon, type IconName } from '../icons/Icon'
 import type { PlatformModifier } from '../keyboard/platformModifier'
 import { shortcutHint, type WorkspaceCommand } from '../keyboard/workspaceShortcuts'
@@ -33,14 +34,16 @@ export function Welcome({
   const hasWorktrees = useWorkspaceStore((state) =>
     state.worktrees.some((worktree) => worktree.projectId === project?.id)
   )
+  const noAgent = useWorkspaceStore((state) => state.agentsProbed && state.agents.length === 0)
   const primary = useRef<HTMLButtonElement | null>(null)
   const firstRun = project === undefined
 
   // Only into a window where nothing has focus: a welcome that appears under the sidebar's keyboard leaves it there.
+  // Again when Check Again takes its own button away.
   useEffect(() => {
     const active = document.activeElement
     if (active === null || active === document.body) primary.current?.focus()
-  }, [firstRun])
+  }, [firstRun, noAgent])
 
   if (project !== undefined) {
     return (
@@ -60,6 +63,7 @@ export function Welcome({
             </button>
           }
         />
+        {noAgent ? <NoAgentFound /> : null}
       </div>
     )
   }
@@ -115,7 +119,8 @@ export function Welcome({
       </div>
 
       <div className="welcome__setup">
-        <SetupSummary />
+        {noAgent ? <NoAgentFound /> : null}
+        <SetupSummary except={noAgent ? 'agents' : undefined} />
       </div>
     </div>
   )

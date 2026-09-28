@@ -155,15 +155,14 @@ export function branchProblem(creates: readonly TaskCreate[], existing: readonly
   return named.some((branch) => branchCollides(branch, taken)) ? 'Branch exists' : null
 }
 
-/** What the button will do, in one line; `probed` separates "not looked yet" from "found nothing". */
-export function taskPlanNote(
-  agents: readonly InstalledAgent[],
-  probed: boolean,
-  selection: readonly InstalledAgent[]
-): string {
+/** The primary's label: nothing is started or sent when no agent will run. */
+export function taskAction(selection: readonly InstalledAgent[]): 'Start Task' | 'Create Worktree' {
+  return selection.length === 0 ? 'Create Worktree' : 'Start Task'
+}
+
+/** What the button will do, in one line, once the agents have been looked for. */
+export function taskPlanNote(probed: boolean, selection: readonly InstalledAgent[]): string {
   if (!probed) return 'Looking for coding agents…'
-  // Names which PATH: the login shell's, so `which claude` in a pane is the check to run.
-  if (agents.length === 0) return 'No coding agent on your login shell’s PATH'
   if (selection.length === 0) return '1 worktree · no agent'
   const names = selection.map((agent) => harnessName(agent.kind)).join(', ')
   return `${selection.length} worktree${selection.length === 1 ? '' : 's'} · ${names}`

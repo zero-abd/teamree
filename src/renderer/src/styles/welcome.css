@@ -264,6 +264,96 @@
   justify-content: flex-end;
 }
 
+/* No coding agent: each harness's mark, name and install line, with Check Again at the head. */
+.no-agent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  width: min(520px, 100%);
+  min-width: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--bg-raised);
+  text-align: left;
+}
+
+.welcome .no-agent {
+  box-shadow: var(--shadow-1);
+}
+
+/* Too tall for the foot: it follows the card instead of covering the shortcuts. */
+.welcome:has(> .welcome__setup .no-agent) {
+  padding-bottom: var(--s6);
+}
+
+.welcome__setup:has(.no-agent) {
+  position: static;
+  margin-top: var(--s6);
+}
+
+/* Under New Task…, the pair centred together rather than the panel pushed to the foot. */
+.welcome--project:has(.no-agent) .empty-state {
+  flex: none;
+}
+
+.modal .no-agent {
+  width: 100%;
+}
+
+.no-agent__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.no-agent__title {
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.no-agent__list {
+  display: grid;
+  grid-template-columns: 16px max-content minmax(0, 1fr) max-content;
+  gap: var(--s1) var(--s3);
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.no-agent__row {
+  display: contents;
+}
+
+.no-agent__mark {
+  display: flex;
+  color: var(--fg-secondary);
+}
+
+.no-agent__name {
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+.no-agent__command {
+  overflow: hidden;
+  color: var(--fg-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: all;
+}
+
+.no-agent__more {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
 /* An open worktree with no panes: its name, its branch, and the `+` menu's rows as buttons. */
 .worktree-start {
   display: flex;

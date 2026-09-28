@@ -167,7 +167,7 @@ function probeLoginShell(options: LoginShellPathOptions): ProbeAnswer {
   return answer
 }
 
-/** Forgets the probe's answer, so the next call asks again. Tests only. */
+/** Forgets the probe's answer, so the next call asks the login shell again. */
 export function resetLoginShellPathCache(): void {
   probed = null
 }
