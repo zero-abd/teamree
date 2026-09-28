@@ -2,13 +2,13 @@
 // and a kill that only logs. The guard is the point: a pid the window could
 // not have been shown a Kill for never reaches `process.kill`.
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ErrorCode, type ErrorResponse, type SuccessResponse } from '../../../shared/protocol'
 import type { SystemResources } from '../../../shared/entities'
-import { WorkspaceStore } from '../../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../../store/storeTestSupport'
 import { createDispatcher, type Dispatcher } from '../dispatcher'
 import { MethodRegistry } from '../methodRegistry'
 import { createRuntimeContext } from '../runtimeContext'
@@ -33,7 +33,7 @@ describe('system.resources and system.kill', () => {
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'teamree-resources-'))
-    const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    const store = await openTestStore(join(directory, 'workspace.json'))
     const registry = new MethodRegistry(
       createRuntimeContext({ version: '0', store, subscriptions: new SubscriptionHub() })
     )
@@ -50,7 +50,7 @@ describe('system.resources and system.kill', () => {
   })
 
   afterEach(async () => {
-    await rm(directory, { recursive: true, force: true })
+    await removeTempDir(directory)
   })
 
   it('answers the tree from one table', async () => {

@@ -11,7 +11,7 @@ import type { PaneHostStatus } from '../../shared/entities'
 import type { Response } from '../../shared/protocol'
 import { createQuitSequence } from '../quitSequence'
 import { startRuntime, WORKSPACE_FILE_NAME, type Runtime } from '../runtime/startRuntime'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../store/storeTestSupport'
 import { canSpawnPty } from '../terminals/pty-test-support'
 import { peekHost, stopHost } from './hosting'
 import { paneHostPaths } from './protocol'
@@ -68,12 +68,12 @@ function alive(pid: number): boolean {
 /** A profile with one worktree and one shell pane recorded, as the last run left it. */
 async function profile(keepPanesRunning: boolean | undefined): Promise<{ userDataDir: string; base: string }> {
   const base = await mkdtemp(join(tmpdir(), 'teamree-keep-panes-'))
-  cleanups.push(() => rm(base, { recursive: true, force: true }))
+  cleanups.push(() => removeTempDir(base))
   const checkout = join(base, 'checkout')
   const userDataDir = join(base, 'userData')
   await mkdir(checkout, { recursive: true })
   await mkdir(userDataDir, { recursive: true })
-  const seed = await WorkspaceStore.open(join(userDataDir, WORKSPACE_FILE_NAME))
+  const seed = await openTestStore(join(userDataDir, WORKSPACE_FILE_NAME))
   seed.putWorktree({
     id: WORKTREE,
     projectId: 'proj_1',

@@ -1,12 +1,12 @@
 // The code a failed subscribe puts on the wire. The hub's errors reach nobody
 // (the connection is gone), so a code is easily decided by accident.
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ErrorCode } from '../../shared/protocol'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../store/storeTestSupport'
 import { createDispatcher } from './dispatcher'
 import { MethodRegistry } from './methodRegistry'
 import { createRuntimeContext } from './runtimeContext'
@@ -17,7 +17,7 @@ import { registerWorkspaceSubscribeHandler } from './handlers/workspaceSubscribe
 const directories: string[] = []
 
 afterEach(async () => {
-  await Promise.all(directories.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  await Promise.all(directories.splice(0).map((dir) => removeTempDir(dir)))
 })
 
 describe('subscribing on a connection the hub does not know', () => {
@@ -40,7 +40,7 @@ describe('subscribing on a connection the hub does not know', () => {
   it('reaches a caller as internal rather than as an unhandled throw', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'teamree-subscribe-'))
     directories.push(directory)
-    const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    const store = await openTestStore(join(directory, 'workspace.json'))
     const hub = new SubscriptionHub()
     const registry = new MethodRegistry(createRuntimeContext({ version: 'test', store, subscriptions: hub }))
     registerWorkspaceSubscribeHandler(registry)

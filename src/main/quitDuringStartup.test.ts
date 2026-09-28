@@ -3,14 +3,14 @@
 // Real workspace file, real pty, real archive; asserted is what the user finds after.
 
 import { existsSync, watch } from 'node:fs'
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { createQuitSequence } from './quitSequence'
 import { startRuntime, WORKSPACE_FILE_NAME, type Runtime } from './runtime/startRuntime'
 import { SCROLLBACK_DIR_NAME } from './store/scrollbackArchive'
-import { WorkspaceStore } from './store/workspaceStore'
+import { openTestStore, removeTempDir } from './store/storeTestSupport'
 import { canSpawnPty, testShell } from './terminals/pty-test-support'
 
 // The renderer bridge is the last step of a launch and the one that can throw
@@ -46,7 +46,7 @@ const runtimes: Runtime[] = []
 afterEach(async () => {
   // A test that failed has left a pane running.
   await Promise.all(runtimes.splice(0).map((runtime) => runtime.stop()))
-  await Promise.all(temporaryDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  await Promise.all(temporaryDirs.splice(0).map((dir) => removeTempDir(dir)))
   bridge.beforeInstalling = async (): Promise<void> => {}
 })
 
@@ -72,7 +72,7 @@ async function lastSession(): Promise<LastSession> {
   )
   await chmod(binary, 0o755)
 
-  const store = await WorkspaceStore.open(join(userDataDir, WORKSPACE_FILE_NAME))
+  const store = await openTestStore(join(userDataDir, WORKSPACE_FILE_NAME))
   store.putWorktree({
     id: WORKTREE,
     projectId: 'proj_1',

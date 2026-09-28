@@ -13,6 +13,7 @@ import { MethodRegistry, WINDOW_CONNECTION_PREFIX } from '../runtime/methodRegis
 import { createRuntimeContext } from '../runtime/runtimeContext'
 import { SubscriptionHub } from '../runtime/subscriptionHub'
 import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore } from '../store/storeTestSupport'
 import { GitServiceError } from './errors'
 import { GitService, type GitEvent } from './gitService'
 import { registerGitHandlers } from './handlers'
@@ -33,7 +34,7 @@ async function setup(
   repos.push(repo)
   await repo.write('README.md', 'hello\n')
   await repo.commit('initial')
-  const store = storeFile === undefined ? undefined : await WorkspaceStore.open(path.join(repo.base, storeFile))
+  const store = storeFile === undefined ? undefined : await openTestStore(path.join(repo.base, storeFile))
   const service = new GitService({ worktreesRoot: repo.worktreesRoot, ...(store ? { store } : {}) })
   services.push(service)
   const project = await service.addProject({ path: repo.repoPath })
@@ -194,7 +195,7 @@ describe('persistence', () => {
     await service.dispose()
     await store?.flush()
 
-    const again = new GitService({ worktreesRoot: repo.worktreesRoot, store: await WorkspaceStore.open(file) })
+    const again = new GitService({ worktreesRoot: repo.worktreesRoot, store: await openTestStore(file) })
     services.push(again)
     again.reviveRestoredRecords()
     expect((await again.getWorktree({ worktreeId: child.id })).parentId).toBe(parent.id)
@@ -203,7 +204,7 @@ describe('persistence', () => {
     document.worktrees = document.worktrees.map((row) => (row['id'] === parent.id ? { ...row, state: 'bogus' } : row))
     await writeFile(file, JSON.stringify(document))
 
-    const salvaged = new GitService({ worktreesRoot: repo.worktreesRoot, store: await WorkspaceStore.open(file) })
+    const salvaged = new GitService({ worktreesRoot: repo.worktreesRoot, store: await openTestStore(file) })
     services.push(salvaged)
     salvaged.reviveRestoredRecords()
     const kept = await salvaged.getWorktree({ worktreeId: child.id })
@@ -219,7 +220,7 @@ describe('limits', () => {
     call: (connectionId: string, params: Record<string, unknown>) => Promise<Worktree>
   }> {
     const { repo, service, project } = await setup()
-    const store = await WorkspaceStore.open(path.join(repo.base, 'unused.json'))
+    const store = await openTestStore(path.join(repo.base, 'unused.json'))
     const registry = new MethodRegistry(
       createRuntimeContext({ version: '0.0.0-test', store, subscriptions: new SubscriptionHub() })
     )

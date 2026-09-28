@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Project, Worktree } from '../../shared/entities'
 import type { TerminalRecord } from '../terminals/session-restore'
 import { DEFAULT_APPEARANCE, type Appearance } from '../../shared/theme'
-import { describeStoreProblem, WorkspaceStore, type StoreProblem } from './workspaceStore'
+import { openTestStore, removeTempDir } from './storeTestSupport'
+import { describeStoreProblem, type StoreProblem } from './workspaceStore'
 
 const project: Project = { id: 'p1', name: 'teamree', path: '/repos/teamree', baseRef: 'origin/main' }
 
@@ -32,16 +33,16 @@ describe('workspace store', () => {
   })
 
   afterEach(async () => {
-    await rm(directory, { recursive: true, force: true })
+    await removeTempDir(directory)
   })
 
   it('starts empty when the file does not exist', async () => {
-    const store = await WorkspaceStore.open(filePath)
+    const store = await openTestStore(filePath)
     expect(store.snapshot()).toEqual({ projects: [], worktrees: [], layouts: [], terminals: [] })
   })
 
   it('writes through a temp file and leaves none behind', async () => {
-    const store = await WorkspaceStore.open(filePath)
+    const store = await openTestStore(filePath)
     store.putProject(project)
     store.putWorktree(worktree('w1'))
     store.putLayout({ worktreeId: 'w1', root: { kind: 'leaf', terminalId: 't1' }, focusedTerminalId: 't1' })
@@ -56,17 +57,17 @@ describe('workspace store', () => {
   })
 
   it('brings a worktree back with its task', async () => {
-    const store = await WorkspaceStore.open(filePath)
+    const store = await openTestStore(filePath)
     store.putProject(project)
     store.putWorktree({ ...worktree('w1'), task: 'Make the pager stream' })
     await store.flush()
 
-    const reopened = await WorkspaceStore.open(filePath)
+    const reopened = await openTestStore(filePath)
     expect(reopened.getWorktree('w1')?.task).toBe('Make the pager stream')
   })
 
   it('brings a file leaf back with its path', async () => {
-    const store = await WorkspaceStore.open(filePath)
+    const store = await openTestStore(filePath)
     store.putProject(project)
     store.putWorktree(worktree('w1'))
     const root = {
@@ -81,12 +82,12 @@ describe('workspace store', () => {
     store.putLayout({ worktreeId: 'w1', root, focusedTerminalId: 'file:1' })
     await store.flush()
 
-    const reopened = await WorkspaceStore.open(filePath)
+    const reopened = await openTestStore(filePath)
     expect(reopened.getLayout('w1')?.root).toEqual(root)
   })
 
   it('brings the file column back with its tabs, the shown one and the preview', async () => {
-    const store = await WorkspaceStore.open(filePath)
+    const store = await openTestStore(filePath)
     store.putProject(project)
     store.putWorktree(worktree('w1'))
     const tab = (id: string) => ({ kind: 'leaf' as const, terminalId: id, pane: 'file' as const, path: `${id}.ts` })
@@ -110,17 +111,17 @@ describe('workspace store', () => {
     store.putLayout({ worktreeId: 'w1', root, focusedTerminalId: 'file:2' })
     await store.flush()
 
-    const reopened = await WorkspaceStore.open(filePath)
+    const reopened = await openTestStore(filePath)
     expect(reopened.getLayout('w1')?.root).toEqual(root)
   })
 
   it('coalesces a burst of mutations into a durable final state', async () => {
-    const store = await WorkspaceStore.open(filePath)
+    const store = await openTestStore(filePath)
     store.putProject(project)
     for (let index = 0; index < 25; index += 1) store.putWorktree(worktree(`w${index}`))
     await store.flush()
 
-    const reopened = await WorkspaceStore.open(filePath)
+    const reopened = await openTestStore(filePath)
     expect(reopened.listWorktrees('p1')).toHaveLength(25)
     expect(reopened.getProject('p1')).toEqual(project)
   })
@@ -129,7 +130,7 @@ describe('workspace store', () => {
     const corruptPath = join(directory, 'workspace.json')
     await writeFile(corruptPath, '{"projects": [{"id": "p1"', 'utf8')
 
-    const store = await WorkspaceStore.open(corruptPath, { onProblem: () => {} })
+    const store = await openTestStore(corruptPath, { onProblem: () => {} })
 
     expect(store.snapshot()).toEqual({ projects: [], worktrees: [], layouts: [], terminals: [] })
     store.putProject(project)
@@ -143,8 +144,8 @@ describe('workspace store', () => {
     await writeFile(path, '{"projects": [{"id": "p1"', 'utf8')
     const problems: StoreProblem[] = []
 
-    const unreadable = await WorkspaceStore.open(path, { onProblem: (problem) => problems.push(problem) })
-    const missing = await WorkspaceStore.open(join(directory, 'never-written.json'), { onProblem: () => {} })
+    const unreadable = await openTestStore(path, { onProblem: (problem) => problems.push(problem) })
+    const missing = await openTestStore(join(directory, 'never-written.json'), { onProblem: () => {} })
 
     expect(unreadable.unreadable).toContain('JSON')
     expect(problems[0]).toEqual({ kind: 'unreadable', filePath: path, reason: unreadable.unreadable })
@@ -158,7 +159,7 @@ describe('workspace store', () => {
     await writeFile(path, original, 'utf8')
     const problems: StoreProblem[] = []
 
-    const store = await WorkspaceStore.open(path, {
+    const store = await openTestStore(path, {
       onProblem: (problem) => problems.push(problem),
       now: () => Date.parse('2026-01-02T03:04:05.678Z')
     })
@@ -185,7 +186,7 @@ describe('workspace store', () => {
     await writeFile(join(occupied, 'in-the-way'), 'x', 'utf8')
     const problems: StoreProblem[] = []
 
-    const store = await WorkspaceStore.open(path, {
+    const store = await openTestStore(path, {
       onProblem: (problem) => problems.push(problem),
       now: () => Date.parse('2026-01-02T03:04:05.678Z')
     })
@@ -200,7 +201,7 @@ describe('workspace store', () => {
     const home = join(directory, 'state')
     await mkdir(home)
     const problems: StoreProblem[] = []
-    const store = await WorkspaceStore.open(join(home, 'workspace.json'), {
+    const store = await openTestStore(join(home, 'workspace.json'), {
       onProblem: (problem) => problems.push(problem),
       retryMs: 60_000
     })
@@ -217,7 +218,38 @@ describe('workspace store', () => {
     store.putWorktree(worktree('w1'))
     await store.flush().catch(() => {})
     expect(problems).toHaveLength(1)
-    store.close()
+    await store.close()
+  })
+
+  it('closes once its save and backup are on disk, and writes nothing after', async () => {
+    const store = await openTestStore(filePath)
+    store.putProject(project)
+    await store.close()
+    expect(JSON.parse(await readFile(filePath, 'utf8'))).toMatchObject({ projects: [project], worktrees: [] })
+    expect(JSON.parse(await readFile(`${filePath}.bak`, 'utf8'))).toMatchObject({ projects: [project] })
+
+    store.putWorktree(worktree('w1'))
+    await store.flush()
+    expect(JSON.parse(await readFile(filePath, 'utf8'))).toMatchObject({ worktrees: [] })
+  })
+
+  it('does not retry a write that fails after close', async () => {
+    const home = join(directory, 'state')
+    await mkdir(home)
+    const problems: StoreProblem[] = []
+    const store = await openTestStore(join(home, 'workspace.json'), {
+      onProblem: (problem) => problems.push(problem),
+      retryMs: 10
+    })
+    await rm(home, { recursive: true })
+    await writeFile(home, 'not a directory\n', 'utf8')
+
+    store.putProject(project)
+    await store.close()
+    await rm(home)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(problems.map((problem) => problem.kind)).toEqual(['writeFailed'])
+    expect(await readdir(directory)).toEqual([])
   })
 
   it('describes each problem in terms of what it costs the user', () => {
@@ -246,7 +278,7 @@ describe('workspace store', () => {
       'utf8'
     )
 
-    const store = await WorkspaceStore.open(path)
+    const store = await openTestStore(path)
 
     expect(store.listProjects()).toEqual([project])
     expect(store.listWorktrees().map((row) => row.id)).toEqual(['w1'])
@@ -254,7 +286,7 @@ describe('workspace store', () => {
   })
 
   it('removes a project together with its worktrees and layouts', async () => {
-    const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    const store = await openTestStore(join(directory, 'workspace.json'))
     store.putProject(project)
     store.putWorktree(worktree('w1'))
     store.putLayout({ worktreeId: 'w1', root: null, focusedTerminalId: null })
@@ -265,22 +297,22 @@ describe('workspace store', () => {
   })
   describe('one-time questions', () => {
     it('has asked nothing on a fresh installation', async () => {
-      const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+      const store = await openTestStore(join(directory, 'workspace.json'))
       expect(store.askedAt('installCli')).toBeUndefined()
     })
 
     it('remembers the answer across a restart', async () => {
       const path = join(directory, 'workspace.json')
-      const store = await WorkspaceStore.open(path)
+      const store = await openTestStore(path)
       store.markAsked('installCli', 1700000000000)
       await store.flush()
 
-      const reopened = await WorkspaceStore.open(path)
+      const reopened = await openTestStore(path)
       expect(reopened.askedAt('installCli')).toBe(1700000000000)
     })
 
     it('keeps the first answer rather than moving the date on every launch', async () => {
-      const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+      const store = await openTestStore(join(directory, 'workspace.json'))
       store.markAsked('installCli', 1700000000000)
       store.markAsked('installCli', 1800000000000)
       expect(store.askedAt('installCli')).toBe(1700000000000)
@@ -289,10 +321,10 @@ describe('workspace store', () => {
     it('survives a file that has never heard of it, and one that has it wrong', async () => {
       const path = join(directory, 'workspace.json')
       await writeFile(path, JSON.stringify({ version: 1, projects: [project] }), 'utf8')
-      expect((await WorkspaceStore.open(path)).askedAt('installCli')).toBeUndefined()
+      expect((await openTestStore(path)).askedAt('installCli')).toBeUndefined()
 
       await writeFile(path, JSON.stringify({ version: 1, asked: { installCli: 'yesterday' } }), 'utf8')
-      expect((await WorkspaceStore.open(path)).askedAt('installCli')).toBeUndefined()
+      expect((await openTestStore(path)).askedAt('installCli')).toBeUndefined()
     })
   })
 
@@ -308,47 +340,47 @@ describe('workspace store', () => {
     })
 
     it('mutes nothing on a fresh installation', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       expect(store.listMutedTerminals()).toEqual([])
     })
 
     it('keeps a mute across a restart, because the pane comes back under its id', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal(terminal('t1'))
       store.setTerminalMuted('t1', true)
       await store.flush()
 
-      const reopened = await WorkspaceStore.open(filePath)
+      const reopened = await openTestStore(filePath)
       expect(reopened.listMutedTerminals()).toEqual(['t1'])
     })
 
     it('drops the mute with the record it was about, so nothing has to be swept', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal(terminal('t1'))
       store.setTerminalMuted('t1', true)
       store.removeTerminal('t1')
       await store.flush()
 
-      const reopened = await WorkspaceStore.open(filePath)
+      const reopened = await openTestStore(filePath)
       expect(reopened.listMutedTerminals()).toEqual([])
     })
 
     it('lifts a mute the owner lifts', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.setTerminalMuted('t1', true)
       store.setTerminalMuted('t1', false)
       await store.flush()
 
-      expect((await WorkspaceStore.open(filePath)).listMutedTerminals()).toEqual([])
+      expect((await openTestStore(filePath)).listMutedTerminals()).toEqual([])
     })
 
     it('survives a file that has never heard of mutes, and one that has them wrong', async () => {
       const path = join(directory, 'workspace.json')
       await writeFile(path, JSON.stringify({ version: 1, projects: [project] }), 'utf8')
-      expect((await WorkspaceStore.open(path)).listMutedTerminals()).toEqual([])
+      expect((await openTestStore(path)).listMutedTerminals()).toEqual([])
 
       await writeFile(path, JSON.stringify({ version: 1, mutedTerminals: ['t1', 7, '', null] }), 'utf8')
-      expect((await WorkspaceStore.open(path)).listMutedTerminals()).toEqual(['t1'])
+      expect((await openTestStore(path)).listMutedTerminals()).toEqual(['t1'])
     })
   })
   // In this file because the main process needs it before a window exists.
@@ -364,7 +396,7 @@ describe('workspace store', () => {
 
       it('moves an untouched Absolute Black on to the current default once, and writes that down', async () => {
         await stored({ themeId: 'black', ground: null, accent: null, overrides: {}, mode: 'system' })
-        const store = await WorkspaceStore.open(filePath)
+        const store = await openTestStore(filePath)
         expect(store.getAppearance()).toEqual(DEFAULT_APPEARANCE)
         await store.flush()
         const written = await onDisk()
@@ -374,41 +406,41 @@ describe('workspace store', () => {
 
       it('keeps Absolute Black when it is picked again afterwards', async () => {
         await stored({ themeId: 'black', ground: null, accent: null, overrides: {} })
-        const first = await WorkspaceStore.open(filePath)
+        const first = await openTestStore(filePath)
         first.setAppearance({ ...first.getAppearance(), themeId: 'black' })
         await first.flush()
-        expect((await WorkspaceStore.open(filePath)).getAppearance().themeId).toBe('black')
+        expect((await openTestStore(filePath)).getAppearance().themeId).toBe('black')
       })
 
       it('keeps Absolute Black picked on an installation that started on Charcoal', async () => {
-        const fresh = await WorkspaceStore.open(filePath)
+        const fresh = await openTestStore(filePath)
         fresh.setAppearance({ ...DEFAULT_APPEARANCE, themeId: 'black' })
         await fresh.flush()
-        expect((await WorkspaceStore.open(filePath)).getAppearance().themeId).toBe('black')
+        expect((await openTestStore(filePath)).getAppearance().themeId).toBe('black')
       })
 
       it('leaves a light slot, another preset and an edited Absolute Black alone', async () => {
         const light = { themeId: 'paper', ground: null, accent: '#5aa9e6', overrides: {} }
         await stored({ themeId: 'black', ground: null, accent: null, overrides: {}, mode: 'light', light })
         // Each store is flushed before the next file is written: its own write would otherwise land on top.
-        const litStore = await WorkspaceStore.open(filePath)
+        const litStore = await openTestStore(filePath)
         await litStore.flush()
         expect(litStore.getAppearance().mode).toBe('light')
         expect(litStore.getAppearance().light).toEqual(light)
 
         await stored({ themeId: 'midnight', ground: null, accent: null, overrides: {} })
-        const midnight = await WorkspaceStore.open(filePath)
+        const midnight = await openTestStore(filePath)
         await midnight.flush()
         expect(midnight.getAppearance().themeId).toBe('midnight')
 
         const edited = { themeId: 'black', ground: null, accent: '#e070c0', overrides: { line: '#333333' } }
         await stored(edited)
-        expect((await WorkspaceStore.open(filePath)).getAppearance()).toEqual(edited)
+        expect((await openTestStore(filePath)).getAppearance()).toEqual(edited)
       })
 
       it('moves nothing once it has moved', async () => {
         await stored({ themeId: 'black', ground: null, accent: null, overrides: {} }, { themeMigratedToCharcoal: true })
-        expect((await WorkspaceStore.open(filePath)).getAppearance().themeId).toBe('black')
+        expect((await openTestStore(filePath)).getAppearance().themeId).toBe('black')
       })
     })
 
@@ -432,7 +464,7 @@ describe('workspace store', () => {
           { ...pristine('charcoal'), mode: 'system', light: pristine('light') },
           { themeMigratedToCharcoal: true }
         )
-        const store = await WorkspaceStore.open(filePath)
+        const store = await openTestStore(filePath)
         expect(store.getAppearance()).toEqual({ ...DEFAULT_APPEARANCE, light: pristine('studio-light') })
         await store.flush()
         const written = await onDisk()
@@ -443,17 +475,17 @@ describe('workspace store', () => {
 
       it('keeps Charcoal when it is picked again afterwards', async () => {
         await stored(pristine('charcoal'), { themeMigratedToCharcoal: true })
-        const first = await WorkspaceStore.open(filePath)
+        const first = await openTestStore(filePath)
         first.setAppearance({ ...first.getAppearance(), themeId: 'charcoal' })
         await first.flush()
-        expect((await WorkspaceStore.open(filePath)).getAppearance().themeId).toBe('charcoal')
+        expect((await openTestStore(filePath)).getAppearance().themeId).toBe('charcoal')
       })
 
       it('keeps Charcoal picked on an installation that started on Studio', async () => {
-        const fresh = await WorkspaceStore.open(filePath)
+        const fresh = await openTestStore(filePath)
         fresh.setAppearance({ ...DEFAULT_APPEARANCE, themeId: 'charcoal', light: pristine('light') })
         await fresh.flush()
-        const reopened = (await WorkspaceStore.open(filePath)).getAppearance()
+        const reopened = (await openTestStore(filePath)).getAppearance()
         expect(reopened.themeId).toBe('charcoal')
         expect(reopened.light?.themeId).toBe('light')
       })
@@ -462,38 +494,38 @@ describe('workspace store', () => {
       it('leaves an edited Charcoal, another preset and an Absolute Black picked after Charcoal alone', async () => {
         const edited = { themeId: 'charcoal', ground: null, accent: '#e070c0', overrides: {} }
         await stored(edited, { themeMigratedToCharcoal: true })
-        const editedStore = await WorkspaceStore.open(filePath)
+        const editedStore = await openTestStore(filePath)
         await editedStore.flush()
         expect(editedStore.getAppearance()).toEqual(edited)
 
         await stored({ ...pristine('midnight'), light: { ...pristine('light'), overrides: { line: '#333333' } } })
-        const midnight = await WorkspaceStore.open(filePath)
+        const midnight = await openTestStore(filePath)
         await midnight.flush()
         expect(midnight.getAppearance().themeId).toBe('midnight')
         expect(midnight.getAppearance().light?.themeId).toBe('light')
 
         await stored(pristine('black'), { themeMigratedToCharcoal: true })
-        expect((await WorkspaceStore.open(filePath)).getAppearance().themeId).toBe('black')
+        expect((await openTestStore(filePath)).getAppearance().themeId).toBe('black')
       })
 
       it('moves nothing once it has moved', async () => {
         await stored(pristine('charcoal'), { themeMigratedToCharcoal: true, themeMigratedToStudio: true })
-        expect((await WorkspaceStore.open(filePath)).getAppearance().themeId).toBe('charcoal')
+        expect((await openTestStore(filePath)).getAppearance().themeId).toBe('charcoal')
       })
     })
 
     it('opens on Studio until somebody chooses otherwise', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       expect(store.getAppearance()).toEqual(DEFAULT_APPEARANCE)
       expect(store.getAppearance().themeId).toBe('studio')
     })
 
     it('is still there after the app is closed and opened again', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.setAppearance({ themeId: 'graphite', ground: '#101820', accent: '#3bb8c4', overrides: { line: '#445566' } })
       await store.flush()
 
-      const reopened = await WorkspaceStore.open(filePath)
+      const reopened = await openTestStore(filePath)
       expect(reopened.getAppearance()).toEqual({
         themeId: 'graphite',
         ground: '#101820',
@@ -519,7 +551,7 @@ describe('workspace store', () => {
         'utf8'
       )
 
-      const store = await WorkspaceStore.open(path)
+      const store = await openTestStore(path)
       expect(store.getAppearance()).toEqual({
         themeId: 'studio',
         ground: null,
@@ -531,7 +563,7 @@ describe('workspace store', () => {
     it('survives a file that has never heard of a theme', async () => {
       const path = join(directory, 'workspace.json')
       await writeFile(path, JSON.stringify({ version: 1, projects: [project] }), 'utf8')
-      expect((await WorkspaceStore.open(path)).getAppearance()).toEqual(DEFAULT_APPEARANCE)
+      expect((await openTestStore(path)).getAppearance()).toEqual(DEFAULT_APPEARANCE)
     })
   })
 
@@ -549,45 +581,45 @@ describe('workspace store', () => {
     const BO = 'Qp2WdTn6Ys4aRk0uEbV8cMxJfZ1gLh3XoIvNtAj5BrM='
 
     it('allows nobody on a fresh installation', async () => {
-      expect((await WorkspaceStore.open(filePath)).listStandingConsent()).toEqual([])
+      expect((await openTestStore(filePath)).listStandingConsent()).toEqual([])
     })
 
     it('keeps a permission across a restart, because the pane comes back under its id', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal(terminal('t1'))
       store.setStandingConsent('t1', ANA, 1700000000000)
       await store.flush()
 
-      const reopened = await WorkspaceStore.open(filePath)
+      const reopened = await openTestStore(filePath)
       expect(reopened.listStandingConsent()).toEqual([{ terminalId: 't1', publicKey: ANA, since: 1700000000000 }])
     })
 
     it('is per person as well as per pane, so allowing one is not allowing everyone', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.setStandingConsent('t1', ANA, 1)
       store.setStandingConsent('t1', BO, 2)
       store.setStandingConsent('t1', ANA, null)
       await store.flush()
 
-      expect((await WorkspaceStore.open(filePath)).listStandingConsent()).toEqual([
+      expect((await openTestStore(filePath)).listStandingConsent()).toEqual([
         { terminalId: 't1', publicKey: BO, since: 2 }
       ])
     })
 
     it('drops the permission with the record it was about, so nothing has to be swept', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal(terminal('t1'))
       store.setStandingConsent('t1', ANA, 1)
       store.removeTerminal('t1')
       await store.flush()
 
-      expect((await WorkspaceStore.open(filePath)).listStandingConsent()).toEqual([])
+      expect((await openTestStore(filePath)).listStandingConsent()).toEqual([])
     })
 
     it('survives a file that has never heard of permissions, and one that has them wrong', async () => {
       const path = join(directory, 'workspace.json')
       await writeFile(path, JSON.stringify({ version: 1, projects: [project] }), 'utf8')
-      expect((await WorkspaceStore.open(path)).listStandingConsent()).toEqual([])
+      expect((await openTestStore(path)).listStandingConsent()).toEqual([])
 
       // Salvaged row by row: a permission nobody can read is not a permission.
       await writeFile(
@@ -598,7 +630,7 @@ describe('workspace store', () => {
         }),
         'utf8'
       )
-      expect((await WorkspaceStore.open(path)).listStandingConsent()).toEqual([
+      expect((await openTestStore(path)).listStandingConsent()).toEqual([
         { terminalId: 't1', publicKey: ANA, since: 1 }
       ])
     })
@@ -623,43 +655,43 @@ describe('workspace store', () => {
     })
 
     it('brings a named pane back under its name', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal(named('t1', 'auth refactor'))
       await store.flush()
 
       const written = JSON.parse(await readFile(filePath, 'utf8')) as { terminals: TerminalRecord[] }
       expect(written.terminals[0]?.label).toBe('auth refactor')
 
-      const reopened = await WorkspaceStore.open(filePath)
+      const reopened = await openTestStore(filePath)
       expect(reopened.listTerminals()).toEqual([named('t1', 'auth refactor')])
     })
 
     it('leaves a pane nobody named without one, rather than inventing an empty one', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal(named('t1'))
       await store.flush()
 
-      const reopened = await WorkspaceStore.open(filePath)
+      const reopened = await openTestStore(filePath)
       const [record] = reopened.listTerminals()
       expect(Object.keys(record ?? {})).not.toContain('label')
     })
 
     it('keeps a rename, which is the name that was typed last', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal(named('t1', 'auth refactor'))
       store.putTerminal(named('t1', 'auth refactor · take two'))
       await store.flush()
 
-      const reopened = await WorkspaceStore.open(filePath)
+      const reopened = await openTestStore(filePath)
       expect(reopened.listTerminals().map((record) => record.label)).toEqual(['auth refactor · take two'])
     })
 
     it('keeps the number an unnamed pane was given', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal({ ...named('t3'), ordinal: 3 })
       await store.flush()
 
-      const reopened = await WorkspaceStore.open(filePath)
+      const reopened = await openTestStore(filePath)
       expect(reopened.listTerminals()).toEqual([{ ...named('t3'), ordinal: 3 }])
     })
   })
@@ -685,7 +717,7 @@ describe('workspace store', () => {
     })
 
     it('brings a pane somebody typed in back as one somebody typed in', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal(terminal('t1', true))
       await store.flush()
 
@@ -693,16 +725,16 @@ describe('workspace store', () => {
       const written = JSON.parse(await readFile(filePath, 'utf8')) as { terminals: TerminalRecord[] }
       expect(written.terminals[0]?.typed).toBe(true)
 
-      const reopened = await WorkspaceStore.open(filePath)
+      const reopened = await openTestStore(filePath)
       expect(reopened.listTerminals()).toEqual([terminal('t1', true)])
     })
 
     it('leaves a record written before the field existed with no answer, rather than a no', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal(terminal('t1'))
       await store.flush()
 
-      const reopened = await WorkspaceStore.open(filePath)
+      const reopened = await openTestStore(filePath)
       const [record] = reopened.listTerminals()
       expect(record).toEqual(terminal('t1'))
       // `toEqual` cannot tell a missing key from undefined, and `restoreLaunch`
@@ -711,12 +743,12 @@ describe('workspace store', () => {
     })
 
     it('brings a pane nobody typed in back as a no, which is not the same as no answer', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal(terminal('t1', false))
       store.putTerminal(terminal('t2'))
       await store.flush()
 
-      const reopened = await WorkspaceStore.open(filePath)
+      const reopened = await openTestStore(filePath)
       const byId = new Map(reopened.listTerminals().map((record) => [record.id, record]))
       expect(byId.get('t1')?.typed).toBe(false)
       expect(Object.keys(byId.get('t1') ?? {})).toContain('typed')
@@ -725,28 +757,28 @@ describe('workspace store', () => {
 
     // A `false` that survives the trip is what lets a pane stop failing the same way for ever.
     it('remembers a no through more than one restart', async () => {
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal(terminal('t1'))
       await store.flush()
 
-      const second = await WorkspaceStore.open(filePath)
+      const second = await openTestStore(filePath)
       second.putTerminal({ ...terminal('t1'), typed: false })
       await second.flush()
 
-      expect((await WorkspaceStore.open(filePath)).listTerminals()).toEqual([terminal('t1', false)])
+      expect((await openTestStore(filePath)).listTerminals()).toEqual([terminal('t1', false)])
     })
 
     it('brings a Run pane back as one, with its command and how it ended', async () => {
       const dev: TerminalRecord = { ...terminal('t2'), command: 'npm run dev', run: 'dev', exitCode: 1 }
       delete dev.agent
       delete dev.agentSessionId
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal(dev)
       // A kind a later build added is dropped, not the pane.
       store.putTerminal({ ...dev, id: 't3', run: 'lint' as TerminalRecord['run'] })
       await store.flush()
 
-      const byId = new Map((await WorkspaceStore.open(filePath)).listTerminals().map((record) => [record.id, record]))
+      const byId = new Map((await openTestStore(filePath)).listTerminals().map((record) => [record.id, record]))
       expect(byId.get('t2')).toEqual(dev)
       expect(byId.get('t3')?.run).toBeUndefined()
     })
@@ -754,11 +786,11 @@ describe('workspace store', () => {
     // A failed agent came back as if it had been quit, and its end block dated itself to the relaunch.
     it('brings an agent back with how and when it ended', async () => {
       const failed: TerminalRecord = { ...terminal('t4'), exitCode: 1, endedAt: 1_700_000_000_000 }
-      const store = await WorkspaceStore.open(filePath)
+      const store = await openTestStore(filePath)
       store.putTerminal(failed)
       await store.flush()
 
-      expect((await WorkspaceStore.open(filePath)).listTerminals().find((record) => record.id === 't4')).toEqual(failed)
+      expect((await openTestStore(filePath)).listTerminals().find((record) => record.id === 't4')).toEqual(failed)
     })
 
     it('brings back a pane whose harness this build has never heard of, as a plain shell', async () => {
@@ -767,7 +799,7 @@ describe('workspace store', () => {
       const known = { ...terminal('t2'), command: 'claude', agent: 'claude' }
       await writeFile(path, JSON.stringify({ version: 1, projects: [project], terminals: [newer, known] }), 'utf8')
 
-      const records = (await WorkspaceStore.open(path)).listTerminals()
+      const records = (await openTestStore(path)).listTerminals()
       expect(records.map((record) => [record.id, record.agent])).toEqual([
         ['t1', undefined],
         ['t2', 'claude']
@@ -791,7 +823,7 @@ describe('workspace store', () => {
         'utf8'
       )
 
-      const store = await WorkspaceStore.open(path)
+      const store = await openTestStore(path)
 
       // Row by row: a pane that does not come back is visible, a conversation resumed on a guess is not.
       expect(store.listTerminals()).toEqual([terminal('t1', true)])
@@ -802,26 +834,26 @@ describe('workspace store', () => {
   describe('trusting new worktrees in the agent CLIs', () => {
     it('is on until turned off, and the choice survives a reopen', async () => {
       const path = join(directory, 'workspace.json')
-      const store = await WorkspaceStore.open(path)
+      const store = await openTestStore(path)
       expect(store.trustNewWorktrees()).toBe(true)
 
       store.setTrustNewWorktrees(false)
       await store.flush()
       expect(JSON.parse(await readFile(path, 'utf8')).agents).toEqual({ trustNewWorktrees: false })
-      expect((await WorkspaceStore.open(path)).trustNewWorktrees()).toBe(false)
+      expect((await openTestStore(path)).trustNewWorktrees()).toBe(false)
     })
 
     it('reads a mangled value as on', async () => {
       const path = join(directory, 'workspace.json')
       await writeFile(path, JSON.stringify({ version: 1, agents: { trustNewWorktrees: 'nope' } }), 'utf8')
-      expect((await WorkspaceStore.open(path)).trustNewWorktrees()).toBe(true)
+      expect((await openTestStore(path)).trustNewWorktrees()).toBe(true)
     })
   })
 
   describe('the menu bar extra', () => {
     it('is shown until hidden, keeps the last note’s project, and survives a reopen', async () => {
       const path = join(directory, 'workspace.json')
-      const store = await WorkspaceStore.open(path)
+      const store = await openTestStore(path)
       expect(store.runtimeSettings().showInMenuBar).toBe(true)
       expect(store.quickNoteProject()).toBeUndefined()
 
@@ -830,7 +862,7 @@ describe('workspace store', () => {
       await store.flush()
       const written = JSON.parse(await readFile(path, 'utf8'))
       expect([written.settings, written.quickNote]).toEqual([{ showInMenuBar: false }, { projectId: 'p1' }])
-      const reopened = await WorkspaceStore.open(path)
+      const reopened = await openTestStore(path)
       expect([reopened.runtimeSettings().showInMenuBar, reopened.quickNoteProject()]).toEqual([false, 'p1'])
     })
 
@@ -838,7 +870,7 @@ describe('workspace store', () => {
       const path = join(directory, 'workspace.json')
       const mangled = { version: 1, settings: { showInMenuBar: 'nope' }, quickNote: { projectId: 7 } }
       await writeFile(path, JSON.stringify(mangled), 'utf8')
-      const store = await WorkspaceStore.open(path)
+      const store = await openTestStore(path)
       expect([store.runtimeSettings().showInMenuBar, store.quickNoteProject()]).toEqual([true, undefined])
     })
   })
@@ -861,7 +893,7 @@ describe('workspace store', () => {
         'utf8'
       )
 
-      const store = await WorkspaceStore.open(path)
+      const store = await openTestStore(path)
       expect(store.getAppearance()).toEqual(DEFAULT_APPEARANCE)
       expect(store.updateSettings().automatic).toBe(false)
       expect(store.updateSettings().lastSeenVersion).toBe('0.2.0')
@@ -883,7 +915,7 @@ describe('workspace store', () => {
         'utf8'
       )
 
-      const store = await WorkspaceStore.open(path)
+      const store = await openTestStore(path)
       expect(store.getAppearance().themeId).toBe('graphite')
       // Absent rather than false: the app goes on checking.
       expect(store.updateSettings().automatic).toBe(true)
@@ -896,7 +928,7 @@ describe('workspace store', () => {
       const path = join(directory, 'workspace.json')
       await writeFile(path, JSON.stringify({ version: 1, projects: [project], worktrees: [] }), 'utf8')
 
-      const store = await WorkspaceStore.open(path)
+      const store = await openTestStore(path)
       expect(store.getAppearance()).toEqual(DEFAULT_APPEARANCE)
       expect(store.updateSettings()).toEqual({
         automatic: true,

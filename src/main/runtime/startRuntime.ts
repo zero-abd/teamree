@@ -231,7 +231,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
         },
         // Again: the teardown itself changes the workspace.
         { name: 'the workspace file', release: () => store.flush() },
-        { name: 'the save retry', release: () => store.close() }
+        { name: 'the workspace store', release: () => store.close() }
       ],
       { graceMs: RELEASE_GRACE_MS, onProblem: report }
     )

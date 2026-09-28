@@ -120,6 +120,7 @@ export class WorkspaceStore {
   private writeError: unknown
   private saveFailure: { reason: string; diskFull: boolean } | undefined
   private retryTimer: ReturnType<typeof setTimeout> | undefined
+  private closed = false
   private readonly onProblem: (problem: StoreProblem) => void
   private readonly now: () => number
   private readonly retryMs: number
@@ -224,9 +225,11 @@ export class WorkspaceStore {
     return this.saveFailure === undefined && !this.unreadablePending
   }
 
-  /** Stops retrying a failed write; the store is done with. */
-  close(): void {
+  /** Waits for the queued save and its backup, then writes nothing more. */
+  async close(): Promise<void> {
+    this.closed = true
     this.stopRetrying()
+    await this.settled()
   }
 
   listProjects(): Project[] {
@@ -489,7 +492,7 @@ export class WorkspaceStore {
 
   private persist(): void {
     // One queued write already covers whatever mutations land before it runs.
-    if (this.queued) return
+    if (this.queued || this.closed) return
     this.queued = true
     this.queue = this.queue.then(async () => {
       this.queued = false
@@ -513,8 +516,10 @@ export class WorkspaceStore {
     this.writeError = error
     this.stopRetrying()
     // A timer, not a watch: nothing says when a full disk frees up.
-    this.retryTimer = setTimeout(() => this.persist(), this.retryMs)
-    this.retryTimer.unref()
+    if (!this.closed) {
+      this.retryTimer = setTimeout(() => this.persist(), this.retryMs)
+      this.retryTimer.unref()
+    }
     // Said the first time: finding out at shutdown is too late.
     if (this.saveFailure !== undefined) return
     const code = (error as NodeJS.ErrnoException).code

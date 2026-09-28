@@ -1,9 +1,9 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ErrorCode, type ErrorResponse } from '../../../shared/protocol'
-import { WorkspaceStore } from '../../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../../store/storeTestSupport'
 import { createDispatcher, type Dispatcher } from '../dispatcher'
 import { MethodRegistry } from '../methodRegistry'
 import { createRuntimeContext } from '../runtimeContext'
@@ -18,13 +18,13 @@ describe('app.quit', () => {
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'teamree-quit-'))
-    const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    const store = await openTestStore(join(directory, 'workspace.json'))
     const context = createRuntimeContext({ version: '9.9.9', store, subscriptions: new SubscriptionHub() })
     registry = new MethodRegistry(context)
   })
 
   afterEach(async () => {
-    await rm(directory, { recursive: true, force: true })
+    await removeTempDir(directory)
   })
 
   it('answers with the pid it is about to end, and only then asks to quit', async () => {

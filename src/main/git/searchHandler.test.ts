@@ -1,7 +1,7 @@
 // worktree.search through the real registry and dispatcher: the scope decides
 // which checkouts are read, and the stream ends with `done` or an unsubscribe.
 
-import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -12,7 +12,7 @@ import { createDispatcher } from '../runtime/dispatcher'
 import { MethodRegistry } from '../runtime/methodRegistry'
 import { createRuntimeContext } from '../runtime/runtimeContext'
 import { SubscriptionHub } from '../runtime/subscriptionHub'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../store/storeTestSupport'
 import { GitService } from './gitService'
 import { registerGitHandlers } from './handlers'
 import { registerSearchHandler } from './searchHandler'
@@ -25,7 +25,7 @@ const scratch: string[] = []
 afterEach(async () => {
   await Promise.all(services.splice(0).map((service) => service.dispose()))
   await Promise.all(repos.splice(0).map((repo) => repo.cleanup()))
-  await Promise.all(scratch.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  await Promise.all(scratch.splice(0).map((dir) => removeTempDir(dir)))
 })
 
 async function wire(rg: string | null = null) {
@@ -33,7 +33,7 @@ async function wire(rg: string | null = null) {
   repos.push(repo)
   await repo.write('src/limits.ts', 'export const limit = 3\n')
   await repo.commit('limits')
-  const store = await WorkspaceStore.open(path.join(repo.base, 'workspace.json'))
+  const store = await openTestStore(path.join(repo.base, 'workspace.json'))
   const subscriptions = new SubscriptionHub()
   const frames: StreamEvent[] = []
   subscriptions.openConnection('test', (frame) => frames.push(frame))

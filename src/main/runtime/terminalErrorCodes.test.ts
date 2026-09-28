@@ -10,7 +10,7 @@ import { ErrorCode, type ErrorResponse, type Response } from '../../shared/proto
 import { createTerminalService, registerTerminalHandlers } from '../terminals/method-handlers'
 import type { TerminalService } from '../terminals/method-handlers'
 import { canSpawnPty, testShell, waitUntil } from '../terminals/pty-test-support'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../store/storeTestSupport'
 import { createDispatcher, type Dispatcher } from './dispatcher'
 import { MethodRegistry } from './methodRegistry'
 import { createRuntimeContext } from './runtimeContext'
@@ -32,13 +32,13 @@ const services: TerminalService[] = []
 
 afterEach(async () => {
   await Promise.all(services.splice(0).map((service) => service.shutdown()))
-  await Promise.all(temporaryDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  await Promise.all(temporaryDirs.splice(0).map((dir) => removeTempDir(dir)))
 })
 
 async function harness(): Promise<Harness> {
   const checkout = await mkdtemp(join(tmpdir(), 'teamree-error-codes-'))
   temporaryDirs.push(checkout)
-  const store = await WorkspaceStore.open(join(checkout, 'workspace.json'))
+  const store = await openTestStore(join(checkout, 'workspace.json'))
   const hub = new SubscriptionHub()
   // The hub refuses a connection it has never seen.
   hub.openConnection('c1', () => {})

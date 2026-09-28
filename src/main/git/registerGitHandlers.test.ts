@@ -10,6 +10,7 @@ import { MethodRegistry, WINDOW_CONNECTION_PREFIX } from '../runtime/methodRegis
 import { createRuntimeContext } from '../runtime/runtimeContext'
 import { SubscriptionHub } from '../runtime/subscriptionHub'
 import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore } from '../store/storeTestSupport'
 import { GitService } from './gitService'
 import { registerGitHandlers } from './handlers'
 import { createTempRepo, type TempRepo } from './testRepository'
@@ -30,7 +31,7 @@ async function wire(): Promise<{
 }> {
   const repo = await createTempRepo()
   repos.push(repo)
-  const store = await WorkspaceStore.open(path.join(repo.base, 'workspace.json'))
+  const store = await openTestStore(path.join(repo.base, 'workspace.json'))
   const registry = new MethodRegistry(
     createRuntimeContext({ version: '0.0.0-test', store, subscriptions: new SubscriptionHub() })
   )
@@ -97,7 +98,7 @@ describe('worktree.rename on the wire', () => {
     expect(renamed).toMatchObject({ name: 'the winner', branch: ready.branch, path: ready.path })
 
     await store.flush()
-    const reopened = await WorkspaceStore.open(path.join(repo.base, 'workspace.json'))
+    const reopened = await openTestStore(path.join(repo.base, 'workspace.json'))
     expect(reopened.getWorktree(created.id)).toMatchObject({ name: 'the winner', branch: ready.branch })
   })
 
@@ -118,7 +119,7 @@ describe('worktree.run', () => {
     await repo.write('.teamree/project.json', '{"runCommands": {"test": "make check"}}')
     await repo.commit('share run commands')
     const file = path.join(repo.base, 'workspace.json')
-    const store = await WorkspaceStore.open(file)
+    const store = await openTestStore(file)
     const registry = new MethodRegistry(
       createRuntimeContext({ version: '0.0.0-test', store, subscriptions: new SubscriptionHub() })
     )
@@ -152,7 +153,7 @@ describe('worktree.run', () => {
     await from('cli', 'worktree.run', { worktreeId: worktree.id, kind: 'test' })
     expect(started).toEqual(['make check', 'make check'])
     await store.flush()
-    const reopened = await WorkspaceStore.open(file)
+    const reopened = await openTestStore(file)
     expect(reopened.getProject(project.id)?.approvedRunCommands).toEqual({ test: 'make check' })
   })
 })

@@ -2,7 +2,7 @@
 // hangup a closing terminal sends. Real runtime, real socket, real pty.
 
 import { existsSync, watch } from 'node:fs'
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -12,7 +12,7 @@ import { createQuitSequence } from './quitSequence'
 import { discoveryFilePath } from './runtime/discoveryFile'
 import { startRuntime, WORKSPACE_FILE_NAME, type Runtime } from './runtime/startRuntime'
 import { SCROLLBACK_DIR_NAME } from './store/scrollbackArchive'
-import { WorkspaceStore } from './store/workspaceStore'
+import { openTestStore, removeTempDir } from './store/storeTestSupport'
 import { canSpawnPty } from './terminals/pty-test-support'
 
 const itPty = canSpawnPty() && process.platform !== 'win32' ? it : it.skip
@@ -27,7 +27,7 @@ const seen: number[] = []
 afterEach(async () => {
   await Promise.all(runtimes.splice(0).map((runtime) => runtime.stop()))
   for (const pid of seen.splice(0)) if (alive(pid)) process.kill(pid, 'SIGKILL')
-  await Promise.all(temporaryDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  await Promise.all(temporaryDirs.splice(0).map((dir) => removeTempDir(dir)))
 })
 
 function alive(pid: number): boolean {
@@ -82,7 +82,7 @@ itPty(
     )
     await chmod(program, 0o755)
 
-    const seed = await WorkspaceStore.open(join(userDataDir, WORKSPACE_FILE_NAME))
+    const seed = await openTestStore(join(userDataDir, WORKSPACE_FILE_NAME))
     seed.putWorktree({
       id: WORKTREE,
       projectId: 'proj_1',

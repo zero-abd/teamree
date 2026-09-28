@@ -6,7 +6,7 @@
 // other change to a pane — or the one state this app most needs to show
 // changes on the record and nowhere on screen.
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -16,7 +16,7 @@ import type { Response } from '../../shared/protocol'
 import { createTerminalService, registerTerminalHandlers } from '../terminals/method-handlers'
 import type { TerminalService } from '../terminals/method-handlers'
 import { canSpawnPty } from '../terminals/pty-test-support'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../store/storeTestSupport'
 import { createDispatcher, type Dispatcher } from './dispatcher'
 import { MethodRegistry } from './methodRegistry'
 import { createRuntimeContext } from './runtimeContext'
@@ -32,7 +32,7 @@ const services: TerminalService[] = []
 
 afterEach(async () => {
   await Promise.all(services.splice(0).map((service) => service.shutdown()))
-  await Promise.all(temporaryDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  await Promise.all(temporaryDirs.splice(0).map((dir) => removeTempDir(dir)))
 })
 
 async function runtime(): Promise<{
@@ -41,7 +41,7 @@ async function runtime(): Promise<{
 }> {
   const dataDir = await mkdtemp(join(tmpdir(), 'teamree-agent-event-stream-'))
   temporaryDirs.push(dataDir)
-  const store = await WorkspaceStore.open(join(dataDir, 'workspace.json'))
+  const store = await openTestStore(join(dataDir, 'workspace.json'))
   const hub = new SubscriptionHub()
   const context = createRuntimeContext({ version: 'test', store, subscriptions: hub })
   const registry = new MethodRegistry(context)

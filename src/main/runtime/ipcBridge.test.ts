@@ -2,13 +2,13 @@
 // literals because it cannot import a main-process module, so the strings are
 // checked here, plus one real round trip. No Electron: `ipcMain` is faked.
 
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Response, StreamEvent } from '../../shared/protocol'
-import { WorkspaceStore } from '../store/workspaceStore'
+import { openTestStore, removeTempDir } from '../store/storeTestSupport'
 import { createDispatcher } from './dispatcher'
 import { registerHandlers } from './handlers/registerHandlers'
 import { RPC_CALL_CHANNEL, RPC_RELEASE_CHANNEL, RPC_STREAM_CHANNEL } from './ipcChannels'
@@ -129,7 +129,7 @@ describe('the ipc bridge, against a real registry', () => {
     handlers.clear()
     listeners.clear()
     directory = await mkdtemp(join(tmpdir(), 'teamree-ipc-'))
-    const store = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    const store = await openTestStore(join(directory, 'workspace.json'))
     hub = new SubscriptionHub()
     context = createRuntimeContext({ version: '9.9.9', store, subscriptions: hub, endpoint: '/tmp/fake.sock' })
     const registry = new MethodRegistry(context)
@@ -140,7 +140,7 @@ describe('the ipc bridge, against a real registry', () => {
   afterEach(async () => {
     uninstall()
     hub.closeAll()
-    await rm(directory, { recursive: true, force: true })
+    await removeTempDir(directory)
   })
 
   it('answers a request the renderer sends on the call channel', async () => {
