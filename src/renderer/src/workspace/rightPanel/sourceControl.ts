@@ -72,14 +72,19 @@ export function sections(
   }
 }
 
+/** Files, not rows: a folded folder of new files counts every file in it. */
 export function sectionCount(shown: Sections, section: 'staged' | 'unstaged'): number {
-  return shown[section].length + (shown.unlistedIn === section ? shown.unlisted : 0)
+  return filesIn(shown[section]) + (shown.unlistedIn === section ? shown.unlisted : 0)
+}
+
+function filesIn(rows: readonly WorktreeChange[]): number {
+  return rows.reduce((sum, change) => sum + (change.files ?? 1), 0)
 }
 
 /** `Commit 2` for what is staged, `Commit All 6` when nothing is and everything goes. */
 export function commitLabel(shown: Sections): string {
   if (shown.scope === 'all')
-    return `Commit All ${counted(shown.staged.length + shown.unstaged.length + shown.unlisted)}`
+    return `Commit All ${counted(filesIn(shown.staged) + filesIn(shown.unstaged) + shown.unlisted)}`
   return `Commit ${counted(sectionCount(shown, 'staged'))}`
 }
 
@@ -130,7 +135,7 @@ export function changeTree(changes: readonly WorktreeChange[], folded: (path: st
   const root: Folder = { folders: new Map(), files: [] }
   for (const change of changes) {
     let at = root
-    const parts = change.path.split('/')
+    const parts = withoutSlash(change.path).split('/')
     for (const part of parts.slice(0, -1)) {
       let next = at.folders.get(part)
       if (next === undefined) {
@@ -192,13 +197,18 @@ export function counted(count: number): string {
   return count.toLocaleString('en-US')
 }
 
-/** The folder a path sits in, `src/cart` for `src/cart/totals.ts`; empty at the root. */
+/** The folder a path sits in, `src/cart` for `src/cart/totals.ts` or `src/cart/gen/`; empty at the root. */
 export function directoryOf(path: string): string {
-  const cut = path.lastIndexOf('/')
+  const cut = withoutSlash(path).lastIndexOf('/')
   return cut === -1 ? '' : path.slice(0, cut)
 }
 
+/** `totals.ts`, or `gen` for a folder git lists as `src/gen/`. */
 export function fileNameOf(path: string): string {
-  const cut = path.lastIndexOf('/')
-  return cut === -1 ? path : path.slice(cut + 1)
+  const bare = withoutSlash(path)
+  return bare.slice(bare.lastIndexOf('/') + 1)
+}
+
+function withoutSlash(path: string): string {
+  return path.endsWith('/') ? path.slice(0, -1) : path
 }

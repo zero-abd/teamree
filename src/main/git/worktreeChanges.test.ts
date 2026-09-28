@@ -195,6 +195,22 @@ describe('changes and diffs against a real repository', () => {
     expect(result.changes.map((change) => change.path)).toEqual(['generated/', 'notes.md'])
   })
 
+  it('says how many new files a folded folder holds, nested ones included', async () => {
+    const repo = await repository()
+    for (let index = 0; index < 20; index += 1) await repo.write(`gen/file-${index}.ts`, 'export {}\n')
+    await repo.write('gen/deep/more.ts', 'x\n')
+    await repo.write('tools/one.ts', 'x\n')
+    await repo.write('notes.md', 'x\n')
+
+    const result = await readWorktreeChanges(repo.runner, { worktreeId: 'wt', worktreePath: repo.repoPath })
+
+    expect(result.changes.map(({ path, files }) => [path, files])).toEqual([
+      ['gen/', 21],
+      ['notes.md', undefined],
+      ['tools/', 1]
+    ])
+  })
+
   it('counts lines added and removed per file, a new file as all added and a binary one not at all', async () => {
     const repo = await repository()
     await repo.write('src/math.ts', 'a\nb\nc\n')

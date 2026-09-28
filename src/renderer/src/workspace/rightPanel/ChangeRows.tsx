@@ -9,12 +9,13 @@ import { Icon } from '../../icons/Icon'
 import { isViewedRow } from '../../review/reviewModel'
 import { useReviewStore } from '../../review/reviewStore'
 import { useWorkspaceStore } from '../../state/workspaceStore'
-import { Menu, type MenuAnchor, type MenuItem } from '../../ui/Menu'
+import { anchorAtPointer, Menu, refocus, type MenuAnchor, type MenuItem } from '../../ui/Menu'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
 import { useScmView, type ChangesView } from './scmView'
 import {
   canDiscard,
   changeTree,
+  counted,
   directoryOf,
   fileNameOf,
   isPartlyStaged,
@@ -43,7 +44,7 @@ export function ChangeRows({ worktreeId, section, rows, view, ticked }: Props): 
     [rows, view, folded, section]
   )
   const actions = useRowActions(worktreeId)
-  const [menu, setMenu] = useState<{ change: WorktreeChange; at: MenuAnchor } | null>(null)
+  const [menu, setMenu] = useState<{ change: WorktreeChange; at: MenuAnchor; row: HTMLElement } | null>(null)
 
   return (
     <>
@@ -84,7 +85,7 @@ export function ChangeRows({ worktreeId, section, rows, view, ticked }: Props): 
               partly={section === 'staged' && isPartlyStaged(row.change, ticked)}
               ticked={ticked.has(row.change.path)}
               actions={actions}
-              onMenu={(at) => setMenu({ change: row.change, at })}
+              onMenu={(at, opener) => setMenu({ change: row.change, at, row: opener })}
             />
           )
         )}
@@ -93,7 +94,10 @@ export function ChangeRows({ worktreeId, section, rows, view, ticked }: Props): 
         <Menu
           label={`Actions for ${menu.change.path}`}
           anchor={menu.at}
-          onClose={() => setMenu(null)}
+          onClose={(closed) => {
+            refocus(menu.row, closed)
+            setMenu(null)
+          }}
           items={menuItems(section, menu.change, isPartlyStaged(menu.change, ticked), actions)}
         />
       )}
@@ -150,7 +154,7 @@ function FileRow({
   partly: boolean
   ticked: boolean
   actions: RowActions
-  onMenu: (at: MenuAnchor) => void
+  onMenu: (at: MenuAnchor, row: HTMLElement) => void
 }): React.JSX.Element {
   const selected = useWorkspaceStore((state) => section !== 'committed' && state.selectedChangePath === change.path)
   const zoomed = useWorkspaceStore((state) => state.expandedTerminalId !== null)
@@ -159,6 +163,7 @@ function FileRow({
   const viewed = useReviewStore((state) => state.viewed[worktreeId]?.[change.path])
   const uncommitted = section !== 'committed'
   const deleted = change.kind === 'deleted'
+  const folderOfNew = change.files !== undefined
   const discardable = uncommitted && canDiscard(change)
   const folder = depth === null ? directoryOf(change.path) : ''
   const name = fileNameOf(change.path)
@@ -179,10 +184,18 @@ function FileRow({
         title={change.from === undefined ? change.path : `${change.from} → ${change.path}`}
         {...(depth === null ? {} : { style: { ['--depth' as string]: depth } })}
         onClick={() => actions.diff(section, change.path)}
-        onDoubleClick={() => (deleted ? actions.diff(section, change.path, true) : actions.open(change.path))}
+        onDoubleClick={() =>
+          deleted || folderOfNew ? actions.diff(section, change.path, true) : actions.open(change.path)
+        }
         onContextMenu={(event) => {
           event.preventDefault()
-          onMenu({ x: event.clientX, y: event.clientY })
+          // The menu key reports no pointer, so the menu hangs under the row.
+          const rect = event.currentTarget.getBoundingClientRect()
+          const keyed = event.clientX === 0 && event.clientY === 0
+          onMenu(
+            anchorAtPointer(keyed ? rect.left : event.clientX, keyed ? rect.bottom : event.clientY),
+            event.currentTarget
+          )
         }}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
@@ -204,7 +217,7 @@ function FileRow({
           if (event.key === ' ') event.preventDefault()
         }}
       >
-        <Icon name={fileIconFor(name)} size={14} className="change__icon-file" />
+        <Icon name={folderOfNew ? 'folder' : fileIconFor(name)} size={14} className="change__icon-file" />
         <span className="change__path">
           <span className={`change__name${deleted ? ' change__name--deleted' : ''}`}>
             {tail === '' ? (
@@ -228,14 +241,18 @@ function FileRow({
             ✓
           </span>
         ) : null}
-        {change.added === undefined || change.removed === undefined ? null : (
+        {change.files !== undefined ? (
+          <span className="change__stat">
+            {counted(change.files)} {change.files === 1 ? 'file' : 'files'}
+          </span>
+        ) : change.added === undefined || change.removed === undefined ? null : (
           <span className="change__stat">
             +{change.added} −{change.removed}
           </span>
         )}
       </button>
       <span className="change__actions">
-        {deleted ? null : (
+        {deleted || folderOfNew ? null : (
           <button
             type="button"
             className="change__icon"
@@ -295,7 +312,9 @@ function FileRow({
 
 function menuItems(section: SectionId, change: WorktreeChange, partly: boolean, actions: RowActions): MenuItem[] {
   const items: MenuItem[] = []
-  if (change.kind !== 'deleted') items.push({ label: 'Open File', onChoose: () => actions.open(change.path) })
+  if (change.kind !== 'deleted' && change.files === undefined) {
+    items.push({ label: 'Open File', onChoose: () => actions.open(change.path) })
+  }
   items.push({ label: 'Open Changes', onChoose: () => actions.diff(section, change.path, true) })
   if (section === 'unstaged' || partly) items.push({ label: 'Stage', onChoose: () => actions.stage(change.path) })
   if (section === 'staged') items.push({ label: 'Unstage', onChoose: () => actions.unstage(change, !change.staged) })

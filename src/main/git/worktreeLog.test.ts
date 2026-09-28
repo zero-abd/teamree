@@ -88,6 +88,19 @@ describe('reading a worktree’s log from a real repository', () => {
     expect(log.readAt).toBe(123)
   })
 
+  it('carries each commit’s whole message, body included', async () => {
+    const repo = await repository()
+    await repo.git(['checkout', '-q', '-b', 'feature', 'main'])
+    await repo.write('one.txt', 'a\n')
+    await repo.commit('Rank by recency\n\nPer line, not per file.\n\nCloses #4')
+    await repo.git(['checkout', '-q', 'main'])
+
+    const [commit] = (await read(repo)).commits
+
+    expect(commit?.subject).toBe('Rank by recency')
+    expect(commit?.message).toBe('Rank by recency\n\nPer line, not per file.\n\nCloses #4')
+  })
+
   // Everything before the fork belongs to the whole repository.
   it('says nothing about commits the base already had', async () => {
     const repo = await repository()

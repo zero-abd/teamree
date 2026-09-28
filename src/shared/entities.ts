@@ -284,6 +284,8 @@ export type WorktreeChange = {
   removed?: number
   /** A conflicted path's conflict blocks still in the file; absent when it could not be read. */
   markers?: number
+  /** A folder of new files git lists as one path (`gen/`): how many files it holds. */
+  files?: number
 }
 
 /** Every changed path in a worktree, as of one read. */
@@ -584,6 +586,8 @@ export type WorktreeCommitSummary = {
   /** ISO 8601 as git wrote it, offset and all. */
   committedAt: string
   subject: string
+  /** The whole message as written, body included; absent where only the subject was read. */
+  message?: string
 }
 
 /** One commit and its patch against its first parent, as `worktree.showCommit` answers. */

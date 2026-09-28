@@ -136,7 +136,7 @@ beforeEach(() => {
   call.mockImplementation(() => new Promise(() => {}))
   openInBrowser.mockReset()
   useReviewStore.setState({ viewed: {}, batch: {}, queued: {}, scope: {}, jump: {} })
-  useCommitDrafts.setState({ drafts: {} })
+  useCommitDrafts.setState({ drafts: {}, amends: {} })
   useScmView.setState(SCM, true)
   seed()
 })
@@ -562,6 +562,47 @@ describe('committing', () => {
     expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
   })
 
+  // git lists a folder of new files as one path; the counts and the button are about the files in it.
+  it('counts a folded folder of new files by the files in it, and commits every one', () => {
+    withChanges([
+      { path: 'README.md', kind: 'modified', staged: false, unstaged: true },
+      { path: 'gen/', kind: 'untracked', staged: false, unstaged: true, files: 2000 },
+      { path: 'src/app.ts', kind: 'untracked', staged: false, unstaged: true }
+    ])
+    render(<ChangesTab />)
+    message('Rank')
+
+    const folder = screen.getByTitle('gen/')
+    expect(folder.querySelector('.change__name')?.textContent).toBe('gen')
+    expect(folder.querySelector('.change__dir')).toBeNull()
+    expect(folder.querySelector('.change__stat')?.textContent).toBe('2,000 files')
+    expect(folder.querySelector('svg[data-icon="folder"]')).not.toBeNull()
+    expect(screen.queryByRole('button', { name: 'Open gen/' })).toBeNull()
+    expect(screen.getByRole('region', { name: 'Changes' }).querySelector('.panel__count')?.textContent).toBe('2,002')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stage gen/' }))
+    expect(screen.getByRole('button', { name: 'Commit 2,000' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage gen/' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Commit All 2,002' }))
+    expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
+  })
+
+  it('shows a folded folder of new files as one counted row in the tree, not a folder with a nameless file', () => {
+    useScmView.setState({ view: 'tree' })
+    withChanges([
+      { path: 'src/gen/', kind: 'untracked', staged: false, unstaged: true, files: 40 },
+      { path: 'src/app.ts', kind: 'modified', staged: false, unstaged: true }
+    ])
+    render(<ChangesTab />)
+
+    const folders = [...document.querySelectorAll('.changes__item--folder .change')].map((row) => row.textContent)
+    expect(folders).toEqual(['src'])
+    const folder = screen.getByTitle('src/gen/')
+    expect(folder.querySelector('.change__name')?.textContent).toBe('gen')
+    expect(folder.querySelector('.change__stat')?.textContent).toBe('40 files')
+  })
+
   it('waits for a message, with the shortcut in the empty box', () => {
     withChanges(rows)
     render(<ChangesTab />)
@@ -627,29 +668,79 @@ describe('committing', () => {
       expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'w1' })
     })
 
-    it('amends the last commit, which no remote has yet', async () => {
+    const box = (): HTMLTextAreaElement => screen.getByRole('textbox', { name: 'Commit message' })
+    const lastCommit = (message: string): void => {
+      useWorkspaceStore.setState({ logs: { w1: { ...log, commits: [{ ...log.commits[0]!, message }] } } })
+    }
+
+    it('amends the last commit, which no remote has yet, starting from its whole message', async () => {
       committed()
+      lastCommit('Rank by recency\n\nPer line.')
       withChanges(rows)
       render(<ChangesTab />)
-      message('Rank by recency, per line')
       await choose('Amend Last Commit')
+      expect(call).not.toHaveBeenCalledWith('worktree.commit', expect.anything())
+      expect(box().value).toBe('Rank by recency\n\nPer line.')
+      expect(document.activeElement).toBe(box())
+
+      message('Rank by recency\n\nPer line, not per file.')
+      await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Amend Last Commit' })))
       expect(call).toHaveBeenCalledWith('worktree.commit', {
         worktreeId: 'w1',
-        message: 'Rank by recency, per line',
+        message: 'Rank by recency\n\nPer line, not per file.',
         all: true,
         amend: true
       })
+      expect(box().value).toBe('')
     })
 
-    it('will not amend a commit already pushed', () => {
+    it('gives back what was typed when amending is called off, from the menu or with Escape', async () => {
+      lastCommit('Rank by recency')
+      withChanges(rows)
+      render(<ChangesTab />)
+      message('Half a thought')
+
+      await choose('Amend Last Commit')
+      expect(box().value).toBe('Rank by recency')
+      message('Rank by recency, edited')
+      await choose('Cancel Amend')
+      expect(box().value).toBe('Half a thought')
+      expect(screen.getByRole('button', { name: 'Commit All 3' })).toBeTruthy()
+
+      await choose('Amend Last Commit')
+      expect(box().value).toBe('Rank by recency')
+      fireEvent.keyDown(box(), { key: 'Escape' })
+      expect(box().value).toBe('Half a thought')
+      expect(call).not.toHaveBeenCalledWith('worktree.commit', expect.anything())
+    })
+
+    it('will not amend a commit already pushed, and choosing it leaves the box alone', async () => {
       seed({ ahead: 0 })
       withChanges(rows)
       render(<ChangesTab />)
-      message('Rank')
+      message('Amended')
       fireEvent.click(screen.getByRole('button', { name: 'Commit Actions' }))
       const amend = screen.getByRole('menuitem', { name: /Amend Last Commit/ })
       expect(amend.getAttribute('aria-disabled')).toBe('true')
       expect(amend.textContent).toContain('Already pushed')
+
+      await act(async () => fireEvent.click(amend))
+      expect(call).not.toHaveBeenCalledWith('worktree.commit', expect.anything())
+      expect(box().value).toBe('Amended')
+      expect(screen.getByRole('button', { name: 'Commit All 3' })).toBeTruthy()
+    })
+
+    it('offers Amend with nothing typed, the rest waiting for a message', () => {
+      withChanges(rows)
+      render(<ChangesTab />)
+      fireEvent.click(screen.getByRole('button', { name: 'Commit Actions' }))
+      const menu = screen.getByRole('menu', { name: 'Commit Actions' })
+      expect(within(menu).getByRole('menuitem', { name: 'Amend Last Commit' }).getAttribute('aria-disabled')).toBeNull()
+      expect(
+        within(menu)
+          .getByRole('menuitem', { name: /Commit & Push/ })
+          .getAttribute('aria-disabled')
+      ).toBe('true')
     })
   })
 })
@@ -784,7 +875,7 @@ describe('what git has staged', () => {
     expect(commitButton().textContent).toBe('Commit 2')
 
     fireEvent.click(screen.getByRole('button', { name: 'Unstage All Changes' }))
-    expect(useWorkspaceStore.getState().stagedPaths).toEqual([])
+    expect(useWorkspaceStore.getState().stagedPaths.w1 ?? []).toEqual([])
     expect(call).toHaveBeenCalledWith('worktree.unstagePath', { worktreeId: 'w1', path: 'src/done.ts' })
   })
 
@@ -794,7 +885,7 @@ describe('what git has staged', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Unstage src/done.ts' }))
     expect(call).toHaveBeenCalledWith('worktree.unstagePath', { worktreeId: 'w1', path: 'src/done.ts' })
-    expect(useWorkspaceStore.getState().stagedPaths).toEqual([])
+    expect(useWorkspaceStore.getState().stagedPaths.w1 ?? []).toEqual([])
 
     act(() => withChanges([{ ...whole, staged: false, unstaged: true }, loose]))
     expect(within(section('Changes')).getByTitle('src/done.ts')).toBeTruthy()
@@ -809,7 +900,7 @@ describe('what git has staged', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Unstage src/rank.ts' }))
     expect(call).toHaveBeenCalledWith('worktree.unstagePath', { worktreeId: 'w1', path: 'src/rank.ts' })
-    expect(useWorkspaceStore.getState().stagedPaths).toEqual([])
+    expect(useWorkspaceStore.getState().stagedPaths.w1 ?? []).toEqual([])
 
     act(() => withChanges([{ ...partly, staged: false }, loose]))
     expect(within(section('Changes')).getByTitle('src/rank.ts')).toBeTruthy()
@@ -832,13 +923,33 @@ describe('what git has staged', () => {
     expect(screen.getByRole('button', { name: 'Commit 1' })).toBeTruthy()
   })
 
+  it('keeps each worktree’s ticks when you leave it and come back, and never carries them across', () => {
+    withChanges([loose])
+    useWorkspaceStore.setState((state) => ({
+      changes: {
+        ...state.changes,
+        w2: { worktreeId: 'w2', changes: [loose], total: 1, limit: 500, truncated: false, readAt: 0 }
+      }
+    }))
+    render(<ChangesTab />)
+    fireEvent.click(screen.getByRole('button', { name: 'Stage README.md' }))
+
+    act(() => void useWorkspaceStore.getState().openWorktree('w2'))
+    expect(within(section('Changes')).getByTitle('README.md')).toBeTruthy()
+    expect(screen.queryByRole('region', { name: 'Staged Changes' })).toBeNull()
+
+    act(() => void useWorkspaceStore.getState().openWorktree('w1'))
+    expect(within(section('Staged Changes')).getByTitle('README.md')).toBeTruthy()
+    expect(commitButton().textContent).toBe('Commit 1')
+  })
+
   it('stages and unstages the row under the keyboard with Space', () => {
     withChanges([loose])
     render(<ChangesTab />)
     fireEvent.keyDown(screen.getByTitle('README.md'), { key: ' ' })
-    expect(useWorkspaceStore.getState().stagedPaths).toEqual(['README.md'])
+    expect(useWorkspaceStore.getState().stagedPaths.w1 ?? []).toEqual(['README.md'])
     fireEvent.keyDown(within(section('Staged Changes')).getByTitle('README.md'), { key: ' ' })
-    expect(useWorkspaceStore.getState().stagedPaths).toEqual([])
+    expect(useWorkspaceStore.getState().stagedPaths.w1 ?? []).toEqual([])
   })
 })
 
@@ -1373,6 +1484,29 @@ describe('discarding a file', () => {
     withRows()
     render(<Tab />)
     expect(screen.queryByRole('button', { name: 'Discard src/done.ts…' })).toBeNull()
+  })
+
+  // The menu key reports no pointer; the menu opens under the row, and Escape puts the keyboard back on it.
+  it('offers Discard… from the menu key, under the row, all by keyboard', () => {
+    withRows()
+    render(<Tab />)
+    const row = screen.getByTitle('README.md')
+    row.getBoundingClientRect = () => ({ left: 40, top: 100, bottom: 122, right: 300 }) as DOMRect
+    row.focus()
+
+    fireEvent.contextMenu(row, { clientX: 0, clientY: 0 })
+    const menu = screen.getByRole('menu', { name: 'Actions for README.md' })
+    expect([menu.style.left, menu.style.top]).toEqual(['40px', '122px'])
+    fireEvent.keyDown(menu, { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(document.activeElement).toBe(row)
+
+    fireEvent.contextMenu(row, { clientX: 0, clientY: 0 })
+    const discard = screen.getByRole('menuitem', { name: 'Discard…' })
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'End' })
+    expect(document.activeElement).toBe(discard)
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Enter' })
+    expect(screen.getByRole('dialog', { name: 'Discard changes to README.md?' })).toBeTruthy()
   })
 
   it('asks on ⌫ from the row under the keyboard', () => {
