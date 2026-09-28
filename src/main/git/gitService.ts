@@ -48,7 +48,7 @@ import type { ParamsOf, ResultOf } from '../../shared/methods'
 import { checkTransport } from '../../shared/origin'
 import { isValidBranchName } from '../../shared/branchName'
 import { siblingRuns } from '../../shared/runCompare'
-import { effectiveProjectSettings } from '../../shared/projectSettings'
+import { effectiveProjectSettings, startPointOf } from '../../shared/projectSettings'
 import { readProjectFile, writeProjectFile, type ProjectFileRead } from '../teamwork/projectFile'
 import { ErrorCode } from '../../shared/protocol'
 import { MAX_CHILD_DEPTH, MAX_OPEN_CHILDREN } from '../../shared/tasks'
@@ -297,7 +297,7 @@ export class GitService {
    */
   async saveProjectSettings(params: ParamsOf<'project.saveSettings'>): Promise<{ file: string; project: Project }> {
     const project = this.#present(this.#requireProject(params.projectId))
-    const startFrom = params.startFrom ?? project.repository?.startFrom
+    const startFrom = params.startFrom ?? project.startPoint ?? project.repository?.startFrom
     const file = await writeProjectFile(project.path, {
       ...effectiveProjectSettings(project),
       ...(startFrom === undefined ? {} : { startFrom })
@@ -541,6 +541,11 @@ export class GitService {
         )
       }
     }
+    if (params.startPoint !== undefined) {
+      const ref = params.startPoint.trim()
+      if (ref === '') delete next.startPoint
+      else next.startPoint = await this.#checkStartPoint(project, ref)
+    }
     if (params.branchPrefix !== undefined) {
       const prefix = params.branchPrefix.trim()
       if (!isValidBranchPrefix(prefix)) {
@@ -553,6 +558,19 @@ export class GitService {
     const presented = this.#present(next)
     this.events.emit({ type: 'project.updated', project: presented })
     return presented
+  }
+
+  /** A start point is saved only while it resolves; `ref · no such ref` is the Settings field's own error. */
+  async #checkStartPoint(project: Project, ref: string): Promise<string> {
+    try {
+      await resolveStartPoint(this.#runner, { root: project.path, requested: ref, refresh: true })
+    } catch (error) {
+      if (error instanceof GitServiceError && error.code === ErrorCode.NotFound) {
+        throw new GitServiceError(ErrorCode.NotFound, `${ref} · no such ref`, error.data)
+      }
+      throw error
+    }
+    return ref
   }
 
   // ---------------------------------------------------------------- worktrees
@@ -860,7 +878,11 @@ export class GitService {
       name,
       branch,
       path: checkoutPath,
-      startedFrom: parent?.branch ?? (params.base?.trim() || params.startedFrom?.trim() || project.baseRef),
+      startedFrom:
+        parent?.branch ??
+        (params.base?.trim() ||
+          params.startedFrom?.trim() ||
+          (checkout ? project.baseRef : startPointOf(this.#present(project)))),
       state: 'creating',
       createdAt: this.#now(),
       ...(told ? { task: told } : {}),
@@ -1872,7 +1894,7 @@ export class GitService {
     const project = this.#requireProject(projectId)
     return resolveStartPoint(this.#runner, {
       root: project.path,
-      requested: startedFrom?.trim() || project.baseRef
+      requested: startedFrom?.trim() || startPointOf(this.#present(project))
     })
   }
 
@@ -2073,6 +2095,8 @@ export class GitService {
           root: project.path,
           requested: worktree.startedFrom,
           signal
+        }).catch((error: unknown) => {
+          throw this.#savedStartGone(project, worktree.startedFrom, error)
         })
         // Asked again: the #chooseBranch listing is as old as the start point took
         // to resolve, and a pane or a CLI can claim a name inside that.
@@ -2174,6 +2198,17 @@ export class GitService {
     claimed()
     await run(['worktree', 'add', worktree.path, branch])
     return made
+  }
+
+  /** A saved start point that stopped resolving is named as the setting, never swapped for the base. */
+  #savedStartGone(project: Project, ref: string, error: unknown): unknown {
+    const saved = this.#store.getProject(project.id)?.startPoint ?? this.#present(project).repository?.startFrom
+    if (ref !== saved || !(error instanceof GitServiceError) || error.code !== ErrorCode.NotFound) return error
+    return new GitServiceError(
+      ErrorCode.NotFound,
+      `start point "${ref}" no longer resolves; change it in Settings › Projects › ${project.name}`,
+      error.data
+    )
   }
 
   /** Where the branch left its base, so Changes shows its own commits and no one else's. */

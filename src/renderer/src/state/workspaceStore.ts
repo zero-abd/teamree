@@ -159,6 +159,7 @@ import {
   readStoredPermissionModes,
   readStoredPushOnMerge,
   readStoredStartPoints,
+  clearStoredStartPoints,
   readStoredTerminalFontSize,
   readStoredTerminalOptions,
   sanitizeTerminalOptions,
@@ -169,7 +170,6 @@ import {
   type KeepAwakeMode,
   withAgentArgs,
   withEditorCommand,
-  withStartPoint,
   writeStoredAgentArgs,
   writeStoredAgentNotices,
   writeStoredConfirmations,
@@ -181,7 +181,6 @@ import {
   writeStoredNoticeEvents,
   writeStoredPermissionModes,
   writeStoredPushOnMerge,
-  writeStoredStartPoints,
   writeStoredTerminalFontSize,
   writeStoredTerminalOptions
 } from './preferences'
@@ -602,10 +601,9 @@ type WorkspaceState = {
   paneSearch: PaneSearch | null
   dialog: DialogState
   notices: Notice[]
-  /** Pane text size in CSS pixels, the rest of how panes draw, and each project's preferred start point. Held in the store so panes re-render. */
+  /** Pane text size in CSS pixels and the rest of how panes draw. Held in the store so panes re-render. */
   terminalFontSize: number
   terminalOptions: TerminalOptions
-  startPointDefaults: Record<string, string>
   /** Whether an agent stopping while you are elsewhere may say so. The reader is the main process, via `useAgentNotices`. */
   agentNotices: AgentNoticePreference
   /** Which events notify, under `agentNotices`. */
@@ -1003,8 +1001,6 @@ type WorkspaceState = {
   setDiffLayout: (layout: DiffLayout) => void
   /** Flips one diff option, and remembers it. */
   toggleDiffOption: (option: keyof DiffOptions) => void
-  /** Sets one project's preferred start point, or clears it when given null. */
-  setStartPointDefault: (projectId: string, ref: string | null) => void
   /** Sets the agent the composer offers first; `NO_DEFAULT_AGENT` clears it. */
   setDefaultAgent: (kind: string) => void
   /** Sets one agent's launch arguments, or clears them when given null. */
@@ -1323,6 +1319,22 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
   // Layouts are the one thing the user edits directly, so an in-flight layout read must not land on top of an edit.
   const layoutEdits = createLocalEditFence()
+
+  /** Start points an older build kept in this window's storage go onto their projects once, then from storage. */
+  const carryStartPoints = async (): Promise<void> => {
+    const stored = readStoredStartPoints(storage)
+    clearStoredStartPoints(storage)
+    for (const [projectId, startPoint] of Object.entries(stored)) {
+      const project = get().projects.find((entry) => entry.id === projectId)
+      if (project === undefined || project.startPoint !== undefined) continue
+      try {
+        const saved = await runtimeClient.call('project.setPaths', { projectId, startPoint })
+        set((state) => ({ projects: state.projects.map((row) => (row.id === saved.id ? saved : row)) }))
+      } catch (error) {
+        failed(`Could not keep the start point for ${project.name}`)(error)
+      }
+    }
+  }
 
   const refreshProjects = async (): Promise<void> => {
     set({ projects: await runtimeClient.call('project.list', {}) })
@@ -2200,7 +2212,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     notices: [],
     terminalFontSize: readStoredTerminalFontSize(storage),
     terminalOptions: readStoredTerminalOptions(storage),
-    startPointDefaults: readStoredStartPoints(storage),
     agentNotices: readStoredAgentNotices(storage),
     noticeEvents: readStoredNoticeEvents(storage),
     confirmations: readStoredConfirmations(storage),
@@ -2249,6 +2260,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         // After the projects exist: teamwork is read per project.
         refresher.request(refreshTargets({ teammates: true, overlaps: true, memory: true }))
         await refresher.flush()
+        void carryStartPoints()
 
         // Agents the last run left ended that can still pick their conversations up: one notice for all of them.
         const stopped = resumableAgents(Object.values(get().terminals)).filter((terminal) => terminal.restored)
@@ -3940,11 +3952,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
 
     async saveProjectSettings(projectId) {
       try {
-        const stored = get().startPointDefaults[projectId]
-        const { file, project } = await runtimeClient.call('project.saveSettings', {
-          projectId,
-          ...(stored ? { startFrom: stored } : {})
-        })
+        const { file, project } = await runtimeClient.call('project.saveSettings', { projectId })
         set((state) => ({ projects: state.projects.map((entry) => (entry.id === project.id ? project : entry)) }))
         notify(`Wrote ${file} · commit it`, 'info')
       } catch (error) {
@@ -4707,12 +4715,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       const diffOptions = { ...get().diffOptions, [option]: !get().diffOptions[option] }
       set({ diffOptions })
       writeStoredDiffOptions(storage, diffOptions)
-    },
-
-    setStartPointDefault(projectId, ref) {
-      const startPointDefaults = withStartPoint(get().startPointDefaults, projectId, ref)
-      set({ startPointDefaults })
-      writeStoredStartPoints(storage, startPointDefaults)
     },
 
     setDefaultAgent(kind) {

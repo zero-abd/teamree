@@ -77,4 +77,11 @@ describe('workspace document: project fields', () => {
     ])
     expect(parseWorkspaceDocument({ projects: [project] }).projects).toEqual([project])
   })
+
+  it("keeps a project's start point across a relaunch, and drops a mangled one", () => {
+    expect(parseWorkspaceDocument({ projects: [{ ...project, startPoint: 'release' }] }).projects).toEqual([
+      { ...project, startPoint: 'release' }
+    ])
+    expect(parseWorkspaceDocument({ projects: [{ ...project, startPoint: 7 }] }).projects).toEqual([project])
+  })
 })

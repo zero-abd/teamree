@@ -8,6 +8,7 @@ import type { WorktreeNest } from '../../shared/nesting.js'
 import { parsePatch, type PatchHunk } from '../../shared/patch.js'
 import { compareRuns, type RunFile } from '../../shared/runCompare.js'
 import { taskNamesForAgents } from '../../main/git/worktreeNaming.js'
+import { setupOutcome } from '../../main/git/worktreeSetup.js'
 import type { CommandContext, CommandSpec } from '../command-spec.js'
 import { readBoolean, readNumber, readString, readStrings, requireString } from '../argv.js'
 import { formatFields, formatTable } from '../output.js'
@@ -225,7 +226,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
     details:
       'Returns as soon as the runtime accepts the requests; the rows may still be in the "creating" state.\n' +
       'Repeat --agent to race one task in several checkouts: each gets its own worktree from the same ' +
-      'start point, and its agent is started once the checkout is ready.\n' +
+      'start point, and its agent is started once the checkout is ready and its setup has passed.\n' +
       'One agent keeps --name; several name each worktree "<name> <agent>", numbering a repeated agent ' +
       'from its second run.\n' +
       '--prompt is the task: written on each worktree record and given to each agent as its first prompt. ' +
@@ -258,7 +259,8 @@ export const worktreeCommands: readonly CommandSpec[] = [
         name: 'from',
         kind: 'string',
         placeholder: '<ref>',
-        description: "Ref or sha to branch from; defaults to the project's base ref."
+        description:
+          "Ref or sha to branch from; defaults to the project's start point (Settings › Projects), else its base ref."
       },
       {
         name: 'branch',
@@ -283,7 +285,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
         name: 'timeout-ms',
         kind: 'number',
         placeholder: '<ms>',
-        description: `How long to wait for each checkout before starting its agent. Defaults to ${DEFAULT_WAIT_TIMEOUT_MS}.`
+        description: `How long to wait for each checkout, then its setup, before starting its agent. Defaults to ${DEFAULT_WAIT_TIMEOUT_MS} for the checkout and an hour for setup.`
       }
     ],
     examples: [
@@ -309,6 +311,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
       const branch = readString(context.flags, 'branch')
       const agents = readStrings(context.flags, 'agent')
       const timeoutMs = readNumber(context.flags, 'timeout-ms') ?? DEFAULT_WAIT_TIMEOUT_MS
+      const setupTimeoutMs = readNumber(context.flags, 'timeout-ms') ?? SETUP_WAIT_TIMEOUT_MS
       const task = await readPrompt(context, agents.length)
 
       // One branch name cannot answer for several checkouts.
@@ -345,6 +348,7 @@ export const worktreeCommands: readonly CommandSpec[] = [
           const agent = agents[index]
           if (agent === undefined) return worktree
           const ready = await waitForCheckout(context, worktree, timeoutMs)
+          await waitForSetup(context, ready, agent, setupTimeoutMs)
           // Named for the worktree, suffix and all, not the binary: three panes
           // called `claude` cannot be told apart in a listing.
           await context.client.call('terminal.create', {
@@ -1329,6 +1333,42 @@ async function waitForCheckout(context: CommandContext, worktree: Worktree, time
     })
   }
   return settled
+}
+
+/** Longer than any install worth waiting on, as the app waits. */
+const SETUP_WAIT_TIMEOUT_MS = 60 * 60_000
+
+/** Blocks until the checkout's setup passes; a failed one is reported and its agent is not started. */
+async function waitForSetup(
+  context: CommandContext,
+  worktree: Worktree,
+  agent: string,
+  timeoutMs: number
+): Promise<void> {
+  if (worktree.setupAsk === undefined && worktree.setupTerminalId === undefined) return
+  const settled = await waitForState({
+    client: context.client,
+    what: `setup in ${worktree.name}`,
+    read: async () => {
+      const rows = await context.client.call('worktree.list', {})
+      const row = rows.find((entry) => entry.id === worktree.id) ?? worktree
+      const [panes, closed] = await Promise.all([
+        context.client.call('terminal.list', { worktreeId: worktree.id }),
+        context.client.call('terminal.closed', { worktreeId: worktree.id })
+      ])
+      return setupOutcome(row, panes, closed)
+    },
+    settled: (outcome) => outcome.state !== 'pending',
+    timeoutMs
+  })
+  if (settled.state === 'failed') {
+    throw new CliError({
+      code: 'setup_failed',
+      message: `Setup failed in ${worktree.name} (exit ${settled.exitCode}); ${agent} not started.`,
+      exitCode: ExitCode.Failure,
+      data: worktree
+    })
+  }
 }
 
 /** One line per node, indented by depth; a split names its axis and its shares, a group of tabs the one shown. */

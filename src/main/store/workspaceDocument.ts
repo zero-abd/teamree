@@ -36,7 +36,8 @@ const ProjectSchema = z.object({
   // Only `false` is stored; on is the default and deletes the field.
   fetchInBackground: z.literal(false).optional(),
   worktreesRoot: z.string().min(1).optional().catch(undefined),
-  branchPrefix: z.string().min(1).optional().catch(undefined)
+  branchPrefix: z.string().min(1).optional().catch(undefined),
+  startPoint: z.string().min(1).optional().catch(undefined)
 })
 
 const WorktreeSchema = z.object({

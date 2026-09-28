@@ -24,6 +24,7 @@ import {
   readStoredKeepAwake,
   readStoredEditorCommands,
   readStoredStartPoints,
+  clearStoredStartPoints,
   readStoredTerminalFontSize,
   readStoredTerminalOptions,
   KEEP_AWAKE_DEFAULT,
@@ -35,36 +36,40 @@ import {
   TERMINAL_FONT_MIN_PX,
   withAgentArgs,
   withEditorCommand,
-  withStartPoint,
   writeStoredAgentArgs,
   writeStoredDefaultAgent,
   writeStoredDiffLayout,
   writeStoredDiffOptions,
   writeStoredKeepAwake,
   writeStoredEditorCommands,
-  writeStoredStartPoints,
   writeStoredTerminalFontSize,
   writeStoredTerminalOptions
 } from './preferences'
 
 /** A storage that holds what it is given, which is all these functions need. */
-function memoryStorage(seed: Record<string, string> = {}): Pick<Storage, 'getItem' | 'setItem'> {
+function memoryStorage(seed: Record<string, string> = {}): Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> {
   const entries = new Map(Object.entries(seed))
   return {
     getItem: (key) => entries.get(key) ?? null,
     setItem: (key, value) => {
       entries.set(key, value)
+    },
+    removeItem: (key) => {
+      entries.delete(key)
     }
   }
 }
 
 /** A storage that refuses, the way a private window's does. */
-const refusingStorage: Pick<Storage, 'getItem' | 'setItem'> = {
+const refusingStorage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> = {
   getItem: () => {
     throw new Error('storage is not available')
   },
   setItem: () => {
     throw new Error('quota exceeded')
+  },
+  removeItem: () => {
+    throw new Error('storage is not available')
   }
 }
 
@@ -112,34 +117,16 @@ describe('the size of the text in a pane', () => {
   })
 })
 
-describe('the ref a project starts new worktrees from', () => {
-  it('comes back as it was written, by project', () => {
-    const storage = memoryStorage()
-    writeStoredStartPoints(storage, { alpha: 'develop', beta: 'release/2.0' })
+describe('the start points an older build kept in this window', () => {
+  it('come back by project, trimmed, and are gone once cleared', () => {
+    const storage = memoryStorage({ 'teamree.worktree.startPoints': '{"alpha":"develop","beta":"  release/2.0  "}' })
     expect(readStoredStartPoints(storage)).toEqual({ alpha: 'develop', beta: 'release/2.0' })
+    clearStoredStartPoints(storage)
+    expect(readStoredStartPoints(storage)).toEqual({})
   })
 
-  it('is empty when nothing has ever been written', () => {
+  it('are empty when nothing has ever been written', () => {
     expect(readStoredStartPoints(memoryStorage())).toEqual({})
-  })
-
-  // Setting a ref and clearing it are the same call; splitting them would
-  // leave two ways to mean "no preference".
-  it('sets one project without disturbing another', () => {
-    const refs = withStartPoint({ alpha: 'develop' }, 'beta', 'main')
-    expect(refs).toEqual({ alpha: 'develop', beta: 'main' })
-  })
-
-  it('removes the entry rather than storing an empty one', () => {
-    expect(withStartPoint({ alpha: 'develop' }, 'alpha', null)).toEqual({})
-    expect(withStartPoint({ alpha: 'develop' }, 'alpha', '   ')).toEqual({})
-  })
-
-  it('trims what it is given, so a stray space cannot become part of a ref name', () => {
-    expect(withStartPoint({}, 'alpha', '  develop  ')).toEqual({ alpha: 'develop' })
-    expect(readStoredStartPoints(memoryStorage({ 'teamree.worktree.startPoints': '{"a":"  main  "}' }))).toEqual({
-      a: 'main'
-    })
   })
 
   // A wrong shape has to end here rather than rendered into the field that names a git ref.
@@ -154,7 +141,7 @@ describe('the ref a project starts new worktrees from', () => {
 
   it('survives a storage that refuses, in both directions', () => {
     expect(readStoredStartPoints(refusingStorage)).toEqual({})
-    expect(() => writeStoredStartPoints(refusingStorage, { alpha: 'develop' })).not.toThrow()
+    expect(() => clearStoredStartPoints(refusingStorage)).not.toThrow()
     expect(readStoredStartPoints(undefined)).toEqual({})
   })
 })

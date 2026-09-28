@@ -275,14 +275,12 @@ export function readStoredStartPoints(storage: Pick<Storage, 'getItem'> | undefi
   }
 }
 
-export function writeStoredStartPoints(
-  storage: Pick<Storage, 'setItem'> | undefined,
-  refs: Record<string, string>
-): void {
+/** Start points now live on the project; this window's old copy goes once it is carried over. */
+export function clearStoredStartPoints(storage: Pick<Storage, 'removeItem'> | undefined): void {
   try {
-    storage?.setItem(START_POINTS_KEY, JSON.stringify(refs))
+    storage?.removeItem(START_POINTS_KEY)
   } catch {
-    // As above: the choice holds for this window and is forgotten on the next.
+    // Storage refused: the carry-over runs again next launch and finds each project already set.
   }
 }
 
@@ -308,20 +306,6 @@ export function writeStoredPushOnMerge(
   } catch {
     // Kept for this window only.
   }
-}
-
-/** The map with one project's preference set, or removed when blank: absence is the only spelling of "use the base ref" checked for elsewhere. */
-export function withStartPoint(
-  refs: Record<string, string>,
-  projectId: string,
-  ref: string | null
-): Record<string, string> {
-  const trimmed = ref?.trim() ?? ''
-  if (trimmed.length === 0) {
-    const { [projectId]: _removed, ...rest } = refs
-    return rest
-  }
-  return { ...refs, [projectId]: trimmed }
 }
 
 /**
@@ -476,7 +460,7 @@ export function writeStoredAgentArgs(
   }
 }
 
-/** The map with one agent's arguments set, or removed when blank, for the same reason as `withStartPoint`. */
+/** The map with one agent's arguments set, or removed when blank: absence is the only spelling of "none". */
 export function withAgentArgs(
   args: Record<string, string>,
   kind: string,

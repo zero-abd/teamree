@@ -140,7 +140,7 @@ export const projectCommands: readonly CommandSpec[] = [
       'shell with the checkout as its cwd — so you watch it and can Ctrl-C it. It is not parsed: quote it ' +
       'as one argument and it runs verbatim.\n' +
       'The pane closes when the command exits 0 and stays, with its output, when it fails. A task started ' +
-      'in the app starts its agent only after it passes.\n' +
+      'in the app or by `worktree create --agent` starts its agent only after it passes.\n' +
       'The pane is recorded on the worktree as setupTerminalId, which `worktree list --json` and ' +
       '`worktree wait --json` carry once the checkout is ready.',
     args: [

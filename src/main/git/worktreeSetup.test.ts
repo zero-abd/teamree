@@ -9,7 +9,13 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { Terminal } from '../../shared/entities'
 import { createTerminalService, type TerminalService } from '../terminals/method-handlers'
 import { canSpawnPty, waitUntil } from '../terminals/pty-test-support'
-import { closePassedSetups, normalizeSetupCommand, SETUP_PANE_LABEL, startSetupCommand } from './worktreeSetup'
+import {
+  closePassedSetups,
+  normalizeSetupCommand,
+  SETUP_PANE_LABEL,
+  setupOutcome,
+  startSetupCommand
+} from './worktreeSetup'
 
 const describePty = canSpawnPty() ? describe : describe.skip
 const TEST_TIMEOUT_MS = 20_000
@@ -109,6 +115,32 @@ describe('closing a setup that passed', () => {
   })
 })
 
+describe('whether an agent may start after setup', () => {
+  const pane = (running: boolean, exitCode?: number) => [{ id: 't_setup', running, exitCode }]
+
+  it('waits on a command still asked about, and on one still running', () => {
+    expect(setupOutcome({ setupAsk: 'npm ci' }, [], [])).toEqual({ state: 'pending' })
+    expect(setupOutcome({ setupTerminalId: 't_setup' }, pane(true), [])).toEqual({ state: 'pending' })
+  })
+
+  it('passes with no setup, a run that exited 0, or its pane closed while running', () => {
+    expect(setupOutcome({}, [], [])).toEqual({ state: 'passed' })
+    expect(setupOutcome({ setupTerminalId: 't_setup' }, pane(false, 0), [])).toEqual({ state: 'passed' })
+    expect(setupOutcome({ setupTerminalId: 't_setup' }, [], [{ terminalId: 't_setup', exitCode: 0 }])).toEqual({
+      state: 'passed'
+    })
+    expect(setupOutcome({ setupTerminalId: 't_setup' }, [], [{ terminalId: 't_setup' }])).toEqual({ state: 'passed' })
+  })
+
+  it('fails on a run that exited otherwise, open or closed', () => {
+    expect(setupOutcome({ setupTerminalId: 't_setup' }, pane(false, 1), [])).toEqual({ state: 'failed', exitCode: 1 })
+    expect(setupOutcome({ setupTerminalId: 't_setup' }, [], [{ terminalId: 't_setup', exitCode: 2 }])).toEqual({
+      state: 'failed',
+      exitCode: 2
+    })
+  })
+})
+
 describePty('a setup pane on a real pty', () => {
   it(
     'runs the command in the worktree and closes the pane once it passes, kept among the closed panes',
@@ -129,6 +161,9 @@ describePty('a setup pane on a real pty', () => {
       expect(service.manager.closedPanes('wt_1')).toEqual([
         expect.objectContaining({ terminalId: pane.id, exitCode: 0 })
       ])
+      expect(
+        setupOutcome({ setupTerminalId: pane.id }, service.manager.list('wt_1'), service.manager.closedPanes('wt_1'))
+      ).toEqual({ state: 'passed' })
     },
     TEST_TIMEOUT_MS
   )
@@ -142,12 +177,16 @@ describePty('a setup pane on a real pty', () => {
       services.push(service)
       closePassedSetups(service.manager)
 
-      startSetupCommand(service.manager, { worktreeId: 'wt_1', command: 'exit 3' })
+      const pane = startSetupCommand(service.manager, { worktreeId: 'wt_1', command: 'sleep 0.3; exit 3' })
+      const outcome = (): ReturnType<typeof setupOutcome> =>
+        setupOutcome({ setupTerminalId: pane.id }, service.manager.list('wt_1'), service.manager.closedPanes('wt_1'))
+      expect(outcome()).toEqual({ state: 'pending' })
 
       await waitUntil(() => service.manager.list('wt_1')[0]?.running === false, 'the setup command to end')
       expect(service.manager.list('wt_1')).toEqual([
         expect.objectContaining({ label: SETUP_PANE_LABEL, run: 'setup', exitCode: 3 })
       ])
+      expect(outcome()).toEqual({ state: 'failed', exitCode: 3 })
     },
     TEST_TIMEOUT_MS
   )

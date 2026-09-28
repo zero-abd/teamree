@@ -1148,6 +1148,58 @@ describe('worktree create --agent, repeated', () => {
   })
 })
 
+describe('worktree create --agent, after setup', () => {
+  /** A checkout whose setup pane runs for `pendingReads` reads, then ends with `exitCode`. */
+  function setupRuntime(exitCode: number, pendingReads = 2): { handler: StubHandler; order: string[] } {
+    const order: string[] = []
+    let reads = 0
+    const made = { ...WORKTREES[0], id: 'wt_made_1', name: 'fix login', state: 'ready', setupTerminalId: 't_setup' }
+    return {
+      order,
+      handler: (method) => {
+        if (method === 'project.list') return PROJECTS
+        if (method === 'worktree.create') return made
+        if (method === 'worktree.list') return [made]
+        if (method === 'terminal.list') {
+          reads += 1
+          const running = reads <= pendingReads
+          order.push(running ? 'setup running' : 'setup ended')
+          // A passed run's pane closes itself; a failed one stays with its exit code.
+          if (!running && exitCode === 0) return []
+          return [{ ...TERMINAL, id: 't_setup', running, ...(running ? {} : { exitCode }) }]
+        }
+        if (method === 'terminal.closed') {
+          return reads > pendingReads && exitCode === 0
+            ? [{ terminalId: 't_setup', worktreeId: 'wt_made_1', resumable: false, closedAt: 1, exitCode: 0 }]
+            : []
+        }
+        if (method === 'terminal.create') {
+          order.push('agent started')
+          return TERMINAL
+        }
+        throw new StubError('unknown_method', `no handler for ${method}`)
+      }
+    }
+  }
+
+  it('starts the agent only once setup has passed', async () => {
+    const runtime = setupRuntime(0)
+    const cli = await harness(runtime.handler)
+    const result = await cli.run(['worktree', 'create', '--project', 'api', '--name', 'fix login', '--agent', 'claude'])
+    expect(result.code).toBe(ExitCode.Success)
+    expect(runtime.order).toEqual(['setup running', 'setup running', 'setup ended', 'agent started'])
+  })
+
+  it('reports a failed setup and leaves the agent unstarted', async () => {
+    const runtime = setupRuntime(1)
+    const cli = await harness(runtime.handler)
+    const result = await cli.run(['worktree', 'create', '--project', 'api', '--name', 'fix login', '--agent', 'claude'])
+    expect(result.code).toBe(ExitCode.Failure)
+    expect(result.err).toContain('Setup failed in fix login (exit 1); claude not started.')
+    expect(runtime.order).not.toContain('agent started')
+  })
+})
+
 // Two things an agent does constantly: read the listing to find a pane, and open
 // a pane in a worktree it already knows the name of.
 describe('pointing the CLI at a worktree', () => {

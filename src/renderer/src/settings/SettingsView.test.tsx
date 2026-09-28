@@ -111,7 +111,6 @@ const loadCli = vi.fn()
 const loadUpdate = vi.fn()
 const loadRelay = vi.fn()
 const revealInFinder = vi.fn()
-const setStartPointDefault = vi.fn()
 const setEditorCommand = vi.fn()
 const setProjectPaths = vi.fn()
 const setTerminalFontSize = vi.fn()
@@ -151,7 +150,6 @@ function seed(overrides: Record<string, unknown> = {}): void {
       loadUpdate,
       loadRelay,
       revealInFinder,
-      setStartPointDefault,
       setEditorCommand,
       setProjectPaths,
       setTerminalFontSize,
@@ -208,7 +206,6 @@ beforeEach(() => {
     loadUpdate,
     loadRelay,
     revealInFinder,
-    setStartPointDefault,
     setEditorCommand,
     setProjectPaths,
     setTerminalFontSize,
@@ -1429,39 +1426,76 @@ describe('what a new worktree carries over from the primary checkout', () => {
   })
 })
 
-describe('the start point a new task is offered first', () => {
+describe('the start point every new worktree starts from', () => {
+  let saved: Array<Record<string, unknown>>
+  const known = new Set(['develop', 'release/2026', ''])
+
+  beforeEach(() => {
+    saved = []
+    runtimeCall.answer = async (method, params) => {
+      if (method !== 'project.setPaths') return new Promise(() => {})
+      const given = params as { startPoint: string }
+      saved.push(given as Record<string, unknown>)
+      if (!known.has(given.startPoint)) throw new Error(`${given.startPoint} · no such ref`)
+      return given.startPoint === '' ? project : { ...project, startPoint: given.startPoint }
+    }
+  })
+
+  afterEach(() => {
+    runtimeCall.answer = () => new Promise(() => {})
+  })
+
   const change = (): void => {
     fireEvent.click(screen.getByRole('button', { name: 'Change' }))
   }
+  const row = (): HTMLElement => screen.getByText('Start new worktrees from').closest('.settings-field') as HTMLElement
 
   // The value in effect as text, not a field that looks filled in.
   it('shows the ref in effect as text, with Change beside it', () => {
     renderAt('projects')
-    const row = screen.getByText('Start new worktrees from').closest('.settings-field') as HTMLElement
-    expect(within(row).getByText('origin/main')).toBeTruthy()
-    expect(within(row).queryByRole('textbox')).toBeNull()
-    expect(within(row).queryByRole('button', { name: 'Use origin/main' })).toBeNull()
+    expect(within(row()).getByText('origin/main')).toBeTruthy()
+    expect(within(row()).queryByRole('textbox')).toBeNull()
+    expect(within(row()).queryByRole('button', { name: 'Use origin/main' })).toBeNull()
   })
 
-  it('commits what was typed when the field is left', () => {
+  it('saves what was typed on the project when the field is left', async () => {
     renderAt('projects')
     change()
     const field = screen.getByLabelText('Start new worktrees from')
     expect(document.activeElement).toBe(field)
     fireEvent.change(field, { target: { value: 'develop' } })
-    expect(setStartPointDefault).not.toHaveBeenCalled()
+    expect(saved).toEqual([])
     fireEvent.blur(field)
-    expect(setStartPointDefault).toHaveBeenCalledWith('p1', 'develop')
-    expect(screen.queryByLabelText('Start new worktrees from')).toBeNull()
+    await vi.waitFor(() => expect(screen.queryByLabelText('Start new worktrees from')).toBeNull())
+    expect(saved).toEqual([{ projectId: 'p1', startPoint: 'develop' }])
+    expect(within(row()).getByText('develop')).toBeTruthy()
   })
 
-  it('commits on Enter too, for the reader who never leaves the keyboard', () => {
+  it('saves on Enter too, once', async () => {
     renderAt('projects')
     change()
     const field = screen.getByLabelText('Start new worktrees from')
     fireEvent.change(field, { target: { value: 'release/2026' } })
     fireEvent.keyDown(field, { key: 'Enter' })
-    expect(setStartPointDefault).toHaveBeenCalledWith('p1', 'release/2026')
+    fireEvent.blur(field)
+    await vi.waitFor(() => expect(within(row()).getByText('release/2026')).toBeTruthy())
+    expect(saved).toEqual([{ projectId: 'p1', startPoint: 'release/2026' }])
+  })
+
+  it('refuses a ref that does not resolve, keeping the field and saying why', async () => {
+    renderAt('projects')
+    change()
+    const field = screen.getByLabelText('Start new worktrees from')
+    fireEvent.change(field, { target: { value: 'origin/mainmain~2' } })
+    fireEvent.blur(field)
+    expect(await within(row()).findByText('origin/mainmain~2 · no such ref')).toBeTruthy()
+    expect(screen.getByLabelText('Start new worktrees from').getAttribute('aria-invalid')).toBe('true')
+    expect(useWorkspaceStore.getState().projects[0]?.startPoint).toBeUndefined()
+
+    fireEvent.change(field, { target: { value: 'develop' } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+    await vi.waitFor(() => expect(within(row()).queryByText('origin/mainmain~2 · no such ref')).toBeNull())
+    expect(within(row()).getByText('develop')).toBeTruthy()
   })
 
   it('puts the field away on Escape and keeps nothing', () => {
@@ -1471,27 +1505,34 @@ describe('the start point a new task is offered first', () => {
     fireEvent.change(field, { target: { value: 'develop' } })
     fireEvent.keyDown(field, { key: 'Escape' })
     expect(screen.queryByLabelText('Start new worktrees from')).toBeNull()
-    expect(setStartPointDefault).not.toHaveBeenCalled()
+    expect(saved).toEqual([])
     expect(toggleSettings).not.toHaveBeenCalled()
   })
 
-  it('shows a ref set here, and offers the base ref back', () => {
-    seed({ startPointDefaults: { p1: 'develop' } })
+  it('leaves the base ref unsaved when Change is left as it was', () => {
     renderAt('projects')
-    expect(screen.getByText('develop')).toBeTruthy()
-    // Null, not '': `withStartPoint` removes the entry for null.
-    fireEvent.click(screen.getByRole('button', { name: 'Use origin/main' }))
-    expect(setStartPointDefault).toHaveBeenCalledWith('p1', null)
+    change()
+    fireEvent.blur(screen.getByLabelText('Start new worktrees from'))
+    expect(saved).toEqual([])
   })
 
-  it('passes null when the field is emptied and left, the same as the button', () => {
-    seed({ startPointDefaults: { p1: 'develop' } })
+  it('shows a ref set here, and offers the base ref back', async () => {
+    seed({ projects: [{ ...project, startPoint: 'develop' }] })
+    renderAt('projects')
+    expect(within(row()).getByText('develop')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Use origin/main' }))
+    await vi.waitFor(() => expect(saved).toEqual([{ projectId: 'p1', startPoint: '' }]))
+    await vi.waitFor(() => expect(within(row()).getByText('origin/main')).toBeTruthy())
+  })
+
+  it('clears it when the field is emptied and left, the same as the button', async () => {
+    seed({ projects: [{ ...project, startPoint: 'develop' }] })
     renderAt('projects')
     change()
     const field = screen.getByLabelText('Start new worktrees from')
     fireEvent.change(field, { target: { value: '  ' } })
     fireEvent.blur(field)
-    expect(setStartPointDefault).toHaveBeenCalledWith('p1', null)
+    await vi.waitFor(() => expect(saved).toEqual([{ projectId: 'p1', startPoint: '' }]))
   })
 
   // The buttons name the ref they would use; no paragraph under them.

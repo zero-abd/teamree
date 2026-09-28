@@ -258,7 +258,9 @@ export const Params = {
     worktreesRoot: z.string().max(4096).optional(),
     allowInsideRepository: z.boolean().optional(),
     /** Omitted leaves it alone; empty clears it. */
-    branchPrefix: z.string().max(64).optional()
+    branchPrefix: z.string().max(64).optional(),
+    /** Omitted leaves it alone; empty clears it. Refused unless git resolves it, fetching a remote-tracking ref first. */
+    startPoint: z.string().max(256).optional()
   }),
 
   worktreeList: z.object({ projectId: z.string().min(1).optional() }),
@@ -266,7 +268,7 @@ export const Params = {
   worktreeCreate: z.object({
     projectId: z.string().min(1),
     name: z.string().min(1),
-    /** Ref or sha to branch from. Defaults to the project's baseRef. */
+    /** Ref or sha to branch from. Defaults to the project's start point (`startPointOf`). */
     startedFrom: z.string().min(1).optional(),
     branch: z.string().min(1).optional(),
     /**
