@@ -390,7 +390,9 @@ export const Params = {
     /** Answer with the plan and merge nothing. */
     dryRun: z.boolean().optional(),
     /** Then push the base to origin; a child landing in its parent ignores it. */
-    push: z.boolean().optional()
+    push: z.boolean().optional(),
+    /** Fetch and catch up as `push` does but leave the push to one `project.pushBase` with `undoTo` after several. */
+    pushLater: z.boolean().optional()
   }),
   /** An `index.lock` of the worktree's repository, as a `locked` error named it. */
   worktreeLock: z.object({ worktreeId: z.string().min(1), lockPath: z.string().min(1).max(4096) }),
@@ -466,7 +468,14 @@ export const Params = {
   /** The checkout's base branch against its upstream. */
   projectBase: z.object({ projectId: z.string().min(1) }),
   /** Pushes the checkout's base branch to origin; never forced. */
-  projectPushBase: z.object({ projectId: z.string().min(1) }),
+  projectPushBase: z.object({
+    projectId: z.string().min(1),
+    /** The first `pushLater` landing's `restore`: where the base goes back when this push fails. */
+    undoTo: z
+      .string()
+      .regex(/^[0-9a-f]{40,64}$/i)
+      .optional()
+  }),
   /** Merges origin's base into the checkout's, backing out of a conflict. */
   projectPullBase: z.object({ projectId: z.string().min(1) }),
   /** Resets the checkout's base branch to origin's; refused when a commit only it holds would be lost. */

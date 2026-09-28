@@ -496,6 +496,8 @@ export type WorktreeMerge = {
   head?: string
   /** Its tip just before, where `project.resetBase` with `landing` puts it back. */
   before?: string
+  /** Asked with `pushLater`: the tip a failed push puts the base back at. */
+  restore?: string
   /** Asked with `push`: whether the base then reached `origin`. */
   pushed?: boolean
   /** Why that push did not land; the merge stands. */

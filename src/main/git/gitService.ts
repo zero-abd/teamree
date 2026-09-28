@@ -113,6 +113,7 @@ import {
   createPullRequest,
   landingOnto,
   mergeIntoBase,
+  pushLandings,
   readCheckFailure,
   readLanding,
   type GhProbe
@@ -1605,7 +1606,9 @@ export class GitService {
         ? {}
         : { parent: { name: parent.name, agentWorking: () => this.#agentWorking(parent.id) } }),
       ...(params.dryRun === undefined ? {} : { dryRun: params.dryRun }),
-      ...(params.push === true ? { push: { projectId: project.id } } : {})
+      ...(params.push === true || params.pushLater === true
+        ? { push: { projectId: project.id, ...(params.push === true ? {} : { later: true }) } }
+        : {})
     })
   }
 
@@ -1615,7 +1618,10 @@ export class GitService {
   }
 
   async projectPushBase(params: ParamsOf<'project.pushBase'>): Promise<ProjectBase> {
-    return pushProjectBase(this.#runner, this.#baseOptions(params.projectId))
+    const options = this.#baseOptions(params.projectId)
+    return params.undoTo === undefined
+      ? pushProjectBase(this.#runner, options)
+      : pushLandings(this.#runner, { ...options, undoTo: params.undoTo })
   }
 
   async projectPullBase(params: ParamsOf<'project.pullBase'>): Promise<ProjectBase> {

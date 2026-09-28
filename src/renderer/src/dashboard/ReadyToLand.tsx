@@ -1,7 +1,8 @@
 // The board's Ready to land: each finished task with work, with Review, Land and Discard, and Land All,
-// which runs the children's ordered merge over them and stops at the first that fails.
+// which asks first, skips one that fails and lands the rest, and pushes each project once at the end.
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { ConfirmLandAllDialog } from '../dialogs/ConfirmLandAllDialog'
 import { useReviewStore } from '../review/reviewStore'
 import { openInBrowser } from '../shell/openInBrowser'
 import { useOverlaps } from '../state/overlapStore'
@@ -27,7 +28,7 @@ export function ReadyToLand(): React.JSX.Element | null {
   const removeWorktree = useWorkspaceStore((state) => state.removeWorktree)
   const overlaps = useOverlaps((state) => state.byProject)
   const merging = useChildren((state) => state.merging[LANDING_QUEUE])
-  const mergeChildren = useChildren((state) => state.mergeChildren)
+  const [asking, setAsking] = useState(false)
   const rows = useMemo(
     () =>
       landingQueue({
@@ -48,6 +49,7 @@ export function ReadyToLand(): React.JSX.Element | null {
   // A pull request lands on the host, in its own time; Land All runs the merges made here.
   const merges = rows.filter((row) => offerOf(row)?.kind === 'merge')
   const ready = readyToMerge(merges)
+  const held = heldBack(merges)
   const busy = merging !== undefined
   const land = (row: ChildRow): void => {
     const offer = offerOf(row)
@@ -75,18 +77,19 @@ export function ReadyToLand(): React.JSX.Element | null {
           className="landq__all"
           disabled={busy || ready.length === 0}
           title={ready.map((row) => row.title).join('\n') || undefined}
-          onClick={() =>
-            void mergeChildren(
-              LANDING_QUEUE,
-              ready.map((row) => row.worktreeId),
-              heldBack(merges)
-            )
-          }
+          onClick={() => setAsking(true)}
         >
           Land All
         </Button>
       }
     >
+      {asking ? (
+        <ConfirmLandAllDialog
+          rows={merges.filter((row) => ready.includes(row) || held.some((each) => each.worktreeId === row.worktreeId))}
+          held={held}
+          onClose={() => setAsking(false)}
+        />
+      ) : null}
       <LandStops runKey={LANDING_QUEUE} rows={rows} />
       <ul className="landq__list">
         {rows.map((row) => {

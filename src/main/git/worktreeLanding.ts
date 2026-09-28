@@ -5,6 +5,7 @@ import { accessSync, constants, statSync } from 'node:fs'
 import path from 'node:path'
 import type {
   CheckFailure,
+  ProjectBase,
   WorktreeIssue,
   WorktreeLanding,
   WorktreeMerge,
@@ -14,7 +15,7 @@ import { ErrorCode } from '../../shared/protocol'
 import { GitServiceError } from './errors'
 import { createGitRunner, type GitRunner } from './gitProcess'
 import { fetchBase } from './baseFetch'
-import { pushProjectBase } from './projectBase'
+import { pushProjectBase, type ProjectBaseOptions } from './projectBase'
 import { failureExcerpt, failureLogArgs, readChecks, readReview } from './pullRequestChecks'
 import { assertRefShape } from './repository'
 import { readMergePreview } from './mergePreview'
@@ -323,8 +324,8 @@ export type MergeOptions = {
   /** A child landing in its parent's checkout: only dirty paths it brings refuse it, and so does the parent's agent mid-turn. */
   parent?: { name: string; agentWorking: () => boolean }
   dryRun?: boolean
-  /** Then pushes the base to origin; ignored for a child. */
-  push?: { projectId: string }
+  /** Then pushes the base to origin; ignored for a child. `later` catches up the same way and leaves the push to `pushLandings`. */
+  push?: { projectId: string; later?: boolean }
 }
 
 /**
@@ -423,6 +424,7 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
   }
   const tip = await read(['rev-parse', 'HEAD'])
   if (push === undefined) return { ...plan, merged: true, head: tip.stdout.trim(), before }
+  if (push.later === true) return { ...plan, merged: true, head: tip.stdout.trim(), before, restore }
   try {
     await pushProjectBase(runner, { projectId: push.projectId, repoPath: cwd, baseRef: into })
   } catch (error) {
@@ -436,6 +438,35 @@ export async function mergeIntoBase(runner: GitRunner, options: MergeOptions): P
     )
   }
   return { ...plan, merged: true, head: tip.stdout.trim(), pushed: true }
+}
+
+/** Pushes the base once after several `push.later` landings; a failed push puts it back at the first one's `restore`. */
+export async function pushLandings(
+  runner: GitRunner,
+  options: ProjectBaseOptions & { undoTo: string }
+): Promise<ProjectBase> {
+  const into = bareRef(options.baseRef, REMOTE)
+  assertRefShape(into, 'base branch')
+  const cwd = options.repoPath
+  const read = (args: string[]): Promise<{ exitCode: number; stdout: string }> =>
+    runner.tryRun({ args, cwd, readOnly: true, timeoutMs: 30_000 })
+  const head = await read(['symbolic-ref', '--quiet', '--short', 'HEAD'])
+  if (head.stdout.trim() !== into)
+    throw new GitServiceError(ErrorCode.Conflict, `${cwd} does not have ${into} checked out`)
+  if ((await read(['merge-base', '--is-ancestor', options.undoTo, into])).exitCode !== 0) {
+    throw new GitServiceError(ErrorCode.Conflict, `${options.undoTo.slice(0, 7)} is not behind ${into}`)
+  }
+  try {
+    return await pushProjectBase(runner, options)
+  } catch (error) {
+    await resetTo(runner, cwd, into, options.undoTo)
+    const failed = error instanceof GitServiceError ? error : null
+    throw new GitServiceError(
+      failed?.code ?? ErrorCode.GitFailed,
+      `Push failed: ${error instanceof Error ? error.message : String(error)} · merges undone`,
+      failed?.data
+    )
+  }
 }
 
 const originOf = (branch: string): string => `refs/remotes/${REMOTE}/${branch}`
