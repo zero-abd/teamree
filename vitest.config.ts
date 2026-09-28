@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { isolate } from './scripts/child-env.mjs'
@@ -24,6 +25,14 @@ process.env.TEAMREE_USER_DATA_DIR = join(tmpdir(), 'teamree-tests-have-no-app')
 // Nor the owner's claude and codex configs: a worktree a test makes looks for trust in these, which never exist.
 process.env.CLAUDE_CONFIG_DIR = join(tmpdir(), 'teamree-tests-have-no-agent-config', 'claude')
 process.env.CODEX_HOME = join(tmpdir(), 'teamree-tests-have-no-agent-config', 'codex')
+// Nor the owner's zsh files and history: a pane's zsh starts only once it holds the history lock, which every
+// shell on the machine takes, and waits up to 10 s for it.
+const zsh = join(tmpdir(), 'teamree-tests-have-no-zsh-history')
+if (!existsSync(join(zsh, '.zshrc'))) {
+  mkdirSync(zsh, { recursive: true })
+  writeFileSync(join(zsh, '.zshrc'), 'unset HISTFILE\n')
+}
+process.env.ZDOTDIR = zsh
 
 export default defineConfig({
   test: {

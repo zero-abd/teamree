@@ -616,7 +616,8 @@ describe('before an agent edits a file', () => {
 
     ledger.schedule(['a'])
     ledger.schedule(['b'])
-    await vi.waitFor(async () => expect(ledger.stats().passes).toBe(2))
+    // A pass is real git work, and on a loaded machine it takes seconds, not the one vi.waitFor allows by default.
+    await vi.waitFor(async () => expect(ledger.stats().passes).toBe(2), { timeout: 20_000 })
     const touched = (await ledger.inspect('p1')).worktrees.map((row) => [row.id, row.touched.length])
     expect(touched).toEqual([
       ['a', 1],
