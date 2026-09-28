@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { GUTTER_PX } from '../../panes/paneLayout'
-import { declarationOf, opacitiesOf, ruleFor } from './css'
+import { declarationOf, opacitiesOf, parse, ruleFor } from './css'
 
 const SHEET = 'panes.css'
 
@@ -49,5 +49,14 @@ describe('panes.css', () => {
   // Most people never hover, so a control drawn only under the pointer is one they never find.
   it('draws a pane’s close faintly at rest, not invisibly', () => {
     expect(opacitiesOf(SHEET, '.pane__close')).toEqual(['var(--control-rest)'])
+  })
+
+  // Forced to `display: flex !important`, a marker's rule stayed where it was drawn once its line scrolled off.
+  it('leaves a marker rule’s display to xterm, which hides it off the screen', () => {
+    parse(SHEET).walkRules((rule) => {
+      if (!/pane-marker|xterm-decoration/.test(rule.selector)) return
+      rule.walkDecls('display', (decl) => expect(decl.important ?? false, rule.selector).toBe(false))
+    })
+    expect(declarationOf(ruleFor(SHEET, '.pane-marker-row'), 'pointer-events')).toBe('none')
   })
 })

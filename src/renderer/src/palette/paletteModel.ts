@@ -21,6 +21,7 @@ import { APPEARANCE_MODES, BUILT_IN_THEMES, type AppearanceMode } from '@shared/
 import { APPEARANCE_MODE_LABEL } from '../settings/AppearanceSettings'
 import { SETTINGS_CATALOG, SETTINGS_SECTIONS } from '../settings/settingsModel'
 import { canResumeConversations, harnessName } from '../agents/harnesses'
+import { resumableAgents } from '../panes/resumeAll'
 import { runName, siblingRuns } from '../compare/siblingRuns'
 import type { WorkspaceCommand } from '../keyboard/workspaceShortcuts'
 import type { DiffOptions } from '../state/preferences'
@@ -56,6 +57,7 @@ export type PaletteAction =
   | 'new-task-from-issue'
   | 'install-cli'
   | 'show-ports'
+  | 'resume-stopped-agents'
   | 'search-contents'
   | 'show-decisions'
   | 'check-for-updates'
@@ -263,6 +265,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
 
   const rows: ActionRow[] = [
     ...commandActions(context),
+    ...resumeAllActions(context),
     ...restoreActions(context),
     ...cleanUpActions(context),
     ...pushBaseActions(context),
@@ -512,6 +515,20 @@ function landRow(land: Exclude<LandOffer, { kind: 'merged' }>): ActionRow {
 }
 
 /** One row per removed worktree that can still come back, its age as the hint. */
+/** Resume Stopped Agents, when any ended agent can pick its conversation back up; the count as the hint. */
+function resumeAllActions(context: PaletteContext): ActionRow[] {
+  const count = resumableAgents(context.terminals ?? []).length
+  if (count === 0) return []
+  return [
+    {
+      id: 'resume-stopped-agents',
+      label: 'Resume Stopped Agents',
+      keywords: 'resume all stopped ended agents conversations quit crash relaunch restart continue',
+      hint: String(count)
+    }
+  ]
+}
+
 function restoreActions(context: PaletteContext): ActionRow[] {
   const now = Date.now()
   return (context.removed ?? []).map((removed) => ({

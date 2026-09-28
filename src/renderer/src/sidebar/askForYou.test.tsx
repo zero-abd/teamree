@@ -152,6 +152,17 @@ describe('a question the agent stopped waiting on', () => {
     )
   })
 
+  // Every ask live when the app quit read "Timed out · the agent moved on" after the relaunch.
+  it.each([
+    ['app', 'Ask ended with the app'],
+    ['agent', 'The agent stopped']
+  ] as const)('says the %s ended it, never that it timed out', (expiredBy, words) => {
+    useMessageStore.setState({ messages: [lapsed({ expiredBy })] })
+    mount(TESTS)
+    expect(screen.getByText(words)).toBeTruthy()
+    expect(screen.queryByText(/Timed out/)).toBeNull()
+  })
+
   it('is dismissed, and then gone', async () => {
     useMessageStore.setState({ messages: [lapsed()] })
     mount(TESTS)

@@ -921,3 +921,37 @@ describe('the head with no worktree open', () => {
     expect(document.querySelector('.workspace__head')?.className).toBe('workspace__head')
   })
 })
+
+// After a quit or a crash, every agent was brought back by hand, one pane at a time.
+describe('Resume All in the head', () => {
+  const ended = (id: string, extra: Partial<Terminal> = {}): Terminal =>
+    terminal({ id, agent: 'claude', running: false, exitCode: 1, ...extra })
+
+  it('resumes every ended agent here that can pick its conversation back up, and only those', () => {
+    const resumeAgents = vi.fn(async () => {})
+    seed({
+      activeWorktreeId: 'w1',
+      resumeAgents,
+      layouts: { w1: layout('w1', row('t1', 't2', 't3'), 't1') },
+      terminals: byId(
+        ended('t1', { resumable: true }),
+        ended('t2', { resumable: true }),
+        ended('t3'),
+        ended('t9', { worktreeId: 'w2', resumable: true })
+      )
+    })
+    mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Resume All' }))
+    expect(resumeAgents).toHaveBeenCalledExactlyOnceWith(['t1', 't2'])
+  })
+
+  it('is not there for one, or none', () => {
+    seed({
+      activeWorktreeId: 'w1',
+      layouts: { w1: layout('w1', row('t1', 't2'), 't1') },
+      terminals: byId(ended('t1', { resumable: true }), ended('t2'))
+    })
+    mount()
+    expect(screen.queryByRole('button', { name: 'Resume All' })).toBeNull()
+  })
+})

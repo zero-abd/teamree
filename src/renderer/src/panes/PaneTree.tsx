@@ -20,6 +20,7 @@ import {
   PaneFoot,
   PaneStarting,
   paneStage,
+  primaryIsFresh,
   SetupMissingTool,
   useSeenOutput
 } from './PaneLifecycle'
@@ -195,7 +196,7 @@ function PaneLeaf({
   // One name per pane, shared by strip, region, menu and close question.
   const name = names?.[terminalId] ?? terminal?.title ?? 'terminal'
   const primary = (): void => {
-    if (stage === 'restored' && onResumeConversation !== undefined) onResumeConversation(terminalId)
+    if (terminal !== undefined && ended && primaryIsFresh(terminal, stage)) onRelaunch(terminalId, { fresh: true })
     else onRelaunch(terminalId)
   }
 

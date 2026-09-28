@@ -52,6 +52,27 @@ describe('ScrollbackArchive', () => {
     expect(store.read('term_1')?.recordedAt).toBe(1_700_000_000_000)
   })
 
+  // 0.7.3's own lines in the record showed raw after the upgrade, in the pane and to `terminal read`.
+  it('reads the bracketed lines a 0.7 build wrote as marker lines, before and after a host session', async () => {
+    const store = await archive()
+    store.put('term_1', 'placeholder\r\n')
+    await store.flush()
+    const dim = (text: string): string => `${ESC}[0m\r\n${ESC}[38;5;244m[${text}]${ESC}[0m\r\n`
+    const text = `Fixed.\r\n${dim('end of record — new shell below')}% ${dim('task done — agent stopped, task not re-sent')}`
+    await writeFile(
+      join(store.directory, 'term_1.json'),
+      JSON.stringify({ version: 1, recordedAt: 1, text, host: { session: 'host_1', before: text } }),
+      'utf8'
+    )
+
+    const kept = store.read('term_1')
+    for (const read of [kept?.text, kept?.host?.before]) {
+      expect(read).not.toMatch(/\[(end of record|task done) —/)
+      expect(read).toContain('── New shell ──')
+      expect(read).not.toContain('agent stopped')
+    }
+  })
+
   it('has nothing to say about a pane it never heard of', async () => {
     const store = await archive()
     expect(store.read('term_missing')).toBeUndefined()

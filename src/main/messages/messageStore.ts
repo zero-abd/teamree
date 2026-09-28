@@ -64,7 +64,10 @@ export class MessageStore {
   }
 
   /** An `undefined` in the patch removes that field. */
-  update(id: number, patch: Partial<Pick<TaskMessage, 'state' | 'answeredBy' | 'expiredAt'>>): TaskMessage | undefined {
+  update(
+    id: number,
+    patch: Partial<Pick<TaskMessage, 'state' | 'answeredBy' | 'expiredAt' | 'expiredBy'>>
+  ): TaskMessage | undefined {
     const current = this.byId.get(id)
     if (current === undefined) return undefined
     const next: TaskMessage = { ...current, ...patch }

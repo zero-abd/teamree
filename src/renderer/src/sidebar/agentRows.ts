@@ -158,11 +158,12 @@ export function agentRows(
 /** What a ^C exit reads as: the person stopped it, nothing failed. */
 const INTERRUPTED = 130
 
-/** `activityOf` as the pane draws it (`paneStage`): a clean exit, a ^C and a restore all ended. */
+/** `activityOf` as the pane draws it (`paneStage`): a clean exit, a ^C and a restore all ended; a failure stays one. */
 export function shownActivity(terminal: Terminal): AgentActivity {
   const activity = activityOf(terminal)
   if (terminal.running) return activity
-  if (terminal.restored === 'stopped' || activity === 'done' || terminal.exitCode === INTERRUPTED) return 'stopped'
+  const restored = terminal.restored === 'stopped' && terminal.stoppedFor !== 'failed'
+  if (restored || activity === 'done' || terminal.exitCode === INTERRUPTED) return 'stopped'
   return activity
 }
 

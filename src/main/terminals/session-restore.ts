@@ -3,15 +3,12 @@
 // only when it resumes something; anything else comes back as a plain shell, a Run pane as ended.
 
 import type { RunKind } from '../../shared/entities'
+import type { StoppedFor } from '../../shared/paneRestore'
 import type { AgentKind } from './agent-command'
 import { carriesSelector, restartSessionCommand, resumeSessionCommand } from './agent-command'
 import { conversationOnDisk, type ConversationEvidence, type ConversationQuestion } from './agent-conversations'
 import type { PanePlace } from './pane-tree'
-import { agentStoppedMark, noConversationMark } from './scrollbackRecord'
-
-/** Why an agent pane is left stopped, as its note says. */
-export const NO_CONVERSATION = 'no conversation to resume'
-export const TASK_DONE = 'task done'
+import { noConversationMark } from './scrollbackRecord'
 
 /** One terminal, as much of it as outlives the process that ran it. */
 export type TerminalRecord = {
@@ -44,8 +41,9 @@ export type TerminalRecord = {
   ordinal?: number
   /** Which Run button started it; see `Terminal.run`. */
   run?: RunKind
-  /** How that run ended, when it ended before the app quit. */
+  /** How the run or agent ended, when it ended before the app quit, and when. */
   exitCode?: number
+  endedAt?: number
   cols: number
   rows: number
   createdAt: number
@@ -77,17 +75,22 @@ export type RestoreLaunch = {
   fallback?: { command: string; agentSessionId?: string }
   /** A line for the pane to print first, when this launch is not the one the record asked for. */
   note?: string
-  /** The agent is left stopped: a conversation was had here and cannot be resumed, so starting over is the owner's call. */
-  stopped?: true
+  /** The agent is left stopped, and why; starting over is the owner's call. The end block says it, not the record. */
+  stopped?: StoppedFor
 }
 
-/** What a stopped agent pane runs: nothing, so it comes back ended with its record above. */
-const STOPPED_COMMAND = 'exit 0'
-
-/** An agent pane left stopped, saying why in the pane. */
-export function stoppedLaunch(reason: string): RestoreLaunch {
-  return { command: STOPPED_COMMAND, resumed: false, stopped: true, note: agentStoppedMark(reason) }
+/** An agent pane left stopped: it runs nothing but ending as it did, so it comes back ended with its record above. */
+export function stoppedLaunch(reason: StoppedFor, exitCode = 0): RestoreLaunch {
+  return { command: `exit ${exitCode}`, resumed: false, stopped: reason }
 }
+
+/** An agent's exit that is a failure: not a clean exit, and not ^C. */
+export function agentFailed(exitCode: number | undefined): exitCode is number {
+  return exitCode !== undefined && exitCode !== 0 && exitCode !== INTERRUPTED
+}
+
+/** ^C's exit status. */
+const INTERRUPTED = 130
 
 /**
  * How to bring one recorded terminal back. A command is re-issued only when it
@@ -119,7 +122,7 @@ export function restoreLaunch(
   // Evidence first, in both directions: the store is what the resume will read.
   if (evidence === 'absent' || (evidence === 'unknown' && !spoken)) {
     // A fresh start would begin again what was already begun: the task done twice.
-    if (spoken) return stoppedLaunch(NO_CONVERSATION)
+    if (spoken) return stoppedLaunch('no-conversation')
     const restart = restartSessionCommand(record.command, record.agent)
     // Could not be modelled (a pipeline, an unclosed quote): re-issuing would
     // leave a dead session id on the line and a different one in the record.

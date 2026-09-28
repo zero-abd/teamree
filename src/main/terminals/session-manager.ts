@@ -4,7 +4,7 @@
 import { randomUUID } from 'node:crypto'
 import { statSync } from 'node:fs'
 import { agentLaunchCommand } from '../../shared/agentLaunch'
-import type { RestoredAs } from '../../shared/paneRestore'
+import type { RestoredAs, StoppedFor } from '../../shared/paneRestore'
 import type {
   AgentEvent,
   ClosedPane,
@@ -64,12 +64,12 @@ import {
 } from './pane-tree'
 import { conversationOnDisk, type ConversationEvidence, type ConversationQuestion } from './agent-conversations'
 import {
+  agentFailed,
   endedRunCommand,
   HUNG_UP,
   restorableRecords,
   restoreLaunch,
   stoppedLaunch,
-  TASK_DONE,
   type ClosedTerminalRecord,
   type RestoreLaunch,
   type TerminalRecord
@@ -239,6 +239,9 @@ export class TerminalSessionManager {
    * looks like work finishing and is not. The id leaves on that first edge.
    */
   private readonly resuming = new Set<string>()
+  /** Whether each ended agent session's Resume would pick its conversation up; asked once per session. */
+  private readonly resumableEnds = new WeakMap<PtySession, boolean>()
+  private stopping = false
   private readonly ownSubscriptions = new Map<string, { terminalId: string; end: () => void }>()
   private readonly layouts: LayoutRepository
   private readonly records: SessionRepository
@@ -279,7 +282,7 @@ export class TerminalSessionManager {
   list(worktreeId?: string): Terminal[] {
     const all = [...this.sessions.values()]
     const scoped = worktreeId === undefined ? all : all.filter((session) => session.worktreeId === worktreeId)
-    return scoped.map((session) => this.withOverlays(session.snapshot()))
+    return scoped.map((session) => this.withOverlays(session))
   }
 
   /** Each pane whose agent waits on an ask for you; a pane that changes is reported as its activity would be. */
@@ -448,6 +451,8 @@ export class TerminalSessionManager {
       rerun === undefined && params.resume === undefined && params.task !== true && params.fresh !== true
         ? this.resumeOf(previous, stored)
         : undefined
+    if (params.resumeOnly === true && resumed === undefined)
+      throw conflict(`${params.terminalId} has nothing to resume`)
     const launch: ReturnType<typeof relaunchCommand> =
       rerun !== undefined ? { command: rerun } : (resumed ?? relaunchCommand(stored, params.resume))
     const talked = resumed !== undefined || params.resume !== undefined
@@ -518,7 +523,9 @@ export class TerminalSessionManager {
     previous: PtySession,
     record: TerminalRecord | undefined
   ): { command: string; agent: AgentKind; agentSessionId?: string } | undefined {
-    if (record?.command === undefined || record.agent === undefined || previous.leftStopped) return undefined
+    // A pane left stopped starts afresh, unless it had failed: that one's conversation is still its own.
+    const stopped = previous.leftStopped && previous.stoppedFor !== 'failed'
+    if (record?.command === undefined || record.agent === undefined || stopped) return undefined
     const said = previous.exitHintSessionId
     const id = said ?? record.agentSessionId
     if (said === undefined) {
@@ -565,7 +572,7 @@ export class TerminalSessionManager {
   async interrupt(terminalId: string): Promise<Terminal> {
     const session = this.require(terminalId)
     await session.interrupt()
-    return this.withOverlays(session.snapshot())
+    return this.withOverlays(session)
   }
 
   /** Chooses an answer the pane's menu offers: `data`'s keypresses, one at a time, only while the screen still shows `prompt`. */
@@ -609,14 +616,14 @@ export class TerminalSessionManager {
     const pane = this.require(terminalId)
     pane.noteAgentEvent(event)
     if (session !== undefined) this.subagents.noteSession(terminalId, session.sessionId, session.transcriptPath)
-    return this.withOverlays(pane.snapshot())
+    return this.withOverlays(pane)
   }
 
   /** A subagent starting or stopping, as the pane's hook reported it. */
   subagentEvent(params: ParamsOf<'terminal.subagentEvent'>): Terminal {
     const pane = this.require(params.terminalId)
     this.subagents.hook(params.terminalId, params)
-    return this.withOverlays(pane.snapshot())
+    return this.withOverlays(pane)
   }
 
   async subagentTranscript(params: ParamsOf<'terminal.subagentTranscript'>): Promise<SubagentTranscript> {
@@ -847,12 +854,15 @@ export class TerminalSessionManager {
         restored += 1
         continue
       }
+      const agentPane = record.agent !== undefined && record.command !== undefined
       const launch: RestoreLaunch =
         record.run !== undefined
           ? { command: endedRunCommand(record), resumed: false }
-          : record.agent !== undefined && record.command !== undefined && this.options.taskDone?.(record.worktreeId)
-            ? stoppedLaunch(TASK_DONE)
-            : restoreLaunch(record, this.evidence)
+          : agentPane && agentFailed(record.exitCode)
+            ? stoppedLaunch('failed', record.exitCode)
+            : agentPane && this.options.taskDone?.(record.worktreeId)
+              ? stoppedLaunch('task-done')
+              : restoreLaunch(record, this.evidence)
       // Handed over even for a resume, which prints the conversation itself:
       // a resume that fails would otherwise leave the pane holding a one-line
       // refusal, and the next quit wrote *that* back over the transcript.
@@ -879,6 +889,9 @@ export class TerminalSessionManager {
             ...(kept === undefined ? {} : { restoredRecord: kept }),
             ...(launch.resumed && launch.fallback !== undefined ? { fallback: launch.fallback } : {}),
             ...(launch.note === undefined ? {} : { startupNote: launch.note }),
+            // Its end block says when the run it stands for ended: at its exit, else when its output was kept.
+            ...(launch.stopped === undefined ? {} : { stoppedFor: launch.stopped }),
+            ...(launch.stopped === undefined ? {} : endedBy(record.endedAt ?? kept?.recordedAt)),
             ...(record.run === undefined && launch.stopped === undefined
               ? {}
               : { recordStartsBelow: NOT_RUN_AGAIN_BELOW }),
@@ -993,8 +1006,14 @@ export class TerminalSessionManager {
     )
   }
 
+  /** Set once `shutdown` starts: whatever ends from here on ends with the app. */
+  get shuttingDown(): boolean {
+    return this.stopping
+  }
+
   /** Kills every PTY on the quit's short grace, then writes their output. Call from the app's before-quit path. */
   async shutdown(): Promise<void> {
+    this.stopping = true
     this.subagents.close()
     const sessions = [...this.sessions.values()]
     // With Keep Agents Running, a pane in the host is let go of, not killed; a host with none is ended.
@@ -1072,6 +1091,8 @@ export class TerminalSessionManager {
       recordStartsBelow?: string
       /** Printed before the command, saying why this is not a resume. */
       startupNote?: string
+      stoppedFor?: StoppedFor
+      endedAt?: number
       /** The number a reopened pane had; kept unless a live pane has it now. */
       ordinal?: number
       run?: RunKind
@@ -1133,6 +1154,8 @@ export class TerminalSessionManager {
       ...(params.restoredRecord === undefined ? {} : { restoredRecord: params.restoredRecord }),
       ...(params.recordStartsBelow === undefined ? {} : { recordStartsBelow: params.recordStartsBelow }),
       ...(params.startupNote === undefined ? {} : { startupNote: params.startupNote }),
+      ...(params.stoppedFor === undefined ? {} : { stoppedFor: params.stoppedFor }),
+      ...(params.endedAt === undefined ? {} : { endedAt: params.endedAt }),
       ...(agent === undefined ? {} : { agent }),
       ...(fallback === undefined
         ? {}
@@ -1252,14 +1275,31 @@ export class TerminalSessionManager {
     )(question)
 
   /** A pane's snapshot with what the manager keeps beside its session. */
-  private withOverlays(terminal: Terminal): Terminal {
+  private withOverlays(session: PtySession): Terminal {
+    const terminal = session.snapshot()
     const subagents = this.subagents.list(terminal.id)
     const askingYou = this.askingYou.get(terminal.id)
     return {
       ...terminal,
       ...(subagents === undefined ? {} : { subagents }),
-      ...(askingYou === undefined ? {} : { askingYou })
+      ...(askingYou === undefined ? {} : { askingYou }),
+      ...(this.resumableEnd(session) ? { resumable: true } : {})
     }
+  }
+
+  /** An ended agent's Resume picks its conversation back up; its store is asked once per ended session. */
+  private resumableEnd(session: PtySession): boolean {
+    // A pane left stopped is ended from its first snapshot: its `exit` is only on its way.
+    if ((session.isRunning && !session.leftStopped) || session.agent === undefined || session.run !== undefined) {
+      return false
+    }
+    let known = this.resumableEnds.get(session)
+    if (known === undefined) {
+      const record = this.records.listTerminals().find((stored) => stored.id === session.id)
+      known = this.resumeOf(session, record) !== undefined
+      this.resumableEnds.set(session, known)
+    }
+    return known
   }
 
   /** Hands on a pane that has stopped, when it is an agent; one rule for both edges. */
@@ -1342,10 +1382,10 @@ export class TerminalSessionManager {
     this.records.putTerminal(next)
   }
 
-  /** Written at the exit, so a relaunch can say how the run ended; `shutdown` writes a run the quit ends. */
-  private noteRunEnded(terminalId: string, exitCode: number): void {
+  /** Written at the exit, so a relaunch can say how the pane ended; `shutdown` writes a run the quit ends. */
+  private noteRunEnded(terminalId: string, exitCode: number, endedAt = Date.now()): void {
     const stored = this.records.listTerminals().find((record) => record.id === terminalId)
-    if (stored !== undefined && stored.exitCode !== exitCode) this.records.putTerminal({ ...stored, exitCode })
+    if (stored !== undefined && stored.exitCode !== exitCode) this.records.putTerminal({ ...stored, exitCode, endedAt })
   }
 
   /** Nothing behind the pane to resume any more: neither a keystroke nor its task still counts. */
@@ -1411,7 +1451,9 @@ export class TerminalSessionManager {
       // The only moment anything knows a resume did not take; unrecorded, the
       // pane asks for the same missing conversation on every launch.
       if (session.resumeDidNotTake) this.markNotResumable(session.id)
-      if (session.run !== undefined) this.noteRunEnded(session.id, event.exitCode)
+      // An agent's too, so one that failed comes back failed; a pane left stopped only replays its old ending.
+      const ended = session.run !== undefined || (session.agent !== undefined && !session.leftStopped)
+      if (ended) this.noteRunEnded(session.id, event.exitCode)
       this.scrollback?.put(session.id, session.recordedOutput())
       this.reportSettled(session, 'exit')
       for (const listener of this.exitListeners) listener(session.id, event.exitCode)
@@ -1523,6 +1565,10 @@ function relaunchCommand(
 }
 
 /** The badge a restored pane wears: 'restarted' is running its agent, so calling it a shell would contradict the banner. */
+function endedBy(at: number | undefined): { endedAt?: number } {
+  return at === undefined ? {} : { endedAt: at }
+}
+
 function restoredAs(launch: RestoreLaunch): RestoredAs {
   if (launch.stopped) return 'stopped'
   if (launch.resumed) return 'agent'

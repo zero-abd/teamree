@@ -82,6 +82,7 @@ function NoticeCard({ notice, onLeft }: { notice: Notice; onLeft?: () => void })
   const dismissNotice = useWorkspaceStore((state) => state.dismissNotice)
   const hideRegion = useWorkspaceStore((state) => state.hideRegion)
   const undo = useWorkspaceStore((state) => state.undo)
+  const resumeAgents = useWorkspaceStore((state) => state.resumeAgents)
   const look = noticeLook(notice)
   const { title, detail } = noticeParts(notice.text)
   const leaving = onLeft !== undefined
@@ -101,6 +102,7 @@ function NoticeCard({ notice, onLeft }: { notice: Notice; onLeft?: () => void })
     }
     dismissNotice(notice.id)
     if ('undo' in action) void undo(action.undo)
+    else if ('resume' in action) void resumeAgents(action.resume)
     else hideRegion(action.hide)
   }
 

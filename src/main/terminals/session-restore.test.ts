@@ -13,8 +13,8 @@ import {
   type ConversationEvidence,
   type ConversationQuestion
 } from './agent-conversations'
-import { agentStoppedMark, INERT_RECORD, noConversationMark } from './scrollbackRecord'
-import { NO_CONVERSATION, restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
+import { INERT_RECORD, noConversationMark } from './scrollbackRecord'
+import { restorableRecords, restoreLaunch, type TerminalRecord } from './session-restore'
 import { TerminalSessionManager, type LayoutRepository, type SessionRepository } from './session-manager'
 
 function record(overrides: Partial<TerminalRecord> = {}): TerminalRecord {
@@ -153,12 +153,7 @@ describe('restoreLaunch', () => {
         record({ command: 'claude --session-id old-zzz', agent: 'claude', agentSessionId: 'old-zzz', ...said }),
         missing
       )
-      expect(launch, JSON.stringify(said)).toEqual({
-        command: 'exit 0',
-        resumed: false,
-        stopped: true,
-        note: agentStoppedMark(NO_CONVERSATION)
-      })
+      expect(launch, JSON.stringify(said)).toEqual({ command: 'exit 0', resumed: false, stopped: 'no-conversation' })
     }
   })
 
@@ -1014,7 +1009,7 @@ describePty('restoring terminals across a restart', () => {
   }
 
   // A keystroke may have reached only the trust gate, or a whole conversation now lost; starting over is the owner's call.
-  it('leaves the agent stopped, saying why, when the store has nothing under the pinned id', async () => {
+  it('leaves the agent stopped, saying why once, when the store has nothing under the pinned id', async () => {
     const { checkout, launch } = await fakeAgent('claude')
     const store = await claudeStore()
     const repositories = createRepositories()
@@ -1037,13 +1032,14 @@ describePty('restoring terminals across a restart', () => {
     await waitUntil(() => second.list('wt_1')[0]?.running === false, 'the stopped pane to end')
     const pane = second.list('wt_1')[0]
     expect(pane?.restored).toBe('stopped')
+    expect(pane?.stoppedFor).toBe('no-conversation')
     expect(pane?.agent).toBe('claude')
 
+    // The end block says why; the record carries no second boundary saying it.
     const shown = second.read(opened.id)
-    expect(shown).toContain(agentStoppedMark(NO_CONVERSATION))
-    // Printed once, by the first launch, above the record's end.
+    expect(shown).not.toContain('not resumed')
+    // Printed once, by the first launch.
     expect(shown.split('AGENT ARGS:')).toHaveLength(2)
-    expect(shown.split(agentStoppedMark(NO_CONVERSATION))[1]).not.toContain('AGENT ARGS:')
 
     // Kept as it was, so the next launch asks the same question.
     const kept = repositories.listTerminals()[0]

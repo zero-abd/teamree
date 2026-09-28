@@ -209,12 +209,12 @@ describe('one pane', () => {
   })
 
   // Its conversation could not come back, and starting over would do its task twice.
-  it('offers a stopped agent its conversation or a fresh start, and no exit code', () => {
+  it('offers a stopped agent a fresh start or a chosen conversation, and no exit code', () => {
     mount(leaf('t1'), [terminal('t1', { agent: 'claude', running: false, exitCode: 0, restored: 'stopped' })])
     expect(document.querySelector('.pane-marker')?.textContent).toMatch(/^Restored/)
     expect(screen.queryByText(/Exited/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Run Again' })).toBeNull()
-    screen.getByRole('button', { name: 'Resume' }).click()
+    screen.getByRole('button', { name: 'Resume…' }).click()
     expect(onResumeConversation).toHaveBeenCalledExactlyOnceWith('t1')
     screen.getByRole('button', { name: 'New Session' }).click()
     expect(onRelaunch).toHaveBeenCalledExactlyOnceWith('t1', { fresh: true })
@@ -237,7 +237,9 @@ describe('one pane', () => {
   // The pane that died is the one somebody is standing in front of wondering
   // what to do, and the answer is nearly always: its conversation back.
   it('ends an agent with a card: its name, its conversation back, a new one, or the pane gone', () => {
-    mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 0, agent: 'claude', restored: 'agent' })])
+    mount(leaf('t1'), [
+      terminal('t1', { running: false, exitCode: 0, agent: 'claude', restored: 'agent', resumable: true })
+    ])
     const card = screen.getByRole('group', { name: 'Claude Code ended' })
     expect(within(card).queryByText(/Exited/)).toBeNull()
     // The card is the whole notice: no chip, no badge, no Run Again above it.
@@ -266,7 +268,7 @@ describe('one pane', () => {
   })
 
   it('resumes on Enter in the ended terminal, and Tab goes to Resume', () => {
-    mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 0, agent: 'claude' })], 't1')
+    mount(leaf('t1'), [terminal('t1', { running: false, exitCode: 0, agent: 'claude', resumable: true })], 't1')
     const surface = screen.getByTestId('surface-t1')
     fireEvent.keyDown(surface, { key: 'Tab' })
     expect(document.activeElement?.textContent).toBe('Resume')
@@ -300,7 +302,7 @@ describe('one pane', () => {
 
   it('offers it to the pane that died and not to the live one beside it', () => {
     mount(row(leaf('t1'), leaf('t2')), [
-      terminal('t1', { running: false, agent: 'claude' }),
+      terminal('t1', { running: false, agent: 'claude', resumable: true }),
       terminal('t2', { agent: 'claude' })
     ])
     expect(screen.getAllByRole('button', { name: /Resume/ })).toHaveLength(1)
@@ -311,8 +313,8 @@ describe('one pane', () => {
 
   it('offers each dead pane its own, out of two', () => {
     mount(row(leaf('t1'), leaf('t2')), [
-      terminal('t1', { running: false, agent: 'claude' }),
-      terminal('t2', { running: false, agent: 'codex' })
+      terminal('t1', { running: false, agent: 'claude', resumable: true }),
+      terminal('t2', { running: false, agent: 'codex', resumable: true })
     ])
     within(screen.getByRole('region', { name: 'Codex' }))
       .getByRole('button', { name: /Resume/ })

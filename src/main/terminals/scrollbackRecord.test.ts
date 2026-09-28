@@ -6,7 +6,6 @@ import { evidenceLine } from '../../shared/outputEvidence'
 import { screenRows } from './screenRows'
 import { markerText, markerTime } from '../../shared/paneMarker'
 import {
-  agentStoppedMark,
   closingMark,
   failedResumeMark,
   noConversationMark,
@@ -16,7 +15,8 @@ import {
   replayableRecord,
   RUN_AGAIN_BELOW,
   sanitizeRecordedOutput,
-  tailFromLineBoundary
+  tailFromLineBoundary,
+  upgradedMarks
 } from './scrollbackRecord'
 
 const ESC = '\x1b'
@@ -198,15 +198,62 @@ describe('the marks around a record', () => {
     expect(closingMark().endsWith(`${ESC}[0m\r\n`)).toBe(true)
   })
 
-  it('says a refused resume, a missing conversation and a stopped agent as markers', () => {
-    for (const mark of [failedResumeMark(1, true), noConversationMark('claude'), agentStoppedMark('task done')]) {
+  it('says a refused resume and a missing conversation as markers', () => {
+    for (const mark of [failedResumeMark(1, true), noConversationMark('claude')]) {
       const line = mark.replace(/\x1b\[[0-9;]*m/g, '').trim()
       expect(line).toMatch(/^── .+ ──$/)
       expect(line).not.toMatch(/[[\]]/)
     }
     expect(failedResumeMark(1, true)).toContain('Resume refused · exit 1 · New session')
     expect(failedResumeMark(1, false)).toContain('Resume refused · exit 1 ──')
-    expect(agentStoppedMark('task done')).toContain('Task done · not resumed')
+  })
+})
+
+// Profiles upgraded from 0.7.x showed their bracketed lines raw, in the pane and in `terminal read`.
+describe('a record written by 0.3 to 0.7', () => {
+  const DIM = `${ESC}[38;5;244m`
+  const RESET = `${ESC}[0m`
+  const old = (text: string): string => `${RESET}\r\n${DIM}[${text}]${RESET}\r\n`
+  const plain = (text: string): string => text.replace(/\x1b\[[0-9;]*m/g, '')
+
+  it('reads each bracketed line as the marker line saying it now, or drops it', () => {
+    const cases: [string, string | null][] = [
+      ['record — up to 2026-09-20 14:02, nothing running', null],
+      ['end of record — not run again', null],
+      ['end of record — new shell below', 'New shell'],
+      ['end of record — resume attempt below', 'Restored'],
+      ['end of record — npm run dev starts again below', 'Restarted'],
+      ['resume refused — agent exited 1, record above; fresh agent below', 'Resume refused · exit 1 · New session'],
+      ['resume refused — agent exited 2; open a new pane for a fresh one', 'Resume refused · exit 2'],
+      ['no conversation to resume — fresh claude below', 'Nothing to resume · fresh claude'],
+      ['task done — agent stopped, task not re-sent', 'Task done · not resumed']
+    ]
+    for (const [text, label] of cases) {
+      const upgraded = plain(upgradedMarks(`before\r\n${old(text)}after\r\n`))
+      expect(upgraded, text).not.toContain('[')
+      if (label === null) expect(upgraded, text).toBe('before\r\n\r\nafter\r\n')
+      else expect(upgraded, text).toBe(`before\r\n\r\n${markerText(label)}\r\nafter\r\n`)
+    }
+  })
+
+  // The upgrade case: 0.7.3 ended the record with it, the rc added its own, and the end block now says it.
+  it('drops the stopped notes at the very end, where the end block says it', () => {
+    const rc = `${RESET}\r\n${DIM}${markerText('Task done · not resumed')}${RESET}\r\n`
+    expect(plain(upgradedMarks(`> ${old('task done — agent stopped, task not re-sent')}${rc}`))).toMatch(/^> (\r\n)+$/)
+    // Mid-record, it is the boundary the fresh session below it has.
+    const mid = plain(upgradedMarks(`> ${old('task done — agent stopped, task not re-sent')}hello\r\n`))
+    expect(mid).toContain(markerText('Task done · not resumed'))
+  })
+
+  it('leaves output that only looks like one alone', () => {
+    const text = 'see [note — this is the agent talking]\r\n[task done — agent stopped, task not re-sent] and more\r\n'
+    expect(upgradedMarks(text)).toBe(text)
+  })
+
+  it('is what a restored pane shows and what a read returns', () => {
+    const text = upgradedMarks(`ok\r\n${old('task done — agent stopped, task not re-sent')}`)
+    const upgraded = replayableRecord({ text, recordedAt: 0 })
+    expect(plain(upgraded)).not.toMatch(/\[|agent stopped/)
   })
 })
 

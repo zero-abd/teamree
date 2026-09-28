@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Terminal, Worktree } from '../../shared/entities'
 import type { WorktreeReport } from '../../shared/tasks'
 import { DELIVERY_GAP_MS, PASTE_SETTLE_MS, TYPING_WINDOW_MS } from './delivery'
-import { MessageService } from './messageService'
+import { MessageService, type MessageServiceOptions } from './messageService'
 
 const worktree = (id: string, name: string, parentId?: string): Worktree => ({
   id,
@@ -86,7 +86,11 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
 function startService(): MessageService {
-  return new MessageService({
+  return new MessageService(options())
+}
+
+function options(): MessageServiceOptions {
+  return {
     dir,
     worktrees: {
       list: () => worktrees,
@@ -111,7 +115,7 @@ function startService(): MessageService {
       timers.push(timer)
       return { cancel: () => timers.splice(timers.indexOf(timer), 1) }
     }
-  })
+  }
 }
 
 const fromTests = { worktreeId: 'tests', terminalId: 't_tests' }
@@ -352,10 +356,36 @@ describe('an ask for you', () => {
   it('stops waiting when its pane exits, and when the app restarts', async () => {
     const first = await askYou()
     service.paneExited('t_tests')
-    expect(service.store.get(first)?.expiredAt).toBe(now)
+    expect(service.store.get(first)).toMatchObject({ expiredAt: now, expiredBy: 'agent' })
     expect(service.read([first])).toEqual({ read: 1 })
     const second = await askYou()
+    panes = panes.map((entry) => ({ ...entry, restored: 'agent' as const }))
     service = startService()
-    expect(service.store.get(second)?.expiredAt).toBe(now)
+    expect(service.store.get(second)).toMatchObject({ expiredAt: now, expiredBy: 'app' })
+  })
+
+  // Every ask live at a quit read "Timed out · the agent moved on" after the relaunch.
+  it('says the app ended an ask it let go of while quitting, and a timeout only when there was one', async () => {
+    const timedOut = await askYou()
+    service.waiting([timedOut], false)
+    expect(service.store.get(timedOut)?.expiredBy).toBeUndefined()
+
+    let quitting = false
+    service = new MessageService({ ...options(), quitting: () => quitting })
+    const atQuit = await askYou()
+    quitting = true
+    service.waiting([atQuit], false)
+    expect(service.store.get(atQuit)?.expiredBy).toBe('app')
+
+    // Waiting again clears the reason with the expiry.
+    service.waiting([atQuit], true)
+    expect(service.store.get(atQuit)?.expiredBy).toBeUndefined()
+  })
+
+  // A pane the pane host kept running is still blocked on its ask when the app comes back.
+  it('keeps waiting on an ask whose pane was kept running through the restart', async () => {
+    const id = await askYou()
+    service = startService()
+    expect(service.store.get(id)?.expiredAt).toBeUndefined()
   })
 })
