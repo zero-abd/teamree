@@ -2,7 +2,9 @@ import { execFileSync } from 'node:child_process'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { spawn } from 'node-pty'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { canSpawnPty } from './pty-test-support'
 import { integrateShell, writeShellIntegration } from './shell-integration'
 
 const scratch: string[] = []
@@ -176,6 +178,64 @@ unix('the startup files', () => {
     )
     expect(run('/bin/zsh', ['-i', '-c', 'print -r -- ${precmd_functions[(I)__teamree_cwd]}'], env)).not.toBe('0')
     expect(run('/bin/zsh', ['-i', '-c', 'cd /usr && __teamree_cwd'], env)).toMatch(/^\x1b\]7;file:\/\/[^/]*\/usr\x07$/)
+  })
+
+  it.runIf(process.platform === 'darwin')('marks where an interactive zsh prompt ends, once, with OSC 133;B', () => {
+    const { integration, cli, user } = rig()
+    writeFileSync(path.join(user, '.zshrc'), "PS1='%# '\n")
+    const { env } = integrateShell(
+      { file: '/bin/zsh', args: ['-l'] },
+      { PATH: '/usr/bin:/bin', HOME: os.homedir(), TEAMREE_CLI: cli, ZDOTDIR: user },
+      integration
+    )
+    const ps1 = run('/bin/zsh', ['-i', '-c', '__teamree_prompt_end; __teamree_prompt_end; print -r -- ${(q+)PS1}'], env)
+    expect(ps1).toBe("$'%# %{\\C-[]133;B\\C-G%}'")
+  })
+
+  it.runIf(process.platform === 'darwin' && canSpawnPty())(
+    'marks a live zsh prompt’s end after its right prompt is drawn, where the cursor waits',
+    async () => {
+      const { integration, cli, user } = rig()
+      // A PS1 set after the hook ran, as a theme's own precmd would: only the line-init mark is left.
+      writeFileSync(path.join(user, '.zshrc'), "precmd() { PS1='%# ' }\nRPROMPT='[right]'\n")
+      const { env } = integrateShell(
+        { file: '/bin/zsh', args: ['-l'] },
+        { PATH: '/usr/bin:/bin', HOME: os.homedir(), TEAMREE_CLI: cli, ZDOTDIR: user, TERM: 'xterm-256color' },
+        integration
+      )
+      const shell = spawn('/bin/zsh', ['-i'], { name: 'xterm-256color', cols: 60, rows: 10, env })
+      let out = ''
+      shell.onData((chunk) => (out += chunk))
+      try {
+        await vi.waitFor(() => expect(out).toContain('\x1b]133;B\x07'), { timeout: 5_000 })
+        expect(out.lastIndexOf('\x1b]133;B\x07')).toBeGreaterThan(out.lastIndexOf('[right]'))
+      } finally {
+        shell.kill()
+      }
+    }
+  )
+
+  it('marks where an interactive bash prompt ends, once, after the user’s PROMPT_COMMAND', () => {
+    const { root, integration, cli } = rig()
+    const home = path.join(root, 'home')
+    mkdirSync(home)
+    writeFileSync(path.join(home, '.bash_profile'), 'PROMPT_COMMAND=\'PS1="\\$ ";\'\n')
+    const launch = integrateShell(
+      { file: '/bin/bash', args: ['-l'] },
+      { PATH: '/usr/bin:/bin', HOME: home, TEAMREE_CLI: cli },
+      integration
+    )
+    const said = run(
+      '/bin/bash',
+      [
+        ...(launch.args as string[]),
+        '-i',
+        '-c',
+        'eval "$PROMPT_COMMAND" >/dev/null; eval "$PROMPT_COMMAND" >/dev/null; printf "%s\\n" "$PS1"'
+      ],
+      launch.env
+    )
+    expect(said).toBe('$ \\[\\e]133;B\\a\\]')
   })
 
   it('says where an interactive bash is at each prompt, with OSC 7', () => {
