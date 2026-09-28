@@ -201,6 +201,16 @@ describe('how it reads', () => {
     expect(fewer('Codex').disabled).toBe(true)
   })
 
+  it('marks each agent with its own harness mark, not a generic one', async () => {
+    seed({ agents: bothAgents })
+    await open()
+    const marks = [...document.querySelectorAll('.agents__mark .agent-glyph')].map((mark) =>
+      mark.getAttribute('data-agent')
+    )
+    expect(marks).toEqual(['claude', 'codex'])
+    expect(document.querySelector('.agents__mark [data-icon="agent"]')).toBeNull()
+  })
+
   // Project is the app's one select, the same as Settings'; Start from shares its chevron.
   it('draws Project as the app’s select and Start from with the same chevron, mono only for the ref', async () => {
     await open()
