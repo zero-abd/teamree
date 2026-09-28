@@ -1,5 +1,5 @@
-// Landing a parent's children from its panel: one at a time in the order given, each committed first under
-// its own message, stopping at the first that fails. The stop stays on the parent until the next run.
+// Landing a parent's children from its panel, or the board's queue: one at a time in the order given, each
+// committed first under its own message, stopping at the first that fails. The stop stays until the next run.
 
 import { create } from 'zustand'
 import { runtimeClient } from '../../runtimeClient/currentRuntimeClient'
@@ -8,6 +8,9 @@ import type { HeldBack } from './childrenModel'
 import { commitSuggestion, shownDraft, useCommitDrafts } from './commitMessage'
 
 export type ChildStop = { worktreeId: string; error: string; conflicts: string[] }
+
+/** The key the board's Ready to land runs under, in place of a parent's id. */
+export const LANDING_QUEUE = 'landing-queue'
 
 type ChildrenState = {
   /** The child being merged, per parent. */

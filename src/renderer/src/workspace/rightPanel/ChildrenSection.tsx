@@ -6,6 +6,7 @@ import { STAGE_WORD } from '../../dashboard/taskRows'
 import { firstSentence } from '../../state/messages'
 import { useOverlaps } from '../../state/overlapStore'
 import { useWorkspaceStore } from '../../state/workspaceStore'
+import { Button } from '../../ui/Button'
 import { childRowSpeech } from '../../sidebar/rowSpeech'
 import { worktreeDisplay, worktreeLabel } from '../../sidebar/worktreeDisplay'
 import { childRows, heldBack, mergeable, readyToMerge, type ChildRow } from './childrenModel'
@@ -34,12 +35,9 @@ export function useChildRows(worktreeId: string): ChildRow[] {
 export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.JSX.Element | null {
   const parent = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId))
   const openWorktree = useWorkspaceStore((state) => state.openWorktree)
-  const openDialog = useWorkspaceStore((state) => state.openDialog)
   const confirmCleanUp = useWorkspaceStore((state) => state.confirmCleanUp)
   const rows = useChildRows(worktreeId)
   const merging = useChildren((state) => state.merging[worktreeId])
-  const lastStop = useChildren((state) => state.stopped[worktreeId])
-  const lastSkipped = useChildren((state) => state.skipped[worktreeId])
   const reveal = useChildren((state) => state.reveal === worktreeId)
   const mergeChildren = useChildren((state) => state.mergeChildren)
   const section = useRef<HTMLElement | null>(null)
@@ -57,12 +55,6 @@ export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.J
   const ready = readyToMerge(rows)
   const landed = rows.filter((row) => row.landed)
   const busy = merging !== undefined
-  const stopped = rows.find((row) => row.worktreeId === lastStop?.worktreeId)
-  // Landed since, through its own merge: nothing is stopped any more.
-  const stop = stopped?.landed === true ? undefined : lastStop
-  const skipped = busy
-    ? []
-    : (lastSkipped ?? []).filter((held) => rows.some((row) => row.worktreeId === held.worktreeId && !row.landed))
 
   return (
     <section className="children" aria-label="Children" ref={section}>
@@ -101,32 +93,7 @@ export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.J
           </button>
         </span>
       </h3>
-      {stop === undefined ? null : (
-        <p className="children__stop" role="alert" title={stop.error}>
-          {`Stopped at ${stopped?.title ?? 'a child'}: ${
-            stop.conflicts.length > 0 ? `conflicts in ${stop.conflicts.join(', ')}` : stop.error
-          }`}
-          <button
-            type="button"
-            className="button button--small"
-            onClick={() => openDialog({ kind: 'confirm-merge', worktreeId: stop.worktreeId })}
-          >
-            {stop.conflicts.length > 0 ? 'Resolve…' : 'Merge…'}
-          </button>
-        </p>
-      )}
-      {skipped.map((held) => (
-        <p key={held.worktreeId} className="children__stop" role="status">
-          {`Skipped ${held.title}: conflicts with ${held.clashesWith}`}
-          <button
-            type="button"
-            className="button button--small"
-            onClick={() => openDialog({ kind: 'confirm-merge', worktreeId: held.worktreeId })}
-          >
-            Resolve…
-          </button>
-        </p>
-      ))}
+      <LandStops runKey={worktreeId} rows={rows} />
       <ul className="children__list">
         {rows.map((row) => (
           <li key={row.worktreeId} className="child" aria-label={row.title}>
@@ -170,8 +137,44 @@ export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.J
   )
 }
 
+/** Where the last run under `runKey` stopped and what it skipped for a clash, each with the way into that merge. */
+export function LandStops({ runKey, rows }: { runKey: string; rows: readonly ChildRow[] }): React.JSX.Element {
+  const openDialog = useWorkspaceStore((state) => state.openDialog)
+  const busy = useChildren((state) => state.merging[runKey] !== undefined)
+  const lastStop = useChildren((state) => state.stopped[runKey])
+  const lastSkipped = useChildren((state) => state.skipped[runKey])
+  // Landed since, through its own merge, or gone: nothing is stopped there any more.
+  const waiting = (worktreeId: string | undefined): ChildRow | undefined =>
+    rows.find((row) => row.worktreeId === worktreeId && !row.landed)
+  const stoppedAt = waiting(lastStop?.worktreeId)
+  const skipped = busy ? [] : (lastSkipped ?? []).filter((held) => waiting(held.worktreeId) !== undefined)
+  const resolve = (worktreeId: string) => (): void => openDialog({ kind: 'confirm-merge', worktreeId })
+  return (
+    <>
+      {lastStop === undefined || stoppedAt === undefined ? null : (
+        <p className="children__stop" role="alert" title={lastStop.error}>
+          {`Stopped at ${stoppedAt.title}: ${
+            lastStop.conflicts.length > 0 ? `conflicts in ${lastStop.conflicts.join(', ')}` : lastStop.error
+          }`}
+          <Button size="sm" onClick={resolve(lastStop.worktreeId)}>
+            {lastStop.conflicts.length > 0 ? 'Resolve…' : 'Merge…'}
+          </Button>
+        </p>
+      )}
+      {skipped.map((held) => (
+        <p key={held.worktreeId} className="children__stop" role="status">
+          {`Skipped ${held.title}: conflicts with ${held.clashesWith}`}
+          <Button size="sm" onClick={resolve(held.worktreeId)}>
+            Resolve…
+          </Button>
+        </p>
+      ))}
+    </>
+  )
+}
+
 /** `↑2 ↓1`, uncommitted files, and the files a merge would stop on. */
-function ChildFacts({ row, into }: { row: ChildRow; into: string }): React.JSX.Element | null {
+export function ChildFacts({ row, into }: { row: ChildRow; into: string }): React.JSX.Element | null {
   if (row.landed) return null
   const arrows = [row.ahead > 0 ? `↑${row.ahead}` : '', row.behind > 0 ? `↓${row.behind}` : '']
     .filter(Boolean)

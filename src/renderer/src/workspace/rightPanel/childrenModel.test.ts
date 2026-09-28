@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { Worktree, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
-import { childRows, heldBack, mergeable, readyToMerge, type ChildrenInput } from './childrenModel'
+import {
+  childRows,
+  heldBack,
+  landable,
+  landingRows,
+  mergeable,
+  readyToMerge,
+  type ChildrenInput
+} from './childrenModel'
 
 const worktree = (id: string, extra: Partial<Worktree> = {}): Worktree => ({
   id,
@@ -159,5 +167,36 @@ describe('childRows', () => {
     )
     expect(rows[0]?.stage).toBe('working')
     expect(mergeable(rows[0]!)).toBe(false)
+  })
+})
+
+describe('landingRows', () => {
+  it('reads top-level tasks against the base: a base conflict with no owner is theirs', () => {
+    const tops = input().worktrees.filter((entry) => entry.parentId === undefined)
+    const rows = landingRows(
+      tops,
+      undefined,
+      input({
+        statuses: { parent: status('parent'), other: status('other') },
+        mergePreviews: { parent: preview('parent'), other: preview('other') },
+        overlaps: [
+          { worktreeId: 'other', with: { base: 'main' }, paths: ['a.js'], conflicts: ['a.js'] },
+          { worktreeId: 'parent', with: { base: 'x', worktreeId: 'cart' }, paths: ['b.js'], conflicts: ['b.js'] }
+        ]
+      })
+    )
+    expect(rows.map((row) => [row.worktreeId, row.conflicts])).toEqual([
+      ['parent', []],
+      ['other', ['a.js']]
+    ])
+  })
+
+  it('calls a done or ready task with work landable, and nothing else', () => {
+    const [cart, , search, old] = childRows('parent', input())
+    expect(landable(cart!)).toBe(true)
+    expect(landable({ ...cart!, stage: 'ready' })).toBe(true)
+    expect(landable(search!)).toBe(false)
+    expect(landable(old!)).toBe(false)
+    expect(landable({ ...cart!, ahead: 0, uncommitted: 0 })).toBe(false)
   })
 })

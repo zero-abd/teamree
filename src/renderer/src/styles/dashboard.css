@@ -339,3 +339,67 @@
   background: transparent;
   color: var(--fg-secondary);
 }
+
+/* Ready to land: one card above the tasks, a line per task with its actions at the end. */
+.landq {
+  flex: none;
+  margin-bottom: var(--s4);
+}
+
+.landq .card__title {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0;
+}
+
+.landq__all {
+  margin-left: auto;
+}
+
+.landq .children__stop {
+  padding: 0 0 var(--s2);
+}
+
+.landq__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.landq__row {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 36px;
+  font-size: var(--text-sm);
+}
+
+.landq__row + .landq__row {
+  border-top: 1px solid var(--line);
+}
+
+.landq__name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.landq__name:hover {
+  color: var(--accent-bright);
+}
+
+.landq__actions {
+  display: flex;
+  flex: none;
+  gap: var(--s1);
+}

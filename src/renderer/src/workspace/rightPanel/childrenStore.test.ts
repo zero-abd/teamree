@@ -25,7 +25,7 @@ vi.mock('../../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { useWorkspaceStore } = await import('../../state/workspaceStore')
-const { useChildren } = await import('./childrenStore')
+const { LANDING_QUEUE, useChildren } = await import('./childrenStore')
 const { useCommitDrafts } = await import('./commitMessage')
 
 const INITIAL = useWorkspaceStore.getState()
@@ -134,5 +134,38 @@ describe('landing children', () => {
 
     await useChildren.getState().mergeChildren(parent.id, [])
     expect(useChildren.getState().skipped[parent.id]).toBeUndefined()
+  })
+})
+
+describe('landing the board’s queue', () => {
+  /** A top-level task that commits `files`, reported done. */
+  async function task(name: string, files: Record<string, string>): Promise<Worktree> {
+    const made = await ready({ projectId: parent.projectId, name })
+    for (const [path, content] of Object.entries(files)) await repo.write(path, content, made.path)
+    await repo.commit(name, made.path)
+    const reported: Worktree = { ...made, report: { outcome: 'succeeded', summary: `${name} done`, paths: [], at: 0 } }
+    useWorkspaceStore.setState((state) => ({ worktrees: [...state.worktrees, reported] }))
+    return reported
+  }
+
+  it('merges top-level tasks into main in order and stops at the first that conflicts', async () => {
+    const cart = await task('cart totals', { 'money.js': 'export const tax = 0.2\n' })
+    const search = await task('search', { 'search.js': 'search\n' })
+    const payment = await task('payment', { 'money.js': 'export const tax = 0.25\n' })
+    const notes = await task('notes', { 'notes.md': 'notes\n' })
+
+    const run = [cart.id, search.id, payment.id, notes.id]
+    expect(await useChildren.getState().mergeChildren(LANDING_QUEUE, run)).toBe(false)
+
+    const main = await repo.git(['log', '--format=%s', 'main'])
+    expect(main).toContain('cart totals')
+    expect(main).toContain('search')
+    expect(main).not.toContain('payment')
+    expect(main).not.toContain('notes')
+    expect(useChildren.getState().stopped[LANDING_QUEUE]).toMatchObject({
+      worktreeId: payment.id,
+      conflicts: ['money.js']
+    })
+    expect(await repo.git(['status', '--porcelain'])).toBe('')
   })
 })
