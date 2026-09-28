@@ -223,9 +223,25 @@ export function isPreparedPath(prepared: PreparedPaths | undefined, entryPath: s
 }
 
 /** Pathspecs that keep `git add -A` off everything preparation put in the checkout. */
-export function preparedExcludes(prepared: PreparedPaths | undefined): string[] {
+export async function preparedExcludes(
+  runner: GitRunner,
+  cwd: string,
+  prepared: PreparedPaths | undefined,
+  signal?: AbortSignal
+): Promise<string[]> {
   const roots = [...(prepared?.linkedPaths ?? []), ...(prepared?.copiedPaths ?? [])].map(tidyPath)
-  return [...new Set(roots.filter((root) => root.length > 0))].map((root) => `:(exclude,literal)${root}`)
+  const unique = [...new Set(roots.filter((root) => root.length > 0))]
+  if (unique.length === 0) return []
+  // git refuses any pathspec naming an ignored path, an exclusion too; `add -A` skips those anyway.
+  const { stdout } = await runner.tryRun({
+    args: ['check-ignore', '-z', '--stdin'],
+    cwd,
+    readOnly: true,
+    stdin: `${unique.join('\0')}\0`,
+    ...(signal ? { signal } : {})
+  })
+  const ignored = new Set(stdout.split('\0'))
+  return unique.filter((root) => !ignored.has(root)).map((root) => `:(exclude,literal)${root}`)
 }
 
 function covers(roots: readonly string[] | undefined, entryPath: string): boolean {
