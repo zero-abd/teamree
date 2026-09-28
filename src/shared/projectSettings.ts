@@ -43,7 +43,7 @@ export function settingSource(
 }
 
 /** The ref new worktrees start from: this Mac's choice, else the repository's, else the base ref. */
-export function startPointOf(project: Project, stored: string | undefined): string {
+export function startPointOf(project: Project, stored: string | undefined = project.startPoint): string {
   return stored || project.repository?.startFrom || project.baseRef
 }
 

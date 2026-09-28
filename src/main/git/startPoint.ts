@@ -74,6 +74,8 @@ export type ResolveStartPointOptions = {
   signal?: AbortSignal
   /** Ceiling for an on-demand `git fetch`; it goes over the network. */
   fetchTimeoutMs?: number
+  /** Fetch a remote-tracking name before resolving it, so a stale copy does not answer; offline, the copy does. */
+  refresh?: boolean
 }
 
 export const DEFAULT_START_POINT_LIMIT = 200
@@ -180,8 +182,10 @@ export async function resolveStartPoint(
   if (requested === 'HEAD') return resolveHead(runner, root, signal)
   if (requested.startsWith('refs/')) return resolveExactRef(runner, root, requested, signal)
 
+  const refreshed =
+    options.refresh === true && (await fetchRemoteBranch(runner, root, requested, options.fetchTimeoutMs, signal))
   const candidates = GLOB_CHARACTERS.test(requested) ? [] : await lookupCandidates(runner, root, requested, signal)
-  if (candidates.length > 0) return chooseCandidate(requested, candidates, false)
+  if (candidates.length > 0) return chooseCandidate(requested, candidates, refreshed)
 
   const bySha = await resolveAsCommit(runner, root, requested, signal)
   if (bySha) return bySha

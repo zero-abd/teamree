@@ -185,21 +185,6 @@ describe('how a pane draws and reads keys', () => {
   })
 })
 
-describe('the ref a project starts new worktrees from', () => {
-  it('is kept per project and written through', () => {
-    store().setStartPointDefault('p1', 'develop')
-    expect(store().startPointDefaults).toEqual({ p1: 'develop' })
-    expect(window.localStorage.getItem('teamree.worktree.startPoints')).toBe('{"p1":"develop"}')
-  })
-
-  it('is cleared back to the base ref by clearing the field, not by an empty one', () => {
-    store().setStartPointDefault('p1', 'develop')
-    store().setStartPointDefault('p1', null)
-    expect(store().startPointDefaults).toEqual({})
-    expect(window.localStorage.getItem('teamree.worktree.startPoints')).toBe('{}')
-  })
-})
-
 describe('showing a path in the file manager', () => {
   it('hands the path to the bridge and says nothing when it worked', async () => {
     const revealPath = vi.fn(async () => ({ revealed: true as const }))

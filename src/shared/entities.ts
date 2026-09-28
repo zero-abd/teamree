@@ -40,6 +40,8 @@ export type Project = {
   worktreesRoot?: string
   /** Leads branch names the runtime picks here, over Settings › General; absent follows it. */
   branchPrefix?: string
+  /** This Mac's ref new worktrees start from, over the repository's `startFrom` and `baseRef`; resolved when saved. */
+  startPoint?: string
   /**
    * What `.teamree/project.json` in the primary checkout says. Read, never
    * stored: each field applies where this Mac has none of its own.

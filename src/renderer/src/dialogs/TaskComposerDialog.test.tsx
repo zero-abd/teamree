@@ -12,7 +12,7 @@
 
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { IssueList, StartPoint, StartPointList } from '@shared/entities'
+import type { IssueList, Project, StartPoint, StartPointList } from '@shared/entities'
 import { formatChord, windowModifier } from '../keyboard/platformModifier'
 
 const call = vi.fn<(method: string, params: unknown) => Promise<unknown>>()
@@ -66,14 +66,21 @@ const listFor = (projectId: string): StartPointList =>
 const startTask = vi.fn()
 const closeDialog = vi.fn()
 
+const PROJECTS: Project[] = [
+  { id: 'p1', name: 'pager', path: '/repos/pager', baseRef: 'origin/main' },
+  { id: 'p2', name: 'relay', path: '/repos/relay', baseRef: 'origin/trunk' }
+]
+
+/** Both projects, pager starting from `ref` as Settings saved it on the project. */
+function startingFrom(ref: string): { projects: Project[] } {
+  return { projects: PROJECTS.map((entry) => (entry.id === 'p1' ? { ...entry, startPoint: ref } : entry)) }
+}
+
 function seed(overrides: Record<string, unknown> = {}): void {
   useWorkspaceStore.setState(
     {
       ...INITIAL,
-      projects: [
-        { id: 'p1', name: 'pager', path: '/repos/pager', baseRef: 'origin/main' },
-        { id: 'p2', name: 'relay', path: '/repos/relay', baseRef: 'origin/trunk' }
-      ],
+      projects: PROJECTS,
       agents: [{ kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }],
       agentsProbed: true,
       startTask,
@@ -364,13 +371,13 @@ describe('what it will not submit', () => {
 // rule: it fills the field and the field is still a field.
 describe('the start point somebody set in settings', () => {
   it('fills the box instead of the repository’s base ref', async () => {
-    seed({ startPointDefaults: { p1: 'feature/pager' } })
+    seed(startingFrom('feature/pager'))
     await open()
     expect(startPoint().value).toBe('feature/pager')
   })
 
   it('belongs to the project it was set for, and does not follow a switch', async () => {
-    seed({ startPointDefaults: { p1: 'feature/pager' } })
+    seed(startingFrom('feature/pager'))
     await open()
     await switchProject('p2')
     expect(startPoint().value).toBe('origin/trunk')
@@ -380,7 +387,7 @@ describe('the start point somebody set in settings', () => {
   // one task would send people to settings and back to start one branch
   // somewhere else.
   it('is still only a default, and what is typed over it is what is submitted', async () => {
-    seed({ startPointDefaults: { p1: 'feature/pager' } })
+    seed(startingFrom('feature/pager'))
     await open()
     fireEvent.change(task(), { target: { value: 'Rewrite the pager' } })
     fireEvent.change(startPoint(), { target: { value: 'origin/main' } })
@@ -393,9 +400,15 @@ describe('the start point somebody set in settings', () => {
   // the last word, which is a better answer than silently branching from
   // somewhere they did not choose.
   it('offers a ref the listing does not carry, rather than falling back to the base', async () => {
-    seed({ startPointDefaults: { p1: 'origin/gone-last-tuesday' } })
+    seed(startingFrom('origin/gone-last-tuesday'))
     await open()
     expect(startPoint().value).toBe('origin/gone-last-tuesday')
+  })
+
+  it('falls back to the repository’s startFrom when this Mac set none', async () => {
+    seed({ projects: PROJECTS.map((entry) => ({ ...entry, repository: { startFrom: 'release/2' } })) })
+    await open()
+    expect(startPoint().value).toBe('release/2')
   })
 })
 
@@ -428,7 +441,7 @@ describe('a base whose local branch holds landed work', () => {
 
   it('still yields to the start point set in settings', async () => {
     call.mockImplementation(async () => landed(0))
-    seed({ startPointDefaults: { p1: 'origin/main' } })
+    seed(startingFrom('origin/main'))
     await open()
     expect(startPoint().value).toBe('origin/main')
   })

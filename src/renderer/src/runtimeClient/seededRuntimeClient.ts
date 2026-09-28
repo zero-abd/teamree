@@ -560,7 +560,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
       fetchInBackground,
       runCommands,
       worktreesRoot,
-      branchPrefix
+      branchPrefix,
+      startPoint
     }) => {
       const project = required(projects.get(projectId), 'project')
       const next: Project = { ...project }
@@ -587,7 +588,8 @@ export function createSeededRuntimeClient(): RuntimeClient {
       }
       for (const [field, value] of [
         ['worktreesRoot', worktreesRoot],
-        ['branchPrefix', branchPrefix]
+        ['branchPrefix', branchPrefix],
+        ['startPoint', startPoint]
       ] as const) {
         if (value === undefined) continue
         if (value.trim() === '') delete next[field]
@@ -599,9 +601,10 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
     'project.saveSettings': ({ projectId, startFrom }) => {
       const project = required(projects.get(projectId), 'project')
+      const shared = startFrom ?? project.startPoint
       const repository = {
         ...effectiveProjectSettings(project),
-        ...(startFrom === undefined ? {} : { startFrom })
+        ...(shared === undefined ? {} : { startFrom: shared })
       }
       const next: Project = { ...project, repository }
       projects.set(next.id, next)

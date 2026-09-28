@@ -1,7 +1,7 @@
 // The one command a project runs in every new worktree. It runs as a `setup` run pane that ends with the
 // command, never parsed or sanitised, and only on create: a pane reappearing after a quit is not a new worktree.
 
-import type { Terminal } from '../../shared/entities'
+import type { ClosedPane, Terminal, Worktree } from '../../shared/entities'
 
 /** What the setup pane is called, in the pane strip and in `terminal list`. */
 export const SETUP_PANE_LABEL = 'setup'
@@ -39,4 +39,25 @@ export function closePassedSetups(panes: SetupEnds, closed?: (pane: Terminal) =>
       .then(() => closed?.(pane))
       .catch((error: unknown) => console.error(`[setup] could not close setup pane ${terminalId}`, error))
   })
+}
+
+/** How a worktree's setup stands for an agent waiting to start in it; `exitCode` is a failed run's. */
+export type SetupOutcome = { state: 'pending' } | { state: 'passed' } | { state: 'failed'; exitCode: number }
+
+/**
+ * Read from the worktree and its panes, as `closePassedSetups` leaves them: a passed run's pane is closed
+ * with exit 0; a pane closed while running was given up on, which lets the agent start.
+ */
+export function setupOutcome(
+  worktree: Pick<Worktree, 'setupAsk' | 'setupTerminalId'>,
+  panes: readonly Pick<Terminal, 'id' | 'running' | 'exitCode'>[],
+  closed: readonly Pick<ClosedPane, 'terminalId' | 'exitCode'>[]
+): SetupOutcome {
+  if (worktree.setupAsk !== undefined) return { state: 'pending' }
+  const id = worktree.setupTerminalId
+  if (id === undefined) return { state: 'passed' }
+  const pane = panes.find((terminal) => terminal.id === id)
+  const exitCode = pane === undefined ? closed.find((gone) => gone.terminalId === id)?.exitCode : pane.exitCode
+  if (pane?.running === true) return { state: 'pending' }
+  return exitCode === undefined || exitCode === 0 ? { state: 'passed' } : { state: 'failed', exitCode }
 }

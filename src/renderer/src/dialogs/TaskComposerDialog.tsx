@@ -57,7 +57,6 @@ export function TaskComposerDialog({
   const agents = useWorkspaceStore((state) => state.agents)
   const agentsProbed = useWorkspaceStore((state) => state.agentsProbed)
   const startTask = useWorkspaceStore((state) => state.startTask)
-  const startPointDefaults = useWorkspaceStore((state) => state.startPointDefaults)
   const defaultAgent = useWorkspaceStore((state) => state.defaultAgent)
   const closeDialog = useWorkspaceStore((state) => state.closeDialog)
   const worktrees = useWorkspaceStore((state) => state.worktrees)
@@ -96,13 +95,13 @@ export function TaskComposerDialog({
   const project = projects.find((entry) => entry.id === projectId)
   const { state: startPoints, reload } = useStartPoints(projectId)
 
-  // The project's stored start ref wins over the base ref; otherwise the listing's base ref replaces
-  // the placeholder as it lands. Nothing overwrites what the user typed.
+  // The project's start point (this Mac's, else the repository's) wins over the base ref; otherwise the
+  // listing's base ref replaces the placeholder as it lands. Nothing overwrites what the user typed.
   // Deps must stay `[startPoints, touched]`: adding `projectId` runs this with the previous project's
   // listing still in closure, putting the old base ref back into a box the select just cleared.
   useEffect(() => {
     if (touched || startPoints.phase !== 'ready') return
-    const preferred = startPointDefaults[projectId]
+    const preferred = project?.startPoint ?? project?.repository?.startFrom
     if (preferred !== undefined) {
       setStartPoint({
         text: preferred,

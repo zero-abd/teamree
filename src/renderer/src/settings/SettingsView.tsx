@@ -180,14 +180,13 @@ function editorPicker(
 
 /** A project's rows as the filter reads them, from the same values its controls show. */
 function useProjectRows(machine: RuntimeSettings | null): (project: Project) => SettingsRow[] {
-  const startPoints = useWorkspaceStore((state) => state.startPointDefaults)
   const editorCommands = useWorkspaceStore((state) => state.editorCommands)
   const found = useWorkspaceStore((state) => state.editors)
   const relays = useWorkspaceStore((state) => state.relays)
   return (project) => {
     const applied = effectiveProjectSettings(project)
     return [
-      { label: 'Start new worktrees from', words: [startPointOf(project, startPoints[project.id])] },
+      { label: 'Start new worktrees from', words: [startPointOf(project)] },
       { label: 'Worktrees in', words: [project.worktreesRoot ?? machineRoot(machine)] },
       { label: 'Branch prefix', words: [branchPrefixFor(project, machine?.branchPrefix)] },
       { label: 'Fetch in Background', words: [] },
@@ -1673,21 +1672,44 @@ function FetchInBackground({ project }: { project: Project }): React.JSX.Element
   )
 }
 
-/** Which ref the New task dialog offers first: the ref in effect as text, a field only after Change. */
+/** Which ref every new worktree starts from: the ref in effect as text, a field only after Change. */
 function StartPoint({ project }: { project: Project }): React.JSX.Element {
-  const stored = useWorkspaceStore((state) => state.startPointDefaults[project.id] ?? '')
-  const setStartPointDefault = useWorkspaceStore((state) => state.setStartPointDefault)
+  const own = project.startPoint ?? ''
   const [draft, setDraft] = useState<string | null>(null)
-  const applied = startPointOf(project, stored)
+  const [problem, setProblem] = useState<string | null>(null)
+  // Enter then the blur it causes would otherwise save twice.
+  const saving = useRef(false)
+  const applied = startPointOf(project)
   const shared = project.repository?.startFrom
+
+  // Resolved by the runtime before it is kept; a ref that does not resolve stays in the field with why.
+  const save = async (startPoint: string): Promise<void> => {
+    if (saving.current) return
+    saving.current = true
+    try {
+      const saved = await runtimeClient.call('project.setPaths', { projectId: project.id, startPoint })
+      useWorkspaceStore.setState((state) => ({
+        projects: state.projects.map((row) => (row.id === saved.id ? saved : row))
+      }))
+      setProblem(null)
+      setDraft(null)
+    } catch (error) {
+      setProblem(reasonFor(error))
+    } finally {
+      saving.current = false
+    }
+  }
 
   // On blur or Enter, since half a ref resolves to nothing.
   const commit = (): void => {
     if (draft === null) return
     const next = draft.trim()
-    setDraft(null)
-    // Null, not '': `withStartPoint` removes the entry on null, the only spelling of "use the base ref".
-    if (next !== stored) setStartPointDefault(project.id, next.length === 0 ? null : next)
+    if (next === own || (next === applied && own === '')) {
+      setDraft(null)
+      setProblem(null)
+      return
+    }
+    void save(next)
   }
 
   const id = `settings-start-point-${project.id}`
@@ -1696,25 +1718,16 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
     <Field
       label="Start new worktrees from"
       htmlFor={draft === null ? undefined : id}
-      source={
-        <SettingSource
-          local={stored || undefined}
-          repository={shared}
-          onReset={() => setStartPointDefault(project.id, null)}
-        />
-      }
+      source={<SettingSource local={own || undefined} repository={shared} onReset={() => void save('')} />}
+      below={problem === null ? null : <p className="settings-error">{problem}</p>}
     >
       {draft === null ? (
         <>
           <code className="settings-value settings-value--mono">
             <Marked text={applied} />
           </code>
-          {stored.length === 0 || shared !== undefined ? null : (
-            <button
-              type="button"
-              className="button button--small"
-              onClick={() => setStartPointDefault(project.id, null)}
-            >
+          {own.length === 0 || shared !== undefined ? null : (
+            <button type="button" className="button button--small" onClick={() => void save('')}>
               Use {project.baseRef}
             </button>
           )}
@@ -1732,6 +1745,7 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
           spellCheck={false}
           autoFocus
           data-own-escape
+          aria-invalid={problem !== null}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
@@ -1741,6 +1755,7 @@ function StartPoint({ project }: { project: Project }): React.JSX.Element {
             } else if (event.key === 'Escape') {
               event.preventDefault()
               setDraft(null)
+              setProblem(null)
             }
           }}
         />
@@ -1815,7 +1830,7 @@ function CarriedPaths({ project }: { project: Project }): React.JSX.Element {
   )
 }
 
-/** The one setup command a new worktree runs, stored and typed into the pane verbatim. */
+/** The one setup command a new worktree runs, stored verbatim and run in a `setup` run pane. */
 function SetupCommand({ project }: { project: Project }): React.JSX.Element {
   const setProjectPaths = useWorkspaceStore((state) => state.setProjectPaths)
   return (
