@@ -72,6 +72,7 @@ import { closePaneWarning } from '../dialogs/closePaneModel'
 import { openInBrowser } from '../shell/openInBrowser'
 import { noticeLifetime } from '../notices/noticeLifetime'
 import { useSharedNotes } from '../teamwork/sharedNotesStore'
+import { useReceivedReviews } from '../teamwork/receivedReviewsStore'
 import { useHandoffs } from '../teamwork/handoffsStore'
 import {
   nextToReopen,
@@ -1635,6 +1636,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
    */
   const refreshTeammates = async (): Promise<void> => {
     void useSharedNotes.getState().refresh()
+    void useReceivedReviews.getState().refresh()
     const projectIds = get().projects.map((project) => project.id)
     if (projectIds.length === 0) return
     void useHandoffs.getState().refresh(projectIds)

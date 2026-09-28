@@ -11,6 +11,7 @@ import { requestRegionFocus } from '../shell/regions'
 import { usePaneEvidence } from '../sidebar/usePaneEvidence'
 import { useWorkspaceStore, type Notice } from '../state/workspaceStore'
 import { HandoffPopups } from '../teamwork/HandoffPopups'
+import { ReviewPopups } from '../teamwork/ReviewPopups'
 import { SharedNotePopups } from '../teamwork/SharedNotePopups'
 import { UpdateAvailableCard } from '../updates/UpdateAvailableCard'
 import { askForYou, useMessageStore } from '../state/messages'
@@ -34,6 +35,7 @@ export function NoticeStack(): React.JSX.Element {
     <div className="corner-stack">
       <SharedNotePopups />
       <HandoffPopups />
+      <ReviewPopups />
       <AskingCards />
       {/* Always mounted: a live region added with its first message is often not heard saying it. */}
       <div className="notices" role="status" aria-live="polite">

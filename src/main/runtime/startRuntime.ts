@@ -5,6 +5,7 @@
 import { join } from 'node:path'
 import type { AgentNotice } from '../agentNotices'
 import type { SharedNoteSummary } from '../../shared/sharedNote'
+import type { TaskReviewNotice } from '../teamwork/peer/taskReview'
 import type { Terminal, UpdateState } from '../../shared/entities'
 import type { Appearance, Tone } from '../../shared/theme'
 import { ScrollbackArchive, SCROLLBACK_DIR_NAME } from '../store/scrollbackArchive'
@@ -65,6 +66,8 @@ export type RuntimeOptions = {
   onAgentNotice?: (notice: AgentNotice) => void
   /** Announces a note a teammate shared; see `onAgentNotice`. */
   onSharedNote?: (note: SharedNoteSummary) => void
+  /** Announces a teammate's review of one of this machine's tasks; see `onAgentNotice`. */
+  onReview?: (review: TaskReviewNotice) => void
   /** Ends the app, for `teamree quit`; `app.quit` in the main process. Absent, the method refuses. */
   requestQuit?: (force: boolean) => void
   /** The window's edited files, which `teamree quit` refuses over without `--force`. */
@@ -127,6 +130,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     trashItem,
     onAgentNotice,
     onSharedNote,
+    onReview,
     requestQuit,
     unsavedFiles,
     onAppearance,
@@ -168,6 +172,7 @@ export async function startRuntime(options: RuntimeOptions): Promise<Runtime> {
     ...(trashItem === undefined ? {} : { trashItem }),
     onAgentNotice,
     ...(onSharedNote === undefined ? {} : { onSharedNote }),
+    ...(onReview === undefined ? {} : { onReview }),
     scrollback,
     worktreesRoot,
     ...(requestQuit === undefined ? {} : { requestQuit }),

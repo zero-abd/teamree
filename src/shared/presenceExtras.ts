@@ -41,6 +41,7 @@ export const PeerWorktreeExtrasOnRead = {
   parentId: onRead(Id),
   paths: onRead(z.array(Path).transform((paths) => paths.slice(0, MAX_PEER_PATHS))),
   ahead: onRead(z.number().int().nonnegative()),
+  dirty: onRead(z.literal(true)),
   stage: onRead(z.enum(TASK_STAGES as [TaskStage, ...TaskStage[]])),
   report: onRead(z.object({ outcome: z.enum(['succeeded', 'failed']), summary: clipped(PEER_REPORT_CHARS) })),
   memory: onRead(PeerWorktreeMemorySchema)

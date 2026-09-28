@@ -171,8 +171,10 @@ describe('dispatcher', () => {
       // Reachable over the peer transport and nowhere else; in the one registry
       // because a teammate is another transport onto the catalogue. See `PEER_METHODS`.
       'peer.presence',
+      'peer.review',
       'peer.shareNote',
       'peer.subscribe',
+      'peer.taskPatch',
       'project.add',
       // Local: git on this machine, with this machine's credentials.
       'project.base',
@@ -226,13 +228,20 @@ describe('dispatcher', () => {
       'teamwork.pull',
       'teamwork.relay',
       'teamwork.requests',
+      // Local: this machine's received reviews; on the wire they are `peer.review`.
+      'teamwork.reviews',
       'teamwork.revoke',
+      // Local: comments this machine wrote, sent as `peer.review`.
+      'teamwork.sendReview',
       'teamwork.setOrigin',
       'teamwork.setRelay',
+      'teamwork.settleReview',
       'teamwork.shareNote',
       'teamwork.sharedNotes',
       'teamwork.status',
       'teamwork.take',
+      // Local: this machine's git, else `peer.taskPatch` over the link.
+      'teamwork.teammateDiff',
       // Local: this machine asking to read and type into somebody else's pane; on
       // the wire they are `terminal.subscribe`, `terminal.read` and `terminal.write`.
       'teamwork.type',

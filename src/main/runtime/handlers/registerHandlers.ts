@@ -39,6 +39,8 @@ import type { AgentNotice, NoticeAnswer } from '../../agentNotices'
 import type { Worktree } from '../../../shared/entities'
 import type { ScreenMenu } from '../../../shared/screenOpinion'
 import type { SharedNoteSummary } from '../../../shared/sharedNote'
+import { MAX_PEER_PATCH_BYTES } from '../../../shared/teammateReview'
+import type { TaskReviewNotice } from '../../teamwork/peer/taskReview'
 import { DEFAULT_FETCH_MINUTES } from '../../../shared/settings'
 import type { Terminal } from '../../../shared/entities'
 import { paletteTone, resolvePalette, type Appearance, type Tone } from '../../../shared/theme'
@@ -106,6 +108,8 @@ export type RegisterHandlersOptions = {
   onAgentNotice?: (notice: AgentNotice) => void
   /** Announces a note a teammate shared. Absent with no window around. */
   onSharedNote?: (note: SharedNoteSummary) => void
+  /** Announces a teammate's review of one of this machine's tasks, as `onSharedNote`. */
+  onReview?: (review: TaskReviewNotice) => void
   /**
    * Ends the app: `app.quit()` and nothing else, the one ending that runs
    * `before-quit`, where the ptys are killed and awaited. Absent, the method refuses.
@@ -465,6 +469,8 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
       readTaskGit: taskGitReader(createGitRunner(), (projectId) =>
         git.listProjects().find((candidate) => candidate.id === projectId)
       ),
+      readTaskPatch: (worktree) =>
+        git.worktreeDiff({ worktreeId: worktree.id, base: true, maxBytes: MAX_PEER_PATCH_BYTES }),
       // Kept beside the terminal records, so a restored pane comes back as muted as it was left.
       mutes: {
         list: () => registry.context.store.listMutedTerminals(),
@@ -477,6 +483,16 @@ export function registerHandlers(registry: MethodRegistry, options: RegisterHand
       },
       onChange: () => workspaceEvents.emit({ type: 'teammates' }),
       ...(options.onSharedNote === undefined ? {} : { onNote: options.onSharedNote }),
+      ...(options.onReview === undefined
+        ? {}
+        : {
+            onReview: (review) =>
+              options.onReview?.({
+                handle: review.handle,
+                task: registry.context.store.getWorktree(review.worktreeId)?.name ?? 'a task',
+                comments: review.comments.length
+              })
+          }),
       // Nothing a peer does may fail quietly: none of it stops the app, and
       // without this none of it leaves a trace either.
       onError: (error) => console.error('[teamwork]', error)

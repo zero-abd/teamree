@@ -35,7 +35,16 @@ import {
 } from '../../../shared/entities'
 import type { ParamsOf, ResultOf } from '../../../shared/methods'
 import type { NoteShareResult, SharedNote, SharedNotePayload, SharedNoteSummary } from '../../../shared/sharedNote'
+import { PeerTaskPatchSchema } from '../../../shared/reviewMethods'
+import {
+  MAX_PEER_PATCH_BYTES,
+  type PeerReview,
+  type PeerTaskPatch,
+  type ReceivedReview,
+  type TeammateDiff
+} from '../../../shared/teammateReview'
 import { createGitRunner, type GitRunner } from '../../git/gitProcess'
+import { cutToBytes } from '../../git/worktreeChanges'
 import type { Dispatcher } from '../../runtime/dispatcher'
 import { defaultMonotonicNow } from '../../runtime/elapsed'
 import {
@@ -78,6 +87,7 @@ import { presenceFor, type PresenceProject, type PresenceSource } from './presen
 import { TaskDetails, type TaskGitDetails } from './presenceDetails'
 import { originMark, readProjectKey } from './projectKey'
 import { readRelayConfig, type RelayLocation } from './relayUrl'
+import { readPushedBranch, ReviewInbox, REVIEWS_FILE } from './taskReview'
 import { watchForWake, type WakeWatch } from './wakeWatch'
 import { webSocketDialer, type RelayDialer } from './relaySocket'
 
@@ -118,6 +128,8 @@ export type PeerServiceOptions = {
   shareTaskDetails?: () => boolean
   /** Changed paths and commits ahead of one of this machine's worktrees. Left out, presence carries neither. */
   readTaskGit?: (worktree: Worktree) => Promise<TaskGitDetails | undefined>
+  /** One of this machine's tasks against its base, uncommitted work included. Left out, no teammate gets one. */
+  readTaskPatch?: (worktree: Worktree) => Promise<{ patch: string; truncated: boolean }>
   /**
    * Where the owner's mutes live between runs: read once at startup, written
    * through on change. Left out, mutes last as long as the runtime.
@@ -132,6 +144,8 @@ export type PeerServiceOptions = {
   onChange: () => void
   /** A teammate's note was filed; the app raises a notification when the window is away. */
   onNote?: (note: SharedNoteSummary) => void
+  /** A teammate's review was filed, as `onNote`. */
+  onReview?: (review: ReceivedReview) => void
   onError?: (error: unknown) => void
 }
 
@@ -269,6 +283,9 @@ export class PeerService {
   readonly #notes: NoteInbox
   readonly #handoffs: HandoffBook
   #handoffsRead: Promise<void> | undefined
+  readonly #reviews: ReviewInbox
+  /** Links with a task patch being read for them: one at a time, since each is up to a megabyte on the relay. */
+  readonly #patchReads = new Set<string>()
 
   #cache: TeammateCache | undefined
   #dispatch: Dispatcher | undefined
@@ -301,6 +318,11 @@ export class PeerService {
       ...(options.onError ? { onError: options.onError } : {})
     })
     this.#handoffs = new HandoffBook(join(options.dataDir, HANDOFFS_FILE), options.onError)
+    this.#reviews = new ReviewInbox({
+      path: join(options.dataDir, REVIEWS_FILE),
+      now: () => this.#scheduler.now(),
+      ...(options.onError ? { onError: options.onError } : {})
+    })
   }
 
   /** The dispatcher is built after the handlers are registered; until it arrives no peer can be answered. */
@@ -331,6 +353,7 @@ export class PeerService {
     await (this.#handoffsRead ??= this.#handoffs.load())
     // Before the reconcile, which drops notes whose sender has left the roster.
     await this.#notes.load()
+    await this.#reviews.load()
     await this.reconcile()
   }
 
@@ -1123,6 +1146,171 @@ export class PeerService {
     return { closed: this.#notes.close(params.shareId) }
   }
 
+  /**
+   * Whether a teammate may have one of this machine's tasks as a patch: the pane read's scoping, then
+   * the owner's Share Task Details. A task in another project answers as one that does not exist.
+   */
+  remoteTaskRead(connectionId: string, worktreeId: string): RemoteReadVerdict {
+    const found = this.#peerTask(connectionId, worktreeId)
+    if ('code' in found) return { ok: false, ...found }
+    if (!this.#sharesTaskDetails()) {
+      return { ok: false, code: ErrorCode.Conflict, message: 'the owner is not sharing task details' }
+    }
+    return { ok: true }
+  }
+
+  /** PEER-ONLY. One of this machine's tasks against its base, cut at `MAX_PEER_PATCH_BYTES`. */
+  async taskPatch(connectionId: string, params: ParamsOf<'peer.taskPatch'>): Promise<PeerTaskPatch> {
+    const verdict = this.remoteTaskRead(connectionId, params.worktreeId)
+    if (!verdict.ok) throw new TeamworkError(verdict.code, verdict.message)
+    const found = this.#peerTask(connectionId, params.worktreeId)
+    const read = this.#options.readTaskPatch
+    if ('code' in found || read === undefined) throw notFound('this runtime is not sharing tasks')
+    if (this.#patchReads.has(connectionId)) throw new TeamworkError(ErrorCode.Conflict, 'a diff is already on its way')
+    this.#patchReads.add(connectionId)
+    try {
+      const { patch, truncated } = await read(found.worktree)
+      const cut = cutToBytes(patch, MAX_PEER_PATCH_BYTES)
+      return { branch: found.worktree.branch, patch: cut, truncated: truncated || cut.length < patch.length }
+    } finally {
+      this.#patchReads.delete(connectionId)
+    }
+  }
+
+  /**
+   * A teammate's task diff: their pushed branch when origin has every commit presence says it has and
+   * nothing is uncommitted, else a patch from their machine, else whatever origin had.
+   */
+  async teammateDiff(params: ParamsOf<'teamwork.teammateDiff'>): Promise<TeammateDiff> {
+    const task = this.#teammateTask(params.projectId, params.worktreeId)
+    const { row } = task
+    const baseRef = this.#options.workspace.listProjects().find((project) => project.id === params.projectId)?.baseRef
+    const pushed =
+      baseRef === undefined
+        ? undefined
+        : await readPushedBranch(this.#runner, { projectPath: task.path, branch: row.branch, baseRef }).catch(
+            () => undefined
+          )
+    const answer = (source: TeammateDiff['source'], read: { patch: string; truncated: boolean }): TeammateDiff => ({
+      worktreeId: params.worktreeId,
+      handle: row.handle,
+      branch: row.branch,
+      source,
+      patch: read.patch,
+      truncated: read.truncated,
+      readAt: this.#scheduler.now()
+    })
+    const current = row.dirty !== true && (row.ahead === undefined || (pushed?.commits ?? 0) >= row.ahead)
+    if (pushed !== undefined && current) return answer('origin', pushed)
+    if (task.record?.status.phase !== 'connected') {
+      if (pushed !== undefined) return answer('origin', pushed)
+      throw new TeamworkError(ErrorCode.NotFound, `${row.handle} has not pushed ${row.branch}`)
+    }
+    try {
+      const sent = PeerTaskPatchSchema.parse(await task.record.link.call('peer.taskPatch', { worktreeId: task.id }))
+      return answer('peer', sent)
+    } catch (error) {
+      if (pushed !== undefined) return answer('origin', pushed)
+      throw new TeamworkError(ErrorCode.Conflict, peerRefusal(error, row.handle, 'send its diff'))
+    }
+  }
+
+  /** Sends comments on a teammate's task to its owner. Nothing is queued: an offline owner is refused. */
+  async sendReview(params: ParamsOf<'teamwork.sendReview'>): Promise<{ delivered: true }> {
+    const task = this.#teammateTask(params.projectId, params.worktreeId)
+    if (task.record?.status.phase !== 'connected') {
+      throw new TeamworkError(ErrorCode.Conflict, `${task.row.handle} is offline`)
+    }
+    const review: PeerReview = {
+      reviewId: randomUUID(),
+      worktreeId: task.id,
+      comments: params.comments,
+      sentAt: this.#scheduler.now()
+    }
+    try {
+      await task.record.link.call('peer.review', review)
+    } catch (error) {
+      throw new TeamworkError(ErrorCode.Conflict, peerRefusal(error, task.row.handle, 'take a review'))
+    }
+    return { delivered: true }
+  }
+
+  /** PEER-ONLY. A teammate's comments, filed only on a task of a project they share with this machine. */
+  receiveReview(connectionId: string, review: PeerReview): { received: true } {
+    const found = this.#peerTask(connectionId, review.worktreeId)
+    if ('code' in found) throw new TeamworkError(found.code, found.message)
+    const publicKey = this.#peerByConnection.get(connectionId)?.publicKey ?? ''
+    let filed: ReceivedReview
+    try {
+      filed = this.#reviews.add({
+        projectId: found.project.projectId,
+        worktreeId: found.worktree.id,
+        handle: this.#handleIn(found.project, publicKey),
+        publicKey,
+        comments: review.comments,
+        sentAt: review.sentAt
+      })
+    } catch (error) {
+      throw new TeamworkError(ErrorCode.Conflict, reasonFor(error))
+    }
+    this.#options.onReview?.(filed)
+    this.#options.onChange()
+    return { received: true }
+  }
+
+  reviews(params: ParamsOf<'teamwork.reviews'>): ReceivedReview[] {
+    return this.#reviews.list(params.projectId)
+  }
+
+  settleReview(params: ParamsOf<'teamwork.settleReview'>): { settled: boolean } {
+    const settled = this.#reviews.settle(params.id, params.how)
+    if (settled) this.#options.onChange()
+    return { settled }
+  }
+
+  /** Resolves once every review change so far is on disk. */
+  flushReviews(): Promise<void> {
+    return this.#reviews.flush()
+  }
+
+  /** One of this machine's ready tasks a teammate's link may name, in a project they share. */
+  #peerTask(
+    connectionId: string,
+    worktreeId: string
+  ): { worktree: Worktree; project: ProjectFacts } | { code: ErrorCode; message: string } {
+    const peer = this.#peerByConnection.get(connectionId)
+    if (!peer || peer.publicKey === this.#identityKey) {
+      return { code: ErrorCode.NotFound, message: 'this connection is not a peer link' }
+    }
+    const projects = this.#projectsForPeer(peer)
+    if (projects.length === 0) return { code: ErrorCode.NotFound, message: 'you are not on this project’s roster' }
+    const handed = this.#handoffs.handedAway()
+    for (const project of projects) {
+      const worktree = this.#options.workspace
+        .listWorktrees(project.projectId)
+        .find((candidate) => candidate.id === worktreeId && candidate.state === 'ready' && !handed.has(candidate.id))
+      if (worktree) return { worktree, project }
+    }
+    return { code: ErrorCode.NotFound, message: 'there is no such task in this project' }
+  }
+
+  /** A teammate's worktree by its `presence` id, with the link it came over and its id on their machine. */
+  #teammateTask(
+    projectId: string,
+    worktreeId: string
+  ): { row: TeammateWorktree; id: string; path: string; record: LinkRecord | undefined } {
+    const presence = this.presence({ projectId })
+    const facts = this.#projects.get(projectId)
+    const row = presence.state === 'read' ? presence.worktrees.find((entry) => entry.id === worktreeId) : undefined
+    if (!row || !facts || facts.projectKey === undefined) throw notFound('that teammate’s task is gone')
+    return {
+      row,
+      id: worktreeId.slice(`peer:${row.publicKey.slice(0, 12)}:`.length),
+      path: facts.path,
+      record: this.#links.get(linkIdFor(row.publicKey, facts.projectKey))
+    }
+  }
+
   /** Offers teammates made to this machine, and the ones it made, in one project. */
   handoffs(params: ParamsOf<'teamwork.handoffs'>): TeamworkHandoffs {
     return {
@@ -1266,6 +1454,7 @@ export class PeerService {
       onWatchersChange: (terminalIds) => this.#recordWatchers(linkId, terminalIds),
       onRemoteWrite: (write) => this.remoteWrite(linkId, write),
       onRemoteRead: (terminalId) => this.remoteRead(linkId, terminalId),
+      onRemoteTaskRead: (worktreeId) => this.remoteTaskRead(linkId, worktreeId),
       onError: this.#options.onError
     })
 
@@ -2171,6 +2360,14 @@ export const UNAIMED_LOGGED_PER_BURST = 20
 
 function reasonFor(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/** A teammate's refusal in words; a build older than the method answers as not knowing it. */
+function peerRefusal(error: unknown, handle: string, what: string): string {
+  if (error instanceof PeerCallError && error.code === ErrorCode.UnknownMethod) {
+    return `${handle}’s teamree is too old to ${what}`
+  }
+  return reasonFor(error)
 }
 
 /**

@@ -1246,6 +1246,8 @@ export type PeerWorktree = {
   /** Changed paths, repo-relative; never contents. */
   paths?: string[]
   ahead?: number
+  /** It has uncommitted work, so a pushed branch is not all of it. */
+  dirty?: true
   stage?: TaskStage
   report?: { outcome: TaskOutcome; summary: string }
   memory?: PeerWorktreeMemory

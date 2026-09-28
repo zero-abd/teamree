@@ -11,6 +11,7 @@ import { isFolded, useTeamFold } from './teamFold'
 import type { TeammatePaneRow, TeammateWorktreeRowModel } from './teammateRows'
 import { TeammateWorktreeRow } from './TeammateWorktreeRow'
 import { Icon } from '../icons/Icon'
+import { useTeammateReview } from '../review/teammateReviewStore'
 
 type TeammateGroupsProps = {
   projectId: string
@@ -37,6 +38,7 @@ export function TeammateGroups({
 }: TeammateGroupsProps): React.JSX.Element {
   const folded = useTeamFold((state) => state.folded)
   const setFolded = useTeamFold((state) => state.setFolded)
+  const openReview = useTeammateReview((state) => state.openReview)
   return (
     <>
       {glance.map((teammate) => {
@@ -94,6 +96,9 @@ export function TeammateGroups({
                       watchingPaneIds={watchingPaneIds}
                       onWatch={onWatch}
                       onAnswer={onAnswer}
+                      onReview={() =>
+                        openReview({ projectId, worktreeId: row.id, title: `${row.handle} · ${row.name}` })
+                      }
                     />
                   )
                 })}

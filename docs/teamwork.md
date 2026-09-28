@@ -372,6 +372,7 @@ worktree also carries:
 | `parentId` | the worktree it is a child of                 | an id          |
 | `paths`    | changed paths, repo-relative                  | 200 paths      |
 | `ahead`    | commits ahead of its base                     | a number       |
+| `dirty`    | it has uncommitted work                       | `true`         |
 | `stage`    | working, asking, stopped, ready, done, failed | one word       |
 | `report`   | outcome and the summary's first sentence      | 300 characters |
 
@@ -393,6 +394,25 @@ machine answers with `took: [id]`, which turns the sender's row from "Handed
 to" into "Taken by" with Remove My Copy, and the sender stops sending that
 worktree, so each side shows the task once. Offers and answers are kept in
 `handoffs.json` in the app's data directory, so both outlive a restart.
+
+### Reviewing a teammate's task
+
+**Review** on a teammate's finished row (or its right-click menu) opens their
+task read-only in a tab. teamree fetches their branch from `origin` and diffs
+it against the project's base. When `origin` lacks the branch, has fewer
+commits than their presence reports, or they have uncommitted work, it asks their machine for
+`peer.taskPatch`: the task against its base, uncommitted work included, cut
+at 1 MB. Their machine answers only a teammate on the project's roster, only
+for one of its own tasks in that project, only while Share Task Details is on,
+and one diff per link at a time. A build older than the method answers
+`unknown_method`, which reads as "too old to send its diff".
+
+Comments picked on its lines are batched and sent as `peer.review`
+(`{reviewId, worktreeId, comments, sentAt}`, at most 100 comments of 40 quoted
+lines each). The owner's machine files them only on one of its tasks in a
+project the sender shares, in `reviews.json` in the app's data directory; they
+show above that task's Review, from where they go to its agent. Nothing is
+queued for an owner who is offline.
 
 ### Offline is stale, not absent
 

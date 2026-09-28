@@ -14,6 +14,7 @@ import { paneAgent } from '../sidebar/agentRows'
 import { usePaneEvidence } from '../sidebar/usePaneEvidence'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { fitLayout, type PatchViewing } from '../workspace/PatchView'
+import { ReceivedReviews } from './ReceivedReviews'
 import { inChangesOrder, isViewedFile, viewedMark } from './reviewModel'
 import { useReviewStore, type ReviewScope } from './reviewStore'
 
@@ -207,6 +208,7 @@ function ReviewHead({ worktreeId }: { worktreeId: string }): React.JSX.Element {
           <span>{evidence[speaker.id]}</span>
         </p>
       )}
+      <ReceivedReviews worktreeId={worktreeId} />
     </div>
   )
 }

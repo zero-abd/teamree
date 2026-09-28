@@ -1390,6 +1390,16 @@ export function createSeededRuntimeClient(): RuntimeClient {
     },
     'teamwork.closeNote': () => ({ closed: false }),
     'teamwork.dismissNote': () => ({ dismissed: false }),
+    'teamwork.teammateDiff': notInDemo('teamwork.teammateDiff'),
+    'teamwork.sendReview': notInDemo('teamwork.sendReview'),
+    'teamwork.reviews': () => [],
+    'teamwork.settleReview': () => ({ settled: false }),
+    'peer.taskPatch': () => {
+      throw new Error('peer.taskPatch is a teammate’s call, not a window’s')
+    },
+    'peer.review': () => {
+      throw new Error('peer.review is a teammate’s call, not a window’s')
+    },
 
     'agent.list': ({ versions }) => [
       { kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude', ...(versions ? { version: '2.1.3' } : {}) },
