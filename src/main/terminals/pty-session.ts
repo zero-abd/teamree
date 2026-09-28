@@ -13,6 +13,8 @@ import { ScrollbackBuffer } from './scrollback'
 import {
   FAILED_RESUME_BELOW,
   failedResumeMark,
+  lastLines,
+  recordCapBytes,
   replayableRecord,
   tailFromLineBoundary,
   type HostedRecord,
@@ -33,6 +35,7 @@ import {
 import { terminalFailed, TerminalServiceError } from './service-error'
 import { integrateShell } from './shell-integration'
 import { ErrorCode } from '../../shared/protocol'
+import { DEFAULT_SCROLLBACK_LINES } from '../../shared/settings'
 import { agentForProcess, takeExitHint, type AgentKind } from './agent-command'
 import { TitleSequenceScanner } from './title-sequence'
 import { titleOpinion, type TitleOpinion } from '../../shared/titleOpinion'
@@ -76,6 +79,9 @@ const SCREEN_TAIL_BYTES = 64 * 1024
 /** How long after a resize output counts as the child repainting for the new size, not as new output. */
 export const REDRAW_AFTER_RESIZE_MS = 300
 
+/** Raw output a record's line count may reach into, per byte the record keeps: escapes drop on the way in. */
+const RAW_BYTES_PER_RECORD_BYTE = 4
+
 /**
  * What a pane keeps once it has exited. Trimmed rather than freed: the
  * renderer, sidebar, `terminal read` and watch snapshots all want the tail.
@@ -118,6 +124,8 @@ export type PtySessionInit = {
   shellIntegrationDir?: string
   platform?: NodeJS.Platform
   scrollbackCapBytes?: number
+  /** Settings › Panes › Scrollback lines: how many lines a record keeps, and of the previous run a reader is shown. */
+  scrollbackLines?: () => number
   /** Set when this session is a previous run's pane being brought back. */
   restored?: RestoredAs
   /** Why a `stopped` restore did not start its agent. */
@@ -485,7 +493,12 @@ export class PtySession {
     const live = this.scrollback.tail(tailBytes)
     if (this.record === undefined || this.recordHeld) return live
     const framed = replayableRecord(this.record, this.resumeFailed ? FAILED_RESUME_BELOW : this.init.recordStartsBelow)
-    if (tailBytes === undefined) return `${framed}${live}`
+    if (tailBytes === undefined) {
+      // The emulator keeps only the setting's lines; any more of the record would be parsed to be dropped.
+      const lines = this.recordLines
+      const left = lines - this.scrollback.lineTail(lines, this.scrollback.byteLength).lines
+      return left <= 0 ? live : `${lastLines(framed, left)}${live}`
+    }
 
     // The live output is the newer half; the record only supplies what is left over.
     const remaining = tailBytes - this.scrollback.byteLength
@@ -494,14 +507,18 @@ export class PtySession {
   }
 
   /**
-   * The pane's output as written down for the next launch. Without the marks:
+   * The pane's last `lines` lines as written down for the next launch. Without the marks:
    * the next replay adds them again, and keeping them would nest the framing.
    */
-  recordedOutput(capBytes?: number): string {
-    const live = this.scrollback.tail(capBytes)
-    if (this.record === undefined || this.scrollback.byteLength >= (capBytes ?? Infinity)) return live
-    const combined = `${endedLine(this.record.text)}${live}`
-    return capBytes === undefined ? combined : tailFromLineBoundary(combined, capBytes)
+  recordedOutput(lines: number = this.recordLines): string {
+    const tail = this.scrollback.lineTail(lines, RAW_BYTES_PER_RECORD_BYTE * recordCapBytes(lines))
+    const live = this.scrollback.tail(tail.bytes)
+    if (this.record === undefined || tail.lines >= lines) return live
+    return `${lastLines(endedLine(this.record.text), lines - tail.lines)}${live}`
+  }
+
+  private get recordLines(): number {
+    return this.init.scrollbackLines?.() ?? DEFAULT_SCROLLBACK_LINES
   }
 
   /**
@@ -740,8 +757,10 @@ export class PtySession {
     this.emit({ type: 'exit', exitCode: this.exitCode })
     for (const waiter of this.exitWaiters) waiter()
     this.exitWaiters.clear()
-    // Last, so every subscriber has read the whole buffer on the back of the exit.
-    this.scrollback.restrictTo(EXITED_RETENTION_BYTES)
+    // Last, so every subscriber has read the whole buffer on the back of the exit. Never under
+    // the record's lines: a quit writes it again from what is left.
+    const record = this.scrollback.lineTail(this.recordLines, this.scrollback.byteLength).bytes
+    this.scrollback.restrictTo(Math.max(EXITED_RETENTION_BYTES, record))
   }
 
   /**

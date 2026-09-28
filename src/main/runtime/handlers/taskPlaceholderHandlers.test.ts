@@ -123,6 +123,19 @@ describe('task, memory and add-on methods before their branches land', () => {
     await store.flush()
   })
 
+  it('keeps the window’s Scrollback lines across a restart, and refuses one outside the setting’s range', async () => {
+    expect(await result('settings.set', { scrollbackLines: 20_000 })).toMatchObject({ scrollbackLines: 20_000 })
+    await store.flush()
+    const reopened = await WorkspaceStore.open(join(directory, 'workspace.json'))
+    expect(reopened.runtimeSettings().scrollbackLines).toBe(20_000)
+
+    for (const scrollbackLines of [999, 100_001, 1.5]) {
+      const params = { scrollbackLines }
+      const response = (await dispatch({ id: 's', method: 'settings.set', params }, call)) as ErrorResponse
+      expect(response.error.code, String(scrollbackLines)).toBe(ErrorCode.InvalidParams)
+    }
+  })
+
   it('refuses a shell that is not a full path to a program', async () => {
     for (const shell of ['zsh', join(directory, 'missing'), directory]) {
       const response = (await dispatch({ id: 's', method: 'settings.set', params: { shell } }, call)) as ErrorResponse

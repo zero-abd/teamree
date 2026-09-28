@@ -6,9 +6,11 @@ import { createHash } from 'node:crypto'
 import { readFileSync, statSync } from 'node:fs'
 import { readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { DEFAULT_SCROLLBACK_LINES, SCROLLBACK_LINES_MAX } from '../../shared/settings'
 import {
+  lastLines,
+  recordCapBytes,
   sanitizeRecordedOutput,
-  tailFromLineBoundary,
   upgradedMarks,
   type HostedRecord,
   type RecordedScrollback
@@ -20,16 +22,10 @@ export const SCROLLBACK_DIR_NAME = 'scrollback'
 export const SCROLLBACK_RECORD_VERSION = 1
 
 /**
- * How much of one pane's output is kept: the tail, half of
- * `EXITED_RETENTION_BYTES`. Multiplied by every open pane, on disk and in memory.
+ * Checked off the stat before the bytes are read: the text and `before` at the largest setting's
+ * ceiling, each escaped to at most three times its size. Not the current setting: lowering it keeps records.
  */
-export const MAX_RECORD_BYTES = 128 * 1024
-
-/**
- * Checked off the stat before the bytes are read. Well above what a capped
- * record serialises to even after JSON escaping.
- */
-export const MAX_RECORD_FILE_BYTES = 1_000_000
+export const MAX_RECORD_FILE_BYTES = 6 * recordCapBytes(SCROLLBACK_LINES_MAX)
 
 /** A terminal id comes from an untrusted file; `..` and a separator cannot survive this. */
 const TERMINAL_ID = /^[A-Za-z0-9_-]{1,64}$/
@@ -102,10 +98,10 @@ export class ScrollbackArchive {
   }
 
   /**
-   * The pane's record, or undefined when there is none to be had. Every failure
-   * is the same answer: the caller can only open the pane empty.
+   * The pane's last `lines` lines, or undefined when there is none to be had. Every
+   * failure is the same answer: the caller can only open the pane empty.
    */
-  read(terminalId: string): RecordedScrollback | undefined {
+  read(terminalId: string, lines: number = DEFAULT_SCROLLBACK_LINES): RecordedScrollback | undefined {
     const path = this.#pathFor(terminalId)
     if (path === undefined) return undefined
 
@@ -124,9 +120,9 @@ export class ScrollbackArchive {
       const at = typeof recordedAt === 'number' ? recordedAt : endedAt
 
       // Sanitised and capped again here: the file is the boundary whatever wrote it. Older marks are upgraded.
-      const kept = upgradedMarks(tailFromLineBoundary(sanitizeRecordedOutput(text), MAX_RECORD_BYTES))
+      const kept = upgradedMarks(lastLines(sanitizeRecordedOutput(text), lines))
       if (kept.length === 0) return undefined
-      const hosted = hostedRecord(host)
+      const hosted = hostedRecord(host, lines)
       return {
         text: kept,
         recordedAt: typeof at === 'number' && Number.isFinite(at) ? at : this.#now(),
@@ -141,20 +137,20 @@ export class ScrollbackArchive {
   }
 
   /**
-   * Writes the capped, inert tail of `text`. Queued; `flush` waits for it. An
+   * Writes the inert last `lines` lines of `text`. Queued; `flush` waits for it. An
    * unchanged record is skipped, timestamp included: it says when output was last new.
    */
-  put(terminalId: string, text: string, hosted?: HostedRecord): void {
+  put(terminalId: string, text: string, hosted?: HostedRecord, lines: number = DEFAULT_SCROLLBACK_LINES): void {
     const path = this.#pathFor(terminalId)
     if (path === undefined) return
 
-    const kept = tailFromLineBoundary(sanitizeRecordedOutput(text), MAX_RECORD_BYTES)
+    const kept = lastLines(sanitizeRecordedOutput(text), lines)
     if (kept.length === 0) {
       this.remove(terminalId)
       return
     }
 
-    const host = hosted === undefined ? undefined : hostedRecord(hosted)
+    const host = hosted === undefined ? undefined : hostedRecord(hosted, lines)
     const fingerprint = createHash('sha256')
       .update(JSON.stringify(host ?? null))
       .update(kept)
@@ -226,16 +222,12 @@ export class ScrollbackArchive {
   }
 }
 
-/** A hosted pane's session and earlier record, reduced and capped like the text; undefined when malformed. */
-function hostedRecord(raw: unknown): HostedRecord | undefined {
+/** A hosted pane's session and earlier record, reduced to `lines` like the text; undefined when malformed. */
+function hostedRecord(raw: unknown, lines: number): HostedRecord | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined
   const { session, before } = raw as Record<string, unknown>
   if (typeof session !== 'string' || !/^[A-Za-z0-9_.-]{1,128}$/.test(session)) return undefined
-  // Half the cap: the file holds this beside the text and must stay under its own limit.
-  const kept =
-    typeof before === 'string'
-      ? upgradedMarks(tailFromLineBoundary(sanitizeRecordedOutput(before), MAX_RECORD_BYTES / 2))
-      : ''
+  const kept = typeof before === 'string' ? upgradedMarks(lastLines(sanitizeRecordedOutput(before), lines)) : ''
   return kept.length === 0 ? { session } : { session, before: kept }
 }
 

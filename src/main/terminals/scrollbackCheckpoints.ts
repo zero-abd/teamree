@@ -9,15 +9,8 @@
  */
 export const CHECKPOINT_INTERVAL_MS = 15_000
 
-/**
- * How much of a live pane one checkpoint looks at: twice `MAX_RECORD_BYTES`.
- * Measured, the sanitizer takes ~3ms over 128 KiB and ~400ms over the whole 4MB
- * buffer, on the main thread. Twice, to leave room for the escapes it drops.
- */
-export const CHECKPOINT_SOURCE_BYTES = 256 * 1024
-
 export type ScrollbackCheckpointOptions = {
-  /** What the pane has printed, or undefined when it was closed since the checkpoint was armed. */
+  /** The pane's last lines as a record keeps them, or undefined when it was closed since the checkpoint was armed. */
   read: (terminalId: string) => string | undefined
   /** Where a checkpoint goes: the archive's `put`, which caps, reduces and dedupes. */
   put: (terminalId: string, text: string) => void

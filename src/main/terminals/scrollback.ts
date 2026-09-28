@@ -81,6 +81,32 @@ export class ScrollbackBuffer {
     this.headCut = false
   }
 
+  /**
+   * How many trailing bytes hold the last `lines` lines, at most `maxBytes`, and how many lines that is.
+   * From the newline before them, which `tail` steps over. Counted raw: only what a record keeps is decoded.
+   */
+  lineTail(lines: number, maxBytes: number): { bytes: number; lines: number } {
+    let bytes = 0
+    let seen = 0
+    for (let index = this.chunks.length - 1; index >= 0; index--) {
+      const chunk = this.chunks[index] as Buffer
+      let from = chunk.byteLength - 1
+      // The newline that ends the last line does not start another.
+      if (index === this.chunks.length - 1 && chunk[from] === 0x0a) from--
+      // Guarded: a negative offset to `lastIndexOf` counts from the end.
+      while (from >= 0) {
+        const newline = chunk.lastIndexOf(0x0a, from)
+        if (newline === -1) break
+        seen++
+        if (seen === lines) return { bytes: Math.min(maxBytes, bytes + chunk.byteLength - newline), lines }
+        from = newline - 1
+      }
+      bytes += chunk.byteLength
+      if (bytes >= maxBytes) return { bytes: maxBytes, lines: seen }
+    }
+    return { bytes, lines: bytes === 0 ? 0 : seen + 1 }
+  }
+
   /** Lowers the cap for the rest of this buffer's life, evicting down to it now. One-way. */
   restrictTo(capBytes: number): void {
     if (capBytes <= 0) throw new RangeError('scrollback cap must be positive')

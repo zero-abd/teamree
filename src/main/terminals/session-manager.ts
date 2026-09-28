@@ -74,7 +74,7 @@ import {
   type RestoreLaunch,
   type TerminalRecord
 } from './session-restore'
-import { CHECKPOINT_SOURCE_BYTES, ScrollbackCheckpoints } from './scrollbackCheckpoints'
+import { ScrollbackCheckpoints } from './scrollbackCheckpoints'
 import {
   closingMark,
   NEW_SHELL_BELOW,
@@ -82,18 +82,19 @@ import {
   NEW_SESSION_BELOW,
   RESUMED_BELOW,
   RUN_AGAIN_BELOW,
+  lastLines,
   sanitizeRecordedOutput,
-  tailFromLineBoundary,
   type HostedRecord,
   type RecordedScrollback
 } from './scrollbackRecord'
-import { EXITED_RETENTION_BYTES, PtySession, type PaneProcess, type PtySessionInit } from './pty-session'
+import { PtySession, type PaneProcess, type PtySessionInit } from './pty-session'
 import type { PaneHostPort } from '../paneHost/hosting'
 import type { HostSession } from '../paneHost/protocol'
 import { conflict, invalidParams, notFound } from './service-error'
 import { resolveLoginShell, type ProfileStores } from './shell-environment'
 import { SubagentTracker, type SubagentTrackerOptions } from './subagents'
 import { QUIT_KILL_GRACE_MS } from './process-tree'
+import { DEFAULT_SCROLLBACK_LINES } from '../../shared/settings'
 import type { Tone } from '../../shared/theme'
 
 /** Size a pane starts at before the renderer measures itself and resizes. */
@@ -136,9 +137,10 @@ export const CLOSED_PANES_KEPT = 10
  * holds the record: a transcript is orders of magnitude larger. See `scrollbackArchive.ts`.
  */
 export type ScrollbackRepository = {
-  read(terminalId: string): RecordedScrollback | undefined
+  /** The last `lines` lines of what the pane printed before this launch. */
+  read(terminalId: string, lines?: number): RecordedScrollback | undefined
   /** `hosted` for a pane in the pane host, so the next launch can attach to it. */
-  put(terminalId: string, text: string, hosted?: HostedRecord): void
+  put(terminalId: string, text: string, hosted?: HostedRecord, lines?: number): void
   remove(terminalId: string): void
   flush(): Promise<void>
 }
@@ -160,6 +162,8 @@ export type TerminalSessionManagerOptions = {
   /** Delivers events for subscriptions opened through subscribe(); attachStream() ignores it. */
   publish?: (subscription: string, event: TerminalEvent) => void
   scrollbackCapBytes?: number
+  /** Settings › Panes › Scrollback lines: how many lines of each pane a restart keeps. Absent is the default. */
+  scrollbackLines?: () => number
   /** Overridable so tests can assert on readable ids. */
   createId?: () => string
   /** Called when a pane starts or stops producing output or asking; the manager stays unaware of the workspace stream. */
@@ -273,8 +277,8 @@ export class TerminalSessionManager {
         ? undefined
         : new ScrollbackCheckpoints({
             // A pane closed since the checkpoint was armed answers nothing.
-            read: (terminalId) => this.sessions.get(terminalId)?.recordedOutput(CHECKPOINT_SOURCE_BYTES),
-            put: (terminalId, text) => archive.put(terminalId, text, this.sessions.get(terminalId)?.hosted),
+            read: (terminalId) => this.sessions.get(terminalId)?.recordedOutput(),
+            put: (terminalId, text) => this.writeDown(terminalId, text, this.sessions.get(terminalId)?.hosted),
             ...(options.checkpointIntervalMs === undefined ? {} : { intervalMs: options.checkpointIntervalMs })
           })
   }
@@ -466,7 +470,7 @@ export class TerminalSessionManager {
 
     // Read before teardown: the only copy of what the pane printed. Sanitised
     // because nothing replayed into a live emulator may do anything but print.
-    const text = tailFromLineBoundary(sanitizeRecordedOutput(previous.recordedOutput()), EXITED_RETENTION_BYTES)
+    const text = lastLines(sanitizeRecordedOutput(previous.recordedOutput()), this.scrollbackLines())
     const kept: RecordedScrollback | undefined = text.length === 0 ? undefined : { text, recordedAt: Date.now() }
 
     const restoring: TerminalRecord = {
@@ -641,7 +645,7 @@ export class TerminalSessionManager {
   clear(terminalId: string): void {
     const session = this.require(terminalId)
     session.clear()
-    this.scrollback?.put(terminalId, session.recordedOutput(), session.hosted)
+    this.writeDown(terminalId, session.recordedOutput(), session.hosted)
   }
 
   /** A pane's snapshot, placed in its stream, with the widest the pane has been and whether it has exited. */
@@ -866,7 +870,7 @@ export class TerminalSessionManager {
       // Handed over even for a resume, which prints the conversation itself:
       // a resume that fails would otherwise leave the pane holding a one-line
       // refusal, and the next quit wrote *that* back over the transcript.
-      const kept = this.scrollback?.read(record.id)
+      const kept = this.scrollback?.read(record.id, this.scrollbackLines())
       // A repinned id has to reach the record, or every launch asks for the same failed resume.
       const restoring: TerminalRecord =
         launch.repinned === undefined
@@ -943,7 +947,7 @@ export class TerminalSessionManager {
   private reattach(record: TerminalRecord, live: HostSession): boolean {
     const host = this.options.paneHost
     if (host === undefined) return false
-    const kept = this.scrollback?.read(record.id)
+    const kept = this.scrollback?.read(record.id, this.scrollbackLines())
     const earlier: RecordedScrollback | undefined =
       kept?.host?.session !== live.id
         ? kept
@@ -1035,10 +1039,18 @@ export class TerminalSessionManager {
     this.checkpoints?.cancelAll()
 
     if (this.scrollback !== undefined) {
-      for (const session of sessions) this.scrollback.put(session.id, session.recordedOutput(), session.hosted)
+      for (const session of sessions) this.writeDown(session.id, session.recordedOutput(), session.hosted)
       await this.scrollback.flush()
     }
     await this.options.paneHost?.release(keep)
+  }
+
+  private scrollbackLines(): number {
+    return this.options.scrollbackLines?.() ?? DEFAULT_SCROLLBACK_LINES
+  }
+
+  private writeDown(terminalId: string, text: string, hosted?: HostedRecord): void {
+    this.scrollback?.put(terminalId, text, hosted, this.scrollbackLines())
   }
 
   /** One past the highest number an open pane of this program holds here: a gone pane counts for nothing. */
@@ -1182,6 +1194,7 @@ export class TerminalSessionManager {
         ? {}
         : { onScreenChange: (session: PtySession) => this.options.onActivityChange?.(session.id) }),
       ...(this.options.scrollbackCapBytes === undefined ? {} : { scrollbackCapBytes: this.options.scrollbackCapBytes }),
+      scrollbackLines: () => this.scrollbackLines(),
       ...(attached === undefined && host?.accepting() === true
         ? {
             spawn: (file, args, options) =>
@@ -1454,7 +1467,7 @@ export class TerminalSessionManager {
       // An agent's too, so one that failed comes back failed; a pane left stopped only replays its old ending.
       const ended = session.run !== undefined || (session.agent !== undefined && !session.leftStopped)
       if (ended) this.noteRunEnded(session.id, event.exitCode)
-      this.scrollback?.put(session.id, session.recordedOutput())
+      this.writeDown(session.id, session.recordedOutput())
       this.reportSettled(session, 'exit')
       for (const listener of this.exitListeners) listener(session.id, event.exitCode)
     })

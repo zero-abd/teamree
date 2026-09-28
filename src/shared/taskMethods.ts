@@ -21,7 +21,7 @@ import {
 import { MAX_MESSAGE_BYTES, MAX_MESSAGE_OPTIONS, MESSAGE_KINDS, type MessageKind, type TaskMessage } from './messages'
 import type { WorktreeNest } from './nesting'
 import { MAX_HANDOFF_NOTE_CHARS } from './presenceExtras'
-import type { RuntimeSettings } from './settings'
+import { SCROLLBACK_LINES_MAX, SCROLLBACK_LINES_MIN, type RuntimeSettings } from './settings'
 import type {
   PeerHandoff,
   TaskTemplate,
@@ -162,7 +162,8 @@ export const TaskParams = {
     branchPrefix: z.string().max(64).optional(),
     /** A full path to a program; empty clears it. */
     shell: z.string().max(4096).optional(),
-    fetchMinutes: z.number().int().min(1).max(1440).optional()
+    fetchMinutes: z.number().int().min(1).max(1440).optional(),
+    scrollbackLines: z.number().int().min(SCROLLBACK_LINES_MIN).max(SCROLLBACK_LINES_MAX).optional()
   }),
 
   addonsStatus: z.object({}),

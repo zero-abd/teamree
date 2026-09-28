@@ -10,8 +10,10 @@ import {
   failedResumeMark,
   noConversationMark,
   INERT_RECORD,
+  lastLines,
   NEW_SHELL_BELOW,
   NOT_RUN_AGAIN_BELOW,
+  RECORD_LINE_BYTES,
   replayableRecord,
   RUN_AGAIN_BELOW,
   sanitizeRecordedOutput,
@@ -263,5 +265,20 @@ describe('the marks, as a sidebar row quotes a restored pane', () => {
     const replayed = replayableRecord({ text: 'server listening on :3000\r\n', recordedAt: 0 })
     expect(evidenceLine(`${replayed}user@host login-flow % `)).toBe('server listening on :3000')
     expect(evidenceLine(`${failedResumeMark(1, false)}${noConversationMark('claude')}`)).toBeNull()
+  })
+})
+
+describe('lastLines', () => {
+  it('keeps the last lines, a final newline starting none', () => {
+    expect(lastLines('a\r\nb\r\nc\r\n', 2)).toBe('b\r\nc\r\n')
+    expect(lastLines('a\nb\nc', 2)).toBe('b\nc')
+    expect(lastLines('a\nb\n', 5)).toBe('a\nb\n')
+    expect(lastLines('\n\n\nx', 2)).toBe('\nx')
+    expect(lastLines('', 3)).toBe('')
+  })
+
+  it('cuts lines past their allowance at a line boundary', () => {
+    const long = `${'x'.repeat(RECORD_LINE_BYTES * 4)}\n`
+    expect(lastLines(`${long}${long}short\n`, 3)).toBe('short\n')
   })
 })

@@ -175,10 +175,17 @@ export function sanitizeRecordedOutput(text: string): string {
       continue
     }
 
-    kept += char
-    // The second half of a surrogate pair is the same cell.
-    if (code < 0xdc00 || code > 0xdfff) column += 1
-    index += 1
+    // Copied a run at a time: a character at a time was most of what a record cost to take.
+    let end = index
+    while (end < text.length) {
+      const next = text.charCodeAt(end)
+      if (next < 0x20 || (next >= 0x7f && next <= 0x9f)) break
+      // The second half of a surrogate pair is the same cell.
+      if (next < 0xdc00 || next > 0xdfff) column += 1
+      end += 1
+    }
+    kept += text.slice(index, end)
+    index = end
   }
 
   return kept
@@ -191,6 +198,27 @@ const LAYOUT_COLUMNS = 300
 function forwardPad(move: { to: 'column' | 'right'; by: number }, column: number): number {
   const target = move.to === 'right' ? column + move.by : move.by - 1
   return target > column && target <= LAYOUT_COLUMNS ? target - column : 0
+}
+
+/** What a record may spend per line it keeps: room for colour, and a ceiling on one pathological line. */
+export const RECORD_LINE_BYTES = 256
+
+/** The byte ceiling on a record of `lines` lines. */
+export function recordCapBytes(lines: number): number {
+  return lines * RECORD_LINE_BYTES
+}
+
+/** The last `lines` lines of `text`, inside their byte ceiling. A final newline does not start a line. */
+export function lastLines(text: string, lines: number): string {
+  let from = text.length - (text.endsWith('\n') ? 2 : 1)
+  let start = 0
+  for (let seen = 0; seen < lines && from >= 0; seen++) {
+    const newline = text.lastIndexOf('\n', from)
+    if (newline === -1) break
+    if (seen === lines - 1) start = newline + 1
+    from = newline - 1
+  }
+  return tailFromLineBoundary(start === 0 ? text : text.slice(start), recordCapBytes(lines))
 }
 
 /**

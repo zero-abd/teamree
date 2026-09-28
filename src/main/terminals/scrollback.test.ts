@@ -78,3 +78,28 @@ describe('ScrollbackBuffer', () => {
     expect(SCROLLBACK_CAP_BYTES).toBeGreaterThanOrEqual(1024 * 1024)
   })
 })
+
+describe('ScrollbackBuffer.lineTail', () => {
+  it('finds the bytes of the last lines across chunks, without the final newline counting', () => {
+    const buffer = new ScrollbackBuffer(1024 * 1024)
+    for (let index = 0; index < 100; index++) buffer.append(`line ${index}\r\n${'y'.repeat(index === 50 ? 9_000 : 0)}`)
+
+    const tail = buffer.lineTail(3, Infinity)
+    expect(tail.lines).toBe(3)
+    expect(buffer.tail(tail.bytes)).toBe('line 97\r\nline 98\r\nline 99\r\n')
+  })
+
+  it('says how many lines there are when there are fewer than asked for', () => {
+    const buffer = new ScrollbackBuffer(1024)
+    expect(buffer.lineTail(5, Infinity)).toEqual({ bytes: 0, lines: 0 })
+    buffer.append('one\ntwo\nthr')
+    expect(buffer.lineTail(5, Infinity)).toEqual({ bytes: 11, lines: 3 })
+    expect(buffer.tail(buffer.lineTail(2, Infinity).bytes)).toBe('two\nthr')
+  })
+
+  it('stops at the byte ceiling', () => {
+    const buffer = new ScrollbackBuffer(1024 * 1024)
+    buffer.append(`${'z'.repeat(20_000)}\nend\n`)
+    expect(buffer.lineTail(2, 1_000).bytes).toBe(1_000)
+  })
+})

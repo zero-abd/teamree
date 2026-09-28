@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { MAX_RECORD_BYTES } from '../store/scrollbackArchive'
 import {
   CHECKPOINT_INTERVAL_MS,
-  CHECKPOINT_SOURCE_BYTES,
   ScrollbackCheckpoints,
   type ScrollbackCheckpointOptions
 } from './scrollbackCheckpoints'
@@ -184,10 +182,5 @@ describe('what the interval is chosen against', () => {
 
   it('is shorter than the minute a record is dated to', () => {
     expect(CHECKPOINT_INTERVAL_MS).toBeLessThan(60_000)
-  })
-
-  // The sanitizer runs on the thread that pumps every PTY, so it reads a window, not the whole buffer.
-  it('reads twice what it can keep, and no more', () => {
-    expect(CHECKPOINT_SOURCE_BYTES).toBe(MAX_RECORD_BYTES * 2)
   })
 })

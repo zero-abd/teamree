@@ -1,12 +1,26 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, truncate, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { INERT_RECORD } from '../terminals/scrollbackRecord'
-import { MAX_RECORD_BYTES, MAX_RECORD_FILE_BYTES, ScrollbackArchive } from './scrollbackArchive'
+import { INERT_RECORD, recordCapBytes } from '../terminals/scrollbackRecord'
+import { MAX_RECORD_FILE_BYTES, ScrollbackArchive } from './scrollbackArchive'
 
 const ESC = '\x1b'
 const directories: string[] = []
+
+/** `count` coloured lines 160 columns wide, numbered from 0, as a busy agent prints them. */
+function busyLines(count: number, from = 0): string {
+  let text = ''
+  for (let index = from; index < from + count; index++) {
+    text += `${ESC}[32m+${ESC}[0m ${`line ${index} `.padEnd(158, '.')}\r\n`
+  }
+  return text
+}
+
+/** The lines of a record, without the empty string after its last newline. */
+function linesOf(text: string | undefined): string[] {
+  return (text ?? '').split('\n').filter((line, index, all) => index < all.length - 1 || line !== '')
+}
 
 afterEach(async () => {
   await Promise.all(directories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })))
@@ -78,24 +92,53 @@ describe('ScrollbackArchive', () => {
     expect(store.read('term_missing')).toBeUndefined()
   })
 
-  it('keeps the end of a pane that printed more than the cap', async () => {
+  it('keeps the last 5,000 lines of a busy pane by default, not the last 128 KiB', async () => {
     const store = await archive()
-    const lines = Array.from({ length: 40_000 }, (_, index) => `line ${index}\r\n`).join('')
-    expect(Buffer.byteLength(lines, 'utf8')).toBeGreaterThan(MAX_RECORD_BYTES)
-
-    store.put('term_1', lines)
+    store.put('term_1', busyLines(65_744))
     await store.flush()
 
-    const kept = store.read('term_1')
-    expect(kept).toBeDefined()
-    expect(Buffer.byteLength(kept?.text ?? '', 'utf8')).toBeLessThanOrEqual(MAX_RECORD_BYTES)
-    expect(kept?.text.endsWith('line 39999\r\n')).toBe(true)
-    expect(kept?.text).not.toContain('line 0\r\n')
+    const kept = linesOf(store.read('term_1')?.text)
+    expect(kept).toHaveLength(5_000)
+    expect(kept[0]).toContain('line 60744 ')
+    expect(kept.at(-1)).toContain('line 65743 ')
 
     // On disk as well as in memory.
     const [name] = await readdir(store.directory)
     const bytes = (await readFile(join(store.directory, name as string))).byteLength
     expect(bytes).toBeLessThan(MAX_RECORD_FILE_BYTES)
+  })
+
+  it('keeps as many lines as the setting asks for, and reads back no more than it asks for now', async () => {
+    const store = await archive()
+    store.put('term_1', busyLines(30_000), undefined, 20_000)
+    await store.flush()
+
+    expect(linesOf(store.read('term_1', 20_000)?.text)).toHaveLength(20_000)
+    const lowered = linesOf(store.read('term_1', 1_000)?.text)
+    expect(lowered).toHaveLength(1_000)
+    expect(lowered.at(-1)).toContain('line 29999 ')
+  })
+
+  it('holds lines too long for their allowance to the setting’s byte ceiling', async () => {
+    const store = await archive()
+    const bar = `${'#'.repeat(100_000)}\r\n`
+    store.put('term_1', `${bar.repeat(20)}done\r\n`, undefined, 1_000)
+    await store.flush()
+
+    const kept = store.read('term_1', 1_000)?.text ?? ''
+    expect(Buffer.byteLength(kept, 'utf8')).toBeLessThanOrEqual(recordCapBytes(1_000))
+    expect(kept.endsWith('done\r\n')).toBe(true)
+  })
+
+  it('keeps as many lines of a hosted pane’s earlier record as of its text', async () => {
+    const store = await archive()
+    const before = busyLines(8_000)
+    store.put('term_1', `${before}${busyLines(10, 8_000)}`, { session: 'term_1.ab12cd34', before })
+    await store.flush()
+
+    const kept = linesOf(store.read('term_1')?.host?.before)
+    expect(kept).toHaveLength(5_000)
+    expect(kept.at(-1)).toContain('line 7999 ')
   })
 
   it('writes a file that cannot reprogram a terminal that reads it', async () => {
@@ -145,7 +188,8 @@ describe('ScrollbackArchive', () => {
     const store = await archive([], problems)
     store.put('term_1', 'placeholder\r\n')
     await store.flush()
-    await writeFile(join(store.directory, 'term_1.json'), 'x'.repeat(MAX_RECORD_FILE_BYTES + 1), 'utf8')
+    // Sparse: the size is what the stat says, without writing it.
+    await truncate(join(store.directory, 'term_1.json'), MAX_RECORD_FILE_BYTES + 1)
 
     expect(store.read('term_1')).toBeUndefined()
     expect(problems.join(' ')).toContain('past the')
