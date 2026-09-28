@@ -345,13 +345,6 @@ kbd {
   font-size: var(--text-base);
 }
 
-/* The one or two actions a screen exists for, when that screen is otherwise empty. */
-.button--lead {
-  height: var(--control-lg);
-  padding: 0 var(--s5);
-  font-size: var(--text-base);
-}
-
 /* A spinner in place of the leading icon; the width holds, and the button takes no second press. */
 .button--loading {
   pointer-events: none;

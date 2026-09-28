@@ -2,35 +2,99 @@
 
 /* The welcome ------------------------------------------------------------- */
 
-/* The front door: the mark on its tile, the name under it, one filled first
-   move over a row of quieter ones, the chords, and setup pinned to the foot. */
+/* The front door: the mark in its split light, the name, one filled first move over three quieter ones,
+   three chords, and setup as one line at the foot. */
 .welcome {
-  display: flex;
   position: relative;
+  display: flex;
   flex: 1;
   align-self: stretch;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--s3);
-  padding: var(--s6) var(--s6) calc(var(--s6) * 2);
+  padding: var(--s6) var(--s6) calc(var(--s8) + var(--s6));
+  background: var(--bg-pane);
   text-align: center;
 }
 
-.welcome .wordmark--welcome {
-  margin-bottom: var(--s4);
+.welcome__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(520px, 100%);
+}
+
+/* Two soft halves leaning out from a lit seam, the tile over them. */
+.welcome__brand {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 128px;
+  height: 112px;
+  background: linear-gradient(transparent, var(--accent-bright), transparent) center / 1px calc(100% - 10px)
+    no-repeat;
+}
+
+.welcome__brand::before,
+.welcome__brand::after {
+  position: absolute;
+  top: 8px;
+  width: 48px;
+  height: 92px;
+  border-radius: 18px;
+  background: linear-gradient(90deg, transparent, var(--accent-soft));
+  content: '';
+}
+
+.welcome__brand::before {
+  left: 7px;
+  transform: skewY(-5deg);
+}
+
+.welcome__brand::after {
+  right: 7px;
+  transform: skewY(5deg) scaleX(-1);
+}
+
+.welcome__tile {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 84px;
+  height: 84px;
+  border: 1px solid var(--accent-line);
+  border-radius: 20px;
+  background: var(--bg-raised);
+  box-shadow:
+    var(--shadow-2),
+    0 0 42px var(--accent-soft);
+  color: var(--fg);
+}
+
+.welcome__wordmark {
+  margin-top: var(--s2);
+  color: var(--fg);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  line-height: 32px;
+  letter-spacing: -0.035em;
+}
+
+.welcome__dot {
+  color: var(--accent-bright);
 }
 
 .welcome__actions {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--s4);
+  gap: 9px;
+  margin-top: var(--s5);
 }
 
 .welcome__first {
-  min-width: 240px;
-  height: 40px;
+  min-width: 200px;
 }
 
 .welcome__others {
@@ -40,55 +104,86 @@
   gap: var(--s2);
 }
 
-.welcome__other {
+/* Label left, cap right, under a rule: a list read down. */
+.welcome__shortcuts {
+  width: min(360px, 100%);
+  margin: var(--s5) 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.welcome__shortcuts > div {
+  display: flex;
+  align-items: center;
   height: 32px;
-  padding: 0 var(--s4);
-  border-color: var(--line);
-  background: transparent;
   color: var(--fg-secondary);
   font-size: var(--text-sm);
-  font-weight: 500;
 }
 
-.welcome__other:hover:not(:disabled) {
-  color: var(--fg);
+.welcome__shortcuts dd {
+  margin-left: auto;
 }
 
-.welcome__other svg {
-  color: var(--fg-muted);
-}
-
-.welcome__other:hover svg {
-  color: inherit;
-}
-
-/* Setup, when nothing needs action: what works, as names with checks. */
-.welcome__status {
-  display: flex;
+/* Setup at the foot: a row for each thing that needs action, then what works in one line. */
+.welcome__setup {
   position: absolute;
   right: 0;
   bottom: var(--s5);
   left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s3);
+  padding: 0 var(--s5);
+}
+
+.welcome__status {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: var(--s2) var(--s4);
-  color: var(--fg-muted);
+  gap: var(--s1) 6px;
+  color: var(--success);
   font-size: var(--text-xs);
 }
 
 .welcome__check {
   display: inline-flex;
   align-items: center;
-  gap: var(--s1);
+  gap: 3px;
 }
 
-.welcome__check svg {
-  color: var(--success);
+.welcome__check + .welcome__check::before {
+  margin-right: 3px;
+  color: var(--fg-muted);
+  content: '·';
 }
 
+/* Setup… arrives with the pointer; Help and the palette open it too. */
 .welcome__status .button {
   color: var(--fg-muted);
+  opacity: var(--row-action-rest);
+  transition: opacity var(--motion-fast) var(--ease);
+}
+
+.welcome__status:hover .button,
+.welcome__status .button:focus-visible {
+  opacity: 1;
+}
+
+.welcome .setup {
+  width: min(520px, 100%);
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--bg-raised);
+  box-shadow: var(--shadow-1);
+}
+
+/* With a project and nothing open: the shared empty state, centred in the pane area. */
+.welcome--project {
+  padding-bottom: var(--s6);
 }
 
 /* What setup found: a mark, the name, what is there, then the buttons. One grid, so the
@@ -169,48 +264,6 @@
   justify-content: flex-end;
 }
 
-/* Label on the left, key on the right, the two columns as wide as their widest
-   entry: a list read down, not a legend read across. The keycaps are the
-   status bar's — quiet, and the same size as the ones already on screen. */
-.welcome__shortcuts {
-  display: grid;
-  grid-template-columns: max-content max-content;
-  gap: var(--s2) var(--s5);
-  align-items: center;
-  margin-top: var(--s5);
-}
-
-.welcome__shortcuts > div {
-  display: contents;
-}
-
-.welcome__shortcuts dt {
-  color: var(--fg-muted);
-  font-size: var(--text-sm);
-  text-align: left;
-}
-
-.welcome__shortcuts dd {
-  text-align: right;
-}
-
-.welcome__shortcuts dd > kbd {
-  display: inline-flex;
-  gap: 3px;
-  padding: 0;
-  border: 0;
-  background: none;
-}
-
-.welcome__shortcuts kbd kbd {
-  min-width: 20px;
-  padding: 1px 4px;
-  border-bottom-width: 1px;
-  font-family: var(--font-ui);
-  font-size: var(--text-xs);
-  text-align: center;
-}
-
 /* An open worktree with no panes: its name, its branch, and the `+` menu's rows as buttons. */
 .worktree-start {
   display: flex;
@@ -229,8 +282,9 @@
   align-items: center;
   gap: var(--s2);
   font-size: var(--text-xl);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-weight: 680;
+  line-height: 24px;
+  letter-spacing: -0.025em;
 }
 
 .worktree-start__where {
@@ -271,8 +325,8 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--s2);
-  max-width: 72ch;
-  margin-top: var(--s5);
+  max-width: 640px;
+  margin-top: 18px;
 }
 
 .worktree-start__actions--resume {
@@ -302,6 +356,7 @@
 .checkout-missing__label {
   color: var(--danger);
   font-size: var(--text-sm);
+  font-weight: 600;
 }
 
 .checkout-missing__path {

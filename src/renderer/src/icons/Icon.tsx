@@ -355,7 +355,21 @@ const GLYPHS = {
     </>
   ),
   plug: <path d="M5.75 1.75v3m4.5-3v3M3.75 4.75h8.5v2.5a4.25 4.25 0 0 1-8.5 0zM8 11.5v2.75" />,
-  download: <path d="M8 2.25v8M4.75 7 8 10.25 11.25 7M2.75 13.75h10.5" />
+  download: <path d="M8 2.25v8M4.75 7 8 10.25 11.25 7M2.75 13.75h10.5" />,
+  alert: (
+    <>
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M8 4.75v3.75" />
+      <circle cx="8" cy="11" r=".55" fill="currentColor" stroke="none" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M8 7.25v3.75" />
+      <circle cx="8" cy="5" r=".55" fill="currentColor" stroke="none" />
+    </>
+  )
 } satisfies Record<string, React.JSX.Element>
 
 export type IconName = keyof typeof GLYPHS

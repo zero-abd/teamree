@@ -153,7 +153,7 @@ describe('when there is nothing open', () => {
     const newProject = vi.fn(() => Promise.resolve())
     seed({ projects: [], chooseProjectFolder, newProject })
     mount()
-    expect(document.querySelector('.welcome .brand__mark')).toBeTruthy()
+    expect(document.querySelector('.welcome__tile .mark')).toBeTruthy()
     expect(screen.getByText('teamree')).toBeTruthy()
     expect(screen.queryByRole('heading')).toBeNull()
     const actions = document.querySelector('.welcome__actions') as HTMLElement
@@ -165,6 +165,8 @@ describe('when there is nothing open', () => {
       'Join a Team…'
     ])
     expect(buttons.filter((button) => button.className.includes('button--primary'))).toEqual([buttons[0]])
+    expect(buttons[0]?.className).toContain('button--lg')
+    for (const button of buttons.slice(1)) expect(button.className).toContain('button--secondary')
     for (const button of buttons) expect(button.querySelector('svg[aria-hidden="true"]')).toBeTruthy()
     const open = screen.getByRole('button', { name: 'Open Folder…' })
     expect(document.activeElement).toBe(open)
@@ -196,7 +198,9 @@ describe('when there is nothing open', () => {
   it('offers only a new task once there is a project, and no agent by name', () => {
     seed({ projects: [project], agents: [{ kind: 'claude', command: 'claude', binary: '/usr/local/bin/claude' }] })
     mount()
-    const actions = document.querySelector('.welcome__actions') as HTMLElement
+    expect(document.querySelector('.empty-state__title')?.textContent).toBe('No worktrees yet')
+    expect(document.querySelector('.empty-state__motif svg')).toBeTruthy()
+    const actions = document.querySelector('.empty-state__actions') as HTMLElement
     expect([...actions.querySelectorAll('button')].map((button) => button.textContent)).toEqual(['New Task…'])
     expect(screen.getByRole('button', { name: 'New Task…' }).className).toContain('button--primary')
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New Task…' }))
@@ -216,22 +220,23 @@ describe('when there is nothing open', () => {
     expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p2' })
   })
 
-  // The button right above says New Task; its chord is on its tooltip, not a row repeating it.
-  it('names the chords, New Task’s on its button rather than in the list', () => {
-    seed({ projects: [project] })
-    mount()
-    const chords = [...document.querySelectorAll('.welcome__shortcuts dd > kbd')]
-    expect(chords.map((node) => node.textContent)).toEqual(['⌘K', '⌘B'])
-    // One cap per key.
-    expect([...chords[0]!.querySelectorAll('kbd')].map((node) => node.textContent)).toEqual(['⌘', 'K'])
-    expect(screen.getByRole('button', { name: 'New Task…' }).title).toBe('New Task · ⌘N')
-    cleanup()
+  // First run teaches three chords in caps; with a project, New Task's chord is on its button.
+  it('names the first chords on a first run, and New Task’s on its button once there is a project', () => {
     seed({ projects: [] })
     mount()
-    expect([...document.querySelectorAll('.welcome__shortcuts dd > kbd')].map((node) => node.textContent)).toEqual([
-      '⌘K',
-      '⌘B'
-    ])
+    const chords = [...document.querySelectorAll('.welcome__shortcuts dd .kbd')]
+    expect(chords.map((node) => node.textContent)).toEqual(['⌘K', '⌘N', '⌘B'])
+    cleanup()
+    seed({ projects: [project] })
+    mount()
+    expect(document.querySelector('.welcome__shortcuts')).toBeNull()
+    expect(screen.getByRole('button', { name: 'New Task…' }).title).toBe('New Task · ⌘N')
+  })
+
+  it('says no worktree is open when the project has some', () => {
+    seed({ projects: [project], worktrees: [worktree()] })
+    mount()
+    expect(document.querySelector('.empty-state__title')?.textContent).toBe('No worktree open')
   })
 
   // The last window's front tab is on its way: a welcome in the meantime is a screen that flashes past.
@@ -654,12 +659,16 @@ describe('the welcome’s shortcut list and the menu bar use one set of words', 
   it('names every command exactly as the menu bar names it, with its chord', async () => {
     const { menuBarSpec } = await import('../menu/menuBar')
     const { commandNamed, shortcutHint } = await import('../keyboard/workspaceShortcuts')
-    seed({ projects: [project], worktrees: [] })
+    seed({ projects: [], worktrees: [] })
     mount()
 
     const menu = new Map(menuBarSpec(useWorkspaceStore.getState()).map((item) => [item.command, item.label]))
     const rows = [...document.querySelectorAll('.welcome__shortcuts > div')]
-    expect(rows.map((row) => row.getAttribute('data-command'))).toEqual(['open-palette', 'toggle-sidebar'])
+    expect(rows.map((row) => row.getAttribute('data-command'))).toEqual([
+      'open-palette',
+      'new-worktree',
+      'toggle-sidebar'
+    ])
     for (const row of rows) {
       const command = commandNamed(row.getAttribute('data-command') ?? '')
       expect(command, row.textContent ?? '').not.toBeNull()

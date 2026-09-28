@@ -613,10 +613,10 @@ describe('the first screen', () => {
     expect(revealPane).toHaveBeenCalledExactlyOnceWith('w2', 't9')
   })
 
-  it('collapses to one ranked list once something is typed', () => {
+  it('heads a typed query’s rows by kind, the best match first', () => {
     mount()
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'copy' } })
-    expect(headers()).toEqual(['Contents'])
+    expect(headers()).toEqual(['Commands', 'Contents'])
     expect(labels()).toEqual([
       'Copy Path',
       'Copy Branch',
@@ -624,6 +624,30 @@ describe('the first screen', () => {
       'Open Setting: Copy into every new worktree',
       'Search in Files: “copy”'
     ])
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'ruler' } })
+    expect(headers()[0]).toBe('Worktrees')
+    expect(labels()[0]).toBe('Fix the ruler')
+  })
+
+  it('marks what the query matched in each name, and keeps the name whole', () => {
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'rul' } })
+    const found = row('Fix the ruler')
+    expect([...found.querySelectorAll('.palette__match')].map((mark) => mark.textContent)).toEqual(['rul'])
+    expect(found.querySelector('.palette__label')?.textContent).toBe('Fix the ruler')
+    expect(row('Search in Files: “rul”').querySelector('.palette__match')).toBeNull()
+  })
+
+  it('draws an icon on every row, and caps only on a command’s chord', () => {
+    mount()
+    for (const each of rows()) expect(each.querySelector('.palette__icon svg')).toBeTruthy()
+    expect(row('New Task…').querySelector('.palette__trailing kbd')?.textContent).toBe('⌘N')
+    expect(row('Fix the ruler').querySelector('kbd')).toBeNull()
+  })
+
+  it('says how to move, open and close at its foot', () => {
+    mount()
+    expect(document.querySelector('.palette__footer')?.textContent).toBe('↑↓ move↵ openesc close')
   })
 })
 
@@ -721,7 +745,8 @@ describe('what a row shows about now', () => {
     })
     mount()
     expect(row('Fix the ruler').querySelector('.activity--working')?.getAttribute('aria-label')).toBe('working')
-    expect(trailingOf('Fix the ruler')).toBe('pager · working')
+    expect(row('Fix the ruler').querySelector('.palette__status')?.textContent).toBe('working')
+    expect(trailingOf('Fix the ruler')).toBe('pager')
     expect(row('Rewrite the pager').querySelector('.activity')).toBeNull()
   })
 

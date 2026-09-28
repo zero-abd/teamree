@@ -1108,8 +1108,7 @@ describe('an invitation pasted into the palette', () => {
   })
 
   it('offers nothing to join for text that is not an invitation', () => {
-    const [group] = queryGroups(none, 'teamree://join?v=1&project=ledger', [])
-    expect(group?.items.map((item) => item.label)).toEqual([])
+    expect(queryGroups(none, 'teamree://join?v=1&project=ledger', [])).toEqual([])
   })
 
   it('offers Join a Team… to paste into, with no project too', () => {
@@ -1143,32 +1142,59 @@ describe('a query that finds nothing to run', () => {
   it('keeps what the query named, dimmed, above them', () => {
     const dimmed = items({ whyUnavailable: (action) => (action === 'save-all' ? 'nothing unsaved' : null) })
     expect(shown(queryGroups(dimmed, 'save all', []))).toEqual([
-      [null, ['Save All', 'New Task: “save all”', 'Open Branch: “save all”']]
+      ['Commands', ['Save All', 'New Task: “save all”', 'Open Branch: “save all”']]
     ])
   })
 
   it('adds nothing while a row would run, a file matched, or the files are still being searched', () => {
-    expect(shown(queryGroups(items(), 'login', []))).toEqual([[null, ['login fix']]])
-    expect(shown(queryGroups(items(), 'zzz', [fileItem('src/zzz.ts')]))).toEqual([
-      [null, []],
-      ['Files', ['zzz.ts']]
-    ])
-    expect(shown(queryGroups(items(), 'zzz', null))).toEqual([[null, []]])
+    expect(shown(queryGroups(items(), 'login', []))).toEqual([['Worktrees', ['login fix']]])
+    expect(shown(queryGroups(items(), 'zzz', [fileItem('src/zzz.ts')]))).toEqual([['Files', ['zzz.ts']]])
+    expect(shown(queryGroups(items(), 'zzz', null))).toEqual([])
   })
 
   it('offers neither with no project to start in or open from', () => {
     const none = items({ projects: [], worktrees: [], activeWorktreeId: null, whyUnavailable: () => 'no project' })
-    expect(shown(queryGroups(none, 'zzz', []))).toEqual([[null, []]])
+    expect(shown(queryGroups(none, 'zzz', []))).toEqual([])
   })
 
-  it('leaves the order of a query that matches as it was', () => {
+  it('leaves the order of a query that matches as it was within each group', () => {
     const all = items({ worktrees: [worktree({ id: 'w1' }), worktree({ id: 'w2', name: 'new tests' })] })
     for (const query of ['new', 'split', 'w2', 'nt']) {
-      const [group] = queryGroups(all, query, [])
-      expect(group?.items).toEqual(filterPalette(all, query))
+      const found = filterPalette(all, query)
+      expect(queryGroups(all, query, []).flatMap((group) => group.items)).toEqual(
+        [...new Set(found.map(kindTitle))].flatMap((title) => found.filter((item) => kindTitle(item) === title))
+      )
     }
   })
 })
+
+describe('a typed query, grouped', () => {
+  const kinds = buildPaletteItems(
+    context({
+      worktrees: [worktree({ id: 'w1', name: 'payment retries' }), worktree({ id: 'w2', name: 'webhook payload' })],
+      activeWorktreeId: 'w1',
+      hintFor: (action) => (action === 'new-worktree' ? '⌘N' : '')
+    })
+  )
+  const titles = (groups: PaletteGroup[]): (string | null)[] => groups.map((group) => group.title)
+
+  it('heads each kind, the group holding the best match first, files after', () => {
+    const groups = queryGroups(kinds, 'pay', [fileItem('src/pay/charge.ts')])
+    expect(titles(groups)).toEqual(['Worktrees', 'Files'])
+    expect(groups[0]?.items.map((item) => item.label)).toEqual(['payment retries', 'webhook payload'])
+    const commands = queryGroups(kinds, 'copy', [])
+    expect(titles(commands)).toEqual(['Commands'])
+  })
+
+  it('keeps the best match first, so Return still takes it', () => {
+    for (const query of ['pay', 'new', 'split', 'copy branch']) {
+      expect(queryGroups(kinds, query, [])[0]?.items[0]).toBe(filterPalette(kinds, query)[0])
+    }
+  })
+})
+
+const kindTitle = (item: PaletteItem): string =>
+  item.kind === 'worktree' ? 'Worktrees' : item.kind === 'pane' ? 'Panes' : item.kind === 'file' ? 'Files' : 'Commands'
 
 describe('a worktree row’s state', () => {
   const terminal = (overrides: Partial<Terminal> & { id: string; worktreeId: string }): Terminal => ({
