@@ -6,6 +6,7 @@ import type { AgentActivity } from './paneActivity'
 import type { RestoredAs } from './paneRestore'
 import type { ScreenMenu, ScreenOpinion } from './screenOpinion'
 import type { PeerHandoff, TaskOutcome, TaskStage, WorktreeReport } from './tasks'
+import type { PeerReviewRequest } from './teammateReview'
 import type { TitleOpinion } from './titleOpinion'
 
 /** A tracked git repository. One project owns many worktrees. */
@@ -1276,6 +1277,8 @@ export type PeerPresence = {
   /** Worktrees offered to teammates, and the offers this runtime took. */
   handoffs?: PeerHandoff[]
   took?: string[]
+  /** Reviews asked of teammates and not yet sent. */
+  reviewRequests?: PeerReviewRequest[]
 }
 
 /**

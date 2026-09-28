@@ -227,7 +227,10 @@ describe('dispatcher', () => {
       'teamwork.publishProgress',
       'teamwork.pull',
       'teamwork.relay',
+      // Local: a request crosses in this machine's presence, never as a teammate's call.
+      'teamwork.requestReview',
       'teamwork.requests',
+      'teamwork.reviewRequests',
       // Local: this machine's received reviews; on the wire they are `peer.review`.
       'teamwork.reviews',
       'teamwork.revoke',
@@ -236,6 +239,7 @@ describe('dispatcher', () => {
       'teamwork.setOrigin',
       'teamwork.setRelay',
       'teamwork.settleReview',
+      'teamwork.settleReviewRequest',
       'teamwork.shareNote',
       'teamwork.sharedNotes',
       'teamwork.status',

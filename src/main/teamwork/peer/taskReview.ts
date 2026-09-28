@@ -1,10 +1,10 @@
-// Reviewing a teammate's task: their pushed branch read here, and the comments teammates sent
-// this machine, kept in `<userData>/reviews.json` so a review outlives a restart.
+// Reviewing a teammate's task: their pushed branch read here, the comments teammates sent this machine,
+// and the reviews it asked for, kept in `<userData>/reviews.json` so each outlives a restart.
 
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import { ReviewNoteSchema } from '../../../shared/reviewMethods'
-import type { ReceivedReview } from '../../../shared/teammateReview'
+import { MAX_REVIEW_REQUESTS, type PeerReviewRequest, type ReceivedReview } from '../../../shared/teammateReview'
 import type { GitRunner } from '../../git/gitProcess'
 import { assertRefShape } from '../../git/repository'
 import { cutToBytes } from '../../git/worktreeChanges'
@@ -38,10 +38,38 @@ const ReviewSchema = z.object({
   seen: z.boolean()
 })
 
-const FileSchema = z.object({ reviews: z.array(ReviewSchema).catch([]) })
+/** A review this machine asked for, until the reviewer sends one. */
+type Asked = PeerReviewRequest & { projectId: string }
+
+/** A request answered here; `from` is the asker's public key, since an id is theirs to choose. */
+type Answered = { id: string; from: string; how: 'seen' | 'later' }
+
+const AskedSchema = z.object({
+  id: z.string().min(1),
+  to: z.string().min(1),
+  from: z.string().optional(),
+  worktreeId: z.string().min(1),
+  worktreeName: z.string(),
+  branch: z.string().min(1),
+  at: z.number(),
+  projectId: z.string().min(1)
+})
+
+const FileSchema = z.object({
+  reviews: z.array(ReviewSchema).catch([]),
+  asked: z.array(AskedSchema).catch([]),
+  answered: z
+    .array(z.object({ id: z.string().min(1), from: z.string().min(1), how: z.enum(['seen', 'later']) }))
+    .catch([])
+})
+
+/** Answered requests remembered, so a teammate still asking is not asked about again. */
+export const MAX_ANSWERED_REQUESTS = MAX_REVIEW_REQUESTS * 5
 
 export class ReviewInbox {
   #reviews: ReceivedReview[] = []
+  #asked: Asked[] = []
+  #answered: Answered[] = []
   #writing: Promise<void> = Promise.resolve()
   readonly #path: string | undefined
   readonly #now: () => number
@@ -57,7 +85,10 @@ export class ReviewInbox {
   async load(): Promise<void> {
     if (this.#path === undefined) return
     const parsed = FileSchema.safeParse(await readJsonFile(this.#path))
-    if (parsed.success) this.#reviews = parsed.data.reviews
+    if (!parsed.success) return
+    this.#reviews = parsed.data.reviews
+    this.#asked = parsed.data.asked
+    this.#answered = parsed.data.answered
   }
 
   /** Files a review. Throws when its sender already has too many waiting, or nothing seen can make room. */
@@ -89,6 +120,51 @@ export class ReviewInbox {
     return true
   }
 
+  /** Files a request, replacing one of the same task to the same teammate; the oldest go past the bound. */
+  ask(entry: Asked): void {
+    const kept = this.#asked.filter((held) => !(held.worktreeId === entry.worktreeId && held.to === entry.to))
+    kept.push(entry)
+    const mine = kept.filter((held) => held.projectId === entry.projectId)
+    const over = new Set(mine.slice(0, Math.max(0, mine.length - MAX_REVIEW_REQUESTS)))
+    this.#asked = kept.filter((held) => !over.has(held))
+    this.#save()
+  }
+
+  asked(projectId: string): PeerReviewRequest[] {
+    return this.#asked.filter((held) => held.projectId === projectId).map(({ projectId: _projectId, ...rest }) => rest)
+  }
+
+  /** What presence carries to one teammate: the requests made of them, without this machine's project ids. */
+  askedOf(projectIds: readonly string[], handle: string): PeerReviewRequest[] {
+    return this.#asked
+      .filter((held) => held.to === handle && projectIds.includes(held.projectId))
+      .map(({ projectId: _projectId, ...rest }) => rest)
+  }
+
+  /** Whether `handle` was asked to review this task, which is the owner's consent to send them its diff. */
+  wasAsked(worktreeId: string, handle: string): boolean {
+    return this.#asked.some((held) => held.worktreeId === worktreeId && held.to === handle)
+  }
+
+  /** The reviewer sent their review: their request is done. Whether any was. */
+  reviewed(worktreeId: string, handle: string): boolean {
+    const before = this.#asked.length
+    this.#asked = this.#asked.filter((held) => !(held.worktreeId === worktreeId && held.to === handle))
+    if (this.#asked.length === before) return false
+    this.#save()
+    return true
+  }
+
+  answer(id: string, from: string, how: Answered['how']): void {
+    this.#answered = [...this.#answered.filter((held) => !(held.id === id && held.from === from)), { id, from, how }]
+    this.#answered = this.#answered.slice(-MAX_ANSWERED_REQUESTS)
+    this.#save()
+  }
+
+  answerOf(id: string, from: string): Answered['how'] | undefined {
+    return this.#answered.find((held) => held.id === id && held.from === from)?.how
+  }
+
   /** Resolves once every change so far is on disk. */
   flush(): Promise<void> {
     return this.#writing
@@ -97,7 +173,7 @@ export class ReviewInbox {
   #save(): void {
     const path = this.#path
     if (path === undefined) return
-    const snapshot = { reviews: this.#reviews }
+    const snapshot = { reviews: this.#reviews, asked: this.#asked, answered: this.#answered }
     this.#writing = this.#writing
       .then(() => writeJsonFileAtomically(path, snapshot))
       .catch((error: unknown) => this.#onError(error))

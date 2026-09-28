@@ -4,6 +4,7 @@
 import { z } from 'zod'
 import { MAX_PEER_MEMORY_BYTES } from './memory'
 import { TASK_STAGES, type TaskStage } from './tasks'
+import { MAX_REVIEW_REQUESTS } from './teammateReview'
 
 /** Bounds on what presence v2 carries per worktree. */
 export const PEER_TASK_CHARS = 200
@@ -71,8 +72,20 @@ const PeerHandoffSchema = z.object({
   at: z.number()
 })
 
+const PeerReviewRequestSchema = z.object({
+  id: Id,
+  to: z.string().min(1).max(160),
+  worktreeId: Id,
+  worktreeName: clipped(512),
+  branch: z.string().min(1).max(512),
+  at: z.number()
+})
+
 /** Spread into the `PeerPresence` payload schema with `.extend`. */
 export const PeerPresenceExtrasOnRead = {
+  reviewRequests: onRead(
+    z.array(PeerReviewRequestSchema).transform((requests) => requests.slice(0, MAX_REVIEW_REQUESTS))
+  ),
   handoffs: onRead(z.array(PeerHandoffSchema).transform((handoffs) => handoffs.slice(0, MAX_HANDOFFS))),
   took: onRead(z.array(Id).max(MAX_HANDOFFS * 5))
 }

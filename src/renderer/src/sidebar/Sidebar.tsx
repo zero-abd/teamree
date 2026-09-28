@@ -35,6 +35,7 @@ import { useOverlaps } from '../state/overlapStore'
 import { overlapChip } from './overlapChip'
 import { openOverlap, overlapNamer } from './useOverlapChip'
 import { handedAway, handoffLine, useHandoffs } from '../teamwork/handoffsStore'
+import { useReviewRequests } from '../teamwork/reviewRequestsStore'
 import { agentWords, worktreeDisplay, worktreeLabel } from './worktreeDisplay'
 import { unreadNotes, useSharedNotes } from '../teamwork/sharedNotesStore'
 import { useSidebarView } from '../state/sidebarViewStore'
@@ -77,6 +78,7 @@ export function Sidebar({
   const teamwork = useWorkspaceStore((state) => state.teamwork)
   const teammates = useWorkspaceStore((state) => state.teammates)
   const handoffs = useHandoffs((state) => state.byProject)
+  const requestReview = useReviewRequests((state) => state.request)
   const cli = useWorkspaceStore((state) => state.cli)
   // What the `!` on Settings is about, named after the row that fixes it.
   const cliFlag = offerCliInstall(cli) ? `CLI: ${cliActionLabel(cli)}` : null
@@ -404,6 +406,9 @@ export function Sidebar({
             const nameOf = overlapNamer(worktrees, teammatesHeard(teammates[project.id])?.worktrees ?? [])
             const canHandOff =
               teamworkOn(teamwork[project.id]) && (teammatesHeard(teammates[project.id])?.teammates.length ?? 0) > 0
+            const reviewers = (teammatesHeard(teammates[project.id])?.teammates ?? []).map(
+              (teammate) => teammate.handle
+            )
             const drawRow = (node: TaskNode<Worktree>, depth: number): React.JSX.Element => {
               const { worktree } = node
               const full = whole.get(worktree.id) ?? node
@@ -440,7 +445,11 @@ export function Sidebar({
                     : {})}
                   onMenuOpen={() => void loadConversations(worktree.id)}
                   {...(canHandOff
-                    ? { onHandOff: () => openDialog({ kind: 'hand-off', worktreeId: worktree.id }) }
+                    ? {
+                        onHandOff: () => openDialog({ kind: 'hand-off', worktreeId: worktree.id }),
+                        reviewers,
+                        onRequestReview: (handle: string) => void requestReview(worktree.id, handle)
+                      }
                     : {})}
                   handoff={handoffLine(handoffs[project.id]?.outgoing ?? [], worktree.id)}
                   {...(handedAway(handoffs[project.id]?.outgoing ?? [], worktree.id)

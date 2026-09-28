@@ -8,6 +8,8 @@ export const MAX_REVIEW_COMMENTS = 100
 export const MAX_REVIEW_LINES = 40
 export const MAX_REVIEW_LINE_CHARS = 2000
 export const MAX_REVIEW_NOTE_CHARS = 4000
+/** Review requests one presence snapshot carries. */
+export const MAX_REVIEW_REQUESTS = 20
 
 /** One quoted line of the patch, numbered on both sides as `patch.ts` numbers it. */
 export type ReviewLine = {
@@ -37,6 +39,25 @@ export type TeammateDiff = {
 
 /** What crosses the wire as `peer.review`. The sender is the link's key, never a field. */
 export type PeerReview = { reviewId: string; worktreeId: string; comments: ReviewNote[]; sentAt: number }
+
+/**
+ * A review asked of one teammate, carried in presence until they send one. Incoming, `worktreeId` is the
+ * task's id as `teamwork.presence` names it and `from` is this roster's handle for the sender.
+ */
+export type PeerReviewRequest = {
+  id: string
+  /** The reviewer's handle; only they draw it. */
+  to: string
+  from?: string
+  worktreeId: string
+  worktreeName: string
+  branch: string
+  at: number
+  /** Incoming only: its popup has been answered. */
+  seen?: true
+}
+
+export type TeamworkReviewRequests = { incoming: PeerReviewRequest[]; outgoing: PeerReviewRequest[] }
 
 /** A teammate's comments on one of this machine's worktrees. */
 export type ReceivedReview = {

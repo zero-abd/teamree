@@ -32,6 +32,8 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 const { useWorkspaceStore } = await import('../state/workspaceStore')
 const { useHandoffs } = await import('./handoffsStore')
 const { useSharedNotes } = await import('./sharedNotesStore')
+const { useReviewRequests } = await import('./reviewRequestsStore')
+const { useTeammateReview } = await import('../review/teammateReviewStore')
 const { TeamHome, TeamInviteActions } = await import('./TeamHome')
 const { teamMemory } = await import('./teamMemory')
 
@@ -144,6 +146,8 @@ beforeEach(() => {
   teamMemory.startedAt.clear()
   teamMemory.finishedAt.clear()
   useHandoffs.setState({ byProject: {} })
+  useReviewRequests.setState({ byProject: {} })
+  useTeammateReview.setState({ open: [], batch: {} })
   useSharedNotes.setState({ inbox: [], bodies: {}, deleting: {}, expanded: null })
 })
 
@@ -277,6 +281,30 @@ describe('what is waiting on you', () => {
     )
     fireEvent.click(within(region('Members')).getByRole('button', { name: 'Open' }))
     expect(toggleWatchedPane).toHaveBeenCalledWith('p1', expect.objectContaining({ terminalId: 'peer:bo:t_1' }))
+  })
+
+  it('lists a review asked of you, opens it beside the workspace, and puts it off on Later', () => {
+    const request = {
+      id: 'r1',
+      to: 'ana',
+      from: 'bo',
+      worktreeId: 'peer:bo:wt_1',
+      worktreeName: 'cart totals',
+      branch: 'cart-totals',
+      at: NOW - 60_000
+    }
+    useReviewRequests.setState({ byProject: { p1: { incoming: [request], outgoing: [] } } })
+    home()
+    const waiting = within(region('Waiting on you'))
+    expect(waiting.getByText(/Review requested by bo/)).toBeTruthy()
+    fireEvent.click(waiting.getByRole('button', { name: 'Review' }))
+    expect(useTeammateReview.getState().open).toEqual([
+      { projectId: 'p1', worktreeId: 'peer:bo:wt_1', title: 'bo · cart totals' }
+    ])
+    expect(call).toHaveBeenCalledWith('teamwork.settleReviewRequest', { projectId: 'p1', id: 'r1', how: 'seen' })
+    fireEvent.click(within(region('Waiting on you')).getByRole('button', { name: 'Later' }))
+    expect(call).toHaveBeenCalledWith('teamwork.settleReviewRequest', { projectId: 'p1', id: 'r1', how: 'later' })
+    expect(within(region('Waiting on you')).getByText('Nothing waiting')).toBeTruthy()
   })
 
   it('says in one line when nothing is', () => {

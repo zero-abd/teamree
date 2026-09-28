@@ -120,6 +120,9 @@ type WorktreeRowProps = {
   overlap?: { chip: OverlapChip; onOpen: (entry: OverlapEntry) => void }
   /** Hand Off…; absent leaves the item out. */
   onHandOff?: () => void
+  /** Request Review, one teammate a submenu item; absent leaves it out. */
+  reviewers?: readonly string[]
+  onRequestReview?: (handle: string) => void
   /** `Handed to ana` or `Taken by ana`, for its latest offer. */
   handoff?: string | null
   /** Once taken: deletes this copy, asking first as Delete Worktree… does. */
@@ -129,6 +132,8 @@ type WorktreeRowProps = {
   /** Shown without matching the filter: a match's parent, or the open row. */
   context?: boolean
 }
+
+const NO_REVIEWERS: readonly string[] = []
 
 export function WorktreeRow({
   worktree,
@@ -167,6 +172,8 @@ export function WorktreeRow({
   onMenuOpen,
   overlap,
   onHandOff,
+  reviewers = NO_REVIEWERS,
+  onRequestReview,
   handoff = null,
   onRemoveCopy,
   compact = false,
@@ -285,6 +292,15 @@ export function WorktreeRow({
       : []),
     ...(onHandOff !== undefined && ready && onRemoveCopy === undefined
       ? [{ label: 'Hand Off…', onChoose: onHandOff }]
+      : []),
+    ...(onRequestReview !== undefined && ready && reviewers.length > 0 && onRemoveCopy === undefined
+      ? [
+          {
+            label: 'Request Review',
+            onChoose: () => {},
+            items: reviewers.map((handle) => ({ label: handle, onChoose: () => onRequestReview(handle) }))
+          }
+        ]
       : []),
     ...(onRemoveCopy === undefined ? [] : [{ label: 'Remove My Copy…', onChoose: onRemoveCopy }]),
     { label: 'Rename…', icon: <Icon name="rename" size={14} />, onChoose: () => setRenaming(true), separated: merged },
