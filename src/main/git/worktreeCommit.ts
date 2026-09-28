@@ -58,7 +58,8 @@ export async function commitWorktree(runner: GitRunner, options: CommitOptions):
   }
 
   if (options.all === true) {
-    await runner.run({ args: ['add', '-A', '--', '.', ...preparedExcludes(options.prepared)], ...run, ...signal })
+    const excludes = await preparedExcludes(runner, options.worktreePath, options.prepared, options.signal)
+    await runner.run({ args: ['add', '-A', '--', '.', ...excludes], ...run, ...signal })
   } else if (options.paths && options.paths.length > 0) {
     // `--` first, so a path that looks like a flag or a ref is still a path.
     await runner.run({ args: ['add', '--', ...options.paths], ...run, ...signal })

@@ -19,7 +19,14 @@ describe('committing in a worktree', () => {
 
   const commit = async (
     repo: TempRepo,
-    options: { message?: string; paths?: string[]; all?: boolean; amend?: boolean; linkedPaths?: string[] } = {}
+    options: {
+      message?: string
+      paths?: string[]
+      all?: boolean
+      amend?: boolean
+      linkedPaths?: string[]
+      copiedPaths?: string[]
+    } = {}
   ): ReturnType<typeof commitWorktree> =>
     commitWorktree(repo.runner, {
       worktreeId: 'wt',
@@ -28,7 +35,10 @@ describe('committing in a worktree', () => {
       ...(options.paths === undefined ? {} : { paths: options.paths }),
       ...(options.all === undefined ? {} : { all: options.all }),
       ...(options.amend === undefined ? {} : { amend: options.amend }),
-      ...(options.linkedPaths === undefined ? {} : { prepared: { linkedPaths: options.linkedPaths } }),
+      prepared: {
+        ...(options.linkedPaths === undefined ? {} : { linkedPaths: options.linkedPaths }),
+        ...(options.copiedPaths === undefined ? {} : { copiedPaths: options.copiedPaths })
+      },
       now: () => 4242
     })
 
@@ -182,6 +192,43 @@ describe('committing in a worktree', () => {
 
     expect(result.paths).toEqual(['src/app.ts'])
     expect(await repo.git(['status', '--porcelain'])).toBe('?? node_modules')
+  })
+
+  // git exits 1 when any pathspec, an exclusion included, names a path it ignores.
+  it('commits all when what the project copied and linked is already ignored', async () => {
+    const repo = await repository()
+    await repo.write('.gitignore', '.env\n.env.local\nnode_modules\n')
+    await repo.write('config/.gitignore', 'secrets.json\n')
+    await repo.commit('ignore')
+    await mkdir(path.join(repo.base, 'shared-modules'))
+    await symlink(path.join(repo.base, 'shared-modules'), path.join(repo.repoPath, 'node_modules'))
+    await repo.write('.env', 'KEY=1\n')
+    await repo.write('.env.local', 'KEY=2\n')
+    await repo.write('config/secrets.json', '{}\n')
+    await repo.write('src/app.ts', 'x\n')
+
+    const result = await commit(repo, {
+      all: true,
+      linkedPaths: ['node_modules'],
+      copiedPaths: ['.env', '.env.local', 'config/secrets.json']
+    })
+
+    expect(result.paths).toEqual(['src/app.ts'])
+    expect(await repo.git(['status', '--porcelain'])).toBe('')
+  })
+
+  it('still leaves a copied path out of all when git does not ignore it', async () => {
+    const repo = await repository()
+    await repo.write('.gitignore', '.env\n')
+    await repo.commit('ignore')
+    await repo.write('.env', 'KEY=1\n')
+    await repo.write('local.json', '{}\n')
+    await repo.write('src/app.ts', 'x\n')
+
+    const result = await commit(repo, { all: true, copiedPaths: ['.env', 'local.json'] })
+
+    expect(result.paths).toEqual(['src/app.ts'])
+    expect(await repo.git(['status', '--porcelain'])).toBe('?? local.json')
   })
 
   it('refuses all with paths named', async () => {
