@@ -65,6 +65,20 @@ describe('findTypedInput at a shell prompt', () => {
     expect(find()?.end).toEqual({ col: 11, row: 1 })
   })
 
+  it('follows input zsh wrapped itself, erasing the row it wrapped onto', async () => {
+    const { write, find } = emulator(30)
+    await write(`w1 % ${B}a long line that wraps ac \r\u001b[Kr\rross the pane`)
+    expect(find()?.text).toBe('a long line that wraps across the pane')
+  })
+
+  it('finds nothing once the line is run', async () => {
+    const { write, find } = emulator()
+    await write(`% ${B}sleep 5`)
+    expect(find()?.text).toBe('sleep 5')
+    await write('\u001b]133;C\u0007')
+    expect(find()).toBeNull()
+  })
+
   it('keeps text past a caret moved left, not a right prompt or a faint suggestion', async () => {
     const { write, find } = emulator()
     await write(`% \u001b7\u001b[70G[right]\u001b8${B}echo hello\u001b[5D`)
@@ -282,6 +296,30 @@ describe('⌘A in a pane', () => {
     press('Escape')
     expect(term.hasSelection()).toBe(false)
     expect(sent).toHaveLength(2)
+  })
+
+  it('replaces the input with text that lands a turn late, and lets a reply to the program through', async () => {
+    const { term } = emulator()
+    const program = shell(term, 'echo hello')
+    const sent: string[] = []
+    const prompts = promptEnds(term)
+    await new Promise((resolve) => term.write('', () => setTimeout(resolve, 0)))
+    const input = typedInputSelection({
+      term,
+      find: () => findTypedInput(term, prompts.last()),
+      send: (data) => {
+        sent.push(data)
+        program.send(data)
+      },
+      settle: FAST
+    })
+    expect(input.select()).toBe(true)
+    input.write('\u001b[?1;2c', false)
+    expect(input.active()).toBe(true)
+    input.write('ü', false)
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(sent).toEqual(['\u001b[?1;2c', '\u0015', 'ü'])
+    expect(program.line()).toBe('ü')
   })
 
   it('copies just the input on ⌘C', async () => {

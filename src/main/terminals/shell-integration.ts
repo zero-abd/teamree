@@ -1,6 +1,6 @@
 // Startup files that run the user's own and then put this build's CLI first on
-// PATH, so a login shell that rebuilds PATH (path_helper, a profile) still finds it;
-// an interactive one also reports its directory at each prompt (OSC 7) and where the prompt ends (OSC 133;B).
+// PATH, so a login shell that rebuilds PATH (path_helper, a profile) still finds it; an interactive
+// one also reports its directory at each prompt (OSC 7), where the prompt ends and when a command starts (OSC 133).
 // zsh through ZDOTDIR, handed back once startup ends; bash through --init-file and BASH_ENV.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -28,14 +28,19 @@ const BASH_CWD = `__teamree_cwd() { printf '\\033]7;file://%s%s\\a' "$HOSTNAME" 
 PROMPT_COMMAND="__teamree_cwd\${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
 `
 
-// OSC 133;B where the prompt ends, so the pane can tell typed input from the prompt. zsh marks it
-// twice: in PS1, redrawn with the prompt, and at line-init, for themes that set PS1 after this hook.
+// OSC 133;B where the prompt ends and 133;C when the line is run, so the pane can tell typed input from the
+// prompt and from output. zsh marks B twice: in PS1, redrawn with it, and at line-init, for a theme that sets PS1 later.
 const ZSH_PROMPT_END = `__teamree_prompt_end() { if [[ -o promptpercent && $PS1 != *$'\\e]133;B'* ]]; then PS1+=$'%{\\e]133;B\\a%}'; fi }
 __teamree_line_init() { print -rn -- $'\\e]133;B\\a' }
+__teamree_run() { print -rn -- $'\\e]133;C\\a' }
 add-zsh-hook precmd __teamree_prompt_end
+add-zsh-hook preexec __teamree_run
 autoload -Uz add-zle-hook-widget && add-zle-hook-widget line-init __teamree_line_init`
-// Last in PROMPT_COMMAND, after anything that rebuilds PS1; a newline, since theirs may end in `;`.
-const BASH_PROMPT_END = `__teamree_prompt_end() { [[ $PS1 == *'133;B'* ]] || PS1+='\\[\\e]133;B\\a\\]'; }
+// Last in PROMPT_COMMAND, after anything that rebuilds PS1; a newline, since theirs may end in `;`. PS0 needs bash 4.4.
+const BASH_PROMPT_END = `__teamree_prompt_end() {
+  [[ $PS1 == *'133;B'* ]] || PS1+='\\[\\e]133;B\\a\\]'
+  [[ $PS0 == *'133;C'* ]] || PS0+='\\e]133;C\\a'
+}
 PROMPT_COMMAND="\${PROMPT_COMMAND:+$PROMPT_COMMAND$'\\n'}__teamree_prompt_end"
 `
 

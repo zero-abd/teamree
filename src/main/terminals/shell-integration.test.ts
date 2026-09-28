@@ -190,6 +190,8 @@ unix('the startup files', () => {
     )
     const ps1 = run('/bin/zsh', ['-i', '-c', '__teamree_prompt_end; __teamree_prompt_end; print -r -- ${(q+)PS1}'], env)
     expect(ps1).toBe("$'%# %{\\C-[]133;B\\C-G%}'")
+    expect(run('/bin/zsh', ['-i', '-c', '__teamree_run'], env)).toBe('\x1b]133;C\x07')
+    expect(run('/bin/zsh', ['-i', '-c', 'print -r -- ${preexec_functions[(I)__teamree_run]}'], env)).not.toBe('0')
   })
 
   it.runIf(process.platform === 'darwin' && canSpawnPty())(
@@ -231,11 +233,11 @@ unix('the startup files', () => {
         ...(launch.args as string[]),
         '-i',
         '-c',
-        'eval "$PROMPT_COMMAND" >/dev/null; eval "$PROMPT_COMMAND" >/dev/null; printf "%s\\n" "$PS1"'
+        'eval "$PROMPT_COMMAND" >/dev/null; eval "$PROMPT_COMMAND" >/dev/null; printf "%s %s\\n" "$PS1" "$PS0"'
       ],
       launch.env
     )
-    expect(said).toBe('$ \\[\\e]133;B\\a\\]')
+    expect(said).toBe('$ \\[\\e]133;B\\a\\] \\e]133;C\\a')
   })
 
   it('says where an interactive bash is at each prompt, with OSC 7', () => {

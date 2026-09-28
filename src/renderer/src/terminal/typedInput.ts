@@ -15,7 +15,7 @@ type Glyph = Cell & { chars: string; width: number; faint: boolean }
 
 type Screen = Pick<XTerm, 'buffer' | 'rows'>
 
-/** Where the last prompt ended; null once its line has left the buffer. */
+/** Where the last prompt ended; null once its line has left the buffer or the line was run. */
 export type PromptEnd = { line: number; col: number }
 
 export function promptEnds(term: Pick<XTerm, 'parser' | 'registerMarker' | 'buffer'>): {
@@ -25,7 +25,12 @@ export function promptEnds(term: Pick<XTerm, 'parser' | 'registerMarker' | 'buff
   let marker: IMarker | undefined
   let col = 0
   const handler = term.parser.registerOscHandler(133, (data) => {
-    if (data !== 'B' && !data.startsWith('B;')) return false
+    const kind = data.split(';', 1)[0]
+    if (kind === 'C') {
+      marker?.dispose()
+      marker = undefined
+    }
+    if (kind !== 'B') return false
     if (term.buffer.active.type !== 'normal') return true
     marker?.dispose()
     marker = term.registerMarker(0)
@@ -51,8 +56,9 @@ function shellInput(term: Screen, prompt: PromptEnd | null): TypedInput | null {
   const buffer = term.buffer.active
   if (prompt === null || buffer.type !== 'normal') return null
   const caret = { col: buffer.cursorX, row: buffer.baseY + buffer.cursorY }
+  // zsh wraps with an erase that clears xterm's wrapped flag, so a row filled to the edge continues too.
   let last = prompt.line
-  while (buffer.getLine(last + 1)?.isWrapped) last++
+  while (buffer.getLine(last + 1)?.isWrapped || reachesEdge(buffer.getLine(last), buffer.getLine(last + 1))) last++
   if (caret.row < prompt.line || caret.row > last || (caret.row === prompt.line && caret.col < prompt.col)) {
     return null
   }
@@ -78,6 +84,12 @@ function shellInput(term: Screen, prompt: PromptEnd | null): TypedInput | null {
     stop = index
   }
   return stop < 0 ? null : typed([glyphs.slice(0, stop + 1)], caret)
+}
+
+function reachesEdge(line: IBufferLine | undefined, next: IBufferLine | undefined): boolean {
+  if (line === undefined || next === undefined) return false
+  const cell = line.getCell(line.length - 1)
+  return cell !== undefined && (cell.getChars() !== '' || cell.getWidth() === 0)
 }
 
 const PROMPT_GLYPHS = new Set(['❯', '>', '›'])
@@ -335,14 +347,14 @@ export function typedInputSelection(options: {
     drop,
     clear,
     write: (data, byHand) => {
-      // A reply to the program's own query is not typing.
-      if (!byHand) send(data, byHand)
-      else if (clearing) queued.push([data, byHand])
-      else if (held !== null && replacesInput(data)) {
+      // Text is typing even when it lands a turn late, as an IME's does; a reply to the program's query never is.
+      const text = replacesInput(data)
+      if (clearing && (text || byHand)) queued.push([data, byHand])
+      else if (held !== null && text) {
         queued.push([data, byHand])
         void clear()
       } else {
-        drop()
+        if (byHand) drop()
         send(data, byHand)
       }
     },
