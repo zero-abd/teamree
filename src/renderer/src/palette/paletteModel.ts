@@ -45,6 +45,7 @@ import { automaticUpdatesLabel } from '../updates/updateNotice'
 import { landLabel, landNote, type LandOffer } from '../workspace/rightPanel/landOffer'
 import type { RunOffer } from '../workspace/runButtons'
 import { RUN_LABEL } from '@shared/runCommands'
+import { lineQuery } from './lineQuery'
 import type { RightPanelTab } from '../workspace/rightPanel/rightPanelState'
 
 /** Every command this window has (derived from `WorkspaceCommand`, so none go missing) plus the palette's own rows. */
@@ -84,6 +85,8 @@ export type PaletteAction =
   | `teamwork:${string}`
   /** A note a teammate shared, by its share id. */
   | `shared-note:${string}`
+  /** New Task in a worktree: a child task of it, by its id. */
+  | `task-in:${string}`
   /** A query that found nothing to run: New Task with it as the task, Open Branch narrowed to it. */
   | `new-task:${string}`
   | `open-branch:${string}`
@@ -267,6 +270,7 @@ export function buildPaletteItems(context: PaletteContext): PaletteItem[] {
     ...commandActions(context),
     ...resumeAllActions(context),
     ...restoreActions(context),
+    ...taskInActions(context),
     ...cleanUpActions(context),
     ...pushBaseActions(context),
     ...fetchActions(context),
@@ -539,6 +543,18 @@ function restoreActions(context: PaletteContext): ActionRow[] {
     keywords: `restore undo removed deleted worktree bring back ${removed.branch}`,
     hint: agoLabel(now - removed.removedAt)
   }))
+}
+
+/** New Task in each worktree a child can branch from; the one on screen carries New Child Task's chord. */
+function taskInActions(context: PaletteContext): ActionRow[] {
+  return context.worktrees
+    .filter((worktree) => worktree.state === 'ready' && worktree.missing !== true)
+    .map((worktree) => ({
+      id: `task-in:${worktree.id}` as const,
+      label: `New Task in ${worktreeLabel(worktreeDisplay(worktree))}`,
+      keywords: `new task child subtask ${worktree.branch}`,
+      hint: worktree.id === context.activeWorktreeId ? context.hintFor('new-child-task') : ''
+    }))
 }
 
 /** Clean Up Merged… per project, its name as the hint. */
@@ -895,11 +911,23 @@ export function queryGroups(
   const listed = stuck ? [...found, ...startFrom(items, query.trim())] : found
   const ranked = join === null ? listed : [join, ...listed.filter((item) => !isDimmed(item))]
   const byKind = new Map<string, PaletteItem[]>()
-  for (const item of [...ranked, ...(files ?? [])]) {
+  const ordered = filesFirst(ranked[0], files ?? [], lineQuery(query).path)
+    ? [...(files ?? []), ...ranked]
+    : [...ranked, ...(files ?? [])]
+  for (const item of ordered) {
     const title = KIND_TITLE[item.kind]
     byKind.set(title, [...(byKind.get(title) ?? []), item])
   }
   return [...byKind].map(([title, rows]) => ({ title, items: rows }))
+}
+
+/** A file named by the query (`matchTier` 2+) leads unless the best row's own name starts a word with the query. */
+function filesFirst(best: PaletteItem | undefined, files: readonly PaletteItem[], wanted: string): boolean {
+  if (best === undefined || best.id.startsWith('join:')) return false
+  if (!files.some((file) => matchTier(file.search, wanted) >= 2)) return false
+  const label = best.label.toLowerCase()
+  const at = label.indexOf(wanted.toLowerCase())
+  return at === -1 || !isWordStart(label, at)
 }
 
 const KIND_TITLE: Record<PaletteItem['kind'], string> = {
@@ -968,7 +996,10 @@ export function paletteGroups(items: readonly PaletteItem[], recent: readonly st
     .map((key) => byKey.get(key))
     .filter((item): item is PaletteItem => item !== undefined && !isDimmed(item))
   const rest = filterPalette(
-    items.filter((item) => !visited.includes(item) && !commands.includes(item) && !isSetting(item)),
+    items.filter(
+      (item) =>
+        !visited.includes(item) && !commands.includes(item) && !isSetting(item) && !item.id.startsWith('task-in:')
+    ),
     ''
   )
   const onScreen = (item: PaletteItem): boolean =>

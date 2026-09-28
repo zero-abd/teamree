@@ -126,6 +126,13 @@ describe('starting an agent from the palette', () => {
     expect(openDialog).not.toHaveBeenCalled()
   })
 
+  it('opens New Task in a worktree as a child task of it', () => {
+    mount()
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'new task in rewrite' } })
+    fireEvent.click(rows()[0] as HTMLElement)
+    expect(openDialog).toHaveBeenCalledExactlyOnceWith({ kind: 'new-task', projectId: 'p1', parentId: 'w1' })
+  })
+
   it('still opens the new-task dialog when that is the row chosen', () => {
     mount()
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'new task' } })

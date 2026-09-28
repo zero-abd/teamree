@@ -377,6 +377,11 @@ export function CommandPalette({
         store.openDialog({ kind: 'new-task', projectId: taskProject, task: item.id.slice('new-task:'.length) })
       return
     }
+    if (item.kind === 'action' && item.id.startsWith('task-in:')) {
+      const parent = worktrees.find((worktree) => `task-in:${worktree.id}` === item.id)
+      if (parent) store.openDialog({ kind: 'new-task', projectId: parent.projectId, parentId: parent.id })
+      return
+    }
     if (item.kind === 'action' && item.id.startsWith('join:')) {
       store.openInvitation(item.id.slice('join:'.length), true)
       return
