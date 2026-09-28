@@ -43,7 +43,7 @@ const terminal = (id: string, overrides: Partial<Terminal> = {}): Terminal => ({
   rows: 24,
   running: true,
   busy: false,
-  lastOutputAt: new Date(2026, 8, 27, 11, 4).getTime(),
+  lastOutputAt: new Date().setHours(11, 4, 0, 0),
   ...overrides
 })
 
