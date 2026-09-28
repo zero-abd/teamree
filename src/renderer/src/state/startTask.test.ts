@@ -2,6 +2,8 @@
 // worktrees, waits for them, and leaves each agent running in its own.
 
 import { expect, it, vi } from 'vitest'
+import type { Terminal, Worktree } from '@shared/entities'
+import type { WorkspaceEvent } from '@shared/methods'
 import { collectTerminalIds } from '../panes/paneLayout'
 
 vi.mock('../runtimeClient/currentRuntimeClient', async () => {
@@ -275,6 +277,107 @@ it('launches the agent in the permission mode the composer chose', { timeout: 20
   } finally {
     call.mockRestore()
     useWorkspaceStore.setState({ agentArgs: {} })
+    stop()
+  }
+})
+
+/** The seeded runtime with a setup pane in every ready worktree it answers about, moved only by `exit`. */
+function withSetupPane() {
+  const watchers = new Set<(event: WorkspaceEvent) => void>()
+  const watch = runtimeClient.watchWorkspace.bind(runtimeClient)
+  const watching = vi.spyOn(runtimeClient, 'watchWorkspace').mockImplementation((onEvent) => {
+    watchers.add(onEvent)
+    const inner = watch(onEvent)
+    return { close: () => (watchers.delete(onEvent), inner.close()) }
+  })
+  let setup: Partial<Terminal> = { running: true }
+  const call = runtimeClient.call.bind(runtimeClient) as (method: string, params: unknown) => Promise<unknown>
+  const calls = vi.spyOn(runtimeClient, 'call').mockImplementation((async (method: string, params: unknown) => {
+    const answer = await call(method, params)
+    if (method === 'worktree.get' && (answer as Worktree).state === 'ready') {
+      return { ...(answer as Worktree), setupTerminalId: 't_setup' }
+    }
+    if (method === 'terminal.list' && setup.id !== 'gone') {
+      const worktreeId = (params as { worktreeId: string }).worktreeId
+      return [...(answer as Terminal[]), { id: 't_setup', worktreeId, run: 'setup', label: 'setup', ...setup }]
+    }
+    return answer
+  }) as typeof runtimeClient.call)
+  return {
+    calls,
+    agentStarted: (worktreeId: string) =>
+      calls.mock.calls.some(
+        ([method, params]) =>
+          method === 'terminal.create' && (params as { worktreeId: string }).worktreeId === worktreeId
+      ),
+    exit: (exitCode: number) => {
+      setup = exitCode === 0 ? { id: 'gone' } : { running: false, exitCode }
+      for (const watcher of [...watchers]) watcher({ type: 'terminalExited', terminalId: 't_setup', exitCode })
+    },
+    restore: () => {
+      calls.mockRestore()
+      watching.mockRestore()
+    }
+  }
+}
+
+it('starts the agent only once the setup command has exited 0', { timeout: 20_000 }, async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const stop = store.startWatching()
+  const runtime = withSetupPane()
+  try {
+    const projectId = useWorkspaceStore.getState().projects[0]!.id
+    const agent = (await runtimeClient.call('agent.list', {}))[0]!
+    store.startTask({ projectId, creates: [{ name: 'Setup first', agentCommand: agent.command, task: 'Setup first' }] })
+
+    await until(
+      () => useWorkspaceStore.getState().worktrees.find((one) => one.name === 'Setup first')?.state === 'ready',
+      'the checkout to be ready'
+    )
+    const created = useWorkspaceStore.getState().worktrees.find((one) => one.name === 'Setup first')!
+    await until(() => runtime.calls.mock.calls.some(([method]) => method === 'terminal.list'), 'the setup to be read')
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(runtime.agentStarted(created.id)).toBe(false)
+
+    runtime.exit(0)
+    await until(() => runtime.agentStarted(created.id), 'the agent to start after setup')
+    expect(useWorkspaceStore.getState().setupHolds[created.id]).toBeUndefined()
+  } finally {
+    runtime.restore()
+    stop()
+  }
+})
+
+it('holds the agent when setup fails, until Start Agent Anyway', { timeout: 20_000 }, async () => {
+  const store = useWorkspaceStore.getState()
+  await store.bootstrap()
+  const stop = store.startWatching()
+  const runtime = withSetupPane()
+  try {
+    const projectId = useWorkspaceStore.getState().projects[0]!.id
+    const agent = (await runtimeClient.call('agent.list', {}))[0]!
+    store.startTask({
+      projectId,
+      creates: [{ name: 'Setup breaks', agentCommand: agent.command, task: 'Setup breaks' }]
+    })
+
+    await until(
+      () => useWorkspaceStore.getState().worktrees.find((one) => one.name === 'Setup breaks')?.state === 'ready',
+      'the checkout to be ready'
+    )
+    const created = useWorkspaceStore.getState().worktrees.find((one) => one.name === 'Setup breaks')!
+    await until(() => runtime.calls.mock.calls.some(([method]) => method === 'terminal.list'), 'the setup to be read')
+    runtime.exit(127)
+
+    await until(() => useWorkspaceStore.getState().setupHolds[created.id] !== undefined, 'the agent to be held')
+    expect(runtime.agentStarted(created.id)).toBe(false)
+
+    await store.startHeldAgent(created.id)
+    expect(runtime.agentStarted(created.id)).toBe(true)
+    expect(useWorkspaceStore.getState().setupHolds[created.id]).toBeUndefined()
+  } finally {
+    runtime.restore()
     stop()
   }
 })

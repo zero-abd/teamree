@@ -5,7 +5,7 @@ import { basename } from 'node:path'
 import type { RestoredAs, StoppedFor } from '../../shared/paneRestore'
 import { spawn } from 'node-pty'
 import type { IDisposable, IPty, IPtyForkOptions } from 'node-pty'
-import type { AgentEvent, ListeningPort, RunKind, Terminal } from '../../shared/entities'
+import type { AgentEvent, ListeningPort, PaneRun, Terminal } from '../../shared/entities'
 import type { TerminalEvent } from '../../shared/methods'
 import { KILL_ESCALATION_MS, killProcessTree } from './process-tree'
 import { recoverTailOnTeardown } from './pty-tail'
@@ -158,7 +158,7 @@ export type PtySessionInit = {
   /** See `Terminal.ordinal`. */
   ordinal?: number
   /** See `Terminal.run`. */
-  run?: RunKind
+  run?: PaneRun
   /** See `Terminal.ports`; read on every snapshot. */
   ports?: () => ListeningPort[] | undefined
   /** Called when the pane starts or stops producing output. */
@@ -184,7 +184,7 @@ export class PtySession {
   readonly command: string | undefined
   readonly agent: AgentKind | undefined
   readonly ordinal: number | undefined
-  readonly run: RunKind | undefined
+  readonly run: PaneRun | undefined
   private readonly portsOf: (() => ListeningPort[] | undefined) | undefined
 
   /** Not a field: a restarted agent has a different child, and `close()` kills by pid. */
@@ -357,6 +357,7 @@ export class PtySession {
       ...(this.label === undefined ? {} : { label: this.label }),
       ...(this.ordinal === undefined ? {} : { ordinal: this.ordinal }),
       ...(this.run === undefined ? {} : { run: this.run }),
+      ...(this.run === undefined || this.command === undefined ? {} : { command: this.command }),
       ...(ports === undefined || ports.length === 0 ? {} : { ports }),
       busy: this.busy,
       // Derived, not stored, so it cannot drift from the title.

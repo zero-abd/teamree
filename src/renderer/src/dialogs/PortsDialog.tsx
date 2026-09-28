@@ -20,7 +20,7 @@ export function PortsDialog(): React.JSX.Element {
   // A Run pane stops as its own Stop does; any other pane loses only the listening process.
   const stop = (entry: PortEntry): void => {
     const run = terminals[entry.terminalId]?.run
-    if (run !== undefined) void stopRun(entry.worktreeId, run)
+    if (run !== undefined && run !== 'setup') void stopRun(entry.worktreeId, run)
     else void runtimeClient.call('system.kill', { pid: entry.pid }).catch(() => undefined)
   }
 

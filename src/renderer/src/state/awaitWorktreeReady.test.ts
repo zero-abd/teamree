@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { Worktree } from '@shared/entities'
-import { awaitWorktreeReady, WorktreeNotReady, WorktreeReadyTimeout } from './awaitWorktreeReady'
+import type { ClosedPane, Terminal, Worktree } from '@shared/entities'
+import type { WorkspaceEvent } from '@shared/methods'
+import { awaitSetup, awaitWorktreeReady, WorktreeNotReady, WorktreeReadyTimeout } from './awaitWorktreeReady'
 
 const worktree = (state: Worktree['state'], error?: string): Worktree => ({
   id: 'wt_1',
@@ -140,6 +141,155 @@ describe('awaitWorktreeReady', () => {
       timeoutMs: 5
     })
     await expect(waiting).rejects.toThrow(WorktreeReadyTimeout)
+    expect(runtime.watcherCount).toBe(0)
+  })
+})
+
+const pane = (id: string, fields: Partial<Terminal> = {}): Terminal =>
+  ({ id, worktreeId: 'wt_1', running: true, run: 'setup', label: 'setup', ...fields }) as Terminal
+
+/** A ready worktree whose setup pane moves only when told to, announcing each move as the runtime does. */
+function setupRuntime(initial: Worktree, panes: Terminal[]) {
+  let current = initial
+  let listed = panes
+  let closed: ClosedPane[] = []
+  const watchers = new Set<(event: WorkspaceEvent) => void>()
+  const emit = (event: WorkspaceEvent): void => {
+    for (const watcher of [...watchers]) watcher(event)
+  }
+  const closeWith = (terminalId: string, exitCode: number): void => {
+    listed = listed.filter((one) => one.id !== terminalId)
+    closed = [{ terminalId, worktreeId: 'wt_1', resumable: false, closedAt: 1, exitCode }, ...closed]
+  }
+  return {
+    options: {
+      worktreeId: 'wt_1',
+      read: async () => current,
+      panes: async () => listed,
+      closed: async () => closed,
+      watch: (onEvent: (event: WorkspaceEvent) => void) => {
+        watchers.add(onEvent)
+        return { close: () => void watchers.delete(onEvent) }
+      }
+    },
+    get watcherCount() {
+      return watchers.size
+    },
+    /** The pane's command ended: `terminalExited`, then the list without it when it passed and closed. */
+    exit: (terminalId: string, exitCode: number, closes = exitCode === 0): void => {
+      if (closes) closeWith(terminalId, exitCode)
+      else listed = listed.map((one) => (one.id === terminalId ? { ...one, running: false, exitCode } : one))
+      emit({ type: 'terminalExited', terminalId, exitCode })
+      emit({ type: 'terminals' })
+    },
+    /** Closed with this exit on its record, announced only as `terminals`: the exit event is still coalescing. */
+    closeQuietly: (terminalId: string, exitCode: number): void => {
+      closeWith(terminalId, exitCode)
+      emit({ type: 'terminals' })
+    },
+    setPanes: (next: Terminal[]): void => {
+      listed = next
+      emit({ type: 'terminals' })
+    },
+    setWorktree: (next: Worktree): void => {
+      current = next
+      emit({ type: 'worktrees' })
+    }
+  }
+}
+
+const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
+
+async function stillWaiting(waiting: Promise<unknown>): Promise<boolean> {
+  await settled()
+  return (await Promise.race([waiting, Promise.resolve('waiting')])) === 'waiting'
+}
+
+describe('awaitSetup', () => {
+  const withSetup: Worktree = { ...worktree('ready'), setupTerminalId: 't_setup' }
+
+  it('lets the agent go at once where the project runs no setup', async () => {
+    const runtime = setupRuntime(worktree('ready'), [])
+    await expect(awaitSetup(runtime.options)).resolves.toBe('passed')
+    expect(runtime.watcherCount).toBe(0)
+  })
+
+  it('holds the agent until the setup command exits 0', async () => {
+    const runtime = setupRuntime(withSetup, [pane('t_setup')])
+    const waiting = awaitSetup(runtime.options)
+    expect(await stillWaiting(waiting)).toBe(true)
+
+    runtime.exit('t_other', 0)
+    runtime.setPanes([pane('t_setup'), pane('t_other', { run: undefined, running: false, exitCode: 0 })])
+    expect(await stillWaiting(waiting)).toBe(true)
+
+    runtime.exit('t_setup', 0)
+    await expect(waiting).resolves.toBe('passed')
+    expect(runtime.watcherCount).toBe(0)
+  })
+
+  it('reports a failed setup, which starts no agent', async () => {
+    const runtime = setupRuntime(withSetup, [pane('t_setup')])
+    const waiting = awaitSetup(runtime.options)
+    runtime.exit('t_setup', 127)
+    await expect(waiting).resolves.toBe('failed')
+    expect(runtime.watcherCount).toBe(0)
+  })
+
+  it('reads a setup pane already ended or gone on the first look', async () => {
+    await expect(awaitSetup(setupRuntime(withSetup, []).options)).resolves.toBe('passed')
+    const failed = setupRuntime(withSetup, [pane('t_setup', { running: false, exitCode: 1 })])
+    await expect(awaitSetup(failed.options)).resolves.toBe('failed')
+  })
+
+  it('waits on the question a repository command asks, then on the setup Run starts', async () => {
+    const runtime = setupRuntime({ ...worktree('ready'), setupAsk: 'npm ci' }, [])
+    const waiting = awaitSetup(runtime.options)
+    expect(await stillWaiting(waiting)).toBe(true)
+
+    runtime.setPanes([pane('t_setup')])
+    runtime.setWorktree(withSetup)
+    expect(await stillWaiting(waiting)).toBe(true)
+
+    runtime.exit('t_setup', 0)
+    await expect(waiting).resolves.toBe('passed')
+  })
+
+  it('after a failure, settles only on a pass or on the pane being closed', async () => {
+    const runtime = setupRuntime(withSetup, [pane('t_setup', { running: false, exitCode: 1 })])
+    const again = awaitSetup({ ...runtime.options, failed: true })
+    expect(await stillWaiting(again)).toBe(true)
+
+    // Run Again, and it fails again: still held.
+    runtime.setPanes([pane('t_setup')])
+    runtime.exit('t_setup', 1)
+    expect(await stillWaiting(again)).toBe(true)
+
+    runtime.setPanes([pane('t_setup')])
+    runtime.exit('t_setup', 0)
+    await expect(again).resolves.toBe('passed')
+
+    const closed = setupRuntime(withSetup, [pane('t_setup', { running: false, exitCode: 1 })])
+    const given = awaitSetup({ ...closed.options, failed: true })
+    closed.closeQuietly('t_setup', 1)
+    await expect(given).resolves.toBe('closed')
+    expect(closed.watcherCount).toBe(0)
+  })
+
+  // The exit event waits out the stream's coalescing window; a read in that window finds the pane already closed.
+  it('after a failure, reads a pass whose exit event has not arrived from the closed pane’s record', async () => {
+    const runtime = setupRuntime(withSetup, [pane('t_setup', { running: false, exitCode: 1 })])
+    const again = awaitSetup({ ...runtime.options, failed: true })
+    runtime.setPanes([pane('t_setup')])
+    expect(await stillWaiting(again)).toBe(true)
+
+    runtime.closeQuietly('t_setup', 0)
+    await expect(again).resolves.toBe('passed')
+  })
+
+  it('reads a setup still running at the deadline as failed, so its agent is held rather than started', async () => {
+    const runtime = setupRuntime(withSetup, [pane('t_setup')])
+    await expect(awaitSetup({ ...runtime.options, timeoutMs: 5 })).resolves.toBe('failed')
     expect(runtime.watcherCount).toBe(0)
   })
 })

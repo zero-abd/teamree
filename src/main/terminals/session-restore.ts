@@ -2,7 +2,7 @@
 // way back up. The rule is in `restoreLaunch`: a stored command is re-issued
 // only when it resumes something; anything else comes back as a plain shell, a Run pane as ended.
 
-import type { RunKind } from '../../shared/entities'
+import type { PaneRun } from '../../shared/entities'
 import type { StoppedFor } from '../../shared/paneRestore'
 import type { AgentKind } from './agent-command'
 import { carriesSelector, restartSessionCommand, resumeSessionCommand } from './agent-command'
@@ -40,7 +40,7 @@ export type TerminalRecord = {
   /** See `Terminal.ordinal`: kept so an unnamed pane keeps its number across a restart. */
   ordinal?: number
   /** Which Run button started it; see `Terminal.run`. */
-  run?: RunKind
+  run?: PaneRun
   /** How the run or agent ended, when it ended before the app quit, and when. */
   exitCode?: number
   endedAt?: number

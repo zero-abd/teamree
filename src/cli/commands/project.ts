@@ -136,9 +136,11 @@ export const projectCommands: readonly CommandSpec[] = [
     summary: 'Show or set the command every new worktree runs.',
     details:
       'Given no command, prints the stored one. Given one, replaces it; --clear removes it.\n' +
-      'It runs once the checkout is ready, in a pane of the new worktree labelled "setup", in your login ' +
+      'It runs once the checkout is ready, in a pane of the new worktree labelled "setup", run by your ' +
       'shell with the checkout as its cwd — so you watch it and can Ctrl-C it. It is not parsed: quote it ' +
-      'as one argument and it is typed into that pane verbatim.\n' +
+      'as one argument and it runs verbatim.\n' +
+      'The pane closes when the command exits 0 and stays, with its output, when it fails. A task started ' +
+      'in the app starts its agent only after it passes.\n' +
       'The pane is recorded on the worktree as setupTerminalId, which `worktree list --json` and ' +
       '`worktree wait --json` carry once the checkout is ready.',
     args: [

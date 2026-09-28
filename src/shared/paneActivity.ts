@@ -1,7 +1,7 @@
 // What a pane is doing, read from a PTY rather than an agent's protocol: bytes arriving, how the
 // process ended, the title, the bell, and, outranking all of them, what the agent's hooks report.
 
-import type { AgentEvent, AgentKind, RunKind } from './entities'
+import type { AgentEvent, AgentKind, PaneRun } from './entities'
 import { runState } from './runCommands'
 import type { ScreenOpinion } from './screenOpinion'
 import type { TitleOpinion } from './titleOpinion'
@@ -39,7 +39,7 @@ export type PaneActivitySource = {
   /** What the agent last reported about itself, when it reports at all. */
   agentEvent?: AgentEvent
   tookTurn?: boolean
-  run?: RunKind
+  run?: PaneRun
   askingYou?: number
 }
 

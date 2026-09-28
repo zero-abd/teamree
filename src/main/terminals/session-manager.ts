@@ -11,7 +11,7 @@ import type {
   Layout,
   ListeningPort,
   PaneNode,
-  RunKind,
+  PaneRun,
   SubagentTranscript,
   Terminal
 } from '../../shared/entities'
@@ -317,7 +317,7 @@ export class TerminalSessionManager {
   }
 
   /** Starts a terminal in the largest pane's place (`paneRoom.ts`), on the last grid a window reported. */
-  create(params: ParamsOf<'terminal.create'> & { run?: RunKind }): Terminal {
+  create(params: ParamsOf<'terminal.create'> & { run?: PaneRun }): Terminal {
     this.noteGrid(params)
     if (params.minPane !== undefined) this.minPane = params.minPane
     const layout = this.layoutFor(params.worktreeId)
@@ -707,7 +707,8 @@ export class TerminalSessionManager {
           record.agent !== undefined &&
           record.command !== undefined &&
           resumeSessionCommand(record.command, record.agent, record.agentSessionId ?? null) !== null,
-        closedAt
+        closedAt,
+        ...(record.exitCode === undefined ? {} : { exitCode: record.exitCode })
       }))
   }
 
@@ -1107,7 +1108,7 @@ export class TerminalSessionManager {
       endedAt?: number
       /** The number a reopened pane had; kept unless a live pane has it now. */
       ordinal?: number
-      run?: RunKind
+      run?: PaneRun
     },
     restoring?: TerminalRecord,
     restored?: RestoredAs,

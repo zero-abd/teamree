@@ -33,7 +33,6 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
 }))
 
 const { PaneTree } = await import('./PaneTree')
-const { showPane } = await import('../terminal/shownPanes')
 const { paneStage } = await import('./PaneLifecycle')
 const { useMessageStore } = await import('../state/messages')
 const { focusAskAnswer } = await import('./askCards')
@@ -238,30 +237,35 @@ describe('a command that was not found', () => {
     expect(actions()).toEqual(['Run Again', 'Show Log', 'Close'])
   })
 
-  it('says so on the setup pane, which stays a shell', () => {
-    vi.useFakeTimers()
-    // A fresh shell's screen: a few rows written, the rest of the grid blank under them.
-    const rows = ['% pnpm install --frozen-lockfile', 'zsh: command not found: pnpm', '% ', ...Array(21).fill('')]
-    const hide = showPane('t1', {
-      buffer: {
-        active: {
-          length: rows.length,
-          getLine: (row) => ({ isWrapped: false, translateToString: () => rows[row] ?? '' })
-        }
-      },
-      clear: () => {}
-    })
+  it('names it on a failed setup, which offers the held agent and a shell', async () => {
+    output = 'zsh:1: command not found: pnpm\r\n'
+    const held = { agentCommand: 'claude', label: 'fix batch 1', task: 'fix batch 1' }
+    useWorkspaceStore.setState({ setupHolds: { w1: held } })
+    const startHeldAgent = vi.spyOn(useWorkspaceStore.getState(), 'startHeldAgent').mockResolvedValue()
     try {
-      mount(terminal('t1', { label: 'setup' }))
-      act(() => {
-        vi.advanceTimersByTime(1_000)
-      })
-      const card = screen.getByRole('group', { name: 'pnpm not found' })
-      expect(card.textContent).toContain('Install with: npm i -g pnpm')
+      mount(terminal('t1', { label: 'setup', run: 'setup', command: 'pnpm i', running: false, exitCode: 127 }))
+      await act(async () => {})
+      expect(marker()).toBe('pnpm not found · 11:04')
+      expect(document.querySelector('.pane-end__hint')?.textContent).toBe('Install with: npm i -g pnpm')
+      expect(actions()).toEqual(['Run Again', 'Start Agent Anyway', 'Open Shell', 'Show Log', 'Close'])
+      fireEvent.click(screen.getByRole('button', { name: 'Start Agent Anyway' }))
+      expect(startHeldAgent).toHaveBeenCalledWith('w1')
     } finally {
-      hide()
-      vi.useRealTimers()
+      startHeldAgent.mockRestore()
+      useWorkspaceStore.setState({ setupHolds: {} })
     }
+  })
+})
+
+describe('a setup still running', () => {
+  it('says Setting up and its command, its output hidden until asked for', () => {
+    mount(terminal('t1', { label: 'setup', run: 'setup', command: 'npm install', title: 'npm' }))
+    expect(screen.getByRole('status', { name: 'Setting up · npm install' })).toBeTruthy()
+    const pane = document.querySelector('.pane') as HTMLElement
+    expect(pane.classList.contains('pane--output-hidden')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Show Output' }))
+    expect(pane.classList.contains('pane--output-hidden')).toBe(false)
+    expect(screen.getByRole('button', { name: 'Hide Output' })).toBeTruthy()
   })
 })
 
