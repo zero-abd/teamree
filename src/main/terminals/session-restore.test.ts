@@ -536,6 +536,26 @@ describePty('restoring terminals across a restart', () => {
     expect(restored.map((pane) => pane.label)).toEqual(['auth refactor', 'pager streaming'])
   }, 20_000)
 
+  it('brings panes back under the numbers they had, gaps included', async () => {
+    const { checkout } = await fakeAgent('unused')
+    const repositories = createRepositories()
+
+    const first = manager(repositories, checkout)
+    const one = first.create({ worktreeId: 'wt_1' })
+    const two = first.create({ worktreeId: 'wt_1' })
+    const three = first.create({ worktreeId: 'wt_1' })
+    await first.close(two.id)
+    expect([one.ordinal, three.ordinal]).toEqual([1, 3])
+    await first.shutdown()
+
+    const second = manager(repositories, checkout)
+    expect(second.restoreSessions().restored).toBe(2)
+    expect(second.list('wt_1').map((pane) => [pane.id, pane.ordinal])).toEqual([
+      [one.id, 1],
+      [three.id, 3]
+    ])
+  }, 20_000)
+
   it('brings an ordinary pane back as a shell rather than running its command again', async () => {
     const { checkout } = await fakeAgent('unused')
     const marker = path.join(checkout, 'ran.txt')

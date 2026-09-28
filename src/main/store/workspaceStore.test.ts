@@ -653,6 +653,15 @@ describe('workspace store', () => {
       const reopened = await WorkspaceStore.open(filePath)
       expect(reopened.listTerminals().map((record) => record.label)).toEqual(['auth refactor · take two'])
     })
+
+    it('keeps the number an unnamed pane was given', async () => {
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal({ ...named('t3'), ordinal: 3 })
+      await store.flush()
+
+      const reopened = await WorkspaceStore.open(filePath)
+      expect(reopened.listTerminals()).toEqual([{ ...named('t3'), ordinal: 3 }])
+    })
   })
 
   /**

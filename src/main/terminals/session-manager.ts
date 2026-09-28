@@ -50,6 +50,7 @@ import {
 } from './agent-hooks'
 import {
   containsTerminal,
+  focusAfterRemoval,
   insertBeside,
   joinGroup,
   leafPane,
@@ -57,7 +58,6 @@ import {
   parsePaneNode,
   placeOf,
   removePane,
-  shownWith,
   splitPane,
   terminalIdsIn,
   type SplitDirection
@@ -1115,7 +1115,8 @@ export class TerminalSessionManager {
     const label = restoring?.label ?? params.label
     // A relaunch replaces a live session under the same id, and keeps its number.
     const ordinal =
-      this.sessions.get(id)?.ordinal ?? this.keptOrdinal(params.worktreeId, agent ?? shell, params.ordinal)
+      this.sessions.get(id)?.ordinal ??
+      this.keptOrdinal(params.worktreeId, agent ?? shell, params.ordinal ?? restoring?.ordinal)
 
     const host = this.options.paneHost
     const init: PtySessionInit = {
@@ -1207,6 +1208,7 @@ export class TerminalSessionManager {
       // `markNotResumable` answers the unknown when the agent refuses.
       ...(restoring === undefined ? { typed: false } : restoring.typed === undefined ? {} : { typed: restoring.typed }),
       ...(prompted ? { prompted: true } : {}),
+      ordinal,
       ...(params.run === undefined ? {} : { run: params.run }),
       cols: snapshot.cols,
       rows: snapshot.rows,
@@ -1371,18 +1373,14 @@ export class TerminalSessionManager {
     return cloneLayout(this.layouts.putLayout(cloneLayout(layout)))
   }
 
-  /** Takes a pane's leaf out of its worktree's tree; focus moves to the first pane left. */
+  /** Takes a pane's leaf out of its worktree's tree; focus moves as `focusAfterRemoval` says. */
   private dropLeaf(worktreeId: string, terminalId: string): void {
     const layout = this.layoutFor(worktreeId)
-    const root = removePane(layout.root, terminalId)
-    // A tab's group shows its next tab, which is where the focus goes.
-    const place = placeOf(layout.root, terminalId)
-    const next = place?.tab === true ? shownWith(root, place.beside[0] ?? '') : undefined
     this.saveLayout({
       worktreeId,
-      root,
+      root: removePane(layout.root, terminalId),
       focusedTerminalId:
-        layout.focusedTerminalId === terminalId ? (next ?? terminalIdsIn(root)[0] ?? null) : layout.focusedTerminalId
+        layout.focusedTerminalId === terminalId ? focusAfterRemoval(layout.root, terminalId) : layout.focusedTerminalId
     })
   }
 

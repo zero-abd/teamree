@@ -298,7 +298,7 @@ export function joinGroup(root: PaneNode | null, member: string, id: string): Pa
 const GROUP: FileColumn = { kind: 'split', direction: 'column', sizes: [], children: [], tabs: true }
 
 /** The tab the group holding `member` shows; `member` itself for a lone pane, undefined when it is not in the tree. */
-export function shownWith(root: PaneNode | null, member: string): string | undefined {
+function shownWith(root: PaneNode | null, member: string): string | undefined {
   if (root === null) return undefined
   if (root.kind === 'leaf') return root.terminalId === member ? member : undefined
   if (isFileColumn(root)) {
@@ -314,6 +314,16 @@ export function shownWith(root: PaneNode | null, member: string): string | undef
     if (found !== undefined) return found
   }
   return undefined
+}
+
+/** Where focus goes once pane `id` leaves `root`: the tab its group shows next, else the tab the neighbouring group shows. */
+export function focusAfterRemoval(root: PaneNode | null, id: string): string | null {
+  const ids = terminalIdsIn(root)
+  const at = ids.indexOf(id)
+  if (at === -1) return null
+  const place = placeOf(root, id)
+  const heir = place?.tab === true ? place.beside[0] : (ids[at + 1] ?? ids[at - 1])
+  return heir === undefined ? null : (shownWith(removePane(root, id), heir) ?? null)
 }
 
 /** A group of one terminal is that pane; one of one file stays the file column. */

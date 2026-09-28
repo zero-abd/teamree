@@ -40,6 +40,8 @@ export type TerminalRecord = {
   typed?: boolean
   /** Its agent was handed the worktree's task at launch; the conversation it began is not started again. */
   prompted?: boolean
+  /** See `Terminal.ordinal`: kept so an unnamed pane keeps its number across a restart. */
+  ordinal?: number
   /** Which Run button started it; see `Terminal.run`. */
   run?: RunKind
   /** How that run ended, when it ended before the app quit. */
