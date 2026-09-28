@@ -232,12 +232,12 @@ function FileRow({
           {folder === '' ? null : <span className="change__dir">{folder}</span>}
         </span>
         {partly ? (
-          <span className="change__where" title="Partly staged">
+          <span className="change__where" data-tip="Partly staged">
             partial
           </span>
         ) : null}
         {uncommitted && isViewedRow(viewed, change) ? (
-          <span className="change__viewed" role="img" aria-label="Viewed" title="Viewed">
+          <span className="change__viewed" role="img" aria-label="Viewed" data-tip="Viewed">
             ✓
           </span>
         ) : null}
@@ -257,7 +257,7 @@ function FileRow({
             type="button"
             className="change__icon"
             aria-label={`Open ${change.path}`}
-            title="Open File"
+            data-tip="Open File"
             tabIndex={-1}
             onClick={() => actions.open(change.path)}
           >
@@ -269,7 +269,7 @@ function FileRow({
             type="button"
             className="change__icon"
             aria-label={`Discard ${change.path}…`}
-            title="Discard…"
+            data-tip="Discard…"
             tabIndex={-1}
             disabled={hunkPending}
             onClick={() => actions.discard(change.path)}
@@ -282,7 +282,7 @@ function FileRow({
             type="button"
             className="change__icon"
             aria-label={`Stage ${change.path}`}
-            title="Stage"
+            data-tip="Stage"
             tabIndex={-1}
             onClick={() => actions.stage(change.path)}
           >
@@ -294,7 +294,7 @@ function FileRow({
             type="button"
             className="change__icon"
             aria-label={`Unstage ${change.path}`}
-            title="Unstage"
+            data-tip="Unstage"
             tabIndex={-1}
             disabled={hunkPending && change.staged}
             onClick={() => actions.unstage(change, ticked)}

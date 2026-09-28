@@ -785,7 +785,7 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
-/* What a hidden label says, after a beat: the inverted ground, never repeating a visible label. */
+/* What a small mark means, after a beat: the inverted ground, one element for the window (`ui/Tooltip.ts`). */
 .tooltip {
   position: fixed;
   z-index: 90;
@@ -798,8 +798,20 @@ kbd {
   font-size: var(--text-xs);
   font-weight: 600;
   line-height: 16px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
   pointer-events: none;
-  transform: translateX(-50%);
+  animation: tooltip-in var(--motion-fast) var(--ease-enter);
+}
+
+.tooltip[data-instant] {
+  animation: none;
+}
+
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+  }
 }
 
 /* A notice: the tone is a 2px edge inside the left border, never a fill. */

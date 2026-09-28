@@ -10,7 +10,10 @@ export function TokensLine({ worktreeId }: { worktreeId: string }): React.JSX.El
   const lines = usageLines(usage, showCost)
   if (usage === undefined || lines === null) return null
   return (
-    <span className="statusbar__item statusbar__tokens" title={[usageDetail(usage), ...lines.slice(1)].join('\n')}>
+    <span
+      className="statusbar__item statusbar__tokens"
+      data-tip={['Agent tokens in this worktree', usageDetail(usage), ...lines.slice(1)].join('\n')}
+    >
       {usageLabel(usage, showCost) ?? '0 tok'}
     </span>
   )

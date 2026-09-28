@@ -31,7 +31,7 @@ export function AddProjectButton(): React.JSX.Element {
       <button
         type="button"
         className="button button--ghost button--icon"
-        title="Add project"
+        data-tip="Add project"
         aria-label="Add project"
         aria-haspopup="menu"
         aria-expanded={menuAt !== null}

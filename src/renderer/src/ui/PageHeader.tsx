@@ -34,7 +34,13 @@ export function PageHeader({
         {lede === undefined ? null : <p className="page__lede">{lede}</p>}
       </div>
       {trailing === undefined ? null : <div className="page__trailing">{trailing}</div>}
-      <button type="button" className="page__close" title={closeTitle} aria-label="Back to the panes" onClick={onClose}>
+      <button
+        type="button"
+        className="page__close"
+        data-tip={closeTitle}
+        aria-label="Back to the panes"
+        onClick={onClose}
+      >
         <Icon name="close" />
       </button>
     </div>

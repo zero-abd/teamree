@@ -104,7 +104,7 @@ export function FilterToggle(): React.JSX.Element {
     <button
       type="button"
       className="button button--ghost button--icon"
-      title="Filter"
+      data-tip="Filter"
       aria-label="Filter"
       aria-expanded={shown}
       data-filter-toggle=""
@@ -122,7 +122,7 @@ export function HideDoneToggle(): React.JSX.Element {
     <button
       type="button"
       className="button button--ghost button--icon"
-      title="Hide Done"
+      data-tip="Hide Done"
       aria-label="Hide Done"
       aria-pressed={on}
       onClick={() => toggleQuick('hide-done')}
@@ -139,7 +139,7 @@ export function CompactToggle(): React.JSX.Element {
     <button
       type="button"
       className="button button--ghost button--icon sidebar__compact"
-      title="Compact"
+      data-tip="Compact"
       aria-label="Compact"
       aria-pressed={compact}
       onClick={() => setCompact(!compact)}

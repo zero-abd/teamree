@@ -222,6 +222,9 @@ export function WorktreeRow({
       state.byProject[worktree.projectId]?.worktrees.find((row) => row.worktreeId === worktree.id)?.claims.join('\n') ??
       ''
   )
+  const baseRef = useWorkspaceStore(
+    (state) => worktree.baseRef ?? state.projects.find((project) => project.id === worktree.projectId)?.baseRef
+  )
   const recreateCheckout = useWorkspaceStore((state) => state.recreateCheckout)
   const locateCheckout = useWorkspaceStore((state) => state.locateCheckout)
   const heardFrom = useWorkspaceStore((state) =>
@@ -416,10 +419,15 @@ export function WorktreeRow({
       // One group, so the open row can hide what its status bar and Changes badge already say.
       <span className="worktree__git">
         {ready ? (
-          <GitStatusChips status={status} child={worktree.parentId !== undefined} aheadBehind={!merged} />
+          <GitStatusChips
+            status={status}
+            child={worktree.parentId !== undefined}
+            aheadBehind={!merged}
+            baseRef={baseRef}
+          />
         ) : null}
         {merged ? (
-          <span className="chip worktree__merged" title={mergedChip(landing).title}>
+          <span className="chip worktree__merged" data-tip={mergedChip(landing).title}>
             {mergedChip(landing).label}
           </span>
         ) : null}
@@ -428,7 +436,7 @@ export function WorktreeRow({
             className="worktree__merge worktree__merge--clean"
             role="img"
             aria-label={badge.detail}
-            title={badge.detail}
+            data-tip={badge.detail}
           >
             <Icon name="merge-clean" size={14} />
           </span>
@@ -437,12 +445,12 @@ export function WorktreeRow({
             className="worktree__merge worktree__merge--conflicts"
             role="img"
             aria-label={badge.detail}
-            title={badge.detail}
+            data-tip={badge.detail}
           >
             <Icon name="merge-conflict" size={14} />
           </span>
         ) : badge ? (
-          <span className={`chip worktree__merge worktree__merge--${badge.tone}`} title={badge.detail}>
+          <span className={`chip worktree__merge worktree__merge--${badge.tone}`} data-tip={badge.detail}>
             {badge.label}
           </span>
         ) : null}
@@ -458,7 +466,7 @@ export function WorktreeRow({
       <span
         className="chip worktree__issue"
         role="link"
-        title={issue.url}
+        data-tip={issue.url}
         onClick={(event) => {
           event.stopPropagation()
           openInBrowser(issue.url)
@@ -525,7 +533,7 @@ export function WorktreeRow({
       'claims',
       'rest',
       text,
-      <span className="chip worktree__claims" role="img" title={claims} aria-label={text}>
+      <span className="chip worktree__claims" role="img" data-tip={claims} aria-label={text}>
         ⚑
       </span>
     )
@@ -540,7 +548,7 @@ export function WorktreeRow({
       <span
         className="chip worktree__tally"
         role="link"
-        title={task.children.join('\n')}
+        data-tip={task.children.join('\n')}
         onClick={(event) => {
           event.stopPropagation()
           void useChildren.getState().showChildren(worktree.id)
@@ -558,7 +566,7 @@ export function WorktreeRow({
       'missing',
       'failing',
       'missing',
-      <span className="chip worktree__tag" title={`${worktree.path} is not on disk`}>
+      <span className="chip worktree__tag" data-tip={`${worktree.path} is not on disk`}>
         missing
       </span>
     )
@@ -577,7 +585,7 @@ export function WorktreeRow({
           <span
             className={dotClass(tone)}
             role="img"
-            title={
+            data-tip={
               rolled?.from === undefined
                 ? `${rows.length} pane${rows.length === 1 ? '' : 's'} here · ${TONE_LABEL[tone]}${
                     unreadHere ? ' · unread' : ''
@@ -600,7 +608,7 @@ export function WorktreeRow({
             ) : null}
             <span
               className={`worktree__name${unreadHere ? ' worktree__name--unread' : ''}`}
-              title={[
+              data-tip={[
                 pullRequest === undefined ? label : `${label} · Pull Request #${pullRequest.number}`,
                 `${worktree.branch} ${startedFromLabel(worktree)}`,
                 ...(tokens ?? [])
@@ -608,6 +616,7 @@ export function WorktreeRow({
               onDoubleClick={() => setRenaming(true)}
             >
               {display.title}
+              {unreadHere ? <span className="worktree__unread" data-tip="Unread output" /> : null}
             </span>
           </>
         )}
@@ -621,7 +630,7 @@ export function WorktreeRow({
       </span>
       {twoLines ? (
         <span className="worktree__meta" aria-hidden="true">
-          <span className="worktree__branch" title={branch}>
+          <span className="worktree__branch" data-tip={branch}>
             {branch ?? ''}
           </span>
           {chips.map((chip) => (
@@ -739,7 +748,7 @@ export function WorktreeRow({
           type="button"
           className="worktree__action"
           tabIndex={-1}
-          title={`More for ${label}`}
+          data-tip={`More for ${label}`}
           aria-label={`More for ${label}`}
           aria-haspopup="menu"
           aria-expanded={menuAt !== null}

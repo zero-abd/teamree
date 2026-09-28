@@ -151,7 +151,7 @@ export function ResourcesControl(): React.JSX.Element {
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={total === null ? 'Memory' : `Memory, ${total}`}
-        title="Memory · teamree + agents + shells"
+        data-tip="Memory · teamree, agents and shells"
         onClick={() => (open ? close() : setOpen(true))}
       >
         <span className={`statusbar__memory statusbar__memory--${sample === null ? 'calm' : memoryLevel(sample.rss)}`}>

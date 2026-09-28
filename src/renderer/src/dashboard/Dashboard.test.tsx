@@ -235,7 +235,7 @@ describe('where the keyboard lands', () => {
     // an instruction where a state belongs, and a sixth place teaching a chord.
     expect(document.querySelector('.placeholder__body')).toBeNull()
     expect(document.querySelector('.placeholder kbd')).toBeNull()
-    expect(screen.getByRole('button', { name: 'Back to the panes' }).getAttribute('title')).toBe('Back to the panes')
+    expect(screen.getByRole('button', { name: 'Back to the panes' }).getAttribute('data-tip')).toBe('Back to the panes')
 
     useWorkspaceStore.setState({ worktrees: [WORKTREE], terminals: { [PANE.id]: PANE } })
     view.rerender(<Dashboard />)
@@ -559,7 +559,7 @@ describe('the Tasks view', () => {
     )
     expect(marks).toEqual(['', '⚠db.ts', '⚠db.ts'])
     expect(document.querySelectorAll('.task-row .overlap--conflict')).toHaveLength(2)
-    expect((document.querySelector('.task-row .overlap') as HTMLElement).title).toBe(
+    expect((document.querySelector('.task-row .overlap') as HTMLElement).getAttribute('data-tip')).toBe(
       'src/db.ts · Update the tests · conflict'
     )
     useOverlaps.setState({ byProject: {} })

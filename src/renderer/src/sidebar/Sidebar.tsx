@@ -42,6 +42,7 @@ import { unreadNotes, useSharedNotes } from '../teamwork/sharedNotesStore'
 import { useSidebarView } from '../state/sidebarViewStore'
 import { filterProject, keepFlat, narrows, type RowFacts } from './sidebarFilter'
 import { CompactToggle, FilterToggle, HideDoneToggle, SidebarFilter } from './SidebarView'
+import { plural } from './tipText'
 import { Icon } from '../icons/Icon'
 
 export function Sidebar({
@@ -241,7 +242,7 @@ export function Sidebar({
         <button
           type="button"
           className="shell__toggle"
-          title="Hide sidebar"
+          data-tip="Hide sidebar"
           aria-label="Hide sidebar"
           onClick={toggleSidebar}
         >
@@ -256,7 +257,7 @@ export function Sidebar({
           type="button"
           className="rail__search"
           aria-label="Search worktrees and commands"
-          title={`Search ${searchHint}`}
+          data-tip={`Search ${searchHint}`}
           onClick={() => openDialog({ kind: 'palette' })}
         >
           <Icon name="search" />
@@ -269,7 +270,7 @@ export function Sidebar({
               type="button"
               className={`rail__link${teamworkProjectId !== null ? ' rail__link--current' : ''}`}
               aria-current={teamworkProjectId !== null ? 'page' : undefined}
-              title={railProject === undefined ? 'Join a Team…' : `Teamwork in ${railProject.name}`}
+              data-tip={railProject === undefined ? 'Join a Team…' : `Teamwork in ${railProject.name}`}
               onClick={() => {
                 if (teamworkProjectId !== null) closeTeamwork()
                 else if (railProject) openTeamwork(railProject.id)
@@ -279,11 +280,20 @@ export function Sidebar({
               <Icon name="team" />
               <span>Teamwork</span>{' '}
               {notesUnread > 0 ? (
-                <span className="rail__badge" role="img" aria-label={`${notesUnread} unread`}>
+                <span
+                  className="rail__badge"
+                  role="img"
+                  aria-label={`${notesUnread} unread`}
+                  data-tip={plural(notesUnread, 'unread note')}
+                >
                   {notesUnread}
                 </span>
               ) : online > 0 ? (
-                <span className="rail__meta rail__meta--online" aria-hidden="true">{`${online} online`}</span>
+                <span
+                  className="rail__meta rail__meta--online"
+                  aria-hidden="true"
+                  data-tip={`${plural(online, 'teammate')} online`}
+                >{`${online} online`}</span>
               ) : null}
             </button>
           </li>
@@ -292,13 +302,13 @@ export function Sidebar({
               type="button"
               className={`rail__link${dashboardOpen ? ' rail__link--current' : ''}`}
               aria-current={dashboardOpen ? 'page' : undefined}
-              title="All Panes, by what needs you"
+              data-tip="All Panes, by what needs you"
               onClick={toggleDashboard}
             >
               <Icon name="all-panes" />
               <span>All Panes</span>
               {paneList.length > 0 ? (
-                <span className="rail__meta" aria-hidden="true">
+                <span className="rail__meta" aria-hidden="true" data-tip={plural(paneList.length, 'pane')}>
                   {paneList.length}
                 </span>
               ) : null}
@@ -526,7 +536,9 @@ export function Sidebar({
                   onTrash={() => void trashProject(project.id)}
                   meta={
                     <div className="project__meta">
-                      <p className="project__base">{project.baseRef}</p>
+                      <p className="project__base" data-tip={`New tasks start from ${project.baseRef}`}>
+                        {project.baseRef}
+                      </p>
                       <BaseFreshness project={project} />
                       <UnpushedBase projectId={project.id} />
                     </div>
@@ -563,7 +575,7 @@ export function Sidebar({
                           className={`project__teamwork${summary ? ` project__teamwork--${summary.tone}` : ''}`}
                           tabIndex={-1}
                           aria-label={`${teamworkControlLabel(summary)} in ${project.name}`}
-                          title={summary ? summary.detail : `Teamwork in ${project.name}`}
+                          data-tip={summary ? summary.detail : `Teamwork in ${project.name}`}
                           onClick={() => openTeamwork(project.id)}
                         >
                           {glance.length > 0 && summary
@@ -630,7 +642,7 @@ export function Sidebar({
                       </li>
                     ) : null}
                     {unheard.length > 0 && !narrowing && !quick.includes('mine') ? (
-                      <li className="project__unheard" role="none" title={unheardTitle(unheard)}>
+                      <li className="project__unheard" role="none" data-tip={unheardTitle(unheard)}>
                         {`Nothing heard yet from ${unheard.join(', ')}`}
                       </li>
                     ) : null}
@@ -649,7 +661,7 @@ export function Sidebar({
           type="button"
           className={`rail__link sidebar__settings${settingsOpen ? ' rail__link--current' : ''}`}
           aria-current={settingsOpen ? 'page' : undefined}
-          title={cliFlag === null ? 'Settings' : `Settings · CLI: ${cliTitle(cli)}`}
+          data-tip={cliFlag === null ? undefined : `CLI: ${cliTitle(cli)}`}
           aria-label={cliFlag === null ? undefined : `Settings, ${cliFlag}`}
           onClick={() => (cliFlag === null || settingsOpen ? toggleSettings() : openSettings('cli'))}
         >
@@ -668,7 +680,7 @@ export function Sidebar({
           aria-pressed={appearanceOpen}
           aria-controls="appearance-sheet"
           aria-label="Appearance"
-          title="Appearance"
+          data-tip="Appearance"
           onClick={() => showAppearance(!appearanceOpen)}
         >
           <Icon name="appearance" />
@@ -678,7 +690,7 @@ export function Sidebar({
           className={`rail__link rail__link--icon${helpOpen ? ' rail__link--current' : ''}`}
           aria-current={helpOpen ? 'page' : undefined}
           aria-label="Help"
-          title="Help"
+          data-tip="Help"
           onClick={toggleHelp}
         >
           <Icon name="help" />

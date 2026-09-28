@@ -389,9 +389,10 @@ export function Icon({
   className?: string
   label?: string
 } & { [attribute: `data-${string}`]: string }): React.JSX.Element {
-  const named = label === undefined ? { 'aria-hidden': true } : { role: 'img', 'aria-label': label }
+  const named = label === undefined ? { 'aria-hidden': true } : { role: 'img', 'aria-label': label, 'data-tip': label }
   return (
     <svg
+      {...named}
       {...data}
       className={className}
       data-icon={name}
@@ -403,9 +404,7 @@ export function Icon({
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"
-      {...named}
     >
-      {label === undefined ? null : <title>{label}</title>}
       {GLYPHS[name]}
     </svg>
   )

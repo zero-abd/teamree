@@ -76,5 +76,5 @@ export function Segments({ label, children }: { label: string; children: React.R
 
 /** A file's edits are ahead of the disk; the tab and the bar draw the same one. */
 export function UnsavedDot(): React.JSX.Element {
-  return <span className="file__unsaved" role="img" aria-label="Unsaved" title="Unsaved" data-testid="unsaved" />
+  return <span className="file__unsaved" role="img" aria-label="Unsaved" data-tip="Unsaved" data-testid="unsaved" />
 }

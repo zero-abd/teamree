@@ -6,6 +6,7 @@ import { harnessName } from '../../agents/harnesses'
 import { ReviewBar } from '../../review/ReviewBar'
 import { mergedChip } from '../../sidebar/mergeBadge'
 import { overlapLines } from '../../sidebar/overlapChip'
+import { aheadTip, behindTip, gitRefs } from '../../sidebar/tipText'
 import { openOverlap, useOverlapChip } from '../../sidebar/useOverlapChip'
 import { openInBrowser } from '../../shell/openInBrowser'
 import { useWorkspaceStore } from '../../state/workspaceStore'
@@ -160,7 +161,7 @@ export function ChangesTab(): React.JSX.Element | null {
     <section className="changes" aria-label="Changes in this worktree">
       {status ? (
         <div className="changes__head">
-          <span className="changes__ref" title={`↑ ${status.upstream ?? log?.baseRef ?? ''}  ↓ ${log?.baseRef ?? ''}`}>
+          <span className="changes__ref" data-tip={refTip(status, base)}>
             {refLine(status.branch, base, status.ahead, status.behind)}
           </span>
           <IconButton icon="reload" label="Refresh" onClick={() => rereadChanges(worktreeId)} />
@@ -295,7 +296,7 @@ export function ChangesTab(): React.JSX.Element | null {
                       type="button"
                       className="change__discard"
                       aria-label={`Take Ours for ${change.path}`}
-                      title={`${sides.task}’s version`}
+                      data-tip={`${sides.task}’s version`}
                       onClick={() => void resolveConflict(worktreeId, change.path, 'ours')}
                     >
                       Take Ours
@@ -304,7 +305,7 @@ export function ChangesTab(): React.JSX.Element | null {
                       type="button"
                       className="change__discard"
                       aria-label={`Take Theirs for ${change.path}`}
-                      title={`${sides.incoming}’s version`}
+                      data-tip={`${sides.incoming}’s version`}
                       onClick={() => void resolveConflict(worktreeId, change.path, 'theirs')}
                     >
                       Take Theirs
@@ -611,4 +612,14 @@ const PUSH_LABEL = { push: ['Push', 'Pushing…'], publish: ['Publish Branch', '
 /** What an empty changes list means; "No changes" is wrong when the base could not be compared. */
 export function emptyChangesLabel(log: WorktreeLog | undefined): string {
   return log?.unavailable !== undefined ? 'Nothing uncommitted' : 'No changes'
+}
+
+/** The ref line's arrows in words, against the refs they count. */
+function refTip(status: WorktreeStatus, base: string | undefined): string | undefined {
+  const refs = gitRefs(status, base)
+  const lines = [
+    status.ahead > 0 ? aheadTip(status.ahead, refs) : '',
+    status.behind > 0 ? behindTip(status.behind, refs) : ''
+  ]
+  return lines.filter(Boolean).join('\n') || undefined
 }

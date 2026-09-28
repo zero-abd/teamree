@@ -61,7 +61,7 @@ export function TeammateGroups({
               aria-expanded={!closed}
               aria-label={`${teammate.handle}, ${presenceWords(teammate, true)} · ${activityWords(teammate)}`}
               tabIndex={-1}
-              title={stale?.detail}
+              data-tip={stale?.detail}
               data-teammate-head={teammate.handle}
               onClick={toggle}
               onKeyDown={(event) => {
@@ -125,7 +125,7 @@ export function HandoffRows({ projectId }: { projectId: string }): React.JSX.Ele
             role="treeitem"
             aria-level={2}
             tabIndex={-1}
-            title={handoff.note}
+            data-tip={handoff.note}
             data-handoff={handoff.id}
           >
             <span className="handoff-row__title">

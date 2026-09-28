@@ -1,7 +1,7 @@
 // The bottom rail, the open worktree's strip: branch, git line, keep-awake and memory on the left; agents
 // working, asking or failed anywhere, and teammates online, on the right. The runtime only when not ready.
 
-import { useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
 import { changedFiles, type WorktreeStatus } from '@shared/entities'
 import { activityOf } from '@shared/paneActivity'
 import { attention, dashboardRows } from '../dashboard/dashboardRows'
@@ -9,6 +9,7 @@ import { stepNeedingYou } from '../dashboard/needingYou'
 import { Icon } from '../icons/Icon'
 import { baseFreshness } from '../sidebar/baseFreshness'
 import { startedFromLabel } from '../sidebar/worktreeDisplay'
+import { aheadTip, behindTip, changedTip, conflictedTip, gitRefs, workingTip, type GitRefs } from '../sidebar/tipText'
 import { formatReadAge } from '../sidebar/worktreeStatusSummary'
 import { RUNTIME_IS_SEEDED } from '../runtimeClient/currentRuntimeClient'
 import { useNow } from '../state/useNow'
@@ -65,7 +66,16 @@ export function StatusBar(): React.JSX.Element {
   const project = projects.find((entry) => entry.id === active?.projectId)
   const fresh = project === undefined ? null : baseFreshness(project, now)
   // In sync with a base that could not be fetched, or was fetched hours ago, is not known.
-  const description = shownStatus === undefined ? undefined : gitWords(shownStatus, child, fresh !== null && !child)
+  const parts =
+    shownStatus === undefined
+      ? undefined
+      : gitParts(
+          shownStatus,
+          child,
+          fresh !== null && !child,
+          gitRefs(shownStatus, active?.baseRef ?? project?.baseRef)
+        )
+  const description = parts?.map((part) => part.text).join(' · ')
   const online = useWorkspaceStore((state) =>
     project === undefined ? 0 : onlineCount(state.teammates[project.id], state.teamwork[project.id])
   )
@@ -82,7 +92,7 @@ export function StatusBar(): React.JSX.Element {
       {connection.phase === 'ready' ? null : (
         <span
           className={`statusbar__item statusbar__connection statusbar__connection--${connection.phase}`}
-          title={connection.detail ?? connectionLabel}
+          data-tip={connection.detail ?? connectionLabel}
         >
           <span className="statusbar__dot" aria-hidden="true" />
           {connectionLabel}
@@ -93,7 +103,7 @@ export function StatusBar(): React.JSX.Element {
         <button
           type="button"
           className="statusbar__item statusbar__button statusbar__branch"
-          title={`${active.branch} ${startedFromLabel(active)}`}
+          data-tip={`Copy branch · ${startedFromLabel(active)}`}
           aria-label={`Copy Branch ${active.branch}`}
           onClick={() => void copyToClipboard(active.branch, `the branch ${active.branch}`)}
         >
@@ -109,10 +119,15 @@ export function StatusBar(): React.JSX.Element {
           className={`statusbar__item statusbar__button statusbar__git${changesOpen ? ' statusbar__button--on' : ''}`}
           aria-pressed={changesOpen}
           aria-label={`Changes, ${description}`}
-          title={`Changes · read ${formatReadAge(shownStatus.readAt, Date.now())}`}
+          data-tip={`Changes · read ${formatReadAge(shownStatus.readAt, Date.now())}`}
           onClick={toggleChanges}
         >
-          {description}
+          {parts?.map((part, index) => (
+            <Fragment key={part.text}>
+              {index === 0 ? null : ' · '}
+              <span data-tip={part.tip}>{part.text}</span>
+            </Fragment>
+          ))}
         </button>
       ) : null}
 
@@ -124,7 +139,7 @@ export function StatusBar(): React.JSX.Element {
           className={`statusbar__item statusbar__button${
             project.fetch?.failure === undefined ? '' : ' statusbar__stale'
           }`}
-          title="Fetch Now"
+          data-tip={`Fetch ${project.baseRef} now`}
           aria-label={`Fetch ${project.baseRef} now${fresh === null ? '' : `, ${fresh}`}`}
           disabled={fetching[project.id] === true}
           onClick={() => void fetchProject(project.id)}
@@ -140,7 +155,12 @@ export function StatusBar(): React.JSX.Element {
 
       {RUNTIME_IS_SEEDED ? <span className="statusbar__badge">seeded data</span> : null}
 
-      {working === 0 ? null : <span className="statusbar__item statusbar__working">{`${working} working`}</span>}
+      {working === 0 ? null : (
+        <span
+          className="statusbar__item statusbar__working"
+          data-tip={workingTip(working)}
+        >{`${working} working`}</span>
+      )}
 
       {first === null ? null : (
         <button
@@ -149,7 +169,7 @@ export function StatusBar(): React.JSX.Element {
           aria-label={[owed.asking > 0 ? `${owed.asking} asking` : '', owed.failed > 0 ? `${owed.failed} failed` : '']
             .filter(Boolean)
             .join(', ')}
-          title={`${first.label} · ${first.worktreeName}`}
+          data-tip={`${first.label} · ${first.worktreeName}`}
           // The next one each press, as Go to Next Needing You walks; the first when it is the one in front.
           onClick={() => {
             const next = stepNeedingYou(useWorkspaceStore.getState(), 1) ?? first
@@ -165,6 +185,7 @@ export function StatusBar(): React.JSX.Element {
         <button
           type="button"
           className="statusbar__item statusbar__button statusbar__online"
+          data-tip={`Teamwork in ${project.name}`}
           onClick={() => openTeamwork(project.id)}
         >
           {`${online} teammate${online === 1 ? '' : 's'} online`}
@@ -174,18 +195,25 @@ export function StatusBar(): React.JSX.Element {
   )
 }
 
-/** The git line: changed files, then ahead and behind; `clean` alone when in sync is not known. */
-export function gitWords(status: WorktreeStatus, child: boolean, syncUnknown: boolean): string {
-  if (status.missing) return 'missing'
+type GitPart = { text: string; tip?: string }
+
+/** The git line: changed files, then ahead and behind, each spelled out in its tip; `clean` alone when in sync is not known. */
+function gitParts(status: WorktreeStatus, child: boolean, syncUnknown: boolean, refs: GitRefs): GitPart[] {
+  if (status.missing) return [{ text: 'missing' }]
   const changed = changedFiles(status)
-  const parts: string[] = []
-  if (status.operation !== undefined) parts.push(status.operation === 'rebase' ? 'rebasing' : 'merging')
-  if (status.conflicted > 0) parts.push(`${status.conflicted} conflicted`)
-  if (changed > 0) parts.push(`${changed} changed`)
-  if (status.ahead > 0) parts.push(`${status.ahead} ahead`)
-  if (status.behind > 0) parts.push(child ? `${status.behind} behind parent` : `${status.behind} behind`)
-  if (parts.length > 0) return parts.join(' · ')
-  return syncUnknown ? 'clean' : 'clean, in sync'
+  const parts: GitPart[] = []
+  if (status.operation !== undefined) parts.push({ text: status.operation === 'rebase' ? 'rebasing' : 'merging' })
+  if (status.conflicted > 0)
+    parts.push({ text: `${status.conflicted} conflicted`, tip: conflictedTip(status.conflicted) })
+  if (changed > 0) parts.push({ text: `${changed} changed`, tip: changedTip(changed) })
+  if (status.ahead > 0) parts.push({ text: `${status.ahead} ahead`, tip: aheadTip(status.ahead, refs) })
+  if (status.behind > 0)
+    parts.push({
+      text: child ? `${status.behind} behind parent` : `${status.behind} behind`,
+      tip: behindTip(status.behind, refs)
+    })
+  if (parts.length > 0) return parts
+  return [{ text: syncUnknown ? 'clean' : 'clean, in sync' }]
 }
 
 /** The zeros of a status with no checkout behind it, whatever was read before the folder went. */

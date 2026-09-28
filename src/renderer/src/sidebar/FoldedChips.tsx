@@ -53,7 +53,7 @@ export function FoldedChips({
           ref={plus}
           className="chip chip-fold"
           role="button"
-          title={foldTitle(folded)}
+          data-tip={foldTitle(folded)}
           aria-expanded={open !== null}
           onClick={(event) => {
             event.stopPropagation()

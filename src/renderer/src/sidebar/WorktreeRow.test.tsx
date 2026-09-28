@@ -323,13 +323,13 @@ describe('a worktree that is ready', () => {
   it('leaves out a branch that is only its name slugified, and names it on hover', () => {
     mount()
     expect(document.querySelector('.worktree__branch')).toBeNull()
-    expect(document.querySelector('.worktree__name')?.getAttribute('title')).toContain('rewrite-the-pager')
+    expect(document.querySelector('.worktree__name')?.getAttribute('data-tip')).toContain('rewrite-the-pager')
   })
 
   it('names a branch that says more, whole on hover', () => {
     mount({ worktree: worktree({ branch: 'ada/rewrite-the-pager' }) })
     const branch = within(openButton()).getByText('ada/rewrite-the-pager')
-    expect(branch.getAttribute('title')).toBe('ada/rewrite-the-pager')
+    expect(branch.getAttribute('data-tip')).toBe('ada/rewrite-the-pager')
   })
 
   // `perf / perf`: a branch that is the name itself says it twice.
@@ -340,7 +340,7 @@ describe('a worktree that is ready', () => {
 
   it('names its branch and where it started on hover', () => {
     mount({ worktree: worktree({ name: 'perf', branch: 'perf', startedFrom: 'v1.2.0' }) })
-    expect(document.querySelector('.worktree__name')?.getAttribute('title')).toBe('perf\nperf from v1.2.0')
+    expect(document.querySelector('.worktree__name')?.getAttribute('data-tip')).toBe('perf\nperf from v1.2.0')
   })
 
   // A chip alone on a second line reads as loose; with no branch there is no second line.
@@ -388,7 +388,7 @@ describe('a worktree that is ready', () => {
     })
     expect(screen.queryByText('merges')).toBeNull()
     const mark = screen.getByRole('img', { name: '2 commits merge cleanly into origin/main', hidden: true })
-    expect(mark.getAttribute('title')).toBe('2 commits merge cleanly into origin/main')
+    expect(mark.getAttribute('data-tip')).toBe('2 commits merge cleanly into origin/main')
   })
 
   // A dot beside the activity dot read as a second status.
@@ -448,7 +448,7 @@ describe('a worktree that is ready', () => {
     // A mark like the clean one, not a word: the count and paths are on hover.
     expect(screen.queryByText('2 conflicts')).toBeNull()
     const mark = screen.getByRole('img', { name: /^Would conflict with origin\/main/, hidden: true })
-    expect(mark.getAttribute('title')).toContain('src/pager.ts')
+    expect(mark.getAttribute('data-tip')).toContain('src/pager.ts')
     expect(mark.className).toContain('worktree__merge--conflicts')
     expect(mark.querySelector('svg')).not.toBeNull()
   })
@@ -475,7 +475,7 @@ describe('one of several runs of a task', () => {
   it('reads the whole task line, then its agent in words, and hovers the same name', () => {
     mount({ worktree: codexRun() })
     expect(screen.getByRole('treeitem', { name: `${TASK} (Codex)` })).toBeTruthy()
-    expect(document.querySelector('.worktree__name')?.getAttribute('title')).toBe(
+    expect(document.querySelector('.worktree__name')?.getAttribute('data-tip')).toBe(
       `${TASK} (Codex)\nadd-a-subtract-function-to-codex from origin/main`
     )
     expect(screen.getByRole('button', { name: `More for ${TASK} (Codex)` })).toBeTruthy()
@@ -1215,7 +1215,7 @@ describe('a worktree whose work has landed', () => {
 
     const chip = screen.getByText('Merged')
     expect(chip.classList.contains('chip')).toBe(true)
-    expect(chip.getAttribute('title')).toBe('Merged into main')
+    expect(chip.getAttribute('data-tip')).toBe('Merged into main')
     expect(screen.queryByRole('img', { name: /merge cleanly/ })).toBeNull()
   })
 
@@ -1236,7 +1236,7 @@ describe('a worktree whose work has landed', () => {
 
     const chip = screen.getByText('Merged')
     expect(chip.classList.contains('chip')).toBe(true)
-    expect(chip.getAttribute('title')).toBe('Merged into Rework auth')
+    expect(chip.getAttribute('data-tip')).toBe('Merged into Rework auth')
     expect(screen.queryByText('Landed')).toBeNull()
   })
 
@@ -1261,7 +1261,7 @@ describe('a worktree whose work has landed', () => {
     })
 
     expect(screen.queryByText('Merged')).toBeNull()
-    expect(screen.getByText('Rewrite the pager').getAttribute('title')).toBe(
+    expect(screen.getByText('Rewrite the pager').getAttribute('data-tip')).toBe(
       'Rewrite the pager · Pull Request #12\nrewrite-the-pager from origin/main'
     )
     fireEvent.contextMenu(row())
@@ -1303,7 +1303,7 @@ describe('a worktree whose work has landed', () => {
     // On the second line, beside a run's chip, so neither squeezes the name.
     expect(chip.closest('.worktree__meta')).not.toBeNull()
     expect(chip.classList.contains('prchip--fail')).toBe(true)
-    expect(chip.getAttribute('title')).toContain('2 failing: test, e2e')
+    expect(chip.getAttribute('data-tip')).toContain('2 failing: test, e2e')
   })
 
   it('carries no pull request chip once the work has merged', () => {
@@ -1554,14 +1554,14 @@ describe('a worktree whose panes listen on ports', () => {
   it('counts the other ports and lists them all on hover', () => {
     mount({ terminals: [serving('w1', 't1', 5173), serving('w1', 't2', 8000, 'Python')] })
     const chip = within(openButton()).getByRole('link', { name: ':5173 +1', hidden: true })
-    expect(chip.getAttribute('title')).toBe(':5173  node\n:8000  Python')
+    expect(chip.getAttribute('data-tip')).toBe(':5173  node\n:8000  Python')
   })
 
   it('says when another worktree holds the same port', () => {
     useWorkspaceStore.setState({ worktrees: [worktree(), worktree({ id: 'w2', name: 'Pager in Go' })] })
     mount({ terminals: [serving('w1', 't1', 5173), serving('w2', 't9', 5173)] })
     const chip = within(openButton()).getByRole('link', { name: ':5173', hidden: true })
-    expect(chip.getAttribute('title')).toContain(':5173 also in Pager in Go')
+    expect(chip.getAttribute('data-tip')).toContain(':5173 also in Pager in Go')
     expect(chip.className).toContain('worktree__port--clash')
     useWorkspaceStore.setState({ worktrees: [] })
   })
@@ -1585,7 +1585,7 @@ describe('a worktree sharing files with another task', () => {
     const mark = row().querySelector('.overlap') as HTMLElement
     expect(mark.textContent).toBe('⚠auth.ts')
     expect(mark.classList.contains('overlap--overlap')).toBe(true)
-    expect(mark.title).toBe('src/api/auth.ts · Add rate limits · overlap')
+    expect(mark.getAttribute('data-tip')).toBe('src/api/auth.ts · Add rate limits · overlap')
   })
 
   it('turns red when a merge would conflict', () => {
@@ -1621,7 +1621,7 @@ describe('a worktree holding claims', () => {
     claim(['src/api/**', 'docs/api.md'])
     mount()
     const mark = row().querySelector('.worktree__claims') as HTMLElement
-    expect(mark.title).toBe('src/api/**\ndocs/api.md')
+    expect(mark.getAttribute('data-tip')).toBe('src/api/**\ndocs/api.md')
     expect(mark.getAttribute('aria-label')).toBe('Claims: src/api/**, docs/api.md')
     expect(mark.textContent).toBe('⚑')
   })
@@ -1655,7 +1655,7 @@ describe('tokens on hover', () => {
         }
       })
     )
-    const name = (): string | null => document.querySelector('.worktree__name')?.getAttribute('title') ?? null
+    const name = (): string | null => document.querySelector('.worktree__name')?.getAttribute('data-tip') ?? null
     expect(name()).toBe('Rewrite the pager\nrewrite-the-pager from origin/main\n1.2M tok\n3.4M tok with children')
 
     // Read a moment ago: a second hover asks nothing.
@@ -1710,5 +1710,61 @@ describe('a box that says each thing once', () => {
     expect(row().querySelector('.worktree__ask-text')?.textContent).toBe('Which store for the limiter?')
     expect(row().querySelector('.panes')).toBeNull()
     useMessageStore.setState({ messages: [] })
+  })
+})
+
+describe('what the small marks say under the pointer', () => {
+  const tips = (): (string | null)[] =>
+    [...row().querySelectorAll('.gitchip')].map((chip) => chip.getAttribute('data-tip'))
+
+  it('names each count in words, against the project’s real base ref', () => {
+    useWorkspaceStore.setState({
+      projects: [{ id: 'p1', name: 'pager', path: '/repos/pager', baseRef: 'origin/master' }]
+    })
+    mount({
+      status: status({
+        upstream: 'origin/rewrite-the-pager',
+        ahead: 1,
+        behind: 48,
+        changed: 115,
+        unstaged: 115,
+        ignored: 10
+      })
+    })
+    expect(tips()).toEqual([
+      '1 commit not pushed to origin/rewrite-the-pager',
+      '48 commits behind origin/master',
+      '115 changed files',
+      '10 ignored files or folders'
+    ])
+    useWorkspaceStore.setState({ projects: [] })
+  })
+
+  it('names the ref a worktree was opened against, and a child’s parent branch', () => {
+    mount({
+      worktree: worktree({ baseRef: 'origin/release' }),
+      status: status({ behind: 1, upstream: null, ahead: 2 })
+    })
+    expect(tips()).toEqual(['2 commits ahead of origin/release, not pushed', '1 commit behind origin/release'])
+    cleanup()
+    mount({ worktree: worktree({ parentId: 'w0', baseRef: 'rework-auth' }), status: status({ behind: 2 }) })
+    expect(tips()).toEqual(['2 commits behind rework-auth'])
+  })
+
+  it('says what the dot and the Merged pill mean, in the tooltip rather than a native title', () => {
+    mount({ terminals: [terminal({ agent: 'claude', busy: true })] })
+    const dot = row().querySelector('.worktree__title .activity') as HTMLElement
+    expect(dot.getAttribute('data-tip')).toBe('1 pane here · working')
+    expect(dot.hasAttribute('title')).toBe(false)
+    cleanup()
+    mount({ landing: { worktreeId: 'w1', base: 'main', merged: true } as WorktreeLanding })
+    const pill = row().querySelector('.worktree__merged') as HTMLElement
+    expect(pill.getAttribute('data-tip')).toBe('Merged into main')
+    expect(row().querySelectorAll('[title]')).toHaveLength(0)
+  })
+
+  it('marks unread output with its own mark and word', () => {
+    mount({ terminals: [terminal({ id: 't1', agent: 'claude' })], unread: ['t1'] })
+    expect(row().querySelector('.worktree__unread')?.getAttribute('data-tip')).toBe('Unread output')
   })
 })

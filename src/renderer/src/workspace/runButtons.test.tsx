@@ -115,7 +115,7 @@ describe('RunButtons', () => {
       'Run Dev',
       'Run Tests'
     ])
-    expect(screen.getByRole('button', { name: 'Run Tests' }).title).toBe('Run Tests · npm test')
+    expect(screen.getByRole('button', { name: 'Run Tests' }).getAttribute('data-tip')).toBe('Run Tests · npm test')
     // Says the verb, as the menu and the palette do.
     expect(screen.getAllByRole('button').map((button) => button.textContent)).toEqual(['Run Dev', 'Run Tests'])
 

@@ -124,7 +124,7 @@ describe('TeammateGroups', () => {
     mount([theirs({ live: false, heardAt: NOW - 36_000 })])
     const head = screen.getByRole('treeitem', { name: /^bo,/ })
     expect(head.querySelector('.teammate__doing--away')?.textContent).toBe('away')
-    expect(head.getAttribute('title')).toBe('bo’s machine is not connected · showing what it had 36s ago')
+    expect(head.getAttribute('data-tip')).toBe('bo’s machine is not connected · showing what it had 36s ago')
   })
 })
 
@@ -148,7 +148,7 @@ describe('HandoffRows', () => {
       </ul>
     )
     const row = screen.getByRole('treeitem', { name: /refund-flow/ })
-    expect(row.getAttribute('title')).toBe('Red tests')
+    expect(row.getAttribute('data-tip')).toBe('Red tests')
     expect(row.dataset.handoff).toBe('h1')
     expect(within(row).getByText('from bo')).toBeTruthy()
     await act(async () => fireEvent.click(within(row).getByRole('button', { name: 'Dismiss' })))

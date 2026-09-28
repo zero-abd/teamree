@@ -81,7 +81,7 @@ export function TerminalSearchBar({
         className="pane-search__toggle"
         aria-pressed={state.options.caseSensitive}
         aria-label="Match case"
-        title="Match case"
+        data-tip="Match case"
         onClick={() => onToggle('caseSensitive')}
       >
         Aa
@@ -91,7 +91,7 @@ export function TerminalSearchBar({
         className="pane-search__toggle pane-search__toggle--word"
         aria-pressed={state.options.wholeWord}
         aria-label="Match whole word"
-        title="Match whole word"
+        data-tip="Match whole word"
         onClick={() => onToggle('wholeWord')}
       >
         ab
@@ -100,7 +100,7 @@ export function TerminalSearchBar({
       <button
         type="button"
         className="button button--ghost button--icon"
-        title="Previous match (Shift+Enter)"
+        data-tip="Previous match (Shift+Enter)"
         aria-label="Previous match"
         disabled={!steppable}
         onClick={() => onStep('previous')}
@@ -110,7 +110,7 @@ export function TerminalSearchBar({
       <button
         type="button"
         className="button button--ghost button--icon"
-        title="Next match (Enter)"
+        data-tip="Next match (Enter)"
         aria-label="Next match"
         disabled={!steppable}
         onClick={() => onStep('next')}
@@ -120,7 +120,7 @@ export function TerminalSearchBar({
       <button
         type="button"
         className="button button--ghost button--icon"
-        title="Close search (Esc)"
+        data-tip="Close search (Esc)"
         aria-label="Close search"
         onClick={onClose}
       >
