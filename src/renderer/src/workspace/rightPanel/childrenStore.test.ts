@@ -196,7 +196,10 @@ describe('landing the board’s queue', () => {
       expect.objectContaining({ worktreeId: cart.id, conflicts: ['CHANGELOG.md'] })
     ])
     expect(useChildren.getState().merging[LANDING_QUEUE]).toBeUndefined()
-    expect(useWorkspaceStore.getState().notices.map((notice) => notice.text)).toContain('Landed 2 · 1 needs you')
+    const said = useWorkspaceStore.getState().notices.map((notice) => notice.text)
+    expect(said).toContain('Landed 2 · 1 needs you')
+    // Not one Merged · Undo per task: an Undo would be stale once main is pushed.
+    expect(said.filter((text) => text.startsWith('Merged'))).toEqual([])
     expect(await repo.git(['status', '--porcelain'])).toBe('')
   })
 
