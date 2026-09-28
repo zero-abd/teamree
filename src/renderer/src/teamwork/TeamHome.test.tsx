@@ -284,7 +284,7 @@ describe('what is waiting on you', () => {
     expect(toggleWatchedPane).toHaveBeenCalledTimes(2)
   })
 
-  it('lists a review asked of you, opens it beside the workspace, and puts it off on Later', () => {
+  it('lists a review asked of you, moves it to Reviewing once opened, and puts it off on Later', () => {
     const request = {
       id: 'r1',
       to: 'ana',
@@ -302,10 +302,15 @@ describe('what is waiting on you', () => {
     expect(useTeammateReview.getState().open).toEqual([
       { projectId: 'p1', worktreeId: 'peer:bo:wt_1', title: 'bo · cart totals' }
     ])
-    expect(call).toHaveBeenCalledWith('teamwork.settleReviewRequest', { projectId: 'p1', id: 'r1', how: 'seen' })
-    fireEvent.click(within(region('Waiting on you')).getByRole('button', { name: 'Later' }))
-    expect(call).toHaveBeenCalledWith('teamwork.settleReviewRequest', { projectId: 'p1', id: 'r1', how: 'later' })
+    expect(call).toHaveBeenCalledWith('teamwork.settleReviewRequest', { projectId: 'p1', id: 'r1', how: 'opened' })
     expect(within(region('Waiting on you')).getByText('Nothing waiting')).toBeTruthy()
+    const reviewing = within(region('Reviewing'))
+    expect(reviewing.getByText(/Asked by bo/)).toBeTruthy()
+    fireEvent.click(reviewing.getByRole('button', { name: 'Open' }))
+    expect(useTeammateReview.getState().open).toHaveLength(1)
+    fireEvent.click(reviewing.getByRole('button', { name: 'Later' }))
+    expect(call).toHaveBeenCalledWith('teamwork.settleReviewRequest', { projectId: 'p1', id: 'r1', how: 'later' })
+    expect(screen.queryByRole('region', { name: 'Reviewing' })).toBeNull()
   })
 
   it('says in one line when nothing is', () => {

@@ -111,6 +111,7 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
   const waiting = waitingOnYou({ handoffs, reviewRequests, presence, now })
   const asking = waiting.filter((item) => item.kind === 'asking' || item.kind === 'review')
   const handed = waiting.filter((item) => item.kind === 'handoff')
+  const reviewing = waiting.filter((item) => item.kind === 'reviewing')
   const notes = listedNotes({ inbox, deleting }, projectId)
   const activity = teamActivity({ list, handoffs, notes, presence, memory: teamMemory, projectId })
   const line = teamLine(status)
@@ -141,6 +142,17 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
               <h2 className="team-home__head">Handed to you</h2>
               <ul className="home-cards">
                 {handed.map((item) => (
+                  <WaitingRow key={rowKey(item)} item={item} projectId={projectId} now={now} />
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {reviewing.length === 0 ? null : (
+            <section className="team-home__section" aria-label="Reviewing">
+              <h2 className="team-home__head">Reviewing</h2>
+              <ul className="home-cards">
+                {reviewing.map((item) => (
                   <WaitingRow key={rowKey(item)} item={item} projectId={projectId} now={now} />
                 ))}
               </ul>
@@ -200,7 +212,7 @@ export function TeamHome({ projectId }: { projectId: string }): React.JSX.Elemen
 
 function rowKey(item: WaitingItem): string {
   if (item.kind === 'handoff') return item.handoff.id
-  return item.kind === 'review' ? item.request.id : item.pane.terminalId
+  return item.kind === 'review' || item.kind === 'reviewing' ? item.request.id : item.pane.terminalId
 }
 
 function WaitingRow({
@@ -214,9 +226,10 @@ function WaitingRow({
 }): React.JSX.Element {
   const dismiss = useHandoffs((state) => state.dismiss)
   const settleRequest = useReviewRequests((state) => state.settle)
-  if (item.kind === 'review') {
+  if (item.kind === 'review' || item.kind === 'reviewing') {
     const { request } = item
     const from = request.from ?? 'a teammate'
+    const opened = item.kind === 'reviewing'
     return (
       <li className="card home-card home-card--review">
         <Avatar handle={from} size="md" decorative />
@@ -225,12 +238,16 @@ function WaitingRow({
             <span className="home-card__name">{request.worktreeName}</span>
           </span>
           <span className="home-card__line">
-            Review requested by {from} · {agoLabel(Math.max(0, now - request.at))}
+            {opened ? 'Asked' : 'Review requested'} by {from} · {agoLabel(Math.max(0, now - request.at))}
           </span>
         </span>
         <span className="home-card__actions">
-          <Button variant="primary" size="sm" onClick={() => reviewRequested({ ...request, projectId })}>
-            Review
+          <Button
+            variant={opened ? 'secondary' : 'primary'}
+            size="sm"
+            onClick={() => reviewRequested({ ...request, projectId })}
+          >
+            {opened ? 'Open' : 'Review'}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => void settleRequest(projectId, request.id, 'later')}>
             Later

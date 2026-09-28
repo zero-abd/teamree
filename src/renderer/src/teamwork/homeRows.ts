@@ -148,11 +148,12 @@ export function presenceLabel(member: TeamMember, now: number): string {
 export type WaitingItem =
   | { kind: 'handoff'; handoff: PeerHandoff }
   | { kind: 'review'; request: PeerReviewRequest }
+  | { kind: 'reviewing'; request: PeerReviewRequest }
   | { kind: 'asking'; handle: string; worktree: string; pane: TeammatePaneRow }
 
 /**
  * Handoffs to take, newest first, then reviews asked of you, oldest first, then teammates' agents asking
- * with answers this machine may send.
+ * with answers this machine may send, then reviews you opened and have not sent.
  */
 export function waitingOnYou(input: {
   handoffs: TeamworkHandoffs | undefined
@@ -168,10 +169,15 @@ export function waitingOnYou(input: {
       .filter((pane) => pane.activity === 'waiting' && pane.choices !== undefined)
       .map((pane): WaitingItem => ({ kind: 'asking', handle: row.handle, worktree: row.name, pane }))
   )
-  const reviews = [...(input.reviewRequests?.incoming ?? [])]
-    .sort((a, b) => a.at - b.at)
-    .map((request): WaitingItem => ({ kind: 'review', request }))
-  return [...handoffs, ...reviews, ...asking]
+  const requests = [...(input.reviewRequests?.incoming ?? [])].sort((a, b) => a.at - b.at)
+  const reviews = requests.filter((request) => request.opened !== true)
+  const reviewing = requests.filter((request) => request.opened === true)
+  return [
+    ...handoffs,
+    ...reviews.map((request): WaitingItem => ({ kind: 'review', request })),
+    ...asking,
+    ...reviewing.map((request): WaitingItem => ({ kind: 'reviewing', request }))
+  ]
 }
 
 export type ActivityItem = {

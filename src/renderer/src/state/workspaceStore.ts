@@ -41,6 +41,7 @@ import type {
   WorktreeIssue,
   WorktreeKeep,
   WorktreeLanding,
+  WorktreeLock,
   WorktreeLog,
   WorktreeMerge,
   WorktreeMergePreview,
@@ -1057,6 +1058,9 @@ const lockNoticeKey = (worktreeId: string): string => `git-lock:${worktreeId}`
 export const commitBlockKey = (worktreeId: string): string => `commit-block:${worktreeId}`
 /** The write each worktree's lock notice retries. */
 const lockRetries = new Map<string, () => Promise<unknown>>()
+/** How often a shown lock notice asks whether its lock is still there. */
+export const LOCK_WATCH_MS = 3_000
+const lockWatches = new Map<string, ReturnType<typeof setInterval>>()
 
 /** The status-bar notice for a pane refused for want of room. */
 const NO_ROOM = 'No room for another pane'
@@ -1113,6 +1117,54 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     }
   }
 
+  /** ` · name` of a worktree for a notice about it, short enough to leave room for what follows. */
+  const noticeWhere = (worktreeId: string): string => {
+    const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
+    const name = worktree === undefined ? '' : worktreeLabel(worktreeDisplay(worktree))
+    return name.length > 26 ? ` · ${name.slice(0, 25).trimEnd()}…` : name === '' ? '' : ` · ${name}`
+  }
+
+  /** Withdraws a worktree's lock notice once its lock is gone, and keeps Clear Lock current meanwhile. */
+  const recheckLock = async (worktreeId: string): Promise<void> => {
+    const shown = get().notices.find((notice) => notice.key === lockNoticeKey(worktreeId))?.lock
+    if (shown === undefined) {
+      clearInterval(lockWatches.get(worktreeId))
+      lockWatches.delete(worktreeId)
+      return
+    }
+    let lock: WorktreeLock
+    try {
+      lock = await runtimeClient.call('worktree.lock', { worktreeId, lockPath: shown.lockPath })
+    } catch {
+      if (!get().worktrees.some((worktree) => worktree.id === worktreeId)) clearNotices(lockNoticeKey(worktreeId))
+      return
+    }
+    if (!lock.exists) clearNotices(lockNoticeKey(worktreeId))
+    else if (lock.clearable !== shown.clearable) {
+      set((state) => ({
+        notices: state.notices.map((notice) =>
+          notice.key === lockNoticeKey(worktreeId) && notice.lock !== undefined
+            ? { ...notice, lock: { ...notice.lock, clearable: lock.clearable } }
+            : notice
+        )
+      }))
+    }
+  }
+
+  const watchLock = (worktreeId: string): void => {
+    clearInterval(lockWatches.get(worktreeId))
+    lockWatches.set(
+      worktreeId,
+      setInterval(() => void recheckLock(worktreeId), LOCK_WATCH_MS)
+    )
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener?.('focus', () => {
+      for (const worktreeId of lockWatches.keys()) void recheckLock(worktreeId)
+    })
+  }
+
   const failed = (what: string) => (error: unknown) => {
     notify(`${what}: ${error instanceof Error ? error.message : String(error)}`)
   }
@@ -1137,9 +1189,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     if (lockPath === null) return false
     lockRetries.set(worktreeId, retry)
     const lock = await runtimeClient.call('worktree.lock', { worktreeId, lockPath }).catch(() => null)
-    notify(LOCKED, 'error', undefined, lockNoticeKey(worktreeId), {
+    notify(`${LOCKED}${noticeWhere(worktreeId)}`, 'error', undefined, lockNoticeKey(worktreeId), {
       lock: { worktreeId, lockPath, clearable: lock?.clearable === true }
     })
+    watchLock(worktreeId)
     return true
   }
 
@@ -3422,13 +3475,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
         return false
       }
       set((state) => ({ commitBlocks: { ...state.commitBlocks, [worktreeId]: hook } }))
-      const worktree = get().worktrees.find((entry) => entry.id === worktreeId)
-      const name = worktree === undefined ? '' : worktreeLabel(worktreeDisplay(worktree))
-      // Short enough that the first line of the output stays the detail under it.
-      const where = name.length > 26 ? ` · ${name.slice(0, 25).trimEnd()}…` : name === '' ? '' : ` · ${name}`
       const first = hook.output.split('\n').find((line) => line.trim() !== '')
       notify(
-        `Commit blocked · ${hook.hook}${where}${first === undefined ? '' : `: ${first.trim()}`}`,
+        `Commit blocked · ${hook.hook}${noticeWhere(worktreeId)}${first === undefined ? '' : `: ${first.trim()}`}`,
         'error',
         undefined,
         commitBlockKey(worktreeId),

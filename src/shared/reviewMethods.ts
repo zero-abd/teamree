@@ -57,8 +57,8 @@ export const ReviewParams = {
   teamworkRequestReview: z.object({ worktreeId: Id, to: z.string().trim().min(1).max(160) }),
   /** Reviews asked of this machine in one project, and the ones it asked. */
   teamworkReviewRequests: z.object({ projectId: Id }),
-  /** `seen` retires an incoming request's popup; `later` takes it off this machine's list. */
-  teamworkSettleReviewRequest: z.object({ projectId: Id, id: Id, how: z.enum(['seen', 'later']) }),
+  /** `seen` retires an incoming request's popup; `opened` also moves it to Reviewing; `later` drops it here. */
+  teamworkSettleReviewRequest: z.object({ projectId: Id, id: Id, how: z.enum(['seen', 'later', 'opened']) }),
   /** PEER-ONLY. One of this machine's tasks as a patch against its base; see `MAX_PEER_PATCH_BYTES`. */
   peerTaskPatch: z.object({ worktreeId: Id }),
   /** PEER-ONLY. A teammate's comments on one of this machine's worktrees; the sender is the link's key. */
