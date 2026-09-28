@@ -1,6 +1,6 @@
 // Startup files that run the user's own and then put this build's CLI first on
-// PATH, so a login shell that rebuilds PATH (path_helper, a profile) still finds it;
-// an interactive one also reports its directory at each prompt (OSC 7).
+// PATH, so a login shell that rebuilds PATH (path_helper, a profile) still finds it; an interactive
+// one also reports its directory at each prompt (OSC 7), where the prompt ends and when a command starts (OSC 133).
 // zsh through ZDOTDIR, handed back once startup ends; bash through --init-file and BASH_ENV.
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -28,6 +28,22 @@ const BASH_CWD = `__teamree_cwd() { printf '\\033]7;file://%s%s\\a' "$HOSTNAME" 
 PROMPT_COMMAND="__teamree_cwd\${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
 `
 
+// OSC 133;B where the prompt ends and 133;C when the line is run, so the pane can tell typed input from the
+// prompt and from output. zsh marks B twice: in PS1, redrawn with it, and at line-init, for a theme that sets PS1 later.
+const ZSH_PROMPT_END = `__teamree_prompt_end() { if [[ -o promptpercent && $PS1 != *$'\\e]133;B'* ]]; then PS1+=$'%{\\e]133;B\\a%}'; fi }
+__teamree_line_init() { print -rn -- $'\\e]133;B\\a' }
+__teamree_run() { print -rn -- $'\\e]133;C\\a' }
+add-zsh-hook precmd __teamree_prompt_end
+add-zsh-hook preexec __teamree_run
+autoload -Uz add-zle-hook-widget && add-zle-hook-widget line-init __teamree_line_init`
+// Last in PROMPT_COMMAND, after anything that rebuilds PS1; a newline, since theirs may end in `;`. PS0 needs bash 4.4.
+const BASH_PROMPT_END = `__teamree_prompt_end() {
+  [[ $PS1 == *'133;B'* ]] || PS1+='\\[\\e]133;B\\a\\]'
+  [[ $PS0 == *'133;C'* ]] || PS0+='\\e]133;C\\a'
+}
+PROMPT_COMMAND="\${PROMPT_COMMAND:+$PROMPT_COMMAND$'\\n'}__teamree_prompt_end"
+`
+
 // Top level, not a function: a user's `typeset` inside a sourced file would otherwise turn local.
 // Set and unset are kept apart: an unset ZDOTDIR means $HOME, and tools test which it is.
 function zshFile(name: keyof typeof ZSH_FILES): string {
@@ -36,7 +52,7 @@ function zshFile(name: keyof typeof ZSH_FILES): string {
     name === '.zshrc'
       ? '[[ $HISTFILE == $__teamree_zdotdir/.zsh_history ]] && HISTFILE=${TEAMREE_USER_ZDOTDIR:-$HOME}/.zsh_history\n'
       : ''
-  const cwd = name === '.zshrc' ? `${ZSH_CWD}\n` : ''
+  const cwd = name === '.zshrc' ? `${ZSH_CWD}\n${ZSH_PROMPT_END}\n` : ''
   return `# teamree: the user's own ${name}, then this build's CLI first on PATH.
 __teamree_zdotdir=$ZDOTDIR
 ${history}if (( \${+TEAMREE_USER_ZDOTDIR} )); then ZDOTDIR=$TEAMREE_USER_ZDOTDIR; else unset ZDOTDIR; fi
@@ -73,7 +89,7 @@ for __teamree_profile in ~/.bash_profile ~/.bash_login ~/.profile; do
   if [ -r "$__teamree_profile" ]; then . "$__teamree_profile"; break; fi
 done
 unset __teamree_profile
-${BASH_PREPEND}${BASH_CWD}`
+${BASH_PREPEND}${BASH_CWD}${BASH_PROMPT_END}`
 
 const BASH_ENV_FILE = `# teamree: the user's own BASH_ENV, then this build's CLI first on PATH.
 if [ -n "$TEAMREE_USER_BASH_ENV" ] && [ -r "$TEAMREE_USER_BASH_ENV" ]; then . "$TEAMREE_USER_BASH_ENV"; fi

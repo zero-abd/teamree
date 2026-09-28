@@ -37,6 +37,7 @@ import { PastedImageStrip } from './PastedImageStrip'
 import { watchPromptImages } from './promptImages'
 import { removePromptImage, type NotRemoved } from './promptEdit'
 import { macEditBytes } from './macEditKeys'
+import { findTypedInput, promptEnds, typedInputKey, typedInputSelection, type TypedInputSelection } from './typedInput'
 import { wideEmoji } from './paneUnicode'
 import { frameWrites, paneWebgl, syncScrollbarPerFrame } from './paneFrames'
 import { paneMarkers } from './paneMarkers'
@@ -336,7 +337,8 @@ export function TerminalView({
     const hasSelection = term.hasSelection()
     // A path's folder may not be read yet (never hovered, or hovered too long ago); the menu waits for it.
     void emulator.links.resolveAt(event.nativeEvent).then((pointed) => {
-      const entries = terminalMenuEntries({ readOnly: false, hasSelection, pointed }, modifierRef.current)
+      const hasInput = emulator.input.found()
+      const entries = terminalMenuEntries({ readOnly: false, hasSelection, pointed, hasInput }, modifierRef.current)
       setMenu({ anchor, entries, pointed })
     })
   }
@@ -366,7 +368,8 @@ export function TerminalView({
       split: (direction) => {
         store.focusPane(terminalId)
         void store.splitFocusedPane(direction)
-      }
+      },
+      selectInput: () => emulator.input.select()
     })
   }
 
@@ -467,6 +470,8 @@ type PaneEmulator = {
   links: PaneLinks
   /** Vouches for a paste from the menu. See `handsHere.ts`. */
   markHands: () => void
+  /** The input typed at the prompt, for the menu's Select Input. */
+  input: Pick<TypedInputSelection, 'select' | 'found'>
   dispose: () => void
 }
 
@@ -583,8 +588,11 @@ function openEmulator(
     },
     links,
     markHands: () => hands.mark(),
+    input: { select: () => typed.select(), found: () => typed.found() },
     dispose: () => {
       alive = false
+      typed.dispose()
+      prompts.dispose()
       subscription?.close()
       hands.stop()
       links.dispose()
@@ -613,11 +621,15 @@ function openEmulator(
 
   const hands = handsHere(term.element)
 
+  const prompts = promptEnds(term)
+  const typed = typedInputSelection({ term, find: () => findTypedInput(term, prompts.last()), send })
+
   const keys = paneKeyHandler({
     isAppChord: (event) => emulator.view.isAppChord(event),
     term,
     modifier,
-    send,
+    send: (data) => typed.write(data, true),
+    input: typed,
     // The clipboard read a paste chord waits on outlives the keypress, so
     // the person behind it has to be vouched for rather than observed.
     byHand: hands.mark
@@ -632,7 +644,7 @@ function openEmulator(
   term.onData((data) => {
     const byHand = hands.acting()
     if (byHand) typedAt = Date.now()
-    send(data, byHand)
+    typed.write(data, byHand)
   })
   // A resize for the replay alone; the pty keeps the size it has.
   let quiet = false
@@ -863,7 +875,7 @@ export type PaneKeys = {
   /** Chords the app owns. Refused here, and answered by the window handler. */
   isAppChord: (event: KeyboardEvent) => boolean
   /** The emulator: what is selected, and where a paste goes in. */
-  term: Pick<XTerm, 'hasSelection' | 'getSelection' | 'paste' | 'options'>
+  term: Pick<XTerm, 'hasSelection' | 'getSelection' | 'paste' | 'options' | 'selectAll'>
   modifier: PlatformModifier
   /** Bytes to the pty. */
   send: (data: string) => void
@@ -871,18 +883,31 @@ export type PaneKeys = {
   byHand?: () => void
   /** The system clipboard, injected so a test can watch it. */
   clipboard?: { copy: (text: string) => void; read: () => Promise<string> }
+  /** What was typed at the prompt, for ⌘A to select and a key to clear. See `typedInput.ts`. */
+  input?: Pick<TypedInputSelection, 'select' | 'active' | 'text' | 'drop' | 'clear'>
 }
 
 /**
  * The pane's answer to one keypress, as xterm's custom key handler wants it:
- * `true` to let the emulator have it, `false` to keep it. App chords first, then the
- * Mac editing keys (`macEditKeys.ts`), the clipboard pair, then the emulator. On macOS
- * the Edit menu claims these accelerators before the page; the branch it loses is in `src/main/appMenu.ts`.
+ * `true` to let the emulator have it, `false` to keep it. App chords first, then ⌘A and the keys on a
+ * selected input (`typedInput.ts`), the Mac editing keys (`macEditKeys.ts`), the clipboard pair, then the emulator.
+ * On macOS the Edit menu claims these accelerators before the page; the branch it loses is in `src/main/appMenu.ts`.
  */
 export function paneKeyHandler(keys: PaneKeys): (event: KeyboardEvent) => boolean {
   const clipboard = keys.clipboard ?? { copy: copyText, read: pasteText }
   return (event) => {
     if (keys.isAppChord(event)) return false
+    const input = keys.modifier.eventFlag === 'metaKey' ? keys.input : undefined
+    const typed = input === undefined ? null : typedInputKey(event, input.active())
+    if (input !== undefined && typed !== null) {
+      if (event.type === 'keydown') {
+        event.preventDefault()
+        if (typed === 'clear') void input.clear()
+        else if (typed === 'drop') input.drop()
+        else if (typed === 'select-all' || !input.select()) keys.term.selectAll()
+      }
+      return false
+    }
     const edit =
       keys.modifier.eventFlag === 'metaKey' ? macEditBytes(event, keys.term.options.macOptionIsMeta === true) : null
     if (edit !== null) {
@@ -898,7 +923,7 @@ export function paneKeyHandler(keys: PaneKeys): (event: KeyboardEvent) => boolea
     // One press raises keydown, keypress and keyup. Act on the keydown alone;
     // keep the other two from the emulator too, since half a chord is worse than none.
     if (event.type !== 'keydown') return false
-    if (intent === 'copy') clipboard.copy(keys.term.getSelection())
+    if (intent === 'copy') clipboard.copy(keys.input?.active() ? keys.input.text() : keys.term.getSelection())
     else if (intent === 'interrupt') keys.send(INTERRUPT)
     else pasteFromClipboard(keys.term, clipboard, keys.byHand)
     return false

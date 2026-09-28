@@ -42,6 +42,10 @@ describe('the rows', () => {
     ])
   })
 
+  it('gives ⌘A to Select Input while something is typed at the prompt', () => {
+    expect(rows({ ...plain, hasInput: true }).slice(1, 4)).toEqual(['Paste ⌘V', 'Select Input ⌘A', 'Select All'])
+  })
+
   it('marks copying, finding, splitting and revealing with the icon set', () => {
     const icons = (context: TerminalMenuContext): Record<string, string | undefined> =>
       Object.fromEntries(terminalMenuEntries(context, MAC).map((entry) => [entry.label, entry.icon]))
@@ -206,6 +210,15 @@ describe('what each row does', () => {
     runTerminalMenuAction('select-all', null, target)
     runTerminalMenuAction('clear', null, target)
     expect(target.calls).toEqual(['copy selected text', 'selectAll', 'clear'])
+  })
+
+  it('selects the input, or everything once the input has gone', () => {
+    const found = { ...host(), selectInput: () => true }
+    const gone = { ...host(), selectInput: () => false }
+    runTerminalMenuAction('select-input', null, found)
+    runTerminalMenuAction('select-input', null, gone)
+    expect(found.calls).toEqual([])
+    expect(gone.calls).toEqual(['selectAll'])
   })
 
   it('pastes through the emulator, vouched for as typing', async () => {

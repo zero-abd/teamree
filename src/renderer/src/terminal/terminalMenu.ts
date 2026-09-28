@@ -17,6 +17,8 @@ export type TerminalMenuContext = {
   readOnly: boolean
   hasSelection: boolean
   pointed: Pointed | null
+  /** Something is typed at the prompt, which ⌘A selects first. */
+  hasInput?: boolean
 }
 
 export type TerminalMenuAction =
@@ -27,6 +29,7 @@ export type TerminalMenuAction =
   | 'reveal-path'
   | 'copy'
   | 'paste'
+  | 'select-input'
   | 'select-all'
   | 'clear'
   | 'find'
@@ -55,6 +58,8 @@ export function terminalMenuEntries(context: TerminalMenuContext, modifier: Plat
     disabled: !context.hasSelection
   }
   const selectAll: TerminalMenuEntry = { action: 'select-all', label: 'Select All', hint: clipboard('a') }
+  const selectInput: TerminalMenuEntry[] =
+    context.hasInput === true ? [{ action: 'select-input', label: 'Select Input', hint: clipboard('a') }] : []
   const pointed: TerminalMenuEntry[] =
     context.pointed?.kind === 'link'
       ? [
@@ -73,7 +78,8 @@ export function terminalMenuEntries(context: TerminalMenuContext, modifier: Plat
     ...pointed,
     { ...copy, separated: pointed.length > 0 },
     { action: 'paste', label: 'Paste', hint: clipboard('v') },
-    selectAll,
+    ...selectInput,
+    selectInput.length > 0 ? { action: 'select-all', label: 'Select All' } : selectAll,
     { action: 'clear', label: 'Clear', hint: hint('clear-pane') },
     { action: 'find', label: 'Find…', icon: 'search', hint: hint('find-in-pane') },
     { action: 'split-right', label: 'Split Right', icon: 'split-right', hint: hint('split-right'), separated: true },
@@ -148,6 +154,8 @@ export type TerminalMenuHost = {
   reveal: (absolute: string, path: string) => void
   find: () => void
   split: (direction: 'row' | 'column') => void
+  /** False when the input has gone since the menu opened; Select All stands in. */
+  selectInput?: () => boolean
 }
 
 export function runTerminalMenuAction(
@@ -176,6 +184,9 @@ export function runTerminalMenuAction(
       return
     case 'paste':
       pasteFromClipboard(host.term, host.clipboard, host.byHand)
+      return
+    case 'select-input':
+      if (host.selectInput?.() !== true) host.term.selectAll()
       return
     case 'select-all':
       host.term.selectAll()

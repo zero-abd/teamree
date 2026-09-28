@@ -27,7 +27,7 @@ export type PromptSpot = { caret: Cell; start: Cell; end: Cell; text: string; fi
 /** How long a redraw is waited on: quiet for `quietMs` after output, or `maxMs` without any. */
 export type Settle = { quietMs: number; maxMs: number }
 
-const SETTLE: Settle = { quietMs: 30, maxMs: 600 }
+export const SETTLE: Settle = { quietMs: 30, maxMs: 600 }
 const TYPED_WITHIN_MS = 1_000
 const BACKSPACE = '\x7f'
 
@@ -142,7 +142,12 @@ function order(a: Cell, b: Cell): number {
   return a.row - b.row || a.col - b.col
 }
 
-function sendAndSettle(pane: PromptPane, data: string, { quietMs, maxMs }: Settle): Promise<void> {
+/** Sends `data` and resolves once the program's answer to it has been drawn. */
+export function sendAndSettle(
+  pane: Pick<PromptPane, 'term' | 'send'>,
+  data: string,
+  { quietMs, maxMs }: Settle
+): Promise<void> {
   return new Promise((resolve) => {
     let quiet: ReturnType<typeof setTimeout> | undefined
     const done = (): void => {
