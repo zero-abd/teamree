@@ -665,7 +665,7 @@ describe('the landing queue', () => {
     openWorktree.mockClear()
     removeWorktree.mockClear()
     const { useChildren } = await import('../workspace/rightPanel/childrenStore')
-    useChildren.setState({ merging: {}, stopped: {}, skipped: {} })
+    useChildren.setState({ merging: {}, stopped: {}, skipped: {}, missed: {}, unpushed: {} })
     useTaskTreeStore.setState({ boardMode: 'tasks' })
     const ids = ['w1', 'w2', 'w3', 'w4']
     seed({
@@ -687,31 +687,67 @@ describe('the landing queue', () => {
       expect(within(row('fix one')).getByRole('button', { name })).toBeTruthy()
   })
 
-  it('Land All lands them in order through the ordered merge, leaving out a predicted conflict', async () => {
+  it('Land All asks first, listing what lands in order, with Push as a single Land has it', async () => {
     const { useOverlaps } = await import('../state/overlapStore')
-    const { LANDING_QUEUE, useChildren } = await import('../workspace/rightPanel/childrenStore')
-    const mergeChildren = vi.fn(async () => true)
-    useChildren.setState({ mergeChildren })
+    const { useChildren } = await import('../workspace/rightPanel/childrenStore')
+    const landAll = vi.fn(async () => {})
+    useChildren.setState({ landAll })
+    useWorkspaceStore.setState({
+      bases: { p1: { projectId: 'p1', branch: 'main', upstream: 'origin/main', ahead: 0, behind: 0 } }
+    })
     useOverlaps.setState({
       byProject: { p1: [{ worktreeId: 'w2', with: { base: 'main' }, paths: ['money.js'], conflicts: ['money.js'] }] }
     })
     render(<Dashboard />)
 
     fireEvent.click(screen.getByRole('button', { name: 'Land All' }))
-    expect(mergeChildren).toHaveBeenCalledWith(LANDING_QUEUE, ['w1', 'w4'], [])
+    expect(landAll).not.toHaveBeenCalled()
+    const dialog = screen.getByRole('dialog', { name: 'Land in this order?' })
+    expect([...dialog.querySelectorAll('.landall__name')].map((name) => name.textContent)).toEqual([
+      'fix one',
+      'fix four'
+    ])
+    expect(within(dialog).getByRole('checkbox', { name: 'Push main to origin' })).toHaveProperty('checked', true)
+
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'fix one' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Land 1' }))
+    expect(landAll).toHaveBeenCalledWith(['w4'], ['p1'], [])
+    expect(screen.queryByRole('dialog')).toBeNull()
     expect(row('fix two').querySelector('.child__conflict')?.getAttribute('title')).toBe(
       'Conflicts with main in money.js'
     )
     useOverlaps.setState({ byProject: {} })
   })
 
-  it('says where the run stopped, with a way into that merge', async () => {
+  it('Land All without Push lands in main only', async () => {
+    const { useChildren } = await import('../workspace/rightPanel/childrenStore')
+    const landAll = vi.fn(async () => {})
+    useChildren.setState({ landAll })
+    render(<Dashboard />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Land All' }))
+    const push = screen.getByRole('checkbox', { name: 'Push main to origin' })
+    expect(push).toHaveProperty('checked', false)
+    fireEvent.click(screen.getByRole('button', { name: 'Land 3' }))
+    expect(landAll).toHaveBeenCalledWith(['w1', 'w2', 'w4'], [], [])
+  })
+
+  it('says what Land All skipped and which push failed, each with a way on', async () => {
     const { LANDING_QUEUE, useChildren } = await import('../workspace/rightPanel/childrenStore')
     useChildren.setState({
-      stopped: { [LANDING_QUEUE]: { worktreeId: 'w4', error: 'x', conflicts: ['money.js'] } }
+      missed: {
+        [LANDING_QUEUE]: [
+          { worktreeId: 'w4', error: 'x', conflicts: ['money.js'] },
+          { worktreeId: 'w1', error: 'Needs a commit message', conflicts: [] }
+        ]
+      },
+      unpushed: { [LANDING_QUEUE]: ['Push failed: origin not found · merges undone'] }
     })
     render(<Dashboard />)
-    expect(screen.getByRole('alert').textContent).toContain('Stopped at fix four: conflicts in money.js')
+    const lines = screen.getAllByRole('status').map((line) => line.textContent)
+    expect(lines).toContain('Skipped fix four: conflicts in money.jsResolve…')
+    expect(lines).toContain('Skipped fix one: Needs a commit messageMerge…')
+    expect(screen.getByRole('alert').textContent).toBe('Push failed: origin not found · merges undone')
     fireEvent.click(screen.getByRole('button', { name: 'Resolve…' }))
     expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'w4' })
   })

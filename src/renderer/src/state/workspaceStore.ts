@@ -841,10 +841,14 @@ type WorkspaceState = {
   createPullRequest: (worktreeId: string, request?: PullRequestRequest) => Promise<string | null>
   /** Asks `gh` about these worktrees' pull requests again, past its cache. */
   refreshPullRequests: (worktreeIds: string[]) => Promise<void>
-  /** Merges into the base branch in the project's checkout, then pushes it when `push`; answers with why not, or null once merged. */
-  mergeIntoBase: (worktreeId: string, push?: boolean) => Promise<string | null>
-  /** Pushes a project's base to origin, pulling origin's first when `pull`; answers with why not, or null once pushed. */
-  pushBase: (projectId: string, pull?: boolean) => Promise<PushBaseFailure | null>
+  /** Merges into the base branch in the project's checkout, then pushes it when `push` (`later`: a `pushBase` with `undoTo` will); answers with why not, or null once merged. */
+  mergeIntoBase: (
+    worktreeId: string,
+    push?: boolean | 'later',
+    onMerged?: (merge: WorktreeMerge) => void
+  ) => Promise<string | null>
+  /** Pushes a project's base to origin, pulling origin's first when `pull`, back to `undoTo` when it fails; answers with why not, or null once pushed. */
+  pushBase: (projectId: string, pull?: boolean, undoTo?: string) => Promise<PushBaseFailure | null>
   /** Resets a project's base to origin's, undoing landings not pushed; answers with why not, or null. */
   undoBaseMerge: (projectId: string) => Promise<string | null>
   /** Fetches a project's base now, clearing any back-off; a failure is said in a toast. */
@@ -4209,25 +4213,27 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       await refreshLandings(worktreeIds, true)
     },
 
-    async mergeIntoBase(worktreeId, push) {
+    async mergeIntoBase(worktreeId, push, onMerged) {
+      const params =
+        push === undefined ? { worktreeId } : push === 'later' ? { worktreeId, pushLater: true } : { worktreeId, push }
       let merged: WorktreeMerge
       try {
-        merged = await pastLock(worktreeId, () =>
-          runtimeClient.call('worktree.mergeIntoBase', push === undefined ? { worktreeId } : { worktreeId, push })
-        )
+        merged = await pastLock(worktreeId, () => runtimeClient.call('worktree.mergeIntoBase', params))
+        onMerged?.(merged)
       } catch (error) {
-        if (await heldLock(worktreeId, error, () => get().mergeIntoBase(worktreeId, push))) return LOCKED
+        if (await heldLock(worktreeId, error, () => get().mergeIntoBase(worktreeId, push, onMerged))) return LOCKED
         return error instanceof Error ? error.message : String(error)
       }
       const projectId = get().worktrees.find((worktree) => worktree.id === worktreeId)?.projectId
       if (push !== undefined && projectId !== undefined) {
-        const pushOnMerge = { ...get().pushOnMerge, [projectId]: push }
+        const pushOnMerge = { ...get().pushOnMerge, [projectId]: push !== false }
         set({ pushOnMerge })
         writeStoredPushOnMerge(storage, pushOnMerge)
       }
       if (get().dialog?.kind === 'confirm-merge') set({ dialog: null })
       const landed = get().worktrees.find((worktree) => worktree.id === worktreeId)
-      if (landed !== undefined && landed.parentId === undefined && merged.merged) {
+      // Land All says its own outcome once the push has run.
+      if (landed !== undefined && landed.parentId === undefined && merged.merged && push !== 'later') {
         const { head, before } = merged
         const undo: UndoTarget | undefined =
           merged.pushed === true || head === undefined || before === undefined
@@ -4242,12 +4248,17 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       return null
     },
 
-    async pushBase(projectId, pull = false) {
+    async pushBase(projectId, pull = false, undoTo) {
       let base: ProjectBase
       try {
         if (pull) await runtimeClient.call('project.pullBase', { projectId })
-        base = await runtimeClient.call('project.pushBase', { projectId })
+        base = await runtimeClient.call(
+          'project.pushBase',
+          undoTo === undefined ? { projectId } : { projectId, undoTo }
+        )
       } catch (error) {
+        // The landings it undid are unmerged again.
+        if (undoTo !== undefined) refresher.request(refreshTargets({ allStatuses: true }))
         const message = error instanceof Error ? error.message : String(error)
         const data = (error as { data?: Partial<PushBaseFailure> } | null)?.data
         return {

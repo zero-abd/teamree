@@ -137,17 +137,23 @@ export function ChildrenSection({ worktreeId }: { worktreeId: string }): React.J
   )
 }
 
-/** Where the last run under `runKey` stopped and what it skipped for a clash, each with the way into that merge. */
+/** Where the last run under `runKey` stopped, what it skipped, and which push failed, each with the way into that merge. */
 export function LandStops({ runKey, rows }: { runKey: string; rows: readonly ChildRow[] }): React.JSX.Element {
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const busy = useChildren((state) => state.merging[runKey] !== undefined)
   const lastStop = useChildren((state) => state.stopped[runKey])
   const lastSkipped = useChildren((state) => state.skipped[runKey])
+  const lastMissed = useChildren((state) => state.missed[runKey])
+  const unpushed = useChildren((state) => state.unpushed[runKey])
   // Landed since, through its own merge, or gone: nothing is stopped there any more.
   const waiting = (worktreeId: string | undefined): ChildRow | undefined =>
     rows.find((row) => row.worktreeId === worktreeId && !row.landed)
   const stoppedAt = waiting(lastStop?.worktreeId)
   const skipped = busy ? [] : (lastSkipped ?? []).filter((held) => waiting(held.worktreeId) !== undefined)
+  const missed = (lastMissed ?? []).flatMap((stop) => {
+    const row = waiting(stop.worktreeId)
+    return row === undefined ? [] : [{ ...stop, title: row.title }]
+  })
   const resolve = (worktreeId: string) => (): void => openDialog({ kind: 'confirm-merge', worktreeId })
   return (
     <>
@@ -161,6 +167,21 @@ export function LandStops({ runKey, rows }: { runKey: string; rows: readonly Chi
           </Button>
         </p>
       )}
+      {(unpushed ?? []).map((line) => (
+        <p key={line} className="children__stop" role="alert">
+          {line}
+        </p>
+      ))}
+      {missed.map((stop) => (
+        <p key={stop.worktreeId} className="children__stop" role="status" title={stop.error}>
+          {`Skipped ${stop.title}: ${
+            stop.conflicts.length > 0 ? `conflicts in ${stop.conflicts.join(', ')}` : stop.error
+          }`}
+          <Button size="sm" onClick={resolve(stop.worktreeId)}>
+            {stop.conflicts.length > 0 ? 'Resolve…' : 'Merge…'}
+          </Button>
+        </p>
+      ))}
       {skipped.map((held) => (
         <p key={held.worktreeId} className="children__stop" role="status">
           {`Skipped ${held.title}: conflicts with ${held.clashesWith}`}

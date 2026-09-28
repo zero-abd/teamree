@@ -785,6 +785,23 @@ button.picker__chevron:hover {
   font-size: var(--text-xs);
 }
 
+/* Land All: Clean Up's rows, numbered in landing order, the commit message or clash on the right. */
+.landall__order {
+  flex: none;
+  min-width: 2ch;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.landall__hint {
+  flex: 0 1 auto;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The question the owner is asked before somebody else's keystrokes run.
    Wider and quieter than the other dialogs on purpose: the thing being read is
    a block of text a stranger's machine chose, and it has to be legible before

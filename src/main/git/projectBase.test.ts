@@ -377,3 +377,72 @@ describe('undoing one local landing', () => {
     expect(await context.repo.git(['rev-parse', 'main'])).toBe(landing.head)
   })
 })
+
+describe('landing several, then one push', () => {
+  it('lands each on origin’s tip without pushing, then pushes them all at once', async () => {
+    const context = await setup()
+    const push = await teammate(context)
+    const first = await taskWriting(context, 'First', 'one.ts', 'one\n')
+    const second = await taskWriting(context, 'Second', 'two.ts', 'two\n')
+    const theirs = await push('footer.ts', 'theirs\n')
+
+    const one = await context.service.worktreeMergeIntoBase({ worktreeId: first.id, pushLater: true })
+    const two = await context.service.worktreeMergeIntoBase({ worktreeId: second.id, pushLater: true })
+
+    expect(one).toMatchObject({ merged: true, restore: theirs })
+    expect(two.pushed).toBeUndefined()
+    expect(await originMain(context.repo)).toBe(theirs)
+
+    await context.service.projectPushBase({ projectId: context.projectId, undoTo: one.restore })
+
+    expect(await originMain(context.repo)).toBe(await context.repo.git(['rev-parse', 'main']))
+    expect(await subjects(context.repo)).toEqual(expect.arrayContaining(['First', 'Second', 'Teammate: footer.ts']))
+  })
+
+  it('takes in what origin gained between two of them', async () => {
+    const context = await setup()
+    const push = await teammate(context)
+    const first = await taskWriting(context, 'First', 'one.ts', 'one\n')
+    const second = await taskWriting(context, 'Second', 'two.ts', 'two\n')
+    const one = await context.service.worktreeMergeIntoBase({ worktreeId: first.id, pushLater: true })
+    await push('footer.ts', 'theirs\n')
+
+    await context.service.worktreeMergeIntoBase({ worktreeId: second.id, pushLater: true })
+    await context.service.projectPushBase({ projectId: context.projectId, undoTo: one.restore })
+
+    expect(await originMain(context.repo)).toBe(await context.repo.git(['rev-parse', 'main']))
+    expect(await subjects(context.repo)).toEqual(expect.arrayContaining(['First', 'Second', 'Teammate: footer.ts']))
+  })
+
+  it('puts main back before all of them when that push fails', async () => {
+    const context = await setup()
+    const first = await taskWriting(context, 'First', 'one.ts', 'one\n')
+    const second = await taskWriting(context, 'Second', 'two.ts', 'two\n')
+    const before = await context.repo.git(['rev-parse', 'main'])
+    const one = await context.service.worktreeMergeIntoBase({ worktreeId: first.id, pushLater: true })
+    await context.service.worktreeMergeIntoBase({ worktreeId: second.id, pushLater: true })
+    await context.repo.git(['remote', 'set-url', '--push', 'origin', path.join(context.repo.base, 'missing.git')])
+
+    const error = await rejection(
+      context.service.projectPushBase({ projectId: context.projectId, undoTo: one.restore })
+    )
+
+    expect(error.message).toBe('Push failed: origin not found · merges undone')
+    expect(await context.repo.git(['rev-parse', 'main'])).toBe(before)
+    expect((await context.service.worktreeLanding({ worktreeId: second.id })).merged).toBe(false)
+  })
+
+  it('refuses to put main back at a commit it is not ahead of', async () => {
+    const context = await setup()
+    await context.repo.write('side.md', 'side\n')
+    await context.repo.commit('Side')
+    const side = await context.repo.git(['rev-parse', 'HEAD'])
+    await context.repo.git(['reset', '--hard', 'HEAD~1'])
+    const before = await originMain(context.repo)
+
+    const error = await rejection(context.service.projectPushBase({ projectId: context.projectId, undoTo: side }))
+
+    expect(error.message).toBe(`${side.slice(0, 7)} is not behind main`)
+    expect(await originMain(context.repo)).toBe(before)
+  })
+})
