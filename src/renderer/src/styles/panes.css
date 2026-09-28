@@ -355,6 +355,11 @@
   pointer-events: none;
 }
 
+/* A right-click menu opens under the pointer; the tip would cover its first item. */
+body:has([role='menu']) .pane-link-tip {
+  display: none;
+}
+
 /* Find bar ---------------------------------------------------------------- */
 
 .pane-search {
