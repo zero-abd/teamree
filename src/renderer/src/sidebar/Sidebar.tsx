@@ -36,6 +36,7 @@ import { overlapChip } from './overlapChip'
 import { openOverlap, overlapNamer } from './useOverlapChip'
 import { handedAway, handoffLine, useHandoffs } from '../teamwork/handoffsStore'
 import { useReviewRequests } from '../teamwork/reviewRequestsStore'
+import { onlineCount } from '../teamwork/homeRows'
 import { agentWords, worktreeDisplay, worktreeLabel } from './worktreeDisplay'
 import { unreadNotes, useSharedNotes } from '../teamwork/sharedNotesStore'
 import { useSidebarView } from '../state/sidebarViewStore'
@@ -190,10 +191,7 @@ export function Sidebar({
   const active = worktrees.find((entry) => entry.id === activeWorktreeId)
   const railProject = projects.find((project) => project.id === active?.projectId) ?? projects[0]
   const notesUnread = useSharedNotes((state) => unreadNotes(state))
-  const online =
-    railProject === undefined
-      ? 0
-      : (teammatesHeard(teammates[railProject.id])?.teammates.filter((mate) => mate.connected).length ?? 0)
+  const online = railProject === undefined ? 0 : onlineCount(teammates[railProject.id], teamwork[railProject.id])
   const pageOpen = dashboardOpen || settingsOpen || helpOpen || teamworkProjectId !== null
 
   // A new filter starts the list from its top; declared first, so on mount the open row still wins.

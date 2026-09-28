@@ -2,7 +2,7 @@
 // working, asking or failed anywhere, and teammates online, on the right. The runtime only when not ready.
 
 import { useMemo } from 'react'
-import { changedFiles, teammatesHeard, type WorktreeStatus } from '@shared/entities'
+import { changedFiles, type WorktreeStatus } from '@shared/entities'
 import { activityOf } from '@shared/paneActivity'
 import { attention, dashboardRows } from '../dashboard/dashboardRows'
 import { stepNeedingYou } from '../dashboard/needingYou'
@@ -17,6 +17,7 @@ import { requestRegionFocus } from './regions'
 import { useKeepAwake } from './keepAwake'
 import { KeepAwakeControl } from './KeepAwakeControl'
 import { ResourcesControl } from './ResourcesControl'
+import { onlineCount } from '../teamwork/homeRows'
 import { TokensLine } from './TokensLine'
 
 /** What the rail says while the runtime is not ready; nothing is said once it is. */
@@ -66,9 +67,7 @@ export function StatusBar(): React.JSX.Element {
   // In sync with a base that could not be fetched, or was fetched hours ago, is not known.
   const description = shownStatus === undefined ? undefined : gitWords(shownStatus, child, fresh !== null && !child)
   const online = useWorkspaceStore((state) =>
-    project === undefined
-      ? 0
-      : (teammatesHeard(state.teammates[project.id])?.teammates.filter((mate) => mate.connected).length ?? 0)
+    project === undefined ? 0 : onlineCount(state.teammates[project.id], state.teamwork[project.id])
   )
   // `now` only moves the quiet-for column, which the count does not read.
   const owed = useMemo(

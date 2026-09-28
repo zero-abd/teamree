@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { landedWhereItLands } from '../dashboard/taskRows'
 import { Icon } from '../icons/Icon'
 import { watchedPaneId } from '../panes/watchedPanes'
-import { AnswerButtons } from '../sidebar/AnswerButtons'
+import { AllowOpen } from '../sidebar/AnswerButtons'
 import { agentRows, agoLabel, worktreeTone } from '../sidebar/agentRows'
 import type { TeammatePaneRow } from '../sidebar/teammateRows'
 import { worktreeDisplay } from '../sidebar/worktreeDisplay'
@@ -213,7 +213,6 @@ function WaitingRow({
   now: number
 }): React.JSX.Element {
   const dismiss = useHandoffs((state) => state.dismiss)
-  const answerTeammatePane = useWorkspaceStore((state) => state.answerTeammatePane)
   const settleRequest = useReviewRequests((state) => state.settle)
   if (item.kind === 'review') {
     const { request } = item
@@ -278,13 +277,7 @@ function WaitingRow({
         {item.pane.evidence === null ? null : <span className="home-card__line">{item.pane.evidence}</span>}
       </span>
       <span className="home-card__actions">
-        <AnswerButtons
-          terminalId={item.pane.terminalId}
-          choices={item.pane.choices ?? []}
-          className="team-answers"
-          onChoose={(choice) => void answerTeammatePane(projectId, item.pane, choice)}
-        />
-        <OpenPane projectId={projectId} pane={item.pane} />
+        <TeammateAllowOpen projectId={projectId} pane={item.pane} />
       </span>
     </li>
   )
@@ -299,7 +292,6 @@ function MemberRow({
   projectId: string
   now: number
 }): React.JSX.Element {
-  const answerTeammatePane = useWorkspaceStore((state) => state.answerTeammatePane)
   const shown = member.worktrees.slice(0, WORKTREES_SHOWN)
   const folded = member.worktrees.length - shown.length
   return (
@@ -322,13 +314,7 @@ function MemberRow({
                   <WorktreeButton worktree={worktree} projectId={projectId} handle={member.handle} />
                   {asking && pane !== undefined ? (
                     <span className="home-card__actions">
-                      <AnswerButtons
-                        terminalId={pane.terminalId}
-                        choices={pane.choices ?? []}
-                        className="team-answers"
-                        onChoose={(choice) => void answerTeammatePane(projectId, pane, choice)}
-                      />
-                      <OpenPane projectId={projectId} pane={pane} />
+                      <TeammateAllowOpen projectId={projectId} pane={pane} />
                     </span>
                   ) : worktree.branch === undefined ? null : (
                     <span className="team-worktree__branch">{worktree.branch}</span>
@@ -381,12 +367,18 @@ function WorktreeButton({
   )
 }
 
-function OpenPane({ projectId, pane }: { projectId: string; pane: TeammatePaneRow }): React.JSX.Element {
+/** As the sidebar's watched rows: Allow sends the menu's first answer through the owner's consent; Open watches the pane. */
+function TeammateAllowOpen({ projectId, pane }: { projectId: string; pane: TeammatePaneRow }): React.JSX.Element {
+  const answerTeammatePane = useWorkspaceStore((state) => state.answerTeammatePane)
   const watch = useWatch(projectId)
   return (
-    <Button variant="ghost" size="sm" onClick={() => watch(pane)}>
-      Open
-    </Button>
+    <AllowOpen
+      terminalId={pane.terminalId}
+      choices={pane.choices ?? []}
+      className="team-answers"
+      onOpen={() => watch(pane)}
+      onChoose={(choice) => void answerTeammatePane(projectId, pane, choice)}
+    />
   )
 }
 

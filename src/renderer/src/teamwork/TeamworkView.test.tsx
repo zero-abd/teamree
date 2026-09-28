@@ -768,7 +768,7 @@ describe('a team that exists, as its home', () => {
     open()
     const head = document.querySelector('.page__head') as HTMLElement
     expect(head.querySelector('h1')?.textContent).toBe('pager')
-    expect(head.querySelector('.page__lede')?.textContent).toBe('Teamwork · 2 online')
+    expect(head.querySelector('.page__lede')?.textContent).toBe('Teamwork · 1 online')
     expect(within(head).getByRole('button', { name: 'Copy Invitation' })).toBeTruthy()
     expect(within(head).getByRole('button', { name: 'Paste Invitation…' })).toBeTruthy()
   })
