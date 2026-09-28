@@ -2,6 +2,7 @@
 // nothing else, so a caller can pipe it straight into a parser. Errors always
 // go to stderr, in both modes.
 
+import type { GitHookFailedData } from '../shared/entities.js'
 import type { CliError } from './exit.js'
 
 export type Streams = {
@@ -37,7 +38,15 @@ export function emitFailure(command: string, error: CliError, json: boolean, str
     return
   }
   streams.err(`error: ${error.message}\n`)
+  // A refusing hook's message is its first line; what it found is the rest.
+  const hook = hookOutput(error.data)
+  if (hook !== null) streams.err(`${hook}\n`)
   if (error.hint) streams.err(`hint: ${error.hint}\n`)
+}
+
+function hookOutput(data: unknown): string | null {
+  const hook = data as Partial<GitHookFailedData> | null | undefined
+  return hook?.kind === 'hook' && typeof hook.output === 'string' && hook.output !== '' ? hook.output : null
 }
 
 /** Fixed-width columns; empty input renders as a single explanatory line. */

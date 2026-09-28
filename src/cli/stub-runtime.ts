@@ -30,9 +30,11 @@ export type StubRuntime = {
 /** Throw this from a handler to send a protocol error response. */
 export class StubError extends Error {
   readonly code: string
-  constructor(code: string, message: string) {
+  readonly data: unknown
+  constructor(code: string, message: string, data?: unknown) {
     super(message)
     this.code = code
+    this.data = data
   }
 }
 
@@ -73,7 +75,12 @@ export async function startStubRuntime(handler: StubHandler): Promise<StubRuntim
           write({ id: request.id, ok: true, result })
         } catch (error) {
           const code = error instanceof StubError ? error.code : 'internal'
-          write({ id: request.id, ok: false, error: { code: code as never, message: (error as Error).message } })
+          const data = error instanceof StubError && error.data !== undefined ? { data: error.data } : {}
+          write({
+            id: request.id,
+            ok: false,
+            error: { code: code as never, message: (error as Error).message, ...data }
+          })
         }
       }
     })
