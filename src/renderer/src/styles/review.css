@@ -258,6 +258,24 @@
   opacity: 1;
 }
 
+/* A line a batched comment quotes, until the batch is sent or cleared; the `+` covers it on hover. */
+.cm-commentGutter .cm-gutterElement:has(.cm-commentPending) {
+  opacity: 1;
+}
+
+.cm-commentPending .status-dot {
+  vertical-align: middle;
+}
+
+.cm-commentPending > :last-child,
+.cm-commentGutter .cm-gutterElement:hover .cm-commentPending .status-dot {
+  display: none;
+}
+
+.cm-commentGutter .cm-gutterElement:hover .cm-commentPending > :last-child {
+  display: inline;
+}
+
 /* The words a changed pair of lines differs in; text at full strength, since the tint dims syntax colours. */
 .patch__row--removed .patch__word,
 .patch__side--removed .patch__word {
