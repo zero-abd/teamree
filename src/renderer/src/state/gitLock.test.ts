@@ -12,6 +12,7 @@ import { createTempRepo, type TempRepo } from '../../../main/git/testRepository'
 import { readWorktreeChanges } from '../../../main/git/worktreeChanges'
 import { ErrorCode } from '@shared/protocol'
 import type { PatchHunk } from '@shared/patch'
+import type { Worktree } from '@shared/entities'
 
 const live = vi.hoisted(() => ({ call: null as null | ((method: string, params: object) => Promise<unknown>) }))
 
@@ -19,7 +20,7 @@ vi.mock('../runtimeClient/currentRuntimeClient', () => ({
   runtimeClient: { call: (method: string, params: object) => live.call!(method, params) }
 }))
 
-import { LOCK_RETRY_MS, useWorkspaceStore } from './workspaceStore'
+import { LOCK_RETRY_MS, LOCK_WATCH_MS, useWorkspaceStore } from './workspaceStore'
 
 const LOCKED = 'Another git process holds the lock'
 const store = () => useWorkspaceStore.getState()
@@ -149,6 +150,30 @@ describe('each git write', () => {
     await vi.advanceTimersByTimeAsync(LOCK_RETRY_MS)
     await again
     expect(calls.filter((each) => each === method)).toHaveLength(4)
+  })
+
+  it('names the worktree, and withdraws itself once the lock is gone', async () => {
+    let held = true
+    live.call = async (method) => {
+      calls.push(method)
+      if (method === 'worktree.lock') return { lockPath, exists: held, ageMs: 0, gitRunning: held, clearable: false }
+      throw locked()
+    }
+    const worktree = { id: 'w1', name: 'fix login', branch: 'fix-login' } as Worktree
+    useWorkspaceStore.setState({ worktrees: [worktree] })
+    const done = store().unstagePath('w1', 'f.txt')
+    await vi.advanceTimersByTimeAsync(LOCK_RETRY_MS)
+    await done
+    expect(lockNotices()).toMatchObject([{ text: `${LOCKED} · fix login` }])
+
+    await vi.advanceTimersByTimeAsync(LOCK_WATCH_MS)
+    expect(lockNotices()).toHaveLength(1)
+    held = false
+    await vi.advanceTimersByTimeAsync(LOCK_WATCH_MS)
+    expect(lockNotices()).toEqual([])
+    const asked = calls.filter((each) => each === 'worktree.lock').length
+    await vi.advanceTimersByTimeAsync(LOCK_WATCH_MS * 3)
+    expect(calls.filter((each) => each === 'worktree.lock')).toHaveLength(asked)
   })
 
   it('answers the merge dialog with the lock, and sets no update error for it', async () => {

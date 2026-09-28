@@ -343,6 +343,25 @@ describe('what is waiting on you', () => {
     ).toEqual(['h1', 'r1', 'r2'])
   })
 
+  it('keeps a review you opened out of the waiting rows, as one you are reviewing', () => {
+    const request = {
+      id: 'r1',
+      to: 'me',
+      from: 'bo',
+      worktreeId: 'peer:bo:r1',
+      worktreeName: 'fix',
+      branch: 'fix',
+      at: NOW
+    }
+    const waiting = waitingOnYou({
+      handoffs: undefined,
+      reviewRequests: { incoming: [{ ...request, seen: true, opened: true }], outgoing: [] },
+      presence: undefined,
+      now: NOW
+    })
+    expect(waiting.map((item) => item.kind)).toEqual(['reviewing'])
+  })
+
   it('lists a teammate’s agent asking with answers you can give from here', () => {
     const asking = theirs({
       panes: [

@@ -381,6 +381,21 @@ describe('asking a teammate for a review', () => {
     expect(again.answerOf(asked.id, (await loadIdentity(bob.dataDir)).publicKey)).toBe('later')
   })
 
+  it('moves out of the waiting list once opened, and stays opened after a restart', async () => {
+    const { alice, bob, scheduler } = await pair()
+    const asked = bob.service.requestReview({ worktreeId: 'wt_fix', to: 'alice' })
+    await scheduler.advance(1_000)
+
+    alice.service.settleReviewRequest({ projectId: 'p_alice', id: asked.id, how: 'opened' })
+    expect(alice.service.reviewRequests({ projectId: 'p_alice' }).incoming).toMatchObject([
+      { id: asked.id, seen: true, opened: true }
+    ])
+    await alice.service.flushReviews()
+    const again = new ReviewInbox({ path: join(alice.dataDir, 'reviews.json'), now: () => 0 })
+    await again.load()
+    expect(again.answerOf(asked.id, (await loadIdentity(bob.dataDir)).publicKey)).toBe('opened')
+  })
+
   it('is refused for anyone not on the roster, and for a task that is not here', async () => {
     const { bob } = await pair()
     expect(() => bob.service.requestReview({ worktreeId: 'wt_fix', to: 'mallory' })).toThrow(/not on this project/)

@@ -14,8 +14,8 @@ type ReviewRequestsState = {
   refresh: (projectIds: readonly string[]) => Promise<void>
   /** Asks `to` to review one of this machine's tasks, and says so. */
   request: (worktreeId: string, to: string) => Promise<void>
-  /** `seen` retires the popup; `later` takes the request off the list. */
-  settle: (projectId: string, id: string, how: 'seen' | 'later') => Promise<void>
+  /** `seen` retires the popup; `opened` also moves it to Reviewing; `later` takes the request off the list. */
+  settle: (projectId: string, id: string, how: 'seen' | 'later' | 'opened') => Promise<void>
 }
 
 /** The requests asking now: unseen ones, oldest first, with the project each is in. */
@@ -60,22 +60,23 @@ export const useReviewRequests = create<ReviewRequestsState>()((set) => ({
     set((state) => {
       const read = state.byProject[projectId]
       if (read === undefined) return {}
+      const settled = how === 'opened' ? { seen: true as const, opened: true as const } : { seen: true as const }
       const incoming =
         how === 'later'
           ? read.incoming.filter((request) => request.id !== id)
-          : read.incoming.map((request) => (request.id === id ? { ...request, seen: true as const } : request))
+          : read.incoming.map((request) => (request.id === id ? { ...request, ...settled } : request))
       return { byProject: { ...state.byProject, [projectId]: { ...read, incoming } } }
     })
     await runtimeClient.call('teamwork.settleReviewRequest', { projectId, id, how }).catch(() => undefined)
   }
 }))
 
-/** Opens the task a request is about beside the workspace and retires its popup. */
+/** Opens the task a request is about beside the workspace, moving it from Waiting on you to Reviewing. */
 export function reviewRequested(request: PeerReviewRequest & { projectId: string }): void {
   useTeammateReview.getState().openReview({
     projectId: request.projectId,
     worktreeId: request.worktreeId,
     title: `${request.from ?? request.to} · ${request.worktreeName}`
   })
-  void useReviewRequests.getState().settle(request.projectId, request.id, 'seen')
+  void useReviewRequests.getState().settle(request.projectId, request.id, 'opened')
 }

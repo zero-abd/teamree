@@ -42,7 +42,7 @@ const ReviewSchema = z.object({
 type Asked = PeerReviewRequest & { projectId: string }
 
 /** A request answered here; `from` is the asker's public key, since an id is theirs to choose. */
-type Answered = { id: string; from: string; how: 'seen' | 'later' }
+type Answered = { id: string; from: string; how: 'seen' | 'later' | 'opened' }
 
 const AskedSchema = z.object({
   id: z.string().min(1),
@@ -59,7 +59,7 @@ const FileSchema = z.object({
   reviews: z.array(ReviewSchema).catch([]),
   asked: z.array(AskedSchema).catch([]),
   answered: z
-    .array(z.object({ id: z.string().min(1), from: z.string().min(1), how: z.enum(['seen', 'later']) }))
+    .array(z.object({ id: z.string().min(1), from: z.string().min(1), how: z.enum(['seen', 'later', 'opened']) }))
     .catch([])
 })
 

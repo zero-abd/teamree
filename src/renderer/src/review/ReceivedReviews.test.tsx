@@ -147,7 +147,7 @@ describe('a teammate asking you for a review', () => {
     expect(useTeammateReview.getState().open).toEqual([
       { projectId: 'p1', worktreeId: 'peer:benkey:wt_fix', title: 'ben · fix footer copy' }
     ])
-    expect(call).toHaveBeenCalledWith('teamwork.settleReviewRequest', { projectId: 'p1', id: 'q1', how: 'seen' })
+    expect(call).toHaveBeenCalledWith('teamwork.settleReviewRequest', { projectId: 'p1', id: 'q1', how: 'opened' })
     await waitFor(() => expect(screen.queryByText(/asks you to review/)).toBeNull())
   })
 })

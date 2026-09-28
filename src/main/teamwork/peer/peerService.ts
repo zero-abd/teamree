@@ -1324,7 +1324,8 @@ export class PeerService {
             // As `presence` names the task, and by this roster, never by what the sender called itself.
             worktreeId: `peer:${publicKey.slice(0, 12)}:${request.worktreeId}`,
             from: this.#handleIn(facts, publicKey),
-            ...(answer === 'seen' ? { seen: true as const } : {})
+            ...(answer === 'seen' || answer === 'opened' ? { seen: true as const } : {}),
+            ...(answer === 'opened' ? { opened: true as const } : {})
           },
           publicKey
         })

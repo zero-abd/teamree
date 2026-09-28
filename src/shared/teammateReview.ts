@@ -55,6 +55,8 @@ export type PeerReviewRequest = {
   at: number
   /** Incoming only: its popup has been answered. */
   seen?: true
+  /** Incoming only: opened for review here, so no longer waiting. */
+  opened?: true
 }
 
 export type TeamworkReviewRequests = { incoming: PeerReviewRequest[]; outgoing: PeerReviewRequest[] }
