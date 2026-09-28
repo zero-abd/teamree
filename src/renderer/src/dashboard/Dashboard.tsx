@@ -14,7 +14,7 @@ import {
   truncateName,
   type DotTone
 } from '../sidebar/agentRows'
-import { AnswerButtons } from '../sidebar/AnswerButtons'
+import { AnswerButtons, AnswerChoices } from '../sidebar/AnswerButtons'
 import { PullRequestMark } from '../sidebar/PullRequestMark'
 import { boardRowSpeech } from '../sidebar/rowSpeech'
 import { usePaneEvidence, useWatchEvidence } from '../sidebar/usePaneEvidence'
@@ -22,7 +22,7 @@ import { useNow } from '../state/useNow'
 import { useUnreadPanes } from '../state/usePaneSeen'
 import { useWorkspaceStore } from '../state/workspaceStore'
 import { PageFrame } from '../workspace/PageFrame'
-import { askingWorktrees, useMessageStore } from '../state/messages'
+import { askForYou, askingWorktrees, useMessageStore } from '../state/messages'
 import { useTaskTreeStore } from '../state/taskTreeStore'
 import { useUsageReads } from '../state/usageStore'
 import { paneState } from '../teamwork/paneState'
@@ -71,6 +71,7 @@ export function Dashboard(): React.JSX.Element {
   const changes = useChangedLines(mode === 'tasks' ? worktrees : [])
   useUsageReads(mode === 'tasks' ? {} : null)
   const messages = useMessageStore((state) => state.messages)
+  const answer = useMessageStore((state) => state.answer)
   const tasks = useMemo(
     () =>
       mode === 'tasks'
@@ -224,7 +225,11 @@ export function Dashboard(): React.JSX.Element {
         </div>
       ) : (
         <ul className="card board__list" ref={list} onKeyDown={step}>
-          {shown.map((row) => {
+          {shown.map((listed) => {
+            // A question put with `msg ask` is its own words and options, not the screen's.
+            const put =
+              terminals[listed.terminalId]?.askingYou === undefined ? undefined : askForYou(messages, listed.worktreeId)
+            const row = put === undefined ? listed : { ...listed, evidence: put.text }
             const state = dotTone(row.activity, row.agent)
             const isUnread = unread.has(row.terminalId)
             const where = [row.worktreeName, row.branch, row.projectName].filter(Boolean).join(' · ')
@@ -254,7 +259,14 @@ export function Dashboard(): React.JSX.Element {
                   </span>
                   <span className="board-row__since">{sinceLabel(row.quietFor)}</span>
                 </button>
-                {row.choices === undefined ? null : (
+                {put?.options === undefined ? null : (
+                  <AnswerChoices
+                    choices={put.options.map((label) => ({ label }))}
+                    onChoose={(index) => void answer(put, put.options?.[index] ?? '')}
+                    className="board-item__answers"
+                  />
+                )}
+                {row.choices === undefined || put !== undefined ? null : (
                   <AnswerButtons
                     terminalId={row.terminalId}
                     choices={row.choices}

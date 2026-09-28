@@ -2,6 +2,7 @@
 // an agent runs, and the end block (marker line and one row of actions) once the program is gone.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import type { Terminal } from '@shared/entities'
 import { markerTime } from '@shared/paneMarker'
 import type { StoppedFor } from '@shared/paneRestore'
@@ -18,7 +19,7 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { shownScreen } from '../terminal/shownPanes'
 import { Button, type ButtonVariant } from '../ui/Button'
 import { StatusDot, type PaneState } from '../ui/StatusPill'
-import { focusAfterAnswer, registerAskCard } from './askCards'
+import { focusAfterAnswer, focusAskAnswer, registerAskCard } from './askCards'
 import { missingTool, type MissingTool } from './missingTool'
 
 /** What a shell's ^C exit reads as: the person stopped it, nothing failed. */
@@ -260,7 +261,11 @@ export function PaneAsk({ terminal, onReview }: { terminal: Terminal; onReview: 
               data-own-escape
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Escape') setReplying(false)
+                if (event.key !== 'Escape') return
+                const pane = card.current?.closest('.pane') ?? null
+                // Drawn now, so the field's going leaves the keyboard on the first answer, not the page.
+                flushSync(() => setReplying(false))
+                if (!focusAskAnswer(terminal.id)) focusAfterAnswer(pane)
               }}
             />
           </form>

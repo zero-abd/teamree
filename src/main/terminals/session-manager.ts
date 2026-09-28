@@ -334,7 +334,7 @@ export class TerminalSessionManager {
     const size = params.cols === undefined ? this.cellsOnGrid(placed(PROBE_PANE_ID), PROBE_PANE_ID) : undefined
     const session = this.startSession({ ...params, ...size })
     this.saveLayout({ worktreeId: session.worktreeId, root: placed(session.id), focusedTerminalId: session.id })
-    return session.snapshot()
+    return this.withOverlays(session)
   }
 
   /**
@@ -367,7 +367,7 @@ export class TerminalSessionManager {
     })
 
     const saved = this.saveLayout({ worktreeId, root: placed(session.id), focusedTerminalId: session.id })
-    return { terminal: session.snapshot(), layout: saved }
+    return { terminal: this.withOverlays(session), layout: saved }
   }
 
   /** Keeps the grid a window reported, for the panes that arrive without a size. */
@@ -516,7 +516,7 @@ export class TerminalSessionManager {
     for (const stream of this.streamsFor(session.id)) {
       stream.channel.emit({ type: 'data', data: boundary })
     }
-    return session.snapshot()
+    return this.withOverlays(session)
   }
 
   /**
@@ -602,13 +602,13 @@ export class TerminalSessionManager {
       else next.label = snapshot.label
       this.records.putTerminal(next)
     }
-    return snapshot
+    return this.withOverlays(session)
   }
 
   resize(terminalId: string, cols: number, rows: number): Terminal {
     const session = this.require(terminalId)
     session.resize(cols, rows)
-    return session.snapshot()
+    return this.withOverlays(session)
   }
 
   /** What the agent's hook just reported. Not written to the record: the next launch starts a new process. */
@@ -759,7 +759,7 @@ export class TerminalSessionManager {
     )
     this.setClosed(this.closedList().filter((candidate) => candidate !== entry))
     this.saveLayout({ worktreeId: record.worktreeId, root, focusedTerminalId: record.id })
-    return session.snapshot()
+    return this.withOverlays(session)
   }
 
   /** Streams a terminal's events into `channel` until the teardown runs or the terminal closes. */
