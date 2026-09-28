@@ -10,7 +10,7 @@
 // first moments of every launch — and each of them was wrong in the state the
 // person is most likely to be in when it matters.
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConsentRequest, PaneConsent, Project, Terminal, Worktree } from '@shared/entities'
@@ -619,5 +619,123 @@ describe('the Tasks view', () => {
     render(<Dashboard />)
     fireEvent.click(document.querySelectorAll<HTMLElement>('.task-row')[1]!)
     expect(openWorktree).toHaveBeenCalledWith('w2')
+  })
+})
+
+// Finished tasks with work, landed from the board rather than one worktree at a time.
+describe('the landing queue', () => {
+  const openWorktree = vi.fn(async () => {})
+  const removeWorktree = vi.fn(async () => {})
+  const done = { outcome: 'succeeded' as const, summary: 'Fixed.', paths: [], at: 0 }
+  const task = (id: string, name: string): Worktree => ({ ...WORKTREE, id, name, branch: id, report: done })
+  const clean = (worktreeId: string) => ({
+    worktreeId,
+    branch: worktreeId,
+    ahead: 0,
+    behind: 0,
+    staged: 0,
+    unstaged: 0,
+    untracked: 0,
+    conflicted: 0,
+    readAt: 0
+  })
+  const ahead = (worktreeId: string, count: number) => ({
+    worktreeId,
+    baseRef: 'main',
+    state: count > 0 ? ('clean' as const) : ('nothingToMerge' as const),
+    ahead: count,
+    conflicts: [],
+    readAt: 0
+  })
+  const landing = (worktreeId: string, unmerged: number) => ({
+    worktreeId,
+    branch: worktreeId,
+    base: 'main',
+    host: null,
+    published: false,
+    unmerged,
+    merged: false,
+    readAt: 0
+  })
+  const queued = (): string[] =>
+    [...document.querySelectorAll('.landq__row')].map((row) => row.querySelector('.landq__name')?.textContent ?? '')
+  const row = (name: string): HTMLElement => document.querySelector<HTMLElement>(`.landq__row[aria-label="${name}"]`)!
+
+  beforeEach(async () => {
+    openWorktree.mockClear()
+    removeWorktree.mockClear()
+    const { useChildren } = await import('../workspace/rightPanel/childrenStore')
+    useChildren.setState({ merging: {}, stopped: {}, skipped: {} })
+    useTaskTreeStore.setState({ boardMode: 'tasks' })
+    const ids = ['w1', 'w2', 'w3', 'w4']
+    seed({
+      worktrees: [task('w1', 'fix one'), task('w2', 'fix two'), task('w3', 'fix three'), task('w4', 'fix four')],
+      terminals: {},
+      statuses: Object.fromEntries(ids.map((id) => [id, clean(id)])),
+      mergePreviews: { w1: ahead('w1', 1), w2: ahead('w2', 2), w3: ahead('w3', 0), w4: ahead('w4', 1) },
+      landings: { w1: landing('w1', 1), w2: landing('w2', 2), w3: landing('w3', 0), w4: landing('w4', 1) },
+      openWorktree,
+      removeWorktree
+    })
+  })
+
+  it('lists finished tasks with work to land, and leaves out one with nothing', () => {
+    render(<Dashboard />)
+    expect(screen.getByRole('heading', { name: /^Ready to land/ })).toBeTruthy()
+    expect(queued()).toEqual(['fix one', 'fix two', 'fix four'])
+    for (const name of ['Review', 'Land', 'Discard'])
+      expect(within(row('fix one')).getByRole('button', { name })).toBeTruthy()
+  })
+
+  it('Land All lands them in order through the ordered merge, leaving out a predicted conflict', async () => {
+    const { useOverlaps } = await import('../state/overlapStore')
+    const { LANDING_QUEUE, useChildren } = await import('../workspace/rightPanel/childrenStore')
+    const mergeChildren = vi.fn(async () => true)
+    useChildren.setState({ mergeChildren })
+    useOverlaps.setState({
+      byProject: { p1: [{ worktreeId: 'w2', with: { base: 'main' }, paths: ['money.js'], conflicts: ['money.js'] }] }
+    })
+    render(<Dashboard />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Land All' }))
+    expect(mergeChildren).toHaveBeenCalledWith(LANDING_QUEUE, ['w1', 'w4'], [])
+    expect(row('fix two').querySelector('.child__conflict')?.getAttribute('title')).toBe(
+      'Conflicts with main in money.js'
+    )
+    useOverlaps.setState({ byProject: {} })
+  })
+
+  it('says where the run stopped, with a way into that merge', async () => {
+    const { LANDING_QUEUE, useChildren } = await import('../workspace/rightPanel/childrenStore')
+    useChildren.setState({
+      stopped: { [LANDING_QUEUE]: { worktreeId: 'w4', error: 'x', conflicts: ['money.js'] } }
+    })
+    render(<Dashboard />)
+    expect(screen.getByRole('alert').textContent).toContain('Stopped at fix four: conflicts in money.js')
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve…' }))
+    expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'w4' })
+  })
+
+  it('lands one from its row through the merge dialog, reviews it, and discards it', async () => {
+    const { useReviewStore } = await import('../review/reviewStore')
+    const reviewBranch = vi.fn()
+    useReviewStore.setState({ reviewBranch })
+    render(<Dashboard />)
+
+    fireEvent.click(within(row('fix one')).getByRole('button', { name: 'Land' }))
+    expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'w1' })
+
+    fireEvent.click(within(row('fix two')).getByRole('button', { name: 'Discard' }))
+    expect(removeWorktree).toHaveBeenCalledWith('w2')
+
+    fireEvent.click(within(row('fix four')).getByRole('button', { name: 'Review' }))
+    await vi.waitFor(() => expect(reviewBranch).toHaveBeenCalledWith('w4'))
+    expect(openWorktree).toHaveBeenCalledWith('w4')
+  })
+
+  it('is not there when nothing is ready to land', () => {
+    useWorkspaceStore.setState({ mergePreviews: {}, landings: {} })
+    render(<Dashboard />)
+    expect(screen.queryByRole('heading', { name: /^Ready to land/ })).toBeNull()
   })
 })

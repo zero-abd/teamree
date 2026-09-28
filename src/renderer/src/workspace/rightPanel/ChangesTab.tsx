@@ -177,13 +177,11 @@ export function ChangesTab(): React.JSX.Element | null {
       ) : null}
       {status ? (
         <div className="changes__actions">
-          {land?.kind === 'merged' ? (
-            <>
-              <Chip title={mergedChip(landing).title}>{mergedChip(landing).label}</Chip>
-              <Button size="sm" onClick={() => void removeWorktree(worktreeId)}>
-                Delete Worktree…
-              </Button>
-            </>
+          {land?.kind === 'merged' ? <Chip title={mergedChip(landing).title}>{mergedChip(landing).label}</Chip> : null}
+          {land?.kind === 'merged' || (landing !== undefined && land === null && midway === undefined) ? (
+            <Button size="sm" onClick={() => void removeWorktree(worktreeId)}>
+              Delete Worktree…
+            </Button>
           ) : null}
           {next === null ? null : (
             <Button

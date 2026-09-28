@@ -76,12 +76,14 @@ describe('the chips', () => {
     ['changed', 'stopped', true],
     ['done', 'done', false],
     ['landed', 'landed', false],
-    ['quiet', 'stopped', false]
+    ['quiet', 'stopped', false],
+    ['to-land', 'done', true],
+    ['ready', 'ready', true]
   ]
   const rows = stages.map(([id, stage, changed]) => row(id, { stage, changed }))
 
-  it('Needs You keeps asking and failed rows', () => {
-    expect(shown(rows, view({ quick: ['needs-you'] }))).toEqual(['asking', 'failed'])
+  it('Needs You keeps asking and failed rows, and finished ones with work to land', () => {
+    expect(shown(rows, view({ quick: ['needs-you'] }))).toEqual(['asking', 'failed', 'to-land', 'ready'])
   })
 
   it('Working keeps working rows', () => {
@@ -89,11 +91,17 @@ describe('the chips', () => {
   })
 
   it('Changed keeps rows with uncommitted or unlanded work', () => {
-    expect(shown(rows, view({ quick: ['changed'] }))).toEqual(['changed'])
+    expect(shown(rows, view({ quick: ['changed'] }))).toEqual(['changed', 'to-land', 'ready'])
   })
 
   it('state chips add up rather than narrowing each other', () => {
-    expect(shown(rows, view({ quick: ['needs-you', 'working'] }))).toEqual(['asking', 'failed', 'working'])
+    expect(shown(rows, view({ quick: ['needs-you', 'working'] }))).toEqual([
+      'asking',
+      'failed',
+      'working',
+      'to-land',
+      'ready'
+    ])
   })
 
   it('Mine leaves teammates out and your own rows in', () => {
@@ -103,12 +111,20 @@ describe('the chips', () => {
     expect(keepFlat(theirs, (entry) => entry, view(), false).rows).toHaveLength(2)
   })
 
-  it('Hide Done folds done and landed rows, counted', () => {
+  it('Hide Done folds done and landed rows, counted, and keeps one with work to land', () => {
     const result = filterProject(rows, (entry) => entry, view({ quick: ['hide-done'] }), {
       keep: null,
       doneOpen: false
     })
-    expect(result.rows.map((entry) => entry.id)).toEqual(['asking', 'failed', 'working', 'changed', 'quiet'])
+    expect(result.rows.map((entry) => entry.id)).toEqual([
+      'asking',
+      'failed',
+      'working',
+      'changed',
+      'quiet',
+      'to-land',
+      'ready'
+    ])
     expect(result.folded).toBe(2)
   })
 

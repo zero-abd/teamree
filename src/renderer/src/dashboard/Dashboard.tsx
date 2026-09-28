@@ -29,6 +29,7 @@ import { paneState } from '../teamwork/paneState'
 import { Segmented } from '../ui/Segmented'
 import { StatusPill } from '../ui/StatusPill'
 import { dashboardRows, toneCounts, type DashboardRow } from './dashboardRows'
+import { ReadyToLand } from './ReadyToLand'
 import { TaskBoard, useChangedLines } from './TaskBoard'
 import { STAGE_WORD, taskRows } from './taskRows'
 
@@ -199,13 +200,16 @@ export function Dashboard(): React.JSX.Element {
       focusKey={false}
     >
       {mode === 'tasks' && shownTasks.length > 0 ? (
-        <TaskBoard
-          rows={shownTasks}
-          unread={unread}
-          onOpen={(worktreeId) => void openWorktree(worktreeId)}
-          listRef={list}
-          onKeyDown={step}
-        />
+        <>
+          <ReadyToLand />
+          <TaskBoard
+            rows={shownTasks}
+            unread={unread}
+            onOpen={(worktreeId) => void openWorktree(worktreeId)}
+            listRef={list}
+            onKeyDown={step}
+          />
+        </>
       ) : listed === 0 ? (
         <div className="placeholder">
           <h2 className="placeholder__title">

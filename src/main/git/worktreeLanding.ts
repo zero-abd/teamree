@@ -192,8 +192,9 @@ export async function readLanding(runner: GitRunner, options: LandingOptions): P
   const localBase = (await git(['rev-parse', '--verify', '--quiet', `refs/heads/${base}`])).exitCode === 0
   // A known host lands through the remote's base; anything else lands here, in the local branch.
   const target = host === null && localBase ? `refs/heads/${base}` : options.baseRef
-  const unmerged = await count(`${target}..${options.branch}`)
   const made = (await count(`${options.startedFrom}..${options.branch}`)) > 0
+  // Cut from a base newer than the local one, a branch with no commit of its own is still ahead of it.
+  const unmerged = made ? await count(`${target}..${options.branch}`) : 0
   const inRemote = made && (await isAncestor(options.baseRef))
   const inLocal = made && !inRemote && localBase && (await isAncestor(`refs/heads/${base}`))
 

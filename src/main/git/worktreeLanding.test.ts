@@ -136,6 +136,18 @@ describe('worktree landing', () => {
     expect(landing).toMatchObject({ host: null, published: false, merged: false, unmerged: 0, base: 'main' })
   })
 
+  it('has nothing to land when it made no commit, though the local main is behind the one it was cut from', async () => {
+    const { repo, service, projectId } = await setup()
+    await repo.write('FOOTER.md', 'copy\n')
+    await repo.commit('Footer copy')
+    await repo.git(['push', 'origin', 'main'])
+    await repo.git(['reset', '--hard', 'HEAD~1'])
+    const worktree = await service.whenSettled((await service.createWorktree({ projectId, name: 'Batch' })).id)
+    expect(await repo.git(['rev-list', '--count', `main..${worktree.branch}`])).toBe('1')
+
+    expect(await service.worktreeLanding({ worktreeId: worktree.id })).toMatchObject({ unmerged: 0, merged: false })
+  })
+
   it('says whether there is a remote to publish to', async () => {
     const { service, projectId } = await setup()
     const worktree = await service.whenSettled((await service.createWorktree({ projectId, name: 'Hub' })).id)

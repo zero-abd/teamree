@@ -491,6 +491,17 @@ describe('landing the work', () => {
     expect(useWorkspaceStore.getState().dialog).toMatchObject({ kind: 'confirm-remove', worktreeId: 'w1' })
   })
 
+  it('offers the removal and never a merge on a branch that made nothing', () => {
+    landed({ host: null, published: false, unmerged: 0, compareUrl: undefined }, { upstream: null, ahead: 0 })
+    useWorkspaceStore.setState({ logs: { w1: { ...log, commits: [] } } })
+    render(<ChangesTab />)
+
+    expect(screen.getByText('No changes')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Merge/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Worktree…' }))
+    expect(useWorkspaceStore.getState().dialog).toMatchObject({ kind: 'confirm-remove', worktreeId: 'w1' })
+  })
+
   it('says not pushed while the merge is only in the local main', () => {
     landed({ merged: true, unmerged: 0, notPushed: true })
     render(<ChangesTab />)

@@ -1,5 +1,5 @@
-// A parent's children as its Changes panel lists them: stage, distance from the parent, what a merge
-// would stop on, and which can land now. Listed order is landing order.
+// A parent's children as its Changes panel lists them, or the board's finished tasks: stage, distance from
+// where they land, what a merge would stop on, and which can land now. Listed order is landing order.
 
 import type { Terminal, Worktree, WorktreeLanding, WorktreeMergePreview, WorktreeStatus } from '@shared/entities'
 import type { TaskStage, WorktreeOverlap } from '@shared/tasks'
@@ -34,7 +34,19 @@ export type ChildRow = {
 }
 
 export function childRows(parentId: string, input: ChildrenInput): ChildRow[] {
-  const children = input.worktrees.filter((worktree) => worktree.parentId === parentId)
+  return landingRows(
+    input.worktrees.filter((worktree) => worktree.parentId === parentId),
+    parentId,
+    input
+  )
+}
+
+/** Sibling tasks against where they land: `ownerId`'s branch, or the base for top-level tasks. */
+export function landingRows(
+  children: readonly Worktree[],
+  ownerId: string | undefined,
+  input: ChildrenInput
+): ChildRow[] {
   if (children.length === 0) return []
   const stages = taskStages({ ...input, worktrees: children, terminals: [...input.terminals] })
   const titleOf = new Map(children.map((child) => [child.id, worktreeLabel(worktreeDisplay(child))]))
@@ -47,7 +59,7 @@ export function childRows(parentId: string, input: ChildrenInput): ChildRow[] {
       if (overlap.worktreeId !== child.id || overlap.conflicts.length === 0) continue
       const other = overlap.with
       if ('base' in other) {
-        if (other.worktreeId === parentId) for (const path of overlap.conflicts) conflicts.add(path)
+        if (other.worktreeId === ownerId) for (const path of overlap.conflicts) conflicts.add(path)
       } else if (!('handle' in other)) {
         const title = titleOf.get(other.worktreeId)
         if (title !== undefined)
@@ -80,6 +92,11 @@ export function mergeable(row: ChildRow): boolean {
   return unmerged(row) && !['working', 'asking', 'failed', 'missing'].includes(row.stage)
 }
 
+/** Mergeable and finished: done, or ready. */
+export function landable(row: ChildRow): boolean {
+  return mergeable(row) && (row.stage === 'done' || row.stage === 'ready')
+}
+
 /** A child Merge All Ready leaves out because it clashes with one it lands first. */
 export type HeldBack = { worktreeId: string; title: string; clashesWith: string }
 
@@ -96,7 +113,7 @@ function mergePlan(rows: readonly ChildRow[]): { ready: ChildRow[]; held: HeldBa
   const ready: ChildRow[] = []
   const held: HeldBack[] = []
   for (const row of rows) {
-    if (!mergeable(row) || (row.stage !== 'done' && row.stage !== 'ready') || row.conflicts.length > 0) continue
+    if (!landable(row) || row.conflicts.length > 0) continue
     const clash = row.siblingConflicts.find((other) => ready.some((earlier) => earlier.worktreeId === other.worktreeId))
     if (clash === undefined) ready.push(row)
     else held.push({ worktreeId: row.worktreeId, title: row.title, clashesWith: clash.title })

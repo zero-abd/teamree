@@ -44,6 +44,9 @@ export function narrows(view: Pick<SidebarView, 'query' | 'quick'>): boolean {
 
 const isDone = (stage: TaskStage | undefined): boolean => stage !== undefined && isDoneStage(stage)
 
+/** Finished with work still to land: it waits on you as much as a question does. */
+const toLand = (facts: RowFacts): boolean => (facts.stage === 'done' || facts.stage === 'ready') && facts.changed
+
 /** The field (every word somewhere in name, branch or `#issue`) and the state chips (any one), Hide Done aside. */
 export function rowMatches(facts: RowFacts, view: Pick<SidebarView, 'query' | 'quick'>): boolean {
   if (facts.theirs === true && view.quick.includes('mine')) return false
@@ -58,7 +61,7 @@ export function rowMatches(facts: RowFacts, view: Pick<SidebarView, 'query' | 'q
   if (chips.length === 0) return true
   return chips.some((chip) =>
     chip === 'needs-you'
-      ? facts.stage === 'asking' || facts.stage === 'failed'
+      ? facts.stage === 'asking' || facts.stage === 'failed' || toLand(facts)
       : chip === 'working'
         ? facts.stage === 'working'
         : facts.changed
@@ -90,7 +93,7 @@ export function filterProject<W extends TreeWorktree>(
     const visit = (node: TaskNode<W>): boolean => {
       const facts = factsOf(node.worktree)
       const matched = rowMatches(facts, view)
-      const foldedHere = folding && matched && isDone(facts.stage)
+      const foldedHere = folding && matched && isDone(facts.stage) && !toLand(facts)
       const wanted = matched && !foldedHere
       // Every child is visited: each one's own answer counts, not just the first.
       const below = node.children.map(visit).some(Boolean)
@@ -119,7 +122,7 @@ export function keepFlat<W>(
 ): { rows: W[]; folded: number } {
   const hideDone = view.quick.includes('hide-done')
   const matched = rows.filter((row) => rowMatches(factsOf(row), view))
-  const done = matched.filter((row) => isDone(factsOf(row).stage))
+  const done = matched.filter((row) => isDone(factsOf(row).stage) && !toLand(factsOf(row)))
   return {
     rows: hideDone && !doneOpen ? matched.filter((row) => !done.includes(row)) : matched,
     folded: hideDone ? done.length : 0
