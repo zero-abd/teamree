@@ -54,7 +54,7 @@ export const PaneLabelOnRead = z.string().optional().catch(undefined)
 export const PaneOrdinalOnRead = z.number().int().positive().optional().catch(undefined)
 
 /** Which Run button started a pane; a kind this build does not know reads as none. */
-export const PaneRunOnRead = z.enum(['dev', 'test']).optional().catch(undefined)
+export const PaneRunOnRead = z.enum(['dev', 'test', 'setup']).optional().catch(undefined)
 
 /** The owner's reading of a pane; one this build does not know reads as none, and the facts decide. */
 export const PaneActivityOnRead = z

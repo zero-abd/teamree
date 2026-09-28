@@ -766,6 +766,11 @@ body.is-dragging-pane * {
   animation: pane-state-in var(--motion-base) var(--ease-enter);
 }
 
+/* A running setup's output waits behind Show Output; hidden, not unmounted, so it is all there when shown. */
+.pane--output-hidden .terminal-frame {
+  visibility: hidden;
+}
+
 .pane-state--asking {
   border-color: color-mix(in srgb, var(--warning), transparent 58%);
   background: color-mix(in srgb, var(--warning), var(--bg-raised) 91%);

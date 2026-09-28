@@ -123,7 +123,7 @@ const TerminalRecordSchema = z.object({
   prompted: z.boolean().optional(),
   ordinal: z.number().int().positive().optional().catch(undefined),
   // A kind this build does not know loses its Run button's claim, not the pane.
-  run: z.enum(['dev', 'test']).optional().catch(undefined),
+  run: z.enum(['dev', 'test', 'setup']).optional().catch(undefined),
   exitCode: z.number().int().optional().catch(undefined),
   endedAt: z.number().optional().catch(undefined),
   cols: z.number().int().positive(),

@@ -41,6 +41,9 @@ export type AgentRow = {
   subagents?: readonly Subagent[]
 }
 
+/** A new worktree's setup while it runs, on its row and over its pane. */
+export const SETTING_UP = 'Setting up'
+
 /** What a dot is coloured: `quiet` is a live agent at its prompt, `idle` a quiet pane with no agent. */
 export type DotTone = AgentActivity | 'idle'
 
@@ -151,14 +154,16 @@ export function agentRows(
           : read
     const line = rowLine(said, terminal, label, source)
     const choices = activity === 'waiting' ? terminal.screenMenu?.choices : undefined
+    // What a setup still running runs, as its pane says it; a passed one is closed, a failed one reads failed.
+    const settingUp = terminal.run === 'setup' && terminal.running
     return {
       terminalId: terminal.id,
       agent: paneAgent(terminal),
       label,
-      text: paneText(terminal, label),
+      text: settingUp ? SETTING_UP : paneText(terminal, label),
       activity,
       quietFor: Math.max(0, now - terminal.lastOutputAt),
-      evidence: line,
+      evidence: settingUp ? (terminal.command ?? line) : line,
       ...(choices === undefined ? {} : { choices }),
       ...(terminal.subagents === undefined ? {} : { subagents: terminal.subagents })
     }

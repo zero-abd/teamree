@@ -54,6 +54,25 @@ describe('PaneRows', () => {
     expect(row?.querySelector('.pane-row__label')?.textContent).toBe('auth refactor')
   })
 
+  it('reads a running setup as Setting up and the command it runs, and a failed one as failed', () => {
+    const [running, failed] = mount(
+      terminal({ id: 't1', title: 'npm', label: 'setup', run: 'setup', command: 'npm install' }),
+      terminal({
+        id: 't2',
+        title: 'pnpm',
+        label: 'setup',
+        run: 'setup',
+        command: 'pnpm i',
+        running: false,
+        exitCode: 127
+      })
+    )
+    expect(running?.querySelector('.pane-row__label')?.textContent).toBe('Setting up')
+    expect(running?.querySelector('.pane-row__evidence')?.textContent).toBe('npm install')
+    expect(failed?.querySelector('.pane-row__label')?.textContent).toBe('setup')
+    expect(failed?.querySelector('.pane-row__since')?.textContent).toBe('failed')
+  })
+
   it('draws a harness found in a plain shell’s foreground', () => {
     const [row] = mount(terminal({ id: 't1', title: '✳ Claude Code', foregroundAgent: 'claude' }))
     expect(row?.querySelector('[data-agent="claude"]')).not.toBeNull()

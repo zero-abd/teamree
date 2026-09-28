@@ -3,7 +3,7 @@
 // only ever touches the two panes either side of the handle it grabbed. Each
 // leaf is a group: its own strip of tabs over its shown tab, the rest kept mounted.
 
-import { createContext, useContext, useEffect, useRef } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type { PaneNode, Terminal } from '@shared/entities'
 import { fileColumnIn, fileTabName, isFileColumn, isFileLeaf, type FileLeaf as FileLeafNode } from '@shared/filePane'
 import { minExtent, type Box } from '@shared/paneRoom'
@@ -23,11 +23,11 @@ import {
   PaneStarting,
   paneStage,
   primaryIsFresh,
-  SetupMissingTool,
   useSeenOutput
 } from './PaneLifecycle'
 import { groupTabs, shownOf, type PaneGroup } from './paneGroups'
 import { normalizeSizes } from './paneLayout'
+import { SetupRunning, useSetupEndActions } from './SetupPane'
 import { SplitFrame } from './SplitFrame'
 
 export type PaneCallbacks = {
@@ -195,6 +195,9 @@ function PaneLeaf({
   const seen = useSeenOutput(terminal)
   const stage = terminal === undefined ? null : paneStage(terminal, seen)
   const ended = stage === 'ended' || stage === 'failed' || stage === 'restored'
+  const settingUp = terminal !== undefined && terminal.run === 'setup' && terminal.running
+  const [setupOutput, setSetupOutput] = useState(false)
+  const setupActions = useSetupEndActions(terminal)
   // One name per pane, shared by strip, region, menu and close question.
   const name = names?.[terminalId] ?? terminal?.title ?? 'terminal'
   const primary = (): void => {
@@ -204,7 +207,9 @@ function PaneLeaf({
 
   return (
     <section
-      className={`pane pane--terminal${focused ? ' pane--focused' : ''}`}
+      className={`pane pane--terminal${focused ? ' pane--focused' : ''}${
+        settingUp && !setupOutput ? ' pane--output-hidden' : ''
+      }`}
       aria-label={name}
       onKeyDownCapture={ended ? (event) => endedKeys(event, primary) : undefined}
     >
@@ -220,7 +225,9 @@ function PaneLeaf({
         />
       ) : null}
       {stage === 'starting' && terminal !== undefined ? <PaneStarting terminal={terminal} /> : null}
-      {stage === null && terminal?.label === 'setup' ? <SetupMissingTool terminal={terminal} /> : null}
+      {settingUp ? (
+        <SetupRunning terminal={terminal} output={setupOutput} onToggle={() => setSetupOutput(!setupOutput)} />
+      ) : null}
       <TerminalView
         terminalId={terminalId}
         focused={focused}
@@ -242,7 +249,8 @@ function PaneLeaf({
               ? {}
               : { onResumeConversation: () => onResumeConversation(terminalId) }),
             onClose: () => onClose(terminalId),
-            onContextMenu: (event) => menu.onContextMenu(terminalId, name, event)
+            onContextMenu: (event) => menu.onContextMenu(terminalId, name, event),
+            more: setupActions
           }}
         />
       ) : null}

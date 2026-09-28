@@ -78,6 +78,9 @@ export type BaseFetchState = {
 /** What a worktree's Run buttons start: its dev server, or its tests. */
 export type RunKind = 'dev' | 'test'
 
+/** What a run pane runs: a Run button's kind, or the project's setup command in a new worktree. */
+export type PaneRun = RunKind | 'setup'
+
 export type RunCommands = { dev?: string; test?: string }
 
 /** What a checkout's lockfile suggests (`command`) and the directory it lacks for it (`missing`). */
@@ -725,8 +728,10 @@ export type Terminal = {
   resumable?: true
   /** Running subagents its Claude Code session started; see `src/main/terminals/subagents.ts`. */
   subagents?: Subagent[]
-  /** Set on the pane a Run button started, and kept across relaunches; its `exitCode` is the run's result. */
-  run?: RunKind
+  /** Set on the pane a Run button or a new worktree's setup started, and kept across relaunches; its `exitCode` is the run's result. */
+  run?: PaneRun
+  /** What a run pane runs, as it was started; absent on a shell or an agent. */
+  command?: string
   /** The open `msg ask --to you` this pane's agent is waiting on; it reads as asking. */
   askingYou?: number
 }
@@ -783,6 +788,8 @@ export type ClosedPane = {
   ordinal?: number
   resumable: boolean
   closedAt: number
+  /** How a run pane's command last ended, when it had before the close. */
+  exitCode?: number
 }
 
 /**
@@ -1241,7 +1248,7 @@ export type PeerPane = {
   running: boolean
   exitCode?: number
   /** `Terminal.run` on the owner's machine: its exit is how the run ended. */
-  run?: RunKind
+  run?: PaneRun
   busy: boolean
   /**
    * The size of the owner's pty, so a watcher can letterbox to it. Optional

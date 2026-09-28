@@ -290,6 +290,8 @@ export type EndActions = {
   onResumeConversation?: () => void
   onClose: () => void
   onContextMenu: (event: React.MouseEvent<HTMLElement>) => void
+  /** A run's own, after Run Again: a failed setup's Start Agent Anyway and Open Shell. */
+  more?: ReadonlyArray<{ label: string; run: () => void }>
 }
 
 type EndAction = { label: string; run: () => void; tone: ButtonVariant }
@@ -358,7 +360,8 @@ function endActions(
     return terminal.resumable === true ? [primary(again('Resume')), fresh, ...rest] : [primary(fresh), ...rest]
   }
   const rerun = primary(again(terminal.run === undefined ? 'New Shell' : 'Run Again'))
-  return stage === 'failed' ? [rerun, log, close] : [rerun, close]
+  const more = (actions.more ?? []).map((action): EndAction => ({ ...action, tone: 'secondary' }))
+  return stage === 'failed' ? [rerun, ...more, log, close] : [rerun, ...more, close]
 }
 
 /** Under an ended, failed or restored pane's output: a marker line and one row of actions, the first primary. */
@@ -422,42 +425,6 @@ function useMissingAfterExit(terminal: Terminal, notFound: boolean): MissingTool
     }
   }, [id, notFound])
   return missing
-}
-
-/** Rows the setup pane's check reads: the error and the prompt after it. */
-const SETUP_ROWS_READ = 3
-
-/** Over the setup pane, which stays a shell: the program its command could not find, while the screen says so. */
-export function SetupMissingTool({ terminal }: { terminal: Terminal }): React.JSX.Element | null {
-  const [missing, setMissing] = useState<MissingTool | null>(null)
-  const id = terminal.id
-  useEffect(() => {
-    const read = (): void => {
-      const rows = (shownScreen(id, SCREEN_ROWS_READ)?.rows ?? []).filter((row) => row.trim() !== '')
-      const next = missingTool(rows.slice(-SETUP_ROWS_READ))
-      setMissing((current) => (current?.tool === next?.tool ? current : next))
-    }
-    read()
-    const timer = setInterval(read, 1_000)
-    return () => clearInterval(timer)
-  }, [id])
-  if (missing === null) return null
-  const title = `${missing.tool} not found`
-  return (
-    <div className="pane-state pane-state--failed" role="group" aria-label={title}>
-      <span className="pane-state__dot">
-        <StatusDot state="failed" />
-      </span>
-      <span className="pane-state__body">
-        <span className="pane-state__title">{title}</span>
-        {missing.fix === undefined ? null : (
-          <span className="pane-state__meta">
-            Install with: <code>{missing.fix}</code>
-          </span>
-        )}
-      </span>
-    </div>
-  )
 }
 
 /** Escape sequences and carriage-return overwrites dropped, for reading as plain text. */

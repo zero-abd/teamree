@@ -123,7 +123,7 @@ import {
 import { tabAfter } from '../workspace/paneTabs'
 import { focusAfterClose } from '../panes/paneGroups'
 import { resumableAgents, stoppedAgentsText } from '../panes/resumeAll'
-import { awaitWorktreeReady } from './awaitWorktreeReady'
+import { awaitSetup, awaitWorktreeReady } from './awaitWorktreeReady'
 import {
   relayLauncherCommand,
   RELAY_PANE_URL_SCHEMES,
@@ -312,6 +312,9 @@ export type TaskDraft = {
   issue?: WorktreeIssue
 }
 
+/** A task's agent as it will be started, once its checkout is ready and its setup has passed. */
+export type TaskAgent = { agentCommand: string; permissionArgs?: string; label: string; task: string }
+
 export type Notice = {
   id: number
   text: string
@@ -449,6 +452,8 @@ type WorkspaceState = {
   editingPaneName: string | null
   /** A repository's run command waiting on Run or Skip before it first runs on this Mac. */
   runAsk: { worktreeId: string; kind: RunKind; command: string } | null
+  /** A task's agent held back by its failed setup, by worktree: a pass starts it, Start Agent Anyway takes it. */
+  setupHolds: Record<string, TaskAgent>
   /** The worktree whose sidebar row shows the name field, or null. */
   editingWorktreeName: string | null
   /** Bumped when the runtime says a worktree's files moved; a file pane re-reads on it. */
@@ -639,8 +644,10 @@ type WorkspaceState = {
   newProject: () => Promise<void>
   /** Clones and adds; answers the one line to show when it did not happen, null when it did. */
   cloneProject: (url: string, path: string) => Promise<string | null>
-  /** Creates the worktree, waits for it, then starts the agent in it. */
+  /** Creates the worktree, waits for it and its setup, then starts the agent in it. */
   startTask: (draft: TaskDraft) => void
+  /** Closes the failed setup pane and starts the agent it was holding back. */
+  startHeldAgent: (worktreeId: string) => Promise<void>
   retryWorktree: (worktreeId: string) => void
   /** Asks first, after any unsaved files; nothing is removed until `confirmRemoveWorktree`. */
   removeWorktree: (worktreeId: string) => Promise<void>
@@ -1959,6 +1966,44 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     writeClosedFiles(storage, files)
   }
 
+  /** Named after the task, since every other pane is called after its binary; the description is its first prompt. */
+  const startTaskAgent = async (worktreeId: string, agent: TaskAgent): Promise<void> => {
+    const agentArgs = extraArgsFor(agent.agentCommand)
+    await runtimeClient.call('terminal.create', {
+      worktreeId,
+      command: agentLaunchCommand(agent.agentCommand, agent.permissionArgs),
+      label: agent.label,
+      ...paneSizeFor(worktreeId),
+      ...(agentArgs === undefined ? {} : { agentArgs }),
+      ...(agent.task ? { prompt: agent.task } : {})
+    })
+  }
+
+  /** Whether a task's agent may start, once its setup passed; a failed one holds it until a pass or Start Agent Anyway. */
+  const setupLetsAgentStart = async (worktreeId: string, agent: TaskAgent): Promise<boolean> => {
+    // A worktree removed while waiting is not a failure to report.
+    const settled = (failed: boolean) =>
+      awaitSetup({
+        worktreeId,
+        read: (id) => runtimeClient.call('worktree.get', { worktreeId: id }),
+        panes: (id) => runtimeClient.call('terminal.list', { worktreeId: id }),
+        closed: (id) => runtimeClient.call('terminal.closed', { worktreeId: id }),
+        watch: (onEvent) => runtimeClient.watchWorkspace(onEvent),
+        failed
+      }).catch(() => 'closed' as const)
+    const first = await settled(false)
+    if (first !== 'failed') return first === 'passed'
+    set((state) => ({ setupHolds: { ...state.setupHolds, [worktreeId]: agent } }))
+    const outcome = await settled(true)
+    // Start Agent Anyway took it meanwhile, or this is the pass it was waiting for.
+    if (get().setupHolds[worktreeId] !== agent) return false
+    set((state) => {
+      const { [worktreeId]: _started, ...setupHolds } = state.setupHolds
+      return { setupHolds }
+    })
+    return outcome === 'passed'
+  }
+
   const forgetWorktree = (worktreeId: string): void => {
     forgetEdits(editedIn(worktreeId))
     useWorkspaceStore.getState().closeWorktreeTab(worktreeId)
@@ -2064,6 +2109,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
     recentFiles: {},
     editingPaneName: null,
     runAsk: null,
+    setupHolds: {},
     editingWorktreeName: null,
     worktreeFilesEpoch: 0,
 
@@ -2303,13 +2349,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
       set({ dialog: null })
 
       void (async () => {
-        const started: Array<{
-          worktreeId: string
-          agentCommand?: string
-          permissionArgs?: string
-          label: string
-          task: string
-        }> = []
+        const started: Array<{ worktreeId: string; agent?: TaskAgent }> = []
         for (const create of creates) {
           const name = create.name.trim()
           const task = create.task.trim()
@@ -2331,41 +2371,52 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => {
           // The first goes in front now, and this is the last time anything here changes tabs: opening
           // it when the checkout was ready meant changing tabs under whoever had gone on typing elsewhere.
           if (started.length === 0) await get().openWorktree(created.id)
+          const { agentCommand, permissionArgs } = create
           started.push({
             worktreeId: created.id,
-            label: name,
-            task,
-            ...(create.agentCommand === undefined ? {} : { agentCommand: create.agentCommand }),
-            ...(create.permissionArgs === undefined ? {} : { permissionArgs: create.permissionArgs })
+            ...(agentCommand
+              ? {
+                  agent: {
+                    agentCommand,
+                    label: name,
+                    task,
+                    ...(permissionArgs === undefined ? {} : { permissionArgs })
+                  }
+                }
+              : {})
           })
         }
         // The project may have been collapsed until now.
         readOnScreen()
 
         await Promise.all(
-          started.map(async ({ worktreeId, agentCommand, permissionArgs, label, task }) => {
+          started.map(async ({ worktreeId, agent }) => {
             // The agent needs a checkout; a failure here is already on the row.
             const worktree = await awaitWorktreeReady({
               worktreeId,
               read: (id) => runtimeClient.call('worktree.get', { worktreeId: id }),
               watch: (onChange) => runtimeClient.watchWorkspace(onChange)
             })
-            if (agentCommand) {
-              // Named after the task, since every other pane is called after its binary; the description is its first prompt.
-              const agentArgs = extraArgsFor(agentCommand)
-              await runtimeClient.call('terminal.create', {
-                worktreeId: worktree.id,
-                command: agentLaunchCommand(agentCommand, permissionArgs),
-                label,
-                ...paneSizeFor(worktree.id),
-                ...(agentArgs === undefined ? {} : { agentArgs }),
-                ...(task ? { prompt: task } : {})
-              })
+            if (agent !== undefined && (await setupLetsAgentStart(worktreeId, agent))) {
+              await startTaskAgent(worktreeId, agent)
             }
             return worktree
           })
         )
       })().catch(failed('Could not start the task'))
+    },
+
+    async startHeldAgent(worktreeId) {
+      const agent = get().setupHolds[worktreeId]
+      if (agent === undefined) return
+      set((state) => {
+        const { [worktreeId]: _started, ...setupHolds } = state.setupHolds
+        return { setupHolds }
+      })
+      // Closed first, so the agent takes the room the setup had.
+      const setup = get().worktrees.find((entry) => entry.id === worktreeId)?.setupTerminalId
+      if (setup !== undefined && get().terminals[setup] !== undefined) await get().forceCloseTerminal(setup)
+      await startTaskAgent(worktreeId, agent).catch(failed('Could not start the agent'))
     },
 
     /**
