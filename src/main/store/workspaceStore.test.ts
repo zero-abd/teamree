@@ -751,6 +751,16 @@ describe('workspace store', () => {
       expect(byId.get('t3')?.run).toBeUndefined()
     })
 
+    // A failed agent came back as if it had been quit, and its end block dated itself to the relaunch.
+    it('brings an agent back with how and when it ended', async () => {
+      const failed: TerminalRecord = { ...terminal('t4'), exitCode: 1, endedAt: 1_700_000_000_000 }
+      const store = await WorkspaceStore.open(filePath)
+      store.putTerminal(failed)
+      await store.flush()
+
+      expect((await WorkspaceStore.open(filePath)).listTerminals().find((record) => record.id === 't4')).toEqual(failed)
+    })
+
     it('brings back a pane whose harness this build has never heard of, as a plain shell', async () => {
       const path = join(directory, 'workspace.json')
       const newer = { ...terminal('t1'), command: 'someday --go', agent: 'harness-from-next-year' }

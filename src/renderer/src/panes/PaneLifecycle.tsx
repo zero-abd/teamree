@@ -229,7 +229,9 @@ export function endMarker(
   stage: 'ended' | 'failed' | 'restored',
   missing: MissingTool | null = null
 ): string {
-  const time = terminal.lastOutputAt > 0 ? markerTime(terminal.lastOutputAt) : null
+  // When it ended, not when it last printed: an agent idle an hour and then quit ended now.
+  const at = terminal.endedAt ?? terminal.lastOutputAt
+  const time = at > 0 ? markerTime(at) : null
   if (stage === 'restored') {
     const why = terminal.stoppedFor === undefined ? 'Restored' : STOPPED_WORDS[terminal.stoppedFor]
     return time === null ? why : `${why} · ${time}`

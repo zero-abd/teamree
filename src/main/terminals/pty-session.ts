@@ -122,6 +122,8 @@ export type PtySessionInit = {
   restored?: RestoredAs
   /** Why a `stopped` restore did not start its agent. */
   stoppedFor?: StoppedFor
+  /** When the run a restore stands for ended, which its end block says rather than the restore's own exit. */
+  endedAt?: number
   /**
    * What the pane printed the last time it was open. Kept apart from the live
    * buffer so no byte of it can be mistaken for one this session produced.
@@ -202,6 +204,7 @@ export class PtySession {
   private rows: number
   private running = true
   private exitCode: number | undefined
+  private endedAt: number | undefined
   private restored: RestoredAs | undefined
   private busy = false
   /**
@@ -338,6 +341,7 @@ export class PtySession {
       // `running` is deliberately still true while draining, but `write` already throws.
       ...(this.draining === undefined ? {} : { draining: true }),
       ...(this.exitCode === undefined ? {} : { exitCode: this.exitCode }),
+      ...(this.endedAt === undefined ? {} : { endedAt: this.endedAt }),
       ...(this.restored === undefined ? {} : { restored: this.restored }),
       ...(this.stoppedFor === undefined ? {} : { stoppedFor: this.stoppedFor }),
       ...(this.agent === undefined ? {} : { agent: this.agent }),
@@ -732,6 +736,7 @@ export class PtySession {
     if (restarting) return
 
     this.exitCode = draining.exitCode
+    this.endedAt = this.init.endedAt ?? this.clock()
     this.emit({ type: 'exit', exitCode: this.exitCode })
     for (const waiter of this.exitWaiters) waiter()
     this.exitWaiters.clear()

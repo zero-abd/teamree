@@ -134,6 +134,25 @@ describe('an ended agent', () => {
     expect(onRelaunch).toHaveBeenLastCalledWith('t1', { fresh: true })
   })
 
+  // Quit with ^C at 04:55 after printing last at 04:46, it read "Ended 04:46".
+  it('says when it ended, not when it last printed', () => {
+    const endedAt = new Date().setHours(11, 58, 0, 0)
+    mount(terminal('t1', { agent: 'claude', running: false, exitCode: 130, endedAt }))
+    expect(marker()).toBe('Ended 11:58 · ^C')
+    cleanup()
+    mount(
+      terminal('t1', {
+        agent: 'claude',
+        running: false,
+        exitCode: 1,
+        restored: 'stopped',
+        stoppedFor: 'failed',
+        endedAt
+      })
+    )
+    expect(marker()).toBe('Exited 1 · 11:58')
+  })
+
   it('says ^C for an agent interrupted out', () => {
     mount(terminal('t1', { agent: 'claude', running: false, exitCode: 130 }))
     expect(marker()).toBe('Ended 11:04 · ^C')

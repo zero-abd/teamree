@@ -41,8 +41,9 @@ export type TerminalRecord = {
   ordinal?: number
   /** Which Run button started it; see `Terminal.run`. */
   run?: RunKind
-  /** How the run or agent ended, when it ended before the app quit. */
+  /** How the run or agent ended, when it ended before the app quit, and when. */
   exitCode?: number
+  endedAt?: number
   cols: number
   rows: number
   createdAt: number

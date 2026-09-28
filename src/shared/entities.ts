@@ -646,6 +646,8 @@ export type Terminal = {
    */
   draining?: boolean
   exitCode?: number
+  /** When the program ended, once it has; a pane restored ended, when its previous run did. */
+  endedAt?: number
   /** Which coding agent this pane runs, when it runs one. */
   agent?: AgentKind
   /** A harness seen in the foreground of a pane not started as one: typed into its shell. */

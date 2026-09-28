@@ -889,7 +889,9 @@ export class TerminalSessionManager {
             ...(kept === undefined ? {} : { restoredRecord: kept }),
             ...(launch.resumed && launch.fallback !== undefined ? { fallback: launch.fallback } : {}),
             ...(launch.note === undefined ? {} : { startupNote: launch.note }),
+            // Its end block says when the run it stands for ended: at its exit, else when its output was kept.
             ...(launch.stopped === undefined ? {} : { stoppedFor: launch.stopped }),
+            ...(launch.stopped === undefined ? {} : endedBy(record.endedAt ?? kept?.recordedAt)),
             ...(record.run === undefined && launch.stopped === undefined
               ? {}
               : { recordStartsBelow: NOT_RUN_AGAIN_BELOW }),
@@ -1090,6 +1092,7 @@ export class TerminalSessionManager {
       /** Printed before the command, saying why this is not a resume. */
       startupNote?: string
       stoppedFor?: StoppedFor
+      endedAt?: number
       /** The number a reopened pane had; kept unless a live pane has it now. */
       ordinal?: number
       run?: RunKind
@@ -1152,6 +1155,7 @@ export class TerminalSessionManager {
       ...(params.recordStartsBelow === undefined ? {} : { recordStartsBelow: params.recordStartsBelow }),
       ...(params.startupNote === undefined ? {} : { startupNote: params.startupNote }),
       ...(params.stoppedFor === undefined ? {} : { stoppedFor: params.stoppedFor }),
+      ...(params.endedAt === undefined ? {} : { endedAt: params.endedAt }),
       ...(agent === undefined ? {} : { agent }),
       ...(fallback === undefined
         ? {}
@@ -1379,9 +1383,9 @@ export class TerminalSessionManager {
   }
 
   /** Written at the exit, so a relaunch can say how the pane ended; `shutdown` writes a run the quit ends. */
-  private noteRunEnded(terminalId: string, exitCode: number): void {
+  private noteRunEnded(terminalId: string, exitCode: number, endedAt = Date.now()): void {
     const stored = this.records.listTerminals().find((record) => record.id === terminalId)
-    if (stored !== undefined && stored.exitCode !== exitCode) this.records.putTerminal({ ...stored, exitCode })
+    if (stored !== undefined && stored.exitCode !== exitCode) this.records.putTerminal({ ...stored, exitCode, endedAt })
   }
 
   /** Nothing behind the pane to resume any more: neither a keystroke nor its task still counts. */
@@ -1447,8 +1451,9 @@ export class TerminalSessionManager {
       // The only moment anything knows a resume did not take; unrecorded, the
       // pane asks for the same missing conversation on every launch.
       if (session.resumeDidNotTake) this.markNotResumable(session.id)
-      // An agent's too: one that failed comes back failed, not as if it had been quit.
-      if (session.run !== undefined || session.agent !== undefined) this.noteRunEnded(session.id, event.exitCode)
+      // An agent's too, so one that failed comes back failed; a pane left stopped only replays its old ending.
+      const ended = session.run !== undefined || (session.agent !== undefined && !session.leftStopped)
+      if (ended) this.noteRunEnded(session.id, event.exitCode)
       this.scrollback?.put(session.id, session.recordedOutput())
       this.reportSettled(session, 'exit')
       for (const listener of this.exitListeners) listener(session.id, event.exitCode)
@@ -1560,6 +1565,10 @@ function relaunchCommand(
 }
 
 /** The badge a restored pane wears: 'restarted' is running its agent, so calling it a shell would contradict the banner. */
+function endedBy(at: number | undefined): { endedAt?: number } {
+  return at === undefined ? {} : { endedAt: at }
+}
+
 function restoredAs(launch: RestoreLaunch): RestoredAs {
   if (launch.stopped) return 'stopped'
   if (launch.resumed) return 'agent'

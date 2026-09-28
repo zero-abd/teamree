@@ -184,6 +184,8 @@ describePty('the task as the first prompt', () => {
       expect(pane?.restored).toBe('stopped')
       expect(pane?.stoppedFor).toBe('no-conversation')
       expect(pane?.resumable).toBeUndefined()
+      // Its own `exit` is not an ending to write down.
+      expect(stores.records.get(terminalId)?.endedAt).toBeUndefined()
       expect(pane?.agent).toBe('claude')
       expect(pane?.title).toBe('claude')
       // Still the agent's pane: the next launch asks the same question.
@@ -216,13 +218,17 @@ describePty('the task as the first prompt', () => {
     'is not given to an agent that failed before the quit, which comes back failed and resumes its conversation',
     async () => {
       const { checkout, stores, terminalId } = await ranOnce('claude', 3)
-      expect(stores.records.get(terminalId)?.exitCode).toBe(3)
+      const record = stores.records.get(terminalId)
+      expect(record?.exitCode).toBe(3)
+      expect(record?.endedAt).toBeGreaterThan(0)
 
       const next = manager(stores, checkout, 'present')
       expect(next.restoreSessions()).toEqual({ restored: 1, resumed: 0 })
       expect(await printedArgs(next, terminalId)).toEqual([])
       const pane = next.list('wt_1')[0]
+      // When it failed, not when this launch put it back.
       expect(pane).toMatchObject({ restored: 'stopped', stoppedFor: 'failed', exitCode: 3, resumable: true })
+      expect(pane?.endedAt).toBe(record?.endedAt)
 
       // Its Resume picks the conversation up, and the task is not sent again.
       await next.relaunch({ terminalId })
@@ -240,7 +246,7 @@ describePty('the task as the first prompt', () => {
       const without = manager(repositories(), checkout, 'absent')
       const lost = without.create({ worktreeId: 'wt_1', command: launch })
       await printedArgs(without, lost.id)
-      expect(without.list('wt_1')[0]).toMatchObject({ exitCode: 1 })
+      expect(without.list('wt_1')[0]).toMatchObject({ exitCode: 1, endedAt: expect.any(Number) })
       expect(without.list('wt_1')[0]?.resumable).toBeUndefined()
       // Resume All's relaunch starts nothing in its place.
       await expect(without.relaunch({ terminalId: lost.id, resumeOnly: true })).rejects.toThrow('nothing to resume')
