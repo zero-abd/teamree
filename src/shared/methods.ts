@@ -314,7 +314,9 @@ export const Params = {
     /** Stage these before committing. Omitted commits what is already staged. */
     paths: z.array(z.string().min(1)).optional(),
     /** Stage every change first, new files included (`git add -A`); not with `paths`. */
-    all: z.boolean().optional()
+    all: z.boolean().optional(),
+    /** Rewrite the last commit instead of adding one; with nothing staged, only its message. */
+    amend: z.boolean().optional()
   }),
   /** Sends the branch to its remote. Deliberately no force. */
   worktreePush: z.object({

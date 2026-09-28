@@ -19,7 +19,7 @@ describe('committing in a worktree', () => {
 
   const commit = async (
     repo: TempRepo,
-    options: { message?: string; paths?: string[]; all?: boolean; linkedPaths?: string[] } = {}
+    options: { message?: string; paths?: string[]; all?: boolean; amend?: boolean; linkedPaths?: string[] } = {}
   ): ReturnType<typeof commitWorktree> =>
     commitWorktree(repo.runner, {
       worktreeId: 'wt',
@@ -27,6 +27,7 @@ describe('committing in a worktree', () => {
       message: options.message ?? 'a message',
       ...(options.paths === undefined ? {} : { paths: options.paths }),
       ...(options.all === undefined ? {} : { all: options.all }),
+      ...(options.amend === undefined ? {} : { amend: options.amend }),
       ...(options.linkedPaths === undefined ? {} : { prepared: { linkedPaths: options.linkedPaths } }),
       now: () => 4242
     })
@@ -187,5 +188,31 @@ describe('committing in a worktree', () => {
     const repo = await repository()
     await repo.write('a.ts', 'x\n')
     await expect(commit(repo, { all: true, paths: ['a.ts'] })).rejects.toBeInstanceOf(GitServiceError)
+  })
+
+  it('amends the last commit with what is staged and the new message, adding no commit', async () => {
+    const repo = await repository()
+    await repo.write('a.ts', 'a\n')
+    await repo.commit('first try')
+    const count = await repo.git(['rev-list', '--count', 'HEAD'])
+    await repo.write('b.ts', 'b\n')
+
+    const result = await commit(repo, { message: 'the real subject', paths: ['b.ts'], amend: true })
+
+    expect(await repo.git(['rev-list', '--count', 'HEAD'])).toBe(count)
+    expect(await repo.git(['log', '-1', '--format=%s'])).toBe('the real subject')
+    expect(await repo.git(['show', '--name-only', '--format=', 'HEAD'])).toContain('b.ts')
+    expect(result.paths).toEqual(['b.ts'])
+  })
+
+  it('amends the message alone when nothing is staged', async () => {
+    const repo = await repository()
+    await repo.write('a.ts', 'a\n')
+    await repo.commit('typo in the subjcet')
+
+    await commit(repo, { message: 'no typo in the subject', amend: true })
+
+    expect(await repo.git(['log', '-1', '--format=%s'])).toBe('no typo in the subject')
+    expect(await repo.git(['show', '--name-only', '--format=', 'HEAD'])).toBe('a.ts')
   })
 })

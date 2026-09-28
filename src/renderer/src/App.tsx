@@ -247,6 +247,7 @@ export function App(): React.JSX.Element {
             worktreeId={dialog.worktreeId}
             path={dialog.path}
             {...(dialog.hunk ? { hunk: dialog.hunk } : {})}
+            {...(dialog.paths ? { paths: dialog.paths } : {})}
           />
         ) : null}
         {dialog?.kind === 'project-refused' ? (

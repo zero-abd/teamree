@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { WorktreeLog } from '@shared/entities'
-import { directoryOf, emptyChangesLabel, fileNameOf } from './ChangesTab'
+import { emptyChangesLabel } from './ChangesTab'
+import { directoryOf, fileNameOf } from './sourceControl'
 import { changedCount } from './RightRail'
 
 describe('emptyChangesLabel', () => {
@@ -21,8 +22,8 @@ describe('emptyChangesLabel', () => {
     subject: 'the work'
   }
 
-  it('separates a worktree that has committed from one that has not', () => {
-    expect(emptyChangesLabel(log({ commits: [commit] }))).toBe('All committed')
+  it('says No changes whether or not the worktree has committed; the last commit is shown under it', () => {
+    expect(emptyChangesLabel(log({ commits: [commit] }))).toBe('No changes')
     expect(emptyChangesLabel(log({}))).toBe('No changes')
   })
 

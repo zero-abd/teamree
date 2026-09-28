@@ -11,7 +11,7 @@ import { useOpenIn } from '../../sidebar/openIn'
 import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { useWorkspaceStore } from '../../state/workspaceStore'
 import { KIND_LETTER } from './changeKinds'
-import { directoryOf, fileNameOf } from './ChangesTab'
+import { directoryOf, fileNameOf } from './sourceControl'
 import {
   applyListing,
   beginListing,

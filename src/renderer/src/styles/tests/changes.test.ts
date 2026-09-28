@@ -33,6 +33,13 @@ describe('changes.css', () => {
     }
   })
 
+  // The owner's Changes panel scrolled sideways under long names.
+  it('never scrolls the changes sideways, and gives a row’s hidden actions no room', () => {
+    expect(declarationOf(ruleFor(SHEET, '.changes__scroll'), 'overflow-x')).toBe('hidden')
+    expect(declarationOf(ruleFor(SHEET, '.change__actions'), 'max-width')).toContain('var(--row-action-rest)')
+    expect(declarationOf(ruleFor(SHEET, '.scm-head__actions'), 'opacity')).toBe('var(--row-action-rest)')
+  })
+
   // Amber stays the asking agent's, so a modified file is blue.
   it.each([
     ['modified', 'var(--info)'],

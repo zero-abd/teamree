@@ -20,7 +20,8 @@ import { useWorkspaceStore } from '../state/workspaceStore'
 import { lastVisits } from '../state/visitHistory'
 import { requestRegionFocus } from '../shell/regions'
 import { listedNotes, useSharedNotes } from '../teamwork/sharedNotesStore'
-import { canDiscard, childOf, updateFrom } from '../workspace/rightPanel/ChangesTab'
+import { childOf, updateFrom } from '../workspace/rightPanel/ChangesTab'
+import { canDiscard } from '../workspace/rightPanel/sourceControl'
 import { idleLand, landOffer } from '../workspace/rightPanel/landOffer'
 import {
   buildPaletteItems,

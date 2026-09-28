@@ -180,6 +180,13 @@ const GLYPHS = {
   filter: <path d="M1.75 3.25h12.5L9.5 8.5v4l-3 1.5V8.5z" />,
   'density-compact': <path d="M2.25 3.25h11.5M2.25 6.5h11.5M2.25 9.75h11.5M2.25 13h11.5" />,
   'density-comfortable': <path d="M2.25 2.75h11.5M2.25 8h11.5M2.25 13.25h11.5" />,
+  'open-file': (
+    <>
+      <path d="M7.25 14.25h-4v-12.5h6l3.5 3.5v2.5" />
+      <path d="M9.25 1.75v3.5h3.5" />
+      <path d="M9.5 10.75h4.75M12 8.5l2.25 2.25L12 13" />
+    </>
+  ),
   more: (
     <>
       <circle cx="3.25" cy="8" r="1" fill="currentColor" stroke="none" />

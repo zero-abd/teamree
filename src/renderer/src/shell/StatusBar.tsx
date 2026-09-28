@@ -17,6 +17,7 @@ import { requestRegionFocus } from './regions'
 import { useKeepAwake } from './keepAwake'
 import { KeepAwakeControl } from './KeepAwakeControl'
 import { ResourcesControl } from './ResourcesControl'
+import { TokensLine } from './TokensLine'
 
 /** What the rail says while the runtime is not ready; nothing is said once it is. */
 const CONNECTION_LABEL: Record<string, string> = {
@@ -112,6 +113,8 @@ export function StatusBar(): React.JSX.Element {
           {description}
         </button>
       ) : null}
+
+      {active !== undefined && !pageOpen ? <TokensLine worktreeId={active.id} /> : null}
 
       {project !== undefined && (fresh !== null || fetching[project.id]) && !pageOpen ? (
         <button

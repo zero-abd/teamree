@@ -20,6 +20,8 @@ export type CommitOptions = {
   paths?: readonly string[]
   /** Stage every change first (`git add -A`), however many; never with `paths`. */
   all?: boolean
+  /** Rewrite the last commit instead of adding one; with nothing staged, only its message. */
+  amend?: boolean
   /** Left out of `all`: what the project put in the checkout is not a change. */
   prepared?: PreparedPaths
   signal?: AbortSignal
@@ -57,7 +59,7 @@ export async function commitWorktree(runner: GitRunner, options: CommitOptions):
   }
 
   const staged = (await readStatus(runner, options.worktreePath, options.signal)).filter((change) => change.staged)
-  if (staged.length === 0) {
+  if (staged.length === 0 && options.amend !== true) {
     throw new GitServiceError(
       ErrorCode.Conflict,
       options.all === true
@@ -68,7 +70,11 @@ export async function commitWorktree(runner: GitRunner, options: CommitOptions):
     )
   }
 
-  await runner.run({ args: ['commit', '-m', message], ...run, ...signal })
+  await runner.run({
+    args: ['commit', ...(options.amend === true ? ['--amend'] : []), '-m', message],
+    ...run,
+    ...signal
+  })
 
   const { stdout } = await runner.run({
     args: ['rev-parse', 'HEAD'],

@@ -1,45 +1,52 @@
-// What this worktree has changed: the list, the commit box and the commits, as a tab of the right
-// panel; a row opens its diff in the centre. It rides the same invalidation as everything else.
+// What this worktree has changed, as a source-control view in the right panel: the branch and its next step,
+// the commit box, then Staged, Changes and what the branch already committed. A row opens its diff in the centre.
 
 import { useEffect, useRef, useState } from 'react'
 import { harnessName } from '../../agents/harnesses'
 import { ReviewBar } from '../../review/ReviewBar'
-import { isViewedRow } from '../../review/reviewModel'
-import { useReviewStore } from '../../review/reviewStore'
-import { RowMenu, type RowMenuAnchor } from '../../sidebar/RowMenu'
 import { mergedChip } from '../../sidebar/mergeBadge'
 import { overlapLines } from '../../sidebar/overlapChip'
 import { openOverlap, useOverlapChip } from '../../sidebar/useOverlapChip'
 import { openInBrowser } from '../../shell/openInBrowser'
-import { commitScope, useWorkspaceStore } from '../../state/workspaceStore'
+import { useWorkspaceStore } from '../../state/workspaceStore'
 import { KIND_LABEL, KIND_LETTER } from './changeKinds'
-import { CommitFrom } from './CommitFrom'
-import { Icon } from '../../icons/Icon'
-import { useCommitMessage } from './commitMessage'
+import { Button, IconButton } from '../../ui/Button'
+import { Chip } from '../../ui/Chip'
+import { EmptyState } from '../../ui/EmptyState'
+import { Menu, type MenuAnchor } from '../../ui/Menu'
+import { Segmented } from '../../ui/Segmented'
 import { headerActions, landLabel, landNote, landOffer, landTitle, pushOffer, type HeaderAction } from './landOffer'
 import { PullRequestChecks } from './PullRequestChecks'
-import type { PaneNode, Worktree, WorktreeChange, WorktreeLog, WorktreeStatus } from '@shared/entities'
+import type { PaneNode, Worktree, WorktreeLog, WorktreeStatus } from '@shared/entities'
 import { fileColumnIn, isCommitLeaf, shownTabId } from '@shared/filePane'
 import { CheckoutMissing } from '../CheckoutMissing'
 import { askerOf, conflictHeadline, updateSides } from './conflictState'
-import { TokensLine } from './TokensLine'
 import { ContextSection } from './ContextSection'
 import { ChildrenSection } from './ChildrenSection'
+import { ChangeRows } from './ChangeRows'
+import { CommitBox } from './CommitBox'
+import { SectionHead } from './SectionHead'
+import { useScmView } from './scmView'
+import {
+  amendBlocker,
+  canDiscard,
+  counted,
+  directoryOf,
+  fileNameOf,
+  refLine,
+  sectionCount,
+  sections
+} from './sourceControl'
 
 export function ChangesTab(): React.JSX.Element | null {
   const worktreeId = useWorkspaceStore((state) => state.activeWorktreeId)
   const changes = useWorkspaceStore((state) => (worktreeId ? state.changes[worktreeId] : undefined))
   const selectedPath = useWorkspaceStore((state) => state.selectedChangePath)
-  const hunkPending = useWorkspaceStore((state) => state.hunkPending)
   const selectChange = useWorkspaceStore((state) => state.selectChange)
-  const zoomed = useWorkspaceStore((state) => state.expandedTerminalId !== null)
-  const toggleExpandedPane = useWorkspaceStore((state) => state.toggleExpandedPane)
   const stagedPaths = useWorkspaceStore((state) => state.stagedPaths)
-  const toggleStaged = useWorkspaceStore((state) => state.toggleStaged)
-  const unstagePath = useWorkspaceStore((state) => state.unstagePath)
-  const setAllStaged = useWorkspaceStore((state) => state.setAllStaged)
-  const commitStaged = useWorkspaceStore((state) => state.commitStaged)
-  const committing = useWorkspaceStore((state) => state.committing)
+  const stagePaths = useWorkspaceStore((state) => state.stagePaths)
+  const unstageAll = useWorkspaceStore((state) => state.unstageAll)
+  const hunkPending = useWorkspaceStore((state) => state.hunkPending)
   const log = useWorkspaceStore((state) => (worktreeId ? state.logs[worktreeId] : undefined))
   const branch = useWorkspaceStore((state) => (worktreeId ? state.branchChanges[worktreeId] : undefined))
   const status = useWorkspaceStore((state) => (worktreeId ? state.statuses[worktreeId] : undefined))
@@ -52,6 +59,7 @@ export function ChangesTab(): React.JSX.Element | null {
   const removeWorktree = useWorkspaceStore((state) => state.removeWorktree)
   const openDialog = useWorkspaceStore((state) => state.openDialog)
   const openCommit = useWorkspaceStore((state) => state.openCommit)
+  const rereadChanges = useWorkspaceStore((state) => state.rereadChanges)
   const updating = useWorkspaceStore((state) => state.updating)
   const updateError = useWorkspaceStore((state) => (worktreeId ? state.updateErrors[worktreeId] : undefined))
   const updateWorktree = useWorkspaceStore((state) => state.updateWorktree)
@@ -72,12 +80,12 @@ export function ChangesTab(): React.JSX.Element | null {
   const shownCommit = useWorkspaceStore((state) =>
     worktreeId ? shownCommitIn(state.layouts[worktreeId]?.root ?? null) : null
   )
-  const viewed = useReviewStore((state) => (worktreeId ? state.viewed[worktreeId] : undefined))
+  const view = useScmView((state) => state.view)
+  const setView = useScmView((state) => state.setView)
+  const folded = useScmView((state) => state.folded)
+  const toggleFold = useScmView((state) => state.toggleFold)
   const overlap = useOverlapChip(worktreeId)
-  const reviewBranch = useReviewStore((state) => state.reviewBranch)
-  const [menu, setMenu] = useState<{ path: string; at: RowMenuAnchor } | null>(null)
-  const [moreAt, setMoreAt] = useState<{ at: RowMenuAnchor; opener: HTMLElement } | null>(null)
-  const { message, from, setMessage } = useCommitMessage(worktreeId)
+  const [moreAt, setMoreAt] = useState<{ at: MenuAnchor; opener: HTMLElement } | null>(null)
   const checkoutPath = useWorkspaceStore((state) => state.worktrees.find((entry) => entry.id === worktreeId)?.path)
   const missing = useWorkspaceStore((state) =>
     state.worktrees.some((entry) => entry.id === worktreeId && entry.missing === true)
@@ -94,26 +102,14 @@ export function ChangesTab(): React.JSX.Element | null {
   }
 
   const sides = updateSides(worktrees, projects, worktreeId)
-
-  const listed = changes?.changes ?? []
-  // Conflicts get a list of their own; they cannot be ticked into a commit.
-  const conflictRows = listed.filter((change) => change.kind === 'conflicted')
-  const rows = listed.filter((change) => change.kind !== 'conflicted')
-  // Past the list's cap: counted by git, never listed, and still in Commit All.
-  const unlisted = changes === undefined ? 0 : Math.max(0, changes.total - listed.length)
-  const uncommitted = rows.length + unlisted
-  const branchRows = branch?.changes ?? []
+  const shown = sections(changes, branch, stagedPaths)
+  const ticked = new Set(stagedPaths)
+  const conflictRows = shown.conflicts
+  const listedRows = shown.staged.length + shown.unstaged.length
   const midway = status?.operation
   const base = baseRef ?? log?.baseRef
-  const ticked = new Set(stagedPaths)
-  const tick = (change: WorktreeChange): Tick => tickOf(change, ticked.has(change.path))
-  const checked = (change: WorktreeChange): boolean => tick(change) === 'on' || tick(change) === 'index'
-  const checkedCount = rows.filter(checked).length
-  const allChecked = rows.length > 0 && checkedCount === rows.length
-  const tickable = rows.filter((change) => tick(change) !== 'index')
-  const allTicked = tickable.every((change) => ticked.has(change.path))
-  const scope = commitScope(stagedPaths, rows, unlisted > 0)
-  const canCommit = rows.length > 0 && message.trim().length > 0 && !committing
+  const open = (key: string): boolean => folded[`section:${key}`] !== true
+  const fold = (key: string) => () => toggleFold(`section:${key}`)
 
   const land = midway === undefined ? landOffer(landing, status) : null
   // Nothing is pushed from the middle of a rebase, nor once the branch has landed.
@@ -122,10 +118,10 @@ export function ChangesTab(): React.JSX.Element | null {
     land,
     push: pushed,
     updateFrom: conflictRows.length === 0 ? updateFrom(status, base, child) : null,
-    uncommitted: rows.length > 0,
+    uncommitted: listedRows > 0,
     ahead: status?.ahead ?? 0
   })
-  const shown = header.shown
+  const next = header.shown
   const labelOf = (action: HeaderAction): string => {
     if (action.kind === 'update') return updating === worktreeId ? 'Updating…' : `Update from ${action.from}`
     if (action.kind === 'land') {
@@ -153,285 +149,359 @@ export function ChangesTab(): React.JSX.Element | null {
     } else if (action.offer.kind === 'merge') openDialog({ kind: 'confirm-merge', worktreeId })
     else void createPullRequest(worktreeId)
   }
-  const discard = (path: string): void => openDialog({ kind: 'confirm-discard', worktreeId, path })
-
-  const commit = (): void => {
-    if (!canCommit) return
-    // The message is the one thing the app cannot reconstruct; only a commit that landed clears it.
-    void commitStaged(message).then((landed) => {
-      if (landed) setMessage('')
-    })
+  const landAfterCommit = (): void => {
+    if (land?.kind === 'merge') openDialog({ kind: 'confirm-merge', worktreeId })
+    else if (land?.kind === 'create-pr') void createPullRequest(worktreeId)
   }
+  const discardable = shown.unstaged.filter(canDiscard).map((change) => change.path)
+  const lastCommit = log?.commits[0]
 
   return (
     <section className="changes" aria-label="Changes in this worktree">
       {status ? (
         <div className="changes__head">
           <span className="changes__ref" title={`↑ ${status.upstream ?? log?.baseRef ?? ''}  ↓ ${log?.baseRef ?? ''}`}>
-            <span className="changes__branch">{status.branch}</span>
-            {aheadBehind(status)}
+            {refLine(status.branch, base, status.ahead, status.behind)}
           </span>
-          <TokensLine worktreeId={worktreeId} />
+          <IconButton icon="reload" label="Refresh" onClick={() => rereadChanges(worktreeId)} />
+          <Segmented
+            label="View"
+            options={[
+              { value: 'list', label: 'List' },
+              { value: 'tree', label: 'Tree' }
+            ]}
+            value={view}
+            onChange={setView}
+          />
+        </div>
+      ) : null}
+      {status ? (
+        <div className="changes__actions">
           {land?.kind === 'merged' ? (
             <>
-              <span className="chip changes__merged" title={mergedChip(landing).title}>
-                {mergedChip(landing).label}
-              </span>
-              <button type="button" className="button button--small" onClick={() => void removeWorktree(worktreeId)}>
+              <Chip title={mergedChip(landing).title}>{mergedChip(landing).label}</Chip>
+              <Button size="sm" onClick={() => void removeWorktree(worktreeId)}>
                 Delete Worktree…
-              </button>
+              </Button>
             </>
           ) : null}
-          {shown === null ? null : (
-            <button
-              type="button"
-              className={`button button--small${header.primary ? ' button--primary' : ''}`}
-              disabled={busy(shown) || blockedBy(shown) !== undefined}
-              title={shown.kind === 'land' ? landTitle(shown.offer) : undefined}
-              onClick={() => act(shown)}
+          {next === null ? null : (
+            <Button
+              size="sm"
+              variant={header.primary ? 'primary' : 'secondary'}
+              disabled={busy(next) || blockedBy(next) !== undefined}
+              title={next.kind === 'land' ? landTitle(next.offer) : undefined}
+              onClick={() => act(next)}
             >
-              {labelOf(shown)}
-            </button>
+              {labelOf(next)}
+            </Button>
           )}
+          <ReviewBar worktreeId={worktreeId} changed={listedRows > 0 || (branch?.changes.length ?? 0) > 0} />
           {header.more.length === 0 ? null : (
-            <button
-              type="button"
-              className="button button--small changes__more"
-              title="More actions"
-              aria-label="More actions"
+            <IconButton
+              icon="more"
+              label="More actions"
+              size="sm"
+              className="changes__more"
               aria-haspopup="menu"
               aria-expanded={moreAt !== null}
               onClick={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect()
-                const at: RowMenuAnchor = { x: rect.right, y: rect.bottom + 4, align: 'right' }
+                const at: MenuAnchor = { x: rect.right, y: rect.bottom + 4, align: 'right' }
                 setMoreAt(moreAt === null ? { at, opener: event.currentTarget } : null)
               }}
-            >
-              <Icon name="more" size={14} />
-            </button>
+            />
           )}
         </div>
       ) : null}
       {status && landing?.pullRequest !== undefined && landing.pullRequest.state !== 'merged' ? (
         <PullRequestChecks worktreeId={worktreeId} pull={landing.pullRequest} />
       ) : null}
-      {worktreeId === null
-        ? null
-        : overlapLines(overlap).map((line) => (
-            <button
-              type="button"
-              key={line.text}
-              className={`changes__overlap${line.conflict ? ' changes__overlap--conflict' : ''}`}
-              title={overlap?.title}
-              onClick={() => openOverlap(worktreeId, line.entry)}
-            >
-              <span aria-hidden="true">⚠</span> {line.text}
-            </button>
-          ))}
+      {overlapLines(overlap).map((line) => (
+        <button
+          type="button"
+          key={line.text}
+          className={`changes__overlap${line.conflict ? ' changes__overlap--conflict' : ''}`}
+          title={overlap?.title}
+          onClick={() => openOverlap(worktreeId, line.entry)}
+        >
+          <span aria-hidden="true">⚠</span> {line.text}
+        </button>
+      ))}
       {updateError === undefined ? null : (
         <p className="changes__updateFailed" role="alert">
           {updateError}
         </p>
       )}
-      {conflictRows.length > 0 || midway !== undefined ? (
-        <section className="changes__conflicts" aria-label="Conflicts">
-          <p className="changes__conflictHead">
-            {midway === undefined
-              ? `${conflictRows.length} conflicted`
-              : conflictHeadline(midway, sides, conflictRows.length)}
-          </p>
-          <ul className="changes__list">
-            {conflictRows.map((change) => (
-              <li
-                className={`changes__item changes__item--conflict${
-                  change.path === selectedPath ? ' changes__item--selected' : ''
-                }`}
-                key={change.path}
-              >
-                <button
-                  type="button"
-                  className="change"
-                  aria-current={change.path === selectedPath ? 'true' : undefined}
-                  title={change.path}
-                  onClick={() => selectChange(change.path)}
-                >
-                  <span className="change__kind change__kind--conflicted" aria-label={KIND_LABEL.conflicted}>
-                    {KIND_LETTER.conflicted}
-                  </span>
-                  <ChangePath path={change.path} />
-                  <span className={`change__where${change.markers === 0 ? ' change__where--resolved' : ''}`}>
-                    {change.markers === 0 ? 'Resolved' : 'Unresolved'}
-                  </span>
-                </button>
-                <span className="change__resolve">
-                  <button
-                    type="button"
-                    className={`change__discard${change.markers === 0 ? ' change__discard--go' : ''}`}
-                    aria-label={`Mark ${change.path} Resolved`}
-                    onClick={() => void resolveConflict(worktreeId, change.path)}
-                  >
-                    Mark Resolved
-                  </button>
-                  <button
-                    type="button"
-                    className="change__discard"
-                    aria-label={`Take Ours for ${change.path}`}
-                    title={`${sides.task}’s version`}
-                    onClick={() => void resolveConflict(worktreeId, change.path, 'ours')}
-                  >
-                    Take Ours
-                  </button>
-                  <button
-                    type="button"
-                    className="change__discard"
-                    aria-label={`Take Theirs for ${change.path}`}
-                    title={`${sides.incoming}’s version`}
-                    onClick={() => void resolveConflict(worktreeId, change.path, 'theirs')}
-                  >
-                    Take Theirs
-                  </button>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <div className="changes__conflictActions">
-            {conflictRows.length > 0 ? (
-              <button
-                type="button"
-                className="button button--small button--primary"
-                disabled={asker === null}
-                onClick={() => void askToResolve(worktreeId)}
-              >
-                {asker === null ? 'Ask Agent to Resolve' : `Ask ${harnessName(asker)} to Resolve`}
-              </button>
-            ) : null}
-            {midway === undefined ? null : (
-              <>
-                <button
-                  type="button"
-                  className={`button button--small${conflictRows.length === 0 ? ' button--primary' : ''}`}
-                  disabled={conflictRows.length > 0 || updating !== null}
-                  onClick={() => void continueUpdate(worktreeId)}
-                >
-                  Continue
-                </button>
-                <button type="button" className="button button--small" onClick={() => void abortUpdate(worktreeId)}>
-                  Abort
-                </button>
-              </>
-            )}
-          </div>
-        </section>
-      ) : null}
       {push?.phase === 'failed' ? (
         <PushFailed error={push.error} detail={push.detail} retry={() => void pushActiveWorktree()} busy={pushing} />
       ) : null}
-      <ReviewBar worktreeId={worktreeId} changed={rows.length > 0 || branchRows.length > 0} />
-      {changes === undefined ? (
-        <p className="changes__empty">Reading…</p>
-      ) : rows.length === 0 ? (
-        conflictRows.length > 0 || midway !== undefined ? null : (
-          <p className="changes__empty">{emptyChangesLabel(log)}</p>
-        )
-      ) : (
-        <section className="changes__group" aria-label="Uncommitted">
-          <h3 className="commits__title">
-            Uncommitted
-            <span className="panel__count">{counted(uncommitted)}</span>
-          </h3>
-          <ul className="changes__list">
-            {rows.map((change, index) => (
-              <li
-                className={`changes__item${change.path === selectedPath ? ' changes__item--selected' : ''}`}
-                key={change.path}
-              >
-                <input
-                  type="checkbox"
-                  className="change__tick"
-                  checked={checked(change)}
-                  ref={(box) => {
-                    if (box) box.indeterminate = tick(change) === 'mixed'
-                  }}
-                  aria-label={`Include ${change.path} in the next commit`}
-                  onChange={() => {
-                    // Unticking anything git holds takes the whole path out of the index.
-                    if (checked(change) && change.staged) void unstagePath(worktreeId, change.path)
-                    else toggleStaged(change.path)
-                  }}
-                />
-                <button
-                  type="button"
-                  className="change"
-                  aria-current={change.path === selectedPath ? 'true' : undefined}
-                  title={change.from === undefined ? change.path : `${change.from} → ${change.path}`}
-                  onClick={() => selectChange(change.path)}
-                  onDoubleClick={() => selectChange(change.path, true)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-                      event.preventDefault()
-                      selectChange(change.path, true)
-                      return
-                    }
-                    if (event.key === 'Escape' && zoomed) {
-                      event.preventDefault()
-                      toggleExpandedPane()
-                      return
-                    }
-                    const step = event.key === 'ArrowDown' ? 1 : event.key === 'ArrowUp' ? -1 : 0
-                    const next = rows[index + step]
-                    if (step === 0 || next === undefined) return
-                    event.preventDefault()
-                    selectChange(next.path)
-                    const item = event.currentTarget.closest('li')
-                    const sibling = step === 1 ? item?.nextElementSibling : item?.previousElementSibling
-                    sibling?.querySelector<HTMLElement>('.change')?.focus()
-                  }}
-                  onContextMenu={(event) => {
-                    if (!canDiscard(change)) return
-                    event.preventDefault()
-                    setMenu({ path: change.path, at: { x: event.clientX, y: event.clientY } })
-                  }}
+      {listedRows > 0 && midway === undefined ? (
+        <CommitBox
+          worktreeId={worktreeId}
+          shown={shown}
+          land={land}
+          remote={landing?.remote !== false}
+          amend={amendBlocker(status, log)}
+          onLand={landAfterCommit}
+        />
+      ) : null}
+
+      <div className="changes__scroll">
+        {conflictRows.length > 0 || midway !== undefined ? (
+          <section className="changes__conflicts" aria-label="Conflicts">
+            <p className="changes__conflictHead">
+              {midway === undefined
+                ? `${conflictRows.length} conflicted`
+                : conflictHeadline(midway, sides, conflictRows.length)}
+            </p>
+            <ul className="changes__list">
+              {conflictRows.map((change) => (
+                <li
+                  className={`changes__item changes__item--conflict${
+                    change.path === selectedPath ? ' changes__item--selected' : ''
+                  }`}
+                  key={change.path}
                 >
-                  <span className={`change__kind change__kind--${change.kind}`} aria-label={KIND_LABEL[change.kind]}>
-                    {KIND_LETTER[change.kind]}
-                  </span>
-                  <ChangePath path={change.path} />
-                  {isViewedRow(viewed?.[change.path], change) ? (
-                    <span className="change__viewed" role="img" aria-label="Viewed" title="Viewed">
-                      ✓
-                    </span>
-                  ) : null}
-                  {change.staged ? (
-                    <span className="change__where" title={change.unstaged ? 'Staged, and edited since' : 'Staged'}>
-                      {change.unstaged ? 'both' : 'staged'}
-                    </span>
-                  ) : null}
-                  {change.added === undefined || change.removed === undefined ? null : (
-                    <span className="change__stat">
-                      +{change.added} −{change.removed}
-                    </span>
-                  )}
-                </button>
-                {canDiscard(change) ? (
                   <button
                     type="button"
-                    className="change__icon"
-                    aria-label={`Discard ${change.path}…`}
-                    title="Discard…"
-                    disabled={hunkPending}
-                    onClick={() => discard(change.path)}
+                    className="change"
+                    aria-current={change.path === selectedPath ? 'true' : undefined}
+                    title={change.path}
+                    onClick={() => selectChange(change.path)}
                   >
-                    <Icon name="discard" size={14} />
+                    <span className="change__kind change__kind--conflicted" aria-label={KIND_LABEL.conflicted}>
+                      {KIND_LETTER.conflicted}
+                    </span>
+                    <span className="change__path">
+                      <span className="change__name">{fileNameOf(change.path)}</span>
+                      {directoryOf(change.path) === '' ? null : (
+                        <span className="change__dir">{directoryOf(change.path)}</span>
+                      )}
+                    </span>
+                    <span className={`change__where${change.markers === 0 ? ' change__where--resolved' : ''}`}>
+                      {change.markers === 0 ? 'Resolved' : 'Unresolved'}
+                    </span>
                   </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-          {unlisted > 0 ? <p className="changes__note">+{counted(unlisted)} more</p> : null}
-        </section>
-      )}
+                  <span className="change__resolve">
+                    <button
+                      type="button"
+                      className={`change__discard${change.markers === 0 ? ' change__discard--go' : ''}`}
+                      aria-label={`Mark ${change.path} Resolved`}
+                      onClick={() => void resolveConflict(worktreeId, change.path)}
+                    >
+                      Mark Resolved
+                    </button>
+                    <button
+                      type="button"
+                      className="change__discard"
+                      aria-label={`Take Ours for ${change.path}`}
+                      title={`${sides.task}’s version`}
+                      onClick={() => void resolveConflict(worktreeId, change.path, 'ours')}
+                    >
+                      Take Ours
+                    </button>
+                    <button
+                      type="button"
+                      className="change__discard"
+                      aria-label={`Take Theirs for ${change.path}`}
+                      title={`${sides.incoming}’s version`}
+                      onClick={() => void resolveConflict(worktreeId, change.path, 'theirs')}
+                    >
+                      Take Theirs
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="changes__conflictActions">
+              {conflictRows.length > 0 ? (
+                <button
+                  type="button"
+                  className="button button--small button--primary"
+                  disabled={asker === null}
+                  onClick={() => void askToResolve(worktreeId)}
+                >
+                  {asker === null ? 'Ask Agent to Resolve' : `Ask ${harnessName(asker)} to Resolve`}
+                </button>
+              ) : null}
+              {midway === undefined ? null : (
+                <>
+                  <button
+                    type="button"
+                    className={`button button--small${conflictRows.length === 0 ? ' button--primary' : ''}`}
+                    disabled={conflictRows.length > 0 || updating !== null}
+                    onClick={() => void continueUpdate(worktreeId)}
+                  >
+                    Continue
+                  </button>
+                  <button type="button" className="button button--small" onClick={() => void abortUpdate(worktreeId)}>
+                    Abort
+                  </button>
+                </>
+              )}
+            </div>
+          </section>
+        ) : null}
+
+        {changes === undefined ? (
+          <p className="changes__empty">Reading…</p>
+        ) : listedRows === 0 && shown.unlisted === 0 ? (
+          conflictRows.length > 0 || midway !== undefined ? null : (
+            <EmptyState
+              title={emptyChangesLabel(log)}
+              {...(lastCommit === undefined
+                ? {}
+                : {
+                    hint: (
+                      <button
+                        type="button"
+                        className="commit__open changes__last"
+                        title={`${lastCommit.author} · ${lastCommit.committedAt}`}
+                        onClick={() => openCommit(worktreeId, lastCommit)}
+                      >
+                        <span className="commit__sha">{lastCommit.shortSha}</span>{' '}
+                        <span className="commit__subject">{lastCommit.subject}</span>
+                      </button>
+                    )
+                  })}
+            />
+          )
+        ) : null}
+
+        {sectionCount(shown, 'staged') === 0 ? null : (
+          <section className="changes__group" aria-label="Staged Changes">
+            <SectionHead
+              title="Staged Changes"
+              count={counted(sectionCount(shown, 'staged'))}
+              open={open('staged')}
+              onToggle={fold('staged')}
+            >
+              <IconButton
+                icon="minimize"
+                label="Unstage All Changes"
+                size="sm"
+                disabled={hunkPending}
+                onClick={() => void unstageAll(worktreeId)}
+              />
+            </SectionHead>
+            {open('staged') ? (
+              <ChangeRows worktreeId={worktreeId} section="staged" rows={shown.staged} view={view} ticked={ticked} />
+            ) : null}
+            {open('staged') && shown.unlistedIn === 'staged' && shown.unlisted > 0 ? (
+              <p className="changes__note">+{counted(shown.unlisted)} more</p>
+            ) : null}
+          </section>
+        )}
+
+        {sectionCount(shown, 'unstaged') === 0 ? null : (
+          <section className="changes__group" aria-label="Changes">
+            <SectionHead
+              title="Changes"
+              count={counted(sectionCount(shown, 'unstaged'))}
+              open={open('unstaged')}
+              onToggle={fold('unstaged')}
+            >
+              {discardable.length === 0 ? null : (
+                <IconButton
+                  icon="discard"
+                  label="Discard All Changes…"
+                  size="sm"
+                  disabled={hunkPending}
+                  onClick={() =>
+                    openDialog({ kind: 'confirm-discard', worktreeId, path: discardable[0] ?? '', paths: discardable })
+                  }
+                />
+              )}
+              <IconButton
+                icon="plus"
+                label="Stage All Changes"
+                size="sm"
+                onClick={() => stagePaths(shown.unstaged.map((change) => change.path))}
+              />
+            </SectionHead>
+            {open('unstaged') ? (
+              <ChangeRows
+                worktreeId={worktreeId}
+                section="unstaged"
+                rows={shown.unstaged}
+                view={view}
+                ticked={ticked}
+              />
+            ) : null}
+            {open('unstaged') && shown.unlistedIn === 'unstaged' && shown.unlisted > 0 ? (
+              <p className="changes__note">+{counted(shown.unlisted)} more</p>
+            ) : null}
+          </section>
+        )}
+
+        <ChildrenSection worktreeId={worktreeId} />
+
+        {shown.committed.length === 0 ? null : (
+          <section className="changes__group" aria-label="Committed on branch">
+            <SectionHead
+              title="Committed on branch"
+              count={counted(shown.committed.length + shown.committedUnlisted)}
+              hint={`vs ${log?.baseRef ?? base ?? ''}`}
+              open={open('committed')}
+              onToggle={fold('committed')}
+            />
+            {open('committed') ? (
+              <ChangeRows
+                worktreeId={worktreeId}
+                section="committed"
+                rows={shown.committed}
+                view={view}
+                ticked={ticked}
+              />
+            ) : null}
+            {open('committed') && shown.committedUnlisted > 0 ? (
+              <p className="changes__note">+{counted(shown.committedUnlisted)} more</p>
+            ) : null}
+          </section>
+        )}
+
+        {log?.unavailable !== undefined ? (
+          <p className="commits__unknown" title={log.unavailable}>
+            Could not read this branch’s commits
+          </p>
+        ) : null}
+
+        {log && log.commits.length > 0 ? (
+          <section className="commits" aria-label="Commits this worktree has made">
+            <SectionHead
+              title="Commits"
+              count={`${log.commits.length}${log.truncated ? '+' : ''}`}
+              hint={`Not in ${log.baseRef}`}
+              open={open('commits')}
+              onToggle={fold('commits')}
+            />
+            {open('commits') ? (
+              <ul className="commits__list">
+                {log.commits.map((commit) => (
+                  <li className={`commit${commit.sha === shownCommit ? ' commit--selected' : ''}`} key={commit.sha}>
+                    <button
+                      type="button"
+                      className="commit__open"
+                      aria-current={commit.sha === shownCommit ? 'true' : undefined}
+                      title={`${commit.author} · ${commit.committedAt}`}
+                      onClick={() => openCommit(worktreeId, commit)}
+                    >
+                      <span className="commit__sha">{commit.shortSha}</span>{' '}
+                      <span className="commit__subject">{commit.subject}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+        ) : null}
+
+        <ContextSection worktreeId={worktreeId} fold={{ open: open('context'), onToggle: fold('context') }} />
+      </div>
+
       {moreAt === null || header.more.length === 0 ? null : (
-        <RowMenu
+        <Menu
           label="More actions"
           anchor={moreAt.at}
           opener={moreAt.opener}
@@ -446,130 +516,6 @@ export function ChangesTab(): React.JSX.Element | null {
           })}
         />
       )}
-      {menu === null ? null : (
-        <RowMenu
-          label={`Actions for ${menu.path}`}
-          anchor={menu.at}
-          onClose={() => setMenu(null)}
-          items={[{ label: 'Discard…', onChoose: () => discard(menu.path) }]}
-        />
-      )}
-
-      {rows.length > 0 && midway === undefined ? (
-        <div className="changes__commit">
-          <div className="changes__all">
-            <label>
-              <input
-                type="checkbox"
-                aria-label="Select all changes"
-                checked={allChecked}
-                ref={(box) => {
-                  if (box) box.indeterminate = !allChecked && rows.some((change) => tick(change) !== 'off')
-                }}
-                disabled={tickable.length === 0}
-                onChange={() => setAllStaged(!allTicked)}
-              />
-              All
-            </label>
-            <span className="changes__allCount">
-              {counted(scope === 'all' && checkedCount > 0 ? uncommitted : checkedCount)}/{counted(uncommitted)}
-            </span>
-            <CommitFrom from={from} onClear={() => setMessage('')} />
-          </div>
-          <textarea
-            className="changes__message"
-            rows={1}
-            value={message}
-            placeholder="Commit message"
-            aria-label="Commit message"
-            disabled={committing}
-            onChange={(event) => setMessage(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' || event.shiftKey) return
-              event.preventDefault()
-              commit()
-            }}
-          />
-          <button type="button" className="button button--primary button--small" disabled={!canCommit} onClick={commit}>
-            {committing
-              ? 'Committing…'
-              : scope === 'all' && unlisted > 0
-                ? `Commit All ${counted(uncommitted)}`
-                : COMMIT_LABEL[scope]}
-          </button>
-        </div>
-      ) : null}
-
-      <ChildrenSection worktreeId={worktreeId} />
-      {branchRows.length > 0 ? (
-        <section className="changes__group changes__group--branch" aria-label="On branch">
-          <h3 className="commits__title" title={`vs ${log?.baseRef ?? base ?? ''}`}>
-            On Branch
-            <span className="panel__count">{counted(branch?.total ?? branchRows.length)}</span>
-          </h3>
-          <ul className="changes__list">
-            {branchRows.map((change) => (
-              <li className="changes__item" key={change.path}>
-                <button
-                  type="button"
-                  className="change"
-                  title={change.from === undefined ? change.path : `${change.from} → ${change.path}`}
-                  onClick={() => reviewBranch(worktreeId, change.path)}
-                >
-                  <span className={`change__kind change__kind--${change.kind}`} aria-label={KIND_LABEL[change.kind]}>
-                    {KIND_LETTER[change.kind]}
-                  </span>
-                  <ChangePath path={change.path} />
-                  {change.added === undefined || change.removed === undefined ? null : (
-                    <span className="change__stat">
-                      +{change.added} −{change.removed}
-                    </span>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-          {branch !== undefined && branch.total > branchRows.length ? (
-            <p className="changes__note">+{counted(branch.total - branchRows.length)} more</p>
-          ) : null}
-        </section>
-      ) : null}
-
-      <ContextSection worktreeId={worktreeId} />
-
-      {log?.unavailable !== undefined ? (
-        <p className="commits__unknown" title={log.unavailable}>
-          Could not read this branch’s commits
-        </p>
-      ) : null}
-
-      {log && log.commits.length > 0 ? (
-        <section className="commits" aria-label="Commits this worktree has made">
-          <h3 className="commits__title" title={`Not in ${log.baseRef}`}>
-            Commits
-            <span className="panel__count">
-              {log.commits.length}
-              {log.truncated ? '+' : ''}
-            </span>
-          </h3>
-          <ul className="commits__list">
-            {log.commits.map((commit) => (
-              <li className={`commit${commit.sha === shownCommit ? ' commit--selected' : ''}`} key={commit.sha}>
-                <button
-                  type="button"
-                  className="commit__open"
-                  aria-current={commit.sha === shownCommit ? 'true' : undefined}
-                  title={`${commit.author} · ${commit.committedAt}`}
-                  onClick={() => openCommit(worktreeId, commit)}
-                >
-                  <span className="commit__sha">{commit.shortSha}</span>{' '}
-                  <span className="commit__subject">{commit.subject}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
     </section>
   )
 }
@@ -651,13 +597,6 @@ export function pushFailedText(error: string): string {
   return error === 'Push failed' ? error : `Push failed: ${error}`
 }
 
-/** ` · ↑2 ↓1` with a zero side left out, and nothing when both are zero. */
-function aheadBehind(status: WorktreeStatus): string {
-  const arrows = [status.ahead > 0 ? `↑${status.ahead}` : '', status.behind > 0 ? `↓${status.behind}` : '']
-  const shown = arrows.filter((arrow) => arrow !== '').join(' ')
-  return shown === '' ? '' : ` · ${shown}`
-}
-
 /** The commit the file column is showing, if its shown tab is one. */
 export function shownCommitIn(root: PaneNode | null): string | null {
   const column = fileColumnIn(root)
@@ -666,55 +605,9 @@ export function shownCommitIn(root: PaneNode | null): string | null {
   return isCommitLeaf(shown) ? shown.commit : null
 }
 
-const COMMIT_LABEL = { ticked: 'Commit', staged: 'Commit Staged', all: 'Commit All' } as const
-
-/** `2,000`: a count past the list's cap is read at a glance. */
-function counted(count: number): string {
-  return count.toLocaleString('en-US')
-}
-
-/** `index`: git already holds the whole change; unticking it unstages the path. */
-type Tick = 'on' | 'off' | 'mixed' | 'index'
-
-function tickOf(change: WorktreeChange, ticked: boolean): Tick {
-  if (change.staged && !change.unstaged) return 'index'
-  if (ticked) return 'on'
-  return change.staged ? 'mixed' : 'off'
-}
-
 const PUSH_LABEL = { push: ['Push', 'Pushing…'], publish: ['Publish Branch', 'Publishing…'] } as const
-
-/** An unstaged change git can put back, or an untracked file the Trash can take. Intent-to-add is refused. */
-export function canDiscard(change: WorktreeChange): boolean {
-  if (!change.unstaged || change.kind === 'conflicted') return false
-  return !(change.kind === 'added' && !change.staged)
-}
-
-/** The file name, then its folder in the muted ink; the row's title has the whole path. */
-function ChangePath({ path }: { path: string }): React.JSX.Element {
-  const folder = directoryOf(path)
-  return (
-    <span className="change__path">
-      <span className="change__name">{fileNameOf(path)}</span>
-      {folder === '' ? null : <span className="change__dir">{folder}</span>}
-    </span>
-  )
-}
 
 /** What an empty changes list means; "No changes" is wrong when the base could not be compared. */
 export function emptyChangesLabel(log: WorktreeLog | undefined): string {
-  if (log?.unavailable !== undefined) return 'Nothing uncommitted'
-  if ((log?.commits.length ?? 0) > 0) return 'All committed'
-  return 'No changes'
-}
-
-/** The folder a path sits in, `src/cart` for `src/cart/totals.ts`; empty at the root. */
-export function directoryOf(path: string): string {
-  const cut = path.lastIndexOf('/')
-  return cut === -1 ? '' : path.slice(0, cut)
-}
-
-export function fileNameOf(path: string): string {
-  const cut = path.lastIndexOf('/')
-  return cut === -1 ? path : path.slice(cut + 1)
+  return log?.unavailable !== undefined ? 'Nothing uncommitted' : 'No changes'
 }

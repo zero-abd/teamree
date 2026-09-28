@@ -30,13 +30,16 @@ vi.mock('../../runtimeClient/currentRuntimeClient', () => ({
 vi.mock('../../shell/openInBrowser', () => ({ openInBrowser: (url: string) => openInBrowser(url) }))
 
 const { useWorkspaceStore } = await import('../../state/workspaceStore')
-const { ChangesTab, canDiscard } = await import('./ChangesTab')
+const { ChangesTab } = await import('./ChangesTab')
+const { canDiscard } = await import('./sourceControl')
+const { useScmView } = await import('./scmView')
 const { ConfirmDiscardDialog } = await import('../../dialogs/ConfirmDiscardDialog')
 const { FilePane } = await import('../../panes/FilePane')
 const { useReviewStore } = await import('../../review/reviewStore')
 const { useCommitDrafts } = await import('./commitMessage')
 
 const INITIAL = useWorkspaceStore.getState()
+const SCM = useScmView.getState()
 
 const status = (overrides: Partial<WorktreeStatus> = {}): WorktreeStatus => ({
   worktreeId: 'w1',
@@ -134,8 +137,14 @@ beforeEach(() => {
   openInBrowser.mockReset()
   useReviewStore.setState({ viewed: {}, batch: {}, queued: {}, scope: {}, jump: {} })
   useCommitDrafts.setState({ drafts: {} })
+  useScmView.setState(SCM, true)
   seed()
 })
+
+/** A folded section's heading, opened. */
+function unfold(name: RegExp): void {
+  fireEvent.click(screen.getByRole('button', { name, expanded: false }))
+}
 
 describe('files another task changes too', () => {
   const task = (id: string, name: string): Worktree => ({
@@ -299,7 +308,7 @@ describe('which button is the next step', () => {
   it('is Commit while there are changes, with Push beside it quiet', () => {
     withChanges(rows)
     render(<ChangesTab />)
-    expect(primary('Commit All')).toBe(true)
+    expect(primary('Commit All 3')).toBe(true)
     expect(primary('Push')).toBe(false)
   })
 
@@ -314,7 +323,7 @@ describe('which button is the next step', () => {
     seed({ upstream: null, ahead: 0 })
     withChanges(rows)
     render(<ChangesTab />)
-    expect(primary('Commit All')).toBe(true)
+    expect(primary('Commit All 3')).toBe(true)
     expect(screen.queryByRole('button', { name: 'Publish Branch' })).toBeNull()
   })
 
@@ -322,7 +331,7 @@ describe('which button is the next step', () => {
     seed({ upstream: null, ahead: 1 })
     withChanges(rows)
     render(<ChangesTab />)
-    expect(primary('Commit All')).toBe(true)
+    expect(primary('Commit All 3')).toBe(true)
     expect(primary('Publish Branch')).toBe(false)
   })
 
@@ -420,7 +429,7 @@ describe('landing the work', () => {
     render(<ChangesTab />)
 
     const button = screen.getByRole('button', { name: 'Commit & Merge into main…' })
-    expect(primary('Commit All')).toBe(true)
+    expect(primary('Commit All 3')).toBe(true)
     expect(button.className).not.toContain('button--primary')
     expect(button.title).toBe('3 uncommitted')
     fireEvent.click(button)
@@ -450,7 +459,7 @@ describe('landing the work', () => {
     expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull()
   })
 
-  it('tidies a child’s header to one button and a menu for the rest', () => {
+  it('tidies a child’s branch actions to one button and a menu for the rest', () => {
     landed(
       { base: 'rework-auth', host: null, published: false, parent: { worktreeId: 'w0', name: 'Rework auth' } },
       { upstream: null, ahead: 1, behind: 1 }
@@ -458,7 +467,7 @@ describe('landing the work', () => {
     useWorkspaceStore.setState({ worktrees: [childWorktree] })
     render(<ChangesTab />)
 
-    const head = document.querySelector('.changes__head') as HTMLElement
+    const head = document.querySelector('.changes__actions') as HTMLElement
     expect(
       within(head)
         .getAllByRole('button')
@@ -491,20 +500,25 @@ describe('landing the work', () => {
 })
 
 describe('committing', () => {
-  it('commits every listed change, new files included, when nothing is ticked, and only the ticked ones otherwise', () => {
+  const message = (text: string): void => {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: text } })
+  }
+
+  it('commits every listed change, new files included, when nothing is staged, and only the staged ones otherwise', () => {
     withChanges(rows)
     render(<ChangesTab />)
-    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Rank' } })
+    message('Rank')
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Include src/app.ts in the next commit' }))
-    expect(screen.queryByRole('button', { name: 'Commit All' })).toBeNull()
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Include src/app.ts in the next commit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Stage src/app.ts' }))
+    expect(screen.queryByRole('button', { name: 'Commit All 3' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Commit 1' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage src/app.ts' }))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Commit All' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Commit All 3' }))
     expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
   })
 
-  // The list stops at 500 rows; the commit, the counts and the All box must not.
+  // The list stops at 500 rows; the commit, the counts and Stage All must not.
   it('commits all 2,000 when only 500 are listed, and says how many are not', { timeout: 90_000 }, () => {
     const listed = Array.from(
       { length: 500 },
@@ -513,38 +527,130 @@ describe('committing', () => {
     useWorkspaceStore.setState({
       changes: { w1: { worktreeId: 'w1', changes: listed, total: 2000, limit: 500, truncated: true, readAt: 0 } }
     })
-    // Label and text lookups: role queries rescan all 500 rows each time and time out on a loaded machine.
+    // Selector and text lookups: role and label queries rescan every row's buttons each time, for seconds apiece.
+    const labelled = (label: string): HTMLElement | null => document.querySelector(`[aria-label="${label}"]`)
     render(<ChangesTab />)
-    fireEvent.change(screen.getByLabelText('Commit message'), { target: { value: 'Rank' } })
+    fireEvent.change(labelled('Commit message')!, { target: { value: 'Rank' } })
 
-    const group = screen.getByLabelText('Uncommitted')
-    expect(within(group).getByText('2,000')).toBeTruthy()
+    expect(labelled('Changes')?.querySelector('.panel__count')?.textContent).toBe('2,000')
     expect(screen.getByText('+1,500 more')).toBeTruthy()
-    expect(screen.getByText('0/2,000')).toBeTruthy()
+    expect(screen.getByText('Commit All 2,000', { selector: 'button' })).toBeTruthy()
 
-    fireEvent.click(screen.getByLabelText('Select all changes'))
-    expect(screen.getByText('2,000/2,000')).toBeTruthy()
+    fireEvent.click(labelled('Stage All Changes')!)
+    expect(labelled('Staged Changes')?.querySelector('.panel__count')?.textContent).toBe('2,000')
+    expect(labelled('Changes')).toBeNull()
     fireEvent.click(screen.getByText('Commit All 2,000', { selector: 'button' }))
     expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
   })
 
-  it('switches to Commit once a file is ticked', () => {
+  it('counts what it commits once a file is staged', () => {
     withChanges(rows)
     render(<ChangesTab />)
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Include README.md in the next commit' }))
-    expect(screen.getByRole('button', { name: 'Commit' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Stage README.md' }))
+    expect(screen.getByRole('button', { name: 'Commit 1' })).toBeTruthy()
   })
 
   // An agent that only created files is the common case: its work must be one click from a commit.
   it('commits all on a worktree whose only changes are new files', () => {
     withChanges([{ path: 'src/app.ts', kind: 'untracked', staged: false, unstaged: true }])
     render(<ChangesTab />)
-    fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Rank' } })
+    message('Rank')
 
-    const commitAll = screen.getByRole('button', { name: 'Commit All' })
-    expect(commitAll).toHaveProperty('disabled', false)
+    const commitAll = screen.getByRole('button', { name: 'Commit All 1' })
+    expect(commitAll.getAttribute('aria-disabled')).toBe('false')
     fireEvent.click(commitAll)
     expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
+  })
+
+  it('waits for a message, with the shortcut in the empty box', () => {
+    withChanges(rows)
+    render(<ChangesTab />)
+    const box = screen.getByRole('textbox', { name: 'Commit message' }) as HTMLTextAreaElement
+    expect(box.placeholder).toBe('Message (⌘↩ to commit)')
+    expect(screen.getByRole('button', { name: 'Commit All 3' }).getAttribute('aria-disabled')).toBe('true')
+  })
+
+  describe('from its menu', () => {
+    const choose = async (name: string): Promise<void> => {
+      fireEvent.click(screen.getByRole('button', { name: 'Commit Actions' }))
+      const item = within(screen.getByRole('menu', { name: 'Commit Actions' })).getByRole('menuitem', { name })
+      await act(async () => fireEvent.click(item))
+    }
+    const landing = (overrides: Partial<WorktreeLanding> = {}): WorktreeLanding => ({
+      worktreeId: 'w1',
+      branch: 'rewrite-the-pager',
+      base: 'main',
+      host: null,
+      published: true,
+      unmerged: 1,
+      merged: false,
+      readAt: 0,
+      ...overrides
+    })
+    const committed = (): void => {
+      call.mockImplementation((method: string) =>
+        method === 'worktree.commit'
+          ? Promise.resolve({
+              worktreeId: 'w1',
+              sha: 'b'.repeat(40),
+              shortSha: 'bbbbbbb',
+              message: 'Rank',
+              paths: [],
+              committedAt: 0
+            })
+          : new Promise(() => {})
+      )
+    }
+
+    it('commits, then pushes', async () => {
+      committed()
+      withChanges(rows)
+      render(<ChangesTab />)
+      message('Rank')
+      await choose('Commit & Push')
+      expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
+      expect(call).toHaveBeenCalledWith('worktree.push', { worktreeId: 'w1' })
+      expect((screen.getByRole('textbox', { name: 'Commit message' }) as HTMLTextAreaElement).value).toBe('')
+    })
+
+    it('commits, then asks before merging into the parent it names', async () => {
+      committed()
+      seed({ unstaged: 3 })
+      useWorkspaceStore.setState({
+        landings: { w1: landing({ base: 'rework-auth', parent: { worktreeId: 'w0', name: 'Rework auth' } }) }
+      })
+      withChanges(rows)
+      render(<ChangesTab />)
+      message('Rank')
+      await choose('Commit & Merge into Rework auth…')
+      expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', all: true })
+      expect(useWorkspaceStore.getState().dialog).toEqual({ kind: 'confirm-merge', worktreeId: 'w1' })
+    })
+
+    it('amends the last commit, which no remote has yet', async () => {
+      committed()
+      withChanges(rows)
+      render(<ChangesTab />)
+      message('Rank by recency, per line')
+      await choose('Amend Last Commit')
+      expect(call).toHaveBeenCalledWith('worktree.commit', {
+        worktreeId: 'w1',
+        message: 'Rank by recency, per line',
+        all: true,
+        amend: true
+      })
+    })
+
+    it('will not amend a commit already pushed', () => {
+      seed({ ahead: 0 })
+      withChanges(rows)
+      render(<ChangesTab />)
+      message('Rank')
+      fireEvent.click(screen.getByRole('button', { name: 'Commit Actions' }))
+      const amend = screen.getByRole('menuitem', { name: /Amend Last Commit/ })
+      expect(amend.getAttribute('aria-disabled')).toBe('true')
+      expect(amend.textContent).toContain('Already pushed')
+    })
   })
 })
 
@@ -556,16 +662,21 @@ describe('the message from the done report', () => {
   })
   const box = (): HTMLTextAreaElement => screen.getByRole('textbox', { name: 'Commit message' }) as HTMLTextAreaElement
 
-  it('starts the box with the report, marked, and commits it only when asked', () => {
+  // The owner's box held the whole task prompt; the suggestion is offered in one line and typed in only when taken.
+  it('offers the report in one line, fills the box only when taken, and commits it only when asked', () => {
     withChanges(rows)
     useWorkspaceStore.setState({ worktrees: [reported('Cart totals include tax.\nRounded per line.')] })
     render(<ChangesTab />)
 
+    expect(box().value).toBe('')
+    const offer = screen.getByRole('button', { name: 'Use: Cart totals include tax.' })
+    expect(offer.title).toBe('Cart totals include tax.\n\nRounded per line.')
+    fireEvent.click(offer)
     expect(box().value).toBe('Cart totals include tax.\n\nRounded per line.')
-    expect(screen.getByText('from report')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Use:/ })).toBeNull()
     expect(call).not.toHaveBeenCalledWith('worktree.commit', expect.anything())
 
-    fireEvent.click(screen.getByRole('button', { name: 'Commit All' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Commit All 3' }))
     expect(call).toHaveBeenCalledWith('worktree.commit', {
       worktreeId: 'w1',
       message: 'Cart totals include tax.\n\nRounded per line.',
@@ -573,15 +684,25 @@ describe('the message from the done report', () => {
     })
   })
 
-  it('clears it with ✕', () => {
+  it('offers the task’s first line when there is no report, never the whole prompt', () => {
+    withChanges(rows)
+    useWorkspaceStore.setState({
+      worktrees: [{ ...childWorktree, task: 'Add tax to cart totals\n\nEvery line, rounded.' }]
+    })
+    render(<ChangesTab />)
+    expect(box().value).toBe('')
+    expect(screen.getByRole('button', { name: 'Use: Add tax to cart totals' })).toBeTruthy()
+  })
+
+  it('offers it again once the box is emptied', () => {
     withChanges(rows)
     useWorkspaceStore.setState({ worktrees: [reported('Cart totals include tax.')] })
     render(<ChangesTab />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Clear message' }))
-    expect(box().value).toBe('')
-    expect(screen.queryByText('from report')).toBeNull()
-    expect((screen.getByRole('button', { name: 'Commit All' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Use: Cart totals include tax.' }))
+    fireEvent.change(box(), { target: { value: '' } })
+    expect(screen.getByRole('button', { name: 'Use: Cart totals include tax.' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Commit All 3' }).getAttribute('aria-disabled')).toBe('true')
   })
 
   it('keeps what was typed when the agent reports again', () => {
@@ -590,28 +711,28 @@ describe('the message from the done report', () => {
     render(<ChangesTab />)
 
     fireEvent.change(box(), { target: { value: 'Tax on totals' } })
-    expect(screen.queryByText('from report')).toBeNull()
     act(() => useWorkspaceStore.setState({ worktrees: [reported('Cart totals include tax and fees.')] }))
     expect(box().value).toBe('Tax on totals')
   })
 
-  it('follows a new report while the old one is untouched', () => {
+  it('offers a new report in place of the old', () => {
     withChanges(rows)
     useWorkspaceStore.setState({ worktrees: [reported('Cart totals include tax.')] })
     render(<ChangesTab />)
 
     act(() => useWorkspaceStore.setState({ worktrees: [reported('Cart totals include tax and fees.')] }))
-    expect(box().value).toBe('Cart totals include tax and fees.')
+    expect(screen.getByRole('button', { name: 'Use: Cart totals include tax and fees.' })).toBeTruthy()
+    expect(box().value).toBe('')
   })
 
-  it('commits on Enter and breaks the line on Shift+Enter', () => {
+  it('commits on ⌘Return and breaks the line on Return', () => {
     withChanges(rows)
-    useWorkspaceStore.setState({ worktrees: [reported('Cart totals include tax.')] })
     render(<ChangesTab />)
+    fireEvent.change(box(), { target: { value: 'Cart totals include tax.' } })
 
-    fireEvent.keyDown(box(), { key: 'Enter', shiftKey: true })
-    expect(call).not.toHaveBeenCalledWith('worktree.commit', expect.anything())
     fireEvent.keyDown(box(), { key: 'Enter' })
+    expect(call).not.toHaveBeenCalledWith('worktree.commit', expect.anything())
+    fireEvent.keyDown(box(), { key: 'Enter', metaKey: true })
     expect(call).toHaveBeenCalledWith('worktree.commit', {
       worktreeId: 'w1',
       message: 'Cart totals include tax.',
@@ -624,116 +745,138 @@ describe('what git has staged', () => {
   const partly: WorktreeChange = { path: 'src/rank.ts', kind: 'modified', staged: true, unstaged: true }
   const whole: WorktreeChange = { path: 'src/done.ts', kind: 'modified', staged: true, unstaged: false }
   const loose: WorktreeChange = { path: 'README.md', kind: 'modified', staged: false, unstaged: true }
-  const box = (path: string): HTMLInputElement =>
-    screen.getByRole('checkbox', { name: `Include ${path} in the next commit` }) as HTMLInputElement
+  const section = (name: string): HTMLElement => screen.getByRole('region', { name })
+  const commitButton = (): HTMLElement => document.querySelector('.changes__commitButton') as HTMLElement
 
   it('commits the index alone, naming no paths, when something is staged and nothing ticked', () => {
     withChanges([partly, loose])
     render(<ChangesTab />)
     fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Rank' } })
 
-    expect(screen.queryByRole('button', { name: 'Commit All' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Commit Staged' }))
+    expect(screen.queryByRole('button', { name: /Commit All/ })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Commit 1' }))
     expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank' })
   })
 
-  it('shows a partly staged row mixed, and a ticked one whole', () => {
+  it('lists a partly staged file once, in Staged, marked partial, and stages the rest of it whole', () => {
     withChanges([partly, loose])
     render(<ChangesTab />)
     fireEvent.change(screen.getByRole('textbox', { name: 'Commit message' }), { target: { value: 'Rank' } })
-    expect(box('src/rank.ts').indeterminate).toBe(true)
-    expect(box('src/rank.ts').checked).toBe(false)
+    expect(within(section('Staged Changes')).getByTitle('src/rank.ts').textContent).toContain('partial')
+    expect(within(section('Changes')).queryByTitle('src/rank.ts')).toBeNull()
 
-    fireEvent.click(box('src/rank.ts'))
-    expect(box('src/rank.ts').indeterminate).toBe(false)
-    expect(box('src/rank.ts').checked).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Commit' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Stage src/rank.ts' }))
+    expect(within(section('Staged Changes')).getByTitle('src/rank.ts').textContent).not.toContain('partial')
+    fireEvent.click(screen.getByRole('button', { name: 'Commit 1' }))
     expect(call).toHaveBeenCalledWith('worktree.commit', { worktreeId: 'w1', message: 'Rank', paths: ['src/rank.ts'] })
   })
 
-  it('shows a wholly staged row ticked, and counts it', () => {
+  it('shows a wholly staged file in Staged, counted, and Stage All joins the rest to it', () => {
     withChanges([whole, loose])
     render(<ChangesTab />)
-    expect(box('src/done.ts').checked).toBe(true)
-    expect(screen.getByText('1/2')).toBeTruthy()
-    const all = screen.getByRole('checkbox', { name: 'Select all changes' }) as HTMLInputElement
-    expect(all.indeterminate).toBe(true)
+    expect(within(section('Staged Changes')).getByTitle('src/done.ts')).toBeTruthy()
+    expect(section('Staged Changes').querySelector('.panel__count')?.textContent).toBe('1')
+    expect(commitButton().textContent).toBe('Commit 1')
 
-    fireEvent.click(all)
-    expect(all.checked).toBe(true)
-    expect(screen.getByText('2/2')).toBeTruthy()
-    fireEvent.click(all)
-    expect(box('src/done.ts').checked).toBe(true)
-    expect(box('README.md').checked).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Stage All Changes' }))
+    expect(section('Staged Changes').querySelector('.panel__count')?.textContent).toBe('2')
+    expect(screen.queryByRole('region', { name: 'Changes' })).toBeNull()
+    expect(commitButton().textContent).toBe('Commit 2')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage All Changes' }))
+    expect(useWorkspaceStore.getState().stagedPaths).toEqual([])
+    expect(call).toHaveBeenCalledWith('worktree.unstagePath', { worktreeId: 'w1', path: 'src/done.ts' })
   })
 
-  const commitButton = (): HTMLElement => screen.getByRole('button', { name: /^Commit/ })
-
-  it('unstages a wholly staged row when it is unticked, and the button follows', () => {
+  it('unstages a wholly staged file from its −, and the button follows', () => {
     withChanges([whole, loose])
     render(<ChangesTab />)
-    expect(commitButton().textContent).toBe('Commit Staged')
 
-    fireEvent.click(box('src/done.ts'))
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage src/done.ts' }))
     expect(call).toHaveBeenCalledWith('worktree.unstagePath', { worktreeId: 'w1', path: 'src/done.ts' })
     expect(useWorkspaceStore.getState().stagedPaths).toEqual([])
 
     act(() => withChanges([{ ...whole, staged: false, unstaged: true }, loose]))
-    expect(box('src/done.ts').checked).toBe(false)
-    expect(commitButton().textContent).toBe('Commit All')
+    expect(within(section('Changes')).getByTitle('src/done.ts')).toBeTruthy()
+    expect(commitButton().textContent).toBe('Commit All 2')
   })
 
-  it('unstages the whole of a partly staged row when it is ticked and then unticked', () => {
+  it('unstages the whole of a partly staged file once it is staged whole and then unstaged', () => {
     withChanges([partly, loose])
     render(<ChangesTab />)
-    fireEvent.click(box('src/rank.ts'))
-    expect(commitButton().textContent).toBe('Commit')
+    fireEvent.click(screen.getByRole('button', { name: 'Stage src/rank.ts' }))
     expect(call).not.toHaveBeenCalledWith('worktree.unstagePath', expect.anything())
 
-    fireEvent.click(box('src/rank.ts'))
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage src/rank.ts' }))
     expect(call).toHaveBeenCalledWith('worktree.unstagePath', { worktreeId: 'w1', path: 'src/rank.ts' })
     expect(useWorkspaceStore.getState().stagedPaths).toEqual([])
 
     act(() => withChanges([{ ...partly, staged: false }, loose]))
-    expect(box('src/rank.ts').checked).toBe(false)
-    expect(box('src/rank.ts').indeterminate).toBe(false)
-    expect(commitButton().textContent).toBe('Commit All')
+    expect(within(section('Changes')).getByTitle('src/rank.ts')).toBeTruthy()
+    expect(commitButton().textContent).toBe('Commit All 2')
   })
 
-  it('leaves an unstaged row to the tick alone', () => {
+  it('leaves git alone when a file only staged here is unstaged', () => {
     withChanges([loose])
     render(<ChangesTab />)
-    fireEvent.click(box('README.md'))
-    fireEvent.click(box('README.md'))
+    fireEvent.click(screen.getByRole('button', { name: 'Stage README.md' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Unstage README.md' }))
     expect(call).not.toHaveBeenCalledWith('worktree.unstagePath', expect.anything())
+    expect(within(section('Changes')).getByTitle('README.md')).toBeTruthy()
   })
 
-  it('leaves All nothing to do when git already holds every change', () => {
+  it('has no Changes section when git already holds every change', () => {
     withChanges([whole])
     render(<ChangesTab />)
-    const all = screen.getByRole('checkbox', { name: 'Select all changes' }) as HTMLInputElement
-    expect(all.checked).toBe(true)
-    expect(all.disabled).toBe(true)
-    expect(screen.getByRole('button', { name: 'Commit Staged' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Stage All Changes' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Commit 1' })).toBeTruthy()
+  })
+
+  it('stages and unstages the row under the keyboard with Space', () => {
+    withChanges([loose])
+    render(<ChangesTab />)
+    fireEvent.keyDown(screen.getByTitle('README.md'), { key: ' ' })
+    expect(useWorkspaceStore.getState().stagedPaths).toEqual(['README.md'])
+    fireEvent.keyDown(within(section('Staged Changes')).getByTitle('README.md'), { key: ' ' })
+    expect(useWorkspaceStore.getState().stagedPaths).toEqual([])
   })
 })
 
 describe('the changes header', () => {
-  it('names the branch and how far it is from its upstream, with the push button after', () => {
+  const ref = (): string | null | undefined => document.querySelector('.changes__head .changes__ref')?.textContent
+
+  it('names the branch, the base it is measured against and how far it is, with the push under it', () => {
     seed({ ahead: 1, behind: 2 })
     render(<ChangesTab />)
-    const head = screen.getByRole('button', { name: 'Push' }).parentElement as HTMLElement
-    expect(head.querySelector('.changes__ref')?.textContent).toBe('rewrite-the-pager · ↑1 ↓2')
-    expect(head.children[1]?.textContent).toBe('Push')
+    expect(ref()).toBe('rewrite-the-pager → main · ↑1 ↓2')
+    const actions = document.querySelector('.changes__actions') as HTMLElement
+    expect(within(actions).getByRole('button', { name: 'Push' })).toBeTruthy()
+    expect(
+      within(document.querySelector('.changes__head') as HTMLElement).queryByRole('button', { name: 'Push' })
+    ).toBeNull()
   })
 
   it('counts against the base when the branch tracks nothing, and says what each arrow measures', () => {
     seed({ upstream: null, ahead: 2, behind: 3 })
     render(<ChangesTab />)
-    const ref = document.querySelector('.changes__ref') as HTMLElement
-    expect(ref.textContent).toBe('rewrite-the-pager · ↑2 ↓3')
-    expect(ref.title).toBe('↑ origin/main  ↓ origin/main')
+    const line = document.querySelector('.changes__ref') as HTMLElement
+    expect(line.textContent).toBe('rewrite-the-pager → main · ↑2 ↓3')
+    expect(line.title).toBe('↑ origin/main  ↓ origin/main')
     expect(screen.getByRole('button', { name: 'Publish Branch' })).toBeTruthy()
+  })
+
+  it('reads the changes again on Refresh', () => {
+    render(<ChangesTab />)
+    call.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    expect(call).toHaveBeenCalledWith('worktree.changes', { worktreeId: 'w1' })
+    expect(call).toHaveBeenCalledWith('worktree.log', { worktreeId: 'w1' })
+  })
+
+  // Tokens belong to the task and the status bar; the panel is for the changes.
+  it('says nothing about tokens', () => {
+    render(<ChangesTab />)
+    expect(call).not.toHaveBeenCalledWith('worktree.usage', expect.anything())
   })
 })
 
@@ -741,17 +884,17 @@ describe('the ahead and behind arrows', () => {
   it('shows nothing when both are zero', () => {
     seed({ ahead: 0, behind: 0 })
     render(<ChangesTab />)
-    expect(document.querySelector('.changes__ref')?.textContent).toBe('rewrite-the-pager')
+    expect(document.querySelector('.changes__ref')?.textContent).toBe('rewrite-the-pager → main')
   })
 
   it('shows only the arrow that is not zero', () => {
     seed({ ahead: 2, behind: 0 })
     render(<ChangesTab />)
-    expect(document.querySelector('.changes__ref')?.textContent).toBe('rewrite-the-pager · ↑2')
+    expect(document.querySelector('.changes__ref')?.textContent).toBe('rewrite-the-pager → main · ↑2')
     cleanup()
     seed({ ahead: 0, behind: 3 })
     render(<ChangesTab />)
-    expect(document.querySelector('.changes__ref')?.textContent).toBe('rewrite-the-pager · ↓3')
+    expect(document.querySelector('.changes__ref')?.textContent).toBe('rewrite-the-pager → main · ↓3')
   })
 })
 
@@ -776,9 +919,10 @@ describe('the commits list', () => {
     })
   }
 
-  it('is headed Commits with its count as a pill, the base ref in the hover', () => {
+  it('is headed Commits with its count as a pill, the base ref in the hover, folded', () => {
     seed()
     render(<ChangesTab />)
+    expect(screen.getByRole('button', { name: /^Commits/ }).getAttribute('aria-expanded')).toBe('false')
     const heading = screen.getByRole('heading', { name: /Commits/ })
     expect(heading.textContent).toBe('Commits1')
     expect(heading.querySelector('.panel__count')?.textContent).toBe('1')
@@ -812,7 +956,9 @@ describe('the commits list', () => {
     )
     render(<ChangesTab />)
 
-    const row = screen.getByRole('button', { name: 'aaaaaaa Rank by recency' })
+    unfold(/^Commits/)
+    const commits = screen.getByRole('region', { name: 'Commits this worktree has made' })
+    const row = within(commits).getByRole('button', { name: 'aaaaaaa Rank by recency' })
     fireEvent.click(row)
 
     const leaves = fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root)
@@ -857,54 +1003,61 @@ describe('the commits list', () => {
   })
 })
 
-describe('ticking every file', () => {
-  it('is a checkbox beside the word All, with the count after it', () => {
-    seed()
-    useWorkspaceStore.setState({
-      changes: {
-        w1: {
-          worktreeId: 'w1',
-          changes: [
-            { path: 'README.md', kind: 'modified', staged: false, unstaged: true },
-            { path: 'src/app.ts', kind: 'untracked', staged: false, unstaged: true }
-          ],
-          total: 2,
-          limit: 500,
-          truncated: false,
-          readAt: 0
-        }
-      }
-    })
+describe('an empty worktree', () => {
+  it('says No changes, with the last commit under it to open', () => {
     render(<ChangesTab />)
+    expect(screen.getByText('No changes')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'aaaaaaa Rank by recency' }))
+    expect(screen.queryByRole('textbox', { name: 'Commit message' })).toBeNull()
+  })
+})
 
-    const all = screen.getByRole('checkbox', { name: 'Select all changes' })
-    expect(screen.getByText('0/2')).toBeTruthy()
-    fireEvent.click(all)
-    expect(all).toHaveProperty('checked', true)
-    expect(screen.getByText('2/2')).toBeTruthy()
-    expect(screen.queryByText(/selected/)).toBeNull()
+describe('the tree', () => {
+  const nested: WorktreeChange[] = [
+    { path: 'src/cart/totals.ts', kind: 'modified', staged: false, unstaged: true },
+    { path: 'src/cart/tax/rates.ts', kind: 'modified', staged: false, unstaged: true },
+    { path: 'docs/guide/intro.md', kind: 'modified', staged: false, unstaged: true },
+    { path: 'README.md', kind: 'modified', staged: false, unstaged: true }
+  ]
+  const folders = (): (string | null)[] =>
+    [...document.querySelectorAll('.changes__item--folder .change')].map((row) => row.textContent)
+
+  it('groups by folder, a lone chain as one row, and is remembered', () => {
+    localStorage.removeItem('teamree.shell.changesView')
+    withChanges(nested)
+    render(<ChangesTab />)
+    expect(folders()).toEqual([])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tree' }))
+    expect(folders()).toEqual(['docs/guide', 'src/cart', 'tax'])
+    expect(localStorage.getItem('teamree.shell.changesView')).toBe('tree')
+    // The folder is on the folder row, so a file row says only its name.
+    expect(screen.getByTitle('src/cart/tax/rates.ts').querySelector('.change__dir')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'List' }))
+    expect(folders()).toEqual([])
+    expect(localStorage.getItem('teamree.shell.changesView')).toBe('list')
   })
 
-  // The word beside it was not its name to a screen reader that reads the box alone.
-  it('names the box itself, not only by the word beside it', () => {
-    withChanges(rows)
+  it('folds a folder from its row and from the keyboard', () => {
+    useScmView.setState({ view: 'tree' })
+    withChanges(nested)
     render(<ChangesTab />)
-    const all = document.querySelector('.changes__all input') as HTMLInputElement
-    expect(all.getAttribute('aria-label')).toBe('Select all changes')
+    fireEvent.click(screen.getByTitle('src/cart'))
+    expect(screen.queryByTitle('src/cart/totals.ts')).toBeNull()
+    fireEvent.keyDown(screen.getByTitle('src/cart'), { key: 'ArrowRight' })
+    expect(screen.getByTitle('src/cart/totals.ts')).toBeTruthy()
   })
+})
 
-  it('is mixed while only some are ticked', () => {
-    withChanges(rows)
+describe('a long name', () => {
+  it('keeps its end, with the whole path in the hover', () => {
+    withChanges([{ path: 'resumes/Abdullah_Al_Mahmud_Resume.pdf', kind: 'untracked', staged: false, unstaged: true }])
     render(<ChangesTab />)
-    const all = screen.getByRole('checkbox', { name: 'Select all changes' }) as HTMLInputElement
-
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Include README.md in the next commit' }))
-    expect(all.indeterminate).toBe(true)
-    expect(all.checked).toBe(false)
-
-    fireEvent.click(all)
-    expect(all.indeterminate).toBe(false)
-    expect(all.checked).toBe(true)
+    const row = screen.getByTitle('resumes/Abdullah_Al_Mahmud_Resume.pdf')
+    expect(row.querySelector('.change__head')?.textContent).toBe('Abdullah_Al_Mahmud_')
+    expect(row.querySelector('.change__tail')?.textContent).toBe('Resume.pdf')
+    expect(row.querySelector('svg[data-icon="file"]')).not.toBeNull()
   })
 })
 
@@ -985,18 +1138,38 @@ describe('one preview tab for the change on screen', () => {
     expect(useWorkspaceStore.getState().diffPanes[leaves()[0]!.terminalId]).toBe(true)
   })
 
-  it('keeps the tab on a double-click or ⌘Return, so the next file opens beside it', () => {
+  it('keeps the diff tab on ⌘Return, so the next file opens beside it', () => {
     withThreeChanges()
     render(<ChangesTab />)
     const first = screen.getByTitle('src/rank.ts')
     fireEvent.click(first)
-    fireEvent.doubleClick(first)
+    fireEvent.keyDown(first, { key: 'Enter', metaKey: true })
     expect(column()?.preview).toBeUndefined()
     fireEvent.keyDown(first, { key: 'ArrowDown' })
     expect(leaves().map((leaf) => leaf.path)).toEqual(['src/rank.ts', 'README.md'])
     fireEvent.keyDown(screen.getByTitle('README.md'), { key: 'Enter', metaKey: true })
     expect(column()?.preview).toBeUndefined()
     expect(leaves()).toHaveLength(2)
+  })
+
+  it('opens the file itself, kept, on a double-click or from its row, and the diff on Return', () => {
+    withThreeChanges()
+    render(<ChangesTab />)
+    const first = screen.getByTitle('src/rank.ts')
+    fireEvent.click(first)
+    fireEvent.doubleClick(first)
+    const [leaf] = leaves()
+    expect(leaf?.path).toBe('src/rank.ts')
+    expect(useWorkspaceStore.getState().diffPanes[leaf!.terminalId]).not.toBe(true)
+    expect(column()?.preview).toBeUndefined()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open README.md' }))
+    const opened = leaves().find((entry) => entry.path === 'README.md')
+    expect(opened && useWorkspaceStore.getState().diffPanes[opened.terminalId]).not.toBe(true)
+
+    fireEvent.keyDown(screen.getByTitle('docs/NOTES.md'), { key: 'Enter' })
+    const diff = leaves().find((entry) => entry.path === 'docs/NOTES.md')
+    expect(diff && useWorkspaceStore.getState().diffPanes[diff.terminalId]).toBe(true)
   })
 
   it('opens every change as one Review tab from Review All, and focuses it again rather than opening another', () => {
@@ -1200,6 +1373,37 @@ describe('discarding a file', () => {
     withRows()
     render(<Tab />)
     expect(screen.queryByRole('button', { name: 'Discard src/done.ts…' })).toBeNull()
+  })
+
+  it('asks on ⌫ from the row under the keyboard', () => {
+    withRows()
+    render(<Tab />)
+    fireEvent.keyDown(screen.getByTitle('README.md'), { key: 'Backspace' })
+    expect(screen.getByRole('dialog', { name: 'Discard changes to README.md?' })).toBeTruthy()
+  })
+
+  it('discards every file in Changes from Discard All, asked once, with one Undo', async () => {
+    withRows()
+    call.mockImplementation((method: string, params: { path: string }) =>
+      method === 'worktree.discardPath'
+        ? Promise.resolve({ worktreeId: 'w1', path: params.path, trashId: `t-${params.path}` })
+        : new Promise(() => {})
+    )
+    render(<Tab />)
+    fireEvent.click(screen.getByRole('button', { name: 'Discard All Changes…' }))
+    const dialog = screen.getByRole('dialog', { name: 'Discard changes to 2 files?' })
+    expect(dialog.textContent).toContain('New files move to the Trash')
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Discard' })))
+
+    expect(call).toHaveBeenCalledWith('worktree.discardPath', { worktreeId: 'w1', path: 'README.md' })
+    expect(call).toHaveBeenCalledWith('worktree.discardPath', { worktreeId: 'w1', path: 'src/new.ts' })
+    expect(call).not.toHaveBeenCalledWith('worktree.discardPath', { worktreeId: 'w1', path: 'src/done.ts' })
+    expect(useWorkspaceStore.getState().notices.map((notice) => [notice.text, notice.action])).toEqual([
+      [
+        'Discarded 2 files',
+        { label: 'Undo', undo: { kind: 'discard-many', worktreeId: 'w1', trashIds: ['t-README.md', 't-src/new.ts'] } }
+      ]
+    ])
   })
 
   it('draws Discard as an icon, its label in the tooltip rather than on every row', () => {
@@ -1537,14 +1741,19 @@ describe('the whole branch', () => {
     })
   }
   const reviews = () => fileLeavesIn(useWorkspaceStore.getState().layouts.w1!.root).filter(isReviewLeaf)
+  const heading = (): HTMLElement =>
+    screen.getByRole('region', { name: 'Committed on branch' }).querySelector('.scm-head') as HTMLElement
 
-  it('keeps Review All when the tree is clean and the branch is ahead, and lists the files against the base', () => {
+  it('keeps Review All when the tree is clean and the branch is ahead, and folds the files against the base', () => {
     withBranch(onBranch)
     render(<ChangesTab />)
-    expect(screen.getByText('All committed')).toBeTruthy()
-    const group = screen.getByRole('region', { name: 'On branch' })
-    expect(group.querySelector('.commits__title')?.textContent).toBe('On Branch2')
-    expect(group.querySelector('.commits__title')?.getAttribute('title')).toBe('vs origin/main')
+    expect(screen.getByText('No changes')).toBeTruthy()
+    expect(heading().textContent).toBe('Committed on branch2')
+    expect(heading().getAttribute('title')).toBe('vs origin/main')
+    expect(screen.queryByTitle('src/limits.ts')).toBeNull()
+
+    unfold(/^Committed on branch/)
+    const group = screen.getByRole('region', { name: 'Committed on branch' })
     expect(within(group).getByTitle('src/limits.ts').querySelector('.change__stat')?.textContent).toBe('+40 −0')
 
     fireEvent.click(screen.getByRole('button', { name: 'Review All' }))
@@ -1558,34 +1767,38 @@ describe('the whole branch', () => {
       }
     })
     render(<ChangesTab />)
-    const group = screen.getByRole('region', { name: 'On branch' })
-    expect(group.querySelector('.commits__title')?.textContent).toBe('On Branch2,002')
-    expect(within(group).getByText('+2,000 more')).toBeTruthy()
+    expect(heading().textContent).toBe('Committed on branch2,002')
+    unfold(/^Committed on branch/)
+    expect(within(screen.getByRole('region', { name: 'Committed on branch' })).getByText('+2,000 more')).toBeTruthy()
   })
 
   it('opens the review on the branch at the file picked', () => {
     withBranch(onBranch)
     useReviewStore.setState({ scope: { w1: 'uncommitted' } })
     render(<ChangesTab />)
-    fireEvent.click(within(screen.getByRole('region', { name: 'On branch' })).getByTitle('src/limits.ts'))
+    unfold(/^Committed on branch/)
+    fireEvent.click(within(screen.getByRole('region', { name: 'Committed on branch' })).getByTitle('src/limits.ts'))
     expect(reviews()).toHaveLength(1)
     expect(useReviewStore.getState().scope.w1).toBe('branch')
     expect(useReviewStore.getState().jump.w1).toBe('src/limits.ts')
   })
 
-  it('heads the uncommitted list with its count once there is one', () => {
+  // The owner's panel listed every file twice, once as uncommitted and again on the branch.
+  it('lists a file once: still uncommitted, it is not also committed', () => {
     withBranch(onBranch)
     withChanges(rows)
     render(<ChangesTab />)
-    expect(screen.getByRole('region', { name: 'Uncommitted' }).querySelector('.commits__title')?.textContent).toBe(
-      'Uncommitted3'
-    )
+    const changes = screen.getByRole('region', { name: 'Changes' })
+    expect(changes.querySelector('.scm-head')?.textContent).toBe('Changes3')
+    expect(heading().textContent).toBe('Committed on branch1')
+    unfold(/^Committed on branch/)
+    expect(screen.getAllByTitle('README.md')).toHaveLength(1)
   })
 
   it('has no branch group, and no Review All, when nothing differs from the base', () => {
     withBranch([])
     render(<ChangesTab />)
-    expect(screen.queryByRole('region', { name: 'On branch' })).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Committed on branch' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Review All' })).toBeNull()
   })
 })

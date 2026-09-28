@@ -7,14 +7,26 @@ import { ledgerWrites, useLedger } from '../../state/ledgerStore'
 import { useWorkspaceStore } from '../../state/workspaceStore'
 import { worktreeDisplay } from '../../sidebar/worktreeDisplay'
 import { worktreeContext } from './contextModel'
+import { SectionHead } from './SectionHead'
 
-export function ContextSection({ worktreeId }: { worktreeId: string }): React.JSX.Element | null {
+/** `fold` hands the open state to the Changes tab, which folds it by default. */
+export function ContextSection({
+  worktreeId,
+  fold
+}: {
+  worktreeId: string
+  fold?: { open: boolean; onToggle: () => void }
+}): React.JSX.Element | null {
   const worktrees = useWorkspaceStore((state) => state.worktrees)
   const projectId = worktrees.find((row) => row.id === worktreeId)?.projectId
   const memory = useLedger((state) => (projectId === undefined ? undefined : state.byProject[projectId]))
   const context = useMemo(() => worktreeContext(memory, worktreeId), [memory, worktreeId])
   const [claiming, setClaiming] = useState(false)
+  const [ownOpen, setOwnOpen] = useState(true)
   if (projectId === undefined) return null
+  const open = fold?.open ?? ownOpen
+  const toggle = fold?.onToggle ?? (() => setOwnOpen(!ownOpen))
+  const own = context.claims.length + context.notes.length
 
   const nameOf = (id: string): string => {
     const row = worktrees.find((entry) => entry.id === id)
@@ -23,13 +35,19 @@ export function ContextSection({ worktreeId }: { worktreeId: string }): React.JS
 
   return (
     <section className="context" aria-label="Context">
-      <h3 className="commits__title">
-        Context
-        <button type="button" className="context__add" onClick={() => setClaiming(true)}>
+      <SectionHead title="Context" {...(own === 0 ? {} : { count: String(own) })} open={open} onToggle={toggle}>
+        <button
+          type="button"
+          className="context__add"
+          onClick={() => {
+            if (!open) toggle()
+            setClaiming(true)
+          }}
+        >
           Add Claim…
         </button>
-      </h3>
-      {claiming ? (
+      </SectionHead>
+      {!open ? null : claiming ? (
         <LineField
           label="Claim"
           placeholder="src/api/**"
@@ -41,14 +59,32 @@ export function ContextSection({ worktreeId }: { worktreeId: string }): React.JS
           onCancel={() => setClaiming(false)}
         />
       ) : null}
-      <ContextRows worktreeId={worktreeId} claims={context.claims} notes={context.notes} editable />
-      {context.siblings.map((sibling) => (
-        <div className="context__sibling" role="group" aria-label={nameOf(sibling.worktreeId)} key={sibling.worktreeId}>
-          <p className="context__name">{nameOf(sibling.worktreeId)}</p>
-          <ContextRows worktreeId={sibling.worktreeId} claims={sibling.claims} notes={sibling.notes} editable={false} />
-        </div>
-      ))}
-      <LineField label="Note" placeholder="Note…" onSubmit={(text) => write(ledgerWrites.decide(worktreeId, text))} />
+      {!open ? null : (
+        <>
+          <ContextRows worktreeId={worktreeId} claims={context.claims} notes={context.notes} editable />
+          {context.siblings.map((sibling) => (
+            <div
+              className="context__sibling"
+              role="group"
+              aria-label={nameOf(sibling.worktreeId)}
+              key={sibling.worktreeId}
+            >
+              <p className="context__name">{nameOf(sibling.worktreeId)}</p>
+              <ContextRows
+                worktreeId={sibling.worktreeId}
+                claims={sibling.claims}
+                notes={sibling.notes}
+                editable={false}
+              />
+            </div>
+          ))}
+          <LineField
+            label="Note"
+            placeholder="Note…"
+            onSubmit={(text) => write(ledgerWrites.decide(worktreeId, text))}
+          />
+        </>
+      )}
     </section>
   )
 }
